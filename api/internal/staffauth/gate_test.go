@@ -232,3 +232,108 @@ func getWithSession(t *testing.T, url, session string) *http.Response {
 	}
 	return resp
 }
+
+func postWithSession(t *testing.T, url, session string) *http.Response {
+	t.Helper()
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, url, nil)
+	if err != nil {
+		t.Fatalf("build request: %v", err)
+	}
+	authntest.AddSessionCookie(req, session)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	return resp
+}
+
+// GatedWrite is Get's role check, applied to a write. #970 needed it for
+// a Contract void: a write whose rule is not reach alone.
+func TestGatedRouter_GatedWriteRecordsAndMounts(t *testing.T) {
+	mux := http.NewServeMux()
+	g := staffauth.NewGatedRouter(mux, nil)
+	g.GatedWrite("POST /api/hello", staffauth.AnyStaff, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusTeapot)
+	}))
+
+	routes := g.Routes()
+	if len(routes) != 1 {
+		t.Fatalf("Routes() = %d entries, want 1", len(routes))
+	}
+	if !routes[0].Write || routes[0].Method != http.MethodPost || routes[0].Pattern != "/api/hello" || len(routes[0].Roles) != 1 {
+		t.Errorf("route = %+v, want a POST write on /api/hello declaring AnyStaff", routes[0])
+	}
+}
+
+// GatedWrite panics on an empty role list exactly as Get does -- a
+// forgotten declaration must fail the binary at startup, not silently
+// admit every Staff member.
+func TestGatedRouter_GatedWritePanicsOnUndeclaredRoute(t *testing.T) {
+	defer func() {
+		if r := recover(); r == nil {
+			t.Fatal("expected GatedWrite to panic on an empty role declaration, it did not")
+		}
+	}()
+	g := staffauth.NewGatedRouter(http.NewServeMux(), nil)
+	g.GatedWrite("POST /api/practices/{practiceId}/engagements/{engagementId}/contract/void", nil, http.NotFoundHandler())
+}
+
+// GatedWrite shares Write's own GET refusal -- a GET belongs at Get or
+// OpenGet, gated or not, so ADR-0008's read table can see it.
+func TestGatedRouter_GatedWriteRefusesAGET(t *testing.T) {
+	defer func() {
+		if r := recover(); r == nil {
+			t.Fatal("expected GatedWrite to panic on a GET, it did not")
+		}
+	}()
+	g := staffauth.NewGatedRouter(http.NewServeMux(), nil)
+	g.GatedWrite("GET /api/hello", staffauth.AnyStaff, http.NotFoundHandler())
+}
+
+// GatedWrite shares Write's own method-less-pattern refusal.
+func TestGatedRouter_GatedWriteRefusesAPatternWithNoMethod(t *testing.T) {
+	defer func() {
+		if r := recover(); r == nil {
+			t.Fatal("expected GatedWrite to panic on a pattern with no method, it did not")
+		}
+	}()
+	g := staffauth.NewGatedRouter(http.NewServeMux(), nil)
+	g.GatedWrite("/api/hello", staffauth.AnyStaff, http.NotFoundHandler())
+}
+
+// TestGatedRouter_GatedWrite_RefusesByRole runs a real write behind
+// GatedWrite and confirms the role check actually gates it: an Owner
+// reaches it, a Doula is refused -- the write-side mirror of
+// TestGatedRouter_BillingBalance_DoulaForbidden.
+func TestGatedRouter_GatedWrite_RefusesByRole(t *testing.T) {
+	db := testdb.New(t)
+	practiceID := testdb.SeedPractice(t, db, "GatedWrite Test Practice")
+
+	ownerUID, doulaUID := "gated-write-owner", "gated-write-doula"
+	ownerID := testdb.SeedStaff(t, db, ownerUID)
+	doulaID := testdb.SeedStaff(t, db, doulaUID)
+	seedMembershipWithRoles(t, db, practiceID, ownerID, "{owner}")
+	seedMembershipWithRoles(t, db, practiceID, doulaID, "{doula}")
+
+	mux := http.NewServeMux()
+	g := staffauth.NewGatedRouter(mux, db.App)
+	g.GatedWrite("POST /practices/{practiceId}/thing", staffauth.OwnerOnly, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	ownerSession := authntest.SeedSession(t, db.App, ownerUID)
+	doulaSession := authntest.SeedSession(t, db.App, doulaUID)
+
+	ownerResp := postWithSession(t, srv.URL+"/practices/"+practiceID+"/thing", ownerSession)
+	defer ownerResp.Body.Close()
+	if ownerResp.StatusCode != http.StatusNoContent {
+		t.Fatalf("owner: status = %d, want %d", ownerResp.StatusCode, http.StatusNoContent)
+	}
+	doulaResp := postWithSession(t, srv.URL+"/practices/"+practiceID+"/thing", doulaSession)
+	defer doulaResp.Body.Close()
+	if doulaResp.StatusCode != http.StatusForbidden {
+		t.Fatalf("doula: status = %d, want %d", doulaResp.StatusCode, http.StatusForbidden)
+	}
+}

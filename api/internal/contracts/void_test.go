@@ -12,6 +12,14 @@ import (
 	"doula-cloud/api/internal/testdb"
 )
 
+// employeeType and contractorType are named once here so golangci-lint's
+// goconst check doesn't see the two stored employment_type values
+// repeated as raw string literals across this file's own role table.
+const (
+	employeeType   = "employee"
+	contractorType = "contractor"
+)
+
 func voidContractURL(srv *httptest.Server, practiceID, engagementID string) string {
 	return srv.URL + "/api/practices/" + practiceID + "/engagements/" + engagementID + "/contract/void"
 }
@@ -33,7 +41,7 @@ func postVoidContract(t *testing.T, srv *httptest.Server, session string, practi
 func TestPostVoidContractHandler_InvalidEngagementID(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "void-invalid-engagement-id"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
 
 	srv, session := newContractServer(t, db, uid)
 	defer srv.Close()
@@ -49,7 +57,7 @@ func TestPostVoidContractHandler_InvalidEngagementID(t *testing.T) {
 func TestPostVoidContractHandler_EngagementNotFound(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "void-no-engagement"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
 	otherPracticeID := testdb.SeedPractice(t, db, "Other Practice")
 	_, otherEngagementID := testdb.SeedEngagement(t, db, otherPracticeID)
 
@@ -67,7 +75,7 @@ func TestPostVoidContractHandler_EngagementNotFound(t *testing.T) {
 func TestPostVoidContractHandler_NoContract(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "void-no-contract"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
 	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
 
 	srv, session := newContractServer(t, db, uid)
@@ -89,7 +97,7 @@ func TestPostVoidContractHandler_NonSignedRejected(t *testing.T) {
 		t.Run(status, func(t *testing.T) {
 			db := testdb.New(t)
 			uid := "void-non-signed-" + status
-			practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
+			practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
 			_, engagementID := testdb.SeedEngagement(t, db, practiceID)
 			seedContract(t, db, engagementID, status, mergeFieldProse)
 
@@ -115,7 +123,7 @@ func TestPostVoidContractHandler_NonSignedRejected(t *testing.T) {
 func TestPostVoidContractHandler_Success(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "void-success"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
 	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
 	_, objectPath := seedSignedContract(t, db, engagementID)
 
@@ -175,7 +183,7 @@ func TestPostVoidContractHandler_Success(t *testing.T) {
 func TestPostContractHandler_AllowedAfterVoid(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "post-after-void"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
 	clientID, engagementID := testdb.SeedEngagement(t, db, practiceID)
 	testdb.SeedPendingPortalInvite(t, db, clientID)
 	seedContractTemplate(t, db, practiceID, mergeFieldProse)
@@ -254,5 +262,44 @@ func TestPostContractHandler_AllowedAfterVoid(t *testing.T) {
 	}
 	if got[1].status != statusSent || got[1].objectPath.Valid {
 		t.Fatalf("recreated row = %+v, want sent with no signed_pdf_object_path", got[1])
+	}
+}
+
+// TestPostVoidContractHandler_RefusedByRole is #282/#970's own table:
+// Void is Owner and Admin only, and refuses every Doula regardless of
+// employment type -- the one Contract write AttachingWrite's reach test
+// alone could never express, since an employed Doula and an attached
+// contractor both reach the Engagement here just as freely as an Owner
+// does.
+func TestPostVoidContractHandler_RefusedByRole(t *testing.T) {
+	cases := []struct {
+		name           string
+		roles          []string
+		employmentType string
+		wantStatus     int
+	}{
+		{"owner", []string{ownerRole}, employeeType, http.StatusOK},
+		{"admin", []string{adminRole}, employeeType, http.StatusOK},
+		{"employed doula", []string{doulaRole}, employeeType, http.StatusForbidden},
+		{"contractor doula", []string{doulaRole}, contractorType, http.StatusForbidden},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			db := testdb.New(t)
+			uid := "void-role-" + tc.name
+			practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, tc.roles, tc.employmentType)
+			_, engagementID := testdb.SeedEngagement(t, db, practiceID)
+			seedSignedContract(t, db, engagementID)
+
+			srv, session := newContractServer(t, db, uid)
+			defer srv.Close()
+
+			resp := postVoidContract(t, srv, session, practiceID, engagementID)
+			defer resp.Body.Close()
+
+			if resp.StatusCode != tc.wantStatus {
+				t.Fatalf("status = %d, want %d", resp.StatusCode, tc.wantStatus)
+			}
+		})
 	}
 }

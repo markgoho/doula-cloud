@@ -28,6 +28,12 @@ type Route struct {
 	// Reason records why a route registered through Router.Exempt
 	// deliberately runs without Wrap. Empty when Replayable is true.
 	Reason string
+	// Roles is set only for a route registered through ExemptGated: the
+	// role declaration staffauth.GatedRouter.GatedWrite enforces at the
+	// mount, ADR-0008's write-side mirror of a GET's Roles (#970). Empty
+	// for a route registered through Replayable or Exempt -- their write
+	// carries no role declaration, by design.
+	Roles []string
 }
 
 // Router closes mutating-route registration until each route declares its
@@ -66,6 +72,10 @@ type Router struct {
 // the same hole this type exists to close on its own side.
 type Mounter interface {
 	Write(pattern string, h http.Handler)
+	// GatedWrite is staffauth.GatedRouter's role-checked write door,
+	// reached through Router.ExemptGated (#970's Contract void, refused
+	// to every Doula regardless of reach).
+	GatedWrite(pattern string, roles []string, h http.Handler)
 }
 
 // NewRouter mounts its routes through mounter. db is the low-privilege
@@ -108,6 +118,32 @@ func (rt *Router) Exempt(pattern, reason string, attaching bool, h http.Handler)
 	}
 	rt.routes = append(rt.routes, Route{Pattern: pattern, Reason: reason, Attaching: attaching})
 	rt.mounter.Write(pattern, staffauth.Middleware(rt.db)(wrapped))
+}
+
+// ExemptGated is Exempt, plus a role declaration ADR-0008's write side
+// can enforce at the mount (#970): roles is checked by
+// staffauth.GatedRouter itself, panicking on an empty list rather than
+// admitting a route with none, the same guarantee Get's role list already
+// carries. Reserved for
+// a write whose rule is not reach alone -- a Contract void, refused to
+// every Doula no matter what she is attached to -- since an ordinary
+// write's role-free Exempt already covers "may this caller reach this
+// Engagement at all" through attaching.
+//
+// GatedWrite applies staffauth.Middleware itself (the same reason Get
+// does), so, unlike Exempt, this must not wrap wrapped in Middleware
+// again -- passing it bare to mounter.GatedWrite is deliberate, not an
+// oversight.
+func (rt *Router) ExemptGated(pattern, reason string, attaching bool, roles []string, h http.Handler) {
+	if reason == "" {
+		panic(fmt.Sprintf("idempotency: Router.ExemptGated(%q): no reason given -- a mutating route left unwrapped must say why", pattern))
+	}
+	wrapped := h
+	if attaching {
+		wrapped = staffauth.AttachingWrite(wrapped)
+	}
+	rt.routes = append(rt.routes, Route{Pattern: pattern, Reason: reason, Attaching: attaching, Roles: roles})
+	rt.mounter.GatedWrite(pattern, roles, wrapped)
 }
 
 // Routes returns the registry of every mutating route this router knows

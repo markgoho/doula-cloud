@@ -51,22 +51,17 @@ func GetTemplateHandler() http.Handler {
 }
 
 // PutTemplateHandler lets a Practice Owner replace its Contract Template's
-// prose. Must be mounted behind staffauth.Middleware.
+// prose. Owner-only is enforced at the mount (contracts.Mount,
+// staffauth.OwnerOnly), not here -- #970 moved this handler's own
+// reader.Has("owner") check to that declaration, so a forgotten
+// declaration fails the binary at startup rather than silently admitting
+// every Staff member. Must be mounted through
+// idempotency.Router.ExemptGated.
 func PutTemplateHandler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		tx, practiceID, ok := staffauth.RequireTx(w, r)
 		// coverage:ignore reason: staffauth.Middleware always sets a tx before this handler runs
 		if !ok {
-			return
-		}
-		reader, has := staffauth.ReaderFrom(r.Context())
-		if !has {
-			// coverage:ignore reason: staffauth.Middleware always places a Reader on context before this handler runs
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
-			return
-		}
-		if !reader.Has("owner") {
-			apierr.WriteError(w, "only a Practice Owner can do that", http.StatusForbidden)
 			return
 		}
 

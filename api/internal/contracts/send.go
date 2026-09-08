@@ -62,7 +62,10 @@ type sendPushPayload struct {
 // activity entry, and sends no push -- identical to the not-a-draft
 // refusal above. On success it notifies the Client's registered push
 // subscription(s) with sendPushPayload via pusher, the #61 Pusher
-// interface. Must be mounted behind staffauth.Middleware.
+// interface. Declared staffauth.AnyStaff at the mount (#282, #970):
+// whoever reaches the Engagement at all -- Owner, Admin, an employed
+// Doula, or a contractor on a granted attachment -- may send. Must be
+// mounted through idempotency.Router.ExemptGated.
 func PostSendContractHandler(pusher push.Pusher) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		tx, engagementID, ok := resolveContractRequest(w, r)
