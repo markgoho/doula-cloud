@@ -21,11 +21,15 @@ So the `client` project pins `maxWorkers` to `Math.min(6, availableParallelism()
 
 | Renderers | Peak (browsers + Vitest) | Wall time |
 | --- | --- | --- |
-| 12 (Vitest's default here) | ~7.0 GB | 19.9s |
+| 12 (Vitest's default here) | ~7.0 GB | 17.4s |
 | **6 (what we pin)** | **4.9 GB** | **16.3s** |
 | 4 | 4.5 GB | 18.0s |
 
-Six is not a trade of speed for memory — it is faster *and* smaller, because twelve renderers oversubscribe 14 cores. It is clamped rather than a bare constant so CI is untouched: a 4-vCPU `ubuntu-latest` runner already resolves to 3, and a constant 6 would have raised the parallelism there.
+Compare warm runs only. The first run of a session pays a cold Vite transform (`transform 38s, import 87s` against ~4s and ~22s once warm) and takes about 20s at any worker count; a cold run measured against a warm one will credit the cap with roughly 4s it did not earn.
+
+Memory is the reason for the cap, and it is the column that moves: browser RSS falls from ~6.0 GB to ~4.0 GB. Wall time is roughly a wash — about a second, plus a real drop in CPU time (111s to 78s) from no longer oversubscribing 14 cores. Six is chosen because it costs nothing in speed, not because it buys any.
+
+It is clamped rather than a bare constant so CI's worker count is untouched: a 4-vCPU `ubuntu-latest` runner already resolves to 3, and a constant 6 would have raised the parallelism there. The `groupOrder` split below *does* apply in CI, where the two projects previously overlapped — measured at no cost, with the `app` job at 4m20s against 4m11s and 4m39s for the two preceding trunk runs.
 
 Two things to know before you change it:
 
