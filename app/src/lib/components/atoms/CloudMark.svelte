@@ -3,7 +3,7 @@
 	 * The Doula Cloud mark: three nested arcs, plum at the front and the
 	 * decorative hairline at the back. Adopted from the teaser social cards
 	 * rather than redesigned (#431) -- logo design is out of scope on the
-	 * design map -- and recoloured into the token ramp.
+	 * design map -- and recolored into the token ramp.
 	 *
 	 * Only width and height vary by size. The canvas carries a `mark-stroke`
 	 * ramp (9/4/3) because pen.dev's `strokeWidth` is node pixels rather

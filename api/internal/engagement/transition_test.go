@@ -251,7 +251,7 @@ func TestTransitionHandler_CompletingRequiresEndingReason(t *testing.T) {
 }
 
 // TestTransitionHandler_RefusesInvalidStatusAndUnknownEngagement covers
-// the request-shape refusals: an unrecognised target status, an
+// the request-shape refusals: an unrecognized target status, an
 // unparseable engagement id, and an engagement id that parses but names
 // nothing at this Practice.
 func TestTransitionHandler_RefusesInvalidStatusAndUnknownEngagement(t *testing.T) {
@@ -276,7 +276,7 @@ func TestTransitionHandler_RefusesInvalidStatusAndUnknownEngagement(t *testing.T
 }
 
 // TestTransitionHandler_RefusesMalformedBody proves a body that fails to
-// decode at all -- not just one with an unrecognised status -- is
+// decode at all -- not just one with an unrecognized status -- is
 // refused with apierr.DecodeJSON's own 400.
 func TestTransitionHandler_RefusesMalformedBody(t *testing.T) {
 	db := testdb.New(t)

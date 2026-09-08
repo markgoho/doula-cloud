@@ -267,7 +267,7 @@
 		read.
 
 		A native <details>, so opening and closing costs no JavaScript and
-		the keyboard and screen-reader behaviour is the browser's own
+		the keyboard and screen-reader behavior is the browser's own
 		(GOV.UK's Details pattern, ADR-0021). The only script here is the
 		fetch the first open triggers.
 	-->

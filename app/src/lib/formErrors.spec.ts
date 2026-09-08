@@ -106,11 +106,11 @@ describe('authRefusal', () => {
 	);
 
 	it('never writes a banned word, whatever the code', () => {
-		const offences = EVERY_CODE.map((code) => authRefusal({ code }, FIELDS).message).filter(
+		const offenses = EVERY_CODE.map((code) => authRefusal({ code }, FIELDS).message).filter(
 			(message) => BANNED.test(message)
 		);
 
-		expect(offences).toEqual([]);
+		expect(offenses).toEqual([]);
 	});
 
 	it('never writes a banned word in the service message', () => {
@@ -147,11 +147,11 @@ describe('passwordReauthRefusal', () => {
 	});
 
 	it('never writes a banned word, whatever the code', () => {
-		const offences = [...EVERY_CODE, 'auth/brand-new']
+		const offenses = [...EVERY_CODE, 'auth/brand-new']
 			.map((code) => passwordReauthRefusal({ code }, passwordId).message)
 			.filter((message) => BANNED.test(message));
 
-		expect(offences).toEqual([]);
+		expect(offenses).toEqual([]);
 	});
 });
 
@@ -179,11 +179,11 @@ describe('totpCodeRefusal', () => {
 	});
 
 	it('never writes a banned word, whatever the code', () => {
-		const offences = [...EVERY_CODE, 'auth/brand-new']
+		const offenses = [...EVERY_CODE, 'auth/brand-new']
 			.map((code) => totpCodeRefusal({ code }, codeId).message)
 			.filter((message) => BANNED.test(message));
 
-		expect(offences).toEqual([]);
+		expect(offenses).toEqual([]);
 	});
 });
 

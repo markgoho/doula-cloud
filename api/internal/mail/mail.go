@@ -34,6 +34,6 @@ type Sender interface {
 // or a permanent bounce. It is not a transient send failure: retrying it
 // on ADR-0010's backoff schedule could only produce the same answer, and
 // Mailgun would refuse the send server-side anyway. outbox.Worker
-// recognises it and dead-letters the row on the spot instead of
+// recognizes it and dead-letters the row on the spot instead of
 // scheduling a retry.
 var ErrSuppressed = errors.New("mail: address is suppressed")

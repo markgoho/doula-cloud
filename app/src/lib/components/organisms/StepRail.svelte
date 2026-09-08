@@ -90,7 +90,7 @@
 		 * the reader is inside one step; `completed` is the summary page,
 		 * where there is no current step and the whole answered journey is
 		 * the point. A closed pair rather than a boolean, because these are
-		 * two behaviours and not one thing switched off.
+		 * two behaviors and not one thing switched off.
 		 *
 		 * There is deliberately no second `open` prop. `expand` already says
 		 * what the page is FOR, which is the only thing the open state turns

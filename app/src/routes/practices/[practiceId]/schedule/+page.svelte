@@ -230,7 +230,7 @@
 		   comfortable width and wraps to its own row the moment the space
 		   this form is given cannot hold two side by side. At 320px that is
 		   one control per row; in a wide column all four sit together. No
-		   viewport media query, and the same behaviour whether the form is
+		   viewport media query, and the same behavior whether the form is
 		   the page or a panel inside something else. */
 		.controls {
 			display: flex;

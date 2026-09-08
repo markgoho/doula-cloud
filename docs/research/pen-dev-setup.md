@@ -84,7 +84,7 @@ change — protocol `2025-06-18`, capabilities `logging` and `tools`).
 | `execute` | The workhorse — mutates the canvas. Self-describing via `get_app_state` |
 | `get_app_state` | App state, current user selection, "essential information to get started on a task" |
 | `browser` | Loads a real URL in an integrated browser and can **reproduce the page as editable canvas layers** |
-| `get_style` | Lists and loads **visual style archetypes** — configurable fonts, colours, imagery. Reference values only; styles do not save variables |
+| `get_style` | Lists and loads **visual style archetypes** — configurable fonts, colors, imagery. Reference values only; styles do not save variables |
 | `read_skill` | Reads pen.dev's own `SKILL.md` teaching an agent how to design on the canvas, plus referenced files like `execute.md`, `guide/web-app.md` |
 
 **v1.2.4 also had** `get_guidelines` (now split into `get_style` + `read_skill`), `get_screenshot`,
@@ -138,7 +138,7 @@ than in-place; `--usage` writes token cost to JSON.
 
 1. `bunx pen --out smoke.pen --prompt "…a 400x200 white card…" --export smoke.png` — the agent called
    `mcp__pencil__execute` once and wrote both files.
-2. The exported PNG matched the prompt: correct size, radius, border, both text runs, colours.
+2. The exported PNG matched the prompt: correct size, radius, border, both text runs, colors.
 3. `open -a /Applications/Pen.app smoke.pen` — **the desktop app rendered the CLI-created file**, writing
    a fresh preview to `~/.pencil/previews/`.
 

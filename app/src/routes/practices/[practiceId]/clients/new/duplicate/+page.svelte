@@ -94,7 +94,7 @@
 			// In words, through `dates.ts`, like every other date the app
 			// shows: this line's whole job is telling two people with the
 			// same name apart, and "1988-02-09" is storage rather than a
-			// fact a reader recognises.
+			// fact a reader recognizes.
 			match.dateOfBirth ? `Born ${formatCalendarDay(match.dateOfBirth)}` : 'No date of birth on file',
 			match.email || match.phone || 'No contact details on file',
 			match.engagements.length === 1

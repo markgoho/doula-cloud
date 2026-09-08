@@ -3,11 +3,11 @@
 		The Doula Cloud mark (#452), the same three arcs CloudMark.svelte
 		draws.
 
-		Literal colours rather than the tokens, because a favicon is rendered
+		Literal colors rather than the tokens, because a favicon is rendered
 		outside the document and can reach no custom property. Still OKLCH,
 		and still the exact values from tokens.css: --color-outline-variant,
 		--color-primary-hover and --color-primary, in both themes. Copied
-		rather than converted, so there is no second colour space in the repo
+		rather than converted, so there is no second color space in the repo
 		to keep in step.
 	-->
 	<style>

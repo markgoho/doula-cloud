@@ -32,7 +32,7 @@ A fourth thing was stipulated alongside the choice, and it is not a caveat:
 
 4. **Doula Cloud should still have something of its own** — not so radical that
    a person cannot work out how to use it, but genuinely there. **Smooth UX is
-   a primary goal**, and it is the thing the product should be recognised for.
+   a primary goal**, and it is the thing the product should be recognized for.
 
 So the direction's stated weakness — that it was the safest and least memorable
 of the four — is *not* accepted as it stands. Familiarity is the floor, not the
@@ -40,7 +40,7 @@ ceiling. What follows is how both are satisfied at once.
 
 ## The governing principle
 
-> **Conventional in pattern and behaviour. Distinctive in execution.**
+> **Conventional in pattern and behavior. Distinctive in execution.**
 
 Every decision below descends from that sentence. Where a convention exists —
 a top bar, a flat nav, an avatar menu at the end of the chrome, a primary
@@ -55,7 +55,7 @@ ruled out. The instruction is narrower: **be unsurprising in what the interface
 does, and unmistakable in how well it does it.**
 
 **Smoothness is where the character lives.** The thing this product should be
-recognised for is not a shape nobody has seen before — it is that everything
+recognized for is not a shape nobody has seen before — it is that everything
 answers immediately, nothing jumps, focus always lands where a person expects,
 a form remembers what was typed, and a long list never stutters. That is
 difficult, it is felt by every user on every visit, and almost nothing in this
@@ -98,7 +98,7 @@ Warm rather than clinical, but warm by a few degrees only — the plum is a
 family resemblance, not a theme. Nothing here should read as domestic,
 therapeutic, or soft. It is a record-keeping tool for a working practice.
 
-## Colour
+## Color
 
 ### Does `Plum Dusk` survive?
 
@@ -168,8 +168,8 @@ is the wrong trade for a tool read at 3am.
   screen has more than a few plum marks on it, the screen is wrong.
 - **Neutrals carry structure.** Grouping, hierarchy and separation are done with
   the five surface steps and the two outline tones. Reach for a surface step
-  before reaching for colour.
-- **Status colour is not accent colour.** `error`, and the status / info /
+  before reaching for color.
+- **Status color is not accent color.** `error`, and the status / info /
   warning family already in `tokens.css`, keep their own hues and are not
   harmonised toward the plum.
 - **Contrast floors are non-negotiable, and are checked rather than claimed.**
@@ -305,7 +305,7 @@ is never decorative.
 - **Nothing moves that the user did not cause.** No carousels, no auto-advancing
   anything, no attention-seeking pulses.
 - **`prefers-reduced-motion: reduce` removes movement, not feedback.** Under
-  that query, transforms and view transitions are dropped; colour and opacity
+  that query, transforms and view transitions are dropped; color and opacity
   changes stay, so a control still visibly responds.
 
 ## Iconography
@@ -354,12 +354,12 @@ point at these and say the work is done. The first of them is the largest.
    date column in `meta` at tabular figures, the event in `body`, the actor in
    `on-surface-muted`, hairline-separated rows — and reuse that treatment
    everywhere an audit trail is shown. It is the one component that is
-   recognisably this product rather than any practice-management tool.
+   recognizably this product rather than any practice-management tool.
 
    > **Amended 2026-08-29 on [#433](https://github.com/markgoho/doula-cloud/issues/433),
    > in three places.**
    >
-   > **The actor's colour.** This entry originally read *"the actor in
+   > **The actor's color.** This entry originally read *"the actor in
    > `outline`"*. `outline` is the form-control-border role, chosen for SC
    > 1.4.11's 3:1 boundary floor; as text on `surface-bright` it sits under
    > this brief's own non-negotiable 4.5:1. `on-surface-muted` exists because,
@@ -411,7 +411,7 @@ left for somebody to discover mid-ticket.
 | **Jakob's Law** | The governing law of this brief. Top bar, flat nav, tenant name and switcher, account behind an avatar at the end of the chrome — the arrangement every product in the [#406](https://github.com/markgoho/doula-cloud/issues/406) survey converged on. No invented navigation pattern, ever. |
 | **Mental Model** | The app's nouns are the domain's nouns. A Practice, a Client, an Engagement, an Offer, a Staff member and a Plan mean on screen exactly what `CONTEXT.md` says they mean. A screen never renames a domain concept for the sake of a nicer label, and never invents a grouping the domain does not have. |
 | **Fitts's Law** | Primary actions are large and close to where the work happened — a form's submit button sits at the end of the form, not in a distant toolbar. Destructive actions are deliberately *not* adjacent to their benign neighbours. Hit targets never fall below 44px, as already stated under Density. |
-| **Selective Attention** | The plum accent is the attention signal and is spent on primary actions and active state only. Nothing else competes: no coloured card headers, no badges used decoratively, no second accent. A screen where the eye cannot find the one thing to do next has failed this law, not the user. |
+| **Selective Attention** | The plum accent is the attention signal and is spent on primary actions and active state only. Nothing else competes: no colored card headers, no badges used decoratively, no second accent. A screen where the eye cannot find the one thing to do next has failed this law, not the user. |
 | **Serial Position Effect** | First and last items in a series are remembered, so put the important ones there. In the top bar, the product identity is first and the account menu is last. In an activity ledger the newest event is first. In a long form, the fields a person came to fill in are not buried in the middle. |
 | **Paradox of the Active User** | Nobody reads onboarding. Every screen has to be usable cold, on the first morning, with no tour and no tooltip tour. Help is inline, at the field, at the moment it is needed — never a modal that must be dismissed before work can start. |
 
@@ -450,7 +450,7 @@ consistently.
 | **Law of Uniform Connectedness** | The strongest grouping cue of the five. A run of rows sharing hairline dividers reads as one list, which is exactly how the activity ledger and every table are built. Never split one logical list across two visual containers. |
 | **Law of Similarity** | Things that look the same are assumed to behave the same. One appearance per role, without exception: every link looks like every other link, every primary button like every other primary button. The corollary is stricter — **something that is not a link must never look like one.** |
 | **Law of Prägnanz** | People resolve complexity into the simplest reading available. Prefer a plain rectangle, a plain rule, a plain list. Ornament that has to be decoded is a cost with no return, which is the same conclusion the direction reached on shadows. |
-| **Von Restorff Effect** | The thing that differs is remembered — and this law is why the restrained accent works rather than being merely timid. Plum is memorable *because* it is almost the only colour on the page. Every additional coloured element spends that memorability. Applies once per screen. |
+| **Von Restorff Effect** | The thing that differs is remembered — and this law is why the restrained accent works rather than being merely timid. Plum is memorable *because* it is almost the only color on the page. Every additional colored element spends that memorability. Applies once per screen. |
 
 ### Pace, feedback and how the product feels
 
@@ -480,7 +480,7 @@ turns them into checks.
 Three real tensions. Each is resolved here so no ticket has to relitigate it.
 
 - **Hick's Law and Choice Overload against Tesler's Law.** Fewer choices are better, and a Practice's intake genuinely needs many fields. **Tesler wins on what exists; Hick wins on what is shown at once.** No field is deleted to make a form shorter. Fields are sequenced, grouped, defaulted and deferred so that few decisions are present at any moment — and the irreducible complexity is absorbed by templates and defaults rather than passed to the doula.
-- **Von Restorff and Selective Attention against the Aesthetic-Usability Effect.** Restraint makes the one accent memorable; a richer surface is perceived as more usable. **Restraint wins, and the aesthetic budget is spent on typography, rhythm and smoothness instead of on colour** — which is exactly what [Where the character comes from](#where-the-character-comes-from) already says.
+- **Von Restorff and Selective Attention against the Aesthetic-Usability Effect.** Restraint makes the one accent memorable; a richer surface is perceived as more usable. **Restraint wins, and the aesthetic budget is spent on typography, rhythm and smoothness instead of on color** — which is exactly what [Where the character comes from](#where-the-character-comes-from) already says.
 - **Goal-Gradient and Zeigarnik against "nothing moves that the user did not cause".** Progress indicators and unfinished-work cues are motion and attention the user did not ask for. **The Motion rule holds:** progress is *shown*, never animated at somebody; an unfinished Engagement appears in a list, never as a badge that pulses or a banner that follows a person around.
 
 **Standing instruction.** These laws are a checklist for review, not a vocabulary to

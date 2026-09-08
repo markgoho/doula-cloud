@@ -118,7 +118,7 @@
 			color: var(--color-on-surface);
 		}
 
-		/* The same weight and colour LabeledField gives a refusal, so one
+		/* The same weight and color LabeledField gives a refusal, so one
 		   error reads the same as the next whichever control it belongs to. */
 		.error {
 			margin: 0 0 var(--space-3);

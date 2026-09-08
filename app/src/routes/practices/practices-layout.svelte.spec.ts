@@ -195,7 +195,7 @@ describe('the nav', () => {
 		await expect.element(page.getByRole('link', { name: 'Billing', exact: true })).not.toBeInTheDocument();
 	});
 
-	it('marks the current section, and marks it with more than colour', async () => {
+	it('marks the current section, and marks it with more than color', async () => {
 		await setup({ pathname: '/practices/practice-1/clients/new' });
 
 		await expect

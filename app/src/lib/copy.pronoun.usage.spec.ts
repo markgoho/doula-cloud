@@ -13,7 +13,7 @@ import { QUOTED, regionLines, regionLinesInFile } from './quotedCopy';
  * Every markup line and every quoted script-string in every component and
  * route, region-classified by `quotedCopy.ts`'s `regionLines` with comments
  * already stripped -- so a pronoun named only inside a doc comment, this
- * file's own rationale included, is not an offence. That is deliberate, not
+ * file's own rationale included, is not an offense. That is deliberate, not
  * a gap: a comment is this repo's documented voice (CLAUDE.md), a separate
  * register from what a screen says out loud, and #463 draws that line
  * explicitly.
@@ -62,15 +62,15 @@ const sourceFiles = globSync('src/{lib/components,routes}/**/*.svelte', { cwd: a
 	(file) => !file.startsWith('src/routes/style-guide/')
 );
 
-interface Offence {
+interface Offense {
 	file: string;
 	line: number;
 	found: string;
 	text: string;
 }
 
-function offencesIn(text: string): Pick<Offence, 'found' | 'text'>[] {
-	const found: Pick<Offence, 'found' | 'text'>[] = [];
+function offensesIn(text: string): Pick<Offense, 'found' | 'text'>[] {
+	const found: Pick<Offense, 'found' | 'text'>[] = [];
 	for (const word of PRONOUNS) {
 		if (new RegExp(String.raw`\b` + word + String.raw`\b`, 'i').test(text)) {
 			found.push({ found: word, text });
@@ -79,8 +79,8 @@ function offencesIn(text: string): Pick<Offence, 'found' | 'text'>[] {
 	return found;
 }
 
-function findOffencesInLines(file: string, lines: ReturnType<typeof regionLines>): Offence[] {
-	const found: Offence[] = [];
+function findOffensesInLines(file: string, lines: ReturnType<typeof regionLines>): Offense[] {
+	const found: Offense[] = [];
 	for (const { line, text, region } of lines) {
 		if (region === 'style') continue;
 		const candidates =
@@ -91,16 +91,16 @@ function findOffencesInLines(file: string, lines: ReturnType<typeof regionLines>
 						.toArray()
 				: [text];
 		for (const candidate of candidates) {
-			for (const offence of offencesIn(candidate)) {
-				found.push({ file, line, ...offence });
+			for (const offense of offensesIn(candidate)) {
+				found.push({ file, line, ...offense });
 			}
 		}
 	}
 	return found;
 }
 
-function findOffences(file: string): Offence[] {
-	return findOffencesInLines(file, regionLinesInFile(file, appRoot));
+function findOffenses(file: string): Offense[] {
+	return findOffensesInLines(file, regionLinesInFile(file, appRoot));
 }
 
 describe('product copy names a Client or Staff member, never a pronoun', () => {
@@ -111,31 +111,31 @@ describe('product copy names a Client or Staff member, never a pronoun', () => {
 	});
 
 	it('uses no gendered pronoun anywhere a Client or Staff member reads', () => {
-		const offences = sourceFiles.flatMap((file) => findOffences(file));
+		const offenses = sourceFiles.flatMap((file) => findOffenses(file));
 
-		expect(offences.map((offence) => `${offence.file}:${offence.line} "${offence.text}"`)).toEqual(
+		expect(offenses.map((offense) => `${offense.file}:${offense.line} "${offense.text}"`)).toEqual(
 			[]
 		);
 	});
 });
 
-describe('findOffencesInLines', () => {
+describe('findOffensesInLines', () => {
 	it('flags a bare-text pronoun in markup, not only a quoted one', () => {
-		const offences = findOffencesInLines('fixture.svelte', regionLines('<p>She joins.</p>'));
+		const offenses = findOffensesInLines('fixture.svelte', regionLines('<p>She joins.</p>'));
 
-		expect(offences).toEqual([{ file: 'fixture.svelte', line: 1, found: 'she', text: '<p>She joins.</p>' }]);
+		expect(offenses).toEqual([{ file: 'fixture.svelte', line: 1, found: 'she', text: '<p>She joins.</p>' }]);
 	});
 
 	it('ignores a pronoun inside an HTML comment', () => {
-		const offences = findOffencesInLines('fixture.svelte', regionLines('<!-- she said so --> <p>ok</p>'));
+		const offenses = findOffensesInLines('fixture.svelte', regionLines('<!-- she said so --> <p>ok</p>'));
 
-		expect(offences).toEqual([]);
+		expect(offenses).toEqual([]);
 	});
 
 	it('ignores a pronoun in a CSS comment inside <style>', () => {
 		const source = ['<style>', '/* what she said */', 'p { color: red; }', '</style>'].join('\n');
 
-		expect(findOffencesInLines('fixture.svelte', regionLines(source))).toEqual([]);
+		expect(findOffensesInLines('fixture.svelte', regionLines(source))).toEqual([]);
 	});
 
 	it('flags a pronoun inside a quoted script string, not the surrounding code', () => {
@@ -143,7 +143,7 @@ describe('findOffencesInLines', () => {
 			'\n'
 		);
 
-		expect(findOffencesInLines('fixture.svelte', regionLines(source))).toEqual([
+		expect(findOffensesInLines('fixture.svelte', regionLines(source))).toEqual([
 			{ file: 'fixture.svelte', line: 3, found: 'she', text: 'She waits' }
 		]);
 	});
@@ -152,8 +152,8 @@ describe('findOffencesInLines', () => {
 		// Exercises `regionLinesInFile`'s disk-reading wrapper directly,
 		// which the glob-driven test above already covers incidentally --
 		// this asserts it in isolation with a file the fix landed clean.
-		const offences = findOffences('src/lib/components/organisms/OfferSection.svelte');
+		const offenses = findOffenses('src/lib/components/organisms/OfferSection.svelte');
 
-		expect(offences).toEqual([]);
+		expect(offenses).toEqual([]);
 	});
 });

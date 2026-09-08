@@ -22,7 +22,7 @@ import (
 func TestNoDirectHTTPError(t *testing.T) {
 	root := "../.."
 
-	var offences []string
+	var offenses []string
 	err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
@@ -60,7 +60,7 @@ func TestNoDirectHTTPError(t *testing.T) {
 			if !ok || ident.Name != "http" || sel.Sel.Name != "Error" {
 				return true
 			}
-			offences = append(offences, rel+":"+fset.Position(call.Pos()).String())
+			offenses = append(offenses, rel+":"+fset.Position(call.Pos()).String())
 			return true
 		})
 		return nil
@@ -69,9 +69,9 @@ func TestNoDirectHTTPError(t *testing.T) {
 		t.Fatalf("walk api module: %v", err)
 	}
 
-	if len(offences) > 0 {
+	if len(offenses) > 0 {
 		t.Fatalf("http.Error called directly instead of apierr.Write/WriteError:\n%s",
-			strings.Join(offences, "\n"))
+			strings.Join(offenses, "\n"))
 	}
 }
 
@@ -97,7 +97,7 @@ var jsonUsageExceptions = map[string]bool{
 func TestNoDirectJSONUsage(t *testing.T) {
 	root := "../.."
 
-	var offences []string
+	var offenses []string
 	err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
@@ -138,7 +138,7 @@ func TestNoDirectJSONUsage(t *testing.T) {
 			// json.NewEncoder(...) / json.NewDecoder(...)
 			if ident, ok := sel.X.(*ast.Ident); ok && ident.Name == "json" &&
 				(sel.Sel.Name == "NewEncoder" || sel.Sel.Name == "NewDecoder") {
-				offences = append(offences, rel+":"+fset.Position(call.Pos()).String()+": json."+sel.Sel.Name)
+				offenses = append(offenses, rel+":"+fset.Position(call.Pos()).String()+": json."+sel.Sel.Name)
 				return true
 			}
 
@@ -157,7 +157,7 @@ func TestNoDirectJSONUsage(t *testing.T) {
 				if !ok || value.Kind != token.STRING || value.Value != `"application/json"` {
 					return true
 				}
-				offences = append(offences, rel+":"+fset.Position(call.Pos()).String()+": Content-Type: application/json")
+				offenses = append(offenses, rel+":"+fset.Position(call.Pos()).String()+": Content-Type: application/json")
 			}
 			return true
 		})
@@ -167,8 +167,8 @@ func TestNoDirectJSONUsage(t *testing.T) {
 		t.Fatalf("walk api module: %v", err)
 	}
 
-	if len(offences) > 0 {
+	if len(offenses) > 0 {
 		t.Fatalf("JSON encode/decode/Content-Type set outside apierr.WriteJSON/DecodeJSON:\n%s",
-			strings.Join(offences, "\n"))
+			strings.Join(offenses, "\n"))
 	}
 }

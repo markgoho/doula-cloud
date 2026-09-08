@@ -248,7 +248,7 @@
 		/* A destination in the shell's own nav bar, at either width. It fills
 		   the bar's height so the 2px accent rule that marks the current
 		   section sits on the bar's own edge rather than floating under the
-		   word -- the one place the brief permits a 2px rule (#431). Colour
+		   word -- the one place the brief permits a 2px rule (#431). Color
 		   and weight are not the only signal: the route also sets `current`,
 		   which puts aria-current="page" on the anchor. */
 		a.nav {
@@ -299,7 +299,7 @@
 		   takes the shell's nav treatment rather than the link treatment:
 		   neutral text with the 2px bar the brief reserves for an active
 		   nav marker. #432's first pass used ordinary prose links, which
-		   put five accent-coloured titles and ten accent sub-links on one
+		   put five accent-colored titles and ten accent sub-links on one
 		   page, against the brief's Von Restorff rule. The accent is now
 		   spent once in the rail -- on the step you are on -- and once on
 		   `Continue`. */

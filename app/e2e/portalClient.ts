@@ -215,7 +215,7 @@ export async function seedContractorDoula(
  * and a Portal Account (#617) linked to that Client.
  *
  * Done through the API and stack.ts's client_portal_users fixture rather
- * than through the UI, so that a spec about some *later* portal behaviour
+ * than through the UI, so that a spec about some *later* portal behavior
  * is not also re-proving signup, Client creation and portal provisioning.
  * A caller that also needs the Client actually signed in still calls
  * signInPortalClient itself -- that is the one real walk of the magic-link

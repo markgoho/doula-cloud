@@ -44,7 +44,7 @@ const componentFiles = globSync('src/{lib/components,routes}/**/*.svelte', {
 
 const appRoot = new URL('../../../', import.meta.url);
 
-interface Offence {
+interface Offense {
 	file: string;
 	line: number;
 	text: string;
@@ -55,11 +55,11 @@ interface Offence {
  * Declaration-level rather than pattern-level, because a negative
  * lookahead after `\s*` backtracks onto the whitespace and matches
  * everything -- which is how the first draft of this file reported every
- * correct `font-size: var(--text-body-size)` in the app as an offence.
+ * correct `font-size: var(--text-body-size)` in the app as an offense.
  */
-function scanDeclarations(properties: string[], isAllowed: (value: string) => boolean): Offence[] {
+function scanDeclarations(properties: string[], isAllowed: (value: string) => boolean): Offense[] {
 	const declaration = new RegExp(String.raw`(${properties.join('|')})\s*:\s*([^;]+)`, 'g');
-	const offences: Offence[] = [];
+	const offenses: Offense[] = [];
 	for (const file of componentFiles) {
 		const source = readFileSync(new URL(file, appRoot), 'utf8');
 		for (const { line, text } of styleLines(source, IGNORE)) {
@@ -68,31 +68,31 @@ function scanDeclarations(properties: string[], isAllowed: (value: string) => bo
 				.filter((match) => !isAllowed(match[2]!.trim()))
 				.toArray();
 			for (const match of breaches) {
-				offences.push({ file, line, text: text.trim(), found: match[0].trim() });
+				offenses.push({ file, line, text: text.trim(), found: match[0].trim() });
 			}
 		}
 	}
-	return offences;
+	return offenses;
 }
 
 // `styleLines` has already dropped everything a `tokens:ignore` covers, so
 // neither scanner has to think about the marker.
-function scan(pattern: RegExp): Offence[] {
-	const offences: Offence[] = [];
+function scan(pattern: RegExp): Offense[] {
+	const offenses: Offense[] = [];
 	for (const file of componentFiles) {
 		const source = readFileSync(new URL(file, appRoot), 'utf8');
 		for (const { line, text } of styleLines(source, IGNORE)) {
 			const match = pattern.exec(text);
 			pattern.lastIndex = 0;
-			if (match !== null) offences.push({ file, line, text: text.trim(), found: match[0] });
+			if (match !== null) offenses.push({ file, line, text: text.trim(), found: match[0] });
 		}
 	}
-	return offences;
+	return offenses;
 }
 
-function report(offences: Offence[]): string[] {
-	return offences.map(
-		(offence) => `${offence.file}:${offence.line}  ${offence.found}  --  ${offence.text}`
+function report(offenses: Offense[]): string[] {
+	return offenses.map(
+		(offense) => `${offense.file}:${offense.line}  ${offense.found}  --  ${offense.text}`
 	);
 }
 
@@ -109,21 +109,21 @@ describe('components spend tokens, not raw values', () => {
 	 * decision -- both worth stopping at.
 	 */
 	it('uses no raw px length', () => {
-		const offences = scan(/(?<![\w-])-?\d*\.?\d+px/g);
+		const offenses = scan(/(?<![\w-])-?\d*\.?\d+px/g);
 
-		expect(report(offences)).toEqual([]);
+		expect(report(offenses)).toEqual([]);
 	});
 
 	/*
-	 * Colour is the one axis where a raw value is never defensible: the
+	 * Color is the one axis where a raw value is never defensible: the
 	 * whole point of authoring in OKLCH in one file is that the dark theme
 	 * is a derivation rather than a second hand-tuned palette, and a hex
 	 * in a component opts that component out of the dark theme entirely.
 	 */
-	it('names no colour of its own', () => {
-		const offences = scan(/#[0-9a-fA-F]{3,8}(?![\w-])|\brgba?\(|\bhsla?\(|\boklch\(/g);
+	it('names no color of its own', () => {
+		const offenses = scan(/#[0-9a-fA-F]{3,8}(?![\w-])|\brgba?\(|\bhsla?\(|\boklch\(/g);
 
-		expect(report(offences)).toEqual([]);
+		expect(report(offenses)).toEqual([]);
 	});
 
 	/*
@@ -133,24 +133,24 @@ describe('components spend tokens, not raw values', () => {
 	 * which is exactly how the shell's wordmark arrived at 17px.
 	 */
 	it('sets no font-size, font-weight or letter-spacing outside the scale', () => {
-		const offences = scanDeclarations(
+		const offenses = scanDeclarations(
 			['font-size', 'font-weight', 'letter-spacing'],
 			(value) => value.startsWith('var(--') || value === 'inherit' || value === 'normal'
 		);
 
-		expect(report(offences)).toEqual([]);
+		expect(report(offenses)).toEqual([]);
 	});
 });
 
 /*
- * The favicon is the one asset that legitimately carries colour literals:
+ * The favicon is the one asset that legitimately carries color literals:
  * it is rendered outside the document, so it can reach no custom property.
  * That makes it the one place a value can drift away from the palette
  * without anything noticing -- which is why it is still authored in OKLCH,
  * and why every value in it has to be one that tokens.css actually
  * declares.
  */
-describe('the favicon holds no colour tokens.css does not', () => {
+describe('the favicon holds no color tokens.css does not', () => {
 	const favicon = readFileSync(new URL('src/lib/assets/favicon.svg', appRoot), 'utf8');
 	const tokens = readFileSync(new URL('src/lib/styles/tokens.css', appRoot), 'utf8');
 	const colors = favicon
@@ -167,9 +167,9 @@ describe('the favicon holds no colour tokens.css does not', () => {
 		expect(tokens).toContain(color);
 	});
 
-	it('names no colour outside OKLCH', () => {
+	it('names no color outside OKLCH', () => {
 		// Comments stripped first: an issue reference like #452 is three hex
-		// digits followed by a non-word character, which is a colour as far
+		// digits followed by a non-word character, which is a color as far
 		// as a regex is concerned.
 		const markup = favicon.replaceAll(/<!--.*?-->/gs, '');
 

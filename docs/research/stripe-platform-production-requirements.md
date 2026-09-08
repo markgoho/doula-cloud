@@ -50,7 +50,7 @@ business" ([KYC obligations](https://support.stripe.com/questions/know-your-cust
 
 | What Stripe asks for | Source | Satisfiable today? |
 | --- | --- | --- |
-| A legal entity, with a business structure Stripe recognises. A single-member New York LLC maps to `single_member_llc`, which Stripe lists explicitly for US companies | [Identity verification, US business structures](https://docs.stripe.com/connect/identity-verification) | **No.** The LLC does not exist yet. That is the map's own destination. |
+| A legal entity, with a business structure Stripe recognizes. A single-member New York LLC maps to `single_member_llc`, which Stripe lists explicitly for US companies | [Identity verification, US business structures](https://docs.stripe.com/connect/identity-verification) | **No.** The LLC does not exist yet. That is the map's own destination. |
 | Business tax ID number — EIN for a US company | Identity verification, "name, address, tax ID number" | **No.** No EIN yet. |
 | Legal business address | Same | **No** as an entity address. [#384](https://github.com/markgoho/doula-cloud/issues/384) settles which of the five addresses goes where. |
 | Representative: the person opening the account — name, date of birth, home address, SSN | Same, plus the KYC article's "individual creating the Stripe account" | **Yes.** Mark is the representative, and nothing has to be created first. |
@@ -232,7 +232,7 @@ Two caveats:
   Connect tax reporting has nothing to say about it.
 
 The IRS's own 1099-K threshold has moved more than once in recent years. The figures above are
-what Stripe publishes today. They are Stripe's statement of Stripe's behaviour, not tax advice,
+what Stripe publishes today. They are Stripe's statement of Stripe's behavior, not tax advice,
 and Stripe says so: "Stripe recommends that you consult a tax advisor."
 
 ## 6. How long review takes, and what that does to end-of-October

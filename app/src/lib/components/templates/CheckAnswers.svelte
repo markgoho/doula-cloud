@@ -201,7 +201,7 @@
 		 * sidebar-l wraps at content-min="min(var(--form-max), 100%)" (or
 		 * the --measure equivalent when `isWide` -- markup above), so it
 		 * never fits beside the rail without the column reaching the
-		 * width it is actually judged against (#564). Centred,
+		 * width it is actually judged against (#564). Centered,
 		 * top-aligned, for the same reason `QuestionPage`'s own
 		 * equivalent Sidebar is: a summary of answers has nothing more to
 		 * put in a wider window (#543), and the flex default (stretch)

@@ -187,7 +187,7 @@ narrower than a 1440px artboard suggested.
 
 **Superseded on [#541](https://github.com/markgoho/doula-cloud/issues/541).** `--page-max` no longer exists: it froze a page column at 1216px, which would have spent a quarter of the fluid ramp [#531](https://github.com/markgoho/doula-cloud/issues/531) introduced, whatever monitor the page was on. The rail still stays at its drawn 16.25rem; the column now takes whatever the space it is given leaves, and the paragraph above stands only as the reason a second page width was refused.
 
-**Amended on [#543](https://github.com/markgoho/doula-cloud/issues/543).** A Template that cannot spend more room does not take it: where its content is fixed by its purpose — a question page asks one question — the rail and the column centre in whatever space is given rather than pinning to the inline start. This is the companion to [#531](https://github.com/markgoho/doula-cloud/issues/531)'s rule that past the plateau more room buys more content, read from the other end, and not an exception to it: neither statement licenses a width, and both put the decision on what the content is. `QuestionPage` and `CheckAnswers` do it with `justify-content: center` over a `var(--page-rail) minmax(0, var(--form-max))` grid — the sizes the rail and the column already had, so no page width returns by another route. `CheckAnswers`'s wide exit has something to put there, so it restores the flexible track, which leaves `justify-content` no free space and stops the centring by itself.
+**Amended on [#543](https://github.com/markgoho/doula-cloud/issues/543).** A Template that cannot spend more room does not take it: where its content is fixed by its purpose — a question page asks one question — the rail and the column center in whatever space is given rather than pinning to the inline start. This is the companion to [#531](https://github.com/markgoho/doula-cloud/issues/531)'s rule that past the plateau more room buys more content, read from the other end, and not an exception to it: neither statement licenses a width, and both put the decision on what the content is. `QuestionPage` and `CheckAnswers` do it with `justify-content: center` over a `var(--page-rail) minmax(0, var(--form-max))` grid — the sizes the rail and the column already had, so no page width returns by another route. `CheckAnswers`'s wide exit has something to put there, so it restores the flexible track, which leaves `justify-content` no free space and stops the centring by itself.
 
 The same list is rendered twice — a rail and a jump-to strip — with exactly one of them `display: none`
 at any width, which takes the other out of the accessibility tree entirely. One list restyled by a
@@ -342,7 +342,7 @@ read-only summary; signup is a longer single form with no picker at all. Giving 
 have produced a Template that only fits some of its own consumers, so the variety stays where ADR-0018
 already puts region-internal arrangement: on the route.
 
-**Top-aligned in a `--form-max` column, not centred in the viewport.** Every Template in this layer —
+**Top-aligned in a `--form-max` column, not centered in the viewport.** Every Template in this layer —
 `FormPage`, `QuestionPage`, `CheckAnswers`, `RecordDetail`, `OverviewHub`, `ErrorPage` — renders in normal
 flow under `padding-block: var(--space-8)`, and none owns the viewport's own height. Centring this one
 vertically would be a second layout mechanism kept for a single archetype, sized against a bar

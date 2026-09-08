@@ -193,7 +193,7 @@ published Reference documents **14** — the live server additionally exposes
 | `generate_screen_from_text` | no | Text prompt → a new screen. Takes minutes. |
 | `edit_screens` | no | Text prompt → edits to named existing screens. |
 | `generate_variants` | no | 1–5 variants of named screens, steered by `creativeRange` and `aspects`. |
-| `create_design_system` | no | Creates foundational tokens — colour, type, roundness, mode. |
+| `create_design_system` | no | Creates foundational tokens — color, type, roundness, mode. |
 | `update_design_system` | no | Updates an existing design system asset. |
 | `list_design_systems` | yes | Design systems for a project, or global ones. |
 | `apply_design_system` | no | Restyles named screens to a design system's tokens. |
@@ -219,9 +219,9 @@ recovery is `get_screen` a few minutes later rather than a re-generate.
   `COLOR_SCHEME`, `IMAGES`, `TEXT_FONT`, `TEXT_CONTENT`.
 - `DesignTheme` — `colorMode` LIGHT/DARK, three font slots from a 29-family
   enum, `roundness` from four steps, a `customColor` hex seed, a `colorVariant`
-  from the Material dynamic-colour set (`MONOCHROME`, `NEUTRAL`, `TONAL_SPOT`,
+  from the Material dynamic-color set (`MONOCHROME`, `NEUTRAL`, `TONAL_SPOT`,
   `VIBRANT`, `EXPRESSIVE`, `FIDELITY`, `CONTENT`, `RAINBOW`, `FRUIT_SALAD`),
-  four optional colour overrides, and a free-text `designMd`.
+  four optional color overrides, and a free-text `designMd`.
 
 The font enum is a closed list. **Phosphor is not relevant here — but note that
 generated HTML pulls Material Symbols**, which collides with the settled
@@ -436,7 +436,7 @@ Characteristics that decide the Svelte question:
   `aside`, three `section`, one `h1`, one `h2`, four `h3`, eight `button`.
   Structure is usable; it is not a div soup, but it is not carefully
   levelled either.
-- **The colour tokens are Material 3 names** — `surface`, `surface-container`,
+- **The color tokens are Material 3 names** — `surface`, `surface-container`,
   `on-surface`, `on-surface-variant`, `primary`, `primary-container`,
   `on-primary-container`, `outline`, `outline-variant`, and the whole `-fixed`
   family. Fifty-odd of them.
@@ -540,7 +540,7 @@ rewrite. That is genuinely good.
 response and every readable artefact.
 
 The one structured, non-prose editing surface that *does* exist is **Edit
-Theme** — mode, accent colour, corner radius, font. That is the `DesignTheme`
+Theme** — mode, accent color, corner radius, font. That is the `DesignTheme`
 object, and it is reachable from the MCP server via `update_design_system` and
 `apply_design_system`. It is coarse by design: it changes the whole system, not
 one element.
@@ -567,7 +567,7 @@ side by side.
 
 The three follow-up suggestions Stitch offered were all next screens
 (*"Design the Client List page"*, *"Create the Birth Tracking view"*, *"Add a
-'New Client Intake' modal"*), which is the documented multi-screen behaviour
+'New Client Intake' modal"*), which is the documented multi-screen behavior
 from the March blog post: *"Stitch can automatically generate logical next
 screens based on the click, mapping out user journeys effortlessly."*
 

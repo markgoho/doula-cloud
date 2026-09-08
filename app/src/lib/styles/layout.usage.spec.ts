@@ -88,7 +88,7 @@ const cwd = fileURLToPath(appRoot);
 const svelteFiles = globSync('src/{lib/components,routes}/**/*.svelte', { cwd });
 const cssFiles = globSync('src/**/*.css', { cwd });
 
-interface Offence {
+interface Offense {
 	file: string;
 	line: number;
 	found: string;
@@ -103,7 +103,7 @@ interface Offence {
  * Matching `@media` rather than `@container` is also what satisfies the
  * ADR's requirement that the gate can tell the two apart: a container
  * query asks about the space a component was given and is the default
- * mechanism, so it is never an offence here however many of them there
+ * mechanism, so it is never an offense here however many of them there
  * are.
  */
 const WIDTH_MEDIA = /@media[^{]*\bwidth\b/;
@@ -138,10 +138,10 @@ const CONTAINMENT_CONTEXT = /(container-type:\s*(inline-size|size)\b)|(container
  */
 const BASE_SIZE = /font-size:\s*var\(--text-body-size\)/;
 
-interface FileOffences {
-	widthMedia: Offence[];
-	staticVw: Offence[];
-	unpairedContainer: Offence[];
+interface FileOffenses {
+	widthMedia: Offense[];
+	staticVw: Offense[];
+	unpairedContainer: Offense[];
 }
 
 /*
@@ -189,7 +189,7 @@ function inBlocks(lines: ReturnType<typeof styleLines>): { line: number; text: s
  * in-force `layout:ignore` has already survived, and it is what rule 2
  * judges.
  */
-function scanSource(file: string, source: string, kind: 'svelte' | 'css'): FileOffences {
+function scanSource(file: string, source: string, kind: 'svelte' | 'css'): FileOffenses {
 	const lines = styleLines(source, IGNORE, kind);
 	const blocked = inBlocks(styleLines(source, NO_MARKER, kind));
 	const baseSizeBlocks = new Set(
@@ -202,7 +202,7 @@ function scanSource(file: string, source: string, kind: 'svelte' | 'css'): FileO
 		staticVw: lines
 			.filter(({ text }) => STATIC_VW.test(text))
 			.map(({ line, text }) => ({ file, line, found: text.trim() })),
-		/* An offence unless some OTHER block in the file declares the base
+		/* An offense unless some OTHER block in the file declares the base
 		   size: the declaration that pairs with a container sits on the
 		   container's children, so it is never in the block being judged,
 		   and a base size in that same block is the defect itself. */
@@ -213,11 +213,11 @@ function scanSource(file: string, source: string, kind: 'svelte' | 'css'): FileO
 	};
 }
 
-function scanFile(file: string, kind: 'svelte' | 'css'): FileOffences {
+function scanFile(file: string, kind: 'svelte' | 'css'): FileOffenses {
 	return scanSource(file, readFileSync(new URL(file, appRoot), 'utf8'), kind);
 }
 
-function scan(): FileOffences {
+function scan(): FileOffenses {
 	const perFile = [
 		...svelteFiles.map((file) => scanFile(file, 'svelte')),
 		...cssFiles.map((file) => scanFile(file, 'css'))
@@ -231,8 +231,8 @@ function scan(): FileOffences {
 
 const { widthMedia, staticVw, unpairedContainer } = scan();
 
-function report(offences: Offence[]): string[] {
-	return offences.map(({ file, line, found }) => `${file}:${line} -- ${found}`);
+function report(offenses: Offense[]): string[] {
+	return offenses.map(({ file, line, found }) => `${file}:${line} -- ${found}`);
 }
 
 describe('intrinsic layout (ADR-0024, gated per ADR-0025)', () => {

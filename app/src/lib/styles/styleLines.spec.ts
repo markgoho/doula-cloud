@@ -12,7 +12,7 @@ import { styleLines } from './styleLines';
  * but the opening line. So the continuation-line case has never run, and
  * the first author to write a reason that reads better on its second line
  * would silently lose their exception. That case is the reason this file
- * exists; the rest is the surrounding behaviour it would be dishonest to
+ * exists; the rest is the surrounding behavior it would be dishonest to
  * assert around without.
  */
 

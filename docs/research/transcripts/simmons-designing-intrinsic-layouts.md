@@ -1,7 +1,7 @@
 # Jen Simmons — "Designing Intrinsic Layouts" (An Event Apart)
 
 Source: https://www.youtube.com/watch?v=AMPKmh98XLY
-YouTube auto-generated captions, retrieved 2026-08-30 with yt-dlp. Auto-captions: no punctuation, occasional mistranscription. Timestamps are [hh:mm:ss].
+YouTube auto-generated captions, retrieved 2026-08-30 with yt-dlp. Auto-captions: no punctuation, occasional mistranscription. Timestamps are [hh:mm:ss]. Verbatim transcript: British spellings in it (e.g. "colour") stay as transcribed and are exempt from the American-English rule in `CLAUDE.md`.
 
 [00:00:05] so I am gonna talk today about CSS grid and layout graphic design in the web this is a topic I've been talking about for five years now there are other videos that I've made or other other conference talks that I've had many of you have been here hello again ivenna part does these amazing recordings and so you can watch them I've conveniently put a playlist of them on my youtube channel at youtube.com slash layout land where you can quickly
 [00:00:33] get to them if you're interested in some of the things I'm talking about today and you get excited you can you might want to watch these other videos or rewatch them or share them with your colleagues and over the years I've done a couple different things to try to explain what this moment is and what it means to have the tools that we have today and have the abilities that we we have today one in one year I did this official timeline of web page layout

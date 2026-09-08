@@ -44,15 +44,15 @@ const appRoot = fileURLToPath(new URL('../../', import.meta.url));
 
 const sourceFiles = globSync('src/{lib/components,routes}/**/*.svelte', { cwd: appRoot });
 
-interface Offence {
+interface Offense {
 	file: string;
 	line: number;
 	found: string;
 	text: string;
 }
 
-function findOffences(file: string): Offence[] {
-	const found: Offence[] = [];
+function findOffenses(file: string): Offense[] {
+	const found: Offense[] = [];
 
 	for (const { line, text: literal } of quotedStrings(file, appRoot)) {
 		for (const word of BANNED) {
@@ -73,12 +73,12 @@ describe('GOV.UK error wording', () => {
 
 	for (const word of BANNED) {
 		it(`no user-facing string says "${word}"`, () => {
-			const offences = sourceFiles
-				.flatMap((file) => findOffences(file))
-				.filter((offence) => offence.found === word);
+			const offenses = sourceFiles
+				.flatMap((file) => findOffenses(file))
+				.filter((offense) => offense.found === word);
 
 			expect(
-				offences.map((offence) => `${offence.file}:${offence.line} "${offence.text}"`)
+				offenses.map((offense) => `${offense.file}:${offense.line} "${offense.text}"`)
 			).toEqual([]);
 		});
 	}

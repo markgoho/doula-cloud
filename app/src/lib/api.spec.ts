@@ -168,7 +168,7 @@ describe('apiFetchWithSession', () => {
 	 * `redirecting` alone resets as soon as the first goto's own promise
 	 * settles, which is *before* the later, sequential calls in that same
 	 * onMount discover their own refusal. By then location.pathname already
-	 * reads /mfa/enroll, so the later call must recognise it is already
+	 * reads /mfa/enroll, so the later call must recognize it is already
 	 * there rather than reading that as the destination to send returnTo to.
 	 */
 	it('lets a later, sequential MFA_REQUIRED refusal fall through once an earlier one has already landed on /mfa/enroll', async () => {

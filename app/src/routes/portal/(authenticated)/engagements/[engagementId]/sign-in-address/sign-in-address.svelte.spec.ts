@@ -34,7 +34,7 @@ vi.mock('#lib/api.js', () => ({
 // best-effort pattern -- mocked rather than exercised, the same as the
 // portal layout's own sign-out spec: it is fire-and-forget by design,
 // and the Service Worker/Push APIs it drives have nothing to do with
-// this screen's own behaviour.
+// this screen's own behavior.
 const unregisterPushSubscription = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
 vi.mock('#lib/pushRegistration.js', () => ({
 	unregisterPushSubscription,

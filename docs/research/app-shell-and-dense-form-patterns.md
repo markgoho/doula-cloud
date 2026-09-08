@@ -15,14 +15,14 @@ right-aligned Sign out button; the staff dashboard at
 fixes this cannot be written from nothing, so this document supplies the
 references.
 
-**Method.** Public marketing sites, product tours, vendor help centres and
+**Method.** Public marketing sites, product tours, vendor help centers and
 public screenshots only. No signups, no trials, no credentials. Sites that
 hide their product shots behind JS were driven with `/playwriter` against the
 user's own Chrome. Every screenshot in
 [`app-shell-survey/`](app-shell-survey/) was captured from a public page in
 August 2026, and every claim below is sourced to the page it came from.
 
-**One caveat on the captures.** The browser used prefers a dark colour scheme,
+**One caveat on the captures.** The browser used prefers a dark color scheme,
 so a few full-page marketing captures render dark. Every screenshot of an
 actual product UI is a vendor-published image and is unaffected.
 
@@ -31,7 +31,7 @@ actual product UI is a vendor-published image and is unaffected.
 | # | Product | Trade | Shell | Density | Practice-defined fields |
 |---|---|---|---|---|---|
 | 1 | [Cliniko](https://www.cliniko.com) | Allied health | Fixed dark left sidebar, collapsible, ~11 flat items | Airy content, compact nav | **Yes** — named sections of fields on the record, archive not delete |
-| 2 | [Jane App](https://jane.app) | Allied health | Top bar only, 6 tabs, tenant name centred | Compact master-detail | Via chart templates and intake forms, not free record fields |
+| 2 | [Jane App](https://jane.app) | Allied health | Top bar only, 6 tabs, tenant name centered | Compact master-detail | Via chart templates and intake forms, not free record fields |
 | 3 | [SimplePractice](https://www.simplepractice.com) | Therapy | Icon-only left rail + top bar, expandable | Airy, generous | **No** — fixed client schema |
 | 4 | [Practice Better](https://practicebetter.io) | Nutrition / health coaching | Global rail + a second record-scoped rail | Medium | Indirect — customer builds *forms*, mapped into fixed record sections |
 | 5 | [Halaxy](https://www.halaxy.com) | Allied health | — (no public shell shot found) | Compact definition lists | **Yes** — custom questions interleaved with structural facts |
@@ -229,7 +229,7 @@ fields*.
 
 *Source: [Clio Manage product page](https://www.clio.com/products/manage/)*
 
-**Custom fields — field sets.** Clio's help centre states that custom fields
+**Custom fields — field sets.** Clio's help center states that custom fields
 are *"additional fields of information that you may need to capture for a
 contact or matter that Clio does not automatically capture"*, and — the
 important part — that *"you can group them together into **field sets** in
@@ -268,7 +268,7 @@ denser than anything else in the survey**.
 *Source: [doulado.co](https://doulado.co/) hero image*
 
 **Shell.** A white top bar: wordmark far left, then a global Search field,
-then centred section tabs — Home, **Clients** (active, underlined), Templates,
+then centered section tabs — Home, **Clients** (active, underlined), Templates,
 Billing — then three utility icons on the right (one carrying a red badge) and
 an avatar with the user's name and a caret ("Bridget Parke ▾"). Below it, a
 **section-scoped left rail** that changes with the tab: CLIENTS (with a count
@@ -287,10 +287,10 @@ survey and it is worth studying closely:
   Status.
 - The table packs **four lines into the Name cell alone**: avatar, name,
   email, date of birth with a computed age, phone.
-- Status is a coloured pill *plus* a short record code (`#JDCL2`).
-- Labels are **multiple coloured pills per row** — Prenatal Education, Birth,
+- Status is a colored pill *plus* a short record code (`#JDCL2`).
+- Labels are **multiple colored pills per row** — Prenatal Education, Birth,
   Postpartum, Lactation, Pelvic Floor, BCBS, Workshop — doing the work of a
-  tag system, in colour, inline.
+  tag system, in color, inline.
 - The Date column shows a due date **and a computed countdown beneath it**
   ("Due 6/27/2026" / "12 weeks, 6 days"). For birth work the countdown is the
   fact people actually read.
@@ -299,7 +299,7 @@ survey and it is worth studying closely:
 - A pinned footer bar: "Showing 23 results · Export All" on the left, "View
   Archive · Settings" on the right.
 
-Colour carries meaning throughout — the labels are not decorative. Rows are
+Color carries meaning throughout — the labels are not decorative. Rows are
 tight, roughly 44–48px. Doulado is the evidence that a doula-facing product
 can be far denser than the allied-health products and still be legible, and
 the countdown column is a domain-specific idea worth taking.
@@ -324,7 +324,7 @@ jane.app/guide*
 
 **Shell.** A **top bar only** — no sidebar. Six flat items on the left
 (Schedule, Patients, Staff, Billing, Reports, Settings), the product logo and
-the **tenant name** ("Demo Clinic") centred, and on the right a **location
+the **tenant name** ("Demo Clinic") centered, and on the right a **location
 switcher** ("The Village ▾"), a `?` help control, and the account menu as an
 avatar with the user's name ("Demo Owner ▾"). Jane is the only product in the
 survey that puts the tenant in the middle of the chrome, and the only one that
@@ -361,8 +361,8 @@ profiles](https://support.halaxy.com/hc/en-au/articles/1500003075021-Customise-y
 support.halaxy.com*
 
 No public capture of Halaxy's full shell was found — its marketing feature
-URLs 404 and the help centre crops to the panel under discussion. What the
-help centre does show is the most interesting **placement** decision in the
+URLs 404 and the help center crops to the panel under discussion. What the
+help center does show is the most interesting **placement** decision in the
 survey.
 
 **Density — compact definition lists.** The patient profile is read-first: a
@@ -370,7 +370,7 @@ header band with avatar, name in caps, a portal status line and an **Edit**
 link top-right, then the facts as a tight `label: value` list — Legal Name,
 Date of Birth (with computed age), Gender, Review Date, Introduction Source,
 **Marital status**, **Children**, Practice Locations, Labels. A status chip
-("CURRENT") sits top-right of the body, and Labels render as coloured chips
+("CURRENT") sits top-right of the body, and Labels render as colored chips
 (Private, New patient, Disability).
 
 **Practice-defined fields — interleaved, not appended.** Marital status and
@@ -408,7 +408,7 @@ Staffing & Scheduling, Payments and invoicing, a Portfolio Builder and a
 Candidate Dashboard. Pricing is Free / $40 monthly / $400 yearly.
 
 **No product UI is published.** Every screenshot slot on the page is a lazy
-placeholder that never resolves, and there is no tour, no help centre with
+placeholder that never resolves, and there is no tour, no help center with
 screenshots, and no public demo. Recorded here as market context only; nothing
 about its shell, density or forms could be observed.
 
@@ -453,9 +453,9 @@ Faithfully recorded, since #405 asked for it:
   *staff-facing* product. Marketing pages show phone mockups of the *client*
   app instead. Whatever these products do when the window narrows, they do not
   consider it a selling point, and it cannot be learned from public sources.
-  Doula Cloud will have to decide narrow-viewport behaviour on its own
+  Doula Cloud will have to decide narrow-viewport behavior on its own
   reasoning rather than by reference.
-- **No vendor documents its type scale, spacing scale or colour tokens
+- **No vendor documents its type scale, spacing scale or color tokens
   publicly.** Density had to be read off screenshots, not off a published
   system.
 
@@ -469,7 +469,7 @@ the left; Jane and Doulado put a bar on the top with a second local rail
 beneath it. The split correlates with what has to be shown: **the two products
 that must display a tenant and a location put it in a top bar**. Doula Cloud
 must show a Practice, and a Staff member who can belong to more than one, so
-Jane's arrangement — nav left, tenant centre, tenant-scoped switcher and
+Jane's arrangement — nav left, tenant center, tenant-scoped switcher and
 account right — is the closest fit to the problem. Every product in the survey
 puts account and sign-out **behind an avatar menu at one end of the chrome**;
 none of them leaves a bare Sign out button on the page, which is what Doula
@@ -482,9 +482,9 @@ Better's per-client section list), never a global tree.
 
 **On density.** There is a real spread, and it is not accidental.
 SimplePractice and Cliniko are airy and spend space; Doulado is dense and
-spends colour. A 14-doula agency reading records all day is closer to
+spends color. A 14-doula agency reading records all day is closer to
 Doulado's problem than to a solo therapist's, but Doulado's density is bought
-with heavy coloured pills that would fight any restrained aesthetic. The
+with heavy colored pills that would fight any restrained aesthetic. The
 honest reading is: **compact rows, airy forms** — Doulado's list density with
 SimplePractice's form pacing.
 

@@ -13,7 +13,7 @@ import { readFileSync } from 'node:fs';
  * Strips comments, then returns what is left of each line.
  *
  * Block comments (`<!-- -->` and slash-star) are tracked across lines. A
- * `//` line comment is only recognised where the line *starts* with it,
+ * `//` line comment is only recognized where the line *starts* with it,
  * which is how every one in this repo is written, and which is what stops
  * a `https://` inside a string being read as the start of a comment.
  */

@@ -305,7 +305,7 @@ test('A contractor Doula reaches the explainer\'s "Set up a Practice" link, with
  * Request this walk seeded, and the walk still has Refuse left to prove.
  * Refuse is the one actually pressed, so the walk demonstrates a real
  * write path end to end and lands where the endpoint's own success
- * behaviour says it should: back on the Client's own record.
+ * behavior says it should: back on the Client's own record.
  */
 test('An Owner decides a pending Engagement Request, with no pointer at any step', async ({
 	page,
@@ -372,6 +372,6 @@ test('An Owner decides a pending Engagement Request, with no pointer at any step
 
 	// Done looks like: the refusal went through, and the screen is back
 	// on the Client's own record -- the endpoint's documented success
-	// behaviour.
+	// behavior.
 	await expect(page).toHaveURL(new RegExp(`/practices/${practiceId}/clients/${clientId}$`));
 });

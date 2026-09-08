@@ -36,6 +36,14 @@ ranked against the feature, and no ticket has to ask for them.
   that can actually enforce it.
 - **Layout.** What is built adapts intrinsically to the space it is given, never to a device it assumes it is on. Every screen is complete and usable from 320px up, and a component behaves correctly wherever it is placed — full page, narrow column, or embedded in a Practice's own website. **Choosing a component is a layout decision**: whoever picks one owns what it does at 320px with a real Practice's content in it, even on a screen that writes no CSS at all. See `docs/adr/0024-layout-is-intrinsic-and-320px-is-a-conformance-commitment.md` for the mechanism and `docs/adr/0025-layout-is-verified-across-the-continuum.md` for how it is checked.
 
+## Language: American English
+
+Everything in this repository is written in American English — identifiers, comments, test-failure messages, documentation, and copy a person reads on screen. "color", not "colour"; "behavior", "center", "recognize", "offense".
+
+Exceptions exist only where the word is part of something we do not own: a CSS keyword, an HTML attribute value, a third-party API or identifier, or a verbatim quotation of an outside source. Each one stays on the line it is on with `spelling:ignore` and the reason beside it.
+
+`app/src/lib/spelling.usage.spec.ts` enforces this over `app/src` and fails the build on a new British spelling; it reads the `spelling:ignore` marker as the deliberate override. Two files are outside the sweep and cannot carry a marker: `bun.lock`, which is generated, and `docs/design/doula-cloud.pen`, which is encrypted design source.
+
 ## Agent skills
 
 ### Git flow: worktree + PR, not a direct push to trunk

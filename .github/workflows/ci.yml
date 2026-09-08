@@ -636,7 +636,7 @@ jobs:
 
           # `firebase deploy` returns before the new release has reached every
           # edge, so a check that curls immediately can still be answered by the
-          # previous release -- which passes for behaviour both releases share
+          # previous release -- which passes for behavior both releases share
           # and fails only for whatever this deploy changed. Retry the whole set
           # until the edge catches up. reason=... is set by the failing check so
           # the timeout message names what never converged.
