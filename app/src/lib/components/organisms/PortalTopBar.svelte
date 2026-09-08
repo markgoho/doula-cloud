@@ -86,6 +86,16 @@
 			background-color: var(--color-surface-bright);
 		}
 
+		/* #280: the portal's own Birth Plan page already asks for a printed
+		   sheet with no chrome (#306) -- this bar is the chrome, so it
+		   never printed. ADR-0024 rule 3 permits `print` as a stated user
+		   preference, so this is the one media query this file owns. */
+		@media print {
+			header {
+				display: none;
+			}
+		}
+
 		/* The base size re-resolved against the bar (#544): a `cqi`
 		   resolves against the nearest ANCESTOR container, so `header`
 		   cannot answer its own, and text inside it would otherwise carry
