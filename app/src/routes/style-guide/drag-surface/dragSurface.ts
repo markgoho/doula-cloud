@@ -1,5 +1,5 @@
 import type { Component } from 'svelte';
-import { toRoutePath, type RouteFixture } from '../../routeFixture.js';
+import { toRoutePath, toSweptFixtures, type RouteFixture } from '../../routeFixture.js';
 
 /*
  * The demo half of the drag surface (CONTEXT.md): the list of components a
@@ -59,15 +59,27 @@ export function toDemos(
  * screen (`fixture.name`) for the check's own failure sentence, so the
  * surface reuses that rather than deriving a second display name -- the
  * two halves report a screen under one name.
+ *
+ * A route that renders differently for different callers offers one entry
+ * per branch (#913), each under the name its own variant carries. The
+ * expansion is `toSweptFixtures`, the same reader `route-continuum.svelte.
+ * spec.ts` uses, so a branch that can be swept can be dragged and the two
+ * halves cannot disagree about which branches exist.
+ *
+ * Every branch of one route keeps that route's slug: the slug names the
+ * screen, and `toSorted` is stable, so the branches stay in the order the
+ * fixture declared them and sit together in the picker.
  */
 export function toRouteDemos(modules: Record<string, { fixture: RouteFixture }>): Demo[] {
 	return Object.entries(modules)
-		.map(([modulePath, module]) => ({
-			name: module.fixture.name,
-			slug: toRoutePath(modulePath),
-			component: module.fixture.component as Component,
-			fixture: module.fixture
-		}))
+		.flatMap(([modulePath, module]) =>
+			toSweptFixtures(module.fixture).map((fixture) => ({
+				name: fixture.name,
+				slug: toRoutePath(modulePath),
+				component: fixture.component as Component,
+				fixture
+			}))
+		)
 		.toSorted((a, b) => a.slug.localeCompare(b.slug));
 }
 

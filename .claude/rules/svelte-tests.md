@@ -180,6 +180,41 @@ body reads once.
   a spread — `{ ...data, hasMore: true }` — never as a fresh object that
   re-states the fields it shares.
 
+**A route that renders differently for different callers declares every
+one of those sessions**, as `variants` on the same fixture
+([#913](https://github.com/markgoho/doula-cloud/issues/913)). A fixture names one session, so a screen that
+branches on `isOwner`, `isOwnerOrAdmin` or `isAmbientContractor` had only
+the branch its own session selected swept and dragged — the Stripe Connect
+settings screen renders three trees and only the Owner's was ever mounted.
+A variant restates whatever carries the session and inherits the rest, and
+names itself as its own screen, because the check titles its `it` with
+`fixture.name` and the drag surface keys its picker on it:
+
+```typescript
+export const asDoula: RouteVariant = {
+  name: 'The Stripe Connect settings screen, as a Doula',
+  pageData: session(['doula'])
+};
+
+export const fixture: RouteFixture = {
+  name: 'The Stripe Connect settings screen, as an Owner',
+  …,
+  variants: [asDoula]
+};
+```
+
+`toSweptFixtures` is the one reader of the field, called by
+`route-continuum.svelte.spec.ts` and by the drag surface — nothing else
+walks `variants`, for the reason `toPageState` gives. A variant is a
+shallow override, so a restated `pageData` replaces the base's whole.
+Declare the branches the screen renders differently, not one per role: a
+branch whose tree is a strict subset of another's realizes nothing the
+sweep has not already measured, and the fixture says in a comment that it
+was left out on purpose. A variant is exported by name beside `fixture`
+for the same reason a fixture's content is — a spec that needs that
+branch spreads it (`toPageState({ ...fixture, ...asDoula })`) rather than
+writing a second session of its own.
+
 **A spec never edits a fixture to suit an assertion.** If a spec needs
 content the fixture does not hold, that is the fixture's screen changing,
 and the sweep measures it too — decide it deliberately rather than
