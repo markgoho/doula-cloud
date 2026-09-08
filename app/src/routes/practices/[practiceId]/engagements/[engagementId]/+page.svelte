@@ -778,13 +778,13 @@
 	// gate this used to route on -- InvoiceSection now decides whether to
 	// show the form at all from canClientsPay, a standing fact read up
 	// front, so a create attempt reaching this function is always the
-	// happy path or a genuine error.
-	async function handleCreateInvoice(amountCents: number, chosenBillingMode?: BillingMode) {
+	// happy path or a genuine error. #947 removed the amount this used to
+	// pass on: an Invoice is raised for whatever the Contract carries.
+	async function handleCreateInvoice(chosenBillingMode?: BillingMode) {
 		const invoice = await createInvoice(
 			apiFetchWithSession,
 			page.params.practiceId!,
 			page.params.engagementId!,
-			amountCents,
 			chosenBillingMode
 		);
 		invoicesState.value = [invoice, ...invoicesState.value];

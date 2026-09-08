@@ -165,9 +165,9 @@ func postInvoiceBody(t *testing.T, srv *httptest.Server, session string, practic
 	return resp
 }
 
-func postInvoice(t *testing.T, srv *httptest.Server, session string, practiceID, engagementID string, amountCents int64) *http.Response {
+func postInvoice(t *testing.T, srv *httptest.Server, session string, practiceID, engagementID string) *http.Response {
 	t.Helper()
-	body, err := json.Marshal(payments.CreateInvoiceRequest{AmountCents: amountCents})
+	body, err := json.Marshal(payments.CreateInvoiceRequest{})
 	if err != nil {
 		t.Fatalf("marshal request: %v", err)
 	}
@@ -212,7 +212,7 @@ func TestPostInvoiceHandler_NotConnectedRefuses(t *testing.T) {
 	srv, session := newInvoiceServer(t, db, uid, client)
 	defer srv.Close()
 
-	resp := postInvoice(t, srv, session, practiceID, engagementID, 15000)
+	resp := postInvoice(t, srv, session, practiceID, engagementID)
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusConflict {
@@ -267,7 +267,7 @@ func TestPostInvoiceHandler_RestrictedCardPaymentsRefuses(t *testing.T) {
 	srv, session := newInvoiceServer(t, db, uid, client)
 	defer srv.Close()
 
-	resp := postInvoice(t, srv, session, practiceID, engagementID, 15000)
+	resp := postInvoice(t, srv, session, practiceID, engagementID)
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusConflict {
@@ -301,7 +301,7 @@ func TestPostInvoiceHandler_CardPaymentsActiveWithNoAccountReturns500(t *testing
 	srv, session := newInvoiceServer(t, db, uid, client)
 	defer srv.Close()
 
-	resp := postInvoice(t, srv, session, practiceID, engagementID, 15000)
+	resp := postInvoice(t, srv, session, practiceID, engagementID)
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusInternalServerError {
@@ -338,7 +338,7 @@ func TestPostInvoiceHandler_CreatesInvoiceWhenConnected(t *testing.T) {
 	srv, session := newInvoiceServer(t, db, uid, client)
 	defer srv.Close()
 
-	resp := postInvoice(t, srv, session, practiceID, engagementID, 15000)
+	resp := postInvoice(t, srv, session, practiceID, engagementID)
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusCreated {
@@ -430,7 +430,7 @@ func TestPostInvoiceHandler_UnbillableContractRefused(t *testing.T) {
 			srv, session := newInvoiceServer(t, db, uid, client)
 			defer srv.Close()
 
-			resp := postInvoice(t, srv, session, practiceID, engagementID, 15000)
+			resp := postInvoice(t, srv, session, practiceID, engagementID)
 			defer resp.Body.Close()
 
 			if resp.StatusCode != http.StatusConflict {
@@ -481,7 +481,7 @@ func TestPostInvoiceHandler_ClientWithNoEmailRefuses(t *testing.T) {
 	srv, session := newInvoiceServer(t, db, uid, fakeClient)
 	defer srv.Close()
 
-	resp := postInvoice(t, srv, session, practiceID, engagementID, 15000)
+	resp := postInvoice(t, srv, session, practiceID, engagementID)
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusUnprocessableEntity {
@@ -504,7 +504,7 @@ func TestPostInvoiceHandler_NoContractReturns404(t *testing.T) {
 	srv, session := newInvoiceServer(t, db, uid, client)
 	defer srv.Close()
 
-	resp := postInvoice(t, srv, session, practiceID, engagementID, 15000)
+	resp := postInvoice(t, srv, session, practiceID, engagementID)
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusNotFound {
@@ -526,7 +526,7 @@ func TestPostInvoiceHandler_MalformedEngagementIDReturns400(t *testing.T) {
 	srv, session := newInvoiceServer(t, db, uid, client)
 	defer srv.Close()
 
-	resp := postInvoice(t, srv, session, practiceID, "not-a-uuid", 15000)
+	resp := postInvoice(t, srv, session, practiceID, "not-a-uuid")
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusBadRequest {
@@ -545,7 +545,7 @@ func TestPostInvoiceHandler_EngagementNotFoundReturns404(t *testing.T) {
 	srv, session := newInvoiceServer(t, db, uid, client)
 	defer srv.Close()
 
-	resp := postInvoice(t, srv, session, practiceID, "00000000-0000-0000-0000-000000000000", 15000)
+	resp := postInvoice(t, srv, session, practiceID, "00000000-0000-0000-0000-000000000000")
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusNotFound {
@@ -553,11 +553,80 @@ func TestPostInvoiceHandler_EngagementNotFoundReturns404(t *testing.T) {
 	}
 }
 
-// TestPostInvoiceHandler_InvalidAmountReturns400 proves a zero or negative
-// amountCents is rejected before any Stripe call.
-func TestPostInvoiceHandler_InvalidAmountReturns400(t *testing.T) {
+// TestPostInvoiceHandler_ContractorWithoutAttachmentNotFound proves
+// #947's reach test: raising an Invoice stays open to any Staff by role
+// (#68), but a contractor Doula who holds no granted attachment on the
+// Engagement is refused with a 404 before the handler runs at all --
+// AttachingWrite's own refusal (staffauth/attach.go), the same one every
+// other Engagement-scoped write already carries. Proven by zero Invoices
+// persisted and zero Stripe calls, not just the status code, so a bug
+// that let the handler run and fail some other way wouldn't pass this
+// test by accident.
+func TestPostInvoiceHandler_ContractorWithoutAttachmentNotFound(t *testing.T) {
 	db := testdb.New(t)
-	const uid = "invoice-invalid-amount"
+	const uid = "invoice-contractor-unattached"
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "contractor")
+	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jane Client", "jane@example.com")
+	seedSignedContract(t, db, engagementID)
+	client := payments.NewFakeClient()
+
+	srv, session := newInvoiceServer(t, db, uid, client)
+	defer srv.Close()
+
+	resp := postInvoice(t, srv, session, practiceID, engagementID)
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusNotFound {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusNotFound)
+	}
+	if got := invoiceCount(t, db); got != 0 {
+		t.Fatalf("invoices row count = %d, want 0", got)
+	}
+	if len(client.CreateInvoiceCalls) != 0 {
+		t.Fatalf("CreateInvoice calls = %d, want 0 -- the reach test must refuse before the handler runs", len(client.CreateInvoiceCalls))
+	}
+}
+
+// TestPostInvoiceHandler_ContractorWithGrantedAttachmentSucceeds proves
+// the other half of #947's reach test: a contractor Doula who *does*
+// hold a granted attachment on the Engagement raises an Invoice the same
+// as anyone else -- reach, not role, is what #68 and this route's own
+// AttachingWrite gate on.
+func TestPostInvoiceHandler_ContractorWithGrantedAttachmentSucceeds(t *testing.T) {
+	db := testdb.New(t)
+	const uid = "invoice-contractor-attached"
+	practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "contractor")
+	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jane Client", "jane@example.com")
+	seedSignedContract(t, db, engagementID)
+	testdb.SeedGrantedAttachment(t, db, engagementID, staffID)
+	client := payments.NewFakeClient()
+
+	srv, session := newInvoiceServer(t, db, uid, client)
+	defer srv.Close()
+
+	resp := postInvoiceWithBillingMode(t, srv, session, practiceID, engagementID, string(payments.BillingModeByHand))
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusCreated {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusCreated)
+	}
+	if got := invoiceCount(t, db); got != 1 {
+		t.Fatalf("invoices row count = %d, want 1", got)
+	}
+}
+
+// TestPostInvoiceHandler_AmountDerivesFromContractIgnoringBody proves
+// #947's core AC: the amount an Invoice is raised for is the signed
+// Contract's own amount_cents, never a caller-supplied figure, even when
+// a request body tries to name one -- CreateInvoiceRequest carries no
+// such field any more, so an old caller's amountCents is simply ignored
+// as an unknown key. The seeded Contract carries 15000
+// (seedSignedContract -> seedContractWithStatus); the attempted 999 must
+// never reach the created Invoice, Stripe's own CreateInvoice call, or
+// the invoice_raised activity entry.
+func TestPostInvoiceHandler_AmountDerivesFromContractIgnoringBody(t *testing.T) {
+	db := testdb.New(t)
+	const uid = "invoice-amount-from-contract"
 	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
 	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jane Client", "jane@example.com")
 	seedSignedContract(t, db, engagementID)
@@ -575,15 +644,37 @@ func TestPostInvoiceHandler_InvalidAmountReturns400(t *testing.T) {
 	srv, session := newInvoiceServer(t, db, uid, client)
 	defer srv.Close()
 
-	for _, amount := range []int64{0, -100} {
-		resp := postInvoice(t, srv, session, practiceID, engagementID, amount)
-		_ = resp.Body.Close()
-		if resp.StatusCode != http.StatusBadRequest {
-			t.Fatalf("amountCents=%d: status = %d, want %d", amount, resp.StatusCode, http.StatusBadRequest)
-		}
+	resp := postInvoiceBody(t, srv, session, practiceID, engagementID, `{"amountCents": 999}`)
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusCreated {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusCreated)
 	}
-	if len(client.CreateInvoiceCalls) != 0 {
-		t.Fatalf("CreateInvoice calls = %d, want 0", len(client.CreateInvoiceCalls))
+	var out payments.InvoiceView
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if out.AmountCents != 15000 {
+		t.Fatalf("invoice.amountCents = %d, want 15000 (the Contract's, not the attempted 999)", out.AmountCents)
+	}
+	if len(client.CreateInvoiceCalls) != 1 || client.CreateInvoiceCalls[0].AmountCents != 15000 {
+		t.Fatalf("CreateInvoice calls = %v, want one call at 15000", client.CreateInvoiceCalls)
+	}
+
+	var diff []byte
+	if err := db.Admin.QueryRowContext(t.Context(),
+		`SELECT diff FROM activity WHERE subject_id = $1 AND action = 'invoice_raised'`, engagementID,
+	).Scan(&diff); err != nil {
+		t.Fatalf("query activity row: %v", err)
+	}
+	var decoded struct {
+		AmountCents int64 `json:"amountCents"`
+	}
+	if err := json.Unmarshal(diff, &decoded); err != nil {
+		t.Fatalf("decode activity diff: %v", err)
+	}
+	if decoded.AmountCents != 15000 {
+		t.Fatalf("activity diff amountCents = %d, want 15000", decoded.AmountCents)
 	}
 }
 
@@ -641,7 +732,7 @@ func TestPostInvoiceHandler_CreateInvoiceFailureReturns500AndPersistsNothing(t *
 	srv, session := newInvoiceServer(t, db, uid, client)
 	defer srv.Close()
 
-	resp := postInvoice(t, srv, session, practiceID, engagementID, 15000)
+	resp := postInvoice(t, srv, session, practiceID, engagementID)
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusInternalServerError {
@@ -678,7 +769,7 @@ func TestPostInvoiceHandler_FinalizeInvoiceFailureReturns500ButPersistsDraft(t *
 	srv, session := newInvoiceServer(t, db, uid, client)
 	defer srv.Close()
 
-	resp := postInvoice(t, srv, session, practiceID, engagementID, 15000)
+	resp := postInvoice(t, srv, session, practiceID, engagementID)
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusInternalServerError {
@@ -974,14 +1065,9 @@ func TestGetInvoicesHandler_InvalidCursorReturns400(t *testing.T) {
 
 // postInvoiceWithBillingMode is postInvoiceBody with a billingMode field
 // set on the request, for #271's "ask once, inline" path.
-// postInvoiceWithBillingModeAmountCents is the fixed amount every caller
-// of postInvoiceWithBillingMode wants -- none of them are testing the
-// amount, so it is not a parameter (golangci-lint's unparam).
-const postInvoiceWithBillingModeAmountCents = 15000
-
 func postInvoiceWithBillingMode(t *testing.T, srv *httptest.Server, session, practiceID, engagementID, billingMode string) *http.Response {
 	t.Helper()
-	body, err := json.Marshal(payments.CreateInvoiceRequest{AmountCents: postInvoiceWithBillingModeAmountCents, BillingMode: &billingMode})
+	body, err := json.Marshal(payments.CreateInvoiceRequest{BillingMode: &billingMode})
 	if err != nil {
 		t.Fatalf("marshal request: %v", err)
 	}
@@ -1012,7 +1098,7 @@ func TestPostInvoiceHandler_BillingModeRequiredWhenUnset(t *testing.T) {
 	srv, session := newInvoiceServer(t, db, uid, client)
 	defer srv.Close()
 
-	resp := postInvoice(t, srv, session, practiceID, engagementID, 15000)
+	resp := postInvoice(t, srv, session, practiceID, engagementID)
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusUnprocessableEntity {
@@ -1187,7 +1273,7 @@ func TestPostInvoiceHandler_ByHandInvoiceSequenceIncrementsAcrossInvoices(t *tes
 
 	// The mode is already set now, so the second request need not (and,
 	// per #271, must not have its own value honored) repeat billingMode.
-	second := postInvoice(t, srv, session, practiceID, engagementID, 22000)
+	second := postInvoice(t, srv, session, practiceID, engagementID)
 	var secondOut payments.InvoiceView
 	if err := json.NewDecoder(second.Body).Decode(&secondOut); err != nil {
 		t.Fatalf("decode second response: %v", err)
@@ -1283,7 +1369,7 @@ func TestPostInvoiceHandler_StripeInvoiceUsesStripeNumberAsReference(t *testing.
 	srv, session := newInvoiceServer(t, db, uid, client)
 	defer srv.Close()
 
-	resp := postInvoice(t, srv, session, practiceID, engagementID, 15000)
+	resp := postInvoice(t, srv, session, practiceID, engagementID)
 	defer resp.Body.Close()
 	var out payments.InvoiceView
 	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {

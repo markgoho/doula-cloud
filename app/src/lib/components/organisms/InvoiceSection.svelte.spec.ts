@@ -17,7 +17,7 @@ interface SetupOptions {
 	hasClientEmail?: boolean;
 	isOwner?: boolean;
 	isOwnerOrAdmin?: boolean;
-	onCreate?: (amountCents: number, billingMode?: BillingMode) => Promise<void>;
+	onCreate?: (billingMode?: BillingMode) => Promise<void>;
 	onRecordPayment?: (
 		invoiceId: string,
 		input: { method: PaymentMethod; note?: string; paidOn: string }
@@ -108,51 +108,35 @@ describe('InvoiceSection.svelte', () => {
 		await expect.element(page.getByText('$150.00 — unknown_status')).toBeInTheDocument();
 	});
 
-	it('shows the amount form when the Contract is billable, Clients can pay, and the Client has an email', async () => {
+	it('shows the Create Invoice button when the Contract is billable, Clients can pay, and the Client has an email', async () => {
 		await setup();
 
-		await expect.element(page.getByLabelText('Amount (USD)')).toBeInTheDocument();
 		await expect.element(page.getByRole('button', { name: 'Create Invoice' })).toBeInTheDocument();
 	});
 
-	it('calls onCreate with the amount converted to cents and clears the field', async () => {
+	// #947: the amount is the Contract's own, never a figure typed here --
+	// clicking Create Invoice calls onCreate with no amount at all.
+	it('calls onCreate with no amount', async () => {
 		const { onCreate } = await setup();
 
-		await page.getByLabelText('Amount (USD)').fill('150.5');
 		await page.getByRole('button', { name: 'Create Invoice' }).click();
 
-		expect(onCreate).toHaveBeenCalledWith(15_050);
-		// jest-dom's toHaveValue treats an empty number input's value as
-		// null, not '' -- see https://github.com/testing-library/jest-dom#tohavevalue
-		// eslint-disable-next-line unicorn/no-null
-		await expect.element(page.getByLabelText('Amount (USD)')).toHaveValue(null);
-	});
-
-	it('rejects a zero amount without calling onCreate', async () => {
-		const { onCreate } = await setup();
-
-		await page.getByLabelText('Amount (USD)').fill('0');
-		await page.getByRole('button', { name: 'Create Invoice' }).click();
-
-		expect(onCreate).not.toHaveBeenCalled();
-		await expect.element(page.getByText('Enter an amount greater than zero')).toBeInTheDocument();
+		expect(onCreate).toHaveBeenCalledWith();
 	});
 
 	it('shows an error when onCreate throws', async () => {
-		const onCreate = vi.fn().mockRejectedValue(new Error('amountCents must be greater than zero'));
+		const onCreate = vi.fn().mockRejectedValue(new Error('engagement not found'));
 		await setup({ onCreate });
 
-		await page.getByLabelText('Amount (USD)').fill('50');
 		await page.getByRole('button', { name: 'Create Invoice' }).click();
 
-		await expect.element(page.getByText('amountCents must be greater than zero')).toBeInTheDocument();
+		await expect.element(page.getByText('engagement not found')).toBeInTheDocument();
 	});
 
 	it('falls back to a generic message when onCreate rejects with a non-Error', async () => {
 		const onCreate = vi.fn().mockRejectedValue('boom');
 		await setup({ onCreate });
 
-		await page.getByLabelText('Amount (USD)').fill('50');
 		await page.getByRole('button', { name: 'Create Invoice' }).click();
 
 		await expect.element(page.getByText('Failed to create invoice')).toBeInTheDocument();
@@ -167,7 +151,7 @@ describe('InvoiceSection.svelte', () => {
 			.element(page.getByText('Clients cannot pay this Practice yet. A Practice Owner has to connect Stripe.'))
 			.toBeVisible();
 		await expect.element(page.getByRole('link', { name: 'Go to Payments settings' })).toBeVisible();
-		await expect.element(page.getByLabelText('Amount (USD)')).not.toBeInTheDocument();
+		await expect.element(page.getByRole('button', { name: 'Create Invoice' })).not.toBeInTheDocument();
 	});
 
 	it('shows the cannot-pay Notice with no link for a non-Owner when Clients cannot pay', async () => {
@@ -177,7 +161,7 @@ describe('InvoiceSection.svelte', () => {
 			.element(page.getByText('Clients cannot pay this Practice yet. A Practice Owner has to connect Stripe.'))
 			.toBeVisible();
 		await expect.element(page.getByRole('link', { name: 'Go to Payments settings' })).not.toBeInTheDocument();
-		await expect.element(page.getByLabelText('Amount (USD)')).not.toBeInTheDocument();
+		await expect.element(page.getByRole('button', { name: 'Create Invoice' })).not.toBeInTheDocument();
 	});
 
 	it('shows a Notice naming the missing email instead of the form when the Client has no email', async () => {
@@ -186,7 +170,7 @@ describe('InvoiceSection.svelte', () => {
 		await expect
 			.element(page.getByText('This Client has no email address on file. Add one before creating an Invoice.'))
 			.toBeVisible();
-		await expect.element(page.getByLabelText('Amount (USD)')).not.toBeInTheDocument();
+		await expect.element(page.getByRole('button', { name: 'Create Invoice' })).not.toBeInTheDocument();
 	});
 
 	// #275: a Contract that cannot be billed hides Create Invoice and says
@@ -199,7 +183,7 @@ describe('InvoiceSection.svelte', () => {
 		await expect
 			.element(page.getByText('Invoicing is unavailable until the Client signs this Contract.'))
 			.toBeVisible();
-		await expect.element(page.getByLabelText('Amount (USD)')).not.toBeInTheDocument();
+		await expect.element(page.getByRole('button', { name: 'Create Invoice' })).not.toBeInTheDocument();
 	});
 
 	it('shows why billing is unavailable instead of the form on a sent (unsigned) Contract', async () => {
@@ -208,7 +192,7 @@ describe('InvoiceSection.svelte', () => {
 		await expect
 			.element(page.getByText('Invoicing is unavailable until the Client signs this Contract.'))
 			.toBeVisible();
-		await expect.element(page.getByLabelText('Amount (USD)')).not.toBeInTheDocument();
+		await expect.element(page.getByRole('button', { name: 'Create Invoice' })).not.toBeInTheDocument();
 	});
 
 	it('shows a voided-specific message instead of the form on a voided Contract', async () => {
@@ -219,7 +203,7 @@ describe('InvoiceSection.svelte', () => {
 				page.getByText('This Contract has been voided. Invoicing is unavailable until Staff issues a new Contract.')
 			)
 			.toBeVisible();
-		await expect.element(page.getByLabelText('Amount (USD)')).not.toBeInTheDocument();
+		await expect.element(page.getByRole('button', { name: 'Create Invoice' })).not.toBeInTheDocument();
 	});
 
 	it('takes priority over the cannot-pay Notice on an unbillable Contract', async () => {
@@ -230,43 +214,40 @@ describe('InvoiceSection.svelte', () => {
 	});
 
 	// #271: the first Invoice a Practice ever raises asks which rail it
-	// bills on, inline, alongside the amount -- never a routed gate and
-	// never assumed from an absent Stripe Connect account.
+	// bills on, inline -- never a routed gate and never assumed from an
+	// absent Stripe Connect account.
 	describe('billing mode not yet chosen (#271)', () => {
-		it('shows the billing-mode ask alongside the amount field, with neither cannot-pay Notice', async () => {
+		it('shows the billing-mode ask with neither cannot-pay Notice', async () => {
 			await setup({ billingMode: 'unset', clientsCanPay: false, hasClientEmail: false });
 
 			await expect.element(page.getByText('How does this Practice bill Clients?')).toBeVisible();
 			await expect.element(page.getByLabelText('Stripe')).toBeVisible();
 			await expect.element(page.getByLabelText('By hand')).toBeVisible();
-			await expect.element(page.getByLabelText('Amount (USD)')).toBeVisible();
+			await expect.element(page.getByRole('button', { name: 'Create Invoice' })).toBeVisible();
 			await expect.element(page.getByText(/Clients cannot pay this Practice/)).not.toBeInTheDocument();
 		});
 
-		it('submits the chosen mode with the amount on the first raise', async () => {
+		it('submits the chosen mode on the first raise', async () => {
 			const { onCreate } = await setup({ billingMode: 'unset' });
 
 			await page.getByLabelText('By hand').click();
-			await page.getByLabelText('Amount (USD)').fill('150');
 			await page.getByRole('button', { name: 'Create Invoice' }).click();
 
-			expect(onCreate).toHaveBeenCalledWith(15_000, 'by_hand');
+			expect(onCreate).toHaveBeenCalledWith('by_hand');
 		});
 
-		it('defaults to Stripe when the amount is submitted without changing the radio', async () => {
+		it('defaults to Stripe when submitted without changing the radio', async () => {
 			const { onCreate } = await setup({ billingMode: 'unset' });
 
-			await page.getByLabelText('Amount (USD)').fill('150');
 			await page.getByRole('button', { name: 'Create Invoice' }).click();
 
-			expect(onCreate).toHaveBeenCalledWith(15_000, 'stripe');
+			expect(onCreate).toHaveBeenCalledWith('stripe');
 		});
 
 		it('shows an error when onCreate throws from the billing-mode ask', async () => {
 			const onCreate = vi.fn().mockRejectedValue(new Error('billing mode invalid'));
 			await setup({ billingMode: 'unset', onCreate });
 
-			await page.getByLabelText('Amount (USD)').fill('150');
 			await page.getByRole('button', { name: 'Create Invoice' }).click();
 
 			await expect.element(page.getByText('billing mode invalid')).toBeVisible();
@@ -275,10 +256,10 @@ describe('InvoiceSection.svelte', () => {
 
 	// #271, #430: a by-hand Invoice mails nothing, so neither the
 	// cannot-pay nor the no-email check ever applies to it.
-	it('shows the amount form directly on the by-hand rail even when Clients cannot pay and the Client has no email', async () => {
+	it('shows the Create Invoice button directly on the by-hand rail even when Clients cannot pay and the Client has no email', async () => {
 		await setup({ billingMode: 'by_hand', clientsCanPay: false, hasClientEmail: false });
 
-		await expect.element(page.getByLabelText('Amount (USD)')).toBeVisible();
+		await expect.element(page.getByRole('button', { name: 'Create Invoice' })).toBeVisible();
 		await expect.element(page.getByText(/Clients cannot pay this Practice/)).not.toBeInTheDocument();
 		await expect.element(page.getByText(/no email address on file/)).not.toBeInTheDocument();
 	});
