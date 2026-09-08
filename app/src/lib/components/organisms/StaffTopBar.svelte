@@ -122,6 +122,16 @@
 			background-color: var(--color-surface-bright);
 		}
 
+		/* #280: a printed page (the Birth Plan's own print control, on the
+		   Practice side) is the record, not this bar -- ADR-0024 rule 3
+		   permits `print` as a stated user preference, so this is the one
+		   media query this file owns. */
+		@media print {
+			header {
+				display: none;
+			}
+		}
+
 		/* The base size re-resolved against the bar (#544): a `cqi`
 		   resolves against the nearest ANCESTOR container, so `header`
 		   cannot answer its own, and text inside it would otherwise carry
