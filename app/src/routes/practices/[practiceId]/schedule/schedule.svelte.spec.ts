@@ -2,6 +2,7 @@ import { page as testPage } from 'vitest/browser';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import { jsonResponse } from '#lib/testResponse.js';
+import { addDays, defaultScheduleRange } from '#lib/visitSchedule.js';
 import { registerLayoutPrimitives } from '#lib/primitives/index.js';
 // DataTable's frame needs stack-l's display:block default (primitives.css)
 // to work as a container-query context -- see DataTable.svelte.spec.ts. This
@@ -140,12 +141,22 @@ describe('the Practice-wide schedule (#263)', () => {
 	it('puts the narrowing in the URL, so it survives a reload and can be shared', async () => {
 		await setup();
 
-		await testPage.getByLabelText('From').fill('2026-09-12');
+		// Both dates are said relative to today rather than written out.
+		// `scheduleHref` omits a date that still equals the default range,
+		// so a literal pair asserts what the URL holds on one calendar day
+		// and nothing on any other -- which is how this spec came to fail
+		// at midnight UTC. `To` is filled with the default itself, to
+		// assert that the unchosen half stays out of the URL.
+		const { from: today, to: defaultTo } = defaultScheduleRange();
+		const chosenFrom = addDays(today, 5);
+
+		await testPage.getByLabelText('From').fill(chosenFrom);
+		await testPage.getByLabelText('To').fill(defaultTo);
 		await testPage.getByLabelText('Doula').selectOptions(earlierVisit.staffName);
 		await testPage.getByRole('button', { name: 'Apply' }).click();
 
 		expect(goto).toHaveBeenCalledWith(
-			`${schedulePath}?from=2026-09-12&staffId=${earlierVisit.staffId}`
+			`${schedulePath}?from=${chosenFrom}&staffId=${earlierVisit.staffId}`
 		);
 	});
 
