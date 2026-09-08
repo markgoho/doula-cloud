@@ -37,7 +37,7 @@ top-left, or sign out, before touching any platform setting.
 
 ## The walk
 
-Sign in as the Owner, open **Payments**, click **Connect Stripe** (or **Continue
+Sign in as the Owner, open **Getting paid**, click **Connect Stripe** (or **Continue
 Stripe onboarding** if `POST .../payments/connect` already made an account).
 
 ### Stripe user account — the outer page, not an iframe
@@ -83,6 +83,8 @@ URL" — Stripe blocks the reserved domain, so use a plausible one.
 ## After
 
 Poll `GET /api/practices/{id}/payments/connect` until `cardPaymentsStatus` is
-`active`. **Do not read the Payments screen to decide** — it fetches once in
-`onMount` and never again (**MO-G11**), so it shows the state at page load and its
-"Status updates once Stripe confirms" banner never comes true without a reload.
+`active` — the fastest way to script a wait. The Getting paid screen itself
+also catches up on its own now (**MO-G11**, fixed by #259): landing on
+`?connect=return` re-reads status on a short, bounded poll while it can still
+move, and a **Check status again** button is always there for an on-demand
+read. Either way works; the screen no longer needs a manual reload.
