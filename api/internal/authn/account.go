@@ -70,6 +70,24 @@ type AccountManager interface {
 	// Practice larger than 100 costs a handful of calls, not one per
 	// person.
 	CountWithoutSecondFactor(ctx context.Context, uids []string) (int, error)
+	// DeleteAccount destroys uid's Identity Platform account outright --
+	// #892's Staff login deletion, the one act in the product that ends a
+	// person's ability to authenticate rather than narrowing her reach.
+	// This existed once before, for Client erasure (#394), and was
+	// retired by #796 when Clients stopped holding Identity Platform
+	// accounts at all (00075); it is restored here for the population
+	// that still does.
+	//
+	// An account Identity Platform already reports absent is a success,
+	// not a failure: the act is irreversible and idempotent, and a retry
+	// after a half-applied attempt must be able to finish rather than
+	// dead-end on the part that already ran. Callers get nil, never
+	// ErrAccountNotFound.
+	//
+	// Deleting the account does not end a session: a __session cookie is
+	// verified against Postgres (ADR-0004), not against Identity
+	// Platform, so the caller must delete her sessions rows itself.
+	DeleteAccount(ctx context.Context, uid string) error
 }
 
 var _ AccountManager = (*FirebaseVerifier)(nil)
@@ -137,6 +155,21 @@ func (v *FirebaseVerifier) SetEmail(ctx context.Context, uid, email string) erro
 	}
 	// coverage:ignore reason: requires a real GCP Identity Platform project, not exercised by unit tests
 	return nil
+}
+
+// DeleteAccount destroys uid's account via the Admin SDK, treating an
+// already-absent account as done. auth.IsUserNotFound is the same
+// not-found test GetAccountByEmail above uses.
+func (v *FirebaseVerifier) DeleteAccount(ctx context.Context, uid string) error {
+	// coverage:ignore reason: requires a real GCP Identity Platform project, not exercised by unit tests
+	err := v.client.DeleteUser(ctx, uid)
+	// coverage:ignore reason: requires a real GCP Identity Platform project, not exercised by unit tests
+	if err == nil || auth.IsUserNotFound(err) {
+		// coverage:ignore reason: requires a real GCP Identity Platform project, not exercised by unit tests
+		return nil
+	}
+	// coverage:ignore reason: requires a real GCP Identity Platform project, not exercised by unit tests
+	return fmt.Errorf("authn: delete account: %w", err)
 }
 
 // getUsersBatchSize is the Admin SDK's own cap on one GetUsers call
