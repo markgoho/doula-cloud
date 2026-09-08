@@ -78,6 +78,7 @@ func postSignContract(t *testing.T, srv *httptest.Server, session string, engage
 // signedRow is the row shape sign_test.go reads back via db.Admin to
 // assert what ClientPostSignContractHandler actually persisted.
 type signedRow struct {
+	id                  string
 	status              string
 	signerFullName      sqlNullString
 	signerAttestation   bool
@@ -97,10 +98,10 @@ func fetchSignedRow(t *testing.T, db *testdb.DB, engagementID string) signedRow 
 	var name, ip, pdfObjectPath *string
 	var signedAt *time.Time
 	if err := db.Admin.QueryRowContext(t.Context(),
-		`SELECT status, signer_full_name, signer_attestation, signed_at, signer_ip, signed_pdf_object_path
+		`SELECT id, status, signer_full_name, signer_attestation, signed_at, signer_ip, signed_pdf_object_path
 		 FROM contracts WHERE engagement_id = $1`,
 		engagementID,
-	).Scan(&row.status, &name, &row.signerAttestation, &signedAt, &ip, &pdfObjectPath); err != nil {
+	).Scan(&row.id, &row.status, &name, &row.signerAttestation, &signedAt, &ip, &pdfObjectPath); err != nil {
 		t.Fatalf("fetch contract row: %v", err)
 	}
 	if name != nil {
@@ -377,7 +378,8 @@ func TestClientPostSignContractHandler_MissingFieldsRejected(t *testing.T) {
 
 // TestClientPostSignContractHandler_RendersAndStoresSignedPDF proves the
 // sent -> signed transition renders a PDF-shaped payload and stores it in
-// the injected ObjectStore under SignedPDFObjectPath(engagementID), and
+// the injected ObjectStore under the Contract's own
+// SignedPDFObjectPath key (#299: Engagement id plus Contract id), and
 // persists that same key on the contracts row -- the #71 AC, checked by
 // content-shape (the "%PDF" magic bytes) rather than byte-for-byte
 // content.
@@ -401,7 +403,7 @@ func TestClientPostSignContractHandler_RendersAndStoresSignedPDF(t *testing.T) {
 	}
 
 	row := fetchSignedRow(t, db, engagementID)
-	wantKey := contracts.SignedPDFObjectPath(engagementID)
+	wantKey := contracts.SignedPDFObjectPath(engagementID, row.id)
 	if !row.signedPDFObjectPath.Valid || row.signedPDFObjectPath.String != wantKey {
 		t.Fatalf("persisted signed_pdf_object_path = %+v, want %q", row.signedPDFObjectPath, wantKey)
 	}

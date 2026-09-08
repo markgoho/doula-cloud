@@ -117,7 +117,7 @@ _Client says_: nothing — the term is internal. A Client reads the Birth Plan I
 _Avoid_: Response, submission
 
 **Contract**:
-The signed agreement governing an Engagement.
+The signed agreement governing an Engagement. Signing renders a **Signed PDF** — the permanent record of what the Client actually saw and agreed to, never re-rendered. It outlives the agreement it records: voiding a Contract cancels the agreement and leaves the PDF reachable to the Practice and to that Client, because voiding does not withdraw the evidence that the agreement was made. An Engagement may hold more than one Contract that has been signed, since voiding frees the slot for a fresh one; each Signed PDF is stored under its own Contract, so a second signing never overwrites the first, and asking an Engagement for "the" Signed PDF answers with its most recent one. Decided on [#299](https://github.com/markgoho/doula-cloud/issues/299).
 _Client says_: Contract — the noun itself does not diverge (ADR-0005). Each `contract_status` value has one fixed label, the same for every Client: `draft` → Being prepared (never reaches her — a Draft Contract 404s the client-portal read, same as one not yet sent), `sent` → Ready for your signature, `signed` → Signed, `voided` → No longer active. A voided Contract also carries a fixed terminal notice naming her Practice rather than the Staff `ContractStatus` component's bare "Voided" (NH-G5): "{Practice name} ended this Contract." It says nothing about an Invoice — voiding a Contract does not touch one, and a register label never claims a fact the model does not hold. Decided on [#212](https://github.com/markgoho/doula-cloud/issues/212).
 _Avoid_: Agreement
 

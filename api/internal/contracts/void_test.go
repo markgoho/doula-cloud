@@ -117,8 +117,7 @@ func TestPostVoidContractHandler_Success(t *testing.T) {
 	const uid = "void-success"
 	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
 	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
-	objectPath := contracts.SignedPDFObjectPath(engagementID)
-	seedSignedContract(t, db, engagementID, objectPath)
+	_, objectPath := seedSignedContract(t, db, engagementID)
 
 	srv, session := newContractServer(t, db, uid)
 	defer srv.Close()
@@ -180,8 +179,7 @@ func TestPostContractHandler_AllowedAfterVoid(t *testing.T) {
 	clientID, engagementID := testdb.SeedEngagement(t, db, practiceID)
 	testdb.SeedPendingPortalInvite(t, db, clientID)
 	seedContractTemplate(t, db, practiceID, mergeFieldProse)
-	oldObjectPath := contracts.SignedPDFObjectPath(engagementID)
-	seedSignedContract(t, db, engagementID, oldObjectPath)
+	_, oldObjectPath := seedSignedContract(t, db, engagementID)
 
 	srv, session := newContractServer(t, db, uid)
 	defer srv.Close()
