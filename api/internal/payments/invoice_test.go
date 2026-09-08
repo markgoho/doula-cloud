@@ -263,6 +263,36 @@ func TestPostInvoiceHandler_RestrictedCardPaymentsRefuses(t *testing.T) {
 	}
 }
 
+// TestPostInvoiceHandler_CardPaymentsActiveWithNoAccountReturns500 proves
+// fetchConnectAccountID's own guard: nothing in the schema ties
+// card_payments_status to stripe_connect_account_id, so a row that
+// somehow reaches 'active' with no account id linked -- unreachable
+// through the webhook, which only ever writes that column by matching an
+// existing account id, but not through a bare UPDATE -- 500s rather than
+// calling Stripe with an empty account id.
+func TestPostInvoiceHandler_CardPaymentsActiveWithNoAccountReturns500(t *testing.T) {
+	db := testdb.New(t)
+	const uid = "invoice-active-no-account"
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
+	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jane Client", "jane@example.com")
+	seedSignedContract(t, db, engagementID)
+	testdb.SeedClientsCanPay(t, db, practiceID)
+	client := payments.NewFakeClient()
+
+	srv, session := newInvoiceServer(t, db, uid, client)
+	defer srv.Close()
+
+	resp := postInvoice(t, srv, session, practiceID, engagementID, 15000)
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusInternalServerError {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusInternalServerError)
+	}
+	if len(client.CreateInvoiceCalls) != 0 {
+		t.Fatalf("CreateInvoice calls = %d, want 0 -- must never reach Stripe with an empty account id", len(client.CreateInvoiceCalls))
+	}
+}
+
 // TestPostInvoiceHandler_CreatesInvoiceWhenConnected proves the full
 // creation path once a Practice is connected: the fake Stripe port
 // receives the connected account id, the Client's name/email, the fixed

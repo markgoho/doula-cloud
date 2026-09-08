@@ -342,9 +342,13 @@ func fetchCurrentContract(ctx context.Context, tx *sql.Tx, engagementID string) 
 
 // fetchConnectAccountID reads practiceID's stored Stripe Connect account
 // id, for the Stripe API calls PostInvoiceHandler makes once ClientsCanPay
-// has already confirmed card_payments is active -- which cannot be true
-// without an account already linked, so this has no "no account" case of
-// its own to report.
+// has already confirmed card_payments is active -- which the webhook that
+// writes that column only ever does by matching an existing
+// stripe_connect_account_id (see PostAccountWebhookHandler), so a null
+// account id here should be unreachable. Nothing in the schema enforces
+// that pairing, though, so this still checks rather than trusting it:
+// erroring here is cheap, and the alternative is calling Stripe with an
+// empty account id.
 func fetchConnectAccountID(ctx context.Context, tx *sql.Tx, practiceID string) (accountID string, err error) {
 	var acct sql.NullString
 	if err := tx.QueryRowContext(ctx,
@@ -352,6 +356,9 @@ func fetchConnectAccountID(ctx context.Context, tx *sql.Tx, practiceID string) (
 	).Scan(&acct); err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		return "", fmt.Errorf("payments: fetch connect account: %w", err)
+	}
+	if !acct.Valid {
+		return "", fmt.Errorf("payments: card_payments active with no connect account linked for practice %s", practiceID)
 	}
 	return acct.String, nil
 }

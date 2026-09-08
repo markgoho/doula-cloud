@@ -139,7 +139,7 @@ describe('InvoiceSection.svelte', () => {
 		await expect
 			.element(page.getByText('Clients cannot pay this Practice yet. A Practice Owner has to connect Stripe.'))
 			.toBeVisible();
-		await expect.element(page.getByRole('link', { name: 'Go to Payments settings' })).toBeInTheDocument();
+		await expect.element(page.getByRole('link', { name: 'Go to Payments settings' })).toBeVisible();
 		await expect.element(page.getByLabelText('Amount (USD)')).not.toBeInTheDocument();
 	});
 

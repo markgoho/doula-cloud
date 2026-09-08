@@ -307,11 +307,7 @@ func TestDetailHandler_ClientsCanPay(t *testing.T) {
 		t.Fatal("clientsCanPay = true before Stripe Connect is active, want false")
 	}
 
-	if _, err := db.Admin.ExecContext(t.Context(),
-		`UPDATE practices SET stripe_connect_card_payments_status = 'active' WHERE id = $1`, practiceID,
-	); err != nil {
-		t.Fatalf("set card payments active: %v", err)
-	}
+	testdb.SeedClientsCanPay(t, db, practiceID)
 
 	if d := fetchDetail(); !d.ClientsCanPay {
 		t.Fatal("clientsCanPay = false once card_payments is active, want true")

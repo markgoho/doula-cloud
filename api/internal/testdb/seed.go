@@ -20,6 +20,23 @@ func SeedPractice(t *testing.T, db *DB, name string) (practiceID string) {
 	return practiceID
 }
 
+// SeedClientsCanPay flips practiceID's stripe_connect_card_payments_status
+// straight to 'active' -- the shared fixture for payments.ClientsCanPay's
+// three readers (the Engagement read, the Practice-wide Invoice totals,
+// PostInvoiceHandler's own gate), which each need this exact state and
+// nothing else about a Connect account (no account id, no Stripe fixture
+// call). Bypasses the Connect webhook that ordinarily writes this column,
+// the same way SeedPractice bypasses onboarding.
+func SeedClientsCanPay(t *testing.T, db *DB, practiceID string) {
+	t.Helper()
+	if _, err := db.Admin.ExecContext(t.Context(),
+		`UPDATE practices SET stripe_connect_card_payments_status = 'active' WHERE id = $1`, practiceID,
+	); err != nil {
+		// coverage:ignore reason: fixture update failure, not exercised by the happy-path test
+		t.Fatalf("testdb: seed clients-can-pay %q: %v", practiceID, err)
+	}
+}
+
 // SeedStaff inserts a bare Staff row, with no practice_memberships row,
 // using the superuser Admin connection. Named "Test Staff "+identityUID
 // and emailed identityUID+"@example.com", the same derivation

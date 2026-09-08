@@ -256,7 +256,10 @@
 	// InvoiceSection's own standing check (#270) -- defaults true so an
 	// in-flight load never flashes the "cannot pay" Notice before
 	// `detail` resolves, the same reasoning hasClientEmailOnFile above
-	// already uses.
+	// already uses. Named canClientsPay, word order swapped from the wire
+	// field's clientsCanPay, only because unicorn/consistent-boolean-name
+	// requires a local boolean binding to start with "can"/"is"/etc; the
+	// prop it's passed into below is still clientsCanPay.
 	const canClientsPay = $derived(detail?.clientsCanPay ?? true);
 
 	let reassignStaffId = $state<Record<string, string>>({});
