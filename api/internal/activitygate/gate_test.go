@@ -125,7 +125,7 @@ func TestCanAccessSubject_Engagement(t *testing.T) {
 func TestRestrictedActions_Engagement(t *testing.T) {
 	want := []string{
 		"contract_created", "contract_sent", contractSignedAction, "contract_voided", "contract_amount_overridden",
-		"contract_amount_repriced",
+		"contract_amount_repriced", "contract_void_requested", "contract_void_declined",
 		"invoice_raised", invoicePaidAction, "payment_recorded", "invoice_voided", "invoice_written_off",
 	}
 	got := activitygate.RestrictedActions(activity.SubjectEngagement)

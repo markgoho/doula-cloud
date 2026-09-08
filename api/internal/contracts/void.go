@@ -74,6 +74,31 @@ func PostVoidContractHandler() http.Handler {
 			return
 		}
 
+		// #971: an Owner or an Admin acting on a Doula's ask is exactly
+		// this transition, not a second endpoint -- any request still
+		// open against this Contract is now fulfilled, so it closes with
+		// the Void rather than staying open forever with nothing left to
+		// grant. decline_reason stays NULL, which is what tells the
+		// requester (VoidRequests on her next GET) she got a void, not a
+		// decline.
+		if _, err := tx.ExecContext(r.Context(),
+			`UPDATE contract_void_requests
+			    SET status = 'voided', decided_by = $1, decided_at = now()
+			  WHERE contract_id = $2 AND status = 'open'`,
+			staffID, id,
+		); err != nil {
+			// coverage:ignore reason: DB query failure, not exercised by unit tests
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+			return
+		}
+
+		voidRequests, err := listVoidRequests(r.Context(), tx, id)
+		if err != nil {
+			// coverage:ignore reason: DB query failure, not exercised by unit tests
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+			return
+		}
+
 		mergeFields := extractMergeFields(prose)
 		out := ContractResponse{
 			EngagementID:    engagementID,
@@ -82,6 +107,7 @@ func PostVoidContractHandler() http.Handler {
 			MergeFields:     mergeFields,
 			Values:          withResolvedPrice(mergeFields, values.nonEmpty(), amountCents),
 			AmountChangedAt: amountChangedAt,
+			VoidRequests:    voidRequests,
 		}
 		apierr.WriteJSON(w, http.StatusOK, out)
 	})

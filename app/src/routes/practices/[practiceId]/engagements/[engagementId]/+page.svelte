@@ -61,6 +61,8 @@
 		saveContractValues,
 		sendContract,
 		voidContract,
+		requestContractVoid,
+		declineContractVoidRequest,
 		downloadSignedContractPdf,
 		setMergeFieldValue,
 		mergeFieldLabel,
@@ -716,6 +718,33 @@
 		);
 	}
 
+	// #971: a Doula's own path to a void, offered exactly where
+	// handleVoidContract is not (see onRequestVoid below). Same shape as
+	// handleVoidContract above -- ContractStatus.svelte awaits this
+	// itself and shows whatever it throws.
+	async function handleRequestVoidContract(reason: string) {
+		if (!contractState.value) return;
+		contractState.value = await requestContractVoid(
+			apiFetchWithSession,
+			page.params.practiceId!,
+			page.params.engagementId!,
+			reason
+		);
+	}
+
+	// The Owner/Admin side of #971's ask -- same shape as
+	// handleVoidContract above.
+	async function handleDeclineVoidRequest(requestId: string, reason: string) {
+		if (!contractState.value) return;
+		contractState.value = await declineContractVoidRequest(
+			apiFetchWithSession,
+			page.params.practiceId!,
+			page.params.engagementId!,
+			requestId,
+			reason
+		);
+	}
+
 	// Same shape as handleVoidContract above -- ContractStatus.svelte
 	// awaits this itself and shows whatever it throws (#302). Until #305
 	// lands this 500s in local/CI, which is exactly what that display is
@@ -1347,8 +1376,11 @@
 			<ContractStatus
 				status={contract.status}
 				amountChangedAt={contract.amountChangedAt}
+				voidRequests={contract.voidRequests}
 				onVoid={isPracticeOwnerOrAdmin ? handleVoidContract : undefined}
 				onDownloadPdf={canReadContractMoney ? handleDownloadSignedContractPdf : undefined}
+				onRequestVoid={isPracticeOwnerOrAdmin ? undefined : handleRequestVoidContract}
+				onDeclineVoidRequest={isPracticeOwnerOrAdmin ? handleDeclineVoidRequest : undefined}
 			/>
 			<!--
 				#258: Staff reads the same filled document the Client will,

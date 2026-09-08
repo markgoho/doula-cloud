@@ -2,12 +2,11 @@ import { page as testPage } from 'vitest/browser';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import { jsonResponse } from '#lib/testResponse.js';
-import type { CursorPage } from '#lib/paginatedList.svelte.js';
-import type { AwaitingContract } from '#lib/contract.js';
 // DataTable's frame needs stack-l's display:block default (primitives.css)
 // to work as a container-query context -- see DataTable.svelte.spec.ts.
 import '#lib/styles/app.css';
 import Page from './+page.svelte';
+import type { ContractsPageData } from './+page.js';
 import { toPageState } from '../../../routeFixture.js';
 import { data, fixture } from './page.fixture.js';
 
@@ -26,7 +25,8 @@ Object.assign(pageState, toPageState(fixture));
 const apiFetchWithSession = vi.hoisted(() => vi.fn());
 vi.mock('#lib/api.js', () => ({ apiFetchWithSession }));
 
-const [draftContract, sentContract] = data.items;
+const [draftContract, sentContract] = data.contracts.items;
+const [voidRequest] = data.voidRequests.items;
 const { practiceId } = fixture.params;
 
 beforeEach(() => {
@@ -45,12 +45,12 @@ const sessionStub = {
 	isContractor: false
 };
 
-async function setup(page: CursorPage<AwaitingContract> = data) {
+async function setup(pageData: ContractsPageData = data) {
 	// Wide enough for DataTable's <table> rather than the <dl> record view
 	// its content floor stacks into below 46rem (#508) -- the same call the
 	// Invoice list's own spec makes for the same reason.
 	await testPage.viewport(1440, 900);
-	await render(Page, { params: fixture.params, data: { ...page, session: sessionStub } });
+	await render(Page, { params: fixture.params, data: { ...pageData, session: sessionStub } });
 }
 
 describe('the Practice-wide Contracts awaiting signature list (#273)', () => {
@@ -82,7 +82,7 @@ describe('the Practice-wide Contracts awaiting signature list (#273)', () => {
 		// Not the happy path, so it is this spec's own to declare -- but it
 		// is declared as a departure from the fixture rather than as a
 		// second description of the same screen.
-		await setup({ items: [], hasMore: false });
+		await setup({ ...data, contracts: { items: [], hasMore: false } });
 
 		await expect
 			.element(
@@ -110,7 +110,7 @@ describe('the Practice-wide Contracts awaiting signature list (#273)', () => {
 			})
 		);
 
-		await setup({ ...data, hasMore: true, nextCursor: 'cursor-1' });
+		await setup({ ...data, contracts: { ...data.contracts, hasMore: true, nextCursor: 'cursor-1' } });
 		await testPage.getByRole('button', { name: 'Load more' }).click();
 
 		await expect.element(testPage.getByRole('link', { name: 'Cleo' })).toBeVisible();
@@ -125,12 +125,40 @@ describe('the Practice-wide Contracts awaiting signature list (#273)', () => {
 	it('reports a failed next page in place rather than losing the list', async () => {
 		apiFetchWithSession.mockResolvedValue(jsonResponse('invalid cursor', 400));
 
-		await setup({ ...data, hasMore: true, nextCursor: 'cursor-1' });
+		await setup({ ...data, contracts: { ...data.contracts, hasMore: true, nextCursor: 'cursor-1' } });
 		await testPage.getByRole('button', { name: 'Load more' }).click();
 
 		await expect.element(testPage.getByRole('alert')).toHaveTextContent('invalid cursor');
 		await expect
 			.element(testPage.getByRole('link', { name: draftContract.clientName }))
+			.toBeVisible();
+	});
+});
+
+describe('the Practice-wide void requests waiting list (#971)', () => {
+	it('names the Client, who asked, and why for each open request', async () => {
+		await setup();
+
+		await expect.element(testPage.getByRole('link', { name: voidRequest.clientName })).toBeVisible();
+		await expect
+			.element(testPage.getByRole('cell', { name: voidRequest.requestedByName }))
+			.toBeVisible();
+		await expect.element(testPage.getByRole('cell', { name: voidRequest.reason })).toBeVisible();
+	});
+
+	it('names the Client as the way in to her Engagement', async () => {
+		await setup();
+
+		await expect
+			.element(testPage.getByRole('link', { name: voidRequest.clientName }))
+			.toHaveAttribute('href', `/practices/${practiceId}/engagements/${voidRequest.engagementId}`);
+	});
+
+	it('says so plainly when nothing is waiting', async () => {
+		await setup({ ...data, voidRequests: { items: [], hasMore: false } });
+
+		await expect
+			.element(testPage.getByRole('cell', { name: 'No void request is waiting on you.' }))
 			.toBeVisible();
 	});
 });

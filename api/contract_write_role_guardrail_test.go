@@ -4,17 +4,20 @@ import "testing"
 
 // contractWriteRoutes are the Contract writes #970 exists to gate: the
 // five named on the ticket (create, set values, send, void, and the
-// Contract Template's own write), each mounted through
+// Contract Template's own write), plus #971's own two (request a void,
+// decline that request), each mounted through
 // idempotency.Router.ExemptGated rather than the role-free Exempt. The
 // map's value is unused -- only the key set matters -- kept as a map
 // rather than a slice so the test below can strike off each pattern it
 // finds and report any it never saw.
 var contractWriteRoutes = map[string]bool{
-	"PUT /api/practices/{practiceId}/contract-template":                         true,
-	"POST /api/practices/{practiceId}/engagements/{engagementId}/contract":      true,
-	"PUT /api/practices/{practiceId}/engagements/{engagementId}/contract":       true,
-	"POST /api/practices/{practiceId}/engagements/{engagementId}/contract/send": true,
-	"POST /api/practices/{practiceId}/engagements/{engagementId}/contract/void": true,
+	"PUT /api/practices/{practiceId}/contract-template":                                                     true,
+	"POST /api/practices/{practiceId}/engagements/{engagementId}/contract":                                  true,
+	"PUT /api/practices/{practiceId}/engagements/{engagementId}/contract":                                   true,
+	"POST /api/practices/{practiceId}/engagements/{engagementId}/contract/send":                             true,
+	"POST /api/practices/{practiceId}/engagements/{engagementId}/contract/void":                             true,
+	"POST /api/practices/{practiceId}/engagements/{engagementId}/contract/void-request":                     true,
+	"POST /api/practices/{practiceId}/engagements/{engagementId}/contract/void-request/{requestId}/decline": true,
 }
 
 // TestRoutes_ContractWritesDeclareRoles is #970's own guardrail: the

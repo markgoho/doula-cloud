@@ -16,7 +16,9 @@
 	import {
 		awaitingContractStatusLabel,
 		loadPracticeAwaitingContracts,
-		type AwaitingContract
+		loadPracticeAwaitingVoidRequests,
+		type AwaitingContract,
+		type AwaitingVoidRequest
 	} from '#lib/contract.js';
 	import { formatActivityTimestamp } from '#lib/dates.js';
 	import { PaginatedList } from '#lib/paginatedList.svelte.js';
@@ -36,7 +38,7 @@
 	 * would drop every page appended since.
 	 */
 	const contracts = new PaginatedList({
-		first: untrack(() => data),
+		first: untrack(() => data.contracts),
 		loadPage: (cursor) =>
 			loadPracticeAwaitingContracts(apiFetchWithSession, page.params.practiceId!, cursor),
 		failureMessage: 'Failed to load more contracts'
@@ -62,6 +64,36 @@
 			engagementId: contract.engagementId
 		});
 	}
+
+	// #971's own roll-up, beside the one above: "sees the void requests
+	// waiting on them" is a second work list on the same screen, not a
+	// second address -- the same reasoning that keeps this whole page
+	// singular rather than one per roll-up.
+	const voidRequests = new PaginatedList({
+		first: untrack(() => data.voidRequests),
+		loadPage: (cursor) =>
+			loadPracticeAwaitingVoidRequests(apiFetchWithSession, page.params.practiceId!, cursor),
+		failureMessage: 'Failed to load more void requests'
+	});
+
+	const voidRequestColumns = [
+		{ label: 'Client', accessor: (request: AwaitingVoidRequest) => request.clientName },
+		{ label: 'Asked by', accessor: (request: AwaitingVoidRequest) => request.requestedByName },
+		{ label: 'Reason', accessor: (request: AwaitingVoidRequest) => request.reason },
+		{
+			label: 'Waiting since',
+			accessor: (request: AwaitingVoidRequest) => formatActivityTimestamp(request.createdAt),
+			variant: 'meta' as const,
+			datetimeAccessor: (request: AwaitingVoidRequest) => request.createdAt
+		}
+	];
+
+	function voidRequestEngagementHref(request: AwaitingVoidRequest): string {
+		return resolve('/practices/[practiceId]/engagements/[engagementId]', {
+			practiceId: page.params.practiceId!,
+			engagementId: request.engagementId
+		});
+	}
 </script>
 
 <PageTitle page="Contracts" />
@@ -83,4 +115,24 @@
 
 {#if contracts.loadMoreError}
 	<Notice message={contracts.loadMoreError} variant="error" />
+{/if}
+
+<Heading level={2} text="Void requests" />
+<Text
+	text="Every void a Doula has asked for and nobody has decided yet, oldest first. Open one to reach the engagement it belongs to and void or decline it there."
+	tone="muted"
+/>
+
+<DataTable
+	columns={voidRequestColumns}
+	rows={voidRequests.items}
+	rowHref={voidRequestEngagementHref}
+	hasMore={voidRequests.hasMore}
+	onLoadMore={() => voidRequests.loadMore()}
+	isLoadingMore={voidRequests.isLoadingMore}
+	emptyMessage="No void request is waiting on you."
+/>
+
+{#if voidRequests.loadMoreError}
+	<Notice message={voidRequests.loadMoreError} variant="error" />
 {/if}

@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import {
 	awaitingContractStatusLabel,
 	createContract,
+	declineContractVoidRequest,
 	downloadClientSignedContractPdf,
 	downloadSignedContractPdf,
 	editableMergeFields,
@@ -10,9 +11,11 @@ import {
 	loadClientContract,
 	loadContract,
 	loadPracticeAwaitingContracts,
+	loadPracticeAwaitingVoidRequests,
 	mergeFieldLabel,
 	missingMergeFieldKeys,
 	practiceAwaitingContractsPath,
+	requestContractVoid,
 	saveContractValues,
 	sendContract,
 	setMergeFieldValue,
@@ -159,6 +162,90 @@ describe('voidContract', () => {
 		const fetcher = vi.fn().mockResolvedValue(jsonResponse('contract is not signed', 409));
 
 		await expect(voidContract(fetcher, 'practice-1', 'eng-1')).rejects.toThrow('contract is not signed');
+	});
+});
+
+describe('requestContractVoid', () => {
+	it('POSTs the reason to the void-request path and returns the decoded contract', async () => {
+		const contract = {
+			engagementId: 'eng-1',
+			status: 'signed',
+			prose: 'Agreement for {{client_name}}.',
+			mergeFields: ['client_name'],
+			values: { client_name: 'Jamie' },
+			voidRequests: [
+				{
+					id: 'request-1',
+					requestedBy: 'staff-1',
+					requestedByName: 'Jamie Doula',
+					reason: 'the client rescheduled',
+					status: 'open',
+					createdAt: '2026-01-01T00:00:00Z'
+				}
+			]
+		};
+		const fetcher = vi.fn().mockResolvedValue(jsonResponse(contract, 201));
+
+		const result = await requestContractVoid(fetcher, 'practice-1', 'eng-1', 'the client rescheduled');
+
+		expect(fetcher).toHaveBeenCalledWith('/api/practices/practice-1/engagements/eng-1/contract/void-request', {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ reason: 'the client rescheduled' })
+		});
+		expect(result).toEqual(contract);
+	});
+
+	it('throws with the response body text on a non-ok response', async () => {
+		const fetcher = vi.fn().mockResolvedValue(jsonResponse('a void may only be requested for a signed contract: it is draft', 409));
+
+		await expect(requestContractVoid(fetcher, 'practice-1', 'eng-1', 'asking')).rejects.toThrow(
+			'a void may only be requested for a signed contract: it is draft'
+		);
+	});
+});
+
+describe('declineContractVoidRequest', () => {
+	it('POSTs the reason to the decline path and returns the decoded contract', async () => {
+		const contract = {
+			engagementId: 'eng-1',
+			status: 'signed',
+			prose: 'Agreement for {{client_name}}.',
+			mergeFields: ['client_name'],
+			values: { client_name: 'Jamie' },
+			voidRequests: [
+				{
+					id: 'request-1',
+					requestedBy: 'staff-1',
+					requestedByName: 'Jamie Doula',
+					reason: 'the client rescheduled',
+					status: 'declined',
+					declineReason: 'not yet',
+					createdAt: '2026-01-01T00:00:00Z'
+				}
+			]
+		};
+		const fetcher = vi.fn().mockResolvedValue(jsonResponse(contract));
+
+		const result = await declineContractVoidRequest(fetcher, 'practice-1', 'eng-1', 'request-1', 'not yet');
+
+		expect(fetcher).toHaveBeenCalledWith(
+			'/api/practices/practice-1/engagements/eng-1/contract/void-request/request-1/decline',
+			{
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ reason: 'not yet' })
+			}
+		);
+		expect(result).toEqual(contract);
+	});
+
+	it('throws with the response body text on a non-ok response', async () => {
+		const fetcher = vi.fn().mockResolvedValue(jsonResponse('no open void request found with this id for this contract', 404));
+
+		await expect(
+			declineContractVoidRequest(fetcher, 'practice-1', 'eng-1', 'request-1', 'not yet')
+		).rejects.toThrow('no open void request found with this id for this contract');
 	});
 });
 
@@ -421,6 +508,41 @@ describe('loadPracticeAwaitingContracts', () => {
 		const fetcher = vi.fn().mockResolvedValue(jsonResponse('not permitted', 403));
 
 		await expect(loadPracticeAwaitingContracts(fetcher, 'practice-1')).rejects.toThrow('not permitted');
+	});
+});
+
+describe('loadPracticeAwaitingVoidRequests', () => {
+	const row = {
+		requestId: 'request-1',
+		engagementId: 'eng-1',
+		clientId: 'client-1',
+		clientName: 'Ada',
+		requestedByName: 'Jamie Doula',
+		reason: 'the client rescheduled',
+		createdAt: '2026-01-01T00:00:00Z'
+	};
+
+	it('fetches the Practice-wide path and returns the page', async () => {
+		const fetcher = vi.fn().mockResolvedValue(jsonResponse({ items: [row], hasMore: false }));
+
+		const result = await loadPracticeAwaitingVoidRequests(fetcher, 'practice-1');
+
+		expect(fetcher).toHaveBeenCalledWith('/api/practices/practice-1/contracts/void-requests');
+		expect(result).toEqual({ items: [row], hasMore: false });
+	});
+
+	it('carries the cursor to the next page', async () => {
+		const fetcher = vi.fn().mockResolvedValue(jsonResponse({ items: [], hasMore: false }));
+
+		await loadPracticeAwaitingVoidRequests(fetcher, 'practice-1', 'cursor-1');
+
+		expect(fetcher).toHaveBeenCalledWith('/api/practices/practice-1/contracts/void-requests?cursor=cursor-1');
+	});
+
+	it('throws with the response body text on a non-2xx response', async () => {
+		const fetcher = vi.fn().mockResolvedValue(jsonResponse('not permitted', 403));
+
+		await expect(loadPracticeAwaitingVoidRequests(fetcher, 'practice-1')).rejects.toThrow('not permitted');
 	});
 });
 
