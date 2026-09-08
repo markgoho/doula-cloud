@@ -355,6 +355,17 @@ test('Archetypes B, C, D, E, F, G -- the Staff side', async ({ page, request, co
 			url: `/practices/${practiceId}/settings/contract-template`,
 			h1: 'Contract Template'
 		},
+		// #966: scanned with no rate set at all, the state every fresh
+		// Practice actually starts in and the one its own AC names as
+		// valid -- not seeded through the API first, unlike the birth plan
+		// above, because the "none yet" state here is the representative
+		// one to prove accessible rather than one to skip past.
+		{
+			key: 'practices/[practiceId]/settings/rates',
+			archetype: 'F',
+			url: `/practices/${practiceId}/settings/rates`,
+			h1: 'Rates'
+		},
 		{
 			key: 'practices/[practiceId]/settings/plan-templates',
 			archetype: 'F',
