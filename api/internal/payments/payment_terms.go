@@ -28,6 +28,16 @@ import (
 // number.
 const DefaultPaymentTermsDays = 30
 
+// MsgNetDaysOutOfRange is what a person reads when the terms she typed
+// are not a usable number of days -- docs/api-design.md section 7 rule 4:
+// a 4xx she can cause by filling in a form names the field at fault,
+// starts with the field's own noun ("Days to pay", the label the
+// settings screen gives it), says what to do, and avoids the four words
+// apierr's TestDetailsWording gates on. The app spends the same sentence
+// (invoice.ts's netDaysOutOfRangeMessage), so the refusal she meets
+// before the request and the one she meets after it are one sentence.
+const MsgNetDaysOutOfRange = "Days to pay must be a whole number of days from 1 to 365"
+
 // maxPaymentTermsDays bounds what PutPaymentTermsHandler accepts, matching
 // the CHECK constraint in 00100_invoice_due_at.sql. A year is far past
 // anything a Practice bills a Client on; the bound exists so a typo
@@ -160,7 +170,9 @@ func PutPaymentTermsHandler() http.Handler {
 			return
 		}
 		if req.NetDays < 1 || req.NetDays > maxPaymentTermsDays {
-			apierr.WriteError(w, fmt.Sprintf("netDays must be a whole number of days between 1 and %d", maxPaymentTermsDays), http.StatusBadRequest)
+			apierr.Write(w, http.StatusBadRequest, apierr.CodeInvalidArgument,
+				fmt.Sprintf("netDays must be between 1 and %d", maxPaymentTermsDays),
+				map[string]string{"netDays": MsgNetDaysOutOfRange})
 			return
 		}
 

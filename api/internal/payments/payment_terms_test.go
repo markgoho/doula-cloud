@@ -142,12 +142,26 @@ func TestPutPaymentTermsHandler_RefusesAnImpossibleTerm(t *testing.T) {
 	defer srv.Close()
 
 	for _, body := range []string{`{"netDays":0}`, `{"netDays":-5}`, `{"netDays":400}`} {
-		resp := requestPaymentTerms(t, srv, session, practiceID, http.MethodPut, body)
-		status := resp.StatusCode
-		_ = resp.Body.Close()
-		if status != http.StatusBadRequest {
-			t.Fatalf("%s status = %d, want %d", body, status, http.StatusBadRequest)
-		}
+		func() {
+			resp := requestPaymentTerms(t, srv, session, practiceID, http.MethodPut, body)
+			defer func() { _ = resp.Body.Close() }()
+			if resp.StatusCode != http.StatusBadRequest {
+				t.Fatalf("%s status = %d, want %d", body, resp.StatusCode, http.StatusBadRequest)
+			}
+			// docs/api-design.md section 7 rule 4: a refusal a person
+			// causes by filling in a form names the field at fault, keyed
+			// by the request DTO's own JSON tag, so the app maps it onto a
+			// control with no translation table.
+			var out struct {
+				Details map[string]string `json:"details"`
+			}
+			if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+				t.Fatalf("%s decode response: %v", body, err)
+			}
+			if out.Details["netDays"] != payments.MsgNetDaysOutOfRange {
+				t.Fatalf("%s details[netDays] = %q, want %q", body, out.Details["netDays"], payments.MsgNetDaysOutOfRange)
+			}
+		}()
 	}
 }
 

@@ -366,12 +366,21 @@ export const clientHasNoEmailMessage = 'This Client has no email address on file
  * which is the only way "overdue" can be proven without a clock, a
  * webhook or a scheduled sweep. */
 export function daysOverdue(dueAt: string, now: Date): number {
-	const dueMs = new Date(dueAt).getTime();
-	const elapsed = now.getTime() - dueMs;
-	if (!Number.isFinite(elapsed) || elapsed <= 0) {
+	if (!isPastDue(dueAt, now)) {
 		return 0;
 	}
-	return Math.floor(elapsed / MS_PER_DAY);
+	return Math.floor((now.getTime() - new Date(dueAt).getTime()) / MS_PER_DAY);
+}
+
+/** Whether `dueAt` has passed at `now` -- the lateness rule itself, said
+ * once (#768). It is deliberately the same test the BFF's overdue totals
+ * and narrowing use (`due_at < now()`), rather than "a whole day has
+ * gone": `daysOverdue` answers *how* late, which is a second question,
+ * and an Invoice that fell due an hour ago is already counted in the
+ * Practice's overdue figure. An unparseable date is not late. */
+function isPastDue(dueAt: string, now: Date): boolean {
+	const dueMs = new Date(dueAt).getTime();
+	return Number.isFinite(dueMs) && dueMs < now.getTime();
 }
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
@@ -392,12 +401,7 @@ export function dueLabel(invoice: Invoice, now: Date): string {
 	if (invoice.status !== 'open') {
 		return due;
 	}
-	// Late is "the instant has passed", not "a whole day has passed" --
-	// the same test the BFF's own overdue totals and narrowing use. The
-	// day count is how late, which is a second question: without this
-	// split, an Invoice that fell due an hour ago would be counted in the
-	// Practice's overdue figure while its own row said nothing.
-	if (new Date(invoice.dueAt).getTime() >= now.getTime()) {
+	if (!isPastDue(invoice.dueAt, now)) {
 		return due;
 	}
 	const late = daysOverdue(invoice.dueAt, now);
@@ -447,3 +451,20 @@ export async function setPaymentTerms(
 	}
 	return response.json();
 }
+
+/** The narrowest and widest payment terms a Practice may set (#768).
+ * These mirror the BFF's own bound (payments.maxPaymentTermsDays) and the
+ * CHECK constraint in 00100_invoice_due_at.sql -- three statements of one
+ * rule, because SQL, Go and TypeScript cannot share a constant. This is
+ * the one the screen spends, so the form and its refusal message can
+ * never disagree with each other. */
+export const MIN_PAYMENT_TERMS_DAYS = 1;
+export const MAX_PAYMENT_TERMS_DAYS = 365;
+
+/** What a person reads when the terms she typed are not a usable number
+ * of days. Word-for-word the BFF's own `MsgNetDaysOutOfRange`, so the
+ * client-side refusal and the boundary's refusal are the same sentence
+ * rather than two that merely mean the same thing. It follows the GOV.UK
+ * error-message rules `formErrors.ts` is gated on: it starts with the
+ * field's own noun and says what to do. */
+export const netDaysOutOfRangeMessage = `Days to pay must be a whole number of days from ${MIN_PAYMENT_TERMS_DAYS} to ${MAX_PAYMENT_TERMS_DAYS}`;

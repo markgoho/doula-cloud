@@ -82,6 +82,15 @@ export const asAdmin: RouteVariant = {
  * this branch answers no request, and its `respond` is the inherited one
  * only because nothing reaches it.
  */
+/*
+ * #768's payment-terms fieldset. The default state, not a Practice's own
+ * chosen number, because it is the longer of the two sentences the
+ * section renders (#537: the longest realistic value, not a
+ * representative one) -- a Practice that has set its own reads the short
+ * form, which cannot need more room than this one.
+ */
+const paymentTerms = { netDays: 30, isDefault: true };
+
 export const asDoula: RouteVariant = {
 	name: 'The Stripe Connect settings screen, as a Doula',
 	pageData: session(['doula'])
@@ -95,6 +104,7 @@ export const fixture: RouteFixture = {
 	pageData: session(['owner']),
 	respond: (path) => {
 		if (path.endsWith('/website')) return jsonResponse(website);
+		if (path.endsWith('/payments/payment-terms')) return jsonResponse(paymentTerms);
 		return jsonResponse(status);
 	},
 	readyText: 'Getting paid',

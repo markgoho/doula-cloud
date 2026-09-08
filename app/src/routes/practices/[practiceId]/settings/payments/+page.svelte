@@ -41,6 +41,9 @@
 		setBillingMode,
 		loadPaymentTerms,
 		setPaymentTerms,
+		MIN_PAYMENT_TERMS_DAYS,
+		MAX_PAYMENT_TERMS_DAYS,
+		netDaysOutOfRangeMessage,
 		type BillingMode,
 		type PaymentTerms
 	} from '#lib/invoice.js';
@@ -53,6 +56,7 @@
 	import Badge from '#lib/components/atoms/Badge.svelte';
 	import RadioGroup from '#lib/components/molecules/RadioGroup.svelte';
 	import LabeledField from '#lib/components/molecules/LabeledField.svelte';
+	import ErrorSummary from '#lib/components/molecules/ErrorSummary.svelte';
 	import TextInput from '#lib/components/atoms/TextInput.svelte';
 	import FormPage from '#lib/components/templates/FormPage.svelte';
 
@@ -134,6 +138,21 @@
 	let isSavingPaymentTerms = $state(false);
 	let paymentTermsError = $state('');
 
+	/*
+	 * GOV.UK's Recover from validation errors pattern (ADR-0021,
+	 * docs/design/govuk-alignment.md): a refused value is said twice --
+	 * once at the top of the page, where ErrorSummary takes focus and
+	 * announces it, and once beside the field itself. This is the first
+	 * field on this screen a person can get wrong, so the summary is
+	 * earned here and was not before. The id is fixed rather than
+	 * generated so the summary's own `<a href="#id">` can reach the input
+	 * -- an anchor, not a click handler, per the Rule of Least Power.
+	 */
+	const netDaysFieldId = 'payment-terms-net-days';
+	const paymentTermsErrors = $derived(
+		paymentTermsError ? [{ message: paymentTermsError, targetId: netDaysFieldId }] : []
+	);
+
 	onMount(async () => {
 		try {
 			paymentTerms = await loadPaymentTerms(apiFetchWithSession, page.params.practiceId!);
@@ -148,8 +167,12 @@
 		// reader is told what is wrong in the words of the field rather
 		// than in the words of an API. The BFF refuses the same range.
 		const netDays = Number(typedNetDays);
-		if (!Number.isSafeInteger(netDays) || netDays < 1 || netDays > 365) {
-			paymentTermsError = 'Enter a whole number of days between 1 and 365.';
+		if (
+			!Number.isSafeInteger(netDays) ||
+			netDays < MIN_PAYMENT_TERMS_DAYS ||
+			netDays > MAX_PAYMENT_TERMS_DAYS
+		) {
+			paymentTermsError = netDaysOutOfRangeMessage;
 			return;
 		}
 		isSavingPaymentTerms = true;
@@ -443,6 +466,10 @@
 	{/if}
 {/snippet}
 
+{#snippet errorSummary()}
+	<ErrorSummary errors={paymentTermsErrors} />
+{/snippet}
+
 {#snippet paymentTermsSection()}
 	<!--
 		#768: an Invoice falls due this many days after it is raised, on
@@ -462,6 +489,7 @@
 		/>
 		{#if isPracticeOwnerOrAdmin}
 			<LabeledField
+				id={netDaysFieldId}
 				label="Days to pay"
 				hint="Applies to the next invoice raised. An invoice already raised keeps the terms it was billed under."
 				error={paymentTermsError || undefined}
@@ -472,7 +500,7 @@
 						{describedBy}
 						{invalid}
 						type="number"
-						min={1}
+						min={MIN_PAYMENT_TERMS_DAYS}
 						inputmode="numeric"
 						value={typedNetDays}
 						onInput={(value) => (typedNetDays = value)}
@@ -692,6 +720,7 @@
 <FormPage
 	title="Getting paid"
 	{intro}
+	errorSummary={paymentTermsErrors.length > 0 ? errorSummary : undefined}
 	fieldsets={[
 		{ legend: 'Billing mode', content: billingModeSection },
 		{ legend: 'Payment terms', content: paymentTermsSection },

@@ -13,6 +13,7 @@ import { page as testPage } from 'vitest/browser';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import { jsonResponse } from '#lib/testResponse.js';
+import { netDaysOutOfRangeMessage } from '#lib/invoice.js';
 import Page from './+page.svelte';
 import { toPageState } from '../../../../routeFixture.js';
 import { fixture } from './page.fixture.js';
@@ -126,7 +127,15 @@ describe('payments settings screen: payment terms (#768)', () => {
 		await testPage.getByLabelText('Days to pay').fill('0');
 		await testPage.getByRole('button', { name: 'Update payment terms' }).click();
 
-		await expect.element(testPage.getByText(/whole number of days between 1 and 365/)).toBeVisible();
+		// GOV.UK's Recover from validation errors pattern: said at the top
+		// of the page as a link that reaches the field, and again beside
+		// the field itself.
+		await expect
+			.element(testPage.getByRole('link', { name: netDaysOutOfRangeMessage }))
+			.toBeVisible();
+		await expect
+			.element(testPage.getByRole('link', { name: netDaysOutOfRangeMessage }))
+			.toHaveAttribute('href', '#payment-terms-net-days');
 		expect(
 			apiFetchWithSession.mock.calls.some(
 				(call: unknown[]) => (call[1] as RequestInit | undefined)?.method === 'PUT'
