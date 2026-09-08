@@ -14,7 +14,9 @@ import (
 
 // employeeType and contractorType are named once here so golangci-lint's
 // goconst check doesn't see the two stored employment_type values
-// repeated as raw string literals across this file's own role table.
+// repeated as raw string literals in TestPostVoidContractHandler_RefusedByRole's
+// own table below -- the rest of this file's calls stay on the raw
+// "employee" literal every other seed call in this package uses.
 const (
 	employeeType   = "employee"
 	contractorType = "contractor"

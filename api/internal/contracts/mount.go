@@ -16,15 +16,15 @@ import (
 // PDF, and the Client portal's own contract read, sign, and PDF.
 //
 // Every Contract write below carries a role declaration at the mount
-// (#970): create, set values and send are staffauth.AnyStaff -- #282's
-// write table gives them to whoever reaches the Engagement at all
-// (Owner, Admin, an employed Doula, or a contractor on a granted
-// attachment), so the mount adds no role restriction beyond the
-// AttachingWrite reach test attaching=true already applies. Void and the
-// Template's own write are narrower -- OwnerAndAdmin and OwnerOnly -- so
-// they are registered through ir.ExemptGated rather than ir.Exempt, which
-// panics if the role list is ever left empty, the same guarantee a GET's
-// role list already carries.
+// (#970), registered through ir.ExemptGated rather than the role-free
+// ir.Exempt, which panics if the role list is ever left empty, the same
+// guarantee a GET's role list already carries. Create, set values and
+// send are staffauth.AnyStaff -- #282's write table gives them to
+// whoever reaches the Engagement at all (Owner, Admin, an employed
+// Doula, or a contractor on a granted attachment), so the mount adds no
+// role restriction beyond the AttachingWrite reach test attaching=true
+// already applies. Void and the Template's own write are narrower --
+// OwnerAndAdmin and OwnerOnly.
 func Mount(g *staffauth.GatedRouter, ir *idempotency.Router, db *sql.DB, store objectstore.ObjectStore, pusher push.Pusher) {
 	g.Get("/api/practices/{practiceId}/contract-template", staffauth.AnyStaff, GetTemplateHandler())
 	// Owner-only (not Admin): #970 moved this rule from an in-handler

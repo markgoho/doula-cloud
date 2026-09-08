@@ -147,10 +147,16 @@ func (g *GatedRouter) Write(pattern string, h http.Handler) {
 
 // GatedWrite mounts a route under any verb but GET, behind Middleware and
 // a role check, the way Get gates a read -- for the rare write whose rule
-// is not reach alone. #970 is the first of these: a Contract void must
-// refuse every Doula, employee or contractor, no matter what she is
-// attached to, which AttachingWrite's reach test cannot express (it asks
-// "can she reach this Engagement", never "is this act hers to do"). roles
+// is not reach alone. #970 is the first write to declare its role at the
+// mount seam this way: a Contract void must refuse every Doula, employee
+// or contractor, no matter what she is attached to, which AttachingWrite's
+// reach test cannot express (it asks "can she reach this Engagement",
+// never "is this act hers to do"). A role-gated write is not new by
+// itself -- payments.PutBillingModeHandler and its by-hand Invoice
+// void/write-off already check staffauth.RequireOwner/RequireOwnerOrAdmin
+// in-handler, invisible to any startup guardrail the same way Contract
+// void was -- what is new here is the mount declaring it, the way GET
+// already does. roles
 // must be non-empty -- pass AnyStaff to declare the write open to any
 // Staff member who reaches it, the same opt-out Get uses. Panics at
 // startup if roles is empty, so a forgotten declaration fails the binary
@@ -160,9 +166,19 @@ func (g *GatedRouter) Write(pattern string, h http.Handler) {
 // ordinary write table is a reach question (which Engagements), not a
 // role one, and declaring roles for every write that needs none would
 // only invite a role list that repeats what AttachingWrite already
-// checks. Reach a GatedWrite through idempotency.Router.ExemptGated or
-// ReplayableGated, the same as Write is reached through Exempt or
-// Replayable.
+// checks. Reach a GatedWrite through idempotency.Router.ExemptGated, the
+// role-declaring mirror of Exempt (Write's own door).
+//
+// The role check runs before h, so a route registered attaching=true
+// through ExemptGated checks role first, then AttachingWrite's reach.
+// That order is right for #970's only case today (an Owner or Admin
+// reaches every Engagement, so refusing her by role never hides an
+// Engagement from her that the reach test would have shown) -- but it is
+// an order: a
+// future GatedWrite whose role list is narrower than its reach population
+// should think about which refusal a caller meets first, a 403 that
+// confirms the Engagement exists versus the 404 AttachingWrite gives an
+// unattached contractor.
 func (g *GatedRouter) GatedWrite(pattern string, roles []string, h http.Handler) {
 	method, path := g.cutWritePattern("GatedWrite", pattern)
 	if len(roles) == 0 {
