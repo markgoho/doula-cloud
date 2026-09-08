@@ -316,6 +316,19 @@ export function seedEngagement(clientId: string, practiceId: string, status = 'i
 	return engagementId;
 }
 
+/**
+ * Seeds a practice_rates row directly (#966/#967): PostContractHandler
+ * refuses to create a Contract at all when the Practice has no rate set
+ * for the Engagement's kind, so every e2e spec that creates a Contract
+ * through the API needs one seeded first, the same way seedEngagement
+ * bypasses the API for its own row.
+ */
+export function seedPracticeRate(practiceId: string, kind = 'birth', amountCents = 15_000): void {
+	execSQL(
+		`INSERT INTO practice_rates (practice_id, kind, amount_cents) VALUES (${sqlLiteral(practiceId)}, ${sqlLiteral(kind)}, ${amountCents})`
+	);
+}
+
 // Seeds a Message whose attachment metadata points at an object never
 // Put to the store -- #305's not-found handling only differs from a
 // genuine storage failure once the DB row and the store disagree, which

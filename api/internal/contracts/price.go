@@ -7,6 +7,8 @@ import (
 	"maps"
 	"slices"
 
+	"doula-cloud/api/internal/staffauth"
+
 	"github.com/dustin/go-humanize"
 )
 
@@ -49,6 +51,38 @@ func withResolvedPrice(mergeFields []string, values MergeFieldValues, amountCent
 	out := make(MergeFieldValues, len(values)+1)
 	maps.Copy(out, values)
 	out[priceMergeKey] = formatCentsAsDollars(amountCents)
+	return out
+}
+
+// priceForReader applies price resolution the way ADR-0008 (as amended
+// on #282, and #969's read-boundary half) entitles reader to it: an
+// ambient contractor never reads the Practice's price -- only her own
+// agreed fee, which lives elsewhere (an Offer/Attachment fee, not this
+// Contract) -- while an Owner, an Admin, or an employee Doula all read
+// it resolved the same way withResolvedPrice always did. This is the
+// piece #969 could not build (the money_/ContractScope/ContractFull
+// split it deleted had no single, reliable key to gate on) and #967
+// closes now that price is exactly one reserved, column-backed key
+// (contract.go's GetContractHandler doc comment names this the interim
+// cost being closed here).
+//
+// Deletes priceMergeKey from values outright for a contractor, rather
+// than merely skipping the resolve -- a pre-#967 fixture or a row
+// written before this reserved key existed could otherwise still carry
+// a raw stored value under that key, which withResolvedPrice's normal
+// no-op-if-absent behavior would let leak straight through. This
+// reproduces the deleted ContractScope's own guarantee: no price key
+// reachable at all, not just a redacted value.
+func priceForReader(reader staffauth.Reader, mergeFields []string, values MergeFieldValues, amountCents int64) MergeFieldValues {
+	if !reader.IsAmbientContractor() {
+		return withResolvedPrice(mergeFields, values, amountCents)
+	}
+	if _, present := values[priceMergeKey]; !present {
+		return values
+	}
+	out := make(MergeFieldValues, len(values))
+	maps.Copy(out, values)
+	delete(out, priceMergeKey)
 	return out
 }
 

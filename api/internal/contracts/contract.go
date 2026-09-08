@@ -182,20 +182,24 @@ func PostContractHandler() http.Handler {
 	})
 }
 
-// GetContractHandler views the Contract for :engagementId, in full, for
-// anyone who can reach the Engagement at all (narrowed by ADR-0008's
-// attachment rule for a contractor Doula). #282 deleted the scope-vs-
-// money split this handler used to enforce (ContractScope/ContractFull,
-// ReadContract, the money_ merge-field-key convention): the premise both
-// shared -- that a Client's money is hidden from a Doula -- was wrong for
-// an employed Doula, and #282's named exit condition retires the split
-// entirely rather than re-aiming it, since narrowing a contractor's read
-// alone would need the same per-field classification back. Until #967
-// gives a Contract a real amount column, a contractor on a granted
-// attachment reads this Contract's merge field values unfiltered,
-// including a money-tagged one if the Practice's Template used the old
-// convention -- the interim cost #969 accepts and #967 closes. Must be
-// mounted behind staffauth.Middleware.
+// GetContractHandler views the Contract for :engagementId, for anyone
+// who can reach the Engagement at all (narrowed by ADR-0008's attachment
+// rule for a contractor Doula). #282 deleted the scope-vs-money split
+// this handler used to enforce (ContractScope/ContractFull, ReadContract,
+// the money_ merge-field-key convention): the premise both shared -- that
+// a Client's money is hidden from a Doula -- was wrong for an employed
+// Doula, and #282's named exit condition retires the split entirely
+// rather than re-aiming it, since narrowing a contractor's read alone
+// would need the same per-field classification back. #969 could not
+// close that gap on its own -- with money no longer tagged at all, there
+// was no single, reliable key left to gate a contractor's read on -- so
+// a contractor on a granted attachment read every merge field value
+// unfiltered in the interim, price included. #967's real amount_cents
+// column gives price back exactly one reserved key, which is what
+// priceForReader gates on here: an Owner, an Admin, and an employed
+// Doula all read it resolved; a contractor never does, the same "no
+// price key reachable at all" guarantee the deleted split used to give.
+// Must be mounted behind staffauth.Middleware.
 func GetContractHandler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		tx, engagementID, ok := resolveContractRequest(w, r)
@@ -237,7 +241,7 @@ func GetContractHandler() http.Handler {
 			Status:       status,
 			Prose:        prose,
 			MergeFields:  mergeFields,
-			Values:       withResolvedPrice(mergeFields, values.nonEmpty(), amountCents),
+			Values:       priceForReader(reader, mergeFields, values.nonEmpty(), amountCents),
 		}
 
 		apierr.WriteJSON(w, http.StatusOK, full)

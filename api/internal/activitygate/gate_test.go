@@ -124,8 +124,8 @@ func TestCanAccessSubject_Engagement(t *testing.T) {
 // activity.MoneyActions() (which would just restate the production code).
 func TestRestrictedActions_Engagement(t *testing.T) {
 	want := []string{
-		"contract_created", "contract_sent", contractSignedAction, "contract_voided", "invoice_raised", invoicePaidAction,
-		"payment_recorded", "invoice_voided", "invoice_written_off",
+		"contract_created", "contract_sent", contractSignedAction, "contract_voided", "contract_amount_overridden",
+		"invoice_raised", invoicePaidAction, "payment_recorded", "invoice_voided", "invoice_written_off",
 	}
 	got := activitygate.RestrictedActions(activity.SubjectEngagement)
 	if len(got) != len(want) {

@@ -469,20 +469,25 @@ test('Archetypes D, G -- the Client portal', async ({ page, request }) => {
 		`create contract failed: ${contract.status()} ${await contract.text()}`
 	).toBe(true);
 	// #258: Send now refuses a Contract with any blank merge field.
-	// practice_name and client_name are already resolved by creation; the
-	// default seeded template's other merge fields (scope_of_service, the
-	// two engagement dates, price) have no such column backing them, so
-	// they're filled in by hand before Send.
+	// practice_name and client_name are already resolved by creation;
+	// #967 resolves price the same way, from the rate card seedPortalClient
+	// seeds (portalClient.ts) -- PutContractHandler refuses a request that
+	// tries to set it directly, so it's excluded here even though the POST
+	// response above already carries it resolved. The default seeded
+	// template's other two merge fields (scope_of_service, the two
+	// engagement dates) have no such column backing them, so they're
+	// filled in by hand before Send.
 	const { values } = await contract.json();
+	// eslint-disable-next-line @typescript-eslint/no-unused-vars -- destructured only to exclude it from editableValues below
+	const { price: _price, ...editableValues } = values;
 	const filled = await request.put(`${engagementURL}/contract`, {
 		headers: staffHeaders,
 		data: {
 			values: {
-				...values,
+				...editableValues,
 				scope_of_service: '12 prenatal visits',
 				engagement_start_date: '2027-01-01',
-				engagement_end_date: '2027-06-01',
-				price: '$1,200'
+				engagement_end_date: '2027-06-01'
 			}
 		}
 	});

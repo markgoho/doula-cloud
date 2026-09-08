@@ -66,6 +66,7 @@
 		mergeFieldLabel,
 		missingMergeFieldKeys,
 		editableMergeFields,
+		editableValues,
 		type Contract
 	} from '#lib/contract.js';
 	import { isAmbientContractor, isDoula, isOwner, isOwnerOrAdmin } from '#lib/roles.js';
@@ -688,7 +689,7 @@
 					apiFetchWithSession,
 					page.params.practiceId!,
 					page.params.engagementId!,
-					contractState.value!.values
+					editableValues(contractState.value!.values)
 				),
 			'Failed to save contract'
 		);

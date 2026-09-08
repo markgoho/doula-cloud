@@ -451,13 +451,14 @@ func TestGetContractHandler_ContractorWithoutAttachmentForbidden(t *testing.T) {
 
 // TestGetContractHandler_ContractorWithGrantedAttachmentSeesScope proves
 // the other half of that rule: a granted, open attachment reaches the
-// Contract's scope. It also pins #969's documented interim gap, per
-// ADR-0008's "Amended on #282" section: with the money_/ContractScope/
-// ContractFull split deleted and no real amount column yet (#967), a
-// contractor's raw merge field values -- including a price, if the
-// Practice's Template names one -- are not filtered at all. That is the
-// accepted cost, closed by #967's column rather than by resurrecting the
-// deleted split.
+// Contract's scope -- but never its price. #969 could not close this
+// gap on its own (no single reliable key to gate a contractor's read on,
+// with money no longer tagged at all); #967's real amount_cents column
+// gives price back exactly one reserved key, and priceForReader deletes
+// it outright for an ambient contractor, even though seedContractWithValues
+// stored a raw value under it directly (a pre-#967 fixture shape) --
+// proving the guarantee is "no price key reachable", not "an unresolved
+// one".
 func TestGetContractHandler_ContractorWithGrantedAttachmentSeesScope(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "get-contractor-attached"
@@ -482,21 +483,24 @@ func TestGetContractHandler_ContractorWithGrantedAttachmentSeesScope(t *testing.
 	if out.EngagementID != engagementID {
 		t.Fatalf("engagementId = %q, want %q", out.EngagementID, engagementID)
 	}
-	if out.Values[priceKey] != testPriceValue {
-		t.Fatalf("Values[price] = %q, want %q -- #969's documented interim gap, closed by #967", out.Values[priceKey], testPriceValue)
+	if out.Values[clientNameKey] != jamieName {
+		t.Fatalf("Values[client_name] = %q, want %q -- scope still reaches a granted-attachment contractor", out.Values[clientNameKey], jamieName)
+	}
+	if _, present := out.Values[priceKey]; present {
+		t.Fatalf("Values = %+v, want no price key reachable at all for a contractor (#967)", out.Values)
 	}
 }
 
 // TestGetContractHandler_EmployedDoulaSeesMoney proves ADR-0008's money
-// row as amended by #282: #969 deleted the ContractScope/ContractFull
-// split, and an employed Doula now reads the Contract's price merge
-// field the same as an Owner or Admin -- previously withheld entirely.
+// row as amended by #282: an employed Doula reads the Contract's price,
+// resolved from amount_cents (#967), the same as an Owner or Admin --
+// previously withheld entirely.
 func TestGetContractHandler_EmployedDoulaSeesMoney(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "get-employee-money"
 	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
 	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
-	seedContractWithValues(t, db, engagementID, contracts.MergeFieldValues{clientNameKey: jamieName, priceKey: testPriceValue})
+	seedContractWithValues(t, db, engagementID, contracts.MergeFieldValues{clientNameKey: jamieName})
 
 	srv, session := newContractServer(t, db, uid)
 	defer srv.Close()
@@ -511,8 +515,41 @@ func TestGetContractHandler_EmployedDoulaSeesMoney(t *testing.T) {
 	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
-	if out.Values[priceKey] != testPriceValue {
-		t.Fatalf("Values[price] = %q, want %q -- an employed Doula reads Contract money now", out.Values[priceKey], testPriceValue)
+	if out.Values[priceKey] != testRateAmountDollars {
+		t.Fatalf("Values[price] = %q, want %q -- an employed Doula reads Contract money now, resolved from amount_cents", out.Values[priceKey], testRateAmountDollars)
+	}
+}
+
+// TestGetContractHandler_ContractorWithGrantedAttachmentNoRawPriceStored
+// proves priceForReader's other branch: a real, post-#967 Contract never
+// stores a raw price in merge_field_values at all (price is resolved,
+// never persisted -- withResolvedPrice's own doc comment), so a
+// contractor's read hits the "not present" early return rather than the
+// delete path TestGetContractHandler_ContractorWithGrantedAttachmentSeesScope
+// exercises -- both must leave no price key reachable.
+func TestGetContractHandler_ContractorWithGrantedAttachmentNoRawPriceStored(t *testing.T) {
+	db := testdb.New(t)
+	const uid = "get-contractor-no-raw-price"
+	practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "contractor")
+	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
+	seedContract(t, db, engagementID, statusDraft, mergeFieldProse)
+	testdb.SeedGrantedAttachment(t, db, engagementID, staffID)
+
+	srv, session := newContractServer(t, db, uid)
+	defer srv.Close()
+
+	resp := getContract(t, srv, session, practiceID, engagementID)
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
+	}
+	var out contracts.ContractResponse
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if _, present := out.Values[priceKey]; present {
+		t.Fatalf("Values = %+v, want no price key reachable for a contractor", out.Values)
 	}
 }
 
