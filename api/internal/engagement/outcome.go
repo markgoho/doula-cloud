@@ -17,7 +17,7 @@ import (
 // it is a hatch rather than an editing surface.
 const ownerRole = "owner"
 
-// The three birth_outcome enum members (00092_engagement_birth_outcome.sql),
+// The three birth_outcome enum members (00093_engagement_birth_outcome.sql),
 // exported so a caller elsewhere in the BFF -- and #294's living-baby
 // derivation in particular -- names the same values this file validates
 // against rather than hand-copying string literals.
@@ -82,7 +82,7 @@ type birthOutcomeRow struct {
 // postpartum-only Engagement records live_birth at intake, because the
 // baby was born before the Practice was hired. Any role that may move a
 // status may record it (ADR-0006 as ADR-0015's role table applies it);
-// once recorded, the pair is frozen by 00092's BEFORE UPDATE trigger and
+// once recorded, the pair is frozen by 00093's BEFORE UPDATE trigger and
 // only an Owner may correct it, by sending correction: true. The
 // database cannot know roles, so the trigger's door
 // (app.allow_outcome_correction) is opened here and only here, after the
@@ -150,7 +150,7 @@ func RecordBirthOutcomeHandler() http.Handler {
 		}
 		if req.Correction {
 			// The trigger's door, opened for this transaction only, after
-			// the Owner check above -- 00092's own comment names this
+			// the Owner check above -- 00093's own comment names this
 			// handler as its single caller.
 			if _, err := tx.ExecContext(r.Context(),
 				`SELECT set_config('app.allow_outcome_correction', 'on', true)`); err != nil {
