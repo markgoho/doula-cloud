@@ -28,11 +28,11 @@ type Route struct {
 	// Reason records why a route registered through Router.Exempt
 	// deliberately runs without Wrap. Empty when Replayable is true.
 	Reason string
-	// Roles is set only for a route registered through ExemptGated: the
-	// role declaration staffauth.GatedRouter.GatedWrite enforces at the
-	// mount, ADR-0008's write-side mirror of a GET's Roles (#970). Empty
-	// for a route registered through Replayable or Exempt -- their write
-	// carries no role declaration, by design.
+	// Roles is set for a route registered through ExemptGated or
+	// ReplayableGated: the role declaration staffauth.GatedRouter.GatedWrite
+	// enforces at the mount, ADR-0008's write-side mirror of a GET's Roles
+	// (#970, #990). Empty for a route registered through Replayable or
+	// Exempt -- their write carries no role declaration, by design.
 	Roles []string
 }
 
@@ -42,8 +42,10 @@ type Route struct {
 // ticket-by-ticket choice (#126, #128, #129) and the other 29 left
 // undeclared -- indistinguishable at the route table from a route nobody
 // got round to. Router is the write-side mirror of staffauth.GatedRouter:
-// Replayable and Exempt are the only two doors a mutating route can be
-// registered through, and Exempt refuses to register without a reason --
+// Replayable and Exempt are the two base doors a mutating route can be
+// registered through, each with a role-gated variant (ExemptGated, #970;
+// ReplayableGated, #990) for the rare write whose rule is not reach
+// alone. Exempt (and ExemptGated) refuse to register without a reason --
 // the same "a declaration nobody had to justify is not a declaration"
 // argument staffauth.GatedRouter.Exempt makes for a GET mounted outside
 // Middleware.
@@ -98,6 +100,29 @@ func (rt *Router) Replayable(pattern string, attaching bool, h http.Handler) {
 	}
 	rt.routes = append(rt.routes, Route{Pattern: pattern, Replayable: true, Attaching: attaching})
 	rt.mounter.Write(pattern, staffauth.Middleware(rt.db)(wrapped))
+}
+
+// ReplayableGated is Replayable, plus a role declaration ADR-0008's write
+// side can enforce at the mount, the same pairing ExemptGated makes for
+// Exempt (#990: payments.PostManualPaymentHandler is money-creating, so
+// it stays Replayable, but its Owner-or-Admin rule is not reach alone --
+// the same gap #970 closed for Contract void). roles is checked by
+// staffauth.GatedRouter itself, panicking on an empty list, the same
+// guarantee ExemptGated's role list already carries.
+//
+// wrapped is built Wrap-then-AttachingWrite, the same order Replayable
+// itself uses, so a route registered attaching=true here still checks
+// reach before replay -- but GatedWrite's own role check runs outside
+// both, the same "role first" order ExemptGated documents, since GatedWrite
+// applies staffauth.Middleware and requireAnyRole around whatever this
+// passes it.
+func (rt *Router) ReplayableGated(pattern string, attaching bool, roles []string, h http.Handler) {
+	wrapped := Wrap(h)
+	if attaching {
+		wrapped = staffauth.AttachingWrite(wrapped)
+	}
+	rt.routes = append(rt.routes, Route{Pattern: pattern, Replayable: true, Attaching: attaching, Roles: roles})
+	rt.mounter.GatedWrite(pattern, roles, wrapped)
 }
 
 // Exempt declares pattern deliberately unwrapped, for reason, and mounts

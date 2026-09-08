@@ -122,9 +122,16 @@ func resolveInvoiceForPractice(ctx context.Context, tx *sql.Tx, practiceID, invo
 // marked paid_out_of_band before anything is written locally, and a
 // Stripe refusal fails the whole record closed -- nothing is saved. Must
 // be mounted behind staffauth.Middleware.
+//
+// Owner and Admin is declared at the mount, not checked here (#990,
+// following #970's own move for Contract writes): the handler no longer
+// calls staffauth.RequireOwnerOrAdmin, because a Doula is refused by the
+// gate before this runs. Widening or narrowing this route means editing
+// its ir.ReplayableGated role list in mount.go.
 func PostManualPaymentHandler(client Client) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, practiceID, ok := staffauth.RequireOwnerOrAdmin(w, r)
+		tx, practiceID, ok := staffauth.RequireTx(w, r)
+		// coverage:ignore reason: staffauth.Middleware always sets a tx before this handler runs
 		if !ok {
 			return
 		}
@@ -258,9 +265,17 @@ type InvoiceTransitionView struct {
 // writing an enum value as a literal rather than a bound parameter,
 // e.g. handleInvoicePaid's `SET status = 'paid'`) -- both callers pass a
 // fixed, internal constant, never anything request-supplied.
+//
+// Owner and Admin is declared at each caller's own mount line, not
+// checked here (#990, following #970's own move for Contract writes):
+// this shared body no longer calls staffauth.RequireOwnerOrAdmin,
+// because a Doula is refused by the gate before either PostVoidInvoiceHandler
+// or PostWriteOffInvoiceHandler ever runs. Widening or narrowing either
+// route means editing its own ir.ExemptGated role list in mount.go.
 func transitionByHandInvoice(newStatus, updateStatusQuery string, action activity.EngagementAction) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, practiceID, ok := staffauth.RequireOwnerOrAdmin(w, r)
+		tx, practiceID, ok := staffauth.RequireTx(w, r)
+		// coverage:ignore reason: staffauth.Middleware always sets a tx before this handler runs
 		if !ok {
 			return
 		}

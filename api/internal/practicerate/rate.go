@@ -145,9 +145,16 @@ type rateDiff struct {
 // an axis that actually changed" rule staffauth.PutMFARequiredHandler
 // follows: a retry with the same body reads the same current amount,
 // writes nothing, and records nothing new.
+//
+// Owner and Admin is declared at the mount, not checked here (#990,
+// following #970's own move for Contract writes): the handler no longer
+// calls staffauth.RequireOwnerOrAdmin, because a Doula is refused by the
+// gate before this runs. Widening or narrowing this route means editing
+// its ir.ExemptGated role list in mount.go.
 func PutRateHandler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, practiceID, ok := staffauth.RequireOwnerOrAdmin(w, r)
+		tx, practiceID, ok := staffauth.RequireTx(w, r)
+		// coverage:ignore reason: staffauth.Middleware always sets a tx before this handler runs
 		if !ok {
 			return
 		}
