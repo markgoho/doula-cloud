@@ -60,7 +60,7 @@ async function setup(isContractor = fixtureData.isContractor) {
 		data: {
 			isContractor,
 			isOwner: false,
-			session: { practiceId, practiceName: 'Riverside Doula Collective', roles: [], isContractor }
+			session: { practiceId, staffId: 'staff-1', practiceName: 'Riverside Doula Collective', roles: [], isContractor }
 		}
 	});
 }

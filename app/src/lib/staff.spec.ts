@@ -282,4 +282,72 @@ describe('doulaOptions', () => {
 			{ value: 'staff-9', label: 'Maya Oyelaran-Fitzgerald' }
 		]);
 	});
+
+	// #909's two axes, and the order they run in. Both Visit pickers are
+	// built from this one function, so the create rule and the reassign
+	// rule cannot drift apart.
+	describe('narrowed for one Visit picker (#909)', () => {
+		const roster = [
+			{ staffId: 'staff-1', name: 'Anne-Marie Ochieng-Whitfield', employmentType: 'employee' },
+			{ staffId: 'staff-2', name: 'Jordan Reyes', employmentType: 'contractor' },
+			{ staffId: 'staff-3', name: 'Kanyakumari Balasubramanian', employmentType: 'employee' }
+		];
+
+		it('puts the caller first and marks the option as hers', () => {
+			expect(doulaOptions(roster, { callerStaffId: 'staff-2' })).toEqual([
+				{ value: 'staff-2', label: 'Jordan Reyes (you)' },
+				{ value: 'staff-1', label: 'Anne-Marie Ochieng-Whitfield' },
+				{ value: 'staff-3', label: 'Kanyakumari Balasubramanian' }
+			]);
+		});
+
+		// An Owner or Admin who holds no Doula role is not on this list at
+		// all, so nothing is marked and nothing is hoisted -- she answers
+		// the question herself.
+		it('marks nothing when the caller is not on the roster', () => {
+			expect(doulaOptions(roster, { callerStaffId: 'staff-bookkeeper' })).toEqual(
+				doulaOptions(roster)
+			);
+		});
+
+		// Reassigning a Visit to the person who already holds it is a move
+		// that did not happen, with an activity entry to say it did.
+		it('leaves out the Staff member the Visit is already assigned to', () => {
+			expect(doulaOptions(roster, { currentAssigneeStaffId: 'staff-2' })).toEqual([
+				{ value: 'staff-1', label: 'Anne-Marie Ochieng-Whitfield' },
+				{ value: 'staff-3', label: 'Kanyakumari Balasubramanian' }
+			]);
+		});
+
+		it('offers the caller as a reassignment target when the Visit is not already hers', () => {
+			expect(
+				doulaOptions(roster, { callerStaffId: 'staff-3', currentAssigneeStaffId: 'staff-1' })
+			).toEqual([
+				{ value: 'staff-3', label: 'Kanyakumari Balasubramanian (you)' },
+				{ value: 'staff-2', label: 'Jordan Reyes' }
+			]);
+		});
+
+		// Exclusion runs before marking, deliberately: a caller this picker
+		// cannot offer must not be marked or hoisted either, which is also
+		// what lets a further exclusion compose with this one.
+		it('does not mark or hoist a caller the Visit is already assigned to', () => {
+			expect(
+				doulaOptions(roster, { callerStaffId: 'staff-1', currentAssigneeStaffId: 'staff-1' })
+			).toEqual([
+				{ value: 'staff-2', label: 'Jordan Reyes' },
+				{ value: 'staff-3', label: 'Kanyakumari Balasubramanian' }
+			]);
+		});
+
+		// The Practice-wide schedule's Doula filter asks nothing about a
+		// Visit, so it passes no context and gets the plain list.
+		it('leaves the list alone when no context is given', () => {
+			expect(doulaOptions(roster)).toEqual([
+				{ value: 'staff-1', label: 'Anne-Marie Ochieng-Whitfield' },
+				{ value: 'staff-2', label: 'Jordan Reyes' },
+				{ value: 'staff-3', label: 'Kanyakumari Balasubramanian' }
+			]);
+		});
+	});
 });

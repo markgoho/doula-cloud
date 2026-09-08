@@ -46,7 +46,13 @@ const { practiceId, clientId } = fixture.params;
 // `session` (#835) into +page.ts's own ContractorGate, the way SvelteKit
 // really does at runtime -- this route never reads it, but rendering the
 // component directly still needs the full merged shape.
-const sessionStub = { practiceId, practiceName: 'Riverside Doula Collective', roles: [], isContractor: false };
+const sessionStub = {
+	practiceId,
+	staffId: 'staff-1',
+	practiceName: 'Riverside Doula Collective',
+	roles: [],
+	isContractor: false
+};
 // The Address DescriptionList row joins the same fields the same way the
 // route does -- an empty addressLine2 is filtered out rather than shown
 // as a bare comma.

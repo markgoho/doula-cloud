@@ -14,6 +14,11 @@ import type { LayoutLoad } from './$types';
  */
 export interface PracticeSession {
 	practiceId: string;
+	// #909: required, unlike `pendingDeletion` below -- that flag is
+	// conditional, but every session has a caller, so a route may read
+	// this one without a fallback. The Add-a-Visit picker reads it to
+	// find which roster entry is the signed-in person.
+	staffId: string;
 	practiceName: string;
 	roles: string[];
 	isContractor: boolean;
@@ -83,6 +88,7 @@ export const load: LayoutLoad = async ({ params, url }): Promise<{ session: Prac
 	}
 
 	const body: {
+		staffId: string;
 		practiceName: string;
 		roles: string[];
 		isContractor: boolean;
@@ -96,6 +102,7 @@ export const load: LayoutLoad = async ({ params, url }): Promise<{ session: Prac
 	return {
 		session: {
 			practiceId: params.practiceId,
+			staffId: body.staffId,
 			practiceName: body.practiceName,
 			roles: body.roles,
 			isContractor: body.isContractor,

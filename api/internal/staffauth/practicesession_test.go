@@ -47,7 +47,7 @@ func TestPracticeSessionHandler_ReportsPracticeAndRoles(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "practice-session-owner"
 	practiceID := testdb.SeedPractice(t, db, "Practice Session Test Practice")
-	testdb.SeedStaffAtPractice(t, db, practiceID, uid, []string{ownerRole, doulaRole}, contractorType)
+	staffID := testdb.SeedStaffAtPractice(t, db, practiceID, uid, []string{ownerRole, doulaRole}, contractorType)
 
 	srv, session := newPracticeSessionServer(t, db, uid)
 	defer srv.Close()
@@ -73,6 +73,11 @@ func TestPracticeSessionHandler_ReportsPracticeAndRoles(t *testing.T) {
 	}
 	if !out.IsContractor {
 		t.Fatal("isContractor = false, want true")
+	}
+	// #909: the caller's own Staff id rides along, so a route under this
+	// Practice knows which roster entry is her without a second call.
+	if out.StaffID != staffID {
+		t.Fatalf("staffId = %q, want %q", out.StaffID, staffID)
 	}
 
 	var lastPracticeID string

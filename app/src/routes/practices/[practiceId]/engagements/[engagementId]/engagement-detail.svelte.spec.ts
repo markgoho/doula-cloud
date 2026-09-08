@@ -67,9 +67,14 @@ interface Detail {
 // is fine for every test using `setup()` below: only the Contract PDF
 // download (#302, its own describe block further down) reads
 // `session.roles` at all, and it calls this with its own roles.
-function sessionFor(roles: string[] = []) {
+// `staffId` defaults to the roster's own first entry (#909), who holds
+// `['owner', 'doula']` in the fixture -- the Doula-Owner this ticket is
+// about, and the reader the picker opens on. A test about somebody the
+// roster does not contain passes an id of its own.
+function sessionFor(roles: string[] = [], staffId = 'staff-1') {
 	return {
 		practiceId: fixture.params.practiceId,
+		staffId,
 		practiceName: 'Riverside Doula Collective',
 		roles,
 		isContractor: false
@@ -117,6 +122,7 @@ async function renderWithFixtureResponder(
 			...detail,
 			session: {
 				practiceId: fixture.params.practiceId,
+				staffId: 'staff-1',
 				practiceName: 'Riverside Doula Collective',
 				roles: [],
 				isContractor: false
@@ -130,7 +136,11 @@ async function renderWithFixtureResponder(
 // -- a 200 is the Owner or Admin who may be offered a colleague to pick,
 // a 403 is the plain Doula the endpoint refuses. At the outer scope
 // because eslint's unicorn/consistent-function-scoping asks for it there.
-async function setupWithRoster(rosterResponse?: Response, roles: string[] = ['owner', 'doula']) {
+async function setupWithRoster(
+	rosterResponse?: Response,
+	roles: string[] = ['owner', 'doula'],
+	staffId = 'staff-1'
+) {
 	await testPage.viewport(1440, 900);
 	const respond = toApiResponder(fixture);
 	apiFetchWithSession.mockImplementation((path: string) => {
@@ -138,7 +148,7 @@ async function setupWithRoster(rosterResponse?: Response, roles: string[] = ['ow
 		return respond(path);
 	});
 	await render(Page, {
-		data: { ...fixtureDetail, session: sessionFor(roles) },
+		data: { ...fixtureDetail, session: sessionFor(roles, staffId) },
 		params: fixture.params
 	});
 }
@@ -885,6 +895,125 @@ describe('choosing who a Visit is for (#268, #274)', () => {
 		await setupWithRoster(undefined, ['admin']);
 
 		await expect.element(testPage.getByLabelText('Who is this Visit for?')).toBeVisible();
+	});
+
+	/*
+	 * #909's three-way split, and the reassign picker's own rule. The
+	 * fixture roster's first entry -- staff-1, Anne-Marie
+	 * Ochieng-Whitfield -- is the only one holding both Owner and Doula,
+	 * so she is the Doula-Owner this ticket is about.
+	 */
+	describe('a Doula who owns her Practice, logging her own Visit (#909)', () => {
+		it('opens the picker on the caller, marked as the signed-in person and first in the list', async () => {
+			await setupWithRoster();
+
+			const picker = testPage.getByLabelText('Who is this Visit for?');
+			await expect.element(picker).toHaveValue('staff-1');
+			// First non-placeholder option, so a standing answer is visible
+			// as an answer rather than as an arbitrary top of the list.
+			const options = [...picker.element().querySelectorAll('option')].map((o) => o.textContent);
+			expect(options[1]).toBe('Anne-Marie Ochieng-Whitfield (you)');
+		});
+
+		it('logs the Visit for the caller without her touching the picker', async () => {
+			await setupWithRoster();
+			await expect.element(testPage.getByLabelText('Who is this Visit for?')).toHaveValue('staff-1');
+			await testPage.getByRole('button', { name: 'Add a Visit' }).click();
+
+			expect(apiFetchWithSession).toHaveBeenCalledWith(
+				'/api/practices/practice-1/engagements/engagement-1/visits',
+				expect.objectContaining({
+					body: JSON.stringify({ scheduledAt: undefined, staffId: 'staff-1' })
+				})
+			);
+		});
+
+		// The other two thirds of the split. An Admin who is not on the
+		// Doula roster has no self to fall back on, so she is asked, and
+		// nothing is chosen for her.
+		it('opens on the placeholder for an Admin who holds no Doula role', async () => {
+			await setupWithRoster(undefined, ['admin'], 'staff-bookkeeper');
+
+			await expect.element(testPage.getByLabelText('Who is this Visit for?')).toHaveValue('');
+		});
+
+		// And a plain Doula is never asked at all -- the roster read
+		// refuses her, and an absent assignee already means her.
+		it('asks a plain Doula nothing, and still lets her log her own Visit', async () => {
+			await setupWithRoster(jsonResponse('not permitted to read this', 403), ['doula'], 'staff-2');
+
+			await expect.element(testPage.getByRole('button', { name: 'Add a Visit' })).toBeVisible();
+			expect(testPage.getByLabelText('Who is this Visit for?').elements()).toHaveLength(0);
+		});
+
+		// The standing answer is a default, not a lock: the same Owner also
+		// books her colleagues' Visits, and naming one has to stick.
+		it('keeps the colleague she names, rather than reverting to her own name', async () => {
+			await setupWithRoster();
+			const picker = testPage.getByLabelText('Who is this Visit for?');
+			await expect.element(picker).toHaveValue('staff-1');
+
+			await picker.selectOptions('Jordan Reyes');
+
+			await expect.element(picker).toHaveValue('staff-2');
+		});
+
+		// visit-1 is assigned to staff-1, visit-2 to staff-2 -- offering
+		// either her own Visit back to her is a move that did not happen.
+		it("leaves a Visit's current assignee out of its own reassign picker", async () => {
+			await setupWithRoster();
+
+			const forVisitOne = testPage.getByLabelText('Reassign to').first();
+			await expect.element(forVisitOne).toBeVisible();
+			expect(
+				forVisitOne.getByRole('option', { name: 'Anne-Marie Ochieng-Whitfield (you)' }).elements()
+			).toHaveLength(0);
+			// She is still offered on a Visit that is not already hers.
+			const forVisitTwo = testPage.getByLabelText('Reassign to').nth(1);
+			expect(
+				forVisitTwo.getByRole('option', { name: 'Anne-Marie Ochieng-Whitfield (you)' }).elements()
+			).toHaveLength(1);
+			expect(forVisitTwo.getByRole('option', { name: 'Jordan Reyes' }).elements()).toHaveLength(0);
+		});
+
+		// ADR-0024's floor, on the real route rather than on a style-guide
+		// demo: the fixture roster is fourteen Doulas with long real-world
+		// names, and the marked option is the longest of the lot.
+		it('never scrolls the document sideways at 320px with a fourteen-name roster', async () => {
+			await setupWithRoster();
+			await testPage.viewport(320, 800);
+
+			await expect.element(testPage.getByLabelText('Who is this Visit for?')).toBeVisible();
+			expect(document.documentElement.scrollWidth).toBe(document.documentElement.clientWidth);
+		});
+
+		// A Practice whose only Doula is the person already holding the
+		// Visit: an empty picker with a placeholder and no explanation is
+		// the defect, so the control says what is true instead.
+		it('says there is nobody to reassign to rather than showing an empty picker', async () => {
+			const soleDoula = {
+				members: [
+					{
+						staffId: 'staff-1',
+						name: 'Anne-Marie Ochieng-Whitfield',
+						email: 'solo@example.test',
+						roles: ['owner', 'doula'],
+						employmentType: 'employee',
+						workState: 'NY',
+						workStateReportedAt: '2026-01-01T00:00:00Z'
+					}
+				],
+				invitations: { items: [] }
+			};
+			await setupWithRoster(jsonResponse(soleDoula));
+
+			await expect
+				.element(testPage.getByText('There is nobody else to reassign this Visit to.').first())
+				.toBeVisible();
+			// visit-2 is Jordan Reyes's, and she is not on this roster, so
+			// its own picker still offers the sole Doula.
+			expect(testPage.getByLabelText('Reassign to').elements()).toHaveLength(1);
+		});
 	});
 
 	// A reader who can neither pick a colleague nor log her own Visit is

@@ -39,6 +39,7 @@ beforeEach(() => {
 // runtime.
 const sessionStub = {
 	practiceId,
+	staffId: 'staff-1',
 	practiceName: 'Riverside Doula Collective',
 	roles: ['owner'],
 	isContractor: false
