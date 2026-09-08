@@ -18,7 +18,7 @@ const targetDirectory = new URL('../src/lib/styles/fonts/', import.meta.url);
 const subsets = ['latin', 'latin-ext'];
 
 // Google's CSS API serves woff2 + variable ranges only to a browser-shaped
-// request; an unrecognised agent gets legacy static TTF instead.
+// request; an unrecognized agent gets legacy static TTF instead.
 const modernBrowser =
 	'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36';
 

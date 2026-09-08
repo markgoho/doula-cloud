@@ -171,7 +171,7 @@ func parseFacts(w http.ResponseWriter, req CreateRequest) (facts, bool) {
 // before Postgres sees it. The CHECK constraint is the real guarantee,
 // but a violation aborts the whole transaction rather than returning a
 // row this handler could turn into a clean 400 (staffauth/invite.go
-// documents the same Postgres behaviour), so the readable error has to
+// documents the same Postgres behavior), so the readable error has to
 // be produced here.
 func checkFee(employmentType string, amountCents *int64) (int, string) {
 	if employmentType == contractorType {

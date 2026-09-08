@@ -55,7 +55,7 @@
 		/*
 		 * The hard cap #468 found missing: a one-character initial and a
 		 * six-digit access code both silently truncate pasted text without
-		 * it, which is the behaviour the two callers want rather than a
+		 * it, which is the behavior the two callers want rather than a
 		 * side effect (#492).
 		 */
 		maxlength?: number;

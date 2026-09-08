@@ -55,7 +55,7 @@
 			letter-spacing: var(--text-label-tracking);
 			/* A circle of two letters is the one place in the app where a
 			   glyph must not reflow: `line-height: 1` keeps the pair on the
-			   optical centre whatever the fallback font's metrics are. */
+			   optical center whatever the fallback font's metrics are. */
 			line-height: 1;
 		}
 	}

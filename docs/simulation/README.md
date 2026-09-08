@@ -96,7 +96,7 @@ Narration is the exception, not the running commentary — see [Silence](#silenc
 2. A **`file:line`** into this repo.
 3. An **HTTP exchange** — method, path, status, and the response body where it is short (`POST /api/practices/{id}/invitations → 409 conflict`).
 4. A **schema reference** — table and column.
-5. A **timing**, machine-captured (this one is always present anyway, so it never stands alone as the only anchor for a claim about behaviour — it anchors a claim about speed).
+5. A **timing**, machine-captured (this one is always present anyway, so it never stands alone as the only anchor for a claim about behavior — it anchors a claim about speed).
 
 **An entry that cannot meet this is deleted, not weakened.** It is not rewritten as a hedge, not moved to a "possible issues" section, and not kept with a note that evidence was unavailable. A run that emits fewer, anchored entries is worth more than a run that emits many, and the deletion is the mechanism that keeps that true. Where an act genuinely could not be captured — the harness dropped the screenshot, the network log was lost — the honest record is a **`u`-numbered entry saying the act was not observable**, which is a fact about the harness and belongs in the run README too.
 

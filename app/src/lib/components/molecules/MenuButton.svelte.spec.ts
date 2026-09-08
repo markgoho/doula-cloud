@@ -48,7 +48,7 @@ describe('MenuButton', () => {
 	/*
 	 * Native `popover` handles Escape, and the browser returns focus to the
 	 * trigger on its own. Asserted rather than assumed, because the whole
-	 * argument for using the platform here is that these three behaviours
+	 * argument for using the platform here is that these three behaviors
 	 * come free -- if they did not, the component would owe them in script.
 	 */
 	it('closes on Escape and gives focus back to the trigger', async () => {

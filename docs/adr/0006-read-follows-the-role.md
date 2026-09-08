@@ -49,7 +49,7 @@ follows write** — you may read only what some role of yours lets you change �
 the tidiest rule to state and to test, and it is wrong at the edge: a Doula must
 read a Contract's scope, which she may never edit. **One Practice, one view** —
 any Staff member reads everything, only writes are gated — is what the code does
-today, and choosing it would have made today's behaviour deliberate. It was
+today, and choosing it would have made today's behavior deliberate. It was
 rejected because it leaves the phrase "staff-only internal notes" with no work to
 do and no rule for #207 to assert.
 

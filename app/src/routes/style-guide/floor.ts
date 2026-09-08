@@ -186,7 +186,7 @@ export function findConditionsBelowConformance(sources: Record<string, string>):
  * re-evaluate the container against elements already on the page, so an
  * UNNAMED condition (`QuestionPage`, `CheckAnswers`'s rail query,
  * `OverviewHub`, `RecordDetail`, `StepRail`) silently keeps its old,
- * un-forced behaviour while a NAMED one (`data-table`, `staff-top-bar`,
+ * un-forced behavior while a NAMED one (`data-table`, `staff-top-bar`,
  * `portal-top-bar`) happened to work, for reasons that were not chased
  * further once a reliable alternative was found.
  *

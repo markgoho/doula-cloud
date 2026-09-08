@@ -32,7 +32,7 @@ interface SetupOptions {
 /*
  * One setup per test. It returns `puts` -- every body/headers pair the
  * screen sent to the PUT -- because "did she confirm, and what did she
- * ask for?" is the behaviour this screen exists to produce. The Membership
+ * ask for?" is the behavior this screen exists to produce. The Membership
  * (roles) comes off page.data.session (#835), set here rather than fetched.
  */
 async function setup({ roles = ['owner'], impact = fixtureImpact, impactOk = true, putResponse }: SetupOptions = {}) {

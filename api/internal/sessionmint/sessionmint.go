@@ -131,7 +131,7 @@ type Finish func(ctx context.Context, tx *sql.Tx) error
 // tier evicts whoever the browser already held" -- a browser used as a
 // shared HTTP client across two different people's sign-ins (a test
 // fixture composing two fixture identities in one browser context, or
-// two Staff members trading a shared birth-centre laptop) must not have
+// two Staff members trading a shared birth-center laptop) must not have
 // the first person's still-valid session deleted out from under her by
 // the second person's unrelated sign-in. An earlier version of this
 // function generalised mfaenroll's own "replace, don't leave in place"

@@ -9,7 +9,7 @@
 	 *
 	 * Native `popover` does the work. The browser puts the panel in the top
 	 * layer, dismisses it on a click outside or on Escape, and returns focus
-	 * to the trigger -- three behaviours that are otherwise a document
+	 * to the trigger -- three behaviors that are otherwise a document
 	 * listener, a key handler and a stored element reference each. The only
 	 * script here mirrors the open state onto `aria-expanded`, which not
 	 * every engine yet derives from `popovertarget` on its own.
@@ -100,7 +100,7 @@
 			color: var(--color-on-surface);
 			font-family: var(--font-family-base);
 
-			/* Without anchor positioning a popover is centred in the viewport,
+			/* Without anchor positioning a popover is centered in the viewport,
 			   which for a top-bar menu reads as a modal that never opened.
 			   Pin it under the bar at the inline end instead: not tethered to
 			   the trigger, but in the place a person is already looking. */

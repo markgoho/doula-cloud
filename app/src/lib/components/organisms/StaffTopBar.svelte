@@ -211,7 +211,7 @@
 
 		/* The sheet is the whole screen, so the UA's default caps on a modal
 		   dialog (max-inline-size: calc(100% - 6px - 2em)) have to go, and so
-		   does the auto margin that centres it. */
+		   does the auto margin that centers it. */
 		.sheet {
 			inset: 0;
 			inline-size: 100%;

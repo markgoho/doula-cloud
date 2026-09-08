@@ -129,7 +129,7 @@
 			color: var(--color-on-surface);
 		}
 
-		/* The same weight and colour every other refusal in the app
+		/* The same weight and color every other refusal in the app
 		   carries -- `LabeledField`'s and `RadioGroup`'s. */
 		.error {
 			margin: 0 0 var(--space-3);

@@ -163,7 +163,7 @@ A world where every Client converts, every Invoice is paid and every doula stays
 | A contractor used once and never again | Already seeded — Trish Halvorsen, looked at in month 6 | Rooted | An Attachment that ended without being deleted |
 | Employment type changes mid-run | 1 — Kimiko Nakashima, employee to contractor, month 5 | Rooted | Fixed by the World. A Membership change on a person holding live work |
 | An Invoice is disputed | 1, month 5 | Rooted | |
-| An Invoice is simply never paid | 3 across the run | Rooted | Overdue behaviour over genuinely elapsed time is this map's headline claim |
+| An Invoice is simply never paid | 3 across the run | Rooted | Overdue behavior over genuinely elapsed time is this map's headline claim |
 | An Invoice is paid off-platform, by cheque | 1, month 2 | Rooted | Dee's known problem: money that arrives with nowhere to be recorded |
 | A birth three weeks early, at 02:00, assigned doula elsewhere | 1 — week 11 | Rooted | P1 |
 | Four births in five days | 1 — week 11 | Rooted | The week meant to hurt |

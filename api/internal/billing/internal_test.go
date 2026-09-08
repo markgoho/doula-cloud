@@ -89,7 +89,7 @@ func TestRefundHandler_IssuesTheRefundAndRecordsIt(t *testing.T) {
 }
 
 // TestRefundHandler_RefusesAnUnnamedRequest proves a refund request must
-// name itself: without the header there is nothing to recognise a retry
+// name itself: without the header there is nothing to recognize a retry
 // by, and the retry would move the money a second time.
 func TestRefundHandler_RefusesAnUnnamedRequest(t *testing.T) {
 	db := testdb.New(t)

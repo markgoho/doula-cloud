@@ -202,7 +202,7 @@ func TestAcceptInviteHandler_ResolvesAnExistingStaffRow(t *testing.T) {
 }
 
 // TestAcceptInviteHandler_AlreadyAMemberIs409 is the AC's named status:
-// the current behaviour is a 500 from an unhandled unique violation.
+// the current behavior is a 500 from an unhandled unique violation.
 func TestAcceptInviteHandler_AlreadyAMemberIs409(t *testing.T) {
 	db := testdb.New(t)
 	ownerID, practiceID := seedOwnerMembership(t, db, "owner-inviting-a-member-again")

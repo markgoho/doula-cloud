@@ -35,7 +35,7 @@
 			color: var(--color-on-surface);
 			font-family: var(--font-family-base);
 			font-weight: var(--font-weight-semibold);
-			/* The mark is optically centred on the wordmark's x-height, not
+			/* The mark is optically centered on the wordmark's x-height, not
 			   its box, so the pair does not need a baseline nudge. */
 			line-height: 1.3;
 		}

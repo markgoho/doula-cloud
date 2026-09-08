@@ -214,7 +214,7 @@ export async function refusalOrConfirmable(
  * exists, the control that caused it.
  *
  * The catch-all is deliberately not "check your details": an
- * unrecognised code is a fault we have not seen, and telling somebody to
+ * unrecognized code is a fault we have not seen, and telling somebody to
  * re-read a correct form is worse than admitting that.
  */
 export function authRefusal(

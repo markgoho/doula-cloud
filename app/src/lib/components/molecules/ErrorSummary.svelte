@@ -28,9 +28,9 @@
 	 *
 	 * A heading, a list and some links -- and, by #424's rule, *a part of a
 	 * section rather than a whole one*: it is the failure region of one
-	 * form, not the form. Owning focus behaviour does not move it up a
+	 * form, not the form. Owning focus behavior does not move it up a
 	 * tier; `MenuButton` is a molecule and owns the whole popover pairing,
-	 * so behaviour is not the axis. Composition is, and this composes two
+	 * so behavior is not the axis. Composition is, and this composes two
 	 * atoms.
 	 *
 	 * ## Why it is not `Notice`
@@ -100,7 +100,7 @@
 					variant: a reader who has seen it once knows what the box
 					is before reading a word of it, which is the whole point of
 					a named pattern (Jakob's Law, and the brief's own
-					"conventional in pattern and behaviour").
+					"conventional in pattern and behavior").
 				-->
 				<Heading level={2} variant="section" text="There is a problem" />
 
@@ -137,7 +137,7 @@
 <style>
 	@layer components {
 		/*
-		 * The error colour on the edge rather than the fill: the brief
+		 * The error color on the edge rather than the fill: the brief
 		 * declares containers by an edge, and a solid red panel would
 		 * outweigh the question it is about. `--border-active` rather than
 		 * the `--border-thin` a `Notice` takes, because this one interrupts

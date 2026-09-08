@@ -14,7 +14,7 @@ import { fixture as checkFixture } from './check/page.fixture.js';
 import { fixture as duplicateFixture } from './duplicate/page.fixture.js';
 
 /*
- * The sequence's own behaviour (#466) -- the free save, the Change round
+ * The sequence's own behavior (#466) -- the free save, the Change round
  * trip and the duplicate branch. The 320px conformance of each of its
  * eight pages is `route-continuum.svelte.spec.ts`'s, through the same
  * fixtures; this spec is only about what the pages DO.

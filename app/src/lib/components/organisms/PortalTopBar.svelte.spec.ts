@@ -75,7 +75,7 @@ describe('PortalTopBar', () => {
 		);
 	});
 
-	it('marks where the person is with more than colour', async () => {
+	it('marks where the person is with more than color', async () => {
 		await setup();
 
 		await expect

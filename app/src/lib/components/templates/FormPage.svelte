@@ -10,7 +10,7 @@
 	 *
 	 * This Template renders no <form> element and owns no submit handler. The
 	 * route wraps the Template in its own <form>, which is valid HTML and is
-	 * how GOV.UK builds the same page. Submission is behaviour, and a Template
+	 * how GOV.UK builds the same page. Submission is behavior, and a Template
 	 * owns page-level arrangement and nothing else.
 	 *
 	 * `errorSummary` renders **above** the title, which is GOV.UK's own

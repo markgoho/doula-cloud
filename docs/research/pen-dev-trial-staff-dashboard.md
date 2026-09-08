@@ -108,7 +108,7 @@ findings came back with the result, not asked for:
 1. **`color-mix(in oklch, ...)` interpolates hue on the shorter polar arc.** `--color-status` (145°) mixed
    with `--color-bg` (320°) at 12% lands near 299° — pale lavender, not green. The same drag hits
    `--color-warning` (85° → ~304°) and `--color-error` (25° → ~305°): every variant's tint converges on
-   nearly the same lavender wash, so background colour carries no variant signal in `Badge.svelte` today —
+   nearly the same lavender wash, so background color carries no variant signal in `Badge.svelte` today —
    only the border, icon, and text do. Fix, if wanted: `color-mix(in oklab, ...)` is rectangular, no hue
    spiral. This is a real finding about the shipped component, surfaced by asking a design tool to
    reproduce it, not by testing the component itself.

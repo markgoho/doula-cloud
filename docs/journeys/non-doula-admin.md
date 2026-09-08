@@ -219,6 +219,6 @@ settle them alone.
 
 - ~~**May an Admin read a filled Care Plan or Birth Plan?**~~ **Settled: yes, both.**
   [ADR-0006](../adr/0006-read-follows-the-role.md) reads "staff-only" as *not the
-  Client*, which does not exclude any Staff role. Today's ungated behaviour is
+  Client*, which does not exclude any Staff role. Today's ungated behavior is
   correct for Dee — but not for a Doula, who under the same ADR loses the Contract's
   money and the credit ledger. See DW-G4.

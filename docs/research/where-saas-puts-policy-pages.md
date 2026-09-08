@@ -80,7 +80,7 @@ Eight sites: Practice Better, SimplePractice, Jane App, Cliniko, Halaxy, Healthi
 ### Cliniko
 
 - Cliniko is the closest thing in the sample to a policy *hub*: the footer's Resources column links **Policies** at `https://www.cliniko.com/policies/`. **Observed.** The page title is literally "Policies" and it links exactly three documents: [Terms](https://www.cliniko.com/policies/terms/), [Privacy](https://www.cliniko.com/policies/privacy/), [Cookies](https://www.cliniko.com/policies/cookies/). No refund document.
-- Support is a separate footer column: community forum (`/community/`), help centre (`/help/`), FAQ (`/faq/`), and a plain `mailto:info@cliniko.com`. **Observed.**
+- Support is a separate footer column: community forum (`/community/`), help center (`/help/`), FAQ (`/faq/`), and a plain `mailto:info@cliniko.com`. **Observed.**
 - `https://www.cliniko.com/support` returns **404**. **Observed.**
 - Refund position, inside `/policies/terms/` — **observed**:
 
@@ -96,7 +96,7 @@ Eight sites: Practice Better, SimplePractice, Jane App, Cliniko, Halaxy, Healthi
 
 Halaxy is the sample's clearest **absence**, and it is instructive.
 
-- The homepage footer contains **no legal links at all** — no terms, no privacy, no policy. Grepping the raw homepage HTML for any href containing `term`, `polic`, `privacy`, `legal`, `refund`, `support` or `contact` returns exactly two hits: `/feature/24-hour-customer-support` (a marketing page) and `https://support.halaxy.com/` (the help centre). **Observed.**
+- The homepage footer contains **no legal links at all** — no terms, no privacy, no policy. Grepping the raw homepage HTML for any href containing `term`, `polic`, `privacy`, `legal`, `refund`, `support` or `contact` returns exactly two hits: `/feature/24-hour-customer-support` (a marketing page) and `https://support.halaxy.com/` (the help center). **Observed.**
 - The terms exist, but they are reachable only by search or by signup flow, at jurisdiction-split URLs: `https://www.halaxy.com/terms/practitioner-au`, `.../practitioner-us`, `.../consumer-us`, and an EU host `https://eu.halaxy.com/terms/practitioner-ie`. Requesting `practitioner-us` served the `practitioner-au` document, so the quote below is labelled as the **AU practitioner terms**. **Observed.**
 - Halaxy sells **prepaid "Halaxy Credits"** and takes the standard line — **observed**, AU practitioner terms:
 
@@ -118,7 +118,7 @@ Halaxy is the sample's clearest **absence**, and it is instructive.
 
 > Upon termination by You or by Doulado of your Account, You will not receive any refund of any amounts previously paid.
 
-- Contact on the same page: `support@doulado.co`, a Sheridan, Wyoming mailing address, and the help centre. **Observed.**
+- Contact on the same page: `support@doulado.co`, a Sheridan, Wyoming mailing address, and the help center. **Observed.**
 
 **A note worth recording.** Doulado's second and third quotes are word-for-word SimplePractice's. Both are running the same lawyer's SaaS terms template, and that template puts refunds in clause 24 of a Terms of Service. The apparent unanimity in this group is partly a unanimity of *boilerplate* — which is itself the reason a standalone refund page is rare. The template does not produce one, so nobody has one.
 
@@ -154,7 +154,7 @@ That last point deserves its own sentence. **Buttondown, a Stripe-billed SaaS wi
 
 ### Fathom Analytics
 
-- Footer: **Privacy** (`/legal/privacy`), **Terms** (`/legal/terms`), GDPR compliance, **Contact** (`/about/contact`), **Help Centre** (`/docs`), Imprint, Status, Sitemap. **Observed.** No `/sitemap.xml`; `robots.txt` points at `/sitemap-index.xml`. No standalone refund URL anywhere in it.
+- Footer: **Privacy** (`/legal/privacy`), **Terms** (`/legal/terms`), GDPR compliance, **Contact** (`/about/contact`), **Help Centre** (`/docs`) <!-- spelling:ignore: Fathom's own footer label, quoted verbatim --> — spelled that way on Fathom's own footer, so quoted verbatim rather than Americanized — Imprint, Status, Sitemap. **Observed.** No `/sitemap.xml`; `robots.txt` points at `/sitemap-index.xml`. No standalone refund URL anywhere in it.
 - Refund position, a **titled subsection inside** `/legal/terms` — **observed**:
 
 > Refunds
@@ -282,7 +282,7 @@ Subsequent purchases are "not eligible for refunds". So even the field's single 
 
 > payment obligations are non-cancelable and fees, Taxes, and Communications Surcharges (collectively, "Fees"), once paid, are non-refundable.
 
-Twilio's **expiry** rule is **unverified**. The help-centre articles that would carry it are client-rendered and returned empty shells to every fetch attempted. Third-party claims of a twelve-month expiry exist and are deliberately not repeated here as fact.
+Twilio's **expiry** rule is **unverified**. The help-center articles that would carry it are client-rendered and returned empty shells to every fetch attempted. Third-party claims of a twelve-month expiry exist and are deliberately not repeated here as fact.
 
 ### Negative results in this group
 
@@ -328,10 +328,10 @@ Twenty-three sites. Every single one publishes a terms document. The path shapes
 | A `/legal` page that is an identity disclosure (German *Impressum*), not a policy hub | **1** | Pirsch |
 | `/contact` as its own page | **5** | Practice Better, Jane App, Healthie, Fathom (`/about/contact`), Plausible |
 | A `mailto:` published directly in the footer | **4** | Cliniko, Jane App, Pirsch, Baremetrics |
-| A separate help centre on `help.*` / `support.*` / `/help` / `/docs` | **12** | Practice Better, SimplePractice, Jane App, Cliniko, Halaxy, Healthie, Doulado, Buttondown, Fathom, Plausible, Baremetrics, Tinylytics |
+| A separate help center on `help.*` / `support.*` / `/help` / `/docs` | **12** | Practice Better, SimplePractice, Jane App, Cliniko, Halaxy, Healthie, Doulado, Buttondown, Fathom, Plausible, Baremetrics, Tinylytics |
 | `/pricing` carrying any refund or cancellation language | **0** | none |
 
-**`/support` specifically.** Probed or observed on eight domains. It **404s on five** (Practice Better, Jane App, Cliniko, Doulado, Healthie), **301s to a marketing page on one** (SimplePractice → `/features/support/`), and **exists as a real page on one** ([Buttondown](https://buttondown.com/support), "Customer Support — Buttondown", footer-linked, two direct email addresses). Halaxy uses the `support.halaxy.com` subdomain for its help centre instead. **In not one of these cases does `/support` carry a refund or cancellation position.**
+**`/support` specifically.** Probed or observed on eight domains. It **404s on five** (Practice Better, Jane App, Cliniko, Doulado, Healthie), **301s to a marketing page on one** (SimplePractice → `/features/support/`), and **exists as a real page on one** ([Buttondown](https://buttondown.com/support), "Customer Support — Buttondown", footer-linked, two direct email addresses). Halaxy uses the `support.halaxy.com` subdomain for its help center instead. **In not one of these cases does `/support` carry a refund or cancellation position.**
 
 The headline number: **`/terms` in some form is effectively universal, and `/refunds` in any form does not exist.** Twenty-three sites, zero refund URLs.
 
@@ -347,12 +347,12 @@ So our plan of a standalone page is the unusual one, and now the reason is on th
 
 ## 6. Where the customer service contact lives
 
-**It is an email address, and it very often sits on the same page as the refund position.** **Eight sites publish a direct email address on the very same page as their refund position**: Practice Better, Jane App, Cliniko, Halaxy, Doulado, Pirsch, Fathom and Baremetrics. Jane App and Baremetrics add a phone number there; Jane App and Doulado add a postal address. SimplePractice puts only a help-centre link on its terms. So the "contact and refund policy together" instinct behind our consolidated page is not wrong — it is simply that everyone achieves it by putting the contact *into the terms document* rather than by pulling the refund rule out into a support page.
+**It is an email address, and it very often sits on the same page as the refund position.** **Eight sites publish a direct email address on the very same page as their refund position**: Practice Better, Jane App, Cliniko, Halaxy, Doulado, Pirsch, Fathom and Baremetrics. Jane App and Baremetrics add a phone number there; Jane App and Doulado add a postal address. SimplePractice puts only a help-center link on its terms. So the "contact and refund policy together" instinct behind our consolidated page is not wrong — it is simply that everyone achieves it by putting the contact *into the terms document* rather than by pulling the refund rule out into a support page.
 
 The contact surfaces observed, in order of how common they are:
 
 - **A direct `mailto:` email address** — the majority. `support@cliniko.com`, `support@doulado.co`, `support@pirsch.io`, `support@usefathom.com`, `support@buttondown.com`, `hello@baremetrics.com`, `hello@plausible.io`, `community@halaxy.com`.
-- **A separate help centre** on `help.*` or `support.*` — twelve of twenty-three. Universal among the practice-management competitors, all of them Zendesk-shaped.
+- **A separate help center** on `help.*` or `support.*` — twelve of twenty-three. Universal among the practice-management competitors, all of them Zendesk-shaped.
 - **A phone number** — Jane App (two, in the footer), Halaxy, Baremetrics.
 - **A contact form as the only route** — observed nowhere. This matters, because it is the one thing Stripe's checklist names as insufficient on its own.
 
@@ -375,7 +375,7 @@ So the page we are about to build is an invention. That is not a smell — there
 
 **Footer, almost without exception.** Of the fourteen competitor and indie sites, **thirteen link their terms document from the site footer**. Reaching it any other way was not observed: no site put its terms in the main navigation, and no site made it in-product only.
 
-The one exception is **Halaxy**, and it is a total one. Its homepage footer contains **no legal links whatsoever** — the raw HTML yields exactly two matches for any href containing `term`, `polic`, `privacy`, `legal`, `refund`, `support` or `contact`, and both are the help centre and a marketing feature page. **Absent**, verified against the raw markup. Halaxy's terms are reachable only by search engine or by going through the signup flow, and they are split by jurisdiction across four URLs. If Stripe reviewed Halaxy's public site the way it says it does, it would not find the fulfilment policy.
+The one exception is **Halaxy**, and it is a total one. Its homepage footer contains **no legal links whatsoever** — the raw HTML yields exactly two matches for any href containing `term`, `polic`, `privacy`, `legal`, `refund`, `support` or `contact`, and both are the help center and a marketing feature page. **Absent**, verified against the raw markup. Halaxy's terms are reachable only by search engine or by going through the signup flow, and they are split by jurisdiction across four URLs. If Stripe reviewed Halaxy's public site the way it says it does, it would not find the fulfilment policy.
 
 Support and legal are usually **two separate footer groups**, not one. SimplePractice has a "Help & Support" column and a "Legal & Policy" column. Cliniko has a "Support" column and a "Resources" column that holds Policies. Baremetrics has a "Help & Support" submenu and a "LEGAL" submenu. Buttondown is the site that mixes them, listing "Terms of service", "Privacy policy" and "Customer support" side by side in one flat footer block.
 
@@ -431,8 +431,8 @@ Three things to do on the page itself, each of which the evidence supports direc
 
 ## What was not established
 
-- **Twilio's credit expiry.** Its help-centre articles are client-rendered and returned empty shells to every fetch. Third-party claims of a twelve-month expiry exist and are deliberately not repeated here as fact. A browser-driven read would settle it if it ever matters.
+- **Twilio's credit expiry.** Its help-center articles are client-rendered and returned empty shells to every fetch. Third-party claims of a twelve-month expiry exist and are deliberately not repeated here as fact. A browser-driven read would settle it if it ever matters.
 - **Enginehire's refund wording.** Its footer and legal URL set were read; the terms document itself was not fetched in full.
 - **fal.ai, Bandwidth and Loops.so** were named as prepaid-credit candidates and never tested.
 - **Halaxy's US and EU practitioner terms.** Requesting `/terms/practitioner-us` served the `practitioner-au` document, so only the Australian practitioner terms are quoted. The `consumer-us` terms were fetched and contain no refund or credit language at all.
-- **SimplePractice's own help-centre articles on cancellation** returned HTTP 403 to every attempt. The refund position quoted here is taken from the terms document's raw HTML instead, which is first-party and sufficient; no secondary source was substituted for the article.
+- **SimplePractice's own help-center articles on cancellation** returned HTTP 403 to every attempt. The refund position quoted here is taken from the terms document's raw HTML instead, which is first-party and sufficient; no secondary source was substituted for the article.

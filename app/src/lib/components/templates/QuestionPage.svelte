@@ -200,7 +200,7 @@
 		/*
 		 * The question column is capped at --form-max while the frame
 		 * around it is not: the column is all controls, and a 1200px input
-		 * is unreadable however wide the window is (#422). Centred rather
+		 * is unreadable however wide the window is (#422). Centered rather
 		 * than left at the inline start, because a page that asks one
 		 * question has nothing else to put in a wider window (#543) --
 		 * which is what the sidebar-l this replaced achieved with

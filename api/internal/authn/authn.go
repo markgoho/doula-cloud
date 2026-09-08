@@ -37,7 +37,7 @@ const SessionCookieName = "__session"
 
 // SessionLifetime is how long a newly minted or renewed Staff session is
 // valid for. #138 fixed this at 12 hours; #618/ADR-0026 keeps it for
-// Staff deliberately -- they share a laptop at a birth centre and read
+// Staff deliberately -- they share a laptop at a birth center and read
 // many people's health records, so the short session is the point, not
 // an inconsistency with the Client lifetime below. It is both the
 // session row's expiry window and the cookie's MaxAge, so the browser

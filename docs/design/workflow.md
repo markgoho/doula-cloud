@@ -35,7 +35,7 @@ Two consequences worth holding on to:
 3. **Draw it**, against the brief and against the Templates in `app/src/lib/components/templates/`. A
    screen that instantiates an existing Template is arranging regions, not inventing a page.
 4. **Check it before showing it.** `Get` with a visitor reports `ctx.bounds` and `ctx.problems`, which
-   catches clipping and collapsed layout without a screenshot. Screenshot only to judge colour, type and
+   catches clipping and collapsed layout without a screenshot. Screenshot only to judge color, type and
    alignment.
 5. **Save**, so the `.pen` change is on disk and in `git diff`.
 
@@ -142,8 +142,8 @@ Open the canvas and change what looks wrong. That is the point of the tool.
    what the empty state assumed (#423). `bun run dev:full` brings up the stack; seed a fixture the way
    `e2e/stack.ts` does and log in as a real person.
 
-   **This machine's Chrome inverts page colours** with an extension, so a screenshot taken through it
-   is evidence about layout and never about the palette. For colour, use a clean browser
+   **This machine's Chrome inverts page colors** with an extension, so a screenshot taken through it
+   is evidence about layout and never about the palette. For color, use a clean browser
    (`playwriter session new --browser headless`) or read the computed value rather than the picture.
 
 ## Committing

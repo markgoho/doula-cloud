@@ -55,7 +55,7 @@ interface SetupOptions {
 /*
  * One setup per test. It returns `puts` -- every body the screen sent --
  * because "what did she publish?" is the output this screen exists to
- * produce, and asserting on it is the behavioural assertion, not a peek
+ * produce, and asserting on it is the behavioral assertion, not a peek
  * at an internal collaborator.
  */
 async function setup({ website = undeclared, roles = ['owner'], websiteOk = true, put }: SetupOptions = {}) {

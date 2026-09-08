@@ -62,7 +62,7 @@ func RefundHandler(db *sql.DB, client StripeClient, secret string) http.Handler 
 		// The name of this request, and the reason a retry is safe: the
 		// same key returns the refund already issued instead of issuing
 		// a second one. Required, not optional -- a refund moves money,
-		// and an unnamed request cannot be recognised on its way back
+		// and an unnamed request cannot be recognized on its way back
 		// through. Same header docs/api-design.md sets for every other
 		// repeatable write.
 		requestKey := r.Header.Get("Idempotency-Key")

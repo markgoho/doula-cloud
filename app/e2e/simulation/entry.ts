@@ -11,7 +11,7 @@ export type Outcome = 'completed' | 'completed with friction' | 'refused' | 'stu
 
 // The four anchor kinds README.md names other than a timing, which is
 // always present as its own field (see Entry.timingMs) and so never
-// counted here as the only anchor for a claim about behaviour.
+// counted here as the only anchor for a claim about behavior.
 export type Anchor =
 	| { kind: 'screenshot'; path: string }
 	| { kind: 'file'; ref: string }

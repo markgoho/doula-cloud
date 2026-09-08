@@ -58,7 +58,7 @@ describe('StaffTopBar', () => {
 		await expect.element(page.getByRole('link', { name: label }).first()).toBeInTheDocument();
 	});
 
-	it('marks the current section with more than colour', async () => {
+	it('marks the current section with more than color', async () => {
 		await setup();
 
 		await expect

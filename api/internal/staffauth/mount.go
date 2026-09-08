@@ -33,7 +33,7 @@ type WriteRouter interface {
 // which runs every test against one shared BFF and one IP within a
 // single run, and above a 14-doula agency's pilot-sized onboarding burst
 // (#602 sizing note): several people fumbling an invite from the same
-// birth-centre connection in one hour must not lock each other out.
+// birth-center connection in one hour must not lock each other out.
 var bootstrapRules = []ratelimit.Rule{
 	ratelimit.BearerTokenRule(5, time.Hour),
 	ratelimit.IPRule(50, time.Hour),

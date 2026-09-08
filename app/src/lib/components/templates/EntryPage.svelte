@@ -15,7 +15,7 @@
 	 * region-internal arrangement ADR-0018 leaves to the page; this
 	 * Template owns only the page-level part.
 	 *
-	 * Top-aligned in a --form-max column, not centred in the viewport.
+	 * Top-aligned in a --form-max column, not centered in the viewport.
 	 * Every other Template in this layer -- FormPage, QuestionPage,
 	 * CheckAnswers, RecordDetail, OverviewHub, ErrorPage -- renders in
 	 * normal flow under `padding-block: var(--space-8)`, and none of them

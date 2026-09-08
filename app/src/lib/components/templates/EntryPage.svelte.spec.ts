@@ -60,7 +60,7 @@ describe('EntryPage.svelte', () => {
 		expect(summary.compareDocumentPosition(content) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 	});
 
-	// Top-aligned in a --form-max column, not centred in the viewport (see
+	// Top-aligned in a --form-max column, not centered in the viewport (see
 	// the Template's own comment for the reasoning) -- the same token and
 	// gutter FormPage already spends on a form.
 	it('caps the page at the form measure, not the full page width, and renders no chrome', async () => {

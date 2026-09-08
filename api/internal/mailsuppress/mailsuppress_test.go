@@ -50,7 +50,7 @@ func TestRecordThenActive(t *testing.T) {
 }
 
 // Mailgun reports the recipient as the sender wrote it, so a Client whose
-// address is stored with capitals must still be recognised.
+// address is stored with capitals must still be recognized.
 func TestSuppressionIsCaseAndSpaceInsensitive(t *testing.T) {
 	db := testdb.New(t)
 

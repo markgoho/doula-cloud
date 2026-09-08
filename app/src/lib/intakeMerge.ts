@@ -3,7 +3,7 @@
  * already on file (ADR-0017's "This is her").
  *
  * Carried forward from #497 rather than re-decided -- its match copy and
- * match behaviour are settled -- and moved out of the route on #466,
+ * match behavior are settled -- and moved out of the route on #466,
  * because the per-step sequence has two callers for it and neither is a
  * good place to keep the rule.
  *

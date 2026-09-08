@@ -125,7 +125,7 @@ Every step carries exactly one mark.
 
 - **`automated (<spec>)`** — an existing Playwright spec drives this step and
   asserts its result. It counts only when the spec exercises the step the way the
-  Persona would, through the UI, or asserts that behaviour directly.
+  Persona would, through the UI, or asserts that behavior directly.
   **Fixture setup does not count.** `birth-plan.e2e.ts` creates its Client with
   `POST /api/practices/{id}/clients`; that automates nothing about the **Add
   Client** form, which stays `manual`. Every spec in the suite provisions its

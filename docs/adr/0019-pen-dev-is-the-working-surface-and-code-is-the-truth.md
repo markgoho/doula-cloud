@@ -110,5 +110,5 @@ route depends on it. That is the whole point of the previous section.
 - **Keeping Stitch for a named job.** Rejected. The brief is settled and binding, so the one job Stitch
   demonstrated is finished. A tool kept "just in case" becomes an obligation nobody revisits.
 - **Generating `DESIGN.md` as an interchange format.** Already rejected on the map: it is one vendor's
-  format, covers colour and type only, and pen.dev's documentation never mentions it. `tokens.css` is
+  format, covers color and type only, and pen.dev's documentation never mentions it. `tokens.css` is
   the machine-readable truth and [the brief](../design/brief.md) is the prose one.
