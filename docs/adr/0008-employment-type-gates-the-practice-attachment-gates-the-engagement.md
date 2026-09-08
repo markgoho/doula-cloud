@@ -368,7 +368,7 @@ Three things this settles, none of them a new argument:
   somebody, or she writes nothing.
 - **"Herself" is the same rule at both moments.** Row one covers a reassign whose
   `staffId` is the caller's own id, not only a create with the field left out —
-  `assignee` (`api/internal/visit/roles.go`) takes the self path on either, so a
+  `resolveAssignee` (`api/internal/visit/roles.go`) takes the self path on either, so a
   plain Doula may take a Visit at her Practice onto herself without holding the
   Owner-or-Admin cell row two needs. That is deliberate: taking work on is not the
   act row two guards, which is putting work on somebody else. Reaching the
@@ -386,8 +386,11 @@ A named **employee** gets a granted attachment written explicitly, with the acti
 person recorded as who attached her. A named **contractor** gets none: she may only
 be named at all if she already holds the open granted attachment her own acceptance
 of an Offer opened, so there is nothing left to grant. Both are enforced in
-`api/internal/visit` by one helper the create and reassign paths share, so the two
-moments of the one act cannot drift apart.
+`api/internal/visit` by one helper the create and reassign paths share --
+`resolveAssignee`, which decides who the Visit lands on and whether she is to be
+granted, and `grantAssignee`, the single guarded `staffauth.Grant` each handler
+calls after its own row write -- so the two moments of the one act cannot drift
+apart ([#914](https://github.com/markgoho/doula-cloud/issues/914)).
 
 Settled on [#227](https://github.com/markgoho/doula-cloud/issues/227), opened as a
 real disagreement with the user's initial position (attached-only for every Doula)

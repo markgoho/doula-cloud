@@ -487,3 +487,38 @@ func TestReassignHandler_APlainDoulaMayNameHerself(t *testing.T) {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
 	}
 }
+
+// The mirror of TestCreateHandler_GrantsTheNamedEmployee on the reassign
+// side: the grant decision is one seam now (#914), and a seam is only
+// proved shared by exercising it from both callers.
+func TestReassignHandler_GrantsTheNamedEmployee(t *testing.T) {
+	db := testdb.New(t)
+	const identityUID = "admin-granting-at-reassign"
+	practiceID := testdb.SeedPractice(t, db, "Test Practice")
+	adminStaffID := testdb.SeedStaffAtPractice(t, db, practiceID, identityUID, []string{adminRole}, "employee")
+	holderStaffID := testdb.SeedStaffAtPractice(t, db, practiceID, "doula-holding-the-visit", []string{doulaRole}, "employee")
+	targetStaffID := testdb.SeedStaffAtPractice(t, db, practiceID, "doula-handed-the-visit", []string{doulaRole}, "employee")
+	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
+	visitID := seedVisit(t, db, engagementID, holderStaffID)
+
+	srv, session := newServer(t, db, identityUID)
+	defer srv.Close()
+
+	body, err := json.Marshal(visit.ReassignRequest{StaffID: targetStaffID})
+	if err != nil {
+		t.Fatalf("marshal body: %v", err)
+	}
+	resp := authedPatch(t, session, visitsURL(srv.URL, practiceID, engagementID)+"/"+visitID, body)
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
+	}
+
+	origin, attachedBy, exists := attachment(t, db, engagementID, targetStaffID)
+	if !exists {
+		t.Fatal("no attachment for the employee the Visit was handed to")
+	}
+	if origin != grantedOrigin || attachedBy != adminStaffID {
+		t.Fatalf("attachment = %s by %s, want granted by the person who handed it over", origin, attachedBy)
+	}
+}

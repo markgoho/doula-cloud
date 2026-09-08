@@ -49,9 +49,10 @@ type CreateResponse struct {
 // Staff member the body names or, with no name in it, to the caller
 // herself. Must be mounted behind staffauth.Middleware.
 //
-// Who may do which of those two is `assignee`'s rule, and a named Staff
-// member has to pass `requireEligibleAssignee` -- the same helper the
-// reassign path uses, so the two can never drift apart.
+// Who may do which of those two, whether a named Staff member may be
+// named at all, and whether she is granted an attachment for it are all
+// `resolveAssignee`'s -- the one seam the reassign path uses too, so the
+// two moments of the act can never drift apart.
 //
 // The role decision therefore has to come *after* the body is decoded,
 // which is why this handler no longer opens with a role gate. A caller
@@ -90,23 +91,9 @@ func CreateHandler() http.Handler {
 		if !ok {
 			return
 		}
-		staffID, isSelf, ok := assignee(w, c, req.StaffID)
+		staffID, isEmployee, ok := resolveAssignee(w, r, c, engagementID, req.StaffID)
 		if !ok {
 			return
-		}
-
-		// Whether the person this Visit lands on gets a granted
-		// attachment turns on *her* employment type, not the caller's.
-		// For a colleague, requireEligibleAssignee has just read it off
-		// her Membership; for the caller herself, her own Reader already
-		// carries it and no second query is needed.
-		isEmployee := !c.reader.IsContractor()
-		if !isSelf {
-			employmentType, eligible := requireEligibleAssignee(w, r, c, engagementID, staffID)
-			if !eligible {
-				return
-			}
-			isEmployee = employmentType == employeeType
 		}
 
 		visitID := uuid.NewString()
@@ -142,28 +129,13 @@ func CreateHandler() http.Handler {
 			return
 		}
 
-		// Naming a Doula on a Visit puts her on this birth, which is a
-		// granted attachment, not the accrual staffauth.AttachingWrite's
-		// seam mints -- ADR-0008 names Visit-create as one of the two
-		// places granted is written explicitly. No fee rides it: a fee is
-		// only ever copied from an Offer. attached_by is the acting
-		// person, who is the caller whether she named herself or a
-		// colleague.
-		//
-		// Only for an employee, though. CONTEXT.md's Attachment entry
-		// gives a contractor exactly one way onto a birth -- her own
-		// acceptance of an Offer -- so granting here would let her hand
-		// herself the reach an Offer exists to ask for. Logging her own
-		// Visit gets her the seam's accrued record instead, which is a
-		// record of work and never a key; being *named* by an Owner or
-		// Admin needs no grant at all, because requireEligibleAssignee
-		// has just proved she holds the one her acceptance opened.
-		if isEmployee {
-			if err := staffauth.Grant(r.Context(), c.tx, engagementID, staffID, c.staffID, nil, nil); err != nil {
-				// coverage:ignore reason: DB query failure, not exercised by unit tests
-				apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
-				return
-			}
+		// The attachment a named employee gets is grantAssignee's rule,
+		// shared with the reassign path. It runs here, after the row and
+		// the activity entry, so nothing is attached on a write that
+		// failed.
+		if !grantAssignee(w, r, c, engagementID, staffID, isEmployee) {
+			// coverage:ignore reason: grantAssignee only reports false on a DB write failure, not exercised by unit tests
+			return
 		}
 
 		apierr.WriteJSON(w, http.StatusCreated, CreateResponse{
