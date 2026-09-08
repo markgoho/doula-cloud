@@ -1,6 +1,6 @@
 import type { CostBreakdown } from './costBreakdown.ts';
 import type { DashboardData } from './dashboard.ts';
-import type { CloudRunUsage } from './server/usageQuery.ts';
+import type { UsageSnapshot } from './server/usageQuery.ts';
 
 /**
  * Where one sync stands. Drives the whole sidebar.
@@ -15,7 +15,7 @@ export type SyncState = 'idle' | 'loading' | 'success' | 'error';
  * a sync happens because a person asked for one.
  *
  * One sync covers both halves of the screen: the cost breakdown and the
- * Cloud Run usage that produced it. They arrive together or not at all.
+ * usage that produced it. They arrive together or not at all.
  */
 export class DashboardSync {
 	readonly #load: () => Promise<DashboardData>;
@@ -26,7 +26,7 @@ export class DashboardSync {
 
 	state = $state<SyncState>('idle');
 	breakdown = $state<CostBreakdown | undefined>();
-	usage = $state<CloudRunUsage | undefined>();
+	usage = $state<UsageSnapshot | undefined>();
 	errorMessage = $state<string | undefined>();
 	syncedAt = $state<number | undefined>();
 

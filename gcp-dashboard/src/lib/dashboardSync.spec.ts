@@ -7,7 +7,8 @@ const data: DashboardData = {
 	usage: {
 		since: '2026-09-01T00:00:00.000Z',
 		through: '2026-09-08T04:30:00.000Z',
-		metrics: { requestCount: 4785 }
+		cloudRun: { requestCount: 4785 },
+		cloudSql: { diskQuotaBytes: 10_464_022_528 }
 	}
 };
 const syncedAt = Date.parse('2026-09-07T06:12:00Z');

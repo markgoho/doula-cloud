@@ -7,7 +7,8 @@ const breakdown = { total: 12.49, services: [] };
 const usage = {
 	since: '2026-09-01T00:00:00.000Z',
 	through: '2026-09-08T04:30:24.000Z',
-	metrics: { requestCount: 4785 }
+	cloudRun: { requestCount: 4785 },
+	cloudSql: { diskQuotaBytes: 10_464_022_528 }
 };
 
 function route(endpoint: string): Response {
