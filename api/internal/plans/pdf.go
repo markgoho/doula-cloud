@@ -12,7 +12,6 @@ import (
 
 	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/clientauth"
-	"doula-cloud/api/internal/engagement"
 )
 
 // contentTypePDF is the Birth Plan PDF's Content-Type -- this package's
@@ -161,22 +160,13 @@ func ClientGetBirthPlanPDFHandler() http.Handler {
 		}
 		engagementID, _ := clientauth.EngagementID(r.Context())
 
-		kind, err := fetchEngagementKind(r.Context(), tx, engagementID)
-		if err != nil {
-			// coverage:ignore reason: DB query failure, not exercised by unit tests -- clientauth.Middleware already confirmed the row exists
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
-			return
-		}
-		if !engagement.OffersBirthPlan(engagement.BirthPlanInputs{Kind: kind}) {
-			// ADR-0015, mirroring ClientGetBirthPlanHandler: refused at the
-			// API independently of the portal's own nav/hub gating (#311).
-			apierr.WriteError(w, "no birth plan found for this engagement", http.StatusNotFound)
+		if refuseUnlessBirthPlanOffered(r.Context(), w, tx, engagementID) {
 			return
 		}
 
 		fields, answers, _, err := fetchInstance(r.Context(), tx, engagementID, birthPlanType)
 		if errors.Is(err, sql.ErrNoRows) {
-			apierr.WriteError(w, "no birth plan found for this engagement", http.StatusNotFound)
+			apierr.WriteError(w, msgNoBirthPlan, http.StatusNotFound)
 			return
 		}
 		if err != nil {

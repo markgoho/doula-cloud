@@ -379,6 +379,13 @@ Two facts, not one:
 | …who then upgrades | `birth` | `null` | **Now offered** |
 | A birth client, two days post-birth | `birth` | `live_birth` | Existing plan readable; no new one |
 | Nadia, after a loss | `birth` | `loss` | Existing plan retired |
+| A withdrawn Client, never followed up | `birth` | `unknown` | Existing plan retired |
+
+The rule's second half is the standing question of "Consult the living baby" below, not a null check:
+`null` and `live_birth` both answer *yes*, and `loss` and `unknown` both answer *no*. The prose above
+is written from the **create** side, which is why it names `null` — a Practice authors a Birth Plan
+before the birth, never after it. What the **Client** is offered is the question, which is why the
+`live_birth` row keeps her plan readable rather than taking it away the day her baby is born.
 
 This names the two suppressors [#311](https://github.com/markgoho/doula-cloud/issues/311) (CB-G5) had
 conflated. **Hiding** on Camille is kind's job — there is nothing to author. **Retiring** on Nadia is

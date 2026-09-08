@@ -83,7 +83,11 @@
 {/snippet}
 
 {#snippet actions()}
-	<!-- #311: offered only where the Engagement's kind calls for one. -->
+	<!--
+		The same one answer the nav item reads -- #311's kind half and
+		#294's living-or-expected-baby half, derived server-side and never
+		recomputed here.
+	-->
 	{#if detail?.offersBirthPlan}
 		<Link
 			href={resolve('/portal/(authenticated)/engagements/[engagementId]/birth-plan', {

@@ -13,6 +13,10 @@ import (
 	"doula-cloud/api/internal/testdb"
 )
 
+// hospital is the one planned-birth-location answer these tests seed and
+// read back, named once so the three files that assert on it agree.
+const hospital = "Hospital"
+
 // newPortalServer mounts the same route main.go wires up for the
 // Client-portal Birth Plan view, behind clientauth.Middleware.
 func newPortalServer(t *testing.T, db *testdb.DB, uid string) (srv *httptest.Server, session string) {
@@ -76,7 +80,7 @@ func TestClientGetBirthPlanHandler_Success(t *testing.T) {
 	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
-	if out.EngagementID != engagementID || out.PlanType != birthPlanType || out.Answers["location"] != "Hospital" {
+	if out.EngagementID != engagementID || out.PlanType != birthPlanType || out.Answers["location"] != hospital {
 		t.Fatalf("unexpected response: %+v", out)
 	}
 }

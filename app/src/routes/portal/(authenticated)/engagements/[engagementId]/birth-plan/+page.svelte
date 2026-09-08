@@ -23,9 +23,11 @@
 	let downloadError = $state('');
 
 	onMount(async () => {
-		// #311: not applicable, per ADR-0015's suppression rule -- skip the
-		// fetch entirely rather than let a real Birth Plan endpoint 404
-		// read as "not yet".
+		// Not applicable, per ADR-0015's suppression rule (#311's kind
+		// half, #294's outcome half) -- skip the fetch entirely rather
+		// than let a real Birth Plan endpoint 404 read as "not yet". The
+		// endpoint refuses this Engagement on its own either way; this
+		// only spares her the request.
 		if (!page.data.offersBirthPlan) return;
 		try {
 			instance = await loadClientBirthPlan(apiFetchWithSession, page.params.engagementId!);
