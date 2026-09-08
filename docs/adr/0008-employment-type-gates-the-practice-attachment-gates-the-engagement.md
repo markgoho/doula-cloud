@@ -294,7 +294,7 @@ Inside one Practice, RLS-fenced as ADR-0006 already established.
 | Engagements, Visits, Messages | all | all | all at the Practice | only those she is attached to | ✗ |
 | Plan Instances — Care Plan and Birth Plan | ✓ | ✓ | ✓ | on her Engagements | ✗ |
 | Contract — scope (Visit counts, dates, on-call terms) | ✓ | ✓ | ✓ | on her Engagements | ✗ — whatever the Practice wrote into the Offer's `terms` |
-| Contract — money, and Invoice history | ✓ | ✓ | ✗ | **her own agreed fee only, on her Engagements — never the Practice's price** | ✗ |
+| Contract — money, and Invoice history | ✓ | ✓ | **✓ — amended on [#282](https://github.com/markgoho/doula-cloud/issues/282); was ✗** | **her own agreed fee only, on her Engagements — never the Practice's price** | ✗ |
 | Plan Template and Contract Template | ✓ | ✓ | ✓ | ✓ | ✗ |
 | Credit balance and ledger | ✓ | ✓ | ✗ | ✗ | ✗ |
 | Stripe Connect state — the status enum and capability flags, never the details Stripe holds | ✓ | ✓ | ✗ | ✗ | ✗ |
@@ -635,3 +635,72 @@ real work this ADR's mechanism section names rather than discovers mid-build.
 contractor and offered-not-accepted columns have no data to gate on. The Owner,
 Admin, and employee columns are expressible today; the rest of this document
 describes the target the build tickets bring the schema up to.
+
+## Amendment: a Client's money is not hidden from the people inside the business
+
+Added on [#282](https://github.com/markgoho/doula-cloud/issues/282), which asked
+which of this document's two tables governs a Contract's price. The read table
+said money is Owner and Admin only; the write table's "Contract actions" row said
+an employed Doula may take every Contract action, pricing included. The answer is
+neither. The premise both tables share is what was wrong.
+
+**Why the split could not work.** It existed to keep a Contract's price away from
+an employed Doula. A Practice's rates are its own published prices, not a Client's
+private fact — the same reason the read table already gives every Doula the
+Contract Template, which holds no person's information. So a Doula reads the rate
+card, and from a rate and an Engagement's kind she infers the price anyway. Every
+piece of machinery holding the split up generated a further problem rather than
+closing one: the `money_` key convention leaked on any Practice that named its
+price field the obvious way ([#864](https://github.com/markgoho/doula-cloud/issues/864)),
+and the Invoice read gate left a Doula raising bills she could not see and could
+duplicate ([#947](https://github.com/markgoho/doula-cloud/issues/947)).
+
+**The rule.** `employment_type` is the boundary, and the only one. An employee is
+inside the business and reads what the Practice charges its Clients. A contractor
+is a separate business the Practice hires: she reads her own agreed fee and never
+the Practice's price, because the difference between those two numbers is the
+Practice's margin on her own labor — a negotiating position, not a care fact.
+
+| | Owner | Admin | Doula (employee) | Doula (contractor) |
+| --- | --- | --- | --- | --- |
+| Contract — money | ✓ | ✓ | ✓ | ✗ — her own agreed fee only |
+| Invoice and payment history | ✓ | ✓ | ✓ | ✗ — her own agreed fee only |
+| Money entries in the activity ledger (ADR-0022) | ✓ | ✓ | ✓ | ✗ |
+| The Practice's rate card | ✓ | ✓ | ✓ | ✓ |
+| Credit balance and ledger — what the Practice pays Doula Cloud | ✓ | ✓ | ✗ | ✗ |
+
+The Credit row is unchanged and stays where it was. It is a different kind of
+money: the Practice's own vendor cost, not a Client's bill.
+
+**Named exit condition.** The contractor narrowing stands while it costs exactly
+one boundary, drawn where `employment_type` already draws one. If it begins to
+require per-field or per-record classification again, it goes, and a contractor
+reads money like everyone else. This is a condition rather than a preference —
+whoever meets it should act on it without reopening the argument.
+
+**The write table is unchanged, and its Contract row narrows.** Reading a number
+and being allowed to set one are different things. "Contract actions" in the write
+table above means non-money Contract actions; the money write moves up a level, to
+the rate card, which only an Owner or an Admin sets. Recording a Payment, voiding
+and writing off a by-hand Invoice, and changing billing mode all keep the rows the
+#271 table gave them — their reasoning cited the read row this amendment moves, but
+their outcome is a write rule, and a Doula still may not perform any of the four.
+Raising an Invoice stays ungated by role, per #68; it gains the attaching-write
+reach test it never carried.
+
+**Money stops being a merge field.** The mechanism section below records
+money-vs-scope tagging on merge-field keys as new surface that does not exist. That
+finding is corrected twice over. It did exist by the time #282 was grilled, as the
+`money_` key-name convention at `api/internal/contracts/contract_view.go` — and
+this amendment removes the need for it. A Practice sets standard rates; a Contract
+snapshots the rate in force into a real column; the price placeholder becomes a
+reserved name the product resolves, the way `client_name` and `practice_name`
+already are. Every merge field a Practice invents is scope by definition, so no key
+a Practice can type carries a price anywhere. `ContractScope`, `ContractFull` and
+`isMoneyMergeFieldKey` are deleted rather than repaired, and the query seam's
+un-backstopped convention — named as a cost below — loses its only Contract case.
+
+**Provisional, pending [#243](https://github.com/markgoho/doula-cloud/issues/243).**
+One rate per Engagement kind rather than tiers; postpartum as a package rather than
+hourly; and an employed Doula sending her own Client's Contract. The last is the
+same ambient-write default this document already marks provisional.
