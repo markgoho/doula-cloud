@@ -162,4 +162,96 @@ export interface RouteFixture<RouteParameters extends Record<string, string> = R
 	a timeout.
 	*/
 	readonly readyText: string;
+	/**
+	The other sessions this same screen renders differently under
+	([#913](https://github.com/markgoho/doula-cloud/issues/913)).
+
+	A route whose render branches on the caller -- `isOwner`,
+	`isOwnerOrAdmin`, `isAmbientContractor` -- is several screens behind
+	one path, and the fixture above describes exactly one of them. Whichever
+	branch its own session selects was swept and dragged; the others were
+	swept and dragged never, because neither half of the check had any way
+	to know they existed. That is the sibling of ADR-0025's row-set rule for
+	the axis a row set cannot reach: these states differ by who is looking,
+	not by what the data holds.
+
+	A variant is read through `toSweptFixtures` and nowhere else. It is a
+	shallow override of the fixture it sits on, so a variant that restates
+	`pageData` restates it whole -- the session is what varies, and a
+	partial merge of two `pageData` objects would leave a variant looking
+	like it inherited a key it had actually dropped.
+	*/
+	readonly variants?: readonly RouteVariant<RouteParameters>[];
+}
+
+/**
+One other session the route above renders differently under, named as its
+own screen.
+
+`name` is required and is the whole name, not a suffix: the check titles
+its `it` with it and the drag surface keys its `Select` on it, so two
+branches sharing a name collide in both. Name what varies -- "The Stripe
+Connect settings screen, as a Doula" -- so a failure sentence says which
+branch broke.
+
+There is no `component`: a variant is the same route seen by a different
+caller. A different component is a different route, and it declares its
+own fixture.
+*/
+export interface RouteVariant<
+	RouteParameters extends Record<string, string> = Record<string, string>
+> {
+	/**
+	How this branch is named in a failure sentence and on the drag
+	surface's picker -- unique across every subject, route and component
+	alike.
+	*/
+	readonly name: string;
+	/**
+	`page.params`, when this branch is reached at other ids.
+	*/
+	readonly params?: Readonly<RouteParameters>;
+	/**
+	`page.url`, when this branch is reached at another address.
+	*/
+	readonly url?: string;
+	/**
+	The route's own `load` output, restated whole.
+	*/
+	readonly props?: Readonly<Record<string, unknown>>;
+	/** This branch's answers to the fetches it makes -- which are not the
+	other branch's, since what a route asks for is often what it is
+	allowed to ask for. */
+	readonly respond?: (path: string) => Response;
+	/** `page.data`, restated whole. This is where a Practice route's
+	session lives, so it is the field nearly every variant sets. */
+	readonly pageData?: Readonly<Record<string, unknown>>;
+	/** The level-1 heading, when this branch's screen is titled
+	differently. */
+	readonly readyText?: string;
+}
+
+/**
+Every complete fixture one declared fixture stands for: itself, then one
+per variant.
+
+This sits beside `toPageState` and `toApiResponder` for the reason that
+comment gives, and it is the reason `variants` could be added at all. A
+field on `RouteFixture` that each half walked for itself reaches whichever
+half somebody remembered, and the two then measure and show different
+screens -- `route-continuum.svelte.spec.ts` would sweep three branches
+while the drag surface offered one. Neither half touches `variants`; both
+call this.
+
+The realized fixtures carry no `variants` of their own, so there is
+nothing left for a caller to expand a second time, and a variant of a
+variant is not a shape this supports. A fixture with no variants is
+returned as itself, unchanged and identical.
+*/
+export function toSweptFixtures<RouteParameters extends Record<string, string>>(
+	fixture: RouteFixture<RouteParameters>
+): readonly RouteFixture<RouteParameters>[] {
+	if (!fixture.variants) return [fixture];
+	const { variants, ...base } = fixture;
+	return [base, ...variants.map((variant) => ({ ...base, ...variant }))];
 }

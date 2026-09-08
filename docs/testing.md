@@ -81,6 +81,12 @@ Three things are outside both specs, and each has somewhere else to be met:
 - **Focus return.** Whether closing a dialog puts focus back on the control that opened it is a sequence, not a snapshot, and axe never sees it. The shell's own menus and its narrow-viewport sheet get this from the platform — they are a native `popover` and a `<dialog>` opened with `showModal()`, and the browser owns the top layer, light dismiss, Escape and the focus return. **Anything hand-rolled does not, and the obligation lands on the first `Dialog` component ([#473](https://github.com/markgoho/doula-cloud/issues/473)): its own spec must assert that dismissing it returns focus to the trigger.** Prefer the platform element, and inherit the behavior instead of testing for it.
 - **Assistive-technology output.** No automated check hears what a screen reader says. axe covers roughly a third of WCAG by rule count; a passing scan is a floor, not a pass.
 
+## Layout: the continuum check, and what a fixture owes it
+
+Layout is verified by sweeping a subject across the space it can be given rather than by asserting at chosen widths — `app/src/routes/style-guide/continuum.svelte.spec.ts` over every component demo, `app/src/routes/route-continuum.svelte.spec.ts` over every route, and the drag surface at `/style-guide/drag-surface` as the same fixtures seen by a person. `docs/adr/0025-layout-is-verified-across-the-continuum.md` is the decision and its Fixtures section is where a fixture's rules live: hostile values rather than polite ones, a row set realizing every state a field renders differently, and every session a route renders differently under.
+
+`.claude/rules/svelte-tests.md` is the operational form of those rules and the file to read before writing a fixture or a route spec — where a route's content is declared, what a spec still owns, the two-row shape, and the `variants` list a role-varying route declares its other sessions in ([#913](https://github.com/markgoho/doula-cloud/issues/913)).
+
 ## `api/`: lint with golangci-lint, matching CI exactly
 
 CI runs `golangci-lint` (config: `api/.golangci.yml`) as its own gating step,

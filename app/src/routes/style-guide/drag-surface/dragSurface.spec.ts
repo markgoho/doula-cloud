@@ -86,6 +86,49 @@ describe('toRouteDemos', () => {
 
 		expect(demos.map((demo) => demo.slug)).toEqual(['account', 'practices/[practiceId]/invoices']);
 	});
+
+	/*
+	 * A route that renders differently for different callers is several
+	 * subjects behind one path (#913), and the picker offers each of them
+	 * -- through `toSweptFixtures`, which is what the continuum check
+	 * expands with too, so a branch that is swept can be dragged.
+	 */
+	it('offers one entry per session a route declares, under its own name', () => {
+		const demos = toRouteDemos({
+			'../../practices/[practiceId]/settings/payments/page.fixture.ts': {
+				fixture: routeFixture({
+					name: 'The Stripe Connect settings screen, as an Owner',
+					variants: [
+						{ name: 'The Stripe Connect settings screen, as an Admin' },
+						{ name: 'The Stripe Connect settings screen, as a Doula' }
+					]
+				})
+			}
+		});
+
+		expect(demos.map((demo) => demo.name)).toEqual([
+			'The Stripe Connect settings screen, as an Owner',
+			'The Stripe Connect settings screen, as an Admin',
+			'The Stripe Connect settings screen, as a Doula'
+		]);
+		// One route, one slug: the branches sit together in the picker and
+		// the sort has one route to place rather than three.
+		expect(new Set(demos.map((demo) => demo.slug))).toEqual(
+			new Set(['practices/[practiceId]/settings/payments'])
+		);
+	});
+
+	it('hands each entry the fixture of its own branch', () => {
+		const [, doula] = toRouteDemos({
+			'../../account/page.fixture.ts': {
+				fixture: routeFixture({
+					variants: [{ name: 'The account screen, as a Doula', readyText: 'Your account' }]
+				})
+			}
+		});
+
+		expect(doula.fixture).toMatchObject({ readyText: 'Your account' });
+	});
 });
 
 const echoPath = (path: string) => new Response(path);

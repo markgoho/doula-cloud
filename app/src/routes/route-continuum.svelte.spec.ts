@@ -86,7 +86,13 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { registerLayoutPrimitives } from '#lib/primitives/index.js';
 import '#lib/styles/app.css';
 import { mountInFrame, overflowReport, sweep } from './style-guide/continuum.js';
-import { toApiResponder, toPageState, toRoutePath, type RouteFixture } from './routeFixture.js';
+import {
+	toApiResponder,
+	toPageState,
+	toRoutePath,
+	toSweptFixtures,
+	type RouteFixture
+} from './routeFixture.js';
 
 /*
  * One mock of `$app/state` for every route, because `vi.mock` is hoisted
@@ -229,8 +235,31 @@ describe('the continuum check, over routes', () => {
 		expect(stale, stale.join(', ')).toEqual([]);
 	});
 
-	// Sorted so the report reads in a stable order whatever the glob returns.
-	const swept = [...fixtures].toSorted(([a], [b]) => a.localeCompare(b));
+	/*
+	 * One route, one map entry, and one or more screens (#913). A route
+	 * that branches on the caller's session had only the branch its own
+	 * fixture's session selected swept; `toSweptFixtures` is what expands
+	 * the declared fixture into every branch it stands for, and the drag
+	 * surface calls the same function for the same reason `toPageState`
+	 * exists -- a field walked by each half separately is a field the two
+	 * halves come to disagree about.
+	 *
+	 * The expansion happens HERE rather than in `fixtures` above, so the
+	 * map stays keyed by route path: `sweeps or names every route this
+	 * repo ships` and its stale-`UNSWEPT` companion both compare route
+	 * paths, and a route with three branches must not read to them as
+	 * three routes owing three entries. `KNOWN_BROKEN` is keyed the same
+	 * way and so marks every branch of a route at once -- it is empty
+	 * today, and a branch-specific entry is work for whoever needs one.
+	 */
+	// Sorted so the report reads in a stable order whatever the glob
+	// returns; `flatMap` preserves that order, and a route's own branches
+	// stay in the order its fixture declared them.
+	const swept = [...fixtures]
+		.toSorted(([a], [b]) => a.localeCompare(b))
+		.flatMap(([routePath, declared]) =>
+			toSweptFixtures(declared).map((fixture) => [routePath, fixture] as const)
+		);
 
 	for (const [routePath, fixture] of swept) {
 		async function assertion() {
