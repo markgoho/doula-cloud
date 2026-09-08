@@ -67,7 +67,7 @@ func GetSignedContractPDFHandler(store objectstore.ObjectStore) http.Handler {
 			return
 		}
 		if reader.IsAmbientContractor() {
-			apierr.WriteError(w, "a contractor Doula cannot read the Practice's money -- only her own agreed fee, on an Engagement she holds a granted attachment on", http.StatusForbidden)
+			apierr.WriteError(w, staffauth.MsgContractorMoneyRefused, http.StatusForbidden)
 			return
 		}
 		serveSignedPDF(w, r, tx, store, engagementID, apierr.MsgInternalError)

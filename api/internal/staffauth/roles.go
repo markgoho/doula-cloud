@@ -41,6 +41,13 @@ func RequireOwner(w http.ResponseWriter, r *http.Request) (tx *sql.Tx, practiceI
 	return tx, practiceID, true
 }
 
+// MsgContractorMoneyRefused is the 403 body every route ADR-0008's money
+// row (as amended by #282) refuses a contractor Doula with -- named once
+// so RequireNotAmbientContractor and a route that needs the reader-only
+// check without a tx (contracts.GetSignedContractPDFHandler) can never
+// drift onto two different wordings for the same refusal.
+const MsgContractorMoneyRefused = "a contractor Doula cannot read the Practice's money -- only her own agreed fee, on an Engagement she holds a granted attachment on"
+
 // RequireNotAmbientContractor resolves the caller's Reader and
 // request-scoped tx from context and confirms the caller is not a plain
 // contractor Doula -- ADR-0008's money row as amended by #282: a
@@ -64,7 +71,7 @@ func RequireNotAmbientContractor(w http.ResponseWriter, r *http.Request) (tx *sq
 		return nil, "", false
 	}
 	if reader.IsAmbientContractor() {
-		apierr.WriteError(w, "a contractor Doula cannot read the Practice's money -- only her own agreed fee, on an Engagement she holds a granted attachment on", http.StatusForbidden)
+		apierr.WriteError(w, MsgContractorMoneyRefused, http.StatusForbidden)
 		return nil, "", false
 	}
 	return tx, practiceID, true

@@ -405,13 +405,19 @@ func TestGetContractHandler_ContractorWithoutAttachmentForbidden(t *testing.T) {
 
 // TestGetContractHandler_ContractorWithGrantedAttachmentSeesScope proves
 // the other half of that rule: a granted, open attachment reaches the
-// Contract's scope -- but never its money, regardless of attachment.
+// Contract's scope. It also pins #969's documented interim gap, per
+// ADR-0008's "Amended on #282" section: with the money_/ContractScope/
+// ContractFull split deleted and no real amount column yet (#967), a
+// contractor's raw merge field values -- including a price, if the
+// Practice's Template names one -- are not filtered at all. That is the
+// accepted cost, closed by #967's column rather than by resurrecting the
+// deleted split.
 func TestGetContractHandler_ContractorWithGrantedAttachmentSeesScope(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "get-contractor-attached"
 	practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "contractor")
 	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
-	seedContract(t, db, engagementID, statusDraft, mergeFieldProse)
+	seedContractWithValues(t, db, engagementID, contracts.MergeFieldValues{clientNameKey: jamieName, priceKey: testPriceValue})
 	testdb.SeedGrantedAttachment(t, db, engagementID, staffID)
 
 	srv, session := newContractServer(t, db, uid)
@@ -429,6 +435,9 @@ func TestGetContractHandler_ContractorWithGrantedAttachmentSeesScope(t *testing.
 	}
 	if out.EngagementID != engagementID {
 		t.Fatalf("engagementId = %q, want %q", out.EngagementID, engagementID)
+	}
+	if out.Values[priceKey] != testPriceValue {
+		t.Fatalf("Values[price] = %q, want %q -- #969's documented interim gap, closed by #967", out.Values[priceKey], testPriceValue)
 	}
 }
 

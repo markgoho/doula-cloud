@@ -338,16 +338,6 @@ everything; the Offer settles her claim and nothing else
 
 **Billing mode is the new row #271 adds, and it is a third row rather than a widening of either fact above it.** It is not Stripe Connect state (no requirements count, no Owner errand) and it is not "can this Practice raise an Invoice at all" (a Practice with no chosen mode yet still cannot raise one, the same ✗ an unconnected Stripe Practice gets — mode and capability are two different gates that happen to block the same button). It reads exactly like its neighbor: all Staff, because a Doula meets it the same way she meets #270's row, on the Invoice section of an Engagement she may already see. Writing it is not this row's concern — see the write table below, where the Owner-only "change an established mode" sits beside the one-time set that rides an Invoice-raise request itself, open to whichever Staff member happens to raise the Practice's first Invoice (not gated in this table at all, since it is a value carried on an otherwise-ungated write, not a read).
 
-**Amended on [#282](https://github.com/markgoho/doula-cloud/issues/282): the "Contract — money, and Invoice history" row's premise was wrong, not merely under-specified.** The row above gave that cell to Owner and Admin alone, on the theory that a Client's money is hidden from a Doula. #282 found the theory false for an employed Doula: a Practice's rates are its own published prices, not a Client's private fact, so she reads them; from a rate and an Engagement's kind she can infer the price anyway. The corrected row:
-
-| | Owner | Admin | Doula (employee) | Doula (contractor) |
-| --- | --- | --- | --- | --- |
-| Contract — money, and Invoice history, and the money entries in the Engagement activity ledger | ✓ | ✓ | ✓ | **her own agreed fee only, on her Engagements — never the Practice's price** |
-
-Employment type is the boundary and the only one, same as every other row in this table: an employee is inside the business and reads what the Practice charges; a contractor is a separate business the Practice hires, and reads her own agreed fee and never the Practice's price, because the difference between those two numbers is the Practice's margin on her labor. The contractor cell is unchanged from the row above.
-
-[#969](https://github.com/markgoho/doula-cloud/issues/969) built this and, with it, retired the query seam this document's "Enforcement mechanism" section below describes for Contract: `ContractScope`/`ContractFull`, `ReadContract`, and the `money_` merge-field-key convention are deleted, not re-aimed at a new predicate, per #282's own named exit condition ("if [the contractor narrowing] begins to require per-field or per-record classification again, it goes and contractors read money like everyone else"). Narrowing a contractor's Contract read still needs that per-field classification until [#967](https://github.com/markgoho/doula-cloud/issues/967) gives a Contract a real amount column, so until #967 lands, a contractor on a granted attachment reads this Contract's raw merge field values unfiltered — the interim cost #969 accepted, closed by #967's column rather than by resurrecting the query seam. `activitygate.bypassesRestriction` (the money tier's one enforcement point for the activity ledger) and every route this row governs — Invoice history, the Practice-wide Invoice book, the signed Contract PDF, and `client.shapeOpenEngagement`'s rollup — now key on `!reader.IsAmbientContractor()` rather than `reader.IsOwnerOrAdmin()`.
-
 ## The write table — new content; ADR-0006 covered reads only
 
 | | Doula (employee) | Doula (contractor) |
@@ -709,6 +699,22 @@ already are. Every merge field a Practice invents is scope by definition, so no 
 a Practice can type carries a price anywhere. `ContractScope`, `ContractFull` and
 `isMoneyMergeFieldKey` are deleted rather than repaired, and the query seam's
 un-backstopped convention — named as a cost below — loses its only Contract case.
+
+**Built in two steps, not one.** [#969](https://github.com/markgoho/doula-cloud/issues/969)
+did the read-boundary half above — the corrected table, `ContractScope`/`ContractFull`/
+`ReadContract`/`isMoneyMergeFieldKey` deleted, and every route this table governs
+(Invoice history, the Practice-wide Invoice book, the signed Contract PDF, and
+`client.shapeOpenEngagement`'s rollup) keying on `!reader.IsAmbientContractor()`
+rather than `reader.IsOwnerOrAdmin()`. It could not also make money stop being a
+merge field: that needs the rate card and the Contract's real amount column, which
+is [#966](https://github.com/markgoho/doula-cloud/issues/966) (built) and
+[#967](https://github.com/markgoho/doula-cloud/issues/967) (not yet). Until #967
+lands, a Contract's price is still whatever a Practice typed into its Template
+prose, so a contractor on a granted attachment — no longer filtered by the deleted
+convention — reads this Contract's merge field values unfiltered, including a price
+if the Template names one. #282's own named exit condition accepts exactly this
+cost rather than resurrecting the query seam to avoid it; #967's column is what
+closes it for good.
 
 **Provisional, pending [#243](https://github.com/markgoho/doula-cloud/issues/243).**
 One rate per Engagement kind rather than tiers; postpartum as a package rather than
