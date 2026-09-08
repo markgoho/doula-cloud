@@ -26,6 +26,31 @@ export interface Contract {
 	 * and always absent for a contractor (the Go BFF withholds it the
 	 * same way it withholds the "price" merge field value itself). */
 	amountChangedAt?: string;
+	/** Every void request against this Contract, newest first, regardless
+	 * of who asked or who is reading (#971) -- unlike `values`, a
+	 * request's reason and outcome carry no price, so nothing here needs
+	 * ADR-0008's contractor redaction. Absent for a Contract nobody has
+	 * ever asked to void, the common case. */
+	voidRequests?: VoidRequestSummary[];
+}
+
+/** One void request against a Contract (#971): who asked, when, why, and
+ * -- once an Owner or an Admin has decided -- whether it was granted (a
+ * void, via the existing Void endpoint) or declined with a reason of its
+ * own. `status` is `'open'` while nobody has decided yet, `'voided'`
+ * once granted, `'declined'` once refused; the two outcomes are how the
+ * person who asked tells which happened. Mirrors the Go BFF's
+ * VoidRequestSummary (api/internal/contracts/voidrequest.go). */
+export interface VoidRequestSummary {
+	id: string;
+	requestedBy: string;
+	requestedByName: string;
+	reason: string;
+	status: string;
+	declineReason?: string;
+	decidedBy?: string;
+	decidedAt?: string;
+	createdAt: string;
 }
 
 /** The "price" merge field key is reserved: the Go BFF resolves it from
@@ -242,6 +267,54 @@ export async function voidContract(
 	return response.json();
 }
 
+/** Asks for engagementId's Signed Contract to be voided (#971) -- what a
+ * Doula does instead of voiding it herself, which #970 refuses her.
+ * Only succeeds while the Contract is signed, and only once per
+ * requester at a time (a second ask while the first is still open
+ * 409s). Throws with the response body text on a non-2xx response. */
+export async function requestContractVoid(
+	fetcher: Fetcher,
+	practiceId: string,
+	engagementId: string,
+	reason: string
+): Promise<Contract> {
+	const response = await fetcher(`${contractPath(practiceId, engagementId)}/void-request`, {
+		method: 'POST',
+		headers: { 'Content-Type': 'application/json' },
+		body: JSON.stringify({ reason })
+	});
+	if (!response.ok) {
+		throw new Error(await apiErrorMessage(response));
+	}
+	return response.json();
+}
+
+/** Declines one open void request against engagementId's Contract (#971)
+ * -- an Owner or an Admin's other answer to a Doula's ask, distinct from
+ * granting it (voidContract above). Only succeeds while requestId names
+ * a still-open request. Throws with the response body text on a non-2xx
+ * response. */
+export async function declineContractVoidRequest(
+	fetcher: Fetcher,
+	practiceId: string,
+	engagementId: string,
+	requestId: string,
+	reason: string
+): Promise<Contract> {
+	const response = await fetcher(
+		`${contractPath(practiceId, engagementId)}/void-request/${requestId}/decline`,
+		{
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ reason })
+		}
+	);
+	if (!response.ok) {
+		throw new Error(await apiErrorMessage(response));
+	}
+	return response.json();
+}
+
 /** Sets the value for a merge field key within values, returning a new
  * object (values is never mutated) -- mirrors planInstance.ts's
  * setAnswer, minus the polymorphic-type handling a Contract's merge
@@ -308,4 +381,40 @@ const awaitingContractStatusLabels: Record<string, string> = {
 
 export function awaitingContractStatusLabel(status: string): string {
 	return awaitingContractStatusLabels[status] ?? status;
+}
+
+/** One row of the Practice-wide "void requests waiting on you" roll-up
+ * (#971) -- mirrors the Go BFF's VoidRequestAwaitingItem
+ * (api/internal/contracts/void_requests_awaiting.go). Owner/Admin only,
+ * the same reach Void itself carries. */
+export interface AwaitingVoidRequest {
+	requestId: string;
+	engagementId: string;
+	clientId: string;
+	clientName: string;
+	requestedByName: string;
+	reason: string;
+	createdAt: string;
+}
+
+/** The Practice-wide "void requests awaiting" list's path -- mirrors
+ * practiceAwaitingContractsPath above. */
+export function practiceAwaitingVoidRequestsPath(practiceId: string, cursor?: string): string {
+	const path = `/api/practices/${practiceId}/contracts/void-requests`;
+	return cursor ? `${path}?cursor=${encodeURIComponent(cursor)}` : path;
+}
+
+/** Loads one page of every open void request at the Practice, oldest
+ * first -- mirrors loadPracticeAwaitingContracts above. Throws with the
+ * response body text on a non-2xx response. */
+export async function loadPracticeAwaitingVoidRequests(
+	fetcher: Fetcher,
+	practiceId: string,
+	cursor?: string
+): Promise<CursorPage<AwaitingVoidRequest>> {
+	const response = await fetcher(practiceAwaitingVoidRequestsPath(practiceId, cursor));
+	if (!response.ok) {
+		throw new Error(await apiErrorMessage(response));
+	}
+	return response.json();
 }
