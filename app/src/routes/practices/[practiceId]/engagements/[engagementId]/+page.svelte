@@ -70,7 +70,17 @@
 	import { isAmbientContractor, isDoula, isOwner, isOwnerOrAdmin } from '#lib/roles.js';
 	import BirthOutcomeSection from '#lib/components/organisms/BirthOutcomeSection.svelte';
 	import InvoiceSection from '#lib/components/organisms/InvoiceSection.svelte';
-	import { loadInvoices, createInvoice, type Invoice } from '#lib/invoice.js';
+	import {
+		loadInvoices,
+		createInvoice,
+		loadBillingMode,
+		recordPayment,
+		voidInvoice,
+		writeOffInvoice,
+		type BillingMode,
+		type Invoice,
+		type PaymentMethod
+	} from '#lib/invoice.js';
 	import OfferSection from '#lib/components/organisms/OfferSection.svelte';
 	import { createOffer, loadEngagementOffers, withdrawOffer, type NewOffer, type Offer } from '#lib/offer.js';
 	import { resolve } from '$app/paths';
@@ -413,6 +423,12 @@
 	const invoices = $derived(invoicesState.value);
 	const invoicesError = $derived(invoicesState.error);
 
+	// #271: undefined until this Practice has chosen a billing rail --
+	// InvoiceSection itself decides what to render for that, from the
+	// same standing fact clientsCanPay/hasClientEmail already are.
+	const billingModeState = new SectionState<BillingMode | undefined>(undefined);
+	const billingMode = $derived(billingModeState.value);
+
 	// Offers on this Engagement (#317). Owner/Admin only at the BFF, so a
 	// Doula's load simply fails and the section stays hidden -- the read
 	// table keeps who-was-asked away from her, and an error banner about
@@ -707,6 +723,13 @@
 			() => loadInvoices(apiFetchWithSession, page.params.practiceId!, page.params.engagementId!),
 			'Failed to load invoices'
 		);
+		// #271: read alongside the Invoice list itself -- InvoiceSection
+		// needs to know the current mode (or its absence) before it can
+		// decide whether to show the "ask once" form.
+		await billingModeState.load(
+			() => loadBillingMode(apiFetchWithSession, page.params.practiceId!),
+			'Failed to load billing mode'
+		);
 	}
 
 	// Reported by InvoiceSection's onCreate prop. No catch here, same as
@@ -716,14 +739,39 @@
 	// show the form at all from canClientsPay, a standing fact read up
 	// front, so a create attempt reaching this function is always the
 	// happy path or a genuine error.
-	async function handleCreateInvoice(amountCents: number) {
+	async function handleCreateInvoice(amountCents: number, chosenBillingMode?: BillingMode) {
 		const invoice = await createInvoice(
 			apiFetchWithSession,
 			page.params.practiceId!,
 			page.params.engagementId!,
-			amountCents
+			amountCents,
+			chosenBillingMode
 		);
 		invoicesState.value = [invoice, ...invoicesState.value];
+		billingModeState.value = invoice.billingMode;
+	}
+
+	// #271: reported by InvoiceSection's onRecordPayment/onVoidInvoice/
+	// onWriteOffInvoice props. Each reloads the Invoice list on success --
+	// unlike handleCreateInvoice's own in-place splice, a status/paid_at
+	// flip is easier to re-fetch than to reconstruct from the Payment or
+	// transition response alone.
+	async function handleRecordPayment(
+		invoiceId: string,
+		input: { method: PaymentMethod; note?: string; paidOn: string }
+	) {
+		await recordPayment(apiFetchWithSession, page.params.practiceId!, invoiceId, input);
+		await loadInvoicesSection();
+	}
+
+	async function handleVoidInvoice(invoiceId: string) {
+		await voidInvoice(apiFetchWithSession, page.params.practiceId!, invoiceId);
+		await loadInvoicesSection();
+	}
+
+	async function handleWriteOffInvoice(invoiceId: string) {
+		await writeOffInvoice(apiFetchWithSession, page.params.practiceId!, invoiceId);
+		await loadInvoicesSection();
 	}
 
 	// The roster read and the Offers read are both Owner/Admin; either
@@ -1351,15 +1399,23 @@
 	{#if invoicesError}
 		<Notice variant="error" message={invoicesError} />
 	{/if}
+	{#if billingModeState.error}
+		<Notice variant="error" message={billingModeState.error} />
+	{/if}
 
 	<InvoiceSection
 		{invoices}
 		contractStatus={contract!.status}
+		{billingMode}
 		clientsCanPay={canClientsPay}
 		hasClientEmail={hasClientEmailOnFile}
 		isOwner={isPracticeOwner}
+		isOwnerOrAdmin={isPracticeOwnerOrAdmin}
 		{paymentsSettingsHref}
 		onCreate={handleCreateInvoice}
+		onRecordPayment={handleRecordPayment}
+		onVoidInvoice={handleVoidInvoice}
+		onWriteOffInvoice={handleWriteOffInvoice}
 	/>
 {/snippet}
 

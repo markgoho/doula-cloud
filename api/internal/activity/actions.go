@@ -144,6 +144,20 @@ const (
 	ActionInvoiceRaised EngagementAction = "invoice_raised"
 	ActionInvoicePaid   EngagementAction = "invoice_paid"
 
+	// ActionPaymentRecorded records a manually recorded Payment (#271) --
+	// a check, a bank transfer, or cash, never money Stripe itself moved
+	// (that stays ActionInvoicePaid, unchanged). Always a StaffActor: an
+	// Owner or Admin typed it in, unlike a Stripe payment, which is the
+	// Client's own act.
+	ActionPaymentRecorded EngagementAction = "payment_recorded"
+	// ActionInvoiceVoided and ActionInvoiceWrittenOff record the two
+	// Staff-initiated ways a by-hand Invoice leaves 'open' without being
+	// paid (#271) -- a mistyped amount, or one the Practice has given up
+	// collecting. Neither reverses a Payment; both act on an Invoice that
+	// was never paid.
+	ActionInvoiceVoided     EngagementAction = "invoice_voided"
+	ActionInvoiceWrittenOff EngagementAction = "invoice_written_off"
+
 	ActionPortalInviteSent EngagementAction = "portal_invite_sent"
 
 	// ActionPortalAccountProvisioned records the Portal Account
@@ -176,12 +190,15 @@ const (
 // agreed fee is a different fact -- it lives on the Offer she accepted,
 // which is not in this set and stays on her ledger.
 var moneyActions = map[EngagementAction]bool{
-	ActionContractCreated: true,
-	ActionContractSent:    true,
-	ActionContractSigned:  true,
-	ActionContractVoided:  true,
-	ActionInvoiceRaised:   true,
-	ActionInvoicePaid:     true,
+	ActionContractCreated:   true,
+	ActionContractSent:      true,
+	ActionContractSigned:    true,
+	ActionContractVoided:    true,
+	ActionInvoiceRaised:     true,
+	ActionInvoicePaid:       true,
+	ActionPaymentRecorded:   true,
+	ActionInvoiceVoided:     true,
+	ActionInvoiceWrittenOff: true,
 }
 
 // MoneyActions returns every action ADR-0008 keeps Owner/Admin-only,

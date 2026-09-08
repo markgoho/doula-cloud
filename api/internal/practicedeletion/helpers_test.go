@@ -110,8 +110,8 @@ func seedUnsettledInvoice(t *testing.T, db *testdb.DB, practiceID string) {
 		t.Fatalf("seed contract: %v", err)
 	}
 	if _, err := db.Admin.ExecContext(t.Context(),
-		`INSERT INTO invoices (practice_id, contract_id, stripe_invoice_id, status, amount_cents)
-		 VALUES ($1, $2, gen_random_uuid()::text, 'open', 10000)`,
+		`INSERT INTO invoices (practice_id, contract_id, stripe_invoice_id, status, amount_cents, reference)
+		 VALUES ($1, $2, gen_random_uuid()::text, 'open', 10000, gen_random_uuid()::text)`,
 		practiceID, contractID,
 	); err != nil {
 		t.Fatalf("seed invoice: %v", err)

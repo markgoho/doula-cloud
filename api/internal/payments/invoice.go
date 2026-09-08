@@ -22,8 +22,23 @@ import (
 // for paginated to be true" reasoning.
 const invoicePageSize = 30
 
+// invoiceStatusOpen is the invoices.status value shared by every read and
+// write site in this package that tests for "billed and not yet
+// collected" -- named once so goconst's repeat threshold, crossed once
+// #271 added a second reader (manual_payment.go), doesn't see the same
+// literal typed twice.
+const invoiceStatusOpen = "open"
+
 // InvoiceView is one Invoice, as returned by both PostInvoiceHandler (the
 // row just created) and GetInvoicesHandler (a page of existing rows).
+//
+// Reference and BillingMode are #271's additions: Reference is a
+// human-readable identifier a check "for invoice ___" can be matched
+// against on paper (a by-hand Invoice's own per-Practice sequence, or
+// Stripe's own `number`), and BillingMode says which rail the Invoice was
+// born on -- an Invoice keeps the rail it was raised under even if the
+// Practice's own billing_mode later changes, so this is read off the row
+// itself, never off the Practice's current setting.
 type InvoiceView struct {
 	ID          string     `json:"id"`
 	ContractID  string     `json:"contractId"`
@@ -32,14 +47,31 @@ type InvoiceView struct {
 	Currency    string     `json:"currency"`
 	CreatedAt   time.Time  `json:"createdAt"`
 	PaidAt      *time.Time `json:"paidAt,omitempty"`
+	Reference   string     `json:"reference"`
+	BillingMode string     `json:"billingMode"`
 }
 
 // CreateInvoiceRequest is the body of a POST to PostInvoiceHandler: the
 // amount Staff agreed with the Client for this Engagement. There is no
 // description/line-item field -- every Invoice's line item and statement
 // descriptor is InvoiceLineItemDescription, unconditionally.
+//
+// BillingMode is read only the first time this Practice ever raises an
+// Invoice -- resolveBillingMode ignores it once a Practice's billing_mode
+// is already set (#271).
 type CreateInvoiceRequest struct {
-	AmountCents int64 `json:"amountCents"`
+	AmountCents int64   `json:"amountCents"`
+	BillingMode *string `json:"billingMode,omitempty"`
+}
+
+// billingModeOf reports the billing rail a row belongs to, straight off
+// its own stored stripe_invoice_id -- NULL means by-hand, following the
+// migration's own "a NULL is the flag; there is no second column" rule.
+func billingModeOf(stripeInvoiceID sql.NullString) string {
+	if stripeInvoiceID.Valid {
+		return string(BillingModeStripe)
+	}
+	return string(BillingModeByHand)
 }
 
 // MsgClientsCannotPay is PostInvoiceHandler's refusal (#270) when this
@@ -67,21 +99,21 @@ type ListInvoicesResponse struct {
 // PostInvoiceHandler creates an Invoice against :engagementId's current
 // Contract for the amount Staff supplies -- open to any Staff with
 // practice access, no assigned-staff or Owner gating (matching Contract's
-// default, #68). If Clients cannot yet pay this Practice --
-// stripe_connect_card_payments_status is not 'active', whether because no
-// Stripe Connect account is linked at all or because one exists but isn't
-// through onboarding -- no Invoice is created and the request 409s with
-// MsgClientsCannotPay instead (#270). This is the same charges-active
-// test EngagementDetail.ClientsCanPay reads, which is what the frontend
-// now consults before ever showing the Create Invoice form -- reaching
-// this refusal from the UI would mean the two disagreed.
+// default, #68).
 //
-// Before any of that, #275: the Contract must be billable at all, per
-// contracts.TransitionBill -- Signed and still in force. A Draft, a Sent
-// (unsigned), or a Voided Contract 409s here, before the Connect gate and
-// well before anything is asked of Stripe. This is the fifth route that
-// consults contracts' one lifecycle declaration, alongside Contract's own
-// edit/send/void/sign transitions.
+// #275: the Contract must be billable at all, per contracts.TransitionBill
+// -- Signed and still in force. A Draft, a Sent (unsigned), or a Voided
+// Contract 409s here, before anything else is checked.
+//
+// #271 then branches on the Practice's billing_mode, resolved by
+// resolveBillingMode (which also handles the "ask once, inline" case
+// where none is set yet). On BillingModeByHand, createByHandInvoice
+// raises the Invoice directly -- open, no Stripe call, no Connect gate,
+// no Client-email requirement (amending #430: a by-hand Invoice mails
+// nothing, so there is nothing an absent email would break). On
+// BillingModeStripe, the pre-#271 flow runs unchanged: the
+// clients-can-pay gate (#270), the no-email refusal (#430), and Stripe's
+// own Create + Finalize Invoice calls.
 func PostInvoiceHandler(client Client) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		tx, practiceID, engagementID, contractID, contractStatus, ok := resolveInvoiceEngagement(w, r)
@@ -90,24 +122,6 @@ func PostInvoiceHandler(client Client) http.Handler {
 		}
 		if billable, refusal := contracts.TransitionBill.Check(contractStatus); !billable {
 			apierr.WriteError(w, refusal, http.StatusConflict)
-			return
-		}
-
-		canPay, err := ClientsCanPay(r.Context(), tx, practiceID)
-		if err != nil {
-			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
-			return
-		}
-		if !canPay {
-			apierr.Write(w, http.StatusConflict, apierr.CodeFailedPrecondition, MsgClientsCannotPay, nil)
-			return
-		}
-
-		accountID, err := fetchConnectAccountID(r.Context(), tx, practiceID)
-		if err != nil {
-			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
@@ -120,64 +134,53 @@ func PostInvoiceHandler(client Client) http.Handler {
 			return
 		}
 
-		clientID, clientName, clientEmail, err := fetchClientContact(r.Context(), tx, engagementID)
+		staffID, _ := staffauth.StaffID(r.Context())
+
+		mode, billingModeAlreadySet, err := resolveBillingMode(r.Context(), tx, practiceID, req.BillingMode)
+		if errors.Is(err, errBillingModeRequired) {
+			apierr.Write(w, http.StatusUnprocessableEntity, apierr.CodeFailedPrecondition, MsgBillingModeRequired, nil)
+			return
+		}
+		if errors.Is(err, errBillingModeInvalid) {
+			apierr.WriteError(w, `billingMode must be "stripe" or "by_hand"`, http.StatusBadRequest)
+			return
+		}
+		if err != nil {
+			// coverage:ignore reason: DB query failure, not exercised by unit tests
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+			return
+		}
+
+		var view InvoiceView
+		if mode == BillingModeByHand {
+			view, err = createByHandInvoice(r.Context(), tx, practiceID, contractID, req.AmountCents)
+		} else {
+			view, err = createStripeInvoice(r.Context(), tx, client, practiceID, engagementID, contractID, req.AmountCents)
+		}
 		if errors.Is(err, errClientNoEmail) {
 			apierr.WriteError(w, "this client has no email on file -- add one before invoicing her", http.StatusUnprocessableEntity)
 			return
 		}
-		if err != nil {
-			// coverage:ignore reason: DB query failure, not exercised by unit tests -- the Contract already resolved above implies the Engagement/Client rows exist
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+		if errors.Is(err, errClientsCannotPay) {
+			apierr.Write(w, http.StatusConflict, apierr.CodeFailedPrecondition, MsgClientsCannotPay, nil)
 			return
 		}
-
-		staffID, _ := staffauth.StaffID(r.Context())
-		stripeCustomerID, err := resolveStripeCustomer(r.Context(), tx, client, stripeCustomerFor{
-			PracticeID: practiceID,
-			ClientID:   clientID,
-			AccountID:  accountID,
-			Email:      clientEmail,
-			Name:       clientName,
-			StaffID:    staffID,
-		})
 		if err != nil {
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
-		stripeInvoiceID, err := client.CreateInvoice(r.Context(), accountID, stripeCustomerID, InvoiceLineItemDescription, req.AmountCents)
-		if err != nil {
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
-			return
+		// Only persist a first-time billing mode once the Invoice it was
+		// requested for has actually been created -- see
+		// resolveBillingMode's comment on why this cannot happen earlier.
+		if !billingModeAlreadySet {
+			if err := setBillingMode(r.Context(), tx, practiceID, mode, staffID); err != nil {
+				// coverage:ignore reason: DB query failure, not exercised by unit tests
+				apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+				return
+			}
 		}
 
-		var invoiceID string
-		var createdAt time.Time
-		if err := tx.QueryRowContext(r.Context(),
-			`INSERT INTO invoices (practice_id, contract_id, stripe_invoice_id, stripe_customer_id, status, amount_cents, currency)
-			 VALUES ($1, $2, $3, $4, 'draft', $5, 'usd') RETURNING id, created_at`,
-			practiceID, contractID, stripeInvoiceID, stripeCustomerID, req.AmountCents,
-		).Scan(&invoiceID, &createdAt); err != nil {
-			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
-			return
-		}
-
-		// A draft invoices row is now persisted (staffauth.Middleware
-		// commits the request-scoped tx regardless of the status this
-		// handler writes) even if FinalizeInvoice below fails -- so a
-		// Stripe-side failure here never leaves an Invoice that exists on
-		// Stripe with no corresponding Doula Cloud record.
-		if _, err := client.FinalizeInvoice(r.Context(), accountID, stripeInvoiceID); err != nil {
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
-			return
-		}
-
-		if _, err := tx.ExecContext(r.Context(), `UPDATE invoices SET status = 'open' WHERE id = $1`, invoiceID); err != nil {
-			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
-			return
-		}
 		diff, err := json.Marshal(map[string]int64{"amountCents": req.AmountCents})
 		if err != nil {
 			// coverage:ignore reason: a map of one int64 always marshals cleanly, not exercised by unit tests
@@ -197,15 +200,139 @@ func PostInvoiceHandler(client Client) http.Handler {
 			return
 		}
 
-		apierr.WriteJSON(w, http.StatusCreated, InvoiceView{
-			ID:          invoiceID,
-			ContractID:  contractID,
-			Status:      "open",
-			AmountCents: req.AmountCents,
-			Currency:    "usd",
-			CreatedAt:   createdAt,
-		})
+		apierr.WriteJSON(w, http.StatusCreated, view)
 	})
+}
+
+// errClientsCannotPay is createStripeInvoice's refusal (#270) when this
+// Practice cannot yet take a Client's card payment.
+var errClientsCannotPay = errors.New("payments: clients cannot pay this practice yet")
+
+// createByHandInvoice raises a by-hand Invoice (#271): open immediately,
+// no Stripe call, no Connect gate, no Client-email requirement. Its
+// reference is claimed from the Practice's own per-Practice sequence,
+// atomically, so two concurrent by-hand Invoices can never collide.
+func createByHandInvoice(ctx context.Context, tx *sql.Tx, practiceID, contractID string, amountCents int64) (InvoiceView, error) {
+	var seq int
+	if err := tx.QueryRowContext(ctx,
+		`UPDATE practices SET next_invoice_sequence = next_invoice_sequence + 1 WHERE id = $1 RETURNING next_invoice_sequence - 1`,
+		practiceID,
+	).Scan(&seq); err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		return InvoiceView{}, fmt.Errorf("payments: claim invoice sequence: %w", err)
+	}
+	reference := fmt.Sprintf("INV-%04d", seq)
+
+	var invoiceID string
+	var createdAt time.Time
+	if err := tx.QueryRowContext(ctx,
+		`INSERT INTO invoices (practice_id, contract_id, status, amount_cents, currency, reference)
+		 VALUES ($1, $2, 'open', $3, 'usd', $4) RETURNING id, created_at`,
+		practiceID, contractID, amountCents, reference,
+	).Scan(&invoiceID, &createdAt); err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		return InvoiceView{}, fmt.Errorf("payments: create by-hand invoice: %w", err)
+	}
+
+	return InvoiceView{
+		ID:          invoiceID,
+		ContractID:  contractID,
+		Status:      invoiceStatusOpen,
+		AmountCents: amountCents,
+		Currency:    "usd",
+		CreatedAt:   createdAt,
+		Reference:   reference,
+		BillingMode: string(BillingModeByHand),
+	}, nil
+}
+
+// createStripeInvoice is the pre-#271 Stripe-backed flow, unchanged in
+// substance: the clients-can-pay gate, the Client-email requirement, and
+// Stripe's own Create + Finalize Invoice calls. The invoices row is
+// inserted 'draft' with its reference temporarily set to the Stripe
+// invoice id (never NULL, satisfying the NOT NULL reference column)
+// before FinalizeInvoice is called, so a Stripe-side failure at that
+// point still leaves a persisted Doula Cloud record rather than an
+// Invoice that exists on Stripe with no local row -- same fail-safe
+// property the pre-#271 code had. Once Finalize succeeds, the row is
+// updated to 'open' with Stripe's own human-readable `number` as its
+// real reference.
+func createStripeInvoice(ctx context.Context, tx *sql.Tx, client Client, practiceID, engagementID, contractID string, amountCents int64) (InvoiceView, error) {
+	canPay, err := ClientsCanPay(ctx, tx, practiceID)
+	if err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		return InvoiceView{}, fmt.Errorf("payments: check clients can pay: %w", err)
+	}
+	if !canPay {
+		return InvoiceView{}, errClientsCannotPay
+	}
+
+	accountID, err := fetchConnectAccountID(ctx, tx, practiceID)
+	if err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		return InvoiceView{}, err
+	}
+
+	clientID, clientName, clientEmail, err := fetchClientContact(ctx, tx, engagementID)
+	if err != nil {
+		return InvoiceView{}, err
+	}
+
+	staffID, _ := staffauth.StaffID(ctx)
+	stripeCustomerID, err := resolveStripeCustomer(ctx, tx, client, stripeCustomerFor{
+		PracticeID: practiceID,
+		ClientID:   clientID,
+		AccountID:  accountID,
+		Email:      clientEmail,
+		Name:       clientName,
+		StaffID:    staffID,
+	})
+	if err != nil {
+		return InvoiceView{}, err
+	}
+
+	stripeInvoiceID, err := client.CreateInvoice(ctx, accountID, stripeCustomerID, InvoiceLineItemDescription, amountCents)
+	if err != nil {
+		return InvoiceView{}, fmt.Errorf("payments: create stripe invoice: %w", err)
+	}
+
+	var invoiceID string
+	var createdAt time.Time
+	if err := tx.QueryRowContext(ctx,
+		`INSERT INTO invoices (practice_id, contract_id, stripe_invoice_id, stripe_customer_id, status, amount_cents, currency, reference)
+		 VALUES ($1, $2, $3, $4, 'draft', $5, 'usd', $3) RETURNING id, created_at`,
+		practiceID, contractID, stripeInvoiceID, stripeCustomerID, amountCents,
+	).Scan(&invoiceID, &createdAt); err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		return InvoiceView{}, fmt.Errorf("payments: create stripe invoice row: %w", err)
+	}
+
+	// A draft invoices row is now persisted (staffauth.Middleware commits
+	// the request-scoped tx regardless of the status this handler writes)
+	// even if FinalizeInvoice below fails.
+	hostedInvoiceURL, number, err := client.FinalizeInvoice(ctx, accountID, stripeInvoiceID)
+	_ = hostedInvoiceURL // not yet surfaced anywhere; see #78's own discard of it
+	if err != nil {
+		return InvoiceView{}, fmt.Errorf("payments: finalize stripe invoice: %w", err)
+	}
+
+	if _, err := tx.ExecContext(ctx,
+		`UPDATE invoices SET status = 'open', reference = $2 WHERE id = $1`, invoiceID, number,
+	); err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		return InvoiceView{}, fmt.Errorf("payments: finalize stripe invoice row: %w", err)
+	}
+
+	return InvoiceView{
+		ID:          invoiceID,
+		ContractID:  contractID,
+		Status:      invoiceStatusOpen,
+		AmountCents: amountCents,
+		Currency:    "usd",
+		CreatedAt:   createdAt,
+		Reference:   number,
+		BillingMode: string(BillingModeStripe),
+	}, nil
 }
 
 // GetInvoicesHandler lists every Invoice ever created against
@@ -473,13 +600,13 @@ func resolveStripeCustomer(ctx context.Context, tx *sql.Tx, stripeClient Client,
 // direct contract_id = $1 filter) so an Invoice created against a
 // since-voided Contract still lists under the Engagement that Contract
 // belonged to.
-const listInvoicesQuery = `SELECT i.id, i.contract_id, i.status, i.amount_cents, i.currency, i.created_at, i.paid_at
+const listInvoicesQuery = `SELECT i.id, i.contract_id, i.status, i.amount_cents, i.currency, i.created_at, i.paid_at, i.reference, i.stripe_invoice_id
 	FROM invoices i
 	JOIN contracts c ON c.id = i.contract_id
 	WHERE c.engagement_id = $1
 	ORDER BY i.created_at DESC, i.id DESC LIMIT $2`
 
-const listInvoicesAfterQuery = `SELECT i.id, i.contract_id, i.status, i.amount_cents, i.currency, i.created_at, i.paid_at
+const listInvoicesAfterQuery = `SELECT i.id, i.contract_id, i.status, i.amount_cents, i.currency, i.created_at, i.paid_at, i.reference, i.stripe_invoice_id
 	FROM invoices i
 	JOIN contracts c ON c.id = i.contract_id
 	WHERE c.engagement_id = $1 AND (i.created_at, i.id) < ($2, $3)
@@ -507,13 +634,15 @@ func listInvoices(ctx context.Context, tx *sql.Tx, engagementID string, after *i
 	for rows.Next() {
 		var it InvoiceView
 		var paidAt sql.NullTime
-		if err := rows.Scan(&it.ID, &it.ContractID, &it.Status, &it.AmountCents, &it.Currency, &it.CreatedAt, &paidAt); err != nil {
+		var stripeInvoiceID sql.NullString
+		if err := rows.Scan(&it.ID, &it.ContractID, &it.Status, &it.AmountCents, &it.Currency, &it.CreatedAt, &paidAt, &it.Reference, &stripeInvoiceID); err != nil {
 			// coverage:ignore reason: row scan failure, not exercised by unit tests
 			return nil, false, fmt.Errorf("payments: scan invoice row: %w", err)
 		}
 		if paidAt.Valid {
 			it.PaidAt = &paidAt.Time
 		}
+		it.BillingMode = billingModeOf(stripeInvoiceID)
 		items = append(items, it)
 	}
 	if err := rows.Err(); err != nil {

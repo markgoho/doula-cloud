@@ -35,6 +35,10 @@ type PracticeInvoiceView struct {
 	Currency     string     `json:"currency"`
 	CreatedAt    time.Time  `json:"createdAt"`
 	PaidAt       *time.Time `json:"paidAt,omitempty"`
+	// Reference and BillingMode are #271's additions -- see InvoiceView's
+	// own doc comment; the same two facts, on the Practice-wide row.
+	Reference   string `json:"reference"`
+	BillingMode string `json:"billingMode"`
 }
 
 // PracticeInvoicesResponse is the cursor-pagination envelope from
@@ -162,7 +166,7 @@ func GetPracticeInvoicesHandler() http.Handler {
 // Client's name here exactly as they keep their place in the per-
 // Engagement list (#72).
 const practiceInvoiceColumns = `SELECT i.id, e.id, i.contract_id, cl.given_name, cl.preferred_name,
-		i.status, i.amount_cents, i.currency, i.created_at, i.paid_at
+		i.status, i.amount_cents, i.currency, i.created_at, i.paid_at, i.reference, i.stripe_invoice_id
 	FROM invoices i
 	JOIN contracts c ON c.id = i.contract_id
 	JOIN engagements e ON e.id = c.engagement_id
@@ -222,8 +226,9 @@ func listPracticeInvoices(ctx context.Context, tx *sql.Tx, practiceID string, af
 		var givenName string
 		var preferredName sql.NullString
 		var paidAt sql.NullTime
+		var stripeInvoiceID sql.NullString
 		if err := rows.Scan(&it.ID, &it.EngagementID, &it.ContractID, &givenName, &preferredName,
-			&it.Status, &it.AmountCents, &it.Currency, &it.CreatedAt, &paidAt); err != nil {
+			&it.Status, &it.AmountCents, &it.Currency, &it.CreatedAt, &paidAt, &it.Reference, &stripeInvoiceID); err != nil {
 			// coverage:ignore reason: row scan failure, not exercised by unit tests
 			return nil, false, fmt.Errorf("payments: scan practice invoice row: %w", err)
 		}
@@ -231,6 +236,7 @@ func listPracticeInvoices(ctx context.Context, tx *sql.Tx, practiceID string, af
 		if paidAt.Valid {
 			it.PaidAt = &paidAt.Time
 		}
+		it.BillingMode = billingModeOf(stripeInvoiceID)
 		items = append(items, it)
 	}
 	if err := rows.Err(); err != nil {

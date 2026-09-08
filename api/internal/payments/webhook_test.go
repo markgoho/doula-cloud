@@ -855,8 +855,8 @@ func TestPostConnectWebhookHandler_InvoicePaidCreatesPaymentAndFlipsStatus(t *te
 	}
 
 	status, gotPaidAt := invoiceStatusAndPaidAt(t, db, invoiceID)
-	if status != "paid" {
-		t.Fatalf("invoice status = %q, want %q", status, "paid")
+	if status != invoiceStatusPaid {
+		t.Fatalf("invoice status = %q, want %q", status, invoiceStatusPaid)
 	}
 	if gotPaidAt == nil || !gotPaidAt.Equal(paidAt) {
 		t.Fatalf("invoice paid_at = %v, want %v", gotPaidAt, paidAt)
@@ -962,6 +962,48 @@ func TestPostConnectWebhookHandler_InvoicePaidReplayIsNoOp(t *testing.T) {
 	}
 }
 
+// TestPostConnectWebhookHandler_InvoicePaidAlreadyPaidGuardSkipsSecondWrite
+// proves #271's already-paid guard: a *distinct* invoice.paid event
+// (never claimed before, so claimEvent's own replay dedup does not apply)
+// arriving for an Invoice already 'paid' -- exactly the shape Stripe's
+// own echo of PostManualPaymentHandler's paid_out_of_band call takes --
+// is acknowledged but writes nothing. Unlike
+// TestPostConnectWebhookHandler_InvoicePaidReplayIsNoOp, which replays
+// the same event id, this proves the FOR UPDATE status check itself
+// catches the case, independent of event-id dedup.
+func TestPostConnectWebhookHandler_InvoicePaidAlreadyPaidGuardSkipsSecondWrite(t *testing.T) {
+	db := testdb.New(t)
+	practiceID := seedConnectedPractice(t, db, "Already Paid Guard Practice", "acct_already_paid_guard")
+	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jane Client", "jane@example.com")
+	contractID := seedDraftContract(t, db, engagementID)
+	invoiceID := seedInvoice(t, db, practiceID, contractID, "in_already_paid_guard", invoiceStatusPaid, 5000, time.Now())
+	// Stands in for a manual Payment already recorded against this
+	// Invoice (PostManualPaymentHandler's own INSERT, done directly here
+	// rather than through the handler since this test's only point is the
+	// webhook-side guard).
+	if _, err := db.Admin.ExecContext(t.Context(),
+		`INSERT INTO payments (invoice_id, stripe_payment_reference, amount_cents, paid_at, kind, method)
+		 VALUES ($1, '', 5000, now(), 'manual', 'check')`,
+		invoiceID,
+	); err != nil {
+		t.Fatalf("seed manual payment: %v", err)
+	}
+	srv := newConnectWebhookServer(db)
+	defer srv.Close()
+
+	payload := invoicePaidPayload(t, "evt_already_paid_guard", "acct_already_paid_guard", "in_already_paid_guard", time.Now())
+	resp := postConnectWebhook(t, srv, payload, stripeConnectWebhookSecret)
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
+	}
+
+	payments := paymentsForInvoice(t, db, invoiceID)
+	if len(payments) != 1 {
+		t.Fatalf("payments for invoice = %d, want exactly 1 (the manual row, untouched)", len(payments))
+	}
+}
+
 // TestPostConnectWebhookHandler_InvoicePaidSurvivesNudgeEnqueueFailure is
 // ADR-0013's correctness constraint proven at this write site: the
 // handler's own tx already committed the payments row and the
@@ -1013,8 +1055,8 @@ func TestPostConnectWebhookHandler_InvoicePaymentFailedFlipsStatusWithoutPayment
 	}
 
 	status, _ := invoiceStatusAndPaidAt(t, db, invoiceID)
-	if status != "uncollectible" {
-		t.Fatalf("invoice status = %q, want %q", status, "uncollectible")
+	if status != invoiceStatusUncollectible {
+		t.Fatalf("invoice status = %q, want %q", status, invoiceStatusUncollectible)
 	}
 	if payments := paymentsForInvoice(t, db, invoiceID); len(payments) != 0 {
 		t.Fatalf("payments for invoice = %d, want 0", len(payments))
@@ -1048,8 +1090,8 @@ func TestPostConnectWebhookHandler_InvoicePaymentFailedReplayIsNoOp(t *testing.T
 	}
 
 	status, _ := invoiceStatusAndPaidAt(t, db, invoiceID)
-	if status != "uncollectible" {
-		t.Fatalf("invoice status = %q, want %q", status, "uncollectible")
+	if status != invoiceStatusUncollectible {
+		t.Fatalf("invoice status = %q, want %q", status, invoiceStatusUncollectible)
 	}
 }
 

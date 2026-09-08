@@ -170,6 +170,9 @@ export const fixture: RouteFixture<RouteParameters> = {
 		if (path.includes('/messages')) return jsonResponse({ items: [], hasMore: false });
 		if (path.includes('/plans/')) return jsonResponse('not found', 404);
 		if (path.endsWith('/contract/invoices')) return jsonResponse({ items: [] });
+		// #271: read alongside the Invoice list on every mount, whether or
+		// not this Engagement currently has a Contract to bill against.
+		if (path.endsWith('/payments/billing-mode')) return jsonResponse({ billingMode: 'stripe' });
 		if (path.endsWith('/contract')) return jsonResponse('not found', 404);
 		if (path.endsWith('/offers')) return jsonResponse({ items: [] });
 		if (path.endsWith('/staff')) return jsonResponse({ members: roster, invitations: { items: [] } });

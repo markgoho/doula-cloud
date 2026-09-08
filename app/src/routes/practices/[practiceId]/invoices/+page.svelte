@@ -62,11 +62,24 @@
 	const columns = [
 		{ label: 'Client', accessor: (invoice: PracticeInvoice) => invoice.clientName },
 		{
+			// #271: a by-hand Invoice's own per-Practice sequence, or
+			// Stripe's own `number` -- a check "for invoice ___" is matched
+			// against this, whichever rail it came from.
+			label: 'Reference',
+			accessor: (invoice: PracticeInvoice) => invoice.reference
+		},
+		{
 			label: 'Amount',
 			accessor: (invoice: PracticeInvoice) => formatAmount(invoice.amountCents),
 			numeric: true
 		},
 		{ label: 'Status', accessor: (invoice: PracticeInvoice) => invoiceStatusLabel(invoice.status) },
+		{
+			// #271: local and Stripe Invoices share one figure, so the rail
+			// is shown per row rather than as a second book.
+			label: 'Billed via',
+			accessor: (invoice: PracticeInvoice) => (invoice.billingMode === 'by_hand' ? 'By hand' : 'Stripe')
+		},
 		{
 			label: 'Billed',
 			accessor: (invoice: PracticeInvoice) => new Date(invoice.createdAt).toLocaleDateString()

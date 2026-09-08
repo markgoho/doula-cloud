@@ -4,10 +4,15 @@ import {
 	createInvoice,
 	formatAmount,
 	invoiceStatusLabel,
+	loadBillingMode,
 	loadInvoices,
 	loadPracticeInvoices,
 	practiceInvoicesPath,
-	unbillableContractMessage
+	recordPayment,
+	setBillingMode,
+	unbillableContractMessage,
+	voidInvoice,
+	writeOffInvoice
 } from './invoice.js';
 import { jsonResponse } from './testResponse.js';
 
@@ -91,6 +96,160 @@ describe('createInvoice', () => {
 		await expect(createInvoice(fetcher, 'practice-1', 'eng-1', 0)).rejects.toThrow(
 			'amountCents must be greater than zero'
 		);
+	});
+
+	it('carries billingMode when the caller supplies it (the inline "ask once")', async () => {
+		const invoice = {
+			id: 'inv-1',
+			contractId: 'contract-1',
+			status: 'open',
+			amountCents: 15_000,
+			currency: 'usd',
+			createdAt: '2026-01-01T00:00:00Z',
+			reference: 'INV-0001',
+			billingMode: 'by_hand'
+		};
+		const fetcher = vi.fn().mockResolvedValue(jsonResponse(invoice));
+
+		await createInvoice(fetcher, 'practice-1', 'eng-1', 15_000, 'by_hand');
+
+		expect(fetcher).toHaveBeenCalledWith('/api/practices/practice-1/engagements/eng-1/contract/invoices', {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ amountCents: 15_000, billingMode: 'by_hand' })
+		});
+	});
+});
+
+describe('loadBillingMode', () => {
+	it('returns the chosen mode', async () => {
+		const fetcher = vi.fn().mockResolvedValue(jsonResponse({ billingMode: 'stripe' }));
+
+		const result = await loadBillingMode(fetcher, 'practice-1');
+
+		expect(fetcher).toHaveBeenCalledWith('/api/practices/practice-1/payments/billing-mode');
+		expect(result).toBe('stripe');
+	});
+
+	it('returns undefined when the Practice has never chosen one', async () => {
+		const fetcher = vi.fn().mockResolvedValue(jsonResponse({}));
+
+		const result = await loadBillingMode(fetcher, 'practice-1');
+
+		expect(result).toBeUndefined();
+	});
+
+	it('throws with the response body text on a non-ok response', async () => {
+		const fetcher = vi.fn().mockResolvedValue(jsonResponse('internal error', 500));
+
+		await expect(loadBillingMode(fetcher, 'practice-1')).rejects.toThrow('internal error');
+	});
+});
+
+describe('setBillingMode', () => {
+	it('PUTs the new mode and returns it', async () => {
+		const fetcher = vi.fn().mockResolvedValue(jsonResponse({ billingMode: 'by_hand' }));
+
+		const result = await setBillingMode(fetcher, 'practice-1', 'by_hand');
+
+		expect(fetcher).toHaveBeenCalledWith('/api/practices/practice-1/payments/billing-mode', {
+			method: 'PUT',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ billingMode: 'by_hand' })
+		});
+		expect(result).toBe('by_hand');
+	});
+
+	it('throws with the response body text when a non-Owner is refused', async () => {
+		const fetcher = vi.fn().mockResolvedValue(jsonResponse('only a Practice Owner can do that', 403));
+
+		await expect(setBillingMode(fetcher, 'practice-1', 'by_hand')).rejects.toThrow(
+			'only a Practice Owner can do that'
+		);
+	});
+});
+
+describe('recordPayment', () => {
+	it('POSTs the payment details and returns the recorded Payment', async () => {
+		const payment = {
+			id: 'pay-1',
+			invoiceId: 'inv-1',
+			amountCents: 15_000,
+			method: 'check',
+			note: 'check #204',
+			paidAt: '2026-01-01T00:00:00Z',
+			createdAt: '2026-01-01T00:00:00Z'
+		};
+		const fetcher = vi.fn().mockResolvedValue(jsonResponse(payment));
+
+		const result = await recordPayment(fetcher, 'practice-1', 'inv-1', {
+			method: 'check',
+			note: 'check #204',
+			paidOn: '2026-01-01'
+		});
+
+		expect(fetcher).toHaveBeenCalledWith('/api/practices/practice-1/invoices/inv-1/payments', {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ method: 'check', note: 'check #204', paidOn: '2026-01-01' })
+		});
+		expect(result).toEqual(payment);
+	});
+
+	it('throws with the response body text when the Invoice is not open', async () => {
+		const fetcher = vi.fn().mockResolvedValue(
+			jsonResponse('This Invoice is not open, so nothing can be recorded or changed against it.', 409)
+		);
+
+		await expect(
+			recordPayment(fetcher, 'practice-1', 'inv-1', { method: 'cash', paidOn: '2026-01-01' })
+		).rejects.toThrow('This Invoice is not open, so nothing can be recorded or changed against it.');
+	});
+});
+
+describe('voidInvoice', () => {
+	it('POSTs to the void action and returns the new status', async () => {
+		const fetcher = vi.fn().mockResolvedValue(jsonResponse({ status: 'void' }));
+
+		const result = await voidInvoice(fetcher, 'practice-1', 'inv-1');
+
+		expect(fetcher).toHaveBeenCalledWith('/api/practices/practice-1/invoices/inv-1/void', {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: '{}'
+		});
+		expect(result).toEqual({ status: 'void' });
+	});
+
+	it('throws with the response body text on a refusal', async () => {
+		const fetcher = vi
+			.fn()
+			.mockResolvedValue(jsonResponse('A Stripe-backed Invoice cannot be voided or written off here.', 409));
+
+		await expect(voidInvoice(fetcher, 'practice-1', 'inv-1')).rejects.toThrow(
+			'A Stripe-backed Invoice cannot be voided or written off here.'
+		);
+	});
+});
+
+describe('writeOffInvoice', () => {
+	it('POSTs to the write-off action and returns the new status', async () => {
+		const fetcher = vi.fn().mockResolvedValue(jsonResponse({ status: 'uncollectible' }));
+
+		const result = await writeOffInvoice(fetcher, 'practice-1', 'inv-1');
+
+		expect(fetcher).toHaveBeenCalledWith('/api/practices/practice-1/invoices/inv-1/write-off', {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: '{}'
+		});
+		expect(result).toEqual({ status: 'uncollectible' });
+	});
+
+	it('throws with the response body text on a refusal', async () => {
+		const fetcher = vi.fn().mockResolvedValue(jsonResponse('This Invoice is not open.', 409));
+
+		await expect(writeOffInvoice(fetcher, 'practice-1', 'inv-1')).rejects.toThrow('This Invoice is not open.');
 	});
 });
 

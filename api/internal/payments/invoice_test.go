@@ -2,8 +2,10 @@ package payments_test
 
 import (
 	"bytes"
+	"database/sql"
 	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strconv"
@@ -23,6 +25,16 @@ import (
 // and assertions across this package's test files -- pulled out once
 // goconst's package-wide "open" repeat count crossed its threshold.
 const invoiceStatusOpen = "open"
+
+// The other four invoices.status values, named for the same goconst
+// reason as invoiceStatusOpen above -- #271's new fixtures and
+// assertions crossed the threshold for each of these too.
+const (
+	invoiceStatusDraft         = "draft"
+	invoiceStatusPaid          = "paid"
+	invoiceStatusVoid          = "void"
+	invoiceStatusUncollectible = "uncollectible"
+)
 
 // seedContractWithStatus seeds a Contract row directly, bypassing the
 // contracts package's own handlers, with an explicit status so tests can
@@ -85,6 +97,11 @@ func seedConnectAccountWithCardStatus(t *testing.T, db *testdb.DB, practiceID, a
 	); err != nil {
 		t.Fatalf("seed connect account: %v", err)
 	}
+	// #271: every fixture that connects Stripe is, by construction, a
+	// Stripe-billing Practice -- this stands in for the "ask once" write
+	// resolveBillingMode would otherwise require on a Practice's first
+	// PostInvoiceHandler call.
+	testdb.SeedBillingMode(t, db, practiceID, string(payments.BillingModeStripe))
 }
 
 // seedInvoice inserts an invoices row directly at an explicit createdAt,
@@ -96,8 +113,8 @@ func seedConnectAccountWithCardStatus(t *testing.T, db *testdb.DB, practiceID, a
 func seedInvoice(t *testing.T, db *testdb.DB, practiceID, contractID, stripeInvoiceID, status string, amountCents int64, createdAt time.Time) (invoiceID string) {
 	t.Helper()
 	if err := db.Admin.QueryRowContext(t.Context(),
-		`INSERT INTO invoices (practice_id, contract_id, stripe_invoice_id, status, amount_cents, currency, created_at)
-		 VALUES ($1, $2, $3, $4::invoice_status, $5, 'usd', $6) RETURNING id`,
+		`INSERT INTO invoices (practice_id, contract_id, stripe_invoice_id, status, amount_cents, currency, created_at, reference)
+		 VALUES ($1, $2, $3, $4::invoice_status, $5, 'usd', $6, $3) RETURNING id`,
 		practiceID, contractID, stripeInvoiceID, status, amountCents, createdAt,
 	).Scan(&invoiceID); err != nil {
 		t.Fatalf("seed invoice: %v", err)
@@ -189,6 +206,7 @@ func TestPostInvoiceHandler_NotConnectedRefuses(t *testing.T) {
 	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
 	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jane Client", "jane@example.com")
 	seedSignedContract(t, db, engagementID)
+	testdb.SeedBillingMode(t, db, practiceID, string(payments.BillingModeStripe))
 	client := payments.NewFakeClient()
 
 	srv, session := newInvoiceServer(t, db, uid, client)
@@ -277,6 +295,7 @@ func TestPostInvoiceHandler_CardPaymentsActiveWithNoAccountReturns500(t *testing
 	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jane Client", "jane@example.com")
 	seedSignedContract(t, db, engagementID)
 	testdb.SeedClientsCanPay(t, db, practiceID)
+	testdb.SeedBillingMode(t, db, practiceID, string(payments.BillingModeStripe))
 	client := payments.NewFakeClient()
 
 	srv, session := newInvoiceServer(t, db, uid, client)
@@ -672,8 +691,8 @@ func TestPostInvoiceHandler_FinalizeInvoiceFailureReturns500ButPersistsDraft(t *
 	if err := db.Admin.QueryRowContext(t.Context(), `SELECT status FROM invoices LIMIT 1`).Scan(&status); err != nil {
 		t.Fatalf("query invoice status: %v", err)
 	}
-	if status != "draft" {
-		t.Fatalf("persisted invoice status = %q, want %q", status, "draft")
+	if status != invoiceStatusDraft {
+		t.Fatalf("persisted invoice status = %q, want %q", status, invoiceStatusDraft)
 	}
 }
 
@@ -691,7 +710,7 @@ func TestGetInvoicesHandler_ListsAcrossVoidedContract(t *testing.T) {
 	currentContractID := seedDraftContract(t, db, engagementID)
 
 	base := time.Now().Add(-time.Hour)
-	oldInvoiceID := seedInvoice(t, db, practiceID, voidedContractID, "in_old", "paid", 10000, base)
+	oldInvoiceID := seedInvoice(t, db, practiceID, voidedContractID, "in_old", invoiceStatusPaid, 10000, base)
 	newInvoiceID := seedInvoice(t, db, practiceID, currentContractID, "in_new", invoiceStatusOpen, 20000, base.Add(time.Minute))
 
 	client := payments.NewFakeClient()
@@ -730,7 +749,7 @@ func TestGetInvoicesHandler_PaidAtRoundTrips(t *testing.T) {
 	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
 	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jane Client", "jane@example.com")
 	contractID := seedDraftContract(t, db, engagementID)
-	invoiceID := seedInvoice(t, db, practiceID, contractID, "in_paid", "paid", 10000, time.Now())
+	invoiceID := seedInvoice(t, db, practiceID, contractID, "in_paid", invoiceStatusPaid, 10000, time.Now())
 	paidAt := time.Now().Round(time.Second)
 	if _, err := db.Admin.ExecContext(t.Context(), `UPDATE invoices SET paid_at = $1 WHERE id = $2`, paidAt, invoiceID); err != nil {
 		t.Fatalf("seed paid_at: %v", err)
@@ -906,5 +925,358 @@ func TestGetInvoicesHandler_InvalidCursorReturns400(t *testing.T) {
 		if resp.StatusCode != http.StatusBadRequest {
 			t.Fatalf("%s: status = %d, want %d", name, resp.StatusCode, http.StatusBadRequest)
 		}
+	}
+}
+
+// postInvoiceWithBillingMode is postInvoiceBody with a billingMode field
+// set on the request, for #271's "ask once, inline" path.
+// postInvoiceWithBillingModeAmountCents is the fixed amount every caller
+// of postInvoiceWithBillingMode wants -- none of them are testing the
+// amount, so it is not a parameter (golangci-lint's unparam).
+const postInvoiceWithBillingModeAmountCents = 15000
+
+func postInvoiceWithBillingMode(t *testing.T, srv *httptest.Server, session, practiceID, engagementID, billingMode string) *http.Response {
+	t.Helper()
+	body, err := json.Marshal(payments.CreateInvoiceRequest{AmountCents: postInvoiceWithBillingModeAmountCents, BillingMode: &billingMode})
+	if err != nil {
+		t.Fatalf("marshal request: %v", err)
+	}
+	return postInvoiceBody(t, srv, session, practiceID, engagementID, string(body))
+}
+
+// billingModeOfPractice reads practiceID's raw billing_mode column.
+func billingModeOfPractice(t *testing.T, db *testdb.DB, practiceID string) (mode string, ok bool, err error) {
+	t.Helper()
+	var raw sql.NullString
+	if err := db.Admin.QueryRowContext(t.Context(), `SELECT billing_mode FROM practices WHERE id = $1`, practiceID).Scan(&raw); err != nil {
+		return "", false, fmt.Errorf("query billing mode: %w", err)
+	}
+	return raw.String, raw.Valid, nil
+}
+
+// TestPostInvoiceHandler_BillingModeRequiredWhenUnset proves #271's
+// refusal when a Practice has never chosen a billing mode and the request
+// raising its first Invoice supplies none either.
+func TestPostInvoiceHandler_BillingModeRequiredWhenUnset(t *testing.T) {
+	db := testdb.New(t)
+	const uid = "invoice-billing-mode-required"
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
+	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jane Client", "jane@example.com")
+	seedSignedContract(t, db, engagementID)
+	client := payments.NewFakeClient()
+
+	srv, session := newInvoiceServer(t, db, uid, client)
+	defer srv.Close()
+
+	resp := postInvoice(t, srv, session, practiceID, engagementID, 15000)
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusUnprocessableEntity {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusUnprocessableEntity)
+	}
+	var out struct {
+		Message string `json:"message"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if out.Message != payments.MsgBillingModeRequired {
+		t.Fatalf("message = %q, want %q", out.Message, payments.MsgBillingModeRequired)
+	}
+	if got := invoiceCount(t, db); got != 0 {
+		t.Fatalf("invoices row count = %d, want 0", got)
+	}
+}
+
+// TestPostInvoiceHandler_BillingModeInvalidValueRefused proves a
+// nonsense billingMode value 400s rather than being written.
+func TestPostInvoiceHandler_BillingModeInvalidValueRefused(t *testing.T) {
+	db := testdb.New(t)
+	const uid = "invoice-billing-mode-invalid"
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
+	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jane Client", "jane@example.com")
+	seedSignedContract(t, db, engagementID)
+	client := payments.NewFakeClient()
+
+	srv, session := newInvoiceServer(t, db, uid, client)
+	defer srv.Close()
+
+	resp := postInvoiceWithBillingMode(t, srv, session, practiceID, engagementID, "cash_app")
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
+	}
+	mode, ok, err := billingModeOfPractice(t, db, practiceID)
+	if err != nil {
+		t.Fatalf("query billing mode: %v", err)
+	}
+	if ok {
+		t.Fatalf("billing_mode = %q, want unset after a rejected value", mode)
+	}
+}
+
+// TestPostInvoiceHandler_FailedFirstInvoiceDoesNotLockInBillingMode
+// proves a Practice's first-ever billing_mode choice is not persisted
+// when the Invoice it was named on then fails downstream --
+// staffauth.Middleware commits this package's tx even on a non-2xx
+// response, so a naive "persist as soon as chosen" would durably lock in
+// a mode nobody's Invoice ever actually used.
+func TestPostInvoiceHandler_FailedFirstInvoiceDoesNotLockInBillingMode(t *testing.T) {
+	db := testdb.New(t)
+	const uid = "invoice-billing-mode-not-locked-in"
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
+	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "No Email Client", "")
+	seedSignedContract(t, db, engagementID)
+	fakeClient := payments.NewFakeClient()
+	accountID, err := fakeClient.CreateAccount(t.Context(), payments.AccountProfile{
+		PracticeID:   practiceID,
+		PracticeName: fixturePracticeName,
+		BusinessURL:  fixtureOwnSiteURL,
+	})
+	if err != nil {
+		t.Fatalf("fixture CreateAccount: %v", err)
+	}
+	// Connected and card-payments-active, but billing_mode left unset --
+	// unlike seedConnectAccount, which stands in a billing_mode=stripe
+	// row for every other test's convenience.
+	if _, err := db.Admin.ExecContext(t.Context(),
+		`UPDATE practices SET stripe_connect_account_id = $1, stripe_connect_card_payments_status = 'active' WHERE id = $2`,
+		accountID, practiceID,
+	); err != nil {
+		t.Fatalf("seed connect account: %v", err)
+	}
+
+	srv, session := newInvoiceServer(t, db, uid, fakeClient)
+	defer srv.Close()
+
+	resp := postInvoiceWithBillingMode(t, srv, session, practiceID, engagementID, string(payments.BillingModeStripe))
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusUnprocessableEntity {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusUnprocessableEntity)
+	}
+	if got := invoiceCount(t, db); got != 0 {
+		t.Fatalf("invoices row count = %d, want 0", got)
+	}
+	_, ok, err := billingModeOfPractice(t, db, practiceID)
+	if err != nil {
+		t.Fatalf("query billing mode: %v", err)
+	}
+	if ok {
+		t.Fatalf("billing_mode was persisted even though the Invoice it was chosen for failed -- want it left unset")
+	}
+}
+
+// TestPostInvoiceHandler_ByHandInvoiceCreatedOpenNoStripeCall proves
+// #271's by-hand rail: raised 'open' immediately, no Stripe call at all,
+// a sequence-derived reference, and the Practice's billing_mode is
+// persisted from the request's first-ever value.
+func TestPostInvoiceHandler_ByHandInvoiceCreatedOpenNoStripeCall(t *testing.T) {
+	db := testdb.New(t)
+	const uid = "invoice-by-hand-create"
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
+	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jane Client", "jane@example.com")
+	contractID := seedSignedContract(t, db, engagementID)
+	client := payments.NewFakeClient()
+
+	srv, session := newInvoiceServer(t, db, uid, client)
+	defer srv.Close()
+
+	resp := postInvoiceWithBillingMode(t, srv, session, practiceID, engagementID, string(payments.BillingModeByHand))
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusCreated {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusCreated)
+	}
+	var out payments.InvoiceView
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if out.ContractID != contractID {
+		t.Fatalf("invoice.contractId = %q, want %q", out.ContractID, contractID)
+	}
+	if out.Status != invoiceStatusOpen {
+		t.Fatalf("invoice.status = %q, want %q", out.Status, invoiceStatusOpen)
+	}
+	if out.BillingMode != string(payments.BillingModeByHand) {
+		t.Fatalf("invoice.billingMode = %q, want %q", out.BillingMode, payments.BillingModeByHand)
+	}
+	if out.Reference != "INV-0001" {
+		t.Fatalf("invoice.reference = %q, want %q", out.Reference, "INV-0001")
+	}
+	if len(client.CreateInvoiceCalls) != 0 {
+		t.Fatalf("CreateInvoice calls = %d, want 0 -- a by-hand Invoice must never reach Stripe", len(client.CreateInvoiceCalls))
+	}
+	if len(client.FinalizeInvoiceIDs) != 0 {
+		t.Fatalf("FinalizeInvoice calls = %d, want 0", len(client.FinalizeInvoiceIDs))
+	}
+	mode, ok, err := billingModeOfPractice(t, db, practiceID)
+	if err != nil {
+		t.Fatalf("query billing mode: %v", err)
+	}
+	if !ok || mode != string(payments.BillingModeByHand) {
+		t.Fatalf("billing_mode = (%q, ok=%v), want (%q, true)", mode, ok, payments.BillingModeByHand)
+	}
+}
+
+// TestPostInvoiceHandler_ByHandInvoiceSequenceIncrementsAcrossInvoices
+// proves the per-Practice reference sequence claims a distinct number for
+// each by-hand Invoice, in order.
+func TestPostInvoiceHandler_ByHandInvoiceSequenceIncrementsAcrossInvoices(t *testing.T) {
+	db := testdb.New(t)
+	const uid = "invoice-by-hand-sequence"
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
+	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jane Client", "jane@example.com")
+	seedSignedContract(t, db, engagementID)
+	client := payments.NewFakeClient()
+
+	srv, session := newInvoiceServer(t, db, uid, client)
+	defer srv.Close()
+
+	first := postInvoiceWithBillingMode(t, srv, session, practiceID, engagementID, string(payments.BillingModeByHand))
+	var firstOut payments.InvoiceView
+	if err := json.NewDecoder(first.Body).Decode(&firstOut); err != nil {
+		t.Fatalf("decode first response: %v", err)
+	}
+	_ = first.Body.Close()
+
+	// The mode is already set now, so the second request need not (and,
+	// per #271, must not have its own value honored) repeat billingMode.
+	second := postInvoice(t, srv, session, practiceID, engagementID, 22000)
+	var secondOut payments.InvoiceView
+	if err := json.NewDecoder(second.Body).Decode(&secondOut); err != nil {
+		t.Fatalf("decode second response: %v", err)
+	}
+	_ = second.Body.Close()
+
+	if firstOut.Reference != "INV-0001" {
+		t.Fatalf("first reference = %q, want %q", firstOut.Reference, "INV-0001")
+	}
+	if secondOut.Reference != "INV-0002" {
+		t.Fatalf("second reference = %q, want %q", secondOut.Reference, "INV-0002")
+	}
+}
+
+// TestPostInvoiceHandler_ByHandInvoiceIgnoresLaterBillingModeRequest
+// proves #271's "changing the mode is the Owner's alone, afterward" rule
+// from the create side: once a Practice's billing_mode is set, a later
+// Invoice-raise request naming a different mode is silently ignored
+// (the established mode governs), never silently switched.
+func TestPostInvoiceHandler_ByHandInvoiceIgnoresLaterBillingModeRequest(t *testing.T) {
+	db := testdb.New(t)
+	const uid = "invoice-by-hand-ignore-later-mode"
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
+	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jane Client", "jane@example.com")
+	seedSignedContract(t, db, engagementID)
+	client := payments.NewFakeClient()
+
+	srv, session := newInvoiceServer(t, db, uid, client)
+	defer srv.Close()
+
+	first := postInvoiceWithBillingMode(t, srv, session, practiceID, engagementID, string(payments.BillingModeByHand))
+	_ = first.Body.Close()
+
+	// This request names "stripe", but the Practice already chose
+	// by_hand -- it must be ignored, and this Invoice raised by hand too.
+	resp := postInvoiceWithBillingMode(t, srv, session, practiceID, engagementID, string(payments.BillingModeStripe))
+	defer resp.Body.Close()
+	var out payments.InvoiceView
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if out.BillingMode != string(payments.BillingModeByHand) {
+		t.Fatalf("invoice.billingMode = %q, want %q (the already-established mode)", out.BillingMode, payments.BillingModeByHand)
+	}
+	if len(client.CreateInvoiceCalls) != 0 {
+		t.Fatalf("CreateInvoice calls = %d, want 0 -- billingMode=stripe must be ignored once a mode is set", len(client.CreateInvoiceCalls))
+	}
+}
+
+// TestPostInvoiceHandler_ByHandInvoiceClientWithNoEmailStillSucceeds
+// amends #430's refusal (errClientNoEmail): a by-hand Invoice mails
+// nothing, so an absent Client email must not block it.
+func TestPostInvoiceHandler_ByHandInvoiceClientWithNoEmailStillSucceeds(t *testing.T) {
+	db := testdb.New(t)
+	const uid = "invoice-by-hand-no-email"
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
+	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jane Client", "")
+	seedSignedContract(t, db, engagementID)
+	client := payments.NewFakeClient()
+
+	srv, session := newInvoiceServer(t, db, uid, client)
+	defer srv.Close()
+
+	resp := postInvoiceWithBillingMode(t, srv, session, practiceID, engagementID, string(payments.BillingModeByHand))
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusCreated {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusCreated)
+	}
+}
+
+// TestPostInvoiceHandler_StripeInvoiceUsesStripeNumberAsReference proves
+// #271's Stripe-rail reference: once FinalizeInvoice succeeds, the
+// persisted Invoice's reference is Stripe's own `number`, not its
+// internal invoice id.
+func TestPostInvoiceHandler_StripeInvoiceUsesStripeNumberAsReference(t *testing.T) {
+	db := testdb.New(t)
+	const uid = "invoice-stripe-reference"
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
+	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jane Client", "jane@example.com")
+	seedSignedContract(t, db, engagementID)
+	client := payments.NewFakeClient()
+	accountID, err := client.CreateAccount(t.Context(), payments.AccountProfile{
+		PracticeID:   practiceID,
+		PracticeName: fixturePracticeName,
+		BusinessURL:  fixtureOwnSiteURL,
+	})
+	if err != nil {
+		t.Fatalf("fixture CreateAccount: %v", err)
+	}
+	seedConnectAccount(t, db, practiceID, accountID)
+
+	srv, session := newInvoiceServer(t, db, uid, client)
+	defer srv.Close()
+
+	resp := postInvoice(t, srv, session, practiceID, engagementID, 15000)
+	defer resp.Body.Close()
+	var out payments.InvoiceView
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if out.BillingMode != string(payments.BillingModeStripe) {
+		t.Fatalf("invoice.billingMode = %q, want %q", out.BillingMode, payments.BillingModeStripe)
+	}
+	if !strings.HasPrefix(out.Reference, "STRIPE-") {
+		t.Fatalf("invoice.reference = %q, want the fake client's deterministic STRIPE-<id> fallback", out.Reference)
+	}
+}
+
+// TestGetInvoicesHandler_ByHandInvoiceReportsByHandBillingMode proves a
+// listed by-hand Invoice (NULL stripe_invoice_id) reports
+// billingMode="by_hand" -- billingModeOf's NULL branch.
+func TestGetInvoicesHandler_ByHandInvoiceReportsByHandBillingMode(t *testing.T) {
+	db := testdb.New(t)
+	const uid = "invoice-list-by-hand-mode"
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
+	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jane Client", "jane@example.com")
+	contractID := seedSignedContract(t, db, engagementID)
+	seedByHandInvoice(t, db, practiceID, contractID)
+
+	srv, session := newInvoiceServer(t, db, uid, payments.NewFakeClient())
+	defer srv.Close()
+
+	resp := getInvoices(t, srv, session, practiceID, engagementID, "")
+	defer resp.Body.Close()
+	var out payments.ListInvoicesResponse
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if len(out.Items) != 1 {
+		t.Fatalf("items = %d, want 1", len(out.Items))
+	}
+	if out.Items[0].BillingMode != string(payments.BillingModeByHand) {
+		t.Fatalf("billingMode = %q, want %q", out.Items[0].BillingMode, payments.BillingModeByHand)
 	}
 }

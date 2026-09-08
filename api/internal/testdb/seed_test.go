@@ -50,6 +50,25 @@ func TestSeedClientsCanPay(t *testing.T) {
 	}
 }
 
+// TestSeedBillingMode proves the practices row's billing_mode is set
+// directly, bypassing resolveBillingMode's own write path (#271).
+func TestSeedBillingMode(t *testing.T) {
+	db := testdb.New(t)
+	practiceID := testdb.SeedPractice(t, db, "Seed Billing Mode Test")
+
+	testdb.SeedBillingMode(t, db, practiceID, "by_hand")
+
+	var mode string
+	if err := db.Admin.QueryRowContext(t.Context(),
+		`SELECT billing_mode FROM practices WHERE id = $1`, practiceID,
+	).Scan(&mode); err != nil {
+		t.Fatalf("read seeded billing mode: %v", err)
+	}
+	if mode != "by_hand" {
+		t.Fatalf("billing_mode = %q, want by_hand", mode)
+	}
+}
+
 // TestSeedStaffAtPractice proves SeedStaffAtPractice's Staff row and
 // practice_memberships row land with the roles and employment type
 // passed in -- every package composing seed helpers on top of this one

@@ -330,18 +330,37 @@ func (c *StripeAPIClient) CreateInvoice(ctx context.Context, accountID, customer
 
 // FinalizeInvoice finalizes invoiceID on accountID's connected account --
 // the transition that makes it payable and triggers Stripe's hosted
-// invoice email to the Customer -- and returns its hosted payment page URL.
-func (c *StripeAPIClient) FinalizeInvoice(ctx context.Context, accountID, invoiceID string) (string, error) {
+// invoice email to the Customer -- and returns its hosted payment page URL
+// and Stripe's own `number`, which Stripe assigns only once finalized.
+func (c *StripeAPIClient) FinalizeInvoice(ctx context.Context, accountID, invoiceID string) (string, string, error) {
 	// coverage:ignore reason: requires a real Stripe API key and network access, not exercised by unit tests
 	inv, err := c.client.V1Invoices.FinalizeInvoice(ctx, invoiceID, &stripe.InvoiceFinalizeInvoiceParams{
 		Params: stripe.Params{StripeAccount: stripe.String(accountID)},
 	})
 	// coverage:ignore reason: requires a real Stripe API key and network access, not exercised by unit tests
 	if err != nil {
-		return "", fmt.Errorf("payments: finalize stripe invoice: %w", err)
+		return "", "", fmt.Errorf("payments: finalize stripe invoice: %w", err)
 	}
 	// coverage:ignore reason: requires a real Stripe API key and network access, not exercised by unit tests
-	return inv.HostedInvoiceURL, nil
+	return inv.HostedInvoiceURL, inv.Number, nil
+}
+
+// PayOutOfBand marks invoiceID paid on accountID's connected account with
+// paid_out_of_band=true -- Stripe's own flag for money that arrived
+// outside Stripe. It charges nothing and schedules Stripe's own
+// invoice.paid webhook echo back at PostConnectWebhookHandler (#271).
+func (c *StripeAPIClient) PayOutOfBand(ctx context.Context, accountID, invoiceID string) error {
+	// coverage:ignore reason: requires a real Stripe API key and network access, not exercised by unit tests
+	_, err := c.client.V1Invoices.Pay(ctx, invoiceID, &stripe.InvoicePayParams{
+		Params:        stripe.Params{StripeAccount: stripe.String(accountID)},
+		PaidOutOfBand: new(true),
+	})
+	// coverage:ignore reason: requires a real Stripe API key and network access, not exercised by unit tests
+	if err != nil {
+		return fmt.Errorf("payments: pay stripe invoice out of band: %w", err)
+	}
+	// coverage:ignore reason: requires a real Stripe API key and network access, not exercised by unit tests
+	return nil
 }
 
 // RetrieveInvoicePaymentReference reports the PaymentIntent id behind

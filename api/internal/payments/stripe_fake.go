@@ -43,6 +43,14 @@ type FakeCustomerCall struct {
 	CustomerID string
 }
 
+// FakeAccountInvoiceCall records one connected-account-scoped Invoice
+// call -- which connected account, and which Stripe Invoice on it. Used
+// by PayOutOfBand.
+type FakeAccountInvoiceCall struct {
+	AccountID string
+	InvoiceID string
+}
+
 // FakeClient is an in-memory Client double, injected into handler tests
 // instead of a real Stripe account -- mirrors billing.FakeStripeClient.
 // The *Err fields, when set, are returned by the corresponding method
@@ -64,6 +72,10 @@ type FakeClient struct {
 	CreateCustomerCalls []FakeCreateCustomerCall
 	CreateInvoiceCalls  []FakeCreateInvoiceCall
 	FinalizeInvoiceIDs  []string
+	// PayOutOfBandCalls records every (account, invoice) pair passed to
+	// PayOutOfBand -- #271's tests assert a manual Payment against a
+	// Stripe-backed Invoice calls this before writing anything locally.
+	PayOutOfBandCalls []FakeAccountInvoiceCall
 	// DeleteCustomerCalls and RedactionJobCalls are #394's two erasure
 	// acts, recorded as (connected account, Customer) pairs so a test can
 	// prove erasure reached the right Customer on the right Practice's
@@ -90,11 +102,23 @@ type FakeClient struct {
 	RedactionJobErr      error
 	FinalizeInvoiceErr   error
 	PaymentReferenceErr  error
+	PayOutOfBandErr      error
+
+	// FinalizeInvoiceNumber, keyed by the fake invoice id FinalizeInvoice
+	// returns, is what it reports as Stripe's `number` -- tests set this to
+	// control the reference #271's PostInvoiceHandler stores for a
+	// Stripe-backed Invoice. Unset invoice ids get a deterministic fallback
+	// so a test that never cares still gets a non-empty reference.
+	FinalizeInvoiceNumber map[string]string
 }
 
 // NewFakeClient returns a FakeClient with no recorded calls.
 func NewFakeClient() *FakeClient {
-	return &FakeClient{Statuses: map[string]AccountStatus{}, PaymentReferences: map[string]string{}}
+	return &FakeClient{
+		Statuses:              map[string]AccountStatus{},
+		PaymentReferences:     map[string]string{},
+		FinalizeInvoiceNumber: map[string]string{},
+	}
 }
 
 // CreateAccount returns a deterministic fake Stripe Connect account id, or
@@ -202,15 +226,34 @@ func (f *FakeClient) CreateRedactionJob(_ context.Context, accountID, customerID
 }
 
 // FinalizeInvoice records the call and returns a deterministic fake
-// hosted invoice URL, or FinalizeInvoiceErr if a test set one.
-func (f *FakeClient) FinalizeInvoice(_ context.Context, _, invoiceID string) (string, error) {
+// hosted invoice URL and Stripe number, or FinalizeInvoiceErr if a test
+// set one. The number is whatever a test put in FinalizeInvoiceNumber for
+// invoiceID, or a deterministic fallback ("STRIPE-<invoiceID>") when a
+// test left that unset.
+func (f *FakeClient) FinalizeInvoice(_ context.Context, _, invoiceID string) (string, string, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if f.FinalizeInvoiceErr != nil {
-		return "", f.FinalizeInvoiceErr
+		return "", "", f.FinalizeInvoiceErr
 	}
 	f.FinalizeInvoiceIDs = append(f.FinalizeInvoiceIDs, invoiceID)
-	return "https://invoice.stripe.test/" + invoiceID, nil
+	number, ok := f.FinalizeInvoiceNumber[invoiceID]
+	if !ok {
+		number = "STRIPE-" + invoiceID
+	}
+	return "https://invoice.stripe.test/" + invoiceID, number, nil
+}
+
+// PayOutOfBand records the call, or returns PayOutOfBandErr if a test set
+// one.
+func (f *FakeClient) PayOutOfBand(_ context.Context, accountID, invoiceID string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.PayOutOfBandErr != nil {
+		return f.PayOutOfBandErr
+	}
+	f.PayOutOfBandCalls = append(f.PayOutOfBandCalls, FakeAccountInvoiceCall{AccountID: accountID, InvoiceID: invoiceID})
+	return nil
 }
 
 // VerifyWebhookSignature is not exercised through FakeClient by any

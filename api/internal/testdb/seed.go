@@ -38,6 +38,21 @@ func SeedClientsCanPay(t *testing.T, db *DB, practiceID string) {
 	}
 }
 
+// SeedBillingMode sets practiceID's billing_mode directly, bypassing
+// resolveBillingMode's own "ask once" write path (#271) -- the fixture
+// every pre-#271 PostInvoiceHandler test needs, now that a Practice with
+// no billing_mode set at all refuses to raise an Invoice. mode is
+// "stripe" or "by_hand".
+func SeedBillingMode(t *testing.T, db *DB, practiceID, mode string) {
+	t.Helper()
+	if _, err := db.Admin.ExecContext(t.Context(),
+		`UPDATE practices SET billing_mode = $2::practice_billing_mode WHERE id = $1`, practiceID, mode,
+	); err != nil {
+		// coverage:ignore reason: fixture update failure, not exercised by the happy-path test
+		t.Fatalf("testdb: seed billing mode %q: %v", practiceID, err)
+	}
+}
+
 // SeedStaff inserts a bare Staff row, with no practice_memberships row,
 // using the superuser Admin connection. Named "Test Staff "+identityUID
 // and emailed identityUID+"@example.com", the same derivation
