@@ -18,11 +18,13 @@ import (
 const pageSize = 30
 
 // Visit is one row of a Visit list: who it's assigned to, when it was
-// created, when it is scheduled (#250), and its own free-text notes
-// (#251) -- both nullable, since a Visit may carry no scheduled instant
-// and no notes have ever been written against it. Staff-only: no
-// Client-facing read path exists for a Visit at all (#251's own AC), so
-// there is nothing to gate Notes out of yet.
+// created, when it is scheduled (#250), its own free-text notes (#251)
+// -- both nullable, since a Visit may carry no scheduled instant and no
+// notes have ever been written against it -- and its derived type
+// (#281). Staff-only: no Client-facing read path exists for a Visit at
+// all (#251's own AC), so there is nothing to gate Notes or Type out of
+// yet -- Type inherits this same gate rather than a rule of its own,
+// since nothing about it is more sensitive than the Visit it describes.
 type Visit struct {
 	VisitID     string     `json:"visitId"`
 	StaffID     string     `json:"staffId"`
@@ -30,6 +32,12 @@ type Visit struct {
 	CreatedAt   time.Time  `json:"createdAt"`
 	ScheduledAt *time.Time `json:"scheduledAt,omitempty"`
 	Notes       *string    `json:"notes,omitempty"`
+	// Type is DeriveType's own output (type.go): prenatal, birth or
+	// postpartum. Never stored, never written -- listVisits computes it
+	// fresh from this row's own instant and the Engagement's
+	// pregnancy_ended_on on every read, so correcting that date retypes
+	// every Visit at once with no separate write and no backfill.
+	Type string `json:"type"`
 }
 
 // ListResponse is the standard cursor-pagination envelope from
@@ -125,10 +133,18 @@ func ListHandler() http.Handler {
 // listVisits is filtered by engagementID explicitly, on top of the RLS
 // scoping staffauth.Middleware already set up on tx -- the app layer's own
 // filter, so a bug in either one alone can't leak rows.
+//
+// Joins engagements for pregnancy_ended_on -- #281's own pivot -- rather
+// than a second query per row: one Engagement backs every row this
+// query returns, so the join adds one lookup for the whole page, not
+// one per Visit. Read as ::text, matching outcome.go's own convention,
+// so DeriveType compares two YYYY-MM-DD strings rather than a
+// time.Time whose zone would have to be guessed.
 func listVisits(ctx context.Context, tx *sql.Tx, engagementID string, after *pagecursor.Cursor) ([]Visit, error) {
-	query := `SELECT v.id, s.id, s.name, v.created_at, v.scheduled_at, v.notes
+	query := `SELECT v.id, s.id, s.name, v.created_at, v.scheduled_at, v.notes, e.pregnancy_ended_on::text
 		 FROM visits v
 		 JOIN staff s ON s.id = v.staff_id
+		 JOIN engagements e ON e.id = v.engagement_id
 		 WHERE v.engagement_id = $1`
 	args := []any{engagementID}
 	if after != nil {
@@ -151,7 +167,8 @@ func listVisits(ctx context.Context, tx *sql.Tx, engagementID string, after *pag
 		var v Visit
 		var scheduledAt sql.NullTime
 		var notes sql.NullString
-		if err := rows.Scan(&v.VisitID, &v.StaffID, &v.StaffName, &v.CreatedAt, &scheduledAt, &notes); err != nil {
+		var pregnancyEndedOn sql.NullString
+		if err := rows.Scan(&v.VisitID, &v.StaffID, &v.StaffName, &v.CreatedAt, &scheduledAt, &notes, &pregnancyEndedOn); err != nil {
 			// coverage:ignore reason: row scan failure, not exercised by unit tests
 			return nil, fmt.Errorf("visit: scan visit row: %w", err)
 		}
@@ -161,6 +178,18 @@ func listVisits(ctx context.Context, tx *sql.Tx, engagementID string, after *pag
 		if notes.Valid {
 			v.Notes = &notes.String
 		}
+		// #281: the Visit's own scheduled instant when it has one,
+		// otherwise when it was logged -- the coalesce DeriveType's own
+		// doc comment leaves to the caller.
+		at := v.CreatedAt
+		if v.ScheduledAt != nil {
+			at = *v.ScheduledAt
+		}
+		var endedOn *string
+		if pregnancyEndedOn.Valid {
+			endedOn = &pregnancyEndedOn.String
+		}
+		v.Type = DeriveType(at, endedOn)
 		list = append(list, v)
 	}
 	if err := rows.Err(); err != nil {

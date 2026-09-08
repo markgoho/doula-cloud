@@ -150,9 +150,19 @@ export const fixture: RouteFixture<RouteParameters> = {
 						createdAt: '2026-08-05T00:00:00Z',
 						scheduledAt: '2027-03-15T14:30:00Z',
 						notes:
-							'She asked a lot of questions about pain management options and wants to keep her options open rather than commit to an unmedicated birth ahead of time. Her partner is nervous about the hospital transfer distance and would like a practice run of the drive before the due date. Follow up next visit on the birth plan draft she is writing.'
+							'She asked a lot of questions about pain management options and wants to keep her options open rather than commit to an unmedicated birth ahead of time. Her partner is nervous about the hospital transfer distance and would like a practice run of the drive before the due date. Follow up next visit on the birth plan draft she is writing.',
+						// #281: this fixture's two rows carry the two Visit types the
+						// screen renders with a different label -- 'birth' shares
+						// postpartum's label-lookup path, so it earns no third row.
+						type: 'postpartum'
 					},
-					{ visitId: 'visit-2', staffId: 'staff-2', staffName: 'Jordan Reyes', createdAt: '2026-08-06T00:00:00Z' }
+					{
+						visitId: 'visit-2',
+						staffId: 'staff-2',
+						staffName: 'Jordan Reyes',
+						createdAt: '2026-08-06T00:00:00Z',
+						type: 'prenatal'
+					}
 				],
 				hasMore: false
 			});
