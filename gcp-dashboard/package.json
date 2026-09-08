@@ -38,6 +38,7 @@
 		"#lib/*": "./src/lib/*"
 	},
 	"dependencies": {
-		"@google-cloud/bigquery": "9.0.2"
+		"@google-cloud/bigquery": "9.0.2",
+		"@google-cloud/monitoring": "6.0.0"
 	}
 }

@@ -1,15 +1,26 @@
 <script lang="ts">
 	import {
+		CLOUD_RUN_SERVICE_DESCRIPTION,
 		EXPORT_FRESHNESS_CAVEAT,
+		findServiceCost,
 		USAGE_DETAIL_UNAVAILABLE_LABEL
 	} from '#lib/costBreakdown.js';
-	import { loadCostBreakdown } from '#lib/costClient.js';
-	import { CostSync } from '#lib/costSync.svelte.js';
-	import { formatClock, formatDay, formatShare, formatUsd } from '#lib/format.js';
+	import { loadDashboard } from '#lib/dashboard.js';
+	import { DashboardSync } from '#lib/dashboardSync.svelte.js';
+	import {
+		formatClock,
+		formatCompact,
+		formatDay,
+		formatHours,
+		formatShare,
+		formatUsd
+	} from '#lib/format.js';
 
-	const sync = new CostSync(() => loadCostBreakdown(fetch));
+	const sync = new DashboardSync(() => loadDashboard(fetch));
 
 	const breakdown = $derived(sync.breakdown);
+	const usage = $derived(sync.usage);
+	const cloudRunCost = $derived(findServiceCost(breakdown, CLOUD_RUN_SERVICE_DESCRIPTION));
 	const isLoading = $derived(sync.state === 'loading');
 </script>
 
@@ -61,42 +72,93 @@
 			{/if}
 		</aside>
 
-		<main class="card">
-			<h2>Cost by service and SKU</h2>
+		<main class="main">
+			<section class="card">
+				<h2>Cost by service and SKU</h2>
 
-			{#if breakdown}
-				{#each breakdown.services as service (service.service)}
-					<details class="service">
-						<summary>
-							<span class="name">{service.service}</span>
-							<span class="cost">{formatUsd(service.cost)}</span>
-							<span class="share">{formatShare(service.share)}</span>
-							<span class="track" aria-hidden="true">
-								<span class="fill" style:inline-size="{service.share * 100}%"></span>
-							</span>
-						</summary>
+				{#if breakdown}
+					{#each breakdown.services as service (service.service)}
+						<details class="service">
+							<summary>
+								<span class="name">{service.service}</span>
+								<span class="cost">{formatUsd(service.cost)}</span>
+								<span class="share">{formatShare(service.share)}</span>
+								<span class="track" aria-hidden="true">
+									<span class="fill" style:inline-size="{service.share * 100}%"></span>
+								</span>
+							</summary>
 
-						<ul class="skus">
-							{#each service.skus as sku (sku.sku)}
-								<li><span>{sku.sku}</span><span class="cost">{formatUsd(sku.cost)}</span></li>
-							{/each}
-						</ul>
+							<ul class="skus">
+								{#each service.skus as sku (sku.sku)}
+									<li><span>{sku.sku}</span><span class="cost">{formatUsd(sku.cost)}</span></li>
+								{/each}
+							</ul>
 
-						{#if !service.usageDetailAvailable}
-							<p class="unavailable">{USAGE_DETAIL_UNAVAILABLE_LABEL}</p>
-						{/if}
-					</details>
+							{#if !service.usageDetailAvailable}
+								<p class="unavailable">{USAGE_DETAIL_UNAVAILABLE_LABEL}</p>
+							{/if}
+						</details>
+					{:else}
+						<p class="caveat">The billing export returned nothing for this period.</p>
+					{/each}
+
+					<p class="caveat">
+						This list is whatever the billing export returns — a newly-enabled service appears
+						here on its own.
+					</p>
 				{:else}
-					<p class="caveat">The billing export returned nothing for this period.</p>
-				{/each}
+					<p class="caveat">Sync to see where the money went.</p>
+				{/if}
+			</section>
 
-				<p class="caveat">
-					This list is whatever the billing export returns — a newly-enabled service appears
-					here on its own.
-				</p>
-			{:else}
-				<p class="caveat">Sync to see where the money went.</p>
-			{/if}
+			<section class="card usage">
+				<h2>Cloud Run usage</h2>
+
+				{#if usage}
+					<p class="panel-cost">
+						{formatUsd(cloudRunCost)}<span class="unit">billed this period</span>
+					</p>
+
+					<!-- Each stat is a term and its value, so it is a description list. The
+					     term is written first, which is both what HTML requires inside a
+					     `<dl>` and the order a screen reader should hear it in; the panel
+					     draws the figure above its label with `column-reverse`. -->
+					<dl class="stat-grid">
+						<div class="stat">
+							<dt class="stat-label">billable instance time</dt>
+							<dd class="stat-num">
+								{formatHours(usage.metrics.billableInstanceTime)}<span class="unit">hrs</span>
+							</dd>
+						</div>
+						<div class="stat">
+							<dt class="stat-label">CPU allocated</dt>
+							<dd class="stat-num">
+								{formatCompact(usage.metrics.cpuAllocationTime)}<span class="unit">vCPU&#8209;s</span
+								>
+							</dd>
+						</div>
+						<div class="stat">
+							<dt class="stat-label">memory allocated</dt>
+							<dd class="stat-num">
+								{formatCompact(usage.metrics.memoryAllocationTime)}<span class="unit"
+									>GiB&#8209;s</span
+								>
+							</dd>
+						</div>
+						<div class="stat">
+							<dt class="stat-label">requests</dt>
+							<dd class="stat-num">{formatCompact(usage.metrics.requestCount)}</dd>
+						</div>
+					</dl>
+
+					<p class="caveat">
+						This billing period, through {formatClock(Date.parse(usage.through))} today: Cloud
+						Monitoring reports usage live. The cost beside it stops earlier, because {EXPORT_FRESHNESS_CAVEAT}.
+					</p>
+				{:else}
+					<p class="caveat">Sync to see the usage that produced the Cloud Run bill.</p>
+				{/if}
+			</section>
 		</main>
 	</div>
 </div>
@@ -127,6 +189,14 @@
 			position: sticky;
 			inset-block-start: 1rem;
 		}
+	}
+
+	/* The panels stack, whatever room the column has. There is one usage panel
+	   so far, so nothing here assumes a row of them. */
+	.main {
+		align-content: start;
+		display: grid;
+		gap: 1.25rem;
 	}
 
 	.card {
@@ -306,6 +376,69 @@
 
 	.skus span:first-child {
 		overflow-wrap: anywhere;
+	}
+
+	.usage {
+		container-type: inline-size;
+	}
+
+	.panel-cost {
+		font-size: 1.375rem;
+		font-variant-numeric: tabular-nums;
+		font-weight: 600;
+		margin: 0 0 0.75rem;
+	}
+
+	/* Two by two, as the panel is designed — and one column once the panel
+	   itself is too narrow for two readable cells, which is the panel's own
+	   width talking, not the viewport's. */
+	.stat-grid {
+		display: grid;
+		gap: 0.75rem 1rem;
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+		margin: 0;
+	}
+
+	/* Measured, not guessed: two cells still read at a 320px viewport, where
+	   this panel's own box is about 15rem wide. One column is for a panel
+	   narrower than that — a sidebar, or a column of its own. */
+	@container (max-width: 11rem) {
+		.stat-grid {
+			grid-template-columns: minmax(0, 1fr);
+		}
+	}
+
+	.stat-grid + .caveat {
+		margin-block-start: 0.75rem;
+	}
+
+	/* The figure reads above its label, while the markup keeps the term
+	   before its description. */
+	.stat {
+		display: flex;
+		flex-direction: column-reverse;
+	}
+
+	.stat-num {
+		font-size: 1.125rem;
+		font-variant-numeric: tabular-nums;
+		font-weight: 600;
+		margin: 0;
+		overflow-wrap: anywhere;
+	}
+
+	.unit {
+		font-size: 0.6875rem;
+		font-weight: 400;
+		margin-inline-start: 0.1875rem;
+		opacity: 0.7;
+	}
+
+	.stat-label {
+		font-size: 0.6875rem;
+		margin-block-start: 0.125rem;
+		opacity: 0.7;
+		text-wrap: pretty;
 	}
 
 	.unavailable {
