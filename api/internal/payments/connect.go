@@ -1,7 +1,9 @@
 package payments
 
 import (
+	"context"
 	"database/sql"
+	"fmt"
 	"net/http"
 
 	"doula-cloud/api/internal/apierr"
@@ -197,6 +199,27 @@ func PostConnectHandler(client Client) http.Handler {
 
 		apierr.WriteJSON(w, http.StatusOK, ConnectResponse{OnboardingURL: onboardingURL})
 	})
+}
+
+// ClientsCanPay reports whether a Client can currently pay practiceID
+// through Stripe -- practices.stripe_connect_card_payments_status being
+// 'active', kept fresh by the Connect webhook (#270). Reads that one
+// column directly rather than a live Stripe retrieve: unlike the Payments
+// settings screen's own GetConnectStatusHandler, which is deliberately
+// backed by an on-demand Account fetch, every other reader of this fact
+// -- the Engagement read (engagement.Detail.ClientsCanPay), the
+// Practice-wide Invoice totals, and PostInvoiceHandler's own gate --
+// needs an instant answer on a request that is not itself about Stripe
+// Connect, not a network round trip to it.
+func ClientsCanPay(ctx context.Context, tx *sql.Tx, practiceID string) (bool, error) {
+	var status string
+	if err := tx.QueryRowContext(ctx,
+		`SELECT stripe_connect_card_payments_status FROM practices WHERE id = $1`, practiceID,
+	).Scan(&status); err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		return false, fmt.Errorf("payments: fetch card payments status: %w", err)
+	}
+	return status == string(CapabilityActive), nil
 }
 
 // GetConnectStatusHandler reads a Practice's Stripe Connect status.

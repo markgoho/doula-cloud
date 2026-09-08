@@ -60,7 +60,7 @@ describe('createInvoice', () => {
 			currency: 'usd',
 			createdAt: '2026-01-01T00:00:00Z'
 		};
-		const fetcher = vi.fn().mockResolvedValue(jsonResponse({ connectRequired: false, invoice }));
+		const fetcher = vi.fn().mockResolvedValue(jsonResponse(invoice));
 
 		const result = await createInvoice(fetcher, 'practice-1', 'eng-1', 15_000);
 
@@ -69,15 +69,20 @@ describe('createInvoice', () => {
 			headers: { 'Content-Type': 'application/json' },
 			body: JSON.stringify({ amountCents: 15_000 })
 		});
-		expect(result).toEqual({ connectRequired: false, invoice });
+		expect(result).toEqual(invoice);
 	});
 
-	it('returns the connect-gate state when the Practice is not connected', async () => {
-		const fetcher = vi.fn().mockResolvedValue(jsonResponse({ connectRequired: true, isOwner: true }));
+	// #270: Clients cannot pay this Practice is a standing fact the caller
+	// reads before ever calling createInvoice, so a refusal reaching this
+	// function is always thrown like any other non-2xx response.
+	it('throws with the response body text when Clients cannot pay this Practice', async () => {
+		const fetcher = vi.fn().mockResolvedValue(
+			jsonResponse('Clients cannot pay this Practice yet. A Practice Owner has to connect Stripe.', 409)
+		);
 
-		const result = await createInvoice(fetcher, 'practice-1', 'eng-1', 15_000);
-
-		expect(result).toEqual({ connectRequired: true, isOwner: true });
+		await expect(createInvoice(fetcher, 'practice-1', 'eng-1', 15_000)).rejects.toThrow(
+			'Clients cannot pay this Practice yet. A Practice Owner has to connect Stripe.'
+		);
 	});
 
 	it('throws with the response body text on a non-ok response', async () => {

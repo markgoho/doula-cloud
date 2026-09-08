@@ -57,6 +57,13 @@ type PracticeInvoicesResponse struct {
 	OutstandingCents int64                 `json:"outstandingCents"`
 	OutstandingCount int                   `json:"outstandingCount"`
 	PaidCents        int64                 `json:"paidCents"`
+	// ClientsCanPay (#270) is ClientsCanPay's own charges-active test --
+	// an aggregate fact about the Practice's book, alongside the three
+	// totals above, not one more per-row field. It lets the list say
+	// "Clients cannot pay this Practice yet" as a standing line rather
+	// than leaving that fact to be inferred from an empty book, which
+	// looks identical to "nobody has billed anything yet".
+	ClientsCanPay bool `json:"clientsCanPay"`
 }
 
 // GetPracticeInvoicesHandler lists every Invoice the Practice has ever
@@ -120,12 +127,20 @@ func GetPracticeInvoicesHandler() http.Handler {
 			return
 		}
 
+		clientsCanPay, err := ClientsCanPay(r.Context(), tx, practiceID)
+		if err != nil {
+			// coverage:ignore reason: DB query failure, not exercised by unit tests
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+			return
+		}
+
 		resp := PracticeInvoicesResponse{
 			Items:            items,
 			HasMore:          hasMore,
 			OutstandingCents: totals.outstandingCents,
 			OutstandingCount: totals.outstandingCount,
 			PaidCents:        totals.paidCents,
+			ClientsCanPay:    clientsCanPay,
 		}
 		if hasMore {
 			next := encodeInvoiceCursor(items[len(items)-1].CreatedAt, items[len(items)-1].ID)

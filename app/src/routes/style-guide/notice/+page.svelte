@@ -15,12 +15,12 @@
 			-->
 			<Notice
 				variant="error"
-				message="The page we publish for you is not loading, so Stripe would find nothing at your web address. Open your website settings and publish it again."
+				message="The page published for this Practice is not loading, so Stripe would find nothing at its web address. Publish the website again."
 			/>
-			<Notice variant="status" message="Stripe onboarding finished. Status updates once Stripe confirms your account is active." />
+			<Notice variant="status" message="Stripe onboarding finished. Status updates once Stripe confirms the account is active." />
 			<Notice
 				variant="info"
-				message="Stripe will not let you take Client payments until it can see where you are online. Tell us your website or let us publish a page for you, then come back here."
+				message="Stripe will not process Client payments until it can see this Practice online. The website question needs an answer before Stripe can be connected."
 			/>
 		</stack-l>
 	</section>

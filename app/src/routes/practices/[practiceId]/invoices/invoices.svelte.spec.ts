@@ -114,6 +114,25 @@ describe('the Practice-wide invoice list (#265)', () => {
 			.toBeVisible();
 	});
 
+	// #270: a standing fact from the envelope's own clientsCanPay field,
+	// never derived from an empty book -- an empty book looks the same
+	// whether nobody has billed anything yet or Clients cannot pay at all.
+	it('shows a standing Notice when Clients cannot pay this Practice', async () => {
+		await setup({ ...data, clientsCanPay: false });
+
+		await expect
+			.element(testPage.getByText('Clients cannot pay this Practice yet. A Practice Owner has to connect Stripe.'))
+			.toBeVisible();
+	});
+
+	it('shows no Notice when Clients can pay this Practice', async () => {
+		await setup();
+
+		await expect
+			.element(testPage.getByText('Clients cannot pay this Practice yet.', { exact: false }))
+			.not.toBeInTheDocument();
+	});
+
 	it('appends the next page rather than replacing the one already read', async () => {
 		// A second page is content the fixture does not hold: the screen the
 		// sweep measures is the first page, and this is what arrives after an

@@ -14,6 +14,7 @@
 	import { resolve } from '$app/paths';
 	import { apiFetchWithSession } from '#lib/api.js';
 	import {
+		clientsCannotPayMessage,
 		formatAmount,
 		invoiceStatusLabel,
 		loadPracticeInvoices,
@@ -96,6 +97,17 @@
 />
 
 <DescriptionList items={summary} />
+
+<!--
+	#270: a standing fact about the Practice, from the same aggregate
+	field the totals above already carry -- an empty book looks identical
+	whether nobody has billed anything yet or Clients cannot pay this
+	Practice at all, so this is the only thing on the page that tells the
+	two apart.
+-->
+{#if !data.clientsCanPay}
+	<Notice variant="info" message={clientsCannotPayMessage} />
+{/if}
 
 <DataTable
 	{columns}

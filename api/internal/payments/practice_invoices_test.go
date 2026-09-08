@@ -196,6 +196,35 @@ func TestGetPracticeInvoicesHandler_EmptyBookIsAnEmptyList(t *testing.T) {
 	}
 }
 
+// TestGetPracticeInvoicesHandler_ClientsCanPay proves the envelope's
+// clientsCanPay (#270) is the same charges-active fact
+// engagement.Detail.ClientsCanPay carries, alongside the book's totals
+// rather than derived from them: an empty book looks identical whether
+// nobody has billed anything yet or Clients cannot pay this Practice at
+// all, so the list needs its own signal to tell the two apart.
+func TestGetPracticeInvoicesHandler_ClientsCanPay(t *testing.T) {
+	db := testdb.New(t)
+	const uid = "practice-invoices-clients-can-pay"
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
+
+	srv, session := newPracticeInvoiceServer(t, db, uid)
+	defer srv.Close()
+
+	if out := readPracticeInvoices(t, srv, session, practiceID, "", false); out.ClientsCanPay {
+		t.Fatal("clientsCanPay = true before Stripe Connect is active, want false")
+	}
+
+	if _, err := db.Admin.ExecContext(t.Context(),
+		`UPDATE practices SET stripe_connect_card_payments_status = 'active' WHERE id = $1`, practiceID,
+	); err != nil {
+		t.Fatalf("set card payments active: %v", err)
+	}
+
+	if out := readPracticeInvoices(t, srv, session, practiceID, "", false); !out.ClientsCanPay {
+		t.Fatal("clientsCanPay = false once card_payments is active, want true")
+	}
+}
+
 // TestGetPracticeInvoicesHandler_PaidAtRoundTrips proves a paid Invoice
 // carries the date it was paid, so the list can say when rather than only
 // naming the status.

@@ -58,12 +58,12 @@
 		missingMergeFieldKeys,
 		type Contract
 	} from '#lib/contract.js';
-	import { isDoula, isOwnerOrAdmin } from '#lib/roles.js';
+	import { isDoula, isOwner, isOwnerOrAdmin } from '#lib/roles.js';
 	import InvoiceSection from '#lib/components/organisms/InvoiceSection.svelte';
 	import { loadInvoices, createInvoice, type Invoice } from '#lib/invoice.js';
 	import OfferSection from '#lib/components/organisms/OfferSection.svelte';
 	import { createOffer, loadEngagementOffers, withdrawOffer, type NewOffer, type Offer } from '#lib/offer.js';
-	import { connect as connectStripe } from '#lib/payments.js';
+	import { resolve } from '$app/paths';
 	import MessageThread, { type Message } from '#lib/components/organisms/MessageThread.svelte';
 	import Text from '#lib/components/atoms/Text.svelte';
 	import Link from '#lib/components/atoms/Link.svelte';
@@ -92,6 +92,10 @@
 		clientPortalInviteStatus?: string;
 		clientEmailSuppressed?: boolean;
 		clientHasEmail?: boolean;
+		// #270: whether Clients can pay this Practice at all -- a standing
+		// fact InvoiceSection reads before ever showing the Create Invoice
+		// form, never a routed gate discovered after a submit attempt.
+		clientsCanPay?: boolean;
 	};
 
 	// The Engagement comes from +page.ts's load now, not an onMount fetch
@@ -107,6 +111,14 @@
 	// decision is not the gate: contract.ts's downloadSignedContractPdf
 	// hits the real endpoint, which refuses any other role on its own.
 	const isPracticeOwnerOrAdmin = $derived(isOwnerOrAdmin(data.session));
+
+	// InvoiceSection's Owner branch (#270): only an Owner gets the link to
+	// the Payments settings screen, matching PostConnectHandler's own
+	// Owner-only gate.
+	const isPracticeOwner = $derived(isOwner(data.session));
+	const paymentsSettingsHref = $derived(
+		resolve('/practices/[practiceId]/settings/payments', { practiceId: page.params.practiceId! })
+	);
 
 	// The reference every read on this page is about. Derived rather than
 	// captured, so a client-side navigation to a sibling Engagement is
@@ -241,6 +253,11 @@
 	const hasNeverInvitedClient = $derived(hasNeverBeenInvited(clientPortalState));
 	const hasAcceptedPortalAccess = $derived(hasAcceptedPortalInvite(clientPortalState));
 	const hasClientEmailOnFile = $derived(detail?.clientHasEmail ?? true);
+	// InvoiceSection's own standing check (#270) -- defaults true so an
+	// in-flight load never flashes the "cannot pay" Notice before
+	// `detail` resolves, the same reasoning hasClientEmailOnFile above
+	// already uses.
+	const canClientsPay = $derived(detail?.clientsCanPay ?? true);
 
 	let reassignStaffId = $state<Record<string, string>>({});
 	// One SectionState per Visit row, created the first time that row is
@@ -337,7 +354,6 @@
 	const invoicesState = new SectionState<Invoice[]>([]);
 	const invoices = $derived(invoicesState.value);
 	const invoicesError = $derived(invoicesState.error);
-	let connectGate = $state<{ isOwner: boolean } | undefined>();
 
 	// Offers on this Engagement (#317). Owner/Admin only at the BFF, so a
 	// Doula's load simply fails and the section stays hidden -- the read
@@ -611,22 +627,21 @@
 		);
 	}
 
-	// Reported by InvoiceSection's onCreate prop -- see its own doc comment
-	// for why it owns the resulting state change (invoices list vs.
-	// connectGate) rather than the component itself. No catch here in the
-	// original either: a refused create is left to the component the same
-	// way Void Contract is (see above).
+	// Reported by InvoiceSection's onCreate prop. No catch here, same as
+	// the original: a refused create is left to the component the same way
+	// Void Contract is (see above). #270 removed the old connectRequired
+	// gate this used to route on -- InvoiceSection now decides whether to
+	// show the form at all from canClientsPay, a standing fact read up
+	// front, so a create attempt reaching this function is always the
+	// happy path or a genuine error.
 	async function handleCreateInvoice(amountCents: number) {
-		const result = await createInvoice(
+		const invoice = await createInvoice(
 			apiFetchWithSession,
 			page.params.practiceId!,
 			page.params.engagementId!,
 			amountCents
 		);
-		connectGate = result.connectRequired ? { isOwner: result.isOwner ?? false } : undefined;
-		if (result.invoice) {
-			invoicesState.value = [result.invoice, ...invoicesState.value];
-		}
+		invoicesState.value = [invoice, ...invoicesState.value];
 	}
 
 	// The roster read and the Offers read are both Owner/Admin; either
@@ -664,11 +679,6 @@
 		await withdrawOffer(apiFetchWithSession, page.params.practiceId!, offerId);
 		const updated = await loadEngagementOffers(apiFetchWithSession, page.params.practiceId!, page.params.engagementId!);
 		if (offersState.value) offersState.value = updated;
-	}
-
-	async function handleConnectInvoicing() {
-		const onboardingUrl = await connectStripe(apiFetchWithSession, page.params.practiceId!);
-		location.assign(onboardingUrl);
 	}
 
 	onMount(async () => {
@@ -909,27 +919,17 @@
 		#255: an accepted Client is never offered a second invite -- the
 		"Portal invite" summary row above already says "Accepted", so
 		hiding this action here states the same fact rather than a second,
-		clickable copy of it. A Client with no email keeps the button
-		(rather than hiding it too) but disabled -- the summary row's own
-		"no email on file" qualifier is the visible reason for a sighted
-		reader, and describedBy joins the same words to this button's own
-		accessible name, the same pattern "View Client" above uses to name
-		whose record it opens, so a screen-reader user who lands on this
-		button without passing through the summary row first still hears
-		why it refuses.
+		clickable copy of it. A Client with no email gets a Notice naming
+		the missing thing in place of the control (#270 converted this from
+		a disabled button with a visually-hidden hint -- the same pattern
+		#275 used at InvoiceSection.svelte:109 -- block over warn, never a
+		control silently withheld with only a hidden explanation).
 	-->
 	{#if !hasAcceptedPortalAccess}
-		<Button
-			label="Send portal invite"
-			onClick={handleSendPortalInvite}
-			loading={isSendingPortalInvite}
-			disabled={!hasClientEmailOnFile}
-			describedBy={hasClientEmailOnFile ? undefined : 'send-portal-invite-no-email'}
-		/>
-		{#if !hasClientEmailOnFile}
-			<span class="visually-hidden" id="send-portal-invite-no-email"
-				>This Client has no email address on file</span
-			>
+		{#if hasClientEmailOnFile}
+			<Button label="Send portal invite" onClick={handleSendPortalInvite} loading={isSendingPortalInvite} />
+		{:else}
+			<Notice variant="info" message="This Client has no email address on file. Add one before sending a portal invite." />
 		{/if}
 	{/if}
 {/snippet}
@@ -1225,9 +1225,11 @@
 	<InvoiceSection
 		{invoices}
 		contractStatus={contract!.status}
-		{connectGate}
+		clientsCanPay={canClientsPay}
+		hasClientEmail={hasClientEmailOnFile}
+		isOwner={isPracticeOwner}
+		{paymentsSettingsHref}
 		onCreate={handleCreateInvoice}
-		onConnect={handleConnectInvoicing}
 	/>
 {/snippet}
 
