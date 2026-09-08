@@ -136,13 +136,22 @@ test('Archetype A -- the screens a person meets signed out', async ({ page }) =>
 	}
 });
 
-// Archetypes B, C, D, E and F, all behind one Staff session. Provisioned
+// Archetypes B, C, D, E, F and G, all behind one Staff session. Provisioned
 // once and looped rather than a test per route: signup + login is ~4s of
 // the same work every time, and none of these scans depends on any other
 // having run.
-test('Archetypes B, C, D, E, F -- the Staff side', async ({ page, request, context }) => {
+test('Archetypes B, C, D, E, F, G -- the Staff side', async ({ page, request, context }) => {
 	const seeded = await seedPortalClient(request, 'Riverside Doulas');
 	const { practiceId, staffId, engagementId } = seeded;
+
+	// #280: archetype G, the same as the portal's own Birth Plan below --
+	// provisioned through the API first, same as that one, so the scan
+	// covers the document view rather than the "none yet" empty state.
+	const birthPlan = await request.post(
+		`${API_URL}/api/practices/${practiceId}/engagements/${engagementId}/plans/birth_plan`,
+		{ headers: seeded.staffHeaders }
+	);
+	expect(birthPlan.ok(), `create birth plan failed: ${birthPlan.status()} ${await birthPlan.text()}`).toBe(true);
 
 	// A second, plain Client -- no portal account -- for the three
 	// clients/[clientId] screens (#516). Given an Engagement of her own so
@@ -232,6 +241,14 @@ test('Archetypes B, C, D, E, F -- the Staff side', async ({ page, request, conte
 			archetype: 'D',
 			url: `/practices/${practiceId}/engagements/${engagementId}`,
 			h1: 'Pat'
+		},
+		{
+			// #280: the Birth Plan's own address on the Practice side,
+			// mirroring the portal's own G-archetype Birth Plan route below.
+			key: 'practices/[practiceId]/engagements/[engagementId]/birth-plan',
+			archetype: 'G',
+			url: `/practices/${practiceId}/engagements/${engagementId}/birth-plan`,
+			h1: "Pat Client's Birth Plan"
 		},
 		{
 			key: 'practices/[practiceId]/clients/[clientId]',

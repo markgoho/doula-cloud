@@ -48,7 +48,6 @@
 		loadInstance,
 		createInstance,
 		saveAnswers,
-		downloadBirthPlanPdf,
 		setAnswer,
 		toggleMultiSelectOption,
 		type Instance
@@ -133,6 +132,15 @@
 	const isPracticeOwner = $derived(isOwner(data.session));
 	const paymentsSettingsHref = $derived(
 		resolve('/practices/[practiceId]/settings/payments', { practiceId: page.params.practiceId! })
+	);
+
+	// #280: the Birth Plan's own address -- a reading and taking-away
+	// surface, distinct from this page's own editing form below.
+	const birthPlanHref = $derived(
+		resolve('/practices/[practiceId]/engagements/[engagementId]/birth-plan', {
+			practiceId: page.params.practiceId!,
+			engagementId: page.params.engagementId!
+		})
 	);
 
 	// The reference every read on this page is about. Derived rather than
@@ -380,11 +388,6 @@
 	// first load has settled, success or failure -- same as isContractLoaded
 	// below.
 	let planLoaded = $state<Record<PlanType, boolean>>({ care_plan: false, birth_plan: false });
-	// #306: Birth Plan only, not Care Plan -- the Client-facing side of
-	// this same download has no Care Plan page to mirror yet, and the
-	// ticket's own decision scoped the PDF to Birth Plan alone.
-	let isDownloadingBirthPlanPdf = $state(false);
-	let downloadBirthPlanPdfError = $state('');
 
 	// Named contractState, not contractSection: that name is already the
 	// RecordDetail section snippet below (content: contractSection), and a
@@ -629,23 +632,6 @@
 				),
 			'Failed to save plan'
 		);
-	}
-
-	// #306: built fresh from the Birth Plan's current answers, never a
-	// stored snapshot -- the same PDF a Client can download from the
-	// portal, mirrored on this side (#280 later moves this control onto
-	// its own Doula-facing page).
-	async function handleDownloadBirthPlanPdf() {
-		downloadBirthPlanPdfError = '';
-		isDownloadingBirthPlanPdf = true;
-		try {
-			const blob = await downloadBirthPlanPdf(apiFetchWithSession, page.params.practiceId!, page.params.engagementId!);
-			triggerBlobDownload(blob, 'birth-plan.pdf');
-		} catch (error_) {
-			downloadBirthPlanPdfError = error_ instanceof Error ? error_.message : 'Failed to download Birth Plan';
-		} finally {
-			isDownloadingBirthPlanPdf = false;
-		}
 	}
 
 	async function loadContractSection() {
@@ -1283,19 +1269,13 @@
 {/snippet}
 
 {#snippet birthPlanSection()}
+	<!--
+		#280: the reading and taking-away surface -- its own address,
+		reachable regardless of whether a Birth Plan exists yet (that
+		address says so plainly rather than 404ing). Editing stays here.
+	-->
+	<Link href={birthPlanHref} label="View printable Birth Plan" icon="file-text" variant="secondary" />
 	{@render planSectionBody('birth_plan', 'Birth Plan')}
-	{#if planLoaded.birth_plan && planState.birth_plan.value}
-		<Button
-			label="Download Birth Plan (PDF)"
-			icon="file-text"
-			variant="secondary"
-			onClick={handleDownloadBirthPlanPdf}
-			loading={isDownloadingBirthPlanPdf}
-		/>
-		{#if downloadBirthPlanPdfError}
-			<p role="alert">{downloadBirthPlanPdfError}</p>
-		{/if}
-	{/if}
 {/snippet}
 
 {#snippet contractSection()}
