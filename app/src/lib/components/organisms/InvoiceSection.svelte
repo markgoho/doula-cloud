@@ -17,8 +17,10 @@
 	 *   issues a new Contract, or the Client signs the one that exists.
 	 *   Applies whichever rail the Practice bills on.
 	 * - billingMode is undefined -- #271's "ask once, inline": the very first
-	 *   Invoice raise asks which rail this Practice bills on, submitted
-	 *   alongside the amount itself, before either check below applies.
+	 *   Invoice raise asks which rail this Practice bills on, before either
+	 *   check below applies. There is no amount to ask alongside it any
+	 *   more (#947) -- the Invoice is raised for whatever the Contract
+	 *   itself carries.
 	 * - On the Stripe rail only, once chosen: !clientsCanPay (a Practice
 	 *   Owner has to connect Stripe) or !hasClientEmail (Staff adds an
 	 *   email to the Client's record) -- #430's amendment: a by-hand
@@ -75,7 +77,7 @@
 		 * write row, Owner and Admin only. */
 		isOwnerOrAdmin: boolean;
 		paymentsSettingsHref: string;
-		onCreate: (amountCents: number, billingMode?: BillingMode) => Promise<void>;
+		onCreate: (billingMode?: BillingMode) => Promise<void>;
 		onRecordPayment: (
 			invoiceId: string,
 			input: { method: PaymentMethod; note?: string; paidOn: string }
@@ -86,7 +88,6 @@
 
 	const isBillable = $derived(contractStatus === billableContractStatus);
 
-	let amountDollars = $state('');
 	let chosenBillingMode = $state<BillingMode>('stripe');
 	let isCreating = $state(false);
 	let createError = $state('');
@@ -96,25 +97,20 @@
 		{ value: 'by_hand' as const, label: 'By hand', description: 'This Practice bills and collects payment itself.' }
 	];
 
+	// #947: the amount an Invoice is raised for is the Contract's own
+	// price, never a figure typed here -- there is nothing left to
+	// validate before calling onCreate.
 	async function handleCreate(event: SubmitEvent) {
 		event.preventDefault();
 		createError = '';
 
-		const dollars = Number(amountDollars);
-		if (!Number.isFinite(dollars) || dollars <= 0) {
-			createError = 'Enter an amount greater than zero';
-			return;
-		}
-
 		isCreating = true;
 		try {
-			const cents = Math.round(dollars * 100);
 			if (billingMode === undefined) {
-				await onCreate(cents, chosenBillingMode);
+				await onCreate(chosenBillingMode);
 			} else {
-				await onCreate(cents);
+				await onCreate();
 			}
-			amountDollars = '';
 		} catch (error_) {
 			createError = error_ instanceof Error ? error_.message : 'Failed to create invoice';
 		} finally {
@@ -179,9 +175,9 @@
 			return;
 		}
 		// No empty-date check: the date TextInput's own `required` already
-		// blocks an empty submission from ever reaching this handler, the
-		// same division of labor the amount field already uses (`required`
-		// for empty, this function for the semantic checks beyond it).
+		// blocks an empty submission from ever reaching this handler --
+		// `required` covers emptiness, this function covers the semantic
+		// checks beyond it.
 		if (paymentDate > todayIsoDate()) {
 			paymentError = 'The date cannot be in the future';
 			return;
@@ -240,23 +236,6 @@
 		}
 	}
 </script>
-
-{#snippet amountField()}
-	<LabeledField label="Amount (USD)">
-		{#snippet children({ id, describedBy, invalid })}
-			<TextInput
-				{id}
-				{describedBy}
-				{invalid}
-				type="number"
-				step={0.01}
-				value={amountDollars}
-				onInput={(value) => (amountDollars = value)}
-				required
-			/>
-		{/snippet}
-	</LabeledField>
-{/snippet}
 
 {#if invoices.length === 0}
 	<p>No Invoices yet.</p>
@@ -383,7 +362,6 @@
 			value={chosenBillingMode}
 			onChange={(value) => (chosenBillingMode = value)}
 		/>
-		{@render amountField()}
 		<Button label="Create Invoice" type="submit" loading={isCreating} />
 	</form>
 	{#if createError}
@@ -398,7 +376,6 @@
 	<Notice variant="info" message={clientHasNoEmailMessage} />
 {:else}
 	<form onsubmit={handleCreate}>
-		{@render amountField()}
 		<Button label="Create Invoice" type="submit" loading={isCreating} />
 	</form>
 	{#if createError}

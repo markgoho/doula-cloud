@@ -110,13 +110,16 @@ export async function loadInvoices(fetcher: Fetcher, practiceId: string, engagem
 	return body.items;
 }
 
-/** Creates an Invoice against engagementId's current Contract for
- * amountCents. Whether Clients can pay this Practice at all is a standing
- * fact the caller already has (EngagementDetail.clientsCanPay, #270) and
- * checks before ever showing the form that calls this -- so a refusal
- * here (409, e.g. Stripe still not connected) is always thrown like any
- * other non-2xx response, with the response body text, never a routed
- * gate state.
+/** Creates an Invoice against engagementId's current Contract, for the
+ * amount that Contract itself carries -- #947 removed the amountCents a
+ * caller used to supply here; the BFF derives it from the Contract's own
+ * amount_cents, so no request can make an Invoice disagree with the
+ * signed Contract. Whether Clients can pay this Practice at all is a
+ * standing fact the caller already has (EngagementDetail.clientsCanPay,
+ * #270) and checks before ever showing the form that calls this -- so a
+ * refusal here (409, e.g. Stripe still not connected) is always thrown
+ * like any other non-2xx response, with the response body text, never a
+ * routed gate state.
  *
  * billingMode (#271) is read only the first time this Practice ever
  * raises an Invoice -- the backend ignores it once a mode is already
@@ -126,13 +129,12 @@ export async function createInvoice(
 	fetcher: Fetcher,
 	practiceId: string,
 	engagementId: string,
-	amountCents: number,
 	billingMode?: BillingMode
 ): Promise<Invoice> {
 	const response = await fetcher(invoicesPath(practiceId, engagementId), {
 		method: 'POST',
 		headers: { 'Content-Type': 'application/json' },
-		body: JSON.stringify({ amountCents, billingMode })
+		body: JSON.stringify({ billingMode })
 	});
 	if (!response.ok) {
 		throw new Error(await apiErrorMessage(response));

@@ -40,9 +40,9 @@ func clientOfEngagement(t *testing.T, db *testdb.DB, engagementID string) string
 
 // createdInvoice posts an Invoice and returns the created row's view,
 // failing the test on any non-201.
-func createdInvoice(t *testing.T, srv *httptest.Server, session, practiceID, engagementID string, amountCents int64) payments.InvoiceView {
+func createdInvoice(t *testing.T, srv *httptest.Server, session, practiceID, engagementID string) payments.InvoiceView {
 	t.Helper()
-	resp := postInvoice(t, srv, session, practiceID, engagementID, amountCents)
+	resp := postInvoice(t, srv, session, practiceID, engagementID)
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusCreated {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusCreated)
@@ -74,8 +74,8 @@ func TestPostInvoiceHandler_SecondInvoiceBillsTheSameCustomer(t *testing.T) {
 	srv, session := newInvoiceServer(t, db, uid, client)
 	defer srv.Close()
 
-	first := createdInvoice(t, srv, session, practiceID, engagementID, 15000)
-	second := createdInvoice(t, srv, session, practiceID, engagementID, 22000)
+	first := createdInvoice(t, srv, session, practiceID, engagementID)
+	second := createdInvoice(t, srv, session, practiceID, engagementID)
 	if first.ID == second.ID {
 		t.Fatal("both posts returned the same Invoice, want two")
 	}
@@ -129,7 +129,7 @@ func TestPostInvoiceHandler_PreExistingMappingIsUsedUnchanged(t *testing.T) {
 	srv, session := newInvoiceServer(t, db, uid, client)
 	defer srv.Close()
 
-	createdInvoice(t, srv, session, practiceID, engagementID, 15000)
+	createdInvoice(t, srv, session, practiceID, engagementID)
 
 	if len(client.CreateCustomerCalls) != 0 {
 		t.Fatalf("CreateCustomer calls = %d, want 0 -- the Customer was already allocated", len(client.CreateCustomerCalls))
@@ -158,7 +158,7 @@ func TestPostInvoiceHandler_CustomerFailureRaisesNoInvoice(t *testing.T) {
 	srv, session := newInvoiceServer(t, db, uid, client)
 	defer srv.Close()
 
-	resp := postInvoice(t, srv, session, practiceID, engagementID, 15000)
+	resp := postInvoice(t, srv, session, practiceID, engagementID)
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusInternalServerError {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusInternalServerError)

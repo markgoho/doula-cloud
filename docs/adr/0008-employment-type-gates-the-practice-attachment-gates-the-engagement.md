@@ -348,12 +348,15 @@ everything; the Offer settles her claim and nothing else
 
 Added on [#271](https://github.com/markgoho/doula-cloud/issues/271) — the write table above has no row for a write on Invoice or Payment money at all, and this closes that gap. The reasoning mirrors the read table's own Contract-money row rather than restating it: recording a Payment is closer in kind to reading Invoice money (ADR-0008's "Contract — money, and Invoice history" row, Owner and Admin only) than to raising an Invoice, which stays ungated by design (#68). A write gated more loosely than the read of the same data would be the harder position to defend, so recording a Payment, voiding a by-hand Invoice, and writing one off all sit with the read row that already narrows to Owner and Admin. Changing an already-established billing mode is the Owner's alone, by analogy to Connect onboarding (the row above this table, "starting or resuming hosted onboarding stays the Owner's alone"). A Doula, employed or contractor, never reaches any of the four — the same ✗ her Contract-money read row already carries.
 
+**Raising an Invoice is the fifth row, added on [#947](https://github.com/markgoho/doula-cloud/issues/947).** It sits apart from the four above it: #282's own amendment already settled that raising stays ungated by role, per [#68](https://github.com/markgoho/doula-cloud/issues/68) — an Owner, an Admin, and a Doula of either employment type may all raise one, the same as any other Contract action. What #947 closes is reach, not role: the route carried no attaching-write test at all, so a contractor with no granted attachment could raise an Invoice on any Engagement at the Practice. It now carries the same reach test every other Engagement-scoped write does (`staffauth.AttachingWrite`) — an employee reaches every Engagement, a contractor only one she holds a granted attachment on. The amount an Invoice is raised for is no longer a figure any caller supplies: it is read straight off the Contract it bills (`contracts.amount_cents`, [#967](https://github.com/markgoho/doula-cloud/issues/967)), so it can never disagree with the signed Contract.
+
 | | Owner | Admin | Doula (employee) | Doula (contractor) |
 | --- | --- | --- | --- | --- |
 | Record a Payment against an open Invoice | ✓ | ✓ | ✗ | ✗ |
 | Void a by-hand Invoice | ✓ | ✓ | ✗ | ✗ |
 | Write off a by-hand Invoice | ✓ | ✓ | ✗ | ✗ |
 | Change an already-established billing mode | ✓ | ✗ | ✗ | ✗ |
+| Raise an Invoice | ✓ | ✓ | ✓ — every Engagement at the Practice | ✓ — only an Engagement she holds a granted attachment on |
 
 ### Who may assign a Visit to whom
 

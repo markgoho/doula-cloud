@@ -51,16 +51,19 @@ type InvoiceView struct {
 	BillingMode string     `json:"billingMode"`
 }
 
-// CreateInvoiceRequest is the body of a POST to PostInvoiceHandler: the
-// amount Staff agreed with the Client for this Engagement. There is no
-// description/line-item field -- every Invoice's line item and statement
-// descriptor is InvoiceLineItemDescription, unconditionally.
+// CreateInvoiceRequest is the body of a POST to PostInvoiceHandler.
+// #947 removed the amountCents a caller used to supply: an Invoice's
+// amount now derives entirely from the Contract it bills
+// (contracts.amount_cents, #967), so no request body -- an Owner's
+// included -- can make an Invoice carry a figure that disagrees with the
+// signed Contract. There is no description/line-item field either --
+// every Invoice's line item and statement descriptor is
+// InvoiceLineItemDescription, unconditionally.
 //
 // BillingMode is read only the first time this Practice ever raises an
 // Invoice -- resolveBillingMode ignores it once a Practice's billing_mode
 // is already set (#271).
 type CreateInvoiceRequest struct {
-	AmountCents int64   `json:"amountCents"`
 	BillingMode *string `json:"billingMode,omitempty"`
 }
 
@@ -97,9 +100,11 @@ type ListInvoicesResponse struct {
 }
 
 // PostInvoiceHandler creates an Invoice against :engagementId's current
-// Contract for the amount Staff supplies -- open to any Staff with
-// practice access, no assigned-staff or Owner gating (matching Contract's
-// default, #68).
+// Contract, for the amount that Contract itself carries
+// (contracts.amount_cents, #967) -- no caller, Owner included, can make
+// it carry a different figure (#947). Raising stays open to any Staff
+// with reach, no role gate (matching Contract's default, #68), mounted
+// with attaching=true so an unattached contractor 404s instead.
 //
 // #275: the Contract must be billable at all, per contracts.TransitionBill
 // -- Signed and still in force. A Draft, a Sent (unsigned), or a Voided
@@ -116,7 +121,7 @@ type ListInvoicesResponse struct {
 // own Create + Finalize Invoice calls.
 func PostInvoiceHandler(client Client) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, practiceID, engagementID, contractID, contractStatus, ok := resolveInvoiceEngagement(w, r)
+		tx, practiceID, engagementID, contractID, contractStatus, amountCents, ok := resolveInvoiceEngagement(w, r)
 		if !ok {
 			return
 		}
@@ -127,10 +132,6 @@ func PostInvoiceHandler(client Client) http.Handler {
 
 		var req CreateInvoiceRequest
 		if !apierr.DecodeJSON(w, r, &req) {
-			return
-		}
-		if req.AmountCents <= 0 {
-			apierr.WriteError(w, "amountCents must be greater than zero", http.StatusBadRequest)
 			return
 		}
 
@@ -153,9 +154,9 @@ func PostInvoiceHandler(client Client) http.Handler {
 
 		var view InvoiceView
 		if mode == BillingModeByHand {
-			view, err = createByHandInvoice(r.Context(), tx, practiceID, contractID, req.AmountCents)
+			view, err = createByHandInvoice(r.Context(), tx, practiceID, contractID, amountCents)
 		} else {
-			view, err = createStripeInvoice(r.Context(), tx, client, practiceID, engagementID, contractID, req.AmountCents)
+			view, err = createStripeInvoice(r.Context(), tx, client, practiceID, engagementID, contractID, amountCents)
 		}
 		if errors.Is(err, errClientNoEmail) {
 			apierr.WriteError(w, "this client has no email on file -- add one before invoicing her", http.StatusUnprocessableEntity)
@@ -181,7 +182,7 @@ func PostInvoiceHandler(client Client) http.Handler {
 			}
 		}
 
-		diff, err := json.Marshal(map[string]int64{"amountCents": req.AmountCents})
+		diff, err := json.Marshal(map[string]int64{"amountCents": amountCents})
 		if err != nil {
 			// coverage:ignore reason: a map of one int64 always marshals cleanly, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
@@ -392,44 +393,46 @@ func GetInvoicesHandler() http.Handler {
 
 // resolveInvoiceEngagement resolves the request-scoped tx, Practice id,
 // and :engagementId path segment, confirms the Engagement belongs to the
-// current Practice, and fetches its current Contract's id and status
-// (the most recently created row, mirroring contracts.fetchContract's
-// "most recent wins" rule) -- the shared prologue for PostInvoiceHandler.
-// Writes the appropriate error response itself and returns ok=false on
-// any failure.
-func resolveInvoiceEngagement(w http.ResponseWriter, r *http.Request) (tx *sql.Tx, practiceID, engagementID, contractID string, contractStatus contracts.Status, ok bool) {
+// current Practice, and fetches its current Contract's id, status and
+// amount (the most recently created row, mirroring
+// contracts.fetchContract's "most recent wins" rule) -- the shared
+// prologue for PostInvoiceHandler. amountCents is the Contract's own
+// amount_cents (#967): the only figure an Invoice is ever raised for
+// (#947). Writes the appropriate error response itself and returns
+// ok=false on any failure.
+func resolveInvoiceEngagement(w http.ResponseWriter, r *http.Request) (tx *sql.Tx, practiceID, engagementID, contractID string, contractStatus contracts.Status, amountCents int64, ok bool) {
 	tx, practiceID, ok = staffauth.RequireTx(w, r)
 	// coverage:ignore reason: staffauth.Middleware always sets a tx before this handler runs
 	if !ok {
-		return nil, "", "", "", "", false
+		return nil, "", "", "", "", 0, false
 	}
 
 	engagementID = r.PathValue("engagementId")
 	if !staffauth.ParseUUID(w, "engagement", engagementID) {
-		return nil, "", "", "", "", false
+		return nil, "", "", "", "", 0, false
 	}
 	if err := requireEngagementAtPractice(r.Context(), tx, engagementID, practiceID); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			apierr.WriteError(w, "engagement not found", http.StatusNotFound)
-			return nil, "", "", "", "", false
+			return nil, "", "", "", "", 0, false
 		}
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
-		return nil, "", "", "", "", false
+		return nil, "", "", "", "", 0, false
 	}
 
-	contractID, contractStatus, err := fetchCurrentContract(r.Context(), tx, engagementID)
+	contractID, contractStatus, amountCents, err := fetchCurrentContract(r.Context(), tx, engagementID)
 	if errors.Is(err, sql.ErrNoRows) {
 		apierr.WriteError(w, "no contract found for this engagement", http.StatusNotFound)
-		return nil, "", "", "", "", false
+		return nil, "", "", "", "", 0, false
 	}
 	if err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
-		return nil, "", "", "", "", false
+		return nil, "", "", "", "", 0, false
 	}
 
-	return tx, practiceID, engagementID, contractID, contractStatus, true
+	return tx, practiceID, engagementID, contractID, contractStatus, amountCents, true
 }
 
 // requireEngagementAtPractice confirms engagementID exists and belongs to
@@ -451,22 +454,24 @@ func requireEngagementAtPractice(ctx context.Context, tx *sql.Tx, engagementID, 
 	return nil
 }
 
-// fetchCurrentContract returns the id and status of engagementID's most
-// recently created Contract row, or a wrapped sql.ErrNoRows if none
-// exists yet. The status travels back with the id (rather than a
-// separate query) because resolveInvoiceEngagement's only caller,
-// PostInvoiceHandler, needs it immediately afterward to check
-// contracts.TransitionBill -- #275.
-func fetchCurrentContract(ctx context.Context, tx *sql.Tx, engagementID string) (id string, status contracts.Status, err error) {
+// fetchCurrentContract returns the id, status and amount of
+// engagementID's most recently created Contract row, or a wrapped
+// sql.ErrNoRows if none exists yet. The status travels back with the id
+// (rather than a separate query) because resolveInvoiceEngagement's only
+// caller, PostInvoiceHandler, needs it immediately afterward to check
+// contracts.TransitionBill -- #275. amountCents (contracts.amount_cents,
+// #967) is the Contract's own real amount -- an Invoice is raised for
+// exactly this figure and no other (#947).
+func fetchCurrentContract(ctx context.Context, tx *sql.Tx, engagementID string) (id string, status contracts.Status, amountCents int64, err error) {
 	var rawStatus string
 	err = tx.QueryRowContext(ctx,
-		`SELECT id, status FROM contracts WHERE engagement_id = $1 ORDER BY created_at DESC LIMIT 1`, engagementID,
-	).Scan(&id, &rawStatus)
+		`SELECT id, status, amount_cents FROM contracts WHERE engagement_id = $1 ORDER BY created_at DESC LIMIT 1`, engagementID,
+	).Scan(&id, &rawStatus, &amountCents)
 	// coverage:ignore reason: the sql.ErrNoRows branch is exercised by unit tests; a non-ErrNoRows DB failure here is not
 	if err != nil {
-		return "", "", fmt.Errorf("payments: fetch current contract: %w", err)
+		return "", "", 0, fmt.Errorf("payments: fetch current contract: %w", err)
 	}
-	return id, contracts.Status(rawStatus), nil
+	return id, contracts.Status(rawStatus), amountCents, nil
 }
 
 // fetchConnectAccountID reads practiceID's stored Stripe Connect account

@@ -24,7 +24,15 @@ func Mount(g *staffauth.GatedRouter, ir *idempotency.Router, client Client) {
 	// inserts a new invoices row, with no dedup guard -- a double-click
 	// billed the Client twice. Money-creating, same as the six routes
 	// already wrapped below.
-	ir.Replayable("POST /api/practices/{practiceId}/engagements/{engagementId}/contract/invoices", false, PostInvoiceHandler(client))
+	//
+	// attaching=true (#947): raising an Invoice stays open to any Staff
+	// with reach -- no role gate, matching Contract's own default (#68)
+	// -- but it never carried the attaching-write reach test every other
+	// Engagement-scoped write does (ADR-0008), so a contractor with no
+	// granted attachment could raise an Invoice on any Engagement at the
+	// Practice. AttachingWrite closes that: an unattached contractor now
+	// 404s the same way she already does on a Contract write.
+	ir.Replayable("POST /api/practices/{practiceId}/engagements/{engagementId}/contract/invoices", true, PostInvoiceHandler(client))
 	// Invoice history: Owner, Admin, and an employed Doula (ADR-0008's
 	// money row as amended by #282); GetInvoicesHandler refuses a
 	// contractor in-handler, so the mount stays AnyStaff. A contractor's

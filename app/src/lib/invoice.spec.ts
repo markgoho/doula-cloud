@@ -56,7 +56,10 @@ describe('loadInvoices', () => {
 });
 
 describe('createInvoice', () => {
-	it('POSTs the amount and returns the created invoice', async () => {
+	// #947: the amount is derived from the Contract on the BFF side, so
+	// this call never sends one -- there is nothing left to assert about
+	// an amount reaching the wire.
+	it('POSTs with no amount and returns the created invoice', async () => {
 		const invoice = {
 			id: 'inv-1',
 			contractId: 'contract-1',
@@ -67,12 +70,12 @@ describe('createInvoice', () => {
 		};
 		const fetcher = vi.fn().mockResolvedValue(jsonResponse(invoice));
 
-		const result = await createInvoice(fetcher, 'practice-1', 'eng-1', 15_000);
+		const result = await createInvoice(fetcher, 'practice-1', 'eng-1');
 
 		expect(fetcher).toHaveBeenCalledWith('/api/practices/practice-1/engagements/eng-1/contract/invoices', {
 			method: 'POST',
 			headers: { 'Content-Type': 'application/json' },
-			body: JSON.stringify({ amountCents: 15_000 })
+			body: JSON.stringify({})
 		});
 		expect(result).toEqual(invoice);
 	});
@@ -85,17 +88,15 @@ describe('createInvoice', () => {
 			jsonResponse('Clients cannot pay this Practice yet. A Practice Owner has to connect Stripe.', 409)
 		);
 
-		await expect(createInvoice(fetcher, 'practice-1', 'eng-1', 15_000)).rejects.toThrow(
+		await expect(createInvoice(fetcher, 'practice-1', 'eng-1')).rejects.toThrow(
 			'Clients cannot pay this Practice yet. A Practice Owner has to connect Stripe.'
 		);
 	});
 
 	it('throws with the response body text on a non-ok response', async () => {
-		const fetcher = vi.fn().mockResolvedValue(jsonResponse('amountCents must be greater than zero', 400));
+		const fetcher = vi.fn().mockResolvedValue(jsonResponse('engagement not found', 404));
 
-		await expect(createInvoice(fetcher, 'practice-1', 'eng-1', 0)).rejects.toThrow(
-			'amountCents must be greater than zero'
-		);
+		await expect(createInvoice(fetcher, 'practice-1', 'eng-1')).rejects.toThrow('engagement not found');
 	});
 
 	it('carries billingMode when the caller supplies it (the inline "ask once")', async () => {
@@ -111,12 +112,12 @@ describe('createInvoice', () => {
 		};
 		const fetcher = vi.fn().mockResolvedValue(jsonResponse(invoice));
 
-		await createInvoice(fetcher, 'practice-1', 'eng-1', 15_000, 'by_hand');
+		await createInvoice(fetcher, 'practice-1', 'eng-1', 'by_hand');
 
 		expect(fetcher).toHaveBeenCalledWith('/api/practices/practice-1/engagements/eng-1/contract/invoices', {
 			method: 'POST',
 			headers: { 'Content-Type': 'application/json' },
-			body: JSON.stringify({ amountCents: 15_000, billingMode: 'by_hand' })
+			body: JSON.stringify({ billingMode: 'by_hand' })
 		});
 	});
 });
