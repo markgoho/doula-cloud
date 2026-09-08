@@ -493,7 +493,7 @@ describe('payments settings screen: re-reading Connect status on return from Str
 
 		await expect.element(testPage.getByText('Active', { exact: true })).toBeVisible();
 		await expect
-			.element(testPage.getByText('Clients can pay their invoices and payouts reach your bank.'))
+			.element(testPage.getByText("Clients can pay their invoices, and payouts reach this Practice's bank."))
 			.toBeVisible();
 		await expect.element(testPage.getByText('Taking payments, payouts on hold')).not.toBeInTheDocument();
 		expect(statusRegion?.textContent).toContain('Active');
