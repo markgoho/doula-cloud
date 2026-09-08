@@ -21,6 +21,7 @@ import {
 	sendMessage,
 	sendPortalInvite,
 	visitsURL,
+	visitTypeLabel,
 	type EngagementReference,
 	type Visit
 } from './engagementDetail.js';
@@ -75,8 +76,8 @@ describe('loadVisitsPage', () => {
 
 	it('keeps the endpoint order, newest first', async () => {
 		const visits: Visit[] = [
-			{ visitId: 'v2', staffId: 's1', staffName: 'Maya', createdAt: '2027-02-01' },
-			{ visitId: 'v1', staffId: 's1', staffName: 'Maya', createdAt: '2027-01-01' }
+			{ visitId: 'v2', staffId: 's1', staffName: 'Maya', createdAt: '2027-02-01', type: 'prenatal' },
+			{ visitId: 'v1', staffId: 's1', staffName: 'Maya', createdAt: '2027-01-01', type: 'prenatal' }
 		];
 		const fetcher = vi.fn().mockResolvedValue(jsonResponse({ items: visits, hasMore: false }));
 
@@ -536,5 +537,16 @@ describe('URL builders', () => {
 		expect(messagesURL(reference)).toBe(`${base}/messages`);
 		expect(portalInviteURL(reference)).toBe(`${base}/portal-invite`);
 		expect(birthOutcomeURL(reference)).toBe(`${base}/birth-outcome`);
+	});
+});
+
+describe('visitTypeLabel', () => {
+	it.each([
+		['prenatal', 'Prenatal'],
+		['birth', 'Birth'],
+		['postpartum', 'Postpartum'],
+		['something-new', 'something-new']
+	])('labels the %s type as %s', (type, expected) => {
+		expect(visitTypeLabel(type)).toBe(expected);
 	});
 });

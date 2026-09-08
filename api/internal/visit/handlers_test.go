@@ -1221,6 +1221,195 @@ func TestListHandler_ReturnsNotes(t *testing.T) {
 	}
 }
 
+// TestListHandler_ReturnsVisitType proves #281's AC directly against the
+// live HTTP surface: a Visit before the Engagement's pregnancy-end date
+// types prenatal, one on it types birth, one after types postpartum --
+// and every row's type agrees with visit.DeriveType called independently
+// on the same inputs, which is the "one derivation, every surface
+// agrees" AC in one assertion.
+func TestListHandler_ReturnsVisitType(t *testing.T) {
+	db := testdb.New(t)
+	const identityUID = "staff-listing-visit-type"
+	practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, "employee")
+	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
+	pregnancyEndedOn := "2026-03-15"
+	setPregnancyEnded(t, db, engagementID, "live_birth", pregnancyEndedOn)
+
+	before := seedScheduledVisit(t, db, engagementID, staffID, time.Date(2026, 3, 1, 9, 0, 0, 0, time.UTC))
+	onPivot := seedScheduledVisit(t, db, engagementID, staffID, time.Date(2026, 3, 15, 20, 0, 0, 0, time.UTC))
+	after := seedScheduledVisit(t, db, engagementID, staffID, time.Date(2026, 3, 20, 9, 0, 0, 0, time.UTC))
+
+	srv, session := newServer(t, db, identityUID)
+	defer srv.Close()
+
+	resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/visits")
+	defer resp.Body.Close()
+	var listResp visit.ListResponse
+	if err := json.NewDecoder(resp.Body).Decode(&listResp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	byID := map[string]visit.Visit{}
+	for _, v := range listResp.Items {
+		byID[v.VisitID] = v
+	}
+
+	for id, want := range map[string]string{
+		before:  visit.TypePrenatal,
+		onPivot: visit.TypeBirth,
+		after:   visit.TypePostpartum,
+	} {
+		v, ok := byID[id]
+		if !ok {
+			t.Fatalf("visit %s missing from response", id)
+		}
+		if v.Type != want {
+			t.Errorf("visit %s: type = %q, want %q", id, v.Type, want)
+		}
+		if agree := visit.DeriveType(*v.ScheduledAt, &pregnancyEndedOn); v.Type != agree {
+			t.Errorf("visit %s: handler's type %q disagrees with DeriveType's own %q", id, v.Type, agree)
+		}
+	}
+}
+
+// TestListHandler_ReturnsVisitType_NoOutcomeIsPrenatal proves the AC's
+// "no pivot yet" case: an Engagement with no recorded pregnancy-end date
+// types every one of its Visits prenatal, whatever their own instant.
+func TestListHandler_ReturnsVisitType_NoOutcomeIsPrenatal(t *testing.T) {
+	db := testdb.New(t)
+	const identityUID = "staff-listing-visit-type-no-outcome"
+	practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, "employee")
+	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
+	visitID := seedScheduledVisit(t, db, engagementID, staffID, time.Date(2030, 1, 1, 0, 0, 0, 0, time.UTC))
+
+	srv, session := newServer(t, db, identityUID)
+	defer srv.Close()
+
+	resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/visits")
+	defer resp.Body.Close()
+	var listResp visit.ListResponse
+	if err := json.NewDecoder(resp.Body).Decode(&listResp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if len(listResp.Items) != 1 || listResp.Items[0].VisitID != visitID {
+		t.Fatalf("items = %+v, want the one seeded Visit", listResp.Items)
+	}
+	if got := listResp.Items[0].Type; got != visit.TypePrenatal {
+		t.Errorf("type = %q, want prenatal for an Engagement with no pregnancy-end date", got)
+	}
+}
+
+// TestListHandler_ReturnsVisitType_UnscheduledFallsBackToCreatedAt
+// proves the fallback type.go's own doc comment names: a Visit nobody
+// has scheduled yet still types, from when it was logged.
+func TestListHandler_ReturnsVisitType_UnscheduledFallsBackToCreatedAt(t *testing.T) {
+	db := testdb.New(t)
+	const identityUID = "staff-listing-visit-type-unscheduled"
+	practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, "employee")
+	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
+	setPregnancyEnded(t, db, engagementID, "live_birth", "2026-03-15")
+	visitID := seedVisitCreatedAt(t, db, engagementID, staffID, time.Date(2026, 3, 20, 9, 0, 0, 0, time.UTC))
+
+	srv, session := newServer(t, db, identityUID)
+	defer srv.Close()
+
+	resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/visits")
+	defer resp.Body.Close()
+	var listResp visit.ListResponse
+	if err := json.NewDecoder(resp.Body).Decode(&listResp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if len(listResp.Items) != 1 || listResp.Items[0].VisitID != visitID {
+		t.Fatalf("items = %+v, want the one seeded Visit", listResp.Items)
+	}
+	if got := listResp.Items[0].Type; got != visit.TypePostpartum {
+		t.Errorf("type = %q, want postpartum derived from created_at since the Visit was never scheduled", got)
+	}
+}
+
+// TestListHandler_ReturnsVisitType_LossTypesPostpartumNoBranch is #281's
+// own AC: a Visit after a loss types postpartum, the same as after a
+// live birth, with no branch on the outcome -- DeriveType takes no
+// outcome parameter at all, and this proves the two Engagements agree.
+func TestListHandler_ReturnsVisitType_LossTypesPostpartumNoBranch(t *testing.T) {
+	db := testdb.New(t)
+	const identityUID = "staff-listing-visit-type-loss"
+	practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, "employee")
+
+	_, liveBirthEngagement := testdb.SeedEngagement(t, db, practiceID)
+	setPregnancyEnded(t, db, liveBirthEngagement, "live_birth", "2026-03-15")
+	liveBirthVisit := seedScheduledVisit(t, db, liveBirthEngagement, staffID, time.Date(2026, 4, 1, 9, 0, 0, 0, time.UTC))
+
+	_, lossEngagement := testdb.SeedEngagement(t, db, practiceID)
+	setPregnancyEnded(t, db, lossEngagement, "loss", "2026-03-15")
+	lossVisit := seedScheduledVisit(t, db, lossEngagement, staffID, time.Date(2026, 4, 1, 9, 0, 0, 0, time.UTC))
+
+	srv, session := newServer(t, db, identityUID)
+	defer srv.Close()
+
+	for engagementID, visitID := range map[string]string{
+		liveBirthEngagement: liveBirthVisit,
+		lossEngagement:      lossVisit,
+	} {
+		resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/visits")
+		defer resp.Body.Close()
+		var listResp visit.ListResponse
+		if err := json.NewDecoder(resp.Body).Decode(&listResp); err != nil {
+			t.Fatalf("decode response: %v", err)
+		}
+		if len(listResp.Items) != 1 || listResp.Items[0].VisitID != visitID {
+			t.Fatalf("items = %+v, want the one seeded Visit", listResp.Items)
+		}
+		if got := listResp.Items[0].Type; got != visit.TypePostpartum {
+			t.Errorf("engagement %s: type = %q, want postpartum after a loss the same as after a live birth", engagementID, got)
+		}
+	}
+}
+
+// TestListHandler_ReturnsVisitType_CorrectionRetypesWithNoVisitWrite is
+// #281's AC that correcting the Engagement's pregnancy-end date retypes
+// its existing Visits at once, with no write to the Visit row and no
+// backfill -- the whole reason the type is derived rather than stored.
+func TestListHandler_ReturnsVisitType_CorrectionRetypesWithNoVisitWrite(t *testing.T) {
+	db := testdb.New(t)
+	const identityUID = "staff-listing-visit-type-correction"
+	practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, "employee")
+	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
+	setPregnancyEnded(t, db, engagementID, "live_birth", "2026-03-20")
+	visitID := seedScheduledVisit(t, db, engagementID, staffID, time.Date(2026, 3, 10, 9, 0, 0, 0, time.UTC))
+
+	srv, session := newServer(t, db, identityUID)
+	defer srv.Close()
+
+	firstResp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/visits")
+	defer firstResp.Body.Close()
+	var first visit.ListResponse
+	if err := json.NewDecoder(firstResp.Body).Decode(&first); err != nil {
+		t.Fatalf("decode first response: %v", err)
+	}
+	if got := first.Items[0].Type; got != visit.TypePrenatal {
+		t.Fatalf("type before correction = %q, want prenatal", got)
+	}
+
+	// The date entered a week late, corrected to before the Visit's own
+	// instant -- the row #293's own handler would touch, updated here
+	// directly since that handler's own frozen-write rules are not what
+	// this test is proving.
+	setPregnancyEnded(t, db, engagementID, "live_birth", "2026-03-05")
+
+	secondResp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/visits")
+	defer secondResp.Body.Close()
+	var second visit.ListResponse
+	if err := json.NewDecoder(secondResp.Body).Decode(&second); err != nil {
+		t.Fatalf("decode second response: %v", err)
+	}
+	if len(second.Items) != 1 || second.Items[0].VisitID != visitID {
+		t.Fatalf("items = %+v, want the same one Visit, untouched", second.Items)
+	}
+	if got := second.Items[0].Type; got != visit.TypePostpartum {
+		t.Errorf("type after correction = %q, want postpartum with no separate write to the Visit", got)
+	}
+}
+
 func TestNotesHandler_SetsNotes(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "doula-writing-notes"

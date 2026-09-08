@@ -105,6 +105,19 @@ export interface Visit {
 	 * written -- distinct from `''`, a Visit whose notes were written and
 	 * then deliberately cleared. */
 	notes?: string;
+	/** ADR-0015's derived Visit type (#281). Never chosen and never
+	 * stored: the BFF computes it fresh on every read from this Visit's
+	 * own instant and the Engagement's pregnancy-end date, so this screen
+	 * renders it rather than deriving its own copy of the same rule. */
+	type: 'prenatal' | 'birth' | 'postpartum';
+}
+
+/** The label a Visit type reads as, falling back to the raw enum value so
+ * an enum this build has not met yet still prints something -- the same
+ * fallback `kindLabel` (engagementRequest.ts) uses, and #262's own rule:
+ * a raw enum value never reaches the screen. */
+export function visitTypeLabel(type: string): string {
+	return { prenatal: 'Prenatal', birth: 'Birth', postpartum: 'Postpartum' }[type] ?? type;
 }
 
 /**

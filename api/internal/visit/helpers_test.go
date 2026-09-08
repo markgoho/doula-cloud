@@ -79,3 +79,54 @@ func seedVisitWithNotes(t *testing.T, db *testdb.DB, engagementID, staffID, note
 	}
 	return visitID
 }
+
+// seedVisitCreatedAt is seedVisit with an explicit created_at and no
+// scheduled_at, for #281's fallback case: DeriveType must read a Visit
+// that was never scheduled by when it was logged.
+func seedVisitCreatedAt(t *testing.T, db *testdb.DB, engagementID, staffID string, createdAt time.Time) (visitID string) {
+	t.Helper()
+
+	if err := db.Admin.QueryRowContext(t.Context(),
+		`INSERT INTO visits (engagement_id, staff_id, created_at) VALUES ($1, $2, $3) RETURNING id`,
+		engagementID, staffID, createdAt,
+	).Scan(&visitID); err != nil {
+		t.Fatalf("seed visit with created_at: %v", err)
+	}
+	return visitID
+}
+
+// setPregnancyEnded writes an Engagement's birth outcome and
+// pregnancy-end date directly on the Admin connection, bypassing
+// engagement.RecordBirthOutcomeHandler's own frozen-write rules -- this
+// package's tests need the fixture, not that handler's own behavior,
+// which engagement_test already covers. endedOn is YYYY-MM-DD text,
+// matching the shape DeriveType compares against.
+//
+// 00093's engagements_freeze_outcome trigger fires for any writer, Admin
+// included -- a superuser bypasses Row-Level Security, not a BEFORE
+// UPDATE trigger -- so a second call correcting an already-recorded
+// outcome opens the trigger's own door (app.allow_outcome_correction)
+// first, inside the one transaction the setting has to survive in.
+func setPregnancyEnded(t *testing.T, db *testdb.DB, engagementID, outcome, endedOn string) {
+	t.Helper()
+
+	tx, err := db.Admin.BeginTx(t.Context(), nil)
+	if err != nil {
+		t.Fatalf("set pregnancy ended: begin: %v", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	if _, err := tx.ExecContext(t.Context(),
+		`SELECT set_config('app.allow_outcome_correction', 'on', true)`); err != nil {
+		t.Fatalf("set pregnancy ended: open correction door: %v", err)
+	}
+	if _, err := tx.ExecContext(t.Context(),
+		`UPDATE engagements SET birth_outcome = $1, pregnancy_ended_on = $2 WHERE id = $3`,
+		outcome, endedOn, engagementID,
+	); err != nil {
+		t.Fatalf("set pregnancy ended: %v", err)
+	}
+	if err := tx.Commit(); err != nil {
+		t.Fatalf("set pregnancy ended: commit: %v", err)
+	}
+}

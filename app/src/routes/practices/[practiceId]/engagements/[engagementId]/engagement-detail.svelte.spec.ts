@@ -435,6 +435,21 @@ describe('the Visits section notes control (#251)', () => {
 	});
 });
 
+// #281: a Visit's derived type, rendered as its own column with the
+// human label rather than the raw enum value the BFF sends (#262).
+describe('the Visits section Type column (#281)', () => {
+	it("renders each Visit's derived type as its human label", async () => {
+		await renderWithFixtureResponder();
+
+		// The fixture's own two rows (page.fixture.ts): visit-1 is
+		// 'postpartum', visit-2 is 'prenatal'. Neither raw enum value
+		// ('postpartum'/'prenatal' as sent) collides with its own label
+		// here, but the label is what a Doula reads, not the wire value.
+		await expect.element(testPage.getByRole('cell', { name: 'Postpartum', exact: true })).toBeVisible();
+		await expect.element(testPage.getByRole('cell', { name: 'Prenatal', exact: true })).toBeVisible();
+	});
+});
+
 // #841: each SectionState is its own instance, so one section's failure
 // must not touch another's -- proved here rather than by the default
 // "everything answers 403" mock every other test in this file uses, since

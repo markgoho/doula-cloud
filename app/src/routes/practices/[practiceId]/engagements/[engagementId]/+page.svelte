@@ -21,6 +21,7 @@
 		scheduleVisit,
 		sendMessage,
 		sendPortalInvite,
+		visitTypeLabel,
 		type BirthOutcomeFacts,
 		type BirthOutcomeRequest,
 		type Visit
@@ -1234,6 +1235,7 @@
 	<DataTable
 		columns={[
 			{ label: 'Staff', accessor: (visit: Visit) => visit.staffName },
+			{ label: 'Type', accessor: (visit: Visit) => visitTypeLabel(visit.type) },
 			{ label: 'Date', accessor: (visit: Visit) => formatScheduledVisit(visit.scheduledAt) },
 			{ label: 'Notes', accessor: (visit: Visit) => visit.notes || 'No notes yet.' }
 		]}
