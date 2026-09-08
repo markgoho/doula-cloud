@@ -6,6 +6,16 @@ Unlike `app/` (a static SPA on `adapter-static`), this project runs on `@sveltej
 
 Styling here is plain and self-contained — it does not reuse or imitate `app/`'s design-system components.
 
+## What it shows
+
+The one screen has a sidebar and a cost breakdown. The sidebar carries total spend for the current billing period and the sync action; the main area lists every service the billing export returned for the period, largest first, each expanding to its SKUs.
+
+`GET /api/cost` is the whole data path: it queries the `doula-cloud:billing_export` BigQuery dataset (`us-central1`), grouped by `service.description` and `sku.description` and filtered to this project. No service is named in the query, so a service enabled tomorrow appears with no code change. Three of them — Artifact Registry, Secret Manager and Identity Platform (which is how Firebase Authentication bills) — publish no Cloud Monitoring metric that can be paired with the bill, so they carry an inline "usage detail not available" note where a usage panel would go.
+
+Sync is stateless: each press is a fresh server-side read that replaces what is on screen. Nothing polls, nothing auto-refreshes, and no history is kept. The billing export is written about once a day, so the total is always about 24 hours behind actual usage — the sidebar says so, and never implies a same-day figure.
+
+Future work, deliberately not built: a history or trend view over past syncs.
+
 ## Local setup
 
 1. `bun install`
