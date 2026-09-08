@@ -28,7 +28,7 @@ func ClientGetContractHandler() http.Handler {
 		}
 		engagementID, _ := clientauth.EngagementID(r.Context())
 
-		_, prose, status, values, amountCents, err := fetchContract(r.Context(), tx, engagementID)
+		_, prose, status, values, amountCents, amountChangedAt, err := fetchContract(r.Context(), tx, engagementID)
 		if errors.Is(err, sql.ErrNoRows) {
 			apierr.WriteError(w, "no contract found for this engagement", http.StatusNotFound)
 			return
@@ -41,11 +41,12 @@ func ClientGetContractHandler() http.Handler {
 		mergeFields := extractMergeFields(prose)
 
 		out := ContractResponse{
-			EngagementID: engagementID,
-			Status:       status,
-			Prose:        prose,
-			MergeFields:  mergeFields,
-			Values:       withResolvedPrice(mergeFields, values.nonEmpty(), amountCents),
+			EngagementID:    engagementID,
+			Status:          status,
+			Prose:           prose,
+			MergeFields:     mergeFields,
+			Values:          withResolvedPrice(mergeFields, values.nonEmpty(), amountCents),
+			AmountChangedAt: amountChangedAt,
 		}
 		apierr.WriteJSON(w, http.StatusOK, out)
 	})

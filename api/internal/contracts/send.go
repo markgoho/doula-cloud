@@ -73,7 +73,7 @@ func PostSendContractHandler(pusher push.Pusher) http.Handler {
 			return
 		}
 
-		id, prose, status, values, amountCents, err := fetchContract(r.Context(), tx, engagementID)
+		id, prose, status, values, amountCents, amountChangedAt, err := fetchContract(r.Context(), tx, engagementID)
 		if errors.Is(err, sql.ErrNoRows) {
 			apierr.WriteError(w, "no contract found for this engagement", http.StatusNotFound)
 			return
@@ -135,11 +135,12 @@ func PostSendContractHandler(pusher push.Pusher) http.Handler {
 		notifyClient(r.Context(), tx, pusher, engagementID)
 
 		out := ContractResponse{
-			EngagementID: engagementID,
-			Status:       string(StatusSent),
-			Prose:        prose,
-			MergeFields:  mergeFields,
-			Values:       values.nonEmpty(),
+			EngagementID:    engagementID,
+			Status:          string(StatusSent),
+			Prose:           prose,
+			MergeFields:     mergeFields,
+			Values:          values.nonEmpty(),
+			AmountChangedAt: amountChangedAt,
 		}
 		apierr.WriteJSON(w, http.StatusOK, out)
 	})

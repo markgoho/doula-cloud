@@ -1346,6 +1346,7 @@
 		{#if contract}
 			<ContractStatus
 				status={contract.status}
+				amountChangedAt={contract.amountChangedAt}
 				onVoid={isPracticeOwnerOrAdmin ? handleVoidContract : undefined}
 				onDownloadPdf={canReadContractMoney ? handleDownloadSignedContractPdf : undefined}
 			/>

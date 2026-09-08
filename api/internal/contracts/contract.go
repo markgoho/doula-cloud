@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"regexp"
 	"slices"
+	"time"
 
 	"doula-cloud/api/internal/activity"
 	"doula-cloud/api/internal/apierr"
@@ -34,6 +35,15 @@ type ContractResponse struct {
 	Prose        string           `json:"prose"`
 	MergeFields  []string         `json:"mergeFields"`
 	Values       MergeFieldValues `json:"values"`
+	// AmountChangedAt is when amount_cents last moved after creation --
+	// an Owner/Admin override (amount.go) or a rate-driven reprice
+	// (#968, practicerate.PutRateHandler) -- so a reader can see the
+	// price changed and when without hunting the activity ledger for
+	// it. Nil while the Contract still carries its as-created amount.
+	// Never set for an ambient contractor (priceForReader), the same
+	// gate the "price" merge-field value itself is read through --
+	// ADR-0008's money tier as amended by #282.
+	AmountChangedAt *time.Time `json:"amountChangedAt,omitempty"`
 }
 
 // PutContractRequest is the body of a PUT Contract request: a full
@@ -224,7 +234,7 @@ func GetContractHandler() http.Handler {
 			return
 		}
 
-		_, prose, status, values, amountCents, err := fetchContract(r.Context(), tx, engagementID)
+		_, prose, status, values, amountCents, amountChangedAt, err := fetchContract(r.Context(), tx, engagementID)
 		if errors.Is(err, sql.ErrNoRows) {
 			apierr.WriteError(w, "no contract found for this engagement", http.StatusNotFound)
 			return
@@ -236,12 +246,21 @@ func GetContractHandler() http.Handler {
 		}
 		mergeFields := extractMergeFields(prose)
 
+		// An ambient contractor never reads the Contract's price
+		// (priceForReader), so amountChangedAt is withheld from her the
+		// same way -- it would otherwise leak "the price changed" even
+		// with the value itself removed.
+		if reader.IsAmbientContractor() {
+			amountChangedAt = nil
+		}
+
 		full := ContractResponse{
-			EngagementID: engagementID,
-			Status:       status,
-			Prose:        prose,
-			MergeFields:  mergeFields,
-			Values:       priceForReader(reader, mergeFields, values.nonEmpty(), amountCents),
+			EngagementID:    engagementID,
+			Status:          status,
+			Prose:           prose,
+			MergeFields:     mergeFields,
+			Values:          priceForReader(reader, mergeFields, values.nonEmpty(), amountCents),
+			AmountChangedAt: amountChangedAt,
 		}
 
 		apierr.WriteJSON(w, http.StatusOK, full)
@@ -265,7 +284,7 @@ func PutContractHandler() http.Handler {
 			return
 		}
 
-		id, prose, status, _, amountCents, err := fetchContract(r.Context(), tx, engagementID)
+		id, prose, status, _, amountCents, amountChangedAt, err := fetchContract(r.Context(), tx, engagementID)
 		if errors.Is(err, sql.ErrNoRows) {
 			apierr.WriteError(w, "no contract found for this engagement", http.StatusNotFound)
 			return
@@ -314,11 +333,12 @@ func PutContractHandler() http.Handler {
 		}
 
 		out := ContractResponse{
-			EngagementID: engagementID,
-			Status:       status,
-			Prose:        prose,
-			MergeFields:  mergeFields,
-			Values:       withResolvedPrice(mergeFields, req.Values, amountCents),
+			EngagementID:    engagementID,
+			Status:          status,
+			Prose:           prose,
+			MergeFields:     mergeFields,
+			Values:          withResolvedPrice(mergeFields, req.Values, amountCents),
+			AmountChangedAt: amountChangedAt,
 		}
 		apierr.WriteJSON(w, http.StatusOK, out)
 	})
@@ -345,26 +365,30 @@ func PutContractHandler() http.Handler {
 // "price" merge field from it via withResolvedPrice, rather than trusting
 // any stored copy (there is none: price is never written into
 // merge_field_values).
-func fetchContract(ctx context.Context, tx *sql.Tx, engagementID string) (id, prose, status string, values MergeFieldValues, amountCents int64, err error) {
+// amountChangedAt is nil while the Contract still carries the amount it
+// was created with, and set the moment amount_cents last moved for any
+// reason after creation -- an Owner/Admin override (amount.go) or a
+// rate-driven reprice (#968, practicerate.PutRateHandler).
+func fetchContract(ctx context.Context, tx *sql.Tx, engagementID string) (id, prose, status string, values MergeFieldValues, amountCents int64, amountChangedAt *time.Time, err error) {
 	var rawValues []byte
 	err = tx.QueryRowContext(ctx,
-		`SELECT id, prose, status, merge_field_values, amount_cents FROM contracts
+		`SELECT id, prose, status, merge_field_values, amount_cents, amount_changed_at FROM contracts
 		 WHERE engagement_id = $1 ORDER BY created_at DESC, id DESC LIMIT 1`,
 		engagementID,
-	).Scan(&id, &prose, &status, &rawValues, &amountCents)
+	).Scan(&id, &prose, &status, &rawValues, &amountCents, &amountChangedAt)
 	if errors.Is(err, sql.ErrNoRows) {
-		return "", "", "", nil, 0, fmt.Errorf("contracts: fetch contract: %w", err)
+		return "", "", "", nil, 0, nil, fmt.Errorf("contracts: fetch contract: %w", err)
 	}
 	// coverage:ignore reason: DB query failure, not exercised by unit tests
 	if err != nil {
-		return "", "", "", nil, 0, fmt.Errorf("contracts: fetch contract: %w", err)
+		return "", "", "", nil, 0, nil, fmt.Errorf("contracts: fetch contract: %w", err)
 	}
 
 	if err := json.Unmarshal(rawValues, &values); err != nil {
 		// coverage:ignore reason: stored JSON is always written by PostContractHandler/PutContractHandler, not exercised by unit tests
-		return "", "", "", nil, 0, fmt.Errorf("contracts: unmarshal merge field values: %w", err)
+		return "", "", "", nil, 0, nil, fmt.Errorf("contracts: unmarshal merge field values: %w", err)
 	}
-	return id, prose, status, values, amountCents, nil
+	return id, prose, status, values, amountCents, amountChangedAt, nil
 }
 
 // clientNameMergeKey and practiceNameMergeKey are the merge fields this

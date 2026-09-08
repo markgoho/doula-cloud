@@ -33,7 +33,11 @@ type contractAmountDiff struct {
 // PutContractAmountHandler lets a Practice Owner or Admin override the
 // amount a Contract carries -- #967's AC: "An Owner or an Admin may
 // override a Contract's amount for a Client whose situation is unusual.
-// A Doula may not." Gated by TransitionOverrideAmount: only a Draft
+// A Doula may not." Also sets amount_overridden (#968,
+// 00098_contracts_reprice.sql), so practicerate.PutRateHandler's reprice
+// pass leaves this Contract's amount alone from here on, and
+// amount_changed_at, so GetContractHandler can surface when the amount
+// last moved. Gated by TransitionOverrideAmount: only a Draft
 // Contract's amount may be overridden, the same precondition every other
 // merge-field edit already carries (TransitionEdit) -- once Sent or
 // beyond, nothing about the Contract is editable through these routes,
@@ -80,7 +84,7 @@ func PutContractAmountHandler() http.Handler {
 			return
 		}
 
-		id, _, status, _, before, err := fetchContract(r.Context(), tx, engagementID)
+		id, _, status, _, before, _, err := fetchContract(r.Context(), tx, engagementID)
 		if errors.Is(err, sql.ErrNoRows) {
 			apierr.WriteError(w, "no contract found for this engagement", http.StatusNotFound)
 			return
@@ -97,7 +101,7 @@ func PutContractAmountHandler() http.Handler {
 
 		if before != req.AmountCents {
 			if _, err := tx.ExecContext(r.Context(),
-				`UPDATE contracts SET amount_cents = $1 WHERE id = $2`,
+				`UPDATE contracts SET amount_cents = $1, amount_overridden = true, amount_changed_at = now() WHERE id = $2`,
 				req.AmountCents, id,
 			); err != nil {
 				// coverage:ignore reason: DB query failure, not exercised by unit tests

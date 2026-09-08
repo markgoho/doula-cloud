@@ -491,6 +491,72 @@ func TestGetContractHandler_ContractorWithGrantedAttachmentSeesScope(t *testing.
 	}
 }
 
+// TestGetContractHandler_AmountChangedAtHiddenFromContractor proves
+// #968's AC ("whoever opens a re-derived Contract can see that its price
+// changed") stays inside ADR-0008's money tier: a contractor never sees
+// amountChangedAt, the same "no price key reachable at all" guarantee
+// priceForReader already gives the "price" merge field value itself --
+// otherwise she would learn "the price changed" with the value redacted,
+// which is still a fact about the Practice's money.
+func TestGetContractHandler_AmountChangedAtHiddenFromContractor(t *testing.T) {
+	db := testdb.New(t)
+	const uid = "get-contractor-amount-changed"
+	practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "contractor")
+	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
+	seedContract(t, db, engagementID, statusDraft, mergeFieldProse)
+	testdb.SeedGrantedAttachment(t, db, engagementID, staffID)
+	if _, err := db.Admin.ExecContext(t.Context(),
+		`UPDATE contracts SET amount_changed_at = now() WHERE engagement_id = $1`, engagementID,
+	); err != nil {
+		t.Fatalf("set amount_changed_at: %v", err)
+	}
+
+	srv, session := newContractServer(t, db, uid)
+	defer srv.Close()
+
+	resp := getContract(t, srv, session, practiceID, engagementID)
+	defer resp.Body.Close()
+
+	var out contracts.ContractResponse
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if out.AmountChangedAt != nil {
+		t.Fatalf("amountChangedAt = %v, want nil for an ambient contractor (#968, ADR-0008)", out.AmountChangedAt)
+	}
+}
+
+// TestGetContractHandler_AmountChangedAtVisibleToEmployee proves the
+// same read's Owner/Admin/employee side: amountChangedAt round-trips
+// once amount_changed_at is set on the row, so a reader can see the
+// price changed and when without hunting the activity ledger for it.
+func TestGetContractHandler_AmountChangedAtVisibleToEmployee(t *testing.T) {
+	db := testdb.New(t)
+	const uid = "get-employee-amount-changed"
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
+	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
+	seedContract(t, db, engagementID, statusDraft, mergeFieldProse)
+	if _, err := db.Admin.ExecContext(t.Context(),
+		`UPDATE contracts SET amount_changed_at = now() WHERE engagement_id = $1`, engagementID,
+	); err != nil {
+		t.Fatalf("set amount_changed_at: %v", err)
+	}
+
+	srv, session := newContractServer(t, db, uid)
+	defer srv.Close()
+
+	resp := getContract(t, srv, session, practiceID, engagementID)
+	defer resp.Body.Close()
+
+	var out contracts.ContractResponse
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if out.AmountChangedAt == nil {
+		t.Fatalf("amountChangedAt = nil, want set -- an employed Doula reads Contract money now (#282)")
+	}
+}
+
 // TestGetContractHandler_EmployedDoulaSeesMoney proves ADR-0008's money
 // row as amended by #282: an employed Doula reads the Contract's price,
 // resolved from amount_cents (#967), the same as an Owner or Admin --

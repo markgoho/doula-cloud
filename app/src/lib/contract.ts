@@ -19,6 +19,13 @@ export interface Contract {
 	prose: string;
 	mergeFields: string[];
 	values: Record<string, string>;
+	/** When amountCents last moved after creation -- an Owner/Admin
+	 * override, or a rate-driven reprice (#968) -- so a reader can see
+	 * the price changed and when without hunting the activity ledger for
+	 * it. Absent while the Contract still carries its as-created amount,
+	 * and always absent for a contractor (the Go BFF withholds it the
+	 * same way it withholds the "price" merge field value itself). */
+	amountChangedAt?: string;
 }
 
 /** The "price" merge field key is reserved: the Go BFF resolves it from

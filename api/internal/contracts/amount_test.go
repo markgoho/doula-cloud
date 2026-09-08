@@ -186,6 +186,22 @@ func TestPutContractAmountHandler_Success(t *testing.T) {
 	if parsedDiff.AmountCentsBefore != 15000 || parsedDiff.AmountCentsAfter != 30000 {
 		t.Fatalf("diff = %+v, want before=15000 after=30000", parsedDiff)
 	}
+
+	// #968's AC: an overridden Contract keeps the override and never
+	// re-derives when a later rate change comes through -- amount_overridden
+	// is the column practicerate.PutRateHandler's reprice pass excludes on.
+	var overridden bool
+	if err := db.Admin.QueryRowContext(t.Context(),
+		`SELECT amount_overridden FROM contracts WHERE engagement_id = $1`, engagementID,
+	).Scan(&overridden); err != nil {
+		t.Fatalf("query amount_overridden: %v", err)
+	}
+	if !overridden {
+		t.Fatalf("amount_overridden = false, want true after an Owner/Admin override")
+	}
+	if getOut.AmountChangedAt == nil {
+		t.Fatalf("GET amountChangedAt = nil, want set -- an Owner/Admin can see the price changed and when (#968)")
+	}
 }
 
 // TestPutContractAmountHandler_RepeatedIdenticalValueRecordsNoNewActivity
