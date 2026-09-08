@@ -178,9 +178,9 @@ func TestSpendResetHandler_PasswordTooShort(t *testing.T) {
 		t.Fatalf("details = %v, want newPassword entry", body.Details)
 	}
 	limit := regexp.MustCompile(`\d+`).FindString(body.Message)
-	if limit == "" || !strings.Contains(staffauth.MsgPasswordTooShort, limit) {
-		t.Fatalf("message %q and detail %q disagree on the minimum length",
-			body.Message, staffauth.MsgPasswordTooShort)
+	if want := "Password must be " + limit + " characters or more"; staffauth.MsgPasswordTooShort != want {
+		t.Fatalf("detail = %q, want %q -- the Message reports a minimum of %q",
+			staffauth.MsgPasswordTooShort, want, limit)
 	}
 }
 
