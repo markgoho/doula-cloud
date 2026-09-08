@@ -454,7 +454,7 @@ export async function setPaymentTerms(
 
 /** The narrowest and widest payment terms a Practice may set (#768).
  * These mirror the BFF's own bound (payments.maxPaymentTermsDays) and the
- * CHECK constraint in 00100_invoice_due_at.sql -- three statements of one
+ * CHECK constraint in 00102_invoice_due_at.sql -- three statements of one
  * rule, because SQL, Go and TypeScript cannot share a constant. This is
  * the one the screen spends, so the form and its refusal message can
  * never disagree with each other. */

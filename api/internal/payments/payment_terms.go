@@ -39,7 +39,7 @@ const DefaultPaymentTermsDays = 30
 const MsgNetDaysOutOfRange = "Days to pay must be a whole number of days from 1 to 365"
 
 // maxPaymentTermsDays bounds what PutPaymentTermsHandler accepts, matching
-// the CHECK constraint in 00100_invoice_due_at.sql. A year is far past
+// the CHECK constraint in 00102_invoice_due_at.sql. A year is far past
 // anything a Practice bills a Client on; the bound exists so a typo
 // ("300" for "30") cannot put an Invoice's due date beyond any horizon a
 // Practice would notice.
