@@ -73,3 +73,34 @@ export function formatCompact(value: number | undefined): string {
 export function formatGibibytes(bytes: number | undefined): string {
 	return bytes === undefined ? NOT_REPORTED : gibibytes.format(bytes / BYTES_PER_GIBIBYTE);
 }
+
+/**
+ * The binary units a byte count is read in, smallest first. A dashboard that
+ * reports every count in GiB writes `0` for half a megabyte, which reads as
+ * no usage rather than a little.
+ */
+const BYTE_UNITS = ['B', 'KiB', 'MiB', 'GiB', 'TiB'] as const;
+const BYTES_PER_UNIT = 1024;
+const scaledBytes = new Intl.NumberFormat('en-US', { maximumFractionDigits: 1 });
+
+/**
+ * A byte count and the unit it is worth reading in: `567149` renders as
+ * `{ value: '553.9', unit: 'KiB' }`, `0` as `{ value: '0', unit: 'B' }`.
+ *
+ * The unit comes back beside the figure rather than inside it, because the
+ * stat grid draws a unit smaller than the number it belongs to. A metric
+ * Cloud Monitoring did not report renders as {@link NOT_REPORTED} with no
+ * unit at all.
+ */
+export function formatBytes(bytes: number | undefined): { value: string; unit: string } {
+	if (bytes === undefined) return { value: NOT_REPORTED, unit: '' };
+
+	let scaled = bytes;
+	let unit = 0;
+	while (scaled >= BYTES_PER_UNIT && unit < BYTE_UNITS.length - 1) {
+		scaled /= BYTES_PER_UNIT;
+		unit += 1;
+	}
+
+	return { value: scaledBytes.format(scaled), unit: BYTE_UNITS[unit] };
+}

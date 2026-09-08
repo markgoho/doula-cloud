@@ -32,6 +32,33 @@ export const CLOUD_SQL_RESOURCE_TYPE = 'cloudsql_database';
 export const CLOUD_SQL_DATABASE_ID = `${MONITORING_PROJECT_ID}:doula-cloud-pg`;
 
 /**
+ * The monitored resource Cloud Storage reports under.
+ *
+ * No bucket is named. Every bucket in the project produces the storage bill,
+ * so the scope takes all of them and the cross-series reducer adds them up.
+ * Read off the live resource on 2026-09-08: three buckets report under it.
+ */
+export const CLOUD_STORAGE_RESOURCE_TYPE = 'gcs_bucket';
+
+/**
+ * The monitored resource Firestore's document counters report under.
+ *
+ * `project_id` is its only label, so there is nothing further to filter on:
+ * the project has one Firestore database and this is it.
+ */
+export const FIRESTORE_RESOURCE_TYPE = 'firestore_instance';
+
+/**
+ * The monitored resource Firebase Hosting reports under.
+ *
+ * No domain is named, for the opposite reason to Cloud Storage: every domain
+ * reports the same project-wide figure rather than its own share, so the
+ * scope takes all of them and picks one rather than adding them up. See
+ * {@link GAUGE_LATEST}.
+ */
+export const FIREBASE_HOSTING_RESOURCE_TYPE = 'firebase_domain';
+
+/**
  * Cloud Monitoring rejects an alignment period under a minute. The first
  * seconds of a new billing period would otherwise ask for one.
  */
@@ -46,7 +73,7 @@ export const MINIMUM_ALIGNMENT_PERIOD_SECONDS = 60;
 export type MetricKind = 'DELTA' | 'GAUGE';
 
 interface Alignment {
-	readonly perSeriesAligner: 'ALIGN_SUM' | 'ALIGN_MEAN' | 'ALIGN_MAX';
+	readonly perSeriesAligner: 'ALIGN_SUM' | 'ALIGN_MEAN' | 'ALIGN_MAX' | 'ALIGN_NEXT_OLDER';
 	readonly crossSeriesReducer: 'REDUCE_SUM' | 'REDUCE_MEAN' | 'REDUCE_MAX';
 }
 
@@ -79,6 +106,45 @@ export const GAUGE_PEAK: Alignment = {
 };
 
 /**
+ * One level spread across several resources: each averaged over the period,
+ * then added together.
+ *
+ * Only the cross-series reducer differs from the GAUGE default. Averaging
+ * within a series is still right — a byte-second charge is the mean size
+ * times the period — but averaging *across* series reports the typical
+ * resource instead of the estate. Read live on 2026-09-08, the three GCS
+ * buckets hold 567,149 bytes between them; the default would have reported
+ * 189,050, which is what one average bucket holds and not what is billed.
+ */
+export const GAUGE_TOTAL: Alignment = {
+	perSeriesAligner: 'ALIGN_MEAN',
+	crossSeriesReducer: 'REDUCE_SUM'
+};
+
+/**
+ * The newest sample in the period, from whichever series is freshest.
+ *
+ * For a counter that Monitoring publishes as a level: Firebase Hosting's
+ * `network/monthly_sent` is month-to-date bytes, reset at the month boundary
+ * and rising from there, so only its newest sample belongs to this period.
+ * Read live on 2026-09-08, `dou.la` reported 136,227,528 at 00:50 on Sep 1
+ * and 200,860 by 11:23 — the same series either side of the reset. Summing
+ * or averaging the period mixes last month's total into this month's.
+ *
+ * `REDUCE_MAX` across series because every domain reports the same
+ * project-wide figure rather than its own share, so the answer is one of
+ * them, not their sum; a domain last written to days ago is stale and reads
+ * low, and the maximum is the freshest.
+ *
+ * A sync in the first minutes of a new month reads the old month's total,
+ * until Monitoring writes the first sample after the reset.
+ */
+export const GAUGE_LATEST: Alignment = {
+	perSeriesAligner: 'ALIGN_NEXT_OLDER',
+	crossSeriesReducer: 'REDUCE_MAX'
+};
+
+/**
  * The four Cloud Run figures the panel shows, keyed the way the DTO carries
  * them.
  */
@@ -96,19 +162,40 @@ export type CloudRunMetricId =
 export type CloudSqlMetricId = 'diskQuotaBytes';
 
 /**
+ * The two Cloud Storage figures the panel shows: what is stored, and what
+ * left. Both are byte counts, and both are named for it.
+ */
+export type CloudStorageMetricId = 'storedBytes' | 'sentBytes';
+
+/**
+ * The three Firestore document counters the panel shows.
+ */
+export type FirestoreMetricId = 'documentReads' | 'documentWrites' | 'documentDeletes';
+
+/**
+ * The one Firebase Hosting figure the panel shows: bytes served so far this
+ * month.
+ */
+export type FirebaseHostingMetricId = 'monthlySentBytes';
+
+/**
  * One metric, and how it is read.
  *
  * A union rather than one shape with an optional field, so that only a GAUGE
- * can carry the {@link GAUGE_PEAK} override: a DELTA counter has no legal
- * alignment other than the sum its kind gives it.
+ * can carry an override: a DELTA counter has no legal alignment other than
+ * the sum its kind gives it. The override itself is one of three named
+ * alignments rather than any {@link Alignment}, so a metric cannot invent a
+ * combination nobody has justified against the live data.
  */
+export type GaugeOverride = typeof GAUGE_PEAK | typeof GAUGE_TOTAL | typeof GAUGE_LATEST;
+
 export type UsageMetric<Id extends string = string> =
 	| { readonly id: Id; readonly type: string; readonly kind: 'DELTA' }
 	| {
 			readonly id: Id;
 			readonly type: string;
 			readonly kind: 'GAUGE';
-			readonly alignment?: typeof GAUGE_PEAK;
+			readonly alignment?: GaugeOverride;
 	  };
 
 /**
@@ -177,6 +264,83 @@ export const CLOUD_SQL_SCOPE: UsageScope<CloudSqlMetricId> = {
 };
 
 /**
+ * The two Cloud Storage metrics that map to the bill.
+ *
+ * Storage is billed on what is held over time and on what leaves, so the
+ * panel shows both. Each `metricKind` was read from the live
+ * `metricDescriptors` endpoint of the `doula-cloud` project on 2026-09-08:
+ * `storage/total_bytes` is a GAUGE of DOUBLE bytes per bucket and per storage
+ * class, which is why it takes {@link GAUGE_TOTAL}; `network/sent_bytes_count`
+ * is a DELTA counter of bytes served out, which is the egress that is
+ * charged. The issue asked for "network egress" without naming a metric;
+ * this is the one Cloud Storage publishes for it. Its counterpart
+ * `network/received_bytes_count` is ingress, which is not billed.
+ */
+export const CLOUD_STORAGE_SCOPE: UsageScope<CloudStorageMetricId> = {
+	resourceFilter: `resource.type="${CLOUD_STORAGE_RESOURCE_TYPE}"`,
+	metrics: [
+		{
+			id: 'storedBytes',
+			type: 'storage.googleapis.com/storage/total_bytes',
+			kind: 'GAUGE',
+			alignment: GAUGE_TOTAL
+		},
+		{ id: 'sentBytes', type: 'storage.googleapis.com/network/sent_bytes_count', kind: 'DELTA' }
+	]
+};
+
+/**
+ * The three Firestore document counters, which are what Firestore charges
+ * per operation.
+ *
+ * All three are DELTA counters, read from the live `metricDescriptors`
+ * endpoint of the `doula-cloud` project on 2026-09-08. The project stores its
+ * data in Postgres, so these usually report nothing; the panel then says so
+ * rather than claiming zero, which is the same absent-not-zero rule every
+ * other metric follows.
+ */
+export const FIRESTORE_SCOPE: UsageScope<FirestoreMetricId> = {
+	resourceFilter: `resource.type="${FIRESTORE_RESOURCE_TYPE}"`,
+	metrics: [
+		{
+			id: 'documentReads',
+			type: 'firestore.googleapis.com/document/read_count',
+			kind: 'DELTA'
+		},
+		{
+			id: 'documentWrites',
+			type: 'firestore.googleapis.com/document/write_count',
+			kind: 'DELTA'
+		},
+		{
+			id: 'documentDeletes',
+			type: 'firestore.googleapis.com/document/delete_count',
+			kind: 'DELTA'
+		}
+	]
+};
+
+/**
+ * The one Firebase Hosting metric that maps to the bill: bytes served.
+ *
+ * A GAUGE of INT64 bytes, read from the live `metricDescriptors` endpoint of
+ * the `doula-cloud` project on 2026-09-08, and a month-to-date total rather
+ * than a level — hence {@link GAUGE_LATEST}, whose comment carries the
+ * evidence.
+ */
+export const FIREBASE_HOSTING_SCOPE: UsageScope<FirebaseHostingMetricId> = {
+	resourceFilter: `resource.type="${FIREBASE_HOSTING_RESOURCE_TYPE}"`,
+	metrics: [
+		{
+			id: 'monthlySentBytes',
+			type: 'firebasehosting.googleapis.com/network/monthly_sent',
+			kind: 'GAUGE',
+			alignment: GAUGE_LATEST
+		}
+	]
+};
+
+/**
  * One pull of usage, as the panels render it.
  *
  * A metric is absent rather than zero when Monitoring returned no series for
@@ -193,6 +357,9 @@ export interface UsageSnapshot {
 	readonly through: string;
 	readonly cloudRun: { readonly [K in CloudRunMetricId]?: number };
 	readonly cloudSql: { readonly [K in CloudSqlMetricId]?: number };
+	readonly cloudStorage: { readonly [K in CloudStorageMetricId]?: number };
+	readonly firestore: { readonly [K in FirestoreMetricId]?: number };
+	readonly firebaseHosting: { readonly [K in FirebaseHostingMetricId]?: number };
 }
 
 /**

@@ -4,7 +4,12 @@ import {
 	buildUsageRequest,
 	CLOUD_RUN_SCOPE,
 	CLOUD_SQL_SCOPE,
+	CLOUD_STORAGE_SCOPE,
+	FIREBASE_HOSTING_SCOPE,
+	FIRESTORE_SCOPE,
+	GAUGE_LATEST,
 	GAUGE_PEAK,
+	GAUGE_TOTAL,
 	MINIMUM_ALIGNMENT_PERIOD_SECONDS,
 	MONITORING_PROJECT_ID,
 	startOfBillingPeriod,
@@ -14,6 +19,8 @@ import {
 const now = new Date('2026-09-08T04:30:24Z');
 const [billableInstanceTime] = CLOUD_RUN_SCOPE.metrics;
 const [diskQuota] = CLOUD_SQL_SCOPE.metrics;
+const [storedBytes, sentBytes] = CLOUD_STORAGE_SCOPE.metrics;
+const [monthlySentBytes] = FIREBASE_HOSTING_SCOPE.metrics;
 
 describe('CLOUD_RUN_SCOPE', () => {
 	it('covers the four Cloud Run figures the bill is read from', () => {
@@ -47,6 +54,77 @@ describe('CLOUD_SQL_SCOPE', () => {
 
 	it('records the quota as the GAUGE Monitoring says it is', () => {
 		expect(diskQuota.kind).toBe('GAUGE');
+	});
+});
+
+describe('CLOUD_STORAGE_SCOPE', () => {
+	it('reads what is stored and what left, which is what storage is charged on', () => {
+		expect(CLOUD_STORAGE_SCOPE.metrics.map((metric) => metric.type)).toEqual([
+			'storage.googleapis.com/storage/total_bytes',
+			'storage.googleapis.com/network/sent_bytes_count'
+		]);
+	});
+
+	it('shows no received bytes, because ingress is not billed', () => {
+		const ingress = CLOUD_STORAGE_SCOPE.metrics.filter((metric) =>
+			metric.type.includes('received')
+		);
+
+		expect(ingress).toEqual([]);
+	});
+
+	it('names no bucket, because every bucket in the project produces the bill', () => {
+		expect(CLOUD_STORAGE_SCOPE.resourceFilter).toBe('resource.type="gcs_bucket"');
+	});
+
+	it('adds the buckets up rather than reporting the average one', () => {
+		expect(storedBytes).toMatchObject({ kind: 'GAUGE', alignment: GAUGE_TOTAL });
+	});
+
+	it('records egress as the DELTA counter Monitoring says it is', () => {
+		expect(sentBytes.kind).toBe('DELTA');
+	});
+});
+
+describe('FIRESTORE_SCOPE', () => {
+	it('reads the three document counters Firestore charges per operation', () => {
+		expect(FIRESTORE_SCOPE.metrics.map((metric) => metric.type)).toEqual([
+			'firestore.googleapis.com/document/read_count',
+			'firestore.googleapis.com/document/write_count',
+			'firestore.googleapis.com/document/delete_count'
+		]);
+	});
+
+	it('records every one of them as the DELTA counter Monitoring says it is', () => {
+		expect(FIRESTORE_SCOPE.metrics.every((metric) => metric.kind === 'DELTA')).toBe(true);
+	});
+
+	it('names no database, because project_id is the only label the resource carries', () => {
+		expect(FIRESTORE_SCOPE.resourceFilter).toBe('resource.type="firestore_instance"');
+	});
+});
+
+describe('FIREBASE_HOSTING_SCOPE', () => {
+	it('reads bytes served and nothing else, because that is what Hosting charges', () => {
+		expect(FIREBASE_HOSTING_SCOPE.metrics.map((metric) => metric.type)).toEqual([
+			'firebasehosting.googleapis.com/network/monthly_sent'
+		]);
+	});
+
+	it('shows no storage figure, which Hosting reports but does not bill on', () => {
+		const storage = FIREBASE_HOSTING_SCOPE.metrics.filter((metric) =>
+			metric.type.includes('storage')
+		);
+
+		expect(storage).toEqual([]);
+	});
+
+	it('takes the newest sample, because the counter resets at the month boundary', () => {
+		expect(monthlySentBytes).toMatchObject({ kind: 'GAUGE', alignment: GAUGE_LATEST });
+	});
+
+	it('names no domain, because every domain reports the same project-wide figure', () => {
+		expect(FIREBASE_HOSTING_SCOPE.resourceFilter).toBe('resource.type="firebase_domain"');
 	});
 });
 
@@ -125,6 +203,32 @@ describe('buildUsageRequest', () => {
 	it('takes the peak instead when a GAUGE asks for it, as a stepped quota does', () => {
 		expect(buildUsageRequest(CLOUD_SQL_SCOPE, diskQuota, now).aggregation).toMatchObject(
 			GAUGE_PEAK
+		);
+	});
+
+	it('averages each bucket and adds them, so stored bytes are the estate not the average', () => {
+		expect(buildUsageRequest(CLOUD_STORAGE_SCOPE, storedBytes, now).aggregation).toMatchObject(
+			GAUGE_TOTAL
+		);
+	});
+
+	it('takes the newest sample for a counter published as a level', () => {
+		expect(
+			buildUsageRequest(FIREBASE_HOSTING_SCOPE, monthlySentBytes, now).aggregation
+		).toMatchObject(GAUGE_LATEST);
+	});
+
+	it('scopes the filter to every bucket in the project', () => {
+		expect(buildUsageRequest(CLOUD_STORAGE_SCOPE, storedBytes, now).filter).toBe(
+			'metric.type="storage.googleapis.com/storage/total_bytes" AND resource.type="gcs_bucket"'
+		);
+	});
+
+	it('scopes the filter to the project Firestore instance', () => {
+		const [documentReads] = FIRESTORE_SCOPE.metrics;
+
+		expect(buildUsageRequest(FIRESTORE_SCOPE, documentReads, now).filter).toBe(
+			'metric.type="firestore.googleapis.com/document/read_count" AND resource.type="firestore_instance"'
 		);
 	});
 });

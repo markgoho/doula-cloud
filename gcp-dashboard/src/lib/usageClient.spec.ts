@@ -6,7 +6,10 @@ const usage: UsageSnapshot = {
 	since: '2026-09-01T00:00:00.000Z',
 	through: '2026-09-08T04:30:24.000Z',
 	cloudRun: { requestCount: 4785 },
-	cloudSql: { diskQuotaBytes: 10_464_022_528 }
+	cloudSql: { diskQuotaBytes: 10_464_022_528 },
+	cloudStorage: { storedBytes: 567_149 },
+	firestore: {},
+	firebaseHosting: { monthlySentBytes: 9_467_734 }
 };
 
 function respond(body: unknown, isOk = true): Response {

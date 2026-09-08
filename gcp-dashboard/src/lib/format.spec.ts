@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
 	NOT_REPORTED,
+	formatBytes,
 	formatClock,
 	formatCompact,
 	formatDay,
@@ -69,5 +70,35 @@ describe('formatGibibytes', () => {
 
 	it('says so when Cloud Monitoring reported no quota', () => {
 		expect(formatGibibytes(undefined)).toBe(NOT_REPORTED);
+	});
+});
+
+describe('formatBytes', () => {
+	it('leaves a small count in bytes rather than rounding it away', () => {
+		expect(formatBytes(512)).toEqual({ value: '512', unit: 'B' });
+	});
+
+	it('steps up to the next unit at the boundary', () => {
+		expect(formatBytes(1024)).toEqual({ value: '1', unit: 'KiB' });
+	});
+
+	it('renders what the buckets hold in a unit that reads as more than zero', () => {
+		expect(formatBytes(567_149)).toEqual({ value: '553.9', unit: 'KiB' });
+	});
+
+	it('renders bytes served in mebibytes', () => {
+		expect(formatBytes(9_467_734)).toEqual({ value: '9', unit: 'MiB' });
+	});
+
+	it('renders a disk-sized count in gibibytes', () => {
+		expect(formatBytes(10_464_022_528)).toEqual({ value: '9.7', unit: 'GiB' });
+	});
+
+	it('stops at the largest unit it knows rather than inventing one', () => {
+		expect(formatBytes(1024 ** 6)).toEqual({ value: '1,048,576', unit: 'TiB' });
+	});
+
+	it('says so, with no unit, when Cloud Monitoring reported no such metric', () => {
+		expect(formatBytes(undefined)).toEqual({ value: NOT_REPORTED, unit: '' });
 	});
 });

@@ -3,6 +3,9 @@ import {
 	buildUsageRequest,
 	CLOUD_RUN_SCOPE,
 	CLOUD_SQL_SCOPE,
+	CLOUD_STORAGE_SCOPE,
+	FIREBASE_HOSTING_SCOPE,
+	FIRESTORE_SCOPE,
 	startOfBillingPeriod,
 	type UsageScope,
 	type UsageSnapshot
@@ -83,18 +86,24 @@ export function createMonitoringUsageSource(now: () => Date = () => new Date()):
 	return async () => {
 		const readAt = now();
 
-		// One sync, both services: the panels are read together so they cover
+		// One sync, every service: the panels are read together so they cover
 		// the same window as each other and as the cost beside them.
-		const [cloudRun, cloudSql] = await Promise.all([
+		const [cloudRun, cloudSql, cloudStorage, firestore, firebaseHosting] = await Promise.all([
 			readScope(monitoring, CLOUD_RUN_SCOPE, readAt),
-			readScope(monitoring, CLOUD_SQL_SCOPE, readAt)
+			readScope(monitoring, CLOUD_SQL_SCOPE, readAt),
+			readScope(monitoring, CLOUD_STORAGE_SCOPE, readAt),
+			readScope(monitoring, FIRESTORE_SCOPE, readAt),
+			readScope(monitoring, FIREBASE_HOSTING_SCOPE, readAt)
 		]);
 
 		return {
 			since: startOfBillingPeriod(readAt).toISOString(),
 			through: readAt.toISOString(),
 			cloudRun,
-			cloudSql
+			cloudSql,
+			cloudStorage,
+			firestore,
+			firebaseHosting
 		};
 	};
 }
