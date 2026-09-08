@@ -83,15 +83,15 @@ func RequireNotAmbientContractor(w http.ResponseWriter, r *http.Request) (tx *sq
 	return tx, practiceID, true
 }
 
-// RequireOwnerOrAdmin is RequireOwner widened by one role, for the acts
-// ADR-0008 puts in an Admin's hands as well as an Owner's -- completing
-// an Engagement, and the Owner/Admin reads that carry the same seat
-// (contracts.awaiting, engagementrequest.List/Detail). Owner-only stays
-// the default for anything that changes who is at the Practice at all
-// (inviting, editing a Membership); this is for running the work.
-// Zero-query, for the same reason RequireOwner is. As with RequireOwner,
-// a write whose Owner-or-Admin rule is the whole rule declares it at the
-// mount instead (#970, #990, #1016), not here.
+// RequireOwnerOrAdmin is RequireOwner widened by one role, for what
+// ADR-0008 puts in an Admin's hands as well as an Owner's: running the
+// work, rather than deciding who is at the Practice at all (inviting,
+// editing a Membership), which stays Owner-only. Zero-query, for the
+// same reason RequireOwner is. Every caller left is a GET whose seat the
+// mount already declares through GatedRouter.Get -- the awaiting-signature
+// and awaiting-void-decision reads, and the Engagement Request list and
+// detail -- because a write whose Owner-or-Admin rule is the whole rule
+// declares it at the mount instead (#970, #990, #1016), not here.
 func RequireOwnerOrAdmin(w http.ResponseWriter, r *http.Request) (tx *sql.Tx, practiceID string, ok bool) {
 	tx, has := Tx(r.Context())
 	if !has {
