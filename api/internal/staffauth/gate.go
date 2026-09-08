@@ -21,11 +21,14 @@ type GatedRoute struct {
 	// it. Reason records why, in one line. See OpenGet below.
 	Exempt bool
 	Reason string
-	// Write marks a route mounted under any verb but GET. ADR-0008's read
-	// table is about reads, so a write carries no role declaration here --
-	// what it carries is the fact of having been registered through this
-	// router at all, which is what lets a test enumerate the write surface
-	// rather than grep for it.
+	// Write marks a route mounted under any verb but GET, through either
+	// Write or GatedWrite. An ordinary Write route carries no role
+	// declaration, by design: ADR-0008's read table is about reads, and
+	// most of the write surface is gated on reach alone (AttachingWrite),
+	// not role. A GatedWrite route is the exception -- one whose rule is
+	// not fully described by reach (#970's Contract void, refused to every
+	// Doula regardless of attachment) -- and carries its own non-empty
+	// Roles, checked the same way a GET's is.
 	Write bool
 }
 
@@ -137,15 +140,66 @@ func (g *GatedRouter) OpenGet(pattern, reason string, h http.Handler) {
 // Panics at startup on a GET, which belongs at Get or OpenGet where the
 // read table can see it.
 func (g *GatedRouter) Write(pattern string, h http.Handler) {
-	method, path, found := strings.Cut(pattern, " ")
-	if !found {
-		panic(fmt.Sprintf("staffauth: GatedRouter.Write(%q): pattern must name its method, e.g. \"POST /api/session\"", pattern))
-	}
-	if method == http.MethodGet {
-		panic(fmt.Sprintf("staffauth: GatedRouter.Write(%q): a GET belongs at Get (with roles) or OpenGet (with a reason), so ADR-0008's read table can see it", pattern))
-	}
+	method, path := g.cutWritePattern("Write", pattern)
 	g.routes = append(g.routes, GatedRoute{Method: method, Pattern: path, Write: true})
 	g.mux.Handle(pattern, h)
+}
+
+// GatedWrite mounts a route under any verb but GET, behind Middleware and
+// a role check, the way Get gates a read -- for the rare write whose rule
+// is not reach alone. #970 is the first write to declare its role at the
+// mount seam this way: a Contract void must refuse every Doula, employee
+// or contractor, no matter what she is attached to, which AttachingWrite's
+// reach test cannot express (it asks "can she reach this Engagement",
+// never "is this act hers to do"). A role-gated write is not new by
+// itself -- payments.PutBillingModeHandler and its by-hand Invoice
+// void/write-off already check staffauth.RequireOwner/RequireOwnerOrAdmin
+// in-handler, invisible to any startup guardrail the same way Contract
+// void was -- what is new here is the mount declaring it, the way GET
+// already does. roles
+// must be non-empty -- pass AnyStaff to declare the write open to any
+// Staff member who reaches it, the same opt-out Get uses. Panics at
+// startup if roles is empty, so a forgotten declaration fails the binary
+// before it serves a single request, exactly as Get's own panic does.
+//
+// Most of the write surface stays on the plain Write above: ADR-0008's
+// ordinary write table is a reach question (which Engagements), not a
+// role one, and declaring roles for every write that needs none would
+// only invite a role list that repeats what AttachingWrite already
+// checks. Reach a GatedWrite through idempotency.Router.ExemptGated, the
+// role-declaring mirror of Exempt (Write's own door).
+//
+// The role check runs before h, so a route registered attaching=true
+// through ExemptGated checks role first, then AttachingWrite's reach.
+// That order is right for #970's only case today (an Owner or Admin
+// reaches every Engagement, so refusing her by role never hides an
+// Engagement from her that the reach test would have shown) -- but it is
+// an order: a
+// future GatedWrite whose role list is narrower than its reach population
+// should think about which refusal a caller meets first, a 403 that
+// confirms the Engagement exists versus the 404 AttachingWrite gives an
+// unattached contractor.
+func (g *GatedRouter) GatedWrite(pattern string, roles []string, h http.Handler) {
+	method, path := g.cutWritePattern("GatedWrite", pattern)
+	if len(roles) == 0 {
+		panic(fmt.Sprintf("staffauth: GatedRouter.GatedWrite(%q): no roles declared -- pass staffauth.AnyStaff to open this write to any Staff member on purpose", pattern))
+	}
+	g.routes = append(g.routes, GatedRoute{Method: method, Pattern: path, Write: true, Roles: roles})
+	g.mux.Handle(pattern, Middleware(g.db)(requireAnyRole(roles, h)))
+}
+
+// cutWritePattern is Write and GatedWrite's shared pattern parse: split
+// "METHOD /path" the way http.ServeMux spells it, and refuse a GET, which
+// belongs at Get or OpenGet where ADR-0008's read table can see it.
+func (g *GatedRouter) cutWritePattern(caller, pattern string) (method, path string) {
+	method, path, found := strings.Cut(pattern, " ")
+	if !found {
+		panic(fmt.Sprintf("staffauth: GatedRouter.%s(%q): pattern must name its method, e.g. \"POST /api/session\"", caller, pattern))
+	}
+	if method == http.MethodGet {
+		panic(fmt.Sprintf("staffauth: GatedRouter.%s(%q): a GET belongs at Get (with roles) or OpenGet (with a reason), so ADR-0008's read table can see it", caller, pattern))
+	}
+	return method, path
 }
 
 // Routes returns the registry of every route this router mounted -- gated
@@ -158,7 +212,9 @@ func (g *GatedRouter) Routes() []GatedRoute {
 // requireAnyRole 403s unless the caller holds at least one of roles (or
 // roles is AnyStaff). Must run downstream of Middleware. Zero-query: it
 // reads the Reader Middleware already resolved rather than querying
-// practice_memberships again.
+// practice_memberships again. Shared by Get and GatedWrite, so its
+// refusal names no verb -- "read" would be wrong the half of the time
+// this guards a write.
 func requireAnyRole(roles []string, h http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if len(roles) == 1 && roles[0] == "*" {
@@ -175,6 +231,6 @@ func requireAnyRole(roles []string, h http.Handler) http.Handler {
 			h.ServeHTTP(w, r)
 			return
 		}
-		apierr.WriteError(w, "not permitted to read this", http.StatusForbidden)
+		apierr.WriteError(w, "not permitted to do this", http.StatusForbidden)
 	})
 }

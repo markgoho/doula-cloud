@@ -17,6 +17,16 @@ type discardMounter struct{}
 
 func (discardMounter) Write(string, http.Handler) {}
 
+func (discardMounter) GatedWrite(string, []string, http.Handler) {}
+
+// ownerRole and adminRole are named once so golangci-lint's goconst check
+// doesn't see the two role literals repeated raw across this file's
+// ExemptGated tests.
+const (
+	ownerRole = "owner"
+	adminRole = "admin"
+)
+
 // TestRouter_ExemptPanicsWithoutAReason mirrors
 // staffauth.TestGatedRouter_ExemptPanicsWithoutAReason: an exemption
 // nobody had to justify is not a declaration, so Exempt refuses one.
@@ -97,5 +107,42 @@ func TestRouter_AttachingIsRecordedOnBothDeclarations(t *testing.T) {
 	}
 	if routes[2].Attaching {
 		t.Errorf("route %q Attaching = true, want false", routes[2].Pattern)
+	}
+}
+
+// TestRouter_ExemptGatedPanicsWithoutAReason mirrors
+// TestRouter_ExemptPanicsWithoutAReason: ExemptGated is Exempt plus a
+// role declaration, and inherits the same "no reason, no registration"
+// refusal.
+func TestRouter_ExemptGatedPanicsWithoutAReason(t *testing.T) {
+	defer func() {
+		if r := recover(); r == nil {
+			t.Fatal("expected ExemptGated to panic on an empty reason, it did not")
+		}
+	}()
+	rt := idempotency.NewRouter(discardMounter{}, nil)
+	rt.ExemptGated("POST /api/practices/{practiceId}/engagements/{engagementId}/contract/void",
+		"", true, []string{ownerRole, adminRole}, http.NotFoundHandler())
+}
+
+// TestRouter_ExemptGatedRecordsRoles proves a route registered through
+// ExemptGated carries its role declaration on the registry -- #970's
+// TestRoutes_ContractWritesDeclareRoles walks this field against the
+// real route table routes() builds.
+func TestRouter_ExemptGatedRecordsRoles(t *testing.T) {
+	rt := idempotency.NewRouter(discardMounter{}, nil)
+	rt.ExemptGated("POST /api/practices/{practiceId}/engagements/{engagementId}/contract/void",
+		"state-guarded", true, []string{ownerRole, adminRole}, http.NotFoundHandler())
+	rt.Exempt("PUT /api/practices/{practiceId}/website", "PUT replaces the declaration wholesale", false, http.NotFoundHandler())
+
+	routes := rt.Routes()
+	if len(routes) != 2 {
+		t.Fatalf("Routes() = %d entries, want 2", len(routes))
+	}
+	if len(routes[0].Roles) != 2 {
+		t.Fatalf("ExemptGated route Roles = %v, want [owner admin]", routes[0].Roles)
+	}
+	if len(routes[1].Roles) != 0 {
+		t.Fatalf("plain Exempt route Roles = %v, want empty", routes[1].Roles)
 	}
 }

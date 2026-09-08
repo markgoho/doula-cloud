@@ -85,7 +85,10 @@ func (v MergeFieldValues) nonEmpty() MergeFieldValues {
 // shouldn't happen post-#67 (every Practice gets one seeded at signup),
 // but a predictable 404 beats a crash. Fails with 409 if a Contract
 // already exists for this Engagement (POST creates; PutContractHandler
-// edits). Must be mounted behind staffauth.Middleware.
+// edits). Declared staffauth.AnyStaff at the mount (#282, #970): whoever
+// reaches the Engagement at all -- Owner, Admin, an employed Doula, or a
+// contractor on a granted attachment -- may create. Must be mounted
+// through idempotency.Router.ExemptGated.
 func PostContractHandler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		tx, engagementID, ok := resolveContractRequest(w, r)
@@ -219,8 +222,13 @@ func GetContractHandler() http.Handler {
 // PutContractHandler replaces the full Values map of the Contract for
 // :engagementId -- the prose snapshot itself is fixed at creation and
 // never editable via this endpoint. Only permitted while status =
-// 'draft'; a Contract that has moved to sent/signed/voided 409s. Must be
-// mounted behind staffauth.Middleware.
+// 'draft'; a Contract that has moved to sent/signed/voided 409s. Declared
+// staffauth.AnyStaff at the mount (#282, #970), the same reach-only rule
+// PostContractHandler carries -- until #967 gives a Contract a real
+// amount column, "set values" still means filling in merge fields, which
+// #282's write table treats as scope regardless of what a Practice's own
+// Template prose names. Must be mounted through
+// idempotency.Router.ExemptGated.
 func PutContractHandler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		tx, engagementID, ok := resolveContractRequest(w, r)

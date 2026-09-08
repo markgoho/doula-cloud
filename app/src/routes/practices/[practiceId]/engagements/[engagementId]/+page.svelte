@@ -1344,7 +1344,7 @@
 		{#if contract}
 			<ContractStatus
 				status={contract.status}
-				onVoid={handleVoidContract}
+				onVoid={isPracticeOwnerOrAdmin ? handleVoidContract : undefined}
 				onDownloadPdf={canReadContractMoney ? handleDownloadSignedContractPdf : undefined}
 			/>
 			<!--

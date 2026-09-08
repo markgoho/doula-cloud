@@ -255,19 +255,28 @@ func TestGetTemplateHandler_AnyMemberAllowed(t *testing.T) {
 	}
 }
 
+// TestPutTemplateHandler_NonOwnerForbidden proves the mount's OwnerOnly
+// declaration (#970) refuses both a plain Doula and an Admin -- the
+// in-handler check this replaced was reader.Has("owner") alone, and the
+// mount declaration must keep exactly that population, not widen it to
+// Owner and Admin the way most of this package's other role rules do.
 func TestPutTemplateHandler_NonOwnerForbidden(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "put-non-owner"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
+	for _, roles := range [][]string{{doulaRole}, {adminRole}} {
+		t.Run(roles[0], func(t *testing.T) {
+			db := testdb.New(t)
+			uid := "put-non-owner-" + roles[0]
+			practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, roles, "employee")
 
-	srv, session := newContractServer(t, db, uid)
-	defer srv.Close()
+			srv, session := newContractServer(t, db, uid)
+			defer srv.Close()
 
-	resp := putTemplate(t, srv, session, practiceID, contracts.TemplateResponse{Prose: "Some prose"})
-	defer resp.Body.Close()
+			resp := putTemplate(t, srv, session, practiceID, contracts.TemplateResponse{Prose: "Some prose"})
+			defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusForbidden {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusForbidden)
+			if resp.StatusCode != http.StatusForbidden {
+				t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusForbidden)
+			}
+		})
 	}
 }
 

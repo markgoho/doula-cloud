@@ -348,6 +348,30 @@ func TestPostContractHandler_Duplicate(t *testing.T) {
 	}
 }
 
+// TestPostContractHandler_ContractorWithoutAttachmentNotFound proves #970's
+// AC that the contractor reach rule is unchanged by this ticket's mount
+// declaration: staffauth.AnyStaff adds no role restriction beyond what
+// AttachingWrite already enforces, so an unattached contractor Doula
+// still gets 404, the same reach refusal GetContractHandler's own
+// contractor test proves on the read side.
+func TestPostContractHandler_ContractorWithoutAttachmentNotFound(t *testing.T) {
+	db := testdb.New(t)
+	const uid = "post-contractor-unattached"
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "contractor")
+	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
+	seedContractTemplate(t, db, practiceID, mergeFieldProse)
+
+	srv, session := newContractServer(t, db, uid)
+	defer srv.Close()
+
+	resp := postContract(t, srv, session, practiceID, engagementID)
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusNotFound {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusNotFound)
+	}
+}
+
 func TestGetContractHandler_InvalidEngagementID(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "get-invalid-engagement-id"
@@ -491,6 +515,30 @@ func TestPutContractHandler_NotFound(t *testing.T) {
 	const uid = "put-not-found"
 	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
 	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
+
+	srv, session := newContractServer(t, db, uid)
+	defer srv.Close()
+
+	resp := putContract(t, srv, session, practiceID, engagementID, contracts.MergeFieldValues{clientNameKey: jamieName})
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusNotFound {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusNotFound)
+	}
+}
+
+// TestPutContractHandler_ContractorWithoutAttachmentNotFound is #970's AC
+// for set-values specifically: staffauth.AnyStaff at the mount adds no
+// role restriction of its own, so AttachingWrite's reach test still
+// refuses an unattached contractor before the handler ever runs -- the
+// same 404 TestPutContractHandler_NotFound gets, but for reach rather
+// than for having no Contract at all.
+func TestPutContractHandler_ContractorWithoutAttachmentNotFound(t *testing.T) {
+	db := testdb.New(t)
+	const uid = "put-contractor-unattached"
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "contractor")
+	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
+	seedContract(t, db, engagementID, statusDraft, mergeFieldProse)
 
 	srv, session := newContractServer(t, db, uid)
 	defer srv.Close()

@@ -24,8 +24,12 @@ import (
 // that replaced the original table-wide UNIQUE (engagement_id); Void
 // itself doesn't touch that index, but every UPDATE here targets the
 // fetched row's id rather than engagement_id, so it can never affect any
-// of the Engagement's other (already-voided) Contract rows. Must be
-// mounted behind staffauth.Middleware.
+// of the Engagement's other (already-voided) Contract rows. Owner and
+// Admin only, declared at the mount (contracts.Mount,
+// staffauth.OwnerAndAdmin) rather than checked here -- #282, #970: every
+// Doula, employee or contractor, is refused regardless of what she is
+// attached to. Must be mounted through
+// idempotency.Router.ExemptGated.
 func PostVoidContractHandler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		tx, engagementID, ok := resolveContractRequest(w, r)

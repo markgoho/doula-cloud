@@ -22,9 +22,13 @@ func TestRoutes_EveryDeclaredGETHasRoleDeclaration(t *testing.T) {
 	}
 	for _, route := range registry {
 		if route.Write {
-			// A write carries no role declaration by design: ADR-0008's
-			// read table is about reads. What it must do is be here at all,
-			// which TestRoutes_EveryRouteIsRegisteredThroughTheGate checks.
+			// An ordinary write carries no role declaration by design:
+			// ADR-0008's read table is about reads, and most of the write
+			// surface is gated on reach alone. What it must do is be here
+			// at all, which TestRoutes_EveryRouteIsRegisteredThroughTheGate
+			// checks. A GatedWrite-mounted write (#970's Contract void) does
+			// carry Roles, checked instead by
+			// TestRoutes_ContractWritesDeclareRoles.
 			continue
 		}
 		if route.Exempt {

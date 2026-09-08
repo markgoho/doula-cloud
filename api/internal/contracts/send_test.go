@@ -93,6 +93,27 @@ func TestPostSendContractHandler_NoContract(t *testing.T) {
 	}
 }
 
+// TestPostSendContractHandler_ContractorWithoutAttachmentNotFound is
+// #970's AC for send specifically: staffauth.AnyStaff at the mount adds
+// no role restriction of its own, so an unattached contractor still gets
+// 404 from AttachingWrite's reach test before the handler ever runs.
+func TestPostSendContractHandler_ContractorWithoutAttachmentNotFound(t *testing.T) {
+	db := testdb.New(t)
+	const uid = "send-contractor-unattached"
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "contractor")
+	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
+
+	srv, session := newContractServer(t, db, uid)
+	defer srv.Close()
+
+	resp := postSendContract(t, srv, session, practiceID, engagementID)
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusNotFound {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusNotFound)
+	}
+}
+
 // TestPostSendContractHandler_NonDraftRejected proves Send 409s once a
 // Contract has already moved past 'draft' -- it's a one-way transition.
 func TestPostSendContractHandler_NonDraftRejected(t *testing.T) {
