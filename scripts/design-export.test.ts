@@ -10,7 +10,7 @@
 import { describe, expect, test } from "bun:test";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
-import { renderExport, type PenDocument } from "./design-export";
+import { EXPORT_COMMAND, renderExport, type PenDocument } from "./design-export";
 
 function doc(children: PenDocument["children"]): PenDocument {
   return { children };
@@ -269,7 +269,7 @@ describe("renderExport", () => {
 
   test("carries a generated-file header naming the fix command", () => {
     const out = renderExport(doc([]));
-    expect(out).toContain("bun run design:export");
+    expect(out).toContain(EXPORT_COMMAND);
     expect(out.toLowerCase()).toContain("generated");
   });
 });
@@ -287,7 +287,7 @@ describe("the committed export", () => {
     if (fresh !== committed) {
       throw new Error(
         "docs/design/doula-cloud.export.md is stale relative to doula-cloud.pen. " +
-          "Run `bun run design:export` and commit the result.",
+          `Run \`${EXPORT_COMMAND}\` and commit the result.`,
       );
     }
   });

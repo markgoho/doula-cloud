@@ -100,8 +100,9 @@ function tokenRefs(node: PenNode): [string, string][] {
 
 /** An override's value, safe against an object value that would otherwise print `[object Object]`. */
 function formatOverrideValue(value: unknown): string {
-  if (typeof value === "string") return JSON.stringify(value);
-  if (value && typeof value === "object") return JSON.stringify(value);
+  if (typeof value === "string" || (value !== null && typeof value === "object")) {
+    return JSON.stringify(value);
+  }
   return String(value);
 }
 
