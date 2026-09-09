@@ -11,8 +11,11 @@ export type SyncState = 'idle' | 'loading' | 'success' | 'error';
  * The state behind the sync action.
  *
  * Stateless by design: every sync is a fresh server-side read that replaces
- * what is on screen. Nothing here starts a timer, polls, or keeps history —
- * a sync happens because a person asked for one.
+ * what is on screen. Nothing here starts a timer, polls, or keeps history.
+ *
+ * The page reads once when it mounts, so a person opening it finds figures
+ * rather than an empty screen and a button. Every read after that one is a
+ * press.
  *
  * One sync covers both halves of the screen: the cost breakdown and the
  * usage that produced it. They arrive together or not at all.
