@@ -107,6 +107,15 @@
 	// A field this Reader may not see is absent from `line` entirely, not
 	// blanked, so there is nothing here to hide -- only to append when
 	// present.
+	//
+	// #741: `invoiceStatus`/`invoiceAmountCents` are now the BFF's answer
+	// to "is anything outstanding under this Contract", not merely its
+	// newest Invoice's status (list.go's OpenEngagement doc comment). The
+	// wording follows that split rather than always saying "Invoice:" --
+	// an `open` (billed, unpaid) result reads as "Outstanding" so the
+	// reader is never told this is just the latest of several Invoices;
+	// every other status (nothing outstanding) keeps the old "Invoice:
+	// <status>" wording, since there is nothing left to flag.
 	function engagementLineText(line: OpenEngagement): string {
 		const parts = [
 			`Contract: ${line.contractStatus ? contractStatusLabel[line.contractStatus] : 'No contract yet'}`,
@@ -116,7 +125,11 @@
 		if (line.invoiceStatus) {
 			const amount =
 				line.invoiceAmountCents === undefined ? '' : ` (${formatAmount(line.invoiceAmountCents)})`;
-			parts.push(`Invoice: ${invoiceStatusLabel(line.invoiceStatus)}${amount}`);
+			parts.push(
+				line.invoiceStatus === 'open'
+					? `Outstanding${amount}`
+					: `Invoice: ${invoiceStatusLabel(line.invoiceStatus)}${amount}`
+			);
 		}
 		if (line.feeCents !== undefined) {
 			parts.push(`Your fee: ${formatAmount(line.feeCents)}`);

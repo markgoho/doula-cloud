@@ -89,6 +89,15 @@ type OpenEngagement struct {
 	// Doula (ADR-0008 as amended by #282). Never set for a contractor
 	// Doula, even when she is attached to this exact Engagement -- she
 	// gets only her own fee, never the Practice's Invoice.
+	//
+	// #741: a Contract can hold several Invoices (a deposit, then a
+	// balance), so these two fields report the oldest still-`open`
+	// (billed, unpaid) one when the Contract has any -- "is anything
+	// outstanding", per docs/journeys/practice-owner.md's RA-G7 -- and
+	// only fall back to the newest Invoice of any other status once
+	// nothing is outstanding. Before #741 this was always the newest
+	// Invoice regardless of status, so a paid balance could hide an
+	// unpaid deposit raised earlier.
 	InvoiceStatus      *string `json:"invoiceStatus,omitempty"`
 	InvoiceAmountCents *int64  `json:"invoiceAmountCents,omitempty"`
 
@@ -377,8 +386,19 @@ const openEngagementRollupQueryTemplate = `
 	    ORDER BY (c.status = 'voided'), c.created_at DESC LIMIT 1
 	) ct ON true
 	LEFT JOIN LATERAL (
+	    -- #741: a Contract can hold several Invoices (a deposit, then a
+	    -- balance), and this used to be plain "ORDER BY i.created_at DESC
+	    -- LIMIT 1" -- whichever Invoice was raised most recently, so a
+	    -- paid balance could hide an unpaid deposit raised earlier. The
+	    -- rollup exists to answer "is anything outstanding" (RA-G7), so
+	    -- this instead reads the oldest still-open (billed, unpaid)
+	    -- Invoice when the Contract has one, and only falls back to the
+	    -- newest Invoice of any other status (paid, void, uncollectible,
+	    -- or draft) once nothing is outstanding.
 	    SELECT i.status, i.amount_cents FROM invoices i
-	    WHERE i.contract_id = ct.id ORDER BY i.created_at DESC LIMIT 1
+	    WHERE i.contract_id = ct.id
+	    ORDER BY (i.status <> 'open'), (CASE WHEN i.status = 'open' THEN i.created_at END), i.created_at DESC
+	    LIMIT 1
 	) inv ON true
 	LEFT JOIN engagement_attachments att
 	    ON att.engagement_id = e.id AND att.staff_id = $%d
@@ -389,9 +409,10 @@ const openEngagementRollupQueryTemplate = `
 
 // fetchOpenEngagements reads every open (non-`completed`) Engagement
 // belonging to any of clientIDs, with its Contract's status, its
-// attached Doula(s)' names, its latest Invoice's status/amount, and
-// staffID's own fee on it if she is attached -- one query regardless of
-// how many Clients or Engagements the page holds.
+// attached Doula(s)' names, its outstanding (or, failing that, latest)
+// Invoice's status/amount (#741), and staffID's own fee on it if she is
+// attached -- one query regardless of how many Clients or Engagements
+// the page holds.
 //
 // staffID is always the caller's own id, whatever her role: passing it
 // unconditionally (rather than only when she is a contractor) is what
