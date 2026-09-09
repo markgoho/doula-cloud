@@ -18,7 +18,7 @@
 		<h2>The person, never the Practice</h2>
 		<p>
 			Practice-scoped settings are a nav item. What lives here is who is signed in, and the two
-			things she can do about that.
+			things the person can do about that.
 		</p>
 		<!--
 			The longest realistic value, not a representative one (ADR-0025): the
@@ -37,7 +37,7 @@
 		<h2>The Client portal's</h2>
 		<p>
 			No email and no Account link: the portal has no per-person screen to reach, and the Client's
-			address is not something the portal asks her to check.
+			address is not something the portal asks the Client to check.
 		</p>
 		<AvatarMenu name="Renata Chiamaka Okonkwo-Adeyemi" signOut={refuses} />
 	</section>

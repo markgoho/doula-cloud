@@ -27,11 +27,15 @@ import { QUOTED, regionLines, regionLinesInFile } from './quotedCopy';
  * `formErrors.usage.spec.ts`, so a variable or type name is never a false
  * positive.
  *
- * `routes/style-guide/**` is excluded. Auditing it turned up twelve
- * pre-existing hits, all in component-catalogue example props rather than
- * a real screen a Practice ever sees -- tracked on #661 (a sub-issue of
- * #463) rather than fixed here, which would have widened this ticket well
- * past a copy fix. Widen this glob to cover it once #661 lands.
+ * `routes/style-guide/**` is covered too, as of #661. #463's earlier audit
+ * found twelve pre-existing hits there, all in component-catalogue example
+ * props rather than a real screen a Practice ever sees; #661 rewrote eleven
+ * of them, settled the twelfth -- `record-detail`'s birth-plan
+ * support-people value, a Client's own first-person answer -- by writing
+ * it in the first person rather than building the third-party-quote
+ * exemption limit 2 below describes (no real screen needs that exemption
+ * yet), and fixed one more the original audit missed
+ * (`contract-status:25`).
  *
  * ## What it deliberately does not catch
  *
@@ -58,9 +62,7 @@ const PRONOUNS = ['she', 'her', 'hers', 'herself', 'he', 'him', 'his', 'himself'
 
 const appRoot = fileURLToPath(new URL('../../', import.meta.url));
 
-const sourceFiles = globSync('src/{lib/components,routes}/**/*.svelte', { cwd: appRoot }).filter(
-	(file) => !file.startsWith('src/routes/style-guide/')
-);
+const sourceFiles = globSync('src/{lib/components,routes}/**/*.svelte', { cwd: appRoot });
 
 interface Offense {
 	file: string;
@@ -104,7 +106,7 @@ function findOffenses(file: string): Offense[] {
 }
 
 describe('product copy names a Client or Staff member, never a pronoun', () => {
-	it('reads every component and route outside the style guide', () => {
+	it('reads every component and route, including the style guide', () => {
 		// A glob that silently matched nothing would make every assertion
 		// below pass while checking no copy at all.
 		expect(sourceFiles.length).toBeGreaterThan(50);

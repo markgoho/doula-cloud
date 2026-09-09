@@ -68,7 +68,7 @@
 				label: 'Pain relief',
 				value: 'Wants to try without an epidural, and to be asked rather than offered'
 			},
-			{ label: 'Support people', value: 'Her partner and her mother, for the whole labour' }
+			{ label: 'Support people', value: 'My partner and my mother, for the whole labor' }
 		]}
 	/>
 {/snippet}
