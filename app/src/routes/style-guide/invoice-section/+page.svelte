@@ -54,6 +54,7 @@
 			onRecordPayment={async () => {}}
 			onVoidInvoice={async () => {}}
 			onWriteOffInvoice={async () => {}}
+			onReversePayment={async () => {}}
 		/>
 	</section>
 
@@ -72,6 +73,7 @@
 			onRecordPayment={async () => {}}
 			onVoidInvoice={async () => {}}
 			onWriteOffInvoice={async () => {}}
+			onReversePayment={async () => {}}
 		/>
 	</section>
 
@@ -94,6 +96,7 @@
 			onRecordPayment={async () => {}}
 			onVoidInvoice={async () => {}}
 			onWriteOffInvoice={async () => {}}
+			onReversePayment={async () => {}}
 		/>
 	</section>
 
@@ -112,6 +115,7 @@
 			onRecordPayment={async () => {}}
 			onVoidInvoice={async () => {}}
 			onWriteOffInvoice={async () => {}}
+			onReversePayment={async () => {}}
 		/>
 	</section>
 
@@ -130,6 +134,7 @@
 			onRecordPayment={async () => {}}
 			onVoidInvoice={async () => {}}
 			onWriteOffInvoice={async () => {}}
+			onReversePayment={async () => {}}
 		/>
 	</section>
 
@@ -150,6 +155,7 @@
 			onRecordPayment={async () => {}}
 			onVoidInvoice={async () => {}}
 			onWriteOffInvoice={async () => {}}
+			onReversePayment={async () => {}}
 		/>
 	</section>
 
@@ -168,6 +174,7 @@
 			onRecordPayment={async () => {}}
 			onVoidInvoice={async () => {}}
 			onWriteOffInvoice={async () => {}}
+			onReversePayment={async () => {}}
 		/>
 	</section>
 
@@ -189,6 +196,7 @@
 			onRecordPayment={async () => {}}
 			onVoidInvoice={async () => {}}
 			onWriteOffInvoice={async () => {}}
+			onReversePayment={async () => {}}
 		/>
 	</section>
 
@@ -210,6 +218,7 @@
 			onRecordPayment={async () => {}}
 			onVoidInvoice={async () => {}}
 			onWriteOffInvoice={async () => {}}
+			onReversePayment={async () => {}}
 		/>
 	</section>
 </stack-l>

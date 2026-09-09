@@ -93,6 +93,18 @@ func Mount(g *staffauth.GatedRouter, ir *idempotency.Router, client Client) {
 	// staffauth.RequireOwnerOrAdmin itself.
 	ir.ReplayableGated("POST /api/practices/{practiceId}/invoices/{invoiceId}/payments", false, staffauth.OwnerAndAdmin, PostManualPaymentHandler(client))
 
+	// Reversing a manually recorded Payment (#945): Owner and Admin only,
+	// the same gate recording one already carries -- an additive row in
+	// the same append-only payments table, never an UPDATE or DELETE.
+	// Money-moving, so Replayable like recording one: a double-click must
+	// not reverse the same Payment twice (resolvePaymentForReversal's own
+	// already-reversed check would 409 the retry regardless, but the
+	// Idempotency-Key still replays the first response rather than
+	// re-running the check). Refused entirely against a Stripe-backed
+	// Invoice -- see PostReversePaymentHandler's own doc comment -- so no
+	// Stripe client call is threaded through here.
+	ir.ReplayableGated("POST /api/practices/{practiceId}/invoices/{invoiceId}/payments/{paymentId}/reverse", false, staffauth.OwnerAndAdmin, PostReversePaymentHandler())
+
 	// Void and write-off (#271) exist only so a by-hand Invoice -- which
 	// nothing else in the model ever moves out of 'open' -- is not stuck
 	// there forever on a mistyped amount. Both are state-guarded

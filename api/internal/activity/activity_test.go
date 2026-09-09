@@ -152,6 +152,7 @@ func TestMoneyActions_ContainsExactlyTheADR0008MoneySet(t *testing.T) {
 		activity.ActionPaymentRecorded,
 		activity.ActionInvoiceVoided,
 		activity.ActionInvoiceWrittenOff,
+		activity.ActionPaymentReversed,
 	}
 	if len(got) != len(want) {
 		t.Fatalf("MoneyActions() = %v, want exactly %v", activity.MoneyActions(), want)

@@ -31,6 +31,13 @@ import (
 // request-supplied, is what actually reaches Stripe.
 const InvoiceLineItemDescription = "Professional services"
 
+// diffKeyAmountCents is the Activity-log diff key every money-moving
+// write in this package marshals its amount under (raising an Invoice,
+// recording a Payment, reversing one) -- named once so golangci-lint's
+// goconst threshold, crossed once #945 added a third call site, sees a
+// deliberate constant instead of a repeated literal.
+const diffKeyAmountCents = "amountCents"
+
 // CapabilityStatus is the status Stripe reports for one capability on a
 // v2 Account's merchant configuration -- four-valued, where v1's
 // equivalent was a boolean. Only Active means the capability actually

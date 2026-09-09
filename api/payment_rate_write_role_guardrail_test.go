@@ -14,11 +14,12 @@ import "testing"
 // practicerate analogue of contractWriteRoutes above. The map's value is
 // unused -- only the key set matters.
 var paymentRateWriteRoutes = map[string]bool{
-	"PUT /api/practices/{practiceId}/payments/billing-mode":           true,
-	"POST /api/practices/{practiceId}/invoices/{invoiceId}/payments":  true,
-	"POST /api/practices/{practiceId}/invoices/{invoiceId}/void":      true,
-	"POST /api/practices/{practiceId}/invoices/{invoiceId}/write-off": true,
-	"PUT /api/practices/{practiceId}/rates/{kind}":                    true,
+	"PUT /api/practices/{practiceId}/payments/billing-mode":                              true,
+	"POST /api/practices/{practiceId}/invoices/{invoiceId}/payments":                     true,
+	"POST /api/practices/{practiceId}/invoices/{invoiceId}/payments/{paymentId}/reverse": true,
+	"POST /api/practices/{practiceId}/invoices/{invoiceId}/void":                         true,
+	"POST /api/practices/{practiceId}/invoices/{invoiceId}/write-off":                    true,
+	"PUT /api/practices/{practiceId}/rates/{kind}":                                       true,
 }
 
 // TestRoutes_PaymentAndRateWritesDeclareRoles is #990's own guardrail,

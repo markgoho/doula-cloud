@@ -9,6 +9,7 @@ import {
 	loadPracticeInvoices,
 	practiceInvoicesPath,
 	recordPayment,
+	reversePayment,
 	setBillingMode,
 	unbillableContractMessage,
 	voidInvoice,
@@ -205,6 +206,46 @@ describe('recordPayment', () => {
 		await expect(
 			recordPayment(fetcher, 'practice-1', 'inv-1', { method: 'cash', paidOn: '2026-01-01' })
 		).rejects.toThrow('This Invoice is not open, so nothing can be recorded or changed against it.');
+	});
+});
+
+describe('reversePayment', () => {
+	it('POSTs the reason to the reverse action and returns the reversal Payment', async () => {
+		const reversal = {
+			id: 'pay-2',
+			invoiceId: 'inv-1',
+			amountCents: -15_000,
+			reversedPaymentId: 'pay-1',
+			reason: 'logged against the wrong invoice',
+			paidAt: '2026-01-02T00:00:00Z',
+			createdAt: '2026-01-02T00:00:00Z'
+		};
+		const fetcher = vi.fn().mockResolvedValue(jsonResponse(reversal));
+
+		const result = await reversePayment(
+			fetcher,
+			'practice-1',
+			'inv-1',
+			'pay-1',
+			'logged against the wrong invoice'
+		);
+
+		expect(fetcher).toHaveBeenCalledWith('/api/practices/practice-1/invoices/inv-1/payments/pay-1/reverse', {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ reason: 'logged against the wrong invoice' })
+		});
+		expect(result).toEqual(reversal);
+	});
+
+	it('throws with the response body text when the Invoice is not paid', async () => {
+		const fetcher = vi
+			.fn()
+			.mockResolvedValue(jsonResponse('This Invoice is not paid, so there is nothing to reverse.', 409));
+
+		await expect(reversePayment(fetcher, 'practice-1', 'inv-1', 'pay-1', 'reason')).rejects.toThrow(
+			'This Invoice is not paid, so there is nothing to reverse.'
+		);
 	});
 });
 

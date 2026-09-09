@@ -79,6 +79,7 @@
 		createInvoice,
 		loadBillingMode,
 		recordPayment,
+		reversePayment,
 		voidInvoice,
 		writeOffInvoice,
 		type BillingMode,
@@ -804,6 +805,11 @@
 		await loadInvoicesSection();
 	}
 
+	async function handleReversePayment(invoiceId: string, paymentId: string, reason: string) {
+		await reversePayment(apiFetchWithSession, page.params.practiceId!, invoiceId, paymentId, reason);
+		await loadInvoicesSection();
+	}
+
 	async function handleVoidInvoice(invoiceId: string) {
 		await voidInvoice(apiFetchWithSession, page.params.practiceId!, invoiceId);
 		await loadInvoicesSection();
@@ -1458,6 +1464,7 @@
 		{paymentsSettingsHref}
 		onCreate={handleCreateInvoice}
 		onRecordPayment={handleRecordPayment}
+		onReversePayment={handleReversePayment}
 		onVoidInvoice={handleVoidInvoice}
 		onWriteOffInvoice={handleWriteOffInvoice}
 	/>

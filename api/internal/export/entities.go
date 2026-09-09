@@ -227,11 +227,14 @@ func entities() []entity {
 			// like every other personal-data-bearing column this export
 			// carries, and covered by the same erasure sweep
 			// (client.redactPaymentNotes) that empties a Contract's merge
-			// fields.
+			// fields. reason and reversed_payment_id (#945) are set only on
+			// a reversal row; reason is covered by its own erasure sweep,
+			// client.redactPaymentReversalReasons.
 			file:        "payment.csv",
 			description: "Every Payment recorded against one of this Practice's Invoices.",
-			header:      []string{"id", "invoice_id", "stripe_payment_reference", colKind, "method", "note", colAmountCents, "paid_at", colCreatedAt},
+			header:      []string{"id", "invoice_id", "stripe_payment_reference", colKind, "method", "note", "reversed_payment_id", "reason", colAmountCents, "paid_at", colCreatedAt},
 			query: `SELECT p.id::text, p.invoice_id::text, p.stripe_payment_reference, p.kind::text, p.method::text, p.note,
+			               p.reversed_payment_id::text, p.reason,
 			               p.amount_cents::text, p.paid_at::text, p.created_at::text
 			          FROM payments p
 			          JOIN invoices i ON i.id = p.invoice_id

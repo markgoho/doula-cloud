@@ -175,15 +175,16 @@ func seedClientContract(t *testing.T, db *testdb.DB, engagementID, status string
 // payments/invoice_test.go's own seedInvoice takes a created_at and
 // returns the invoiceID, both of which its ordering assertions need and
 // this package's rollup fixture doesn't.
-func seedClientInvoice(t *testing.T, db *testdb.DB, practiceID, contractID, status string, amountCents int64) {
+func seedClientInvoice(t *testing.T, db *testdb.DB, practiceID, contractID, status string, amountCents int64) (invoiceID string) {
 	t.Helper()
-	if _, err := db.Admin.ExecContext(t.Context(),
+	if err := db.Admin.QueryRowContext(t.Context(),
 		`INSERT INTO invoices (practice_id, contract_id, stripe_invoice_id, status, amount_cents, reference, due_at)
-		 VALUES ($1, $2, gen_random_uuid()::text, $3, $4, gen_random_uuid()::text, now() + interval '30 days')`,
+		 VALUES ($1, $2, gen_random_uuid()::text, $3, $4, gen_random_uuid()::text, now() + interval '30 days') RETURNING id`,
 		practiceID, contractID, status, amountCents,
-	); err != nil {
+	).Scan(&invoiceID); err != nil {
 		t.Fatalf("seed invoice: %v", err)
 	}
+	return invoiceID
 }
 
 // seedPendingOutboxRow inserts a pending client_portal_users +

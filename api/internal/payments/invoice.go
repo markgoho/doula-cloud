@@ -56,6 +56,15 @@ type InvoiceView struct {
 	DueAt       time.Time `json:"dueAt"`
 	Reference   string    `json:"reference"`
 	BillingMode string    `json:"billingMode"`
+	// ActivePaymentID (#945) is the one manually recorded Payment
+	// currently covering this Invoice, if any -- nil unless the Invoice
+	// is 'paid' by a 'manual' row nothing has reversed yet. What
+	// PostReversePaymentHandler's own :paymentId path segment needs; a
+	// Stripe-collected ('stripe' kind) Payment is never reachable this way
+	// (refund is a different mechanism, out of scope), and this stays nil
+	// on a Stripe-backed Invoice regardless since reversal refuses that
+	// case outright.
+	ActivePaymentID *string `json:"activePaymentId,omitempty"`
 }
 
 // CreateInvoiceRequest is the body of a POST to PostInvoiceHandler.
@@ -201,7 +210,7 @@ func PostInvoiceHandler(client Client) http.Handler {
 			}
 		}
 
-		diff, err := json.Marshal(map[string]int64{"amountCents": amountCents})
+		diff, err := json.Marshal(map[string]int64{diffKeyAmountCents: amountCents})
 		if err != nil {
 			// coverage:ignore reason: a map of one int64 always marshals cleanly, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
@@ -628,13 +637,26 @@ func resolveStripeCustomer(ctx context.Context, tx *sql.Tx, stripeClient Client,
 // direct contract_id = $1 filter) so an Invoice created against a
 // since-voided Contract still lists under the Engagement that Contract
 // belonged to.
-const listInvoicesQuery = `SELECT i.id, i.contract_id, i.status, i.amount_cents, i.currency, i.created_at, i.paid_at, i.due_at, i.reference, i.stripe_invoice_id
+// activePaymentIDSubquery is #945's own addition: the one manually
+// recorded Payment currently covering an Invoice, if any -- a 'manual'
+// row nothing has reversed yet. The all-or-nothing Payment model means at
+// most one ever exists at a time for a 'paid' Invoice, so ORDER BY ...
+// LIMIT 1 is a safety net against a future model change rather than a
+// real ambiguity today. Reversal needs this id (PostReversePaymentHandler
+// takes :paymentId in its own path, not just :invoiceId), and nothing
+// before this ticket ever exposed it to a caller.
+const activePaymentIDSubquery = `(SELECT p.id FROM payments p
+	 WHERE p.invoice_id = i.id AND p.kind = 'manual'
+	   AND NOT EXISTS (SELECT 1 FROM payments r WHERE r.reversed_payment_id = p.id)
+	 ORDER BY p.created_at DESC LIMIT 1) AS active_payment_id`
+
+const listInvoicesQuery = `SELECT i.id, i.contract_id, i.status, i.amount_cents, i.currency, i.created_at, i.paid_at, i.due_at, i.reference, i.stripe_invoice_id, ` + activePaymentIDSubquery + `
 	FROM invoices i
 	JOIN contracts c ON c.id = i.contract_id
 	WHERE c.engagement_id = $1
 	ORDER BY i.created_at DESC, i.id DESC LIMIT $2`
 
-const listInvoicesAfterQuery = `SELECT i.id, i.contract_id, i.status, i.amount_cents, i.currency, i.created_at, i.paid_at, i.due_at, i.reference, i.stripe_invoice_id
+const listInvoicesAfterQuery = `SELECT i.id, i.contract_id, i.status, i.amount_cents, i.currency, i.created_at, i.paid_at, i.due_at, i.reference, i.stripe_invoice_id, ` + activePaymentIDSubquery + `
 	FROM invoices i
 	JOIN contracts c ON c.id = i.contract_id
 	WHERE c.engagement_id = $1 AND (i.created_at, i.id) < ($2, $3)
@@ -663,12 +685,16 @@ func listInvoices(ctx context.Context, tx *sql.Tx, engagementID string, after *i
 		var it InvoiceView
 		var paidAt sql.NullTime
 		var stripeInvoiceID sql.NullString
-		if err := rows.Scan(&it.ID, &it.ContractID, &it.Status, &it.AmountCents, &it.Currency, &it.CreatedAt, &paidAt, &it.DueAt, &it.Reference, &stripeInvoiceID); err != nil {
+		var activePaymentID sql.NullString
+		if err := rows.Scan(&it.ID, &it.ContractID, &it.Status, &it.AmountCents, &it.Currency, &it.CreatedAt, &paidAt, &it.DueAt, &it.Reference, &stripeInvoiceID, &activePaymentID); err != nil {
 			// coverage:ignore reason: row scan failure, not exercised by unit tests
 			return nil, false, fmt.Errorf("payments: scan invoice row: %w", err)
 		}
 		if paidAt.Valid {
 			it.PaidAt = &paidAt.Time
+		}
+		if activePaymentID.Valid {
+			it.ActivePaymentID = &activePaymentID.String
 		}
 		it.BillingMode = billingModeOf(stripeInvoiceID)
 		items = append(items, it)

@@ -24,6 +24,7 @@ interface SetupOptions {
 	) => Promise<void>;
 	onVoidInvoice?: (invoiceId: string) => Promise<void>;
 	onWriteOffInvoice?: (invoiceId: string) => Promise<void>;
+	onReversePayment?: (invoiceId: string, paymentId: string, reason: string) => Promise<void>;
 }
 
 const paymentsSettingsHref = 'https://example.test/practices/practice-1/settings/payments';
@@ -53,6 +54,24 @@ const invoicePaid: Invoice = {
 	billingMode: 'stripe'
 };
 
+// A paid by-hand Invoice with an active Payment (#945) -- the one state
+// that renders the "Reverse payment" action. A Stripe-backed paid
+// Invoice (invoicePaid above) never carries activePaymentId, since
+// reversal refuses that case outright.
+const invoicePaidByHand: Invoice = {
+	id: 'inv-3',
+	contractId: 'contract-1',
+	status: 'paid',
+	amountCents: 25_000,
+	currency: 'usd',
+	createdAt: '2026-01-03T00:00:00Z',
+	paidAt: '2026-01-06T00:00:00Z',
+	dueAt: '2026-02-02T00:00:00Z',
+	reference: 'INV-0003',
+	billingMode: 'by_hand',
+	activePaymentId: 'payment-1'
+};
+
 async function setup({
 	invoices = [],
 	contractStatus = 'signed',
@@ -64,7 +83,8 @@ async function setup({
 	onCreate = vi.fn().mockResolvedValue(undefined),
 	onRecordPayment = vi.fn().mockResolvedValue(undefined),
 	onVoidInvoice = vi.fn().mockResolvedValue(undefined),
-	onWriteOffInvoice = vi.fn().mockResolvedValue(undefined)
+	onWriteOffInvoice = vi.fn().mockResolvedValue(undefined),
+	onReversePayment = vi.fn().mockResolvedValue(undefined)
 }: SetupOptions = {}) {
 	await render(InvoiceSection, {
 		invoices,
@@ -78,9 +98,10 @@ async function setup({
 		onCreate,
 		onRecordPayment,
 		onVoidInvoice,
-		onWriteOffInvoice
+		onWriteOffInvoice,
+		onReversePayment
 	});
-	return { onCreate, onRecordPayment, onVoidInvoice, onWriteOffInvoice };
+	return { onCreate, onRecordPayment, onVoidInvoice, onWriteOffInvoice, onReversePayment };
 }
 
 describe('InvoiceSection.svelte', () => {
@@ -435,6 +456,95 @@ describe('InvoiceSection.svelte', () => {
 			await page.getByRole('button', { name: 'Write off' }).click();
 
 			await expect.element(page.getByText('Failed to write off this Invoice')).toBeVisible();
+		});
+	});
+
+	describe('reverse a manually recorded Payment (#945)', () => {
+		it('offers Reverse payment for a paid by-hand Invoice with an active Payment, but not for a paid Stripe-backed one', async () => {
+			await setup({ invoices: [invoicePaid, invoicePaidByHand], isOwnerOrAdmin: true });
+
+			await expect.element(page.getByRole('button', { name: 'Reverse payment' })).toBeVisible();
+			expect(page.getByRole('button', { name: 'Reverse payment' }).all()).toHaveLength(1);
+		});
+
+		it('hides Reverse payment from anyone but Owner or Admin', async () => {
+			await setup({ invoices: [invoicePaidByHand], isOwnerOrAdmin: false });
+
+			expect(page.getByRole('button', { name: 'Reverse payment' }).all()).toHaveLength(0);
+		});
+
+		it('blocks Continue with a blank reason', async () => {
+			await setup({ invoices: [invoicePaidByHand], isOwnerOrAdmin: true });
+
+			await page.getByRole('button', { name: 'Reverse payment' }).click();
+			await page.getByRole('button', { name: 'Continue' }).click();
+
+			await expect.element(page.getByText('Enter a reason for reversing this payment')).toBeVisible();
+			expect(page.getByRole('button', { name: 'Confirm and reverse' }).all()).toHaveLength(0);
+		});
+
+		it('calls onReversePayment with the Invoice id, Payment id, and reason once confirmed', async () => {
+			const { onReversePayment } = await setup({ invoices: [invoicePaidByHand], isOwnerOrAdmin: true });
+
+			await page.getByRole('button', { name: 'Reverse payment' }).click();
+			await page.getByLabelText('Reason').fill('Logged against the wrong Invoice');
+			await page.getByRole('button', { name: 'Continue' }).click();
+			await expect.element(page.getByText('Logged against the wrong Invoice')).toBeVisible();
+			await page.getByRole('button', { name: 'Confirm and reverse' }).click();
+
+			expect(onReversePayment).toHaveBeenCalledWith(
+				invoicePaidByHand.id,
+				invoicePaidByHand.activePaymentId,
+				'Logged against the wrong Invoice'
+			);
+		});
+
+		it('returns to the form on Change', async () => {
+			await setup({ invoices: [invoicePaidByHand], isOwnerOrAdmin: true });
+
+			await page.getByRole('button', { name: 'Reverse payment' }).click();
+			await page.getByLabelText('Reason').fill('Logged against the wrong Invoice');
+			await page.getByRole('button', { name: 'Continue' }).click();
+			await page.getByRole('button', { name: 'Change' }).click();
+
+			await expect.element(page.getByRole('button', { name: 'Continue' })).toBeVisible();
+		});
+
+		it('shows an error when onReversePayment throws', async () => {
+			const onReversePayment = vi.fn().mockRejectedValue(new Error('This Payment has already been reversed.'));
+			await setup({ invoices: [invoicePaidByHand], isOwnerOrAdmin: true, onReversePayment });
+
+			await page.getByRole('button', { name: 'Reverse payment' }).click();
+			await page.getByLabelText('Reason').fill('reason');
+			await page.getByRole('button', { name: 'Continue' }).click();
+			await page.getByRole('button', { name: 'Confirm and reverse' }).click();
+
+			await expect.element(page.getByText('This Payment has already been reversed.')).toBeVisible();
+		});
+
+		it('falls back to a generic message when onReversePayment rejects with a non-Error', async () => {
+			const onReversePayment = vi.fn().mockRejectedValue('boom');
+			await setup({ invoices: [invoicePaidByHand], isOwnerOrAdmin: true, onReversePayment });
+
+			await page.getByRole('button', { name: 'Reverse payment' }).click();
+			await page.getByLabelText('Reason').fill('reason');
+			await page.getByRole('button', { name: 'Continue' }).click();
+			await page.getByRole('button', { name: 'Confirm and reverse' }).click();
+
+			await expect.element(page.getByText('Failed to reverse this payment')).toBeVisible();
+		});
+
+		it('closes the record-payment form when Reverse payment is started', async () => {
+			const openByHandForReversal: Invoice = { ...invoiceOpen, id: 'inv-4', billingMode: 'by_hand' };
+			await setup({ invoices: [openByHandForReversal, invoicePaidByHand], isOwnerOrAdmin: true });
+
+			await page.getByRole('button', { name: 'Record payment' }).click();
+			await expect.element(page.getByRole('heading', { name: /Record a payment/ })).toBeVisible();
+
+			await page.getByRole('button', { name: 'Reverse payment' }).click();
+
+			expect(page.getByRole('heading', { name: /Record a payment/ }).all()).toHaveLength(0);
+			await expect.element(page.getByRole('heading', { name: /Reverse a payment/ })).toBeVisible();
 		});
 	});
 });
