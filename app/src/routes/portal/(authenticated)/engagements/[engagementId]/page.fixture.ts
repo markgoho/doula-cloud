@@ -61,10 +61,18 @@ export const visits = [
 /*
  * #708's own row-set split, the same shape the Visits above take. The
  * ledger used to answer this route's `/activity` read with an empty page,
- * which meant every sweep that trusts this fixture measured a table with
- * no rows in it -- and once the What column started carrying a whole
- * sentence rather than an action string, an empty ledger stopped standing
- * in for the real one.
+ * and once the What column started carrying a whole sentence rather than
+ * an action string, an empty ledger stopped standing in for the real one.
+ *
+ * These rows are not what checks the ledger's layout today, and this
+ * comment should not be read as claiming they are: `route-continuum`'s
+ * sweep never opens the disclosure, and a closed `<details>` renders
+ * nothing at all to measure. The open-state sweep that does measure these
+ * phrases lives in `engagement-hub.svelte.spec.ts`, which mounts a row of
+ * its own for exactly that reason. What this fixture gives is a route
+ * description that matches the route -- so a sweep that does open the
+ * disclosure finds real rows waiting, rather than a table the fixture
+ * emptied.
  *
  * Two rows, because two things about this column can be worst-case: the
  * longest phrase the Client register holds (`contract_void_requested`,
