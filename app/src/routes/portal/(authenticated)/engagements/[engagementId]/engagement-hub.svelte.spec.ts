@@ -237,7 +237,11 @@ describe('the Activity disclosure (#486)', () => {
 		// DataTable ("Your visits") on this page, above this one, so a bare
 		// `.table-view` is that table rather than the ledger's.
 		const tableView = page.elementLocator(container.querySelector(':scope details .table-view')!);
-		await expect.element(tableView.getByText('Contract sent')).toBeVisible();
+		// #708: the register's phrase for `contract_sent`, not the staff
+		// surfaces' "Contract sent" -- which is the raw action string with
+		// its underscore taken out, and a domain word ADR-0005 says a
+		// Client never meets.
+		await expect.element(tableView.getByText('Your Contract was sent to you.')).toBeVisible();
 		await expect.element(tableView.getByText('Your practice')).toBeVisible();
 	});
 
@@ -249,12 +253,19 @@ describe('the Activity disclosure (#486)', () => {
 	// (continuum.ts), so #486's AC7 ("free of horizontal scroll from
 	// 320px up") is checked for the ledger's own open-state layout rather
 	// than only asserted in a doc comment.
+	//
+	// #708 made the What column's text longer than the action string it
+	// replaced, so the row swept here is the longest phrase the register
+	// holds rather than an average one -- the widest thing this column can
+	// actually be asked to lay out at 320px. Which action that is, is
+	// pinned in `activityPhrases.usage.spec.ts`, so a longer phrase added
+	// later fails there rather than silently demoting this sweep.
 	it('is free of horizontal overflow from 320px up once opened (ADR-0024/0025)', async () => {
 		mockFetch(detail, [
 			{
 				subjectKind: 'engagement',
 				subjectId: detail.engagementId,
-				action: 'contract_sent',
+				action: 'contract_void_requested',
 				actorKind: 'staff',
 				actorName: 'Your practice',
 				createdAt: new Date().toISOString()
@@ -274,13 +285,40 @@ describe('the Activity disclosure (#486)', () => {
 			// frame's own width at this point in the test, so a role/text
 			// query would either hit a strict-mode multiple match or resolve
 			// against whichever tree is currently hidden.
-			await expect.poll(() => frame.querySelector(':scope details .frame')?.textContent).toContain('Contract sent');
+			await expect
+				.poll(() => frame.querySelector(':scope details .frame')?.textContent)
+				.toContain('Someone at your practice asked for your Contract to be ended.');
 
 			const found = sweep(frame, run.clientWidth);
 			expect(found, found && overflowReport('Client-portal Activity disclosure (open)', found)).toBeUndefined();
 		} finally {
 			remove();
 		}
+	});
+
+	// #708's own acceptance criterion, on the row the ticket names: the
+	// staff surfaces render `plan_instance_edited` as "Plan instance
+	// edited", which puts an internal system noun in front of a Client.
+	// Asserted through the opened disclosure's own table view, the same
+	// scoping the two tests above take and for the same #508 reason.
+	it("speaks the Client register, not the write side's action name", async () => {
+		mockFetch(detail, [
+			{
+				subjectKind: 'engagement',
+				subjectId: detail.engagementId,
+				action: 'plan_instance_edited',
+				actorKind: 'staff',
+				actorName: 'Your practice',
+				createdAt: new Date().toISOString()
+			}
+		]);
+
+		const { container } = await render(Hub);
+
+		await page.getByText('Show what has happened').click();
+		const tableView = page.elementLocator(container.querySelector(':scope details .table-view')!);
+		await expect.element(tableView.getByText('Your Birth Plan was updated.')).toBeVisible();
+		expect(container.querySelector(':scope details')!.textContent).not.toContain('Plan instance edited');
 	});
 
 	it('says so when the ledger cannot be read', async () => {

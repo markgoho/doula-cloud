@@ -15,6 +15,7 @@
 import type { Fetcher } from './fetcher.js';
 
 import { apiErrorMessage } from './api.js';
+import { clientActivityPhrase } from './clientRegister.js';
 import { formatActivityTimestamp } from './dates.js';
 import type { CursorPage } from './paginatedList.svelte.js';
 import type { EngagementReference } from './engagementDetail.js';
@@ -54,10 +55,26 @@ export interface ActivityEntry {
  * label per action -- the write side (activity/actions.go) already names
  * every action once, and a second, hand-maintained copy here is exactly
  * the kind of table that goes stale the next time a write site adds one.
+ *
+ * Staff-facing only, and that is the whole of #708's fix: its output is
+ * the domain word itself, which ADR-0005 says a Client never meets. The
+ * Client portal renders `clientRegister.clientActivityPhrase` instead,
+ * whose own doc comment says why the staleness argument above does not
+ * carry on that side.
  */
 export function describeActivityAction(action: string): string {
 	const spaced = action.replaceAll('_', ' ');
 	return spaced.charAt(0).toUpperCase() + spaced.slice(1);
+}
+
+/**
+ * The two staff surfaces' event text: the server's own `detail` sentence
+ * when the entry carries one (#887), and the generic description
+ * otherwise. `activityLedgerColumns`'s default, and the whole of what
+ * #708 left unchanged for them.
+ */
+function staffEventText(row: ActivityEntry): string {
+	return row.detail ?? describeActivityAction(row.action);
 }
 
 /**
@@ -86,8 +103,19 @@ interface LedgerColumn {
  * `row.createdAt` is already the raw instant, so the rendered `<time>`
  * carries it as its machine-readable value even while accessor shows the
  * relative-or-absolute display string.
+ *
+ * #708: the What column's text is the one thing a caller may substitute,
+ * because it is the one thing that differs by who is reading -- the
+ * Client portal passes `clientActivityLedgerColumns` below. It is a
+ * parameter rather than a post-hoc rewrite of the returned array, so
+ * neither caller has to find its column by matching the display copy
+ * "What", which is a heading a design change is free to reword.
+ * Everything else stays built once here, which is the point of the
+ * module.
  */
-export function activityLedgerColumns(): LedgerColumn[] {
+export function activityLedgerColumns(
+	describeEvent: (row: ActivityEntry) => string = staffEventText
+): LedgerColumn[] {
 	return [
 		{
 			label: 'When',
@@ -95,13 +123,27 @@ export function activityLedgerColumns(): LedgerColumn[] {
 			variant: 'meta',
 			datetimeAccessor: (row) => row.createdAt
 		},
-		{
-			label: 'What',
-			accessor: (row) => row.detail ?? describeActivityAction(row.action),
-			variant: 'body'
-		},
+		{ label: 'What', accessor: describeEvent, variant: 'body' },
 		{ label: 'Who', accessor: (row) => row.actorName, variant: 'muted' }
 	];
+}
+
+/**
+ * The same three columns, with the What column reading the Client
+ * register's own fixed phrase for the action instead of the staff-facing
+ * humanizer (#708). The Client portal's disclosure is the one caller.
+ *
+ * `row.detail` is not consulted here, and that is structural rather than
+ * incidental: #887's sentence is staff-register prose that names
+ * individual Doulas ("Visit reassigned from <one Doula> to <another>"),
+ * which is exactly the half of CONTEXT.md's Activity entry
+ * portal.ActivityHandler's own actor redaction exists to hold. No portal
+ * reader can send one today -- activityfeed.Entry has no such field --
+ * but that handler redacts the actor's name and nothing else, so a column
+ * that fell back to `detail` would leak the moment one did.
+ */
+export function clientActivityLedgerColumns(): LedgerColumn[] {
+	return activityLedgerColumns((row) => clientActivityPhrase(row.action));
 }
 
 /**

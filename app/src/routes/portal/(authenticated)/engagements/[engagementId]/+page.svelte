@@ -16,7 +16,11 @@
 	import { apiErrorMessage, apiFetchWithSession } from '#lib/api.js';
 	import { formatCalendarDay } from '#lib/dates.js';
 	import { PaginatedList } from '#lib/paginatedList.svelte.js';
-	import { activityLedgerColumns, loadPortalActivityPage, type ActivityEntry } from '#lib/activityLedger.js';
+	import {
+		clientActivityLedgerColumns,
+		loadPortalActivityPage,
+		type ActivityEntry
+	} from '#lib/activityLedger.js';
 	import {
 		inReadingOrder,
 		loadPortalVisitsPage,
@@ -181,6 +185,10 @@
 	happened" instead of the heading's exact words. Behind a closed
 	disclosure, per the design brief's #433 amendment for the Client
 	portal.
+
+	#708: the Client's own column set, not the staff one -- every row's
+	event text is the register's fixed phrase for that action, never the
+	raw `activity.EngagementAction` the two staff surfaces show.
 -->
 {#snippet activitySection()}
 	{#if activityError}
@@ -188,7 +196,7 @@
 	{/if}
 	<DataTable
 		disclosure="Show what has happened"
-		columns={activityLedgerColumns()}
+		columns={clientActivityLedgerColumns()}
 		rows={activity.items}
 		hasMore={activity.hasMore}
 		onLoadMore={() => activity.loadMore()}
