@@ -174,8 +174,9 @@ func PostManualPaymentHandler(client Client) http.Handler {
 			return
 		}
 		if !validPaymentMethods[req.Method] {
-			const msg = `method must be "check", "bank_transfer", "cash", or "other"`
-			apierr.Write(w, http.StatusBadRequest, apierr.CodeInvalidArgument, msg, map[string]string{"method": msg})
+			apierr.Write(w, http.StatusBadRequest, apierr.CodeInvalidArgument,
+				`method must be "check", "bank_transfer", "cash", or "other"`,
+				map[string]string{"method": `method must be "check", "bank_transfer", "cash", or "other"`})
 			return
 		}
 		if req.Method == PaymentMethodOther && req.Note == "" {
@@ -191,8 +192,9 @@ func PostManualPaymentHandler(client Client) http.Handler {
 		}
 		paidOn, err := time.Parse(paidOnLayout, req.PaidOn)
 		if err != nil {
-			const msg = "paidOn must be a date in YYYY-MM-DD form"
-			apierr.Write(w, http.StatusBadRequest, apierr.CodeInvalidArgument, msg, map[string]string{"paidOn": msg})
+			apierr.Write(w, http.StatusBadRequest, apierr.CodeInvalidArgument,
+				"paidOn must be a date in YYYY-MM-DD form",
+				map[string]string{"paidOn": "paidOn must be a date in YYYY-MM-DD form"})
 			return
 		}
 		if paidOn.After(time.Now().UTC().Truncate(24 * time.Hour)) {
