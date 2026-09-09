@@ -1475,6 +1475,180 @@ func TestListHandler_OpenEngagementsRollup_ContractorSeesOwnFeeOnlyOnAttachedEng
 	}
 }
 
+// TestListHandler_OpenEngagementsRollup_EndedAttachmentShowsNoFee proves
+// fetchOpenEngagements' own "att.ended_at IS NULL" condition (#742),
+// distinct from the identical one staffauth.Reader.CanAccessEngagement
+// enforces: a contractor's attachment that has since ended must not
+// surface her old fee, or the Engagement line it sat on, even though the
+// same Client still shows because of a separate, still-open attachment.
+func TestListHandler_OpenEngagementsRollup_EndedAttachmentShowsNoFee(t *testing.T) {
+	db := testdb.New(t)
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, "staff-owner-for-ended-rollup", []string{doulaRole}, "employee")
+	const contractorUID = "contractor-ended-rollup"
+	contractorID := testdb.SeedContractorAtPractice(t, db, practiceID, contractorUID)
+
+	clientID, openEngagement := testdb.SeedEngagementInStatus(t, db, practiceID, "Ended Rollup Client", "ended-rollup@example.com", "active")
+	seedGrantedAttachmentWithFee(t, db, openEngagement, contractorID, 90000)
+
+	endedEngagement := seedEngagementForClient(t, db, clientID, practiceID, "active", "postpartum")
+	seedAttachmentWithFee(t, db, endedEngagement, contractorID, "granted", true, 40000)
+
+	srv, session := newServer(t, db, contractorUID)
+	defer srv.Close()
+
+	resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/clients?all=true")
+	defer resp.Body.Close()
+	var listResp client.ListResponse
+	if err := json.NewDecoder(resp.Body).Decode(&listResp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if len(listResp.Items) != 1 || listResp.Items[0].ClientID != clientID {
+		t.Fatalf("list = %+v, want exactly the still-attached Client", listResp.Items)
+	}
+	rollup := listResp.Items[0].OpenEngagements
+	if len(rollup) != 1 || rollup[0].EngagementID != openEngagement {
+		t.Fatalf("rollup = %+v, want exactly the open-attachment Engagement %q (ended attachment's %q must not appear)",
+			rollup, openEngagement, endedEngagement)
+	}
+	if rollup[0].FeeCents == nil || *rollup[0].FeeCents != 90000 {
+		t.Fatalf("fee = %v, want 90000", rollup[0].FeeCents)
+	}
+}
+
+// TestListHandler_OpenEngagementsRollup_AccruedAttachmentShowsNoFee
+// proves fetchOpenEngagements' own "att.origin = 'granted'" condition
+// (#742): an accrued-only attachment (#228 -- a record of work, never a
+// key) must not surface a fee or its Engagement line either, even though
+// the same contractor holds a separate open, granted attachment
+// elsewhere on the same Client.
+func TestListHandler_OpenEngagementsRollup_AccruedAttachmentShowsNoFee(t *testing.T) {
+	db := testdb.New(t)
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, "staff-owner-for-accrued-rollup", []string{doulaRole}, "employee")
+	const contractorUID = "contractor-accrued-rollup"
+	contractorID := testdb.SeedContractorAtPractice(t, db, practiceID, contractorUID)
+
+	clientID, openEngagement := testdb.SeedEngagementInStatus(t, db, practiceID, "Accrued Rollup Client", "accrued-rollup@example.com", "active")
+	seedGrantedAttachmentWithFee(t, db, openEngagement, contractorID, 85000)
+
+	accruedEngagement := seedEngagementForClient(t, db, clientID, practiceID, "active", "postpartum")
+	seedAttachmentWithFee(t, db, accruedEngagement, contractorID, "accrued", false, 5000)
+
+	srv, session := newServer(t, db, contractorUID)
+	defer srv.Close()
+
+	resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/clients?all=true")
+	defer resp.Body.Close()
+	var listResp client.ListResponse
+	if err := json.NewDecoder(resp.Body).Decode(&listResp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if len(listResp.Items) != 1 || listResp.Items[0].ClientID != clientID {
+		t.Fatalf("list = %+v, want exactly the granted-attachment Client", listResp.Items)
+	}
+	rollup := listResp.Items[0].OpenEngagements
+	if len(rollup) != 1 || rollup[0].EngagementID != openEngagement {
+		t.Fatalf("rollup = %+v, want exactly the granted Engagement %q (accrued-only %q must not appear)",
+			rollup, openEngagement, accruedEngagement)
+	}
+	if rollup[0].FeeCents == nil || *rollup[0].FeeCents != 85000 {
+		t.Fatalf("fee = %v, want 85000", rollup[0].FeeCents)
+	}
+}
+
+// TestListHandler_OpenEngagementsRollup_AnotherDoulasFeeNeverSurfaces
+// proves fetchOpenEngagements' own "att.staff_id = $n" condition (#742):
+// two contractors both hold an open, granted attachment on the same
+// Engagement (a co-attended birth), each with her own agreed fee -- the
+// reader must see only her own, never the other Doula's.
+func TestListHandler_OpenEngagementsRollup_AnotherDoulasFeeNeverSurfaces(t *testing.T) {
+	db := testdb.New(t)
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, "staff-owner-for-cofee-rollup", []string{doulaRole}, "employee")
+	const readerUID = "contractor-cofee-reader"
+	readerID := testdb.SeedContractorAtPractice(t, db, practiceID, readerUID)
+	const otherUID = "contractor-cofee-other"
+	otherID := testdb.SeedContractorAtPractice(t, db, practiceID, otherUID)
+
+	clientID, sharedEngagement := testdb.SeedEngagementInStatus(t, db, practiceID, "Co-Attended Client", "cofee-rollup@example.com", "active")
+	seedGrantedAttachmentWithFee(t, db, sharedEngagement, readerID, 70000)
+	seedGrantedAttachmentWithFee(t, db, sharedEngagement, otherID, 130000)
+
+	srv, session := newServer(t, db, readerUID)
+	defer srv.Close()
+
+	resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/clients?all=true")
+	defer resp.Body.Close()
+	var listResp client.ListResponse
+	if err := json.NewDecoder(resp.Body).Decode(&listResp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if len(listResp.Items) != 1 || listResp.Items[0].ClientID != clientID {
+		t.Fatalf("list = %+v, want exactly the shared Client", listResp.Items)
+	}
+	rollup := listResp.Items[0].OpenEngagements
+	if len(rollup) != 1 || rollup[0].EngagementID != sharedEngagement {
+		t.Fatalf("rollup = %+v, want exactly one line for the shared Engagement", rollup)
+	}
+	if rollup[0].FeeCents == nil || *rollup[0].FeeCents != 70000 {
+		t.Fatalf("fee = %v, want the reader's own 70000, never the other Doula's 130000", rollup[0].FeeCents)
+	}
+}
+
+// TestListHandler_OwnerContractorSeesWholePracticeNotOnlyHerAttachments
+// resolves fetchOpenEngagements' own doc comment (#742): an
+// owner-contractor (ADR-0017's "solo Practice") is real and reachable --
+// nothing in staffauth ties employment_type to role -- so both
+// ListHandler's own query choice and attachOpenEngagements' attachedOnly
+// must key off staffauth.Reader.IsAmbientContractor, never bare
+// IsContractor, or an Owner whose own membership happens to read
+// "contractor" would have her Clients list silently narrowed to just her
+// own attachments.
+func TestListHandler_OwnerContractorSeesWholePracticeNotOnlyHerAttachments(t *testing.T) {
+	db := testdb.New(t)
+	practiceID := testdb.SeedPractice(t, db, "Solo Practice Rollup")
+	const uid = "owner-contractor-rollup"
+	ownerID := testdb.SeedStaffAtPractice(t, db, practiceID, uid, []string{ownerRole, doulaRole}, "contractor")
+
+	// An Engagement the Owner holds no attachment on at all -- still
+	// hers to see, because the owner role's ambient reach does not
+	// depend on her own employment_type.
+	unattachedClientID, unattachedEngagement := testdb.SeedEngagementInStatus(t, db, practiceID, "Unattached Owner Client", "unattached-owner-rollup@example.com", "active")
+
+	// An Engagement she does hold a fee on, to prove that still joins
+	// through unconditionally alongside the ambient reach above.
+	attachedClientID, attachedEngagement := testdb.SeedEngagementInStatus(t, db, practiceID, "Attached Owner Client", "attached-owner-rollup@example.com", "active")
+	seedGrantedAttachmentWithFee(t, db, attachedEngagement, ownerID, 60000)
+
+	srv, session := newServer(t, db, uid)
+	defer srv.Close()
+
+	resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/clients")
+	defer resp.Body.Close()
+	var listResp client.ListResponse
+	if err := json.NewDecoder(resp.Body).Decode(&listResp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	byID := map[string]client.ListItem{}
+	for _, item := range listResp.Items {
+		byID[item.ClientID] = item
+	}
+	unattached, ok := byID[unattachedClientID]
+	if !ok {
+		t.Fatalf("list = %+v, want the unattached Client too -- an owner-contractor is not narrowed", listResp.Items)
+	}
+	if rollup := unattached.OpenEngagements; len(rollup) != 1 || rollup[0].EngagementID != unattachedEngagement {
+		t.Fatalf("unattached rollup = %+v, want the one Engagement she holds no attachment on", rollup)
+	}
+
+	attached, ok := byID[attachedClientID]
+	if !ok {
+		t.Fatalf("list = %+v, want the attached Client", listResp.Items)
+	}
+	rollup := attached.OpenEngagements
+	if len(rollup) != 1 || rollup[0].FeeCents == nil || *rollup[0].FeeCents != 60000 {
+		t.Fatalf("attached rollup = %+v, want her own 60000 fee to join through", rollup)
+	}
+}
+
 func readBody(t *testing.T, resp *http.Response) string {
 	t.Helper()
 	buf := new(bytes.Buffer)
