@@ -27,7 +27,7 @@ Read against the live project, not from documentation. This table supersedes the
 | Project-level IAM bindings | 35 role bindings, 38 principal-role pairs, 23 distinct principals — #1043 removed `roles/cloudfunctions.developer` and `roles/cloudfunctions.admin` (each the sole binding for its role), and #1044 then added `terraform-plan@`'s three (`roles/viewer`, `roles/iam.securityReviewer`, `roles/iam.workloadIdentityPoolViewer`) | Yes, for the non-service-agent ones |
 | Workload Identity pool and provider | pool `github-actions`, provider `github` | Yes |
 | Artifact Registry repositories | `api`, `cloud-run-source-deploy`, `firebaseapphosting-images` — `gcf-artifacts` was deleted 2026-09-08 (#1043) | `api` yes; the other two no |
-| Cloud SQL instance | `doula-cloud-pg`, POSTGRES_16, `db-f1-micro`, ZONAL, public IP, `sslMode: TRUSTED_CLIENT_CERTIFICATE_REQUIRED`, 10 GB, 7 backups retained, **`deletionProtectionEnabled: false`** | Instance settings and databases yes; users no |
+| Cloud SQL instance | `doula-cloud-pg`, POSTGRES_16, `db-f1-micro`, ZONAL, public IP, `sslMode: TRUSTED_CLIENT_CERTIFICATE_REQUIRED`, 10 GB, 7 backups retained, `deletionProtectionEnabled: true` (#1044 turned it on; #1048 imported the instance to match) | Instance settings and databases yes; users no |
 | Cloud SQL databases and users | databases `doula_cloud`, `postgres`; users `app_runtime_login`, `site_builder_login`, `postgres` | Databases yes, users no |
 | GCS buckets | `doula-cloud-attachments`; `doula-cloud.firebasestorage.app`, `run-sources-…` — `gcf-v2-sources-…` and `gcf-v2-uploads-…` were deleted 2026-09-08 (#1043) | `doula-cloud-attachments` yes; the rest no |
 | Firestore | one `(default)` FIRESTORE_NATIVE database, created by Firebase | No |
