@@ -43,37 +43,37 @@ resource "google_service_account" "github_action" {
 # `github-action-733741680@`'s nine project roles (ten until #1043 removed
 # `roles/cloudfunctions.developer`).
 resource "google_project_iam_member" "github_action_artifactregistry_writer" {
-  member  = "serviceAccount:github-action-733741680@doula-cloud.iam.gserviceaccount.com"
+  member  = google_service_account.github_action.member
   project = "doula-cloud"
   role    = "roles/artifactregistry.writer"
 }
 
 resource "google_project_iam_member" "github_action_cloudsql_client" {
-  member  = "serviceAccount:github-action-733741680@doula-cloud.iam.gserviceaccount.com"
+  member  = google_service_account.github_action.member
   project = "doula-cloud"
   role    = "roles/cloudsql.client"
 }
 
 resource "google_project_iam_member" "github_action_firebaseauth_admin" {
-  member  = "serviceAccount:github-action-733741680@doula-cloud.iam.gserviceaccount.com"
+  member  = google_service_account.github_action.member
   project = "doula-cloud"
   role    = "roles/firebaseauth.admin"
 }
 
 resource "google_project_iam_member" "github_action_firebasehosting_admin" {
-  member  = "serviceAccount:github-action-733741680@doula-cloud.iam.gserviceaccount.com"
+  member  = google_service_account.github_action.member
   project = "doula-cloud"
   role    = "roles/firebasehosting.admin"
 }
 
 resource "google_project_iam_member" "github_action_run_admin" {
-  member  = "serviceAccount:github-action-733741680@doula-cloud.iam.gserviceaccount.com"
+  member  = google_service_account.github_action.member
   project = "doula-cloud"
   role    = "roles/run.admin"
 }
 
 resource "google_project_iam_member" "github_action_run_viewer" {
-  member  = "serviceAccount:github-action-733741680@doula-cloud.iam.gserviceaccount.com"
+  member  = google_service_account.github_action.member
   project = "doula-cloud"
   role    = "roles/run.viewer"
 }
@@ -81,19 +81,19 @@ resource "google_project_iam_member" "github_action_run_viewer" {
 # #1078: project-wide read access to all thirteen secrets, not the one
 # `ci.yml` reads. Imported as it stands; narrowing it is #1078's job.
 resource "google_project_iam_member" "github_action_secretmanager_secret_accessor" {
-  member  = "serviceAccount:github-action-733741680@doula-cloud.iam.gserviceaccount.com"
+  member  = google_service_account.github_action.member
   project = "doula-cloud"
   role    = "roles/secretmanager.secretAccessor"
 }
 
 resource "google_project_iam_member" "github_action_serviceusage_api_keys_viewer" {
-  member  = "serviceAccount:github-action-733741680@doula-cloud.iam.gserviceaccount.com"
+  member  = google_service_account.github_action.member
   project = "doula-cloud"
   role    = "roles/serviceusage.apiKeysViewer"
 }
 
 resource "google_project_iam_member" "github_action_serviceusage_service_usage_consumer" {
-  member  = "serviceAccount:github-action-733741680@doula-cloud.iam.gserviceaccount.com"
+  member  = google_service_account.github_action.member
   project = "doula-cloud"
   role    = "roles/serviceusage.serviceUsageConsumer"
 }
