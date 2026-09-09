@@ -169,11 +169,27 @@ async function startMailbox() {
 // so --wait blocks forever (confirmed on trunk -- see git log for this
 // file). Polling the host-exposed port directly sidesteps that.
 async function startDatabase() {
-	execFileSync(CONTAINER_ENGINE, [...COMPOSE_ARGS, 'up', '-d'], {
-		stdio: 'inherit',
-		timeout: DB_UP_TIMEOUT_MS,
-		env: COMPOSE_ENV
-	});
+	try {
+		// stdio left as the default (captured), not 'inherit': 'inherit'
+		// hands the child the parent's own file descriptors, so Node never
+		// fills in error.stdout/error.stderr on a non-zero exit -- the exit
+		// status this then throws is all a caller ever sees (#782). Capturing
+		// costs nothing here (compose up -d exits almost immediately) and
+		// lets the catch below put podman-compose's own message on the
+		// console before re-throwing.
+		const output = execFileSync(CONTAINER_ENGINE, [...COMPOSE_ARGS, 'up', '-d'], {
+			timeout: DB_UP_TIMEOUT_MS,
+			env: COMPOSE_ENV
+		});
+		process.stdout.write(output);
+	} catch (error) {
+		if (error instanceof Error) {
+			const { stdout, stderr } = error as Error & { stdout?: Buffer; stderr?: Buffer };
+			if (stdout?.length) process.stdout.write(stdout);
+			if (stderr?.length) process.stderr.write(stderr);
+		}
+		throw error;
+	}
 	await waitForPort(DB_HOST, DB_PORT, READY_TIMEOUT_MS);
 	await waitForPort(GCS_HOST, GCS_PORT, READY_TIMEOUT_MS);
 }
