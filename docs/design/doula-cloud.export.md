@@ -1,0 +1,2276 @@
+# Design export
+
+Generated from `docs/design/doula-cloud.pen`. Do not hand-edit this file:
+run `bun run design:export` to regenerate it, and commit the result alongside
+the `.pen` change it was generated from. See docs/design/workflow.md for
+what this export is for, and what it is not.
+
+
+## QuickCard (reusable)
+
+- icon "users" (lucide) [fill: $muted]
+- text: "Clients" [fill: $text; fontFamily: $font-sans]
+
+## ActivityEntry (reusable)
+
+- text: "28 Aug 2026, 9:14am" [fill: $color-on-surface-muted; fontFamily: $font-family-base; fontSize: $text-meta-size]
+- text: "Event description" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-body-size]
+- text: "Actor Name" [fill: $color-on-surface-muted; fontFamily: $font-family-base; fontSize: $text-meta-size]
+
+## Staff Shell - Desktop
+
+- ref "Top Bar" -> component "StaffTopBar"
+- frame "Page Content"
+  - text: "Welcome to Riverside Doula Collective" [fill: $text; fontFamily: $font-sans]
+  - frame "Quick Links"
+    - ref "Clients" -> component "QuickCard"
+      - override Icon (icon): icon: "users"
+      - override Label (text): content: "Clients"
+    - ref "Billing" -> component "QuickCard"
+      - override Icon (icon): icon: "receipt"
+      - override Label (text): content: "Billing"
+    - ref "Your offers" -> component "QuickCard"
+      - override Icon (icon): icon: "tag"
+      - override Label (text): content: "Your offers"
+    - ref "Staff" -> component "QuickCard"
+      - override Icon (icon): icon: "user-check"
+      - override Label (text): content: "Staff"
+    - ref "Plan Templates" -> component "QuickCard"
+      - override Icon (icon): icon: "layout-template"
+      - override Label (text): content: "Plan Templates"
+    - ref "Contract Template" -> component "QuickCard"
+      - override Icon (icon): icon: "file-text"
+      - override Label (text): content: "Contract Template"
+    - ref "Payments" -> component "QuickCard"
+      - override Icon (icon): icon: "credit-card"
+      - override Label (text): content: "Payments"
+  - frame "Recent Activity" [fill: $panel; cornerRadius: $radius; stroke: $hairline]
+    - frame "Panel Header" [stroke: $hairline]
+      - text: "Recent activity" [fill: $text; fontFamily: $font-sans]
+      - text: "Last 4 days · newest first" [fill: $muted; fontFamily: $font-sans]
+    - frame "Activity List"
+      - ref "Row 1" -> component "ActivityEntry"
+        - override When (text): content: "2026-08-28 09:41"
+        - override What happened (text): content: "Invoice INV-2041 sent to Amara Okafor for $1,850.00"
+        - override Who (text): content: "Mark Goho"
+      - ref "Row 2" -> component "ActivityEntry"
+        - override When (text): content: "2026-08-28 08:57"
+        - override What happened (text): content: "Danielle Ruiz accepted the invitation to join the practice"
+        - override Who (text): content: "System"
+      - ref "Row 3" -> component "ActivityEntry"
+        - override When (text): content: "2026-08-27 17:22"
+        - override What happened (text): content: "Employment type changed for Priya Raman: contractor to employee"
+        - override Who (text): content: "Mark Goho"
+      - ref "Row 4" -> component "ActivityEntry"
+        - override When (text): content: "2026-08-27 15:05"
+        - override What happened (text): content: "Plan “Full Spectrum Birth + 4 Postpartum Visits” assigned to Jordan Wells"
+        - override Who (text): content: "Tasha Lin"
+      - ref "Row 5" -> component "ActivityEntry"
+        - override When (text): content: "2026-08-27 11:38"
+        - override What happened (text): content: "Payment of $600.00 received against invoice INV-2038"
+        - override Who (text): content: "Stripe"
+      - ref "Row 6" -> component "ActivityEntry"
+        - override When (text): content: "2026-08-26 16:12"
+        - override What happened (text): content: "Contract template “Standard Birth Doula Agreement” updated to v4"
+        - override Who (text): content: "Mark Goho"
+      - ref "Row 7" -> component "ActivityEntry"
+        - override When (text): content: "2026-08-26 10:04"
+        - override What happened (text): content: "Client record created for Simone Adeyemi, due 2026-11-14"
+        - override Who (text): content: "Tasha Lin"
+      - ref "Row 8" -> component "ActivityEntry"
+        - override When (text): content: "2026-08-25 14:47"
+        - override What happened (text): content: "Offer “Postpartum Support Package” archived"
+        - override Who (text): content: "Danielle Ruiz"
+
+## Staff Shell - Menus Open
+
+- ref "Top Bar" -> component "StaffTopBar"
+- frame "Practice Switcher Menu" [fill: $color-surface-bright; cornerRadius: $radius; stroke: $color-surface-container-highest]
+  - frame "Switcher Heading"
+    - text: "YOUR PRACTICES" [fill: $color-on-surface-muted; fontFamily: $font-family-base]
+  - frame "Practice Riverside Doula Collective" [fill: $color-surface-container]
+    - frame "Text"
+      - text: "Riverside Doula Collective" [fill: $color-on-surface; fontFamily: $font-family-base]
+      - text: "Owner, Admin" [fill: $color-on-surface-muted; fontFamily: $font-family-base]
+    - icon "check" (lucide) [fill: $color-primary]
+  - frame "Practice Finger Lakes Birth Support"
+    - frame "Text"
+      - text: "Finger Lakes Birth Support" [fill: $color-on-surface; fontFamily: $font-family-base]
+      - text: "Doula" [fill: $color-on-surface-muted; fontFamily: $font-family-base]
+    - icon "check" (lucide) [fill: $color-surface-bright]
+  - frame "Practice Genesee Valley Midwifery"
+    - frame "Text"
+      - text: "Genesee Valley Midwifery" [fill: $color-on-surface; fontFamily: $font-family-base]
+      - text: "Doula" [fill: $color-on-surface-muted; fontFamily: $font-family-base]
+    - icon "check" (lucide) [fill: $color-surface-bright]
+- text: "PRACTICE SWITCHER - one row per Membership. Contractor Doulas hold several." [fill: $color-on-surface-muted; fontFamily: $font-family-base]
+- ref "Top Bar B" -> component "StaffTopBar"
+- text: "AVATAR MENU - the person, never the Practice. Practice settings are a nav item, not here." [fill: $color-on-surface-muted; fontFamily: $font-family-base]
+- frame "Avatar Menu" [fill: $color-surface-bright; cornerRadius: $radius; stroke: $color-surface-container-highest]
+  - frame "Identity" [stroke: $color-outline-variant]
+    - text: "Mark Goho" [fill: $color-on-surface; fontFamily: $font-family-base]
+    - text: "markgoho@gmail.com" [fill: $color-on-surface-muted; fontFamily: $font-family-base]
+  - frame "Items"
+    - frame "Sign out"
+      - text: "Sign out" [fill: $color-error; fontFamily: $font-family-base]
+
+## Staff Shell - Narrow
+
+- frame "Top Bar" [fill: $color-surface-bright; stroke: $color-outline-variant]
+  - frame "Menu Hit"
+    - icon "menu" (lucide) [fill: $color-on-surface]
+  - frame "Practice"
+    - text: "Riverside Doula Collective" [fill: $color-on-surface; fontFamily: $font-family-base]
+    - icon "chevron-down" (lucide) [fill: $color-on-surface-variant]
+  - frame "Avatar Hit"
+    - frame "Avatar" [fill: $color-surface-container-high; stroke: $color-outline-variant]
+      - text: "MG" [fill: $color-on-surface; fontFamily: $font-family-base]
+- frame "Page Content"
+  - text: "Overview" [fill: $color-on-surface; fontFamily: $font-family-base]
+  - frame "Card Clients" [fill: $color-surface-bright; cornerRadius: $radius; stroke: $color-outline-variant]
+    - text: "Clients" [fill: $color-on-surface; fontFamily: $font-family-base]
+    - text: "14 active" [fill: $color-on-surface-variant; fontFamily: $font-family-base]
+  - frame "Card Offers" [fill: $color-surface-bright; cornerRadius: $radius; stroke: $color-outline-variant]
+    - text: "Offers" [fill: $color-on-surface; fontFamily: $font-family-base]
+    - text: "2 waiting on a Doula" [fill: $color-on-surface-variant; fontFamily: $font-family-base]
+  - frame "Card Billing" [fill: $color-surface-bright; cornerRadius: $radius; stroke: $color-outline-variant]
+    - text: "Billing" [fill: $color-on-surface; fontFamily: $font-family-base]
+    - text: "31 Credits" [fill: $color-on-surface-variant; fontFamily: $font-family-base]
+
+## Staff Shell - Narrow, Menu Open
+
+- frame "Top Bar" [fill: $color-surface-bright; stroke: $color-outline-variant]
+  - frame "Close Hit"
+    - icon "x" (lucide) [fill: $color-on-surface]
+  - frame "Brand"
+    - ref "Brand Lockup" -> component "BrandLockup"
+  - frame "Avatar Hit"
+    - frame "Avatar" [fill: $color-surface-container-high; stroke: $color-outline-variant]
+      - text: "MG" [fill: $color-on-surface; fontFamily: $font-family-base]
+- frame "Nav"
+  - frame "Nav Overview" [fill: $color-surface-container; stroke: $color-primary]
+    - text: "Overview" [fill: $color-primary; fontFamily: $font-family-base]
+  - frame "Nav Clients"
+    - text: "Clients" [fill: $color-on-surface; fontFamily: $font-family-base]
+  - frame "Nav Billing"
+    - text: "Billing" [fill: $color-on-surface; fontFamily: $font-family-base]
+  - frame "Nav Staff"
+    - text: "Staff" [fill: $color-on-surface; fontFamily: $font-family-base]
+  - frame "Nav Offers"
+    - text: "Offers" [fill: $color-on-surface; fontFamily: $font-family-base]
+  - frame "Nav Settings"
+    - text: "Settings" [fill: $color-on-surface; fontFamily: $font-family-base]
+- frame "Switcher" [stroke: $color-outline-variant]
+  - text: "PRACTICE" [fill: $color-on-surface-muted; fontFamily: $font-family-base]
+  - frame "Current Practice"
+    - text: "Riverside Doula Collective" [fill: $color-on-surface; fontFamily: $font-family-base]
+    - icon "chevron-down" (lucide) [fill: $color-on-surface-variant]
+
+## Portal Shell - Desktop
+
+- frame "Top Bar" [fill: $color-surface-bright; stroke: $color-outline-variant]
+  - frame "Brand and Nav"
+    - text: "Riverside Doula Collective" [fill: $color-on-surface; fontFamily: $font-family-base]
+    - frame "Nav"
+      - frame "Nav Your care" [stroke: $color-primary]
+        - text: "Your care" [fill: $color-primary; fontFamily: $font-family-base]
+      - frame "Nav Messages"
+        - text: "Messages" [fill: $color-on-surface-variant; fontFamily: $font-family-base]
+      - frame "Nav Birth plan"
+        - text: "Birth plan" [fill: $color-on-surface-variant; fontFamily: $font-family-base]
+      - frame "Nav Contract"
+        - text: "Contract" [fill: $color-on-surface-variant; fontFamily: $font-family-base]
+  - frame "Account"
+    - frame "Avatar Hit"
+      - frame "Avatar" [fill: $color-surface-container-high; stroke: $color-outline-variant]
+        - text: "AB" [fill: $color-on-surface; fontFamily: $font-family-base]
+- frame "Page Content"
+  - frame "Page Frame"
+    - text: "Your care with Riverside Doula Collective" [fill: $color-on-surface; fontFamily: $font-family-base]
+    - text: "Your Doula is Sam Reyes. Your due date is 4 March 2027." [fill: $color-on-surface-variant; fontFamily: $font-family-base]
+    - frame "Card Birth plan" [fill: $color-surface-bright; cornerRadius: $radius; stroke: $color-outline-variant]
+      - text: "Birth plan" [fill: $color-on-surface; fontFamily: $font-family-base]
+      - text: "Last edited 12 January" [fill: $color-on-surface-variant; fontFamily: $font-family-base]
+    - frame "Card Contract" [fill: $color-surface-bright; cornerRadius: $radius; stroke: $color-outline-variant]
+      - text: "Contract" [fill: $color-on-surface; fontFamily: $font-family-base]
+      - text: "Signed 2 December" [fill: $color-on-surface-variant; fontFamily: $font-family-base]
+
+## Portal Shell - Narrow
+
+- frame "Top Bar" [fill: $color-surface-bright]
+  - frame "Brand"
+    - text: "Riverside Doula Collective" [fill: $color-on-surface; fontFamily: $font-family-base]
+  - frame "Avatar Hit"
+    - frame "Avatar" [fill: $color-surface-container-high; stroke: $color-outline-variant]
+      - text: "AB" [fill: $color-on-surface; fontFamily: $font-family-base]
+- frame "Nav" [fill: $color-surface-bright; stroke: $color-outline-variant]
+  - frame "Nav Your care" [stroke: $color-primary]
+    - text: "Your care" [fill: $color-primary; fontFamily: $font-family-base]
+  - frame "Nav Messages"
+    - text: "Messages" [fill: $color-on-surface-variant; fontFamily: $font-family-base]
+  - frame "Nav Birth plan"
+    - text: "Birth plan" [fill: $color-on-surface-variant; fontFamily: $font-family-base]
+  - frame "Nav Contract"
+    - text: "Contract" [fill: $color-on-surface-variant; fontFamily: $font-family-base]
+- frame "Page Content"
+  - text: "Your care" [fill: $color-on-surface; fontFamily: $font-family-base]
+  - text: "Your Doula is Sam Reyes. Your due date is 4 March 2027." [fill: $color-on-surface-variant; fontFamily: $font-family-base]
+  - frame "Card Birth plan" [fill: $color-surface-bright; cornerRadius: $radius; stroke: $color-outline-variant]
+    - text: "Birth plan" [fill: $color-on-surface; fontFamily: $font-family-base]
+    - text: "Last edited 12 January" [fill: $color-on-surface-variant; fontFamily: $font-family-base]
+  - frame "Card Contract" [fill: $color-surface-bright; cornerRadius: $radius; stroke: $color-outline-variant]
+    - text: "Contract" [fill: $color-on-surface; fontFamily: $font-family-base]
+    - text: "Signed 2 December" [fill: $color-on-surface-variant; fontFamily: $font-family-base]
+
+## Signed-out Shell
+
+- frame "Top Bar" [fill: $color-surface-bright; stroke: $color-outline-variant]
+  - ref "Brand Lockup" -> component "BrandLockup"
+- frame "Page Content"
+  - frame "Login Card" [fill: $color-surface-bright; cornerRadius: $radius; stroke: $color-outline-variant]
+    - text: "Sign in" [fill: $color-on-surface; fontFamily: $font-family-base]
+    - frame "Field Email address"
+      - text: "Email address" [fill: $color-on-surface-variant; fontFamily: $font-family-base]
+      - frame "Input" [fill: $color-surface-bright; cornerRadius: $radius; stroke: $color-outline]
+        - text: "" [fill: $color-on-surface; fontFamily: $font-family-base]
+    - frame "Field Password"
+      - text: "Password" [fill: $color-on-surface-variant; fontFamily: $font-family-base]
+      - frame "Input" [fill: $color-surface-bright; cornerRadius: $radius; stroke: $color-outline]
+        - text: "" [fill: $color-on-surface; fontFamily: $font-family-base]
+    - frame "Submit" [fill: $color-primary; cornerRadius: $radius]
+      - text: "Sign in" [fill: $color-on-primary; fontFamily: $font-family-base]
+
+## CloudMark - size ramp
+
+- frame "Large"
+  - ref "Mark lg" -> component "CloudMark" (theme: size=lg)
+  - text: "lg  120x56" [fill: $color-on-surface-muted; fontFamily: $font-family-base]
+- frame "Medium"
+  - ref "Mark md" -> component "CloudMark" (theme: size=md)
+  - text: "md  60x28" [fill: $color-on-surface-muted; fontFamily: $font-family-base]
+- frame "Small"
+  - ref "Mark sm" -> component "CloudMark" (theme: size=sm)
+  - text: "sm  40x19" [fill: $color-on-surface-muted; fontFamily: $font-family-base]
+
+## StaffTopBar (reusable)
+
+- frame "Brand and Nav"
+  - ref "Brand Lockup" -> component "BrandLockup"
+  - frame "Nav"
+    - frame "Nav Overview" [stroke: $accent]
+      - text: "Overview" [fill: $accent; fontFamily: $font-sans]
+    - frame "Nav Clients"
+      - text: "Clients" [fill: $muted; fontFamily: $font-sans]
+    - frame "Nav Billing"
+      - text: "Billing" [fill: $muted; fontFamily: $font-sans]
+    - frame "Nav Staff"
+      - text: "Staff" [fill: $muted; fontFamily: $font-sans]
+    - frame "Nav Offers"
+      - text: "Offers" [fill: $muted; fontFamily: $font-sans]
+    - frame "Nav Settings"
+      - text: "Settings" [fill: $muted; fontFamily: $font-sans]
+- frame "Account"
+  - frame "Practice Switcher"
+    - text: "Riverside Doula Collective" [fill: $color-on-surface; fontFamily: $font-family-base]
+    - icon "chevron-down" (lucide) [fill: $color-on-surface-variant]
+  - frame "Avatar Hit Target"
+    - frame "Avatar" [fill: $color-surface-container-high; stroke: $color-outline-variant]
+      - text: "MG" [fill: $color-on-surface; fontFamily: $font-family-base]
+
+## CloudMark (reusable) (theme: size=sm)
+
+- path "Arc 1" [stroke: $color-primary; strokeWidth: $mark-stroke]
+- path "Arc 2" [stroke: $color-primary-hover; strokeWidth: $mark-stroke]
+- path "Arc 3" [stroke: $color-outline-variant; strokeWidth: $mark-stroke]
+
+## BrandLockup (reusable)
+
+- ref "Mark" -> component "CloudMark" (theme: size=sm)
+- text: "Doula Cloud" [fill: $color-on-surface; fontFamily: $font-family-base]
+
+## FormField (reusable)
+
+- frame "Label Block"
+  - text: "Given name" [fill: $color-on-surface; lineHeight: $text-label-leading; fontFamily: $font-family-base; fontSize: $text-label-size]
+  - text: "The only thing we must have." [fill: $color-on-surface-variant; lineHeight: $text-meta-leading; fontFamily: $font-family-base; fontSize: $text-meta-size]
+- frame "Control" [fill: $color-surface-bright; cornerRadius: $radius; stroke: $color-outline]
+  - text: "Sarah" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-body-size]
+- text: "Enter her given name" (hidden) [fill: $color-error; lineHeight: $text-label-leading; fontFamily: $font-family-base; fontSize: $text-label-size]
+
+## Sarah Beck - record, with an archived field
+
+- ref "Top Bar" -> component "StaffTopBar"
+- frame "Page Content"
+  - frame "Column"
+    - text: "Clients" [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-body-size]
+    - text: "Sarah Beck" [fill: $color-on-surface; lineHeight: $text-heading-lg-leading; fontFamily: $font-family-base; fontSize: $text-heading-lg-size]
+    - frame "Section - How Sarah found the practice"
+      - text: "How Sarah found the practice" [fill: $color-on-surface; lineHeight: $text-heading-leading; fontFamily: $font-family-base; fontSize: $text-heading-size]
+      - frame "Rows"
+        - frame "Row - Source" [stroke: $color-outline-variant]
+          - frame "Key Block"
+            - text: "Source" [fill: $color-on-surface-variant; lineHeight: $text-body-leading; fontFamily: $font-family-base; fontSize: $text-body-size]
+          - text: "Midwife referral" [fill: $color-on-surface; lineHeight: $text-body-leading; fontFamily: $font-family-base; fontSize: $text-body-size]
+          - text: "Change" [fill: $color-primary; fontFamily: $font-family-base; fontSize: $text-body-size]
+        - frame "Row - Who referred" [stroke: $color-outline-variant]
+          - frame "Key Block"
+            - text: "Who referred" [fill: $color-on-surface-variant; lineHeight: $text-body-leading; fontFamily: $font-family-base; fontSize: $text-body-size]
+          - text: "Rochester Midwifery Group" [fill: $color-on-surface; lineHeight: $text-body-leading; fontFamily: $font-family-base; fontSize: $text-body-size]
+          - text: "Change" [fill: $color-primary; fontFamily: $font-family-base; fontSize: $text-body-size]
+        - frame "Row - First contact" [stroke: $color-outline-variant]
+          - frame "Key Block"
+            - text: "First contact" [fill: $color-on-surface-variant; lineHeight: $text-body-leading; fontFamily: $font-family-base; fontSize: $text-body-size]
+          - text: "Phone, January 12" [fill: $color-on-surface; lineHeight: $text-body-leading; fontFamily: $font-family-base; fontSize: $text-body-size]
+          - text: "Change" [fill: $color-primary; fontFamily: $font-family-base; fontSize: $text-body-size]
+        - frame "Row - Doula on call at booking" [stroke: $color-outline-variant]
+          - frame "Key Block"
+            - text: "Doula on call at booking" [fill: $color-on-surface-variant; lineHeight: $text-body-leading; fontFamily: $font-family-base; fontSize: $text-body-size]
+            - frame "Tag" [fill: $color-surface-container-high]
+              - text: "No longer collected" [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-meta-size]
+          - text: "Priya Raman" [fill: $color-on-surface; lineHeight: $text-body-leading; fontFamily: $font-family-base; fontSize: $text-body-size]
+          - text: "Kept, not collected" [fill: $color-on-surface-muted; lineHeight: $text-meta-leading; fontFamily: $font-family-base; fontSize: $text-meta-size]
+    - text: "Riverside Doula Collective stopped asking this question. Sarah's answer is kept and can be read. It cannot be changed, and it is not asked of a new Client." [fill: $color-on-surface-variant; lineHeight: $text-body-leading; fontFamily: $font-family-base; fontSize: $text-body-size]
+
+## Intake 1 - Find the Client
+
+- ref "Top Bar" -> component "StaffTopBar"
+- frame "Page Content"
+  - frame "Progress"
+    - text: "Add a Client" [fill: $color-on-surface-variant; lineHeight: $text-label-leading; fontFamily: $font-family-base; fontSize: $text-label-size]
+    - frame "Steps"
+      - frame "Step 1" [stroke: $color-primary]
+        - frame "Marker" [stroke: $color-outline-variant]
+          - text: "1" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-meta-size]
+        - frame "Step Body"
+          - text: "Find the Client" [fill: $color-on-surface; lineHeight: $text-body-leading; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+      - frame "Step 2"
+        - frame "Marker" [stroke: $color-outline-variant]
+          - text: "2" [fill: $color-on-surface-muted; fontFamily: $font-family-base; fontSize: $text-meta-size]
+        - frame "Step Body"
+          - text: "Who the Client is" [fill: $color-on-surface-muted; lineHeight: $text-body-leading; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+      - frame "Step 3"
+        - frame "Marker" [stroke: $color-outline-variant]
+          - text: "3" [fill: $color-on-surface-muted; fontFamily: $font-family-base; fontSize: $text-meta-size]
+        - frame "Step Body"
+          - text: "How to reach the Client" [fill: $color-on-surface-muted; lineHeight: $text-body-leading; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+      - frame "Step 4"
+        - frame "Marker" [stroke: $color-outline-variant]
+          - text: "4" [fill: $color-on-surface-muted; fontFamily: $font-family-base; fontSize: $text-meta-size]
+        - frame "Step Body"
+          - text: "Where the Client lives" [fill: $color-on-surface-muted; lineHeight: $text-body-leading; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+      - frame "Step 5"
+        - frame "Marker" [stroke: $color-outline-variant]
+          - text: "5" [fill: $color-on-surface-muted; fontFamily: $font-family-base; fontSize: $text-meta-size]
+        - frame "Step Body"
+          - text: "Riverside Doula Collective's questions" [fill: $color-on-surface-muted; lineHeight: $text-body-leading; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+      - frame "Step 6"
+        - frame "Marker" [stroke: $color-outline-variant]
+          - text: "6" [fill: $color-on-surface-muted; fontFamily: $font-family-base; fontSize: $text-meta-size]
+        - frame "Step Body"
+          - text: "Check and save" [fill: $color-on-surface-muted; lineHeight: $text-body-leading; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+  - frame "Column"
+    - frame "Back"
+      - icon "arrow-left" (phosphor) [fill: $color-primary]
+      - text: "Back" [fill: $color-primary; fontFamily: $font-family-base; fontSize: $text-body-size]
+    - text: "Find the Client" [fill: $color-on-surface; lineHeight: $text-heading-lg-leading; fontFamily: $font-family-base; fontSize: $text-heading-lg-size]
+    - text: "Every Client is searched for before being added. A Client this practice already has must not be typed in a second time." [fill: $color-on-surface-variant; lineHeight: $text-body-leading; fontFamily: $font-family-base; fontSize: $text-body-size]
+    - ref "Search" -> component "FormField"
+      - override Label (text): enabled: false
+      - override Hint (text): content: "Search by name, date of birth, email or phone. Any one of them is enough."
+      - override Value (text): content: "Sarah Beck"; fill: "$color-on-surface"
+      - override Error (text): enabled: false
+    - frame "Actions"
+      - frame "Primary" [fill: $color-primary; cornerRadius: $radius]
+        - text: "Search" [fill: $color-on-primary; fontFamily: $font-family-base; fontSize: $text-body-size]
+    - frame "Rule" [fill: $color-outline-variant]
+    - text: "2 people match" [fill: $color-on-surface; lineHeight: $text-heading-leading; fontFamily: $font-family-base; fontSize: $text-heading-size]
+    - frame "Results"
+      - frame "Result"
+        - text: "Sarah Beck" [fill: $color-primary; fontFamily: $font-family-base; fontSize: $text-body-size]
+        - text: "Added 4 March 2024 - 2 engagements - most recent ended June 2026" [fill: $color-on-surface-variant; lineHeight: $text-meta-leading; fontFamily: $font-family-base; fontSize: $text-meta-size]
+      - frame "Rule" [fill: $color-outline-variant]
+      - frame "Result"
+        - text: "Sara Beck" [fill: $color-primary; fontFamily: $font-family-base; fontSize: $text-body-size]
+        - text: "Added 11 January 2023 - 1 engagement - ended April 2023" [fill: $color-on-surface-variant; lineHeight: $text-meta-leading; fontFamily: $font-family-base; fontSize: $text-meta-size]
+      - frame "Rule" [fill: $color-outline-variant]
+    - frame "New"
+      - text: "None of these is the right Client?" [fill: $color-on-surface; lineHeight: $text-body-leading; fontFamily: $font-family-base; fontSize: $text-body-size]
+      - frame "Actions"
+        - frame "Primary" [fill: $color-primary; cornerRadius: $radius]
+          - text: "Add a new Client" [fill: $color-on-primary; fontFamily: $font-family-base; fontSize: $text-body-size]
+
+## Intake 2 - Name
+
+- ref "Top Bar" -> component "StaffTopBar"
+- frame "Page Content"
+  - frame "Progress"
+    - text: "Add a Client" [fill: $color-on-surface-variant; lineHeight: $text-label-leading; fontFamily: $font-family-base; fontSize: $text-label-size]
+    - frame "Steps"
+      - frame "Step 1"
+        - frame "Marker" [fill: $color-surface-container-high; stroke: $color-outline-variant]
+          - icon "check" (phosphor) [fill: $color-on-surface-variant]
+        - frame "Step Body"
+          - text: "Find the Client" [fill: $color-on-surface-variant; lineHeight: $text-body-leading; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+      - frame "Step 2" [stroke: $color-primary]
+        - frame "Marker" [stroke: $color-outline-variant]
+          - text: "2" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-meta-size]
+        - frame "Step Body"
+          - text: "Who the Client is" [fill: $color-on-surface; lineHeight: $text-body-leading; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+          - frame "Sub Steps"
+            - text: "Name" [fill: $color-on-surface; lineHeight: $text-meta-leading; fontFamily: $font-family-base; fontSize: $text-meta-size]
+            - text: "Date of birth" [fill: $color-on-surface-variant; lineHeight: $text-meta-leading; fontFamily: $font-family-base; fontSize: $text-meta-size]
+      - frame "Step 3"
+        - frame "Marker" [stroke: $color-outline-variant]
+          - text: "3" [fill: $color-on-surface-muted; fontFamily: $font-family-base; fontSize: $text-meta-size]
+        - frame "Step Body"
+          - text: "How to reach the Client" [fill: $color-on-surface-muted; lineHeight: $text-body-leading; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+      - frame "Step 4"
+        - frame "Marker" [stroke: $color-outline-variant]
+          - text: "4" [fill: $color-on-surface-muted; fontFamily: $font-family-base; fontSize: $text-meta-size]
+        - frame "Step Body"
+          - text: "Where the Client lives" [fill: $color-on-surface-muted; lineHeight: $text-body-leading; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+      - frame "Step 5"
+        - frame "Marker" [stroke: $color-outline-variant]
+          - text: "5" [fill: $color-on-surface-muted; fontFamily: $font-family-base; fontSize: $text-meta-size]
+        - frame "Step Body"
+          - text: "Riverside Doula Collective's questions" [fill: $color-on-surface-muted; lineHeight: $text-body-leading; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+      - frame "Step 6"
+        - frame "Marker" [stroke: $color-outline-variant]
+          - text: "6" [fill: $color-on-surface-muted; fontFamily: $font-family-base; fontSize: $text-meta-size]
+        - frame "Step Body"
+          - text: "Check and save" [fill: $color-on-surface-muted; lineHeight: $text-body-leading; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+  - frame "Column"
+    - frame "Back"
+      - icon "arrow-left" (phosphor) [fill: $color-primary]
+      - text: "Back" [fill: $color-primary; fontFamily: $font-family-base; fontSize: $text-body-size]
+    - text: "What is the Client's name?" [fill: $color-on-surface; lineHeight: $text-heading-lg-leading; fontFamily: $font-family-base; fontSize: $text-heading-lg-size]
+    - frame "Fields"
+      - ref "Given name" -> component "FormField"
+        - override Label (text): content: "Given name"
+        - override Hint (text): content: "The only part of a Client record the practice must have."
+        - override Value (text): content: "Sarah"; fill: "$color-on-surface"
+        - override Error (text): enabled: false
+      - ref "Family name" -> component "FormField"
+        - override Label (text): content: "Family name"
+        - override Hint (text): content: "Optional."
+        - override Value (text): content: "Beck"; fill: "$color-on-surface"
+        - override Error (text): enabled: false
+      - ref "Preferred name" -> component "FormField"
+        - override Label (text): content: "Preferred name"
+        - override Hint (text): content: "Optional. What every screen and the message thread will use. Contracts and invoices use the legal name."
+        - override Value (text): content: "Sar"; fill: "$color-on-surface"
+        - override Error (text): enabled: false
+    - frame "Actions"
+      - frame "Primary" [fill: $color-primary; cornerRadius: $radius]
+        - text: "Continue" [fill: $color-on-primary; fontFamily: $font-family-base; fontSize: $text-body-size]
+      - frame "Secondary" [cornerRadius: $radius]
+        - text: "Save and come back later" [fill: $color-primary; fontFamily: $font-family-base; fontSize: $text-body-size]
+
+## Intake 3 - Date of birth
+
+- ref "Top Bar" -> component "StaffTopBar"
+- frame "Page Content"
+  - frame "Progress"
+    - text: "Add a Client" [fill: $color-on-surface-variant; lineHeight: $text-label-leading; fontFamily: $font-family-base; fontSize: $text-label-size]
+    - frame "Steps"
+      - frame "Step 1"
+        - frame "Marker" [fill: $color-surface-container-high; stroke: $color-outline-variant]
+          - icon "check" (phosphor) [fill: $color-on-surface-variant]
+        - frame "Step Body"
+          - text: "Find the Client" [fill: $color-on-surface-variant; lineHeight: $text-body-leading; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+      - frame "Step 2" [stroke: $color-primary]
+        - frame "Marker" [stroke: $color-outline-variant]
+          - text: "2" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-meta-size]
+        - frame "Step Body"
+          - text: "Who Sarah is" [fill: $color-on-surface; lineHeight: $text-body-leading; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+          - frame "Sub Steps"
+            - text: "Name" [fill: $color-on-surface-variant; lineHeight: $text-meta-leading; fontFamily: $font-family-base; fontSize: $text-meta-size]
+            - text: "Date of birth" [fill: $color-on-surface; lineHeight: $text-meta-leading; fontFamily: $font-family-base; fontSize: $text-meta-size]
+      - frame "Step 3"
+        - frame "Marker" [stroke: $color-outline-variant]
+          - text: "3" [fill: $color-on-surface-muted; fontFamily: $font-family-base; fontSize: $text-meta-size]
+        - frame "Step Body"
+          - text: "How to reach Sarah" [fill: $color-on-surface-muted; lineHeight: $text-body-leading; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+      - frame "Step 4"
+        - frame "Marker" [stroke: $color-outline-variant]
+          - text: "4" [fill: $color-on-surface-muted; fontFamily: $font-family-base; fontSize: $text-meta-size]
+        - frame "Step Body"
+          - text: "Where Sarah lives" [fill: $color-on-surface-muted; lineHeight: $text-body-leading; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+      - frame "Step 5"
+        - frame "Marker" [stroke: $color-outline-variant]
+          - text: "5" [fill: $color-on-surface-muted; fontFamily: $font-family-base; fontSize: $text-meta-size]
+        - frame "Step Body"
+          - text: "Riverside Doula Collective's questions" [fill: $color-on-surface-muted; lineHeight: $text-body-leading; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+      - frame "Step 6"
+        - frame "Marker" [stroke: $color-outline-variant]
+          - text: "6" [fill: $color-on-surface-muted; fontFamily: $font-family-base; fontSize: $text-meta-size]
+        - frame "Step Body"
+          - text: "Check and save" [fill: $color-on-surface-muted; lineHeight: $text-body-leading; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+  - frame "Column"
+    - frame "Back"
+      - icon "arrow-left" (phosphor) [fill: $color-primary]
+      - text: "Back" [fill: $color-primary; fontFamily: $font-family-base; fontSize: $text-body-size]
+    - text: "What is Sarah's date of birth?" [fill: $color-on-surface; lineHeight: $text-heading-lg-leading; fontFamily: $font-family-base; fontSize: $text-heading-lg-size]
+    - text: "Optional. For example, 3 14 1991. A date of birth is how this practice recognises a returning Client years later." [fill: $color-on-surface-variant; lineHeight: $text-body-leading; fontFamily: $font-family-base; fontSize: $text-body-size]
+    - frame "Date of birth"
+      - ref "Month" -> component "FormField"
+        - override Label (text): content: "Month"
+        - override Hint (text): enabled: false
+        - override Value (text): content: "3"; fill: "$color-on-surface"
+        - override Error (text): enabled: false
+      - ref "Day" -> component "FormField"
+        - override Label (text): content: "Day"
+        - override Hint (text): enabled: false
+        - override Value (text): content: "14"; fill: "$color-on-surface"
+        - override Error (text): enabled: false
+      - ref "Year" -> component "FormField"
+        - override Label (text): content: "Year"
+        - override Hint (text): enabled: false
+        - override Value (text): content: "1991"; fill: "$color-on-surface"
+        - override Error (text): enabled: false
+    - frame "Actions"
+      - frame "Primary" [fill: $color-primary; cornerRadius: $radius]
+        - text: "Continue" [fill: $color-on-primary; fontFamily: $font-family-base; fontSize: $text-body-size]
+      - frame "Secondary" [cornerRadius: $radius]
+        - text: "Save and come back later" [fill: $color-primary; fontFamily: $font-family-base; fontSize: $text-body-size]
+
+## Intake 4 - Email
+
+- ref "Top Bar" -> component "StaffTopBar"
+- frame "Page Content"
+  - frame "Progress"
+    - text: "Add a Client" [fill: $color-on-surface-variant; lineHeight: $text-label-leading; fontFamily: $font-family-base; fontSize: $text-label-size]
+    - frame "Steps"
+      - frame "Step 1"
+        - frame "Marker" [fill: $color-surface-container-high; stroke: $color-outline-variant]
+          - icon "check" (phosphor) [fill: $color-on-surface-variant]
+        - frame "Step Body"
+          - text: "Find the Client" [fill: $color-on-surface-variant; lineHeight: $text-body-leading; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+      - frame "Step 2"
+        - frame "Marker" [fill: $color-surface-container-high; stroke: $color-outline-variant]
+          - icon "check" (phosphor) [fill: $color-on-surface-variant]
+        - frame "Step Body"
+          - text: "Who Sarah is" [fill: $color-on-surface-variant; lineHeight: $text-body-leading; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+      - frame "Step 3" [stroke: $color-primary]
+        - frame "Marker" [stroke: $color-outline-variant]
+          - text: "3" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-meta-size]
+        - frame "Step Body"
+          - text: "How to reach Sarah" [fill: $color-on-surface; lineHeight: $text-body-leading; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+          - frame "Sub Steps"
+            - text: "Email address" [fill: $color-on-surface; lineHeight: $text-meta-leading; fontFamily: $font-family-base; fontSize: $text-meta-size]
+            - text: "Phone number" [fill: $color-on-surface-variant; lineHeight: $text-meta-leading; fontFamily: $font-family-base; fontSize: $text-meta-size]
+      - frame "Step 4"
+        - frame "Marker" [stroke: $color-outline-variant]
+          - text: "4" [fill: $color-on-surface-muted; fontFamily: $font-family-base; fontSize: $text-meta-size]
+        - frame "Step Body"
+          - text: "Where Sarah lives" [fill: $color-on-surface-muted; lineHeight: $text-body-leading; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+      - frame "Step 5"
+        - frame "Marker" [stroke: $color-outline-variant]
+          - text: "5" [fill: $color-on-surface-muted; fontFamily: $font-family-base; fontSize: $text-meta-size]
+        - frame "Step Body"
+          - text: "Riverside Doula Collective's questions" [fill: $color-on-surface-muted; lineHeight: $text-body-leading; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+      - frame "Step 6"
+        - frame "Marker" [stroke: $color-outline-variant]
+          - text: "6" [fill: $color-on-surface-muted; fontFamily: $font-family-base; fontSize: $text-meta-size]
+        - frame "Step Body"
+          - text: "Check and save" [fill: $color-on-surface-muted; lineHeight: $text-body-leading; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+  - frame "Column"
+    - frame "Back"
+      - icon "arrow-left" (phosphor) [fill: $color-primary]
+      - text: "Back" [fill: $color-primary; fontFamily: $font-family-base; fontSize: $text-body-size]
+    - text: "What is Sarah's email address?" [fill: $color-on-surface; lineHeight: $text-heading-lg-leading; fontFamily: $font-family-base; fontSize: $text-heading-lg-size]
+    - text: "Optional. Without an email address Sarah cannot be invited to the client portal and cannot be invoiced. A phone number alone is enough to keep the record." [fill: $color-on-surface-variant; lineHeight: $text-body-leading; fontFamily: $font-family-base; fontSize: $text-body-size]
+    - ref "Email" -> component "FormField"
+      - override Label (text): enabled: false
+      - override Hint (text): enabled: false
+      - override Value (text): content: "sarah.beck@gmail.com"; fill: "$color-on-surface"
+      - override Error (text): enabled: false
+    - frame "Actions"
+      - frame "Primary" [fill: $color-primary; cornerRadius: $radius]
+        - text: "Continue" [fill: $color-on-primary; fontFamily: $font-family-base; fontSize: $text-body-size]
+      - frame "Secondary" [cornerRadius: $radius]
+        - text: "Save and come back later" [fill: $color-primary; fontFamily: $font-family-base; fontSize: $text-body-size]
+
+## Intake 5 - Phone
+
+- ref "Top Bar" -> component "StaffTopBar"
+- frame "Page Content"
+  - frame "Progress"
+    - text: "Add a Client" [fill: $color-on-surface-variant; lineHeight: $text-label-leading; fontFamily: $font-family-base; fontSize: $text-label-size]
+    - frame "Steps"
+      - frame "Step 1"
+        - frame "Marker" [fill: $color-surface-container-high; stroke: $color-outline-variant]
+          - icon "check" (phosphor) [fill: $color-on-surface-variant]
+        - frame "Step Body"
+          - text: "Find the Client" [fill: $color-on-surface-variant; lineHeight: $text-body-leading; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+      - frame "Step 2"
+        - frame "Marker" [fill: $color-surface-container-high; stroke: $color-outline-variant]
+          - icon "check" (phosphor) [fill: $color-on-surface-variant]
+        - frame "Step Body"
+          - text: "Who Sarah is" [fill: $color-on-surface-variant; lineHeight: $text-body-leading; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+      - frame "Step 3" [stroke: $color-primary]
+        - frame "Marker" [stroke: $color-outline-variant]
+          - text: "3" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-meta-size]
+        - frame "Step Body"
+          - text: "How to reach Sarah" [fill: $color-on-surface; lineHeight: $text-body-leading; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+          - frame "Sub Steps"
+            - text: "Email address" [fill: $color-on-surface-variant; lineHeight: $text-meta-leading; fontFamily: $font-family-base; fontSize: $text-meta-size]
+            - text: "Phone number" [fill: $color-on-surface; lineHeight: $text-meta-leading; fontFamily: $font-family-base; fontSize: $text-meta-size]
+      - frame "Step 4"
+        - frame "Marker" [stroke: $color-outline-variant]
+          - text: "4" [fill: $color-on-surface-muted; fontFamily: $font-family-base; fontSize: $text-meta-size]
+        - frame "Step Body"
+          - text: "Where Sarah lives" [fill: $color-on-surface-muted; lineHeight: $text-body-leading; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+      - frame "Step 5"
+        - frame "Marker" [stroke: $color-outline-variant]
+          - text: "5" [fill: $color-on-surface-muted; fontFamily: $font-family-base; fontSize: $text-meta-size]
+        - frame "Step Body"
+          - text: "Riverside Doula Collective's questions" [fill: $color-on-surface-muted; lineHeight: $text-body-leading; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+      - frame "Step 6"
+        - frame "Marker" [stroke: $color-outline-variant]
+          - text: "6" [fill: $color-on-surface-muted; fontFamily: $font-family-base; fontSize: $text-meta-size]
+        - frame "Step Body"
+          - text: "Check and save" [fill: $color-on-surface-muted; lineHeight: $text-body-leading; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+  - frame "Column"
+    - frame "Back"
+      - icon "arrow-left" (phosphor) [fill: $color-primary]
+      - text: "Back" [fill: $color-primary; fontFamily: $font-family-base; fontSize: $text-body-size]
+    - text: "What is Sarah's phone number?" [fill: $color-on-surface; lineHeight: $text-heading-lg-leading; fontFamily: $font-family-base; fontSize: $text-heading-lg-size]
+    - text: "Optional. Type it any way at all. Only ask for a number the practice will actually use." [fill: $color-on-surface-variant; lineHeight: $text-body-leading; fontFamily: $font-family-base; fontSize: $text-body-size]
+    - ref "Phone" -> component "FormField"
+      - override Label (text): enabled: false
+      - override Hint (text): enabled: false
+      - override Value (text): content: "(585) 555-0142"; fill: "$color-on-surface"
+      - override Error (text): enabled: false
+    - frame "Actions"
+      - frame "Primary" [fill: $color-primary; cornerRadius: $radius]
+        - text: "Continue" [fill: $color-on-primary; fontFamily: $font-family-base; fontSize: $text-body-size]
+      - frame "Secondary" [cornerRadius: $radius]
+        - text: "Save and come back later" [fill: $color-primary; fontFamily: $font-family-base; fontSize: $text-body-size]
+
+## Intake 6 - Address
+
+- ref "Top Bar" -> component "StaffTopBar"
+- frame "Page Content"
+  - frame "Progress"
+    - text: "Add a Client" [fill: $color-on-surface-variant; lineHeight: $text-label-leading; fontFamily: $font-family-base; fontSize: $text-label-size]
+    - frame "Steps"
+      - frame "Step 1"
+        - frame "Marker" [fill: $color-surface-container-high; stroke: $color-outline-variant]
+          - icon "check" (phosphor) [fill: $color-on-surface-variant]
+        - frame "Step Body"
+          - text: "Find the Client" [fill: $color-on-surface-variant; lineHeight: $text-body-leading; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+      - frame "Step 2"
+        - frame "Marker" [fill: $color-surface-container-high; stroke: $color-outline-variant]
+          - icon "check" (phosphor) [fill: $color-on-surface-variant]
+        - frame "Step Body"
+          - text: "Who Sarah is" [fill: $color-on-surface-variant; lineHeight: $text-body-leading; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+      - frame "Step 3"
+        - frame "Marker" [fill: $color-surface-container-high; stroke: $color-outline-variant]
+          - icon "check" (phosphor) [fill: $color-on-surface-variant]
+        - frame "Step Body"
+          - text: "How to reach Sarah" [fill: $color-on-surface-variant; lineHeight: $text-body-leading; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+      - frame "Step 4" [stroke: $color-primary]
+        - frame "Marker" [stroke: $color-outline-variant]
+          - text: "4" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-meta-size]
+        - frame "Step Body"
+          - text: "Where Sarah lives" [fill: $color-on-surface; lineHeight: $text-body-leading; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+          - frame "Sub Steps"
+            - text: "Address" [fill: $color-on-surface; lineHeight: $text-meta-leading; fontFamily: $font-family-base; fontSize: $text-meta-size]
+      - frame "Step 5"
+        - frame "Marker" [stroke: $color-outline-variant]
+          - text: "5" [fill: $color-on-surface-muted; fontFamily: $font-family-base; fontSize: $text-meta-size]
+        - frame "Step Body"
+          - text: "Riverside Doula Collective's questions" [fill: $color-on-surface-muted; lineHeight: $text-body-leading; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+      - frame "Step 6"
+        - frame "Marker" [stroke: $color-outline-variant]
+          - text: "6" [fill: $color-on-surface-muted; fontFamily: $font-family-base; fontSize: $text-meta-size]
+        - frame "Step Body"
+          - text: "Check and save" [fill: $color-on-surface-muted; lineHeight: $text-body-leading; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+  - frame "Column"
+    - frame "Back"
+      - icon "arrow-left" (phosphor) [fill: $color-primary]
+      - text: "Back" [fill: $color-primary; fontFamily: $font-family-base; fontSize: $text-body-size]
+    - text: "What is Sarah's address?" [fill: $color-on-surface; lineHeight: $text-heading-lg-leading; fontFamily: $font-family-base; fontSize: $text-heading-lg-size]
+    - text: "Optional. An offer shows a contractor doula the city and nothing else about where a Client lives." [fill: $color-on-surface-variant; lineHeight: $text-body-leading; fontFamily: $font-family-base; fontSize: $text-body-size]
+    - frame "Fields"
+      - ref "Address line 1" -> component "FormField"
+        - override Label (text): content: "Address line 1"
+        - override Hint (text): enabled: false
+        - override Value (text): content: "44 Alexander Street"; fill: "$color-on-surface"
+        - override Error (text): enabled: false
+      - ref "Address line 2" -> component "FormField"
+        - override Label (text): content: "Address line 2"
+        - override Hint (text): enabled: false
+        - override Value (text): content: "Apartment, suite, floor"; fill: "$color-on-surface"
+        - override Error (text): enabled: false
+      - ref "City" -> component "FormField"
+        - override Label (text): content: "City"
+        - override Hint (text): enabled: false
+        - override Value (text): content: "Rochester"; fill: "$color-on-surface"
+        - override Error (text): enabled: false
+      - frame "State Zip"
+        - ref "State" -> component "FormField"
+          - override Label (text): content: "State"
+          - override Hint (text): enabled: false
+          - override Value (text): content: "NY"; fill: "$color-on-surface"
+          - override Error (text): enabled: false
+        - ref "ZIP" -> component "FormField"
+          - override Label (text): content: "ZIP code"
+          - override Hint (text): enabled: false
+          - override Value (text): content: "14607"; fill: "$color-on-surface"
+          - override Error (text): enabled: false
+    - frame "Actions"
+      - frame "Primary" [fill: $color-primary; cornerRadius: $radius]
+        - text: "Continue" [fill: $color-on-primary; fontFamily: $font-family-base; fontSize: $text-body-size]
+      - frame "Secondary" [cornerRadius: $radius]
+        - text: "Save and come back later" [fill: $color-primary; fontFamily: $font-family-base; fontSize: $text-body-size]
+
+## Intake 7 - A practice-named section
+
+- ref "Top Bar" -> component "StaffTopBar"
+- frame "Page Content"
+  - frame "Progress"
+    - text: "Add a Client" [fill: $color-on-surface-variant; lineHeight: $text-label-leading; fontFamily: $font-family-base; fontSize: $text-label-size]
+    - frame "Steps"
+      - frame "Step 1"
+        - frame "Marker" [fill: $color-surface-container-high; stroke: $color-outline-variant]
+          - icon "check" (phosphor) [fill: $color-on-surface-variant]
+        - frame "Step Body"
+          - text: "Find the Client" [fill: $color-on-surface-variant; lineHeight: $text-body-leading; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+      - frame "Step 2"
+        - frame "Marker" [fill: $color-surface-container-high; stroke: $color-outline-variant]
+          - icon "check" (phosphor) [fill: $color-on-surface-variant]
+        - frame "Step Body"
+          - text: "Who Sarah is" [fill: $color-on-surface-variant; lineHeight: $text-body-leading; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+      - frame "Step 3"
+        - frame "Marker" [fill: $color-surface-container-high; stroke: $color-outline-variant]
+          - icon "check" (phosphor) [fill: $color-on-surface-variant]
+        - frame "Step Body"
+          - text: "How to reach Sarah" [fill: $color-on-surface-variant; lineHeight: $text-body-leading; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+      - frame "Step 4"
+        - frame "Marker" [fill: $color-surface-container-high; stroke: $color-outline-variant]
+          - icon "check" (phosphor) [fill: $color-on-surface-variant]
+        - frame "Step Body"
+          - text: "Where Sarah lives" [fill: $color-on-surface-variant; lineHeight: $text-body-leading; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+      - frame "Step 5" [stroke: $color-primary]
+        - frame "Marker" [stroke: $color-outline-variant]
+          - text: "5" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-meta-size]
+        - frame "Step Body"
+          - text: "Riverside Doula Collective's questions" [fill: $color-on-surface; lineHeight: $text-body-leading; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+          - frame "Sub Steps"
+            - text: "Practice details" [fill: $color-on-surface-variant; lineHeight: $text-meta-leading; fontFamily: $font-family-base; fontSize: $text-meta-size]
+            - text: "Birth preferences" [fill: $color-on-surface; lineHeight: $text-meta-leading; fontFamily: $font-family-base; fontSize: $text-meta-size]
+            - text: "Sarah's household" [fill: $color-on-surface-variant; lineHeight: $text-meta-leading; fontFamily: $font-family-base; fontSize: $text-meta-size]
+            - text: "How Sarah found the practice" [fill: $color-on-surface-variant; lineHeight: $text-meta-leading; fontFamily: $font-family-base; fontSize: $text-meta-size]
+      - frame "Step 6"
+        - frame "Marker" [stroke: $color-outline-variant]
+          - text: "6" [fill: $color-on-surface-muted; fontFamily: $font-family-base; fontSize: $text-meta-size]
+        - frame "Step Body"
+          - text: "Check and save" [fill: $color-on-surface-muted; lineHeight: $text-body-leading; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+  - frame "Column"
+    - frame "Back"
+      - icon "arrow-left" (phosphor) [fill: $color-primary]
+      - text: "Back" [fill: $color-primary; fontFamily: $font-family-base; fontSize: $text-body-size]
+    - text: "Birth preferences" [fill: $color-on-surface; lineHeight: $text-heading-lg-leading; fontFamily: $font-family-base; fontSize: $text-heading-lg-size]
+    - text: "Riverside Doula Collective added these questions. Every one is optional." [fill: $color-on-surface-variant; lineHeight: $text-body-leading; fontFamily: $font-family-base; fontSize: $text-body-size]
+    - frame "Fields"
+      - ref "Place" -> component "FormField"
+        - override Label (text): content: "Place of birth"
+        - override Hint (text): enabled: false
+        - override Value (text): content: "Strong Memorial Hospital"; fill: "$color-on-surface"
+        - override Error (text): enabled: false
+      - ref "Provider" -> component "FormField"
+        - override Label (text): content: "Care provider"
+        - override Hint (text): enabled: false
+        - override Value (text): content: "Dr. Amara Okoye"; fill: "$color-on-surface"
+        - override Error (text): enabled: false
+      - ref "Pain" -> component "FormField"
+        - override Label (text): content: "Pain relief plan"
+        - override Hint (text): enabled: false
+        - override Value (text): content: "Hoping to labor without an epidural"; fill: "$color-on-surface"
+        - override Error (text): enabled: false
+      - ref "Partner" -> component "FormField"
+        - override Label (text): content: "Partner at the birth"
+        - override Hint (text): enabled: false
+        - override Value (text): content: "Yes"; fill: "$color-on-surface"
+        - override Error (text): enabled: false
+      - ref "Support" -> component "FormField"
+        - override Label (text): content: "Other support in the room"
+        - override Hint (text): enabled: false
+        - override Value (text): content: "Sarah's mother"; fill: "$color-on-surface"
+        - override Error (text): enabled: false
+      - ref "Music" -> component "FormField"
+        - override Label (text): content: "Music or quiet"
+        - override Hint (text): enabled: false
+        - override Value (text): content: "Quiet"; fill: "$color-on-surface"
+        - override Error (text): enabled: false
+      - ref "Photos" -> component "FormField"
+        - override Label (text): content: "Photography"
+        - override Hint (text): enabled: false
+        - override Value (text): content: "No photographs during labor"; fill: "$color-on-surface"
+        - override Error (text): enabled: false
+    - frame "Actions"
+      - frame "Primary" [fill: $color-primary; cornerRadius: $radius]
+        - text: "Continue" [fill: $color-on-primary; fontFamily: $font-family-base; fontSize: $text-body-size]
+      - frame "Secondary" [cornerRadius: $radius]
+        - text: "Save and come back later" [fill: $color-primary; fontFamily: $font-family-base; fontSize: $text-body-size]
+
+## Intake - error on a question page
+
+- ref "Top Bar" -> component "StaffTopBar"
+- frame "Page Content"
+  - frame "Progress"
+    - text: "Add a Client" [fill: $color-on-surface-variant; lineHeight: $text-label-leading; fontFamily: $font-family-base; fontSize: $text-label-size]
+    - frame "Steps"
+      - frame "Step 1"
+        - frame "Marker" [fill: $color-surface-container-high; stroke: $color-outline-variant]
+          - icon "check" (phosphor) [fill: $color-on-surface-variant]
+        - frame "Step Body"
+          - text: "Find the Client" [fill: $color-on-surface-variant; lineHeight: $text-body-leading; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+      - frame "Step 2" [stroke: $color-primary]
+        - frame "Marker" [stroke: $color-outline-variant]
+          - text: "2" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-meta-size]
+        - frame "Step Body"
+          - text: "Who the Client is" [fill: $color-on-surface; lineHeight: $text-body-leading; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+          - frame "Sub Steps"
+            - text: "Name" [fill: $color-on-surface; lineHeight: $text-meta-leading; fontFamily: $font-family-base; fontSize: $text-meta-size]
+            - text: "Date of birth" [fill: $color-on-surface-variant; lineHeight: $text-meta-leading; fontFamily: $font-family-base; fontSize: $text-meta-size]
+      - frame "Step 3"
+        - frame "Marker" [stroke: $color-outline-variant]
+          - text: "3" [fill: $color-on-surface-muted; fontFamily: $font-family-base; fontSize: $text-meta-size]
+        - frame "Step Body"
+          - text: "How to reach the Client" [fill: $color-on-surface-muted; lineHeight: $text-body-leading; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+      - frame "Step 4"
+        - frame "Marker" [stroke: $color-outline-variant]
+          - text: "4" [fill: $color-on-surface-muted; fontFamily: $font-family-base; fontSize: $text-meta-size]
+        - frame "Step Body"
+          - text: "Where the Client lives" [fill: $color-on-surface-muted; lineHeight: $text-body-leading; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+      - frame "Step 5"
+        - frame "Marker" [stroke: $color-outline-variant]
+          - text: "5" [fill: $color-on-surface-muted; fontFamily: $font-family-base; fontSize: $text-meta-size]
+        - frame "Step Body"
+          - text: "Riverside Doula Collective's questions" [fill: $color-on-surface-muted; lineHeight: $text-body-leading; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+      - frame "Step 6"
+        - frame "Marker" [stroke: $color-outline-variant]
+          - text: "6" [fill: $color-on-surface-muted; fontFamily: $font-family-base; fontSize: $text-meta-size]
+        - frame "Step Body"
+          - text: "Check and save" [fill: $color-on-surface-muted; lineHeight: $text-body-leading; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+  - frame "Column"
+    - frame "Back"
+      - icon "arrow-left" (phosphor) [fill: $color-primary]
+      - text: "Back" [fill: $color-primary; fontFamily: $font-family-base; fontSize: $text-body-size]
+    - frame "Error Summary" [fill: $color-surface-bright; cornerRadius: $radius; stroke: $color-error]
+      - text: "There is a problem" [fill: $color-error; lineHeight: $text-body-leading; fontFamily: $font-family-base; fontSize: $text-subheading-size]
+      - text: "Enter the Client's given name" [fill: $color-error; lineHeight: $text-body-leading; fontFamily: $font-family-base; fontSize: $text-body-size]
+    - text: "What is the Client's name?" [fill: $color-on-surface; lineHeight: $text-heading-lg-leading; fontFamily: $font-family-base; fontSize: $text-heading-lg-size]
+    - frame "Fields"
+      - ref "Given name" -> component "FormField"
+        - override Label (text): content: "Given name"
+        - override Hint (text): content: "The only part of a Client record the practice must have."
+        - override Control (frame): stroke: "$color-error"; strokeWidth: 2
+        - override Value (text): content: ""; fill: "$color-on-surface-muted"
+        - override Error (text): enabled: true; content: "Enter the Client's given name"
+      - ref "Family name" -> component "FormField"
+        - override Label (text): content: "Family name"
+        - override Hint (text): content: "Optional."
+        - override Value (text): content: "Beck"; fill: "$color-on-surface"
+        - override Error (text): enabled: false
+      - ref "Preferred name" -> component "FormField"
+        - override Label (text): content: "Preferred name"
+        - override Hint (text): content: "Optional. What every screen and the message thread will use. Contracts and invoices use the legal name."
+        - override Value (text): content: "Sar"; fill: "$color-on-surface"
+        - override Error (text): enabled: false
+    - frame "Actions"
+      - frame "Primary" [fill: $color-primary; cornerRadius: $radius]
+        - text: "Continue" [fill: $color-on-primary; fontFamily: $font-family-base; fontSize: $text-body-size]
+      - frame "Secondary" [cornerRadius: $radius]
+        - text: "Save and come back later" [fill: $color-primary; fontFamily: $font-family-base; fontSize: $text-body-size]
+
+## Intake - is this the same person?
+
+- ref "Top Bar" -> component "StaffTopBar"
+- frame "Page Content"
+  - frame "Progress"
+    - text: "Add a Client" [fill: $color-on-surface-variant; lineHeight: $text-label-leading; fontFamily: $font-family-base; fontSize: $text-label-size]
+    - frame "Steps"
+      - frame "Step 1"
+        - frame "Marker" [fill: $color-surface-container-high; stroke: $color-outline-variant]
+          - icon "check" (phosphor) [fill: $color-on-surface-variant]
+        - frame "Step Body"
+          - text: "Find the Client" [fill: $color-on-surface-variant; lineHeight: $text-body-leading; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+      - frame "Step 2"
+        - frame "Marker" [fill: $color-surface-container-high; stroke: $color-outline-variant]
+          - icon "check" (phosphor) [fill: $color-on-surface-variant]
+        - frame "Step Body"
+          - text: "Who Sarah is" [fill: $color-on-surface-variant; lineHeight: $text-body-leading; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+      - frame "Step 3"
+        - frame "Marker" [fill: $color-surface-container-high; stroke: $color-outline-variant]
+          - icon "check" (phosphor) [fill: $color-on-surface-variant]
+        - frame "Step Body"
+          - text: "How to reach Sarah" [fill: $color-on-surface-variant; lineHeight: $text-body-leading; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+      - frame "Step 4"
+        - frame "Marker" [fill: $color-surface-container-high; stroke: $color-outline-variant]
+          - icon "check" (phosphor) [fill: $color-on-surface-variant]
+        - frame "Step Body"
+          - text: "Where Sarah lives" [fill: $color-on-surface-variant; lineHeight: $text-body-leading; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+      - frame "Step 5"
+        - frame "Marker" [fill: $color-surface-container-high; stroke: $color-outline-variant]
+          - icon "check" (phosphor) [fill: $color-on-surface-variant]
+        - frame "Step Body"
+          - text: "Riverside Doula Collective's questions" [fill: $color-on-surface-variant; lineHeight: $text-body-leading; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+      - frame "Step 6" [stroke: $color-primary]
+        - frame "Marker" [stroke: $color-outline-variant]
+          - text: "6" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-meta-size]
+        - frame "Step Body"
+          - text: "Check and save" [fill: $color-on-surface; lineHeight: $text-body-leading; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+  - frame "Column"
+    - frame "Back"
+      - icon "arrow-left" (phosphor) [fill: $color-primary]
+      - text: "Back" [fill: $color-primary; fontFamily: $font-family-base; fontSize: $text-body-size]
+    - text: "Is this the same person?" [fill: $color-on-surface; lineHeight: $text-heading-lg-leading; fontFamily: $font-family-base; fontSize: $text-heading-lg-size]
+    - text: "Two Clients at Riverside Doula Collective look like the record just typed. Nothing is saved until this is answered." [fill: $color-on-surface-variant; lineHeight: $text-body-leading; fontFamily: $font-family-base; fontSize: $text-body-size]
+    - frame "Options"
+      - frame "Match 1" [fill: $color-surface-bright; cornerRadius: $radius; stroke: $color-primary]
+        - frame "Radio" [fill: $color-surface-bright; stroke: $color-primary]
+        - frame "Option Body"
+          - text: "Sarah Beck" [fill: $color-on-surface; lineHeight: $text-body-leading; fontFamily: $font-family-base; fontSize: $text-body-size]
+          - text: "Added 4 March 2024 - 2 engagements - most recent ended June 2026" [fill: $color-on-surface-variant; lineHeight: $text-meta-leading; fontFamily: $font-family-base; fontSize: $text-meta-size]
+          - text: "The existing record is kept. What was just typed is listed as changes to confirm before anything is applied." [fill: $color-on-surface-variant; lineHeight: $text-meta-leading; fontFamily: $font-family-base; fontSize: $text-meta-size]
+      - frame "Match 2" [fill: $color-surface-bright; cornerRadius: $radius; stroke: $color-outline-variant]
+        - frame "Radio" [fill: $color-surface-bright; stroke: $color-outline]
+        - frame "Option Body"
+          - text: "Sara Beck" [fill: $color-on-surface; lineHeight: $text-body-leading; fontFamily: $font-family-base; fontSize: $text-body-size]
+          - text: "Added 11 January 2023 - 1 engagement - ended April 2023" [fill: $color-on-surface-variant; lineHeight: $text-meta-leading; fontFamily: $font-family-base; fontSize: $text-meta-size]
+          - text: "The existing record is kept. What was just typed is listed as changes to confirm before anything is applied." [fill: $color-on-surface-variant; lineHeight: $text-meta-leading; fontFamily: $font-family-base; fontSize: $text-meta-size]
+      - frame "New person" [fill: $color-surface-bright; cornerRadius: $radius; stroke: $color-outline-variant]
+        - frame "Radio" [fill: $color-surface-bright; stroke: $color-outline]
+        - frame "Option Body"
+          - text: "No, this is a different person" [fill: $color-on-surface; lineHeight: $text-body-leading; fontFamily: $font-family-base; fontSize: $text-body-size]
+          - text: "A second record is created. This is the only way a duplicate can be made." [fill: $color-on-surface-variant; lineHeight: $text-meta-leading; fontFamily: $font-family-base; fontSize: $text-meta-size]
+    - frame "Actions"
+      - frame "Primary" [fill: $color-primary; cornerRadius: $radius]
+        - text: "Continue" [fill: $color-on-primary; fontFamily: $font-family-base; fontSize: $text-body-size]
+      - frame "Secondary" [cornerRadius: $radius]
+        - text: "Go back and edit" [fill: $color-primary; fontFamily: $font-family-base; fontSize: $text-body-size]
+
+## Intake 8b - Check the answers, a long practice layer
+
+- ref "Top Bar" -> component "StaffTopBar"
+- frame "Page Content"
+  - frame "Progress"
+    - text: "Add a Client" [fill: $color-on-surface-variant; lineHeight: $text-label-leading; fontFamily: $font-family-base; fontSize: $text-label-size]
+    - frame "Steps"
+      - frame "Step 1"
+        - frame "Marker" [fill: $color-surface-container-high; stroke: $color-outline-variant]
+          - icon "check" (phosphor) [fill: $color-on-surface-variant]
+        - frame "Step Body"
+          - text: "Find the Client" [fill: $color-on-surface-variant; lineHeight: $text-body-leading; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+      - frame "Step 2"
+        - frame "Marker" [fill: $color-surface-container-high; stroke: $color-outline-variant]
+          - icon "check" (phosphor) [fill: $color-on-surface-variant]
+        - frame "Step Body"
+          - text: "Who Sarah is" [fill: $color-on-surface-variant; lineHeight: $text-body-leading; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+          - frame "Sub Steps"
+            - text: "Name" [fill: $color-on-surface-variant; lineHeight: $text-meta-leading; fontFamily: $font-family-base; fontSize: $text-meta-size]
+            - text: "Date of birth" [fill: $color-on-surface-variant; lineHeight: $text-meta-leading; fontFamily: $font-family-base; fontSize: $text-meta-size]
+      - frame "Step 3"
+        - frame "Marker" [fill: $color-surface-container-high; stroke: $color-outline-variant]
+          - icon "check" (phosphor) [fill: $color-on-surface-variant]
+        - frame "Step Body"
+          - text: "How to reach Sarah" [fill: $color-on-surface-variant; lineHeight: $text-body-leading; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+          - frame "Sub Steps"
+            - text: "Email address" [fill: $color-on-surface-variant; lineHeight: $text-meta-leading; fontFamily: $font-family-base; fontSize: $text-meta-size]
+            - text: "Phone number" [fill: $color-on-surface-variant; lineHeight: $text-meta-leading; fontFamily: $font-family-base; fontSize: $text-meta-size]
+      - frame "Step 4"
+        - frame "Marker" [fill: $color-surface-container-high; stroke: $color-outline-variant]
+          - icon "check" (phosphor) [fill: $color-on-surface-variant]
+        - frame "Step Body"
+          - text: "Where Sarah lives" [fill: $color-on-surface-variant; lineHeight: $text-body-leading; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+          - frame "Sub Steps"
+            - text: "Address" [fill: $color-on-surface-variant; lineHeight: $text-meta-leading; fontFamily: $font-family-base; fontSize: $text-meta-size]
+      - frame "Step 5"
+        - frame "Marker" [fill: $color-surface-container-high; stroke: $color-outline-variant]
+          - icon "check" (phosphor) [fill: $color-on-surface-variant]
+        - frame "Step Body"
+          - text: "Riverside Doula Collective's questions" [fill: $color-on-surface-variant; lineHeight: $text-body-leading; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+          - frame "Sub Steps"
+            - text: "Practice details" [fill: $color-on-surface-variant; lineHeight: $text-meta-leading; fontFamily: $font-family-base; fontSize: $text-meta-size]
+            - text: "Birth preferences" [fill: $color-on-surface-variant; lineHeight: $text-meta-leading; fontFamily: $font-family-base; fontSize: $text-meta-size]
+            - text: "Sarah's household" [fill: $color-on-surface-variant; lineHeight: $text-meta-leading; fontFamily: $font-family-base; fontSize: $text-meta-size]
+            - text: "How Sarah found the practice" [fill: $color-on-surface-variant; lineHeight: $text-meta-leading; fontFamily: $font-family-base; fontSize: $text-meta-size]
+      - frame "Step 6" [stroke: $color-primary]
+        - frame "Marker" [stroke: $color-outline-variant]
+          - text: "6" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-meta-size]
+        - frame "Step Body"
+          - text: "Check and save" [fill: $color-on-surface; lineHeight: $text-body-leading; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+  - frame "Column"
+    - frame "Back"
+      - icon "arrow-left" (phosphor) [fill: $color-primary]
+      - text: "Back" [fill: $color-primary; fontFamily: $font-family-base; fontSize: $text-body-size]
+    - text: "Check Sarah's details before saving" [fill: $color-on-surface; lineHeight: $text-heading-lg-leading; fontFamily: $font-family-base; fontSize: $text-heading-lg-size]
+    - text: "Riverside Doula Collective asks for more than most. Change anything that is wrong before saving." [fill: $color-on-surface-variant; lineHeight: $text-body-leading; fontFamily: $font-family-base; fontSize: $text-body-size]
+    - frame "Section - Who Sarah is"
+      - text: "Who Sarah is" [fill: $color-on-surface; lineHeight: $text-heading-leading; fontFamily: $font-family-base; fontSize: $text-heading-size]
+      - frame "Rows"
+        - frame "Row - Given name" [stroke: $color-outline-variant]
+          - text: "Given name" [fill: $color-on-surface-variant; lineHeight: $text-body-leading; fontFamily: $font-family-base; fontSize: $text-body-size]
+          - text: "Sarah" [fill: $color-on-surface; lineHeight: $text-body-leading; fontFamily: $font-family-base; fontSize: $text-body-size]
+          - text: "Change" [fill: $color-primary; lineHeight: $text-body-leading; fontFamily: $font-family-base; fontSize: $text-body-size]
+        - frame "Row - Family name" [stroke: $color-outline-variant]
+          - text: "Family name" [fill: $color-on-surface-variant; lineHeight: $text-body-leading; fontFamily: $font-family-base; fontSize: $text-body-size]
+          - text: "Beck" [fill: $color-on-surface; lineHeight: $text-body-leading; fontFamily: $font-family-base; fontSize: $text-body-size]
+          - text: "Change" [fill: $color-primary; lineHeight: $text-body-leading; fontFamily: $font-family-base; fontSize: $text-body-size]
+        - frame "Row - Preferred name" [stroke: $color-outline-variant]
+          - text: "Preferred name" [fill: $color-on-surface-variant; lineHeight: $text-body-leading; fontFamily: $font-family-base; fontSize: $text-body-size]
+          - text: "Sar" [fill: $color-on-surface; lineHeight: $text-body-leading; fontFamily: $font-family-base; fontSize: $text-body-size]
+          - text: "Change" [fill: $color-primary; lineHeight: $text-body-leading; fontFamily: $font-family-base; fontSize: $text-body-size]
+        - frame "Row - Date of birth" [stroke: $color-outline-variant]
+          - text: "Date of birth" [fill: $color-on-surface-variant; lineHeight: $text-body-leading; fontFamily: $font-family-base; fontSize: $text-body-size]
+          - text: "March 14, 1991" [fill: $color-on-surface; lineHeight: $text-body-leading; fontFamily: $font-family-base; fontSize: $text-body-size]
+          - text: "Change" [fill: $color-primary; lineHeight: $text-body-leading; fontFamily: $font-family-base; fontSize: $text-body-size]
+    - frame "Section - How to reach Sarah"
+      - text: "How to reach Sarah" [fill: $color-on-surface; lineHeight: $text-heading-leading; fontFamily: $font-family-base; fontSize: $text-heading-size]
+      - frame "Rows"
+        - frame "Row - Email address" [stroke: $color-outline-variant]
+          - text: "Email address" [fill: $color-on-surface-variant; lineHeight: $text-body-leading; fontFamily: $font-family-base; fontSize: $text-body-size]
+          - text: "sarah.beck@gmail.com" [fill: $color-on-surface; lineHeight: $text-body-leading; fontFamily: $font-family-base; fontSize: $text-body-size]
+          - text: "Change" [fill: $color-primary; lineHeight: $text-body-leading; fontFamily: $font-family-base; fontSize: $text-body-size]
+        - frame "Row - Phone number" [stroke: $color-outline-variant]
+          - text: "Phone number" [fill: $color-on-surface-variant; lineHeight: $text-body-leading; fontFamily: $font-family-base; fontSize: $text-body-size]
+          - text: "(585) 555-0142" [fill: $color-on-surface; lineHeight: $text-body-leading; fontFamily: $font-family-base; fontSize: $text-body-size]
+          - text: "Change" [fill: $color-primary; lineHeight: $text-body-leading; fontFamily: $font-family-base; fontSize: $text-body-size]
+    - frame "Section - Where Sarah lives"
+      - text: "Where Sarah lives" [fill: $color-on-surface; lineHeight: $text-heading-leading; fontFamily: $font-family-base; fontSize: $text-heading-size]
+      - frame "Rows"
+        - frame "Row - Address" [stroke: $color-outline-variant]
+          - text: "Address" [fill: $color-on-surface-variant; lineHeight: $text-body-leading; fontFamily: $font-family-base; fontSize: $text-body-size]
+          - text: "44 Alexander Street, Rochester, NY 14607" [fill: $color-on-surface; lineHeight: $text-body-leading; fontFamily: $font-family-base; fontSize: $text-body-size]
+          - text: "Change" [fill: $color-primary; lineHeight: $text-body-leading; fontFamily: $font-family-base; fontSize: $text-body-size]
+    - frame "Section - Riverside Doula Collective"
+      - text: "Riverside Doula Collective" [fill: $color-on-surface; lineHeight: $text-heading-leading; fontFamily: $font-family-base; fontSize: $text-heading-size]
+      - frame "Rows"
+        - frame "Row - Pronouns" [stroke: $color-outline-variant]
+          - text: "Pronouns" [fill: $color-on-surface-variant; lineHeight: $text-body-leading; fontFamily: $font-family-base; fontSize: $text-body-size]
+          - text: "she / her" [fill: $color-on-surface; lineHeight: $text-body-leading; fontFamily: $font-family-base; fontSize: $text-body-size]
+          - text: "Change" [fill: $color-primary; lineHeight: $text-body-leading; fontFamily: $font-family-base; fontSize: $text-body-size]
+        - frame "Row - Intake note" [stroke: $color-outline-variant]
+          - text: "Intake note" [fill: $color-on-surface-variant; lineHeight: $text-body-leading; fontFamily: $font-family-base; fontSize: $text-body-size]
+          - text: "Referred at 22 weeks. Wants a quiet room." [fill: $color-on-surface; lineHeight: $text-body-leading; fontFamily: $font-family-base; fontSize: $text-body-size]
+          - text: "Change" [fill: $color-primary; lineHeight: $text-body-leading; fontFamily: $font-family-base; fontSize: $text-body-size]
+    - frame "Section - Birth preferences"
+      - text: "Birth preferences" [fill: $color-on-surface; lineHeight: $text-heading-leading; fontFamily: $font-family-base; fontSize: $text-heading-size]
+      - frame "Rows"
+        - frame "Row - Place of birth" [stroke: $color-outline-variant]
+          - text: "Place of birth" [fill: $color-on-surface-variant; lineHeight: $text-body-leading; fontFamily: $font-family-base; fontSize: $text-body-size]
+          - text: "Strong Memorial Hospital" [fill: $color-on-surface; lineHeight: $text-body-leading; fontFamily: $font-family-base; fontSize: $text-body-size]
+          - text: "Change" [fill: $color-primary; lineHeight: $text-body-leading; fontFamily: $font-family-base; fontSize: $text-body-size]
+        - frame "Row - Care provider" [stroke: $color-outline-variant]
+          - text: "Care provider" [fill: $color-on-surface-variant; lineHeight: $text-body-leading; fontFamily: $font-family-base; fontSize: $text-body-size]
+          - text: "Dr. Amara Okoye" [fill: $color-on-surface; lineHeight: $text-body-leading; fontFamily: $font-family-base; fontSize: $text-body-size]
+          - text: "Change" [fill: $color-primary; lineHeight: $text-body-leading; fontFamily: $font-family-base; fontSize: $text-body-size]
+        - frame "Row - Pain relief plan" [stroke: $color-outline-variant]
+          - text: "Pain relief plan" [fill: $color-on-surface-variant; lineHeight: $text-body-leading; fontFamily: $font-family-base; fontSize: $text-body-size]
+          - text: "Hoping to labor without an epidural" [fill: $color-on-surface; lineHeight: $text-body-leading; fontFamily: $font-family-base; fontSize: $text-body-size]
+          - text: "Change" [fill: $color-primary; lineHeight: $text-body-leading; fontFamily: $font-family-base; fontSize: $text-body-size]
+        - frame "Row - Partner at the birth" [stroke: $color-outline-variant]
+          - text: "Partner at the birth" [fill: $color-on-surface-variant; lineHeight: $text-body-leading; fontFamily: $font-family-base; fontSize: $text-body-size]
+          - text: "Yes" [fill: $color-on-surface; lineHeight: $text-body-leading; fontFamily: $font-family-base; fontSize: $text-body-size]
+          - text: "Change" [fill: $color-primary; lineHeight: $text-body-leading; fontFamily: $font-family-base; fontSize: $text-body-size]
+        - frame "Row - Other support in the room" [stroke: $color-outline-variant]
+          - text: "Other support in the room" [fill: $color-on-surface-variant; lineHeight: $text-body-leading; fontFamily: $font-family-base; fontSize: $text-body-size]
+          - text: "Sarah's mother" [fill: $color-on-surface; lineHeight: $text-body-leading; fontFamily: $font-family-base; fontSize: $text-body-size]
+          - text: "Change" [fill: $color-primary; lineHeight: $text-body-leading; fontFamily: $font-family-base; fontSize: $text-body-size]
+        - frame "Row - Music or quiet" [stroke: $color-outline-variant]
+          - text: "Music or quiet" [fill: $color-on-surface-variant; lineHeight: $text-body-leading; fontFamily: $font-family-base; fontSize: $text-body-size]
+          - text: "Quiet" [fill: $color-on-surface; lineHeight: $text-body-leading; fontFamily: $font-family-base; fontSize: $text-body-size]
+          - text: "Change" [fill: $color-primary; lineHeight: $text-body-leading; fontFamily: $font-family-base; fontSize: $text-body-size]
+        - frame "Row - Photography" [stroke: $color-outline-variant]
+          - text: "Photography" [fill: $color-on-surface-variant; lineHeight: $text-body-leading; fontFamily: $font-family-base; fontSize: $text-body-size]
+          - text: "No photographs during labor" [fill: $color-on-surface; lineHeight: $text-body-leading; fontFamily: $font-family-base; fontSize: $text-body-size]
+          - text: "Change" [fill: $color-primary; lineHeight: $text-body-leading; fontFamily: $font-family-base; fontSize: $text-body-size]
+    - frame "Section - Sarah's household"
+      - text: "Sarah's household" [fill: $color-on-surface; lineHeight: $text-heading-leading; fontFamily: $font-family-base; fontSize: $text-heading-size]
+      - frame "Rows"
+        - frame "Row - Other children at home" [stroke: $color-outline-variant]
+          - text: "Other children at home" [fill: $color-on-surface-variant; lineHeight: $text-body-leading; fontFamily: $font-family-base; fontSize: $text-body-size]
+          - text: "Two, ages 4 and 7" [fill: $color-on-surface; lineHeight: $text-body-leading; fontFamily: $font-family-base; fontSize: $text-body-size]
+          - text: "Change" [fill: $color-primary; lineHeight: $text-body-leading; fontFamily: $font-family-base; fontSize: $text-body-size]
+        - frame "Row - Pets" [stroke: $color-outline-variant]
+          - text: "Pets" [fill: $color-on-surface-variant; lineHeight: $text-body-leading; fontFamily: $font-family-base; fontSize: $text-body-size]
+          - text: "One dog" [fill: $color-on-surface; lineHeight: $text-body-leading; fontFamily: $font-family-base; fontSize: $text-body-size]
+          - text: "Change" [fill: $color-primary; lineHeight: $text-body-leading; fontFamily: $font-family-base; fontSize: $text-body-size]
+        - frame "Row - Stairs to the door" [stroke: $color-outline-variant]
+          - text: "Stairs to the door" [fill: $color-on-surface-variant; lineHeight: $text-body-leading; fontFamily: $font-family-base; fontSize: $text-body-size]
+          - text: "Yes, one flight" [fill: $color-on-surface; lineHeight: $text-body-leading; fontFamily: $font-family-base; fontSize: $text-body-size]
+          - text: "Change" [fill: $color-primary; lineHeight: $text-body-leading; fontFamily: $font-family-base; fontSize: $text-body-size]
+        - frame "Row - Parking" [stroke: $color-outline-variant]
+          - text: "Parking" [fill: $color-on-surface-variant; lineHeight: $text-body-leading; fontFamily: $font-family-base; fontSize: $text-body-size]
+          - text: "Street, permit required" [fill: $color-on-surface; lineHeight: $text-body-leading; fontFamily: $font-family-base; fontSize: $text-body-size]
+          - text: "Change" [fill: $color-primary; lineHeight: $text-body-leading; fontFamily: $font-family-base; fontSize: $text-body-size]
+        - frame "Row - Languages spoken at home" [stroke: $color-outline-variant]
+          - text: "Languages spoken at home" [fill: $color-on-surface-variant; lineHeight: $text-body-leading; fontFamily: $font-family-base; fontSize: $text-body-size]
+          - text: "English, Twi" [fill: $color-on-surface; lineHeight: $text-body-leading; fontFamily: $font-family-base; fontSize: $text-body-size]
+          - text: "Change" [fill: $color-primary; lineHeight: $text-body-leading; fontFamily: $font-family-base; fontSize: $text-body-size]
+    - frame "Section - How Sarah found the practice"
+      - text: "How Sarah found the practice" [fill: $color-on-surface; lineHeight: $text-heading-leading; fontFamily: $font-family-base; fontSize: $text-heading-size]
+      - frame "Rows"
+        - frame "Row - Source" [stroke: $color-outline-variant]
+          - text: "Source" [fill: $color-on-surface-variant; lineHeight: $text-body-leading; fontFamily: $font-family-base; fontSize: $text-body-size]
+          - text: "Midwife referral" [fill: $color-on-surface; lineHeight: $text-body-leading; fontFamily: $font-family-base; fontSize: $text-body-size]
+          - text: "Change" [fill: $color-primary; lineHeight: $text-body-leading; fontFamily: $font-family-base; fontSize: $text-body-size]
+        - frame "Row - Who referred" [stroke: $color-outline-variant]
+          - text: "Who referred" [fill: $color-on-surface-variant; lineHeight: $text-body-leading; fontFamily: $font-family-base; fontSize: $text-body-size]
+          - text: "Rochester Midwifery Group" [fill: $color-on-surface; lineHeight: $text-body-leading; fontFamily: $font-family-base; fontSize: $text-body-size]
+          - text: "Change" [fill: $color-primary; lineHeight: $text-body-leading; fontFamily: $font-family-base; fontSize: $text-body-size]
+        - frame "Row - First contact" [stroke: $color-outline-variant]
+          - text: "First contact" [fill: $color-on-surface-variant; lineHeight: $text-body-leading; fontFamily: $font-family-base; fontSize: $text-body-size]
+          - text: "Phone, January 12" [fill: $color-on-surface; lineHeight: $text-body-leading; fontFamily: $font-family-base; fontSize: $text-body-size]
+          - text: "Change" [fill: $color-primary; lineHeight: $text-body-leading; fontFamily: $font-family-base; fontSize: $text-body-size]
+    - text: "Saving starts nothing and costs nothing. An engagement is asked for from Sarah's record, and an owner or admin approves it." [fill: $color-on-surface-variant; lineHeight: $text-body-leading; fontFamily: $font-family-base; fontSize: $text-body-size]
+    - frame "Actions"
+      - frame "Primary" [fill: $color-primary; cornerRadius: $radius]
+        - text: "Save this Client" [fill: $color-on-primary; fontFamily: $font-family-base; fontSize: $text-body-size]
+      - frame "Secondary" [cornerRadius: $radius]
+        - text: "Cancel" [fill: $color-primary; fontFamily: $font-family-base; fontSize: $text-body-size]
+
+## Intake 8 - Check the answers, nothing added
+
+- ref "Top Bar" -> component "StaffTopBar"
+- frame "Page Content"
+  - frame "Progress"
+    - text: "Add a Client" [fill: $color-on-surface-variant; lineHeight: $text-label-leading; fontFamily: $font-family-base; fontSize: $text-label-size]
+    - frame "Steps"
+      - frame "Step 1"
+        - frame "Marker" [fill: $color-surface-container-high; stroke: $color-outline-variant]
+          - icon "check" (phosphor) [fill: $color-on-surface-variant]
+        - frame "Step Body"
+          - text: "Find the Client" [fill: $color-on-surface-variant; lineHeight: $text-body-leading; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+      - frame "Step 2"
+        - frame "Marker" [fill: $color-surface-container-high; stroke: $color-outline-variant]
+          - icon "check" (phosphor) [fill: $color-on-surface-variant]
+        - frame "Step Body"
+          - text: "Who Sarah is" [fill: $color-on-surface-variant; lineHeight: $text-body-leading; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+          - frame "Sub Steps"
+            - text: "Name" [fill: $color-on-surface-variant; lineHeight: $text-meta-leading; fontFamily: $font-family-base; fontSize: $text-meta-size]
+            - text: "Date of birth" [fill: $color-on-surface-variant; lineHeight: $text-meta-leading; fontFamily: $font-family-base; fontSize: $text-meta-size]
+      - frame "Step 3"
+        - frame "Marker" [fill: $color-surface-container-high; stroke: $color-outline-variant]
+          - icon "check" (phosphor) [fill: $color-on-surface-variant]
+        - frame "Step Body"
+          - text: "How to reach Sarah" [fill: $color-on-surface-variant; lineHeight: $text-body-leading; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+          - frame "Sub Steps"
+            - text: "Email address" [fill: $color-on-surface-variant; lineHeight: $text-meta-leading; fontFamily: $font-family-base; fontSize: $text-meta-size]
+            - text: "Phone number" [fill: $color-on-surface-variant; lineHeight: $text-meta-leading; fontFamily: $font-family-base; fontSize: $text-meta-size]
+      - frame "Step 4"
+        - frame "Marker" [fill: $color-surface-container-high; stroke: $color-outline-variant]
+          - icon "check" (phosphor) [fill: $color-on-surface-variant]
+        - frame "Step Body"
+          - text: "Where Sarah lives" [fill: $color-on-surface-variant; lineHeight: $text-body-leading; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+          - frame "Sub Steps"
+            - text: "Address" [fill: $color-on-surface-variant; lineHeight: $text-meta-leading; fontFamily: $font-family-base; fontSize: $text-meta-size]
+      - frame "Step 5" [stroke: $color-primary]
+        - frame "Marker" [stroke: $color-outline-variant]
+          - text: "5" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-meta-size]
+        - frame "Step Body"
+          - text: "Check and save" [fill: $color-on-surface; lineHeight: $text-body-leading; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+  - frame "Column"
+    - frame "Back"
+      - icon "arrow-left" (phosphor) [fill: $color-primary]
+      - text: "Back" [fill: $color-primary; fontFamily: $font-family-base; fontSize: $text-body-size]
+    - text: "Check Sarah's details before saving" [fill: $color-on-surface; lineHeight: $text-heading-lg-leading; fontFamily: $font-family-base; fontSize: $text-heading-lg-size]
+    - frame "Section - Who Sarah is"
+      - text: "Who Sarah is" [fill: $color-on-surface; lineHeight: $text-heading-leading; fontFamily: $font-family-base; fontSize: $text-heading-size]
+      - frame "Rows"
+        - frame "Row - Given name" [stroke: $color-outline-variant]
+          - text: "Given name" [fill: $color-on-surface-variant; lineHeight: $text-body-leading; fontFamily: $font-family-base; fontSize: $text-body-size]
+          - text: "Sarah" [fill: $color-on-surface; lineHeight: $text-body-leading; fontFamily: $font-family-base; fontSize: $text-body-size]
+          - text: "Change" [fill: $color-primary; lineHeight: $text-body-leading; fontFamily: $font-family-base; fontSize: $text-body-size]
+        - frame "Row - Family name" [stroke: $color-outline-variant]
+          - text: "Family name" [fill: $color-on-surface-variant; lineHeight: $text-body-leading; fontFamily: $font-family-base; fontSize: $text-body-size]
+          - text: "Beck" [fill: $color-on-surface; lineHeight: $text-body-leading; fontFamily: $font-family-base; fontSize: $text-body-size]
+          - text: "Change" [fill: $color-primary; lineHeight: $text-body-leading; fontFamily: $font-family-base; fontSize: $text-body-size]
+        - frame "Row - Preferred name" [stroke: $color-outline-variant]
+          - text: "Preferred name" [fill: $color-on-surface-variant; lineHeight: $text-body-leading; fontFamily: $font-family-base; fontSize: $text-body-size]
+          - text: "Sar" [fill: $color-on-surface; lineHeight: $text-body-leading; fontFamily: $font-family-base; fontSize: $text-body-size]
+          - text: "Change" [fill: $color-primary; lineHeight: $text-body-leading; fontFamily: $font-family-base; fontSize: $text-body-size]
+        - frame "Row - Date of birth" [stroke: $color-outline-variant]
+          - text: "Date of birth" [fill: $color-on-surface-variant; lineHeight: $text-body-leading; fontFamily: $font-family-base; fontSize: $text-body-size]
+          - text: "March 14, 1991" [fill: $color-on-surface; lineHeight: $text-body-leading; fontFamily: $font-family-base; fontSize: $text-body-size]
+          - text: "Change" [fill: $color-primary; lineHeight: $text-body-leading; fontFamily: $font-family-base; fontSize: $text-body-size]
+    - frame "Section - How to reach Sarah"
+      - text: "How to reach Sarah" [fill: $color-on-surface; lineHeight: $text-heading-leading; fontFamily: $font-family-base; fontSize: $text-heading-size]
+      - frame "Rows"
+        - frame "Row - Email address" [stroke: $color-outline-variant]
+          - text: "Email address" [fill: $color-on-surface-variant; lineHeight: $text-body-leading; fontFamily: $font-family-base; fontSize: $text-body-size]
+          - text: "sarah.beck@gmail.com" [fill: $color-on-surface; lineHeight: $text-body-leading; fontFamily: $font-family-base; fontSize: $text-body-size]
+          - text: "Change" [fill: $color-primary; lineHeight: $text-body-leading; fontFamily: $font-family-base; fontSize: $text-body-size]
+        - frame "Row - Phone number" [stroke: $color-outline-variant]
+          - text: "Phone number" [fill: $color-on-surface-variant; lineHeight: $text-body-leading; fontFamily: $font-family-base; fontSize: $text-body-size]
+          - text: "(585) 555-0142" [fill: $color-on-surface; lineHeight: $text-body-leading; fontFamily: $font-family-base; fontSize: $text-body-size]
+          - text: "Change" [fill: $color-primary; lineHeight: $text-body-leading; fontFamily: $font-family-base; fontSize: $text-body-size]
+    - frame "Section - Where Sarah lives"
+      - text: "Where Sarah lives" [fill: $color-on-surface; lineHeight: $text-heading-leading; fontFamily: $font-family-base; fontSize: $text-heading-size]
+      - frame "Rows"
+        - frame "Row - Address" [stroke: $color-outline-variant]
+          - text: "Address" [fill: $color-on-surface-variant; lineHeight: $text-body-leading; fontFamily: $font-family-base; fontSize: $text-body-size]
+          - text: "44 Alexander Street, Rochester, NY 14607" [fill: $color-on-surface; lineHeight: $text-body-leading; fontFamily: $font-family-base; fontSize: $text-body-size]
+          - text: "Change" [fill: $color-primary; lineHeight: $text-body-leading; fontFamily: $font-family-base; fontSize: $text-body-size]
+    - text: "Saving starts nothing and costs nothing. An engagement is asked for from Sarah's record, and an owner or admin approves it." [fill: $color-on-surface-variant; lineHeight: $text-body-leading; fontFamily: $font-family-base; fontSize: $text-body-size]
+    - frame "Actions"
+      - frame "Primary" [fill: $color-primary; cornerRadius: $radius]
+        - text: "Save this Client" [fill: $color-on-primary; fontFamily: $font-family-base; fontSize: $text-body-size]
+      - frame "Secondary" [cornerRadius: $radius]
+        - text: "Cancel" [fill: $color-primary; fontFamily: $font-family-base; fontSize: $text-body-size]
+
+## Intake - narrow question page
+
+- frame "Top Bar" [fill: $color-surface-bright; stroke: $color-outline-variant]
+  - frame "Menu Hit"
+    - icon "menu" (lucide) [fill: $color-on-surface]
+  - frame "Practice"
+    - text: "Riverside Doula Collective" [fill: $color-on-surface; fontFamily: $font-family-base]
+    - icon "chevron-down" (lucide) [fill: $color-on-surface-variant]
+  - frame "Avatar Hit"
+    - frame "Avatar" [fill: $color-surface-container-high; stroke: $color-outline-variant]
+      - text: "MG" [fill: $color-on-surface; fontFamily: $font-family-base]
+- frame "Page Content"
+  - frame "Back"
+    - icon "arrow-left" (phosphor) [fill: $color-primary]
+    - text: "Back" [fill: $color-primary; fontFamily: $font-family-base; fontSize: $text-body-size]
+  - frame "Progress Narrow"
+    - frame "Progress Row"
+      - text: "Step 2 of 6" [fill: $color-on-surface-variant; lineHeight: $text-meta-leading; fontFamily: $font-family-base; fontSize: $text-meta-size]
+      - text: "Who the Client is" [fill: $color-on-surface; lineHeight: $text-meta-leading; fontFamily: $font-family-base; fontSize: $text-meta-size]
+      - text: "Show all steps" [fill: $color-primary; lineHeight: $text-meta-leading; fontFamily: $font-family-base; fontSize: $text-meta-size]
+    - frame "Track" [fill: $color-surface-container-high]
+      - frame "Filled" [fill: $color-primary]
+  - text: "What is the Client's name?" [fill: $color-on-surface; lineHeight: $text-heading-lg-leading; fontFamily: $font-family-base; fontSize: $text-heading-size]
+  - frame "Fields"
+    - ref "Given name" -> component "FormField"
+      - override Label (text): content: "Given name"
+      - override Hint (text): content: "The only part of a Client record the practice must have."
+      - override Value (text): content: "Sarah"; fill: "$color-on-surface"
+      - override Error (text): enabled: false
+    - ref "Family name" -> component "FormField"
+      - override Label (text): content: "Family name"
+      - override Hint (text): content: "Optional."
+      - override Value (text): content: "Beck"; fill: "$color-on-surface"
+      - override Error (text): enabled: false
+    - ref "Preferred name" -> component "FormField"
+      - override Label (text): content: "Preferred name"
+      - override Hint (text): content: "Optional. What every screen and the message thread will use."
+      - override Value (text): content: "Sar"; fill: "$color-on-surface"
+      - override Error (text): enabled: false
+  - frame "Actions"
+    - frame "Primary" [fill: $color-primary; cornerRadius: $radius]
+      - text: "Continue" [fill: $color-on-primary; fontFamily: $font-family-base; fontSize: $text-body-size]
+    - frame "Secondary" [cornerRadius: $radius]
+      - text: "Save and come back later" [fill: $color-primary; fontFamily: $font-family-base; fontSize: $text-body-size]
+
+## Engagement - Owner or Admin
+
+- ref "Top Bar" -> component "StaffTopBar"
+- frame "Page Content"
+  - frame "Contents" [gap: $space-3]
+    - text: "On this page" [fill: $color-on-surface-muted; fontFamily: $font-family-base; fontSize: $text-label-size]
+    - frame "Links"
+      - frame "Contract" [stroke: $color-outline-variant; strokeWidth.left: $border-thin]
+        - text: "Contract" [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+      - frame "Visits" [stroke: $color-outline-variant; strokeWidth.left: $border-thin]
+        - text: "Visits" [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+      - frame "Care Plan" [stroke: $color-outline-variant; strokeWidth.left: $border-thin]
+        - text: "Care Plan" [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+      - frame "Birth Plan" [stroke: $color-outline-variant; strokeWidth.left: $border-thin]
+        - text: "Birth Plan" [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+      - frame "Invoices" [stroke: $color-outline-variant; strokeWidth.left: $border-thin]
+        - text: "Invoices" [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+      - frame "Offers" [stroke: $color-outline-variant; strokeWidth.left: $border-thin]
+        - text: "Offers" [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+      - frame "Messages" [stroke: $color-outline-variant; strokeWidth.left: $border-thin]
+        - text: "Messages" [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+      - frame "Activity" [stroke: $color-outline-variant; strokeWidth.left: $border-thin]
+        - text: "Activity" [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+  - frame "Column" [gap: $space-8]
+    - frame "Header" [gap: $space-4]
+      - frame "Back" [gap: $space-2]
+        - icon "arrow-left" (phosphor) [fill: $color-primary]
+        - text: "Clients" [fill: $color-primary; fontFamily: $font-family-base; fontSize: $text-label-size]
+      - frame "Title Row" [gap: $space-4]
+        - text: "Amara Okafor" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-heading-lg-size]
+        - frame "Actions" [gap: $space-2]
+          - frame "Message" [stroke: $color-outline; strokeWidth: $border-thin; gap: $space-2]
+            - text: "Message the client" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-label-size]
+          - frame "Invite" [stroke: $color-outline; strokeWidth: $border-thin; gap: $space-2]
+            - text: "Portal invite sent" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-label-size]
+      - frame "Summary" [fill: $color-surface-bright; stroke: $color-outline-variant; strokeWidth: $border-thin]
+        - frame "Row - Care" [stroke: $color-outline-variant; strokeWidth.bottom: $border-thin; gap: $space-4]
+          - text: "Care" [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-label-size]
+          - text: "Birth" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-body-size]
+          - text: "Change" [fill: $color-primary; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+        - frame "Row - Due" [stroke: $color-outline-variant; strokeWidth.bottom: $border-thin; gap: $space-4]
+          - text: "Due" [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-label-size]
+          - text: "14 November 2026" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-body-size]
+          - text: "Change" [fill: $color-primary; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+        - frame "Row - Care phase" [stroke: $color-outline-variant; strokeWidth.bottom: $border-thin; gap: $space-4]
+          - text: "Care phase" [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-label-size]
+          - text: "Active" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-body-size]
+          - text: "Change" [fill: $color-primary; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+        - frame "Row - Doula" [stroke: $color-outline-variant; gap: $space-4]
+          - text: "Doula" [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-label-size]
+          - text: "Priya Raman" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-body-size]
+          - text: "Change" [fill: $color-primary; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+    - frame "Section - Contract" [gap: $space-4]
+      - text: "Contract" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-heading-size]
+      - frame "Card" [fill: $color-surface-bright; stroke: $color-outline-variant; strokeWidth: $border-thin; gap: $space-4]
+        - frame "Pairs" [gap: $space-3]
+          - frame "Status" [gap: $space-4]
+            - text: "Status" [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-label-size]
+            - text: "Signed on 14 August 2026" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-body-size]
+          - frame "Signed by" [gap: $space-4]
+            - text: "Signed by" [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-label-size]
+            - text: "Amara Okafor" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-body-size]
+          - frame "Fee" [gap: $space-4]
+            - text: "Fee" [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-label-size]
+            - text: "$1,850.00" [fill: $color-on-surface; content: $1,850.00; fontFamily: $font-family-base; fontSize: $text-body-size]
+          - frame "Sent" [gap: $space-4]
+            - text: "Sent" [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-label-size]
+            - text: "12 August 2026 by Mark Goho" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-body-size]
+        - frame "Actions" [gap: $space-2]
+          - frame "View contract" [stroke: $color-outline; strokeWidth: $border-thin]
+            - text: "View contract" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-label-size]
+          - frame "Void this contract" [stroke: $color-outline; strokeWidth: $border-thin]
+            - text: "Void this contract" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-label-size]
+    - frame "Section - Visits" [gap: $space-4]
+      - text: "Visits" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-heading-size]
+      - frame "Card" [fill: $color-surface-bright; stroke: $color-outline-variant; strokeWidth: $border-thin; gap: $space-4]
+        - frame "Table"
+          - frame "Head" [stroke: $color-outline-variant; strokeWidth.bottom: $border-thin; gap: $space-4]
+            - text: "Date" [fill: $color-on-surface-muted; fontFamily: $font-family-base; fontSize: $text-label-size]
+            - text: "Type" [fill: $color-on-surface-muted; fontFamily: $font-family-base; fontSize: $text-label-size]
+            - text: "Doula" [fill: $color-on-surface-muted; fontFamily: $font-family-base; fontSize: $text-label-size]
+            - text: "What we covered" [fill: $color-on-surface-muted; fontFamily: $font-family-base; fontSize: $text-label-size]
+          - frame "Row 1" [stroke: $color-outline-variant; strokeWidth.bottom: $border-thin; gap: $space-4]
+            - text: "18 Aug 2026" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+            - text: "Prenatal" [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+            - text: "Priya Raman" [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+            - text: "Birth preferences, hospital bag, when to call" [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+          - frame "Row 2" [stroke: $color-outline-variant; strokeWidth.bottom: $border-thin; gap: $space-4]
+            - text: "04 Aug 2026" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+            - text: "Prenatal" [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+            - text: "Priya Raman" [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+            - text: "Went through the birth plan draft" [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+          - frame "Row 3" [stroke: $color-outline-variant; gap: $space-4]
+            - text: "21 Jul 2026" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+            - text: "Intake" [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+            - text: "Tasha Lin" [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+            - text: "First meeting, took her history" [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+        - frame "Actions" [gap: $space-2]
+          - frame "Schedule a visit" [fill: $color-primary]
+            - text: "Schedule a visit" [fill: $color-on-primary; fontFamily: $font-family-base; fontSize: $text-label-size]
+          - frame "Log a visit that happened" [stroke: $color-outline; strokeWidth: $border-thin]
+            - text: "Log a visit that happened" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-label-size]
+        - frame "Gap note" [fill: $color-surface-container; stroke: $color-warning]
+          - text: "A Visit is (engagement_id, staff_id, created_at) today — no date, no type, no notes. Date #250, notes #251, type #281." [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-meta-size]
+    - frame "Section - Care Plan" [gap: $space-4]
+      - text: "Care Plan" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-heading-size]
+      - frame "Card" [fill: $color-surface-bright; stroke: $color-outline-variant; strokeWidth: $border-thin; gap: $space-4]
+        - frame "Pairs" [gap: $space-3]
+          - frame "Progress" [gap: $space-4]
+            - text: "Progress" [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-label-size]
+            - text: "12 of 14 questions answered" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-body-size]
+          - frame "Last edited" [gap: $space-4]
+            - text: "Last edited" [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-label-size]
+            - text: "26 August 2026 by Tasha Lin" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-body-size]
+        - frame "Actions" [gap: $space-2]
+          - frame "Open the care plan" [stroke: $color-outline; strokeWidth: $border-thin]
+            - text: "Open the care plan" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-label-size]
+    - frame "Section - Birth Plan" [gap: $space-4]
+      - text: "Birth Plan" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-heading-size]
+      - frame "Card" [fill: $color-surface-bright; stroke: $color-outline-variant; strokeWidth: $border-thin; gap: $space-4]
+        - frame "Pairs" [gap: $space-3]
+          - frame "Progress" [gap: $space-4]
+            - text: "Progress" [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-label-size]
+            - text: "Complete" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-body-size]
+          - frame "Last edited" [gap: $space-4]
+            - text: "Last edited" [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-label-size]
+            - text: "20 August 2026 by Priya Raman" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-body-size]
+        - frame "Actions" [gap: $space-2]
+          - frame "Open the birth plan" [stroke: $color-outline; strokeWidth: $border-thin]
+            - text: "Open the birth plan" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-label-size]
+          - frame "Print for the hospital" [stroke: $color-outline; strokeWidth: $border-thin]
+            - text: "Print for the hospital" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-label-size]
+    - frame "Section - Invoices" [gap: $space-4]
+      - text: "Invoices" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-heading-size]
+      - frame "Card" [fill: $color-surface-bright; stroke: $color-outline-variant; strokeWidth: $border-thin; gap: $space-4]
+        - frame "Table"
+          - frame "Head" [stroke: $color-outline-variant; strokeWidth.bottom: $border-thin; gap: $space-4]
+            - text: "Invoice" [fill: $color-on-surface-muted; fontFamily: $font-family-base; fontSize: $text-label-size]
+            - text: "Raised" [fill: $color-on-surface-muted; fontFamily: $font-family-base; fontSize: $text-label-size]
+            - text: "Amount" [fill: $color-on-surface-muted; fontFamily: $font-family-base; fontSize: $text-label-size]
+            - text: "Status" [fill: $color-on-surface-muted; fontFamily: $font-family-base; fontSize: $text-label-size]
+          - frame "Row 1" [stroke: $color-outline-variant; strokeWidth.bottom: $border-thin; gap: $space-4]
+            - text: "INV-2041" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+            - text: "12 Aug 2026" [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+            - text: "$925.00" [fill: $color-on-surface-variant; content: $925.00; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+            - text: "Paid 14 Aug 2026" [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+          - frame "Row 2" [stroke: $color-outline-variant; gap: $space-4]
+            - text: "INV-2052" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+            - text: "26 Aug 2026" [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+            - text: "$925.00" [fill: $color-on-surface-variant; content: $925.00; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+            - text: "Awaiting payment" [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+        - frame "Actions" [gap: $space-2]
+          - frame "Raise an invoice" [fill: $color-primary]
+            - text: "Raise an invoice" [fill: $color-on-primary; fontFamily: $font-family-base; fontSize: $text-label-size]
+          - frame "Record a payment taken elsewhere" [stroke: $color-outline; strokeWidth: $border-thin]
+            - text: "Record a payment taken elsewhere" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-label-size]
+        - frame "Gap note" [fill: $color-surface-container; stroke: $color-warning]
+          - text: "A payment can only be recorded by the Stripe webhook — a cheque or a bank transfer cannot be recorded at all (#271). Nothing stops a voided Contract being invoiced (#275)." [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-meta-size]
+    - frame "Section - Offers" [gap: $space-4]
+      - text: "Offers" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-heading-size]
+      - frame "Card" [fill: $color-surface-bright; stroke: $color-outline-variant; strokeWidth: $border-thin; gap: $space-4]
+        - frame "Table"
+          - frame "Head" [stroke: $color-outline-variant; strokeWidth.bottom: $border-thin; gap: $space-4]
+            - text: "Doula" [fill: $color-on-surface-muted; fontFamily: $font-family-base; fontSize: $text-label-size]
+            - text: "Offered" [fill: $color-on-surface-muted; fontFamily: $font-family-base; fontSize: $text-label-size]
+            - text: "Fee" [fill: $color-on-surface-muted; fontFamily: $font-family-base; fontSize: $text-label-size]
+            - text: "Answer" [fill: $color-on-surface-muted; fontFamily: $font-family-base; fontSize: $text-label-size]
+          - frame "Row 1" [stroke: $color-outline-variant; strokeWidth.bottom: $border-thin; gap: $space-4]
+            - text: "Priya Raman" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+            - text: "21 Jul 2026" [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+            - text: "$620.00" [fill: $color-on-surface-variant; content: $620.00; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+            - text: "Accepted 22 Jul 2026" [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+          - frame "Row 2" [stroke: $color-outline-variant; gap: $space-4]
+            - text: "Lena Vasquez" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+            - text: "21 Jul 2026" [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+            - text: "$620.00" [fill: $color-on-surface-variant; content: $620.00; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+            - text: "Superseded" [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+        - frame "Actions" [gap: $space-2]
+          - frame "Offer this engagement" [stroke: $color-outline; strokeWidth: $border-thin]
+            - text: "Offer this engagement" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-label-size]
+    - frame "Section - Messages" [gap: $space-4]
+      - text: "Messages" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-heading-size]
+      - frame "Card" [fill: $color-surface-bright; stroke: $color-outline-variant; strokeWidth: $border-thin; gap: $space-4]
+        - frame "Pairs" [gap: $space-3]
+          - frame "Latest" [gap: $space-4]
+            - text: "Latest" [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-label-size]
+            - text: "“Thursday works. See you at 2.” — Amara Okafor, 28 Aug" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-body-size]
+          - frame "Unanswered" [gap: $space-4]
+            - text: "Unanswered" [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-label-size]
+            - text: "No" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-body-size]
+        - frame "Actions" [gap: $space-2]
+          - frame "Open the thread" [stroke: $color-outline; strokeWidth: $border-thin]
+            - text: "Open the thread" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-label-size]
+    - frame "Section - Activity" [gap: $space-4]
+      - text: "Activity" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-heading-size]
+      - frame "Card" [fill: $color-surface-bright; stroke: $color-outline-variant; strokeWidth: $border-thin; gap: $space-4]
+        - frame "Entries"
+          - ref "Entry 1" -> component "ActivityEntry"
+            - override When (text): content: "12 minutes ago"
+            - override What happened (text): content: "Invoice INV-2052 emailed to Amara Okafor"
+            - override Who (text): content: "Doula Cloud"
+          - ref "Entry 2" -> component "ActivityEntry"
+            - override When (text): content: "2 hours ago"
+            - override What happened (text): content: "Invoice INV-2052 raised for $925.00"
+            - override Who (text): content: "Mark Goho"
+          - ref "Entry 3" -> component "ActivityEntry"
+            - override When (text): content: "Yesterday, 9:31am"
+            - override What happened (text): content: "Care plan edited — 3 answers changed"
+            - override Who (text): content: "Tasha Lin"
+          - ref "Entry 4" -> component "ActivityEntry"
+            - override When (text): content: "Tuesday, 4:40pm"
+            - override What happened (text): content: "Visit logged"
+            - override Who (text): content: "Priya Raman"
+          - ref "Entry 5" -> component "ActivityEntry"
+            - override When (text): content: "16 Aug 2026, 6:00am"
+            - override What happened (text): content: "Payment of $925.00 received against INV-2041"
+            - override Who (text): content: "Amara Okafor"
+          - ref "Entry 6" -> component "ActivityEntry"
+            - override When (text): content: "14 Aug 2026, 8:12pm"
+            - override What happened (text): content: "Contract signed"
+            - override Who (text): content: "Amara Okafor"
+          - ref "Entry 7" -> component "ActivityEntry"
+            - override When (text): content: "12 Aug 2026, 11:06am"
+            - override What happened (text): content: "Portal invite sent to amara.okafor@example.com"
+            - override Who (text): content: "Doula Cloud"
+          - ref "Entry 8" -> component "ActivityEntry"
+            - override When (text): content: "12 Aug 2026, 11:05am"
+            - override What happened (text): content: "Contract sent"
+            - override Who (text): content: "Mark Goho"
+          - ref "Entry 9" -> component "ActivityEntry"
+            - override When (text): content: "23 Jul 2026, 9:04am"
+            - override What happened (text): content: "Offer to Lena Vasquez superseded"
+            - override Who (text): content: "Doula Cloud"
+          - ref "Entry 10" -> component "ActivityEntry"
+            - override When (text): content: "22 Jul 2026, 8:19am"
+            - override What happened (text): content: "Offer accepted — Priya Raman attached"
+            - override Who (text): content: "Priya Raman"
+          - ref "Entry 11" -> component "ActivityEntry"
+            - override When (text): content: "21 Jul 2026, 5:55pm"
+            - override What happened (text): content: "Engagement created from an approved request"
+            - override Who (text): content: "Tasha Lin"
+        - frame "Gap note" [fill: $color-surface-container; stroke: $color-warning]
+          - text: "Two rules the drawing is asserting. Actors come in three kinds and only one is a staff member — a person did it, the Client did it (Amara signed, Amara paid), or Doula Cloud did it with nobody asking. And time is relative under seven days and absolute beyond it, on a 12-hour clock — “2 hours ago” is what a person reads and “14 Aug 2026, 8:12pm” is what an audit trail survives on; the exact instant is always carried underneath, never replaced. Only two of these eleven events are recorded at all today." [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-meta-size]
+
+## Engagement - Doula (employee)
+
+- ref "Top Bar" -> component "StaffTopBar"
+- frame "Page Content"
+  - frame "Contents" [gap: $space-3]
+    - text: "On this page" [fill: $color-on-surface-muted; fontFamily: $font-family-base; fontSize: $text-label-size]
+    - frame "Links"
+      - frame "Contract" [stroke: $color-outline-variant; strokeWidth.left: $border-thin]
+        - text: "Contract" [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+      - frame "Visits" [stroke: $color-outline-variant; strokeWidth.left: $border-thin]
+        - text: "Visits" [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+      - frame "Care Plan" [stroke: $color-outline-variant; strokeWidth.left: $border-thin]
+        - text: "Care Plan" [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+      - frame "Birth Plan" [stroke: $color-outline-variant; strokeWidth.left: $border-thin]
+        - text: "Birth Plan" [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+      - frame "Messages" [stroke: $color-outline-variant; strokeWidth.left: $border-thin]
+        - text: "Messages" [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+      - frame "Activity" [stroke: $color-outline-variant; strokeWidth.left: $border-thin]
+        - text: "Activity" [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+  - frame "Column" [gap: $space-8]
+    - frame "Header" [gap: $space-4]
+      - frame "Back" [gap: $space-2]
+        - icon "arrow-left" (phosphor) [fill: $color-primary]
+        - text: "Clients" [fill: $color-primary; fontFamily: $font-family-base; fontSize: $text-label-size]
+      - frame "Title Row" [gap: $space-4]
+        - text: "Amara Okafor" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-heading-lg-size]
+        - frame "Actions" [gap: $space-2]
+          - frame "Message" [stroke: $color-outline; strokeWidth: $border-thin; gap: $space-2]
+            - text: "Message the client" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-label-size]
+          - frame "Invite" [stroke: $color-outline; strokeWidth: $border-thin; gap: $space-2]
+            - text: "Portal invite sent" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-label-size]
+      - frame "Summary" [fill: $color-surface-bright; stroke: $color-outline-variant; strokeWidth: $border-thin]
+        - frame "Row - Care" [stroke: $color-outline-variant; strokeWidth.bottom: $border-thin; gap: $space-4]
+          - text: "Care" [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-label-size]
+          - text: "Birth" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-body-size]
+          - text: "Change" [fill: $color-primary; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+        - frame "Row - Due" [stroke: $color-outline-variant; strokeWidth.bottom: $border-thin; gap: $space-4]
+          - text: "Due" [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-label-size]
+          - text: "14 November 2026" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-body-size]
+          - text: "Change" [fill: $color-primary; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+        - frame "Row - Care phase" [stroke: $color-outline-variant; strokeWidth.bottom: $border-thin; gap: $space-4]
+          - text: "Care phase" [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-label-size]
+          - text: "Active" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-body-size]
+          - text: "Change" [fill: $color-primary; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+        - frame "Row - Doula" [stroke: $color-outline-variant; gap: $space-4]
+          - text: "Doula" [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-label-size]
+          - text: "Priya Raman" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-body-size]
+          - text: "Change" [fill: $color-primary; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+    - frame "Section - Contract" [gap: $space-4]
+      - text: "Contract" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-heading-size]
+      - frame "Card" [fill: $color-surface-bright; stroke: $color-outline-variant; strokeWidth: $border-thin; gap: $space-4]
+        - frame "Pairs" [gap: $space-3]
+          - frame "Status" [gap: $space-4]
+            - text: "Status" [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-label-size]
+            - text: "Signed on 14 August 2026" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-body-size]
+          - frame "Signed by" [gap: $space-4]
+            - text: "Signed by" [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-label-size]
+            - text: "Amara Okafor" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-body-size]
+          - frame "Sent" [gap: $space-4]
+            - text: "Sent" [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-label-size]
+            - text: "12 August 2026 by Mark Goho" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-body-size]
+        - frame "Actions" [gap: $space-2]
+          - frame "View contract" [stroke: $color-outline; strokeWidth: $border-thin]
+            - text: "View contract" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-label-size]
+          - frame "Void this contract" [stroke: $color-outline; strokeWidth: $border-thin]
+            - text: "Void this contract" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-label-size]
+        - frame "Gap note" [fill: $color-surface-container; stroke: $color-warning]
+          - text: "An employed Doula reads a Contract's scope and never its money (ADR-0008). Today the read carries no role check, so she reads the amount and the invoice history on every Engagement in the Practice — #277, and the write side #282." [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-meta-size]
+    - frame "Section - Visits" [gap: $space-4]
+      - text: "Visits" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-heading-size]
+      - frame "Card" [fill: $color-surface-bright; stroke: $color-outline-variant; strokeWidth: $border-thin; gap: $space-4]
+        - frame "Table"
+          - frame "Head" [stroke: $color-outline-variant; strokeWidth.bottom: $border-thin; gap: $space-4]
+            - text: "Date" [fill: $color-on-surface-muted; fontFamily: $font-family-base; fontSize: $text-label-size]
+            - text: "Type" [fill: $color-on-surface-muted; fontFamily: $font-family-base; fontSize: $text-label-size]
+            - text: "Doula" [fill: $color-on-surface-muted; fontFamily: $font-family-base; fontSize: $text-label-size]
+            - text: "What we covered" [fill: $color-on-surface-muted; fontFamily: $font-family-base; fontSize: $text-label-size]
+          - frame "Row 1" [stroke: $color-outline-variant; strokeWidth.bottom: $border-thin; gap: $space-4]
+            - text: "18 Aug 2026" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+            - text: "Prenatal" [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+            - text: "Priya Raman" [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+            - text: "Birth preferences, hospital bag, when to call" [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+          - frame "Row 2" [stroke: $color-outline-variant; strokeWidth.bottom: $border-thin; gap: $space-4]
+            - text: "04 Aug 2026" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+            - text: "Prenatal" [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+            - text: "Priya Raman" [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+            - text: "Went through the birth plan draft" [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+          - frame "Row 3" [stroke: $color-outline-variant; gap: $space-4]
+            - text: "21 Jul 2026" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+            - text: "Intake" [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+            - text: "Tasha Lin" [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+            - text: "First meeting, took her history" [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+        - frame "Actions" [gap: $space-2]
+          - frame "Schedule a visit" [fill: $color-primary]
+            - text: "Schedule a visit" [fill: $color-on-primary; fontFamily: $font-family-base; fontSize: $text-label-size]
+          - frame "Log a visit that happened" [stroke: $color-outline; strokeWidth: $border-thin]
+            - text: "Log a visit that happened" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-label-size]
+        - frame "Gap note" [fill: $color-surface-container; stroke: $color-warning]
+          - text: "A Visit is (engagement_id, staff_id, created_at) today — no date, no type, no notes. Date #250, notes #251, type #281." [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-meta-size]
+    - frame "Section - Care Plan" [gap: $space-4]
+      - text: "Care Plan" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-heading-size]
+      - frame "Card" [fill: $color-surface-bright; stroke: $color-outline-variant; strokeWidth: $border-thin; gap: $space-4]
+        - frame "Pairs" [gap: $space-3]
+          - frame "Progress" [gap: $space-4]
+            - text: "Progress" [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-label-size]
+            - text: "12 of 14 questions answered" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-body-size]
+          - frame "Last edited" [gap: $space-4]
+            - text: "Last edited" [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-label-size]
+            - text: "26 August 2026 by Tasha Lin" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-body-size]
+        - frame "Actions" [gap: $space-2]
+          - frame "Open the care plan" [stroke: $color-outline; strokeWidth: $border-thin]
+            - text: "Open the care plan" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-label-size]
+    - frame "Section - Birth Plan" [gap: $space-4]
+      - text: "Birth Plan" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-heading-size]
+      - frame "Card" [fill: $color-surface-bright; stroke: $color-outline-variant; strokeWidth: $border-thin; gap: $space-4]
+        - frame "Pairs" [gap: $space-3]
+          - frame "Progress" [gap: $space-4]
+            - text: "Progress" [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-label-size]
+            - text: "Complete" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-body-size]
+          - frame "Last edited" [gap: $space-4]
+            - text: "Last edited" [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-label-size]
+            - text: "20 August 2026 by Priya Raman" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-body-size]
+        - frame "Actions" [gap: $space-2]
+          - frame "Open the birth plan" [stroke: $color-outline; strokeWidth: $border-thin]
+            - text: "Open the birth plan" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-label-size]
+          - frame "Print for the hospital" [stroke: $color-outline; strokeWidth: $border-thin]
+            - text: "Print for the hospital" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-label-size]
+    - frame "Section - Messages" [gap: $space-4]
+      - text: "Messages" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-heading-size]
+      - frame "Card" [fill: $color-surface-bright; stroke: $color-outline-variant; strokeWidth: $border-thin; gap: $space-4]
+        - frame "Pairs" [gap: $space-3]
+          - frame "Latest" [gap: $space-4]
+            - text: "Latest" [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-label-size]
+            - text: "“Thursday works. See you at 2.” — Amara Okafor, 28 Aug" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-body-size]
+          - frame "Unanswered" [gap: $space-4]
+            - text: "Unanswered" [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-label-size]
+            - text: "No" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-body-size]
+        - frame "Actions" [gap: $space-2]
+          - frame "Open the thread" [stroke: $color-outline; strokeWidth: $border-thin]
+            - text: "Open the thread" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-label-size]
+    - frame "Section - Activity" [gap: $space-4]
+      - text: "Activity" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-heading-size]
+      - frame "Card" [fill: $color-surface-bright; stroke: $color-outline-variant; strokeWidth: $border-thin; gap: $space-4]
+        - frame "Entries"
+          - ref "Entry 3" -> component "ActivityEntry"
+            - override When (text): content: "Yesterday, 9:31am"
+            - override What happened (text): content: "Care plan edited — 3 answers changed"
+            - override Who (text): content: "Tasha Lin"
+          - ref "Entry 4" -> component "ActivityEntry"
+            - override When (text): content: "Tuesday, 4:40pm"
+            - override What happened (text): content: "Visit logged"
+            - override Who (text): content: "Priya Raman"
+          - ref "Entry 6" -> component "ActivityEntry"
+            - override When (text): content: "14 Aug 2026, 8:12pm"
+            - override What happened (text): content: "Contract signed"
+            - override Who (text): content: "Amara Okafor"
+          - ref "Entry 7" -> component "ActivityEntry"
+            - override When (text): content: "12 Aug 2026, 11:06am"
+            - override What happened (text): content: "Portal invite sent to amara.okafor@example.com"
+            - override Who (text): content: "Doula Cloud"
+          - ref "Entry 8" -> component "ActivityEntry"
+            - override When (text): content: "12 Aug 2026, 11:05am"
+            - override What happened (text): content: "Contract sent"
+            - override Who (text): content: "Mark Goho"
+          - ref "Entry 9" -> component "ActivityEntry"
+            - override When (text): content: "23 Jul 2026, 9:04am"
+            - override What happened (text): content: "Offer to Lena Vasquez superseded"
+            - override Who (text): content: "Doula Cloud"
+          - ref "Entry 10" -> component "ActivityEntry"
+            - override When (text): content: "22 Jul 2026, 8:19am"
+            - override What happened (text): content: "Offer accepted — Priya Raman attached"
+            - override Who (text): content: "Priya Raman"
+          - ref "Entry 11" -> component "ActivityEntry"
+            - override When (text): content: "21 Jul 2026, 5:55pm"
+            - override What happened (text): content: "Engagement created from an approved request"
+            - override Who (text): content: "Tasha Lin"
+        - frame "Gap note" [fill: $color-surface-container; stroke: $color-warning]
+          - text: "The ledger is filtered by role, not just the sections above it. Three money entries an Owner sees are absent here, because ADR-0008 gives an employed Doula no read on Contract money or Invoice history — and an audit trail that leaked them would be a way round the gate. That filtering is why this has to be one queryable log with a subject and an actor, not six tables merged in the browser." [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-meta-size]
+
+## Engagement - Doula (contractor)
+
+- ref "Top Bar" -> component "StaffTopBar"
+- frame "Page Content"
+  - frame "Contents" [gap: $space-3]
+    - text: "On this page" [fill: $color-on-surface-muted; fontFamily: $font-family-base; fontSize: $text-label-size]
+    - frame "Links"
+      - frame "Contract" [stroke: $color-outline-variant; strokeWidth.left: $border-thin]
+        - text: "Contract" [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+      - frame "Visits" [stroke: $color-outline-variant; strokeWidth.left: $border-thin]
+        - text: "Visits" [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+      - frame "Care Plan" [stroke: $color-outline-variant; strokeWidth.left: $border-thin]
+        - text: "Care Plan" [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+      - frame "Birth Plan" [stroke: $color-outline-variant; strokeWidth.left: $border-thin]
+        - text: "Birth Plan" [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+      - frame "Messages" [stroke: $color-outline-variant; strokeWidth.left: $border-thin]
+        - text: "Messages" [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+      - frame "Activity" [stroke: $color-outline-variant; strokeWidth.left: $border-thin]
+        - text: "Activity" [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+  - frame "Column" [gap: $space-8]
+    - frame "Header" [gap: $space-4]
+      - frame "Back" [gap: $space-2]
+        - icon "arrow-left" (phosphor) [fill: $color-primary]
+        - text: "Clients" [fill: $color-primary; fontFamily: $font-family-base; fontSize: $text-label-size]
+      - frame "Title Row" [gap: $space-4]
+        - text: "Amara Okafor" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-heading-lg-size]
+        - frame "Actions" [gap: $space-2]
+          - frame "Message" [stroke: $color-outline; strokeWidth: $border-thin; gap: $space-2]
+            - text: "Message the client" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-label-size]
+          - frame "Invite" [stroke: $color-outline; strokeWidth: $border-thin; gap: $space-2]
+            - text: "Portal invite sent" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-label-size]
+      - frame "Summary" [fill: $color-surface-bright; stroke: $color-outline-variant; strokeWidth: $border-thin]
+        - frame "Row - Care" [stroke: $color-outline-variant; strokeWidth.bottom: $border-thin; gap: $space-4]
+          - text: "Care" [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-label-size]
+          - text: "Birth" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-body-size]
+          - text: "Change" [fill: $color-primary; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+        - frame "Row - Due" [stroke: $color-outline-variant; strokeWidth.bottom: $border-thin; gap: $space-4]
+          - text: "Due" [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-label-size]
+          - text: "14 November 2026" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-body-size]
+          - text: "Change" [fill: $color-primary; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+        - frame "Row - Care phase" [stroke: $color-outline-variant; strokeWidth.bottom: $border-thin; gap: $space-4]
+          - text: "Care phase" [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-label-size]
+          - text: "Active" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-body-size]
+          - text: "Change" [fill: $color-primary; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+        - frame "Row - Doula" [stroke: $color-outline-variant; gap: $space-4]
+          - text: "Doula" [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-label-size]
+          - text: "Priya Raman" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-body-size]
+          - text: "Change" [fill: $color-primary; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+    - frame "Section - Contract" [gap: $space-4]
+      - text: "Contract" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-heading-size]
+      - frame "Card" [fill: $color-surface-bright; stroke: $color-outline-variant; strokeWidth: $border-thin; gap: $space-4]
+        - frame "Pairs" [gap: $space-3]
+          - frame "Status" [gap: $space-4]
+            - text: "Status" [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-label-size]
+            - text: "Signed on 14 August 2026" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-body-size]
+          - frame "Signed by" [gap: $space-4]
+            - text: "Signed by" [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-label-size]
+            - text: "Amara Okafor" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-body-size]
+          - frame "Sent" [gap: $space-4]
+            - text: "Sent" [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-label-size]
+            - text: "12 August 2026 by Mark Goho" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-body-size]
+          - frame "Your fee" [gap: $space-4]
+            - text: "Your fee" [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-label-size]
+            - text: "$620.00 — the fee you accepted on 22 July 2026" [fill: $color-on-surface; content: $620.00 — the fee you accepted on 22 July 2026; fontFamily: $font-family-base; fontSize: $text-body-size]
+        - frame "Actions" [gap: $space-2]
+          - frame "View contract" [stroke: $color-outline; strokeWidth: $border-thin]
+            - text: "View contract" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-label-size]
+          - frame "Void this contract" [stroke: $color-outline; strokeWidth: $border-thin]
+            - text: "Void this contract" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-label-size]
+        - frame "Gap note" [fill: $color-surface-container; stroke: $color-warning]
+          - text: "A contractor reads her own agreed fee and never the Practice's price (ADR-0008). Neither half works today: the Contract read has no role check so she sees the Practice's price on every Engagement (#277), and nothing anywhere records what a Practice owes a doula, so her own fee has no home at all — #225." [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-meta-size]
+    - frame "Section - Visits" [gap: $space-4]
+      - text: "Visits" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-heading-size]
+      - frame "Card" [fill: $color-surface-bright; stroke: $color-outline-variant; strokeWidth: $border-thin; gap: $space-4]
+        - frame "Table"
+          - frame "Head" [stroke: $color-outline-variant; strokeWidth.bottom: $border-thin; gap: $space-4]
+            - text: "Date" [fill: $color-on-surface-muted; fontFamily: $font-family-base; fontSize: $text-label-size]
+            - text: "Type" [fill: $color-on-surface-muted; fontFamily: $font-family-base; fontSize: $text-label-size]
+            - text: "Doula" [fill: $color-on-surface-muted; fontFamily: $font-family-base; fontSize: $text-label-size]
+            - text: "What we covered" [fill: $color-on-surface-muted; fontFamily: $font-family-base; fontSize: $text-label-size]
+          - frame "Row 1" [stroke: $color-outline-variant; strokeWidth.bottom: $border-thin; gap: $space-4]
+            - text: "18 Aug 2026" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+            - text: "Prenatal" [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+            - text: "Priya Raman" [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+            - text: "Birth preferences, hospital bag, when to call" [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+          - frame "Row 2" [stroke: $color-outline-variant; strokeWidth.bottom: $border-thin; gap: $space-4]
+            - text: "04 Aug 2026" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+            - text: "Prenatal" [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+            - text: "Priya Raman" [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+            - text: "Went through the birth plan draft" [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+          - frame "Row 3" [stroke: $color-outline-variant; gap: $space-4]
+            - text: "21 Jul 2026" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+            - text: "Intake" [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+            - text: "Tasha Lin" [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+            - text: "First meeting, took her history" [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+        - frame "Actions" [gap: $space-2]
+          - frame "Schedule a visit" [fill: $color-primary]
+            - text: "Schedule a visit" [fill: $color-on-primary; fontFamily: $font-family-base; fontSize: $text-label-size]
+          - frame "Log a visit that happened" [stroke: $color-outline; strokeWidth: $border-thin]
+            - text: "Log a visit that happened" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-label-size]
+        - frame "Gap note" [fill: $color-surface-container; stroke: $color-warning]
+          - text: "A Visit is (engagement_id, staff_id, created_at) today — no date, no type, no notes. Date #250, notes #251, type #281." [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-meta-size]
+    - frame "Section - Care Plan" [gap: $space-4]
+      - text: "Care Plan" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-heading-size]
+      - frame "Card" [fill: $color-surface-bright; stroke: $color-outline-variant; strokeWidth: $border-thin; gap: $space-4]
+        - frame "Pairs" [gap: $space-3]
+          - frame "Progress" [gap: $space-4]
+            - text: "Progress" [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-label-size]
+            - text: "12 of 14 questions answered" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-body-size]
+          - frame "Last edited" [gap: $space-4]
+            - text: "Last edited" [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-label-size]
+            - text: "26 August 2026 by Tasha Lin" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-body-size]
+        - frame "Actions" [gap: $space-2]
+          - frame "Open the care plan" [stroke: $color-outline; strokeWidth: $border-thin]
+            - text: "Open the care plan" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-label-size]
+    - frame "Section - Birth Plan" [gap: $space-4]
+      - text: "Birth Plan" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-heading-size]
+      - frame "Card" [fill: $color-surface-bright; stroke: $color-outline-variant; strokeWidth: $border-thin; gap: $space-4]
+        - frame "Pairs" [gap: $space-3]
+          - frame "Progress" [gap: $space-4]
+            - text: "Progress" [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-label-size]
+            - text: "Complete" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-body-size]
+          - frame "Last edited" [gap: $space-4]
+            - text: "Last edited" [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-label-size]
+            - text: "20 August 2026 by Priya Raman" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-body-size]
+        - frame "Actions" [gap: $space-2]
+          - frame "Open the birth plan" [stroke: $color-outline; strokeWidth: $border-thin]
+            - text: "Open the birth plan" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-label-size]
+          - frame "Print for the hospital" [stroke: $color-outline; strokeWidth: $border-thin]
+            - text: "Print for the hospital" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-label-size]
+    - frame "Section - Messages" [gap: $space-4]
+      - text: "Messages" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-heading-size]
+      - frame "Card" [fill: $color-surface-bright; stroke: $color-outline-variant; strokeWidth: $border-thin; gap: $space-4]
+        - frame "Pairs" [gap: $space-3]
+          - frame "Latest" [gap: $space-4]
+            - text: "Latest" [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-label-size]
+            - text: "“Thursday works. See you at 2.” — Amara Okafor, 28 Aug" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-body-size]
+          - frame "Unanswered" [gap: $space-4]
+            - text: "Unanswered" [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-label-size]
+            - text: "No" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-body-size]
+        - frame "Actions" [gap: $space-2]
+          - frame "Open the thread" [stroke: $color-outline; strokeWidth: $border-thin]
+            - text: "Open the thread" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-label-size]
+    - frame "Section - Activity" [gap: $space-4]
+      - text: "Activity" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-heading-size]
+      - frame "Card" [fill: $color-surface-bright; stroke: $color-outline-variant; strokeWidth: $border-thin; gap: $space-4]
+        - frame "Entries"
+          - ref "Entry 3" -> component "ActivityEntry"
+            - override When (text): content: "Yesterday, 9:31am"
+            - override What happened (text): content: "Care plan edited — 3 answers changed"
+            - override Who (text): content: "Tasha Lin"
+          - ref "Entry 4" -> component "ActivityEntry"
+            - override When (text): content: "Tuesday, 4:40pm"
+            - override What happened (text): content: "Visit logged"
+            - override Who (text): content: "Priya Raman"
+          - ref "Entry 6" -> component "ActivityEntry"
+            - override When (text): content: "14 Aug 2026, 8:12pm"
+            - override What happened (text): content: "Contract signed"
+            - override Who (text): content: "Amara Okafor"
+          - ref "Entry 7" -> component "ActivityEntry"
+            - override When (text): content: "12 Aug 2026, 11:06am"
+            - override What happened (text): content: "Portal invite sent to amara.okafor@example.com"
+            - override Who (text): content: "Doula Cloud"
+          - ref "Entry 8" -> component "ActivityEntry"
+            - override When (text): content: "12 Aug 2026, 11:05am"
+            - override What happened (text): content: "Contract sent"
+            - override Who (text): content: "Mark Goho"
+          - ref "Entry 9" -> component "ActivityEntry"
+            - override When (text): content: "23 Jul 2026, 9:04am"
+            - override What happened (text): content: "Offer to Lena Vasquez superseded"
+            - override Who (text): content: "Doula Cloud"
+          - ref "Entry 10" -> component "ActivityEntry"
+            - override When (text): content: "22 Jul 2026, 8:19am"
+            - override What happened (text): content: "Offer accepted — Priya Raman attached"
+            - override Who (text): content: "Priya Raman"
+          - ref "Entry 11" -> component "ActivityEntry"
+            - override When (text): content: "21 Jul 2026, 5:55pm"
+            - override What happened (text): content: "Engagement created from an approved request"
+            - override Who (text): content: "Tasha Lin"
+        - frame "Gap note" [fill: $color-surface-container; stroke: $color-warning]
+          - text: "The ledger is filtered by role. A contractor reads her own agreed fee and never the Practice's price (ADR-0008), so the invoice and payment entries an Owner sees are absent — but the offer she accepted is hers and stays. Her own fee is not recorded anywhere today (#225), so the entry that would matter most to her cannot be written yet." [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-meta-size]
+
+## Engagement - nothing has happened yet
+
+- ref "Top Bar" -> component "StaffTopBar"
+- frame "Page Content"
+  - frame "Contents" [gap: $space-3]
+    - text: "On this page" [fill: $color-on-surface-muted; fontFamily: $font-family-base; fontSize: $text-label-size]
+    - frame "Links"
+      - frame "Contract" [stroke: $color-outline-variant; strokeWidth.left: $border-thin]
+        - text: "Contract" [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+      - frame "Visits" [stroke: $color-outline-variant; strokeWidth.left: $border-thin]
+        - text: "Visits" [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+      - frame "Care Plan" [stroke: $color-outline-variant; strokeWidth.left: $border-thin]
+        - text: "Care Plan" [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+      - frame "Birth Plan" [stroke: $color-outline-variant; strokeWidth.left: $border-thin]
+        - text: "Birth Plan" [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+      - frame "Invoices" [stroke: $color-outline-variant; strokeWidth.left: $border-thin]
+        - text: "Invoices" [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+      - frame "Offers" [stroke: $color-outline-variant; strokeWidth.left: $border-thin]
+        - text: "Offers" [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+      - frame "Messages" [stroke: $color-outline-variant; strokeWidth.left: $border-thin]
+        - text: "Messages" [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+      - frame "Activity" [stroke: $color-outline-variant; strokeWidth.left: $border-thin]
+        - text: "Activity" [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+  - frame "Column" [gap: $space-8]
+    - frame "Header" [gap: $space-4]
+      - frame "Back" [gap: $space-2]
+        - icon "arrow-left" (phosphor) [fill: $color-primary]
+        - text: "Clients" [fill: $color-primary; fontFamily: $font-family-base; fontSize: $text-label-size]
+      - frame "Title Row" [gap: $space-4]
+        - text: "Amara Okafor" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-heading-lg-size]
+        - frame "Actions" [gap: $space-2]
+          - frame "Message" [stroke: $color-outline; strokeWidth: $border-thin; gap: $space-2]
+            - text: "Message the client" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-label-size]
+          - frame "Invite" [stroke: $color-outline; strokeWidth: $border-thin; gap: $space-2]
+            - text: "Send the portal invite" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-label-size]
+      - frame "Summary" [fill: $color-surface-bright; stroke: $color-outline-variant; strokeWidth: $border-thin]
+        - frame "Row - Care" [stroke: $color-outline-variant; strokeWidth.bottom: $border-thin; gap: $space-4]
+          - text: "Care" [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-label-size]
+          - text: "Birth" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-body-size]
+          - text: "Change" [fill: $color-primary; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+        - frame "Row - Due" [stroke: $color-outline-variant; strokeWidth.bottom: $border-thin; gap: $space-4]
+          - text: "Due" [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-label-size]
+          - text: "14 November 2026" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-body-size]
+          - text: "Change" [fill: $color-primary; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+        - frame "Row - Care phase" [stroke: $color-outline-variant; strokeWidth.bottom: $border-thin; gap: $space-4]
+          - text: "Care phase" [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-label-size]
+          - text: "Getting set up" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-body-size]
+          - text: "Change" [fill: $color-primary; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+        - frame "Row - Doula" [stroke: $color-outline-variant; gap: $space-4]
+          - text: "Doula" [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-label-size]
+          - text: "Nobody yet" [fill: $color-on-surface-muted; fontFamily: $font-family-base; fontSize: $text-body-size]
+          - text: "Change" [fill: $color-primary; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+    - frame "Section - Contract" [gap: $space-4]
+      - text: "Contract" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-heading-size]
+      - frame "Card" [fill: $color-surface-bright; stroke: $color-outline-variant; strokeWidth: $border-thin; gap: $space-4]
+        - text: "No contract yet." [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-body-size]
+        - text: "Amara cannot sign until she has a portal account, so send her invite first." [fill: $color-on-surface-muted; fontFamily: $font-family-base; fontSize: $text-body-size]
+        - frame "Actions" [gap: $space-2]
+          - frame "Send the portal invite" [fill: $color-primary]
+            - text: "Send the portal invite" [fill: $color-on-primary; fontFamily: $font-family-base; fontSize: $text-label-size]
+          - frame "Build the contract" [stroke: $color-outline; strokeWidth: $border-thin]
+            - text: "Build the contract" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-label-size]
+        - frame "Gap note" [fill: $color-surface-container; stroke: $color-warning]
+          - text: "The invite-before-signature ordering is implicit today — nothing on the Contract section says so (#255). A contract can also be sent with every merge field blank (#258)." [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-meta-size]
+    - frame "Section - Visits" [gap: $space-4]
+      - text: "Visits" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-heading-size]
+      - frame "Card" [fill: $color-surface-bright; stroke: $color-outline-variant; strokeWidth: $border-thin; gap: $space-4]
+        - text: "No visits yet." [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-body-size]
+        - frame "Actions" [gap: $space-2]
+          - frame "Schedule a visit" [fill: $color-primary]
+            - text: "Schedule a visit" [fill: $color-on-primary; fontFamily: $font-family-base; fontSize: $text-label-size]
+    - frame "Section - Care Plan" [gap: $space-4]
+      - text: "Care Plan" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-heading-size]
+      - frame "Card" [fill: $color-surface-bright; stroke: $color-outline-variant; strokeWidth: $border-thin; gap: $space-4]
+        - text: "Not started." [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-body-size]
+        - text: "Your practice's care plan template has 14 questions." [fill: $color-on-surface-muted; fontFamily: $font-family-base; fontSize: $text-body-size]
+        - frame "Actions" [gap: $space-2]
+          - frame "Start the care plan" [stroke: $color-outline; strokeWidth: $border-thin]
+            - text: "Start the care plan" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-label-size]
+    - frame "Section - Birth Plan" [gap: $space-4]
+      - text: "Birth Plan" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-heading-size]
+      - frame "Card" [fill: $color-surface-bright; stroke: $color-outline-variant; strokeWidth: $border-thin; gap: $space-4]
+        - text: "Not started." [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-body-size]
+        - frame "Actions" [gap: $space-2]
+          - frame "Start the birth plan" [stroke: $color-outline; strokeWidth: $border-thin]
+            - text: "Start the birth plan" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-label-size]
+    - frame "Section - Invoices" [gap: $space-4]
+      - text: "Invoices" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-heading-size]
+      - frame "Card" [fill: $color-surface-bright; stroke: $color-outline-variant; strokeWidth: $border-thin; gap: $space-4]
+        - text: "No invoices." [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-body-size]
+        - text: "An invoice is raised against a signed contract." [fill: $color-on-surface-muted; fontFamily: $font-family-base; fontSize: $text-body-size]
+    - frame "Section - Offers" [gap: $space-4]
+      - text: "Offers" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-heading-size]
+      - frame "Card" [fill: $color-surface-bright; stroke: $color-outline-variant; strokeWidth: $border-thin; gap: $space-4]
+        - text: "Not offered to anyone yet." [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-body-size]
+        - text: "A contractor doula can only reach this engagement by accepting an offer." [fill: $color-on-surface-muted; fontFamily: $font-family-base; fontSize: $text-body-size]
+        - frame "Actions" [gap: $space-2]
+          - frame "Offer this engagement" [stroke: $color-outline; strokeWidth: $border-thin]
+            - text: "Offer this engagement" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-label-size]
+    - frame "Section - Messages" [gap: $space-4]
+      - text: "Messages" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-heading-size]
+      - frame "Card" [fill: $color-surface-bright; stroke: $color-outline-variant; strokeWidth: $border-thin; gap: $space-4]
+        - text: "No messages yet." [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-body-size]
+        - text: "The thread opens once Amara has accepted her portal invite." [fill: $color-on-surface-muted; fontFamily: $font-family-base; fontSize: $text-body-size]
+    - frame "Section - Activity" [gap: $space-4]
+      - text: "Activity" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-heading-size]
+      - frame "Card" [fill: $color-surface-bright; stroke: $color-outline-variant; strokeWidth: $border-thin; gap: $space-4]
+        - frame "Entries"
+          - ref "Entry 7" -> component "ActivityEntry"
+            - override When (text): content: "21 Jul 2026, 5:55pm"
+            - override What happened (text): content: "Engagement created from an approved request"
+            - override Who (text): content: "Tasha Lin"
+        - frame "Gap note" [fill: $color-surface-container; stroke: $color-warning]
+          - text: "Only two of these seven are recorded today. Messages carry an actor and a timestamp; a Client signature carries one. Contract sent, contract voided, visit reassigned, plan edited and engagement completed are all bare UPDATEs with no actor and no time. This section needs the consolidated Activity log." [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-meta-size]
+
+## Your care - Desktop
+
+- frame "Top Bar" [fill: $color-surface-bright; stroke: $color-outline-variant]
+  - frame "Brand and Nav"
+    - text: "Riverside Doula Collective" [fill: $color-on-surface; fontFamily: $font-family-base]
+    - frame "Nav"
+      - frame "Nav Your care" [stroke: $color-primary]
+        - text: "Your care" [fill: $color-primary; fontFamily: $font-family-base]
+      - frame "Nav Messages"
+        - text: "Messages" [fill: $color-on-surface-variant; fontFamily: $font-family-base]
+      - frame "Nav Birth plan"
+        - text: "Birth plan" [fill: $color-on-surface-variant; fontFamily: $font-family-base]
+      - frame "Nav Contract"
+        - text: "Contract" [fill: $color-on-surface-variant; fontFamily: $font-family-base]
+  - frame "Account"
+    - frame "Avatar Hit"
+      - frame "Avatar" [fill: $color-surface-container-high; stroke: $color-outline-variant]
+        - text: "AB" [fill: $color-on-surface; fontFamily: $font-family-base]
+- frame "Page Content"
+  - frame "Page Frame" [gap: $space-8]
+    - frame "Header" [gap: $space-2]
+      - text: "Your care" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-heading-lg-size]
+      - text: "Rooted Birth Collective" [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-body-size]
+    - frame "What happens next" [fill: $color-surface-bright; stroke: $color-outline-variant; strokeWidth: $border-thin; gap: $space-3]
+      - text: "What happens next" [fill: $color-on-surface-muted; fontFamily: $font-family-base; fontSize: $text-label-size]
+      - text: "Priya is coming to you on Thursday 4 September at 2pm." [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-subheading-size]
+      - text: "Your baby is due on 14 November 2026." [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-body-size]
+    - frame "Section - Your visits" [gap: $space-4]
+      - text: "Your visits" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-heading-size]
+      - frame "Card" [fill: $color-surface-bright; stroke: $color-outline-variant; strokeWidth: $border-thin; gap: $space-4]
+        - frame "Table"
+          - frame "Row 1" [stroke: $color-outline-variant; strokeWidth.bottom: $border-thin; gap: $space-4]
+            - text: "Thu 4 Sep, 2pm" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+            - text: "Priya Raman — at your home" [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+          - frame "Row 2" [stroke: $color-outline-variant; strokeWidth.bottom: $border-thin; gap: $space-4]
+            - text: "18 Aug 2026" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+            - text: "Priya Raman — birth preferences, hospital bag" [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+          - frame "Row 3" [stroke: $color-outline-variant; gap: $space-4]
+            - text: "4 Aug 2026" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+            - text: "Priya Raman — went through the birth plan" [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+        - frame "Gap note" [fill: $color-surface-container; stroke: $color-warning]
+          - text: "A Visit carries no date, no type and no note today, and no client-facing Visit surface exists at all — CONTEXT.md records that no Client word was settled because there was nothing to name. #250, #251, and a new portal read." [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-meta-size]
+    - frame "Section - Your birth plan" [gap: $space-4]
+      - text: "Your birth plan" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-heading-size]
+      - frame "Card" [fill: $color-surface-bright; stroke: $color-outline-variant; strokeWidth: $border-thin; gap: $space-4]
+        - text: "Complete. Priya last changed it on 20 August 2026." [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-body-size]
+        - frame "Actions" [gap: $space-2]
+          - frame "Read your birth plan" [stroke: $color-outline; strokeWidth: $border-thin]
+            - text: "Read your birth plan" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-label-size]
+          - frame "Print it for the hospital" [stroke: $color-outline; strokeWidth: $border-thin]
+            - text: "Print it for the hospital" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-label-size]
+    - frame "Section - Your contract" [gap: $space-4]
+      - text: "Your contract" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-heading-size]
+      - frame "Card" [fill: $color-surface-bright; stroke: $color-outline-variant; strokeWidth: $border-thin; gap: $space-4]
+        - text: "You signed this on 14 August 2026." [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-body-size]
+        - frame "Actions" [gap: $space-2]
+          - frame "Read what you signed" [stroke: $color-outline; strokeWidth: $border-thin]
+            - text: "Read what you signed" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-label-size]
+          - frame "Download a copy" [stroke: $color-outline; strokeWidth: $border-thin]
+            - text: "Download a copy" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-label-size]
+        - frame "Gap note" [fill: $color-surface-container; stroke: $color-warning]
+          - text: "The signed PDF is routed but never linked (#302), and retrieving a stored object 500s outright (#305)." [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-meta-size]
+    - frame "Section - What you owe" [gap: $space-4]
+      - text: "What you owe" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-heading-size]
+      - frame "Card" [fill: $color-surface-bright; stroke: $color-outline-variant; strokeWidth: $border-thin; gap: $space-4]
+        - frame "Table"
+          - frame "Row 1" [stroke: $color-outline-variant; strokeWidth.bottom: $border-thin; gap: $space-4]
+            - text: "$925.00" [fill: $color-on-surface; content: $925.00; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+            - text: "Due 9 Sep 2026" [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+            - text: "Invoice INV-2052" [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+          - frame "Row 2" [stroke: $color-outline-variant; gap: $space-4]
+            - text: "$925.00" [fill: $color-on-surface; content: $925.00; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+            - text: "Paid 16 Aug 2026" [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+            - text: "Invoice INV-2041" [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+        - frame "Actions" [gap: $space-2]
+          - frame "Pay $925.00" [fill: $color-primary]
+            - text: "Pay $925.00" [fill: $color-on-primary; fontFamily: $font-family-base; fontSize: $text-label-size]
+        - frame "Gap note" [fill: $color-surface-container; stroke: $color-warning]
+          - text: "The portal has no invoice, balance or payment surface at all — #297. Nadia Haddad's journey names this the one question she is most likely to have and least likely to ask out loud." [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-meta-size]
+    - frame "Section - Messages" [gap: $space-4]
+      - text: "Messages" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-heading-size]
+      - frame "Card" [fill: $color-surface-bright; stroke: $color-outline-variant; strokeWidth: $border-thin; gap: $space-4]
+        - text: "“Thursday works. See you at 2.” — you, 28 August" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-body-size]
+        - frame "Actions" [gap: $space-2]
+          - frame "Open your messages" [stroke: $color-outline; strokeWidth: $border-thin]
+            - text: "Open your messages" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-label-size]
+    - frame "Details - Everything that has happened" [stroke: $color-outline-variant; strokeWidth.top: $border-thin; gap: $space-3]
+      - frame "Summary" [gap: $space-2]
+        - icon "caret-right" (phosphor) [fill: $color-primary]
+        - text: "Everything that has happened" [fill: $color-primary; fontFamily: $font-family-base; fontSize: $text-body-size]
+      - text: "Closed by default. Every date, every document, and who did what — for when you need to check." [fill: $color-on-surface-muted; fontFamily: $font-family-base; fontSize: $text-meta-size]
+      - frame "Gap note" [fill: $color-surface-container; stroke: $color-warning]
+        - text: "GOV.UK Details, closed. Three client journeys each want one specific fact out of her own history — did I sign that, what have I paid, when did Maya come — and none of them wants a feed. The same Activity log as the staff page, filtered to what a Client may read: her own actions, her documents, her money. Never who inside the Practice did what." [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-meta-size]
+
+## Your care - after a loss
+
+- frame "Top Bar" [fill: $color-surface-bright; stroke: $color-outline-variant]
+  - frame "Brand and Nav"
+    - text: "Riverside Doula Collective" [fill: $color-on-surface; fontFamily: $font-family-base]
+    - frame "Nav"
+      - frame "Nav Your care" [stroke: $color-primary]
+        - text: "Your care" [fill: $color-primary; fontFamily: $font-family-base]
+      - frame "Nav Messages"
+        - text: "Messages" [fill: $color-on-surface-variant; fontFamily: $font-family-base]
+      - frame "Nav Birth plan"
+        - text: "Birth plan" [fill: $color-on-surface-variant; fontFamily: $font-family-base]
+      - frame "Nav Contract"
+        - text: "Contract" [fill: $color-on-surface-variant; fontFamily: $font-family-base]
+  - frame "Account"
+    - frame "Avatar Hit"
+      - frame "Avatar" [fill: $color-surface-container-high; stroke: $color-outline-variant]
+        - text: "AB" [fill: $color-on-surface; fontFamily: $font-family-base]
+- frame "Page Content"
+  - frame "Page Frame" [gap: $space-8]
+    - frame "Header" [gap: $space-2]
+      - text: "Your care" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-heading-lg-size]
+      - text: "Rooted Birth Collective" [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-body-size]
+      - frame "Design note" [fill: $color-surface-container; stroke: $color-warning]
+        - text: "Nothing on this page states a care phase, and that is the decision, not an omission. ADR-0005 binds one fixed Client label per status and #293 records that none is true after a loss — but no client journey ever asks for the phase. Removing it removes the lie without inventing a fourth enum value. What replaces it is the same thing every other Client gets: what happens next. No due date, no birth plan, no greeting." [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-meta-size]
+    - frame "What happens next" [fill: $color-surface-bright; stroke: $color-outline-variant; strokeWidth: $border-thin; gap: $space-3]
+      - text: "What happens next" [fill: $color-on-surface-muted; fontFamily: $font-family-base; fontSize: $text-label-size]
+      - text: "Maya is coming to you on Thursday 4 September at 2pm." [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-subheading-size]
+      - text: "She has kept the rest of the month free for you." [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-body-size]
+    - frame "Section - Your visits" [gap: $space-4]
+      - text: "Your visits" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-heading-size]
+      - frame "Card" [fill: $color-surface-bright; stroke: $color-outline-variant; strokeWidth: $border-thin; gap: $space-4]
+        - frame "Table"
+          - frame "Row 1" [stroke: $color-outline-variant; strokeWidth.bottom: $border-thin; gap: $space-4]
+            - text: "Thu 4 Sep, 2pm" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+            - text: "Maya Okonkwo — at your home" [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+          - frame "Row 2" [stroke: $color-outline-variant; strokeWidth.bottom: $border-thin; gap: $space-4]
+            - text: "21 Aug 2026" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+            - text: "Maya Okonkwo — she came to the hospital" [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+          - frame "Row 3" [stroke: $color-outline-variant; gap: $space-4]
+            - text: "4 Aug 2026" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+            - text: "Maya Okonkwo — at your home" [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+        - frame "Gap note" [fill: $color-surface-container; stroke: $color-warning]
+          - text: "A Visit carries no date, no type and no note today, and no client-facing Visit surface exists at all — CONTEXT.md records that no Client word was settled because there was nothing to name. #250, #251, and a new portal read." [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-meta-size]
+    - frame "Section - Your contract" [gap: $space-4]
+      - text: "Your contract" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-heading-size]
+      - frame "Card" [fill: $color-surface-bright; stroke: $color-outline-variant; strokeWidth: $border-thin; gap: $space-4]
+        - text: "You signed this on 14 April 2026. Rooted Birth Collective ended it on 22 August 2026, so nothing more is owed under it." [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-body-size]
+        - frame "Actions" [gap: $space-2]
+          - frame "Read what you signed" [stroke: $color-outline; strokeWidth: $border-thin]
+            - text: "Read what you signed" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-label-size]
+          - frame "Download a copy" [stroke: $color-outline; strokeWidth: $border-thin]
+            - text: "Download a copy" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-label-size]
+        - frame "Gap note" [fill: $color-surface-container; stroke: $color-warning]
+          - text: "Today this reaches her as the bare word “voided” plus a terminal notice written for staff, because the portal reuses the Staff ContractStatus component — NH-G5, folded into #212. CONTEXT.md has no Client label for any contract_status value; #212's acceptance criteria ask for one, kind for every Client who will read it." [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-meta-size]
+    - frame "Section - What you owe" [gap: $space-4]
+      - text: "What you owe" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-heading-size]
+      - frame "Card" [fill: $color-surface-bright; stroke: $color-outline-variant; strokeWidth: $border-thin; gap: $space-4]
+        - text: "Nothing is outstanding." [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-body-size]
+        - frame "Table"
+          - frame "Row 2" [stroke: $color-outline-variant; gap: $space-4]
+            - text: "$925.00" [fill: $color-on-surface; content: $925.00; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+            - text: "Paid 16 Apr 2026" [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+            - text: "Invoice INV-1904" [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+        - frame "Gap note" [fill: $color-surface-container; stroke: $color-warning]
+          - text: "The portal has no invoice, balance or payment surface at all — #297. Nadia Haddad's journey names this the one question she is most likely to have and least likely to ask out loud." [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-meta-size]
+    - frame "Section - Messages" [gap: $space-4]
+      - text: "Messages" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-heading-size]
+      - frame "Card" [fill: $color-surface-bright; stroke: $color-outline-variant; strokeWidth: $border-thin; gap: $space-4]
+        - text: "“Thursday works. See you at 2.” — you, 28 August" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-body-size]
+        - frame "Actions" [gap: $space-2]
+          - frame "Open your messages" [stroke: $color-outline; strokeWidth: $border-thin]
+            - text: "Open your messages" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-label-size]
+    - frame "Details - Everything that has happened" [stroke: $color-outline-variant; strokeWidth.top: $border-thin; gap: $space-3]
+      - frame "Summary" [gap: $space-2]
+        - icon "caret-right" (phosphor) [fill: $color-primary]
+        - text: "Everything that has happened" [fill: $color-primary; fontFamily: $font-family-base; fontSize: $text-body-size]
+      - text: "Closed by default. Every date, every document, and who did what — for when you need to check." [fill: $color-on-surface-muted; fontFamily: $font-family-base; fontSize: $text-meta-size]
+      - frame "Gap note" [fill: $color-surface-container; stroke: $color-warning]
+        - text: "GOV.UK Details, closed. Three client journeys each want one specific fact out of her own history — did I sign that, what have I paid, when did Maya come — and none of them wants a feed. The same Activity log as the staff page, filtered to what a Client may read: her own actions, her documents, her money. Never who inside the Practice did what." [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-meta-size]
+
+## Engagement - narrow (Priya, in the corridor)
+
+- frame "Top Bar" [fill: $color-surface-bright; stroke: $color-outline-variant]
+  - frame "Menu Hit"
+    - icon "menu" (lucide) [fill: $color-on-surface]
+  - frame "Practice"
+    - text: "Riverside Doula Collective" [fill: $color-on-surface; fontFamily: $font-family-base]
+    - icon "chevron-down" (lucide) [fill: $color-on-surface-variant]
+  - frame "Avatar Hit"
+    - frame "Avatar" [fill: $color-surface-container-high; stroke: $color-outline-variant]
+      - text: "MG" [fill: $color-on-surface; fontFamily: $font-family-base]
+- frame "Page Content"
+  - text: "‹ Clients" [fill: $color-primary; fontFamily: $font-family-base; fontSize: $text-label-size]
+  - text: "Amara Okafor" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-heading-size]
+  - text: "Birth · due 14 Nov 2026 · Priya Raman" [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+  - frame "Jump to" [fill: $color-surface-container; stroke: $color-outline-variant; strokeWidth: $border-thin; gap: $space-2]
+    - text: "Jump to" [fill: $color-on-surface-muted; fontFamily: $font-family-base; fontSize: $text-meta-size]
+    - frame "Chips" [gap: $space-2]
+      - frame "Birth Plan" [fill: $color-surface-bright; stroke: $color-outline; strokeWidth: $border-thin]
+        - text: "Birth Plan" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-label-size]
+      - frame "Visits" [fill: $color-surface-bright; stroke: $color-outline; strokeWidth: $border-thin]
+        - text: "Visits" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-label-size]
+      - frame "Messages" [fill: $color-surface-bright; stroke: $color-outline; strokeWidth: $border-thin]
+        - text: "Messages" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-label-size]
+  - frame "Section - Birth Plan" [gap: $space-3]
+    - text: "Birth Plan" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-subheading-size]
+    - frame "Card" [fill: $color-surface-bright; stroke: $color-outline-variant; strokeWidth: $border-thin; gap: $space-3]
+      - text: "Complete. Changed 20 Aug by Priya Raman." [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+      - frame "Actions" [gap: $space-2]
+        - frame "Open the birth plan" [fill: $color-primary]
+          - text: "Open the birth plan" [fill: $color-on-primary; fontFamily: $font-family-base; fontSize: $text-label-size]
+        - frame "Print for the hospital" [stroke: $color-outline; strokeWidth: $border-thin]
+          - text: "Print for the hospital" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-label-size]
+  - frame "Section - Visits" [gap: $space-3]
+    - text: "Visits" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-subheading-size]
+    - frame "Card" [fill: $color-surface-bright; stroke: $color-outline-variant; strokeWidth: $border-thin; gap: $space-3]
+      - text: "Thu 4 Sep, 2pm — you" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+      - text: "18 Aug 2026 — you" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+      - text: "4 Aug 2026 — you" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+      - frame "Actions" [gap: $space-2]
+        - frame "Log a visit" [stroke: $color-outline; strokeWidth: $border-thin]
+          - text: "Log a visit" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-label-size]
+  - frame "Section - Contract" [gap: $space-3]
+    - text: "Contract" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-subheading-size]
+    - frame "Card" [fill: $color-surface-bright; stroke: $color-outline-variant; strokeWidth: $border-thin; gap: $space-3]
+      - text: "Signed 14 Aug 2026 by Amara Okafor." [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+      - frame "Actions" [gap: $space-2]
+        - frame "Read the contract" [stroke: $color-outline; strokeWidth: $border-thin]
+          - text: "Read the contract" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-label-size]
+  - frame "Design note" [fill: $color-surface-container; stroke: $color-warning]
+    - text: "Priya's moment of truth is this screen, on a phone, in a hospital corridor. The desktop contents rail becomes a Jump-to strip pinned under the title, because PR-G5 is that the Birth Plan is buried and PR-G9 is that the page renders no links at all. Buttons go full width at 44px minimum. No money section: ADR-0008 gives an employed Doula no read on it." [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-meta-size]
+
+## Your care - narrow
+
+- frame "Top Bar" [fill: $color-surface-bright]
+  - frame "Brand"
+    - text: "Riverside Doula Collective" [fill: $color-on-surface; fontFamily: $font-family-base]
+  - frame "Avatar Hit"
+    - frame "Avatar" [fill: $color-surface-container-high; stroke: $color-outline-variant]
+      - text: "AB" [fill: $color-on-surface; fontFamily: $font-family-base]
+- frame "Nav" [fill: $color-surface-bright; stroke: $color-outline-variant]
+  - frame "Nav Your care" [stroke: $color-primary]
+    - text: "Your care" [fill: $color-primary; fontFamily: $font-family-base]
+  - frame "Nav Messages"
+    - text: "Messages" [fill: $color-on-surface-variant; fontFamily: $font-family-base]
+  - frame "Nav Birth plan"
+    - text: "Birth plan" [fill: $color-on-surface-variant; fontFamily: $font-family-base]
+  - frame "Nav Contract"
+    - text: "Contract" [fill: $color-on-surface-variant; fontFamily: $font-family-base]
+- frame "Page Content"
+  - text: "Your care" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-heading-lg-size]
+  - text: "Rooted Birth Collective" [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+  - frame "What happens next" [fill: $color-surface-bright; stroke: $color-outline-variant; strokeWidth: $border-thin; gap: $space-2]
+    - text: "What happens next" [fill: $color-on-surface-muted; fontFamily: $font-family-base; fontSize: $text-meta-size]
+    - text: "Priya is coming to you on Thursday 4 September at 2pm." [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-subheading-size]
+    - text: "Your baby is due on 14 November 2026." [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+  - frame "Section - Your visits" [gap: $space-3]
+    - text: "Your visits" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-subheading-size]
+    - frame "Card" [fill: $color-surface-bright; stroke: $color-outline-variant; strokeWidth: $border-thin; gap: $space-3]
+      - text: "Thu 4 Sep, 2pm — Priya, at your home" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+      - text: "18 Aug 2026 — birth preferences" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+      - text: "4 Aug 2026 — the birth plan draft" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+  - frame "Section - What you owe" [gap: $space-3]
+    - text: "What you owe" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-subheading-size]
+    - frame "Card" [fill: $color-surface-bright; stroke: $color-outline-variant; strokeWidth: $border-thin; gap: $space-3]
+      - text: "$925.00 due 9 September 2026" [fill: $color-on-surface; content: $925.00 due 9 September 2026; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+      - frame "Pay $925.00" [fill: $color-primary]
+        - text: "Pay $925.00" [fill: $color-on-primary; fontFamily: $font-family-base; fontSize: $text-label-size]
+  - frame "Section - Your birth plan" [gap: $space-3]
+    - text: "Your birth plan" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-subheading-size]
+    - frame "Card" [fill: $color-surface-bright; stroke: $color-outline-variant; strokeWidth: $border-thin; gap: $space-3]
+      - text: "Complete." [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+      - frame "Read your birth plan" [stroke: $color-outline; strokeWidth: $border-thin]
+        - text: "Read your birth plan" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-label-size]
+  - frame "Section - Your contract" [gap: $space-3]
+    - text: "Your contract" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-subheading-size]
+    - frame "Card" [fill: $color-surface-bright; stroke: $color-outline-variant; strokeWidth: $border-thin; gap: $space-3]
+      - text: "You signed this on 14 August 2026." [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+      - frame "Read what you signed" [stroke: $color-outline; strokeWidth: $border-thin]
+        - text: "Read what you signed" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-label-size]
+  - frame "Section - Messages" [gap: $space-3]
+    - text: "Messages" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-subheading-size]
+    - frame "Card" [fill: $color-surface-bright; stroke: $color-outline-variant; strokeWidth: $border-thin; gap: $space-3]
+      - text: "“Thursday works. See you at 2.” — you, 28 Aug" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+      - frame "Open your messages" [stroke: $color-outline; strokeWidth: $border-thin]
+        - text: "Open your messages" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-label-size]
+  - frame "Details - Everything that has happened" [stroke: $color-outline-variant; strokeWidth.top: $border-thin; gap: $space-2]
+    - text: "› Everything that has happened" [fill: $color-primary; fontFamily: $font-family-base; fontSize: $text-body-sm-size]
+  - frame "Design note" [fill: $color-surface-container; stroke: $color-warning]
+    - text: "What you owe sits second, above the documents. Nadia's journey names it the question she is most likely to have and least likely to ask out loud, and no Client can answer it on any screen today (#297). No care phase anywhere, on any width." [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-meta-size]
+
