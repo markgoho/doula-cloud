@@ -171,7 +171,7 @@ Four mechanisms, in this order:
 
 **What they are.** Both are 2nd-generation Cloud Functions, not plain Cloud Run services — `goog-managed-by: cloudfunctions`, `run.googleapis.com/client-name: cli-firebase`, `cloudfunctions.googleapis.com/function-id: redirectUrl` and `shortenUrl`, both built on 2025-03-26 from a single Cloud Build (`fb1e636f-…`) producing `gcf-artifacts/doula--cloud__us--central1__shorten_url:version_1`. `gcloud functions list` confirms both as ACTIVE 2nd-gen HTTP-triggered functions. They are a Firebase Functions URL shortener deployed with `firebase deploy`.
 
-**Whose they are.** Mark's account, on this ticket: they are a previous incarnation of this project, from before the current Svelte-and-Go stack existed. Nothing in this repository references either one — a full-tree search for `shortenurl`, `redirecturl`, `shorten_url`, `redirect_url` and `shortUrl` returns nothing outside `.git`.
+**Whose they are.** Mark's account, [recorded on the ticket](https://github.com/markgoho/doula-cloud/issues/797#issuecomment-5594356337): they are a previous incarnation of this project, from before the current Svelte-and-Go stack existed. Nothing in this repository references either one — a full-tree search for `shortenurl`, `redirecturl`, `shorten_url`, `redirect_url` and `shortUrl` returns nothing outside `.git`.
 
 **What depends on them: nothing.** Thirty days of Cloud Run request logs, read on 2026-09-08:
 
