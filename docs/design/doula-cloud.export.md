@@ -511,7 +511,7 @@ what this export is for, and what it is not.
       - icon "arrow-left" (phosphor) [fill: $color-primary]
       - text: "Back" [fill: $color-primary; fontFamily: $font-family-base; fontSize: $text-body-size]
     - text: "What is Sarah's date of birth?" [fill: $color-on-surface; lineHeight: $text-heading-lg-leading; fontFamily: $font-family-base; fontSize: $text-heading-lg-size]
-    - text: "Optional. For example, 3 14 1991. A date of birth is how this practice recognises a returning Client years later." [fill: $color-on-surface-variant; lineHeight: $text-body-leading; fontFamily: $font-family-base; fontSize: $text-body-size]
+    - text: "Optional. For example, 3 14 1991. A date of birth is how this practice recognizes a returning Client years later." [fill: $color-on-surface-variant; lineHeight: $text-body-leading; fontFamily: $font-family-base; fontSize: $text-body-size]
     - frame "Date of birth"
       - ref "Month" -> component "FormField"
         - override Label (text): content: "Month"
@@ -1425,7 +1425,7 @@ what this export is for, and what it is not.
           - frame "Record a payment taken elsewhere" [stroke: $color-outline; strokeWidth: $border-thin]
             - text: "Record a payment taken elsewhere" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-label-size]
         - frame "Gap note" [fill: $color-surface-container; stroke: $color-warning]
-          - text: "A payment can only be recorded by the Stripe webhook — a cheque or a bank transfer cannot be recorded at all (#271). Nothing stops a voided Contract being invoiced (#275)." [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-meta-size]
+          - text: "A payment can only be recorded by the Stripe webhook — a check or a bank transfer cannot be recorded at all (#271). Nothing stops a voided Contract being invoiced (#275)." [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-meta-size]
     - frame "Section - Offers" [gap: $space-4]
       - text: "Offers" [fill: $color-on-surface; fontFamily: $font-family-base; fontSize: $text-heading-size]
       - frame "Card" [fill: $color-surface-bright; stroke: $color-outline-variant; strokeWidth: $border-thin; gap: $space-4]

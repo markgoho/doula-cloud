@@ -622,7 +622,8 @@
                       "fill": "$color-on-surface",
                       "content": "Finger Lakes Birth Support",
                       "fontFamily": "$font-family-base",
-                      "fontSize": 14
+                      "fontSize": 14,
+                      "fontWeight": "normal"
                     },
                     {
                       "type": "text",
@@ -676,7 +677,8 @@
                       "fill": "$color-on-surface",
                       "content": "Genesee Valley Midwifery",
                       "fontFamily": "$font-family-base",
-                      "fontSize": 14
+                      "fontSize": 14,
+                      "fontWeight": "normal"
                     },
                     {
                       "type": "text",
@@ -793,7 +795,8 @@
                   "fill": "$color-on-surface-muted",
                   "content": "markgoho@gmail.com",
                   "fontFamily": "$font-family-base",
-                  "fontSize": 12
+                  "fontSize": 12,
+                  "fontWeight": "normal"
                 }
               ]
             },
@@ -829,7 +832,8 @@
                       "fill": "$color-error",
                       "content": "Sign out",
                       "fontFamily": "$font-family-base",
-                      "fontSize": 14
+                      "fontSize": 14,
+                      "fontWeight": "normal"
                     }
                   ]
                 }
@@ -1018,7 +1022,8 @@
                   "fill": "$color-on-surface-variant",
                   "content": "14 active",
                   "fontFamily": "$font-family-base",
-                  "fontSize": 14
+                  "fontSize": 14,
+                  "fontWeight": "normal"
                 }
               ]
             },
@@ -1056,7 +1061,8 @@
                   "fill": "$color-on-surface-variant",
                   "content": "2 waiting on a Doula",
                   "fontFamily": "$font-family-base",
-                  "fontSize": 14
+                  "fontSize": 14,
+                  "fontWeight": "normal"
                 }
               ]
             },
@@ -1094,7 +1100,8 @@
                   "fill": "$color-on-surface-variant",
                   "content": "31 Credits",
                   "fontFamily": "$font-family-base",
-                  "fontSize": 14
+                  "fontSize": 14,
+                  "fontWeight": "normal"
                 }
               ]
             }
@@ -1270,7 +1277,8 @@
                   "fill": "$color-on-surface",
                   "content": "Clients",
                   "fontFamily": "$font-family-base",
-                  "fontSize": 16
+                  "fontSize": 16,
+                  "fontWeight": "normal"
                 }
               ]
             },
@@ -1293,7 +1301,8 @@
                   "fill": "$color-on-surface",
                   "content": "Billing",
                   "fontFamily": "$font-family-base",
-                  "fontSize": 16
+                  "fontSize": 16,
+                  "fontWeight": "normal"
                 }
               ]
             },
@@ -1316,7 +1325,8 @@
                   "fill": "$color-on-surface",
                   "content": "Staff",
                   "fontFamily": "$font-family-base",
-                  "fontSize": 16
+                  "fontSize": 16,
+                  "fontWeight": "normal"
                 }
               ]
             },
@@ -1339,7 +1349,8 @@
                   "fill": "$color-on-surface",
                   "content": "Offers",
                   "fontFamily": "$font-family-base",
-                  "fontSize": 16
+                  "fontSize": 16,
+                  "fontWeight": "normal"
                 }
               ]
             },
@@ -1362,7 +1373,8 @@
                   "fill": "$color-on-surface",
                   "content": "Settings",
                   "fontFamily": "$font-family-base",
-                  "fontSize": 16
+                  "fontSize": 16,
+                  "fontWeight": "normal"
                 }
               ]
             }
@@ -1394,7 +1406,8 @@
               "fill": "$color-on-surface-muted",
               "content": "PRACTICE",
               "fontFamily": "$font-family-base",
-              "fontSize": 12
+              "fontSize": 12,
+              "fontWeight": "normal"
             },
             {
               "type": "frame",
@@ -1537,7 +1550,8 @@
                           "fill": "$color-on-surface-variant",
                           "content": "Messages",
                           "fontFamily": "$font-family-base",
-                          "fontSize": 14
+                          "fontSize": 14,
+                          "fontWeight": "normal"
                         }
                       ]
                     },
@@ -1561,7 +1575,8 @@
                           "fill": "$color-on-surface-variant",
                           "content": "Birth plan",
                           "fontFamily": "$font-family-base",
-                          "fontSize": 14
+                          "fontSize": 14,
+                          "fontWeight": "normal"
                         }
                       ]
                     },
@@ -1585,7 +1600,8 @@
                           "fill": "$color-on-surface-variant",
                           "content": "Contract",
                           "fontFamily": "$font-family-base",
-                          "fontSize": 14
+                          "fontSize": 14,
+                          "fontWeight": "normal"
                         }
                       ]
                     }
@@ -1681,7 +1697,8 @@
                   "fill": "$color-on-surface-variant",
                   "content": "Your Doula is Sam Reyes. Your due date is 4 March 2027.",
                   "fontFamily": "$font-family-base",
-                  "fontSize": 15
+                  "fontSize": 15,
+                  "fontWeight": "normal"
                 },
                 {
                   "type": "frame",
@@ -1717,7 +1734,8 @@
                       "fill": "$color-on-surface-variant",
                       "content": "Last edited 12 January",
                       "fontFamily": "$font-family-base",
-                      "fontSize": 14
+                      "fontSize": 14,
+                      "fontWeight": "normal"
                     }
                   ]
                 },
@@ -1755,7 +1773,8 @@
                       "fill": "$color-on-surface-variant",
                       "content": "Signed 2 December",
                       "fontFamily": "$font-family-base",
-                      "fontSize": 14
+                      "fontSize": 14,
+                      "fontWeight": "normal"
                     }
                   ]
                 }
@@ -1906,7 +1925,8 @@
                   "fill": "$color-on-surface-variant",
                   "content": "Messages",
                   "fontFamily": "$font-family-base",
-                  "fontSize": 13
+                  "fontSize": 13,
+                  "fontWeight": "normal"
                 }
               ]
             },
@@ -1927,7 +1947,8 @@
                   "fill": "$color-on-surface-variant",
                   "content": "Birth plan",
                   "fontFamily": "$font-family-base",
-                  "fontSize": 13
+                  "fontSize": 13,
+                  "fontWeight": "normal"
                 }
               ]
             },
@@ -1948,7 +1969,8 @@
                   "fill": "$color-on-surface-variant",
                   "content": "Contract",
                   "fontFamily": "$font-family-base",
-                  "fontSize": 13
+                  "fontSize": 13,
+                  "fontWeight": "normal"
                 }
               ]
             }
@@ -1987,7 +2009,8 @@
               "width": "fill_container",
               "content": "Your Doula is Sam Reyes. Your due date is 4 March 2027.",
               "fontFamily": "$font-family-base",
-              "fontSize": 15
+              "fontSize": 15,
+              "fontWeight": "normal"
             },
             {
               "type": "frame",
@@ -2023,7 +2046,8 @@
                   "fill": "$color-on-surface-variant",
                   "content": "Last edited 12 January",
                   "fontFamily": "$font-family-base",
-                  "fontSize": 14
+                  "fontSize": 14,
+                  "fontWeight": "normal"
                 }
               ]
             },
@@ -2061,7 +2085,8 @@
                   "fill": "$color-on-surface-variant",
                   "content": "Signed 2 December",
                   "fontFamily": "$font-family-base",
-                  "fontSize": 14
+                  "fontSize": 14,
+                  "fontWeight": "normal"
                 }
               ]
             }
@@ -2191,7 +2216,8 @@
                           "name": "Value",
                           "fill": "$color-on-surface",
                           "fontFamily": "$font-family-base",
-                          "fontSize": 15
+                          "fontSize": 15,
+                          "fontWeight": "normal"
                         }
                       ]
                     }
@@ -2238,7 +2264,8 @@
                           "name": "Value",
                           "fill": "$color-on-surface",
                           "fontFamily": "$font-family-base",
-                          "fontSize": 15
+                          "fontSize": 15,
+                          "fontWeight": "normal"
                         }
                       ]
                     }
@@ -2813,7 +2840,8 @@
               "content": "The only thing we must have.",
               "lineHeight": "$text-meta-leading",
               "fontFamily": "$font-family-base",
-              "fontSize": "$text-meta-size"
+              "fontSize": "$text-meta-size",
+              "fontWeight": "normal"
             }
           ]
         },
@@ -2841,7 +2869,8 @@
               "fill": "$color-on-surface",
               "content": "Sarah",
               "fontFamily": "$font-family-base",
-              "fontSize": "$text-body-size"
+              "fontSize": "$text-body-size",
+              "fontWeight": "normal"
             }
           ]
         },
@@ -3262,7 +3291,8 @@
                   "content": "Riverside Doula Collective stopped asking this question. Sarah's answer is kept and can be read. It cannot be changed, and it is not asked of a new Client.",
                   "lineHeight": "$text-body-leading",
                   "fontFamily": "$font-family-base",
-                  "fontSize": "$text-body-size"
+                  "fontSize": "$text-body-size",
+                  "fontWeight": "normal"
                 }
               ]
             }
@@ -3453,7 +3483,8 @@
                               "content": "Who the Client is",
                               "lineHeight": "$text-body-leading",
                               "fontFamily": "$font-family-base",
-                              "fontSize": "$text-body-sm-size"
+                              "fontSize": "$text-body-sm-size",
+                              "fontWeight": "normal"
                             }
                           ]
                         }
@@ -3515,7 +3546,8 @@
                               "content": "How to reach the Client",
                               "lineHeight": "$text-body-leading",
                               "fontFamily": "$font-family-base",
-                              "fontSize": "$text-body-sm-size"
+                              "fontSize": "$text-body-sm-size",
+                              "fontWeight": "normal"
                             }
                           ]
                         }
@@ -3577,7 +3609,8 @@
                               "content": "Where the Client lives",
                               "lineHeight": "$text-body-leading",
                               "fontFamily": "$font-family-base",
-                              "fontSize": "$text-body-sm-size"
+                              "fontSize": "$text-body-sm-size",
+                              "fontWeight": "normal"
                             }
                           ]
                         }
@@ -3639,7 +3672,8 @@
                               "content": "Riverside Doula Collective's questions",
                               "lineHeight": "$text-body-leading",
                               "fontFamily": "$font-family-base",
-                              "fontSize": "$text-body-sm-size"
+                              "fontSize": "$text-body-sm-size",
+                              "fontWeight": "normal"
                             }
                           ]
                         }
@@ -3701,7 +3735,8 @@
                               "content": "Check and save",
                               "lineHeight": "$text-body-leading",
                               "fontFamily": "$font-family-base",
-                              "fontSize": "$text-body-sm-size"
+                              "fontSize": "$text-body-sm-size",
+                              "fontWeight": "normal"
                             }
                           ]
                         }
@@ -3771,7 +3806,8 @@
                   "content": "Every Client is searched for before being added. A Client this practice already has must not be typed in a second time.",
                   "lineHeight": "$text-body-leading",
                   "fontFamily": "$font-family-base",
-                  "fontSize": "$text-body-size"
+                  "fontSize": "$text-body-size",
+                  "fontWeight": "normal"
                 },
                 {
                   "id": "z3GxRT",
@@ -3890,7 +3926,8 @@
                           "content": "Added 4 March 2024 - 2 engagements - most recent ended June 2026",
                           "lineHeight": "$text-meta-leading",
                           "fontFamily": "$font-family-base",
-                          "fontSize": "$text-meta-size"
+                          "fontSize": "$text-meta-size",
+                          "fontWeight": "normal"
                         }
                       ]
                     },
@@ -3934,7 +3971,8 @@
                           "content": "Added 11 January 2023 - 1 engagement - ended April 2023",
                           "lineHeight": "$text-meta-leading",
                           "fontFamily": "$font-family-base",
-                          "fontSize": "$text-meta-size"
+                          "fontSize": "$text-meta-size",
+                          "fontWeight": "normal"
                         }
                       ]
                     },
@@ -3966,7 +4004,8 @@
                       "content": "None of these is the right Client?",
                       "lineHeight": "$text-body-leading",
                       "fontFamily": "$font-family-base",
-                      "fontSize": "$text-body-size"
+                      "fontSize": "$text-body-size",
+                      "fontWeight": "normal"
                     },
                     {
                       "type": "frame",
@@ -4127,7 +4166,8 @@
                               "content": "Find the Client",
                               "lineHeight": "$text-body-leading",
                               "fontFamily": "$font-family-base",
-                              "fontSize": "$text-body-sm-size"
+                              "fontSize": "$text-body-sm-size",
+                              "fontWeight": "normal"
                             }
                           ]
                         }
@@ -4228,7 +4268,8 @@
                                   "content": "Date of birth",
                                   "lineHeight": "$text-meta-leading",
                                   "fontFamily": "$font-family-base",
-                                  "fontSize": "$text-meta-size"
+                                  "fontSize": "$text-meta-size",
+                                  "fontWeight": "normal"
                                 }
                               ]
                             }
@@ -4292,7 +4333,8 @@
                               "content": "How to reach the Client",
                               "lineHeight": "$text-body-leading",
                               "fontFamily": "$font-family-base",
-                              "fontSize": "$text-body-sm-size"
+                              "fontSize": "$text-body-sm-size",
+                              "fontWeight": "normal"
                             }
                           ]
                         }
@@ -4354,7 +4396,8 @@
                               "content": "Where the Client lives",
                               "lineHeight": "$text-body-leading",
                               "fontFamily": "$font-family-base",
-                              "fontSize": "$text-body-sm-size"
+                              "fontSize": "$text-body-sm-size",
+                              "fontWeight": "normal"
                             }
                           ]
                         }
@@ -4416,7 +4459,8 @@
                               "content": "Riverside Doula Collective's questions",
                               "lineHeight": "$text-body-leading",
                               "fontFamily": "$font-family-base",
-                              "fontSize": "$text-body-sm-size"
+                              "fontSize": "$text-body-sm-size",
+                              "fontWeight": "normal"
                             }
                           ]
                         }
@@ -4478,7 +4522,8 @@
                               "content": "Check and save",
                               "lineHeight": "$text-body-leading",
                               "fontFamily": "$font-family-base",
-                              "fontSize": "$text-body-sm-size"
+                              "fontSize": "$text-body-sm-size",
+                              "fontWeight": "normal"
                             }
                           ]
                         }
@@ -4795,7 +4840,8 @@
                               "content": "Find the Client",
                               "lineHeight": "$text-body-leading",
                               "fontFamily": "$font-family-base",
-                              "fontSize": "$text-body-sm-size"
+                              "fontSize": "$text-body-sm-size",
+                              "fontWeight": "normal"
                             }
                           ]
                         }
@@ -4883,7 +4929,8 @@
                                   "content": "Name",
                                   "lineHeight": "$text-meta-leading",
                                   "fontFamily": "$font-family-base",
-                                  "fontSize": "$text-meta-size"
+                                  "fontSize": "$text-meta-size",
+                                  "fontWeight": "normal"
                                 },
                                 {
                                   "type": "text",
@@ -4960,7 +5007,8 @@
                               "content": "How to reach Sarah",
                               "lineHeight": "$text-body-leading",
                               "fontFamily": "$font-family-base",
-                              "fontSize": "$text-body-sm-size"
+                              "fontSize": "$text-body-sm-size",
+                              "fontWeight": "normal"
                             }
                           ]
                         }
@@ -5022,7 +5070,8 @@
                               "content": "Where Sarah lives",
                               "lineHeight": "$text-body-leading",
                               "fontFamily": "$font-family-base",
-                              "fontSize": "$text-body-sm-size"
+                              "fontSize": "$text-body-sm-size",
+                              "fontWeight": "normal"
                             }
                           ]
                         }
@@ -5084,7 +5133,8 @@
                               "content": "Riverside Doula Collective's questions",
                               "lineHeight": "$text-body-leading",
                               "fontFamily": "$font-family-base",
-                              "fontSize": "$text-body-sm-size"
+                              "fontSize": "$text-body-sm-size",
+                              "fontWeight": "normal"
                             }
                           ]
                         }
@@ -5146,7 +5196,8 @@
                               "content": "Check and save",
                               "lineHeight": "$text-body-leading",
                               "fontFamily": "$font-family-base",
-                              "fontSize": "$text-body-sm-size"
+                              "fontSize": "$text-body-sm-size",
+                              "fontWeight": "normal"
                             }
                           ]
                         }
@@ -5213,10 +5264,11 @@
                   "fill": "$color-on-surface-variant",
                   "textGrowth": "fixed-width",
                   "width": "fill_container",
-                  "content": "Optional. For example, 3 14 1991. A date of birth is how this practice recognises a returning Client years later.",
+                  "content": "Optional. For example, 3 14 1991. A date of birth is how this practice recognizes a returning Client years later.",
                   "lineHeight": "$text-body-leading",
                   "fontFamily": "$font-family-base",
-                  "fontSize": "$text-body-size"
+                  "fontSize": "$text-body-size",
+                  "fontWeight": "normal"
                 },
                 {
                   "type": "frame",
@@ -5474,7 +5526,8 @@
                               "content": "Find the Client",
                               "lineHeight": "$text-body-leading",
                               "fontFamily": "$font-family-base",
-                              "fontSize": "$text-body-sm-size"
+                              "fontSize": "$text-body-sm-size",
+                              "fontWeight": "normal"
                             }
                           ]
                         }
@@ -5537,7 +5590,8 @@
                               "content": "Who Sarah is",
                               "lineHeight": "$text-body-leading",
                               "fontFamily": "$font-family-base",
-                              "fontSize": "$text-body-sm-size"
+                              "fontSize": "$text-body-sm-size",
+                              "fontWeight": "normal"
                             }
                           ]
                         }
@@ -5638,7 +5692,8 @@
                                   "content": "Phone number",
                                   "lineHeight": "$text-meta-leading",
                                   "fontFamily": "$font-family-base",
-                                  "fontSize": "$text-meta-size"
+                                  "fontSize": "$text-meta-size",
+                                  "fontWeight": "normal"
                                 }
                               ]
                             }
@@ -5702,7 +5757,8 @@
                               "content": "Where Sarah lives",
                               "lineHeight": "$text-body-leading",
                               "fontFamily": "$font-family-base",
-                              "fontSize": "$text-body-sm-size"
+                              "fontSize": "$text-body-sm-size",
+                              "fontWeight": "normal"
                             }
                           ]
                         }
@@ -5764,7 +5820,8 @@
                               "content": "Riverside Doula Collective's questions",
                               "lineHeight": "$text-body-leading",
                               "fontFamily": "$font-family-base",
-                              "fontSize": "$text-body-sm-size"
+                              "fontSize": "$text-body-sm-size",
+                              "fontWeight": "normal"
                             }
                           ]
                         }
@@ -5826,7 +5883,8 @@
                               "content": "Check and save",
                               "lineHeight": "$text-body-leading",
                               "fontFamily": "$font-family-base",
-                              "fontSize": "$text-body-sm-size"
+                              "fontSize": "$text-body-sm-size",
+                              "fontWeight": "normal"
                             }
                           ]
                         }
@@ -5896,7 +5954,8 @@
                   "content": "Optional. Without an email address Sarah cannot be invited to the client portal and cannot be invoiced. A phone number alone is enough to keep the record.",
                   "lineHeight": "$text-body-leading",
                   "fontFamily": "$font-family-base",
-                  "fontSize": "$text-body-size"
+                  "fontSize": "$text-body-size",
+                  "fontWeight": "normal"
                 },
                 {
                   "id": "z3FTC9",
@@ -6101,7 +6160,8 @@
                               "content": "Find the Client",
                               "lineHeight": "$text-body-leading",
                               "fontFamily": "$font-family-base",
-                              "fontSize": "$text-body-sm-size"
+                              "fontSize": "$text-body-sm-size",
+                              "fontWeight": "normal"
                             }
                           ]
                         }
@@ -6164,7 +6224,8 @@
                               "content": "Who Sarah is",
                               "lineHeight": "$text-body-leading",
                               "fontFamily": "$font-family-base",
-                              "fontSize": "$text-body-sm-size"
+                              "fontSize": "$text-body-sm-size",
+                              "fontWeight": "normal"
                             }
                           ]
                         }
@@ -6252,7 +6313,8 @@
                                   "content": "Email address",
                                   "lineHeight": "$text-meta-leading",
                                   "fontFamily": "$font-family-base",
-                                  "fontSize": "$text-meta-size"
+                                  "fontSize": "$text-meta-size",
+                                  "fontWeight": "normal"
                                 },
                                 {
                                   "type": "text",
@@ -6329,7 +6391,8 @@
                               "content": "Where Sarah lives",
                               "lineHeight": "$text-body-leading",
                               "fontFamily": "$font-family-base",
-                              "fontSize": "$text-body-sm-size"
+                              "fontSize": "$text-body-sm-size",
+                              "fontWeight": "normal"
                             }
                           ]
                         }
@@ -6391,7 +6454,8 @@
                               "content": "Riverside Doula Collective's questions",
                               "lineHeight": "$text-body-leading",
                               "fontFamily": "$font-family-base",
-                              "fontSize": "$text-body-sm-size"
+                              "fontSize": "$text-body-sm-size",
+                              "fontWeight": "normal"
                             }
                           ]
                         }
@@ -6453,7 +6517,8 @@
                               "content": "Check and save",
                               "lineHeight": "$text-body-leading",
                               "fontFamily": "$font-family-base",
-                              "fontSize": "$text-body-sm-size"
+                              "fontSize": "$text-body-sm-size",
+                              "fontWeight": "normal"
                             }
                           ]
                         }
@@ -6523,7 +6588,8 @@
                   "content": "Optional. Type it any way at all. Only ask for a number the practice will actually use.",
                   "lineHeight": "$text-body-leading",
                   "fontFamily": "$font-family-base",
-                  "fontSize": "$text-body-size"
+                  "fontSize": "$text-body-size",
+                  "fontWeight": "normal"
                 },
                 {
                   "id": "B3wAe9",
@@ -6728,7 +6794,8 @@
                               "content": "Find the Client",
                               "lineHeight": "$text-body-leading",
                               "fontFamily": "$font-family-base",
-                              "fontSize": "$text-body-sm-size"
+                              "fontSize": "$text-body-sm-size",
+                              "fontWeight": "normal"
                             }
                           ]
                         }
@@ -6791,7 +6858,8 @@
                               "content": "Who Sarah is",
                               "lineHeight": "$text-body-leading",
                               "fontFamily": "$font-family-base",
-                              "fontSize": "$text-body-sm-size"
+                              "fontSize": "$text-body-sm-size",
+                              "fontWeight": "normal"
                             }
                           ]
                         }
@@ -6854,7 +6922,8 @@
                               "content": "How to reach Sarah",
                               "lineHeight": "$text-body-leading",
                               "fontFamily": "$font-family-base",
-                              "fontSize": "$text-body-sm-size"
+                              "fontSize": "$text-body-sm-size",
+                              "fontWeight": "normal"
                             }
                           ]
                         }
@@ -7007,7 +7076,8 @@
                               "content": "Riverside Doula Collective's questions",
                               "lineHeight": "$text-body-leading",
                               "fontFamily": "$font-family-base",
-                              "fontSize": "$text-body-sm-size"
+                              "fontSize": "$text-body-sm-size",
+                              "fontWeight": "normal"
                             }
                           ]
                         }
@@ -7069,7 +7139,8 @@
                               "content": "Check and save",
                               "lineHeight": "$text-body-leading",
                               "fontFamily": "$font-family-base",
-                              "fontSize": "$text-body-sm-size"
+                              "fontSize": "$text-body-sm-size",
+                              "fontWeight": "normal"
                             }
                           ]
                         }
@@ -7139,7 +7210,8 @@
                   "content": "Optional. An offer shows a contractor doula the city and nothing else about where a Client lives.",
                   "lineHeight": "$text-body-leading",
                   "fontFamily": "$font-family-base",
-                  "fontSize": "$text-body-size"
+                  "fontSize": "$text-body-size",
+                  "fontWeight": "normal"
                 },
                 {
                   "type": "frame",
@@ -7451,7 +7523,8 @@
                               "content": "Find the Client",
                               "lineHeight": "$text-body-leading",
                               "fontFamily": "$font-family-base",
-                              "fontSize": "$text-body-sm-size"
+                              "fontSize": "$text-body-sm-size",
+                              "fontWeight": "normal"
                             }
                           ]
                         }
@@ -7514,7 +7587,8 @@
                               "content": "Who Sarah is",
                               "lineHeight": "$text-body-leading",
                               "fontFamily": "$font-family-base",
-                              "fontSize": "$text-body-sm-size"
+                              "fontSize": "$text-body-sm-size",
+                              "fontWeight": "normal"
                             }
                           ]
                         }
@@ -7577,7 +7651,8 @@
                               "content": "How to reach Sarah",
                               "lineHeight": "$text-body-leading",
                               "fontFamily": "$font-family-base",
-                              "fontSize": "$text-body-sm-size"
+                              "fontSize": "$text-body-sm-size",
+                              "fontWeight": "normal"
                             }
                           ]
                         }
@@ -7640,7 +7715,8 @@
                               "content": "Where Sarah lives",
                               "lineHeight": "$text-body-leading",
                               "fontFamily": "$font-family-base",
-                              "fontSize": "$text-body-sm-size"
+                              "fontSize": "$text-body-sm-size",
+                              "fontWeight": "normal"
                             }
                           ]
                         }
@@ -7728,7 +7804,8 @@
                                   "content": "Practice details",
                                   "lineHeight": "$text-meta-leading",
                                   "fontFamily": "$font-family-base",
-                                  "fontSize": "$text-meta-size"
+                                  "fontSize": "$text-meta-size",
+                                  "fontWeight": "normal"
                                 },
                                 {
                                   "type": "text",
@@ -7753,7 +7830,8 @@
                                   "content": "Sarah's household",
                                   "lineHeight": "$text-meta-leading",
                                   "fontFamily": "$font-family-base",
-                                  "fontSize": "$text-meta-size"
+                                  "fontSize": "$text-meta-size",
+                                  "fontWeight": "normal"
                                 },
                                 {
                                   "type": "text",
@@ -7765,7 +7843,8 @@
                                   "content": "How Sarah found the practice",
                                   "lineHeight": "$text-meta-leading",
                                   "fontFamily": "$font-family-base",
-                                  "fontSize": "$text-meta-size"
+                                  "fontSize": "$text-meta-size",
+                                  "fontWeight": "normal"
                                 }
                               ]
                             }
@@ -7829,7 +7908,8 @@
                               "content": "Check and save",
                               "lineHeight": "$text-body-leading",
                               "fontFamily": "$font-family-base",
-                              "fontSize": "$text-body-sm-size"
+                              "fontSize": "$text-body-sm-size",
+                              "fontWeight": "normal"
                             }
                           ]
                         }
@@ -7899,7 +7979,8 @@
                   "content": "Riverside Doula Collective added these questions. Every one is optional.",
                   "lineHeight": "$text-body-leading",
                   "fontFamily": "$font-family-base",
-                  "fontSize": "$text-body-size"
+                  "fontSize": "$text-body-size",
+                  "fontWeight": "normal"
                 },
                 {
                   "type": "frame",
@@ -8246,7 +8327,8 @@
                               "content": "Find the Client",
                               "lineHeight": "$text-body-leading",
                               "fontFamily": "$font-family-base",
-                              "fontSize": "$text-body-sm-size"
+                              "fontSize": "$text-body-sm-size",
+                              "fontWeight": "normal"
                             }
                           ]
                         }
@@ -8347,7 +8429,8 @@
                                   "content": "Date of birth",
                                   "lineHeight": "$text-meta-leading",
                                   "fontFamily": "$font-family-base",
-                                  "fontSize": "$text-meta-size"
+                                  "fontSize": "$text-meta-size",
+                                  "fontWeight": "normal"
                                 }
                               ]
                             }
@@ -8411,7 +8494,8 @@
                               "content": "How to reach the Client",
                               "lineHeight": "$text-body-leading",
                               "fontFamily": "$font-family-base",
-                              "fontSize": "$text-body-sm-size"
+                              "fontSize": "$text-body-sm-size",
+                              "fontWeight": "normal"
                             }
                           ]
                         }
@@ -8473,7 +8557,8 @@
                               "content": "Where the Client lives",
                               "lineHeight": "$text-body-leading",
                               "fontFamily": "$font-family-base",
-                              "fontSize": "$text-body-sm-size"
+                              "fontSize": "$text-body-sm-size",
+                              "fontWeight": "normal"
                             }
                           ]
                         }
@@ -8535,7 +8620,8 @@
                               "content": "Riverside Doula Collective's questions",
                               "lineHeight": "$text-body-leading",
                               "fontFamily": "$font-family-base",
-                              "fontSize": "$text-body-sm-size"
+                              "fontSize": "$text-body-sm-size",
+                              "fontWeight": "normal"
                             }
                           ]
                         }
@@ -8597,7 +8683,8 @@
                               "content": "Check and save",
                               "lineHeight": "$text-body-leading",
                               "fontFamily": "$font-family-base",
-                              "fontSize": "$text-body-sm-size"
+                              "fontSize": "$text-body-sm-size",
+                              "fontWeight": "normal"
                             }
                           ]
                         }
@@ -8681,7 +8768,8 @@
                       "content": "Enter the Client's given name",
                       "lineHeight": "$text-body-leading",
                       "fontFamily": "$font-family-base",
-                      "fontSize": "$text-body-size"
+                      "fontSize": "$text-body-size",
+                      "fontWeight": "normal"
                     }
                   ]
                 },
@@ -8960,7 +9048,8 @@
                               "content": "Find the Client",
                               "lineHeight": "$text-body-leading",
                               "fontFamily": "$font-family-base",
-                              "fontSize": "$text-body-sm-size"
+                              "fontSize": "$text-body-sm-size",
+                              "fontWeight": "normal"
                             }
                           ]
                         }
@@ -9023,7 +9112,8 @@
                               "content": "Who Sarah is",
                               "lineHeight": "$text-body-leading",
                               "fontFamily": "$font-family-base",
-                              "fontSize": "$text-body-sm-size"
+                              "fontSize": "$text-body-sm-size",
+                              "fontWeight": "normal"
                             }
                           ]
                         }
@@ -9086,7 +9176,8 @@
                               "content": "How to reach Sarah",
                               "lineHeight": "$text-body-leading",
                               "fontFamily": "$font-family-base",
-                              "fontSize": "$text-body-sm-size"
+                              "fontSize": "$text-body-sm-size",
+                              "fontWeight": "normal"
                             }
                           ]
                         }
@@ -9149,7 +9240,8 @@
                               "content": "Where Sarah lives",
                               "lineHeight": "$text-body-leading",
                               "fontFamily": "$font-family-base",
-                              "fontSize": "$text-body-sm-size"
+                              "fontSize": "$text-body-sm-size",
+                              "fontWeight": "normal"
                             }
                           ]
                         }
@@ -9212,7 +9304,8 @@
                               "content": "Riverside Doula Collective's questions",
                               "lineHeight": "$text-body-leading",
                               "fontFamily": "$font-family-base",
-                              "fontSize": "$text-body-sm-size"
+                              "fontSize": "$text-body-sm-size",
+                              "fontWeight": "normal"
                             }
                           ]
                         }
@@ -9350,7 +9443,8 @@
                   "content": "Two Clients at Riverside Doula Collective look like the record just typed. Nothing is saved until this is answered.",
                   "lineHeight": "$text-body-leading",
                   "fontFamily": "$font-family-base",
-                  "fontSize": "$text-body-size"
+                  "fontSize": "$text-body-size",
+                  "fontWeight": "normal"
                 },
                 {
                   "type": "frame",
@@ -9416,7 +9510,8 @@
                               "content": "Added 4 March 2024 - 2 engagements - most recent ended June 2026",
                               "lineHeight": "$text-meta-leading",
                               "fontFamily": "$font-family-base",
-                              "fontSize": "$text-meta-size"
+                              "fontSize": "$text-meta-size",
+                              "fontWeight": "normal"
                             },
                             {
                               "type": "text",
@@ -9428,7 +9523,8 @@
                               "content": "The existing record is kept. What was just typed is listed as changes to confirm before anything is applied.",
                               "lineHeight": "$text-meta-leading",
                               "fontFamily": "$font-family-base",
-                              "fontSize": "$text-meta-size"
+                              "fontSize": "$text-meta-size",
+                              "fontWeight": "normal"
                             }
                           ]
                         }
@@ -9490,7 +9586,8 @@
                               "content": "Added 11 January 2023 - 1 engagement - ended April 2023",
                               "lineHeight": "$text-meta-leading",
                               "fontFamily": "$font-family-base",
-                              "fontSize": "$text-meta-size"
+                              "fontSize": "$text-meta-size",
+                              "fontWeight": "normal"
                             },
                             {
                               "type": "text",
@@ -9502,7 +9599,8 @@
                               "content": "The existing record is kept. What was just typed is listed as changes to confirm before anything is applied.",
                               "lineHeight": "$text-meta-leading",
                               "fontFamily": "$font-family-base",
-                              "fontSize": "$text-meta-size"
+                              "fontSize": "$text-meta-size",
+                              "fontWeight": "normal"
                             }
                           ]
                         }
@@ -9564,7 +9662,8 @@
                               "content": "A second record is created. This is the only way a duplicate can be made.",
                               "lineHeight": "$text-meta-leading",
                               "fontFamily": "$font-family-base",
-                              "fontSize": "$text-meta-size"
+                              "fontSize": "$text-meta-size",
+                              "fontWeight": "normal"
                             }
                           ]
                         }
@@ -9753,7 +9852,8 @@
                               "content": "Find the Client",
                               "lineHeight": "$text-body-leading",
                               "fontFamily": "$font-family-base",
-                              "fontSize": "$text-body-sm-size"
+                              "fontSize": "$text-body-sm-size",
+                              "fontWeight": "normal"
                             }
                           ]
                         }
@@ -9816,7 +9916,8 @@
                               "content": "Who Sarah is",
                               "lineHeight": "$text-body-leading",
                               "fontFamily": "$font-family-base",
-                              "fontSize": "$text-body-sm-size"
+                              "fontSize": "$text-body-sm-size",
+                              "fontWeight": "normal"
                             },
                             {
                               "type": "frame",
@@ -9836,7 +9937,8 @@
                                   "content": "Name",
                                   "lineHeight": "$text-meta-leading",
                                   "fontFamily": "$font-family-base",
-                                  "fontSize": "$text-meta-size"
+                                  "fontSize": "$text-meta-size",
+                                  "fontWeight": "normal"
                                 },
                                 {
                                   "type": "text",
@@ -9848,7 +9950,8 @@
                                   "content": "Date of birth",
                                   "lineHeight": "$text-meta-leading",
                                   "fontFamily": "$font-family-base",
-                                  "fontSize": "$text-meta-size"
+                                  "fontSize": "$text-meta-size",
+                                  "fontWeight": "normal"
                                 }
                               ]
                             }
@@ -9913,7 +10016,8 @@
                               "content": "How to reach Sarah",
                               "lineHeight": "$text-body-leading",
                               "fontFamily": "$font-family-base",
-                              "fontSize": "$text-body-sm-size"
+                              "fontSize": "$text-body-sm-size",
+                              "fontWeight": "normal"
                             },
                             {
                               "type": "frame",
@@ -9933,7 +10037,8 @@
                                   "content": "Email address",
                                   "lineHeight": "$text-meta-leading",
                                   "fontFamily": "$font-family-base",
-                                  "fontSize": "$text-meta-size"
+                                  "fontSize": "$text-meta-size",
+                                  "fontWeight": "normal"
                                 },
                                 {
                                   "type": "text",
@@ -9945,7 +10050,8 @@
                                   "content": "Phone number",
                                   "lineHeight": "$text-meta-leading",
                                   "fontFamily": "$font-family-base",
-                                  "fontSize": "$text-meta-size"
+                                  "fontSize": "$text-meta-size",
+                                  "fontWeight": "normal"
                                 }
                               ]
                             }
@@ -10010,7 +10116,8 @@
                               "content": "Where Sarah lives",
                               "lineHeight": "$text-body-leading",
                               "fontFamily": "$font-family-base",
-                              "fontSize": "$text-body-sm-size"
+                              "fontSize": "$text-body-sm-size",
+                              "fontWeight": "normal"
                             },
                             {
                               "type": "frame",
@@ -10030,7 +10137,8 @@
                                   "content": "Address",
                                   "lineHeight": "$text-meta-leading",
                                   "fontFamily": "$font-family-base",
-                                  "fontSize": "$text-meta-size"
+                                  "fontSize": "$text-meta-size",
+                                  "fontWeight": "normal"
                                 }
                               ]
                             }
@@ -10095,7 +10203,8 @@
                               "content": "Riverside Doula Collective's questions",
                               "lineHeight": "$text-body-leading",
                               "fontFamily": "$font-family-base",
-                              "fontSize": "$text-body-sm-size"
+                              "fontSize": "$text-body-sm-size",
+                              "fontWeight": "normal"
                             },
                             {
                               "type": "frame",
@@ -10115,7 +10224,8 @@
                                   "content": "Practice details",
                                   "lineHeight": "$text-meta-leading",
                                   "fontFamily": "$font-family-base",
-                                  "fontSize": "$text-meta-size"
+                                  "fontSize": "$text-meta-size",
+                                  "fontWeight": "normal"
                                 },
                                 {
                                   "type": "text",
@@ -10127,7 +10237,8 @@
                                   "content": "Birth preferences",
                                   "lineHeight": "$text-meta-leading",
                                   "fontFamily": "$font-family-base",
-                                  "fontSize": "$text-meta-size"
+                                  "fontSize": "$text-meta-size",
+                                  "fontWeight": "normal"
                                 },
                                 {
                                   "type": "text",
@@ -10139,7 +10250,8 @@
                                   "content": "Sarah's household",
                                   "lineHeight": "$text-meta-leading",
                                   "fontFamily": "$font-family-base",
-                                  "fontSize": "$text-meta-size"
+                                  "fontSize": "$text-meta-size",
+                                  "fontWeight": "normal"
                                 },
                                 {
                                   "type": "text",
@@ -10151,7 +10263,8 @@
                                   "content": "How Sarah found the practice",
                                   "lineHeight": "$text-meta-leading",
                                   "fontFamily": "$font-family-base",
-                                  "fontSize": "$text-meta-size"
+                                  "fontSize": "$text-meta-size",
+                                  "fontWeight": "normal"
                                 }
                               ]
                             }
@@ -10291,7 +10404,8 @@
                   "content": "Riverside Doula Collective asks for more than most. Change anything that is wrong before saving.",
                   "lineHeight": "$text-body-leading",
                   "fontFamily": "$font-family-base",
-                  "fontSize": "$text-body-size"
+                  "fontSize": "$text-body-size",
+                  "fontWeight": "normal"
                 },
                 {
                   "type": "frame",
@@ -10360,7 +10474,8 @@
                               "content": "Sarah",
                               "lineHeight": "$text-body-leading",
                               "fontFamily": "$font-family-base",
-                              "fontSize": "$text-body-size"
+                              "fontSize": "$text-body-size",
+                              "fontWeight": "normal"
                             },
                             {
                               "type": "text",
@@ -10416,7 +10531,8 @@
                               "content": "Beck",
                               "lineHeight": "$text-body-leading",
                               "fontFamily": "$font-family-base",
-                              "fontSize": "$text-body-size"
+                              "fontSize": "$text-body-size",
+                              "fontWeight": "normal"
                             },
                             {
                               "type": "text",
@@ -10472,7 +10588,8 @@
                               "content": "Sar",
                               "lineHeight": "$text-body-leading",
                               "fontFamily": "$font-family-base",
-                              "fontSize": "$text-body-size"
+                              "fontSize": "$text-body-size",
+                              "fontWeight": "normal"
                             },
                             {
                               "type": "text",
@@ -10528,7 +10645,8 @@
                               "content": "March 14, 1991",
                               "lineHeight": "$text-body-leading",
                               "fontFamily": "$font-family-base",
-                              "fontSize": "$text-body-size"
+                              "fontSize": "$text-body-size",
+                              "fontWeight": "normal"
                             },
                             {
                               "type": "text",
@@ -10616,7 +10734,8 @@
                               "content": "sarah.beck@gmail.com",
                               "lineHeight": "$text-body-leading",
                               "fontFamily": "$font-family-base",
-                              "fontSize": "$text-body-size"
+                              "fontSize": "$text-body-size",
+                              "fontWeight": "normal"
                             },
                             {
                               "type": "text",
@@ -10672,7 +10791,8 @@
                               "content": "(585) 555-0142",
                               "lineHeight": "$text-body-leading",
                               "fontFamily": "$font-family-base",
-                              "fontSize": "$text-body-size"
+                              "fontSize": "$text-body-size",
+                              "fontWeight": "normal"
                             },
                             {
                               "type": "text",
@@ -10760,7 +10880,8 @@
                               "content": "44 Alexander Street, Rochester, NY 14607",
                               "lineHeight": "$text-body-leading",
                               "fontFamily": "$font-family-base",
-                              "fontSize": "$text-body-size"
+                              "fontSize": "$text-body-size",
+                              "fontWeight": "normal"
                             },
                             {
                               "type": "text",
@@ -10848,7 +10969,8 @@
                               "content": "she / her",
                               "lineHeight": "$text-body-leading",
                               "fontFamily": "$font-family-base",
-                              "fontSize": "$text-body-size"
+                              "fontSize": "$text-body-size",
+                              "fontWeight": "normal"
                             },
                             {
                               "type": "text",
@@ -10904,7 +11026,8 @@
                               "content": "Referred at 22 weeks. Wants a quiet room.",
                               "lineHeight": "$text-body-leading",
                               "fontFamily": "$font-family-base",
-                              "fontSize": "$text-body-size"
+                              "fontSize": "$text-body-size",
+                              "fontWeight": "normal"
                             },
                             {
                               "type": "text",
@@ -10992,7 +11115,8 @@
                               "content": "Strong Memorial Hospital",
                               "lineHeight": "$text-body-leading",
                               "fontFamily": "$font-family-base",
-                              "fontSize": "$text-body-size"
+                              "fontSize": "$text-body-size",
+                              "fontWeight": "normal"
                             },
                             {
                               "type": "text",
@@ -11048,7 +11172,8 @@
                               "content": "Dr. Amara Okoye",
                               "lineHeight": "$text-body-leading",
                               "fontFamily": "$font-family-base",
-                              "fontSize": "$text-body-size"
+                              "fontSize": "$text-body-size",
+                              "fontWeight": "normal"
                             },
                             {
                               "type": "text",
@@ -11104,7 +11229,8 @@
                               "content": "Hoping to labor without an epidural",
                               "lineHeight": "$text-body-leading",
                               "fontFamily": "$font-family-base",
-                              "fontSize": "$text-body-size"
+                              "fontSize": "$text-body-size",
+                              "fontWeight": "normal"
                             },
                             {
                               "type": "text",
@@ -11160,7 +11286,8 @@
                               "content": "Yes",
                               "lineHeight": "$text-body-leading",
                               "fontFamily": "$font-family-base",
-                              "fontSize": "$text-body-size"
+                              "fontSize": "$text-body-size",
+                              "fontWeight": "normal"
                             },
                             {
                               "type": "text",
@@ -11216,7 +11343,8 @@
                               "content": "Sarah's mother",
                               "lineHeight": "$text-body-leading",
                               "fontFamily": "$font-family-base",
-                              "fontSize": "$text-body-size"
+                              "fontSize": "$text-body-size",
+                              "fontWeight": "normal"
                             },
                             {
                               "type": "text",
@@ -11272,7 +11400,8 @@
                               "content": "Quiet",
                               "lineHeight": "$text-body-leading",
                               "fontFamily": "$font-family-base",
-                              "fontSize": "$text-body-size"
+                              "fontSize": "$text-body-size",
+                              "fontWeight": "normal"
                             },
                             {
                               "type": "text",
@@ -11328,7 +11457,8 @@
                               "content": "No photographs during labor",
                               "lineHeight": "$text-body-leading",
                               "fontFamily": "$font-family-base",
-                              "fontSize": "$text-body-size"
+                              "fontSize": "$text-body-size",
+                              "fontWeight": "normal"
                             },
                             {
                               "type": "text",
@@ -11416,7 +11546,8 @@
                               "content": "Two, ages 4 and 7",
                               "lineHeight": "$text-body-leading",
                               "fontFamily": "$font-family-base",
-                              "fontSize": "$text-body-size"
+                              "fontSize": "$text-body-size",
+                              "fontWeight": "normal"
                             },
                             {
                               "type": "text",
@@ -11472,7 +11603,8 @@
                               "content": "One dog",
                               "lineHeight": "$text-body-leading",
                               "fontFamily": "$font-family-base",
-                              "fontSize": "$text-body-size"
+                              "fontSize": "$text-body-size",
+                              "fontWeight": "normal"
                             },
                             {
                               "type": "text",
@@ -11528,7 +11660,8 @@
                               "content": "Yes, one flight",
                               "lineHeight": "$text-body-leading",
                               "fontFamily": "$font-family-base",
-                              "fontSize": "$text-body-size"
+                              "fontSize": "$text-body-size",
+                              "fontWeight": "normal"
                             },
                             {
                               "type": "text",
@@ -11584,7 +11717,8 @@
                               "content": "Street, permit required",
                               "lineHeight": "$text-body-leading",
                               "fontFamily": "$font-family-base",
-                              "fontSize": "$text-body-size"
+                              "fontSize": "$text-body-size",
+                              "fontWeight": "normal"
                             },
                             {
                               "type": "text",
@@ -11640,7 +11774,8 @@
                               "content": "English, Twi",
                               "lineHeight": "$text-body-leading",
                               "fontFamily": "$font-family-base",
-                              "fontSize": "$text-body-size"
+                              "fontSize": "$text-body-size",
+                              "fontWeight": "normal"
                             },
                             {
                               "type": "text",
@@ -11728,7 +11863,8 @@
                               "content": "Midwife referral",
                               "lineHeight": "$text-body-leading",
                               "fontFamily": "$font-family-base",
-                              "fontSize": "$text-body-size"
+                              "fontSize": "$text-body-size",
+                              "fontWeight": "normal"
                             },
                             {
                               "type": "text",
@@ -11784,7 +11920,8 @@
                               "content": "Rochester Midwifery Group",
                               "lineHeight": "$text-body-leading",
                               "fontFamily": "$font-family-base",
-                              "fontSize": "$text-body-size"
+                              "fontSize": "$text-body-size",
+                              "fontWeight": "normal"
                             },
                             {
                               "type": "text",
@@ -11840,7 +11977,8 @@
                               "content": "Phone, January 12",
                               "lineHeight": "$text-body-leading",
                               "fontFamily": "$font-family-base",
-                              "fontSize": "$text-body-size"
+                              "fontSize": "$text-body-size",
+                              "fontWeight": "normal"
                             },
                             {
                               "type": "text",
@@ -11871,7 +12009,8 @@
                   "content": "Saving starts nothing and costs nothing. An engagement is asked for from Sarah's record, and an owner or admin approves it.",
                   "lineHeight": "$text-body-leading",
                   "fontFamily": "$font-family-base",
-                  "fontSize": "$text-body-size"
+                  "fontSize": "$text-body-size",
+                  "fontWeight": "normal"
                 },
                 {
                   "type": "frame",
@@ -12054,7 +12193,8 @@
                               "content": "Find the Client",
                               "lineHeight": "$text-body-leading",
                               "fontFamily": "$font-family-base",
-                              "fontSize": "$text-body-sm-size"
+                              "fontSize": "$text-body-sm-size",
+                              "fontWeight": "normal"
                             }
                           ]
                         }
@@ -12117,7 +12257,8 @@
                               "content": "Who Sarah is",
                               "lineHeight": "$text-body-leading",
                               "fontFamily": "$font-family-base",
-                              "fontSize": "$text-body-sm-size"
+                              "fontSize": "$text-body-sm-size",
+                              "fontWeight": "normal"
                             },
                             {
                               "type": "frame",
@@ -12137,7 +12278,8 @@
                                   "content": "Name",
                                   "lineHeight": "$text-meta-leading",
                                   "fontFamily": "$font-family-base",
-                                  "fontSize": "$text-meta-size"
+                                  "fontSize": "$text-meta-size",
+                                  "fontWeight": "normal"
                                 },
                                 {
                                   "type": "text",
@@ -12149,7 +12291,8 @@
                                   "content": "Date of birth",
                                   "lineHeight": "$text-meta-leading",
                                   "fontFamily": "$font-family-base",
-                                  "fontSize": "$text-meta-size"
+                                  "fontSize": "$text-meta-size",
+                                  "fontWeight": "normal"
                                 }
                               ]
                             }
@@ -12214,7 +12357,8 @@
                               "content": "How to reach Sarah",
                               "lineHeight": "$text-body-leading",
                               "fontFamily": "$font-family-base",
-                              "fontSize": "$text-body-sm-size"
+                              "fontSize": "$text-body-sm-size",
+                              "fontWeight": "normal"
                             },
                             {
                               "type": "frame",
@@ -12234,7 +12378,8 @@
                                   "content": "Email address",
                                   "lineHeight": "$text-meta-leading",
                                   "fontFamily": "$font-family-base",
-                                  "fontSize": "$text-meta-size"
+                                  "fontSize": "$text-meta-size",
+                                  "fontWeight": "normal"
                                 },
                                 {
                                   "type": "text",
@@ -12246,7 +12391,8 @@
                                   "content": "Phone number",
                                   "lineHeight": "$text-meta-leading",
                                   "fontFamily": "$font-family-base",
-                                  "fontSize": "$text-meta-size"
+                                  "fontSize": "$text-meta-size",
+                                  "fontWeight": "normal"
                                 }
                               ]
                             }
@@ -12311,7 +12457,8 @@
                               "content": "Where Sarah lives",
                               "lineHeight": "$text-body-leading",
                               "fontFamily": "$font-family-base",
-                              "fontSize": "$text-body-sm-size"
+                              "fontSize": "$text-body-sm-size",
+                              "fontWeight": "normal"
                             },
                             {
                               "type": "frame",
@@ -12331,7 +12478,8 @@
                                   "content": "Address",
                                   "lineHeight": "$text-meta-leading",
                                   "fontFamily": "$font-family-base",
-                                  "fontSize": "$text-meta-size"
+                                  "fontSize": "$text-meta-size",
+                                  "fontWeight": "normal"
                                 }
                               ]
                             }
@@ -12528,7 +12676,8 @@
                               "content": "Sarah",
                               "lineHeight": "$text-body-leading",
                               "fontFamily": "$font-family-base",
-                              "fontSize": "$text-body-size"
+                              "fontSize": "$text-body-size",
+                              "fontWeight": "normal"
                             },
                             {
                               "type": "text",
@@ -12584,7 +12733,8 @@
                               "content": "Beck",
                               "lineHeight": "$text-body-leading",
                               "fontFamily": "$font-family-base",
-                              "fontSize": "$text-body-size"
+                              "fontSize": "$text-body-size",
+                              "fontWeight": "normal"
                             },
                             {
                               "type": "text",
@@ -12640,7 +12790,8 @@
                               "content": "Sar",
                               "lineHeight": "$text-body-leading",
                               "fontFamily": "$font-family-base",
-                              "fontSize": "$text-body-size"
+                              "fontSize": "$text-body-size",
+                              "fontWeight": "normal"
                             },
                             {
                               "type": "text",
@@ -12696,7 +12847,8 @@
                               "content": "March 14, 1991",
                               "lineHeight": "$text-body-leading",
                               "fontFamily": "$font-family-base",
-                              "fontSize": "$text-body-size"
+                              "fontSize": "$text-body-size",
+                              "fontWeight": "normal"
                             },
                             {
                               "type": "text",
@@ -12784,7 +12936,8 @@
                               "content": "sarah.beck@gmail.com",
                               "lineHeight": "$text-body-leading",
                               "fontFamily": "$font-family-base",
-                              "fontSize": "$text-body-size"
+                              "fontSize": "$text-body-size",
+                              "fontWeight": "normal"
                             },
                             {
                               "type": "text",
@@ -12840,7 +12993,8 @@
                               "content": "(585) 555-0142",
                               "lineHeight": "$text-body-leading",
                               "fontFamily": "$font-family-base",
-                              "fontSize": "$text-body-size"
+                              "fontSize": "$text-body-size",
+                              "fontWeight": "normal"
                             },
                             {
                               "type": "text",
@@ -12928,7 +13082,8 @@
                               "content": "44 Alexander Street, Rochester, NY 14607",
                               "lineHeight": "$text-body-leading",
                               "fontFamily": "$font-family-base",
-                              "fontSize": "$text-body-size"
+                              "fontSize": "$text-body-size",
+                              "fontWeight": "normal"
                             },
                             {
                               "type": "text",
@@ -12959,7 +13114,8 @@
                   "content": "Saving starts nothing and costs nothing. An engagement is asked for from Sarah's record, and an owner or admin approves it.",
                   "lineHeight": "$text-body-leading",
                   "fontFamily": "$font-family-base",
-                  "fontSize": "$text-body-size"
+                  "fontSize": "$text-body-size",
+                  "fontWeight": "normal"
                 },
                 {
                   "type": "frame",
@@ -13228,7 +13384,8 @@
                       "content": "Who the Client is",
                       "lineHeight": "$text-meta-leading",
                       "fontFamily": "$font-family-base",
-                      "fontSize": "$text-meta-size"
+                      "fontSize": "$text-meta-size",
+                      "fontWeight": "normal"
                     },
                     {
                       "type": "text",
@@ -15360,7 +15517,7 @@
                               "fill": "$color-on-surface-variant",
                               "textGrowth": "fixed-width",
                               "width": "fill_container",
-                              "content": "A payment can only be recorded by the Stripe webhook — a cheque or a bank transfer cannot be recorded at all (#271). Nothing stops a voided Contract being invoiced (#275).",
+                              "content": "A payment can only be recorded by the Stripe webhook — a check or a bank transfer cannot be recorded at all (#271). Nothing stops a voided Contract being invoiced (#275).",
                               "fontFamily": "$font-family-base",
                               "fontSize": "$text-meta-size",
                               "fontWeight": "normal"
@@ -21588,7 +21745,8 @@
                           "fill": "$color-on-surface-variant",
                           "content": "Messages",
                           "fontFamily": "$font-family-base",
-                          "fontSize": 14
+                          "fontSize": 14,
+                          "fontWeight": "normal"
                         }
                       ]
                     },
@@ -21612,7 +21770,8 @@
                           "fill": "$color-on-surface-variant",
                           "content": "Birth plan",
                           "fontFamily": "$font-family-base",
-                          "fontSize": 14
+                          "fontSize": 14,
+                          "fontWeight": "normal"
                         }
                       ]
                     },
@@ -21636,7 +21795,8 @@
                           "fill": "$color-on-surface-variant",
                           "content": "Contract",
                           "fontFamily": "$font-family-base",
-                          "fontSize": 14
+                          "fontSize": 14,
+                          "fontWeight": "normal"
                         }
                       ]
                     }
@@ -22767,7 +22927,8 @@
                           "fill": "$color-on-surface-variant",
                           "content": "Messages",
                           "fontFamily": "$font-family-base",
-                          "fontSize": 14
+                          "fontSize": 14,
+                          "fontWeight": "normal"
                         }
                       ]
                     },
@@ -22791,7 +22952,8 @@
                           "fill": "$color-on-surface-variant",
                           "content": "Birth plan",
                           "fontFamily": "$font-family-base",
-                          "fontSize": 14
+                          "fontSize": 14,
+                          "fontWeight": "normal"
                         }
                       ]
                     },
@@ -22815,7 +22977,8 @@
                           "fill": "$color-on-surface-variant",
                           "content": "Contract",
                           "fontFamily": "$font-family-base",
-                          "fontSize": 14
+                          "fontSize": 14,
+                          "fontWeight": "normal"
                         }
                       ]
                     }
@@ -24453,7 +24616,8 @@
                   "fill": "$color-on-surface-variant",
                   "content": "Messages",
                   "fontFamily": "$font-family-base",
-                  "fontSize": 13
+                  "fontSize": 13,
+                  "fontWeight": "normal"
                 }
               ]
             },
@@ -24474,7 +24638,8 @@
                   "fill": "$color-on-surface-variant",
                   "content": "Birth plan",
                   "fontFamily": "$font-family-base",
-                  "fontSize": 13
+                  "fontSize": 13,
+                  "fontWeight": "normal"
                 }
               ]
             },
@@ -24495,7 +24660,8 @@
                   "fill": "$color-on-surface-variant",
                   "content": "Contract",
                   "fontFamily": "$font-family-base",
-                  "fontSize": 13
+                  "fontSize": 13,
+                  "fontWeight": "normal"
                 }
               ]
             }
