@@ -1,6 +1,6 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Page } from '@playwright/test';
-import { E2E_API_HOST, E2E_API_PORT } from './ports';
+import { E2E_API_HOST, E2E_API_PORT, PREVIEW_SERVER_ORIGIN } from './ports';
 import {
 	seedClient,
 	seedContractorDoula,
@@ -10,6 +10,7 @@ import {
 } from './portalClient';
 import { seedEngagement, seedEngagementRequest } from './stack';
 import { enterPracticeAsEnrolled } from './mfa';
+import { seedAccountWithNoPractice } from './staffSignup';
 
 const API_URL = `http://${E2E_API_HOST}:${E2E_API_PORT}`;
 
@@ -134,6 +135,36 @@ test('Archetype A -- the screens a person meets signed out', async ({ page }) =>
 	for (const route of routes) {
 		await scan(page, route);
 	}
+});
+
+// Archetype A's one outlier (#745, #749): `/no-practice` needs a live
+// session, unlike every route in the no-fixture batch above. Opened with
+// no session at all, it hits its own onMount redirect to /login (see
+// the page's doc comment) and a scan there would measure the login
+// screen, not this one -- so the session here has to resolve to no
+// Practice specifically, not to no session. seedAccountWithNoPractice
+// (staffSignup.ts) provisions exactly that: an Identity Platform account
+// exchanged for a session with no POST /api/staff/signup in between. The
+// cookie is injected straight into the browser context -- the same
+// shape mfa.ts's enterPracticeAsEnrolled uses -- since nothing here
+// needs an interactive sign-in.
+test('Archetype A -- the no-Practice landing, behind a session with no Practice', async ({
+	page,
+	request,
+	context
+}) => {
+	const { headers } = await seedAccountWithNoPractice(request);
+	const token = headers.Cookie.replace('__session=', '');
+	await context.addCookies([
+		{ name: '__session', value: token, url: PREVIEW_SERVER_ORIGIN, httpOnly: true, secure: false, sameSite: 'Lax' }
+	]);
+
+	await scan(page, {
+		key: 'no-practice',
+		archetype: 'A',
+		url: '/no-practice',
+		h1: 'Your account is not part of a Practice'
+	});
 });
 
 // Archetypes B, C, D, E, F and G, all behind one Staff session. Provisioned
