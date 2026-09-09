@@ -89,7 +89,7 @@ func TestPostManualPaymentHandler_ByHandCheckHappyPath(t *testing.T) {
 	srv, session := newInvoiceServer(t, db, uid, payments.NewFakeClient())
 	defer srv.Close()
 
-	resp := postPayment(t, srv, session, practiceID, invoiceID, payments.PaymentMethodCheck, "check #204", isoDate(time.Now()))
+	resp := postPayment(t, srv, session, practiceID, invoiceID, payments.PaymentMethodCheck, "check #204", isoDate(time.Now().UTC()))
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusCreated {
@@ -134,7 +134,7 @@ func TestPostManualPaymentHandler_OtherMethodRequiresNote(t *testing.T) {
 	srv, session := newInvoiceServer(t, db, uid, payments.NewFakeClient())
 	defer srv.Close()
 
-	resp := postPayment(t, srv, session, practiceID, invoiceID, payments.PaymentMethodOther, "", isoDate(time.Now()))
+	resp := postPayment(t, srv, session, practiceID, invoiceID, payments.PaymentMethodOther, "", isoDate(time.Now().UTC()))
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusBadRequest {
@@ -157,7 +157,7 @@ func TestPostManualPaymentHandler_OtherMethodWithNoteSucceeds(t *testing.T) {
 	srv, session := newInvoiceServer(t, db, uid, payments.NewFakeClient())
 	defer srv.Close()
 
-	resp := postPayment(t, srv, session, practiceID, invoiceID, payments.PaymentMethodOther, "Venmo, screenshot on file", isoDate(time.Now()))
+	resp := postPayment(t, srv, session, practiceID, invoiceID, payments.PaymentMethodOther, "Venmo, screenshot on file", isoDate(time.Now().UTC()))
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusCreated {
@@ -177,7 +177,7 @@ func TestPostManualPaymentHandler_InvalidMethodRefused(t *testing.T) {
 	srv, session := newInvoiceServer(t, db, uid, payments.NewFakeClient())
 	defer srv.Close()
 
-	resp := postPayment(t, srv, session, practiceID, invoiceID, payments.PaymentMethod("venmo"), "", isoDate(time.Now()))
+	resp := postPayment(t, srv, session, practiceID, invoiceID, payments.PaymentMethod("venmo"), "", isoDate(time.Now().UTC()))
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusBadRequest {
@@ -197,7 +197,7 @@ func TestPostManualPaymentHandler_FutureDateRefused(t *testing.T) {
 	srv, session := newInvoiceServer(t, db, uid, payments.NewFakeClient())
 	defer srv.Close()
 
-	resp := postPayment(t, srv, session, practiceID, invoiceID, payments.PaymentMethodCash, "", isoDate(time.Now().AddDate(0, 0, 1)))
+	resp := postPayment(t, srv, session, practiceID, invoiceID, payments.PaymentMethodCash, "", isoDate(time.Now().UTC().AddDate(0, 0, 1)))
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusBadRequest {
@@ -259,7 +259,7 @@ func TestPostManualPaymentHandler_NotOpenInvoiceRefused(t *testing.T) {
 
 	for _, status := range []string{invoiceStatusDraft, invoiceStatusVoid, invoiceStatusUncollectible, invoiceStatusPaid} {
 		invoiceID := seedInvoice(t, db, practiceID, contractID, "in_not_open_"+status, status, 15000, time.Now())
-		resp := postPayment(t, srv, session, practiceID, invoiceID, payments.PaymentMethodCash, "", isoDate(time.Now()))
+		resp := postPayment(t, srv, session, practiceID, invoiceID, payments.PaymentMethodCash, "", isoDate(time.Now().UTC()))
 		if resp.StatusCode != http.StatusConflict {
 			t.Fatalf("status=%q: status = %d, want %d", status, resp.StatusCode, http.StatusConflict)
 		}
@@ -279,7 +279,7 @@ func TestPostManualPaymentHandler_DoulaForbidden(t *testing.T) {
 	srv, session := newInvoiceServer(t, db, uid, payments.NewFakeClient())
 	defer srv.Close()
 
-	resp := postPayment(t, srv, session, practiceID, invoiceID, payments.PaymentMethodCash, "", isoDate(time.Now()))
+	resp := postPayment(t, srv, session, practiceID, invoiceID, payments.PaymentMethodCash, "", isoDate(time.Now().UTC()))
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusForbidden {
@@ -296,7 +296,7 @@ func TestPostManualPaymentHandler_InvoiceNotFound(t *testing.T) {
 	srv, session := newInvoiceServer(t, db, uid, payments.NewFakeClient())
 	defer srv.Close()
 
-	resp := postPayment(t, srv, session, practiceID, "00000000-0000-0000-0000-000000000000", payments.PaymentMethodCash, "", isoDate(time.Now()))
+	resp := postPayment(t, srv, session, practiceID, "00000000-0000-0000-0000-000000000000", payments.PaymentMethodCash, "", isoDate(time.Now().UTC()))
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusNotFound {
@@ -319,7 +319,7 @@ func TestPostManualPaymentHandler_StripeBackedCallsPayOutOfBandThenRecords(t *te
 	srv, session := newInvoiceServer(t, db, uid, client)
 	defer srv.Close()
 
-	resp := postPayment(t, srv, session, practiceID, invoiceID, payments.PaymentMethodBankTransfer, "", isoDate(time.Now()))
+	resp := postPayment(t, srv, session, practiceID, invoiceID, payments.PaymentMethodBankTransfer, "", isoDate(time.Now().UTC()))
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusCreated {
@@ -352,7 +352,7 @@ func TestPostManualPaymentHandler_StripePayOutOfBandFailureRecordsNothing(t *tes
 	srv, session := newInvoiceServer(t, db, uid, client)
 	defer srv.Close()
 
-	resp := postPayment(t, srv, session, practiceID, invoiceID, payments.PaymentMethodCheck, "", isoDate(time.Now()))
+	resp := postPayment(t, srv, session, practiceID, invoiceID, payments.PaymentMethodCheck, "", isoDate(time.Now().UTC()))
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusBadGateway {
@@ -574,7 +574,7 @@ func TestPostManualPaymentHandler_MalformedInvoiceIDReturns400(t *testing.T) {
 	srv, session := newInvoiceServer(t, db, uid, payments.NewFakeClient())
 	defer srv.Close()
 
-	resp := postPayment(t, srv, session, practiceID, "not-a-uuid", payments.PaymentMethodCash, "", isoDate(time.Now()))
+	resp := postPayment(t, srv, session, practiceID, "not-a-uuid", payments.PaymentMethodCash, "", isoDate(time.Now().UTC()))
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusBadRequest {
