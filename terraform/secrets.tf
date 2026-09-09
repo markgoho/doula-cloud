@@ -22,15 +22,11 @@
 #
 # The accessor grant is the point of #743: a secret that exists but is not
 # granted to the identity reading it fails at container start, silently,
-# until that moment. Every grant on every secret below is its own
-# `google_secret_manager_secret_iam_member` resource, imported alongside its
-# secret — a secret imported without its grants would be exactly the
-# half-configuration this ticket exists to close.
-#
-# `doula-cloud-pg-migrate-dsn` and `doula-cloud-pg-site-builder-dsn` carry no
-# accessor grants at all (`gcloud secrets get-iam-policy` returns an empty
-# binding set for both) — neither is read by `doula-api`'s own container, so
-# there is nothing to import for them beyond the shell.
+# until that moment. Every grant below is its own real, imported
+# `google_secret_manager_secret_iam_member` resource, read from `gcloud
+# secrets get-iam-policy` rather than assumed, and kept next to the secret it
+# grants access to — a secret imported without its grants would be exactly
+# the half-configuration this ticket exists to close.
 #
 # `firebase-app-hosting-github-oauth-github-oauthtoken-a16322` is not here.
 # See docs/infrastructure.md's by-hand table for why.
@@ -56,97 +52,11 @@ resource "google_secret_manager_secret" "github_dispatch_token" {
   }
 }
 
-# Accessor grants. Every one below is a real, imported grant read from
-# `gcloud secrets get-iam-policy` — none is assumed from `docs/environment.md`
-# or from `doula-api`'s own env var list in `cloud_run.tf`.
-
 resource "google_secret_manager_secret_iam_member" "github_dispatch_token_accessor" {
   member    = "serviceAccount:850855848778-compute@developer.gserviceaccount.com"
   project   = "doula-cloud"
   role      = "roles/secretmanager.secretAccessor"
   secret_id = google_secret_manager_secret.github_dispatch_token.id
-}
-
-resource "google_secret_manager_secret_iam_member" "mailgun_api_key_accessor" {
-  member    = "serviceAccount:850855848778-compute@developer.gserviceaccount.com"
-  project   = "doula-cloud"
-  role      = "roles/secretmanager.secretAccessor"
-  secret_id = google_secret_manager_secret.mailgun_api_key.id
-}
-
-resource "google_secret_manager_secret_iam_member" "mailgun_webhook_signing_key_accessor" {
-  member    = "serviceAccount:850855848778-compute@developer.gserviceaccount.com"
-  project   = "doula-cloud"
-  role      = "roles/secretmanager.secretAccessor"
-  secret_id = google_secret_manager_secret.mailgun_webhook_signing_key.id
-}
-
-# `doula-cloud-notification-worker-secret` carries three accessors: the
-# runtime container itself, `deploy-api` (which writes the header value onto
-# the Scheduler jobs at deploy time — see `docs/environment.md`), and
-# `terraform-plan@`, added in #1044 so the `data` source in `scheduler.tf` can
-# read it during `plan`.
-resource "google_secret_manager_secret_iam_member" "notification_worker_secret_compute_accessor" {
-  member    = "serviceAccount:850855848778-compute@developer.gserviceaccount.com"
-  project   = "doula-cloud"
-  role      = "roles/secretmanager.secretAccessor"
-  secret_id = google_secret_manager_secret.notification_worker_secret.id
-}
-
-resource "google_secret_manager_secret_iam_member" "notification_worker_secret_deploy_accessor" {
-  member    = "serviceAccount:github-action-733741680@doula-cloud.iam.gserviceaccount.com"
-  project   = "doula-cloud"
-  role      = "roles/secretmanager.secretAccessor"
-  secret_id = google_secret_manager_secret.notification_worker_secret.id
-}
-
-resource "google_secret_manager_secret_iam_member" "notification_worker_secret_terraform_plan_accessor" {
-  member    = "serviceAccount:terraform-plan@doula-cloud.iam.gserviceaccount.com"
-  project   = "doula-cloud"
-  role      = "roles/secretmanager.secretAccessor"
-  secret_id = google_secret_manager_secret.notification_worker_secret.id
-}
-
-resource "google_secret_manager_secret_iam_member" "pg_app_runtime_dsn_accessor" {
-  member    = "serviceAccount:850855848778-compute@developer.gserviceaccount.com"
-  project   = "doula-cloud"
-  role      = "roles/secretmanager.secretAccessor"
-  secret_id = google_secret_manager_secret.pg_app_runtime_dsn.id
-}
-
-resource "google_secret_manager_secret_iam_member" "stripe_account_webhook_secret_accessor" {
-  member    = "serviceAccount:850855848778-compute@developer.gserviceaccount.com"
-  project   = "doula-cloud"
-  role      = "roles/secretmanager.secretAccessor"
-  secret_id = google_secret_manager_secret.stripe_account_webhook_secret.id
-}
-
-resource "google_secret_manager_secret_iam_member" "stripe_api_key_accessor" {
-  member    = "serviceAccount:850855848778-compute@developer.gserviceaccount.com"
-  project   = "doula-cloud"
-  role      = "roles/secretmanager.secretAccessor"
-  secret_id = google_secret_manager_secret.stripe_api_key.id
-}
-
-resource "google_secret_manager_secret_iam_member" "stripe_connect_webhook_secret_accessor" {
-  member    = "serviceAccount:850855848778-compute@developer.gserviceaccount.com"
-  project   = "doula-cloud"
-  role      = "roles/secretmanager.secretAccessor"
-  secret_id = google_secret_manager_secret.stripe_connect_webhook_secret.id
-}
-
-resource "google_secret_manager_secret_iam_member" "stripe_webhook_secret_accessor" {
-  member    = "serviceAccount:850855848778-compute@developer.gserviceaccount.com"
-  project   = "doula-cloud"
-  role      = "roles/secretmanager.secretAccessor"
-  secret_id = google_secret_manager_secret.stripe_webhook_secret.id
-}
-
-resource "google_secret_manager_secret_iam_member" "vapid_private_key_accessor" {
-  member    = "serviceAccount:850855848778-compute@developer.gserviceaccount.com"
-  project   = "doula-cloud"
-  role      = "roles/secretmanager.secretAccessor"
-  secret_id = google_secret_manager_secret.vapid_private_key.id
 }
 
 resource "google_secret_manager_secret" "mailgun_api_key" {
@@ -170,6 +80,13 @@ resource "google_secret_manager_secret" "mailgun_api_key" {
   }
 }
 
+resource "google_secret_manager_secret_iam_member" "mailgun_api_key_accessor" {
+  member    = "serviceAccount:850855848778-compute@developer.gserviceaccount.com"
+  project   = "doula-cloud"
+  role      = "roles/secretmanager.secretAccessor"
+  secret_id = google_secret_manager_secret.mailgun_api_key.id
+}
+
 resource "google_secret_manager_secret" "mailgun_webhook_signing_key" {
   annotations         = {}
   deletion_policy     = "DELETE"
@@ -191,6 +108,13 @@ resource "google_secret_manager_secret" "mailgun_webhook_signing_key" {
   }
 }
 
+resource "google_secret_manager_secret_iam_member" "mailgun_webhook_signing_key_accessor" {
+  member    = "serviceAccount:850855848778-compute@developer.gserviceaccount.com"
+  project   = "doula-cloud"
+  role      = "roles/secretmanager.secretAccessor"
+  secret_id = google_secret_manager_secret.mailgun_webhook_signing_key.id
+}
+
 resource "google_secret_manager_secret" "notification_worker_secret" {
   annotations         = {}
   deletion_policy     = "DELETE"
@@ -210,6 +134,31 @@ resource "google_secret_manager_secret" "notification_worker_secret" {
   lifecycle {
     prevent_destroy = true
   }
+}
+
+# Three accessors, not one: the runtime container itself, `deploy-api` (which
+# writes the header value onto the Scheduler jobs at deploy time — see
+# docs/environment.md), and `terraform-plan@`, added in #1044 so the `data`
+# source in `scheduler.tf` can read this secret during `plan`.
+resource "google_secret_manager_secret_iam_member" "notification_worker_secret_compute_accessor" {
+  member    = "serviceAccount:850855848778-compute@developer.gserviceaccount.com"
+  project   = "doula-cloud"
+  role      = "roles/secretmanager.secretAccessor"
+  secret_id = google_secret_manager_secret.notification_worker_secret.id
+}
+
+resource "google_secret_manager_secret_iam_member" "notification_worker_secret_deploy_accessor" {
+  member    = "serviceAccount:github-action-733741680@doula-cloud.iam.gserviceaccount.com"
+  project   = "doula-cloud"
+  role      = "roles/secretmanager.secretAccessor"
+  secret_id = google_secret_manager_secret.notification_worker_secret.id
+}
+
+resource "google_secret_manager_secret_iam_member" "notification_worker_secret_terraform_plan_accessor" {
+  member    = "serviceAccount:terraform-plan@doula-cloud.iam.gserviceaccount.com"
+  project   = "doula-cloud"
+  role      = "roles/secretmanager.secretAccessor"
+  secret_id = google_secret_manager_secret.notification_worker_secret.id
 }
 
 resource "google_secret_manager_secret" "pg_app_runtime_dsn" {
@@ -237,6 +186,16 @@ resource "google_secret_manager_secret" "pg_app_runtime_dsn" {
   }
 }
 
+resource "google_secret_manager_secret_iam_member" "pg_app_runtime_dsn_accessor" {
+  member    = "serviceAccount:850855848778-compute@developer.gserviceaccount.com"
+  project   = "doula-cloud"
+  role      = "roles/secretmanager.secretAccessor"
+  secret_id = google_secret_manager_secret.pg_app_runtime_dsn.id
+}
+
+# No accessor grant: `gcloud secrets get-iam-policy doula-cloud-pg-migrate-dsn`
+# returns an empty binding set. This DSN is not read by `doula-api`'s own
+# container, so there is nothing to import here beyond the shell.
 resource "google_secret_manager_secret" "pg_migrate_dsn" {
   annotations         = {}
   deletion_policy     = "DELETE"
@@ -262,6 +221,8 @@ resource "google_secret_manager_secret" "pg_migrate_dsn" {
   }
 }
 
+# No accessor grant: same as `pg_migrate_dsn` above, `gcloud secrets
+# get-iam-policy doula-cloud-pg-site-builder-dsn` returns an empty binding set.
 resource "google_secret_manager_secret" "pg_site_builder_dsn" {
   annotations         = {}
   deletion_policy     = "DELETE"
@@ -304,6 +265,13 @@ resource "google_secret_manager_secret" "stripe_account_webhook_secret" {
   }
 }
 
+resource "google_secret_manager_secret_iam_member" "stripe_account_webhook_secret_accessor" {
+  member    = "serviceAccount:850855848778-compute@developer.gserviceaccount.com"
+  project   = "doula-cloud"
+  role      = "roles/secretmanager.secretAccessor"
+  secret_id = google_secret_manager_secret.stripe_account_webhook_secret.id
+}
+
 resource "google_secret_manager_secret" "stripe_api_key" {
   annotations         = {}
   deletion_policy     = "DELETE"
@@ -323,6 +291,13 @@ resource "google_secret_manager_secret" "stripe_api_key" {
   lifecycle {
     prevent_destroy = true
   }
+}
+
+resource "google_secret_manager_secret_iam_member" "stripe_api_key_accessor" {
+  member    = "serviceAccount:850855848778-compute@developer.gserviceaccount.com"
+  project   = "doula-cloud"
+  role      = "roles/secretmanager.secretAccessor"
+  secret_id = google_secret_manager_secret.stripe_api_key.id
 }
 
 resource "google_secret_manager_secret" "stripe_connect_webhook_secret" {
@@ -346,6 +321,13 @@ resource "google_secret_manager_secret" "stripe_connect_webhook_secret" {
   }
 }
 
+resource "google_secret_manager_secret_iam_member" "stripe_connect_webhook_secret_accessor" {
+  member    = "serviceAccount:850855848778-compute@developer.gserviceaccount.com"
+  project   = "doula-cloud"
+  role      = "roles/secretmanager.secretAccessor"
+  secret_id = google_secret_manager_secret.stripe_connect_webhook_secret.id
+}
+
 resource "google_secret_manager_secret" "stripe_webhook_secret" {
   annotations         = {}
   deletion_policy     = "DELETE"
@@ -367,6 +349,13 @@ resource "google_secret_manager_secret" "stripe_webhook_secret" {
   }
 }
 
+resource "google_secret_manager_secret_iam_member" "stripe_webhook_secret_accessor" {
+  member    = "serviceAccount:850855848778-compute@developer.gserviceaccount.com"
+  project   = "doula-cloud"
+  role      = "roles/secretmanager.secretAccessor"
+  secret_id = google_secret_manager_secret.stripe_webhook_secret.id
+}
+
 resource "google_secret_manager_secret" "vapid_private_key" {
   annotations         = {}
   deletion_policy     = "DELETE"
@@ -386,4 +375,11 @@ resource "google_secret_manager_secret" "vapid_private_key" {
   lifecycle {
     prevent_destroy = true
   }
+}
+
+resource "google_secret_manager_secret_iam_member" "vapid_private_key_accessor" {
+  member    = "serviceAccount:850855848778-compute@developer.gserviceaccount.com"
+  project   = "doula-cloud"
+  role      = "roles/secretmanager.secretAccessor"
+  secret_id = google_secret_manager_secret.vapid_private_key.id
 }
