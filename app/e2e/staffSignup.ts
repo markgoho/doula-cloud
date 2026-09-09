@@ -1,5 +1,6 @@
 import { expect, type APIRequestContext } from '@playwright/test';
 import { E2E_API_HOST, E2E_API_PORT, E2E_EMULATOR_HOST, E2E_EMULATOR_PORT } from './ports';
+import { signIn } from './auth';
 
 const EMULATOR_URL = `http://${E2E_EMULATOR_HOST}:${E2E_EMULATOR_PORT}`;
 const API_URL = `http://${E2E_API_HOST}:${E2E_API_PORT}`;
@@ -55,4 +56,38 @@ export async function seedFoundingOwner(
 	const { practiceId, staffId } = JSON.parse(signupBody);
 
 	return { email, password: FOUNDING_OWNER_PASSWORD, idToken, localId, practiceId, staffId };
+}
+
+export interface SeededNoPracticeAccount {
+	email: string;
+	headers: { Cookie: string };
+}
+
+/**
+ * Provisions an Identity Platform account and exchanges its ID token for
+ * a session via auth.ts's signIn -- without ever calling
+ * POST /api/staff/signup in between, unlike seedFoundingOwner above. The
+ * resulting session is authenticated but resolves to no staff row: the
+ * state `/no-practice` (#745) exists for, and which #749's accessibility
+ * scan needs a fixture for, distinct from holding no session at all.
+ */
+export async function seedAccountWithNoPractice(request: APIRequestContext): Promise<SeededNoPracticeAccount> {
+	// Same random-suffix reasoning as seedFoundingOwner above.
+	const unique = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+	const email = `no-practice-${unique}@example.com`;
+
+	// No password constant of its own: this account never signs in through
+	// a form, only ever by ID token, so the value only has to satisfy
+	// accounts:signUp -- reusing FOUNDING_OWNER_PASSWORD here would name
+	// this account after a role it never holds.
+	const signUp = await request.post(
+		`${EMULATOR_URL}/identitytoolkit.googleapis.com/v1/accounts:signUp?key=fake-key`,
+		{ data: { email, password: 'password123', returnSecureToken: true } }
+	);
+	expect(signUp.ok(), `no-practice account signUp failed: ${signUp.status()} ${await signUp.text()}`).toBe(true);
+	const { idToken } = await signUp.json();
+
+	const headers = await signIn(request, API_URL, idToken);
+
+	return { email, headers };
 }
