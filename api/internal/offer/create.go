@@ -102,9 +102,9 @@ func CreateHandler(enq tasknudge.Enqueuer) http.Handler {
 			return
 		}
 
-		resp, status, msg := create(r.Context(), tx, practiceID, engagementID, actorStaffID, req, facts)
+		resp, status, code, msg, details := create(r.Context(), tx, practiceID, engagementID, actorStaffID, req, facts)
 		if status != http.StatusCreated {
-			apierr.WriteError(w, msg, status)
+			apierr.Write(w, status, code, msg, details)
 			return
 		}
 		if req.StaffID == "" {
@@ -229,13 +229,13 @@ func writeEngagementErr(w http.ResponseWriter, err error) {
 // create resolves the Offer's target and writes the row. The two target
 // paths differ in exactly one thing -- whether an Invitation has to be
 // minted first -- and converge on the same insert.
-func create(ctx context.Context, tx *sql.Tx, practiceID, engagementID, actorStaffID string, req CreateRequest, f facts) (CreateResponse, int, string) {
-	target, status, msg := resolveTarget(ctx, tx, practiceID, actorStaffID, req)
+func create(ctx context.Context, tx *sql.Tx, practiceID, engagementID, actorStaffID string, req CreateRequest, f facts) (CreateResponse, int, apierr.Code, string, map[string]string) {
+	target, status, code, msg, details := resolveTarget(ctx, tx, practiceID, actorStaffID, req)
 	if status != http.StatusOK {
-		return CreateResponse{}, status, msg
+		return CreateResponse{}, status, code, msg, details
 	}
 	if status, msg := checkFee(target.employmentType, req.AmountCents); status != http.StatusOK {
-		return CreateResponse{}, status, msg
+		return CreateResponse{}, status, apierr.CodeForStatus(status), msg, nil
 	}
 
 	// Anything already open for this target expires on the way past, so a
@@ -243,15 +243,15 @@ func create(ctx context.Context, tx *sql.Tx, practiceID, engagementID, actorStaf
 	// nobody would call a duplicate.
 	if err := expireOpen(ctx, tx, byEngagementID, engagementID); err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		return CreateResponse{}, http.StatusInternalServerError, apierr.MsgInternalError
+		return CreateResponse{}, http.StatusInternalServerError, apierr.CodeInternal, apierr.MsgInternalError, nil
 	}
 	open, err := hasOpenOffer(ctx, tx, engagementID, target)
 	if err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		return CreateResponse{}, http.StatusInternalServerError, apierr.MsgInternalError
+		return CreateResponse{}, http.StatusInternalServerError, apierr.CodeInternal, apierr.MsgInternalError, nil
 	}
 	if open {
-		return CreateResponse{}, http.StatusConflict, "that person already has an open offer on this engagement"
+		return CreateResponse{}, http.StatusConflict, apierr.CodeConflict, "that person already has an open offer on this engagement", nil
 	}
 
 	expiresAt := time.Now().Add(Lifetime)
@@ -266,7 +266,7 @@ func create(ctx context.Context, tx *sql.Tx, practiceID, engagementID, actorStaf
 		f.clientFirstInitial, f.clientArea, f.dueDate, actorStaffID, expiresAt, target.accessCodeDigest,
 	).Scan(&offerID); err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		return CreateResponse{}, http.StatusInternalServerError, apierr.MsgInternalError
+		return CreateResponse{}, http.StatusInternalServerError, apierr.CodeInternal, apierr.MsgInternalError, nil
 	}
 	if err := activity.Record(ctx, tx, activity.Entry{
 		PracticeID:  practiceID,
@@ -276,13 +276,13 @@ func create(ctx context.Context, tx *sql.Tx, practiceID, engagementID, actorStaf
 		Actor:       activity.StaffActor(actorStaffID),
 	}); err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		return CreateResponse{}, http.StatusInternalServerError, apierr.MsgInternalError
+		return CreateResponse{}, http.StatusInternalServerError, apierr.CodeInternal, apierr.MsgInternalError, nil
 	}
 
 	if target.invitationID.Valid {
 		if err := queue(ctx, tx, offerID, target.inviteToken, target.accessCode); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			return CreateResponse{}, http.StatusInternalServerError, apierr.MsgInternalError
+			return CreateResponse{}, http.StatusInternalServerError, apierr.CodeInternal, apierr.MsgInternalError, nil
 		}
 		// The Invitation's token was just rotated by MintInvitation, so a
 		// Staff invitation email still sitting unsent in its own outbox
@@ -291,11 +291,11 @@ func create(ctx context.Context, tx *sql.Tx, practiceID, engagementID, actorStaf
 		// Offer's email, which carries the same link.
 		if err := staffinvite.Refresh(ctx, tx, target.invitationID.String, target.inviteToken); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			return CreateResponse{}, http.StatusInternalServerError, apierr.MsgInternalError
+			return CreateResponse{}, http.StatusInternalServerError, apierr.CodeInternal, apierr.MsgInternalError, nil
 		}
 	}
 
-	return CreateResponse{OfferID: offerID, ExpiresAt: expiresAt.UTC().Format(time.RFC3339)}, http.StatusCreated, ""
+	return CreateResponse{OfferID: offerID, ExpiresAt: expiresAt.UTC().Format(time.RFC3339)}, http.StatusCreated, "", "", nil
 }
 
 // hasOpenOffer reports whether target already holds an open Offer on

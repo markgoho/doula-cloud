@@ -5,7 +5,9 @@ import (
 	"testing"
 	"time"
 
+	"doula-cloud/api/internal/mailsuppress"
 	"doula-cloud/api/internal/offer"
+	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/tasknudge"
 	"doula-cloud/api/internal/testdb"
 )
@@ -290,4 +292,140 @@ func TestCreateHandler_RefusesInvalidBodyAndNonPrivilegedCaller(t *testing.T) {
 
 	expectStatus(t, do(t, http.MethodPost, f.offersURL(), f.doulaSession, offerBody(f.doulaID, 45000)),
 		http.StatusForbidden)
+}
+
+// offerRowCounts reads back the three things #862's AC says a refused
+// Offer must never write: the engagement_offers row, a
+// practice_invitations row for address (email-target path only), and the
+// engagement_offer_outbox row that would carry it to Mailgun.
+func offerRowCounts(t *testing.T, db *testdb.DB, engagementID, address string) (offers, invitations, outbox int) {
+	t.Helper()
+	if err := db.Admin.QueryRowContext(t.Context(),
+		`SELECT count(*) FROM engagement_offers WHERE engagement_id = $1`, engagementID,
+	).Scan(&offers); err != nil {
+		t.Fatalf("count engagement_offers: %v", err)
+	}
+	if err := db.Admin.QueryRowContext(t.Context(),
+		`SELECT count(*) FROM practice_invitations WHERE lower(address) = $1`, mailsuppress.Normalize(address),
+	).Scan(&invitations); err != nil {
+		t.Fatalf("count practice_invitations: %v", err)
+	}
+	if err := db.Admin.QueryRowContext(t.Context(),
+		`SELECT count(*) FROM engagement_offer_outbox eoo JOIN engagement_offers eo ON eo.id = eoo.offer_id WHERE eo.engagement_id = $1`,
+		engagementID,
+	).Scan(&outbox); err != nil {
+		t.Fatalf("count engagement_offer_outbox: %v", err)
+	}
+	return offers, invitations, outbox
+}
+
+// TestCreateHandler_RefusesSuppressedStaffTarget is #862's AC for the
+// on-file Staff address: closer to #789's stored-record case than
+// #861's, so this is a 409 FAILED_PRECONDITION rather than a 400 field
+// error, but it shares #861's wording (staffauth.MsgAddressBlocked) and
+// its "nothing written" proof.
+func TestCreateHandler_RefusesSuppressedStaffTarget(t *testing.T) {
+	f := newFixture(t)
+	const doulaAddress = "uid-doula@example.com"
+	if err := mailsuppress.Record(t.Context(), f.db.Admin, doulaAddress, mailsuppress.CauseBounce, "evt-862-staff"); err != nil {
+		t.Fatalf("seed suppression: %v", err)
+	}
+
+	resp := do(t, http.MethodPost, f.offersURL(), f.ownerSession, offerBody(f.doulaID, 45000))
+	if resp.status != http.StatusConflict {
+		t.Fatalf("status = %d, want %d: %s", resp.status, http.StatusConflict, resp.body)
+	}
+	refusal := decodeRefusal(t, resp)
+	if refusal.Code != "FAILED_PRECONDITION" {
+		t.Fatalf("code = %q, want FAILED_PRECONDITION", refusal.Code)
+	}
+	if refusal.Details["email"] != staffauth.MsgAddressBlocked {
+		t.Fatalf("details = %v, want an email entry naming Blocked email addresses", refusal.Details)
+	}
+
+	offers, _, outbox := offerRowCounts(t, f.db, f.engagementID, doulaAddress)
+	if offers != 0 {
+		t.Fatalf("engagement_offers rows = %d, want 0 for a refused offer", offers)
+	}
+	if outbox != 0 {
+		t.Fatalf("engagement_offer_outbox rows = %d, want 0 for a refused offer", outbox)
+	}
+	if len(f.enq.Calls()) != 0 {
+		t.Fatalf("nudges fired = %v, want none for a refused offer", f.enq.Calls())
+	}
+}
+
+// TestCreateHandler_RefusesSuppressedEmailTarget is #862's AC for the
+// fresh request-body address: closer to #861's own shape, a 400 field
+// error naming the same wording. No practice_invitations row is minted
+// for it -- MintInvitation must never run for a suppressed address.
+func TestCreateHandler_RefusesSuppressedEmailTarget(t *testing.T) {
+	f := newFixture(t)
+	const address = "suppressed-offer@example.test"
+	if err := mailsuppress.Record(t.Context(), f.db.Admin, address, mailsuppress.CauseBounce, "evt-862-email"); err != nil {
+		t.Fatalf("seed suppression: %v", err)
+	}
+	fee := int64(52000)
+
+	resp := do(t, http.MethodPost, f.offersURL(), f.ownerSession, emailOfferBody(address, &fee))
+	if resp.status != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d: %s", resp.status, http.StatusBadRequest, resp.body)
+	}
+	refusal := decodeRefusal(t, resp)
+	if refusal.Code != "INVALID_ARGUMENT" {
+		t.Fatalf("code = %q, want INVALID_ARGUMENT", refusal.Code)
+	}
+	if refusal.Details["email"] != staffauth.MsgAddressBlocked {
+		t.Fatalf("details = %v, want an email entry naming Blocked email addresses", refusal.Details)
+	}
+
+	offers, invitations, outbox := offerRowCounts(t, f.db, f.engagementID, address)
+	if offers != 0 {
+		t.Fatalf("engagement_offers rows = %d, want 0 for a refused offer", offers)
+	}
+	if invitations != 0 {
+		t.Fatalf("practice_invitations rows = %d, want 0 -- MintInvitation must not run for a suppressed address", invitations)
+	}
+	if outbox != 0 {
+		t.Fatalf("engagement_offer_outbox rows = %d, want 0 for a refused offer", outbox)
+	}
+	if len(f.enq.Calls()) != 0 {
+		t.Fatalf("nudges fired = %v, want none for a refused offer", f.enq.Calls())
+	}
+}
+
+// TestCreateHandler_ClearedSuppressionAllowsStaffTargetOffer is #862's
+// other AC: a suppression cleared under #744 lets the same Offer through
+// unchanged.
+func TestCreateHandler_ClearedSuppressionAllowsStaffTargetOffer(t *testing.T) {
+	f := newFixture(t)
+	const doulaAddress = "uid-doula@example.com"
+	if err := mailsuppress.Record(t.Context(), f.db.Admin, doulaAddress, mailsuppress.CauseBounce, "evt-862-staff-cleared"); err != nil {
+		t.Fatalf("seed suppression: %v", err)
+	}
+	if _, err := f.db.Admin.ExecContext(t.Context(),
+		`UPDATE email_suppressions SET cleared_at = now() WHERE address = $1`, mailsuppress.Normalize(doulaAddress),
+	); err != nil {
+		t.Fatalf("clear suppression: %v", err)
+	}
+
+	f.makeOffer(t, offerBody(f.doulaID, 45000))
+}
+
+// TestCreateHandler_ClearedSuppressionAllowsEmailTargetOffer is the same
+// claim for the email-target path.
+func TestCreateHandler_ClearedSuppressionAllowsEmailTargetOffer(t *testing.T) {
+	f := newFixture(t)
+	const address = "cleared-offer@example.test"
+	if err := mailsuppress.Record(t.Context(), f.db.Admin, address, mailsuppress.CauseBounce, "evt-862-email-cleared"); err != nil {
+		t.Fatalf("seed suppression: %v", err)
+	}
+	if _, err := f.db.Admin.ExecContext(t.Context(),
+		`UPDATE email_suppressions SET cleared_at = now() WHERE address = $1`, mailsuppress.Normalize(address),
+	); err != nil {
+		t.Fatalf("clear suppression: %v", err)
+	}
+	fee := int64(52000)
+
+	f.makeOffer(t, emailOfferBody(address, &fee))
 }
