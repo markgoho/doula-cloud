@@ -19,7 +19,7 @@ func newRemoveSecondFactorServer(t *testing.T, db *testdb.DB, verifier authn.Ver
 	mux := http.NewServeMux()
 	g := staffauth.NewGatedRouter(mux, db.App)
 	ir := idempotency.NewRouter(g, db.App)
-	staffauth.Mount(g, ir, db.App, verifier, accounts, tasknudge.NoOpEnqueuer{})
+	staffauth.Mount(g, ir, db.App, verifier, accounts, tasknudge.NoOpEnqueuer{}, neverSuppressed)
 	return httptest.NewServer(mux)
 }
 

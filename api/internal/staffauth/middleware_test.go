@@ -1,6 +1,7 @@
 package staffauth_test
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"net/http"
@@ -13,6 +14,15 @@ import (
 	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/testdb"
 )
+
+// neverSuppressed stands in for mailsuppress.Active in every test that
+// does not itself exercise the Staff-invite suppression check (#861):
+// no address is ever blocked. Shared across this package's test files
+// rather than repeated, since staffauth.Mount needs one in every server
+// it wires up.
+func neverSuppressed(context.Context, *sql.Tx, string) (bool, error) {
+	return false, nil
+}
 
 // newServer wires the middleware in front of a handler that echoes the
 // resolved Staff/Practice ids and confirms a usable *sql.Tx was placed on

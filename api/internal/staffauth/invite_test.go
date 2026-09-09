@@ -3,6 +3,7 @@ package staffauth_test
 import (
 	"bytes"
 	"context"
+	"database/sql"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -11,6 +12,7 @@ import (
 
 	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/idempotency"
+	"doula-cloud/api/internal/mailsuppress"
 	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/tasknudge"
 	"doula-cloud/api/internal/testdb"
@@ -31,7 +33,10 @@ func newInviteServer(t *testing.T, db *testdb.DB, uid string) (srv *httptest.Ser
 	mux := http.NewServeMux()
 	g := staffauth.NewGatedRouter(mux, db.App)
 	ir := idempotency.NewRouter(g, db.App)
-	staffauth.Mount(g, ir, db.App, authntest.Verifier{}, authntest.NewFakeAccountManager(), enq)
+	staffauth.Mount(g, ir, db.App, authntest.Verifier{}, authntest.NewFakeAccountManager(), enq,
+		func(ctx context.Context, tx *sql.Tx, address string) (bool, error) {
+			return mailsuppress.Active(ctx, tx, address)
+		})
 	return httptest.NewServer(mux), authntest.SeedSession(t, db.App, uid), enq
 }
 
@@ -218,6 +223,96 @@ func TestInviteHandler_AlreadyAMemberConflicts(t *testing.T) {
 	// the control that caused it.
 	if details := decodeDetails(t, resp); details["email"] != staffauth.MsgMembershipAlreadyHeld {
 		t.Fatalf("details = %v, want email entry", details)
+	}
+}
+
+// TestInviteHandler_SuppressedAddressRefused is #861's AC: a Staff
+// invitation to a currently-suppressed address is refused at the
+// endpoint, before any row is written -- the same claim #789 proves for
+// the Client portal invite, but here as a 400 field error (the address
+// arrives fresh in the request body) rather than #789's stored-record
+// 409.
+func TestInviteHandler_SuppressedAddressRefused(t *testing.T) {
+	db := testdb.New(t)
+	const ownerUID = "owner-invites-suppressed"
+	_, practiceID := seedOwnerMembership(t, db, ownerUID)
+	const email = "suppressed@example.com"
+	if err := mailsuppress.Record(t.Context(), db.Admin, email, mailsuppress.CauseBounce, "evt-861"); err != nil {
+		t.Fatalf("seed suppression: %v", err)
+	}
+
+	srv, session, enq := newInviteServer(t, db, ownerUID)
+	defer srv.Close()
+
+	resp := postInvite(t, srv, session, practiceID, staffauth.InviteRequest{
+		Email: email, Roles: []string{doulaRole}, EmploymentType: employeeType,
+	})
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
+	}
+	refusal := decodeRefusal(t, resp)
+	if refusal.Code != "INVALID_ARGUMENT" {
+		t.Fatalf("code = %q, want %q", refusal.Code, "INVALID_ARGUMENT")
+	}
+	if refusal.Details["email"] != staffauth.MsgAddressBlocked {
+		t.Fatalf("details = %v, want an email entry naming Blocked email addresses", refusal.Details)
+	}
+
+	var invitationCount int
+	if err := db.Admin.QueryRowContext(t.Context(),
+		`SELECT count(*) FROM practice_invitations WHERE practice_id = $1 AND lower(address) = $2`,
+		practiceID, email,
+	).Scan(&invitationCount); err != nil {
+		t.Fatalf("count practice_invitations: %v", err)
+	}
+	if invitationCount != 0 {
+		t.Fatalf("expected no practice_invitations row for a refused invite, got %d", invitationCount)
+	}
+
+	var outboxCount int
+	if err := db.Admin.QueryRowContext(t.Context(),
+		`SELECT count(*) FROM staff_invite_outbox`,
+	).Scan(&outboxCount); err != nil {
+		t.Fatalf("count staff_invite_outbox: %v", err)
+	}
+	if outboxCount != 0 {
+		t.Fatalf("expected no staff_invite_outbox row for a refused invite, got %d", outboxCount)
+	}
+	if len(enq.fired) != 0 {
+		t.Fatalf("nudges fired = %v, want none for a refused invite", enq.fired)
+	}
+}
+
+// TestInviteHandler_ClearedSuppressionAllowsInvite is #861's other AC: a
+// suppression that has been cleared (#744) lets the same invitation
+// through unchanged.
+func TestInviteHandler_ClearedSuppressionAllowsInvite(t *testing.T) {
+	db := testdb.New(t)
+	const ownerUID = "owner-invites-cleared"
+	_, practiceID := seedOwnerMembership(t, db, ownerUID)
+	const email = "cleared@example.com"
+	if err := mailsuppress.Record(t.Context(), db.Admin, email, mailsuppress.CauseBounce, "evt-861-cleared"); err != nil {
+		t.Fatalf("seed suppression: %v", err)
+	}
+	if _, err := db.Admin.ExecContext(t.Context(),
+		`UPDATE email_suppressions SET cleared_at = now() WHERE address = $1`,
+		mailsuppress.Normalize(email),
+	); err != nil {
+		t.Fatalf("clear suppression: %v", err)
+	}
+
+	srv, session, _ := newInviteServer(t, db, ownerUID)
+	defer srv.Close()
+
+	resp := postInvite(t, srv, session, practiceID, staffauth.InviteRequest{
+		Email: email, Roles: []string{doulaRole}, EmploymentType: employeeType,
+	})
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusCreated {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusCreated)
 	}
 }
 

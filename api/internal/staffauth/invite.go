@@ -62,9 +62,12 @@ var validEmploymentTypes = map[string]bool{"employee": true, "contractor": true}
 // enq is ADR-0013's Cloud Tasks nudge, registered rather than fired for
 // the reason portalinvite.InviteHandler gives: Middleware's commit --
 // which decides whether the queued outbox row survives at all -- runs
-// after this handler has returned. Must be mounted behind
-// staffauth.Middleware.
-func InviteHandler(enq tasknudge.Enqueuer) http.Handler {
+// after this handler has returned. suppressed is mailsuppress.Active,
+// handed in rather than imported directly: mailsuppress.Mount takes a
+// *GatedRouter, so this package importing mailsuppress back would cycle
+// -- the same reason WriteRouter (mount.go) exists. Must be mounted
+// behind staffauth.Middleware.
+func InviteHandler(enq tasknudge.Enqueuer, suppressed SuppressionChecker) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		tx, practiceID, ok := RequireOwner(w, r)
 		if !ok {
@@ -84,6 +87,27 @@ func InviteHandler(enq tasknudge.Enqueuer) http.Handler {
 		}
 		invited, ok := parseMembership(w, req.Roles, req.EmploymentType)
 		if !ok {
+			return
+		}
+
+		// A suppressed address (ADR-0029) is refused here, before any row
+		// exists, rather than left to staff_invite_outbox's send-time
+		// guard: without this the response is a false success and the
+		// dead letter is the only place the truth ever shows up (#861).
+		// Unlike #789's Client portal invite, this address is typed into
+		// the request body rather than read off a stored record, so the
+		// refusal takes the same field-validation shape the empty-address
+		// check just above it does -- a 400 naming the email field --
+		// rather than #789's stored-record 409.
+		blocked, err := suppressed(r.Context(), tx, address)
+		if err != nil {
+			// coverage:ignore reason: DB query failure, not exercised by unit tests
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+			return
+		}
+		if blocked {
+			apierr.Write(w, http.StatusBadRequest, apierr.CodeInvalidArgument, MsgAddressBlocked,
+				map[string]string{fieldEmail: MsgAddressBlocked})
 			return
 		}
 

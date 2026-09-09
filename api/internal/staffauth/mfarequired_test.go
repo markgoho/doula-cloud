@@ -19,7 +19,7 @@ func newMFARequiredServer(t *testing.T, db *testdb.DB, accounts *authntest.FakeA
 	mux := http.NewServeMux()
 	g := staffauth.NewGatedRouter(mux, db.App)
 	ir := idempotency.NewRouter(g, db.App)
-	staffauth.Mount(g, ir, db.App, authntest.Verifier{}, accounts, tasknudge.NoOpEnqueuer{})
+	staffauth.Mount(g, ir, db.App, authntest.Verifier{}, accounts, tasknudge.NoOpEnqueuer{}, neverSuppressed)
 	return httptest.NewServer(mux), func(uid string) string { return authntest.SeedSession(t, db.App, uid) }
 }
 

@@ -74,7 +74,7 @@ func newAcceptServerWithAccounts(t *testing.T, db *testdb.DB, uid, email string,
 	mux := http.NewServeMux()
 	g := staffauth.NewGatedRouter(mux, db.App)
 	ir := idempotency.NewRouter(g, db.App)
-	staffauth.Mount(g, ir, db.App, authntest.Verifier{UID: uid, Email: email}, accounts, tasknudge.NoOpEnqueuer{})
+	staffauth.Mount(g, ir, db.App, authntest.Verifier{UID: uid, Email: email}, accounts, tasknudge.NoOpEnqueuer{}, neverSuppressed)
 	return httptest.NewServer(mux)
 }
 

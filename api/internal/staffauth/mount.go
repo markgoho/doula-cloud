@@ -1,6 +1,7 @@
 package staffauth
 
 import (
+	"context"
 	"database/sql"
 	"net/http"
 	"time"
@@ -21,6 +22,13 @@ type WriteRouter interface {
 	Replayable(pattern string, attaching bool, h http.Handler)
 	Exempt(pattern, reason string, attaching bool, h http.Handler)
 }
+
+// SuppressionChecker reports whether address is currently blocked from
+// receiving mail (ADR-0029) -- mailsuppress.Active's own signature,
+// handed in rather than called directly. mailsuppress.Mount takes a
+// *GatedRouter, so this package importing mailsuppress back would cycle,
+// the same reason WriteRouter above exists.
+type SuppressionChecker func(ctx context.Context, tx *sql.Tx, address string) (bool, error)
 
 // bootstrapRules limits the once-per-person events -- signup and
 // invitation acceptance -- that read a Bearer ID token via
@@ -101,14 +109,14 @@ var mfaRecoveryRotateRules = []ratelimit.Rule{
 // and the person-level facts (work state, email, MFA enrolment) that
 // #437 and #613 keep off any one Membership (mounted directly on g,
 // since there is no session yet for Middleware to establish).
-func Mount(g *GatedRouter, ir WriteRouter, db *sql.DB, verifier authn.Verifier, accounts authn.AccountManager, enq tasknudge.Enqueuer) {
-	mountPracticeRoutes(g, ir, verifier, accounts, enq)
+func Mount(g *GatedRouter, ir WriteRouter, db *sql.DB, verifier authn.Verifier, accounts authn.AccountManager, enq tasknudge.Enqueuer, suppressed SuppressionChecker) {
+	mountPracticeRoutes(g, ir, verifier, accounts, enq, suppressed)
 	mountSessionRoutes(g, db, verifier, accounts, enq)
 }
 
 // mountPracticeRoutes is the Practice-scoped half of Mount: Staff roster,
 // Membership, Invitation, ending sessions, and the MFA-required switch.
-func mountPracticeRoutes(g *GatedRouter, ir WriteRouter, verifier authn.Verifier, accounts authn.AccountManager, enq tasknudge.Enqueuer) {
+func mountPracticeRoutes(g *GatedRouter, ir WriteRouter, verifier authn.Verifier, accounts authn.AccountManager, enq tasknudge.Enqueuer, suppressed SuppressionChecker) {
 	g.Get("/api/practices/{practiceId}/session", AnyStaff, PracticeSessionHandler())
 	// Roles and employment type are edited together on one surface
 	// (RA-G2, #261) -- ADR-0008 makes them the two halves of what a
@@ -121,7 +129,7 @@ func mountPracticeRoutes(g *GatedRouter, ir WriteRouter, verifier authn.Verifier
 	ir.Exempt("DELETE /api/practices/{practiceId}/staff/{staffId}/membership",
 		"delete; a retry after the first succeeds finds no membership row left and 404s instead of removing or recording removal twice",
 		false, RemoveMembershipHandler())
-	ir.Replayable("POST /api/practices/{practiceId}/staff/invitations", false, InviteHandler(enq))
+	ir.Replayable("POST /api/practices/{practiceId}/staff/invitations", false, InviteHandler(enq, suppressed))
 	ir.Exempt("POST /api/practices/{practiceId}/staff/invitations/{invitationId}/revoke",
 		"state-guarded UPDATE ... WHERE status = 'pending'; a retry after the first commit affects zero rows and 404s instead of revoking twice",
 		false, RevokeInvitationHandler())
