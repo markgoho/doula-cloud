@@ -197,7 +197,7 @@ An import pass forces a question about every resource in the project, and asking
 
 One unrelated thing, found while numbering ADR-0034: **two ADRs both number themselves 0033** — `0033-overdue-is-derived-and-notifies-nobody.md` and `0033-staff-login-deletion-is-immediate-and-redacts-the-person.md`. Renaming either one breaks existing links, so it is not done here. → [Two ADRs both number themselves 0033, so the citation names two decisions #1053](https://github.com/markgoho/doula-cloud/issues/1053)
 
-## The build
+## The build, as sub-issues
 
 Seven sub-issues of [#797](https://github.com/markgoho/doula-cloud/issues/797), sequenced. The order is dependency, not priority — nothing here is ranked by impact, because there is nothing yet to impact.
 
