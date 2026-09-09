@@ -16,23 +16,23 @@ Read against the live project, not from documentation. This table supersedes the
 
 | Resource | What is there | Owned by Terraform? |
 | --- | --- | --- |
-| Cloud Run services | `doula-api`; `redirecturl` and `shortenurl` (2nd-gen Cloud Functions, being deleted) | `doula-api` yes, minus its image; the other two are deleted rather than imported |
+| Cloud Run services | `doula-api` only — `redirecturl` and `shortenurl` (2nd-gen Cloud Functions) were deleted 2026-09-08 (#1043) | `doula-api` yes, minus its image |
 | `doula-api` env vars and secret references | 19 — 8 plain values, 11 Secret Manager references | Yes |
-| Cloud Run service IAM | `allUsers` → `roles/run.invoker` on all three services | `doula-api`'s yes; the other two go with their services |
+| Cloud Run service IAM | `allUsers` → `roles/run.invoker` on `doula-api` | Yes |
 | Cloud Scheduler jobs | `process-outbox-drain` (`*/5 * * * *`), `verify-practice-pages` (`*/15 * * * *`) | Yes |
 | Cloud Tasks queues | `doula-cloud-notification-nudge` | Yes |
 | Cloud Tasks queue IAM | `850855848778-compute@` → `roles/cloudtasks.enqueuer` | Yes |
 | Secret Manager secrets | 13 | Shells yes, versions no |
 | Service accounts | `github-action-733741680@`, `firebase-adminsdk-rq3g0@`, `firebase-app-hosting-compute@`, `850855848778-compute@` (Google-created default) | The first yes; the three Google-created ones no |
-| Project-level IAM bindings | 34 role bindings, 37 principal-role pairs, 22 distinct principals | Yes, for the non-service-agent ones |
+| Project-level IAM bindings | 32 role bindings, 35 principal-role pairs, 22 distinct principals, after #1043 removed `roles/cloudfunctions.developer` and `roles/cloudfunctions.admin` (each the sole binding for its role) | Yes, for the non-service-agent ones |
 | Workload Identity pool and provider | pool `github-actions`, provider `github` | Yes |
-| Artifact Registry repositories | `api`, `cloud-run-source-deploy`, `gcf-artifacts`, `firebaseapphosting-images` | `api` yes; the other three no |
+| Artifact Registry repositories | `api`, `cloud-run-source-deploy`, `firebaseapphosting-images` — `gcf-artifacts` was deleted 2026-09-08 (#1043) | `api` yes; the other two no |
 | Cloud SQL instance | `doula-cloud-pg`, POSTGRES_16, `db-f1-micro`, ZONAL, public IP, `sslMode: TRUSTED_CLIENT_CERTIFICATE_REQUIRED`, 10 GB, 7 backups retained, **`deletionProtectionEnabled: false`** | Instance settings and databases yes; users no |
 | Cloud SQL databases and users | databases `doula_cloud`, `postgres`; users `app_runtime_login`, `site_builder_login`, `postgres` | Databases yes, users no |
-| GCS buckets | `doula-cloud-attachments`; `doula-cloud.firebasestorage.app`, `run-sources-…`, `gcf-v2-sources-…`, `gcf-v2-uploads-…` | `doula-cloud-attachments` yes; the rest no |
+| GCS buckets | `doula-cloud-attachments`; `doula-cloud.firebasestorage.app`, `run-sources-…` — `gcf-v2-sources-…` and `gcf-v2-uploads-…` were deleted 2026-09-08 (#1043) | `doula-cloud-attachments` yes; the rest no |
 | Firestore | one `(default)` FIRESTORE_NATIVE database, created by Firebase | No |
 
-#797's "34 project-level IAM bindings" is the role count. The number that matters for Terraform is 37, the principal-role pairs, because `google_project_iam_member` is one resource per pair. Seventeen of those 37 belong to Google's own service agents, which the boundary below leaves alone; the other twenty are owned.
+#797's "34 project-level IAM bindings" is the role count as it stood before #1043; it is 32 now. The number that matters for Terraform is the principal-role pairs — 37 before #1043, 35 now — because `google_project_iam_member` is one resource per pair. Seventeen of those belong to Google's own service agents, which the boundary below leaves alone; the other eighteen are owned, down from twenty after #1043 removed `roles/cloudfunctions.developer` from `github-action-733741680@` and `roles/cloudfunctions.admin` from `firebase-adminsdk-rq3g0@`.
 
 ## What Terraform owns
 
@@ -45,7 +45,7 @@ Each of these is a resource in the configuration, and a difference between the c
 | `doula-api`'s service configuration | `google_cloud_run_v2_service`, minus the fields in [The Cloud Run image conflict](#the-cloud-run-image-conflict) | 19 environment variables and secret references set out of band by `gcloud run services update`, with nothing but `docs/environment.md` recording that they should be there. Each one is a `500` waiting to happen if a deploy ever drops it. |
 | Cloud Run service IAM | `google_cloud_run_v2_service_iam_member` | `allUsers` on a public API is a deliberate choice today; it should be one that shows up in a diff if it ever changes. |
 | Secret Manager secret shells | `google_secret_manager_secret` | The container, its replication policy, and its accessor grants. A secret that exists with the wrong accessor fails at container start, which is the failure #743 walked by hand. |
-| `github-action-733741680@` and its grants | `google_service_account`, `google_project_iam_member` | The identity every deploy runs as. Its ten project roles are the highest-value thing in the project to have reviewable. |
+| `github-action-733741680@` and its grants | `google_service_account`, `google_project_iam_member` | The identity every deploy runs as. Its nine project roles (ten until #1043 removed `roles/cloudfunctions.developer`) are the highest-value thing in the project to have reviewable. |
 | The Workload Identity pool and provider | `google_iam_workload_identity_pool`, `google_iam_workload_identity_pool_provider` | The attribute condition on this provider — today `assertion.repository == 'markgoho/doula-cloud'` — is the single string that stops another GitHub repository from minting tokens for this project. It has never been reviewed in a diff because it has never been in a file. |
 | Non-service-agent project IAM | `google_project_iam_member` | Google's own service agents (`service-…@gcp-sa-*`, `…@cloudservices`, `…@cloudbuild`) are excluded: the platform creates and repairs them, and importing them means Terraform proposing to delete a binding Google will immediately recreate. Everything else — the GitHub Actions account, the Firebase accounts, the default compute account, and `markgoho@gmail.com`'s `roles/owner` — is owned. |
 | Artifact Registry `api` | `google_artifact_registry_repository` | The repository, not the images in it. Same split as Cloud Run: Terraform owns the shape, CI owns the contents. |
@@ -64,9 +64,9 @@ Nothing here is an oversight. Each line is a decision, and the reason is the poi
 | Identity Platform configuration | `signIn.email`, the MFA settings, the authorized domains. The Terraform provider covers `google_identity_platform_config` unevenly, and ADR-0026's two sign-in methods are a product decision walked by hand once. Revisit only if it drifts. |
 | Firebase Hosting, Firestore, and the Firebase-created buckets | `firebase.json` and `.firebaserc` are already code and already deploy from CI; `doula-cloud.firebasestorage.app` and the `(default)` Firestore database were created by Firebase enabling itself and are managed by it. Adding a second owner would produce drift, not detect it. |
 | Google-created service accounts and service agents | `850855848778-compute@`, `firebase-adminsdk-rq3g0@`, `firebase-app-hosting-compute@`, and every `service-…@gcp-sa-*` principal. The platform creates, grants and repairs these; Terraform proposing to remove a binding Google recreates makes `plan` permanently red, which is the failure mode this whole effort is trying to avoid. |
-| Artifact Registry `cloud-run-source-deploy`, `gcf-artifacts`, `firebaseapphosting-images` | All three are created by a tool for its own use — `gcloud run deploy --source`, Cloud Functions, and Firebase App Hosting. `gcf-artifacts` goes away with the two functions below. |
+| Artifact Registry `cloud-run-source-deploy`, `firebaseapphosting-images` | Both are created by a tool for its own use — `gcloud run deploy --source` and Firebase App Hosting. `gcf-artifacts` held the two functions' build images below and was deleted with them, 2026-09-08 (#1043). |
 | The Terraform state bucket | It has to exist before Terraform runs. Created once by hand; the commands are in the [State](#state) section so the creation is repeatable even though it is not applied. |
-| The GCS buckets Google made for builds | `run-sources-…`, `gcf-v2-sources-…`, `gcf-v2-uploads-…`. Build scratch space, recreated on demand. |
+| The GCS buckets Google made for builds | `run-sources-…`. Build scratch space, recreated on demand. `gcf-v2-sources-…` and `gcf-v2-uploads-…` were deleted 2026-09-08 (#1043) along with the two Cloud Functions that used them. |
 | Mailgun, Stripe, GitHub | Outside GCP entirely. `docs/environment.md` is where these are described, and this specification does not move them. |
 | goose migrations | Already code, already run by `ci.yml`'s `migrate` job. Terraform owns the instance, never the schema. |
 
@@ -169,21 +169,27 @@ Four mechanisms, in this order:
 
 ## `redirecturl` and `shortenurl`
 
-**They are deleted, not imported.** [#87](https://github.com/markgoho/doula-cloud/issues/87) is why this needed an answer rather than an assumption: infrastructure that looks unused is not safe to delete on that basis, and acting on appearance there caused a live incident. So here is the answer, written down.
+**They were deleted, not imported, on 2026-09-08 ([#1043](https://github.com/markgoho/doula-cloud/issues/1043)).** [#87](https://github.com/markgoho/doula-cloud/issues/87) is why this needed an answer rather than an assumption: infrastructure that looks unused is not safe to delete on that basis, and acting on appearance there caused a live incident. So here is the answer, written down.
 
-**What they are.** Both are 2nd-generation Cloud Functions, not plain Cloud Run services — `goog-managed-by: cloudfunctions`, `run.googleapis.com/client-name: cli-firebase`, `cloudfunctions.googleapis.com/function-id: redirectUrl` and `shortenUrl`, both built on 2025-03-26 from a single Cloud Build (`fb1e636f-…`) producing `gcf-artifacts/doula--cloud__us--central1__shorten_url:version_1`. `gcloud functions list` confirms both as ACTIVE 2nd-gen HTTP-triggered functions. They are a Firebase Functions URL shortener deployed with `firebase deploy`.
+**What they were.** Both were 2nd-generation Cloud Functions, not plain Cloud Run services — `goog-managed-by: cloudfunctions`, `run.googleapis.com/client-name: cli-firebase`, `cloudfunctions.googleapis.com/function-id: redirectUrl` and `shortenUrl`, both built on 2025-03-26 from a single Cloud Build (`fb1e636f-…`) producing `gcf-artifacts/doula--cloud__us--central1__shorten_url:version_1`. `gcloud functions list`, read before deletion, confirmed both as ACTIVE 2nd-gen HTTP-triggered functions. They were a Firebase Functions URL shortener deployed with `firebase deploy`.
 
-**Whose they are.** Mark's account, [recorded on the ticket](https://github.com/markgoho/doula-cloud/issues/797#issuecomment-5594356337): they are a previous incarnation of this project, from before the current Svelte-and-Go stack existed. Nothing in this repository references either one — a full-tree search for `shortenurl`, `redirecturl`, `shorten_url`, `redirect_url` and `shortUrl` returns nothing outside `.git`.
+**Whose they were.** Mark's account, [recorded on the ticket](https://github.com/markgoho/doula-cloud/issues/797#issuecomment-5594356337): a previous incarnation of this project, from before the current Svelte-and-Go stack existed. Nothing in this repository referenced either one — a full-tree search for `shortenurl`, `redirecturl`, `shorten_url`, `redirect_url` and `shortUrl` returned nothing outside `.git`.
 
-**What depends on them: nothing.** Thirty days of Cloud Run request logs, read on 2026-09-08:
+**What depended on them: nothing.** Thirty days of Cloud Run request logs, re-read on 2026-09-08 immediately before deletion, against a 10,000-entry limit so nothing was truncated. An earlier reading of the same window undercounted — the figures below are the ones read fresh, immediately before deletion:
 
-- `shortenurl`: **zero requests**, of any kind.
-- `redirecturl`: traffic on one day only, 2026-08-17, and every request is a hostile scan — `POST /xmlrpc.php`, and roughly fifty `GET`s for PHP web-shell filenames (`wp-load.php`, `root.php`, `usr.php`, `a.php`). Every one answered `404`. There is not a single successful request in the window.
-- Both carry `allUsers` → `roles/run.invoker`, so both are open to the internet. What the logs show is a public attack surface for a service nobody uses.
+- `shortenurl`: **zero log entries of any kind.**
+- `redirecturl`: 4,942 log entries — 4,575 HTTP requests plus 367 system/stderr lines — spanning eight days, 2026-08-10 through 2026-08-17, and nothing since. 4,566 of the 4,575 requests answered `404`; the other 9 answered `500`, all `GET /__debug__/` or `GET /wp-json/` from user agents impersonating a web crawler or identifying outright as a PHP-webshell scanner (`wp2shell`) — the function's own stderr log shows the 500s are a Firestore lookup crashing on a reserved document id, not a served response. Every requested path in the window is scanner fare: `/robots.txt`, then dozens of PHP web-shell filenames (`wp-login.php`, `admin.php`, `a.php`, and similar). There was no 2xx and no 3xx response anywhere in the window — a redirector that redirected nothing. [Full detail is on the ticket.](https://github.com/markgoho/doula-cloud/issues/1043#issuecomment-5594847923)
+- Both carried `allUsers` → `roles/run.invoker`, so both were open to the internet. What the logs show is a public attack surface for a service nobody used.
 
-**What goes with them.** Deleting the functions makes four things removable that exist only to support them, and each should be confirmed empty rather than deleted on sight: the `gcf-artifacts` Artifact Registry repository, the `gcf-v2-sources-850855848778-us-central1` and `gcf-v2-uploads-…` buckets, and two project IAM bindings — `roles/cloudfunctions.developer` on `github-action-733741680@` and `roles/cloudfunctions.admin` on `firebase-adminsdk-rq3g0@`. The `(default)` Firestore database stays: Firebase created it and the shortener's use of it, if any, is not what keeps it there.
+**What went with them.** Deleting the functions made four things removable, each confirmed empty or unreferenced, also on 2026-09-08:
 
-**Removal is `gcloud functions delete redirectUrl` and `gcloud functions delete shortenUrl`, in `us-central1`** — deleting the underlying Cloud Run service instead leaves the Cloud Functions resource behind. It is independent of every Terraform decision above and does not wait on any of it; it is #1043, first in the sequence, for that reason. Nothing else in the project is touched.
+- The `gcf-artifacts` Artifact Registry repository — confirmed empty, then deleted.
+- `gcf-v2-sources-850855848778-us-central1` and `gcf-v2-uploads-850855848778.us-central1.cloudfunctions.appspot.com` — confirmed to hold only build-scratch `function-source.zip` objects tied to the two deleted functions (plus one unrelated leftover from an already-gone function), then deleted.
+- `roles/cloudfunctions.developer` on `github-action-733741680@` and `roles/cloudfunctions.admin` on `firebase-adminsdk-rq3g0@` — removed from the project's IAM policy before this change merged to trunk, so the trunk CI run the merge produced is itself the evidence the GitHub Actions deploy identity did not need the role.
+
+The `(default)` Firestore database stayed: Firebase created it and the shortener's use of it, if any, was not what kept it there.
+
+**Removal was `gcloud functions delete redirectUrl` and `gcloud functions delete shortenUrl`, in `us-central1`** — deleting the underlying Cloud Run service instead would have left the Cloud Functions resource behind. It was independent of every Terraform decision above and did not wait on any of it; it was #1043, first in the sequence, for that reason. Nothing else in the project was touched.
 
 ## What this specification found and did not fix
 
