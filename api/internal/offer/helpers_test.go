@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/engagement"
 	"doula-cloud/api/internal/idempotency"
@@ -124,6 +125,19 @@ func expectStatus(t *testing.T, resp response, want int) {
 	if resp.status != want {
 		t.Fatalf("status = %d, want %d: %s", resp.status, want, resp.body)
 	}
+}
+
+// decodeRefusal reads a refusal's whole section 7 envelope, for a test
+// that needs Code and Details together (#488), mirroring
+// staffauth_test.decodeRefusal for this package's byte-body response
+// shape.
+func decodeRefusal(t *testing.T, resp response) apierr.APIError {
+	t.Helper()
+	var body apierr.APIError
+	if err := json.Unmarshal(resp.body, &body); err != nil {
+		t.Fatalf("decode refusal: %v", err)
+	}
+	return body
 }
 
 // offerBody is a valid contractor-target CreateRequest for staffID, with
