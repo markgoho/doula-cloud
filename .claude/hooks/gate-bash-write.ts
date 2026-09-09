@@ -27,9 +27,113 @@
 // gaps above, because the GitHub trunk ruleset (docs/agents/worktree-flow.md)
 // is the real, unconditional boundary; this hook is a local nudge on top of
 // it, not a substitute for it.
+//
+// Decision (#677): the redirection scan used to run over the raw command
+// text with no notion of quoting or heredocs, so a literal `>` sitting in
+// prose -- an HTML tag, a CSS child combinator, an arrow in an ordinary
+// sentence, a markdown blockquote marker starting a heredoc body -- was read
+// as a redirection operator and the next word became a fabricated "write
+// target". This also false-blocked a `gh issue create`/`edit`/`comment` or
+// `gh pr create`/`edit` invocation over characters inside its own
+// `--body`/`--title`/`-m` value, even though none of those commands write
+// to a local tracked path at all. Two changes, same textual-not-a-shell-
+// parser posture as the gaps above: (1) a heredoc body (between a
+// `<<DELIM` introducer and the line that is exactly its closing delimiter)
+// is stripped before scanning, since it is stdin content and never a write
+// target regardless of what characters it holds; (2) a `>` is only treated
+// as an operator when it is not inside a single- or double-quoted span, so
+// `echo "1085 -> Ready"` and a `--body "..."` value both scan clean. A
+// command-name allowlist for `gh issue`/`gh pr` was considered and rejected:
+// it would have to skip the whole segment's candidate collection to reach
+// every reported case, which would also swallow a real trailing redirect on
+// the same command line (`gh issue create --body "x" > CLAUDE.md`) -- a
+// genuine write this hook exists to catch. Masking covers every value that
+// is actually quoted or heredoc'd, which is the only way such a value can
+// hold a literal `>` and still mean what it says in real shell syntax;
+// anything else is not this ticket's problem to solve. What this still
+// gives up, on purpose: quoting is not unwound anywhere else in this file
+// (see `tokenize` below), so a real write target that is itself quoted and
+// contains a `;`/`|`/`&` that `segments` splits on is still missed -- the
+// same accepted gap as before, now stated for the masking pass too.
 import path from 'node:path';
 import { isTrackedInMainCheckout, readStdin } from './tracked-path.ts';
 import { findMainCheckoutRoot } from './worktree-root.ts';
+
+// Removes a heredoc body (`<<DELIM ... DELIM`, `<<'DELIM' ... DELIM`,
+// `<<-DELIM ... \tDELIM`) from the raw command before anything else scans
+// it. A heredoc body is stdin content, never a write target, no matter what
+// it contains -- but `segments` (below) splits on every newline, so left in
+// place a body's own lines get read as separate fake commands. Multiple
+// heredocs in one command are each found and stripped in turn. An
+// unterminated heredoc (no line matching the delimiter) stops the scan at
+// its introducer -- nothing after it can be attributed reliably, and this
+// hook fails closed elsewhere, not here: no candidates surviving just means
+// nothing blocks, the same "not caught" gap already accepted in the header.
+function stripHeredocBodies(command: string): string {
+	const introducer = /<<-?\s*(['"]?)([A-Za-z_][A-Za-z0-9_]*)\1/g;
+	let result = '';
+	let cursor = 0;
+	let match: RegExpExecArray | null;
+
+	while ((match = introducer.exec(command))) {
+		const delimiter = match[2] ?? '';
+		const introEnd = introducer.lastIndex;
+		result += command.slice(cursor, introEnd);
+
+		const bodyStart = command.indexOf('\n', introEnd);
+		if (bodyStart === -1) {
+			cursor = introEnd;
+			break;
+		}
+
+		const closing = new RegExp(`^\\t*${delimiter.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*$`, 'm');
+		const rest = command.slice(bodyStart + 1);
+		const closeMatch = closing.exec(rest);
+		if (!closeMatch) {
+			cursor = bodyStart + 1;
+			break;
+		}
+
+		result += '\n';
+		cursor = bodyStart + 1 + closeMatch.index + closeMatch[0].length;
+		introducer.lastIndex = cursor;
+	}
+
+	return result + command.slice(cursor);
+}
+
+// Blanks a `>` that sits inside a single- or double-quoted span, so the
+// redirection scan below cannot read it as an operator. Everything else --
+// including a `>` that precedes a quoted target, e.g. `echo hi > "f.md"` --
+// passes through untouched, so a genuinely quoted write target is still
+// recognized. Double-quote escaping (`\"`, `\\`) is tracked only well enough
+// to find the real closing quote; single quotes have no escape mechanism in
+// shell, so none is needed there.
+function maskQuotedRedirectionChars(command: string): string {
+	let out = '';
+	let quote: '"' | "'" | null = null;
+
+	for (let i = 0; i < command.length; i++) {
+		const char = command[i] ?? '';
+
+		if (quote === '"' && char === '\\' && i + 1 < command.length) {
+			out += char + command[i + 1];
+			i++;
+			continue;
+		}
+
+		if (quote !== null) {
+			if (char === quote) quote = null;
+			out += char === '>' ? '_' : char;
+			continue;
+		}
+
+		if (char === "'" || char === '"') quote = char;
+		out += char;
+	}
+
+	return out;
+}
 
 // One list/pipeline stage per entry, so a write in one stage of
 // `A | tee file` or `A && sed -i ... file` is examined on its own --
@@ -137,7 +241,8 @@ async function main(): Promise<void> {
 	const command = (toolInput as Record<string, unknown>)['command'];
 	if (typeof command !== 'string') process.exit(0);
 
-	const candidates = segments(command).flatMap(writeTargets);
+	const scannable = maskQuotedRedirectionChars(stripHeredocBodies(command));
+	const candidates = segments(scannable).flatMap(writeTargets);
 	if (candidates.length === 0) process.exit(0);
 
 	// Only pay for a git subprocess once there is something to check.
