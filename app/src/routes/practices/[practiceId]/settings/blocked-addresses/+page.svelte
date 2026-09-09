@@ -79,8 +79,8 @@
 		}
 	}
 
-	// Throws nothing on: ConfirmDialog closes on a resolved promise, and
-	// a refusal belongs on the row rather than in the dialog.
+	// Rethrown so ConfirmDialog stays open and renders unblockError inside
+	// itself (#804), rather than closing over a failure on the row behind it.
 	async function handleUnblock(address: string) {
 		unblockError[address] = '';
 		unblockedAddress = '';
@@ -91,6 +91,7 @@
 		} catch (error_) {
 			unblockError[address] =
 				error_ instanceof Error ? error_.message : 'Failed to unblock this address';
+			throw error_;
 		}
 	}
 
@@ -161,6 +162,7 @@
 			title="Unblock this address"
 			consequence={`Doula Cloud writes to ${suppression.address} again. If an email to it comes back undelivered, it is blocked again.`}
 			confirmLabel="Unblock this address"
+			error={unblockError[suppression.address]}
 			onConfirm={() => handleUnblock(suppression.address)}
 		/>
 	{:else}
@@ -170,9 +172,6 @@
 			would otherwise be.
 		-->
 		<Text text="This block stays. It cannot be undone." step="body-sm" tone="variant" />
-	{/if}
-	{#if unblockError[suppression.address]}
-		<Notice variant="error" message={unblockError[suppression.address]} />
 	{/if}
 {/snippet}
 

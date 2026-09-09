@@ -138,7 +138,10 @@ describe('MFA settings screen', () => {
 		await dialog.getByRole('button', { name: 'Require MFA for all Staff' }).click();
 
 		expect(puts).toHaveLength(1);
-		await expect.element(testPage.getByText('this action requires confirmation')).toBeVisible();
+		// #804: ConfirmDialog stays open on the rejection and renders this
+		// inside itself, so the dialog is where the error now lives.
+		await expect.element(dialog).toBeVisible();
+		await expect.element(dialog.getByText('this action requires confirmation')).toBeVisible();
 		await expect.element(testPage.getByText('Mandatory for Owners, optional for other Staff')).toBeVisible();
 	});
 

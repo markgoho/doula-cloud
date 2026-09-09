@@ -5,12 +5,23 @@
 	// The style guide never really removes anyone -- each demo below drives
 	// the component with a stub it treats exactly like the real thing.
 	const succeeds = async () => {};
-	const fails = async () => {
-		throw new Error('demo failure');
-	};
 
 	let isOpenSucceeds = $state(false);
 	let isOpenFails = $state(false);
+	let failError = $state('');
+
+	// The real shape every call site uses (#804): set `error` in the catch,
+	// pass it to ConfirmDialog, and it renders inside the dialog rather
+	// than behind it.
+	async function fails() {
+		failError = '';
+		try {
+			throw new Error('demo failure');
+		} catch (error_) {
+			failError = error_ instanceof Error ? error_.message : 'demo failure';
+			throw error_;
+		}
+	}
 </script>
 
 <stack-l space="var(--space-6)">
@@ -39,7 +50,10 @@
 
 	<section>
 		<h2>A failing confirm</h2>
-		<p>Click through to see the dialog stay open when <code>onConfirm</code> rejects.</p>
+		<p>
+			Click through to see the dialog stay open when <code>onConfirm</code> rejects, with the error
+			rendered inside the dialog rather than behind it (#804).
+		</p>
 		<Button
 			label="Decline this offer"
 			variant="destructive"
@@ -50,6 +64,7 @@
 			title="Decline this offer"
 			consequence="This offer cannot be reinstated once declined, and the Practice that sent it is told straight away."
 			confirmLabel="Decline this offer"
+			error={failError}
 			onConfirm={fails}
 		/>
 	</section>

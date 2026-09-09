@@ -334,17 +334,13 @@
 			 * The last-Owner refusal names the Practices in the way, so it is
 			 * rendered verbatim rather than replaced with a generic sentence.
 			 *
-			 * Swallowed rather than rethrown, which is the same choice the
-			 * portal's own "Sign out of every device" makes. ConfirmDialog
-			 * offers to stay open over a failure, and taking that offer would
-			 * put this Notice behind the dialog's own backdrop -- leaving her
-			 * looking at a Cancel button and a confirm that will refuse again,
-			 * with the reason hidden behind them. Letting it close puts the
-			 * named Practices in front of her, which is the only thing she can
-			 * act on.
+			 * Rethrown so ConfirmDialog stays open and renders this inside
+			 * itself (#804) -- she reads the named Practices right there,
+			 * with the same Cancel and a confirm she can retry once she has
+			 * acted on them, rather than losing the dialog's own context.
 			 */
 			deleteLoginError = error instanceof Error ? error.message : SERVICE_PROBLEM;
-			return;
+			throw error;
 		} finally {
 			isDeletingLogin = false;
 		}
@@ -494,11 +490,9 @@
 		title="Delete your login"
 		consequence="Your login, and your membership of every practice you work at, are deleted immediately. You cannot sign in again. Everything you did stays with those practices, and Doula Cloud keeps its own record that this account existed."
 		confirmLabel="Delete your login"
+		error={deleteLoginError}
 		onConfirm={handleDeleteLogin}
 	/>
-	{#if deleteLoginError}
-		<Notice variant="error" message={deleteLoginError} />
-	{/if}
 {/snippet}
 
 {#snippet errorSummary()}
