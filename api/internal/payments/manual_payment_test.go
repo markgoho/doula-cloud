@@ -140,6 +140,18 @@ func TestPostManualPaymentHandler_OtherMethodRequiresNote(t *testing.T) {
 	if resp.StatusCode != http.StatusBadRequest {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
 	}
+	// docs/api-design.md section 7 rule 4 (#1037): a refusal a person
+	// causes by filling in a form names the field at fault, keyed by the
+	// request DTO's own JSON tag.
+	var out struct {
+		Details map[string]string `json:"details"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if want := `note is needed when method is "other"`; out.Details["note"] != want {
+		t.Fatalf("details[note] = %q, want %q", out.Details["note"], want)
+	}
 	if status := invoiceStatusFor(t, db, invoiceID); status != invoiceStatusOpen {
 		t.Fatalf("invoice status = %q, want unchanged %q", status, invoiceStatusOpen)
 	}
@@ -183,6 +195,15 @@ func TestPostManualPaymentHandler_InvalidMethodRefused(t *testing.T) {
 	if resp.StatusCode != http.StatusBadRequest {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
 	}
+	var out struct {
+		Details map[string]string `json:"details"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if want := `method must be "check", "bank_transfer", "cash", or "other"`; out.Details["method"] != want {
+		t.Fatalf("details[method] = %q, want %q", out.Details["method"], want)
+	}
 }
 
 // TestPostManualPaymentHandler_FutureDateRefused proves paidOn cannot be
@@ -222,6 +243,15 @@ func TestPostManualPaymentHandler_MalformedDateRefused(t *testing.T) {
 
 	if resp.StatusCode != http.StatusBadRequest {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
+	}
+	var out struct {
+		Details map[string]string `json:"details"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if want := "paidOn must be a date in YYYY-MM-DD form"; out.Details["paidOn"] != want {
+		t.Fatalf("details[paidOn] = %q, want %q", out.Details["paidOn"], want)
 	}
 }
 

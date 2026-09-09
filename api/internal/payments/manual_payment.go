@@ -174,16 +174,27 @@ func PostManualPaymentHandler(client Client) http.Handler {
 			return
 		}
 		if !validPaymentMethods[req.Method] {
-			apierr.WriteError(w, `method must be "check", "bank_transfer", "cash", or "other"`, http.StatusBadRequest)
+			apierr.Write(w, http.StatusBadRequest, apierr.CodeInvalidArgument,
+				`method must be "check", "bank_transfer", "cash", or "other"`,
+				map[string]string{"method": `method must be "check", "bank_transfer", "cash", or "other"`})
 			return
 		}
 		if req.Method == PaymentMethodOther && req.Note == "" {
-			apierr.WriteError(w, `note is required when method is "other"`, http.StatusBadRequest)
+			// The details value swaps "required" for "needed" -- apierr's
+			// TestDetailsWording bans "required" from Details (#488's
+			// GOV.UK wording gate), the same reason MsgWorkStateNeeded
+			// exists beside MsgWorkStateRequired in staffauth. The summary
+			// Message a caller reads is left exactly as it was (#1037).
+			apierr.Write(w, http.StatusBadRequest, apierr.CodeInvalidArgument,
+				`note is required when method is "other"`,
+				map[string]string{"note": `note is needed when method is "other"`})
 			return
 		}
 		paidOn, err := time.Parse(paidOnLayout, req.PaidOn)
 		if err != nil {
-			apierr.WriteError(w, "paidOn must be a date in YYYY-MM-DD form", http.StatusBadRequest)
+			apierr.Write(w, http.StatusBadRequest, apierr.CodeInvalidArgument,
+				"paidOn must be a date in YYYY-MM-DD form",
+				map[string]string{"paidOn": "paidOn must be a date in YYYY-MM-DD form"})
 			return
 		}
 		if paidOn.After(time.Now().UTC().Truncate(24 * time.Hour)) {
