@@ -3,6 +3,16 @@
 # bucket-level access, enforced public access prevention, no lifecycle rule
 # and no versioning.
 #
+# No `versioning` block is declared. `lifecycle_rule` is an ordinary Optional
+# set, so its absence here already makes a hand-added rule show up as a plan
+# diff. `versioning` is different: on a bucket that has never had versioning
+# turned on, the live API returns no versioning object at all rather than
+# `{enabled: false}`, so declaring `versioning { enabled = false }` here was
+# tried and produced `1 to change` on an otherwise clean plan — a false
+# drift, not a real one. Turning versioning on by hand would still be
+# invisible to `plan` as a result; that gap is accepted rather than forced,
+# since forcing it means carrying a permanent phantom diff instead.
+#
 # No other bucket is here, and none should be. `doula-cloud.firebasestorage.app`
 # and `run-sources-doula-cloud-us-central1` are both created by something
 # other than this project for its own use (Firebase enabling itself, and

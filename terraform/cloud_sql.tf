@@ -17,8 +17,14 @@
 #   - `lifecycle.prevent_destroy` is Terraform refusing to run a plan that
 #     would destroy this resource at all, before either of the two API-level
 #     flags above is ever consulted.
-# All three are set, the same three-mechanism reasoning `cloud_run.tf` and
-# `secrets.tf` already use for `doula-api` and the secret shells.
+# All three are set here. `cloud_run.tf` draws the same `deletion_protection`
+# vs. `prevent_destroy` distinction for `doula-api`, but Cloud Run has no
+# GCP-level mirror of the flag, so this instance is the only resource in this
+# configuration where all three actually apply. `secrets.tf` sets only the
+# Terraform-side pair, and deliberately leaves its own provider-level
+# `deletion_protection` at the generated `false` — flipping it would be a
+# live change outside this ticket's import-only mechanism, per its own
+# comment.
 #
 # `google_sql_user` is never a resource in this configuration. It writes the
 # generated or supplied password to Terraform state in plaintext, and
@@ -89,6 +95,15 @@ resource "google_sql_database_instance" "doula_cloud_pg" {
 
   lifecycle {
     prevent_destroy = true
+
+    # `maintenance_version` records the release Cloud SQL last applied during
+    # a maintenance window and moves on its own schedule, not this
+    # configuration's — the same class of drift `cloud_run.tf`'s
+    # `client`/`client_version` entries exist to absorb. Declared as-is
+    # rather than omitted, so the value that was live at import time is on
+    # record, but ignored so the next automatic maintenance rollout does not
+    # turn the drift job red for a reason unrelated to configuration.
+    ignore_changes = [maintenance_version]
   }
 }
 
