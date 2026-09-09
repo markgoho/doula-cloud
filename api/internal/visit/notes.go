@@ -76,16 +76,21 @@ func NotesHandler() http.Handler {
 			return
 		}
 
-		// Read before writing, inside this same transaction, the same
-		// shape ScheduleHandler's own comment gives -- and for the same
+		// The Visit row is locked before it is read, the same shape
+		// ScheduleHandler's own locking read uses (#922) and for the same
 		// reason: a first write, an edit and a clear all edit the
-		// identical column, and a Diff that reads the same for all three
-		// answers nothing. previous.Valid is this route's own 404 (a
-		// missing Visit scans no row at all), so there is no separate
+		// identical column, and under READ COMMITTED a plain SELECT would
+		// let two concurrent writers both read the same prior notes, so
+		// the second entry could claim a hadNotes that the first write
+		// had already changed. SELECT ... FOR UPDATE blocks on a
+		// competing writer and then re-reads the row it committed, so
+		// hadNotes always reflects the value this write actually
+		// overwrote. previous.Valid is this route's own 404 (a missing
+		// Visit scans no row at all), so there is no separate
 		// RowsAffected check.
 		var previous sql.NullString
 		if err := tx.QueryRowContext(r.Context(),
-			`SELECT notes FROM visits WHERE id = $1 AND engagement_id = $2`,
+			`SELECT notes FROM visits WHERE id = $1 AND engagement_id = $2 FOR UPDATE`,
 			visitID, engagementID,
 		).Scan(&previous); err != nil {
 			if errors.Is(err, sql.ErrNoRows) {

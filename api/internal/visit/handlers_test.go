@@ -2,8 +2,10 @@ package visit_test
 
 import (
 	"bytes"
+	"context"
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strings"
 	"testing"
@@ -1020,6 +1022,156 @@ func TestScheduleHandler_ChangesThenClearsScheduledAt(t *testing.T) {
 	}
 }
 
+// TestScheduleHandler_ConcurrentReschedulesRecordTheTrueBefore is #922's
+// acceptance test: a genuine second writer, not a second call made after
+// the first has already committed. A raw transaction stands in for "the
+// first Staff member's reschedule is already under way" -- it takes the
+// Visit row's lock and holds it open while the request under test runs
+// concurrently on its own goroutine, and the test only lets the stand-in
+// write and commit once Postgres shows the request under test is
+// genuinely waiting on that lock (waitForLockContention), never on a
+// sleep's guess at timing.
+//
+// Before #922's fix this failed: the request under test's plain SELECT
+// read straight past the stand-in's held lock and recorded the Visit's
+// original instant as scheduledAtBefore, even though the stand-in's own
+// write -- committed before the request under test's UPDATE ever ran --
+// had already replaced it.
+func TestScheduleHandler_ConcurrentReschedulesRecordTheTrueBefore(t *testing.T) {
+	db := testdb.New(t)
+	const identityUID = "doula-scheduling-race"
+	practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, "employee")
+	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
+	original := time.Date(2027, 1, 1, 8, 0, 0, 0, time.UTC)
+	visitID := seedScheduledVisit(t, db, engagementID, staffID, original)
+
+	srv, session := newServer(t, db, identityUID)
+	defer srv.Close()
+
+	standIn, err := db.Admin.BeginTx(t.Context(), nil)
+	if err != nil {
+		t.Fatalf("begin stand-in transaction: %v", err)
+	}
+	defer func() { _ = standIn.Rollback() }()
+	var locked sql.NullTime
+	if err := standIn.QueryRowContext(t.Context(),
+		`SELECT scheduled_at FROM visits WHERE id = $1 FOR UPDATE`, visitID,
+	).Scan(&locked); err != nil {
+		t.Fatalf("stand-in lock read: %v", err)
+	}
+
+	// The request under test must overlap the stand-in's open
+	// transaction, so it runs on its own goroutine -- t.Fatalf is never
+	// safe off the test's own goroutine, so its outcome comes back over a
+	// channel instead. The response body is read and closed inside the
+	// goroutine too, since only its status code is needed here.
+	const secondAt = "2027-01-02T09:00:00Z"
+	results := make(chan patchResult, 1)
+	go func() {
+		body, marshalErr := json.Marshal(visit.ScheduleRequest{ScheduledAt: new(secondAt)})
+		if marshalErr != nil {
+			results <- patchResult{err: marshalErr}
+			return
+		}
+		resp, reqErr := doAuthedPatch(session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/visits/"+visitID+"/schedule", body)
+		if reqErr != nil {
+			results <- patchResult{err: reqErr}
+			return
+		}
+		defer resp.Body.Close()
+		results <- patchResult{statusCode: resp.StatusCode}
+	}()
+
+	waitForLockContention(t, db)
+
+	// The stand-in's own write is the first reschedule the request under
+	// test's entry must record as its "before" -- committed while that
+	// request is genuinely waiting on the row, not before it started.
+	firstAt := original.Add(2 * time.Hour)
+	if _, err := standIn.ExecContext(t.Context(), `UPDATE visits SET scheduled_at = $1 WHERE id = $2`, firstAt, visitID); err != nil {
+		t.Fatalf("stand-in write: %v", err)
+	}
+	if err := standIn.Commit(); err != nil {
+		t.Fatalf("stand-in commit: %v", err)
+	}
+
+	res := <-results
+	if res.err != nil {
+		t.Fatalf("request under test: %v", res.err)
+	}
+	if res.statusCode != http.StatusOK {
+		t.Fatalf("status = %d, want %d", res.statusCode, http.StatusOK)
+	}
+
+	var diffJSON []byte
+	if err := db.Admin.QueryRowContext(t.Context(),
+		`SELECT diff FROM activity
+		  WHERE subject_kind = 'engagement' AND subject_id = $1 AND action = 'visit_scheduled'
+		  ORDER BY created_at DESC LIMIT 1`,
+		engagementID,
+	).Scan(&diffJSON); err != nil {
+		t.Fatalf("read activity row: %v", err)
+	}
+	var diff struct {
+		Before *string `json:"scheduledAtBefore"`
+		After  *string `json:"scheduledAtAfter"`
+	}
+	if err := json.Unmarshal(diffJSON, &diff); err != nil {
+		t.Fatalf("unmarshal diff: %v", err)
+	}
+	if diff.Before == nil || !parseRFC3339(t, *diff.Before).Equal(firstAt) {
+		t.Fatalf("diff.scheduledAtBefore = %v, want the stand-in's own write (%s), not the Visit's original instant",
+			diff.Before, firstAt.Format(time.RFC3339))
+	}
+}
+
+// patchResult is doAuthedPatch's outcome, carried back over a channel to
+// the test's own goroutine -- the only one t.Fatalf is ever safe on.
+type patchResult struct {
+	statusCode int
+	err        error
+}
+
+// doAuthedPatch is authedPatch without a *testing.T, for a caller running
+// on a goroutine other than the test's own -- t.Fatalf is never safe
+// there, so failures come back as a plain error instead.
+func doAuthedPatch(session, url string, body []byte) (*http.Response, error) {
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodPatch, url, bytes.NewReader(body))
+	if err != nil {
+		return nil, fmt.Errorf("build request: %w", err)
+	}
+	authntest.AddSessionCookie(req, session)
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("do request: %w", err)
+	}
+	return resp, nil
+}
+
+// waitForLockContention blocks until Postgres shows some other backend is
+// actually waiting on a lock -- proof the request under test has reached
+// its own locking read or write and is genuinely contending for the
+// Visit row, rather than a sleep's guess at when that might have
+// happened.
+func waitForLockContention(t *testing.T, db *testdb.DB) {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		var waiting bool
+		if err := db.Admin.QueryRowContext(t.Context(),
+			`SELECT EXISTS (SELECT 1 FROM pg_locks WHERE NOT granted)`,
+		).Scan(&waiting); err != nil {
+			t.Fatalf("poll pg_locks: %v", err)
+		}
+		if waiting {
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatal("timed out waiting for the request under test to contend for the Visit row's lock")
+}
+
 func TestScheduleHandler_InvalidFormat(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "doula-scheduling-bad-format"
@@ -1552,6 +1704,98 @@ func TestNotesHandler_ChangesThenClearsNotes(t *testing.T) {
 	}
 	if diff.HasNotes {
 		t.Fatalf("diff.hasNotes = true, want false after clearing")
+	}
+}
+
+// TestNotesHandler_ConcurrentEditsRecordTheTrueHadNotes is #922's
+// acceptance test for NotesHandler, the same shape
+// TestScheduleHandler_ConcurrentReschedulesRecordTheTrueBefore proves for
+// ScheduleHandler: a genuine second writer, not a second call made after
+// the first has already committed. The Visit starts with no notes at
+// all, so the race is visible in hadNotes itself -- before #922's fix,
+// the request under test's plain SELECT would read past the stand-in's
+// held lock and record hadNotes=false, even though the stand-in's own
+// write, committed before the request under test's UPDATE ever ran, had
+// already given the Visit a first note.
+func TestNotesHandler_ConcurrentEditsRecordTheTrueHadNotes(t *testing.T) {
+	db := testdb.New(t)
+	const identityUID = "doula-notes-race"
+	practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, "employee")
+	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
+	visitID := seedVisit(t, db, engagementID, staffID)
+
+	srv, session := newServer(t, db, identityUID)
+	defer srv.Close()
+
+	standIn, err := db.Admin.BeginTx(t.Context(), nil)
+	if err != nil {
+		t.Fatalf("begin stand-in transaction: %v", err)
+	}
+	defer func() { _ = standIn.Rollback() }()
+	var locked sql.NullString
+	if err := standIn.QueryRowContext(t.Context(),
+		`SELECT notes FROM visits WHERE id = $1 FOR UPDATE`, visitID,
+	).Scan(&locked); err != nil {
+		t.Fatalf("stand-in lock read: %v", err)
+	}
+
+	const secondWriterNotes = "Second writer's note, from the request under test."
+	results := make(chan patchResult, 1)
+	go func() {
+		body, marshalErr := json.Marshal(visit.NotesRequest{Notes: new(secondWriterNotes)})
+		if marshalErr != nil {
+			results <- patchResult{err: marshalErr}
+			return
+		}
+		resp, reqErr := doAuthedPatch(session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/visits/"+visitID+"/notes", body)
+		if reqErr != nil {
+			results <- patchResult{err: reqErr}
+			return
+		}
+		defer resp.Body.Close()
+		results <- patchResult{statusCode: resp.StatusCode}
+	}()
+
+	waitForLockContention(t, db)
+
+	// The stand-in's own write is the first note the request under
+	// test's entry must record as having existed -- committed while that
+	// request is genuinely waiting on the row, not before it started.
+	if _, err := standIn.ExecContext(t.Context(),
+		`UPDATE visits SET notes = $1 WHERE id = $2`, "First writer's note, from the stand-in.", visitID,
+	); err != nil {
+		t.Fatalf("stand-in write: %v", err)
+	}
+	if err := standIn.Commit(); err != nil {
+		t.Fatalf("stand-in commit: %v", err)
+	}
+
+	res := <-results
+	if res.err != nil {
+		t.Fatalf("request under test: %v", res.err)
+	}
+	if res.statusCode != http.StatusOK {
+		t.Fatalf("status = %d, want %d", res.statusCode, http.StatusOK)
+	}
+
+	var diffJSON []byte
+	if err := db.Admin.QueryRowContext(t.Context(),
+		`SELECT diff FROM activity
+		  WHERE subject_kind = 'engagement' AND subject_id = $1 AND action = 'visit_notes_edited'
+		  ORDER BY created_at DESC LIMIT 1`,
+		engagementID,
+	).Scan(&diffJSON); err != nil {
+		t.Fatalf("read activity row: %v", err)
+	}
+	var diff struct {
+		HadNotes bool `json:"hadNotes"`
+		HasNotes bool `json:"hasNotes"`
+	}
+	if err := json.Unmarshal(diffJSON, &diff); err != nil {
+		t.Fatalf("unmarshal diff: %v", err)
+	}
+	if !diff.HadNotes {
+		t.Fatalf("diff.hadNotes = false, want true (the stand-in's own write had already given the Visit a first note)")
 	}
 }
 
