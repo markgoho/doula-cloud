@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { jsonResponse } from './testResponse.js';
 import {
 	activityLedgerColumns,
+	clientActivityLedgerColumns,
 	describeActivityAction,
 	loadEngagementActivityPage,
 	loadPortalActivityPage,
@@ -119,5 +120,38 @@ describe('activityLedgerColumns', () => {
 		const what = activityLedgerColumns()[1];
 
 		expect(what.accessor(entry({ action: 'invoice_raised' }))).toBe('Invoice raised');
+	});
+});
+
+describe('clientActivityLedgerColumns (#708)', () => {
+	it('keeps the staff column set everywhere but the event text', () => {
+		const staff = activityLedgerColumns();
+		const client = clientActivityLedgerColumns();
+
+		expect(client.map((column) => column.label)).toEqual(staff.map((column) => column.label));
+		expect(client[0].accessor(entry())).toBe(staff[0].accessor(entry()));
+		expect(client[2].accessor(entry())).toBe(staff[2].accessor(entry()));
+	});
+
+	it('says the register phrase, not the raw action, for the row the ticket names', () => {
+		const what = clientActivityLedgerColumns()[1];
+
+		expect(what.accessor(entry({ action: 'plan_instance_edited' }))).toBe('Your Birth Plan was updated.');
+	});
+
+	it("ignores a detail sentence, which is the staff register's own prose", () => {
+		const what = clientActivityLedgerColumns()[1];
+
+		expect(
+			what.accessor(
+				entry({ action: 'visit_logged', detail: 'Visit reassigned from Ana Silva to Mira Osei' })
+			)
+		).toBe('A visit was added to your care.');
+	});
+
+	it('refuses an action the register does not phrase', () => {
+		const what = clientActivityLedgerColumns()[1];
+
+		expect(() => what.accessor(entry({ action: 'offer_sent' }))).toThrow('no Client phrase');
 	});
 });
