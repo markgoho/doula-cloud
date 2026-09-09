@@ -80,6 +80,7 @@
 			await loadImpact();
 		} catch (error_) {
 			toggleError = error_ instanceof Error ? error_.message : 'Failed to save this setting';
+			throw error_;
 		} finally {
 			isSubmitting = false;
 		}
@@ -89,12 +90,20 @@
 		isConfirmOpen = true;
 	}
 
+	// Rethrown by save() so ConfirmDialog stays open and renders toggleError
+	// inside itself (#804).
 	async function handleConfirmRequireAll() {
 		await save(true, 'Every Staff member must now sign in with a second factor.');
 	}
 
 	async function handleStopRequiring() {
-		await save(false, 'Staff without a second factor can sign in without one again.');
+		try {
+			await save(false, 'Staff without a second factor can sign in without one again.');
+		} catch {
+			// No ConfirmDialog gates this direction (#606) -- toggleError set
+			// by save() above already renders on the page, so there is
+			// nothing here that needs the rejection.
+		}
 	}
 
 	// Singular/plural verbs, not just nouns ("has" vs "have") -- the same
@@ -167,7 +176,10 @@
 		{#if successNotice}
 			<Notice variant="status" message={successNotice} />
 		{/if}
-		{#if toggleError}
+		{#if toggleError && !isConfirmOpen}
+			<!-- Require-all's own failure renders inside ConfirmDialog while
+			     it is open (#804); this is Stop-requiring's, which has no
+			     dialog to gate it. -->
 			<Notice variant="error" message={toggleError} />
 		{/if}
 	{/if}
@@ -195,5 +207,6 @@
 	title="Require a second factor for every Staff member"
 	consequence={confirmConsequence}
 	confirmLabel="Require MFA for all Staff"
+	error={toggleError}
 	onConfirm={handleConfirmRequireAll}
 />

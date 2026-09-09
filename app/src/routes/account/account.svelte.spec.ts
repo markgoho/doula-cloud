@@ -500,10 +500,12 @@ describe('deleting your own login', () => {
 		await deleteButton().first().click();
 		await deleteButton().last().click();
 
-		// The dialog closes on a refusal she cannot fix by retrying, so the
-		// named Practices are in front of her rather than behind a backdrop.
-		await expect.element(testPage.getByText(/only Owner of Riverside Doula Collective/)).toBeVisible();
-		await expect.element(testPage.getByRole('dialog')).not.toBeInTheDocument();
+		// #804: the dialog stays open on a rejected onConfirm and renders
+		// this inside itself, so the named Practices are in front of her
+		// rather than behind its backdrop.
+		const dialog = testPage.getByRole('dialog');
+		await expect.element(dialog).toBeVisible();
+		await expect.element(dialog.getByText(/only Owner of Riverside Doula Collective/)).toBeVisible();
 		expect(goto).not.toHaveBeenCalled();
 	});
 
@@ -514,7 +516,9 @@ describe('deleting your own login', () => {
 		await deleteButton().first().click();
 		await deleteButton().last().click();
 
-		await expect.element(testPage.getByText('The network dropped')).toBeVisible();
+		const dialog = testPage.getByRole('dialog');
+		await expect.element(dialog).toBeVisible();
+		await expect.element(dialog.getByText('The network dropped')).toBeVisible();
 		expect(goto).not.toHaveBeenCalled();
 	});
 });

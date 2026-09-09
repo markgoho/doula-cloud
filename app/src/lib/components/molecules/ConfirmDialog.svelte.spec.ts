@@ -6,16 +6,18 @@ import ConfirmDialog from './ConfirmDialog.svelte';
 interface SetupOptions {
 	onConfirm?: () => void | Promise<void>;
 	onCancel?: () => void;
+	error?: string;
 }
 
-async function setup({ onConfirm = vi.fn(), onCancel }: SetupOptions = {}) {
+async function setup({ onConfirm = vi.fn(), onCancel, error }: SetupOptions = {}) {
 	await render(ConfirmDialog, {
 		open: true,
 		title: 'Remove from Practice',
 		consequence: 'This cannot be undone.',
 		confirmLabel: 'Remove from Practice',
 		onConfirm,
-		onCancel
+		onCancel,
+		error
 	});
 	return { onConfirm };
 }
@@ -80,5 +82,25 @@ describe('ConfirmDialog', () => {
 		await expect
 			.element(page.getByRole('button', { name: 'Remove from Practice' }))
 			.toHaveAttribute('aria-busy', 'false');
+	});
+
+	// #804: the caller used to render this Notice itself, as a sibling of
+	// ConfirmDialog in the page -- outside the native <dialog>'s top layer,
+	// so it sat behind the still-open dialog's own ::backdrop. Scoping the
+	// query to the dialog element itself is the assertion the old
+	// convention could never satisfy: that markup had no error inside
+	// ConfirmDialog to find, on a component with no `error` prop at all.
+	it('renders a caller-supplied error inside the dialog, not behind its backdrop', async () => {
+		await setup({ error: 'Failed to remove membership' });
+
+		const dialog = page.getByRole('dialog');
+		await expect.element(dialog).toBeVisible();
+		await expect.element(dialog.getByText('Failed to remove membership')).toBeVisible();
+	});
+
+	it('renders nothing extra when there is no error', async () => {
+		await setup();
+
+		await expect.element(page.getByRole('alert')).not.toBeInTheDocument();
 	});
 });

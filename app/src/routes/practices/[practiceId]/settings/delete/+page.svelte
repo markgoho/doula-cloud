@@ -129,7 +129,9 @@
 	{#if successNotice}
 		<Notice variant="status" message={successNotice} />
 	{/if}
-	{#if actionError}
+	{#if actionError && !isConfirmOpen}
+		<!-- Delete's own failure renders inside ConfirmDialog while it is
+		     open (#804); this is Restore's, which has no dialog to gate it. -->
 		<Notice variant="error" message={actionError} />
 	{/if}
 {/snippet}
@@ -155,5 +157,6 @@
 	title={`Delete ${session.practiceName}`}
 	consequence={deleteConsequence}
 	confirmLabel="Delete this Practice"
+	error={actionError}
 	onConfirm={handleConfirmDelete}
 />

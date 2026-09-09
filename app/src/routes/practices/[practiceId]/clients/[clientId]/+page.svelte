@@ -341,11 +341,9 @@
 					title="Erase {name}'s data"
 					consequence={eraseConsequence()}
 					confirmLabel="Erase {name}'s data"
+					error={eraseError}
 					onConfirm={handleErase}
 				/>
-			{/if}
-			{#if eraseError}
-				<Notice variant="error" message={eraseError} />
 			{/if}
 		{/if}
 

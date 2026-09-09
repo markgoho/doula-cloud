@@ -59,7 +59,11 @@
 			const decided = await declinePreAccountOffer(apiFetch, offerId, token, code);
 			offer &&= { ...offer, state: decided.state };
 		} catch (error_) {
+			// Rethrown so ConfirmDialog stays open and renders this inside
+			// itself (#804), rather than closing over a failure with no
+			// account to sign back into and try again from.
 			error = error_ instanceof Error ? error_.message : 'Could not decline this offer';
+			throw error_;
 		}
 	}
 </script>
@@ -120,11 +124,15 @@
 			title="Decline this offer"
 			consequence="Declining this offer cannot be undone."
 			confirmLabel="Decline this offer"
+			error={error}
 			onConfirm={handleDecline}
 		/>
 	{/if}
 {/if}
 
-{#if error}
+{#if error && !isDeclineDialogOpen}
+	<!-- Decline's own failure renders inside ConfirmDialog while it is
+	     open (#804); this is the access-code form's, which has no dialog
+	     to gate it. -->
 	<Notice message={error} variant="error" />
 {/if}

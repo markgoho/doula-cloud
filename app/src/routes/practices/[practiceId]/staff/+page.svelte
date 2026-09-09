@@ -197,8 +197,12 @@
 			await endSessions(apiFetchWithSession, page.params.practiceId!, staffId);
 			endSessionsDone[staffId] = true;
 		} catch (error_) {
+			// Rethrown so ConfirmDialog's own contract (left open on a
+			// rejected onConfirm) holds and `error` below renders inside the
+			// dialog rather than behind it (#804).
 			endSessionsError[staffId] =
 				error_ instanceof Error ? error_.message : 'Failed to end sessions';
+			throw error_;
 		} finally {
 			endingSessionsFor[staffId] = false;
 		}
@@ -240,8 +244,10 @@
 			await removeMember(apiFetchWithSession, page.params.practiceId!, staffId);
 			await loadRoster();
 		} catch (error_) {
+			// Rethrown for the same reason handleEndSessions above rethrows.
 			removeError[staffId] =
 				error_ instanceof Error ? error_.message : 'Failed to remove membership';
+			throw error_;
 		}
 	}
 
@@ -251,8 +257,10 @@
 			await revokeInvitation(apiFetchWithSession, page.params.practiceId!, invitationId);
 			await loadRoster();
 		} catch (error_) {
+			// Rethrown for the same reason handleEndSessions above rethrows.
 			revokeError[invitationId] =
 				error_ instanceof Error ? error_.message : 'Failed to revoke invitation';
+			throw error_;
 		}
 	}
 </script>
@@ -352,13 +360,11 @@
 		title="End sessions everywhere"
 		consequence={`${member.name} is signed out on every device immediately.`}
 		confirmLabel="End sessions everywhere"
+		error={endSessionsError[member.staffId]}
 		onConfirm={() => handleEndSessions(member.staffId)}
 	/>
 	{#if endSessionsDone[member.staffId]}
 		<Notice variant="status" message="Sessions ended." />
-	{/if}
-	{#if endSessionsError[member.staffId]}
-		<Notice variant="error" message={endSessionsError[member.staffId]} />
 	{/if}
 	<Button
 		label="Remove from practice"
@@ -378,11 +384,9 @@
 		title="Remove from Practice"
 		consequence={`${member.name} loses access to this Practice's Clients immediately.`}
 		confirmLabel="Remove from Practice"
+		error={removeError[member.staffId]}
 		onConfirm={() => handleRemoveMembership(member.staffId)}
 	/>
-	{#if removeError[member.staffId]}
-		<Notice variant="error" message={removeError[member.staffId]} />
-	{/if}
 {/snippet}
 
 {#snippet invitationActions(invitation: InvitationSummary)}
@@ -410,11 +414,9 @@
 		title="Revoke invitation"
 		consequence={`The invitation to ${invitation.address} no longer works.`}
 		confirmLabel="Revoke invitation"
+		error={revokeError[invitation.invitationId]}
 		onConfirm={() => handleRevoke(invitation.invitationId)}
 	/>
-	{#if revokeError[invitation.invitationId]}
-		<Notice variant="error" message={revokeError[invitation.invitationId]} />
-	{/if}
 {/snippet}
 
 {#snippet actions()}

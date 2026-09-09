@@ -130,8 +130,7 @@
 			);
 			const response = await apiFetchWithSession('/api/portal/sessions', { method: 'DELETE' });
 			if (!response.ok) {
-				signOutEverywhereError = await apiErrorMessage(response);
-				return;
+				throw new Error(await apiErrorMessage(response));
 			}
 			// engagements/[engagementId]/+layout.ts's load result is keyed
 			// on params alone, so a Back press to this exact URL would
@@ -141,8 +140,12 @@
 			await invalidateAll();
 			await goto(resolve('/portal/(signed-out)/login'));
 		} catch (error_) {
+			// Rethrown so ConfirmDialog stays open and renders this inside
+			// itself (#804), rather than closing over a failure she has had
+			// no chance to read.
 			signOutEverywhereError =
 				error_ instanceof Error ? error_.message : 'Failed to sign out of every device';
+			throw error_;
 		} finally {
 			isSigningOutEverywhere = false;
 		}
@@ -198,11 +201,9 @@
 		title="Sign out of every device"
 		consequence="You are signed out on every device immediately, including this one."
 		confirmLabel="Sign out of every device"
+		error={signOutEverywhereError}
 		onConfirm={handleSignOutEverywhere}
 	/>
-	{#if signOutEverywhereError}
-		<Notice variant="error" message={signOutEverywhereError} />
-	{/if}
 {/snippet}
 
 {#snippet errorSummary()}

@@ -84,9 +84,15 @@ test('a sole Owner is refused, with the practice in the way named', async ({
 
 	await page.goto('/account');
 	await page.getByRole('button', { name: 'Delete your login' }).first().click();
-	await page.getByRole('dialog').getByRole('button', { name: 'Delete your login' }).click();
 
-	await expect(page.getByText(/only Owner of Lakeshore Birth Partners/)).toBeVisible();
+	const dialog = page.getByRole('dialog');
+	await dialog.getByRole('button', { name: 'Delete your login' }).click();
+
+	// #804: the refusal renders inside the still-open dialog, not behind
+	// its backdrop -- ConfirmDialog stays open on a rejected onConfirm, and
+	// this is the one call site that names why (the practices in the way).
+	await expect(dialog.getByText(/only Owner of Lakeshore Birth Partners/)).toBeVisible();
+	await expect(dialog).toBeVisible();
 	// Still signed in, and still on the page she was on.
 	await expect(page).toHaveURL(/\/account$/);
 	const stillWorks = await request.get(`${API_URL}/api/staff/session`, { headers });
