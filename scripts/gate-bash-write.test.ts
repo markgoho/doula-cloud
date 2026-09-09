@@ -15,9 +15,9 @@ const SOURCE_ROOT = findMainCheckoutRoot(REPO_ROOT);
 const HOOK = path.join(REPO_ROOT, ".claude", "hooks", "gate-bash-write.ts");
 const TARGET = path.join(SOURCE_ROOT, "CLAUDE.md");
 
-function invoke(command: string): Promise<{ exitCode: number; stdout: string }> {
+function invoke(command: string, options: { cwd?: string } = {}): Promise<{ exitCode: number; stdout: string }> {
 	return new Promise((resolve, reject) => {
-		const child = spawn("bun", [HOOK], { stdio: ["pipe", "pipe", "inherit"] });
+		const child = spawn("bun", [HOOK], { stdio: ["pipe", "pipe", "inherit"], cwd: options.cwd });
 		let stdout = "";
 		child.stdout.on("data", chunk => {
 			stdout += chunk;
@@ -87,5 +87,34 @@ describe("gate-bash-write", () => {
 		const ignored = path.join(SOURCE_ROOT, "app", ".env.local");
 		const { exitCode } = await invoke(`echo hi > ${ignored}`);
 		expect(exitCode).toBe(0);
+	});
+
+	// #702: the hook sees the raw command before the shell expands `$S`, so
+	// the literal text `$S/c298.md` resolves as a relative path against the
+	// hook's own cwd. Run these with cwd set to the main checkout -- the
+	// exact scenario from #702, a session standing in main rather than a
+	// worktree -- so `path.resolve` pins the target inside the checkout,
+	// the same way it did for the reported bug. Before the fix,
+	// `isTrackedInMainCheckout` then called that nonexistent path tracked;
+	// the fix skips any target still holding a shell variable or command
+	// substitution before it gets that far.
+	test("allows a redirect target held in a shell variable ($VAR form)", async () => {
+		const { exitCode } = await invoke("printf hi >> $S/c298.md", { cwd: SOURCE_ROOT });
+		expect(exitCode).toBe(0);
+	});
+
+	test("allows a redirect target held in a shell variable (${VAR} form)", async () => {
+		const { exitCode } = await invoke("printf hi >> ${S}/c298.md", { cwd: SOURCE_ROOT });
+		expect(exitCode).toBe(0);
+	});
+
+	test("allows a redirect target held in a command substitution", async () => {
+		const { exitCode } = await invoke("printf hi >> $(dirname /tmp/x)/c298.md", { cwd: SOURCE_ROOT });
+		expect(exitCode).toBe(0);
+	});
+
+	test("still blocks a literal redirection to a tracked path (true positive unchanged)", async () => {
+		const { exitCode } = await invoke(`echo hi >> ${TARGET}`);
+		expect(exitCode).toBe(2);
 	});
 });

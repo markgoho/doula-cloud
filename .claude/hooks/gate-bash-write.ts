@@ -9,6 +9,24 @@
 // scripting-language one-liner, a compiled binary -- is not caught. That
 // gap is accepted on purpose; see docs/agents/worktree-flow.md's
 // Enforcement section.
+//
+// Decision (#702): a target holding an unexpanded shell variable or command
+// substitution (`$S/c298.md`, `${S}/c298.md`, `$(cmd)/c298.md`) is skipped
+// rather than resolved. This hook sees the command string before the shell
+// expands it, so `path.resolve` would pin that literal text to the working
+// directory -- producing a path that resolves inside the checkout by
+// accident, which `isTrackedInMainCheckout` then calls tracked because it
+// never consults git's index at all. The alternative -- teaching
+// `isTrackedInMainCheckout` to consult the index -- was rejected here: it is
+// a wider change (it also decides how an untracked new file in the checkout
+// is treated, a question #702 does not need answered) for a narrower
+// ticket. Skipping is consistent with this file's already-declared
+// incomplete-by-construction posture and costs nothing extra. What it gives
+// up: a caller that deliberately hides a tracked-checkout path behind a
+// variable to dodge the gate goes undetected -- accepted, the same as the
+// gaps above, because the GitHub trunk ruleset (docs/agents/worktree-flow.md)
+// is the real, unconditional boundary; this hook is a local nudge on top of
+// it, not a substitute for it.
 import path from 'node:path';
 import { isTrackedInMainCheckout, readStdin } from './tracked-path.ts';
 import { findMainCheckoutRoot } from './worktree-root.ts';
@@ -49,6 +67,14 @@ function stripQuotes(target: string): string {
 	return target.replace(/^(['"])(.*)\1$/, '$2');
 }
 
+// True for a target that still holds a shell variable or command
+// substitution (`$VAR`, `${VAR}`, `$(cmd)`, backticks) -- this hook sees the
+// command before the shell expands any of these, so the text is not the
+// real path (#702). See the decision note in the file header.
+function hasUnexpandedVariable(target: string): boolean {
+	return /\$\{|\$\(|\$[A-Za-z_]|`/.test(target);
+}
+
 // Candidate write targets for one pipeline/list stage. Over-collecting is
 // fine -- every candidate still has to resolve inside the main checkout
 // and outside gitignore to actually block anything.
@@ -82,7 +108,7 @@ function writeTargets(segment: string): string[] {
 		if (positional.length > 1 && destination) targets.push(destination);
 	}
 
-	return targets.map(stripQuotes);
+	return targets.map(stripQuotes).filter(target => !hasUnexpandedVariable(target));
 }
 
 function block(reason: string): never {
