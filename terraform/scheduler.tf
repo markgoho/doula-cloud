@@ -19,15 +19,15 @@ data "google_secret_manager_secret_version" "notification_worker_secret" {
 # cloud_run.tf, or the Cloud SQL instance and buckets #1048 will add, none of
 # which can be recreated without losing something.
 resource "google_cloud_scheduler_job" "process_outbox_drain" {
+  attempt_deadline = "180s"
+  deletion_policy  = "DELETE"
+  description      = "ADR-0010 as amended by #481: runs every outbox in the registry. The durability backstop under ADR-0013's nudge, replacing one Cloud Scheduler job per outbox."
   name             = "process-outbox-drain"
+  paused           = false
   project          = "doula-cloud"
   region           = "us-central1"
-  description      = "ADR-0010 as amended by #481: runs every outbox in the registry. The durability backstop under ADR-0013's nudge, replacing one Cloud Scheduler job per outbox."
   schedule         = "*/5 * * * *"
   time_zone        = "Etc/UTC"
-  attempt_deadline = "180s"
-  paused           = false
-  deletion_policy  = "DELETE"
 
   http_target {
     http_method = "POST"
@@ -47,15 +47,15 @@ resource "google_cloud_scheduler_job" "process_outbox_drain" {
 }
 
 resource "google_cloud_scheduler_job" "verify_practice_pages" {
+  attempt_deadline = "180s"
+  deletion_policy  = "DELETE"
+  description      = "#443: probes every published Practice Page and records whether it resolved; catches a build that failed and never reported"
   name             = "verify-practice-pages"
+  paused           = false
   project          = "doula-cloud"
   region           = "us-central1"
-  description      = "#443: probes every published Practice Page and records whether it resolved; catches a build that failed and never reported"
   schedule         = "*/15 * * * *"
   time_zone        = "Etc/UTC"
-  attempt_deadline = "180s"
-  paused           = false
-  deletion_policy  = "DELETE"
 
   http_target {
     http_method = "POST"
@@ -77,10 +77,11 @@ resource "google_cloud_scheduler_job" "verify_practice_pages" {
 # ADR-0013's nudge path: the queue existing without the enqueuer binding below
 # is exactly the silent half-configuration this import pass exists to catch.
 resource "google_cloud_tasks_queue" "notification_nudge" {
+  deletion_policy = "DELETE"
+  desired_state   = "RUNNING"
+  location        = "us-central1"
   name            = "doula-cloud-notification-nudge"
   project         = "doula-cloud"
-  location        = "us-central1"
-  deletion_policy = "DELETE"
 
   rate_limits {
     max_concurrent_dispatches = 1000
@@ -96,9 +97,9 @@ resource "google_cloud_tasks_queue" "notification_nudge" {
 }
 
 resource "google_cloud_tasks_queue_iam_member" "notification_nudge_enqueuer" {
-  project  = "doula-cloud"
   location = "us-central1"
-  name     = google_cloud_tasks_queue.notification_nudge.id
-  role     = "roles/cloudtasks.enqueuer"
   member   = "serviceAccount:850855848778-compute@developer.gserviceaccount.com"
+  name     = google_cloud_tasks_queue.notification_nudge.id
+  project  = "doula-cloud"
+  role     = "roles/cloudtasks.enqueuer"
 }
