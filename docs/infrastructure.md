@@ -24,7 +24,7 @@ Read against the live project, not from documentation. This table supersedes the
 | Cloud Tasks queue IAM | `850855848778-compute@` → `roles/cloudtasks.enqueuer` | Yes |
 | Secret Manager secrets | 13 | 12 shells and their accessor grants yes, versions no; the 13th (Firebase's own OAuth token) no — see the by-hand table |
 | Service accounts | `github-action-733741680@`, `firebase-adminsdk-rq3g0@`, `firebase-app-hosting-compute@`, `850855848778-compute@` (Google-created default) | The first yes; the three Google-created ones no |
-| Project-level IAM bindings | 32 role bindings, 35 principal-role pairs, 22 distinct principals, after #1043 removed `roles/cloudfunctions.developer` and `roles/cloudfunctions.admin` (each the sole binding for its role) | Yes, for the non-service-agent ones |
+| Project-level IAM bindings | 35 role bindings, 38 principal-role pairs, 23 distinct principals — #1043 removed `roles/cloudfunctions.developer` and `roles/cloudfunctions.admin` (each the sole binding for its role), and #1044 then added `terraform-plan@`'s three (`roles/viewer`, `roles/iam.securityReviewer`, `roles/iam.workloadIdentityPoolViewer`) | Yes, for the non-service-agent ones |
 | Workload Identity pool and provider | pool `github-actions`, provider `github` | Yes |
 | Artifact Registry repositories | `api`, `cloud-run-source-deploy`, `firebaseapphosting-images` — `gcf-artifacts` was deleted 2026-09-08 (#1043) | `api` yes; the other two no |
 | Cloud SQL instance | `doula-cloud-pg`, POSTGRES_16, `db-f1-micro`, ZONAL, public IP, `sslMode: TRUSTED_CLIENT_CERTIFICATE_REQUIRED`, 10 GB, 7 backups retained, **`deletionProtectionEnabled: false`** | Instance settings and databases yes; users no |
@@ -32,7 +32,7 @@ Read against the live project, not from documentation. This table supersedes the
 | GCS buckets | `doula-cloud-attachments`; `doula-cloud.firebasestorage.app`, `run-sources-…` — `gcf-v2-sources-…` and `gcf-v2-uploads-…` were deleted 2026-09-08 (#1043) | `doula-cloud-attachments` yes; the rest no |
 | Firestore | one `(default)` FIRESTORE_NATIVE database, created by Firebase | No |
 
-#797's "34 project-level IAM bindings" is the role count as it stood before #1043; it is 32 now. The number that matters for Terraform is the principal-role pairs — 37 before #1043, 35 now — because `google_project_iam_member` is one resource per pair. Seventeen of those belong to Google's own service agents, which the boundary below leaves alone; the other eighteen are owned, down from twenty after #1043 removed `roles/cloudfunctions.developer` from `github-action-733741680@` and `roles/cloudfunctions.admin` from `firebase-adminsdk-rq3g0@`.
+#797's "34 project-level IAM bindings" is the role count as it stood before #1043; it is 35 now, after #1043 removed two roles and #1044 added `terraform-plan@` as a principal with three of its own. The number that matters for Terraform is the principal-role pairs — 37 before #1043, 38 now (#1043 removed two, #1044 added three) — because `google_project_iam_member` is one resource per pair. Eighteen of those belong to Google's own service agents, which the boundary below leaves alone; the other twenty are owned and imported by this ticket (#1047): the nine on `github-action-733741680@`, three each on `firebase-adminsdk-rq3g0@` and `firebase-app-hosting-compute@`, one on the default compute account, one on `markgoho@gmail.com`, and the three #1044 added on `terraform-plan@`.
 
 ## What Terraform owns
 
