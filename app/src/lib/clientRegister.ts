@@ -17,6 +17,22 @@
 
 import { formatInstant } from './dates.js';
 
+/**
+ * Every lookup in this module has the same body: find the fixed wording
+ * for a raw value, and refuse rather than fall back when there is none.
+ * Written once here (#708 made it the third copy) so the refusal itself
+ * -- the thing ADR-0005 actually asks this module to guarantee -- cannot
+ * differ between one table and the next.
+ *
+ * `what` names the vocabulary in the message ("engagement status",
+ * "activity action"), which is the only part that ever differed.
+ */
+function fixedWording(table: Record<string, string>, value: string, what: string): string {
+	const wording = table[value];
+	if (!wording) throw new Error(`clientRegister: no Client wording for ${what} "${value}"`);
+	return wording;
+}
+
 /** `engagement_status` has three values today (ADR-0015 superseded
  * ADR-0005's four-value set when `postpartum` left the column). One
  * fixed label per value, the same for every Client. */
@@ -27,9 +43,7 @@ const ENGAGEMENT_STATUS_LABELS: Record<string, string> = {
 };
 
 export function engagementStatusLabel(status: string): string {
-	const label = ENGAGEMENT_STATUS_LABELS[status];
-	if (!label) throw new Error(`clientRegister: no Client label for engagement status "${status}"`);
-	return label;
+	return fixedWording(ENGAGEMENT_STATUS_LABELS, status, 'engagement status');
 }
 
 /** `contract_status` (`draft | sent | signed | voided`) had no Client
@@ -46,9 +60,7 @@ const CONTRACT_STATUS_LABELS: Record<string, string> = {
 };
 
 export function contractStatusLabel(status: string): string {
-	const label = CONTRACT_STATUS_LABELS[status];
-	if (!label) throw new Error(`clientRegister: no Client label for contract status "${status}"`);
-	return label;
+	return fixedWording(CONTRACT_STATUS_LABELS, status, 'contract status');
 }
 
 /** The terminal notice a voided Contract carries for a Client (NH-G5) --
@@ -105,10 +117,13 @@ export function engagementLabel(engagement: EngagementLabelInput): string {
  * `activityPhrases.usage.spec.ts`, which reads the Go action vocabulary
  * itself and fails on an action added, removed, or left unphrased.
  *
- * Actor-neutral throughout: the ledger's own "Who" column already carries
+ * No phrase names a person: the ledger's own "Who" column already carries
  * the actor (a Client's own name, "Your practice", or "Doula Cloud"), so
- * a phrase naming one would say it twice, and several of these actions
- * can be either kind.
+ * a phrase naming one would say it twice. A phrase opens with "You" only
+ * where the write side admits one actor kind and it is hers -- an
+ * acknowledged Birth Plan, her own notification switch, an invitation
+ * addressed to her -- never where a Staff member could have done the same
+ * act.
  *
  * Keyed by every action a Client can reach -- every `EngagementAction`
  * except the staffing set `activity.StaffingActions()` names, which the
@@ -147,16 +162,33 @@ const CLIENT_ACTIVITY_PHRASES: Record<string, string> = {
 	// set -- phrased here rather than left to throw, with whether they
 	// should reach her at all left to #1096, which is a filter question
 	// rather than a wording one.
-	contract_void_requested: 'Your Practice asked to end your Contract.',
-	contract_void_declined: 'Your Practice decided to keep your Contract.',
+	//
+	// "Someone at your practice", not "Your practice asked you": the ask
+	// goes to an Owner or Admin, never to her, and a phrase that read as
+	// addressed to her would invite a reply she has no way to give. It
+	// still names nobody, which is the half of CONTEXT.md's Activity
+	// entry portal.staffActorDisplayName holds on the actor column.
+	// Lower-case "practice" in both, matching that column's own
+	// "Your practice" -- two spellings of the same word in one row is
+	// exactly the seam a Client would read as two different things.
+	contract_void_requested: 'Someone at your practice asked for your Contract to be ended.',
+	contract_void_declined: 'Your practice decided to keep your Contract.',
 
-	// Visits, in her own phrasing. `visit_notes_edited` says notes exist
-	// and never what they say: ADR-0006 keeps a Visit's notes staff-only,
-	// and a phrase promising her a reading of them would be a fact the
-	// model does not hold.
+	// Visits, in her own phrasing. Both of the last two say "updated"
+	// rather than naming a direction, because the write side does not hold
+	// one: `visit_scheduled` records a scheduled time being set, changed
+	// *or cleared* (its diff carries a nullable before and a nullable
+	// after), and `visit_notes_edited` records notes written *or
+	// re-written*. "Scheduled" or "added" would be false the first time it
+	// is not, which is what CONTEXT.md's Contract entry rules out: a
+	// register label never claims a fact the model does not hold.
+	//
+	// `visit_notes_edited` says notes exist and never what they say:
+	// ADR-0006 keeps a Visit's notes staff-only, and a phrase promising her
+	// a reading of them would be the same defect from the other side.
 	visit_logged: 'A visit was added to your care.',
-	visit_scheduled: "A visit's date and time changed.",
-	visit_notes_edited: 'Notes were added to a visit.',
+	visit_scheduled: "A visit's timing was updated.",
+	visit_notes_edited: 'Notes on a visit were updated.',
 
 	// The Plan Instance, which she calls her Birth Plan (CONTEXT.md's Plan
 	// Instance entry: she never meets the concept itself).
@@ -167,7 +199,13 @@ const CLIENT_ACTIVITY_PHRASES: Record<string, string> = {
 	// phrase for CONTEXT.md's own stated reason: "Written off" would tell
 	// her that her Practice absorbed a loss on her, which is true, unkind,
 	// and hers to be spared.
-	invoice_raised: 'You were sent an Invoice.',
+	// "Added to your care", not "sent to you": raising an Invoice
+	// (payments' own handler) creates the row and records this entry, and
+	// mails nobody -- the by-hand rail has no Client-email requirement at
+	// all, and whether the Invoice number ever reaches her is still #946's
+	// to decide. "You were sent an Invoice" would be a delivery the model
+	// does not hold.
+	invoice_raised: 'An Invoice was added to your care.',
 	invoice_paid: 'An Invoice was paid.',
 	payment_recorded: 'A payment from you was recorded.',
 	payment_reversed: 'A payment recorded earlier was removed.',
@@ -187,9 +225,7 @@ const CLIENT_ACTIVITY_PHRASES: Record<string, string> = {
 };
 
 export function clientActivityPhrase(action: string): string {
-	const phrase = CLIENT_ACTIVITY_PHRASES[action];
-	if (!phrase) throw new Error(`clientRegister: no Client phrase for activity action "${action}"`);
-	return phrase;
+	return fixedWording(CLIENT_ACTIVITY_PHRASES, action, 'activity action');
 }
 
 /** The table's own keys, sorted, for the drift guard that compares them

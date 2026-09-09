@@ -58,6 +58,41 @@ export const visits = [
 	{ visitId: 'visit-past', scheduledAt: '2026-08-18T14:30:00Z', doulaName: 'Priya Raman', hasHappened: true }
 ];
 
+/*
+ * #708's own row-set split, the same shape the Visits above take. The
+ * ledger used to answer this route's `/activity` read with an empty page,
+ * which meant every sweep that trusts this fixture measured a table with
+ * no rows in it -- and once the What column started carrying a whole
+ * sentence rather than an action string, an empty ledger stopped standing
+ * in for the real one.
+ *
+ * Two rows, because two things about this column can be worst-case: the
+ * longest phrase the Client register holds (`contract_void_requested`,
+ * pinned in `activityPhrases.usage.spec.ts`), and the longest single
+ * unbreakable word among them, which is what a 320px track actually
+ * cannot split -- "notifications", on a row whose actor is her own name
+ * rather than "Your practice", so the Who column is swept under a real
+ * Client's name too.
+ */
+export const activity = [
+	{
+		subjectKind: 'engagement',
+		subjectId: detail.engagementId,
+		action: 'contract_void_requested',
+		actorKind: 'staff',
+		actorName: 'Your practice',
+		createdAt: '2026-08-30T15:00:00Z'
+	},
+	{
+		subjectKind: 'engagement',
+		subjectId: detail.engagementId,
+		action: 'push_notifications_enabled',
+		actorKind: 'client',
+		actorName: detail.clientName,
+		createdAt: '2026-08-29T11:30:00Z'
+	}
+];
+
 export const fixture: RouteFixture = {
 	name: 'The Client-portal Engagement hub',
 	component: Page,
@@ -71,9 +106,9 @@ export const fixture: RouteFixture = {
 	// fetcher, and needs the cursor-list envelope docs/api-design.md
 	// section 4 asks for -- the bare `detail` shape above has no `items`,
 	// which is exactly what crashed DataTable when this fixture answered
-	// every path with it alike.
+	// every path with it alike. #708 gave it real rows; see `activity`.
 	respond: (path) => {
-		if (path.includes('/activity')) return jsonResponse({ items: [], hasMore: false });
+		if (path.includes('/activity')) return jsonResponse({ items: activity, hasMore: false });
 		if (path.includes('/visits')) return jsonResponse({ items: visits, hasMore: false });
 		return jsonResponse(detail);
 	},

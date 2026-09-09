@@ -68,6 +68,16 @@ export function describeActivityAction(action: string): string {
 }
 
 /**
+ * The two staff surfaces' event text: the server's own `detail` sentence
+ * when the entry carries one (#887), and the generic description
+ * otherwise. `activityLedgerColumns`'s default, and the whole of what
+ * #708 left unchanged for them.
+ */
+function staffEventText(row: ActivityEntry): string {
+	return row.detail ?? describeActivityAction(row.action);
+}
+
+/**
  * One column, shaped to satisfy DataTable's own `Column<T>` structurally
  * (that type is local to DataTable.svelte, not exported -- a plain object
  * literal matching its shape is how every other Column-typed value in
@@ -96,10 +106,16 @@ interface LedgerColumn {
  *
  * #708: the What column's text is the one thing a caller may substitute,
  * because it is the one thing that differs by who is reading -- the
- * Client portal passes `clientActivityLedgerColumns` below. Everything
- * else stays built once here, which is the point of the module.
+ * Client portal passes `clientActivityLedgerColumns` below. It is a
+ * parameter rather than a post-hoc rewrite of the returned array, so
+ * neither caller has to find its column by matching the display copy
+ * "What", which is a heading a design change is free to reword.
+ * Everything else stays built once here, which is the point of the
+ * module.
  */
-export function activityLedgerColumns(): LedgerColumn[] {
+export function activityLedgerColumns(
+	describeEvent: (row: ActivityEntry) => string = staffEventText
+): LedgerColumn[] {
 	return [
 		{
 			label: 'When',
@@ -107,11 +123,7 @@ export function activityLedgerColumns(): LedgerColumn[] {
 			variant: 'meta',
 			datetimeAccessor: (row) => row.createdAt
 		},
-		{
-			label: 'What',
-			accessor: (row) => row.detail ?? describeActivityAction(row.action),
-			variant: 'body'
-		},
+		{ label: 'What', accessor: describeEvent, variant: 'body' },
 		{ label: 'Who', accessor: (row) => row.actorName, variant: 'muted' }
 	];
 }
@@ -131,11 +143,7 @@ export function activityLedgerColumns(): LedgerColumn[] {
  * that fell back to `detail` would leak the moment one did.
  */
 export function clientActivityLedgerColumns(): LedgerColumn[] {
-	return activityLedgerColumns().map((column) =>
-		column.label === 'What'
-			? { ...column, accessor: (row: ActivityEntry) => clientActivityPhrase(row.action) }
-			: column
-	);
+	return activityLedgerColumns((row) => clientActivityPhrase(row.action));
 }
 
 /**

@@ -152,6 +152,6 @@ describe('clientActivityLedgerColumns (#708)', () => {
 	it('refuses an action the register does not phrase', () => {
 		const what = clientActivityLedgerColumns()[1];
 
-		expect(() => what.accessor(entry({ action: 'offer_sent' }))).toThrow('no Client phrase');
+		expect(() => what.accessor(entry({ action: 'offer_sent' }))).toThrow('no Client wording');
 	});
 });

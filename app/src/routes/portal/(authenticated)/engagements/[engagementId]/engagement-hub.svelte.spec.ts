@@ -257,13 +257,15 @@ describe('the Activity disclosure (#486)', () => {
 	// #708 made the What column's text longer than the action string it
 	// replaced, so the row swept here is the longest phrase the register
 	// holds rather than an average one -- the widest thing this column can
-	// actually be asked to lay out at 320px.
+	// actually be asked to lay out at 320px. Which action that is, is
+	// pinned in `activityPhrases.usage.spec.ts`, so a longer phrase added
+	// later fails there rather than silently demoting this sweep.
 	it('is free of horizontal overflow from 320px up once opened (ADR-0024/0025)', async () => {
 		mockFetch(detail, [
 			{
 				subjectKind: 'engagement',
 				subjectId: detail.engagementId,
-				action: 'contract_void_declined',
+				action: 'contract_void_requested',
 				actorKind: 'staff',
 				actorName: 'Your practice',
 				createdAt: new Date().toISOString()
@@ -285,7 +287,7 @@ describe('the Activity disclosure (#486)', () => {
 			// against whichever tree is currently hidden.
 			await expect
 				.poll(() => frame.querySelector(':scope details .frame')?.textContent)
-				.toContain('Your Practice decided to keep your Contract.');
+				.toContain('Someone at your practice asked for your Contract to be ended.');
 
 			const found = sweep(frame, run.clientWidth);
 			expect(found, found && overflowReport('Client-portal Activity disclosure (open)', found)).toBeUndefined();

@@ -18,7 +18,7 @@ describe('engagementStatusLabel', () => {
 	});
 
 	it('throws for a status this build has not labeled, rather than falling back to the raw value', () => {
-		expect(() => engagementStatusLabel('postpartum')).toThrow(/no Client label/);
+		expect(() => engagementStatusLabel('postpartum')).toThrow(/no Client wording/);
 	});
 });
 
@@ -71,7 +71,7 @@ describe('contractStatusLabel', () => {
 	});
 
 	it('throws for an unlabeled contract status', () => {
-		expect(() => contractStatusLabel('archived')).toThrow(/no Client label/);
+		expect(() => contractStatusLabel('archived')).toThrow(/no Client wording/);
 	});
 });
 
