@@ -42,6 +42,7 @@
 		type Invoice,
 		type PaymentMethod
 	} from '#lib/invoice.js';
+	import { RefusalError } from '#lib/formErrors.js';
 	import Button from '#lib/components/atoms/Button.svelte';
 	import Link from '#lib/components/atoms/Link.svelte';
 	import Notice from '#lib/components/atoms/Notice.svelte';
@@ -135,8 +136,47 @@
 	let paymentMethod = $state<PaymentMethod>('check');
 	let paymentNote = $state('');
 	let paymentDate = $state(todayIsoDate());
+	// paymentError is the untargeted GOV.UK summary fallback (#1038): a
+	// refusal naming no field of this form -- a Stripe-side failure, an
+	// Invoice no longer open. The three below carry a refusal that does
+	// name a field, read into the LabeledField/RadioGroup it concerns
+	// rather than only this detached paragraph.
 	let paymentError = $state('');
+	let paymentMethodError = $state('');
+	let paymentNoteError = $state('');
+	let paymentDateError = $state('');
 	let isRecordingPayment = $state(false);
+
+	function resetPaymentErrors() {
+		paymentError = '';
+		paymentMethodError = '';
+		paymentNoteError = '';
+		paymentDateError = '';
+	}
+
+	/** Reads a caught refusal into this form's field-level state, per
+	 * `formErrors.ts`'s GOV.UK rules: a `RefusalError` naming one of this
+	 * form's own fields (`method`/`note`/`paidOn`, PostManualPaymentHandler's
+	 * own `details` keys, #1037) is read onto that field; anything else --
+	 * no `details` at all, or a key none of these fields own -- stays the
+	 * single untargeted summary paragraph this form already showed. */
+	function applyPaymentRefusal(error_: unknown) {
+		resetPaymentErrors();
+		if (error_ instanceof RefusalError && error_.details) {
+			paymentMethodError = error_.details.method ?? '';
+			paymentNoteError = error_.details.note ?? '';
+			paymentDateError = error_.details.paidOn ?? '';
+			if (paymentMethodError || paymentNoteError || paymentDateError) {
+				// Back to the entry step: a field-level error is only
+				// wired into the field it concerns while that field is on
+				// screen, and the review step shows a DescriptionList, not
+				// the form.
+				paymentStep = 'form';
+				return;
+			}
+		}
+		paymentError = error_ instanceof Error ? error_.message : 'Failed to record payment';
+	}
 
 	const paymentMethodOptions = [
 		{ value: 'check' as const, label: 'Check' },
@@ -158,23 +198,25 @@
 		paymentMethod = 'check';
 		paymentNote = '';
 		paymentDate = todayIsoDate();
-		paymentError = '';
+		resetPaymentErrors();
 		cancelReversingPayment();
 	}
 
 	function cancelRecordingPayment() {
 		payingInvoiceId = '';
-		paymentError = '';
+		resetPaymentErrors();
 	}
 
 	/** Moves from the entry form to the review step, after the same
 	 * validation the BFF itself enforces -- so a Staff member sees the
-	 * refusal before, not after, typing the whole thing twice. */
+	 * refusal before, not after, typing the whole thing twice. Each check
+	 * targets the field it is about (#1038), the same as a refusal read
+	 * back off the BFF. */
 	function reviewPayment(event: SubmitEvent) {
 		event.preventDefault();
-		paymentError = '';
+		resetPaymentErrors();
 		if (paymentMethod === 'other' && paymentNote.trim() === '') {
-			paymentError = 'Enter a note for "Other"';
+			paymentNoteError = 'Enter a note for "Other"';
 			return;
 		}
 		// No empty-date check: the date TextInput's own `required` already
@@ -182,7 +224,7 @@
 		// `required` covers emptiness, this function covers the semantic
 		// checks beyond it.
 		if (paymentDate > todayIsoDate()) {
-			paymentError = 'The date cannot be in the future';
+			paymentDateError = 'The date cannot be in the future';
 			return;
 		}
 		paymentStep = 'review';
@@ -190,7 +232,7 @@
 
 	async function confirmPayment() {
 		isRecordingPayment = true;
-		paymentError = '';
+		resetPaymentErrors();
 		try {
 			await onRecordPayment(payingInvoiceId, {
 				method: paymentMethod,
@@ -199,7 +241,7 @@
 			});
 			payingInvoiceId = '';
 		} catch (error_) {
-			paymentError = error_ instanceof Error ? error_.message : 'Failed to record payment';
+			applyPaymentRefusal(error_);
 		} finally {
 			isRecordingPayment = false;
 		}
@@ -217,31 +259,56 @@
 	let reversingPaymentId = $state('');
 	let reversalStep = $state<'form' | 'review'>('form');
 	let reversalReason = $state('');
+	// reversalError is the untargeted summary fallback (#1038) -- a
+	// Stripe-backed refusal, or a Payment already reversed; neither names
+	// the Reason field. reversalReasonError is that field's own error.
 	let reversalError = $state('');
+	let reversalReasonError = $state('');
 	let isReversingPayment = $state(false);
+
+	function resetReversalErrors() {
+		reversalError = '';
+		reversalReasonError = '';
+	}
+
+	/** As applyPaymentRefusal above: PostReversePaymentHandler's own
+	 * `reason` details key (#945) is read onto the Reason field; anything
+	 * else stays the untargeted summary paragraph. */
+	function applyReversalRefusal(error_: unknown) {
+		resetReversalErrors();
+		if (error_ instanceof RefusalError && error_.details?.reason) {
+			reversalReasonError = error_.details.reason;
+			// Back to the entry step, matching applyPaymentRefusal above.
+			reversalStep = 'form';
+			return;
+		}
+		reversalError = error_ instanceof Error ? error_.message : 'Failed to reverse this payment';
+	}
 
 	function startReversingPayment(invoiceId: string, paymentId: string) {
 		reversingInvoiceId = invoiceId;
 		reversingPaymentId = paymentId;
 		reversalStep = 'form';
 		reversalReason = '';
-		reversalError = '';
+		resetReversalErrors();
 		cancelRecordingPayment();
 	}
 
 	function cancelReversingPayment() {
 		reversingInvoiceId = '';
 		reversingPaymentId = '';
-		reversalError = '';
+		resetReversalErrors();
 	}
 
 	/** Moves from the entry form to the review step, after the same
-	 * non-blank check the BFF itself enforces on the reason. */
+	 * non-blank check the BFF itself enforces on the reason -- targeted at
+	 * the Reason field (#1038), the same as a refusal read back off the
+	 * BFF. */
 	function reviewReversal(event: SubmitEvent) {
 		event.preventDefault();
-		reversalError = '';
+		resetReversalErrors();
 		if (reversalReason.trim() === '') {
-			reversalError = 'Enter a reason for reversing this payment';
+			reversalReasonError = 'Enter a reason for reversing this payment';
 			return;
 		}
 		reversalStep = 'review';
@@ -249,13 +316,13 @@
 
 	async function confirmReversal() {
 		isReversingPayment = true;
-		reversalError = '';
+		resetReversalErrors();
 		try {
 			await onReversePayment(reversingInvoiceId, reversingPaymentId, reversalReason.trim());
 			reversingInvoiceId = '';
 			reversingPaymentId = '';
 		} catch (error_) {
-			reversalError = error_ instanceof Error ? error_.message : 'Failed to reverse this payment';
+			applyReversalRefusal(error_);
 		} finally {
 			isReversingPayment = false;
 		}
@@ -373,13 +440,14 @@
 						options={paymentMethodOptions}
 						value={paymentMethod}
 						onChange={(value) => (paymentMethod = value)}
+						error={paymentMethodError || undefined}
 					/>
-					<LabeledField label="Note (optional)">
+					<LabeledField label="Note (optional)" error={paymentNoteError || undefined}>
 						{#snippet children({ id, describedBy, invalid })}
 							<Textarea {id} {describedBy} {invalid} value={paymentNote} onInput={(value) => (paymentNote = value)} />
 						{/snippet}
 					</LabeledField>
-					<LabeledField label="Date received">
+					<LabeledField label="Date received" error={paymentDateError || undefined}>
 						{#snippet children({ id, describedBy, invalid })}
 							<TextInput
 								{id}
@@ -434,7 +502,7 @@
 			<h3>Reverse a payment of {formatAmount(invoice.amountCents)}</h3>
 			{#if reversalStep === 'form'}
 				<form onsubmit={reviewReversal}>
-					<LabeledField label="Reason">
+					<LabeledField label="Reason" error={reversalReasonError || undefined}>
 						{#snippet children({ id, describedBy, invalid })}
 							<Textarea {id} {describedBy} {invalid} value={reversalReason} onInput={(value) => (reversalReason = value)} />
 						{/snippet}

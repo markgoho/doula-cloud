@@ -10,6 +10,7 @@
 import type { Fetcher } from './fetcher.js';
 
 import { apiErrorMessage } from './apiErrorMessage.js';
+import { refusalError } from './formErrors.js';
 import { formatMoney } from './money.js';
 
 export interface Invoice {
@@ -266,8 +267,11 @@ export async function recordPayment(
 		headers: { 'Content-Type': 'application/json' },
 		body: JSON.stringify(input)
 	});
+	// refusalError, not apiErrorMessage: #1038's field-level wiring in
+	// InvoiceSection needs PostManualPaymentHandler's own `details` map
+	// (#1037), which apiErrorMessage discards down to a single string.
 	if (!response.ok) {
-		throw new Error(await apiErrorMessage(response));
+		throw await refusalError(response);
 	}
 	return response.json();
 }
@@ -295,8 +299,11 @@ export async function reversePayment(
 			body: JSON.stringify({ reason })
 		}
 	);
+	// refusalError, matching recordPayment above: PostReversePaymentHandler's
+	// blank-reason refusal carries a `reason` details entry (#945) that
+	// apiErrorMessage would discard.
 	if (!response.ok) {
-		throw new Error(await apiErrorMessage(response));
+		throw await refusalError(response);
 	}
 	return response.json();
 }
