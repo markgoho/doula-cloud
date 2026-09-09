@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import InvoiceSection from './InvoiceSection.svelte';
 import type { BillingMode, Invoice, PaymentMethod } from '#lib/invoice.js';
+import { RefusalError } from '#lib/formErrors.js';
 
 interface SetupOptions {
 	invoices?: Invoice[];
@@ -343,7 +344,10 @@ describe('InvoiceSection.svelte', () => {
 			await expect.element(page.getByLabelText('Date received')).not.toBeInTheDocument();
 		});
 
-		it('requires a note when the method is Other', async () => {
+		// #1038: the message is wired into the Note field itself -- marked
+		// invalid via LabeledField's own error slot -- not only a detached
+		// role="alert" paragraph.
+		it('requires a note when the method is Other, wired into the Note field', async () => {
 			await setup({ invoices: [invoiceOpen], isOwnerOrAdmin: true });
 
 			await page.getByRole('button', { name: 'Record payment' }).click();
@@ -352,9 +356,12 @@ describe('InvoiceSection.svelte', () => {
 			await page.getByRole('button', { name: 'Continue' }).click();
 
 			await expect.element(page.getByText('Enter a note for "Other"')).toBeVisible();
+			await expect.element(page.getByLabelText('Note (optional)')).toHaveAttribute('aria-invalid', 'true');
+			await expect.element(page.getByLabelText('Date received')).toHaveAttribute('aria-invalid', 'false');
 		});
 
-		it('rejects a date in the future', async () => {
+		// #1038: wired into the Date received field, not a detached alert.
+		it('rejects a date in the future, wired into the Date received field', async () => {
 			await setup({ invoices: [invoiceOpen], isOwnerOrAdmin: true });
 
 			const future = new Date();
@@ -365,6 +372,7 @@ describe('InvoiceSection.svelte', () => {
 			await page.getByRole('button', { name: 'Continue' }).click();
 
 			await expect.element(page.getByText('The date cannot be in the future')).toBeVisible();
+			await expect.element(page.getByLabelText('Date received')).toHaveAttribute('aria-invalid', 'true');
 		});
 
 		it('shows an error when onRecordPayment throws', async () => {
@@ -393,6 +401,103 @@ describe('InvoiceSection.svelte', () => {
 			await page.getByRole('button', { name: 'Confirm and record' }).click();
 
 			await expect.element(page.getByText('Failed to record payment')).toBeVisible();
+		});
+
+		// #1038: PostManualPaymentHandler's own `details` map (#1037) --
+		// each of the three keys read onto the field it names, per
+		// formErrors.ts's GOV.UK rules, rather than a detached alert.
+		it('wires a note refusal from the BFF onto the Note field', async () => {
+			const onRecordPayment = vi
+				.fn()
+				.mockRejectedValue(
+					new RefusalError('note is required when method is "other"', {
+						note: 'note is needed when method is "other"'
+					})
+				);
+			await setup({ invoices: [invoiceOpen], isOwnerOrAdmin: true, onRecordPayment });
+
+			await page.getByRole('button', { name: 'Record payment' }).click();
+			await page.getByLabelText('Date received').fill('2026-01-02');
+			await page.getByRole('button', { name: 'Continue' }).click();
+			await page.getByRole('button', { name: 'Confirm and record' }).click();
+
+			await expect.element(page.getByText('note is needed when method is "other"')).toBeVisible();
+			await expect.element(page.getByLabelText('Note (optional)')).toHaveAttribute('aria-invalid', 'true');
+		});
+
+		it('wires a paidOn refusal from the BFF onto the Date received field', async () => {
+			const onRecordPayment = vi
+				.fn()
+				.mockRejectedValue(
+					new RefusalError('paidOn must be a date in YYYY-MM-DD form', {
+						paidOn: 'paidOn must be a date in YYYY-MM-DD form'
+					})
+				);
+			await setup({ invoices: [invoiceOpen], isOwnerOrAdmin: true, onRecordPayment });
+
+			await page.getByRole('button', { name: 'Record payment' }).click();
+			await page.getByLabelText('Date received').fill('2026-01-02');
+			await page.getByRole('button', { name: 'Continue' }).click();
+			await page.getByRole('button', { name: 'Confirm and record' }).click();
+
+			await expect.element(page.getByText('paidOn must be a date in YYYY-MM-DD form')).toBeVisible();
+			await expect.element(page.getByLabelText('Date received')).toHaveAttribute('aria-invalid', 'true');
+		});
+
+		it('wires a method refusal from the BFF onto the Method group', async () => {
+			const onRecordPayment = vi.fn().mockRejectedValue(
+				new RefusalError('method must be "check", "bank_transfer", "cash", or "other"', {
+					method: 'method must be "check", "bank_transfer", "cash", or "other"'
+				})
+			);
+			await setup({ invoices: [invoiceOpen], isOwnerOrAdmin: true, onRecordPayment });
+
+			await page.getByRole('button', { name: 'Record payment' }).click();
+			await page.getByLabelText('Date received').fill('2026-01-02');
+			await page.getByRole('button', { name: 'Continue' }).click();
+			await page.getByRole('button', { name: 'Confirm and record' }).click();
+
+			await expect
+				.element(page.getByText('method must be "check", "bank_transfer", "cash", or "other"'))
+				.toBeVisible();
+		});
+
+		// #1038's second shape: a refusal naming no field of this form --
+		// a Stripe-side failure -- still falls back to the untargeted
+		// role="alert" summary, per docs/api-design.md section 7.
+		it('falls back to the untargeted summary for a RefusalError with no details at all', async () => {
+			const onRecordPayment = vi
+				.fn()
+				.mockRejectedValue(
+					new RefusalError('Stripe would not mark this Invoice paid, so nothing was recorded.')
+				);
+			await setup({ invoices: [invoiceOpen], isOwnerOrAdmin: true, onRecordPayment });
+
+			await page.getByRole('button', { name: 'Record payment' }).click();
+			await page.getByLabelText('Date received').fill('2026-01-02');
+			await page.getByRole('button', { name: 'Continue' }).click();
+			await page.getByRole('button', { name: 'Confirm and record' }).click();
+
+			await expect
+				.element(page.getByText('Stripe would not mark this Invoice paid, so nothing was recorded.'))
+				.toBeVisible();
+			// Stays on the review step: an untargeted refusal has no field
+			// to send the reader back to, unlike the targeted refusals above.
+			await expect.element(page.getByLabelText('Note (optional)')).not.toBeInTheDocument();
+		});
+
+		it('falls back to the untargeted summary when a RefusalError\'s details name no field of this form', async () => {
+			const onRecordPayment = vi
+				.fn()
+				.mockRejectedValue(new RefusalError('refused', { someUnrelatedField: 'x' }));
+			await setup({ invoices: [invoiceOpen], isOwnerOrAdmin: true, onRecordPayment });
+
+			await page.getByRole('button', { name: 'Record payment' }).click();
+			await page.getByLabelText('Date received').fill('2026-01-02');
+			await page.getByRole('button', { name: 'Continue' }).click();
+			await page.getByRole('button', { name: 'Confirm and record' }).click();
+
+			await expect.element(page.getByText('refused')).toBeVisible();
 		});
 	});
 
@@ -473,13 +578,15 @@ describe('InvoiceSection.svelte', () => {
 			expect(page.getByRole('button', { name: 'Reverse payment' }).all()).toHaveLength(0);
 		});
 
-		it('blocks Continue with a blank reason', async () => {
+		// #1038: wired into the Reason field itself, not a detached alert.
+		it('blocks Continue with a blank reason, wired into the Reason field', async () => {
 			await setup({ invoices: [invoicePaidByHand], isOwnerOrAdmin: true });
 
 			await page.getByRole('button', { name: 'Reverse payment' }).click();
 			await page.getByRole('button', { name: 'Continue' }).click();
 
 			await expect.element(page.getByText('Enter a reason for reversing this payment')).toBeVisible();
+			await expect.element(page.getByLabelText('Reason')).toHaveAttribute('aria-invalid', 'true');
 			expect(page.getByRole('button', { name: 'Confirm and reverse' }).all()).toHaveLength(0);
 		});
 
@@ -532,6 +639,58 @@ describe('InvoiceSection.svelte', () => {
 			await page.getByRole('button', { name: 'Confirm and reverse' }).click();
 
 			await expect.element(page.getByText('Failed to reverse this payment')).toBeVisible();
+		});
+
+		// #1038: PostReversePaymentHandler's own `reason` details key
+		// (#945) is read onto the Reason field, per formErrors.ts's
+		// GOV.UK rules, rather than a detached alert.
+		it('wires a reason refusal from the BFF onto the Reason field', async () => {
+			const onReversePayment = vi
+				.fn()
+				.mockRejectedValue(new RefusalError('reason cannot be blank', { reason: 'reason cannot be blank' }));
+			await setup({ invoices: [invoicePaidByHand], isOwnerOrAdmin: true, onReversePayment });
+
+			await page.getByRole('button', { name: 'Reverse payment' }).click();
+			await page.getByLabelText('Reason').fill('reason');
+			await page.getByRole('button', { name: 'Continue' }).click();
+			await page.getByRole('button', { name: 'Confirm and reverse' }).click();
+
+			await expect.element(page.getByText('reason cannot be blank')).toBeVisible();
+			await expect.element(page.getByLabelText('Reason')).toHaveAttribute('aria-invalid', 'true');
+		});
+
+		// #1038's second shape: an already-reversed conflict names no
+		// field of this form, so it still falls back to the untargeted
+		// role="alert" summary, per docs/api-design.md section 7.
+		it('falls back to the untargeted summary for a RefusalError with no details at all', async () => {
+			const onReversePayment = vi
+				.fn()
+				.mockRejectedValue(new RefusalError('This Payment has already been reversed.'));
+			await setup({ invoices: [invoicePaidByHand], isOwnerOrAdmin: true, onReversePayment });
+
+			await page.getByRole('button', { name: 'Reverse payment' }).click();
+			await page.getByLabelText('Reason').fill('reason');
+			await page.getByRole('button', { name: 'Continue' }).click();
+			await page.getByRole('button', { name: 'Confirm and reverse' }).click();
+
+			await expect.element(page.getByText('This Payment has already been reversed.')).toBeVisible();
+			// Stays on the review step: an untargeted refusal has no field
+			// to send the reader back to, unlike the targeted refusal above.
+			await expect.element(page.getByLabelText('Reason')).not.toBeInTheDocument();
+		});
+
+		it('falls back to the untargeted summary when a RefusalError\'s details name no field of this form', async () => {
+			const onReversePayment = vi
+				.fn()
+				.mockRejectedValue(new RefusalError('refused', { someUnrelatedField: 'x' }));
+			await setup({ invoices: [invoicePaidByHand], isOwnerOrAdmin: true, onReversePayment });
+
+			await page.getByRole('button', { name: 'Reverse payment' }).click();
+			await page.getByLabelText('Reason').fill('reason');
+			await page.getByRole('button', { name: 'Continue' }).click();
+			await page.getByRole('button', { name: 'Confirm and reverse' }).click();
+
+			await expect.element(page.getByText('refused')).toBeVisible();
 		});
 
 		it('closes the record-payment form when Reverse payment is started', async () => {
