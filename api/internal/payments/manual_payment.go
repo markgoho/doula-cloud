@@ -461,7 +461,7 @@ func PostReversePaymentHandler() http.Handler {
 			return
 		}
 		if req.Reason == "" {
-			apierr.WriteError(w, "reason cannot be blank", http.StatusBadRequest)
+			apierr.Write(w, http.StatusBadRequest, apierr.CodeInvalidArgument, "reason cannot be blank", map[string]string{"reason": "reason cannot be blank"})
 			return
 		}
 

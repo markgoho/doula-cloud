@@ -75,6 +75,15 @@ ALTER TABLE payments ADD CONSTRAINT payments_reason_matches_kind CHECK (
     kind = 'reversal' OR reason IS NULL
 );
 
+-- payments.invoice_id has carried no index since 00025_payments.sql --
+-- every existing query reaches this table by a single payments.id already
+-- (a row lock) or is scoped by RLS's own EXISTS join, so nothing before
+-- this ticket ran a plan that wanted one. GetInvoicesHandler's new
+-- activePaymentIDSubquery below is the first per-row correlated lookup
+-- against invoice_id (once per Invoice in a page), so it is the first
+-- query this omission would actually cost.
+CREATE INDEX payments_invoice_id_idx ON payments (invoice_id);
+
 -- amount_cents carried no sign constraint before this migration (#945's
 -- own body flags it). A 'reversal' row must net its target to zero when
 -- summed, so it is always negative; every other kind is always positive
@@ -85,6 +94,7 @@ ALTER TABLE payments ADD CONSTRAINT payments_amount_sign_matches_kind CHECK (
 );
 
 -- +goose Down
+DROP INDEX payments_invoice_id_idx;
 ALTER TABLE payments DROP CONSTRAINT payments_amount_sign_matches_kind;
 ALTER TABLE payments DROP CONSTRAINT payments_reversed_payment_id_matches_kind;
 ALTER TABLE payments DROP CONSTRAINT payments_reason_matches_kind;

@@ -34,9 +34,9 @@ export interface Invoice {
 	 * read, so it stays right in a tab left open overnight. */
 	dueAt: string;
 	/** The one manually recorded Payment currently covering this Invoice
-	 * (#945), if any -- present only while status is 'paid' via a
-	 * 'by_hand' Payment nothing has reversed yet. What reversePayment's
-	 * own paymentId argument needs. */
+	 * (#945), if any -- present only while status is 'paid' via a manual
+	 * Payment nothing has reversed yet. What reversePayment's own
+	 * paymentId argument needs. */
 	activePaymentId?: string;
 }
 
