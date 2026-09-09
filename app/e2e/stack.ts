@@ -183,8 +183,8 @@ async function startDatabase() {
 		});
 		process.stdout.write(output);
 	} catch (error) {
-		if (error && typeof error === 'object') {
-			const { stdout, stderr } = error as { stdout?: Buffer; stderr?: Buffer };
+		if (error instanceof Error) {
+			const { stdout, stderr } = error as Error & { stdout?: Buffer; stderr?: Buffer };
 			if (stdout?.length) process.stdout.write(stdout);
 			if (stderr?.length) process.stderr.write(stderr);
 		}
