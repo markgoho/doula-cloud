@@ -29,16 +29,28 @@ on:
     - cron: '41 9 * * *'
   workflow_dispatch: {}
 
-# One state file, shared by every trigger regardless of branch or PR --
-# concurrent plans would otherwise contend for the GCS backend's lock.
-# Queue rather than cancel: a plan that gets cancelled instead of finishing
-# is a missed drift signal, which is the one thing this job exists to give.
+# Matches ci.yml's own top-level pattern: scoped per ref, not global, so an
+# unrelated PR's plan is never queued behind this one. Genuine cross-ref
+# contention on the GCS state lock is rare (one person, one project) and is
+# already handled by `-lock-timeout` below, which waits instead of erroring.
 concurrency:
-  group: terraform-plan
-  cancel-in-progress: false
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   plan:
+    # GitHub forces GITHUB_TOKEN to read-only, non-OIDC permissions on a
+    # pull_request event opened by Dependabot, so id-token: write is
+    # unavailable and google-github-actions/auth fails outright -- not a
+    # drift finding, just a token Dependabot's own PRs can never mint.
+    # Skipping the whole job for that one actor keeps every other trigger
+    # (trunk push, a human's PR, the schedule) authenticating and running
+    # normally, and it keeps this usable as a required check on Dependabot
+    # PRs: GitHub reports a job skipped by its own `if:` as a successful
+    # status check, unlike a workflow that never triggers at all (a
+    # path/branch filter on `on:`), which would stay pending forever.
+    # Verified against #1023, an open Dependabot PR, before relying on it.
+    if: github.actor != 'dependabot[bot]'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
@@ -47,24 +59,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      # GitHub forces GITHUB_TOKEN to read-only, non-OIDC permissions on a
-      # pull_request event opened by Dependabot, so id-token: write is
-      # unavailable and google-github-actions/auth fails outright -- not a
-      # drift finding, just a token Dependabot's own PRs can never mint.
-      # Skipping the plan for that one actor keeps every other trigger
-      # (trunk push, a human's PR, the schedule) authenticating and running
-      # normally, and it keeps this a required check Dependabot PRs can
-      # still pass: a job with every step skipped and none failed reports
-      # success, which is what the merge gate on trunk asks for. Verified
-      # against #1023, an open Dependabot PR, before relying on it.
-      - name: Record Dependabot skip
-        if: github.actor == 'dependabot[bot]'
-        run: |
-          echo "Skipping terraform plan: Dependabot PRs cannot mint an OIDC token (id-token: write is unavailable on this event)." >> "$GITHUB_STEP_SUMMARY"
-          echo "Drift on the resources this PR could touch is still caught by the next trunk push or scheduled run." >> "$GITHUB_STEP_SUMMARY"
-
       - name: Authenticate to Google Cloud
-        if: github.actor != 'dependabot[bot]'
         uses: ./.github/actions/gcp-auth
         with:
           project_id: doula-cloud
@@ -72,13 +67,11 @@ jobs:
           service_account: terraform-plan@doula-cloud.iam.gserviceaccount.com
 
       - name: Setup Terraform
-        if: github.actor != 'dependabot[bot]'
         uses: hashicorp/setup-terraform@v4
         with:
           terraform_version: '~1.16'
 
       - name: Terraform init
-        if: github.actor != 'dependabot[bot]'
         working-directory: terraform
         run: terraform init -input=false
 
@@ -90,8 +83,16 @@ jobs:
       # -json` with jq. The one exception is a genuine command failure
       # (detailed-exitcode 1: e.g. a refresh permission gap), which is not a
       # drift finding and is safe to show in full.
+      #
+      # `mode == "managed"` excludes the one data source in this
+      # configuration (scheduler.tf's notification_worker_secret read) from
+      # the drift table -- confirmed empirically that it does not appear in
+      # resource_changes at all on a clean plan, but excluding it by mode
+      # rather than relying on that means a future data source refreshing
+      # under `read` can never masquerade as drift on an otherwise-clean
+      # project, which is exactly the permanently-red failure ADR-0034
+      # refuses.
       - name: Terraform plan
-        if: github.actor != 'dependabot[bot]'
         working-directory: terraform
         env:
           TF_IN_AUTOMATION: 'true'
@@ -120,7 +121,7 @@ jobs:
               (($b | keys) + ($a | keys) | unique) as $allkeys |
               ($allkeys | map(select($b[.] != $a[.])));
 
-            [.resource_changes[] | select(.change.actions != ["no-op"])] as $drifted
+            [.resource_changes[] | select(.mode == "managed" and .change.actions != ["no-op"])] as $drifted
             | ($drifted | length | tostring) + " resource(s) differ from the live project. Attribute NAMES only -- never values, per #1052.\n\n" +
               "| Resource | Action | Changed attributes |\n|---|---|---|\n" +
               ( [ $drifted[]
