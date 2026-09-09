@@ -144,7 +144,7 @@ The test has two limbs joined by "and", and the **first limb is geographic**. A 
 
 — [Tax Bulletin ST-128, *Computer Software*](https://www.tax.ny.gov/pubs_and_bulls/tg_bulletins/st/computer_software.htm), emphasis added.
 
-New York does not use the word "SaaS". It does not need to: it treats the licence to remotely access prewritten software as a sale of tangible personal property, and that is precisely what a Doula Cloud subscription is. **Prewritten** means "not designed and developed to the specifications of a particular purchaser" — a multi-tenant product sold to many Practices is prewritten by definition. The custom-software exemption is not available and cannot be engineered into: the bulletin closes that door explicitly, noting the exemption does not apply where "the sale is prewritten software that is available to be sold to customers in the ordinary course of business".
+New York does not use the word "SaaS". It does not need to: it treats the license to remotely access prewritten software as a sale of tangible personal property, and that is precisely what a Doula Cloud subscription is. **Prewritten** means "not designed and developed to the specifications of a particular purchaser" — a multi-tenant product sold to many Practices is prewritten by definition. The custom-software exemption is not available and cannot be engineered into: the bulletin closes that door explicitly, noting the exemption does not apply where "the sale is prewritten software that is available to be sold to customers in the ordinary course of business".
 
 ### Which customers
 

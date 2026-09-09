@@ -12,7 +12,7 @@
 	 * appointment. GOV.UK's rule is about a date somebody already knows:
 	 * a picker makes a reader navigate to 1988 to enter a fact they could
 	 * have typed in four keystrokes, and a single text box makes them
-	 * guess a format. Three labelled boxes ask for it the way it is
+	 * guess a format. Three labeled boxes ask for it the way it is
 	 * remembered.
 	 *
 	 * ## The legend is optional, like `RadioGroup`'s

@@ -24,7 +24,7 @@
  *
  * ## Two states, not one row (`.claude/rules/svelte-tests.md`)
  *
- * The draft carries one Client, so the rule's two-row shape is realised
+ * The draft carries one Client, so the rule's two-row shape is realized
  * inside it: every field that renders one way is at its longest, and the
  * two genuinely optional columns -- a second address line, a preferred
  * name that matches the given one -- are left blank, so the summary's

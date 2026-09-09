@@ -66,7 +66,7 @@ They hold the same string in all three environments today, and they are
 still two variables. `EXPECTED_ORIGINS` is a list the CSRF check compares
 an inbound `Origin` header against. `APP_BASE_URL` is one string the BFF
 concatenates redirect targets onto: Checkout returns to
-`/practices/{id}/billing?checkout=success|cancelled`, and the Connect
+`/practices/{id}/billing?checkout=success|canceled`, and the Connect
 Account Link returns to `/practices/{id}/settings/payments?connect=return|refresh`.
 A tunnelled local walk needs `APP_BASE_URL` overridden and
 `EXPECTED_ORIGINS` left alone.

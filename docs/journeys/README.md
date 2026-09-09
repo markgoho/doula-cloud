@@ -23,7 +23,7 @@ step by id (`Renata 3.2`) and a gap by id (`RA-G4`):
 
 1. **Header** — persona link, goal, entry point, done looks like.
 2. **Moment of truth** — the one make-or-break moment in this journey. This is the
-   lead for prioritising the gap backlog.
+   lead for prioritizing the gap backlog.
 3. **Words** — the domain term beside the Persona's own word for it. `CONTEXT.md`
    is the language of the model and of the team; it is not automatically the copy
    on screen. Where the two diverge sharply, that divergence is a finding.

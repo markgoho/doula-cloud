@@ -244,7 +244,7 @@
 				</form>
 
 				{#if hasSearched}
-					<section aria-labelledby="client-search-results-heading">
+					<section aria-labelledby="client-search-results-heading"> <!-- spelling:ignore: aria-labelledby is an ARIA attribute name -->
 						<stack-l space="var(--space-6)">
 							<div bind:this={resultsStart} id="client-search-results" tabindex="-1">
 								<Heading

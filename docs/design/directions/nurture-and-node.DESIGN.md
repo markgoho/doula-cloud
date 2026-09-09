@@ -115,7 +115,7 @@ The design system is built to evoke the warmth of a private journal and the reli
 The style is a blend of **Editorial Minimalism** and **Tonal Layering**. It prioritizes high-contrast serif typography and generous whitespace to create a sense of calm and focus. Rather than using shadows to create depth, the system relies on subtle shifts in background warmth to define different functional areas, ensuring the interface feels organic and grounded.
 
 ## Colors
-The palette is rooted in earth tones, moving away from clinical blues and greys. 
+The palette is rooted in earth tones, moving away from clinical blues and grays. 
 
 - **Ground**: The base layer of the application uses a warm cream (#fff8f6), providing a soft, non-reflective canvas that reduces eye strain.
 - **Tonal Stepping**: Depth is achieved through a hierarchy of warmth. Use `#fdf0ec` for secondary containers (like sidebars or list views) and `#f9e8e2` for interactive surface elements (like input backgrounds or active cards).

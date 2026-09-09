@@ -76,7 +76,7 @@
 		<!--
 			A two-track grid, not cluster-l (#510): cluster-l is flex-wrap, and
 			a flex row that cannot hold both items drops the whole label to a
-			second line below the control -- an unlabelled control followed by
+			second line below the control -- an unlabeled control followed by
 			a stray sentence, worst on SignContract's long consent label. Two
 			other shapes were rejected. Keeping the wrap and indenting the
 			label (text-indent/padding hanging-indent) still lets the label

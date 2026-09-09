@@ -26,7 +26,7 @@ have put an unpinned tool outside the lockfile for no benefit.
 `pen login` is interactive (email + password or OTP) and writes `~/.pencil/session-cli.json`. The desktop
 app keeps a separate `~/.pencil/session-desktop.json`; **logging into the desktop does not log in the
 CLI**, which is why the CLI showed no session despite the app being signed in since 2026-08-10.
-`PEN_CLI_KEY` is the non-interactive alternative for CI, via organisation Developer Keys.
+`PEN_CLI_KEY` is the non-interactive alternative for CI, via organization Developer Keys.
 
 ## Enabling the MCP server in Claude Code
 

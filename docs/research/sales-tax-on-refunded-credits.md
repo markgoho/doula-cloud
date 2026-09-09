@@ -2,7 +2,7 @@
 
 Question: a New York single-member LLC sells prepaid **Credits** to business customers, charges and collects New York sales tax at the moment of purchase, and is about to publish a policy that **unspent Credits are refundable at any time, with no time limit**. When a purchase is refunded — in the same quarter or three years later, in full or in part — what happens to the tax?
 
-Facts held fixed, established elsewhere and not re-argued here: the taxable event is the **purchase** of the Credits, not their redemption; a licence to remotely access prewritten software is taxable in New York under [Tax Bulletin ST-128](https://www.tax.ny.gov/pubs_and_bulls/tg_bulletins/st/computer_software.htm); Stripe Tax computes and collects the tax into the seller's ordinary Stripe balance and **never remits it**; the seller files Form ST-100 quarterly and remits by hand.
+Facts held fixed, established elsewhere and not re-argued here: the taxable event is the **purchase** of the Credits, not their redemption; a license to remotely access prewritten software is taxable in New York under [Tax Bulletin ST-128](https://www.tax.ny.gov/pubs_and_bulls/tg_bulletins/st/computer_software.htm); Stripe Tax computes and collects the tax into the seller's ordinary Stripe balance and **never remits it**; the seller files Form ST-100 quarterly and remits by hand.
 
 **This is not tax advice.** It is a record of what the taxing authority and Stripe themselves publish, with every claim traced to the document that owns it. Researched **28 August 2026**.
 
@@ -69,13 +69,13 @@ Two entirely different mechanisms, and which one applies turns on a single fact:
 
 The delegating statute is Tax Law §1132(e):
 
-> The commissioner may provide, by regulation, for the **exclusion from taxable receipts** [...] of amounts representing sales where **the contract of sale has been cancelled**, the property returned or the receipt, charge or rent has been ascertained to be uncollectible or, in case the tax has been paid upon such receipt [...] **for refund of or credit for the tax so paid**. Where the commissioner provides for a credit for the tax so paid, he or she shall require an application for credit to be filed, but he or she may also allow the applicant to immediately take the credit on the return which is due coincident with or immediately subsequent to the time the applicant files his or her application for credit.
+> The commissioner may provide, by regulation, for the **exclusion from taxable receipts** [...] of amounts representing sales where **the contract of sale has been cancelled**, the property returned or the receipt, charge or rent has been ascertained to be uncollectible or, in case the tax has been paid upon such receipt [...] **for refund of or credit for the tax so paid**. Where the commissioner provides for a credit for the tax so paid, he or she shall require an application for credit to be filed, but he or she may also allow the applicant to immediately take the credit on the return which is due coincident with or immediately subsequent to the time the applicant files his or her application for credit. <!-- spelling:ignore: verbatim quotation of NY Tax Law §1132(e), which spells it this way in the actual statute -->
 
 — [NY Tax Law §1132(e)](https://www.nysenate.gov/legislation/laws/TAX/1132), emphasis added.
 
-The regulation made under it, 20 NYCRR §534.6, provides that where the contract of sale is cancelled or the property returned **within the reporting period in which the sale was made**, the vendor may exclude those receipts from the sales and use tax return altogether. Nothing is claimed back, because nothing was ever reported. A Credit purchase refunded in full three weeks later, inside the same quarter, simply nets out of gross sales and taxable sales before the ST-100 is prepared.
+The regulation made under it, 20 NYCRR §534.6, provides that where the contract of sale is canceled or the property returned **within the reporting period in which the sale was made**, the vendor may exclude those receipts from the sales and use tax return altogether. Nothing is claimed back, because nothing was ever reported. A Credit purchase refunded in full three weeks later, inside the same quarter, simply nets out of gross sales and taxable sales before the ST-100 is prepared.
 
-**Sourcing gap, stated plainly.** The Department does not publish the text of 20 NYCRR Part 534 on tax.ny.gov — searched, and the site's "Regulations and regulatory actions" route points off-site to the State's contracted publisher, which is not reachable from here. The same-period exclusion is therefore stated above from the delegating statute §1132(e), which contains it in terms ("exclusion from taxable receipts [...] where the contract of sale has been cancelled"), and from the Department's own citation of §534.6 in TSB-A-09(29)S. **No wording of §534.6 is quoted anywhere in this document, because none was obtained from a first-party source.**
+**Sourcing gap, stated plainly.** The Department does not publish the text of 20 NYCRR Part 534 on tax.ny.gov — searched, and the site's "Regulations and regulatory actions" route points off-site to the State's contracted publisher, which is not reachable from here. The same-period exclusion is therefore stated above from the delegating statute §1132(e), which contains it in terms ("exclusion from taxable receipts [...] where the contract of sale has been cancelled") <!-- spelling:ignore: verbatim quotation of NY Tax Law §1132(e)'s own wording -->, and from the Department's own citation of §534.6 in TSB-A-09(29)S. **No wording of §534.6 is quoted anywhere in this document, because none was obtained from a first-party source.**
 
 ### A later quarter: three filings, not one
 
@@ -241,7 +241,7 @@ The AU-11 instructions raise the bar further on what "returned to the customer" 
 
 — [Form AU-11-I (12/10)](https://www.tax.ny.gov/pdf/current_forms/st/au11i.pdf), emphasis added.
 
-**That last quotation is a schema.** It is the Department telling the seller exactly which columns a refund record needs: invoice number, invoice date, purchaser name, item, amount excluding tax, tax billed, taxing jurisdiction, reason. A Credits refund record built to those eight fields — plus the Stripe refund ID and the tax reversal ID, so the claim reconciles to the Stripe export — satisfies both the substantiation requirement and the summary-in-table-form allowance in one artefact.
+**That last quotation is a schema.** It is the Department telling the seller exactly which columns a refund record needs: invoice number, invoice date, purchaser name, item, amount excluding tax, tax billed, taxing jurisdiction, reason. A Credits refund record built to those eight fields — plus the Stripe refund ID and the tax reversal ID, so the claim reconciles to the Stripe export — satisfies both the substantiation requirement and the summary-in-table-form allowance in one artifact.
 
 **Assembled, the minimum per refund:**
 
@@ -404,7 +404,7 @@ A seller who fills in each ST-100 from the location report will therefore under-
 All retrieved 28 August 2026.
 
 **New York Tax Law** (New York State Senate)
-- [Tax Law §1132](https://www.nysenate.gov/legislation/laws/TAX/1132) — §1132(a)(1) separately stated tax, collected "as trustee for and on account of the state"; §1132(e) exclusion from taxable receipts on cancelled sales
+- [Tax Law §1132](https://www.nysenate.gov/legislation/laws/TAX/1132) — §1132(a)(1) separately stated tax, collected "as trustee for and on account of the state"; §1132(e) exclusion from taxable receipts on canceled sales
 - [Tax Law §1139](https://www.nysenate.gov/legislation/laws/TAX/1139) — §1139(a) no refund or credit to the collector until the customer has been repaid, and the customer's own three-year application right; §1139(c) the three-year / two-year limitation
 
 **NY Department of Taxation and Finance**

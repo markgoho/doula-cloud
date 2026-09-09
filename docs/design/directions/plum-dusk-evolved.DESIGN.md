@@ -109,8 +109,8 @@ This design system utilizes a strictly light-mode palette. The foundation is a w
 
 - **Primary Plum (#8E4479):** Reserved strictly for primary call-to-actions, active navigation states, and critical progress indicators. It is never used for large background areas.
 - **Plum Tint (#F7F2F5):** Used as a surface tint for active list items, hover states, or subtle background differentiation in sidebars.
-- **Neutral Grey/Black (#1A1618):** Used for primary text and high-contrast iconography to ensure WCAG AA accessibility.
-- **Hairline Border (#E5E1E0):** A neutral, low-contrast grey used to define the boundaries of the UI without adding visual weight.
+- **Neutral Gray/Black (#1A1618):** Used for primary text and high-contrast iconography to ensure WCAG AA accessibility.
+- **Hairline Border (#E5E1E0):** A neutral, low-contrast gray used to define the boundaries of the UI without adding visual weight.
 
 ## Typography
 
@@ -133,7 +133,7 @@ The layout follows a **Fixed Grid** philosophy for desktop to maintain a structu
 This design system is strictly **Flat**. Depth is achieved exclusively through **Tonal Layering** and **Hairline Borders**.
 
 - **Shadows:** No drop shadows or inner shadows are permitted. 
-- **Borders:** All interactive surfaces and containers are defined by 1px solid borders in a neutral grey. 
+- **Borders:** All interactive surfaces and containers are defined by 1px solid borders in a neutral gray. 
 - **Z-Index:** Layering is communicated by stacking order. Overlays (modals) use a solid, high-contrast border and a dim, neutral-tinted backdrop rather than a shadow cast.
 - **Active State:** Elements indicate focus or selection by changing border color to the primary Plum or adding the faint Plum surface tint.
 

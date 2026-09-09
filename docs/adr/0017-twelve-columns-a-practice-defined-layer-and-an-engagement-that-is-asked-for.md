@@ -80,7 +80,7 @@ record that renders against a template from four years ago is a record nobody ca
 
 The consequence is that archived-not-deleted carries real weight here, where in ADR-0001 the
 snapshot would have covered it. An archived field's stored values survive and the Client detail page
-still shows them, labelled and marked as no longer collected.
+still shows them, labeled and marked as no longer collected.
 
 ### One layer, or two, on the Engagement
 
@@ -175,7 +175,7 @@ portal **login** was never `clients.email`, and is already hers (see below) — 
 
 **Search is the first screen of intake, and the only door to it.** There is no top-level *Add a
 Client* action. The route is *Clients → Find or add a Client → search → her record → Request
-Engagement start* ([#539](https://github.com/markgoho/doula-cloud/issues/539) relabelled the
+Engagement start* ([#539](https://github.com/markgoho/doula-cloud/issues/539) relabeled the
 Clients list's link, which had read only *Add a Client* even though it served both errands), and
 the empty state carries whatever was typed into a new record, so searching costs a staff member
 nothing when the woman is genuinely new.
@@ -410,7 +410,7 @@ screen has to become Client-shaped regardless.
 ### Credits
 
 **No Credit is reserved when a Request is made.** Reserving prices a Credit at the moment of asking,
-which is the *pay for every enquiry that went nowhere* model ADR-0015 ruled out; and with three
+which is the *pay for every inquiry that went nowhere* model ADR-0015 ruled out; and with three
 Doulas holding Requests against two Credits, the first two asks would lock what the third cannot
 have. The balance is true only at the moment of approval.
 

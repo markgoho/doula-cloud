@@ -5,7 +5,7 @@ Research for [#382](https://github.com/markgoho/doula-cloud/issues/382), on the 
 
 ## Method, and what is first-party
 
-Two kinds of evidence appear below, and they are labelled.
+Two kinds of evidence appear below, and they are labeled.
 
 - **Verified live** — read out of the Stripe Sandbox with the authenticated CLI and the
   Stripe MCP tools, or read off the public internet with `curl`/`dig`.
@@ -250,7 +250,7 @@ What the docs do say about timing is indirect, and all of it points the same way
   for example, a scan of a valid government-issued ID, a proof of address document, or both"
   ([Identity verification](https://docs.stripe.com/connect/identity-verification)).
 - "Faster onboarding reviews" is listed as a *benefit* of Stripe Verified, an invitation-only
-  programme based on "your platform's history with Stripe, transaction volume, and risk
+  program based on "your platform's history with Stripe, transaction volume, and risk
   profile" ([Verified for platforms](https://docs.stripe.com/verified/verified-for-platforms)).
   A brand-new platform gets the ordinary path.
 - The Connect platform profile is a second approval on top of account activation, with its own

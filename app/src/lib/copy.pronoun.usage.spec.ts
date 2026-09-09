@@ -28,7 +28,7 @@ import { QUOTED, regionLines, regionLinesInFile } from './quotedCopy';
  * positive.
  *
  * `routes/style-guide/**` is covered too, as of #661. #463's earlier audit
- * found twelve pre-existing hits there, all in component-catalogue example
+ * found twelve pre-existing hits there, all in component-catalog example
  * props rather than a real screen a Practice ever sees; #661 rewrote eleven
  * of them, settled the twelfth -- `record-detail`'s birth-plan
  * support-people value, a Client's own first-person answer -- by writing

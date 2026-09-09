@@ -7,7 +7,7 @@ Raw generator output kept as evidence for the design-brief decision on
 Three directions were generated with **Google Stitch**, driven headlessly over raw JSON-RPC
 (the MCP server still registers zero tools in Claude Code — see
 [`../../research/stitch-mcp-agent-surface.md`](../research/stitch-mcp-agent-surface.md)). A fourth,
-**Ledger & Ink**, was drawn in Claude Design and has no Stitch artefact.
+**Ledger & Ink**, was drawn in Claude Design and has no Stitch artifact.
 
 Every direction was given the *same* screen brief — the staff Overview Hub, desktop, light theme,
 top bar with flat nav and a Practice switcher, four groups of destination links, and a Recent

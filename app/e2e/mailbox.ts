@@ -46,7 +46,7 @@ const messages: Captured[] = [];
 // and #762 already rules "the notification arrived too late"
 // inadmissible. Sequence plus the run's own label is everything an
 // entry is allowed to say about when.
-const runClock = { label: 'unlabelled' };
+const runClock = { label: 'unlabeled' };
 
 const BOUNCE_TARGET = `http://${E2E_API_HOST}:${E2E_API_PORT}/api/mailgun/webhook`;
 
@@ -230,7 +230,7 @@ async function route(request: Request): Promise<Response> {
 
 	if (pathname === '/api/clock' && request.method === 'POST') {
 		const requested = (await request.json()) as { label?: string };
-		runClock.label = String(requested.label ?? 'unlabelled');
+		runClock.label = String(requested.label ?? 'unlabeled');
 		return json({ label: runClock.label });
 	}
 

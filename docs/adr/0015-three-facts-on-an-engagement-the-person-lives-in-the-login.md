@@ -3,7 +3,7 @@
 Supersedes one paragraph of [ADR-0005](0005-one-context-client-register-at-the-ui-edge.md) — the
 one fixing a `_Client says_:` label for each of four `engagement_status` values. There are three
 values now, and `postpartum` is not one of them. Everything else in ADR-0005 stands, including the
-rule that produced this change: *if a status cannot be labelled kindly for every Client, the status
+rule that produced this change: *if a status cannot be labeled kindly for every Client, the status
 set is missing a value.* ADR-0005 named Nadia Haddad as the live instance and argued the status set
 was short a terminal state for a loss. This document answers that argument, and the answer turned
 out to be that the set was one value too **long**.
@@ -89,7 +89,7 @@ never quietly becomes one. Three facts already in the model rule that reading ou
 
 - **A Credit locks when an Engagement is created** ([#332](https://github.com/markgoho/doula-cloud/issues/332),
   [#45](https://github.com/markgoho/doula-cloud/issues/45)). If `intake` held leads, a Practice would
-  pay Doula Cloud for every enquiry that went nowhere. That is not the pricing model.
+  pay Doula Cloud for every inquiry that went nowhere. That is not the pricing model.
 - **`intake` carries a binding Client-portal label** under ADR-0005 — "Getting started". Only a
   person with a portal login reads it, and a Practice does not hand a portal login to someone it has
   not taken on.
@@ -462,7 +462,7 @@ Engagements. That another agency serves the same woman is her business. Concrete
 from a portal session. The portal is the only surface where the person is one person.
 
 **Shared reference data is a different category, not an exception.** A hospital in Rochester NY is a
-public fact about the world, not a fact about a Practice or a Client, so a shared catalogue leaks
+public fact about the world, not a fact about a Practice or a Client, so a shared catalog leaks
 nothing — **provided** it carries no usage signal (no "added by", no counts, no "3 practices use
 this"). The moment it carries one, it becomes a client-adjacent fact and the rule above bites.
 
@@ -493,7 +493,7 @@ There were always two doors, and they are ruled differently.
 
 ### What the portal shows, at model level
 
-- The root resolves to **her Engagements across every Practice**, each labelled by the Practice. With
+- The root resolves to **her Engagements across every Practice**, each labeled by the Practice. With
   exactly one, the portal may open it directly — that is a UI shortcut over a list, not a second
   model.
 - **"Current" is derived, never stored.** The most recently created non-`completed` Engagement. A
@@ -597,7 +597,7 @@ direction, and it is a choice. This binds [#294](https://github.com/markgoho/dou
 and [#296](https://github.com/markgoho/doula-cloud/issues/296) without either being closed here.
 
 **2. An Engagement is editable in place.** *A Practice pays per Engagement, so no change to what the
-Practice sold may require cancelling and recreating one, because that would charge a second Credit
+Practice sold may require canceling and recreating one, because that would charge a second Credit
 for fixing a fact.* It is why the rare `birth` → `postpartum` downgrade is allowed, and why kind is
 not frozen in the database. It also retroactively names the reason post-loss care stays on the same
 Engagement.

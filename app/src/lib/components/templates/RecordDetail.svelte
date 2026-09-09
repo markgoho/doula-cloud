@@ -106,10 +106,10 @@
 				<stack-l space="var(--space-8)">
 					{#each sections as section (section.heading)}
 						<!-- v8 ignore start: Svelte-compiled attribute-diffing branch for the
-						     templated aria-labelledby/id pair below isn't reachable from
+						     templated aria-labelledby/id pair below isn't reachable from -- spelling:ignore: aria-labelledby is an ARIA attribute name
 						     app-level interaction tests, only from Svelte's own reactivity
 						     internals -->
-						<section id={anchorId(section.heading)} aria-labelledby="{anchorId(section.heading)}-heading">
+						<section id={anchorId(section.heading)} aria-labelledby="{anchorId(section.heading)}-heading"> <!-- spelling:ignore: aria-labelledby is an ARIA attribute name -->
 							<stack-l space="var(--space-4)">
 								<Heading level={2} variant="section" text={section.heading} id="{anchorId(section.heading)}-heading" />
 								{@render section.content()}

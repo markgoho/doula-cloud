@@ -160,7 +160,7 @@
 
 		/*
 		 * The brief's "airy forms" half: consecutive fields 20px apart
-		 * (--space-5, on the stack inside each fieldset) and a labelled group
+		 * (--space-5, on the stack inside each fieldset) and a labeled group
 		 * 28px from the next (--space-7, on the outer stack). A fieldset
 		 * carries no border of its own -- the Law of Proximity does the
 		 * grouping, and the direction drops boxes that only exist to look

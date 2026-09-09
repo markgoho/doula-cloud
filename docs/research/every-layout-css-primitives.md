@@ -46,7 +46,7 @@ stated position. See "Where the previous version was wrong" below.
   nested Stack/Box/Center/Cluster/Cover/Sidebar instances, plus the book's
   literal definition of a "layout" as a tree where every node is either an
   element or another layout (p. 25). See "Composition" below — this is the
-  part the issue asks to be recorded, not just the catalogue.
+  part the issue asks to be recorded, not just the catalog.
 - **It missed the book's own vocabulary for exactly the territory it was
   editorializing about**: Sidebar, Switcher, and the Flexbox grid are each
   called a **"quantum layout"** — one CSS declaration existing simultaneously
@@ -60,7 +60,7 @@ stated position. See "Where the previous version was wrong" below.
   out of view for a zoomed-in user, since only the left edge is guaranteed
   visible (Center, p. 69); and "one `<h1>` per page," with successive
   `<cover-l>` instances needing an `<h2>` instead (Cover, p. 116).
-- **The primitive catalogue and licensing terms were accurate.** All 13
+- **The primitive catalog and licensing terms were accurate.** All 13
   primitives, their custom-property tables, their default values, and the
   quoted licensing terms in the old file check out against the book. That part
   did not need fixing so much as re-sourcing.
@@ -178,7 +178,7 @@ This is the part the issue calls out as "the part a component author gets
 wrong first," and it is the weakest part of the superseded file.
 
 **The book's argument for having primitives at all is a composition
-argument, not a catalogue argument.** The Composition chapter opens by naming
+argument, not a catalog argument.** The Composition chapter opens by naming
 "composition over inheritance," borrowed from programming and explicitly
 citing React's docs on the same principle (p. 14). Its worked example is a
 dialog box, first built the way most component libraries build it — a
@@ -328,7 +328,7 @@ current (3.1.7.14) edition. The relationship is not uniform across the three:
 - **No conflict was found on Grid or intrinsic sizing keywords** — these are
   gaps (the book has no opinion), not disagreements, and ADR-0023 does not
   claim the book as its source for either; ADR-0003 cites the book only for
-  the primitive catalogue and the custom-elements-without-Shadow-DOM decision,
+  the primitive catalog and the custom-elements-without-Shadow-DOM decision,
   not for grid regions or sizing keywords.
 
 ## Licensing (carried forward, re-verified)

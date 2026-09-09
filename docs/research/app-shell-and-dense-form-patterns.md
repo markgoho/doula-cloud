@@ -72,7 +72,7 @@ is where account and sign-out live. There is no top bar at all. The tenant is
 not named in the chrome — Cliniko is single-practice per account, so it does
 not have Doula Cloud's problem of showing which Practice you are in.
 
-**Density.** The nav is compact; the content area is airy — a light grey
+**Density.** The nav is compact; the content area is airy — a light gray
 canvas with white cards, generous padding, and a comfortable reading measure.
 The product is used all day and the density reflects that: nav is tight so
 content can breathe.
@@ -85,7 +85,7 @@ given structure and weight. This is directly transferable to
 `practices/[practiceId]`, which today is four bare links.
 
 **Practice-defined fields — the answer.** Cliniko's custom patient fields are
-organised as **named sections, each holding an ordered list of typed fields**.
+organized as **named sections, each holding an ordered list of typed fields**.
 The editor is a stack: a *Section title* row, then *Field title* + *Type*
 rows, then per-field *Options* rows where the type needs them, each row
 carrying a move-up/move-down control and its own **Archive** button.
@@ -165,7 +165,7 @@ justification.
 
 **Practice-defined fields — an explicit negative.** SimplePractice does not
 offer arbitrary custom client fields. The Client Info tab is a fixed schema;
-customisation happens in **notes and intake forms**, not on the record itself.
+customization happens in **notes and intake forms**, not on the record itself.
 A serious, well-funded product in the nearest adjacent trade decided this
 problem was not worth solving on the client record. That is a real data point
 against, not an oversight.
@@ -185,7 +185,7 @@ help.practicebetter.io*
 
 **Shell.** Two rails. Outside the crop is the global nav; inside it is a
 **second, record-scoped left rail** that belongs to this one client. It opens
-with an identity block — photo, name, "ACTIVE 2 DAYS AGO", a favourite star, a
+with an identity block — photo, name, "ACTIVE 2 DAYS AGO", a favorite star, a
 row of quick-action icons (edit, photo, message, profile, overflow) — then the
 client's key facts as icon-led lines (email, date of birth with computed age,
 mobile), then a status chip ("Member"), then the section list: Bookings &
@@ -210,7 +210,7 @@ this repo's standing cross-cutting expectation that a user can answer *"how
 did this thing come to be?"*. Practice Better's hub page **is** the audit
 trail, made readable and made the default view.
 
-**Practice-defined fields — indirectly.** Practice Better's customisation is
+**Practice-defined fields — indirectly.** Practice Better's customization is
 the **form**, not the record field. The customer builds forms with the
 Automatic Form Builder or by hand (question types include multiple choice,
 tables, scale and contact information), and **Form Mappings** then take the
@@ -338,12 +338,12 @@ costs one band of vertical space.
 holding a search field, an alphabetical list of names (given name regular,
 family name bold, so the sort key reads first), and a **"⊕ New Patient"
 button pinned at the foot of the panel**; the rest of the screen is the detail
-pane, which shows a grey line-art empty-state illustration until a patient is
+pane, which shows a gray line-art empty-state illustration until a patient is
 picked. Worth noting for archetype C: the create action lives at the bottom of
 the list it creates into, not in a page header.
 
-**Practice-defined fields.** Not on the patient record. Jane's customisation
-surfaces are the **customisable patient sign-up form** — where a clinic
+**Practice-defined fields.** Not on the patient record. Jane's customization
+surfaces are the **customizable patient sign-up form** — where a clinic
 chooses which of Jane's own fields to include and which to require, per
 [Customizable Patient Sign Up
 Form](https://jane.app/guide/customizable-patient-sign-up-form) — and chart
@@ -356,9 +356,7 @@ new ones.
 
 ![Halaxy patient profile with inline custom fields](app-shell-survey/halaxy-patient-profile-inline-custom.png)
 
-*Source: [Customise your patient
-profiles](https://support.halaxy.com/hc/en-au/articles/1500003075021-Customise-your-patient-profiles),
-support.halaxy.com*
+*Source: [Customise your patient profiles](https://support.halaxy.com/hc/en-au/articles/1500003075021-Customise-your-patient-profiles), support.halaxy.com* <!-- spelling:ignore: quoting Halaxy's own AU article title, which matches the URL slug -->
 
 No public capture of Halaxy's full shell was found — its marketing feature
 URLs 404 and the help center crops to the panel under discussion. What the
@@ -385,7 +383,7 @@ Halaxy also solves the *authoring* side differently: custom questions are
 drawn from a **shared question library**, so the questions already used in
 clinical tool templates can be reused on the profile, and typing offers
 existing questions from a dropdown. Settings expose it as one row in a
-definition list — "Customised patient profiles: Default" with a pencil —
+definition list — "Customised patient profiles: Default" with a pencil — <!-- spelling:ignore: verbatim quotation of Halaxy's own UI text, observed -->
 alongside Terminology, Introduction Sources, Contact Relationships, Profile
 type preferences.
 
@@ -418,7 +416,7 @@ about its shell, density or forms could be observed.
 
 TaxDome was surveyed as a small-accounting comparator. Its `/features/` URL
 404s and its product screenshots sit behind a "Take a tour" gate that requires
-a signup, which this survey does not do. The only usable public artefact is
+a signup, which this survey does not do. The only usable public artifact is
 its footer information architecture, which is itself mildly interesting for
 grouping: Firm management, Client management, Client experience, Revenue
 operations. Its client-management list names **CRM, Document management, Tax
@@ -532,10 +530,7 @@ Every URL below was fetched in August 2026.
   Records](https://help.practicebetter.io/hc/en-us/articles/41912588997275-Working-with-Client-Records-in-Practice-Better);
   [Creating Forms & Waivers with the Automatic Form
   Builder](https://help.practicebetter.io/hc/en-us/articles/36961546831643-Creating-Forms-Waivers-with-Practice-Better-s-Automatic-Form-Builder)
-- Halaxy — <https://www.halaxy.com>; [Customise your patient
-  profiles](https://support.halaxy.com/hc/en-au/articles/1500003075021-Customise-your-patient-profiles);
-  [Guide to patient
-  profiles](https://support.halaxy.com/hc/en-au/articles/360044499333-Guide-to-patient-profiles)
+- Halaxy — <https://www.halaxy.com>; [Customise your patient profiles](https://support.halaxy.com/hc/en-au/articles/1500003075021-Customise-your-patient-profiles); [Guide to patient profiles](https://support.halaxy.com/hc/en-au/articles/360044499333-Guide-to-patient-profiles) <!-- spelling:ignore: quoting Halaxy's own AU article title, which matches the URL slug -->
 - Clio — <https://www.clio.com/products/manage/>; [Create Custom Fields in
   Clio
   Manage](https://help.clio.com/hc/en-us/articles/9285496802331-Create-Custom-Fields-in-Clio-Manage);

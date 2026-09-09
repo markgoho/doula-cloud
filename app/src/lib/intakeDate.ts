@@ -7,7 +7,7 @@
  *
  * The composition rule is Postel's Law, written out on #466: one or two
  * digits for the month and the day, two or four for the year, all
- * accepted and normalised on the way to storage. That is a decision with
+ * accepted and normalized on the way to storage. That is a decision with
  * edge cases -- a two-digit year has to be resolved against something,
  * and 30 February parses as 2 March if nobody stops it -- so it lives in
  * a module a unit test can exercise directly, and `DateFields.svelte`

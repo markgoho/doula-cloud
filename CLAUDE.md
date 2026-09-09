@@ -42,7 +42,7 @@ Everything in this repository is written in American English — identifiers, co
 
 Exceptions exist only where the word is part of something we do not own: a CSS keyword, an HTML attribute value, a third-party API or identifier, or a verbatim quotation of an outside source. Each one stays on the line it is on with `spelling:ignore` and the reason beside it.
 
-`app/src/lib/spelling.usage.spec.ts` enforces this over `app/src` and fails the build on a new British spelling; it reads the `spelling:ignore` marker as the deliberate override. Three things are outside the sweep because none of them can carry a marker: `bun.lock`, which is generated; `docs/design/doula-cloud.pen`, which is encrypted design source; and everything under `docs/research/transcripts/`, which is verbatim auto-generated captions.
+`app/src/lib/spelling.usage.spec.ts` enforces this over `app/src` and `api/`'s Go source and fails the build on a new British spelling; it reads the `spelling:ignore` marker as the deliberate override. A few things are outside the sweep because none of them can carry a marker: `bun.lock`, which is generated; `docs/design/doula-cloud.pen`, which is encrypted design source; everything under `docs/research/transcripts/`, which is verbatim auto-generated captions; and `api/db/migrations/`, whose already-applied files goose checksums by content, so editing one breaks that check for anyone who has already run it.
 
 ## Agent skills
 

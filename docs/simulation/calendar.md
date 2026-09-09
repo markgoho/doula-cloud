@@ -4,7 +4,7 @@ What arrives, when, and to whom — the counts, the calendar, and the things tha
 
 Four files describe a run. [README.md](README.md) is the **instrument** — what a friction log is and what an entry must carry. [worlds/rooted-birth-collective.md](worlds/rooted-birth-collective.md) is the **World** — who is walking and what they arrive from. [environment.md](environment.md) is the **sandbox** — where the walking happens and what it cannot show. This file is the **calendar**: how much work there is, how it distributes across twenty-six simulated weeks, and what breaks.
 
-## Every number here is an estimate, and it is labelled one
+## Every number here is an estimate, and it is labeled one
 
 No real agency's book has ever been read. Every count below was reasoned from the World's fourteen-doula shape, from what `CONTEXT.md` says a Credit does, and from what the nine journey maps need in order to be walkable — not from an agency's records. Confirmed at the user's direction on 2026-09-05: the estimates stand, and they are corrected against reality once a real Practice is on the product, not before.
 

@@ -49,7 +49,7 @@ a new interaction to be interesting. Spend the whole distinctiveness budget on
 typography, rhythm and one signature component, described under
 [Where the character comes from](#where-the-character-comes-from).
 
-This is not a licence to be generic. A brief that only said "look like other
+This is not a license to be generic. A brief that only said "look like other
 SaaS" would produce something anonymous, and anonymous is exactly what has been
 ruled out. The instruction is narrower: **be unsurprising in what the interface
 does, and unmistakable in how well it does it.**
@@ -180,7 +180,7 @@ is the wrong trade for a tool read at 3am.
 
   SC 1.4.11 covers UI components and graphics that carry meaning. It does **not**
   cover a decorative divider, and this brief does not pretend otherwise: forcing
-  a hairline to 3:1 would drag it to a mid-grey and destroy "containers are
+  a hairline to 3:1 would drag it to a mid-gray and destroy "containers are
   declared by an edge". `outline-variant` is exempt, deliberately.
 
   These roles follow [Material Design 3](https://m3.material.io/styles/color/roles)
@@ -266,7 +266,7 @@ forms.**
   scanning fifty clients should see as many as will fit without the page
   becoming a wall.
 - **Forms are comfortable.** A form control is `40px` tall with `12px` of
-  horizontal padding; consecutive fields are `20px` apart; a labelled field
+  horizontal padding; consecutive fields are `20px` apart; a labeled field
   group is `28px` from the next. Filling in an intake form is careful work and
   is not the place to save vertical space.
 - **The spacing scale stays on a 4px base.** The existing `--space-*` ramp is
@@ -317,7 +317,7 @@ stroked in `outline`, at 18px in the chrome and 20px beside a section heading.
 `duotone` is reserved for empty states and other places where an icon is the
 subject rather than a marker.
 
-Stitch's generated HTML pulls Material Symbols. That is an artefact of the
+Stitch's generated HTML pulls Material Symbols. That is an artifact of the
 generator and is not adopted.
 
 ## Voice
@@ -387,7 +387,7 @@ point at these and say the work is done. The first of them is the largest.
    > relative under seven days, absolute beyond, on a 12-hour clock with a
    > lowercase `am`/`pm`, and the exact instant always carried underneath.
 
-**This is not a licence to add a fifth.** If a later ticket wants a signature
+**This is not a license to add a fifth.** If a later ticket wants a signature
 move that is not on this list, that is a change to the brief and belongs on the
 map, not in a component.
 
@@ -430,7 +430,7 @@ expensive.
 | **Miller's Law** and **Working Memory** | No group of fields, nav items or options exceeds roughly seven before it is broken up. Nothing a person must *remember* from an earlier step to complete a later one: if a later field depends on an earlier answer, the earlier answer is still on screen. |
 | **Chunking** | The structural core is chunked into meaningful groups with headings — identity, contact, care, billing — not presented as twelve equal rows. Chunk by what the information *is*, never by what fits. |
 | **Tesler's Law** | Some complexity is irreducible, and somebody absorbs it. A Practice's intake genuinely has many fields; the design's job is to carry that weight *for the doula*, in the software, rather than hand it to her as a longer form. Where complexity cannot be removed it is moved — to a default, to a template, to a later step — and never simply hidden. |
-| **Postel's Law** | Be liberal in what a field accepts, conservative in what it emits. Phone numbers, dates and names are accepted in whatever shape a person types, then normalised on the way to storage. A field that rejects a valid answer over formatting is a defect, not validation. |
+| **Postel's Law** | Be liberal in what a field accepts, conservative in what it emits. Phone numbers, dates and names are accepted in whatever shape a person types, then normalized on the way to storage. A field that rejects a valid answer over formatting is a defect, not validation. |
 | **Goal-Gradient Effect** | Effort rises as the end comes into view, so a multi-step form always shows where the end is — a real step count, real progress, and never a fake one. A saved draft resumes at the step it left, not at the beginning. |
 | **Zeigarnik Effect** | An interrupted task is remembered and wants finishing. Nothing in this product loses work: an intake form partially filled at 3am survives the tab closing, and an incomplete Engagement or unsent Invoice is visible somewhere as unfinished rather than silently absent. |
 | **Parkinson's Law** | A task with no visible end inflates to fill the time available. Give every long task a stated shape — how many steps, what remains — so it does not become an open-ended sitting. This is the same instruction as Goal-Gradient, arrived at from the other side. |
@@ -473,7 +473,7 @@ turns them into checks.
 |---|---|
 | **Occam's Razor** | Between two designs that serve the task equally, take the one with fewer parts. Applies to components as much as screens: a new atom must justify itself against composing existing ones. |
 | **Pareto Principle** | A small share of the work carries most of the value. Design the paths a 14-doula agency walks every day — the client list, intake, the activity ledger, invoicing — to a higher standard than the paths walked once a quarter, and be explicit about which is which rather than spreading effort evenly. |
-| **Cognitive Bias** | Our own judgement is the unreliable instrument. Two working rules: a design is not validated by the team liking it, and a default is never neutral — whatever is pre-selected is what most people will accept, so choose defaults as deliberately as any other decision. |
+| **Cognitive Bias** | Our own judgment is the unreliable instrument. Two working rules: a design is not validated by the team liking it, and a default is never neutral — whatever is pre-selected is what most people will accept, so choose defaults as deliberately as any other decision. |
 
 ### Where the laws conflict
 

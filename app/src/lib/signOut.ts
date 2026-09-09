@@ -88,7 +88,7 @@ export async function signOutOfSession({
 /**
  * Runs work, giving it milliseconds at most and swallowing whatever it
  * throws: the caller carries on either way. Work that outlives its
- * deadline is abandoned, not cancelled -- there is nothing to cancel,
+ * deadline is abandoned, not canceled -- there is nothing to cancel,
  * which is the point of it being best-effort.
  *
  * Exported so #618's sign-out-everywhere can bound its own push

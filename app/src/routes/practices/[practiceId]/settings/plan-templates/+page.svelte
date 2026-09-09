@@ -86,7 +86,7 @@
 	}
 
 	// One id pair per plan type, so the tab/tabpanel pairing (`id` /
-	// `aria-controls` / `aria-labelledby`) is built in one place rather
+	// `aria-controls` / `aria-labelledby`) is built in one place rather -- spelling:ignore: aria-labelledby is an ARIA attribute name
 	// than retyped at each of the three call sites below.
 	function tabId(value: 'care_plan' | 'birth_plan'): string {
 		return `plan-type-tab-${value}`;
@@ -135,7 +135,7 @@
 {/snippet}
 
 {#snippet editor()}
-	<div role="tabpanel" id={panelId(planType)} aria-labelledby={tabId(planType)} tabindex="0">
+	<div role="tabpanel" id={panelId(planType)} aria-labelledby={tabId(planType)} tabindex="0"> <!-- spelling:ignore: aria-labelledby is an ARIA attribute name -->
 		{#if error}
 			<Notice variant="error" message={error} />
 		{/if}

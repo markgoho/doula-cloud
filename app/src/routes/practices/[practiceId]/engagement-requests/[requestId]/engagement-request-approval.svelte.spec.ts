@@ -236,7 +236,7 @@ describe('the approval screen', () => {
 		expect(goto).not.toHaveBeenCalled();
 	});
 
-	it('exposes the decision controls and her record as reachable, labelled controls', async () => {
+	it('exposes the decision controls and her record as reachable, labeled controls', async () => {
 		await setup();
 
 		await expect.element(testPage.getByRole('button', { name: 'Approve and start the work' })).toBeVisible();

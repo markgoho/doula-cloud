@@ -226,7 +226,7 @@ describe('the Engagement Request screen', () => {
 		expect(goto).not.toHaveBeenCalled();
 	});
 
-	it('exposes the kind options, due date, note, submit and Cancel as reachable, labelled controls', async () => {
+	it('exposes the kind options, due date, note, submit and Cancel as reachable, labeled controls', async () => {
 		await setup();
 
 		await expect.element(testPage.getByLabelText('Birth')).toBeVisible();

@@ -177,7 +177,7 @@ invitation was only *sent* — accepting it **is** steps 1.1 and 1.2, and the
 steps twice would say nothing 2.1-b does not, so the second pass is a fixed battery
 rather than the whole plan: **21 endpoints**, captured once at `roles = '{}'` — the
 state acceptance actually leaves her in — and again at `['doula']`, then diffed with
-ids and timestamps normalised away. The session's call, recorded here rather than
+ids and timestamps normalized away. The session's call, recorded here rather than
 asked, following Dee's precedent.
 
 | Step | Mark | Result | What was seen |
@@ -204,7 +204,7 @@ asked, following Dee's precedent.
 | 7.1-b | `missing-feature (PR-G6)` [#281](https://github.com/markgoho/doula-cloud/issues/281) | as expected | Confirmed unwalkable. The Visits section's only input is `Reassign to Staff id`. No type, no prenatal/birth/postpartum anywhere |
 | 7.1-c | `missing-feature (MO-G2)` [#251](https://github.com/markgoho/doula-cloud/issues/251) | as expected | Confirmed unwalkable. No notes field, so "what was I told last time" has nowhere to live |
 | 8.1 | `manual` | as expected | `POST .../messages` -> `201`, appended to the one Engagement thread with her name, `(staff)`, and a timestamp |
-| 8.2 | `manual` | as expected | Marisol replied from the portal and the message landed in the same thread, in order, labelled `(client)`. Immutable as claimed: no edit or delete control renders, and `api/main.go` mounts no `PUT`, `PATCH` or `DELETE` on messages |
+| 8.2 | `manual` | as expected | Marisol replied from the portal and the message landed in the same thread, in order, labeled `(client)`. Immutable as claimed: no edit or delete control renders, and `api/main.go` mounts no `PUT`, `PATCH` or `DELETE` on messages |
 | 8.2-a | `automated (push-notification.e2e.ts)` | not re-run | Already green in the 2026-08-22 suite run |
 | PR-B1 | `manual` | as expected | **Holds.** The heading `Staff` renders, then `only a Practice Owner can do that` where the roster would be. `403 GET .../staff` |
 | PR-B2 | `manual` | as expected | **Holds on submit.** The form renders with **no API call at all** on load — name, email, **Send invite** — and the press answers `403 only a Practice Owner can do that`, printed on the screen |

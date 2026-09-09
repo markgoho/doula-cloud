@@ -43,9 +43,9 @@ plan picker or business-details step before the form loads.
 
 | Field | Required? | Notes |
 |---|---|---|
-| Practice Name | **No** — labelled "Practice Name (Optional)" | Placeholder: *"Your Practice Name (or leave blank to use your name)"* |
-| First Name | Implied (unlabelled) | Paired two-column with Last Name |
-| Last Name | Implied (unlabelled) | — |
+| Practice Name | **No** — labeled "Practice Name (Optional)" | Placeholder: *"Your Practice Name (or leave blank to use your name)"* |
+| First Name | Implied (unlabeled) | Paired two-column with Last Name |
+| Last Name | Implied (unlabeled) | — |
 | Email address | Yes | `type="email"`, placeholder `you@example.com` |
 | Password | Yes | `type="password"`; placeholder is literally `••••••••` |
 | Confirm Password | Yes | Same placeholder |

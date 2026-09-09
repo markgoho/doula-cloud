@@ -42,7 +42,7 @@ The Credit ledger, the Stripe Connect account and its payouts, and `stripe_webho
 
 `activity` is the same outcome for a different reason: append-only, `GRANT SELECT, INSERT` only, and the record `CLAUDE.md`'s audit expectation exists to keep. Every `*_outbox` table — `client_erasure_outbox`, `practice_deletion_outbox` itself, and the rest — is kept regardless too, for a third reason again: none of them is scoped to a live session at all, so deletion has no mechanism that could reach them even if it wanted to.
 
-## Cancelling a queued job by rechecking live state, not by cancelling it
+## Canceling a queued job by rechecking live state, not by canceling it
 
 Client erasure's outbox (`client_erasure_outbox`, ADR-0027) carries no cancel mechanism and no `DELETE` grant — a design accepted there because erasure itself is immediate and irreversible; nothing queued against it is ever meant to be taken back. Practice deletion's own outbox (`practice_deletion_outbox`) inherits that same shape for the same reason (Postgres's row locking gives no clean way to guarantee a cancel lands before a concurrent claim does), but now genuinely needs to be undoable: a restore during the 30-day window must stop the day-30 finalization and the day-23 reminder that were already enqueued at initiation.
 

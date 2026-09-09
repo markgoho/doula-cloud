@@ -93,7 +93,7 @@ do not appear. Nothing here is about supporting a birth.
 
 **Abandon point**: this screen (TB-G4). It is an empty filing cabinet, not proof.
 
-### Stage 5 — Kick the tyres
+### Stage 5 — Kick the tires
 
 **Thinking**: "Let me put a fake client in and see what happens."
 **Pain points**: she must invent a client to see any real screen.

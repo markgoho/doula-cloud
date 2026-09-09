@@ -2,7 +2,7 @@
 
 Research for [#383](https://github.com/markgoho/doula-cloud/issues/383), on the entity map [#375](https://github.com/markgoho/doula-cloud/issues/375). Verified 25 August 2026 against the code at `trunk` and against the live Stripe Sandbox `acct_1U7N3e1rKoVEA79v` ("Doula Cloud sandbox").
 
-**This memo establishes facts. It does not conclude the legal question.** The ticket says the conclusion — *"and therefore no licence is required in New York"* — needs an attorney's signature, and that judgement stands. Section 7 is the question to hand over.
+**This memo establishes facts. It does not conclude the legal question.** The ticket says the conclusion — *"and therefore no license is required in New York"* — needs an attorney's signature, and that judgment stands. Section 7 is the question to hand over.
 
 ## 1. What is established, in one paragraph
 
@@ -242,13 +242,13 @@ Note the shape. Stripe absorbs a Practice's negative balance, but the base liabi
 
 Contractual, not regulatory — but it points the same way as the statute would: the platform must not present itself as standing between payer and payee. Doula Cloud's product copy should be checked against it (section 6).
 
-**Money services businesses are a Restricted business.** The [Prohibited and Restricted Businesses](https://stripe.com/legal/restricted-businesses) list puts "Money transmitters, remittances, currency exchange services, and other money service businesses" in the **Restricted** tier ("require additional due diligence… proof of relevant licenses"), and "Peer-to-peer money transmission" and "Payable-through accounts" in the **Prohibited** tier. SSA General Terms (ix) forbids using the Services to "operate or benefit from any Prohibited or Restricted Business… unless Stripe has pre-approved the respective Prohibited or Restricted Business in writing". So if Doula Cloud ever *were* a money transmitter, its own Stripe account would be out of compliance until Stripe pre-approved it and it produced licences. The regulatory question and the vendor question do not come apart.
+**Money services businesses are a Restricted business.** The [Prohibited and Restricted Businesses](https://stripe.com/legal/restricted-businesses) list puts "Money transmitters, remittances, currency exchange services, and other money service businesses" in the **Restricted** tier ("require additional due diligence… proof of relevant licenses"), and "Peer-to-peer money transmission" and "Payable-through accounts" in the **Prohibited** tier. SSA General Terms (ix) forbids using the Services to "operate or benefit from any Prohibited or Restricted Business… unless Stripe has pre-approved the respective Prohibited or Restricted Business in writing". So if Doula Cloud ever *were* a money transmitter, its own Stripe account would be out of compliance until Stripe pre-approved it and it produced licenses. The regulatory question and the vendor question do not come apart.
 
 ### 4.7 What Stripe does **not** say — a checked absence, not an unchecked one
 
 Across `/connect/charges`, `/connect/direct-charges`, `/connect/destination-charges`, `/connect/separate-charges-and-transfers`, the `/connect` overview, `/connect/service-agreement-types`, `/connect/account-balances`, `/connect/accounts-v2/connected-account-configuration`, `/connect/integration-recommendations`, `/connect/top-ups` and `/connect/required-verification-information`, the phrase "money transmi…" appears **once**: in [risk management](https://docs.stripe.com/connect/risk-management), listing "Money transmitter licenses (MTL) in the US" among the screens *Stripe* performs.
 
-- **Stripe nowhere states that a Connect platform does not need its own money transmitter licence.** There is no such assurance to rely on, in docs or in contract.
+- **Stripe nowhere states that a Connect platform does not need its own money transmitter license.** There is no such assurance to rely on, in docs or in contract.
 - The only Stripe pages linking a *platform* to MTL need are the payouts comparison tables — [cross-border payouts](https://docs.stripe.com/connect/cross-border-payouts) and [global payouts vs Connect](https://docs.stripe.com/global-payouts/compare-with-connect) — which say Connect payouts "**Offload legal and compliance requirements to Stripe using the Stripe Money Transmitter License**", while Global Payouts means "**If you're managing your customers' funds, you might need a Money Transmitter License**". Directionally supportive, but scoped to payouts products Doula Cloud does not use.
 - **There is no clause in the SSA where a platform represents that it is not engaged in money transmission.** The nearest constraints are §3.4(b) above and the Restricted-business list.
 - **No Stripe document forbids a platform holding a balance**, or says a platform balance changes its status. [Account balances](https://docs.stripe.com/connect/account-balances) and [top-ups](https://docs.stripe.com/connect/top-ups) describe the mechanics with no regulatory commentary.
@@ -281,7 +281,7 @@ Three things follow from the text itself:
 2. **The exemption list is depository institutions only.** No software exemption, no SaaS exemption, no marketplace exemption.
 3. **The nexus is "in this state"** — § 641(2)(c), § 642(4) and § 648 all frame the business as conducted in New York. A New York LLC serving New York Practices is squarely inside it.
 
-The cost of a licence, if one were needed, is set by **§ 643**: a surety bond of "no less than five hundred thousand dollars", plus § 651's permissible-investments reserve. This is not a filing fee. It is a capital requirement that would end the business as currently conceived — which is why the question is on the entity map.
+The cost of a license, if one were needed, is set by **§ 643**: a surety bond of "no less than five hundred thousand dollars", plus § 651's permissible-investments reserve. This is not a filing fee. It is a capital requirement that would end the business as currently conceived — which is why the question is on the entity map.
 
 ### 5.2 The statute does not define its own trigger
 
@@ -414,19 +414,19 @@ Hand over sections 7.1 and 7.2 as they stand. They are written so the hour is sp
 
 ### 7.2 The questions
 
-**Q1 — The core question.** On the facts in 7.1, does Doula Cloud "engage in the business of receiving money for transmission or transmitting the same" within **NY Banking Law section 641(1)**, such that it requires a money transmitter licence from the Superintendent?
+**Q1 — The core question.** On the facts in 7.1, does Doula Cloud "engage in the business of receiving money for transmission or transmitting the same" within **NY Banking Law section 641(1)**, such that it requires a money transmitter license from the Superintendent?
 
-**Q2 — The controlling authority, as we read it.** NYDFS's [letter of 9 July 2007](https://www.dfs.ny.gov/legal/interpret/lo070709b.htm) concluded that a payment processor required a licence *"except in the situation where credit card payments go directly from credit card accounts to accounts owned by the intended payees,"* reasoning that in that case *"there appears to be no risk to the payor and it appears that there is no receipt of money for transmission by the Client within Banking Law, Section 641."*
+**Q2 — The controlling authority, as we read it.** NYDFS's [letter of 9 July 2007](https://www.dfs.ny.gov/legal/interpret/lo070709b.htm) concluded that a payment processor required a license *"except in the situation where credit card payments go directly from credit card accounts to accounts owned by the intended payees,"* reasoning that in that case *"there appears to be no risk to the payor and it appears that there is no receipt of money for transmission by the Client within Banking Law, Section 641."*
 
 We read our facts as falling inside that exception. **Is a Stripe connected-account balance — held by Stripe Payments Company, credited to the Practice, governed by the Practice's own agreement with Stripe, and payable only to the Practice's own bank account — "an account owned by the intended payee" for the purposes of that letter?** If not, what would have to be different for it to be? And how much weight should a 2007 opinion letter, addressed to another party and predating the platform-payments industry, carry in 2026?
 
-**Q3 — Agent of a payee.** Section 641(1) excepts a person acting "as agent of a payee", and 3 NYCRR 406.2(l) defines that as one "authorized by a payee to receive funds on behalf of the payee and to deliver such funds received from the payor to the payee." **On our facts we do not receive funds at all, so we read this exception as unnecessary rather than as our defence.** Is that right — or should we structure the Practice agreement to satisfy DFS's agency conditions anyway (a written agency agreement, a customer receipt stating that payment to the agent is payment to the payee, no risk of loss to the payor), as a belt-and-braces matter? If so, what language should the Practice agreement and the Client-facing invoice carry?
+**Q3 — Agent of a payee.** Section 641(1) excepts a person acting "as agent of a payee", and 3 NYCRR 406.2(l) defines that as one "authorized by a payee to receive funds on behalf of the payee and to deliver such funds received from the payor to the payee." **On our facts we do not receive funds at all, so we read this exception as unnecessary rather than as our defense.** Is that right — or should we structure the Practice agreement to satisfy DFS's agency conditions anyway (a written agency agreement, a customer receipt stating that payment to the agent is payment to the payee, no risk of loss to the payor), as a belt-and-braces matter? If so, what language should the Practice agreement and the Client-facing invoice carry?
 
 **Q4 — Administrative reach without possession.** Does the platform's ability to create and finalize invoices on a Practice's Stripe account (fact 10), without any ability to take the proceeds, bear on the section 641(1) analysis? We have found no New York authority addressing control without custody, and would rather ask than assume.
 
 **Q5 — The prepaid credits.** Practices pre-pay Doula Cloud for Doula Cloud's own software, in a closed loop with no redemption to third parties and no cash-out (fact 11). Does that raise any issue under article 13-B — "payment instrument" under section 640(5), section 651's permissible-investments requirement, or New York's abandoned-property and gift-certificate rules? We assume not, since the credits are consideration for our own services and section 640(5) excludes an "instrument which is redeemable by the issuer in merchandise or services", but we would like that confirmed rather than assumed.
 
-**Q6 — What would change the answer.** Which of the following would require a licence, so we can put them behind a legal gate in our roadmap rather than discovering it later?
+**Q6 — What would change the answer.** Which of the following would require a license, so we can put them behind a legal gate in our roadmap rather than discovering it later?
 
 - (a) switching to **destination charges** or **separate charges and transfers**, so the charge lands on our platform balance before reaching the Practice;
 - (b) taking an **application fee** — a percentage of each Client payment — as our revenue instead of a separate subscription;
@@ -436,9 +436,9 @@ We read our facts as falling inside that exception. **Is a Stripe connected-acco
 
 We expect (a), (c) and (d) to be the dangerous ones. Please tell us if (b) or (e) is worse than we think.
 
-**Q7 — Consequences, and other states.** If a licence *were* required: we understand section 643 sets a surety bond of "no less than five hundred thousand dollars", and section 650(2)(a) makes unlicensed transmission a Class A misdemeanour with no minimum threshold. Is that the correct read of the exposure? And since Practices will eventually be outside New York — does the answer here generalise, or should we expect a state-by-state analysis before selling across state lines? We note New York has **not** adopted the Money Transmission Modernization Act, so its exemption architecture differs from the 31 states that have.
+**Q7 — Consequences, and other states.** If a license *were* required: we understand section 643 sets a surety bond of "no less than five hundred thousand dollars", and section 650(2)(a) makes unlicensed transmission a Class A misdemeanour with no minimum threshold. Is that the correct read of the exposure? And since Practices will eventually be outside New York — does the answer here generalise, or should we expect a state-by-state analysis before selling across state lines? We note New York has **not** adopted the Money Transmission Modernization Act, so its exemption architecture differs from the 31 states that have.
 
-**Q8 — What we should write down.** If the conclusion is that no licence is required, is there anything we should put in our Practice agreement, our Client-facing invoice, or our marketing copy to *keep* it true? Stripe's own contract forbids us to "act as or hold itself out as a payment facilitator, intermediary or aggregator", and we would like our copy checked against the same standard a regulator would apply.
+**Q8 — What we should write down.** If the conclusion is that no license is required, is there anything we should put in our Practice agreement, our Client-facing invoice, or our marketing copy to *keep* it true? Stripe's own contract forbids us to "act as or hold itself out as a payment facilitator, intermediary or aggregator", and we would like our copy checked against the same standard a regulator would apply.
 
 ### 7.3 What we are not asking
 
@@ -464,8 +464,8 @@ We are not asking whether the integration is well built, and we are not asking f
 - Whether a Stripe connected-account balance counts as "an account owned by the intended payee" under that 2007 letter.
 - Whether administrative API reach without custody bears on section 641(1).
 - Whether the prepaid credit ledger raises any stored-value question.
-- Which of the six roadmap changes in Q6 would require a licence.
-- **And the conclusion itself.** This memo does not state that no licence is required in New York. It states that Doula Cloud is not in the flow of funds, and that whether anything short of being in the flow of funds still triggers section 641(1) is the question counsel is being paid to answer.
+- Which of the six roadmap changes in Q6 would require a license.
+- **And the conclusion itself.** This memo does not state that no license is required in New York. It states that Doula Cloud is not in the flow of funds, and that whether anything short of being in the flow of funds still triggers section 641(1) is the question counsel is being paid to answer.
 
 ---
 

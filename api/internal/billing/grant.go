@@ -61,7 +61,7 @@ func FoundingGrant(ctx context.Context, tx *sql.Tx, practiceID, grantedBy string
 		return FoundingGrantReceipt{}, ErrNoGrantor
 	}
 
-	// Same lock ConsumeCredit and Refund take. Here it also serialises
+	// Same lock ConsumeCredit and Refund take. Here it also serializes
 	// two grants arriving together: the unique index below would refuse
 	// the second either way, but the lock makes the refusal
 	// ErrAlreadyGranted rather than a constraint violation.

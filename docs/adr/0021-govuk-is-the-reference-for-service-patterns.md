@@ -38,7 +38,7 @@ This does not conflict with [the design brief](../design/brief.md)'s appeal to J
 
 The decision above assumes GOV.UK either has a pattern or is departed from with a recorded reason. It says nothing about the third case: **GOV.UK has no pattern at all.** Raised by the account owner during [#512](https://github.com/markgoho/doula-cloud/issues/512)'s grilling and confirmed on [#514](https://github.com/markgoho/doula-cloud/issues/514). [#508](https://github.com/markgoho/doula-cloud/issues/508) hit this first: GOV.UK publishes nothing about tables at narrow widths beyond a small-text class, their own backlog issue [alphagov/govuk-design-system-backlog#61](https://github.com/alphagov/govuk-design-system-backlog/issues/61) has been open since 2018 with 62 comments, and an HMRC engineer commented in October 2025 that they had to port ONS's and NHS's design-system CSS by hand for exactly this gap.
 
-**A GOV.UK gap is not a licence to invent.** It is a prompt to walk this order until a source has an opinion:
+**A GOV.UK gap is not a license to invent.** It is a prompt to walk this order until a source has an opinion:
 
 1. **GOV.UK Design System** -- unchanged, this ADR's own default.
 2. **NHS.UK Design System and ONS Design System**, tied -- both built on GOV.UK's own foundations, so they extend it rather than fight it, and both are publicly maintained and user-tested.

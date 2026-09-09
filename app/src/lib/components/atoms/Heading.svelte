@@ -15,7 +15,7 @@
 		variant?: 'page' | 'section' | 'card';
 		text: string;
 		/**
-		Lets a caller point an `aria-labelledby` at this heading -- RecordDetail's section landmarks (#507).
+		Lets a caller point an `aria-labelledby` at this heading -- RecordDetail's section landmarks (#507). spelling:ignore: aria-labelledby is an ARIA attribute name
 		*/
 		id?: string;
 	}

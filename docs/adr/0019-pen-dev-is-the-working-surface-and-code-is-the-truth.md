@@ -18,7 +18,7 @@ Three tools were tried on real work. Only one survived a round trip.
 back. Its MCP server registers **zero tools** in Claude Code, because `upload_design_md` carries a
 dangling `#/$defs/ScreenInstance` reference that aborts the whole tool list. Driven over raw JSON-RPC it
 generated a finished screen in 91 seconds and returned correct surgical `dom_operations` from
-`edit_screens` — which then never reached any readable artefact. `get_screen` returned byte-identical
+`edit_screens` — which then never reached any readable artifact. `get_screen` returned byte-identical
 HTML across four polls and the canvas did not change. Stitch cannot read back its own edits, let alone
 a person's.
 

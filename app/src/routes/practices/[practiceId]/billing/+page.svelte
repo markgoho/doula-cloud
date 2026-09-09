@@ -158,8 +158,8 @@
 			message="Credit purchase complete. The balance updates once Stripe confirms payment."
 			variant="status"
 		/>
-	{:else if checkoutStatus === 'cancelled'}
-		<Notice message="Credit purchase cancelled." variant="status" />
+	{:else if checkoutStatus === 'canceled'}
+		<Notice message="Credit purchase canceled." variant="status" />
 	{/if}
 
 	<form onsubmit={handlePurchase}>
@@ -217,7 +217,7 @@
 				silently inert for an Admin sent here by exactly that
 				message. Visible text, not only aria-describedby, so a
 				sighted Admin also learns why rather than guessing at a
-				greyed-out button.
+				grayed-out button.
 			-->
 			<Text id={buyCreditsHelpId} text="Buying Credits is for a practice Owner or Admin." step="body-sm" tone="variant" />
 		{/if}
