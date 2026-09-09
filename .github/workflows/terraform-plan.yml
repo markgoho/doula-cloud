@@ -1,0 +1,133 @@
+# Terraform drift check (#1049, closing out #797).
+#
+# ADR-0034 draws the line: `apply` never runs in CI, only from a laptop as
+# markgoho@gmail.com. This job only ever runs `plan`, as the read-only
+# `terraform-plan@doula-cloud.iam.gserviceaccount.com` account, over the same
+# `github-actions` Workload Identity pool `deploy-api` in ci.yml already
+# authenticates through. See docs/infrastructure.md, "Who may apply, and
+# what CI may read".
+#
+# Required check, per the ticket, not an advisory annotation -- and also
+# scheduled, because a console change produces no commit and therefore no
+# push to trigger anything. Both are true at once, and that has a real cost:
+# the first console drift blocks every unrelated pull request until someone
+# reconciles it or a maintainer relaxes the ruleset. That trade is recorded,
+# not softened here -- see the issue for the reasoning.
+name: Terraform Plan
+
+on:
+  push:
+    branches: [trunk]
+  pull_request:
+  schedule:
+    # Daily, not hourly: #481 is the case this whole effort answers to, and
+    # it went unnoticed for three days. Daily keeps reconciling drift a
+    # same-day task without running a project this quiet's plan every hour
+    # for no signal. 41 past the hour, not on one of the round numbers every
+    # other scheduled workflow on GitHub also asks for at the top of the
+    # hour (documented cause of scheduled-run delay/skipping under load).
+    - cron: '41 9 * * *'
+  workflow_dispatch: {}
+
+# Matches ci.yml's own top-level pattern: scoped per ref, not global, so an
+# unrelated PR's plan is never queued behind this one. Genuine cross-ref
+# contention on the GCS state lock is rare (one person, one project) and is
+# already handled by `-lock-timeout` below, which waits instead of erroring.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  plan:
+    # GitHub forces GITHUB_TOKEN to read-only, non-OIDC permissions on a
+    # pull_request event opened by Dependabot, so id-token: write is
+    # unavailable and google-github-actions/auth fails outright -- not a
+    # drift finding, just a token Dependabot's own PRs can never mint.
+    # Skipping the whole job for that one actor keeps every other trigger
+    # (trunk push, a human's PR, the schedule) authenticating and running
+    # normally, and it keeps this usable as a required check on Dependabot
+    # PRs: GitHub reports a job skipped by its own `if:` as a successful
+    # status check, unlike a workflow that never triggers at all (a
+    # path/branch filter on `on:`), which would stay pending forever.
+    # Verified against #1023, an open Dependabot PR, before relying on it.
+    if: github.actor != 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Authenticate to Google Cloud
+        uses: ./.github/actions/gcp-auth
+        with:
+          project_id: doula-cloud
+          workload_identity_provider: projects/850855848778/locations/global/workloadIdentityPools/github-actions/providers/github
+          service_account: terraform-plan@doula-cloud.iam.gserviceaccount.com
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v4
+        with:
+          terraform_version: '~1.16'
+
+      - name: Terraform init
+        working-directory: terraform
+        run: terraform init -input=false
+
+      # `plan`'s own human-readable stdout is never printed or kept: with
+      # nonsensitive() in scheduler.tf, a *drifted* X-Internal-Secret header
+      # would otherwise print its actual value in plain text (#1052). Every
+      # branch below reports the resource address, the action, and which
+      # attribute NAMES changed -- never a value -- read from `terraform show
+      # -json` with jq. The one exception is a genuine command failure
+      # (detailed-exitcode 1: e.g. a refresh permission gap), which is not a
+      # drift finding and is safe to show in full.
+      #
+      # `mode == "managed"` excludes the one data source in this
+      # configuration (scheduler.tf's notification_worker_secret read) from
+      # the drift table -- confirmed empirically that it does not appear in
+      # resource_changes at all on a clean plan, but excluding it by mode
+      # rather than relying on that means a future data source refreshing
+      # under `read` can never masquerade as drift on an otherwise-clean
+      # project, which is exactly the permanently-red failure ADR-0034
+      # refuses.
+      - name: Terraform plan
+        working-directory: terraform
+        env:
+          TF_IN_AUTOMATION: 'true'
+        run: |
+          set +e
+          terraform plan -detailed-exitcode -input=false -no-color -lock-timeout=120s -out=tfplan > plan-raw.log 2>&1
+          plan_exit=$?
+          set -e
+
+          if [ "$plan_exit" -eq 1 ]; then
+            echo "terraform plan failed to run (not a drift finding):"
+            cat plan-raw.log
+            exit 1
+          fi
+
+          if [ "$plan_exit" -eq 0 ]; then
+            echo "No changes. The live project matches the committed configuration." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          terraform show -json tfplan > plan.json
+
+          jq -r '
+            def changed_keys(b; a):
+              (b // {}) as $b | (a // {}) as $a |
+              (($b | keys) + ($a | keys) | unique) as $allkeys |
+              ($allkeys | map(select($b[.] != $a[.])));
+
+            [.resource_changes[] | select(.mode == "managed" and .change.actions != ["no-op"])] as $drifted
+            | ($drifted | length | tostring) + " resource(s) differ from the live project. Attribute NAMES only -- never values, per #1052.\n\n" +
+              "| Resource | Action | Changed attributes |\n|---|---|---|\n" +
+              ( [ $drifted[]
+                  | "| `" + .address + "` | " + (.change.actions | join(",")) + " | " + (changed_keys(.change.before; .change.after) | join(", ")) + " |"
+                ] | join("\n") )
+          ' plan.json >> "$GITHUB_STEP_SUMMARY"
+
+          echo "Terraform plan is non-empty -- see the job summary for which resources and attributes drifted."
+          exit 1
