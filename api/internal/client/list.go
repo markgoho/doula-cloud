@@ -113,10 +113,12 @@ type ListResponse struct {
 // with at least one Engagement, or a pending Engagement Request -- per
 // ADR-0017; ?all=true returns everyone. A row already merged into
 // another (ADR-0017's amendment tombstone) never appears, under either
-// filter. A contractor Doula's list is
+// filter. An ambient contractor Doula's list is
 // narrowed to Clients she holds an open, granted attachment to (through
 // any of their Engagements) regardless of the filter, the same ADR-0008
-// carve-out Reader.CanAccessClient enforces. Must be mounted behind
+// carve-out Reader.CanAccessClient enforces -- an owner-contractor
+// (ADR-0017's "solo Practice") holds the owner role's ambient reach
+// instead, so her list is never narrowed. Must be mounted behind
 // staffauth.Middleware.
 //
 // Ordering moved from alphabetical (COALESCE(preferred_name, given_name))
@@ -153,7 +155,7 @@ func ListHandler() http.Handler {
 
 		var list []ListItem
 		var err error
-		if reader.IsContractor() {
+		if reader.IsAmbientContractor() {
 			list, err = listAttachedClients(r.Context(), tx, practiceID, staffID, withWorkOnly, after)
 		} else {
 			list, err = listClients(r.Context(), tx, practiceID, withWorkOnly, after)
@@ -323,7 +325,7 @@ func attachOpenEngagements(ctx context.Context, tx *sql.Tx, list []ListItem, rea
 	for i, item := range list {
 		clientIDs[i] = item.ClientID
 	}
-	raws, err := fetchOpenEngagements(ctx, tx, clientIDs, staffID, reader.IsContractor())
+	raws, err := fetchOpenEngagements(ctx, tx, clientIDs, staffID, reader.IsAmbientContractor())
 	if err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		return err
@@ -394,15 +396,20 @@ const openEngagementRollupQueryTemplate = `
 // staffID is always the caller's own id, whatever her role: passing it
 // unconditionally (rather than only when she is a contractor) is what
 // lets an owner-contractor's (ADR-0017's "solo Practice") own fee join
-// through the same LEFT JOIN an actual contractor's does, with no second
+// through the same LEFT JOIN an ambient contractor's does, with no second
 // code path to keep in sync. attachedOnly narrows the result set itself
-// to Engagements staffID is attached to (true for a contractor's own
-// list, per staffauth.Reader.CanAccessEngagement's "only what she is
-// attached to") -- false lets every open Engagement on the Client
-// through regardless of attachment, for every other role. Which of the
-// fetched fields actually reach the caller is shapeOpenEngagement's job,
-// not this query's: fetching InvoiceStatus/FeeCents unconditionally is
-// its own "fetch full, shape by role" split.
+// to Engagements staffID is attached to (true only for an ambient
+// contractor -- staffauth.Reader.IsAmbientContractor, the same gate
+// CanAccessEngagement uses -- never for bare IsContractor, which an
+// owner-contractor also satisfies) -- false lets every open Engagement on
+// the Client through regardless of attachment, for an Owner, an Admin, an
+// employee Doula, and an owner-contractor alike. An owner-contractor
+// therefore reads the whole Practice like any other Owner, while her own
+// fee still joins through wherever she personally holds a granted
+// attachment. Which of the fetched fields actually reach the caller is
+// shapeOpenEngagement's job, not this query's: fetching
+// InvoiceStatus/FeeCents unconditionally is its own "fetch full, shape by
+// role" split.
 func fetchOpenEngagements(ctx context.Context, tx *sql.Tx, clientIDs []string, staffID string, attachedOnly bool) ([]rawOpenEngagement, error) {
 	placeholders := make([]string, len(clientIDs))
 	args := make([]any, 0, len(clientIDs)+2)

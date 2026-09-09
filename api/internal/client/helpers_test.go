@@ -142,11 +142,26 @@ func seedFieldTemplate(t *testing.T, db *testdb.DB, practiceID, fieldsJSON strin
 // list rollup's contractor-only field (#264).
 func seedGrantedAttachmentWithFee(t *testing.T, db *testdb.DB, engagementID, staffID string, feeAmountCents int64) {
 	t.Helper()
+	seedAttachmentWithFee(t, db, engagementID, staffID, "granted", false, feeAmountCents)
+}
+
+// seedAttachmentWithFee is testdb.SeedAttachment plus a fee_amount_cents
+// value -- #742's rollup tests need an ended or accrued attachment to
+// carry its own distinct fee, so deleting the SQL condition that is
+// supposed to keep it hidden surfaces a visibly wrong fee rather than a
+// silent nil either way.
+func seedAttachmentWithFee(t *testing.T, db *testdb.DB, engagementID, staffID, origin string, ended bool, feeAmountCents int64) {
+	t.Helper()
+	endedAt := "NULL"
+	if ended {
+		endedAt = "now()"
+	}
 	if _, err := db.Admin.ExecContext(t.Context(),
-		`INSERT INTO engagement_attachments (engagement_id, staff_id, origin, attached_by, fee_amount_cents) VALUES ($1, $2, 'granted', $2, $3)`,
-		engagementID, staffID, feeAmountCents,
+		`INSERT INTO engagement_attachments (engagement_id, staff_id, origin, attached_by, ended_at, fee_amount_cents)
+		 VALUES ($1, $2, $3::attachment_origin, $2, `+endedAt+`, $4)`,
+		engagementID, staffID, origin, feeAmountCents,
 	); err != nil {
-		t.Fatalf("seed granted attachment with fee: %v", err)
+		t.Fatalf("seed attachment with fee (origin=%s, ended=%v): %v", origin, ended, err)
 	}
 }
 
