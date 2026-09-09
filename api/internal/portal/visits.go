@@ -45,6 +45,14 @@ type Visit struct {
 	// redaction: that rule answers "never who inside the Practice did
 	// what" about a Practice's own roster acts, and who is coming to her
 	// home is a fact about her care, not about the roster.
+	//
+	// One case does fall back to that same word, and it is a known gap
+	// rather than a rule: a Staff member who has left the Practice is no
+	// longer resolvable to a Client (00105's own comment says why, and
+	// what happened when the policy that would fix it was tried), so a
+	// past Visit of hers reads "Your practice" instead of her name. The
+	// Visit itself never disappears -- that is what the LEFT JOIN in
+	// listPortalVisits is for.
 	DoulaName string `json:"doulaName"`
 	// HasHappened is decided in SQL against the database's own clock, so the
 	// browser never has to compare a parsed instant with its own -- the

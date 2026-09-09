@@ -206,9 +206,11 @@ func TestVisitsHandler_RefusesAnotherEngagementsVisits(t *testing.T) {
 // truthfulness rule pointed the other way: "she came on 18 August" must
 // still be there after that Doula leaves. Removing a Membership deletes
 // the practice_memberships row that 00009's Staff-visible-to-a-Client
-// policy reaches through, so without
-// staff_visible_to_own_client_portal_visits (00105) her Staff row goes
-// invisible to this Client and the JOIN takes the Visit with it.
+// policy reaches through, so her Staff row goes invisible to this
+// Client -- and under an inner join that took the Visit with it. The
+// LEFT JOIN keeps the row and prints staffActorDisplayName in place of
+// the name it can no longer read. Losing her name is the known gap
+// 00105's own comment records; losing the Visit was the bug.
 func TestVisitsHandler_KeepsAVisitWhoseDoulaHasLeftThePractice(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "portal-visits-departed"
@@ -230,8 +232,8 @@ func TestVisitsHandler_KeepsAVisitWhoseDoulaHasLeftThePractice(t *testing.T) {
 	if len(out.Items) != 1 || out.Items[0].VisitID != visitID {
 		t.Fatalf("items = %+v, want the Visit %q she came to", out.Items, visitID)
 	}
-	if out.Items[0].DoulaName != "Maya Okonkwo" {
-		t.Fatalf("doulaName = %q, want the Doula who came", out.Items[0].DoulaName)
+	if out.Items[0].DoulaName != "Your practice" {
+		t.Fatalf("doulaName = %q, want the Practice standing in for a name this Client can no longer read", out.Items[0].DoulaName)
 	}
 }
 
