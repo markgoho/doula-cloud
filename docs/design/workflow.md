@@ -24,7 +24,9 @@ Two consequences worth holding on to:
 
 - **`execute` edits whatever the app has open.** Before an agent touches the canvas, the app must have
   `doula-cloud.pen` as its active editor. Confirm with `get_app_state`, which prints the active path.
-- **The CLI is the file-writing path.** `execute` changes are in memory until the canvas is saved.
+- **The CLI is the file-writing path.** `execute` changes are in memory until the canvas is saved, and
+  `printf 'save()\nexit()\n' | bunx pen interactive --app desktop` is how an agent saves it. See
+  [Autosave, and the one operation it misses](#autosave-and-the-one-operation-it-misses).
 
 ## The export is a read-back, not a source
 
@@ -194,16 +196,23 @@ Two consequences, and they are the durable part:
 > file is the only check that distinguishes saved from unsaved**, and it belongs at the end of every
 > canvas pass.
 
-> **⌘S in Pen is the only deterministic write.** There is no save in the `execute` API — `Export()`
-> writes PNG, JPEG, WEBP, PDF and HTML, never `.pen`. An agent that has finished a canvas change should
-> verify with `git status` and, if the file is unchanged, ask for the keystroke rather than waiting on
-> an autosave that may not come.
-
-A related trap: because the disk file can lag the live document by an arbitrary amount, whatever autosave
-does eventually write is a **snapshot of some intermediate state**, not necessarily the state you left.
-On #417 the flush captured a throwaway probe frame that had already been deleted in memory. Never commit
-a `.pen` without confirming the diff is what you meant.
-
-The CLI (`bunx pen --in … --out …`) is unaffected: it writes the file paths it is given, which is why
-[ADR-0019](../adr/0019-pen-dev-is-the-working-surface-and-code-is-the-truth.md) calls it the
-file-writing path.
+> **`pen interactive --app desktop` has a `save()`, and that is the deterministic write.** There is
+> still no save in the `execute` API — `Export()` writes PNG, JPEG, WEBP, PDF and HTML, never `.pen`.
+> But `bunx pen interactive --app desktop` attaches to the same live document the MCP `execute` calls
+> edit, and its `save()` command writes that document to disk, so an agent can flush its own work with
+> nobody at the keyboard:
+>
+> ```sh
+> printf 'save()\nexit()\n' | bunx pen interactive --app desktop
+> ```
+>
+> Settled on [#1085](https://github.com/markgoho/doula-cloud/issues/1085): `execute` changed two text
+> nodes, `git status` on the `.pen` file stayed clean through a minute of waiting and an `osascript`
+> ⌘S that reported no error, and the piped `save()` wrote the file on the first try.
+>
+> **⌘S is the fallback, and it is not always reachable.** On #1085 the desktop app was running with
+> **zero windows**: `get_app_state` reported `doula-cloud.pen` as the active canvas editor and
+> `execute` edited it happily, while `System Events` counted no window to aim a keystroke at
+> (`tell process "Pen" to get count of windows` returned `0`). So an agent that has finished a canvas
+> change should verify with `git status` and, if the file is unchanged, run `save()` through the
+> interactive shell — rather than asking for a keystroke that may have nowhere to land.
