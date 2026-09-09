@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { onMount } from 'svelte';
 	import {
 		CLOUD_RUN_SERVICE_DESCRIPTION,
 		CLOUD_SQL_SERVICE_DESCRIPTION,
@@ -37,6 +38,19 @@
 	const sentBytes = $derived(formatBytes(usage?.cloudStorage.sentBytes));
 	const monthlySentBytes = $derived(formatBytes(usage?.firebaseHosting.monthlySentBytes));
 	const isLoading = $derived(sync.state === 'loading');
+
+	/**
+	 * The first read, done for the person opening the page rather than asked
+	 * for. It runs once, on mount, and nothing follows it — the button is
+	 * still the only way to read again.
+	 *
+	 * `onMount` rather than `$effect`: `sync()` reads `state` before its first
+	 * `await`, so an effect would track `state`, re-run when the sync writes
+	 * it, and read forever.
+	 */
+	onMount(() => {
+		void sync.sync();
+	});
 </script>
 
 <svelte:head><title>GCP spend — doula-cloud</title></svelte:head>

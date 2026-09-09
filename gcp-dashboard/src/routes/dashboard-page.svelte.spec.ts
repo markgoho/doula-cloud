@@ -1,5 +1,5 @@
 import { page as testPage } from 'vitest/browser';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import { CLOUD_RUN_SERVICE_DESCRIPTION } from '#lib/costBreakdown.js';
 import type { DashboardData } from '#lib/dashboard.js';
@@ -39,20 +39,40 @@ const data: DashboardData = {
 };
 
 describe('the GCP spend dashboard page', () => {
-	it('shows nothing has synced yet before a first sync', async () => {
-		await render(Page, {});
-
-		await expect.element(testPage.getByText('No figures yet.', { exact: false })).toBeVisible();
-		await expect.element(testPage.getByRole('button', { name: 'Sync now' })).toBeVisible();
-		await expect.element(testPage.getByText('Not synced yet')).toBeVisible();
+	beforeEach(() => {
+		loadDashboard.mockReset();
 	});
 
-	it('shows a sync in progress', async () => {
+	it('reads once as it mounts, without anyone pressing sync', async () => {
+		loadDashboard.mockResolvedValue(data);
+		await render(Page, {});
+
+		await expect
+			.element(testPage.getByRole('complementary').getByText('$6.50'))
+			.toBeVisible();
+		expect(loadDashboard).toHaveBeenCalledTimes(1);
+	});
+
+	it('reads again when the button is pressed, and only then', async () => {
+		loadDashboard.mockResolvedValue(data);
+		await render(Page, {});
+		await expect
+			.element(testPage.getByRole('button', { name: 'Sync again' }))
+			.toBeVisible();
+		expect(loadDashboard).toHaveBeenCalledTimes(1);
+
+		await testPage.getByRole('button', { name: 'Sync again' }).click();
+
+		await expect
+			.element(testPage.getByRole('button', { name: 'Sync again' }))
+			.toBeVisible();
+		expect(loadDashboard).toHaveBeenCalledTimes(2);
+	});
+
+	it('shows the mount read in progress', async () => {
 		const pending = Promise.withResolvers<DashboardData>();
 		loadDashboard.mockReturnValue(pending.promise);
 		await render(Page, {});
-
-		await testPage.getByRole('button', { name: 'Sync now' }).click();
 
 		await expect.element(testPage.getByRole('button', { name: 'Syncing…' })).toBeVisible();
 		await expect
@@ -65,8 +85,6 @@ describe('the GCP spend dashboard page', () => {
 	it('shows the breakdown and usage a successful sync produced', async () => {
 		loadDashboard.mockResolvedValue(data);
 		await render(Page, {});
-
-		await testPage.getByRole('button', { name: 'Sync now' }).click();
 
 		await expect
 			.element(testPage.getByRole('complementary').getByText('$6.50'))
@@ -83,11 +101,9 @@ describe('the GCP spend dashboard page', () => {
 		await expect.element(testPage.getByText('4.79K')).toBeVisible();
 	});
 
-	it('shows why a sync failed', async () => {
+	it('shows why the mount read failed', async () => {
 		loadDashboard.mockRejectedValue(new Error('query timed out'));
 		await render(Page, {});
-
-		await testPage.getByRole('button', { name: 'Sync now' }).click();
 
 		const alert = testPage.getByRole('alert');
 		await expect.element(alert).toBeVisible();
