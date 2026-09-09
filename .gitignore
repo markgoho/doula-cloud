@@ -83,3 +83,17 @@ hugo/content/p/
 # every worktree that ran it.
 .golangci-cache
 api/.golangci-cache
+
+# Terraform (docs/infrastructure.md) — state lives in gs://doula-cloud-tfstate,
+# never locally or in git. .terraform.lock.hcl is the one file in this family
+# that IS committed; it lives outside this block.
+terraform/.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+crash.log
+crash.*.log
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
