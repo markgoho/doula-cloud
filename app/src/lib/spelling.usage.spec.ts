@@ -103,7 +103,10 @@ const RULES: readonly Rule[] = [
 	{ british: 'emphasi\u{73}e', american: 'emphasize' },
 	{ british: 'summari\u{73}es', american: 'summarizes' },
 	{ british: 'reali\u{73}ed', american: 'realized' },
-	{ british: 'program\u{6D}e', american: 'program' },
+	// No rule for "programme" -> "program": the plain substring collides
+	// with "programmer"/"programmers", an ordinary, dialect-invariant
+	// English word -- the same failure mode as "tyres" above. Its one real
+	// occurrence (prose, outside app/src and api/) was fixed by hand.
 	{ british: 'prioriti\u{73}ing', american: 'prioritizing' },
 	// American English doubles the L here, the reverse of most of this
 	// list's -ed/-ing pairs: "fulfillment", not "fulfilment".
