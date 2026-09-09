@@ -5,7 +5,7 @@
 //   bun .claude/hooks/worktree-prune.ts [--dry-run|--merged]
 //
 // --dry-run (default): list every worktree under .claude/worktrees with
-//   its branch, PR state, dirty flag, and size. Removes nothing.
+//   its branch, PR state, dirty flag, and size. Removes nothing live.
 // --merged: remove a worktree only when its branch is merged into trunk
 //   AND its tree is clean. A branch merged into trunk can never lose work
 //   by being deleted; anything else (uncommitted changes, or committed
@@ -16,8 +16,13 @@
 //   ExitWorktree-removal path is what actually keeps pace with this
 //   session's own landings.
 //
-// Always ends with `git worktree prune` to drop metadata for worktrees
-// whose directory is already gone.
+// A registered worktree whose directory is already gone (someone ran
+// `rm -rf` instead of `git worktree remove`) is reported as STALE rather
+// than probed with git -- there is nothing there to run git against. It
+// never stops the rest of the report (#1058). Both modes clear it: this
+// always ends with `git worktree prune`, which only ever drops metadata
+// for a directory that is already gone, never a live one, so it is safe
+// even under --dry-run.
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -31,10 +36,30 @@ type WorktreeInfo = {
 	path: string;
 	branch: string | null;
 	locked: boolean;
+	/* Registered with `git worktree list`, but the directory itself is
+	   gone -- e.g. `rm -rf` instead of `git worktree remove`. Running git
+	   against a path like that always fails with "cannot change to
+	   '<path>': No such file or directory" (#1058), so this is checked
+	   before any git command ever targets it. */
+	stale: boolean;
 };
 
+/*
+ * `execFileSync` throws Node's own `Error`, whose default `.message` is a
+ * generic "Command failed: git -C <cwd> ..." with the real reason buried
+ * in a `.stderr` property most callers never look at. Every caller here
+ * still gets a normal thrown value (most already catch it and fall back
+ * to a safe default), but the one that doesn't -- and any future one --
+ * fails with the actual git error on one line instead of an execFileSync
+ * object's giant default report (#1058).
+ */
 function runGit(args: string[], cwd = SOURCE_ROOT): string {
-	return execFileSync('git', ['-C', cwd, ...args], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
+	try {
+		return execFileSync('git', ['-C', cwd, ...args], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
+	} catch (error) {
+		const stderr = error && typeof error === 'object' && 'stderr' in error ? String((error as { stderr?: unknown }).stderr ?? '').trim() : '';
+		throw new Error(`git ${args.join(' ')} (cwd ${cwd}) failed${stderr ? `: ${stderr}` : ''}`);
+	}
 }
 
 /*
@@ -47,9 +72,16 @@ function listWorktrees(onlyManaged = true): WorktreeInfo[] {
 	const entries: WorktreeInfo[] = [];
 	let current: Partial<WorktreeInfo> | null = null;
 
+	const finish = (partial: Partial<WorktreeInfo> & { path: string }): WorktreeInfo => ({
+		path: partial.path,
+		branch: partial.branch ?? null,
+		locked: partial.locked ?? false,
+		stale: !fs.existsSync(partial.path)
+	});
+
 	for (const line of raw.split('\n')) {
 		if (line.startsWith('worktree ')) {
-			if (current?.path) entries.push({ path: current.path, branch: current.branch ?? null, locked: current.locked ?? false });
+			if (current?.path) entries.push(finish(current as Partial<WorktreeInfo> & { path: string }));
 			current = { path: line.slice('worktree '.length), branch: null, locked: false };
 		} else if (line.startsWith('branch ')) {
 			if (current) current.branch = line.slice('branch '.length).replace('refs/heads/', '');
@@ -57,7 +89,7 @@ function listWorktrees(onlyManaged = true): WorktreeInfo[] {
 			if (current) current.locked = true;
 		}
 	}
-	if (current?.path) entries.push({ path: current.path, branch: current.branch ?? null, locked: current.locked ?? false });
+	if (current?.path) entries.push(finish(current as Partial<WorktreeInfo> & { path: string }));
 
 	if (!onlyManaged) return entries;
 	return entries.filter(entry => path.resolve(entry.path).startsWith(`${WORKTREES_ROOT}${path.sep}`));
@@ -243,15 +275,34 @@ function main(): void {
 	}
 
 	for (const wt of worktrees) {
-		/* First, before anything else touches this worktree: `git status`
-		   rewrites the index it is being measured by, so asking after the
-		   dirty check makes every worktree look freshly touched forever. */
-		const touched = recentlyTouched(wt.path);
-		const dirty = isDirty(wt.path);
 		const branch = wt.branch ?? '(detached)';
-		const size = dirSize(wt.path);
-		const pr = wt.branch ? prState(wt.branch, tipOf('HEAD', wt.path)) : 'no branch';
-		const mergedFlag = wt.branch ? isMergedIntoTrunk(wt.branch, pr) : false;
+
+		if (wt.stale) {
+			console.log(`${wt.path}  branch=${branch}  STALE (directory missing -- cleared by this run's closing 'git worktree prune')`);
+			continue;
+		}
+
+		let touched: boolean;
+		let dirty: boolean;
+		let size: string;
+		let pr: string;
+		let mergedFlag: boolean;
+		try {
+			/* First, before anything else touches this worktree: `git status`
+			   rewrites the index it is being measured by, so asking after the
+			   dirty check makes every worktree look freshly touched forever. */
+			touched = recentlyTouched(wt.path);
+			dirty = isDirty(wt.path);
+			size = dirSize(wt.path);
+			pr = wt.branch ? prState(wt.branch, tipOf('HEAD', wt.path)) : 'no branch';
+			mergedFlag = wt.branch ? isMergedIntoTrunk(wt.branch, pr) : false;
+		} catch (error) {
+			// Defense in depth: `stale` already covers the known case (the
+			// directory disappearing before the check above), but nothing
+			// here should be able to take the whole report down (#1058).
+			console.log(`${wt.path}  ERROR (skipped): ${error instanceof Error ? error.message : String(error)}`);
+			continue;
+		}
 
 		if (!merged) {
 			console.log(
