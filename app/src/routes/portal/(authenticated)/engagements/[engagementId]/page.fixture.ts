@@ -39,6 +39,25 @@ export const detail = {
 	offersBirthPlan: true
 };
 
+/*
+ * #478's own two rows, and they are the row-set split ADR-0025 asks for
+ * rather than two examples of the same thing: one scheduled Visit with
+ * every field at its busiest -- a hyphenated double-barrelled Doula name
+ * a real Practice employs -- and one past Visit, which is the
+ * `hasHappened` flag's other state and the other of the two `When` formats. A fixture
+ * with only the upcoming row would sweep one of the two strings this
+ * section can render.
+ */
+export const visits = [
+	{
+		visitId: 'visit-upcoming',
+		scheduledAt: '2027-02-18T19:00:00Z',
+		doulaName: 'Marguerite Ashworth-Delacroix-Whitfield',
+		hasHappened: false
+	},
+	{ visitId: 'visit-past', scheduledAt: '2026-08-18T14:30:00Z', doulaName: 'Priya Raman', hasHappened: true }
+];
+
 export const fixture: RouteFixture = {
 	name: 'The Client-portal Engagement hub',
 	component: Page,
@@ -53,7 +72,10 @@ export const fixture: RouteFixture = {
 	// section 4 asks for -- the bare `detail` shape above has no `items`,
 	// which is exactly what crashed DataTable when this fixture answered
 	// every path with it alike.
-	respond: (path) =>
-		jsonResponse(path.includes('/activity') ? { items: [], hasMore: false } : detail),
+	respond: (path) => {
+		if (path.includes('/activity')) return jsonResponse({ items: [], hasMore: false });
+		if (path.includes('/visits')) return jsonResponse({ items: visits, hasMore: false });
+		return jsonResponse(detail);
+	},
 	readyText: 'Your care'
 };

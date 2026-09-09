@@ -97,6 +97,36 @@ export function formatScheduledVisit(value: string | undefined): string {
 }
 
 /**
+ * A Visit as her own portal shows it (#478), and the one place the
+ * difference between "Thursday at 2pm" and "she came on 18 August" is
+ * written. `hasHappened` is the server's own answer (portal.Visit's
+ * `hasHappened`, decided against the database clock), never a comparison
+ * this module makes against the reader's device: two people looking at
+ * the same Visit from two time zones must not disagree about whether it
+ * has happened.
+ *
+ * A Visit still to come reads as a plan -- the weekday first, because
+ * that is how a person says it ("when she comes over"), and the clock,
+ * because the hour is the part she has to be ready for. One that has
+ * happened reads as a record: the calendar day it was on, with no
+ * weekday and no clock, since neither is what she is checking a month
+ * later ("when Maya came"). The year is on the past form alone -- a
+ * scheduled Visit is inside the pregnancy she is living in, a past one
+ * may not be. Both are the design source's own two rows on
+ * `Your care - Desktop` ("Thu 4 Sep, 2pm", "18 Aug 2026"), with this
+ * file's existing `formatClock` for the hour rather than a second clock
+ * format of its own.
+ */
+export function formatPortalVisit(value: string, hasHappened: boolean): string {
+	const date = new Date(value);
+	const day = date.getDate();
+	const month = date.toLocaleDateString('en-US', { month: 'short' });
+	if (hasHappened) return `${day} ${month} ${date.getFullYear()}`;
+	const weekday = date.toLocaleDateString('en-US', { weekday: 'short' });
+	return `${weekday} ${day} ${month}, ${formatClock(date)}`;
+}
+
+/**
  * `<input type="datetime-local">`'s own value shape ("YYYY-MM-DDTHH:mm",
  * local time, no offset) from an ISO instant -- the inverse of what that
  * control hands back on input, so a Visit's existing scheduled value

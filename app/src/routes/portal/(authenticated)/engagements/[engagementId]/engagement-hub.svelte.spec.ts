@@ -11,7 +11,7 @@ import Hub from './+page.svelte';
 // table-view/record-view switch.
 import '#lib/styles/app.css';
 import { toApiResponder, toPageState } from '../../../../routeFixture.js';
-import { createdAt, detail, fixture, practiceName } from './page.fixture.js';
+import { createdAt, detail, fixture, practiceName, visits } from './page.fixture.js';
 import { engagementLabel } from '#lib/clientRegister.js';
 if (!customElements.get('center-l')) registerLayoutPrimitives();
 
@@ -45,13 +45,16 @@ function jsonResponse(body: unknown) {
 	return { ok: true, json: () => Promise.resolve(body) } as Response;
 }
 
-// Both the Engagement detail read and #486's own /activity read share this
-// one mock, branched by path -- a blanket single response would hand the
-// activity loader the detail body instead of a { items, hasMore } page.
-function mockFetch(body: unknown, activityItems: unknown[] = []) {
-	apiFetchWithSession.mockImplementation((path: string) =>
-		Promise.resolve(jsonResponse(path.includes('/activity') ? { items: activityItems, hasMore: false } : body))
-	);
+// The Engagement detail read, #486's own /activity read and #478's
+// /visits read share this one mock, branched by path -- a blanket single
+// response would hand either list loader the detail body instead of a
+// { items, hasMore } page.
+function mockFetch(body: unknown, activityItems: unknown[] = [], visitItems: unknown[] = visits) {
+	apiFetchWithSession.mockImplementation((path: string) => {
+		if (path.includes('/activity')) return Promise.resolve(jsonResponse({ items: activityItems, hasMore: false }));
+		if (path.includes('/visits')) return Promise.resolve(jsonResponse({ items: visitItems, hasMore: false }));
+		return Promise.resolve(jsonResponse(body));
+	});
 }
 
 describe('Client portal Engagement hub', () => {
@@ -226,11 +229,14 @@ describe('the Activity disclosure (#486)', () => {
 			.element(page.getByRole('heading', { name: 'Everything that has happened' }))
 			.toBeVisible();
 		await expect.element(page.getByText('Show what has happened')).toBeVisible();
-		expect(getComputedStyle(container.querySelector('.frame')!).display).toBe('none');
+		expect(getComputedStyle(container.querySelector(':scope details .frame')!).display).toBe('none');
 
 		await page.getByText('Show what has happened').click();
-		expect(getComputedStyle(container.querySelector('.frame')!).display).not.toBe('none');
-		const tableView = page.elementLocator(container.querySelector('.table-view')!);
+		expect(getComputedStyle(container.querySelector(':scope details .frame')!).display).not.toBe('none');
+		// Scoped inside the disclosure specifically: #478 put a second
+		// DataTable ("Your visits") on this page, above this one, so a bare
+		// `.table-view` is that table rather than the ledger's.
+		const tableView = page.elementLocator(container.querySelector(':scope details .table-view')!);
 		await expect.element(tableView.getByText('Contract sent')).toBeVisible();
 		await expect.element(tableView.getByText('Your practice')).toBeVisible();
 	});
@@ -268,7 +274,7 @@ describe('the Activity disclosure (#486)', () => {
 			// frame's own width at this point in the test, so a role/text
 			// query would either hit a strict-mode multiple match or resolve
 			// against whichever tree is currently hidden.
-			await expect.poll(() => frame.querySelector('.frame')?.textContent).toContain('Contract sent');
+			await expect.poll(() => frame.querySelector(':scope details .frame')?.textContent).toContain('Contract sent');
 
 			const found = sweep(frame, run.clientWidth);
 			expect(found, found && overflowReport('Client-portal Activity disclosure (open)', found)).toBeUndefined();
@@ -278,16 +284,122 @@ describe('the Activity disclosure (#486)', () => {
 	});
 
 	it('says so when the ledger cannot be read', async () => {
-		apiFetchWithSession.mockImplementation((path: string) =>
-			Promise.resolve(
-				path.includes('/activity')
-					? ({ ok: false, text: () => Promise.resolve('nope') } as Response)
-					: jsonResponse(detail)
-			)
-		);
+		apiFetchWithSession.mockImplementation((path: string) => {
+			if (path.includes('/activity'))
+				return Promise.resolve({ ok: false, text: () => Promise.resolve('nope') } as Response);
+			if (path.includes('/visits')) return Promise.resolve(jsonResponse({ items: [], hasMore: false }));
+			return Promise.resolve(jsonResponse(detail));
+		});
 
 		await render(Hub);
 
 		await expect.element(page.getByText('nope')).toBeVisible();
+	});
+});
+
+// DataTable renders both a <table> and a record view at once (#508,
+// ADR-0024) with the same text in each, so a page-wide accessible query
+// matches one of them twice over -- the documented exception this file's
+// Activity tests already take. `:not(details *)` is what separates the
+// "Your visits" table from the ledger's, which lives inside the
+// disclosure.
+//
+// Re-read on every poll rather than captured once: `sections` is rebuilt
+// when the Visit page arrives, so a node held from before that is
+// detached and keeps the empty table's text forever.
+function visitsTableText(container: HTMLElement) {
+	return () => container.querySelector(':scope .table-view:not(details *)')?.textContent;
+}
+
+// #478: CONTEXT.md's Visit entry settles the Client register's word for
+// this section -- "visits", "Your visits" as a heading -- and settles
+// what a Client is told about one: when it is, and who is coming.
+describe('Your visits (#478)', () => {
+	it("heads the section with the register's own word", async () => {
+		mockFetch(detail);
+
+		await render(Hub);
+
+		await expect.element(page.getByRole('heading', { name: 'Your visits' })).toBeVisible();
+	});
+
+	// The acceptance criterion in the ticket's own words: "Thursday at
+	// 2pm" and "she came on 18 August" must render differently. The server
+	// sends `hasHappened`; the two formats are what a Client sees, so
+	// this asserts the strings rather than the flag. Both are read out of
+	// the fixture in the runner's own zone, which is what a Client's
+	// browser does with the same instant.
+	it('renders a scheduled Visit and a past one differently, each naming who is coming', async () => {
+		await page.viewport(1440, 900);
+		mockFetch(detail);
+
+		const { container } = await render(Hub);
+		const text = visitsTableText(container);
+
+		// The upcoming one: weekday first, then the clock, because the
+		// hour is the part she has to be ready for. Both instants are read
+		// in the runner's own zone, which is what a Client's browser does
+		// with the same value.
+		const upcoming = new Date(visits[0]!.scheduledAt);
+		const weekday = upcoming.toLocaleDateString('en-US', { weekday: 'short' });
+		const month = upcoming.toLocaleDateString('en-US', { month: 'short' });
+		await expect
+			.poll(text)
+			.toMatch(new RegExp(`${weekday} ${upcoming.getDate()} ${month}, ${String.raw`\d+:\d\d[ap]m`}`));
+		expect(text()).toContain('Marguerite Ashworth-Delacroix-Whitfield');
+
+		// The past one: the calendar day it was on, no weekday and no
+		// clock -- neither is what she is checking a month later.
+		const happened = new Date(visits[1]!.scheduledAt);
+		const happenedMonth = happened.toLocaleDateString('en-US', { month: 'short' });
+		expect(text()).toContain(`${happened.getDate()} ${happenedMonth} ${happened.getFullYear()}`);
+		expect(text()).toContain('Priya Raman');
+		// The past row carries no weekday and no clock of its own -- the
+		// whole of what tells the two apart on the page.
+		const pastDay = `${happened.getDate()} ${happenedMonth}`;
+		expect(text()).not.toMatch(
+			new RegExp(`${String.raw`\w{3} `}${pastDay}|${pastDay} ${String.raw`\d{4}, \d`}`)
+		);
+	});
+
+	// A Visit's derived type is staff-only (CONTEXT.md's Visit entry), and
+	// naming a bereavement Visit `postpartum` in Nadia's own portal is the
+	// CB-G5 mistake this surface exists not to repeat. The server sends no
+	// type at all; this proves the screen renders none either, from a
+	// payload that carried one anyway.
+	it('names no Visit type, even if the response carries one', async () => {
+		mockFetch(detail, [], [{ ...visits[0], type: 'postpartum' }]);
+
+		await render(Hub);
+
+		await expect.element(page.getByRole('heading', { name: 'Your visits' })).toBeVisible();
+		await expect.element(page.getByText(/prenatal|postpartum/i)).not.toBeInTheDocument();
+	});
+
+	// CB-G5: the empty state has to be true for a postpartum-only
+	// Engagement, where nothing prenatal was ever coming, and for one
+	// where the Practice has booked nothing yet -- so it reports the state
+	// of her own list and promises no visit at all.
+	it('promises nothing when nothing is booked', async () => {
+		await page.viewport(1440, 900);
+		mockFetch(detail, [], []);
+
+		const { container } = await render(Hub);
+
+		await expect.poll(visitsTableText(container)).toContain('Nothing is booked yet.');
+		await expect.element(page.getByText(/will be|soon|shortly|coming up/i)).not.toBeInTheDocument();
+	});
+
+	it('says so when the visits cannot be read', async () => {
+		apiFetchWithSession.mockImplementation((path: string) => {
+			if (path.includes('/activity')) return Promise.resolve(jsonResponse({ items: [], hasMore: false }));
+			if (path.includes('/visits'))
+				return Promise.resolve({ ok: false, text: () => Promise.resolve('no visits for you') } as Response);
+			return Promise.resolve(jsonResponse(detail));
+		});
+
+		await render(Hub);
+
+		await expect.element(page.getByText('no visits for you')).toBeVisible();
 	});
 });
