@@ -19,7 +19,7 @@ func newVouchServer(t *testing.T, db *testdb.DB, verifier authn.Verifier, enq ta
 	mux := http.NewServeMux()
 	g := staffauth.NewGatedRouter(mux, db.App)
 	ir := idempotency.NewRouter(g, db.App)
-	staffauth.Mount(g, ir, db.App, verifier, authntest.NewFakeAccountManager(), enq)
+	staffauth.Mount(g, ir, db.App, verifier, authntest.NewFakeAccountManager(), enq, neverSuppressed)
 	return httptest.NewServer(mux)
 }
 

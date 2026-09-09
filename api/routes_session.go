@@ -1,10 +1,13 @@
 package main
 
 import (
+	"context"
+	"database/sql"
 	"net/http"
 
 	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/idempotency"
+	"doula-cloud/api/internal/mailsuppress"
 	"doula-cloud/api/internal/session"
 	"doula-cloud/api/internal/staffauth"
 )
@@ -31,5 +34,8 @@ func registerSessionRoutes(g *staffauth.GatedRouter, ir *idempotency.Router, d D
 	// against the container and against the raw Cloud Run URL.
 	g.OpenGet("/api/hello", "no auth at all -- a health probe", http.HandlerFunc(helloHandler))
 	session.Mount(g, d.DB, d.Verifier, d.NudgeEnqueuer)
-	staffauth.Mount(g, ir, d.DB, d.Verifier, d.AccountManager, d.NudgeEnqueuer)
+	staffauth.Mount(g, ir, d.DB, d.Verifier, d.AccountManager, d.NudgeEnqueuer,
+		func(ctx context.Context, tx *sql.Tx, address string) (bool, error) {
+			return mailsuppress.Active(ctx, tx, address)
+		})
 }

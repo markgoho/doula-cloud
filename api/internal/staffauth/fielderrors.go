@@ -65,6 +65,14 @@ const (
 	// rule only the server knows, said in the reader's words and keyed
 	// onto the control that caused it.
 	MsgMembershipAlreadyHeld = "That address already holds a membership at this Practice"
+	// MsgAddressBlocked refuses a Staff invitation to a currently
+	// suppressed address (ADR-0029). Same wording as
+	// portalinvite.msgAddressBlocked (#789): a person who trips either
+	// invite's refusal reads it the same way. Not exported there because
+	// that package's check is unconditional-on-a-stored-record rather
+	// than a form field, so it carries no separate Details constant to
+	// share.
+	MsgAddressBlocked = "This email address is blocked. Blocked email addresses shows why and what can be done."
 	// MsgPasswordTooShort is the newPassword field on the reset screen.
 	// Spelled out rather than built with fmt.Sprintf from
 	// minPasswordLength: TestDetailsWording reads a literal or a constant

@@ -64,7 +64,7 @@ func newSignupServer(verifier authntest.Verifier, db *testdb.DB) *httptest.Serve
 	mux := http.NewServeMux()
 	g := staffauth.NewGatedRouter(mux, db.App)
 	ir := idempotency.NewRouter(g, db.App)
-	staffauth.Mount(g, ir, db.App, verifier, authntest.NewFakeAccountManager(), tasknudge.NoOpEnqueuer{})
+	staffauth.Mount(g, ir, db.App, verifier, authntest.NewFakeAccountManager(), tasknudge.NoOpEnqueuer{}, neverSuppressed)
 	return httptest.NewServer(mux)
 }
 
@@ -422,7 +422,7 @@ func TestSignupHandler_SeededTemplatesRoundTripThroughPlansAPI(t *testing.T) {
 	mux := http.NewServeMux()
 	g := staffauth.NewGatedRouter(mux, db.App)
 	ir := idempotency.NewRouter(g, db.App)
-	staffauth.Mount(g, ir, db.App, verifier, authntest.NewFakeAccountManager(), tasknudge.NoOpEnqueuer{})
+	staffauth.Mount(g, ir, db.App, verifier, authntest.NewFakeAccountManager(), tasknudge.NoOpEnqueuer{}, neverSuppressed)
 	plans.Mount(g, ir, db.App)
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
@@ -528,7 +528,7 @@ func TestSignupHandler_SeededContractTemplateRoundTripsThroughContractsAPI(t *te
 	mux := http.NewServeMux()
 	g := staffauth.NewGatedRouter(mux, db.App)
 	ir := idempotency.NewRouter(g, db.App)
-	staffauth.Mount(g, ir, db.App, verifier, authntest.NewFakeAccountManager(), tasknudge.NoOpEnqueuer{})
+	staffauth.Mount(g, ir, db.App, verifier, authntest.NewFakeAccountManager(), tasknudge.NoOpEnqueuer{}, neverSuppressed)
 	contracts.Mount(g, ir, db.App, objectstore.NewMemoryStore(), push.NewFakePusher())
 	srv := httptest.NewServer(mux)
 	defer srv.Close()

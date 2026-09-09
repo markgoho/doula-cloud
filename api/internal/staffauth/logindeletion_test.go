@@ -23,7 +23,7 @@ func newDeleteLoginServer(t *testing.T, db *testdb.DB, accounts *authntest.FakeA
 	mux := http.NewServeMux()
 	g := staffauth.NewGatedRouter(mux, db.App)
 	ir := idempotency.NewRouter(g, db.App)
-	staffauth.Mount(g, ir, db.App, authntest.Verifier{}, accounts, &tasknudge.FakeEnqueuer{})
+	staffauth.Mount(g, ir, db.App, authntest.Verifier{}, accounts, &tasknudge.FakeEnqueuer{}, neverSuppressed)
 	return httptest.NewServer(mux)
 }
 

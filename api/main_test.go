@@ -13,10 +13,12 @@ import (
 
 	"github.com/stripe/stripe-go/v86"
 
+	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/billing"
 	"doula-cloud/api/internal/engagementrequest"
 	"doula-cloud/api/internal/mail"
+	"doula-cloud/api/internal/mailsuppress"
 	"doula-cloud/api/internal/objectstore"
 	"doula-cloud/api/internal/offer"
 	"doula-cloud/api/internal/outbox"
@@ -33,6 +35,11 @@ import (
 
 // testWorkerFrom is every routes() test worker's stand-in From identity.
 const testWorkerFrom = "Doula Cloud <notifications@mg.example.test>"
+
+// roleDoula names the practice_role every routes() test that seeds a
+// plain roster member (not an Owner) uses, so goconst has one spelling
+// to point at rather than three string literals.
+const roleDoula = "doula"
 
 // testWorkerReplyTo is every Platform-voice routes() test worker's
 // stand-in ReplyTo (ADR-0011's support@ inbox), shared by
@@ -410,7 +417,7 @@ func TestRoutes_PracticeSessionContractorFlag(t *testing.T) {
 
 	const identityUID = "e2e-contractor-uid"
 	practiceID := testdb.SeedPractice(t, db, "Contractor's Practice")
-	testdb.SeedStaffAtPractice(t, db, practiceID, identityUID, []string{"doula"}, "contractor")
+	testdb.SeedStaffAtPractice(t, db, practiceID, identityUID, []string{roleDoula}, "contractor")
 	sessionCookie := authntest.SeedSession(t, db.App, identityUID)
 
 	req, _ := http.NewRequestWithContext(t.Context(), http.MethodGet, srv.URL+"/api/practices/"+practiceID+"/session", nil)
@@ -430,8 +437,60 @@ func TestRoutes_PracticeSessionContractorFlag(t *testing.T) {
 	if !landing.IsContractor {
 		t.Fatalf("isContractor = %v, want true for a contractor Doula", landing.IsContractor)
 	}
-	if len(landing.Roles) != 1 || landing.Roles[0] != "doula" {
+	if len(landing.Roles) != 1 || landing.Roles[0] != roleDoula {
 		t.Fatalf("roles = %v, want [doula]", landing.Roles)
+	}
+}
+
+// TestRoutes_StaffInviteSuppressedAddressRefused exercises #861's guard
+// through the real route table rather than staffauth's own test server,
+// so the closure routes_session.go wires staffauth.Mount's
+// SuppressionChecker with -- routes() is the one place that adapts
+// mailsuppress.Active to it, to avoid staffauth importing mailsuppress
+// back (mailsuppress.Mount already takes a *staffauth.GatedRouter).
+func TestRoutes_StaffInviteSuppressedAddressRefused(t *testing.T) {
+	db := testdb.New(t)
+	deps := testDeps()
+	deps.DB = db.App
+	mux, _, _ := routes(deps)
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	const identityUID = "e2e-owner-invites-suppressed"
+	practiceID := testdb.SeedPractice(t, db, "Suppressing Practice")
+	testdb.SeedStaffAtPractice(t, db, practiceID, identityUID, []string{"owner"}, "employee")
+	sessionCookie := authntest.SeedSession(t, db.App, identityUID)
+	const email = "blocked@example.com"
+	if err := mailsuppress.Record(t.Context(), db.App, email, mailsuppress.CauseBounce, "evt-e2e-861"); err != nil {
+		t.Fatalf("seed suppression: %v", err)
+	}
+
+	body, err := json.Marshal(staffauth.InviteRequest{Email: email, Roles: []string{roleDoula}, EmploymentType: "employee"})
+	if err != nil {
+		t.Fatalf("marshal body: %v", err)
+	}
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost,
+		srv.URL+"/api/practices/"+practiceID+"/staff/invitations", bytes.NewReader(body))
+	if err != nil {
+		t.Fatalf("build request: %v", err)
+	}
+	authntest.AddSessionCookie(req, sessionCookie)
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("invite request: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
+	}
+	var refusal apierr.APIError
+	if err := json.NewDecoder(resp.Body).Decode(&refusal); err != nil {
+		t.Fatalf("decode refusal: %v", err)
+	}
+	if refusal.Details["email"] != staffauth.MsgAddressBlocked {
+		t.Fatalf("details = %v, want an email entry naming Blocked email addresses", refusal.Details)
 	}
 }
 
