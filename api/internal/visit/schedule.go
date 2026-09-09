@@ -80,20 +80,28 @@ func ScheduleHandler() http.Handler {
 			return
 		}
 
-		// Read before writing, inside this same transaction: what the
-		// audit-trail entry below needs to say more than ReassignHandler's
-		// own activity row does -- a set, a change and a clear all edit
-		// the identical column, and CLAUDE.md's audit-trail expectation
-		// ("how did this come to be?") is not answered by a row that reads
-		// the same for all three. engagement_id is filtered explicitly
-		// here too, on top of the RLS scoping staffauth.Middleware already
-		// set up on tx, matching ReassignHandler's own reasoning: a Visit
-		// can't be rescheduled via an engagementId/visitId pair that don't
-		// actually belong together. Its NOT FOUND is this route's 404,
-		// same as ReassignHandler's own missing-Visit case.
+		// The Visit row is locked before it is read, so scheduledAtBefore
+		// below is the value the UPDATE actually overwrites. The shared
+		// transaction alone does not give that: under READ COMMITTED a
+		// plain SELECT takes no row lock, so two concurrent reschedules
+		// could both read the same original instant, and the second
+		// entry would claim a "before" the first write had already
+		// replaced (#922). SELECT ... FOR UPDATE blocks on a competing
+		// writer and then re-reads the row it committed, so the pair
+		// recorded is always the move that actually took place -- the
+		// same mechanism ReassignHandler's own locking read uses (#887),
+		// needed here whichever direction the write goes, since a set, a
+		// change and a clear all edit the identical column.
+		//
+		// engagement_id is filtered explicitly here too, on top of the
+		// RLS scoping staffauth.Middleware already set up on tx, matching
+		// ReassignHandler's own reasoning: a Visit can't be rescheduled
+		// via an engagementId/visitId pair that don't actually belong
+		// together. Its NOT FOUND is this route's 404, same as
+		// ReassignHandler's own missing-Visit case.
 		var previous sql.NullTime
 		if err := c.tx.QueryRowContext(r.Context(),
-			`SELECT scheduled_at FROM visits WHERE id = $1 AND engagement_id = $2`,
+			`SELECT scheduled_at FROM visits WHERE id = $1 AND engagement_id = $2 FOR UPDATE`,
 			visitID, engagementID,
 		).Scan(&previous); err != nil {
 			if errors.Is(err, sql.ErrNoRows) {
