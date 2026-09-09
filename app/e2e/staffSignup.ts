@@ -76,9 +76,13 @@ export async function seedAccountWithNoPractice(request: APIRequestContext): Pro
 	const unique = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 	const email = `no-practice-${unique}@example.com`;
 
+	// No password constant of its own: this account never signs in through
+	// a form, only ever by ID token, so the value only has to satisfy
+	// accounts:signUp -- reusing FOUNDING_OWNER_PASSWORD here would name
+	// this account after a role it never holds.
 	const signUp = await request.post(
 		`${EMULATOR_URL}/identitytoolkit.googleapis.com/v1/accounts:signUp?key=fake-key`,
-		{ data: { email, password: FOUNDING_OWNER_PASSWORD, returnSecureToken: true } }
+		{ data: { email, password: 'password123', returnSecureToken: true } }
 	);
 	expect(signUp.ok(), `no-practice account signUp failed: ${signUp.status()} ${await signUp.text()}`).toBe(true);
 	const { idToken } = await signUp.json();
