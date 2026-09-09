@@ -5,6 +5,7 @@
   "private": true,
   "scripts": {
     "build": "bun scripts/sync-practice-pages.ts && cd hugo && hugo --minify",
+    "design:export": "bun scripts/export-design.ts",
     "dev": "bun run --cwd app dev:full",
     "test": "bun test scripts/"
   },

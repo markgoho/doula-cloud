@@ -18,12 +18,21 @@ brief first.
 | The desktop canvas | `/Applications/Pen.app`. Where a person edits by hand. | The app's memory, then disk on save. |
 | `mcp__pencil__execute` | A JavaScript API — `Insert`, `Update`, `Copy`, `Get`, `SetVariables` — that an agent calls from this session. Deterministic; it is not a generative model choosing a layout. | The **active canvas editor**. Its `filePath` argument is ignored. |
 | `bunx pen --in … --out …` | The CLI. Spawns a separate Claude Agent SDK session that makes those same `execute` calls. | The file paths given. |
+| `bun run design:export` (`scripts/export-design.ts`) | A generated, read-only Markdown derivative of the whole `.pen` file: every artboard's regions, text and component references, in document order. | `docs/design/doula-cloud.export.md`, on trunk. |
 
 Two consequences worth holding on to:
 
 - **`execute` edits whatever the app has open.** Before an agent touches the canvas, the app must have
   `doula-cloud.pen` as its active editor. Confirm with `get_app_state`, which prints the active path.
 - **The CLI is the file-writing path.** `execute` changes are in memory until the canvas is saved.
+
+## The export is a read-back, not a source
+
+`docs/design/doula-cloud.export.md` exists so that a reader with no Pen.app open — a CI check, a background agent, a PR reviewer — can still answer "what is on this screen": an artboard's regions in order, their text, which component or `ref` each one instantiates, and which `tokens.css` name a styled value points at. `bun run design:export` produces it by reading `doula-cloud.pen` straight off disk as JSON; nothing about it needs the desktop app, the Pencil MCP server, or a `pen` CLI agent session running.
+
+It is explicitly not an interchange format. ADR-0019 already rejected "Generating `DESIGN.md` as an interchange format" on the grounds that a hand-authored stand-in for the canvas would drift from it with no way to detect the drift; this export is different in the one way that matters — it is machine-generated only, from the `.pen` file, and read-only — but the conclusion still holds for it: nobody hand-edits it, it is never itself a source of truth, and a design decision is never made by editing it. `doula-cloud.pen` stays the working surface, `tokens.css` stays the machine-readable truth, and this is a read-back of the first, the way a lockfile is a read-back of a manifest.
+
+`scripts/design-export.test.ts` regenerates the export from the real `.pen` file on every `bun test scripts/` run (the existing `scripts` CI job already runs this) and fails, naming `bun run design:export`, if the committed export has gone stale.
 
 ## Designing a screen
 
@@ -38,6 +47,7 @@ Two consequences worth holding on to:
    catches clipping and collapsed layout without a screenshot. Screenshot only to judge color, type and
    alignment.
 5. **Save**, so the `.pen` change is on disk and in `git diff`.
+6. **Regenerate the export.** `bun run design:export`, and commit `docs/design/doula-cloud.export.md` in the same commit as the `.pen` change (see Committing, below). A commit that changes the `.pen` file without this fails CI.
 
 ## Five `execute` rules that are not in Pen's own skill
 
@@ -122,17 +132,18 @@ Open the canvas and change what looks wrong. That is the point of the tool.
 - **You do not have to say what changed.** Reading the correction back cold is a tested capability, not
   an assumption: on [#411](https://github.com/markgoho/doula-cloud/issues/411) a blind reorder of the
   quick-link cards was read back correctly and carried into the code.
+- **Regenerate the export after saving.** `bun run design:export`, so `docs/design/doula-cloud.export.md` matches what is now on disk; CI fails otherwise and names the same command.
 
 ## Carrying a design into code
 
-1. **Read the canvas**, not a screenshot of it. `Get` returns schema data with resolved bounds.
+1. **Read the canvas**, not a screenshot of it. `Get` returns schema data with resolved bounds. When Pen.app is not open and no MCP tools are reachable, read `docs/design/doula-cloud.export.md` instead — regenerate it first with `bun run design:export` if it looks stale. If neither the live canvas nor a fresh export answers the question, say so plainly rather than guessing at the design.
 2. **Write Svelte against the repo's own rules.** Atoms, molecules, organisms and Templates come first.
    Raw `<a>` and `<button>` are forbidden outside the atoms by `svelte/no-restricted-html-elements`.
 3. **When the design needs something an atom cannot do, grow the atom.** Do not bypass the rule and do
    not hand-roll the markup. On #411 this produced a real improvement: `Link.svelte` gained an icon slot,
    a `current` state and a `card` variant, and landed on trunk on its own merit.
 4. **Tokens come from `tokens.css`, never from the canvas.** Import runs one way, CSS → canvas Variables,
-   and it is byte-exact. There is no export mechanism: `Export()` writes images, PDF and HTML, never CSS
+   and it is byte-exact. There is no *token* export mechanism: `Export()` writes images, PDF and HTML, never CSS
    custom properties. Turning canvas Variables back into CSS is an agent translating by hand, which is
    how a token drifts. Change `tokens.css`, then re-import.
 5. **Verify**: `bun run check`, `bun run lint`, `bun run test` in `app/`, with the coverage gate intact.
@@ -148,8 +159,7 @@ Open the canvas and change what looks wrong. That is the point of the tool.
 
 ## Committing
 
-The `.pen` change and the Svelte change **go in the same commit**. A design and the code implementing it
-should never disagree in history, and one commit makes the pair reviewable together.
+The `.pen` change, its regenerated export, and the Svelte change **go in the same commit**. A design and the code implementing it should never disagree in history, and one commit makes the pair reviewable together.
 
 ## When the canvas can be skipped
 
