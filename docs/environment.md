@@ -6,6 +6,8 @@ of its own — see [The Hugo site's build](#the-hugo-sites-build). `app/.env.exa
 template; the Stripe half of it is filled in by hand, from the Sandbox
 keys and the `stripe listen` secret (see [Stripe](#stripe)).
 
+**Before you provision anything by hand, read [`docs/infrastructure.md`](infrastructure.md).** It is the boundary [#797](https://github.com/markgoho/doula-cloud/issues/797) drew between what Terraform owns and what stays a console visit, and it names every resource in the `doula-cloud` project on both sides with a reason. This page still describes what each value *is* and how it gets set; that page says whether setting it by hand is the right thing to do at all. The short version: secret values, Cloud SQL logins, Identity Platform and everything outside GCP stay by hand, and nearly everything else — the Scheduler jobs, the Tasks queue, `doula-api`'s configuration, the secret shells, IAM, the bucket and the database instance — becomes a change to a configuration file and a `terraform apply`. [ADR-0034](adr/0034-terraform-owns-the-shape-not-the-image-and-apply-stays-off-ci.md) records the decision.
+
 ## Where a value lives
 
 | Place | Mechanism |
