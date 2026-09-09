@@ -12,7 +12,7 @@
 		<h2>Default</h2>
 		<p>
 			The two halves of a Membership, edited together: what a person does at a Practice, and what
-			she is to the business.
+			the person is to the business.
 		</p>
 		<!--
 			No hostile value exists for this component (ADR-0025): both halves are

@@ -31,7 +31,7 @@
 		<ConfirmDialog
 			bind:open={isOpenSucceeds}
 			title="Remove Anne-Marie Ochieng-Whitfield from the Practice"
-			consequence="This removes the Doula from the Practice, and every Engagement she is working on stops with her. This cannot be undone."
+			consequence="This removes the Doula from the Practice, ending every Engagement the Doula is working on. This cannot be undone."
 			confirmLabel="Remove Anne-Marie Ochieng-Whitfield from the Practice"
 			onConfirm={succeeds}
 		/>

@@ -22,7 +22,7 @@
 	</section>
 
 	<section>
-		<h2>Signed, seen by a Doula &mdash; the PDF endpoint refuses her, so no download button</h2>
+		<h2>Signed, seen by a Doula &mdash; the PDF endpoint refuses the Doula, so no download button</h2>
 		<ContractStatus status="signed" onVoid={async () => {}} />
 	</section>
 

@@ -26,7 +26,7 @@
 
 {#snippet intro()}
 	<Text
-		text="Everything here is visible to the Doulas on this Client's Engagement, including the ones added to it later. The Client fills in her own birth plan herself."
+		text="Everything here is visible to the Doulas on this Client's Engagement, including the ones added to it later. The Client fills in the birth plan directly."
 		tone="variant"
 	/>
 {/snippet}
@@ -114,7 +114,7 @@
 	{intro}
 	errorSummary={hasError ? errorSummary : undefined}
 	fieldsets={[
-		{ legend: 'About the Client and how to reach her', content: coreFields },
+		{ legend: 'About the Client and how to reach the Client', content: coreFields },
 		{ legend: 'Birth preferences', content: practiceFields }
 	]}
 	{actions}

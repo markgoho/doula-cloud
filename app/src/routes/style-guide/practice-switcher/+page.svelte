@@ -45,8 +45,8 @@
 	<section>
 		<h2>One Membership</h2>
 		<p>
-			Still named, because a person should be able to see which Practice she is in. No caret and no
-			panel: a control that opens a list of one is a promise the product cannot keep.
+			Still named, because a person should be able to see which Practice the person is in. No caret
+			and no panel: a control that opens a list of one is a promise the product cannot keep.
 		</p>
 		<PracticeSwitcher practices={[several[0]!]} currentPracticeId="p1" />
 	</section>

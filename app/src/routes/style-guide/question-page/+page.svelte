@@ -90,7 +90,11 @@
 {/snippet}
 
 {#snippet actions()}
-	<Button label="Continue to where she lives" type="submit" onClick={noop} />
+	<Button
+		label="Continue to where Anne-Marie Ochieng-Whitfield lives"
+		type="submit"
+		onClick={noop}
+	/>
 	<Link href="/style-guide/question-page" label="Save and come back later" />
 {/snippet}
 
@@ -134,7 +138,10 @@
 		backHref="/style-guide/question-page"
 		errorSummary={hasError ? errorSummary : undefined}
 		caption="Who Anne-Marie Ochieng-Whitfield is"
-		question={{ as: 'legend', text: 'What is her date of birth?' }}
+		question={{
+			as: 'legend',
+			text: "What is Anne-Marie Ochieng-Whitfield's date of birth?"
+		}}
 		hint="For example, 4 2 1990."
 		content={dateInputs}
 		{actions}
