@@ -56,30 +56,32 @@ type AwaitingResponse struct {
 // (docs/journeys/non-doula-admin.md, DW-G5). Must be mounted behind
 // staffauth.Middleware.
 //
-// Owner or Admin only, which #426 asked for and which is worth stating
-// against ADR-0008 rather than assumed: the read table's "Contract --
-// scope" row does admit an employee Doula, and nothing returned here is
-// money. But that row is about a Contract she reaches through an
-// Engagement, and the contractor half of the same table narrows even
-// that to the Engagements she is attached to. A Practice-wide roll-up
-// has no Engagement to reach through -- it names every Client with an
-// agreement outstanding anywhere at the Practice, attached or not -- so
-// it follows the Practice-wide readers the table does have: the credit
-// balance and the Practice-wide Invoice list, both Owner and Admin.
-// GetContractHandler is still where a Doula reads the scope of a
-// Contract she is on.
+// AwaitingItem carries no amount, so this is not a money read and does
+// not follow the Practice-wide money rows (credit balance, Invoice
+// history). It follows ADR-0008's "Engagements, Visits, Messages" row
+// instead, the same row message.AwaitingReplyHandler's own Practice-wide
+// roll-up follows: an employee Doula sees every outstanding Contract at
+// the Practice, since she reaches every Engagement; a contractor Doula
+// sees only the ones on an Engagement she holds an open, granted
+// attachment on (#973). Under #282's write table a Doula is the one who
+// sends a Contract and then waits on the signature, so she needs this
+// list of what she is waiting on.
 //
 // Ordered oldest first, which is what makes it a work list rather than a
 // feed: the Contract that has been waiting longest is the one that has
 // cost the most, and it belongs at the top.
 func AwaitingSignatureHandler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, practiceID, ok := staffauth.RequireOwnerOrAdmin(w, r)
+		tx, practiceID, ok := staffauth.RequireTx(w, r)
 		if !ok {
-			// coverage:ignore reason: belt-and-braces -- contracts.Mount's own
-			// OwnerAndAdmin declaration (g.Get) already refuses a non-owner/admin
-			// caller before this handler runs, so !ok is unreachable through the
-			// real mount.
+			// coverage:ignore reason: staffauth.Middleware always sets a tx before this handler runs
+			return
+		}
+		staffID, _ := staffauth.StaffID(r.Context())
+		reader, has := staffauth.ReaderFrom(r.Context())
+		if !has {
+			// coverage:ignore reason: staffauth.Middleware always places a Reader on context before this handler runs
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
@@ -93,7 +95,13 @@ func AwaitingSignatureHandler() http.Handler {
 			after = &c
 		}
 
-		list, err := listAwaiting(r.Context(), tx, practiceID, after)
+		var list []AwaitingItem
+		var err error
+		if reader.IsContractor() {
+			list, err = listAttachedAwaiting(r.Context(), tx, practiceID, staffID, after)
+		} else {
+			list, err = listAwaiting(r.Context(), tx, practiceID, after)
+		}
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
@@ -115,28 +123,32 @@ func AwaitingSignatureHandler() http.Handler {
 	})
 }
 
-// listAwaiting reads one page of outstanding Contracts, oldest first. The
-// cursor comparison is `>` because this list ascends; pagecursor carries
-// a position, not a direction.
-//
-// 'draft' and 'sent' are the whole predicate. A signed Contract is done,
-// and a voided one is a superseded record rather than outstanding work --
-// it stays unsigned forever and no amount of chasing changes that.
-// Excluding voided also means each Engagement appears at most once, for
-// free: 00020's partial unique index already allows only one non-voided
-// Contract per Engagement, so nothing here has to de-duplicate.
-//
-// contracts has no practice_id column, so the Practice filter is the join
-// to engagements -- filtered explicitly on top of the RLS scoping
-// staffauth.Middleware already set on tx, the same belt-and-braces
-// engagementrequest's inbox uses. The join to clients is for her name
-// only.
-func listAwaiting(ctx context.Context, tx *sql.Tx, practiceID string, after *pagecursor.Cursor) ([]AwaitingItem, error) {
-	query := `SELECT c.id, e.id, cl.id, cl.given_name, cl.preferred_name, c.status::text, c.created_at
+// awaitingSelect is shared by both queries below: the columns and joins
+// that make one AwaitingItem row. 'draft' and 'sent' are the whole status
+// predicate -- a signed Contract is done, and a voided one is a
+// superseded record rather than outstanding work; it stays unsigned
+// forever and no amount of chasing changes that. Excluding voided also
+// means each Engagement appears at most once, for free: 00020's partial
+// unique index already allows only one non-voided Contract per
+// Engagement, so nothing here has to de-duplicate. The join to clients
+// is for her name only.
+const awaitingSelect = `SELECT c.id, e.id, cl.id, cl.given_name, cl.preferred_name, c.status::text, c.created_at
 	            FROM contracts c
 	            JOIN engagements e ON e.id = c.engagement_id
 	            JOIN clients cl ON cl.id = e.client_id
 	           WHERE e.practice_id = $1 AND c.status IN ('draft', 'sent')`
+
+// listAwaiting reads one page of outstanding Contracts across the whole
+// Practice, oldest first -- the ambient-reach query for an Owner, Admin,
+// or employee Doula (ADR-0008). The cursor comparison is `>` because
+// this list ascends; pagecursor carries a position, not a direction.
+//
+// contracts has no practice_id column, so the Practice filter is the join
+// to engagements -- filtered explicitly on top of the RLS scoping
+// staffauth.Middleware already set on tx, the same belt-and-braces
+// engagementrequest's inbox uses.
+func listAwaiting(ctx context.Context, tx *sql.Tx, practiceID string, after *pagecursor.Cursor) ([]AwaitingItem, error) {
+	query := awaitingSelect
 	args := []any{practiceID}
 	if after != nil {
 		query += ` AND (c.created_at, c.id) > ($2, $3) ORDER BY c.created_at, c.id LIMIT $4`
@@ -152,7 +164,41 @@ func listAwaiting(ctx context.Context, tx *sql.Tx, practiceID string, after *pag
 		return nil, fmt.Errorf("contracts: list awaiting signature: %w", err)
 	}
 	defer func() { _ = rows.Close() }()
+	return scanAwaitingItems(rows)
+}
 
+// listAttachedAwaiting is listAwaiting narrowed to Engagements staffID
+// holds an open (ended_at IS NULL), granted-origin engagement_attachments
+// row on -- the literal predicate staffauth.Reader.CanAccessEngagement
+// runs, applied here as a SQL filter the same way
+// message.listAttachedAwaitingReply already does for its own Practice-wide,
+// single-subject-kind roll-up (#973).
+func listAttachedAwaiting(ctx context.Context, tx *sql.Tx, practiceID, staffID string, after *pagecursor.Cursor) ([]AwaitingItem, error) {
+	query := awaitingSelect + `
+	             AND EXISTS (
+	                 SELECT 1 FROM engagement_attachments ea
+	                 WHERE ea.engagement_id = e.id AND ea.staff_id = $2
+	                   AND ea.origin = 'granted' AND ea.ended_at IS NULL
+	             )`
+	args := []any{practiceID, staffID}
+	if after != nil {
+		query += ` AND (c.created_at, c.id) > ($3, $4) ORDER BY c.created_at, c.id LIMIT $5`
+		args = append(args, after.At, after.ID, awaitingPageSize+1)
+	} else {
+		query += ` ORDER BY c.created_at, c.id LIMIT $3`
+		args = append(args, awaitingPageSize+1)
+	}
+
+	rows, err := tx.QueryContext(ctx, query, args...)
+	if err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		return nil, fmt.Errorf("contracts: list attached awaiting signature: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	return scanAwaitingItems(rows)
+}
+
+func scanAwaitingItems(rows *sql.Rows) ([]AwaitingItem, error) {
 	list := []AwaitingItem{}
 	for rows.Next() {
 		var item AwaitingItem

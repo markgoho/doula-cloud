@@ -88,10 +88,14 @@ func RequireNotAmbientContractor(w http.ResponseWriter, r *http.Request) (tx *sq
 // work, rather than deciding who is at the Practice at all (inviting,
 // editing a Membership), which stays Owner-only. Zero-query, for the
 // same reason RequireOwner is. Every caller left is a GET whose seat the
-// mount already declares through GatedRouter.Get -- the awaiting-signature
-// and awaiting-void-decision reads, and the Engagement Request list and
+// mount already declares through GatedRouter.Get -- the
+// awaiting-void-decision read, and the Engagement Request list and
 // detail -- because a write whose Owner-or-Admin rule is the whole rule
-// declares it at the mount instead (#970, #990, #1016), not here.
+// declares it at the mount instead (#970, #990, #1016), not here. The
+// Contracts awaiting-signature roll-up moved off this call on #973: it
+// carries no money, so it follows ADR-0008's Engagements/Visits/Messages
+// row (AnyStaff, narrowed for a contractor inside the handler) rather
+// than an Owner-or-Admin seat.
 func RequireOwnerOrAdmin(w http.ResponseWriter, r *http.Request) (tx *sql.Tx, practiceID string, ok bool) {
 	tx, has := Tx(r.Context())
 	if !has {

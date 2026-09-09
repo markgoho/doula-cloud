@@ -39,9 +39,13 @@ func Mount(g *staffauth.GatedRouter, ir *idempotency.Router, db *sql.DB, store o
 	// The Practice-wide "Contracts awaiting signature" roll-up (#426):
 	// every Draft or Sent Contract at the Practice in one read, so
 	// chasing signatures is one screen rather than every Engagement
-	// opened in turn. Owner and Admin, the same declaration the credit
-	// balance and the Practice-wide Invoice list carry.
-	g.Get("/api/practices/{practiceId}/contracts/awaiting-signature", staffauth.OwnerAndAdmin, AwaitingSignatureHandler())
+	// opened in turn. AwaitingItem carries no amount, so this is not a
+	// money read and does not carry the credit balance / Invoice-list
+	// declaration; it follows ADR-0008's Engagements/Visits/Messages row
+	// instead, the same as message's own "awaiting-reply" roll-up below --
+	// AnyStaff, with the contractor's attachment narrowing enforced
+	// inside the handler's own query (#973).
+	g.Get("/api/practices/{practiceId}/contracts/awaiting-signature", staffauth.AnyStaff, AwaitingSignatureHandler())
 	// #971: the mirror roll-up for a void a Doula has asked for but
 	// nobody has decided yet -- same reach as the row above, since void
 	// itself is Owner/Admin-only (#970).

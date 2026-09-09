@@ -193,22 +193,111 @@ func TestAwaitingSignatureHandler_AdmitsAnAdmin(t *testing.T) {
 	}
 }
 
-// TestAwaitingSignatureHandler_RefusesADoula proves the gate ADR-0008's
-// read table draws: the Practice's book of outstanding agreements is not
-// a Doula's to read, the same seat the credit balance holds.
-func TestAwaitingSignatureHandler_RefusesADoula(t *testing.T) {
+// TestAwaitingSignatureHandler_AdmitsAnEmployedDoula proves ADR-0008's
+// Engagements/Visits/Messages row, not the money row, governs this
+// roll-up (#973): an employed Doula reaches every Engagement at the
+// Practice, so she sees every outstanding Contract, the same as an Owner
+// or Admin.
+func TestAwaitingSignatureHandler_AdmitsAnEmployedDoula(t *testing.T) {
 	db := testdb.New(t)
-	const uid = "awaiting-doula"
+	const uid = "awaiting-employee-doula"
 	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
+	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
+	seedContract(t, db, engagementID, statusSent, mergeFieldProse)
 
 	srv, session := newContractServer(t, db, uid)
 	defer srv.Close()
 
-	resp := getAwaiting(t, session, awaitingURL(srv, practiceID))
-	defer resp.Body.Close()
+	out := decodeAwaiting(t, session, awaitingURL(srv, practiceID))
 
-	if resp.StatusCode != http.StatusForbidden {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusForbidden)
+	if len(out.Items) != 1 || out.Items[0].EngagementID != engagementID {
+		t.Fatalf("items = %+v, want the outstanding Contract", out.Items)
+	}
+}
+
+// TestAwaitingSignatureHandler_ContractorSeesOnlyHerAttachedEngagements
+// is #973's own security boundary: a contractor Doula reaches only an
+// Engagement she holds an open, granted attachment on, so an outstanding
+// Contract on an Engagement she is not attached to never reaches her.
+func TestAwaitingSignatureHandler_ContractorSeesOnlyHerAttachedEngagements(t *testing.T) {
+	db := testdb.New(t)
+	const contractorUID = "awaiting-contractor-narrowed"
+	practiceID := testdb.SeedPractice(t, db, "Awaiting Contractor Practice")
+	contractorID := testdb.SeedContractorAtPractice(t, db, practiceID, contractorUID)
+
+	_, attachedEngagement := testdb.SeedEngagement(t, db, practiceID)
+	testdb.SeedGrantedAttachment(t, db, attachedEngagement, contractorID)
+	seedContract(t, db, attachedEngagement, statusSent, mergeFieldProse)
+
+	_, unattachedEngagement := testdb.SeedEngagement(t, db, practiceID)
+	seedContract(t, db, unattachedEngagement, statusSent, mergeFieldProse)
+
+	srv, session := newContractServer(t, db, contractorUID)
+	defer srv.Close()
+
+	out := decodeAwaiting(t, session, awaitingURL(srv, practiceID))
+
+	if len(out.Items) != 1 || out.Items[0].EngagementID != attachedEngagement {
+		t.Fatalf("items = %+v, want exactly the one attached Engagement (no leak of the unattached one)", out.Items)
+	}
+}
+
+// TestAwaitingSignatureHandler_ContractorWithNoAttachmentSeesNothing
+// proves the narrow case #973's acceptance criteria calls out by name: a
+// contractor who holds no granted attachment at all gets an empty list,
+// not an error and not the Practice's whole roll-up.
+func TestAwaitingSignatureHandler_ContractorWithNoAttachmentSeesNothing(t *testing.T) {
+	db := testdb.New(t)
+	const contractorUID = "awaiting-contractor-unattached"
+	practiceID := testdb.SeedPractice(t, db, "Awaiting Contractor No Attachment Practice")
+	testdb.SeedContractorAtPractice(t, db, practiceID, contractorUID)
+
+	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
+	seedContract(t, db, engagementID, statusSent, mergeFieldProse)
+
+	srv, session := newContractServer(t, db, contractorUID)
+	defer srv.Close()
+
+	out := decodeAwaiting(t, session, awaitingURL(srv, practiceID))
+
+	if len(out.Items) != 0 {
+		t.Fatalf("items = %+v, want none for a contractor with no granted attachment", out.Items)
+	}
+}
+
+// TestAwaitingSignatureHandler_ContractorPaginatesAcrossPages exercises
+// listAttachedAwaiting's own cursor branch (the `after != nil` path),
+// the contractor mirror of
+// TestAwaitingSignatureHandler_WalksTheCursor below.
+func TestAwaitingSignatureHandler_ContractorPaginatesAcrossPages(t *testing.T) {
+	db := testdb.New(t)
+	const contractorUID = "awaiting-contractor-pages"
+	practiceID := testdb.SeedPractice(t, db, "Awaiting Contractor Pages Practice")
+	contractorID := testdb.SeedContractorAtPractice(t, db, practiceID, contractorUID)
+
+	const total = 31 // awaitingPageSize (30) + 1, to force a second page
+	for range total {
+		_, engagementID := testdb.SeedEngagement(t, db, practiceID)
+		testdb.SeedGrantedAttachment(t, db, engagementID, contractorID)
+		seedContract(t, db, engagementID, statusSent, mergeFieldProse)
+	}
+
+	srv, session := newContractServer(t, db, contractorUID)
+	defer srv.Close()
+
+	first := decodeAwaiting(t, session, awaitingURL(srv, practiceID))
+	if len(first.Items) != 30 || !first.HasMore || first.NextCursor == nil {
+		t.Fatalf("first page = %d items, hasMore=%v, cursor=%v; want 30/true/non-nil",
+			len(first.Items), first.HasMore, first.NextCursor)
+	}
+
+	second := decodeAwaiting(t, session, awaitingURL(srv, practiceID)+"?cursor="+*first.NextCursor)
+	if len(second.Items) != 1 || second.HasMore || second.NextCursor != nil {
+		t.Fatalf("second page = %d items, hasMore=%v, cursor=%v; want 1/false/nil",
+			len(second.Items), second.HasMore, second.NextCursor)
+	}
+	if second.Items[0].ContractID == first.Items[29].ContractID {
+		t.Fatal("the second page repeated the first page's last row")
 	}
 }
 
