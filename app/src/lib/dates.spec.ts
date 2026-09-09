@@ -3,6 +3,7 @@ import {
 	formatActivityTimestamp,
 	formatCalendarDay,
 	formatInstant,
+	formatPortalVisit,
 	formatScheduledVisit,
 	toDatetimeLocalValue
 } from './dates.js';
@@ -77,6 +78,33 @@ describe('formatScheduledVisit', () => {
 		expect(formatScheduledVisit(iso)).toBe(
 			`${expected.getDate()} ${expected.toLocaleDateString('en-US', { month: 'short' })} ${expected.getFullYear()}, ${expected.getHours() % 12 === 0 ? 12 : expected.getHours() % 12}:${expected.getMinutes().toString().padStart(2, '0')}${expected.getHours() < 12 ? 'am' : 'pm'}`
 		);
+	});
+});
+
+// #478: the two things a Client is shown about a Visit, and the whole of
+// what tells "Thursday at 2pm" from "she came on 18 August".
+describe('formatPortalVisit', () => {
+	it('reads a Visit still to come as a weekday and a clock', () => {
+		const iso = local(2027, 2, 18, 14, 0);
+		const expected = new Date(iso);
+		expect(formatPortalVisit(iso, false)).toBe(
+			`${expected.toLocaleDateString('en-US', { weekday: 'short' })} ${expected.getDate()} ${expected.toLocaleDateString('en-US', { month: 'short' })}, 2:00pm`
+		);
+	});
+
+	it('reads a Visit that has happened as the calendar day, with no clock', () => {
+		const iso = local(2026, 8, 18, 14, 30);
+		const expected = new Date(iso);
+		expect(formatPortalVisit(iso, true)).toBe(
+			`${expected.getDate()} ${expected.toLocaleDateString('en-US', { month: 'short' })} ${expected.getFullYear()}`
+		);
+	});
+
+	// The same instant, both ways: the flag is the server's answer, and
+	// nothing about the value itself decides which form is used.
+	it('renders one instant differently on each side of the flag', () => {
+		const iso = local(2027, 2, 18, 14, 0);
+		expect(formatPortalVisit(iso, false)).not.toBe(formatPortalVisit(iso, true));
 	});
 });
 

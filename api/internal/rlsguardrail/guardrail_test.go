@@ -11,7 +11,12 @@
 // and engagements_client_visibility), making it the natural place to prove
 // both hold together -- clients and staff later grew their own both-tier
 // policies too (00009_messaging_client_portal_read.sql), covered directly
-// by message/client_rls_test.go rather than duplicated here. No dedicated
+// by message/client_rls_test.go rather than duplicated here. visits is
+// the exception to that split and is covered here as well
+// (00105_visits_client_visibility.sql): #478 gave the Client portal its
+// first Visit read and named this package in its own acceptance
+// criteria, while visit/rls_test.go still proves the practice tier
+// alone. No dedicated
 // CI step is added for this package -- the existing "api" job in
 // .github/workflows/ci.yml already runs `go test ./...` on every push and
 // pull_request with no path filter, so it already runs this test on every
@@ -196,6 +201,94 @@ func activityVisible(t *testing.T, db *testdb.DB, practiceID, activityID string)
 	var count int
 	if err := tx.QueryRowContext(t.Context(), `SELECT count(*) FROM activity WHERE id = $1`, activityID).Scan(&count); err != nil {
 		t.Fatalf("query activity: %v", err)
+	}
+	return count == 1
+}
+
+// TestRLS_GuardrailVisitsClientTierIsolation exercises
+// visits_client_visibility (00105_visits_client_visibility.sql, #478):
+// the Client portal's own "Your visits" read is fenced at the database,
+// so a Client reaches the Visits on her own Engagement and none of
+// anybody else's -- the second fence behind clientauth.Middleware's
+// own 403, and the one that still holds if a future handler forgets to
+// filter by Engagement at all.
+//
+// This one lives here rather than in visit/rls_test.go, which covers
+// the practice tier only: #478's acceptance criteria name this package
+// by name. Several tables carry both tiers' policies (messages,
+// clients, staff, plan_instances, contracts); what puts visits here
+// beside engagements is that AC, not a property of the table.
+func TestRLS_GuardrailVisitsClientTierIsolation(t *testing.T) {
+	db := testdb.New(t)
+	practiceA, clientA, engagementA := seedEngagementAt(t, db, "Guardrail Visits Client A")
+	practiceB, clientB, engagementB := seedEngagementAt(t, db, "Guardrail Visits Client B")
+	visitA := seedGuardrailVisit(t, db, practiceA, engagementA, "guardrail-visits-doula-a")
+	visitB := seedGuardrailVisit(t, db, practiceB, engagementB, "guardrail-visits-doula-b")
+
+	if !visitVisible(t, db, clientA, visitA) {
+		t.Fatal("Client A's own session could not see her own Engagement's Visit")
+	}
+	if !visitVisible(t, db, clientB, visitB) {
+		t.Fatal("Client B's own session could not see her own Engagement's Visit")
+	}
+	if visitVisible(t, db, clientB, visitA) {
+		t.Fatal("Client B's session saw Client A's Visit")
+	}
+	if visitVisible(t, db, clientA, visitB) {
+		t.Fatal("Client A's session saw Client B's Visit")
+	}
+}
+
+// TestRLS_GuardrailVisitsFailClosedWithNoSessionVariableSet is the
+// fail-closed half for visits: neither session variable set sees no
+// Visit at all, even though one exists.
+func TestRLS_GuardrailVisitsFailClosedWithNoSessionVariableSet(t *testing.T) {
+	db := testdb.New(t)
+	practiceID, _, engagementID := seedEngagementAt(t, db, "Guardrail Visits Fail Closed")
+	seedGuardrailVisit(t, db, practiceID, engagementID, "guardrail-visits-doula-closed")
+
+	var count int
+	if err := db.App.QueryRowContext(t.Context(), `SELECT count(*) FROM visits`).Scan(&count); err != nil {
+		t.Fatalf("query visits with no session variables set: %v", err)
+	}
+	if count != 0 {
+		t.Fatalf("expected 0 rows with no session variables set (fail closed), got %d", count)
+	}
+}
+
+// seedGuardrailVisit inserts a Doula at practiceID and one scheduled
+// Visit on engagementID naming her, via the Admin connection.
+func seedGuardrailVisit(t *testing.T, db *testdb.DB, practiceID, engagementID, identityUID string) (visitID string) {
+	t.Helper()
+	staffID := seedGrantStaffAt(t, db, practiceID, identityUID)
+	if err := db.Admin.QueryRowContext(t.Context(),
+		`INSERT INTO visits (engagement_id, staff_id, scheduled_at) VALUES ($1, $2, now()) RETURNING id`,
+		engagementID, staffID,
+	).Scan(&visitID); err != nil {
+		t.Fatalf("seed visit: %v", err)
+	}
+	return visitID
+}
+
+// visitVisible sets app.current_client_id to clientID for a single
+// transaction on db.App and reports whether visitID is visible under
+// that session context.
+func visitVisible(t *testing.T, db *testdb.DB, clientID, visitID string) bool {
+	t.Helper()
+
+	tx, err := db.App.BeginTx(t.Context(), nil)
+	if err != nil {
+		t.Fatalf("begin: %v", err)
+	}
+	defer tx.Rollback()
+
+	if _, err := tx.ExecContext(t.Context(), `SELECT set_config('app.current_client_id', $1, true)`, clientID); err != nil {
+		t.Fatalf("set_config app.current_client_id: %v", err)
+	}
+
+	var count int
+	if err := tx.QueryRowContext(t.Context(), `SELECT count(*) FROM visits WHERE id = $1`, visitID).Scan(&count); err != nil {
+		t.Fatalf("query visits: %v", err)
 	}
 	return count == 1
 }

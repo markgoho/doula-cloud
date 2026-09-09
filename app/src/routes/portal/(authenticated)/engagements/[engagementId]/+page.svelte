@@ -17,6 +17,13 @@
 	import { formatCalendarDay } from '#lib/dates.js';
 	import { PaginatedList } from '#lib/paginatedList.svelte.js';
 	import { activityLedgerColumns, loadPortalActivityPage, type ActivityEntry } from '#lib/activityLedger.js';
+	import {
+		inReadingOrder,
+		loadPortalVisitsPage,
+		noVisitsMessage,
+		portalVisitColumns,
+		type PortalVisit
+	} from '#lib/portalVisits.js';
 	import { engagementLabel, engagementStatusLabel } from '#lib/clientRegister.js';
 	import Link from '#lib/components/atoms/Link.svelte';
 	import DescriptionList from '#lib/components/molecules/DescriptionList.svelte';
@@ -46,6 +53,17 @@
 	});
 	let activityError = $state('');
 
+	// #478: her own Visits, scheduled and past, in one cursor-paginated
+	// stream ordered furthest-future first -- so the two groups need no
+	// second request. `inReadingOrder` turns the scheduled half around for
+	// display; its own doc comment says why the two orders differ.
+	const visits = new PaginatedList<PortalVisit>({
+		first: { items: [], hasMore: false },
+		loadPage: (cursor) => loadPortalVisitsPage(apiFetchWithSession, page.params.engagementId!, cursor),
+		failureMessage: 'Failed to load more visits'
+	});
+	let visitsError = $state('');
+
 	onMount(async () => {
 		const response = await apiFetchWithSession(
 			`/api/portal/engagements/${page.params.engagementId}`
@@ -57,11 +75,27 @@
 
 		detail = await response.json();
 
-		try {
-			activity.reset(await loadPortalActivityPage(apiFetchWithSession, page.params.engagementId!, ''));
-		} catch (error_) {
-			activityError = error_ instanceof Error ? error_.message : 'Failed to load activity';
-		}
+		// Both sections' first page at once, not one behind the other: the
+		// section a Client came for is the open one at the top, and
+		// awaiting the ledger's request first would make it wait on a
+		// table that is closed when the page loads. Neither read depends
+		// on the other's answer, and each keeps its own failure.
+		await Promise.all([
+			(async () => {
+				try {
+					activity.reset(await loadPortalActivityPage(apiFetchWithSession, page.params.engagementId!, ''));
+				} catch (error_) {
+					activityError = error_ instanceof Error ? error_.message : 'Failed to load activity';
+				}
+			})(),
+			(async () => {
+				try {
+					visits.reset(await loadPortalVisitsPage(apiFetchWithSession, page.params.engagementId!, ''));
+				} catch (error_) {
+					visitsError = error_ instanceof Error ? error_.message : 'Failed to load visits';
+				}
+			})()
+		]);
 	});
 
 	/** The summary row's own facts (#505). `dueDate` is left out of the
@@ -101,6 +135,41 @@
 			engagementId: page.params.engagementId!
 		})}
 		label="Contract"
+	/>
+{/snippet}
+
+<!--
+	#478: CONTEXT.md's Visit entry gives this section its heading -- the
+	Client register's own "Your visits", her phrasing ("when she comes
+	over", "when Maya came"), never the team's "Visits".
+
+	It is the FIRST section on the page, not the second. The drawing puts
+	it directly under "What happens next", and that section does not
+	exist on this route -- nothing above the sections here but the
+	record's own summary and the two document links -- so directly under
+	it means first. Ahead of the Activity ledger either way: both
+	journeys put "when is someone coming" among the first things she
+	wants, and the ledger is what already happened.
+
+	Open, unlike the ledger's closed disclosure: the ledger sits behind
+	one because it is a record to consult, and this is the answer she came
+	for.
+
+	No Visit type is rendered, in any wording -- see portalVisits.ts, and
+	CONTEXT.md's Visit entry, for why.
+-->
+{#snippet visitsSection()}
+	{#if visitsError}
+		<Notice variant="error" message={visitsError} />
+	{/if}
+	<DataTable
+		columns={portalVisitColumns()}
+		rows={inReadingOrder(visits.items)}
+		hasMore={visits.hasMore}
+		onLoadMore={() => visits.loadMore()}
+		isLoadingMore={visits.isLoadingMore}
+		loadMoreError={visits.loadMoreError}
+		emptyMessage={noVisitsMessage}
 	/>
 {/snippet}
 
@@ -173,7 +242,12 @@
 	serviceName={engagementLabel({ practiceName: page.data.practiceName, createdAt: page.data.createdAt })}
 	{summary}
 	{actions}
-	sections={detail ? [{ heading: 'Everything that has happened', content: activitySection }] : []}
+	sections={detail
+		? [
+				{ heading: 'Your visits', content: visitsSection },
+				{ heading: 'Everything that has happened', content: activitySection }
+			]
+		: []}
 	loading={detail || error ? undefined : 'Loading your care'}
 	loadError={error || undefined}
 />
