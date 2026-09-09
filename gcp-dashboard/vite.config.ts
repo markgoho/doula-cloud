@@ -1,4 +1,5 @@
 import { defineConfig } from 'vitest/config';
+import { playwright } from '@vitest/browser-playwright';
 import adapter from '@sveltejs/adapter-node';
 import { sveltekit } from '@sveltejs/kit/vite';
 
@@ -21,19 +22,30 @@ export default defineConfig({
 		expect: { requireAssertions: true },
 		coverage: {
 			provider: 'v8',
+			// src/routes/** stays out of this include, same convention
+			// app/vite.config.ts documents (see docs/testing.md's Coverage
+			// section): it is exercised by the `client`/`server` projects
+			// below, just not folded into the 100% requirement. See
+			// README.md's Testing section for why.
 			include: ['src/lib/**/*.{ts,svelte}'],
 			thresholds: {
 				100: true
 			}
 		},
-		// No `client` (browser-mode) project yet, unlike app/vite.config.ts --
-		// there is no Svelte component here to render a `.svelte.spec.ts`
-		// against. `coverage.include` above still matches `src/lib/**/*.svelte`,
-		// so the gate does not go quiet if one is added without this project:
-		// an unexercised .svelte file reports 0% and fails the 100% threshold
-		// rather than passing vacuously, forcing whoever adds the first real
-		// component to add the client project too (verified empirically).
 		projects: [
+			{
+				extends: './vite.config.ts',
+				test: {
+					name: 'client',
+					browser: {
+						enabled: true,
+						provider: playwright(),
+						instances: [{ browser: 'chromium', headless: true }]
+					},
+					include: ['src/**/*.svelte.{test,spec}.{js,ts}']
+				}
+			},
+
 			{
 				extends: './vite.config.ts',
 				test: {

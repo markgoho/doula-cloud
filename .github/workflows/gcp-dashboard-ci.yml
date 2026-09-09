@@ -55,6 +55,53 @@ jobs:
         working-directory: gcp-dashboard
         run: bun run lint
 
+      # The `client` project (vite.config.ts) runs the dashboard page's specs
+      # in headless Chromium via @vitest/browser-playwright -- the same
+      # mechanism app/'s ci.yml installs for its own `client` project.
+      # --only-shell installs chromium-headless-shell rather than full
+      # Chromium, which this headless-only run never needs. Adds roughly
+      # 30-60s to a cold job even with the cache below (~90MB download);
+      # a cache hit still pays the OS-dependency install step.
+      - name: Resolve Playwright version
+        id: playwright-version
+        working-directory: gcp-dashboard
+        run: |
+          version=$(grep -oP '"playwright@\K[0-9.]+(?=")' bun.lock | head -1)
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Playwright browsers
+        id: playwright-cache
+        uses: actions/cache@v6
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-shell-gcp-dashboard-${{ runner.os }}-${{ steps.playwright-version.outputs.version }}
+
+      - name: Install Playwright browser
+        working-directory: gcp-dashboard
+        run: |
+          for attempt in 1 2 3; do
+            if bunx playwright install --with-deps --only-shell chromium; then
+              exit 0
+            fi
+            echo "Browser install attempt ${attempt} failed; retrying in 30s..."
+            sleep 30
+          done
+          exit 1
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
+
+      - name: Install Playwright OS dependencies only
+        working-directory: gcp-dashboard
+        run: |
+          for attempt in 1 2 3; do
+            if timeout 180 bunx playwright install-deps chromium; then
+              exit 0
+            fi
+            echo "OS dependency install attempt ${attempt} failed; retrying in 10s..."
+            sleep 10
+          done
+          exit 1
+        if: steps.playwright-cache.outputs.cache-hit == 'true'
+
       - name: Unit test with coverage gate
         working-directory: gcp-dashboard
         run: bun run test:unit:coverage

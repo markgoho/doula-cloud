@@ -55,3 +55,5 @@ bun run test:unit:coverage   # unit tests with the 100%-line-coverage gate
 ```
 
 CI (`.github/workflows/gcp-dashboard-ci.yml`) runs all three on every change under `gcp-dashboard/**`. This job never deploys — the tool has no production target.
+
+`test:unit:coverage`'s 100%-line-coverage gate is scoped to `src/lib/**` only (see `vite.config.ts`'s `coverage.include`) — the same convention `docs/testing.md`'s Coverage section documents for `app/`. `src/routes/**` (the dashboard page and its `+server.ts` routes) is exercised by real specs in the `client` (a rendered `dashboard-page.svelte.spec.ts`, browser-mode via vitest-browser-svelte) and `server` (`cost-route.spec.ts`) projects, it just isn't folded into the 100% requirement — a deliberate exclusion, not an oversight.
