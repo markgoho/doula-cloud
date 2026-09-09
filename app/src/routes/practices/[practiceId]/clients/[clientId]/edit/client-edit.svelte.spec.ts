@@ -206,7 +206,7 @@ describe('client edit', () => {
 			.toBeVisible();
 	});
 
-	it('exposes Save and Cancel as reachable, labelled controls', async () => {
+	it('exposes Save and Cancel as reachable, labeled controls', async () => {
 		await setup();
 
 		await expect.element(testPage.getByRole('button', { name: 'Save' })).toBeVisible();

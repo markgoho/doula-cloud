@@ -33,7 +33,7 @@
 </script>
 
 {#if !isDisclosureAffirmed}
-	<section aria-labelledby="esign-disclosure-heading">
+	<section aria-labelledby="esign-disclosure-heading"> <!-- spelling:ignore: aria-labelledby is an ARIA attribute name -->
 		<h2 id="esign-disclosure-heading">Electronic signature disclosure</h2>
 		<p>By choosing to sign electronically, you consent to sign this Contract using an electronic signature.</p>
 		<p>

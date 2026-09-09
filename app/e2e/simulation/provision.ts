@@ -61,8 +61,8 @@ export async function standUpRidgeline(request: APIRequestContext): Promise<Ridg
 	// Labels the mailbox before Lena's invitation is sent, so her inbox
 	// never shows this message under whatever label a later jump leaves
 	// behind -- the run's own clock has not started yet (#762, #764).
-	const labelled = await request.post(`${MAILBOX_URL}/api/clock`, { data: { label: 'before day zero' } });
-	expect(labelled.ok(), `standUpRidgeline: labelling the mailbox failed: ${labelled.status()}`).toBe(true);
+	const labeled = await request.post(`${MAILBOX_URL}/api/clock`, { data: { label: 'before day zero' } });
+	expect(labeled.ok(), `standUpRidgeline: labeling the mailbox failed: ${labeled.status()}`).toBe(true);
 
 	const owner = await seedFoundingOwner(request, {
 		practiceName: 'Ridgeline Doula Group',

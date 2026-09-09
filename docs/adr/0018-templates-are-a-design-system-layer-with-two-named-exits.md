@@ -20,7 +20,7 @@ Atomic Design is one of two things the map declared it would not change.
 The ambiguity is resolved by convention, not by renaming: **the domain nouns are always written
 qualified**, and a bare "Template" therefore always means the Atomic Design layer. Considered and
 rejected: calling the layer `PageShell` or `Scaffold`, which removes the collision at the cost of no
-longer speaking Atomic Design in the one codebase organised by it.
+longer speaking Atomic Design in the one codebase organized by it.
 
 The components themselves carry **no `Template` suffix** — `templates/RecordDetail.svelte`, not
 `RecordDetailTemplate.svelte` — for the same reason `Button.svelte` is not `ButtonAtom.svelte`: the

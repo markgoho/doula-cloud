@@ -7,7 +7,7 @@
  * fallback-to-raw path, unlike a Staff-facing label such as
  * `invoiceStatusLabel` -- ADR-0005's whole premise is that a Client never
  * meets the domain word, so quietly printing one on a status this build
- * has not labelled yet would be the exact defect this module exists to
+ * has not labeled yet would be the exact defect this module exists to
  * prevent.
  *
  * Decided on #212 (comment threads from #433 and #834): the label is

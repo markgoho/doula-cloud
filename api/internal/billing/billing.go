@@ -36,7 +36,7 @@ var ErrNoCreditsRemaining = errors.New("billing: no credits remaining")
 // runs) must already have set app.current_practice_id to practiceID on
 // tx, the same contract every other RLS-scoped write in this codebase
 // relies on. There is no refund operation: a credit spent here stays
-// spent even if the Engagement is later cancelled or voided.
+// spent even if the Engagement is later canceled or voided.
 func ConsumeCredit(ctx context.Context, tx *sql.Tx, practiceID, engagementID string) error {
 	// Locks the Practice row for the rest of this transaction so two
 	// concurrent ConsumeCredit calls for the same Practice can't both

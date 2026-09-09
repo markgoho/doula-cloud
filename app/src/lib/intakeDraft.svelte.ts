@@ -98,7 +98,7 @@ export class IntakeDraft {
 	answers = $state<IntakeAnswers>(blankAnswers());
 	/**
 	 * Which steps the reader has been through, in the order they were
-	 * walked. An array rather than a Set so it serialises and so Svelte's
+	 * walked. An array rather than a Set so it serializes and so Svelte's
 	 * proxy reports a push; `journeySteps` asks it with `includes`, which
 	 * is why no Set is needed at all.
 	 */

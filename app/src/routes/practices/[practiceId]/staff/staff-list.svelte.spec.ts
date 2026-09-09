@@ -315,7 +315,7 @@ describe('staff screen', () => {
 		await expect.element(testPage.getByRole('group', { name: 'Roles' })).toBeVisible();
 	});
 
-	it('closes the edit form without changing the membership when cancelled', async () => {
+	it('closes the edit form without changing the membership when canceled', async () => {
 		await setup();
 
 		await testPage.getByRole('button', { name: 'Edit membership' }).first().click();

@@ -11,7 +11,7 @@
 // GET .../session identity read staffauth.Middleware leaves open to
 // every role) and enqueues a day-23 reminder and a day-30 finalization.
 // Restoring, at any point before finalization, undoes the lock; the two
-// enqueued outbox rows are never cancelled (this package's own table
+// enqueued outbox rows are never canceled (this package's own table
 // carries no DELETE grant, the same design 00064_client_erasure.sql
 // chose for client_erasure_outbox) -- each rechecks the Practice's live
 // state at send time instead, the "skip-at-send recheck" shape

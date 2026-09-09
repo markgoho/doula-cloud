@@ -66,7 +66,7 @@ blob. Re-derive the stroke for every size the mark is used at, rather than copyi
 the source SVG.
 
 **There is no variant system, and theme axes are the substitute.** Pen has no Figma-style variants:
-a component is one tree, and an instance customises it through `ref` properties and a `descendants`
+a component is one tree, and an instance customizes it through `ref` properties and a `descendants`
 map. What fills the gap is that **variables take a value per theme-axis value, and any node can be
 pinned to one** through its `theme` property. `SetVariables` registers a new axis on the fly, so
 `mark-stroke` carries `9`/`4`/`3` on a `size` axis of `lg`/`md`/`sm`, the `CloudMark` arcs reference

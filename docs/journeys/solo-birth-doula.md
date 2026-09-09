@@ -30,7 +30,7 @@ Maya is close to a domain expert but not inside the model.
 | --- | --- | --- |
 | Engagement | "her file", "my client" | The word Engagement is invisible in her workflow and should stay that way |
 | Care Plan | "my notes" | She would not call her own notes a plan |
-| Plan Instance | — | She has no word for it, and needs none. It is a modelling term |
+| Plan Instance | — | She has no word for it, and needs none. It is a modeling term |
 | Plan Template | "the form I use every time" | |
 | Visit | "a visit", "the birth" | Matches |
 | Client | "my client", "the mom" | `CONTEXT.md` avoids "mom" deliberately |

@@ -58,7 +58,7 @@ type PracticeInvoiceView struct {
 //
 // "Outstanding" is status 'open' alone: money billed to a Client and not
 // yet collected. A 'draft' Invoice never reached her, a 'void' one was
-// cancelled, and an 'uncollectible' one was written off, so none of the
+// canceled, and an 'uncollectible' one was written off, so none of the
 // three is owed.
 type PracticeInvoicesResponse struct {
 	Items            []PracticeInvoiceView `json:"items"`

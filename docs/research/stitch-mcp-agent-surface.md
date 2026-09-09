@@ -242,7 +242,7 @@ This is the load-bearing finding of the ticket, so here is the whole run.
 theme, warm and trustworthy, DESKTOP, `GEMINI_3_FLASH`). **HTTP 200 in 91.06
 seconds.** No browser open, no human involved.
 
-The response is not one artefact. It is a `sessionId` plus six
+The response is not one artifact. It is a `sessionId` plus six
 `outputComponents`:
 
 1. a **`designSystem`** Stitch invented unprompted — displayName
@@ -295,7 +295,7 @@ But the patch never reached anything an agent can read:
 
 So the observed loop is: **generate → read back works; edit → read back does
 not.** The edit exists as a session event and as prose in the chat log; it does
-not exist in the artefact any downstream tool consumes.
+not exist in the artifact any downstream tool consumes.
 
 This matters directly to #405's tool-comparison table, which already records
 Stitch as **"reads the correction back: no."** That row is now verified, and
@@ -365,7 +365,7 @@ as public, and never paste real or realistic client data into one.
 
 Four things, and only four.
 
-| Artefact | Form | Where from |
+| Artifact | Form | Where from |
 |---|---|---|
 | **Screenshot** | PNG at a `lh3.googleusercontent.com` download URL | `Screen.screenshot` |
 | **Code** | One HTML file at a `contribution.usercontent.google.com` URL | `Screen.htmlCode` |
@@ -447,7 +447,7 @@ Characteristics that decide the Svelte question:
 
 **Answer: none of the code exports. Take the design system, not the HTML.**
 
-The choice is not among seven frameworks; it is between two artefacts Stitch
+The choice is not among seven frameworks; it is between two artifacts Stitch
 produces, and the HTML is the weaker one.
 
 - **Tailwind-CDN HTML is actively hostile to scoped component styles.** Its
@@ -532,12 +532,12 @@ with the standing advice to *"make one major change at a time."*
 
 **And the model honours it precisely.** My `edit_screens` call used exactly that
 formula and got back five correct, minimal `dom_operations` targeting
-`div:nth-child(3)` and its siblings. Stitch understood "emphasise the third
-card, de-emphasise the other two" and expressed it as a diff rather than a
+`div:nth-child(3)` and its siblings. Stitch understood "emphasize the third
+card, de-emphasize the other two" and expressed it as a diff rather than a
 rewrite. That is genuinely good.
 
 **But it did not stick.** See §3. The precise edit vanished between the
-response and every readable artefact.
+response and every readable artifact.
 
 The one structured, non-prose editing surface that *does* exist is **Edit
 Theme** — mode, accent color, corner radius, font. That is the `DesignTheme`
@@ -623,7 +623,7 @@ Stitch is a strong **generator** and a poor **surface**.
 - As a working surface it fails the round trip, and now for a documented,
   reproducible reason rather than an assumption. Do not plan any workflow that
   reads an edit back out of Stitch.
-- **Take the `DESIGN.md`, not the HTML.** The single most valuable artefact is
+- **Take the `DESIGN.md`, not the HTML.** The single most valuable artifact is
   the YAML token block plus the `styleGuidelines` prose. Both convert cleanly
   into the repo's own layers. The Tailwind HTML converts into nothing useful and
   should not be committed.
@@ -646,7 +646,7 @@ Stitch is a strong **generator** and a poor **surface**.
    `upload_design_md`'s empty `outputSchema.$defs` to Google — it is a
    one-field fix that currently blocks every MCP client that validates schemas.
 
-## Artefacts from this run
+## Artifacts from this run
 
 - Stitch project: `projects/1030173294483256667` —
   [Doula Cloud research #407](https://stitch.withgoogle.com/projects/1030173294483256667).

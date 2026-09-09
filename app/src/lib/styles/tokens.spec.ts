@@ -13,7 +13,7 @@ import { describe, expect, it } from 'vitest';
  * Note what SC 1.4.11 does NOT cover: a decorative divider is neither a
  * UI component nor a meaningful graphic, so `outline-variant` is exempt and
  * is deliberately absent from the 3:1 assertions. Requiring 3:1 there would
- * drag the hairline to a mid-grey and destroy the direction's "containers
+ * drag the hairline to a mid-gray and destroy the direction's "containers
  * are declared by an edge, never a fill or a shadow".
  */
 

@@ -43,7 +43,7 @@ const paidOnLayout = "2006-01-02"
 
 // MsgInvoiceNotOpen is the refusal for recording a Payment, voiding, or
 // writing off an Invoice that is not currently 'open' -- a draft never
-// reached anybody, a void one was cancelled, an uncollectible one was
+// reached anybody, a void one was canceled, an uncollectible one was
 // already written off, and an already-paid one would double-count.
 const MsgInvoiceNotOpen = "This Invoice is not open, so nothing can be recorded or changed against it."
 
@@ -51,7 +51,7 @@ const MsgInvoiceNotOpen = "This Invoice is not open, so nothing can be recorded 
 // against a Stripe-backed Invoice (#271): nothing else in the model moves
 // a by-hand Invoice out of 'open' besides these two actions and a
 // Payment, so only a by-hand Invoice needs the escape hatch. A
-// Stripe-backed Invoice is cancelled or written off in Stripe's own
+// Stripe-backed Invoice is canceled or written off in Stripe's own
 // Dashboard, which flows back by webhook.
 const MsgStripeInvoiceCannotBeVoidedOrWrittenOff = "A Stripe-backed Invoice cannot be voided or written off here -- use the Stripe Dashboard."
 

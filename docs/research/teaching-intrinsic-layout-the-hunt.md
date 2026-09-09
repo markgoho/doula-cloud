@@ -1,6 +1,6 @@
 # The teaching hunt: does anything actually teach intrinsic layout?
 
-Research for [#526](https://github.com/markgoho/doula-cloud/issues/526), part of the [#518](https://github.com/markgoho/doula-cloud/issues/518) map. #519 surveyed three named sources and found eight of eleven design systems with zero container queries in source, and no measured evidence anywhere that any teaching format changes what an author writes. #520 read Every Layout firsthand and found a reference organised by primitive, not a curriculum. This ticket is a hunt: find the best teaching artifact for this material, wherever it lives, and judge it honestly against what this repo already has.
+Research for [#526](https://github.com/markgoho/doula-cloud/issues/526), part of the [#518](https://github.com/markgoho/doula-cloud/issues/518) map. #519 surveyed three named sources and found eight of eleven design systems with zero container queries in source, and no measured evidence anywhere that any teaching format changes what an author writes. #520 read Every Layout firsthand and found a reference organized by primitive, not a curriculum. This ticket is a hunt: find the best teaching artifact for this material, wherever it lives, and judge it honestly against what this repo already has.
 
 **A framing note on #519's design-system finding, from the repo owner:** the earlier zero-container-query result is not evidence the approach is unwise. Large systems carry legacy surface and no incentive to re-platform; their absence means there is no reference implementation to copy, not that the idea is premature. This research went looking specifically for systems that *have* adopted it, smaller and newer especially.
 
@@ -52,7 +52,7 @@ Syntax was checked at the level the coordinator asked for: raw transcripts, not 
 
 ### Kevin Powell
 
-Judged from catalogue and video-description evidence only (his site, [kevinpowell.co](https://www.kevinpowell.co/courses/), and course listings on Class Central) — no page was found offering an interactive, reader-driven artifact or a checkable exercise distinct from watching a video. He has individual videos on container queries and style queries, and is credited across multiple sources with high volume and clarity of explanation. **Judgment: volume and clarity, no mechanism found beyond video tutorial.** This is weaker evidence than the firsthand checks above and is stated as such.
+Judged from catalog and video-description evidence only (his site, [kevinpowell.co](https://www.kevinpowell.co/courses/), and course listings on Class Central) — no page was found offering an interactive, reader-driven artifact or a checkable exercise distinct from watching a video. He has individual videos on container queries and style queries, and is credited across multiple sources with high volume and clarity of explanation. **Judgment: volume and clarity, no mechanism found beyond video tutorial.** This is weaker evidence than the firsthand checks above and is stated as such.
 
 ### Miriam Suzanne
 
@@ -124,7 +124,7 @@ So: better at making a person understand it, on the day they read it. Not shown 
 - Andy Bell, [buildexcellentwebsit.es](https://buildexcellentwebsit.es/) / ["Be the browser's mentor, not its micromanager"](https://bell.bz/be-the-browsers-mentor-not-its-micromanager/); [Complete CSS](https://piccalil.li/course/complete-css/) via [CSS-Tricks](https://css-tricks.com/complete-css-course/)
 - Wes Bos, [cssgrid.io](https://cssgrid.io/) / [github.com/wesbos/css-grid](https://github.com/wesbos/css-grid) — verified firsthand via GitHub API (25 numbered lesson folders, START/FINISHED file pairs); [flexbox.io](https://flexbox.io/) / [github.com/wesbos/What-The-Flexbox](https://github.com/wesbos/What-The-Flexbox)
 - Syntax, [#566 "Container Queries Explained"](https://syntax.fm/show/566/container-queries-explained/transcript) and [#725 "Safari is the new Chrome — Jen Simmons of Apple"](https://syntax.fm/show/725/safari-is-the-new-chrome-jen-simmons-of-apple/transcript) — both verified firsthand against raw transcript text (grepped for "breakpoint," "intrinsic," "Jen Simmons," "Every Layout")
-- Kevin Powell, [kevinpowell.co/courses](https://www.kevinpowell.co/courses/) (catalogue-level only, not independently verified for mechanism)
+- Kevin Powell, [kevinpowell.co/courses](https://www.kevinpowell.co/courses/) (catalog-level only, not independently verified for mechanism)
 - Miriam Suzanne, [Container Queries Explainer & Proposal](https://www.miriamsuzanne.com/2021/05/02/container-queries/)
 - Rachel Andrew, [Flexible Sized Grids with auto-fill and minmax](https://rachelandrew.co.uk/archives/2016/04/12/flexible-sized-grids-with-auto-fill-and-minmax/) (already this repo's source in `intrinsic-web-design.md`)
 - [web.dev/learn/css](https://web.dev/learn/css)

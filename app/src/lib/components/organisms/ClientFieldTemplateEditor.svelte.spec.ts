@@ -164,7 +164,7 @@ describe('ClientFieldTemplateEditor.svelte', () => {
 		expect(onArchiveToggle).toHaveBeenCalledWith('a');
 	});
 
-	it('does not call onArchiveToggle when the archive confirmation is cancelled', async () => {
+	it('does not call onArchiveToggle when the archive confirmation is canceled', async () => {
 		const { onArchiveToggle } = await setup();
 
 		await page.getByRole('button', { name: 'Archive', exact: true }).first().click();

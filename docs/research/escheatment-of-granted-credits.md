@@ -8,7 +8,7 @@ Facts held fixed: this ticket does not re-litigate purchased Credits — [`docs/
 
 Sources are first-party throughout for the New York question: the **New York State Legislature's** publication of the consolidated laws (nysenate.gov) for statutory text, and the **New York State Office of the State Comptroller** (osc.ny.gov), the office that administers escheat and receives the reports. The **Revised Uniform Unclaimed Property Act (RUUPA)** is quoted only as contrast, from the Uniform Law Commission's own drafted text — New York has not enacted it, and its answer is never substituted for a missing New York one.
 
-Each claim below is labelled by how it was verified, matching the convention `docs/research/ny-escheatment-on-credits.md` established:
+Each claim below is labeled by how it was verified, matching the convention `docs/research/ny-escheatment-on-credits.md` established:
 
 - **[statute]** — quoted from the enacted text of the Abandoned Property Law.
 - **[OSC]** — quoted from the Comptroller's own published holder guidance.

@@ -530,7 +530,7 @@ func (r Runner) waitForReady(ctx context.Context, clocks []heldClock) error {
 			}
 			select {
 			case <-ctx.Done():
-				// coverage:ignore reason: requires a cancelled context mid-poll, not exercised by unit tests
+				// coverage:ignore reason: requires a canceled context mid-poll, not exercised by unit tests
 				return fmt.Errorf("simclock: waiting on clock %s: %w", c.ID, ctx.Err())
 			case <-time.After(interval):
 			}

@@ -142,7 +142,7 @@ func TestGetPracticeInvoicesHandler_ListsEveryEngagementNewestFirst(t *testing.T
 // TestGetPracticeInvoicesHandler_TotalsCoverTheWholeBook proves the
 // outstanding and paid totals are of every Invoice at the Practice, not
 // of the page -- and that a draft, void or uncollectible Invoice counts
-// as neither (a draft never reached the Client, a void was cancelled, an
+// as neither (a draft never reached the Client, a void was canceled, an
 // uncollectible was written off).
 func TestGetPracticeInvoicesHandler_TotalsCoverTheWholeBook(t *testing.T) {
 	db := testdb.New(t)

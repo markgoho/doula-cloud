@@ -2,7 +2,7 @@
 
 Question: **a pre-launch B2B SaaS needs one publicly reachable page carrying the business name, a description of the service, a customer service contact, and a refund/dispute/cancellation position — Stripe's activation requirement. Where do real businesses actually put that content, and is a single consolidated page for it normal, unusual, or a smell?**
 
-Researched **28 August 2026** by visiting the sites and reading the pages. Every claim below is labelled by how it was verified: **observed** means the page was fetched and the quoted text came out of it; **absent** means the page was fetched or probed and the thing looked for was not there; **unverified** means a first-party fetch failed and no secondary source was substituted. There are no claims sourced to review sites, cancellation-service blogs, or search-result summaries.
+Researched **28 August 2026** by visiting the sites and reading the pages. Every claim below is labeled by how it was verified: **observed** means the page was fetched and the quoted text came out of it; **absent** means the page was fetched or probed and the thing looked for was not there; **unverified** means a first-party fetch failed and no secondary source was substituted. There are no claims sourced to review sites, cancellation-service blogs, or search-result summaries.
 
 Twenty-three sites were fetched across three groups: practice-management competitors, small indie SaaS billing through Stripe, and businesses that sell a prepaid credit balance rather than a subscription.
 
@@ -97,7 +97,7 @@ Eight sites: Practice Better, SimplePractice, Jane App, Cliniko, Halaxy, Healthi
 Halaxy is the sample's clearest **absence**, and it is instructive.
 
 - The homepage footer contains **no legal links at all** — no terms, no privacy, no policy. Grepping the raw homepage HTML for any href containing `term`, `polic`, `privacy`, `legal`, `refund`, `support` or `contact` returns exactly two hits: `/feature/24-hour-customer-support` (a marketing page) and `https://support.halaxy.com/` (the help center). **Observed.**
-- The terms exist, but they are reachable only by search or by signup flow, at jurisdiction-split URLs: `https://www.halaxy.com/terms/practitioner-au`, `.../practitioner-us`, `.../consumer-us`, and an EU host `https://eu.halaxy.com/terms/practitioner-ie`. Requesting `practitioner-us` served the `practitioner-au` document, so the quote below is labelled as the **AU practitioner terms**. **Observed.**
+- The terms exist, but they are reachable only by search or by signup flow, at jurisdiction-split URLs: `https://www.halaxy.com/terms/practitioner-au`, `.../practitioner-us`, `.../consumer-us`, and an EU host `https://eu.halaxy.com/terms/practitioner-ie`. Requesting `practitioner-us` served the `practitioner-au` document, so the quote below is labeled as the **AU practitioner terms**. **Observed.**
 - Halaxy sells **prepaid "Halaxy Credits"** and takes the standard line — **observed**, AU practitioner terms:
 
 > If you terminate your account with us, you will not be entitled to any refund for unused Halaxy Credits allocated to your account.
@@ -214,7 +214,7 @@ Fathom is the pattern our page is closest to in spirit: a heading called **Refun
 - **Baremetrics requires a phone or video call to cancel**, and says explicitly that email and chat do not count. That is the most restrictive cancellation mechanism observed anywhere in this survey, and it is worth knowing that a well-regarded SaaS ships it. Both `hello@baremetrics.com` and the phone number appear on the terms page. **Observed.**
 ## 3. Businesses that sell prepaid credits — the wording, verbatim
 
-This is the group whose wording is directly useful, because our refund question is about an unspent prepaid balance rather than a cancelled month. Seven businesses were checked here, plus the two prepaid-credit positions already found among the competitors (Cliniko's SMS credits, Halaxy Credits). Every quote below is **observed** from the named page.
+This is the group whose wording is directly useful, because our refund question is about an unspent prepaid balance rather than a canceled month. Seven businesses were checked here, plus the two prepaid-credit positions already found among the competitors (Cliniko's SMS credits, Halaxy Credits). Every quote below is **observed** from the named page.
 
 ### Anthropic — standalone credit terms, incorporated by reference
 
@@ -375,7 +375,7 @@ So the page we are about to build is an invention. That is not a smell — there
 
 **Footer, almost without exception.** Of the fourteen competitor and indie sites, **thirteen link their terms document from the site footer**. Reaching it any other way was not observed: no site put its terms in the main navigation, and no site made it in-product only.
 
-The one exception is **Halaxy**, and it is a total one. Its homepage footer contains **no legal links whatsoever** — the raw HTML yields exactly two matches for any href containing `term`, `polic`, `privacy`, `legal`, `refund`, `support` or `contact`, and both are the help center and a marketing feature page. **Absent**, verified against the raw markup. Halaxy's terms are reachable only by search engine or by going through the signup flow, and they are split by jurisdiction across four URLs. If Stripe reviewed Halaxy's public site the way it says it does, it would not find the fulfilment policy.
+The one exception is **Halaxy**, and it is a total one. Its homepage footer contains **no legal links whatsoever** — the raw HTML yields exactly two matches for any href containing `term`, `polic`, `privacy`, `legal`, `refund`, `support` or `contact`, and both are the help center and a marketing feature page. **Absent**, verified against the raw markup. Halaxy's terms are reachable only by search engine or by going through the signup flow, and they are split by jurisdiction across four URLs. If Stripe reviewed Halaxy's public site the way it says it does, it would not find the fulfillment policy.
 
 Support and legal are usually **two separate footer groups**, not one. SimplePractice has a "Help & Support" column and a "Legal & Policy" column. Cliniko has a "Support" column and a "Resources" column that holds Policies. Baremetrics has a "Help & Support" submenu and a "LEGAL" submenu. Buttondown is the site that mixes them, listing "Terms of service", "Privacy policy" and "Customer support" side by side in one flat footer block.
 

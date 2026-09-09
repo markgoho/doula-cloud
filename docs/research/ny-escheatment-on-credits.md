@@ -8,7 +8,7 @@ Facts held fixed: Doula Cloud is a **New York single-member LLC** selling practi
 
 Sources are first-party throughout: the **New York State Legislature's** publication of the consolidated laws (nysenate.gov) for statutory text, and the **New York State Office of the State Comptroller** (osc.ny.gov), which is the office that administers escheat and receives the reports. There is no secondary source in this document — no law-firm article, no unclaimed-property-vendor blog, no formation service.
 
-Each claim below is labelled by how it was verified:
+Each claim below is labeled by how it was verified:
 
 - **[statute]** — quoted from the enacted text of the Abandoned Property Law or the General Business Law.
 - **[OSC]** — quoted from the Comptroller's own published holder guidance.

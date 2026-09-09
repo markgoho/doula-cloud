@@ -7,7 +7,7 @@
 
 Tasha is the only Persona who may legitimately abandon, so every stage carries an
 **abandon check**: the tester records whether a real evaluator would close the tab
-there. That check is the point of the plan, and it is a judgement, not an
+there. That check is the point of the plan, and it is a judgment, not an
 assertion — record what was seen, in her words, not a pass or a fail.
 
 ## Preconditions
@@ -59,7 +59,7 @@ marketing site is out of scope for this map).
 
 **Abandon check**: this screen. It is an empty filing cabinet, not proof (TB-G4).
 
-### Stage 5 — Kick the tyres
+### Stage 5 — Kick the tires
 
 | Step | Action | Expected result | Mark |
 | --- | --- | --- | --- |
@@ -149,7 +149,7 @@ migration, the Go BFF and the Firebase Auth emulator, all local.
 | 2.1 | `missing-feature (TB-G2)` [#285](https://github.com/markgoho/doula-cloud/issues/285) | as expected | No price in `hugo/`, and none in the app. **Sharper than the plan claimed**: the one screen that sells credits shows no price either — see 2.1-a |
 | 2.1-a | `manual` | as expected | `Billing` — `Credit balance: 3`, one ledger row `8/22/2026, 12:43:58 PM / signup_bonus / +3`, then `Quantity [1]` and a **Buy credits** button. Nothing says what a credit buys, what one costs, or what `signup_bonus` is — the origin is printed as the raw enum. Pressing **Buy credits** used to return `internal error` (HTTP 500) with no Stripe key. Re-run 2026-08-22 against the Sandbox ([#242](https://github.com/markgoho/doula-cloud/issues/242)): it now opens Stripe Checkout and a paid Session credits the ledger from the `checkout.session.completed` webhook. **[TB-G2](https://github.com/markgoho/doula-cloud/issues/285) and [TB-G3](https://github.com/markgoho/doula-cloud/issues/286) stand unchanged** — a credit costs $5.00 and the screen still never says so, nor what a credit buys; the price is visible only once the Practice has already left for Stripe |
 | 3.1 | `manual` | as expected | `/signup`: heading `Sign up your Practice`, four fields, one **Create Practice** button. No email confirmation, no terms, no link back to anything |
-| 3.2 | `manual` | as expected | The first field is labelled `Practice name`, exactly as the abandon check predicted |
+| 3.2 | `manual` | as expected | The first field is labeled `Practice name`, exactly as the abandon check predicted |
 | 3.3 | `manual` | as expected | Landed on `/practices/{id}`. DB after: **one** `practices` row, **one** `staff` row, one `practice_memberships` row with `{owner,office_manager,doula}` — the three roles in one statement, as claimed. **The stage-3 timing claim ("under a minute") was not tested**: a driven browser types faster than a person, so any number here would be fiction |
 | 3.3-a | `manual` (was `missing-feature (TB-G7)` [#290](https://github.com/markgoho/doula-cloud/issues/290)) | **falsified** | The **Staff** link on the first screen opens a roster with a `Roles` column reading `owner, office_manager, doula`. She *can* learn that roles exist, in one click. TB-G7 is narrowed, not deleted: nothing signposts it, the only Action offered is `End sessions everywhere` (no role can be changed — [RA-G2](https://github.com/markgoho/doula-cloud/issues/261), owned by Renata's map), and the word on screen is `office_manager`, which is the schema's word and not **Admin** (#204). See the journey map's revised TB-G7 row |
 | 4.1 | `manual` | as expected | `Welcome to Bell & Co Birth Support` and the seven links in the order the plan lists them. One control the plan does not name: a `Sign out` button in the banner. That is the whole screen |
@@ -158,7 +158,7 @@ migration, the Go BFF and the Firebase Auth emulator, all local.
 | 5.1 | `manual` | as expected | `Add a Client`: two fields, `Their name` and `Their email`. Nothing on the screen mentions credits |
 | 5.2 | `manual` | as expected | One `clients` row, one `engagements` row at `intake`, and a `credit_ledger` row `consumption / -1` at the identical timestamp. Nothing on screen said a credit was spent. **The plan's route is one click long, not two**: **Add Client** lands straight on the Engagement page — she never passes through the Clients list |
 | 5.2-a | `manual` | as expected | No warning of any kind, on either screen |
-| 5.4 | `manual` | as expected, with one correction | The Engagement page shows `Test Client One`, `Status intake` (raw enum), `Created`, `Send portal invite`, Visits, Care Plan, Birth Plan, Contract, Messages. **Three clicks from the first screen, not four** (Clients → Add a Client → Add Client), because 5.2 lands her here. The Visits table's `Date` column is `visit.createdAt` (`app/src/routes/practices/[practiceId]/engagements/[engagementId]/+page.svelte:525`) — a column labelled Date that holds when the row was typed. Corroborates **[MO-G1](https://github.com/markgoho/doula-cloud/issues/250)**; no new gap |
+| 5.4 | `manual` | as expected, with one correction | The Engagement page shows `Test Client One`, `Status intake` (raw enum), `Created`, `Send portal invite`, Visits, Care Plan, Birth Plan, Contract, Messages. **Three clicks from the first screen, not four** (Clients → Add a Client → Add Client), because 5.2 lands her here. The Visits table's `Date` column is `visit.createdAt` (`app/src/routes/practices/[practiceId]/engagements/[engagementId]/+page.svelte:525`) — a column labeled Date that holds when the row was typed. Corroborates **[MO-G1](https://github.com/markgoho/doula-cloud/issues/250)**; no new gap |
 | 6.1 | `missing-feature (TB-G5)` [#288](https://github.com/markgoho/doula-cloud/issues/288) | as expected | Unwalkable and confirmed at the route table: `api/main.go:137-236` registers no export, no download, and no account deletion. The seven links carry no account or settings screen, and the Clients list offers no export |
 | 7.1 | `missing-feature (TB-G6)` [#289](https://github.com/markgoho/doula-cloud/issues/289) | as expected | Same route table: no import endpoint exists |
 | 7.1-a | `manual` | as expected | Walked and impossible, as claimed: `Add a Client` accepts a name and an email and nothing else (**[MO-G3](https://github.com/markgoho/doula-cloud/issues/252)**) |
@@ -172,7 +172,7 @@ filed — that is
 
 #### Abandon checks — what a real evaluator would do
 
-Recorded as judgement, in Tasha's words, not as pass or fail.
+Recorded as judgment, in Tasha's words, not as pass or fail.
 
 - **Stage 1** — She never arrives. Nothing to close the tab on.
 - **Stage 2** — "What does it cost?" is unanswered before signup *and* after it.

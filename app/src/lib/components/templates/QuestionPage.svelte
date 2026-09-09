@@ -280,7 +280,7 @@
 		}
 
 		/* 28px from the question to the thing it asks for -- the brief's gap
-		   between a labelled group and the next, which is what this is. */
+		   between a labeled group and the next, which is what this is. */
 		.thing {
 			margin-block-start: var(--space-7);
 		}

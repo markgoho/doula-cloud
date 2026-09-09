@@ -144,7 +144,7 @@ describe('LabeledField.svelte', () => {
 
 	/*
 	 * Regression, #510: an inline row that could not hold both items dropped
-	 * the whole label onto its own line below the control -- an unlabelled
+	 * the whole label onto its own line below the control -- an unlabeled
 	 * control followed by a stray sentence. Reproduced at 320px (ADR-0024)
 	 * with a label long enough that it cannot share a line with the control,
 	 * the same shape as SignContract's consent checkbox. Asserted on the

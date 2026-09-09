@@ -34,7 +34,7 @@ function pixelOf(cssColor: string): [number, number, number] {
 	return [r, g, b];
 }
 
-// Hue angle in degrees for an sRGB triplet. A grey pixel (no chroma) has no
+// Hue angle in degrees for an sRGB triplet. A gray pixel (no chroma) has no
 // hue at all, which is exactly the failure mode #434 describes -- so this
 // returns NaN rather than an arbitrary 0, and the test below fails loudly on it.
 function hueOf([r, g, b]: [number, number, number]): number {
@@ -141,7 +141,7 @@ describe('the five variants read as visibly different background tints (#434)', 
 				return result;
 			});
 
-			for (const [name, hue] of hues) expect(hue, `${name} has a real hue, not grey`).not.toBeNaN();
+			for (const [name, hue] of hues) expect(hue, `${name} has a real hue, not gray`).not.toBeNaN();
 
 			for (const { a, b, gap } of pairwiseHueGaps(hues)) {
 				expect(gap, `${a} vs ${b}`).toBeGreaterThanOrEqual(15);

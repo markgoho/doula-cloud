@@ -132,7 +132,7 @@ func (c *StripeAPIClient) CreateCheckoutSession(ctx context.Context, req Checkou
 			Address: stripe.String("auto"),
 		},
 		SuccessURL: stripe.String(c.appBaseURL + "/practices/" + req.PracticeID + "/billing?checkout=success"),
-		CancelURL:  stripe.String(c.appBaseURL + "/practices/" + req.PracticeID + "/billing?checkout=cancelled"),
+		CancelURL:  stripe.String(c.appBaseURL + "/practices/" + req.PracticeID + "/billing?checkout=canceled"),
 		Metadata: map[string]string{
 			"practice_id": req.PracticeID,
 			"quantity":    strconv.Itoa(req.Quantity),

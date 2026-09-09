@@ -74,7 +74,7 @@
 </script>
 
 <!--
-	Roles and Employment type are two labelled field groups, so the brief's
+	Roles and Employment type are two labeled field groups, so the brief's
 	Density section puts 28px between them rather than the 20px a bare
 	stack would give. The spacing lives here, not on the two screens that
 	compose this, because it is the same decision on both (#425).

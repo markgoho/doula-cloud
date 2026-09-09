@@ -71,7 +71,7 @@ function changeHref(basePath: string, slug: string): string {
  * The whole summary.
  *
  * Section headings are the rail's own step labels, so the summary reads
- * as the journey it summarises rather than as a second grouping of the
+ * as the journey it summarizes rather than as a second grouping of the
  * same facts.
  */
 export function answerSections(

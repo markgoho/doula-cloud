@@ -7,7 +7,7 @@
 	let note = $state('');
 	let prose = $state('');
 	let fact = $state('');
-	let labelled = $state('');
+	let labeled = $state('');
 </script>
 
 <stack-l space="var(--space-6)">
@@ -39,10 +39,10 @@
 		<LabeledField
 			label="What your Practice offers"
 			hint="Say what kind of support you provide, where you work, and anything a Client should know before they get in touch."
-			error={labelled.length > 0 ? '' : 'Enter a description of what your Practice offers'}
+			error={labeled.length > 0 ? '' : 'Enter a description of what your Practice offers'}
 		>
 			{#snippet children({ id, describedBy, invalid })}
-				<Textarea {id} {describedBy} {invalid} value={labelled} onInput={(value) => (labelled = value)} />
+				<Textarea {id} {describedBy} {invalid} value={labeled} onInput={(value) => (labeled = value)} />
 			{/snippet}
 		</LabeledField>
 	</section>

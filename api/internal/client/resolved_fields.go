@@ -11,7 +11,7 @@ import (
 
 // noLongerCollected is the wording a Client detail page shows beside an
 // archived field she still holds a value in (ADR-0017, #399's AC3):
-// still visible on her record, labelled and marked as no longer
+// still visible on her record, labeled and marked as no longer
 // collected.
 const noLongerCollected = "No longer collected"
 

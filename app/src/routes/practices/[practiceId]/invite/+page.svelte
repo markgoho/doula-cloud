@@ -139,7 +139,7 @@
 	legends the Owner does not need -- the h1 already says what the page
 	is -- so they are unnamed groups, which is the case #425 asked this
 	Template to handle. Two groups rather than one because the brief puts
-	28px between labelled field groups and 20px between consecutive
+	28px between labeled field groups and 20px between consecutive
 	fields, and `FormPage`'s outer stack is the 28px one.
 -->
 <!-- `novalidate`: the page refuses the submit and lists every reason at
