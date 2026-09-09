@@ -71,10 +71,7 @@ export function formatActivityTimestamp(value: string, now: Date = new Date()): 
 		const weekday = date.toLocaleDateString('en-US', { weekday: 'long' });
 		return `${weekday}, ${formatClock(date)}`;
 	}
-	const day = date.getDate();
-	const month = date.toLocaleDateString('en-US', { month: 'short' });
-	const year = date.getFullYear();
-	return `${day} ${month} ${year}, ${formatClock(date)}`;
+	return `${formatDay(date)}, ${formatClock(date)}`;
 }
 
 /**
@@ -90,10 +87,7 @@ export function formatActivityTimestamp(value: string, now: Date = new Date()): 
 export function formatScheduledVisit(value: string | undefined): string {
 	if (!value) return 'Not yet scheduled';
 	const date = new Date(value);
-	const day = date.getDate();
-	const month = date.toLocaleDateString('en-US', { month: 'short' });
-	const year = date.getFullYear();
-	return `${day} ${month} ${year}, ${formatClock(date)}`;
+	return `${formatDay(date)}, ${formatClock(date)}`;
 }
 
 /**
@@ -119,11 +113,9 @@ export function formatScheduledVisit(value: string | undefined): string {
  */
 export function formatPortalVisit(value: string, hasHappened: boolean): string {
 	const date = new Date(value);
-	const day = date.getDate();
-	const month = date.toLocaleDateString('en-US', { month: 'short' });
-	if (hasHappened) return `${day} ${month} ${date.getFullYear()}`;
+	if (hasHappened) return formatDay(date);
 	const weekday = date.toLocaleDateString('en-US', { weekday: 'short' });
-	return `${weekday} ${day} ${month}, ${formatClock(date)}`;
+	return `${weekday} ${formatDay(date, { withYear: false })}, ${formatClock(date)}`;
 }
 
 /**
@@ -147,6 +139,16 @@ const MINUTE_MS = 60_000;
 const HOUR_MS = 60 * MINUTE_MS;
 const DAY_MS = 24 * HOUR_MS;
 const WEEK_MS = 7 * DAY_MS;
+
+/** "18 Aug 2026", or "18 Aug" without the year -- the absolute calendar
+ * day every formatter here prints, written once. Day, then short month,
+ * then year: the order the Activity ledger's absolute branch established
+ * (ADR-0022's own worked example, "31 Jul 2026, 8:00pm") and the one the
+ * two Visit formatters below it already followed by hand. */
+function formatDay(date: Date, { withYear = true } = {}): string {
+	const day = `${date.getDate()} ${date.toLocaleDateString('en-US', { month: 'short' })}`;
+	return withYear ? `${day} ${date.getFullYear()}` : day;
+}
 
 /** "9:31am" / "12:00pm" -- 12-hour, lowercase am/pm, no periods, minutes
  * always two digits, hour never zero-padded and never 0 (noon and

@@ -42,7 +42,7 @@ export const detail = {
 /*
  * #478's own two rows, and they are the row-set split ADR-0025 asks for
  * rather than two examples of the same thing: one scheduled Visit with
- * every field at its busiest -- a hyphenated double-barrelled Doula name
+ * every field at its busiest -- a hyphenated double-barreled Doula name
  * a real Practice employs -- and one past Visit, which is the
  * `hasHappened` flag's other state and the other of the two `When` formats. A fixture
  * with only the upcoming row would sweep one of the two strings this

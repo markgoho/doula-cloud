@@ -202,6 +202,39 @@ func TestVisitsHandler_RefusesAnotherEngagementsVisits(t *testing.T) {
 	}
 }
 
+// TestVisitsHandler_KeepsAVisitWhoseDoulaHasLeftThePractice is the
+// truthfulness rule pointed the other way: "she came on 18 August" must
+// still be there after that Doula leaves. Removing a Membership deletes
+// the practice_memberships row that 00009's Staff-visible-to-a-Client
+// policy reaches through, so without
+// staff_visible_to_own_client_portal_visits (00105) her Staff row goes
+// invisible to this Client and the JOIN takes the Visit with it.
+func TestVisitsHandler_KeepsAVisitWhoseDoulaHasLeftThePractice(t *testing.T) {
+	db := testdb.New(t)
+	const identityUID = "portal-visits-departed"
+	engagementID, doulaID := seedEngagementForVisits(t, db, identityUID, "Departed Practice", "Maya Okonkwo")
+	visitID := seedPortalVisit(t, db, engagementID, doulaID, time.Now().Add(-21*24*time.Hour))
+	if _, err := db.Admin.ExecContext(t.Context(),
+		`DELETE FROM practice_memberships WHERE staff_id = $1`, doulaID,
+	); err != nil {
+		t.Fatalf("remove membership: %v", err)
+	}
+
+	srv, session := newServer(t, db, identityUID)
+	defer srv.Close()
+
+	resp := authedActivityGet(t, session, srv.URL+"/api/portal/engagements/"+engagementID+"/visits")
+	defer resp.Body.Close()
+
+	out := decodeVisits(t, resp)
+	if len(out.Items) != 1 || out.Items[0].VisitID != visitID {
+		t.Fatalf("items = %+v, want the Visit %q she came to", out.Items, visitID)
+	}
+	if out.Items[0].DoulaName != "Maya Okonkwo" {
+		t.Fatalf("doulaName = %q, want the Doula who came", out.Items[0].DoulaName)
+	}
+}
+
 // TestVisitsHandler_RejectsAnUnreadableCursor keeps the envelope's
 // contract (docs/api-design.md section 4): a cursor the server did not
 // write is a client error, not an empty page.

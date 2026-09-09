@@ -60,11 +60,14 @@ interface VisitColumn {
  * does: the display string is a rendering, and the instant underneath it
  * stays machine-readable for a screen reader, a hover and a copy-paste.
  *
- * The Who column is the Doula's own name, not "Your practice". The
+ * The Who column carries the Doula's own name, not "Your practice". The
  * Activity ledger redacts a Staff actor's name because CONTEXT.md says a
  * Client "never [reads] who inside the Practice did what" -- a fact about
  * the Practice's roster. Who is coming to her home is a fact about her
  * care, and CONTEXT.md's Visit entry settles it as part of this surface.
+ * It takes the `muted` treatment the ledger's own Who column takes, which
+ * is also the drawing's own fill for this cell (`$color-on-surface-variant`):
+ * the answer she is scanning for is when, and the name reads beside it.
  */
 export function portalVisitColumns(): VisitColumn[] {
 	return [
@@ -74,8 +77,38 @@ export function portalVisitColumns(): VisitColumn[] {
 			variant: 'meta',
 			datetimeAccessor: (row) => row.scheduledAt
 		},
-		{ label: 'Who', accessor: (row) => row.doulaName, variant: 'body' }
+		{ label: 'Who', accessor: (row) => row.doulaName, variant: 'muted' }
 	];
+}
+
+/**
+ * Reading order, which is not the wire's order. The response is one
+ * cursor stream ordered furthest-future first (docs/api-design.md
+ * section 4's DESC), so a page holds every scheduled Visit before every
+ * past one -- but within the scheduled ones that puts the most distant
+ * on top, and the question both journeys ask is "when is someone
+ * coming", which the *next* Visit answers. So the scheduled ones are
+ * turned around for display and the past ones are left newest-first, the
+ * drawing's own row order. `message.ListHandler`'s consumer reverses a
+ * page for the same reason: the order that pages stably and the order a
+ * person reads are different orders.
+ *
+ * Sorted rather than reversed, and copied rather than sorted in place: a
+ * cursor page is guaranteed ordered, and a caller's own array is not
+ * this function's to mutate.
+ *
+ * One limit, and it belongs to pagination rather than to this sort: an
+ * Engagement with more than a page of Visits has the furthest-future
+ * ones on page one, so the next Visit arrives with a later page. That is
+ * the DESC stream's own shape; the richer time model that would answer
+ * "the next visit" directly is
+ * [#330](https://github.com/markgoho/doula-cloud/issues/330).
+ */
+export function inReadingOrder(items: PortalVisit[]): PortalVisit[] {
+	const scheduled = items.filter((visit) => !visit.hasHappened);
+	const happened = items.filter((visit) => visit.hasHappened);
+	scheduled.sort((a, b) => a.scheduledAt.localeCompare(b.scheduledAt));
+	return [...scheduled, ...happened];
 }
 
 /**
@@ -86,6 +119,12 @@ export function portalVisitColumns(): VisitColumn[] {
  * coming, and on one where the Practice simply has not booked anything
  * yet -- so it reports the state of her own list and says nothing about
  * what anyone will do next.
+ *
+ * "yet" is the one word here worth defending, because it does lean
+ * forward. It reports that this list is empty at the moment rather than
+ * that it is finished, which is true in both of those cases and commits
+ * nobody to anything -- unlike a sentence naming a visit, a time, or a
+ * person, which is what CB-G5 actually records going wrong.
  */
 export const noVisitsMessage = 'Nothing is booked yet.';
 

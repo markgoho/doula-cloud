@@ -33,7 +33,7 @@ const visitPageSize = 30
 //   - nothing from the Care Plan.
 //
 // ScheduledAt is not a pointer, unlike visit.Visit's: a Visit nobody has
-// scheduled never reaches this response at all (see visitsQuery), so
+// scheduled never reaches this response at all (see listPortalVisits), so
 // every row here has one.
 type Visit struct {
 	VisitID     string    `json:"visitId"`
@@ -129,16 +129,16 @@ func VisitsHandler() http.Handler {
 // every past one in a single stream, so the consumer groups by
 // `hasHappened` with no second request and no sort of its own.
 func listPortalVisits(ctx context.Context, tx *sql.Tx, engagementID string, after *pagecursor.Cursor) ([]Visit, error) {
-	query := `SELECT v.id, v.scheduled_at, s.name, v.scheduled_at <= now()
+	query := `SELECT v.id, v.scheduled_at, coalesce(s.name, $2), v.scheduled_at <= now()
 		 FROM visits v
-		 JOIN staff s ON s.id = v.staff_id
+		 LEFT JOIN staff s ON s.id = v.staff_id
 		 WHERE v.engagement_id = $1 AND v.scheduled_at IS NOT NULL`
-	args := []any{engagementID}
+	args := []any{engagementID, staffActorDisplayName}
 	if after != nil {
-		query += ` AND (v.scheduled_at, v.id) < ($2, $3) ORDER BY v.scheduled_at DESC, v.id DESC LIMIT $4`
+		query += ` AND (v.scheduled_at, v.id) < ($3, $4) ORDER BY v.scheduled_at DESC, v.id DESC LIMIT $5`
 		args = append(args, after.At, after.ID, visitPageSize+1)
 	} else {
-		query += ` ORDER BY v.scheduled_at DESC, v.id DESC LIMIT $2`
+		query += ` ORDER BY v.scheduled_at DESC, v.id DESC LIMIT $3`
 		args = append(args, visitPageSize+1)
 	}
 

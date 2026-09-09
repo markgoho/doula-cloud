@@ -314,11 +314,28 @@ function visitsTableText(container: HTMLElement) {
 // #478: CONTEXT.md's Visit entry settles the Client register's word for
 // this section -- "visits", "Your visits" as a heading -- and settles
 // what a Client is told about one: when it is, and who is coming.
+/** This section's own setup: the fixture's two Visits are the happy
+ * path, and a state it has to hold for is a departure passed here rather
+ * than a second screen written out. `refusal` is the read failing rather
+ * than answering, which no list content can express. At module scope
+ * because it closes over nothing this `describe` owns. */
+async function setup({ items = visits, refusal }: { items?: unknown[]; refusal?: string } = {}) {
+	if (refusal === undefined) {
+		mockFetch(detail, [], items);
+	} else {
+		apiFetchWithSession.mockImplementation((path: string) => {
+			if (path.includes('/activity')) return Promise.resolve(jsonResponse({ items: [], hasMore: false }));
+			if (path.includes('/visits'))
+				return Promise.resolve({ ok: false, text: () => Promise.resolve(refusal) } as Response);
+			return Promise.resolve(jsonResponse(detail));
+		});
+	}
+	return await render(Hub);
+}
+
 describe('Your visits (#478)', () => {
 	it("heads the section with the register's own word", async () => {
-		mockFetch(detail);
-
-		await render(Hub);
+		await setup();
 
 		await expect.element(page.getByRole('heading', { name: 'Your visits' })).toBeVisible();
 	});
@@ -331,9 +348,8 @@ describe('Your visits (#478)', () => {
 	// browser does with the same instant.
 	it('renders a scheduled Visit and a past one differently, each naming who is coming', async () => {
 		await page.viewport(1440, 900);
-		mockFetch(detail);
 
-		const { container } = await render(Hub);
+		const { container } = await setup();
 		const text = visitsTableText(container);
 
 		// The upcoming one: weekday first, then the clock, because the
@@ -346,14 +362,14 @@ describe('Your visits (#478)', () => {
 		await expect
 			.poll(text)
 			.toMatch(new RegExp(`${weekday} ${upcoming.getDate()} ${month}, ${String.raw`\d+:\d\d[ap]m`}`));
-		expect(text()).toContain('Marguerite Ashworth-Delacroix-Whitfield');
+		expect(text()).toContain(visits[0]!.doulaName);
 
 		// The past one: the calendar day it was on, no weekday and no
 		// clock -- neither is what she is checking a month later.
 		const happened = new Date(visits[1]!.scheduledAt);
 		const happenedMonth = happened.toLocaleDateString('en-US', { month: 'short' });
 		expect(text()).toContain(`${happened.getDate()} ${happenedMonth} ${happened.getFullYear()}`);
-		expect(text()).toContain('Priya Raman');
+		expect(text()).toContain(visits[1]!.doulaName);
 		// The past row carries no weekday and no clock of its own -- the
 		// whole of what tells the two apart on the page.
 		const pastDay = `${happened.getDate()} ${happenedMonth}`;
@@ -368,9 +384,7 @@ describe('Your visits (#478)', () => {
 	// type at all; this proves the screen renders none either, from a
 	// payload that carried one anyway.
 	it('names no Visit type, even if the response carries one', async () => {
-		mockFetch(detail, [], [{ ...visits[0], type: 'postpartum' }]);
-
-		await render(Hub);
+		await setup({ items: [{ ...visits[0], type: 'postpartum' }] });
 
 		await expect.element(page.getByRole('heading', { name: 'Your visits' })).toBeVisible();
 		await expect.element(page.getByText(/prenatal|postpartum/i)).not.toBeInTheDocument();
@@ -382,24 +396,37 @@ describe('Your visits (#478)', () => {
 	// of her own list and promises no visit at all.
 	it('promises nothing when nothing is booked', async () => {
 		await page.viewport(1440, 900);
-		mockFetch(detail, [], []);
 
-		const { container } = await render(Hub);
+		const { container } = await setup({ items: [] });
 
 		await expect.poll(visitsTableText(container)).toContain('Nothing is booked yet.');
 		await expect.element(page.getByText(/will be|soon|shortly|coming up/i)).not.toBeInTheDocument();
 	});
 
 	it('says so when the visits cannot be read', async () => {
-		apiFetchWithSession.mockImplementation((path: string) => {
-			if (path.includes('/activity')) return Promise.resolve(jsonResponse({ items: [], hasMore: false }));
-			if (path.includes('/visits'))
-				return Promise.resolve({ ok: false, text: () => Promise.resolve('no visits for you') } as Response);
-			return Promise.resolve(jsonResponse(detail));
-		});
-
-		await render(Hub);
+		await setup({ refusal: 'no visits for you' });
 
 		await expect.element(page.getByText('no visits for you')).toBeVisible();
+	});
+
+	// The next Visit is the answer both journeys came for, so the
+	// scheduled ones read soonest-first on the page even though the
+	// response is ordered furthest-future first (inReadingOrder, and its
+	// own doc comment). Two scheduled Visits are what makes that order
+	// visible at all, which the fixture's single upcoming row cannot show
+	// -- a departure from it, spread rather than restated.
+	it('puts the soonest scheduled Visit above a later one', async () => {
+		await page.viewport(1440, 900);
+		const later = { ...visits[0]!, visitId: 'visit-later', scheduledAt: '2027-04-20T15:00:00Z' };
+
+		const { container } = await setup({ items: [later, ...visits] });
+		const text = visitsTableText(container);
+
+		const soonest = new Date(visits[0]!.scheduledAt);
+		const soonestDay = `${soonest.getDate()} ${soonest.toLocaleDateString('en-US', { month: 'short' })}`;
+		const furthest = new Date(later.scheduledAt);
+		const furthestDay = `${furthest.getDate()} ${furthest.toLocaleDateString('en-US', { month: 'short' })}`;
+		await expect.poll(text).toContain(furthestDay);
+		expect(text()!.indexOf(soonestDay)).toBeLessThan(text()!.indexOf(furthestDay));
 	});
 });

@@ -31,6 +31,33 @@ CREATE POLICY visits_client_visibility ON visits
         )
     );
 
+-- A Client may see the Staff member named on a Visit of her own, whether
+-- or not that person is still at the Practice.
+--
+-- staff_visible_to_own_client_portal_engagements (00009) already lets her
+-- resolve a Staff name, but only through a live practice_memberships row
+-- -- and removing a Membership deletes that row (staffauth's own
+-- membership removal, and a Staff login deletion). Without this policy,
+-- the Doula who worked her birth becomes invisible the day she leaves,
+-- and the Visit she came to goes with her: the portal read joins staff to
+-- name who is coming, so an invisible Staff row is a missing row, not a
+-- missing name. "Maya came on 18 August" is exactly the fact the loss
+-- journey records her asking for.
+--
+-- Reached only through a Visit on her own Engagement, so it widens
+-- nothing else: a Staff member who has never been named on one of her
+-- Visits is no more visible than before.
+CREATE POLICY staff_visible_to_own_client_portal_visits ON staff
+    FOR SELECT
+    USING (
+        EXISTS (
+            SELECT 1 FROM visits v
+            JOIN engagements e ON e.id = v.engagement_id
+            WHERE v.staff_id = staff.id
+              AND e.client_id = NULLIF(current_setting('app.current_client_id', true), '')::uuid
+        )
+    );
+
 -- The portal read written as an index: `WHERE engagement_id = $1 AND
 -- scheduled_at IS NOT NULL ORDER BY scheduled_at DESC, id DESC`. The
 -- partial predicate is the query's own IS NOT NULL predicate, the leading
@@ -47,4 +74,5 @@ CREATE INDEX visits_engagement_scheduled_at_idx ON visits (engagement_id, schedu
 
 -- +goose Down
 DROP INDEX visits_engagement_scheduled_at_idx;
+DROP POLICY staff_visible_to_own_client_portal_visits ON staff;
 DROP POLICY visits_client_visibility ON visits;

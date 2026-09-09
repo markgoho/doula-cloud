@@ -1,7 +1,13 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import { jsonResponse } from './testResponse.js';
-import { loadPortalVisitsPage, noVisitsMessage, portalVisitColumns, type PortalVisit } from './portalVisits.js';
+import {
+	inReadingOrder,
+	loadPortalVisitsPage,
+	noVisitsMessage,
+	portalVisitColumns,
+	type PortalVisit
+} from './portalVisits.js';
 
 const visit = (overrides: Partial<PortalVisit> = {}): PortalVisit => ({
 	visitId: 'visit-1',
@@ -57,6 +63,40 @@ describe('portalVisitColumns', () => {
 		const who = portalVisitColumns()[1]!;
 
 		expect(who.accessor(visit({ doulaName: 'Maya Okonkwo' }))).toBe('Maya Okonkwo');
+	});
+});
+
+// The wire's order is furthest-future first, and the page's is the next
+// Visit first -- the question both journeys ask.
+describe('inReadingOrder', () => {
+	const later = visit({ visitId: 'later', scheduledAt: '2027-04-20T15:00:00Z' });
+	const soon = visit({ visitId: 'soon', scheduledAt: '2027-02-18T19:00:00Z' });
+	const recent = visit({ visitId: 'recent', scheduledAt: '2026-08-18T14:30:00Z', hasHappened: true });
+	const older = visit({ visitId: 'older', scheduledAt: '2026-08-04T14:30:00Z', hasHappened: true });
+
+	it('reads scheduled soonest-first, then what has happened newest-first', () => {
+		expect(inReadingOrder([later, soon, recent, older]).map((v) => v.visitId)).toEqual([
+			'soon',
+			'later',
+			'recent',
+			'older'
+		]);
+	});
+
+	it('leaves the caller its own array', () => {
+		const page = [later, soon];
+
+		inReadingOrder(page);
+
+		expect(page.map((v) => v.visitId)).toEqual(['later', 'soon']);
+	});
+
+	it.each([
+		['nothing at all', []],
+		['only scheduled Visits', [later, soon]],
+		['only Visits that have happened', [recent, older]]
+	])('holds for a list of %s', (_name, items) => {
+		expect(inReadingOrder(items)).toHaveLength(items.length);
 	});
 });
 

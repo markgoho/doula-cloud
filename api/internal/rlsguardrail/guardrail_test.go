@@ -215,8 +215,9 @@ func activityVisible(t *testing.T, db *testdb.DB, practiceID, activityID string)
 //
 // This one lives here rather than in visit/rls_test.go, which covers
 // the practice tier only: #478's acceptance criteria name this package
-// by name, and visits is the second table (after engagements) to carry
-// both tiers' policies at once.
+// by name. Several tables carry both tiers' policies (messages,
+// clients, staff, plan_instances, contracts); what puts visits here
+// beside engagements is that AC, not a property of the table.
 func TestRLS_GuardrailVisitsClientTierIsolation(t *testing.T) {
 	db := testdb.New(t)
 	practiceA, clientA, engagementA := seedEngagementAt(t, db, "Guardrail Visits Client A")
