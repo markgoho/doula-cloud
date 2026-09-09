@@ -26,7 +26,13 @@ export const clients: ClientListItem[] = [
 		 * own two extremes above already sits at "zero"), one line
 		 * carrying every field populated (Contract, Doula, Invoice/money),
 		 * the other carrying every optional field absent (no Contract yet,
-		 * no Doula attached, no Invoice).
+		 * no Doula attached, no Invoice). A third line (#741) covers the
+		 * one further render-distinct branch neither extreme reaches: an
+		 * `invoiceStatus` other than `open` now renders as "Invoice:
+		 * <status>" rather than "Outstanding", a different template, not
+		 * merely a different word through the same one -- so it needs its
+		 * own line, the same reasoning ADR-0025 gives for adding a third
+		 * row only where a field's own render branches a third way.
 		 */
 		openEngagements: [
 			{
@@ -56,6 +62,18 @@ export const clients: ClientListItem[] = [
 			{
 				engagementId: 'engagement-2',
 				engagementStatus: 'intake'
+			},
+			/*
+			 * #741: the settled-Contract branch -- a deposit Invoice paid
+			 * off alongside its balance, so nothing is outstanding any
+			 * longer and the line reads the old "Invoice: Paid" wording
+			 * rather than "Outstanding".
+			 */
+			{
+				engagementId: 'engagement-3',
+				engagementStatus: 'active',
+				invoiceStatus: 'paid',
+				invoiceAmountCents: 100_000
 			}
 		]
 	},

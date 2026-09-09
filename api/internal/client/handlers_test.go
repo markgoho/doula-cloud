@@ -1315,6 +1315,50 @@ func TestListHandler_OpenEngagementsRollup_AdminSeesInvoiceAndMoney(t *testing.T
 	}
 }
 
+// TestListHandler_OpenEngagementsRollup_UnpaidDepositOutranksLaterPaidBalance
+// is #741's regression case: a Contract can hold more than one Invoice,
+// so a deposit Invoice that is still open (billed, unpaid) must not be
+// hidden by a balance Invoice raised later and already paid. Decided on
+// #741's own issue comment -- the rollup reports whether anything is
+// outstanding under the Contract, never merely the newest Invoice's
+// status.
+func TestListHandler_OpenEngagementsRollup_UnpaidDepositOutranksLaterPaidBalance(t *testing.T) {
+	db := testdb.New(t)
+	practiceID := testdb.SeedPractice(t, db, "Test Practice")
+	const ownerUID = "staff-rollup-deposit-owner"
+	testdb.SeedStaffAtPractice(t, db, practiceID, ownerUID, []string{ownerRole}, "employee")
+
+	clientID, engagementID := testdb.SeedEngagementInStatus(t, db, practiceID, "Deposit Client", "deposit@example.com", "active")
+	contractID := seedClientContract(t, db, engagementID, "sent")
+	seedClientInvoice(t, db, practiceID, contractID, openInvoiceStatus, 20000)
+	seedClientInvoice(t, db, practiceID, contractID, "paid", 80000)
+
+	srv, session := newServer(t, db, ownerUID)
+	defer srv.Close()
+
+	resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/clients")
+	defer resp.Body.Close()
+	var listResp client.ListResponse
+	if err := json.NewDecoder(resp.Body).Decode(&listResp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	byID := map[string]client.ListItem{}
+	for _, item := range listResp.Items {
+		byID[item.ClientID] = item
+	}
+	rollup := byID[clientID].OpenEngagements
+	if len(rollup) != 1 {
+		t.Fatalf("OpenEngagements = %+v, want exactly one line", rollup)
+	}
+	line := rollup[0]
+	if line.InvoiceStatus == nil || *line.InvoiceStatus != openInvoiceStatus {
+		t.Fatalf("invoice status = %v, want %q -- the unpaid deposit must outrank the later paid balance, never read \"paid\"", line.InvoiceStatus, openInvoiceStatus)
+	}
+	if line.InvoiceAmountCents == nil || *line.InvoiceAmountCents != 20000 {
+		t.Fatalf("invoice amount = %v, want 20000 (the deposit's amount, not the 80000 balance)", line.InvoiceAmountCents)
+	}
+}
+
 // TestListHandler_OpenEngagementsRollup_NoClientsSkipsTheRollupQuery proves
 // attachOpenEngagements' empty-list short circuit: a Practice with no
 // Clients at all returns an empty page rather than erroring.

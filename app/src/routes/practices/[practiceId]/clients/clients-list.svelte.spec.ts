@@ -314,19 +314,37 @@ describe('the "see everyone" toggle', () => {
 // #264 (RA-G6): the open-Engagement rollup column.
 describe('the Engagements rollup column (#264)', () => {
 	it('shows one line per open Engagement, dropping none', async () => {
-		// The fixture's first Client already carries two openEngagements
-		// entries (#596: one fully populated, one fully absent).
+		// The fixture's first Client already carries three openEngagements
+		// entries (#596: one fully populated, one fully absent; #741 adds
+		// a settled-Contract line, asserted separately below).
 		await setup();
 
 		await expect
 			.element(
 				testPage.getByRole('cell', {
-					name: 'Contract: Sent · Doula: Yolanda Okonkwo-Fitzgerald · Active · Invoice: Open ($4,500.00)'
+					name: 'Contract: Sent · Doula: Yolanda Okonkwo-Fitzgerald · Active · Outstanding ($4,500.00)'
 				})
 			)
 			.toBeVisible();
 		await expect
 			.element(testPage.getByRole('cell', { name: 'Contract: No contract yet · Doula: No Doula assigned · Intake' }))
+			.toBeVisible();
+	});
+
+	// #741: an Invoice that is `open` (billed, unpaid) is what "is anything
+	// outstanding" means, so it gets the "Outstanding" wording asserted
+	// above; anything else -- here, a settled Contract's Invoice reading
+	// `paid` -- keeps the older "Invoice: <status>" wording, since there
+	// is nothing left for the reader to act on.
+	it('reads "Invoice: Paid" rather than "Outstanding" once nothing is outstanding', async () => {
+		await setup();
+
+		await expect
+			.element(
+				testPage.getByRole('cell', {
+					name: 'Contract: No contract yet · Doula: No Doula assigned · Active · Invoice: Paid ($1,000.00)'
+				})
+			)
 			.toBeVisible();
 	});
 
