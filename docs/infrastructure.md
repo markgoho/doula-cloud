@@ -104,7 +104,9 @@ Four of the six mutated fields need no entry. The revision name, generation and 
 2. `terraform apply` performed the import — **import writes state only; no `apply` in this exercise ever changed the project.**
 3. `terraform plan` against the imported state: *No changes. Your infrastructure matches the configuration.*
 4. The configuration was then edited to hold a different image tag, a different `commit-sha` template label and a different `client_version` — the three declared fields a deploy moves — and planned twice. **Without** the `lifecycle` block: `Plan: 0 to add, 1 to change, 0 to destroy`, naming those three and nothing else. **With** it: *No changes.* That is both halves of the claim — the plan is genuinely sensitive to those fields, and the block is what makes it ignore them.
-5. The same plan re-run after a real trunk deploy. This ticket's own merge is that deploy; both plan outputs are posted on [#797](https://github.com/markgoho/doula-cloud/issues/797), and the first build sub-issue re-runs the step against the committed configuration.
+5. The same plan re-run after a real trunk deploy. This ticket's own merge is that deploy.
+
+Every command and every plan output above is on [#797, as a comment](https://github.com/markgoho/doula-cloud/issues/797#issuecomment-5594346220), including the two things the spike settled that were not obvious from the API surface. The first build sub-issue re-runs the whole sequence against the committed configuration rather than trusting the spike.
 
 One thing the generated configuration turned up that the boundary above now accounts for: the live service still carries a `build_config` block pointing at `gs://run-sources-doula-cloud-us-central1/services/doula-api/1786507208…zip`, left behind by a long-past `gcloud run deploy --source`. It is inert and does not drift today — every deploy since has been by image reference, and the plan above was empty with it declared as-is — but it is exactly the kind of residue an import pass exists to surface, and a single future `--source` deploy would turn it red. Clear it, or add `build_config` to `ignore_changes`, before the first apply.
 
