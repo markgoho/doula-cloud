@@ -63,7 +63,8 @@
 		onCreate,
 		onRecordPayment,
 		onVoidInvoice,
-		onWriteOffInvoice
+		onWriteOffInvoice,
+		onReversePayment
 	}: {
 		invoices: Invoice[];
 		contractStatus: string;
@@ -73,8 +74,8 @@
 		clientsCanPay: boolean;
 		hasClientEmail: boolean;
 		isOwner: boolean;
-		/** Gates Record payment/Void/Write off -- ADR-0008's Contract-money
-		 * write row, Owner and Admin only. */
+		/** Gates Record payment/Void/Write off/Reverse payment -- ADR-0008's
+		 * Contract-money write row, Owner and Admin only. */
 		isOwnerOrAdmin: boolean;
 		paymentsSettingsHref: string;
 		onCreate: (billingMode?: BillingMode) => Promise<void>;
@@ -84,6 +85,7 @@
 		) => Promise<void>;
 		onVoidInvoice: (invoiceId: string) => Promise<void>;
 		onWriteOffInvoice: (invoiceId: string) => Promise<void>;
+		onReversePayment: (invoiceId: string, paymentId: string, reason: string) => Promise<void>;
 	} = $props();
 
 	const isBillable = $derived(contractStatus === billableContractStatus);
@@ -157,6 +159,7 @@
 		paymentNote = '';
 		paymentDate = todayIsoDate();
 		paymentError = '';
+		cancelReversingPayment();
 	}
 
 	function cancelRecordingPayment() {
@@ -204,6 +207,62 @@
 
 	function payingInvoice(): Invoice | undefined {
 		return invoices.find((invoice) => invoice.id === payingInvoiceId);
+	}
+
+	// #945's reversal flow: the same shape as payment recording above --
+	// which Invoice/Payment (if any) is being reversed, and which of its
+	// two steps -- fill in a reason, then confirm it -- it is on. Only one
+	// Invoice's form (recording or reversal) is ever open at a time.
+	let reversingInvoiceId = $state('');
+	let reversingPaymentId = $state('');
+	let reversalStep = $state<'form' | 'review'>('form');
+	let reversalReason = $state('');
+	let reversalError = $state('');
+	let isReversingPayment = $state(false);
+
+	function startReversingPayment(invoiceId: string, paymentId: string) {
+		reversingInvoiceId = invoiceId;
+		reversingPaymentId = paymentId;
+		reversalStep = 'form';
+		reversalReason = '';
+		reversalError = '';
+		cancelRecordingPayment();
+	}
+
+	function cancelReversingPayment() {
+		reversingInvoiceId = '';
+		reversingPaymentId = '';
+		reversalError = '';
+	}
+
+	/** Moves from the entry form to the review step, after the same
+	 * non-blank check the BFF itself enforces on the reason. */
+	function reviewReversal(event: SubmitEvent) {
+		event.preventDefault();
+		reversalError = '';
+		if (reversalReason.trim() === '') {
+			reversalError = 'Enter a reason for reversing this payment';
+			return;
+		}
+		reversalStep = 'review';
+	}
+
+	async function confirmReversal() {
+		isReversingPayment = true;
+		reversalError = '';
+		try {
+			await onReversePayment(reversingInvoiceId, reversingPaymentId, reversalReason.trim());
+			reversingInvoiceId = '';
+			reversingPaymentId = '';
+		} catch (error_) {
+			reversalError = error_ instanceof Error ? error_.message : 'Failed to reverse this payment';
+		} finally {
+			isReversingPayment = false;
+		}
+	}
+
+	function reversingInvoice(): Invoice | undefined {
+		return invoices.find((invoice) => invoice.id === reversingInvoiceId);
 	}
 
 	// Void and write-off (#271) need no confirm step of their own -- #271
@@ -277,6 +336,17 @@
 						{/if}
 					</cluster-l>
 				{/if}
+				{#if invoice.status === 'paid' && invoice.billingMode === 'by_hand' && isOwnerOrAdmin && invoice.activePaymentId}
+					{@const activePaymentId = invoice.activePaymentId}
+					<cluster-l space="var(--space-2)">
+						<Button
+							label="Reverse payment"
+							variant="secondary"
+							size="sm"
+							onClick={() => startReversingPayment(invoice.id, activePaymentId)}
+						/>
+					</cluster-l>
+				{/if}
 			</li>
 		{/each}
 	</ul>
@@ -346,6 +416,44 @@
 			{/if}
 			{#if paymentError}
 				<p role="alert">{paymentError}</p>
+			{/if}
+		</section>
+	{/if}
+	<!-- v8 ignore stop -->
+{/if}
+
+{#if reversingInvoiceId}
+	{@const invoice = reversingInvoice()}
+	<!-- v8 ignore start: reversingInvoiceId is only ever set to an id already
+	     present in invoices (startReversingPayment), so invoice is always
+	     found in practice -- this guard exists only against a reload
+	     racing the form open, not a path a test can drive without faking
+	     that race. -->
+	{#if invoice}
+		<section aria-label="Reverse this payment">
+			<h3>Reverse a payment of {formatAmount(invoice.amountCents)}</h3>
+			{#if reversalStep === 'form'}
+				<form onsubmit={reviewReversal}>
+					<LabeledField label="Reason">
+						{#snippet children({ id, describedBy, invalid })}
+							<Textarea {id} {describedBy} {invalid} value={reversalReason} onInput={(value) => (reversalReason = value)} />
+						{/snippet}
+					</LabeledField>
+					<Button label="Continue" type="submit" />
+					<Button label="Cancel" variant="secondary" onClick={cancelReversingPayment} />
+				</form>
+			{:else}
+				<DescriptionList
+					items={[
+						{ label: 'Amount', value: formatAmount(invoice.amountCents) },
+						{ label: 'Reason', value: reversalReason }
+					]}
+				/>
+				<Button label="Confirm and reverse" onClick={confirmReversal} loading={isReversingPayment} />
+				<Button label="Change" variant="secondary" onClick={() => (reversalStep = 'form')} />
+			{/if}
+			{#if reversalError}
+				<p role="alert">{reversalError}</p>
 			{/if}
 		</section>
 	{/if}

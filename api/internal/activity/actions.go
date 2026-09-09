@@ -209,6 +209,13 @@ const (
 	// was never paid.
 	ActionInvoiceVoided     EngagementAction = "invoice_voided"
 	ActionInvoiceWrittenOff EngagementAction = "invoice_written_off"
+	// ActionPaymentReversed records reversing a manually recorded Payment
+	// (#945) -- a new, additive payments row, never an edit of the
+	// original, that returns the Invoice to 'open' once nothing covers it
+	// any more. Always a StaffActor, the same reasoning
+	// ActionPaymentRecorded carries: an Owner or Admin chose to undo it,
+	// never the Client's own act.
+	ActionPaymentReversed EngagementAction = "payment_reversed"
 
 	ActionPortalInviteSent EngagementAction = "portal_invite_sent"
 
@@ -260,6 +267,7 @@ var moneyActions = map[EngagementAction]bool{
 	ActionPaymentRecorded:          true,
 	ActionInvoiceVoided:            true,
 	ActionInvoiceWrittenOff:        true,
+	ActionPaymentReversed:          true,
 }
 
 // MoneyActions returns every action ADR-0008 keeps Owner/Admin-only,

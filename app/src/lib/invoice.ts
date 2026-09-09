@@ -33,6 +33,11 @@ export interface Invoice {
 	 * date, never a day count: `daysOverdue` derives the count here, at
 	 * read, so it stays right in a tab left open overnight. */
 	dueAt: string;
+	/** The one manually recorded Payment currently covering this Invoice
+	 * (#945), if any -- present only while status is 'paid' via a
+	 * 'by_hand' Payment nothing has reversed yet. What reversePayment's
+	 * own paymentId argument needs. */
+	activePaymentId?: string;
 }
 
 /** A Practice's choice of billing rail (#271): Stripe-hosted Invoicing,
@@ -214,14 +219,19 @@ export async function setBillingMode(
 export type PaymentMethod = 'check' | 'bank_transfer' | 'cash' | 'other';
 
 /**
-A manually recorded Payment, as returned by recordPayment.
+One payments row -- a manually recorded Payment (as returned by
+recordPayment) or its reversal (#945, as returned by reversePayment).
+reversedPaymentId and reason are set only on a reversal row; method and
+note only on a manually recorded one.
 */
 export interface Payment {
 	id: string;
 	invoiceId: string;
 	amountCents: number;
-	method: PaymentMethod;
+	method?: PaymentMethod;
 	note?: string;
+	reversedPaymentId?: string;
+	reason?: string;
 	paidAt: string;
 	createdAt: string;
 }
@@ -256,6 +266,35 @@ export async function recordPayment(
 		headers: { 'Content-Type': 'application/json' },
 		body: JSON.stringify(input)
 	});
+	if (!response.ok) {
+		throw new Error(await apiErrorMessage(response));
+	}
+	return response.json();
+}
+
+/** Reverses a manually recorded Payment (#945): a new, additive
+ * payments row that nets paymentId's amount to zero and returns
+ * invoiceId to 'open' once nothing covers it any more. Owner and Admin
+ * only, matching recordPayment's own gate. Refused (409) against a
+ * Stripe-backed Invoice -- Stripe's own detach_payment call cannot undo
+ * a paid_out_of_band mark -- against an Invoice that is not currently
+ * 'paid', or against a Payment already reversed. reason is always
+ * required. */
+export async function reversePayment(
+	fetcher: Fetcher,
+	practiceId: string,
+	invoiceId: string,
+	paymentId: string,
+	reason: string
+): Promise<Payment> {
+	const response = await fetcher(
+		`${invoiceActionPath(practiceId, invoiceId, 'payments')}/${paymentId}/reverse`,
+		{
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ reason })
+		}
+	);
 	if (!response.ok) {
 		throw new Error(await apiErrorMessage(response));
 	}

@@ -350,11 +350,14 @@ Added on [#271](https://github.com/markgoho/doula-cloud/issues/271) — the writ
 
 **Raising an Invoice is the fifth row, added on [#947](https://github.com/markgoho/doula-cloud/issues/947).** It sits apart from the four above it: #282's own amendment already settled that raising stays ungated by role, per [#68](https://github.com/markgoho/doula-cloud/issues/68) — an Owner, an Admin, and a Doula of either employment type may all raise one, the same as any other Contract action. What #947 closes is reach, not role: the route carried no attaching-write test at all, so a contractor with no granted attachment could raise an Invoice on any Engagement at the Practice. It now carries the same reach test every other Engagement-scoped write does (`staffauth.AttachingWrite`) — an employee reaches every Engagement, a contractor only one she holds a granted attachment on. The amount an Invoice is raised for is no longer a figure any caller supplies: it is read straight off the Contract it bills (`contracts.amount_cents`, [#967](https://github.com/markgoho/doula-cloud/issues/967)), so it can never disagree with the signed Contract.
 
+**Reversing a manually recorded Payment is the sixth row, added on [#945](https://github.com/markgoho/doula-cloud/issues/945).** Same seat as the first four — the same gate #271 already puts on recording a Payment, since undoing one is closer in kind to recording one than to anything ungated in this table. It reaches a by-hand Invoice only: a Stripe-backed Invoice's `paid_out_of_band` mark has no working Stripe-side undo (verified in the Sandbox — Stripe's own `detach_payment` call only detaches a PaymentIntent-backed payment, and `paid_out_of_band` creates a PaymentRecord-backed one instead), so that case is refused the same door void and write-off already use for a Stripe-backed Invoice.
+
 | | Owner | Admin | Doula (employee) | Doula (contractor) |
 | --- | --- | --- | --- | --- |
 | Record a Payment against an open Invoice | ✓ | ✓ | ✗ | ✗ |
 | Void a by-hand Invoice | ✓ | ✓ | ✗ | ✗ |
 | Write off a by-hand Invoice | ✓ | ✓ | ✗ | ✗ |
+| Reverse a manually recorded Payment against a by-hand Invoice | ✓ | ✓ | ✗ | ✗ |
 | Change an already-established billing mode | ✓ | ✗ | ✗ | ✗ |
 | Raise an Invoice | ✓ | ✓ | ✓ — every Engagement at the Practice | ✓ — only an Engagement she holds a granted attachment on |
 

@@ -61,6 +61,31 @@ const MsgStripeInvoiceCannotBeVoidedOrWrittenOff = "A Stripe-backed Invoice cann
 // (it may carry Stripe-internal detail unfit for a Staff-facing message).
 const MsgStripePayOutOfBandFailed = "Stripe would not mark this Invoice paid, so nothing was recorded. Try again, or check this Practice's Stripe Dashboard."
 
+// MsgInvoiceNotPaid refuses reversing a Payment against an Invoice that is
+// not currently 'paid' (#945) -- there is nothing to undo.
+const MsgInvoiceNotPaid = "This Invoice is not paid, so there is nothing to reverse."
+
+// MsgStripeInvoiceCannotBeReversed refuses reversing a Payment against a
+// Stripe-backed Invoice (#945), the same door
+// MsgStripeInvoiceCannotBeVoidedOrWrittenOff already uses. Stripe's
+// detach_payment call only detaches a PaymentIntent-backed payment, and
+// paid_out_of_band (#271) creates a PaymentRecord-backed one instead --
+// verified in the Sandbox against every preview API version that exists,
+// not just the docs (#945's own issue comment). There is no working
+// Stripe-side undo today.
+const MsgStripeInvoiceCannotBeReversed = "A Payment against a Stripe-backed Invoice cannot be reversed here -- use the Stripe Dashboard."
+
+// MsgPaymentNotReversible refuses a reversal target that is not a
+// manually recorded Payment belonging to :invoiceId -- either a Payment
+// this Invoice never had, a Stripe-collected one (out of scope: refunded
+// through Stripe's own refund object instead), or a reversal row itself
+// (a reversal cannot itself be reversed).
+const MsgPaymentNotReversible = "This Payment cannot be reversed."
+
+// MsgPaymentAlreadyReversed refuses reversing a Payment a second time --
+// a reversal row already targets it.
+const MsgPaymentAlreadyReversed = "This Payment has already been reversed."
+
 // RecordPaymentRequest is the body of a POST to PostManualPaymentHandler.
 // The amount is never supplied -- it is always the Invoice's own
 // amount_cents (#271: partial payments stay out of the model).
@@ -75,16 +100,20 @@ type RecordPaymentRequest struct {
 	PaidOn string `json:"paidOn"`
 }
 
-// PaymentView is a manually recorded Payment, as returned by
-// PostManualPaymentHandler.
+// PaymentView is one payments row -- a manually recorded Payment (as
+// returned by PostManualPaymentHandler) or its reversal (#945, as returned
+// by PostReversePaymentHandler). ReversedPaymentID and Reason are set only
+// on a reversal row; Method and Note only on a manually recorded one.
 type PaymentView struct {
-	ID          string    `json:"id"`
-	InvoiceID   string    `json:"invoiceId"`
-	AmountCents int64     `json:"amountCents"`
-	Method      string    `json:"method"`
-	Note        *string   `json:"note,omitempty"`
-	PaidAt      time.Time `json:"paidAt"`
-	CreatedAt   time.Time `json:"createdAt"`
+	ID                string    `json:"id"`
+	InvoiceID         string    `json:"invoiceId"`
+	AmountCents       int64     `json:"amountCents"`
+	Method            string    `json:"method,omitempty"`
+	Note              *string   `json:"note,omitempty"`
+	ReversedPaymentID *string   `json:"reversedPaymentId,omitempty"`
+	Reason            *string   `json:"reason,omitempty"`
+	PaidAt            time.Time `json:"paidAt"`
+	CreatedAt         time.Time `json:"createdAt"`
 }
 
 // resolveInvoiceForPractice locks :invoiceId's row FOR UPDATE within
@@ -216,7 +245,7 @@ func PostManualPaymentHandler(client Client) http.Handler {
 		}
 
 		staffID, _ := staffauth.StaffID(r.Context())
-		diff, err := json.Marshal(map[string]any{"method": string(req.Method), "amountCents": amountCents})
+		diff, err := json.Marshal(map[string]any{"method": string(req.Method), diffKeyAmountCents: amountCents})
 		if err != nil {
 			// coverage:ignore reason: a map of a string and an int64 always marshals cleanly, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
@@ -342,4 +371,187 @@ func PostVoidInvoiceHandler() http.Handler {
 // is not 'open'. Must be mounted behind staffauth.Middleware.
 func PostWriteOffInvoiceHandler() http.Handler {
 	return transitionByHandInvoice("uncollectible", `UPDATE invoices SET status = 'uncollectible' WHERE id = $1`, activity.ActionInvoiceWrittenOff)
+}
+
+// errPaymentAlreadyReversed signals that :paymentId is a manually recorded
+// Payment belonging to :invoiceId, but a reversal row already targets it
+// -- distinct from sql.ErrNoRows (no such Payment at all, or one that is
+// not manually recorded) so the handler can tell the two refusals apart.
+var errPaymentAlreadyReversed = errors.New("payments: payment already reversed")
+
+// ReversePaymentRequest is the body of a POST to
+// PostReversePaymentHandler. Reason is always required -- unlike a
+// recorded Payment's own optional note, undoing one always needs a stated
+// why (#945's own Activity-log acceptance criterion).
+type ReversePaymentRequest struct {
+	Reason string `json:"reason"`
+}
+
+// resolvePaymentForReversal locks :paymentId's row FOR UPDATE, scoped to
+// :invoiceId and to kind = 'manual' -- a Stripe-collected Payment or a
+// reversal row itself never matches, so either one reaches the same
+// sql.ErrNoRows a nonexistent id would (MsgPaymentNotReversible covers
+// all three; the caller does not need to tell them apart). Returns
+// errPaymentAlreadyReversed if a reversal already targets this Payment --
+// the partial unique index on payments.reversed_payment_id
+// (00103_payment_reversal.sql) is the same invariant enforced at the
+// database level, but this pre-check turns it into a clean 409 instead of
+// a raw constraint violation.
+func resolvePaymentForReversal(ctx context.Context, tx *sql.Tx, invoiceID, paymentID string) (amountCents int64, err error) {
+	err = tx.QueryRowContext(ctx,
+		`SELECT amount_cents FROM payments
+		  WHERE id = $1 AND invoice_id = $2 AND kind = 'manual'
+		  FOR UPDATE`,
+		paymentID, invoiceID,
+	).Scan(&amountCents)
+	// coverage:ignore reason: the sql.ErrNoRows branch is exercised by unit tests; a non-ErrNoRows DB failure here is not
+	if err != nil {
+		return 0, fmt.Errorf("payments: resolve payment for reversal: %w", err)
+	}
+	var alreadyReversed bool
+	if err := tx.QueryRowContext(ctx,
+		`SELECT EXISTS (SELECT 1 FROM payments WHERE reversed_payment_id = $1)`, paymentID,
+	).Scan(&alreadyReversed); err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		return 0, fmt.Errorf("payments: check payment already reversed: %w", err)
+	}
+	if alreadyReversed {
+		return 0, errPaymentAlreadyReversed
+	}
+	return amountCents, nil
+}
+
+// PostReversePaymentHandler reverses one manually recorded Payment (#945):
+// an additive row in the same append-only payments table -- never an
+// UPDATE or DELETE on the original -- that nets the original's amount to
+// zero and returns its Invoice to 'open' once nothing covers it any more.
+// A reversal cannot itself be reversed (resolvePaymentForReversal's own
+// kind = 'manual' scope refuses a reversal row as a target), and a
+// Payment already reversed cannot be reversed again
+// (MsgPaymentAlreadyReversed).
+//
+// Refused against a Stripe-backed Invoice (MsgStripeInvoiceCannotBeReversed:
+// Stripe's own detach_payment call cannot undo a paid_out_of_band mark,
+// verified in the Sandbox -- see #945's issue comment) and against an
+// Invoice that is not currently 'paid' (MsgInvoiceNotPaid). Must be
+// mounted behind staffauth.Middleware.
+//
+// Owner and Admin is declared at the mount, not checked here (#990's
+// pattern, matching PostManualPaymentHandler above): widening or
+// narrowing this route means editing its ir.ReplayableGated role list in
+// mount.go.
+func PostReversePaymentHandler() http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		tx, practiceID, ok := staffauth.RequireTx(w, r)
+		// coverage:ignore reason: staffauth.Middleware always sets a tx before this handler runs
+		if !ok {
+			return
+		}
+		invoiceID := r.PathValue("invoiceId")
+		if !staffauth.ParseUUID(w, "invoice", invoiceID) {
+			return
+		}
+		paymentID := r.PathValue("paymentId")
+		if !staffauth.ParseUUID(w, "payment", paymentID) {
+			return
+		}
+
+		var req ReversePaymentRequest
+		if !apierr.DecodeJSON(w, r, &req) {
+			return
+		}
+		if req.Reason == "" {
+			apierr.WriteError(w, "reason cannot be blank", http.StatusBadRequest)
+			return
+		}
+
+		status, _, stripeInvoiceID, engagementID, err := resolveInvoiceForPractice(r.Context(), tx, practiceID, invoiceID)
+		if errors.Is(err, sql.ErrNoRows) {
+			apierr.WriteError(w, "invoice not found", http.StatusNotFound)
+			return
+		}
+		if err != nil {
+			// coverage:ignore reason: DB query failure, not exercised by unit tests
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+			return
+		}
+		if stripeInvoiceID.Valid {
+			apierr.Write(w, http.StatusConflict, apierr.CodeFailedPrecondition, MsgStripeInvoiceCannotBeReversed, nil)
+			return
+		}
+		if status != "paid" {
+			apierr.Write(w, http.StatusConflict, apierr.CodeFailedPrecondition, MsgInvoiceNotPaid, nil)
+			return
+		}
+
+		amountCents, err := resolvePaymentForReversal(r.Context(), tx, invoiceID, paymentID)
+		if errors.Is(err, sql.ErrNoRows) {
+			apierr.WriteError(w, MsgPaymentNotReversible, http.StatusNotFound)
+			return
+		}
+		if errors.Is(err, errPaymentAlreadyReversed) {
+			apierr.Write(w, http.StatusConflict, apierr.CodeFailedPrecondition, MsgPaymentAlreadyReversed, nil)
+			return
+		}
+		if err != nil {
+			// coverage:ignore reason: DB query failure, not exercised by unit tests
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+			return
+		}
+
+		reversedAt := time.Now().UTC()
+		var reversalID string
+		var createdAt time.Time
+		if err := tx.QueryRowContext(r.Context(),
+			`INSERT INTO payments (invoice_id, amount_cents, paid_at, kind, reversed_payment_id, reason)
+			 VALUES ($1, $2, $3, 'reversal', $4, $5) RETURNING id, created_at`,
+			invoiceID, -amountCents, reversedAt, paymentID, req.Reason,
+		).Scan(&reversalID, &createdAt); err != nil {
+			// coverage:ignore reason: DB query failure, not exercised by unit tests
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+			return
+		}
+		if _, err := tx.ExecContext(r.Context(),
+			`UPDATE invoices SET status = 'open', paid_at = NULL WHERE id = $1`, invoiceID,
+		); err != nil {
+			// coverage:ignore reason: DB query failure, not exercised by unit tests
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+			return
+		}
+
+		staffID, _ := staffauth.StaffID(r.Context())
+		// reason is deliberately excluded from this diff -- PostManualPaymentHandler's
+		// own diff excludes note the same way, so a personal-data-bearing
+		// field never lands anywhere but the one column the erasure sweep
+		// (client.redactPaymentReasons) actually reaches.
+		diff, err := json.Marshal(map[string]any{diffKeyAmountCents: -amountCents, "reversedPaymentId": paymentID})
+		if err != nil {
+			// coverage:ignore reason: a map of an int64 and a string always marshals cleanly, not exercised by unit tests
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+			return
+		}
+		if err := activity.Record(r.Context(), tx, activity.Entry{
+			PracticeID:  practiceID,
+			SubjectKind: activity.SubjectEngagement,
+			SubjectID:   engagementID,
+			Action:      string(activity.ActionPaymentReversed),
+			Diff:        diff,
+			Actor:       activity.StaffActor(staffID),
+		}); err != nil {
+			// coverage:ignore reason: DB query failure, not exercised by unit tests
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+			return
+		}
+
+		view := PaymentView{
+			ID:                reversalID,
+			InvoiceID:         invoiceID,
+			AmountCents:       -amountCents,
+			ReversedPaymentID: &paymentID,
+			Reason:            &req.Reason,
+			PaidAt:            reversedAt,
+			CreatedAt:         createdAt,
+		}
+		apierr.WriteJSON(w, http.StatusCreated, view)
+	})
 }

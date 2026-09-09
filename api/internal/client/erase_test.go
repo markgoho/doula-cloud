@@ -185,6 +185,69 @@ func TestEraseHandler_ShredsHerHistoryWithoutTouchingIt(t *testing.T) {
 	}
 }
 
+// TestEraseHandler_RedactsPaymentReversalReasons proves erasure empties
+// the free-text reason on a reversal row (#945) against one of her
+// Invoices -- the same personal-data sweep #271 already runs for a
+// manually recorded Payment's own note, on the same table's other
+// free-text column.
+func TestEraseHandler_RedactsPaymentReversalReasons(t *testing.T) {
+	db := testdb.New(t)
+	const uid = "owner-erase-payment-reversal-reason"
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
+	clientID, engagementID := testdb.SeedEngagementInStatus(t, db, practiceID, "Ada Lovelace", "ada@example.com", "active")
+	contractID := seedClientContract(t, db, engagementID, "signed")
+	invoiceID := seedClientInvoice(t, db, practiceID, contractID, "paid", 15000)
+
+	var paymentID string
+	if err := db.Admin.QueryRowContext(t.Context(),
+		`INSERT INTO payments (invoice_id, amount_cents, paid_at, kind, method) VALUES ($1, 15000, now(), 'manual', 'check') RETURNING id`,
+		invoiceID,
+	).Scan(&paymentID); err != nil {
+		t.Fatalf("seed manual payment: %v", err)
+	}
+	if _, err := db.Admin.ExecContext(t.Context(),
+		`INSERT INTO payments (invoice_id, amount_cents, paid_at, kind, reversed_payment_id, reason)
+		 VALUES ($1, -15000, now(), 'reversal', $2, 'logged against the wrong invoice')`,
+		invoiceID, paymentID,
+	); err != nil {
+		t.Fatalf("seed reversal: %v", err)
+	}
+
+	srv, session := newServer(t, db, uid)
+	defer srv.Close()
+
+	resp := postErasure(t, session, srv, practiceID, clientID)
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
+	}
+	var diff []byte
+	if err := db.Admin.QueryRowContext(t.Context(),
+		`SELECT diff FROM activity WHERE subject_kind = 'client' AND subject_id = $1 AND action = 'erased'`, clientID,
+	).Scan(&diff); err != nil {
+		t.Fatalf("query erased activity row: %v", err)
+	}
+	var scope struct {
+		PaymentReversalReasons int `json:"paymentReversalReasons"`
+	}
+	if err := json.Unmarshal(diff, &scope); err != nil {
+		t.Fatalf("decode erasure scope: %v", err)
+	}
+	if scope.PaymentReversalReasons != 1 {
+		t.Fatalf("erasureScope.paymentReversalReasons = %d, want 1", scope.PaymentReversalReasons)
+	}
+
+	var reason *string
+	if err := db.Admin.QueryRowContext(t.Context(),
+		`SELECT reason FROM payments WHERE invoice_id = $1 AND kind = 'reversal'`, invoiceID,
+	).Scan(&reason); err != nil {
+		t.Fatalf("query reversal reason: %v", err)
+	}
+	if reason != nil {
+		t.Fatalf("reversal reason = %v, want NULL after erasure", *reason)
+	}
+}
+
 // TestEraseHandler_RefusesEveryRoleButOwner is the Owner-only criterion.
 func TestEraseHandler_RefusesEveryRoleButOwner(t *testing.T) {
 	for name, roles := range map[string][]string{

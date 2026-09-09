@@ -71,6 +71,12 @@ type erasureScope struct {
 	// this erasure emptied -- the same "count, never the value" rule
 	// erasureScope already applies to Contracts.
 	PaymentNotes int `json:"paymentNotes"`
+	// PaymentReversalReasons counts reversal rows (#945) whose reason this
+	// erasure emptied -- a second personal-data surface on the same
+	// payments table, counted separately from PaymentNotes because the two
+	// columns are set on different kinds of row (note on 'manual', reason
+	// on 'reversal') and neither implies the other.
+	PaymentReversalReasons int `json:"paymentReversalReasons"`
 }
 
 // EraseHandler erases one Client's personal data at the Owner's
@@ -270,6 +276,11 @@ func Erase(ctx context.Context, tx *sql.Tx, practiceID, clientID string, actor a
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		return ErasureResponse{}, err
 	}
+	paymentReversalReasons, err := redactPaymentReversalReasons(ctx, tx, clientID)
+	if err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		return ErasureResponse{}, err
+	}
 
 	customers, eligibleAt, err := enqueueStripeErasure(ctx, tx, practiceID, clientID, now)
 	if err != nil {
@@ -289,6 +300,7 @@ func Erase(ctx context.Context, tx *sql.Tx, practiceID, clientID string, actor a
 		SessionsEnded:             sessionsEnded,
 		StripeRedactionEligibleAt: eligibleAt,
 		PaymentNotes:              paymentNotes,
+		PaymentReversalReasons:    paymentReversalReasons,
 	}
 	if err := recordErasure(ctx, tx, practiceID, clientID, actor, scope); err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
@@ -392,6 +404,37 @@ func redactPaymentNotes(ctx context.Context, tx *sql.Tx, clientID string) (int, 
 	if err != nil {
 		// coverage:ignore reason: lib/pq always reports RowsAffected, not exercised by unit tests
 		return 0, fmt.Errorf("client: count redacted payment notes: %w", err)
+	}
+	return int(n), nil
+}
+
+// redactPaymentReversalReasons empties the free-text reason on every
+// reversal row (#945) against one of clientID's Invoices -- the same
+// personal-data surface redactPaymentNotes already covers for a manually
+// recorded Payment's own note, on the same table's other free-text
+// column. Only a 'reversal' row ever carries a reason
+// (payments_reason_matches_kind's own CHECK), so this reaches nothing a
+// 'manual' or 'stripe' row holds.
+func redactPaymentReversalReasons(ctx context.Context, tx *sql.Tx, clientID string) (int, error) {
+	res, err := tx.ExecContext(ctx,
+		`UPDATE payments SET reason = NULL
+		 WHERE reason IS NOT NULL
+		   AND invoice_id IN (
+		       SELECT i.id FROM invoices i
+		       JOIN contracts c ON c.id = i.contract_id
+		       JOIN engagements e ON e.id = c.engagement_id
+		       WHERE e.client_id = $1
+		   )`,
+		clientID,
+	)
+	if err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		return 0, fmt.Errorf("client: redact payment reversal reasons: %w", err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		// coverage:ignore reason: lib/pq always reports RowsAffected, not exercised by unit tests
+		return 0, fmt.Errorf("client: count redacted payment reversal reasons: %w", err)
 	}
 	return int(n), nil
 }
