@@ -74,9 +74,10 @@ test('An invitation arrives as readable mail, and a complaint stops the next one
 	await expect(page.getByRole('heading', { name: 'Tell us about yourself' })).toBeVisible();
 
 	// Mailgun's event side. A complaint for an address suppresses it
-	// account-wide (ADR-0029), so the invitation queued for it after the
-	// complaint is dead-lettered by mailsuppress.Sender and never
-	// reaches the mailbox at all.
+	// account-wide (ADR-0029), so an invitation to it after the complaint
+	// is refused at the endpoint (#861) and no mail is ever queued. The
+	// send-time guard in mailsuppress.Sender still stands behind that for
+	// an address suppressed after its mail was already queued.
 	const complaint = await request.post(`${MAILBOX_URL}/api/delivery-event`, {
 		data: { to: complainerEmail, event: 'complained', reason: 'abuse' }
 	});
@@ -87,7 +88,12 @@ test('An invitation arrives as readable mail, and a complaint stops the next one
 	await page.goto(`/practices/${practiceId}/invite`);
 	await page.getByLabel('Their email').fill(complainerEmail);
 	await page.getByRole('button', { name: 'Send invite' }).click();
-	await expect(page.getByText(`is on its way to ${complainerEmail}`)).toBeVisible();
+	// #861: the invitation is refused at the endpoint now, before any row
+	// is written, so the Owner is told at the field rather than reading a
+	// success message for mail that will only ever be dead-lettered.
+	await expect(
+		page.getByText('This email address is blocked. Blocked email addresses shows why and what can be done.').first()
+	).toBeVisible();
 	const drainedAgain = await drain();
 	expect(drainedAgain.ok(), 'draining after the complaint failed').toBe(true);
 
