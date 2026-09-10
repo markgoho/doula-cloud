@@ -42,19 +42,33 @@ const dateLayout = "2006-01-02"
 // reason any other Visit after the pivot does, with no branch on how the
 // birth went.
 //
-// Both instants are compared as calendar days in UTC. Doula Cloud has no
-// Practice timezone today (grepped: no timezone column, no per-Practice
-// setting anywhere in the schema), so UTC is the one zone every Practice
-// already agrees on implicitly. This can misplace a birth logged late in
-// the evening in a zone behind UTC across midnight into the following
-// UTC day -- filed as #281's own follow-up rather than solved here,
-// since a Practice timezone is a new fact plus a settings screen, not
-// this derivation's job.
-func DeriveType(at time.Time, pregnancyEndedOn *string) string {
+// in is the Practice's own timezone (#953, practices.timezone), and it
+// is what makes "the same day" mean anything here: pregnancyEndedOn
+// comes off a `date` column, which carries no zone at all, so the two
+// sides of the comparison are only commensurable once somebody says
+// which day the Visit's instant falls on. That somebody is the Practice.
+// This used to be UTC, on the reasoning that it was the one zone every
+// Practice agreed on implicitly -- but a zone behind UTC crosses
+// midnight in the evening, so a Visit worked the same evening as the
+// birth typed postpartum, which is not what the Doula who was there saw.
+//
+// Not the reader's own zone, and not a zone on the Visit. One function
+// computes this on every read and no two surfaces may disagree
+// (CONTEXT.md, Visit), which a reader-local zone breaks outright: two
+// Staff in two zones would read two types for one Visit. A per-Visit
+// zone belongs to the richer time model parked on #330.
+//
+// A nil location is treated as UTC rather than panicking, matching what
+// time.Time's own In would refuse: callers get the previous behavior
+// instead of a crash on a zone the Practice row could not supply.
+func DeriveType(at time.Time, pregnancyEndedOn *string, in *time.Location) string {
 	if pregnancyEndedOn == nil || *pregnancyEndedOn == "" {
 		return TypePrenatal
 	}
-	atDate := at.UTC().Format(dateLayout)
+	if in == nil {
+		in = time.UTC
+	}
+	atDate := at.In(in).Format(dateLayout)
 	switch {
 	case atDate < *pregnancyEndedOn:
 		return TypePrenatal

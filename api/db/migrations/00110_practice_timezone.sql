@@ -1,0 +1,36 @@
+-- +goose Up
+-- #953: the one zone a Practice's date math happens in. Before this,
+-- visit.DeriveType formatted a Visit's instant with .UTC() and compared
+-- the resulting YYYY-MM-DD against engagements.pregnancy_ended_on, a
+-- zone-less `date`. In any zone behind UTC an evening Visit crosses into
+-- the next UTC calendar day, so a Visit worked the same evening as the
+-- birth typed 'postpartum'. A `date` column carries no zone at all, so
+-- something has to say which day "the same day" means; this is it.
+--
+-- One zone per Practice rather than one per Visit or one per reader.
+-- CONTEXT.md's Visit entry has one function compute the type on every
+-- read and forbids two surfaces disagreeing, which rules out a
+-- reader-local zone: two Staff in two zones would read two types for one
+-- Visit. A per-Visit zone belongs to the richer time model (#330), which
+-- that same entry parks deliberately.
+--
+-- text, not an enum and not a CHECK against pg_timezone_names: the IANA
+-- database is revised several times a year, an enum would need a
+-- migration per revision, and pg_timezone_names is not immutable so a
+-- CHECK cannot call it. The write side validates instead -- today by
+-- time.LoadLocation in the BFF, and at the moment an Owner can first
+-- state one, on the settings surface #1166 adds.
+--
+-- The DEFAULT stays rather than taking guardrail_test.go's usual
+-- DEFAULT-then-DROP form, and that is the point rather than an
+-- oversight: nothing on the signup path asks for a zone yet (#1166), so
+-- every INSERT into practices would fail the moment the default went
+-- away. 'America/New_York' is a stopgap for that window, grounded in the
+-- product being US-only today (Work State enumerates US states and
+-- nothing else) and in the pilot being a Rochester, New York agency --
+-- not a claim that a Practice's zone is a thing the product gets to
+-- choose. #1166 replaces it with a zone the Owner states.
+ALTER TABLE practices ADD COLUMN timezone text NOT NULL DEFAULT 'America/New_York';
+
+-- +goose Down
+ALTER TABLE practices DROP COLUMN timezone;
