@@ -451,6 +451,20 @@ test('Archetypes B, C, D, E, F, G -- the Staff side', async ({ page, request, co
 			h1: 'Delete this Practice'
 		},
 		{
+			// #894: archetype F by shape, like the settings screens above
+			// that postdate #405's survey. Scanned as the Owner this batch
+			// signs in as, so it reads the branch that carries the setting
+			// itself -- the status Badge, the Staff-count sentence and the
+			// toggle -- rather than the one-Notice screen a non-Owner meets.
+			// The default "optional for other Staff" state, since a fresh
+			// Practice starts there and the two states differ by a Badge
+			// label and a Button label, not by a node axe reads differently.
+			key: 'practices/[practiceId]/settings/mfa',
+			archetype: 'F',
+			url: `/practices/${practiceId}/settings/mfa`,
+			h1: 'Multi-factor authentication'
+		},
+		{
 			// Scoped to the person, not this Practice (#437), so it sits
 			// outside the practiceId group every other route above is under
 			// -- the one route in this loop not built from `practiceId`. Now
