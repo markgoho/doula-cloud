@@ -329,6 +329,20 @@ export interface OverflowMeasurement {
  * floor being wrong rather than as the instrument being unable to see, and
  * a gate that cannot see a region is worth nothing.
  *
+ * This measurement and no other, and that is a measured fact rather than a
+ * scoping choice. A closed disclosure's descendants still report their own
+ * geometry in this engine -- measured on #1124, `measureWrap`'s line counts
+ * and the single-row criterion's element tops read the SAME numbers closed
+ * as open -- while the disclosure itself contributes nothing to any
+ * ancestor's `scrollWidth`. So the overflow criterion is the only one of the
+ * four that was blind, and the other three need no open/undo pair.
+ *
+ * The limit that would change that, named because it is a limit rather than
+ * an oversight: a component that hides its own closed content with a plain
+ * `display: none` (`DataTable`'s `details:not([open]) > .frame` rule does
+ * exactly this) takes the geometry away from every criterion, not just this
+ * one. No component with a non-overflow criterion does that today.
+ *
  * `openDisclosures` is imported rather than re-queried here: one artifact is
  * enforced by there being one function (#570), and that function's own
  * comment named this ticket as the second caller before the second caller

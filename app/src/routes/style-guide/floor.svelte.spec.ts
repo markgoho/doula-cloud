@@ -543,7 +543,7 @@ describe('the floor check (#564)', () => {
 describe("the floor check's overflow measurement, over a closed disclosure (#1124)", () => {
 	const AT_WIDTH = 320;
 
-	it('lays out nothing at all while the disclosure stays closed', () => {
+	it('adds nothing to the frame scroll width while the disclosure stays closed', () => {
 		const { frame, remove } = frameHolding(ledgerMarkup());
 		try {
 			atWidth(frame, AT_WIDTH);
