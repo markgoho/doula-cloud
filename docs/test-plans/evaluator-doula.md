@@ -104,9 +104,7 @@ screens open, and what they show is the finding. TB-G1 backs two steps.
 below: the step can be performed, and what the Staff screen hands back is the
 result.
 
-5.1 moved from `manual` to `automated (add-client-visits.e2e.ts)` in the 2026-09-10
-desk pass below, and 5.2-b was appended: the free save and the act that spends the
-Credit are two acts now, so they are two steps.
+5.1 moved from `manual` to `automated (add-client-visits.e2e.ts)` in the 2026-09-10 desk pass below, and 5.2-b was appended: the free save and the act that spends the Credit are two acts now, so they are two steps.
 
 Her plan is the least automatable of the six, and for a reason worth keeping: two
 of her seven stages happen before the product exists, and a Playwright spec cannot

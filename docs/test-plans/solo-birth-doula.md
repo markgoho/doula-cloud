@@ -121,14 +121,11 @@ on 2026-08-22.
 | `blocked` | 0 |
 | `missing-feature` | 3 ([MO-G1](https://github.com/markgoho/doula-cloud/issues/250), [MO-G2](https://github.com/markgoho/doula-cloud/issues/251), [MO-G4](https://github.com/markgoho/doula-cloud/issues/253)) |
 
-MO-G3 ([#252](https://github.com/markgoho/doula-cloud/issues/252)) is closed and
-3.1-a is walkable, so it no longer holds a step.
+MO-G3 ([#252](https://github.com/markgoho/doula-cloud/issues/252)) is closed and 3.1-a is walkable, so it no longer holds a step.
 
 MO-G5 to MO-G9 are experience-layer or infrastructure findings; they are observed
 inside the steps above (3.4, 7.1, 7.2-a) rather than given steps of their own.
-MO-G9 ([#257](https://github.com/markgoho/doula-cloud/issues/257)) is closed as
-well — 3.4 still meets a wall, but a paid one she can walk through, not the dead
-end that gap named.
+MO-G9 ([#257](https://github.com/markgoho/doula-cloud/issues/257)) is closed as well — 3.4 still meets a wall, but a paid one she can walk through, not the dead end that gap named.
 
 ## Run log
 
