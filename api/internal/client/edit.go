@@ -5,7 +5,6 @@ import (
 	"errors"
 	"net/http"
 	"strings"
-	"time"
 
 	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/portalinvite"
@@ -30,24 +29,27 @@ type EditRequest struct {
 // one wire shape for both gates. Substitution true is gate one: a name
 // column changed and the result is exactly another Client's given and
 // family name; Matches is just the substituted-into record(s), and
-// MergeOffered is always false -- Override is the only next step.
-// Substitution false is gate two: a possible duplicate, asked rather
-// than blocked; MergeOffered says whether "This is her" is available at
-// all (ADR-0017's amendment: only while the record being edited holds no
-// Engagement, no Engagement Request, no portal invitation and no portal
-// account), and each match's WouldSurvive says which side a "This is
-// her" answer on it would keep -- computed here, not by the frontend, so
-// the changes it lists are the changes MergeHandler would actually make
-// (direction never depends on which record is open).
+// Override is the only next step. Substitution false is gate two: a
+// possible duplicate, asked rather than blocked, where each match's
+// WouldSurvive says which side a "This is her" answer on it would keep
+// -- computed here, not by the frontend, so the changes it lists are the
+// changes MergeHandler would actually make (direction never depends on
+// which record is open).
+//
+// There is no MergeOffered any more (#813, ADR-0039). It said whether
+// "This is her" was available at all, and its answer was always "only
+// while the record being edited holds no Engagement, no Engagement
+// Request and no portal account" -- which is exactly the case the true
+// merge now covers. Attachment decides which record survives; it no
+// longer decides whether the question may be asked.
 type EditConflictResponse struct {
 	Matches      []CollisionMatch `json:"matches"`
 	Substitution bool             `json:"substitution"`
-	MergeOffered bool             `json:"mergeOffered"`
 }
 
 // CollisionMatch is one Match FindCollisions turned up, plus whether it
-// would survive a merge -- meaningless (and left false) outside gate
-// two's MergeOffered case.
+// would survive a merge -- meaningless (and left false) on gate one,
+// which offers no merge.
 type CollisionMatch struct {
 	Match
 	WouldSurvive bool `json:"wouldSurvive"`
@@ -186,33 +188,27 @@ func EditHandler() http.Handler {
 					apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 					return
 				}
-				mergeOffered := !sourceAttached
+				sourceCreatedAt, err := clientCreatedAt(r.Context(), tx, clientID)
+				if err != nil {
+					// coverage:ignore reason: DB query failure, not exercised by unit tests
+					apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+					return
+				}
 
-				var sourceCreatedAt time.Time
-				if mergeOffered {
-					sourceCreatedAt, err = clientCreatedAt(r.Context(), tx, clientID)
+				matches := make([]CollisionMatch, len(collisions))
+				for i, c := range collisions {
+					otherAttached, err := isAttachedRecord(r.Context(), tx, c.ID)
 					if err != nil {
 						// coverage:ignore reason: DB query failure, not exercised by unit tests
 						apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 						return
 					}
-				}
-
-				matches := make([]CollisionMatch, len(collisions))
-				for i, c := range collisions {
-					match := CollisionMatch{Match: c.Match}
-					if mergeOffered {
-						otherAttached, err := isAttachedRecord(r.Context(), tx, c.ID)
-						if err != nil {
-							// coverage:ignore reason: DB query failure, not exercised by unit tests
-							apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
-							return
-						}
-						match.WouldSurvive = resolveMergeDirection(otherAttached, sourceCreatedAt, c.CreatedAt)
+					matches[i] = CollisionMatch{
+						Match:        c.Match,
+						WouldSurvive: resolveMergeDirection(sourceAttached, otherAttached, sourceCreatedAt, c.CreatedAt),
 					}
-					matches[i] = match
 				}
-				writeConflict(w, EditConflictResponse{Matches: matches, MergeOffered: mergeOffered})
+				writeConflict(w, EditConflictResponse{Matches: matches})
 				return
 			}
 		}
