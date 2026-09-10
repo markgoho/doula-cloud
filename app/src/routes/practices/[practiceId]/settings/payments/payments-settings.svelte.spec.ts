@@ -59,6 +59,12 @@ interface MockOptions {
 	   case -- a refusal is the cooldown, or an Owner who connected in
 	   another tab, neither of which the screen can see coming. */
 	nudgeRefusal?: string;
+	/* What #271's billing-mode read answers with. The default is a
+	   Practice that has already chosen Stripe, because that is the
+	   established state every other assertion here is made against; `{}`
+	   is a Practice that has raised no Invoice yet and so has never been
+	   asked. */
+	billingModeBody?: unknown;
 }
 
 function mockApi({
@@ -67,7 +73,8 @@ function mockApi({
 	requirementsDue = [],
 	websiteMode = 'own',
 	pageState: websitePageState = 'pending',
-	nudgeRefusal
+	nudgeRefusal,
+	billingModeBody = { billingMode: 'stripe' }
 }: MockOptions = {}) {
 	// The Membership (roles) comes off page.data.session (#835), not a
 	// fetch this mock has to answer.
@@ -88,7 +95,7 @@ function mockApi({
 		// this mock's connect-status sequencing, nor trip the not-permitted
 		// tripwire the Doula tests below rely on.
 		if (path.endsWith('/payments/billing-mode')) {
-			return Promise.resolve(jsonResponse({ billingMode: 'stripe' }));
+			return Promise.resolve(jsonResponse(billingModeBody));
 		}
 		// #768: payment terms are read by any Staff member too, for the
 		// same reason, and are outside the connect-status sequencing
@@ -214,10 +221,39 @@ function mockApiSequence(replies: StatusReply[], { roles = ['owner'] }: { roles?
 	});
 }
 
+/* This file's `setup()`, per `.claude/rules/svelte-tests.md` -- the two
+   mocks above already hold what a `setup()` would construct, so it joins
+   one of them to the `render()` rather than building a screen of its own.
+   It sits at module scope, shared by every `describe` below, because each
+   block varies the same `MockOptions` the mock already names: eight
+   per-block copies would be byte-identical, and a test's own options say
+   which state of the screen it is about far better than which block it
+   sits in.
+
+   `roles` stays explicit at every call site rather than defaulting to an
+   Owner: almost every test here is named for the person reading the
+   screen, and the role is the fact that makes its assertion true.
+
+   It returns nothing: every test it serves asserts through the role tree
+   and reads no handle off the render. */
+async function setup(options: MockOptions = {}) {
+	mockApi(options);
+	await render(Page, {});
+}
+
+/** The same, for the #259 block: a poll drives several reads, so its
+ * screen is constructed from a sequence of replies rather than one
+ * state. It returns the two handles that block does read -- `container`
+ * for the live region, `unmount` for leaving the screen mid-poll. */
+async function setupSequence(replies: StatusReply[], options: { roles?: string[] } = {}) {
+	mockApiSequence(replies, options);
+	const { container, unmount } = await render(Page, {});
+	return { container, unmount };
+}
+
 describe('payments settings screen', () => {
 	it('shows a Connect Stripe button for an Owner when not connected', async () => {
-		mockApi({ status: 'not_connected', roles: ['owner'] });
-		await render(Page, {});
+		await setup({ status: 'not_connected', roles: ['owner'] });
 
 		await expect.element(testPage.getByText('Stripe Connect status:')).toBeVisible();
 		await expect.element(testPage.getByText('Not connected')).toBeVisible();
@@ -228,8 +264,7 @@ describe('payments settings screen', () => {
 	// populations it covered no longer see the same screen: an Admin reads
 	// the status and is told who connects it, a Doula reads nothing at all.
 	it('shows an Admin the status and who connects it, with no button', async () => {
-		mockApi({ status: 'not_connected', roles: ['admin'] });
-		await render(Page, {});
+		await setup({ status: 'not_connected', roles: ['admin'] });
 
 		await expect.element(testPage.getByText('Stripe Connect status:')).toBeVisible();
 		await expect.element(testPage.getByText('Not connected')).toBeVisible();
@@ -247,16 +282,14 @@ describe('payments settings screen', () => {
 	// lived beside the button, under a condition that is false whenever the
 	// Owner still has the website question to answer.
 	it('tells an Admin who connects Stripe even while the website question blocks it', async () => {
-		mockApi({ status: 'not_connected', roles: ['admin'], websiteMode: 'undeclared' });
-		await render(Page, {});
+		await setup({ status: 'not_connected', roles: ['admin'], websiteMode: 'undeclared' });
 
 		await expect.element(testPage.getByText('A Practice Owner has to connect Stripe.')).toBeVisible();
 		await expect.element(testPage.getByRole('link', { name: 'Answer the website question' })).not.toBeInTheDocument();
 	});
 
 	it('asks the BFF nothing for Connect status for a Doula, and never prints its refusal', async () => {
-		mockApi({ status: 'not_connected', roles: ['doula'] });
-		await render(Page, {});
+		await setup({ status: 'not_connected', roles: ['doula'] });
 
 		await expect
 			.element(testPage.getByText('Only a Practice Owner or Admin can see how this Practice gets paid.'))
@@ -272,8 +305,7 @@ describe('payments settings screen', () => {
 	});
 
 	it('hides the connect button once the account is active, even for an Owner', async () => {
-		mockApi({ status: 'active', roles: ['owner'] });
-		await render(Page, {});
+		await setup({ status: 'active', roles: ['owner'] });
 
 		await expect.element(testPage.getByText('Stripe Connect status:')).toBeVisible();
 		await expect.element(testPage.getByText('Active', { exact: true })).toBeVisible();
@@ -282,8 +314,7 @@ describe('payments settings screen', () => {
 	});
 
 	it('offers to continue onboarding for an Owner mid-onboarding', async () => {
-		mockApi({ status: 'onboarding_incomplete', roles: ['owner'] });
-		await render(Page, {});
+		await setup({ status: 'onboarding_incomplete', roles: ['owner'] });
 
 		await expect.element(testPage.getByRole('button', { name: 'Continue Stripe onboarding' })).toBeVisible();
 	});
@@ -299,16 +330,14 @@ describe('payments settings screen', () => {
  */
 describe('telling an Owner the Practice still has to connect Stripe (#917)', () => {
 	it('offers an Admin the ask when nothing else would reach an Owner', async () => {
-		mockApi({ status: 'not_connected', roles: ['admin'] });
-		await render(Page, {});
+		await setup({ status: 'not_connected', roles: ['admin'] });
 
 		await expect.element(testPage.getByText('A Practice Owner has to connect Stripe.')).toBeVisible();
 		await expect.element(testPage.getByRole('button', { name: 'Email the Practice Owners' })).toBeVisible();
 	});
 
 	it('confirms the send, and takes the control away so a second press is not offered', async () => {
-		mockApi({ status: 'not_connected', roles: ['admin'] });
-		await render(Page, {});
+		await setup({ status: 'not_connected', roles: ['admin'] });
 
 		await testPage.getByRole('button', { name: 'Email the Practice Owners' }).click();
 
@@ -326,8 +355,7 @@ describe('telling an Owner the Practice still has to connect Stripe (#917)', () 
 		// The ordinary way to meet this is a colleague having asked
 		// yesterday from her own screen, which this one cannot see.
 		const refusal = 'Doula Cloud was already asked to email every Practice Owner about this in the last week.';
-		mockApi({ status: 'not_connected', roles: ['admin'], nudgeRefusal: refusal });
-		await render(Page, {});
+		await setup({ status: 'not_connected', roles: ['admin'], nudgeRefusal: refusal });
 
 		await testPage.getByRole('button', { name: 'Email the Practice Owners' }).click();
 
@@ -336,8 +364,7 @@ describe('telling an Owner the Practice still has to connect Stripe (#917)', () 
 	});
 
 	it('tells an Admin mid-onboarding that the Owners already have the email, and offers no second one', async () => {
-		mockApi({ status: 'onboarding_incomplete', roles: ['admin'], requirementsDue: ['individual.dob'] });
-		await render(Page, {});
+		await setup({ status: 'onboarding_incomplete', roles: ['admin'], requirementsDue: ['individual.dob'] });
 
 		await expect.element(testPage.getByText(CONNECT_OWNERS_ALREADY_EMAILED_MESSAGE)).toBeVisible();
 		await expect
@@ -346,8 +373,7 @@ describe('telling an Owner the Practice still has to connect Stripe (#917)', () 
 	});
 
 	it('never offers the ask to an Owner, who can connect Stripe herself', async () => {
-		mockApi({ status: 'not_connected', roles: ['owner'] });
-		await render(Page, {});
+		await setup({ status: 'not_connected', roles: ['owner'] });
 
 		await expect.element(testPage.getByRole('button', { name: 'Connect Stripe' })).toBeVisible();
 		await expect
@@ -358,8 +384,7 @@ describe('telling an Owner the Practice still has to connect Stripe (#917)', () 
 
 describe('what Getting paid is, who it is between, and how it differs from Credits (#256)', () => {
 	it('is titled Getting paid, not Payments', async () => {
-		mockApi({ status: 'not_connected', roles: ['owner'] });
-		await render(Page, {});
+		await setup({ status: 'not_connected', roles: ['owner'] });
 
 		await expect
 			.element(testPage.getByRole('heading', { level: 1, name: 'Getting paid' }))
@@ -371,8 +396,7 @@ describe('what Getting paid is, who it is between, and how it differs from Credi
 	// `loading` branch too, #256) and for every role, not only an Owner
 	// or Admin.
 	it('states its purpose and names Credits as the other screen, before the Connect status resolves', async () => {
-		mockApi({ status: 'not_connected', roles: ['owner'] });
-		await render(Page, {});
+		await setup({ status: 'not_connected', roles: ['owner'] });
 
 		await expect
 			.element(testPage.getByText('This is where a Practice connects Stripe, so its Clients can pay it directly.'))
@@ -385,8 +409,7 @@ describe('what Getting paid is, who it is between, and how it differs from Credi
 	});
 
 	it('states its purpose for a Doula too, who sees no Connect status at all', async () => {
-		mockApi({ status: 'not_connected', roles: ['doula'] });
-		await render(Page, {});
+		await setup({ status: 'not_connected', roles: ['doula'] });
 
 		await expect
 			.element(testPage.getByText('This is where a Practice connects Stripe, so its Clients can pay it directly.'))
@@ -396,8 +419,7 @@ describe('what Getting paid is, who it is between, and how it differs from Credi
 
 describe('payments settings screen: the states Accounts v1 could not report', () => {
 	it('offers no onboarding button while Stripe is reviewing', async () => {
-		mockApi({ status: 'pending', roles: ['owner'] });
-		await render(Page, {});
+		await setup({ status: 'pending', roles: ['owner'] });
 
 		await expect.element(testPage.getByText('Awaiting Stripe review')).toBeVisible();
 		await expect
@@ -407,8 +429,7 @@ describe('payments settings screen: the states Accounts v1 could not report', ()
 	});
 
 	it('says invoicing works when only payouts are held up', async () => {
-		mockApi({ status: 'payouts_restricted', roles: ['owner'] });
-		await render(Page, {});
+		await setup({ status: 'payouts_restricted', roles: ['owner'] });
 
 		await expect.element(testPage.getByText('Taking payments, payouts on hold')).toBeVisible();
 		await expect
@@ -419,12 +440,11 @@ describe('payments settings screen: the states Accounts v1 could not report', ()
 	});
 
 	it('counts what Stripe is still waiting on without leaking its field paths', async () => {
-		mockApi({
+		await setup({
 			status: 'onboarding_incomplete',
 			roles: ['owner'],
 			requirementsDue: ['configuration.merchant.mcc', 'configuration.merchant.support.phone']
 		});
-		await render(Page, {});
 
 		await expect.element(testPage.getByText('Stripe needs 2 more details from you.')).toBeVisible();
 		await expect.element(testPage.getByText('configuration.merchant.mcc')).not.toBeInTheDocument();
@@ -435,12 +455,11 @@ describe('payments settings screen: the states Accounts v1 could not report', ()
 	// "from you" is the Owner's sentence; the Admin reads the state of the
 	// Practice's account, not an errand she could run if she wanted to.
 	it('names the Owner rather than the reader when an Admin reads the count', async () => {
-		mockApi({
+		await setup({
 			status: 'onboarding_incomplete',
 			roles: ['admin'],
 			requirementsDue: ['configuration.merchant.mcc']
 		});
-		await render(Page, {});
 
 		await expect
 			.element(testPage.getByText('Stripe needs 1 more detail from a Practice Owner.'))
@@ -449,8 +468,7 @@ describe('payments settings screen: the states Accounts v1 could not report', ()
 	});
 
 	it('offers no onboarding button when payouts are held up with nothing to supply', async () => {
-		mockApi({ status: 'payouts_restricted', roles: ['owner'], requirementsDue: [] });
-		await render(Page, {});
+		await setup({ status: 'payouts_restricted', roles: ['owner'], requirementsDue: [] });
 
 		await expect.element(testPage.getByText('Taking payments, payouts on hold')).toBeVisible();
 		await expect.element(testPage.getByRole('button', { name: 'Continue Stripe onboarding' })).not.toBeInTheDocument();
@@ -459,8 +477,7 @@ describe('payments settings screen: the states Accounts v1 could not report', ()
 
 describe('payments settings screen: what #442 refuses and what it warns about', () => {
 	it('refuses the button, and says where to fix it, when no website has been declared', async () => {
-		mockApi({ status: 'not_connected', roles: ['owner'], websiteMode: 'undeclared' });
-		await render(Page, {});
+		await setup({ status: 'not_connected', roles: ['owner'], websiteMode: 'undeclared' });
 
 		await expect
 			.element(
@@ -475,8 +492,7 @@ describe('payments settings screen: what #442 refuses and what it warns about', 
 	});
 
 	it('opens the flow once a page is published here, not only when she has her own site', async () => {
-		mockApi({ status: 'not_connected', roles: ['owner'], websiteMode: 'hosted' });
-		await render(Page, {});
+		await setup({ status: 'not_connected', roles: ['owner'], websiteMode: 'hosted' });
 
 		await expect.element(testPage.getByRole('button', { name: 'Connect Stripe' })).toBeVisible();
 	});
@@ -487,13 +503,12 @@ describe('payments settings screen: what #442 refuses and what it warns about', 
 	   same rule as the missing answer above, and PostConnectHandler
 	   refuses the request too. */
 	it('refuses the button when the page published for her does not load', async () => {
-		mockApi({
+		await setup({
 			status: 'not_connected',
 			roles: ['owner'],
 			websiteMode: 'hosted',
 			pageState: 'failed'
 		});
-		await render(Page, {});
 
 		await expect
 			.element(testPage.getByText('The page published for this Practice is not loading', { exact: false }))
@@ -505,20 +520,18 @@ describe('payments settings screen: what #442 refuses and what it warns about', 
 	/* A page still waiting for its deploy must not block her: every
 	   Practice passes through `pending` on the way to `live`. */
 	it('opens the flow while her page is still waiting for its deploy', async () => {
-		mockApi({
+		await setup({
 			status: 'not_connected',
 			roles: ['owner'],
 			websiteMode: 'hosted',
 			pageState: 'pending'
 		});
-		await render(Page, {});
 
 		await expect.element(testPage.getByRole('button', { name: 'Connect Stripe' })).toBeVisible();
 	});
 
 	it('says what Stripe will ask for before the button, not after it', async () => {
-		mockApi({ status: 'not_connected', roles: ['owner'] });
-		await render(Page, {});
+		await setup({ status: 'not_connected', roles: ['owner'] });
 
 		await expect.element(testPage.getByRole('heading', { name: 'What Stripe will ask you for' })).toBeVisible();
 		await expect.element(testPage.getByText('two-step authentication', { exact: false })).toBeVisible();
@@ -529,8 +542,7 @@ describe('payments settings screen: what #442 refuses and what it warns about', 
 	});
 
 	it('tells her where the text on her Clients card statements comes from', async () => {
-		mockApi({ status: 'not_connected', roles: ['owner'] });
-		await render(Page, {});
+		await setup({ status: 'not_connected', roles: ['owner'] });
 
 		await expect
 			.element(
@@ -543,12 +555,11 @@ describe('payments settings screen: what #442 refuses and what it warns about', 
 
 	it('does not congratulate a Practice who came back from Stripe still restricted', async () => {
 		returnedFromStripe('return');
-		mockApi({
+		await setup({
 			status: 'onboarding_incomplete',
 			roles: ['owner'],
 			requirementsDue: ['defaults.profile.business_url']
 		});
-		await render(Page, {});
 
 		await expect
 			.element(testPage.getByText('Stripe still needs something before Clients can pay this Practice.', { exact: false }))
@@ -560,8 +571,7 @@ describe('payments settings screen: what #442 refuses and what it warns about', 
 
 describe('payments settings screen: the one question the two website answers do not share', () => {
 	it("warns a Practice on her own site that Stripe wants a description she has not written", async () => {
-		mockApi({ status: 'not_connected', roles: ['owner'], websiteMode: 'own' });
-		await render(Page, {});
+		await setup({ status: 'not_connected', roles: ['owner'], websiteMode: 'own' });
 
 		await expect
 			.element(testPage.getByText('A short description of what your Practice offers', { exact: false }))
@@ -569,8 +579,7 @@ describe('payments settings screen: the one question the two website answers do 
 	});
 
 	it('does not warn a Practice whose published page already carries one', async () => {
-		mockApi({ status: 'not_connected', roles: ['owner'], websiteMode: 'hosted' });
-		await render(Page, {});
+		await setup({ status: 'not_connected', roles: ['owner'], websiteMode: 'hosted' });
 
 		await expect
 			.element(testPage.getByText('A short description of what your Practice offers', { exact: false }))
@@ -582,9 +591,7 @@ describe('payments settings screen: re-reading Connect status on return from Str
 	it('re-reads Connect status after a growing delay while the status can still move on its own', async () => {
 		vi.useFakeTimers();
 		returnedFromStripe('return');
-		mockApiSequence([{ status: 'pending' }, { status: 'active' }]);
-
-		await render(Page, {});
+		await setupSequence([{ status: 'pending' }, { status: 'active' }]);
 		expect(connectCallCount()).toBe(1);
 		await expect.element(testPage.getByText('Awaiting Stripe review')).toBeVisible();
 
@@ -597,12 +604,10 @@ describe('payments settings screen: re-reading Connect status on return from Str
 	it('updates the badge, explanation, requirement count and banner together, and announces the change', async () => {
 		vi.useFakeTimers();
 		returnedFromStripe('return');
-		mockApiSequence([
+		const { container } = await setupSequence([
 			{ status: 'payouts_restricted', requirementsDue: [] },
 			{ status: 'active' }
 		]);
-
-		const { container } = await render(Page, {});
 		await expect.element(testPage.getByText('Taking payments, payouts on hold')).toBeVisible();
 		const statusRegion = container.querySelector('[aria-live="polite"]');
 		expect(statusRegion).not.toBeNull();
@@ -620,9 +625,7 @@ describe('payments settings screen: re-reading Connect status on return from Str
 	it('promises to keep checking only while a check is actually still scheduled', async () => {
 		vi.useFakeTimers();
 		returnedFromStripe('return');
-		mockApiSequence([{ status: 'pending' }, { status: 'active' }]);
-
-		await render(Page, {});
+		await setupSequence([{ status: 'pending' }, { status: 'active' }]);
 		await expect
 			.element(
 				testPage.getByText("We're checking with Stripe again shortly", { exact: false })
@@ -639,9 +642,7 @@ describe('payments settings screen: re-reading Connect status on return from Str
 
 	it('shows the plain finished banner, with no promise to keep checking, for a status already settled', async () => {
 		returnedFromStripe('return');
-		mockApiSequence([{ status: 'active' }]);
-
-		await render(Page, {});
+		await setupSequence([{ status: 'active' }]);
 
 		await expect.element(testPage.getByText('Stripe onboarding finished.', { exact: true })).toBeVisible();
 		await expect
@@ -652,9 +653,7 @@ describe('payments settings screen: re-reading Connect status on return from Str
 	it('does not read again once the status has settled', async () => {
 		vi.useFakeTimers();
 		returnedFromStripe('return');
-		mockApiSequence([{ status: 'active' }]);
-
-		await render(Page, {});
+		await setupSequence([{ status: 'active' }]);
 		expect(connectCallCount()).toBe(1);
 
 		const totalDelay = CONNECT_STATUS_POLL_DELAYS_MS.reduce((sum, ms) => sum + ms, 0);
@@ -665,9 +664,7 @@ describe('payments settings screen: re-reading Connect status on return from Str
 
 	it('does not read again without the return parameter, even for a status that could still move', async () => {
 		vi.useFakeTimers();
-		mockApiSequence([{ status: 'pending' }]);
-
-		await render(Page, {});
+		await setupSequence([{ status: 'pending' }]);
 		expect(connectCallCount()).toBe(1);
 
 		const totalDelay = CONNECT_STATUS_POLL_DELAYS_MS.reduce((sum, ms) => sum + ms, 0);
@@ -681,9 +678,7 @@ describe('payments settings screen: re-reading Connect status on return from Str
 		returnedFromStripe('return');
 		// Every reply is 'pending' -- an account whose review never finishes
 		// inside the schedule, the case the ceiling exists for.
-		mockApiSequence([{ status: 'pending' }]);
-
-		await render(Page, {});
+		await setupSequence([{ status: 'pending' }]);
 
 		const totalDelay = CONNECT_STATUS_POLL_DELAYS_MS.reduce((sum, ms) => sum + ms, 0);
 		await vi.advanceTimersByTimeAsync(totalDelay);
@@ -696,9 +691,7 @@ describe('payments settings screen: re-reading Connect status on return from Str
 	it('stops re-reading once the screen is left', async () => {
 		vi.useFakeTimers();
 		returnedFromStripe('return');
-		mockApiSequence([{ status: 'pending' }]);
-
-		const { unmount } = await render(Page, {});
+		const { unmount } = await setupSequence([{ status: 'pending' }]);
 		expect(connectCallCount()).toBe(1);
 		// Lets onMount's own async work -- the two awaited fetches, then
 		// starting the poll -- finish assigning `pollHandle` before this
@@ -714,13 +707,11 @@ describe('payments settings screen: re-reading Connect status on return from Str
 	it('never starts a poll for a screen left before its own first read finishes', async () => {
 		vi.useFakeTimers();
 		returnedFromStripe('return');
-		mockApiSequence([{ status: 'pending' }]);
-
 		// Unmounts before the awaited initial fetch settles, and before
 		// `pollHandle` has anything to stop -- the guard this is proving is
 		// the `destroyed` flag onMount checks between its own two awaits
 		// and the point it would otherwise start the poll.
-		const { unmount } = await render(Page, {});
+		const { unmount } = await setupSequence([{ status: 'pending' }]);
 		await unmount();
 		await vi.advanceTimersByTimeAsync(60_000);
 
@@ -730,9 +721,7 @@ describe('payments settings screen: re-reading Connect status on return from Str
 	it('keeps the last good status on screen and reports failure when a re-read fails', async () => {
 		vi.useFakeTimers();
 		returnedFromStripe('return');
-		mockApiSequence([{ status: 'pending' }, 'error']);
-
-		await render(Page, {});
+		await setupSequence([{ status: 'pending' }, 'error']);
 		await expect.element(testPage.getByText('Awaiting Stripe review')).toBeVisible();
 
 		await vi.advanceTimersByTimeAsync(CONNECT_STATUS_POLL_DELAYS_MS[0]);
@@ -745,12 +734,10 @@ describe('payments settings screen: re-reading Connect status on return from Str
 	});
 
 	it('lets the person check the status again on demand, and the Continue button follows the new answer', async () => {
-		mockApiSequence([
+		await setupSequence([
 			{ status: 'payouts_restricted', requirementsDue: ['configuration.merchant.mcc'] },
 			{ status: 'payouts_restricted', requirementsDue: [] }
 		]);
-
-		await render(Page, {});
 		await expect.element(testPage.getByRole('button', { name: 'Continue Stripe onboarding' })).toBeVisible();
 
 		await testPage.getByRole('button', { name: 'Check status again' }).click();
@@ -761,9 +748,7 @@ describe('payments settings screen: re-reading Connect status on return from Str
 	});
 
 	it('reports a failed on-demand check without blanking the status', async () => {
-		mockApiSequence([{ status: 'not_connected' }, 'error']);
-
-		await render(Page, {});
+		await setupSequence([{ status: 'not_connected' }, 'error']);
 		await testPage.getByRole('button', { name: 'Check status again' }).click();
 
 		await expect.element(testPage.getByText(CONNECT_STATUS_CHECK_FAILED_MESSAGE)).toBeVisible();
@@ -776,16 +761,14 @@ describe('payments settings screen: re-reading Connect status on return from Str
 // carries alongside Stripe Connect status, not gated by it.
 describe('payments settings screen: billing mode (#271)', () => {
 	it('shows the current mode with no change control for an Admin', async () => {
-		mockApi({ roles: ['admin'] });
-		await render(Page, {});
+		await setup({ roles: ['admin'] });
 
 		await expect.element(testPage.getByText('This Practice bills Clients through Stripe.')).toBeVisible();
 		await expect.element(testPage.getByRole('radio', { name: 'By hand' })).not.toBeInTheDocument();
 	});
 
 	it('lets an Owner submit a change to an already-established mode', async () => {
-		mockApi({ roles: ['owner'] });
-		await render(Page, {});
+		await setup({ roles: ['owner'] });
 
 		await expect.element(testPage.getByText('This Practice bills Clients through Stripe.')).toBeVisible();
 		await testPage.getByLabelText('By hand').click();
@@ -803,8 +786,7 @@ describe('payments settings screen: billing mode (#271)', () => {
 	});
 
 	it('reports a failed billing mode change through the same Notice error pattern as the load failure', async () => {
-		mockApi({ roles: ['owner'] });
-		await render(Page, {});
+		await setup({ roles: ['owner'] });
 
 		await expect.element(testPage.getByText('This Practice bills Clients through Stripe.')).toBeVisible();
 		await testPage.getByLabelText('By hand').click();
@@ -821,30 +803,11 @@ describe('payments settings screen: billing mode (#271)', () => {
 	});
 
 	it('names the not-yet-chosen state rather than a raw null', async () => {
-		mockApi({ roles: ['owner'] });
-		apiFetchWithSession.mockImplementation((path: string) => {
-			if (path.endsWith('/payments/billing-mode')) return Promise.resolve(jsonResponse({}));
-			if (path.endsWith('/website')) {
-				return Promise.resolve(
-					jsonResponse({
-						mode: 'own',
-						ownUrl: 'https://rochesterdoulas.com',
-						serviceDescription: '',
-						cancellationPolicy: '',
-						updatedBy: '',
-						updatedAt: '',
-						pageState: '',
-						pageCheckedAt: '',
-						pageCheckDetail: '',
-						pageUrl: ''
-					})
-				);
-			}
-			return Promise.resolve(
-				jsonResponse({ status: 'not_connected', cardPaymentsStatus: 'unsupported', payoutsStatus: 'unsupported', requirementsDue: [] })
-			);
-		});
-		await render(Page, {});
+		// A Practice that has raised no Invoice yet: the billing-mode read
+		// answers with no `billingMode` field at all rather than a chosen
+		// rail. Every other endpoint answers exactly as it does for the
+		// rest of this block, which is what `mockApi`'s own defaults say.
+		await setup({ roles: ['owner'], billingModeBody: {} });
 
 		await expect
 			.element(testPage.getByText('Not chosen yet -- this is asked the first time Staff raises an Invoice.'))
