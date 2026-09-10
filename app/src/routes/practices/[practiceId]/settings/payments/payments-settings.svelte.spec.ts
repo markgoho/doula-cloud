@@ -234,17 +234,17 @@ function mockApiSequence(replies: StatusReply[], { roles = ['owner'] }: { roles?
    Owner: almost every test here is named for the person reading the
    screen, and the role is the fact that makes its assertion true.
 
-   Only `container` and `unmount` are returned -- the whole render result
-   is never what a test needs. */
+   It returns nothing: every test it serves asserts through the role tree
+   and reads no handle off the render. */
 async function setup(options: MockOptions = {}) {
 	mockApi(options);
-	const { container, unmount } = await render(Page, {});
-	return { container, unmount };
+	await render(Page, {});
 }
 
 /** The same, for the #259 block: a poll drives several reads, so its
  * screen is constructed from a sequence of replies rather than one
- * state. */
+ * state. It returns the two handles that block does read -- `container`
+ * for the live region, `unmount` for leaving the screen mid-poll. */
 async function setupSequence(replies: StatusReply[], options: { roles?: string[] } = {}) {
 	mockApiSequence(replies, options);
 	const { container, unmount } = await render(Page, {});

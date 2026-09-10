@@ -56,6 +56,21 @@ function mockFetch(body: unknown, activityItems: unknown[] = [], visitItems: unk
 	});
 }
 
+/** One of the two list reads refusing rather than answering, which no
+ * list content can express: the named read fails, the other list answers
+ * empty, and the Engagement detail answers as ever. Both the Activity
+ * block and the Your visits block need this and neither can express it
+ * through `mockFetch`, so it is written once and told which read fails. */
+function mockRefusedList(failingPath: '/activity' | '/visits', refusal: string) {
+	apiFetchWithSession.mockImplementation((path: string) => {
+		if (path.includes(failingPath))
+			return Promise.resolve({ ok: false, text: () => Promise.resolve(refusal) } as Response);
+		if (path.includes('/activity') || path.includes('/visits'))
+			return Promise.resolve(jsonResponse({ items: [], hasMore: false }));
+		return Promise.resolve(jsonResponse(detail));
+	});
+}
+
 /*
  * One `setup()` per `describe` below, per `.claude/rules/svelte-tests.md`
  * -- each named for the block it serves rather than all four named
@@ -87,7 +102,7 @@ async function setupHub({ record }: { record?: unknown } = {}) {
  * happy path; a state that ticket has to hold for is a spread of it,
  * never a second record. Nothing in that block reads the render result:
  * the heading is asserted through the role tree. */
-async function setupHeading(record: unknown = detail) {
+async function setupHeading({ record = detail }: { record?: unknown } = {}) {
 	mockFetch(record);
 	await render(Hub);
 }
@@ -203,7 +218,7 @@ describe("the hub's heading (#296)", () => {
 	];
 
 	it.each(records)('says the same words to $name', async ({ detail: record }) => {
-		await setupHeading(record);
+		await setupHeading({ record });
 
 		await expect.element(page.getByRole('heading', { name: 'Your care', level: 1 })).toBeVisible();
 		await expect.element(page.getByText(/welcome/i)).not.toBeInTheDocument();
@@ -242,12 +257,7 @@ function activityEntry(action: string) {
  * line. */
 async function setupActivity({ activity, refusal }: { activity?: unknown[]; refusal?: string } = {}) {
 	if (refusal !== undefined) {
-		apiFetchWithSession.mockImplementation((path: string) => {
-			if (path.includes('/activity'))
-				return Promise.resolve({ ok: false, text: () => Promise.resolve(refusal) } as Response);
-			if (path.includes('/visits')) return Promise.resolve(jsonResponse({ items: [], hasMore: false }));
-			return Promise.resolve(jsonResponse(detail));
-		});
+		mockRefusedList('/activity', refusal);
 	} else if (activity === undefined) {
 		apiFetchWithSession.mockImplementation(toApiResponder(fixture));
 	} else {
@@ -376,12 +386,7 @@ async function setupVisits({ items = visits, refusal }: { items?: unknown[]; ref
 	if (refusal === undefined) {
 		mockFetch(detail, [], items);
 	} else {
-		apiFetchWithSession.mockImplementation((path: string) => {
-			if (path.includes('/activity')) return Promise.resolve(jsonResponse({ items: [], hasMore: false }));
-			if (path.includes('/visits'))
-				return Promise.resolve({ ok: false, text: () => Promise.resolve(refusal) } as Response);
-			return Promise.resolve(jsonResponse(detail));
-		});
+		mockRefusedList('/visits', refusal);
 	}
 	// `container` alone: `visitsTableText` reaches past the accessibility
 	// tree for the reason its own comment gives, and nothing here needs
