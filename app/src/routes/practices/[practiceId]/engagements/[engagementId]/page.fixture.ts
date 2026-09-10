@@ -140,7 +140,7 @@ export const detail = {
  * [#928](https://github.com/markgoho/doula-cloud/issues/928) with the rest
  * of the sessions this screen renders differently under.
  *
- * The values are hostile per #537: the Client's own double-barrelled name
+ * The values are hostile per #537: the Client's own double-barreled name
  * again, the Practice's full name, a four-figure price, a scope that runs
  * to a real paragraph, and a URL inside a void request's reason -- the
  * one shape that made the baseline sweep on #521 go red at all.
@@ -216,7 +216,13 @@ export const session = {
 	staffId: 'staff-1',
 	practiceName: 'Riverside Doula Collective',
 	roles: ['owner', 'doula'],
-	isContractor: false
+	// The roster above already says `staff-1` is a contractor, and
+	// `visitAssignees` leans on it for the self rule, so naming the
+	// `staffId` made the old `false` a contradiction rather than an
+	// omission. It changes nothing the screen draws: `isAmbientContractor`
+	// is `isContractor && !isOwnerOrAdmin`, so an Owner who contracts is
+	// never the ambient contractor ADR-0008 confines.
+	isContractor: true
 };
 
 export const fixture: RouteFixture<RouteParameters> = {

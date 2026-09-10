@@ -144,6 +144,15 @@ vi.mock('$app/state', () => ({ page: pageState }));
  * navigates -- the sweep measures, it does not interact -- so these exist
  * to be importable, not to be asserted on.
  */
+/*
+ * How many macrotask turns a route's own load cascade may take before the
+ * sweep gives up waiting for it (#885). A guard against a route that
+ * polls, never a budget: a fixture answers synchronously, so one turn
+ * drains a whole section and the deepest cascade this app has is eight
+ * reads long.
+ */
+const SETTLE_TURNS = 50;
+
 vi.mock('$app/navigation', () => ({
 	goto: vi.fn(),
 	invalidate: vi.fn(),
@@ -356,10 +365,21 @@ describe('the continuum check, over routes', () => {
 				 * new, and the bound is a guard against a route that polls
 				 * rather than a budget anything is expected to spend.
 				 */
-				for (let turn = 0, quiet = -1; quiet !== answered && turn < 50; turn += 1) {
+				let quiet = -1;
+				for (let turn = 0; quiet !== answered && turn < SETTLE_TURNS; turn += 1) {
 					quiet = answered;
 					await new Promise((resolve) => setTimeout(resolve, 0));
 				}
+				/*
+				 * A bound that ran out is a screen still arriving, and
+				 * measuring it anyway would reopen the hole this wait exists
+				 * to close -- silently, which is the one way this file must
+				 * not fail. So it says so instead.
+				 */
+				expect(
+					answered,
+					`${fixture.name} was still fetching after ${SETTLE_TURNS} turns`
+				).toBe(quiet);
 				const found = sweep(frame, run.clientWidth);
 				expect(found, found && overflowReport(fixture.name, found)).toBeUndefined();
 			} finally {

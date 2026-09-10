@@ -43,7 +43,7 @@ A route's fixture names the screen's own `<h1>` and the check waits for it befor
 
 **So the check waits for the fixture's own answering to go quiet before it measures.** The wait is a quiescence, never a duration: a fixture serves every response synchronously, so one macrotask turn drains however many `await`s a section chains, and the loop ends on the first turn that asks for nothing new. This lives in the check rather than in a fixture for the same reason #710's disclosure-opening does — a hole in what the instrument can see is the instrument's to close, and a fixture that could be added without joining is the shape [#521](https://github.com/markgoho/doula-cloud/issues/521) proved gets walked past. The drag surface needs nothing: a person in front of it has already waited.
 
-This does not reach `floor.svelte.spec.ts`, which takes its own measurement, for the same reason #710 did not.
+`floor.svelte.spec.ts` needs nothing here, unlike with #710: its subjects are component demos, which take their content as props and fetch nothing, so there is no cascade for it to wait on.
 
 ## Fixtures
 

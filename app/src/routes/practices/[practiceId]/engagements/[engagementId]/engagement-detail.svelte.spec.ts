@@ -80,14 +80,11 @@ interface Detail {
 // `['owner', 'doula']` in the fixture -- the Doula-Owner this ticket is
 // about, and the reader the picker opens on. A test about somebody the
 // roster does not contain passes an id of its own.
+// #885: a departure from the fixture's own session rather than a second
+// description of one -- the Practice it names and the Practice the
+// `respond` paths match on cannot drift apart if only one of them says it.
 function sessionFor(roles: string[] = [], staffId = 'staff-1', isContractor = false) {
-	return {
-		practiceId: fixture.params.practiceId,
-		staffId,
-		practiceName: 'Riverside Doula Collective',
-		roles,
-		isContractor
-	};
+	return { ...session, staffId, roles, isContractor };
 }
 
 async function setup(detail: Detail, activityResponse?: Response) {
@@ -127,16 +124,7 @@ async function renderWithFixtureResponder(
 		return respond(path);
 	});
 	await render(Page, {
-		data: {
-			...detail,
-			session: {
-				practiceId: fixture.params.practiceId,
-				staffId: 'staff-1',
-				practiceName: 'Riverside Doula Collective',
-				roles: [],
-				isContractor: false
-			}
-		},
+		data: { ...detail, session: sessionFor() },
 		params: fixture.params
 	});
 }
@@ -562,14 +550,10 @@ function pdfBlobResponse(): Response {
  * price change to report and no void to have been asked for.
  */
 function draftOf(overrides: Partial<Contract> = {}): Contract {
-	return {
-		engagementId: fixtureContract.engagementId,
-		prose: fixtureContract.prose,
-		mergeFields: fixtureContract.mergeFields,
-		values: fixtureContract.values,
-		status: 'draft',
-		...overrides
-	};
+	const draft: Contract = { ...fixtureContract, status: 'draft' };
+	delete draft.amountChangedAt;
+	delete draft.voidRequests;
+	return { ...draft, ...overrides };
 }
 
 describe("the Client's portal-invite state and the Contract section's block (#255)", () => {
@@ -582,11 +566,7 @@ describe("the Client's portal-invite state and the Contract section's block (#25
 	const draftContract = draftOf();
 
 	function mockDraftContract() {
-		const respond = toApiResponder(fixture);
-		apiFetchWithSession.mockImplementation((path: string) => {
-			if (path.endsWith('/contract')) return Promise.resolve(jsonResponse(draftContract));
-			return respond(path);
-		});
+		mockContract(draftContract);
 	}
 
 	it('reads "Never invited" on the summary when the Client has never been invited', async () => {
@@ -680,15 +660,25 @@ describe("the Client's portal-invite state and the Contract section's block (#25
 	});
 });
 
-// Mocks the Practice-side GET .../contract response to contract, letting
+/*
+ * The fixture answering every path it knows, with one path answered
+ * differently (#885). `toApiResponder` beside its own
+ * `mockImplementation` had been written out four times in this file by
+ * the time the fixture grew a Contract of its own -- four chances for one
+ * of them to consult the fixture first and shadow its own override.
+ */
+function respondFromFixture(override?: (path: string) => Response | undefined) {
+	const respond = toApiResponder(fixture);
+	apiFetchWithSession.mockImplementation((path: string) =>
+		Promise.resolve(override?.(path) ?? respond(path))
+	);
+}
+
+// Answers the Practice-side GET .../contract with `contract`, letting
 // every other section respond from the fixture as normal -- shared by
 // the #258 describe block below.
 function mockContract(contract: Contract) {
-	const respond = toApiResponder(fixture);
-	apiFetchWithSession.mockImplementation((path: string) => {
-		if (path.endsWith('/contract')) return Promise.resolve(jsonResponse(contract));
-		return respond(path);
-	});
+	respondFromFixture((path) => (path.endsWith('/contract') ? jsonResponse(contract) : undefined));
 }
 
 describe("the Contract's merge-field completeness block and filled-text render (#258)", () => {
@@ -712,9 +702,8 @@ describe("the Contract's merge-field completeness block and filled-text render (
 		await expect
 			.element(
 				testPage.getByText(
-					new RegExp(
-						`between ${fixtureContract.values.practice_name} and ${fixtureDetail.clientName}`
-					)
+					`between ${fixtureContract.values.practice_name} and ${fixtureContract.values.client_name}`,
+					{ exact: false }
 				)
 			)
 			.toBeVisible();
@@ -755,10 +744,12 @@ describe("the Contract's merge-field completeness block and filled-text render (
  * `/contract` answered a 404. This is the assertion that the subject the
  * sweep measures really does carry the section's controls.
  */
+// At the conformance commitment itself (ADR-0024), not at a desk width:
+// the criterion asks that these controls be there at 320px, and a screen
+// that draws them only when it has room would satisfy a wider mount.
 async function mountFixture() {
-	await testPage.viewport(1440, 900);
-	const respond = toApiResponder(fixture);
-	apiFetchWithSession.mockImplementation((path: string) => Promise.resolve(respond(path)));
+	await testPage.viewport(320, 900);
+	respondFromFixture();
 	await render(Page, { data: { ...fixtureDetail, session }, params: fixture.params });
 }
 
@@ -785,11 +776,7 @@ describe("the fixture's own Contract section, as the sweep mounts it (#885)", ()
 // describes one: only the PDF path, which the fixture cannot answer
 // because each test needs a different response from it.
 function mockSignedContract(pdfResponse: Response) {
-	const respond = toApiResponder(fixture);
-	apiFetchWithSession.mockImplementation((path: string) => {
-		if (path.endsWith('/contract/pdf')) return Promise.resolve(pdfResponse);
-		return respond(path);
-	});
+	respondFromFixture((path) => (path.endsWith('/contract/pdf') ? pdfResponse : undefined));
 }
 
 async function setupWithRoles(roles: string[], pdfResponse: Response, isContractor = false) {
