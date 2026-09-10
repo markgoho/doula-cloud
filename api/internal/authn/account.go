@@ -243,7 +243,10 @@ func (v *FirebaseVerifier) countChunkWithoutSecondFactor(ctx context.Context, ui
 // The body this puts on the wire is
 // `{"localId":"...","mfa":{"enrollments":null}}` -- the SDK's
 // validateAndFormatMfaSettings leaves its slice nil however the call is
-// written, so no caller can turn that null into an array. #1128 probed
+// written (checked against v4.21.0, the newest release), so no caller
+// going through auth.UserToUpdate can turn that null into an array.
+// Sending an array would mean a hand-rolled accounts:update, not a
+// different way of writing this call. #1128 probed
 // it against the real doula-cloud Identity Platform project on
 // 2026-09-10, on a throwaway account holding a real TOTP enrollment:
 // 200, and the enrollment was gone on the read-back. Production reads

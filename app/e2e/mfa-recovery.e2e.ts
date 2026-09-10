@@ -137,19 +137,17 @@ test('An Owner vouches for a locked-out doula, and the code reaches her and nobo
 	 * always marshals `mfa.enrollments` as JSON null (the SDK's own
 	 * validateAndFormatMfaSettings leaves the slice nil however it is
 	 * called); the emulator's schema refuses null for a repeated field
-	 * with "must be array". Production Identity Platform accepts it:
-	 * [#1128](https://github.com/markgoho/doula-cloud/issues/1128) ran
-	 * that exact body against the real doula-cloud project on 2026-09-10
-	 * and got a 200 with the enrollment actually gone on the read-back,
-	 * so the null is emulator strictness over proto3-JSON and the shipped
-	 * call is right as written. The success path therefore stays
-	 * unwalkable here -- the fix would be to send an array purely to
-	 * satisfy the emulator, which would leave the emulator, not
-	 * production, deciding the shape of a live call. See the second named
-	 * limitation in mfa.ts. What *is* walked is everything this screen
-	 * owns: reachable signed out, from the log-in screen, posting the
-	 * shape the endpoint reads, and rendering the one sentence #168
-	 * allows.
+	 * with "must be array". Production accepts the same body and clears
+	 * the factor --
+	 * [#1128](https://github.com/markgoho/doula-cloud/issues/1128) probed
+	 * it against the real doula-cloud project on 2026-09-10 -- so the
+	 * shipped call is right as written and the only thing that would make
+	 * the emulator accept it is rewriting a live credential call for the
+	 * emulator's sake. The success path therefore stays unwalkable here.
+	 * See the second named limitation in mfa.ts. What *is* walked is
+	 * everything this screen owns: reachable signed out, from the log-in
+	 * screen, posting the shape the endpoint reads, and rendering the one
+	 * sentence #168 allows.
 	 */
 	await context.clearCookies();
 	await page.goto('/login');
