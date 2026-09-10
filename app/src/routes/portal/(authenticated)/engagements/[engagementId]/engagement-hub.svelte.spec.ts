@@ -11,7 +11,7 @@ import Hub from './+page.svelte';
 // table-view/record-view switch.
 import '#lib/styles/app.css';
 import { toApiResponder, toPageState } from '../../../../routeFixture.js';
-import { createdAt, detail, fixture, practiceName, visits } from './page.fixture.js';
+import { activity, createdAt, detail, fixture, practiceName, visits } from './page.fixture.js';
 import { engagementLabel } from '#lib/clientRegister.js';
 if (!customElements.get('center-l')) registerLayoutPrimitives();
 
@@ -259,18 +259,12 @@ describe('the Activity disclosure (#486)', () => {
 	// holds rather than an average one -- the widest thing this column can
 	// actually be asked to lay out at 320px. Which action that is, is
 	// pinned in `activityPhrases.usage.spec.ts`, so a longer phrase added
-	// later fails there rather than silently demoting this sweep.
+	// later fails there rather than silently demoting this sweep. The row
+	// itself comes from the route's own fixture, which already carries that
+	// worst case as its first entry -- one description of this screen, not
+	// two (`.claude/rules/svelte-tests.md`).
 	it('is free of horizontal overflow from 320px up once opened (ADR-0024/0025)', async () => {
-		mockFetch(detail, [
-			{
-				subjectKind: 'engagement',
-				subjectId: detail.engagementId,
-				action: 'payment_reversed',
-				actorKind: 'staff',
-				actorName: 'Your practice',
-				createdAt: new Date().toISOString()
-			}
-		]);
+		mockFetch(detail, [activity[0]]);
 
 		const { run, frame, remove } = await mountInFrame(Hub);
 		try {

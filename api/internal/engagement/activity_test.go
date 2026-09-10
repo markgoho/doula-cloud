@@ -388,21 +388,12 @@ func TestListActivityHandler_StaffStillSeeVoidDeliberation(t *testing.T) {
 	testdb.SeedActivity(t, db, practiceID, activity.SubjectEngagement, engagementID,
 		string(activity.ActionContractVoidDeclined), activity.StaffActor(ownerID))
 
-	srv, session := newServer(t, db, identityUID)
-	defer srv.Close()
-	resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/activity")
-	defer resp.Body.Close()
-
-	var got engagement.ActivityListResponse
-	if err := json.NewDecoder(resp.Body).Decode(&got); err != nil {
-		// coverage:ignore reason: decode failure of a response this handler just wrote
-		t.Fatalf("decode: %v", err)
-	}
+	got := readActivity(t, db, practiceID, engagementID, identityUID)
 	seen := map[string]bool{}
 	for _, item := range got.Items {
 		seen[item.Action] = true
 	}
-	if !seen[string(activity.ActionContractVoidRequested)] || !seen[string(activity.ActionContractVoidDeclined)] {
+	if len(got.Items) != 2 || !seen[string(activity.ActionContractVoidRequested)] || !seen[string(activity.ActionContractVoidDeclined)] {
 		t.Fatalf("Items = %+v, want both void-deliberation rows on the Staff feed", got.Items)
 	}
 }

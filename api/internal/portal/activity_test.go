@@ -192,11 +192,11 @@ func TestActivityHandler_HidesStaffingEntries(t *testing.T) {
 }
 
 // TestActivityHandler_HidesVoidDeliberation proves #1096 at the reader
-// rather than only at the set: a Doula asking for a signed Contract to be
-// voided, and an Owner or Admin refusing that ask, are the Practice
-// deliberating with itself about her Contract, with nothing of hers
-// changed either way. A granted ask still reaches her as contract_voided,
-// which is why her record stays complete on every outcome.
+// rather than only at the set -- the SQL clause staffingActionsNotIn
+// builds, for the two actions CONTEXT.md's Activity entry now names as
+// the Practice deliberating with itself. contract_voided is seeded beside
+// them because it is the half that does not change: it is the outcome she
+// reads, so a granted ask still reaches her and her record stays complete.
 func TestActivityHandler_HidesVoidDeliberation(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "portal-activity-void-deliberation"
