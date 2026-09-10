@@ -5,7 +5,7 @@
 	import { page } from '#lib/appState.svelte.js';
 	import { apiBaseURL, probeSession } from '#lib/api.js';
 	import { decidePortalLanding, type PortalSessionInfo } from '#lib/portalLanding.js';
-	import { sessionEndedFrom } from '#lib/sessionEnded.js';
+	import { didSessionEnd } from '#lib/sessionEnded.js';
 	import TextInput from '#lib/components/atoms/TextInput.svelte';
 	import Button from '#lib/components/atoms/Button.svelte';
 	import Notice from '#lib/components/atoms/Notice.svelte';
@@ -27,7 +27,7 @@
 	 * `page` is the seam, and a plain read would resolve once at init and
 	 * never see a drag-surface override.
 	 */
-	const hasSessionEnded = $derived(sessionEndedFrom(page.url));
+	const hasSessionEnded = $derived(didSessionEnd(page.url));
 
 	let email = $state('');
 	const submission = new FormSubmission();

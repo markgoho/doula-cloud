@@ -15,7 +15,7 @@
 	import { getFirebaseAuth } from '#lib/firebase.js';
 	import { apiBaseURL, apiFetchWithSession, probeSession } from '#lib/api.js';
 	import { decideLanding, type Membership, type SessionInfo } from '#lib/landing.js';
-	import { sessionEndedFrom } from '#lib/sessionEnded.js';
+	import { didSessionEnd } from '#lib/sessionEnded.js';
 	import TextInput from '#lib/components/atoms/TextInput.svelte';
 	import Button from '#lib/components/atoms/Button.svelte';
 	import Link from '#lib/components/atoms/Link.svelte';
@@ -50,7 +50,7 @@
 	 * override set after this component mounts. A plain read would
 	 * resolve once, at init, and never see either.
 	 */
-	const hasSessionEnded = $derived(sessionEndedFrom(page.url));
+	const hasSessionEnded = $derived(didSessionEnd(page.url));
 
 	const emailId = 'login-email';
 	const passwordId = 'login-password';

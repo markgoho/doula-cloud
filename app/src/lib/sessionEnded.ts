@@ -30,12 +30,23 @@ const PARAM = 'sessionEnded';
 const SET = 'true';
 
 /**
+Everything this module needs of an address: the ability to be asked for
+one query parameter. A real `URL` satisfies it, and so does SvelteKit's
+`page.url`, whose `searchParams` is a `ReadonlyURLSearchParams` and so
+is not assignable to `URL` -- which is what both login screens have to
+hand.
+*/
+interface AddressQuery {
+	readonly searchParams: { get(name: string): string | null };
+}
+
+/**
 Whether url is a login address entered after a session ended, as opposed
-to an ordinary visit to the same screen. Takes the whole `URL` rather
+to an ordinary visit to the same screen. Takes the whole address rather
 than its `searchParams` so a caller passes what it already has -- both
 login screens read `page.url`.
 */
-export function sessionEndedFrom(url: URL): boolean {
+export function didSessionEnd(url: AddressQuery): boolean {
 	return url.searchParams.get(PARAM) === SET;
 }
 

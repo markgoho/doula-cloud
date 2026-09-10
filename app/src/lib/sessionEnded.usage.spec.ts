@@ -69,7 +69,7 @@ function literals(source: string): string[] {
 
 function findOffenses(file: string, source: string): Offense[] {
 	return literals(source)
-		.filter((literal) => FLAG.test(literal.replace(OWNER_MODULE_ID, '')))
+		.filter((literal) => FLAG.test(literal.replaceAll(OWNER_MODULE_ID, '')))
 		.map((literal) => ({ file, found: literal }));
 }
 
@@ -112,12 +112,12 @@ describe('findOffenses', () => {
 
 	it('allows importing the owner', () => {
 		expect(
-			findOffenses('x.ts', "import { sessionEndedFrom } from '#lib/sessionEnded.js';")
+			findOffenses('x.ts', "import { didSessionEnd } from '#lib/sessionEnded.js';")
 		).toEqual([]);
 	});
 
 	it('allows an identifier built from the same words', () => {
-		expect(findOffenses('x.svelte', 'const hasSessionEnded = $derived(sessionEndedFrom(page.url));')).toEqual(
+		expect(findOffenses('x.svelte', 'const hasSessionEnded = $derived(didSessionEnd(page.url));')).toEqual(
 			[]
 		);
 	});
