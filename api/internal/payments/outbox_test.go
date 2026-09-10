@@ -20,13 +20,18 @@ const (
 	// across this package's payout-outbox tests for "something is
 	// outstanding" -- its content never matters beyond that.
 	testRequirementDOB = "individual.dob"
+	// The Platform-voice sending identity every outbox worker in this
+	// package's tests is built with -- named once now that three workers
+	// (payout, payment-received and #917's connect nudge) each need it.
+	testOutboxFrom    = "a@b.test"
+	testOutboxReplyTo = "support@b.test"
 )
 
 // newTestPayoutWorker builds a payments.Worker around sender with this
 // file's stand-in AppBaseURL/From/ReplyTo -- every outbox test needs
 // one, only the injected Sender and (occasionally) Now vary.
 func newTestPayoutWorker(sender mail.Sender) payments.Worker {
-	return payments.Worker{Mailer: outbox.Mailer{Sender: sender, Now: time.Now, AppBaseURL: testPayoutAppBaseURL, From: "a@b.test", ReplyTo: "support@b.test"}}
+	return payments.Worker{Mailer: outbox.Mailer{Sender: sender, Now: time.Now, AppBaseURL: testPayoutAppBaseURL, From: testOutboxFrom, ReplyTo: testOutboxReplyTo}}
 }
 
 // seedPayoutOutboxRow inserts a pending payout_outbox row for

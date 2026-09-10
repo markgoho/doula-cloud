@@ -2,7 +2,12 @@ import { page as testPage } from 'vitest/browser';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import { jsonResponse } from '#lib/testResponse.js';
-import { CONNECT_STATUS_CHECK_FAILED_MESSAGE, CONNECT_STATUS_POLL_DELAYS_MS } from '#lib/payments.js';
+import {
+	CONNECT_NUDGE_SENT_MESSAGE,
+	CONNECT_OWNERS_ALREADY_EMAILED_MESSAGE,
+	CONNECT_STATUS_CHECK_FAILED_MESSAGE,
+	CONNECT_STATUS_POLL_DELAYS_MS
+} from '#lib/payments.js';
 import Page from './+page.svelte';
 import { toPageState } from '../../../../routeFixture.js';
 import { fixture } from './page.fixture.js';
@@ -49,6 +54,11 @@ interface MockOptions {
 	   (#443). `pending` is the default because it is where every hosted
 	   page starts and where the happy path passes through. */
 	pageState?: '' | 'pending' | 'live' | 'failed';
+	/* #917: the sentence the BFF refuses the connect nudge with, when it
+	   refuses at all. Undefined means it accepts, which is the ordinary
+	   case -- a refusal is the cooldown, or an Owner who connected in
+	   another tab, neither of which the screen can see coming. */
+	nudgeRefusal?: string;
 }
 
 function mockApi({
@@ -56,7 +66,8 @@ function mockApi({
 	roles = [],
 	requirementsDue = [],
 	websiteMode = 'own',
-	pageState: websitePageState = 'pending'
+	pageState: websitePageState = 'pending',
+	nudgeRefusal
 }: MockOptions = {}) {
 	// The Membership (roles) comes off page.data.session (#835), not a
 	// fetch this mock has to answer.
@@ -87,6 +98,16 @@ function mockApi({
 		}
 		if (!isOwnerOrAdmin) {
 			return Promise.resolve(new Response('not permitted to read this', { status: 403 }));
+		}
+		// #917. Placed above the connect-status fallback so it is never
+		// answered with a status body, and above nothing else -- it is
+		// Owner-and-Admin gated exactly like the read below it.
+		if (path.endsWith('/payments/connect/nudge')) {
+			return Promise.resolve(
+				nudgeRefusal === undefined
+					? new Response(undefined, { status: 202 })
+					: new Response(nudgeRefusal, { status: 409 })
+			);
 		}
 		if (path.endsWith('/website')) {
 			return Promise.resolve(
@@ -267,6 +288,72 @@ describe('payments settings screen', () => {
 		await expect.element(testPage.getByRole('button', { name: 'Continue Stripe onboarding' })).toBeVisible();
 	});
 
+});
+
+/*
+ * #917 (ADR-0035). The Admin can see Stripe is unconnected and cannot
+ * connect it; whether the screen offers her a way to say so turns on
+ * whether anything else in the product would reach an Owner about it.
+ * Only `not_connected` produces no Stripe webhook, so only there does
+ * #343's payout Notification fail to fire on its own.
+ */
+describe('telling an Owner the Practice still has to connect Stripe (#917)', () => {
+	it('offers an Admin the ask when nothing else would reach an Owner', async () => {
+		mockApi({ status: 'not_connected', roles: ['admin'] });
+		await render(Page, {});
+
+		await expect.element(testPage.getByText('A Practice Owner has to connect Stripe.')).toBeVisible();
+		await expect.element(testPage.getByRole('button', { name: 'Email the Practice Owners' })).toBeVisible();
+	});
+
+	it('confirms the send, and takes the control away so a second press is not offered', async () => {
+		mockApi({ status: 'not_connected', roles: ['admin'] });
+		await render(Page, {});
+
+		await testPage.getByRole('button', { name: 'Email the Practice Owners' }).click();
+
+		await expect.element(testPage.getByText(CONNECT_NUDGE_SENT_MESSAGE)).toBeVisible();
+		await expect
+			.element(testPage.getByRole('button', { name: 'Email the Practice Owners' }))
+			.not.toBeInTheDocument();
+		const nudged = apiFetchWithSession.mock.calls.filter((call: unknown[]) =>
+			(call[0] as string).endsWith('/payments/connect/nudge')
+		);
+		expect(nudged).toHaveLength(1);
+	});
+
+	it("says why the ask was refused rather than swallowing the server's sentence", async () => {
+		// The ordinary way to meet this is a colleague having asked
+		// yesterday from her own screen, which this one cannot see.
+		const refusal = 'Doula Cloud was already asked to email every Practice Owner about this in the last week.';
+		mockApi({ status: 'not_connected', roles: ['admin'], nudgeRefusal: refusal });
+		await render(Page, {});
+
+		await testPage.getByRole('button', { name: 'Email the Practice Owners' }).click();
+
+		await expect.element(testPage.getByText(refusal)).toBeVisible();
+		await expect.element(testPage.getByText(CONNECT_NUDGE_SENT_MESSAGE)).not.toBeInTheDocument();
+	});
+
+	it('tells an Admin mid-onboarding that the Owners already have the email, and offers no second one', async () => {
+		mockApi({ status: 'onboarding_incomplete', roles: ['admin'], requirementsDue: ['individual.dob'] });
+		await render(Page, {});
+
+		await expect.element(testPage.getByText(CONNECT_OWNERS_ALREADY_EMAILED_MESSAGE)).toBeVisible();
+		await expect
+			.element(testPage.getByRole('button', { name: 'Email the Practice Owners' }))
+			.not.toBeInTheDocument();
+	});
+
+	it('never offers the ask to an Owner, who can connect Stripe herself', async () => {
+		mockApi({ status: 'not_connected', roles: ['owner'] });
+		await render(Page, {});
+
+		await expect.element(testPage.getByRole('button', { name: 'Connect Stripe' })).toBeVisible();
+		await expect
+			.element(testPage.getByRole('button', { name: 'Email the Practice Owners' }))
+			.not.toBeInTheDocument();
+	});
 });
 
 describe('what Getting paid is, who it is between, and how it differs from Credits (#256)', () => {

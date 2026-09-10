@@ -172,6 +172,7 @@ func main() {
 	outboxWorker := portalinvite.NewWorker(practiceVoiceMailer)
 	lowCreditOutboxWorker := billing.Worker{Mailer: platformMailer}
 	payoutOutboxWorker := payments.Worker{Mailer: platformMailer}
+	connectNudgeOutboxWorker := payments.ConnectNudgeWorker{Mailer: platformMailer}
 	paymentOutboxWorker := payments.PaymentReceivedWorker{Mailer: platformMailer}
 	sessionNoticeOutboxWorker := sessionnotice.NewWorker(platformMailer)
 	staffInviteOutboxWorker := staffinvite.NewWorker(platformMailer)
@@ -252,6 +253,7 @@ func main() {
 		PortalInviteWorker:      outboxWorker,
 		LowCreditWorker:         lowCreditOutboxWorker,
 		PayoutWorker:            payoutOutboxWorker,
+		ConnectNudgeWorker:      connectNudgeOutboxWorker,
 		PaymentReceivedWorker:   paymentOutboxWorker,
 		SessionNoticeWorker:     sessionNoticeOutboxWorker,
 		StaffInviteWorker:       staffInviteOutboxWorker,

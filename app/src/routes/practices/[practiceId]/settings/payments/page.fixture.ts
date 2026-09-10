@@ -91,9 +91,53 @@ export const asAdmin: RouteVariant = {
  */
 const paymentTerms = { netDays: 30, isDefault: true };
 
+/* This screen's three fetches, answered once: the website and the payment
+   terms are the same on every branch, and the Connect status is the only
+   thing a branch has any reason to change. Both the base fixture and
+   #917's variant below build their `respond` from it. */
+function respondWith(connectStatus: ConnectStatusResult): (path: string) => Response {
+	return (path) => {
+		if (path.endsWith('/website')) return jsonResponse(website);
+		if (path.endsWith('/payments/payment-terms')) return jsonResponse(paymentTerms);
+		return jsonResponse(connectStatus);
+	};
+}
+
 export const asDoula: RouteVariant = {
 	name: 'The Stripe Connect settings screen, as a Doula',
 	pageData: session(['doula'])
+};
+
+/*
+ * #917's own branch, and the one reason this screen needs a fourth
+ * session rather than three. The Admin variant above inherits a
+ * `payouts_restricted` account with three outstanding requirements, which
+ * is a Practice #343's payout Notification has already mailed -- so she
+ * reads a single sentence saying so and is offered nothing. A Practice
+ * with no Stripe account at all is the state no webhook can reach
+ * (ADR-0035), and it is the only one that puts a control on her screen:
+ * a sentence, and a button under it. That tree is not a subset of any
+ * branch declared above, so the sweep would otherwise never mount it.
+ *
+ * A variant's `respond` is a replacement rather than a merge, so this one
+ * would have restated the website and payment-terms answers verbatim.
+ * `respondWith` is those two written once, taking only the thing that
+ * actually differs -- which is the spread the fixture rule asks for, in
+ * the one form a function-valued field can take it.
+ *
+ * `requirementsDue` is empty because a Practice with no account has
+ * nothing outstanding: the count sentence is one the Admin variant above
+ * already carries.
+ */
+export const asAdminWithNoAccount: RouteVariant = {
+	name: 'The Stripe Connect settings screen, as an Admin with no Stripe account',
+	pageData: session(['admin']),
+	respond: respondWith({
+		status: 'not_connected',
+		cardPaymentsStatus: 'unsupported',
+		payoutsStatus: 'unsupported',
+		requirementsDue: []
+	})
 };
 
 export const fixture: RouteFixture = {
@@ -102,11 +146,7 @@ export const fixture: RouteFixture = {
 	params: { practiceId: 'practice-1' },
 	url: 'https://example.test/practices/practice-1/settings/payments',
 	pageData: session(['owner']),
-	respond: (path) => {
-		if (path.endsWith('/website')) return jsonResponse(website);
-		if (path.endsWith('/payments/payment-terms')) return jsonResponse(paymentTerms);
-		return jsonResponse(status);
-	},
+	respond: respondWith(status),
 	readyText: 'Getting paid',
-	variants: [asAdmin, asDoula]
+	variants: [asAdmin, asAdminWithNoAccount, asDoula]
 };

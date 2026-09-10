@@ -16,7 +16,7 @@ import (
 // should call.
 type OutboxType string
 
-// The eleven outbox types a nudge can target (ADR-0010, ADR-0013). Where
+// The twelve outbox types a nudge can target (ADR-0010, ADR-0013). Where
 // each one is served is not held here: the BFF's own outbox list names
 // both the type and the path, and hands this package the map at
 // construction (outbox.NudgePaths). A constant here with no registration
@@ -39,6 +39,14 @@ const (
 	// same: durable rows, retried with backoff, dead-lettered when they
 	// stop being worth retrying.
 	ClientErasure OutboxType = "client-erasure"
+	// ConnectNudge is #917's "your Practice still has to connect Stripe"
+	// mail, and the only nudge target a Staff member presses a button to
+	// queue rather than a webhook or a background transition queueing it
+	// (ADR-0035). Nudged for the reason MFARecoveryCode is: a colleague is
+	// standing at the screen having decided this is now urgent, so five
+	// minutes of Cloud Scheduler cadence is exactly the latency ADR-0013
+	// exists to remove.
+	ConnectNudge OutboxType = "connect-nudge"
 )
 
 // delay is how long a nudge waits before it fires, per outbox type.
@@ -86,12 +94,15 @@ func (NoOpEnqueuer) Enqueue(context.Context, OutboxType) error {
 
 // Fire returns a closure that enqueues a nudge for outboxType via enq,
 // logging and swallowing any error rather than propagating it -- the one
-// piece of behavior every write site in ADR-0013 needs identically. The
-// three write sites that commit their own write directly call the
-// returned closure immediately after that commit succeeds; the two that
-// run inside staffauth.Middleware's request-scoped transaction pass it to
-// Register instead, so Middleware runs it only after its own commit
-// succeeds.
+// piece of behavior every write site in ADR-0013 needs identically. A
+// write site that commits its own write calls the returned closure
+// immediately after that commit succeeds; one that runs inside
+// staffauth.Middleware's request-scoped transaction passes it to Register
+// instead, so Middleware runs it only after its own commit succeeds.
+//
+// Deliberately no count of either group: this comment carried one, it was
+// wrong by several before #917 added another Register site, and a number
+// nothing checks goes stale the next time a write site is added.
 func Fire(enq Enqueuer, outboxType OutboxType) func(context.Context) {
 	return func(ctx context.Context) {
 		if err := enq.Enqueue(ctx, outboxType); err != nil {

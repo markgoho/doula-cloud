@@ -14,6 +14,7 @@ import (
 	"doula-cloud/api/internal/idempotency"
 	"doula-cloud/api/internal/payments"
 	"doula-cloud/api/internal/staffauth"
+	"doula-cloud/api/internal/tasknudge"
 	"doula-cloud/api/internal/testdb"
 )
 
@@ -29,7 +30,7 @@ func newPracticeInvoiceServer(t *testing.T, db *testdb.DB, uid string) (srv *htt
 	mux := http.NewServeMux()
 	g := staffauth.NewGatedRouter(mux, db.App)
 	ir := idempotency.NewRouter(g, db.App)
-	payments.Mount(g, ir, payments.NewFakeClient())
+	payments.Mount(g, ir, payments.NewFakeClient(), tasknudge.NoOpEnqueuer{})
 	return httptest.NewServer(mux), authntest.SeedSession(t, db.App, uid)
 }
 

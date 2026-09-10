@@ -63,6 +63,11 @@ var testLowCreditWorker = billing.Worker{Mailer: outbox.Mailer{Sender: &mail.Fak
 // counterpart to testLowCreditWorker above.
 var testPayoutOutboxWorker = payments.Worker{Mailer: outbox.Mailer{Sender: &mail.FakeSender{}, Now: time.Now, AppBaseURL: testExpectedOrigin, From: testWorkerFrom, ReplyTo: testWorkerReplyTo}}
 
+// testConnectNudgeOutboxWorker is every routes() test's stand-in for the
+// connect-nudge outbox worker (#917), the payments package's third
+// outbox worker beside the two either side of it here.
+var testConnectNudgeOutboxWorker = payments.ConnectNudgeWorker{Mailer: outbox.Mailer{Sender: &mail.FakeSender{}, Now: time.Now, AppBaseURL: testExpectedOrigin, From: testWorkerFrom, ReplyTo: testWorkerReplyTo}}
+
 // testPaymentOutboxWorker is every routes() test's stand-in for the
 // payment-received outbox worker (#344), the payments package's
 // counterpart to testPayoutOutboxWorker above.
@@ -136,6 +141,7 @@ func testDeps() Deps {
 		PortalInviteWorker:      testWorker,
 		LowCreditWorker:         testLowCreditWorker,
 		PayoutWorker:            testPayoutOutboxWorker,
+		ConnectNudgeWorker:      testConnectNudgeOutboxWorker,
 		PaymentReceivedWorker:   testPaymentOutboxWorker,
 		SessionNoticeWorker:     testSessionNoticeOutboxWorker,
 		StaffInviteWorker:       testStaffInviteOutboxWorker,
