@@ -1387,6 +1387,8 @@ func TestListHandler_ReturnsVisitType(t *testing.T) {
 	pregnancyEndedOn := "2026-03-15"
 	setPregnancyEnded(t, db, engagementID, "live_birth", pregnancyEndedOn)
 
+	practiceZone := seededPracticeZone(t)
+
 	before := seedScheduledVisit(t, db, engagementID, staffID, time.Date(2026, 3, 1, 9, 0, 0, 0, time.UTC))
 	onPivot := seedScheduledVisit(t, db, engagementID, staffID, time.Date(2026, 3, 15, 20, 0, 0, 0, time.UTC))
 	after := seedScheduledVisit(t, db, engagementID, staffID, time.Date(2026, 3, 20, 9, 0, 0, 0, time.UTC))
@@ -1417,7 +1419,7 @@ func TestListHandler_ReturnsVisitType(t *testing.T) {
 		if v.Type != want {
 			t.Errorf("visit %s: type = %q, want %q", id, v.Type, want)
 		}
-		if agree := visit.DeriveType(*v.ScheduledAt, &pregnancyEndedOn); v.Type != agree {
+		if agree := visit.DeriveType(*v.ScheduledAt, &pregnancyEndedOn, practiceZone); v.Type != agree {
 			t.Errorf("visit %s: handler's type %q disagrees with DeriveType's own %q", id, v.Type, agree)
 		}
 	}
@@ -2008,4 +2010,70 @@ func parseRFC3339(t *testing.T, s string) time.Time {
 		t.Fatalf("parse %q: %v", s, err)
 	}
 	return parsed
+}
+
+// TestListHandler_TypesTheEveningOfTheBirthAsBirth is #953's own AC
+// against the live HTTP surface: a Visit at 9pm in the Practice's own
+// zone on the pregnancy-end date types birth. The instant seeded is
+// 01:00 UTC the *following* day, which is exactly what made this answer
+// postpartum while the derivation compared UTC calendar days -- the
+// Doula worked the evening of the birth and the product told her it was
+// postpartum care.
+func TestListHandler_TypesTheEveningOfTheBirthAsBirth(t *testing.T) {
+	db := testdb.New(t)
+	const identityUID = "staff-listing-visit-type-evening"
+	practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, "employee")
+	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
+	setPregnancyEnded(t, db, engagementID, "live_birth", "2026-03-15")
+
+	zone := seededPracticeZone(t)
+	evening := time.Date(2026, 3, 15, 21, 0, 0, 0, zone)
+	if got := evening.UTC().Day(); got != 16 {
+		t.Fatalf("fixture is not the boundary this test is about: 9pm on the 15th is UTC day %d, want 16", got)
+	}
+	eveningOfTheBirth := seedScheduledVisit(t, db, engagementID, staffID, evening)
+	nextMorning := seedScheduledVisit(t, db, engagementID, staffID, time.Date(2026, 3, 16, 9, 0, 0, 0, zone))
+
+	srv, session := newServer(t, db, identityUID)
+	defer srv.Close()
+
+	resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/visits")
+	defer resp.Body.Close()
+	var listResp visit.ListResponse
+	if err := json.NewDecoder(resp.Body).Decode(&listResp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	byID := map[string]visit.Visit{}
+	for _, v := range listResp.Items {
+		byID[v.VisitID] = v
+	}
+
+	if got := byID[eveningOfTheBirth].Type; got != visit.TypeBirth {
+		t.Errorf("9pm on the pregnancy-end date in the Practice's own zone: type = %q, want %q", got, visit.TypeBirth)
+	}
+	if got := byID[nextMorning].Type; got != visit.TypePostpartum {
+		t.Errorf("the next morning in the Practice's own zone: type = %q, want %q", got, visit.TypePostpartum)
+	}
+}
+
+// TestListHandler_UnloadablePracticeZoneIsAnError proves the Visit list
+// refuses rather than answering with the wrong day when the Practice's
+// zone will not load. Falling back to UTC would reintroduce exactly the
+// misplacement #953 exists to end, and say nothing about it.
+func TestListHandler_UnloadablePracticeZoneIsAnError(t *testing.T) {
+	db := testdb.New(t)
+	const identityUID = "staff-listing-visit-type-bad-zone"
+	practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, "employee")
+	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
+	seedScheduledVisit(t, db, engagementID, staffID, time.Date(2026, 3, 15, 20, 0, 0, 0, time.UTC))
+	setPracticeTimezone(t, db, practiceID, "Nowhere/Atlantis")
+
+	srv, session := newServer(t, db, identityUID)
+	defer srv.Close()
+
+	resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/visits")
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusInternalServerError {
+		t.Fatalf("status = %d, want %d for a Practice zone that will not load", resp.StatusCode, http.StatusInternalServerError)
+	}
 }
