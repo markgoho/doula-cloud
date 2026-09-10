@@ -133,7 +133,7 @@ describe('the pre-account Offer read refuses its own submit', () => {
 		);
 	});
 
-	it('refuses a code that is not six digits, and says what a code looks like', async () => {
+	it('refuses a code that is not six digits, and shows what one looks like', async () => {
 		const { calls } = await setup();
 
 		await testPage.getByLabelText('Access code').fill('12ab');
@@ -141,7 +141,7 @@ describe('the pre-account Offer read refuses its own submit', () => {
 
 		await expect
 			.element(
-				testPage.getByRole('link', { name: 'The code from your email is six digits, like 123456' })
+				testPage.getByRole('link', { name: 'Enter the code in the correct format, like 123456' })
 			)
 			.toBeVisible();
 		expect(calls).toHaveLength(0);

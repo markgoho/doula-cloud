@@ -58,16 +58,20 @@
 	 * (#1107, ADR-0021's Recover from validation errors pattern). Both
 	 * messages name the next action and what a code looks like, because a
 	 * person reaching this screen is often unsure why she is being asked
-	 * for a code at all.
+	 * for a code at all -- and the format one is written in the
+	 * "in the correct format, like ..." shape `formErrors.ts` already uses
+	 * for an address, so the two read the same way.
+	 *
+	 * `undefined` rather than an empty array, because `run` reads any
+	 * returned value as the refusal itself: an empty array would be a
+	 * refusal of nothing, which stops the load and reports no reason.
 	 */
-	function refusedCode(entered: string): FormError[] | undefined {
+	function codeRefusal(entered: string): FormError[] | undefined {
 		if (entered === '') {
 			return [{ message: 'Enter the six-digit code from your email', targetId: codeId }];
 		}
 		if (!CODE_PATTERN.test(entered)) {
-			return [
-				{ message: 'The code from your email is six digits, like 123456', targetId: codeId }
-			];
+			return [{ message: 'Enter the code in the correct format, like 123456', targetId: codeId }];
 		}
 		return undefined;
 	}
@@ -76,7 +80,7 @@
 		event.preventDefault();
 		await submission.run(async () => {
 			const entered = code.trim();
-			const refused = refusedCode(entered);
+			const refused = codeRefusal(entered);
 			if (refused) return refused;
 
 			/*
@@ -132,7 +136,6 @@
 					value={code}
 					onInput={(value) => (code = value)}
 					required
-					autocomplete="one-time-code"
 				/>
 			{/snippet}
 		</LabeledField>
