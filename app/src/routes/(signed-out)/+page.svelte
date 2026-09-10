@@ -62,6 +62,7 @@
 		CARE_HEADING,
 		NO_CARE_HEADING,
 		NO_CARE_MESSAGE,
+		NO_CARE_WRONG_ADDRESS_MESSAGE,
 		engagementLabel,
 		engagementStatusLabel
 	} from '#lib/clientRegister.js';
@@ -88,8 +89,12 @@
 	 * alongside `/no-practice`'s own handler, which is the only other
 	 * scope-less sign-out: the two differ in where they land -- a Client
 	 * sent to the Staff login would be shown a door that is not hers
-	 * (#153) -- and in this one's `invalidateAll`, so they are two
-	 * behaviors that read alike rather than one repeated twice.
+	 * (#153) -- and in whether the screen has to invalidate anything.
+	 * `/no-practice` does not, because it re-probes `/api/staff/session`
+	 * in its own `onMount` and sends a 401 to the login screen, so a Back
+	 * to it re-asks the question rather than redrawing a cached answer.
+	 * `/` answers that question in a `load` instead, which is why this one
+	 * has to say so explicitly below.
 	 */
 	async function handleSignOut(): Promise<SignOutOutcome> {
 		const outcome = await signOutOfSession({
@@ -148,7 +153,7 @@
 				</li>
 			{/each}
 		</ul>
-	{:else if data.engagements.length === 0}
+	{:else if hasNoCare}
 		<!--
 			#1116: two people reach this state -- one whose Practice has not
 			set her care up yet, and one who signed in with an address her
@@ -158,10 +163,7 @@
 			heading) and what to do next.
 		-->
 		<p>{NO_CARE_MESSAGE}</p>
-		<p>
-			If your Practice has already set up your care, this may be a different email address from the
-			one your Practice has. Sign out, then sign in with that address.
-		</p>
+		<p>{NO_CARE_WRONG_ADDRESS_MESSAGE}</p>
 		<SignOutButton signOut={handleSignOut} />
 	{:else}
 		<!--

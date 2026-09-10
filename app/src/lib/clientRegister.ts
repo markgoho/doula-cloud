@@ -89,6 +89,15 @@ export const CARE_HEADING = 'Your care';
 export const NO_CARE_HEADING = "You don't have care set up yet";
 export const NO_CARE_MESSAGE = 'Ask your Practice to set it up. It shows up here once that happens.';
 
+/** The second half of the same empty-state instruction (#1116). Two
+ * people read `NO_CARE_HEADING`, and only one of them is waiting on a
+ * Practice: the other signed in under an address her Practice does not
+ * hold, and for her the way out is the sign-out button beside this
+ * sentence. Fixed wording, so it lives here beside its twin rather than
+ * inline on the one screen that renders it (ADR-0005). */
+export const NO_CARE_WRONG_ADDRESS_MESSAGE =
+	'If your Practice has already set up your care, you may have signed in with a different email address from the one your Practice has. Sign out, then sign in with that address.';
+
 /**
  * The one label a Client reads for an Engagement wherever more than one of
  * hers might sit side by side: the portal root's list, and the authenticated

@@ -120,7 +120,7 @@ describe('/+page.svelte', () => {
 			.toBeVisible();
 		await expect.element(testPage.getByText('Ask your Practice to set it up', { exact: false })).toBeVisible();
 		await expect
-			.element(testPage.getByText('a different email address from the one your Practice has', { exact: false }))
+			.element(testPage.getByText('signed in with a different email address', { exact: false }))
 			.toBeVisible();
 	});
 
