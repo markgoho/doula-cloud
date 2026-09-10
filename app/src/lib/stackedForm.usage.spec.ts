@@ -34,16 +34,18 @@ import { describe, expect, it } from 'vitest';
  * has no `<form>` of its own) or carries `stacked-form:ignore: <reason>`
  * beside it, in the marker style `tokens:ignore`, `layout:ignore` and
  * `primitives:ignore` already use here. The escape hatch is the point
- * rather than a leak: a form inside a `DataTable` row, a `method="get"`
- * filter, and a page-wide `<form>` wrapping a Template that stacks its own
- * fieldsets all want something other than a run of fields at
- * `var(--space-5)`, and #1108's complaint was never that they are wrong --
- * it was that nothing on the page said which they were.
+ * rather than a leak: a `<form>` wrapping a Template that stacks its own
+ * fieldsets, a `method="get"` filter laying its controls out on two axes,
+ * a form holding one button, and a form whose only refusal today is the
+ * browser's own `required` (#1228, where `StackedForm`'s `novalidate`
+ * would take that away) each want something other than a plain run of
+ * fields. #1108's complaint was never that they are wrong -- it was that
+ * nothing on the page said which they were.
  *
- * The marker is read from the `<form` line itself or from the three lines
- * above it, which is where the HTML comment explaining a form sits. A
- * comment that runs several lines counts as its last one, so the prose
- * can be as long as the reason needs.
+ * The marker is read from the `<form` line itself or from the nearest
+ * line above it that holds anything, which is where the HTML comment
+ * explaining a form sits. A comment that runs several lines counts as its
+ * last one, so the prose can be as long as the reason needs.
  */
 
 const appRoot = fileURLToPath(new URL('../../', import.meta.url));
@@ -67,12 +69,9 @@ function read(file: string): string {
  * three HTML comments that mention one. So `<script>` and `<style>` go
  * whole, and an HTML comment goes unless it carries the marker -- which is
  * exactly where the marker is meant to live, in a comment beside the form
- * it explains. Line count is preserved on the way out, because the
- * marker is read from the source lines just above the form, and a comment
- * that says nothing about stacking has to leave a line behind rather than
- * closing the gap -- `MessageThread` writes an `eslint-disable-next-line`
- * comment inside a form, and a form could have one above it just as
- * easily.
+ * it explains. Line count is preserved on the way out, because the marker
+ * is read from the line just above the form and a blanked comment has to
+ * leave that line behind rather than closing the gap.
  */
 function markup(source: string): string {
 	return source
@@ -106,14 +105,30 @@ function isEntryScreen(file: string): boolean {
 	return ENTRY_TEMPLATE_IMPORT.test(read(file));
 }
 
+/*
+ * The nearest line above that holds anything, rather than a fixed window.
+ * A window of one is too narrow -- `markup` blanks a comment that says
+ * nothing about stacking, and `MessageThread` writes an
+ * `eslint-disable-next-line` comment inside a form, so a form could
+ * easily have one above it -- and a window of three is too wide, because
+ * a marker written for one form would then exempt an unrelated `<form>`
+ * two lines below it. "Nothing but blank lines in between" is the rule
+ * that means beside.
+ */
+function precedingLine(lines: string[], index: number): string {
+	for (let above = index - 1; above >= 0; above--) {
+		if (lines[above]!.trim() !== '') return lines[above]!;
+	}
+	return '';
+}
+
 function unmarkedForms(source: string): number[] {
 	const lines = markup(source).split('\n');
 	const unmarked: number[] = [];
 
 	for (const [index, line] of lines.entries()) {
 		if (!line.includes('<form')) continue;
-		const nearby = lines.slice(Math.max(0, index - 3), index + 1);
-		if (nearby.some((candidate) => IGNORE_MARKER.test(candidate))) continue;
+		if (IGNORE_MARKER.test(line) || IGNORE_MARKER.test(precedingLine(lines, index))) continue;
 		unmarked.push(index + 1);
 	}
 
