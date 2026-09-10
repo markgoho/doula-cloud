@@ -1,3 +1,18 @@
+# `doula-api`'s own base URL, written once. Four things have to agree on it
+# and none of them can be checked against the others by anything but a human
+# reading two files: the `INTERNAL_OIDC_AUDIENCE` the guard validates against
+# (ADR-0037), the `audience` on each Scheduler job's `oidc_token`, and
+# `NOTIFICATION_TASKS_TARGET_BASE_URL`, which is both where a nudge is sent
+# and — through `internalCallerAuth` in `api/main.go` — the audience Cloud
+# Tasks mints each nudge's token for. Both Cloud Scheduler and Cloud Tasks
+# default an unset `audience` to the *full target URI*, path included, while
+# the guard checks the base URL, so a job written without an explicit
+# `audience` 401s with an otherwise perfectly valid token. A local is what
+# stops those four from drifting apart one edit at a time.
+locals {
+  doula_api_base_url = "https://doula-api-850855848778.us-central1.run.app"
+}
+
 # Imported from "projects/doula-cloud/locations/us-central1/services/doula-api"
 # (docs/infrastructure.md). Terraform owns the shape of this service, never
 # its image: the `lifecycle` block below is the whole of the split between
@@ -115,6 +130,38 @@ resource "google_cloud_run_v2_service" "doula_api" {
           }
         }
       }
+      # ADR-0037's three, set here by #1183. `internalauth.Guard` needs all
+      # three of audience, allowlist and validator before it will accept a
+      # token at all — a half-configured service refuses rather than waving a
+      # signed token through — so these arrive together or not at all.
+      env {
+        name  = "INTERNAL_OIDC_AUDIENCE"
+        value = local.doula_api_base_url
+      }
+      # Three callers, not the two #1183 was written with. `internal-caller@`
+      # is the Scheduler jobs' identity and `doula-api-runtime@` is what a
+      # Cloud Tasks nudge arrives as; `github-action-733741680@` is the third
+      # because `firebase-hosting-merge.yml`'s `verify-pages` step now presents
+      # an ID token minted for the identity that workflow already authenticates
+      # as, rather than reading the shared secret out of Secret Manager. That
+      # account can already deploy any image to this service, so allowlisting
+      # it grants nothing it could not already reach; making CI impersonate a
+      # fourth account would buy a longer allowlist and no boundary.
+      env {
+        name = "INTERNAL_OIDC_CALLERS"
+        value = join(",", [
+          google_service_account.internal_caller.email,
+          google_service_account.doula_api_runtime.email,
+          google_service_account.github_action.email,
+        ])
+      }
+      # The account Cloud Tasks mints each nudge's token for, which is the
+      # account the service itself runs as: a nudge is this service calling
+      # its own internal endpoint by way of the queue.
+      env {
+        name  = "INTERNAL_OIDC_SERVICE_ACCOUNT"
+        value = google_service_account.doula_api_runtime.email
+      }
       env {
         name  = "MAILGUN_API_KEY"
         value = null
@@ -145,18 +192,14 @@ resource "google_cloud_run_v2_service" "doula_api" {
       }
       env {
         name  = "NOTIFICATION_TASKS_TARGET_BASE_URL"
-        value = "https://doula-api-850855848778.us-central1.run.app"
+        value = local.doula_api_base_url
       }
-      env {
-        name  = "NOTIFICATION_WORKER_SECRET"
-        value = null
-        value_source {
-          secret_key_ref {
-            secret  = "doula-cloud-notification-worker-secret"
-            version = "latest"
-          }
-        }
-      }
+      # `NOTIFICATION_WORKER_SECRET` was here until #1183 and is deliberately
+      # absent: `internalauth.Guard` refuses `X-Internal-Secret` outright
+      # wherever no secret is configured, so the deployed service now has no
+      # shared-string path into `/api/internal/**` at all. The variable
+      # survives only in `app/e2e/stack.ts`, which runs the BFF against a
+      # local Postgres with no metadata server to mint a token with.
       env {
         name  = "STRIPE_ACCOUNT_WEBHOOK_SECRET"
         value = null
@@ -268,7 +311,7 @@ resource "google_cloud_run_v2_service" "doula_api" {
   # run any plan that would destroy this resource, before an apply is ever
   # attempted. See the comment on `deletion_protection` above for how this
   # differs from the provider-level argument. Never removed; the service holds
-  # identity (its URL, its Cloud SQL attachment, its 19 environment variables
+  # identity (its URL, its Cloud SQL attachment, its 21 environment variables
   # and secret references) that nothing here should ever destroy.
   #
   # `ignore_changes` is the split between what Terraform owns (the shape of

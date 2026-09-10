@@ -85,23 +85,25 @@ jobs:
         working-directory: terraform
         run: terraform init -input=false
 
-      # `plan`'s own human-readable stdout is never printed or kept: with
-      # nonsensitive() in scheduler.tf, a *drifted* X-Internal-Secret header
-      # would otherwise print its actual value in plain text (#1052). Every
-      # branch below reports the resource address, the action, and which
-      # attribute NAMES changed -- never a value -- read from `terraform show
-      # -json` with jq. The one exception is a genuine command failure
-      # (detailed-exitcode 1: e.g. a refresh permission gap), which is not a
-      # drift finding and is safe to show in full.
+      # `plan`'s own human-readable stdout is never printed or kept. The
+      # original reason was scheduler.tf's nonsensitive() read: a *drifted*
+      # X-Internal-Secret header would have printed its actual value in plain
+      # text (#1052). #1183 removed that data source with the header, so this
+      # configuration reads no secret at all any more -- but the rule stays,
+      # because it is cheaper to keep than to re-argue the next time a value
+      # worth hiding enters a resource. Every branch below reports the
+      # resource address, the action, and which attribute NAMES changed --
+      # never a value -- read from `terraform show -json` with jq. The one
+      # exception is a genuine command failure (detailed-exitcode 1: e.g. a
+      # refresh permission gap), which is not a drift finding and is safe to
+      # show in full.
       #
-      # `mode == "managed"` excludes the one data source in this
-      # configuration (scheduler.tf's notification_worker_secret read) from
-      # the drift table -- confirmed empirically that it does not appear in
-      # resource_changes at all on a clean plan, but excluding it by mode
-      # rather than relying on that means a future data source refreshing
-      # under `read` can never masquerade as drift on an otherwise-clean
-      # project, which is exactly the permanently-red failure ADR-0034
-      # refuses.
+      # `mode == "managed"` keeps any data source out of the drift table.
+      # There is none in this configuration since #1183, and the filter is
+      # what makes that a fact about today rather than a dependency: a future
+      # data source refreshing under `read` can never masquerade as drift on
+      # an otherwise-clean project, which is exactly the permanently-red
+      # failure ADR-0034 refuses.
       - name: Terraform plan
         working-directory: terraform
         env:

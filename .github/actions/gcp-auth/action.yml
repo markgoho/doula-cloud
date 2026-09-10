@@ -12,6 +12,24 @@ inputs:
     required: true
   service_account:
     required: true
+  token_format:
+    description: >-
+      Set to `id_token` to have this action mint a Google-signed OIDC ID token
+      for the impersonated service account, in addition to the credentials file
+      every caller gets. The token comes back on the `id_token` output.
+    required: false
+    default: ""
+  id_token_audience:
+    description: The `aud` claim the minted ID token carries. Required when token_format is id_token.
+    required: false
+    default: ""
+  id_token_include_email:
+    description: >-
+      Whether the minted ID token carries an `email` claim. Defaults to false
+      upstream, and `internalauth.Guard` refuses a token with no verified email
+      claim (ADR-0037), so any caller of `/api/internal/**` must set this true.
+    required: false
+    default: "false"
 outputs:
   project_id:
     value: ${{ steps.attempt1.outputs.project_id || steps.attempt2.outputs.project_id || steps.attempt3.outputs.project_id }}
@@ -34,6 +52,9 @@ runs:
         project_id: ${{ inputs.project_id }}
         workload_identity_provider: ${{ inputs.workload_identity_provider }}
         service_account: ${{ inputs.service_account }}
+        token_format: ${{ inputs.token_format }}
+        id_token_audience: ${{ inputs.id_token_audience }}
+        id_token_include_email: ${{ inputs.id_token_include_email }}
 
     - name: Back off before attempt 2
       if: steps.attempt1.outcome == 'failure'
@@ -51,6 +72,9 @@ runs:
         project_id: ${{ inputs.project_id }}
         workload_identity_provider: ${{ inputs.workload_identity_provider }}
         service_account: ${{ inputs.service_account }}
+        token_format: ${{ inputs.token_format }}
+        id_token_audience: ${{ inputs.id_token_audience }}
+        id_token_include_email: ${{ inputs.id_token_include_email }}
 
     - name: Back off before attempt 3
       if: steps.attempt1.outcome == 'failure' && steps.attempt2.outcome == 'failure'
@@ -68,6 +92,9 @@ runs:
         project_id: ${{ inputs.project_id }}
         workload_identity_provider: ${{ inputs.workload_identity_provider }}
         service_account: ${{ inputs.service_account }}
+        token_format: ${{ inputs.token_format }}
+        id_token_audience: ${{ inputs.id_token_audience }}
+        id_token_include_email: ${{ inputs.id_token_include_email }}
 
     - name: Confirm authentication succeeded
       if: always()
