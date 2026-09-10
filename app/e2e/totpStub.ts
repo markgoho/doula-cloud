@@ -166,7 +166,10 @@ async function resolvePhoneChallenge(
  * emulator refuses with UNVERIFIED_EMAIL, exactly as the live service
  * does.
  */
-async function enrollPhoneFactor(request: APIRequestContext, idToken: string): Promise<string> {
+async function enrollPhoneFactor(
+	request: APIRequestContext,
+	idToken: string
+): Promise<{ idToken: string; refreshToken: string }> {
 	const phoneNumber = randomPhoneNumber();
 	const start = await request.post(
 		`${EMULATOR_URL}/identitytoolkit.googleapis.com/v2/accounts/mfaEnrollment:start?key=fake-key`,
@@ -184,8 +187,7 @@ async function enrollPhoneFactor(request: APIRequestContext, idToken: string): P
 		{ data: { idToken, phoneVerificationInfo: { sessionInfo, code } } }
 	);
 	expect(finalize.ok(), `mfaEnrollment:finalize failed: ${finalize.status()} ${await finalize.text()}`).toBe(true);
-	const { idToken: enrolled } = await finalize.json();
-	return enrolled;
+	return await finalize.json();
 }
 
 async function readVerificationCode(request: APIRequestContext, sessionInfo: string): Promise<string> {
@@ -267,7 +269,9 @@ export async function stubTotpFactor(page: Page, request: APIRequestContext): Pr
 			return;
 		}
 		const enrolled = await enrollPhoneFactor(request, body.idToken);
-		await route.fulfill({ json: { idToken: relabelSecondFactor(enrolled) } });
+		await route.fulfill({
+			json: { idToken: relabelSecondFactor(enrolled.idToken), refreshToken: enrolled.refreshToken }
+		});
 	});
 
 	await page.route(matchesPath('/identitytoolkit.googleapis.com/v2/accounts/mfaSignIn:finalize'), async (route) => {
@@ -283,5 +287,36 @@ export async function stubTotpFactor(page: Page, request: APIRequestContext): Pr
 		const { idToken, refreshToken } = await resolvePhoneChallenge(request, body.mfaPendingCredential, body.mfaEnrollmentId);
 		await route.fulfill({ json: { idToken: relabelSecondFactor(idToken), refreshToken } });
 	});
+
+	/*
+	 * A refreshed token has to keep telling the same story. The screens
+	 * force a refresh right after enrollment (the just-added claim is not
+	 * on the cached token), and the emulator reissues from the stored
+	 * refresh-token record, which still says `phone`. Only a token that
+	 * already carries a second factor is relabeled here -- an ordinary
+	 * refresh for an identity with no second factor passes through
+	 * untouched, so nothing is ever told about a factor that does not
+	 * exist.
+	 */
+	await page.route(matchesPath('/securetoken.googleapis.com/v1/token'), async (route) => {
+		const response = await route.fetch();
+		const body = await response.json();
+		if (typeof body.id_token === 'string' && hasSecondFactor(body.id_token)) {
+			body.id_token = relabelSecondFactor(body.id_token);
+			body.access_token = body.id_token;
+		}
+		await route.fulfill({ response, json: body });
+	});
+}
+
+/**
+ * Whether an emulator ID token already names a second factor of any
+ * provider.
+ */
+function hasSecondFactor(idToken: string): boolean {
+	const payload = idToken.split('.', 3)[1];
+	if (payload === undefined) return false;
+	const claims = JSON.parse(Buffer.from(payload, 'base64url').toString('utf8'));
+	return Boolean(claims?.firebase?.sign_in_second_factor);
 }
 
