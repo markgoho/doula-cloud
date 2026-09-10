@@ -19,12 +19,19 @@
 	 *   record being edited already exists, so the same answer here only
 	 *   keeps it as its own record. The wording says so.
 	 *
-	 * `mergeOffered` (set once, server-side, when the record being edited
-	 * holds no Engagement, Engagement Request, portal invitation or
-	 * portal account) decides which of two shapes this page takes: with
-	 * it, every match is offered as "This is her"; without it, no merge
-	 * is possible at all and the only actionable choice is naming this as
-	 * a different person.
+	 * There used to be a third shape here: a page saying no merge was
+	 * possible at all, shown whenever the record being edited held an
+	 * Engagement, an Engagement Request or a portal account. #813
+	 * (ADR-0040) removed it. Two records that both carry history now
+	 * merge for real, so "This is her" is offered on every match and
+	 * attachment only decides which record survives.
+	 *
+	 * What the page must still say plainly, because the word "merge"
+	 * promises more than the act delivers: the two histories do not
+	 * become one. Each Client's history is sealed under her own key and
+	 * the log is append-only, so the combined record carries both trails
+	 * side by side, each labeled with the record it came from -- and both
+	 * Credits stay spent.
 	 */
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
@@ -104,10 +111,6 @@
 			match.engagements.length === 1 ? '1 Engagement' : `${match.engagements.length} Engagements`
 		];
 		return facts.join(' · ');
-	}
-
-	function matchNames(): string {
-		return editMergeDraft.matches.map((match) => displayName(match)).join(', ');
 	}
 
 	const options = $derived([
@@ -212,7 +215,7 @@
 			<Button label="Save changes" loading={submission.isSubmitting} onClick={handleSaveChanges} />
 		{/snippet}
 	</QuestionPage>
-{:else if editMergeDraft.matches.length > 0 && editMergeDraft.mergeOffered}
+{:else if editMergeDraft.matches.length > 0}
 	<form onsubmit={handleContinue} novalidate>
 		<QuestionPage
 			journey={JOURNEY}
@@ -239,7 +242,11 @@
 					<Text
 						step="body-sm"
 						tone="muted"
-						text="Choosing an existing Client combines the two records. Whichever one has no Engagement, request or portal account is the one absorbed -- never assume which record that is."
+						text="Choosing an existing Client combines the two records into one. Engagements, requests and portal access move to the record that is kept, and the record that is absorbed stops appearing anywhere. The one kept is whichever has more history behind it -- never assume which record that is."
+					/>
+					<Notice
+						variant="info"
+						message="This cannot be undone, and it does not join the two histories. The combined Client keeps both records' history side by side, each labeled with the record it came from. Any Credits already spent stay spent."
 					/>
 				</stack-l>
 			{/snippet}
@@ -249,32 +256,4 @@
 			{/snippet}
 		</QuestionPage>
 	</form>
-{:else if editMergeDraft.matches.length > 0}
-	<QuestionPage
-		journey={JOURNEY}
-		{steps}
-		backHref={editHref()}
-		question={{ as: 'legend', text: "This can't be matched to an existing Client" }}
-		hint="Nothing has been saved yet. What was typed matches a Client this Practice already has, but the two records can't be combined here."
-	>
-		{#snippet errorSummary()}
-			{#if submission.errors.length > 0}
-				<ErrorSummary errors={submission.errors} />
-			{/if}
-		{/snippet}
-
-		{#snippet content()}
-			<stack-l space="var(--space-5)">
-				<Text text={`This matches ${matchNames()} already on file at this Practice.`} tone="muted" />
-				<Notice
-					variant="info"
-					message="This record already has an Engagement, an Engagement Request, or a portal account, so it can't be combined with another record. Saving keeps it as its own record."
-				/>
-			</stack-l>
-		{/snippet}
-
-		{#snippet actions()}
-			<Button label="Yes, a different person" loading={submission.isSubmitting} onClick={saveAsDifferentPerson} />
-		{/snippet}
-	</QuestionPage>
 {/if}

@@ -22,8 +22,9 @@
 	 * - Gate two, a possible duplicate -- `substitution: false`. Nothing
 	 *   is written; the reader is sent to this route's own `duplicate`
 	 *   sub-route, a question page rather than a dismissible dialog, per
-	 *   the ADR. `mergeOffered` there says whether "This is her" (which
-	 *   absorbs one record into the other) is even offered.
+	 *   the ADR. "This is her" is offered on every match there since
+	 *   #813 (ADR-0040): two records that both carry history now merge,
+	 *   and attachment only decides which of them survives.
 	 */
 	import { onMount, tick } from 'svelte';
 	import { goto } from '$app/navigation';
@@ -221,7 +222,7 @@
 					isConflictOpen = true;
 					return;
 				}
-				editMergeDraft.open(page.params.clientId!, currentFields(), result.matches, result.mergeOffered);
+				editMergeDraft.open(page.params.clientId!, currentFields(), result.matches);
 				await goto(`${editHref()}/duplicate`);
 				return;
 			}

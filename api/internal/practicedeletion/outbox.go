@@ -241,7 +241,15 @@ func finalize(ctx context.Context, tx *sql.Tx, practiceID string, now time.Time)
 // finalize must not double-erase her.
 func unerasedClientIDs(ctx context.Context, tx *sql.Tx, practiceID string) ([]string, error) {
 	rows, err := tx.QueryContext(ctx,
-		`SELECT id FROM clients WHERE practice_id = $1 AND erased_at IS NULL FOR UPDATE`,
+		// merged_into IS NULL excludes the tombstone a merge leaves behind
+		// (#813). client.Erase reaches an absorbed record through the
+		// survivor's own erasure and through the one SECURITY DEFINER door
+		// that can write to a tombstone at all -- calling Erase on the
+		// tombstone directly would run redactRecord's plain UPDATE, which
+		// clients_update's own USING clause (merged_into IS NULL, 00080)
+		// matches zero rows for, and the key would then be destroyed with
+		// her name still standing in the row.
+		`SELECT id FROM clients WHERE practice_id = $1 AND erased_at IS NULL AND merged_into IS NULL FOR UPDATE`,
 		practiceID,
 	)
 	if err != nil {

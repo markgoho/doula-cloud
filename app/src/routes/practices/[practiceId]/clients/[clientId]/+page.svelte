@@ -96,7 +96,42 @@
 		return entry.engagementRequest.requestedByName;
 	}
 
+	// #813 (ADR-0040). A merged Client's history is two trails, not one,
+	// and it can never become one: each Client's entries are sealed under
+	// her own key and the activity log is append-only, so the absorbed
+	// woman's diffs may not be re-sealed under the survivor's. Every entry
+	// says which record it was written against rather than letting the two
+	// read as one continuous history that never happened.
+	//
+	// It rides in the What column rather than a fourth one: a fourth
+	// column costs every row width at 320px to carry a fact almost no
+	// Client's history has, and this way a screen reader hears the label
+	// in the same cell as the thing it qualifies.
+	//
+	// It says "another record" rather than naming which. An absorbed row
+	// is a tombstone and this screen deliberately never reads its name --
+	// after an erasure there is no name left to read, and the label has to
+	// mean the same thing before and after that.
+	const MERGED_ENTRY_SUFFIX = ' (from another record, before the two were combined)';
+
+	const mergedFrom = $derived(detail?.mergedFrom ?? []);
+
+	// Says the act happened, when, and who did it -- the audit trail's own
+	// question, answered from plaintext columns so it survives the
+	// shredding of both keys.
+	function mergeSummary(): string {
+		const count = mergedFrom.length;
+		const records = count === 1 ? 'another record' : `${count} other records`;
+		const last = mergedFrom.at(-1)!;
+		const who = last.mergedByName ?? 'a staff member';
+		return `This Client was combined with ${records}. Most recently on ${formatActivityTimestamp(last.mergedAt)}, by ${who}. The histories below stay separate: each record's own entries are labeled, and combining them never joined the two.`;
+	}
+
 	function historyWhat(entry: HistoryEntry): string {
+		return historyAction(entry) + (entry.fromMergedRecord ? MERGED_ENTRY_SUFFIX : '');
+	}
+
+	function historyAction(entry: HistoryEntry): string {
 		if (entry.type === 'client_event') {
 			switch (entry.clientEvent.eventType) {
 				case 'created': {
@@ -463,6 +498,23 @@
 {/snippet}
 
 {#snippet historySection()}
+	{#if mergedFrom.length > 0}
+		<!--
+			The plaintext explanation of why this history has two trails in
+			it (#813). Every value here is a column on clients rather than
+			a sealed diff, so it still reads after an erasure has shredded
+			both Clients' keys -- which is exactly when it matters most,
+			because by then every entry below says only that it cannot be
+			read.
+
+			Text, not Notice: every Notice variant carries a live-region
+			role (alert or status), and this is standing explanation of what
+			the table below is, not something that just happened. A second
+			live region on the page would announce it over the withdraw
+			confirmation that shares the screen.
+		-->
+		<Text step="body-sm" tone="muted" text={mergeSummary()} />
+	{/if}
 	<DataTable
 		columns={[
 			{ label: 'When', accessor: historyWhen, variant: 'meta' as const, datetimeAccessor: historyAt },

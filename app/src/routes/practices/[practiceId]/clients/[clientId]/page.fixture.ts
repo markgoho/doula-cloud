@@ -82,6 +82,45 @@ export const detail: ClientDetail = {
 			type: 'client_event',
 			at: '2026-07-01T00:00:00Z',
 			clientEvent: { eventType: 'created', diff: undefined, actorKind: 'system', createdAt: '2026-07-01T00:00:00Z' }
+		},
+		// An entry from a record absorbed into this one (#813). The
+		// history renders it differently -- the What column carries the
+		// "from another record" label -- so it earns its own row here,
+		// per the fixture rule that a row set must hold every state a
+		// field renders differently. Without it the sweep would measure a
+		// History table whose widest cell is a state no merged Client's
+		// screen actually shows, and the label is the longest one there
+		// is.
+		{
+			type: 'client_event',
+			at: '2026-06-02T00:00:00Z',
+			fromMergedRecord: 'client-absorbed-1',
+			clientEvent: {
+				eventType: 'updated',
+				diff: undefined,
+				actorKind: 'staff',
+				actorStaffId: 'staff-1',
+				actorName: 'Anne-Marie Ochieng-Whitfield',
+				createdAt: '2026-06-02T00:00:00Z'
+			}
+		},
+		{
+			type: 'client_event',
+			at: '2026-06-01T00:00:00Z',
+			fromMergedRecord: 'client-absorbed-1',
+			clientEvent: { eventType: 'created', diff: undefined, actorKind: 'system', createdAt: '2026-06-01T00:00:00Z' }
+		}
+	],
+	// The record that history came from, with the plaintext audit of the
+	// act that absorbed it. One record rather than two: the summary's
+	// length turns on the Staff name it carries, which is already this
+	// fixture's longest, and a second row changes only a count.
+	mergedFrom: [
+		{
+			clientId: 'client-absorbed-1',
+			mergedAt: '2026-06-15T00:00:00Z',
+			mergedByStaffId: 'staff-1',
+			mergedByName: 'Anne-Marie Ochieng-Whitfield'
 		}
 	]
 };

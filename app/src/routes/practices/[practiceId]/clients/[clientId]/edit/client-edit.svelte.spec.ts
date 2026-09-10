@@ -163,7 +163,7 @@ describe('client edit', () => {
 	it('refuses a save that exactly matches a different Client (gate one), naming the match, before writing anything', async () => {
 		await setup();
 		apiFetchWithSession.mockResolvedValueOnce(
-			jsonResponse({ matches: [anotherClientMatch], substitution: true, mergeOffered: false }, 409)
+			jsonResponse({ matches: [anotherClientMatch], substitution: true }, 409)
 		);
 
 		await testPage.getByRole('button', { name: 'Save' }).click();
@@ -177,7 +177,7 @@ describe('client edit', () => {
 	it('saves after the deliberate override, retrying with override: true', async () => {
 		await setup();
 		apiFetchWithSession.mockResolvedValueOnce(
-			jsonResponse({ matches: [anotherClientMatch], substitution: true, mergeOffered: false }, 409)
+			jsonResponse({ matches: [anotherClientMatch], substitution: true }, 409)
 		);
 		apiFetchWithSession.mockResolvedValueOnce(jsonResponse(baseDetail));
 
@@ -207,7 +207,7 @@ describe('client edit', () => {
 	it('keeps a refused override that names no field readable inside the still-open dialog', async () => {
 		await setup();
 		apiFetchWithSession.mockResolvedValueOnce(
-			jsonResponse({ matches: [anotherClientMatch], substitution: true, mergeOffered: false }, 409)
+			jsonResponse({ matches: [anotherClientMatch], substitution: true }, 409)
 		);
 		apiFetchWithSession.mockResolvedValueOnce(
 			jsonResponse({ message: 'This Practice is not accepting changes.' }, 403)
@@ -234,7 +234,7 @@ describe('client edit', () => {
 	it('shows every reason when a refused override names fields this form does not map', async () => {
 		await setup();
 		apiFetchWithSession.mockResolvedValueOnce(
-			jsonResponse({ matches: [anotherClientMatch], substitution: true, mergeOffered: false }, 409)
+			jsonResponse({ matches: [anotherClientMatch], substitution: true }, 409)
 		);
 		// `details` keyed on two columns this form has no control for, which
 		// is what a BFF refusal naming a field the form has not caught up
@@ -269,7 +269,7 @@ describe('client edit', () => {
 	it('hands a refused override that names a field back to the form, with focus that lands', async () => {
 		await setup();
 		apiFetchWithSession.mockResolvedValueOnce(
-			jsonResponse({ matches: [anotherClientMatch], substitution: true, mergeOffered: false }, 409)
+			jsonResponse({ matches: [anotherClientMatch], substitution: true }, 409)
 		);
 		apiFetchWithSession.mockResolvedValueOnce(
 			jsonResponse(
@@ -310,7 +310,7 @@ describe('client edit', () => {
 		await setup();
 		apiFetchWithSession.mockResolvedValueOnce(
 			jsonResponse(
-				{ matches: [{ ...anotherClientMatch, wouldSurvive: true }], substitution: false, mergeOffered: true },
+				{ matches: [{ ...anotherClientMatch, wouldSurvive: true }], substitution: false },
 				409
 			)
 		);
@@ -321,7 +321,6 @@ describe('client edit', () => {
 		expect(goto).toHaveBeenCalledWith(editDuplicateHref);
 		expect(editMergeDraft.clientId).toBe(clientId);
 		expect(editMergeDraft.matches).toEqual([{ ...anotherClientMatch, wouldSurvive: true }]);
-		expect(editMergeDraft.mergeOffered).toBe(true);
 		expect(editMergeDraft.fields.givenName).toBe(baseDetail.givenName);
 	});
 

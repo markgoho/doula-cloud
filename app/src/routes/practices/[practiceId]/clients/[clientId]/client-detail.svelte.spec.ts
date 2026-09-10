@@ -660,3 +660,59 @@ describe('erasing a Client (#691, ADR-0027)', () => {
 		await expect.element(dialog).toBeVisible();
 	});
 });
+
+describe('a Client merged from two records (#813)', () => {
+	// The constraint the decision on #813 put hardest: the merged Client
+	// carries two audit trails under one name, permanently, and the screen
+	// must say so rather than implying one history. The two can never fold
+	// together -- each is sealed under its own key and the activity log is
+	// append-only -- so this is not a rendering preference, it is the only
+	// honest way to draw what the database holds.
+	it('labels each entry that came from the absorbed record, and leaves the survivor own entries unlabeled', async () => {
+		await setup();
+
+		await expect
+			.element(testPage.getByText('from another record, before the two were combined', { exact: false }).first())
+			.toBeVisible();
+		// The survivor's own entries stay plain -- a label on everything
+		// would say nothing.
+		await expect
+			.element(testPage.getByRole('cell', { name: 'Record created', exact: true }).first())
+			.toBeVisible();
+	});
+
+	it('says the record was combined, when, and by whom', async () => {
+		await setup();
+
+		const merged = baseDetail.mergedFrom![0]!;
+		await expect
+			.element(testPage.getByText('This Client was combined with another record', { exact: false }))
+			.toBeVisible();
+		await expect
+			.element(testPage.getByText(formatActivityTimestamp(merged.mergedAt), { exact: false }).first())
+			.toBeVisible();
+		await expect.element(testPage.getByText(merged.mergedByName!, { exact: false }).first()).toBeVisible();
+	});
+
+	it('says nothing about a combination for an ordinary Client', async () => {
+		await setup({ overrides: { mergedFrom: undefined, history: [] } });
+
+		await expect
+			.element(testPage.getByText('This Client was combined with', { exact: false }))
+			.not.toBeInTheDocument();
+	});
+
+	it('still explains the combination after an erasure has made both histories unreadable', async () => {
+		// The whole reason merged_at and merged_by_staff_id are plaintext
+		// columns rather than a sealed diff: this is the moment the sealed
+		// answer would be gone and the question would still be asked.
+		await setup({ overrides: { erasedAt: '2026-09-01T00:00:00Z' } });
+
+		await expect
+			.element(testPage.getByText('This Client was combined with another record', { exact: false }))
+			.toBeVisible();
+		await expect
+			.element(testPage.getByText(baseDetail.mergedFrom![0]!.mergedByName!, { exact: false }).first())
+			.toBeVisible();
+	});
+});

@@ -63,6 +63,33 @@ type HistoryEntry struct {
 	At                time.Time       `json:"at"`
 	ClientEvent       *Event          `json:"clientEvent,omitempty"`
 	EngagementRequest *RequestSummary `json:"engagementRequest,omitempty"`
+	// FromMergedRecord names the absorbed record this entry was written
+	// against, absent for everything written against the surviving record
+	// itself (#813).
+	//
+	// It exists because the two histories are two and may never become
+	// one. ADR-0027 seals each Client's diffs under her own key and
+	// ADR-0022's activity table is append-only, so re-sealing the
+	// absorbed woman's entries under the survivor's key would rewrite
+	// rows that may never be rewritten. The screen has to say which
+	// record an entry came from rather than presenting one continuous
+	// history that never existed -- and after an erasure, which of the
+	// two keys the unreadable entry was sealed under.
+	FromMergedRecord *string `json:"fromMergedRecord,omitempty"`
+}
+
+// MergedRecord is one record absorbed into the Client being read, and
+// the plaintext audit of the act that absorbed it (#813): who did it and
+// when. Both facts live in columns on clients rather than only in the
+// sealed 'merged'/'absorbed' activity diffs, precisely so this answer
+// survives the shredding of both data keys -- after an erasure the
+// history is unreadable and this still says how the record came to be.
+type MergedRecord struct {
+	ClientID        string     `json:"clientId"`
+	MergedAt        time.Time  `json:"mergedAt"`
+	MergedByStaffID *string    `json:"mergedByStaffId,omitempty"`
+	MergedByName    *string    `json:"mergedByName,omitempty"`
+	ErasedAt        *time.Time `json:"erasedAt,omitempty"`
 }
 
 // DetailResponse is a Client's full detail read: her record (both
@@ -85,6 +112,12 @@ type DetailResponse struct {
 	// data is still here (activity holds links to this id), but this is
 	// no longer the current record of her.
 	MergedInto *string `json:"mergedInto,omitempty"`
+	// MergedFrom names every record absorbed into this one (#813), in the
+	// order they were absorbed. Empty for the ordinary Client, which is
+	// almost all of them. A chain resolves into a flat list here: if A
+	// was merged into B and B later into C, C reports both, because a
+	// woman reading C's screen is looking at all three records' history.
+	MergedFrom []MergedRecord `json:"mergedFrom,omitempty"`
 	// StripeRedactionEligibleAt is the date Stripe will first allow her
 	// transactions to be redacted -- 90 days past the newest invoice on
 	// whichever of her Stripe Customers is furthest from eligible.
@@ -162,7 +195,18 @@ func DetailHandler() http.Handler {
 			return
 		}
 
-		history, err := mergedHistory(r.Context(), tx, clientID)
+		mergedFrom, err := listMergedRecords(r.Context(), tx, clientID)
+		if err != nil {
+			// coverage:ignore reason: DB query failure, not exercised by unit tests
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+			return
+		}
+		absorbedIDs := make([]string, len(mergedFrom))
+		for i, m := range mergedFrom {
+			absorbedIDs[i] = m.ClientID
+		}
+
+		history, err := mergedHistory(r.Context(), tx, clientID, absorbedIDs)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
@@ -188,6 +232,7 @@ func DetailHandler() http.Handler {
 			ResolvedFields:            resolvedFields,
 			Engagements:               engagements,
 			History:                   history,
+			MergedFrom:                mergedFrom,
 			ErasedAt:                  erasedAt,
 			StripeRedactionEligibleAt: redactionEligibleAt,
 		}
@@ -199,7 +244,18 @@ func DetailHandler() http.Handler {
 // rows and interleaves them newest-first by time -- a read concern, not
 // a storage one (ADR-0017 deliberately keeps no mirrored row on either
 // side).
-func mergedHistory(ctx context.Context, tx *sql.Tx, clientID string) ([]HistoryEntry, error) {
+//
+// Since #813 it also reads the activity rows of every record absorbed
+// into this one, each labeled with the record it came from. They are
+// read one record at a time, and that is not an optimization left
+// undone: openDiff unseals a diff under the Client's own key, and the
+// absorbed woman's entries are sealed under hers, not the survivor's.
+// One query over both subject ids would hand every row to one key and
+// render half the history unreadable.
+//
+// The Engagement Requests need no such treatment: the merge re-pointed
+// their client_id at the survivor, so they are already hers to read.
+func mergedHistory(ctx context.Context, tx *sql.Tx, clientID string, absorbedIDs []string) ([]HistoryEntry, error) {
 	events, err := listClientEvents(ctx, tx, clientID)
 	if err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
@@ -215,11 +271,78 @@ func mergedHistory(ctx context.Context, tx *sql.Tx, clientID string) ([]HistoryE
 	for i := range events {
 		history = append(history, HistoryEntry{Type: "client_event", At: events[i].CreatedAt, ClientEvent: &events[i]})
 	}
+	for _, absorbedID := range absorbedIDs {
+		absorbedEvents, err := listClientEvents(ctx, tx, absorbedID)
+		if err != nil {
+			// coverage:ignore reason: DB query failure, not exercised by unit tests
+			return nil, err
+		}
+		for i := range absorbedEvents {
+			history = append(history, HistoryEntry{
+				Type:             "client_event",
+				At:               absorbedEvents[i].CreatedAt,
+				ClientEvent:      &absorbedEvents[i],
+				FromMergedRecord: &absorbedID,
+			})
+		}
+	}
 	for i := range requests {
 		history = append(history, HistoryEntry{Type: "engagement_request", At: requests[i].RequestedAt, EngagementRequest: &requests[i]})
 	}
 	sort.Slice(history, func(i, j int) bool { return history[i].At.After(history[j].At) })
 	return history, nil
+}
+
+// listMergedRecords reads every record absorbed into clientID (#813),
+// nearest first, flattening a chain: a record merged into a record that
+// was later merged into this one is reported here too, because its
+// history is part of what this screen now shows.
+//
+// It reads the plaintext audit columns rather than the sealed activity
+// diffs. That is the point of those columns existing: after an erasure
+// shreds both keys, "who merged this, and when" still has an answer
+// while nothing about either woman does.
+func listMergedRecords(ctx context.Context, tx *sql.Tx, clientID string) ([]MergedRecord, error) {
+	rows, err := tx.QueryContext(ctx,
+		absorbedChainCTE+
+			`SELECT c.id, c.merged_at, c.merged_by_staff_id, s.name, c.erased_at
+		   FROM absorbed a
+		   JOIN clients c ON c.id = a.id
+		   LEFT JOIN staff s ON s.id = c.merged_by_staff_id
+		  ORDER BY a.depth, c.merged_at`,
+		clientID,
+	)
+	if err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		return nil, fmt.Errorf("client: list merged records: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	var merged []MergedRecord
+	for rows.Next() {
+		var m MergedRecord
+		var staffID, staffName sql.NullString
+		var erasedAt sql.NullTime
+		if err := rows.Scan(&m.ClientID, &m.MergedAt, &staffID, &staffName, &erasedAt); err != nil {
+			// coverage:ignore reason: row scan failure, not exercised by unit tests
+			return nil, fmt.Errorf("client: scan merged record: %w", err)
+		}
+		if staffID.Valid {
+			m.MergedByStaffID = &staffID.String
+		}
+		if staffName.Valid {
+			m.MergedByName = &staffName.String
+		}
+		if erasedAt.Valid {
+			m.ErasedAt = &erasedAt.Time
+		}
+		merged = append(merged, m)
+	}
+	if err := rows.Err(); err != nil {
+		// coverage:ignore reason: row iteration failure, not exercised by unit tests
+		return nil, fmt.Errorf("client: iterate merged records: %w", err)
+	}
+	return merged, nil
 }
 
 func listClientEvents(ctx context.Context, tx *sql.Tx, clientID string) ([]Event, error) {
@@ -308,10 +431,23 @@ func listClientEvents(ctx context.Context, tx *sql.Tx, clientID string) ([]Event
 // presence at all.
 func readErasureState(ctx context.Context, tx *sql.Tx, clientID string) (erasedAt, redactionEligibleAt *time.Time, err error) {
 	var erased, eligible sql.NullTime
+	// The outbox is read over her surviving record AND every record
+	// merged into it (#813). A merge cannot move client_stripe_customers
+	// -- 00076 grants no UPDATE on that table -- so an absorbed record's
+	// Customers are erased under the absorbed record's own client_id, and
+	// a subquery keyed on the survivor alone would report the Stripe half
+	// finished while one of those redactions was still scheduled. Erase's
+	// own ErasureResponse already folds both, so this is the read
+	// agreeing with the write.
 	err = tx.QueryRowContext(ctx,
-		`SELECT c.erased_at,
+		`WITH RECURSIVE hers AS (
+		     SELECT $1::uuid AS id
+		     UNION ALL
+		     SELECT c.id FROM clients c JOIN hers h ON c.merged_into = h.id
+		 )
+		 SELECT c.erased_at,
 		        (SELECT max(o.redactable_after) FROM client_erasure_outbox o
-		          WHERE o.client_id = c.id AND o.redactable_after IS NOT NULL
+		          WHERE o.client_id IN (SELECT id FROM hers) AND o.redactable_after IS NOT NULL
 		            AND o.status <> 'sent')
 		 FROM clients c WHERE c.id = $1`,
 		clientID,

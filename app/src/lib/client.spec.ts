@@ -204,26 +204,26 @@ describe('editClient', () => {
 		expect(body.override).toBe(true);
 	});
 
-	it('decodes a 409 into a named conflict, carrying substitution and mergeOffered, rather than throwing', async () => {
+	it('decodes a 409 into a named conflict, carrying substitution, rather than throwing', async () => {
 		const matches = [{ id: 'client-2', ...editFields, givenName: 'Ada', engagements: [], wouldSurvive: true }];
 		const fetcher = vi
 			.fn()
-			.mockResolvedValue(response({ matches, substitution: false, mergeOffered: true }, 409));
+			.mockResolvedValue(response({ matches, substitution: false }, 409));
 
 		const result = await editClient(fetcher, 'practice-1', 'client-1', editFields, false);
 
-		expect(result).toEqual({ conflict: true, matches, substitution: false, mergeOffered: true });
+		expect(result).toEqual({ conflict: true, matches, substitution: false });
 	});
 
-	it('decodes gate one (substitution: true, mergeOffered always false)', async () => {
+	it('decodes gate one (substitution: true, which offers no merge)', async () => {
 		const matches = [{ id: 'client-2', ...editFields, givenName: 'Ada', engagements: [], wouldSurvive: false }];
 		const fetcher = vi
 			.fn()
-			.mockResolvedValue(response({ matches, substitution: true, mergeOffered: false }, 409));
+			.mockResolvedValue(response({ matches, substitution: true }, 409));
 
 		const result = await editClient(fetcher, 'practice-1', 'client-1', editFields, false);
 
-		expect(result).toEqual({ conflict: true, matches, substitution: true, mergeOffered: false });
+		expect(result).toEqual({ conflict: true, matches, substitution: true });
 	});
 
 	it('throws with the response body text on a non-conflict, non-ok response', async () => {

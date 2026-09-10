@@ -89,9 +89,33 @@ export interface EngagementRequestSummary {
  * discriminated union on `type`, matching the Go BFF's own "exactly one
  * of ClientEvent/EngagementRequest is set" contract, so a reader
  * switches on `type` instead of null-checking either payload. */
-export type HistoryEntry =
+export type HistoryEntry = (
 	| { type: 'client_event'; at: string; clientEvent: ClientEvent }
-	| { type: 'engagement_request'; at: string; engagementRequest: EngagementRequestSummary };
+	| { type: 'engagement_request'; at: string; engagementRequest: EngagementRequestSummary }
+) & {
+	/** The absorbed record this entry was written against, absent for
+	 * everything written against the surviving record itself (#813,
+	 * ADR-0040). A merged Client's two histories are two and may never
+	 * become one -- each is sealed under its own key and the log is
+	 * append-only -- so the screen labels each entry with the record it
+	 * came from rather than showing one continuous history that never
+	 * existed. After an erasure both trails read as unreadable, and this
+	 * label is what explains why there are two of them. */
+	fromMergedRecord?: string;
+};
+
+/** One record absorbed into this Client, and the plaintext audit of the
+ * act that absorbed it (#813) -- mirrors client.MergedRecord. `mergedAt`
+ * and `mergedByName` are columns rather than a sealed diff precisely so
+ * they still answer "how did this record come to be?" after an erasure
+ * has shredded both Clients' keys. */
+export interface MergedRecord {
+	clientId: string;
+	mergedAt: string;
+	mergedByStaffId?: string;
+	mergedByName?: string;
+	erasedAt?: string;
+}
 
 /**
 A Client's full detail read -- mirrors client.DetailResponse.
@@ -116,6 +140,12 @@ export interface ClientDetail extends ClientRecord {
 	 * -- the Go handler returns only `{id, mergedInto}` -- so a reader
 	 * redirects to the survivor rather than rendering anything here. */
 	mergedInto?: string;
+	/** Every record absorbed into this one (#813, ADR-0040), oldest merge
+	 * first. Absent for the ordinary Client, which is almost all of them.
+	 * A screen reads it to say the record was combined, when, and by
+	 * whom -- and to explain why the history below carries two trails
+	 * rather than one. */
+	mergedFrom?: MergedRecord[];
 }
 
 /** Loads one Client's full detail read. Throws with the response body
