@@ -53,6 +53,24 @@ Her `client_portal_users.identity_uid` names a GCP Identity Platform account who
 
 Deleting the account does not invalidate a `__session` cookie she already holds; sessions in this product are rows in Postgres, verified against Postgres. So erasure deletes her session rows in the same transaction. She cannot authenticate to the portal afterwards, and she is not still inside it.
 
+## Amendment, 2026-09-10: the login is one person's, so the last Practice out is the one that takes it ([#830](https://github.com/markgoho/doula-cloud/issues/830))
+
+The section above was written when a Portal Account belonged to exactly one Client record, which `client_portal_users.identity_uid`'s table-wide `UNIQUE` enforced. It no longer does: [#309](https://github.com/markgoho/doula-cloud/issues/309) lifted that constraint so [ADR-0015](0015-three-facts-on-an-engagement-the-person-lives-in-the-login.md)'s actual shape — *a Portal Account reaches many Clients, at most one per Practice* — became reachable. (The Identity Platform account that section deletes is also gone; [ADR-0026](0026-two-populations-two-sign-in-methods-and-one-token-table.md) took Identity Platform away from Clients entirely and `portal_accounts` is where the sign-in address lives now.)
+
+Camille is a Client at Rooted Birth Collective and at Ridgeline Doulas, behind one login. She asks Rooted, and only Rooted, to erase her. Under the section above, Rooted's erasure deleted the `portal_accounts` row keyed on her identifier, the foreign key's `ON DELETE SET NULL` nulled `identity_uid` on Ridgeline's row too, and every session she held anywhere ended — including the one she had open with Ridgeline. One Practice's request reached into another Practice's relationship with her, which is exactly what ADR-0015's *no Client fact crosses a Practice* refuses.
+
+**The rule: erasure removes the erasing Practice's link to the login always, and deletes the login itself only when no un-erased Client anywhere still reaches it.** The last Practice out takes it; anyone before that takes only its own link. Three consequences, each decided here rather than left to the caller.
+
+**Her sign-in address stays while the login does.** It is the login's own fact — ADR-0015's *the person lives in the login* — not the erasing Practice's record of her, and she is still an active user of Doula Cloud through the other Practice. What Rooted's erasure destroys is Rooted's ability to reach her, which the cleared `identity_uid` on Rooted's own row already accomplishes.
+
+**Her sessions survive while the login does.** A session is the person's, not a Practice's: one reaches every Client she has. `clientauth` recomputes her reachable set from `client_portal_users` on every request, so a row with no `identity_uid` is a Client she can no longer address, live cookie or not — the unlink is the enforcement, and ending every session would only be the same cross-Practice reach in a different form. When the login itself goes, the sessions go with it, unchanged from the section above.
+
+**The other Practice is told nothing, and neither is the erasing one.** Ridgeline's audit trail has nothing to explain, because nothing about Ridgeline's relationship with her changed — and writing an entry there saying Rooted erased her would *be* the leak. The reverse holds just as hard: `ErasureResponse.portalAccountQueued` and the `erased` activity row's `portalAccount` both mean *her portal link at this Practice was removed*, true in both branches, so no Owner can read the existence of another Practice off her own erasure's result.
+
+The liveness question crosses tenants by construction, so it cannot be asked under the erasing Practice's own row security — a sibling row is invisible to it, and a `NOT EXISTS` written inline would answer "nothing else reaches this login" every time. It is a `SECURITY DEFINER` function returning one bit, the same purpose-built shape `portal_account_reuse_for_accept` already takes, and `portal_accounts`' own `DELETE` policy carries the predicate too so the database refuses the cross-Practice delete whatever a future caller believes.
+
+[ADR-0031](0031-practice-deletion-is-a-thirty-day-window-then-the-erasure-cascade.md)'s deletion cascade runs the same act per Client and inherits this rule unchanged. It spares a **login**, and only while an un-erased Client still reaches it; it retains no record of care and restores nothing, which is the interaction [#1094](https://github.com/markgoho/doula-cloud/issues/1094) asks about from the other side.
+
 ## Considered and rejected
 
 **Deleting the `clients` row.** It would take every Invoice, Contract and Visit with it, or leave them dangling. The Practice's financial and clinical record is not hers to delete, and it is not the product's either.
@@ -60,5 +78,7 @@ Deleting the account does not invalidate a `__session` cookie she already holds;
 **Anonymizing rather than redacting — replacing her name with a stable pseudonym.** A pseudonym that is stable enough to be useful is stable enough to re-identify her against the free text this ADR declines to scrub. A placeholder that says nothing is honest about what happened.
 
 **Deleting or updating `activity` rows for her.** It is the one invariant this product does not trade: an append-only log that is sometimes edited is not an audit log. Crypto-shredding exists precisely so the invariant survives the erasure.
+
+**Erasing the whole Portal Account whatever else reaches it, and notifying the other Practices** ([#830](https://github.com/markgoho/doula-cloud/issues/830)'s second option). It would need ADR-0015 amended to say what one Practice's erasure request costs a Practice that made no request, and the notification is itself the cross-Practice disclosure the same ADR forbids — the notice cannot be written without naming a Client relationship the recipient never had cause to hear about. There is also nothing to gain: the login holds one fact about her, her sign-in address, and she is still using it.
 
 **A Client-facing erasure request in the portal.** This is the Practice-side act. Whether a Client can ask for it herself, and what the Practice owes her in response time, is a service-design question, not this one.
