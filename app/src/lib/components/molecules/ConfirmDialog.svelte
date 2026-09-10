@@ -20,6 +20,16 @@
 	 * control's own operation outcome, not a refused form (#467's own
 	 * distinction), so it renders as `Notice`, matching every other
 	 * section-local outcome in the app rather than growing an `ErrorSummary`.
+	 *
+	 * #1082 settled that `error` stays a `string` rather than widening to
+	 * carry field-targeted entries, and the reason is the `inert` above:
+	 * an `ErrorSummary`'s entries are fragment links, and HTML's
+	 * fragment-focusing steps cannot focus an inert element, so every
+	 * targeted entry rendered in here would point at a control nobody can
+	 * reach. A caller whose refusal names a control on the form behind
+	 * closes this dialog and hands the refusal to that form's own summary
+	 * instead -- see the Client-edit override confirm, and the modal
+	 * `Dialog` paragraph of docs/design/govuk-alignment.md.
 	 */
 	interface Properties {
 		open?: boolean;

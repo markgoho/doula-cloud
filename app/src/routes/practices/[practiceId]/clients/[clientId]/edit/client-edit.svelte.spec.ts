@@ -153,6 +153,121 @@ describe('client edit', () => {
 		expect(goto).toHaveBeenCalledWith(detailHref);
 	});
 
+	/*
+	 * The two halves of #1082's decision. Both need an assertion
+	 * `toBeVisible()` cannot make: the dialog is a native `<dialog>` held
+	 * open by `showModal()`, so it sits in the top layer above a
+	 * `::backdrop` and the whole page behind it is inert. A refusal
+	 * rendered in the page while the dialog is open still passes
+	 * `toBeVisible()` and is unreadable, and `ErrorSummary`'s focus effect
+	 * fires against inert content and does nothing. So the refusal is
+	 * queried *through* the dialog rather than through the page, which is
+	 * the assertion #804 used for the same defect, and the focus half is
+	 * read off `document.activeElement`. Each one fails under the
+	 * arrangement this ticket replaces.
+	 */
+	it('keeps a refused override that names no field readable inside the still-open dialog', async () => {
+		await setup();
+		apiFetchWithSession.mockResolvedValueOnce(
+			jsonResponse({ matches: [anotherClientMatch], substitution: true, mergeOffered: false }, 409)
+		);
+		apiFetchWithSession.mockResolvedValueOnce(
+			jsonResponse({ message: 'This Practice is not accepting changes.' }, 403)
+		);
+
+		await testPage.getByRole('button', { name: 'Save' }).click();
+		await expect.element(testPage.getByRole('dialog')).toBeVisible();
+		await testPage.getByRole('button', { name: 'Yes, a different person' }).click();
+
+		// Scoped to the dialog, so this passes only while the refusal is in
+		// the top layer with it -- the same query that would have failed
+		// with the refusal rendered in the page behind the backdrop.
+		const dialog = testPage.getByRole('dialog');
+		await expect.element(dialog).toBeVisible();
+		await expect
+			.element(dialog.getByText('This Practice is not accepting changes.'))
+			.toBeVisible();
+		// And nothing is left waiting in the page's own summary to appear
+		// unannounced the moment she cancels.
+		await expect.element(testPage.getByText('There is a problem')).not.toBeInTheDocument();
+		expect(goto).not.toHaveBeenCalled();
+	});
+
+	it('shows every reason when a refused override names fields this form does not map', async () => {
+		await setup();
+		apiFetchWithSession.mockResolvedValueOnce(
+			jsonResponse({ matches: [anotherClientMatch], substitution: true, mergeOffered: false }, 409)
+		);
+		// `details` keyed on two columns this form has no control for, which
+		// is what a BFF refusal naming a field the form has not caught up
+		// with looks like. Both entries come back untargeted, and neither
+		// may be the one that disappears.
+		apiFetchWithSession.mockResolvedValueOnce(
+			jsonResponse(
+				{
+					message: 'The Client record could not be saved.',
+					details: {
+						pronouns: 'Enter pronouns of 50 characters or fewer',
+						dueDate: 'The due date must be a real date'
+					}
+				},
+				400
+			)
+		);
+
+		await testPage.getByRole('button', { name: 'Save' }).click();
+		await expect.element(testPage.getByRole('dialog')).toBeVisible();
+		await testPage.getByRole('button', { name: 'Yes, a different person' }).click();
+
+		const dialog = testPage.getByRole('dialog');
+		await expect
+			.element(dialog.getByText('Enter pronouns of 50 characters or fewer', { exact: false }))
+			.toBeVisible();
+		await expect
+			.element(dialog.getByText('The due date must be a real date', { exact: false }))
+			.toBeVisible();
+	});
+
+	it('hands a refused override that names a field back to the form, with focus that lands', async () => {
+		await setup();
+		apiFetchWithSession.mockResolvedValueOnce(
+			jsonResponse({ matches: [anotherClientMatch], substitution: true, mergeOffered: false }, 409)
+		);
+		apiFetchWithSession.mockResolvedValueOnce(
+			jsonResponse(
+				{
+					message: 'The Client record could not be saved.',
+					details: { givenName: 'Enter a given name of 100 characters or fewer' }
+				},
+				400
+			)
+		);
+
+		await testPage.getByRole('button', { name: 'Save' }).click();
+		await expect.element(testPage.getByRole('dialog')).toBeVisible();
+		await testPage.getByRole('button', { name: 'Yes, a different person' }).click();
+
+		// The fix is on the form, so the dialog gets out of the way: the
+		// page stops being inert, its summary's own focus effect can reach
+		// it, and the entry's fragment link can follow. Under the old
+		// arrangement the dialog stayed open and `document.activeElement`
+		// was still the confirm button.
+		await expect
+			.element(testPage.getByRole('link', { name: 'Enter a given name of 100 characters or fewer' }))
+			.toBeVisible();
+		await expect.element(testPage.getByRole('dialog')).not.toBeInTheDocument();
+		// `document.activeElement` rather than a locator's `toHaveFocus()`:
+		// what takes focus is `ErrorSummary`'s own `tabindex="-1"` wrapper,
+		// which carries no role on purpose so it does not double up on the
+		// `role="alert"` inside it -- the second `querySelector` exception
+		// in `.claude/rules/svelte-tests.md`, a deliberately non-accessible
+		// element with nothing for an accessible query to find.
+		await expect
+			.poll(() => document.activeElement?.textContent)
+			.toContain('Enter a given name of 100 characters or fewer');
+		expect(goto).not.toHaveBeenCalled();
+	});
+
 	it('sends a possible duplicate (gate two) to its own question page rather than a dialog', async () => {
 		await setup();
 		apiFetchWithSession.mockResolvedValueOnce(
