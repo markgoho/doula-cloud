@@ -51,13 +51,15 @@ const WCAG_TAGS = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'];
  *   instances it is pointed at and not the pattern behind them.
  * - `mfa/enroll`'s second step -- the QR code, the fallback secret and
  *   the code field. Step one, the password re-authentication, IS scanned
- *   below (#1114); step two cannot be reached here at all, because the
- *   vendored Firebase Auth emulator has no TOTP enrollment path and 400s
- *   the `TotpMultiFactorGenerator.generateSecret()` call that opens it
- *   (firebase-tools#6224, and docs/testing.md's own note). No Playwright
- *   test in this repo has ever driven a TOTP screen for that reason, and
- *   #1132 owns closing it -- when it does, step two gets its own entry
- *   here rather than staying in this list.
+ *   below (#1114). Step two was unreachable until #1132: the vendored
+ *   Firebase Auth emulator has no TOTP enrollment path and 400s the
+ *   `TotpMultiFactorGenerator.generateSecret()` call that opens it
+ *   (firebase-tools#6224, and docs/testing.md's own note). #1132's
+ *   `e2e/totpStub.ts` closed that, and `e2e/mfa-totp.e2e.ts` walks step
+ *   two in a browser now -- but the inventory below is keyed by URL, and
+ *   step two is a state rather than a route, so enrolling it needs this
+ *   harness to learn how to reach a state before it scans. #1240 owns
+ *   that, and step two gets its own entry here when it lands.
  */
 
 /**
