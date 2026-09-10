@@ -140,10 +140,12 @@ export function sweep(frame: HTMLElement, availableSpace: number): Break | undef
  * changes coalesce, so a disclosure opened and closed again inside one
  * task never runs its `ontoggle` handler as open -- which is how the Staff
  * roster's work-state history is not fetched by the act of measuring the
- * roster. It is also why content a disclosure loads on open is measured in
- * its loading state, the gap #1126 holds. The undo serves a plainer
- * purpose too: a spec that reads the DOM after a sweep sees the screen it
- * mounted rather than the one the instrument left behind.
+ * roster. It is also why a measurement can never reach content a disclosure
+ * LOADS on open: `revealDisclosures` below is where that content arrives,
+ * in the preparation the measurement is taken after (#1126). The undo
+ * serves a plainer purpose too: a spec that reads the DOM after a sweep
+ * sees the screen it mounted rather than the one the instrument left
+ * behind.
  *
  * What this does not handle, named because it is a limit rather than an
  * oversight: a grouped `<details name="...">`, where opening one closes
@@ -157,6 +159,149 @@ export function openDisclosures(frame: HTMLElement): () => void {
 	return () => {
 		for (const disclosure of closed) disclosure.open = false;
 	};
+}
+
+/*
+ * How many macrotask turns any of this instrument's waits may take before
+ * it gives up (#885, #1126). A guard against a screen that polls, never a
+ * budget anything is expected to spend: every response is served
+ * synchronously from a fixture, so one turn drains however many `await`s a
+ * section chains, and the deepest cascade this app has is eight reads long.
+ */
+export const SETTLE_TURNS = 50;
+
+/*
+ * The one bounded wait this instrument has (#1126), turned over to
+ * whichever signal a caller can actually observe -- a route's own answering
+ * going quiet, a disclosure reporting that it opened, a frame that has
+ * stopped changing.
+ *
+ * There is one of these rather than one per signal because what matters is
+ * the same in all of them and is easy to get wrong differently each time: a
+ * wait that runs out must FAIL, loudly, and never fall through into a
+ * measurement. A budget that expires quietly reports whatever happened to be
+ * in the frame at that instant as the screen, which is the one way these
+ * checks must not go wrong -- #885's part-built screens were exactly that,
+ * and they were green.
+ *
+ * A turn is a macrotask, not a duration. Nothing here sleeps for a fixed
+ * time: a sleep long enough to be safe is slow on every subject that did not
+ * need it, and still wrong on the one that did.
+ */
+export async function awaitSettled(isSettled: () => boolean, stillArriving: string): Promise<void> {
+	for (let turn = 0; turn < SETTLE_TURNS; turn += 1) {
+		if (isSettled()) return;
+		await new Promise((resolve) => setTimeout(resolve, 0));
+	}
+	throw new Error(
+		`${stillArriving} after ${SETTLE_TURNS} turns. Measuring it anyway would report whatever happened to be in the frame at that moment as the screen, so this stops instead.`
+	);
+}
+
+/*
+ * "Nothing new happened this turn", as a signal `awaitSettled` can read
+ * (#885, #1126). The caller counts whatever it can count -- responses
+ * answered, DOM mutations seen -- and this reports the first turn that
+ * added none.
+ */
+export function quiescence(sample: () => number): () => boolean {
+	let previous = -1;
+	return () => {
+		const seen = sample();
+		const isSettled = seen === previous;
+		previous = seen;
+		return isSettled;
+	};
+}
+
+/*
+ * Opens every closed disclosure under `frame` and waits for what opening
+ * them brought in (#1126). It leaves them open.
+ *
+ * ## Why this is not `openDisclosures` with an `await` in it
+ *
+ * A disclosure that fetches its content on open cannot be measured on that
+ * content unless the fetch happens, and #710's whole point is that MEASURING
+ * must never make it happen -- an instrument that issued a request per
+ * disclosure is an instrument with consequences. Awaiting the toggle inside
+ * `sweep` would trade one for the other.
+ *
+ * So the two are separated instead of traded. This function prepares the
+ * subject; `sweep` and `measureOverflow` measure it, unchanged from #710 and
+ * #1124, still opening and closing inside one task and still firing no
+ * handler. By the time either runs, the disclosures are already open, so
+ * `openDisclosures` finds nothing closed and touches nothing at all.
+ *
+ * Preparation is where a screen's own loads already belong. `mountInFrame`
+ * runs a route's `onMount` cascade and #885's settle wait exists precisely
+ * because those loads are the check's to wait for; a disclosure opened here
+ * reaches the state a person reaches by clicking one on the drag surface,
+ * which is the screen behaving rather than the instrument reaching in. What
+ * would be new is a REQUEST issued while measuring, and there is none:
+ * `continuum.svelte.spec.ts` counts the subject's loads across a sweep and
+ * gets zero.
+ *
+ * ## The two waits
+ *
+ * A `toggle` is queued as an element task, so "the handler has run" is not
+ * something a `setTimeout(0)` can be assumed to come after -- task-source
+ * ordering is exactly the kind of in-practice that flakes. This waits for
+ * each opened disclosure to report its own toggle, and then for the frame to
+ * stop changing, which is what says the content the handler asked for has
+ * arrived AND been rendered. Both waits are `awaitSettled`, so both fail
+ * loudly rather than falling through into a measurement.
+ *
+ * A subject with nothing closed pays neither wait: the common case is a
+ * component demo with no disclosure at all, and it returns before the first
+ * turn.
+ *
+ * ## Limits, named rather than left to be discovered
+ *
+ * Content that arrives holding a disclosure of its OWN, closed and loading,
+ * is measured in ITS loading state: this opens what the frame held when it
+ * was called, and does not look again. Nothing in the app nests one that
+ * way. The grouped-`<details name>` limit `openDisclosures` names is this
+ * function's too, since it opens through it.
+ */
+export async function revealDisclosures(frame: HTMLElement, subject: string): Promise<void> {
+	const closed = [...frame.querySelectorAll<HTMLDetailsElement>('details:not([open])')];
+	if (closed.length === 0) return;
+	let toggled = 0;
+	const listening = new AbortController();
+	let mutations = 0;
+	const observer = new MutationObserver((records) => {
+		mutations += records.length;
+	});
+	try {
+		for (const disclosure of closed) {
+			disclosure.addEventListener(
+				'toggle',
+				() => {
+					toggled += 1;
+				},
+				{ once: true, signal: listening.signal }
+			);
+		}
+		observer.observe(frame, {
+			subtree: true,
+			childList: true,
+			characterData: true,
+			attributes: true
+		});
+		for (const disclosure of closed) disclosure.open = true;
+		await awaitSettled(
+			() => toggled === closed.length,
+			`${subject} kept a disclosure that never reported opening`
+		);
+		await awaitSettled(
+			quiescence(() => mutations),
+			`${subject} was still filling in content a disclosure loaded on open`
+		);
+	} finally {
+		observer.disconnect();
+		listening.abort();
+	}
+	void frame.offsetWidth;
 }
 
 /*
@@ -204,6 +349,53 @@ export function ledgerMarkup(isOpen = false): string {
 		`<details${isOpen ? ' open' : ''}><summary>Show what has happened</summary>` +
 		`<div style="inline-size: ${OVERFLOWING}px">Everything that has happened</div></details>`
 	);
+}
+
+/*
+ * The Staff roster's work-state history in miniature (#1126): a closed
+ * disclosure holding nothing but the word `Loading...`, which asks for its
+ * own content the first time it is opened and lays out something far wider
+ * than the frame once that content lands.
+ *
+ * Both instruments need this one and neither can build it out of
+ * `ledgerMarkup`, so it lives here with its sibling for the reason #1124
+ * moved that one here: two consumers is the bar, and the pair of them are
+ * the same blind spot measured twice.
+ *
+ * The load is a real `ontoggle` -> `await` -> insert path rather than a
+ * flag a test flips. The content arrives a whole macrotask turn AFTER the
+ * toggle, which is what a fetch answered by a fixture actually does, and it
+ * is the reason a settle signal is needed at all: anything that opened the
+ * disclosure and measured in the same turn would read `Loading...` and
+ * report a screen that fits.
+ *
+ * `loads` counts the requests the subject issued. It is what pins the
+ * property this ticket had to keep -- a measurement is not an action -- to
+ * a number rather than to a doc comment: a sweep of this subject leaves it
+ * at zero.
+ */
+export interface LoadingLedger extends HeldFrame {
+	loads(): number;
+}
+
+export function frameHoldingLoadingLedger(): LoadingLedger {
+	const held = frameHolding(
+		'<details><summary>Show what has happened</summary><p>Loading...</p></details>'
+	);
+	const disclosure = held.frame.querySelector('details')!;
+	const waiting = disclosure.querySelector('p')!;
+	let loads = 0;
+	disclosure.addEventListener('toggle', () => {
+		if (!disclosure.open || loads > 0) return;
+		loads += 1;
+		setTimeout(() => {
+			const loaded = document.createElement('div');
+			loaded.style.inlineSize = `${OVERFLOWING}px`;
+			loaded.textContent = 'Everything that has happened';
+			waiting.replaceWith(loaded);
+		}, 0);
+	});
+	return { ...held, loads: () => loads };
 }
 
 /*
@@ -268,7 +460,24 @@ export async function ensureFontLoaded(): Promise<void> {
 /*
  * Puts a subject in front of the sweep: an unconstrained run, a frame that
  * is a containment context, the pairing re-declared on the frame's own
- * children (#544), and a wait for the real webfont (#550).
+ * children (#544), a wait for the real webfont (#550), and the subject's
+ * own disclosures opened and filled in (#1126).
+ *
+ * That last step is here rather than in either measurement because it is
+ * preparation: it lets a disclosure that fetches on open do so, which a
+ * measurement must never do. Every instrument mounts through this one
+ * function -- the component sweep, the route sweep and the floor check
+ * alike -- so all three measure the same revealed screen. A route's own
+ * disclosures usually arrive later than this, behind its `onMount` cascade;
+ * `route-continuum.svelte.spec.ts` reveals again once that cascade has gone
+ * quiet, which is the same function called at the moment the subject
+ * actually has them.
+ *
+ * A revealed disclosure is left open, and nothing re-closes it: the floor
+ * check's `forceLive` re-renders nothing (it writes classes and inline
+ * styles onto elements already mounted), and no component in this repo
+ * binds `open`, so a subject that was opened here stays open for the
+ * measurement that follows.
  *
  * It lives here, beside `sweep`, because it was already written three
  * times. `continuum.svelte.spec.ts` had it inline in its own `it`;
@@ -313,6 +522,7 @@ export async function mountInFrame(
 		(child as HTMLElement).style.fontSize = 'var(--text-body-size)';
 	}
 	await ensureFontLoaded();
+	await revealDisclosures(frame, 'A mounted subject');
 	return { run, frame, remove: () => run.remove() };
 }
 

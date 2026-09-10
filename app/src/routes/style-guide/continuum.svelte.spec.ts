@@ -32,10 +32,13 @@ import '#lib/styles/app.css';
 import { atomPages, moleculePages, organismPages, templatePages } from './components.js';
 import {
 	frameHolding,
+	frameHoldingLoadingLedger,
 	ledgerMarkup,
 	mountInFrame,
 	overflowReport,
 	OVERFLOWING,
+	revealDisclosures,
+	SETTLE_TURNS,
 	sweep
 } from './continuum.js';
 import { toDemos, type PageModule } from './drag-surface/dragSurface.js';
@@ -202,6 +205,100 @@ describe('the sweep, over a closed disclosure (#710)', () => {
 
 			expect(frame.querySelector('details')?.open).toBe(true);
 		} finally {
+			remove();
+		}
+	});
+});
+
+/*
+ * What reaches the frame before the sweep measures it, when a disclosure
+ * fetches its own content the first time it opens (#1126).
+ *
+ * #710 left this open on purpose and said why: the sweep opens, measures
+ * and closes again inside one task, a `toggle` event is queued rather than
+ * dispatched synchronously, and repeated changes coalesce -- so no handler
+ * ever sees the disclosure open, and a measurement is therefore not an
+ * action. That is the property this ticket had to keep while closing the
+ * hole it leaves, which is why the fix is not "await the toggle" inside
+ * `sweep`.
+ *
+ * It is split instead: `revealDisclosures` prepares the subject and
+ * `sweep` measures it. Preparation is where a screen's own loads already
+ * happen -- `mountInFrame` runs a route's `onMount` cascade, and #885's
+ * settle wait exists precisely because those loads are the check's to wait
+ * for -- so a disclosure opened there reaches the state a person reaches
+ * by clicking one on the drag surface. The measurement is unchanged from
+ * #710 and still acts on nothing, which the load counts below pin to a
+ * number rather than to this paragraph.
+ */
+describe('the sweep, over a disclosure that loads on open (#1126)', () => {
+	it('measures the loading state when nothing has prepared the disclosure', async () => {
+		const { run, frame, remove, loads } = frameHoldingLoadingLedger();
+		try {
+			const found = sweep(frame, run.clientWidth);
+			await new Promise((resolve) => setTimeout(resolve, 50));
+
+			// The `Loading...` the disclosure holds fits at every width, so the
+			// sweep reports a screen that fits -- and the content that does not
+			// fit was never asked for. The blind spot and the property worth
+			// keeping, in one measurement.
+			expect(found).toBeUndefined();
+			expect(loads()).toBe(0);
+		} finally {
+			remove();
+		}
+	});
+
+	it('finds the overflow in content the disclosure loaded on open', async () => {
+		const { run, frame, remove } = frameHoldingLoadingLedger();
+		try {
+			await revealDisclosures(frame, 'The loading ledger');
+			const found = sweep(frame, run.clientWidth);
+
+			expect(found?.width).toBe(320);
+			expect(found?.needed).toBeGreaterThanOrEqual(OVERFLOWING);
+		} finally {
+			remove();
+		}
+	});
+
+	it('asks for the content once, in preparation, and never while measuring', async () => {
+		const { run, frame, remove, loads } = frameHoldingLoadingLedger();
+		try {
+			await revealDisclosures(frame, 'The loading ledger');
+			const afterPreparing = loads();
+			sweep(frame, run.clientWidth);
+			await new Promise((resolve) => setTimeout(resolve, 50));
+
+			expect(afterPreparing).toBe(1);
+			expect(loads()).toBe(1);
+		} finally {
+			remove();
+		}
+	});
+
+	/*
+	 * A settle signal that gives up quietly is the one failure this
+	 * instrument must not have: it would measure whatever happened to be in
+	 * the frame at the moment the budget ran out and report that as the
+	 * screen. So the wait is bounded and the bound throws, and this is the
+	 * subject that trips it -- a disclosure whose content never stops
+	 * arriving, which is what a screen that polls looks like from here.
+	 */
+	it('stops loudly rather than measuring content that never settles', async () => {
+		const { frame, remove } = frameHolding(
+			'<details><summary>Show what has happened</summary><p>Loading...</p></details>'
+		);
+		const waiting = frame.querySelector('p')!;
+		const restless = setInterval(() => {
+			waiting.textContent = `Loading... ${Date.now()}`;
+		}, 0);
+		try {
+			await expect(revealDisclosures(frame, 'The restless ledger')).rejects.toThrow(
+				`after ${SETTLE_TURNS} turns`
+			);
+		} finally {
+			clearInterval(restless);
 			remove();
 		}
 	});
