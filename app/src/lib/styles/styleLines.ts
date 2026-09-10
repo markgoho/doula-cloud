@@ -2,7 +2,8 @@
  * Walks a Svelte file's `<style>` blocks and returns the lines a source
  * gate should judge, with any block carrying an ignore marker removed.
  *
- * Shared by `tokens.usage.spec.ts` and `layout.usage.spec.ts`, which ask
+ * Shared by `tokens.usage.spec.ts`, `layout.usage.spec.ts` and
+ * `primitives.usage.spec.ts`, which ask
  * different questions of the same lines and agree exactly on what counts
  * as a line worth asking about: inside a `<style>`, not inside a comment,
  * and not under an in-force exception marker.

@@ -138,13 +138,18 @@ describe('a layout primitive spaces its children with gap, not with their margin
 	);
 
 	/*
-	 * An exemption that names a primitive no longer in the set is an
-	 * exemption nobody is reading, and the next person inherits it as
-	 * fact. It goes when its subject does.
+	 * An exemption whose rule no longer fires is an exemption nobody is
+	 * reading, and the next person inherits it as fact -- the shape
+	 * `docs/testing.md` already asks of an allowance list, which fails the
+	 * scan until a spent entry is narrowed or deleted. So the staleness
+	 * check is not "does this primitive still exist" but "does it still
+	 * write the thing it is excused for": the day #1220 gives Cover its own
+	 * answer, this fails and takes the exemption with it.
 	 */
-	it('holds no exemption for a primitive that no longer exists', () => {
-		const tagNames = new Set(primitiveSpecs.map((spec) => spec.tagName));
+	it.each(EXEMPT.keys().toArray())('still has something for the %s exemption to excuse', (tagName) => {
+		const spec = primitiveSpecs.find((candidate) => candidate.tagName === tagName);
 
-		expect(EXEMPT.keys().filter((tagName) => !tagNames.has(tagName)).toArray()).toEqual([]);
+		expect(spec).toBeDefined();
+		expect(findOffenses(tagName, spec!.css(spec!.defaults, tagName))).not.toEqual([]);
 	});
 });

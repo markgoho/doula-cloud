@@ -513,14 +513,7 @@
 		}
 
 		/* One <dl> per record (#508, ADR-0024) rather than a mangled
-		   <table>, which strips table semantics in Safari and Firefox.
-		   This used to carry `margin-block-start: 0` to cancel the frame's
-		   own stack-l spacing, because `> * + *` counted the hidden
-		   .table-view before it as a preceding sibling. The stack spaces
-		   with `gap` now (ADR-0039), and a `display: none` child is not a
-		   flex item at all, so only one of these two views is ever in the
-		   flow and there is no gap to cancel. */
-
+		   <table>, which strips table semantics in Safari and Firefox. */
 		.record-view dl {
 			display: grid;
 			grid-template-columns: auto 1fr;

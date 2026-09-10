@@ -79,14 +79,9 @@
 
 <style>
 	@layer components {
-		/*
-		 * The same intrinsic-width rule `Button` carries, and for the same
-		 * reason: `stack-l` is a column flex container (ADR-0039), so a
-		 * link dropped straight into a stack would stretch to the full
-		 * width -- and a link's hit area running the width of the page is
-		 * an affordance pointing at nothing. Scoped to `stack-l`, since
-		 * `align-self` is the block axis in a row-direction parent.
-		 */
+		/* The intrinsic-width rule `Button.svelte` explains in full, for the
+		   same reason: a link's hit area running the width of the page is an
+		   affordance pointing at nothing. */
 		:global(stack-l) > a {
 			align-self: start;
 		}

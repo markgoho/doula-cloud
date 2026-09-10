@@ -116,6 +116,11 @@ describe('QuestionPage.svelte', () => {
 		const { container } = await setup();
 
 		expect(container.textContent).not.toContain('There is a problem');
+		// A fact about the document rather than about any one element -- the
+		// third `querySelector` case in `.claude/rules/svelte-tests.md`:
+		// "how many things does the column hold" has no element for an
+		// accessible query to ask about.
+		//
 		// Back link, journey, the question-and-control stack, actions -- the
 		// journey joined the column on #585, where it used to sit beside it,
 		// and the question and its control moved into a nested stack of
