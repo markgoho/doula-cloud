@@ -306,12 +306,13 @@ func applyAddressChange(ctx context.Context, tx *sql.Tx, token string) (address 
 // at more than one Practice, so "record the change" is one row per
 // Practice that holds her, not one row overall.
 //
-// It is one row today whatever this code does --
-// client_portal_users.identity_uid carries a UNIQUE constraint (00006),
-// which is the schema disagreeing with the ADR rather than this loop
-// being speculative. That disagreement is #819's to settle; written to
-// the ADR because that is the rule as it stands, and because a set of
-// rows is what the query returns whichever way #819 goes.
+// The schema says the same thing now. It did not when this loop was
+// written: client_portal_users.identity_uid still carried 00006's
+// table-wide UNIQUE constraint, which made the set one row whatever this
+// code did. #309 dropped that constraint and #819 replaced it with
+// uniqueness on (identity_uid, client_id) -- ADR-0015's own, narrower
+// rule -- so a Portal Account genuinely reaching two Practices is a
+// shape the database admits and this loop is what records it.
 type clientSubject struct {
 	clientID   string
 	practiceID string
