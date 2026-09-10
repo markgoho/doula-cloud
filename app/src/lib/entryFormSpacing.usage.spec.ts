@@ -3,93 +3,99 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
 /*
- * #660's static gate, in the shape `pageTitle.usage.spec.ts` and
- * `formErrors.usage.spec.ts` already use.
+ * #660's static gate, in the shape `pageTitle.usage.spec.ts` already uses.
  *
- * An archetype-A route builds its own `<form>` inside `EntryPage`'s
- * `content` region, because ADR-0018 leaves region-internal arrangement to
- * the page. `EntryPage` stacks the *top-level* siblings of that region, and
- * `LabeledField` stacks its own label, hint and control -- but `stack-l`'s
- * rule is `> * + *`, which reaches a child and never a grandchild. So a
- * `<form>` that puts its fields in directly gets no spacing between them at
- * all: the Password label sits flush against the Email input, and the
- * submit button flush against the last field. That is what #660 found in a
- * browser at 1440 and 480, on all five archetype-A screens at once.
+ * `stack-l`'s rule is `> * + *`: it spaces a child and never a grandchild.
+ * A Template stacks the top-level siblings of the region it hands a route,
+ * and `LabeledField` stacks its own label, hint and control -- but nothing
+ * between those two levels stacks a form's fields. So a `<form>` that held
+ * `LabeledField`s directly rendered them flush, on every unauthenticated
+ * entry screen in the app at once, which is what #660 found in a browser at
+ * 1440 and 480.
  *
- * A rendering spec cannot cover this. Three of the six forms are behind a
- * step the page only reaches after a successful sign-in or a second-factor
- * challenge, so a route spec would assert the wrapper on whichever form
- * happened to render first and say nothing about the others. Reading the
- * source says it about all of them, and about the next one somebody adds.
+ * `StackedForm` is the fix, and this is the check that nobody writes the
+ * unstacked shape again. A rendering spec could not do it: several of these
+ * forms sit behind a step the page only reaches after a successful sign-in
+ * or a second-factor challenge, so a rendering spec would assert on
+ * whichever form happened to render first and say nothing about the others.
  *
- * The gate is scoped by what a route *composes*, not by a list of paths:
- * importing `EntryPage` is what makes a route archetype A. A `FormPage`
- * route is deliberately out of scope -- there the `<form>` wraps the
- * Template, and the Template already stacks each fieldset's content at the
- * same `var(--space-5)`.
+ * ## Which routes it asks about, and how they are discovered
+ *
+ * Three rules, none of them a list of paths, so a new screen is checked
+ * without opting in:
+ *
+ * 1. anything under `(signed-out)` -- the Staff side's own route group
+ * 2. anything under `portal/(signed-out)` -- the Client portal's
+ * 3. anything importing `EntryPage`, which is what makes a route archetype
+ *    A wherever it lives (`mfa/enroll` and the style guide's own demo are
+ *    both outside the two groups)
+ *
+ * ## What it asks
+ *
+ * That the route contains no bare `<form>` element -- `StackedForm` owns
+ * that element now -- unless the form opens with the stack wrapper itself.
+ * The exception is deliberate and there is exactly one user of it today:
+ * see `EXEMPT` below.
  */
 
-const TEMPLATE = 'EntryPage';
 const REQUIRED_WRAPPER = '<stack-l space="var(--space-5)">';
+
+/*
+ * The pre-account Offer screen. `StackedForm` sets `novalidate`, because
+ * ADR-0021's Recover from validation errors pattern is that the page
+ * refuses the submit and says so once at the top -- and this screen has no
+ * `ErrorSummary` and no refusal path to say it with, so it is still relying
+ * on the browser's own bubble to stop an empty access code. Adopting the
+ * molecule there would take that refusal away and put nothing in its place.
+ * It carries the wrapper inline instead, which is what this file lets it
+ * do, until #1107 gives it an error summary of its own.
+ */
+const EXEMPT = ['src/routes/(signed-out)/offers/[offerId]/+page.svelte'];
 
 const appRoot = fileURLToPath(new URL('../../', import.meta.url));
 
-const entryRoutes = globSync('src/routes/**/+page.svelte', { cwd: appRoot }).filter((file) =>
-	readFileSync(new URL(file, `file://${appRoot}`), 'utf8').includes(TEMPLATE)
-);
+const HTML_COMMENT = /<!--[\S\s]*?-->/g;
+const ENTRY_TEMPLATE_IMPORT = /from '#lib\/components\/templates\/EntryPage\.svelte'/;
 
-/*
- * The markup that follows each `<form …>` start tag, in source order.
- *
- * The first `>` after `<form` is not reliably the end of the tag: the
- * style-guide's own demo writes `onsubmit={(event) => event.preventDefault()}`,
- * and the arrow's `>` sits inside a Svelte expression. So the expressions
- * are blanked before the scan rather than parsed, which is the smallest
- * rule that reads every form this app has.
- */
-const SVELTE_EXPRESSION = /\{[^{}]*\}/g;
-
-function markupAfterEachFormTag(source: string): string[] {
-	/*
-	 * Blank every Svelte expression to spaces of the same length. Offsets
-	 * are unchanged, so a `>` found in here indexes the real source -- and
-	 * the arrow's own `>` is no longer one of them.
-	 */
-	const flattened = source.replaceAll(SVELTE_EXPRESSION, (match) => ' '.repeat(match.length));
-
-	const found: string[] = [];
-	let from = flattened.indexOf('<form');
-	while (from !== -1) {
-		const tagEnd = flattened.indexOf('>', from);
-		found.push(source.slice(tagEnd + 1));
-		from = flattened.indexOf('<form', tagEnd);
-	}
-
-	return found;
+function read(file: string): string {
+	return readFileSync(new URL(file, `file://${appRoot}`), 'utf8');
 }
 
-describe('every archetype-A form stacks its own fields', () => {
-	it('finds archetype-A routes to check', () => {
+// A comment that mentions `<form>` is prose about a form, not a form --
+// `account/+page.svelte` has three of them.
+function withoutComments(source: string): string {
+	return source.replaceAll(HTML_COMMENT, '');
+}
+
+function isEntryScreen(file: string): boolean {
+	if (file.startsWith('src/routes/(signed-out)/')) return true;
+	if (file.startsWith('src/routes/portal/(signed-out)/')) return true;
+	return ENTRY_TEMPLATE_IMPORT.test(read(file));
+}
+
+const entryRoutes = globSync('src/routes/**/+page.svelte', { cwd: appRoot }).filter((file) =>
+	isEntryScreen(file)
+);
+
+describe('every unauthenticated entry form stacks its own fields', () => {
+	it('finds the entry screens to check', () => {
 		expect(entryRoutes.length).toBeGreaterThan(0);
 	});
 
-	for (const file of entryRoutes) {
-		it(`${file} opens each <form> with ${REQUIRED_WRAPPER}`, () => {
-			const source = readFileSync(new URL(file, `file://${appRoot}`), 'utf8');
-			const forms = markupAfterEachFormTag(source);
+	it('names only exemptions that still exist', () => {
+		expect(EXEMPT.filter((file) => entryRoutes.includes(file))).toEqual(EXEMPT);
+	});
 
-			/*
-			 * Compared as arrays rather than asserted in the loop, because
-			 * several archetype-A routes have no `<form>` at all -- the portal's
-			 * own accept-invite is a warning and a button, and `no-practice` is
-			 * a sentence and a link. A loop body asserts nothing on those, which
-			 * Vitest reports as a test that ran no expectation. An empty array
-			 * equal to an empty array is the honest statement: this route has
-			 * no form for the rule to be false about.
-			 */
-			expect(forms.map((markup) => markup.trimStart().startsWith(REQUIRED_WRAPPER))).toEqual(
-				forms.map(() => true)
-			);
+	for (const file of entryRoutes) {
+		it(`${file} builds its forms with StackedForm`, () => {
+			const markup = withoutComments(read(file));
+
+			if (EXEMPT.includes(file)) {
+				expect(markup.includes(REQUIRED_WRAPPER)).toBe(true);
+				return;
+			}
+
+			expect(markup.includes('<form')).toBe(false);
 		});
 	}
 });

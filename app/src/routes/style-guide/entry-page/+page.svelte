@@ -11,6 +11,7 @@
 	import Button from '#lib/components/atoms/Button.svelte';
 	import Link from '#lib/components/atoms/Link.svelte';
 	import LabeledField from '#lib/components/molecules/LabeledField.svelte';
+	import StackedForm from '#lib/components/molecules/StackedForm.svelte';
 	import ErrorSummary from '#lib/components/molecules/ErrorSummary.svelte';
 	import Heading from '#lib/components/atoms/Heading.svelte';
 
@@ -35,50 +36,41 @@
 {/snippet}
 
 {#snippet content()}
-	<!--
-		#660: the demo shows the shape a real archetype-A route has to build,
-		wrapper included. `EntryPage` stacks the top-level siblings of its
-		`content` region and `LabeledField` stacks its own parts, but nothing
-		stacks a form's fields for it, so a demo without this would teach the
-		bug rather than the pattern.
-	-->
-	<form onsubmit={(event) => event.preventDefault()} novalidate>
-		<stack-l space="var(--space-5)">
-			<LabeledField id={emailId} label="Email" error={hasError ? 'Enter your email address' : undefined}>
-				{#snippet children({ id, describedBy, invalid })}
-					<TextInput
-						{id}
-						{describedBy}
-						{invalid}
-						type="email"
-						value={email}
-						onInput={(value) => (email = value)}
-						required
-						autocomplete="username"
-					/>
-				{/snippet}
-			</LabeledField>
-			<LabeledField
-				id={passwordId}
-				label="Password"
-				error={hasError ? 'Enter your password' : undefined}
-			>
-				{#snippet children({ id, describedBy, invalid })}
-					<TextInput
-						{id}
-						{describedBy}
-						{invalid}
-						type="password"
-						value={password}
-						onInput={(value) => (password = value)}
-						required
-						autocomplete="current-password"
-					/>
-				{/snippet}
-			</LabeledField>
-			<Button type="submit" label="Log in" onClick={noop} />
-		</stack-l>
-	</form>
+	<StackedForm onSubmit={(event) => event.preventDefault()}>
+		<LabeledField id={emailId} label="Email" error={hasError ? 'Enter your email address' : undefined}>
+			{#snippet children({ id, describedBy, invalid })}
+				<TextInput
+					{id}
+					{describedBy}
+					{invalid}
+					type="email"
+					value={email}
+					onInput={(value) => (email = value)}
+					required
+					autocomplete="username"
+				/>
+			{/snippet}
+		</LabeledField>
+		<LabeledField
+			id={passwordId}
+			label="Password"
+			error={hasError ? 'Enter your password' : undefined}
+		>
+			{#snippet children({ id, describedBy, invalid })}
+				<TextInput
+					{id}
+					{describedBy}
+					{invalid}
+					type="password"
+					value={password}
+					onInput={(value) => (password = value)}
+					required
+					autocomplete="current-password"
+				/>
+			{/snippet}
+		</LabeledField>
+		<Button type="submit" label="Log in" onClick={noop} />
+	</StackedForm>
 
 	<Link href="/style-guide/entry-page" label="Forgot your password?" />
 

@@ -44,6 +44,7 @@
 	import Text from '#lib/components/atoms/Text.svelte';
 	import WarningText from '#lib/components/atoms/WarningText.svelte';
 	import LabeledField from '#lib/components/molecules/LabeledField.svelte';
+	import StackedForm from '#lib/components/molecules/StackedForm.svelte';
 	import TotpCodeField from '#lib/components/molecules/TotpCodeField.svelte';
 	import ErrorSummary from '#lib/components/molecules/ErrorSummary.svelte';
 	import EntryPage from '#lib/components/templates/EntryPage.svelte';
@@ -240,35 +241,24 @@
 {#snippet content()}
 	{#if step === 'password'}
 		<!-- `novalidate`: the page refuses the submit, not the browser (#467). -->
-		<!--
-			#660: the fields are stacked by the form, not by `EntryPage`.
-			`EntryPage` spaces the top-level siblings of its `content` region,
-			and `LabeledField` spaces its own label, hint and control -- but
-			`stack-l`'s rule reaches a child, never a grandchild, so without
-			this wrapper each field's label sits flush against whatever is
-			above it. `var(--space-5)` is the same token `FormPage` spends on
-			a fieldset's content, so a form reads the same on both archetypes.
-		-->
-		<form onsubmit={handlePasswordSubmit} novalidate>
-			<stack-l space="var(--space-5)">
-				<Text text="Confirm your password to set up an authenticator app." />
-				<LabeledField id={passwordId} label="Password" error={submission.errorFor(passwordId)}>
-					{#snippet children({ id, describedBy, invalid })}
-						<TextInput
-							{id}
-							{describedBy}
-							{invalid}
-							type="password"
-							value={password}
-							onInput={(value) => (password = value)}
-							required
-							autocomplete="current-password"
-						/>
-					{/snippet}
-				</LabeledField>
-				<Button type="submit" label="Continue" loading={submission.isSubmitting} />
-			</stack-l>
-		</form>
+		<StackedForm onSubmit={handlePasswordSubmit}>
+			<Text text="Confirm your password to set up an authenticator app." />
+			<LabeledField id={passwordId} label="Password" error={submission.errorFor(passwordId)}>
+				{#snippet children({ id, describedBy, invalid })}
+					<TextInput
+						{id}
+						{describedBy}
+						{invalid}
+						type="password"
+						value={password}
+						onInput={(value) => (password = value)}
+						required
+						autocomplete="current-password"
+					/>
+				{/snippet}
+			</LabeledField>
+			<Button type="submit" label="Continue" loading={submission.isSubmitting} />
+		</StackedForm>
 	{:else if step === 'confirm-sign-out'}
 		<!--
 			#816: the warning goes on the button that acts, not on a screen
@@ -286,28 +276,26 @@
 		/>
 		<Button type="button" label="Cancel" variant="secondary" onClick={handleCancelSignOut} />
 	{:else}
-		<form onsubmit={handleCodeSubmit} novalidate>
-			<stack-l space="var(--space-5)">
-				<Text
-					text="Scan this QR code with an authenticator app, such as Google Authenticator or 1Password."
-				/>
-				<img
-					src={qrCodeDataUrl}
-					alt="QR code for setting up two-factor authentication in an authenticator app"
-					width="200"
-					height="200"
-				/>
-				<Text text="Can't scan the code? Enter this key into your authenticator app instead:" />
-				<!--
-					Selectable plain text, not an input: a person enrolling on the
-					same device she is reading the screen on cannot scan her own
-					screen, so this is the one alternative path -- #606's own AC.
-				-->
-				<p><code>{secretKey}</code></p>
-				<TotpCodeField id={codeId} value={code} onInput={(value) => (code = value)} error={submission.errorFor(codeId)} />
-				<Button type="submit" label="Confirm and turn on" loading={submission.isSubmitting} />
-			</stack-l>
-		</form>
+		<StackedForm onSubmit={handleCodeSubmit}>
+			<Text
+				text="Scan this QR code with an authenticator app, such as Google Authenticator or 1Password."
+			/>
+			<img
+				src={qrCodeDataUrl}
+				alt="QR code for setting up two-factor authentication in an authenticator app"
+				width="200"
+				height="200"
+			/>
+			<Text text="Can't scan the code? Enter this key into your authenticator app instead:" />
+			<!--
+				Selectable plain text, not an input: a person enrolling on the
+				same device she is reading the screen on cannot scan her own
+				screen, so this is the one alternative path -- #606's own AC.
+			-->
+			<p><code>{secretKey}</code></p>
+			<TotpCodeField id={codeId} value={code} onInput={(value) => (code = value)} error={submission.errorFor(codeId)} />
+			<Button type="submit" label="Confirm and turn on" loading={submission.isSubmitting} />
+		</StackedForm>
 	{/if}
 {/snippet}
 

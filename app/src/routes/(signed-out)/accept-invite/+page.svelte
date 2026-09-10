@@ -40,6 +40,7 @@
 	import Text from '#lib/components/atoms/Text.svelte';
 	import Heading from '#lib/components/atoms/Heading.svelte';
 	import LabeledField from '#lib/components/molecules/LabeledField.svelte';
+	import StackedForm from '#lib/components/molecules/StackedForm.svelte';
 	import RadioGroup from '#lib/components/molecules/RadioGroup.svelte';
 	import WorkStateField from '#lib/components/molecules/WorkStateField.svelte';
 	import ErrorSummary from '#lib/components/molecules/ErrorSummary.svelte';
@@ -345,62 +346,51 @@
 			signing in is what settles that.
 		-->
 		<!-- `novalidate`: the page refuses the submit, not the browser (#467). -->
-		<!--
-			#660: the fields are stacked by the form, not by `EntryPage`.
-			`EntryPage` spaces the top-level siblings of its `content` region,
-			and `LabeledField` spaces its own label, hint and control -- but
-			`stack-l`'s rule reaches a child, never a grandchild, so without
-			this wrapper each field's label sits flush against the input above
-			it. `var(--space-5)` is the same token `FormPage` spends on a
-			fieldset's content, so a form reads the same on both archetypes.
-		-->
-		<form onsubmit={handleIdentify} novalidate>
-			<stack-l space="var(--space-5)">
-				<Text text="First, sign in or create an account with the address your invite was sent to." />
-				<LabeledField id={emailId} label="Email" error={submission.errorFor(emailId)}>
-					{#snippet children({ id, describedBy, invalid })}
-						<TextInput
-							{id}
-							{describedBy}
-							{invalid}
-							type="email"
-							value={email}
-							onInput={(value) => (email = value)}
-							required
-							autocomplete={emailAutocomplete}
-						/>
-					{/snippet}
-				</LabeledField>
-				<LabeledField
-					id={passwordId}
-					label="Password"
-					hint={passwordHint}
-					error={submission.errorFor(passwordId)}
-				>
-					{#snippet children({ id, describedBy, invalid })}
-						<TextInput
-							{id}
-							{describedBy}
-							{invalid}
-							type="password"
-							value={password}
-							onInput={(value) => (password = value)}
-							required
-							minlength={6}
-							autocomplete={passwordAutocomplete}
-						/>
-					{/snippet}
-				</LabeledField>
-				<RadioGroup
-					legend="Account mode"
-					name="mode"
-					options={modeOptions}
-					value={mode}
-					onChange={(value) => (mode = value)}
-				/>
-				<Button type="submit" label="Continue" loading={submission.isSubmitting} />
-			</stack-l>
-		</form>
+		<StackedForm onSubmit={handleIdentify}>
+			<Text text="First, sign in or create an account with the address your invite was sent to." />
+			<LabeledField id={emailId} label="Email" error={submission.errorFor(emailId)}>
+				{#snippet children({ id, describedBy, invalid })}
+					<TextInput
+						{id}
+						{describedBy}
+						{invalid}
+						type="email"
+						value={email}
+						onInput={(value) => (email = value)}
+						required
+						autocomplete={emailAutocomplete}
+					/>
+				{/snippet}
+			</LabeledField>
+			<LabeledField
+				id={passwordId}
+				label="Password"
+				hint={passwordHint}
+				error={submission.errorFor(passwordId)}
+			>
+				{#snippet children({ id, describedBy, invalid })}
+					<TextInput
+						{id}
+						{describedBy}
+						{invalid}
+						type="password"
+						value={password}
+						onInput={(value) => (password = value)}
+						required
+						minlength={6}
+						autocomplete={passwordAutocomplete}
+					/>
+				{/snippet}
+			</LabeledField>
+			<RadioGroup
+				legend="Account mode"
+				name="mode"
+				options={modeOptions}
+				value={mode}
+				onChange={(value) => (mode = value)}
+			/>
+			<Button type="submit" label="Continue" loading={submission.isSubmitting} />
+		</StackedForm>
 	{:else if step === 'confirm-sign-out'}
 		<!--
 			#816: the warning goes on the button that acts, not on a screen
@@ -418,56 +408,54 @@
 		/>
 		<Button type="button" label="Cancel" variant="secondary" onClick={handleCancelSignOut} />
 	{:else}
-		<form onsubmit={handleAccept} novalidate>
-			<stack-l space="var(--space-5)">
-				<h2 tabindex="-1" {@attach focusOnAppearing}>
-					{existing ? 'Check your details' : 'Tell us about yourself'}
-				</h2>
+		<StackedForm onSubmit={handleAccept}>
+			<h2 tabindex="-1" {@attach focusOnAppearing}>
+				{existing ? 'Check your details' : 'Tell us about yourself'}
+			</h2>
 
-				{#if existing}
-					<!--
-						Read as plain text, not as disabled form controls. A disabled
-						input still looks like a question, and a question she cannot
-						answer reads as a fault in the page rather than as a fact that
-						is already settled. These are hers, already recorded, and the
-						only honest thing to render is the value itself.
-					-->
-					<Text text="These come from the Staff account you already have, so we are not asking again." />
-					<Text text={existing.name} />
-					<Text
-						text={`You work from ${workStateName(existing.workState)}, self-reported ${workStateReportedOn(existing.workStateReportedAt)}.`}
-					/>
-					<!--
-						The correction lives on one screen, because the work state is
-						one fact about one person however many Practices she works at
-						(#437). Pointing at it here rather than reopening the field
-						keeps that true.
-					-->
-					<Link href={resolve('/account')} label="Change where you work" variant="secondary" />
-				{:else}
-					<LabeledField id={nameId} label="Your name" error={submission.errorFor(nameId)}>
-						{#snippet children({ id, describedBy, invalid })}
-							<TextInput
-								{id}
-								{describedBy}
-								{invalid}
-								value={name}
-								onInput={(value) => (name = value)}
-								required
-								autocomplete="name"
-							/>
-						{/snippet}
-					</LabeledField>
-					<WorkStateField
-						id={workStateId}
-						bind:value={workStateName_}
-						error={submission.errorFor(workStateId)}
-					/>
-				{/if}
+			{#if existing}
+				<!--
+					Read as plain text, not as disabled form controls. A disabled
+					input still looks like a question, and a question she cannot
+					answer reads as a fault in the page rather than as a fact that
+					is already settled. These are hers, already recorded, and the
+					only honest thing to render is the value itself.
+				-->
+				<Text text="These come from the Staff account you already have, so we are not asking again." />
+				<Text text={existing.name} />
+				<Text
+					text={`You work from ${workStateName(existing.workState)}, self-reported ${workStateReportedOn(existing.workStateReportedAt)}.`}
+				/>
+				<!--
+					The correction lives on one screen, because the work state is
+					one fact about one person however many Practices she works at
+					(#437). Pointing at it here rather than reopening the field
+					keeps that true.
+				-->
+				<Link href={resolve('/account')} label="Change where you work" variant="secondary" />
+			{:else}
+				<LabeledField id={nameId} label="Your name" error={submission.errorFor(nameId)}>
+					{#snippet children({ id, describedBy, invalid })}
+						<TextInput
+							{id}
+							{describedBy}
+							{invalid}
+							value={name}
+							onInput={(value) => (name = value)}
+							required
+							autocomplete="name"
+						/>
+					{/snippet}
+				</LabeledField>
+				<WorkStateField
+					id={workStateId}
+					bind:value={workStateName_}
+					error={submission.errorFor(workStateId)}
+				/>
+			{/if}
 
-				<Button type="submit" label="Accept invite" loading={submission.isSubmitting} />
-			</stack-l>
-		</form>
+			<Button type="submit" label="Accept invite" loading={submission.isSubmitting} />
+		</StackedForm>
 	{/if}
 
 	{#if picker}
