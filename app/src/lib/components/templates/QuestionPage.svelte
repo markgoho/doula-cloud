@@ -191,7 +191,7 @@
 								</h1>
 								{@render questionHint()}
 							</div>
-							{@render content({ describedBy: hintId })}
+							<div class="thing">{@render content({ describedBy: hintId })}</div>
 						</stack-l>
 					{/if}
 
@@ -296,7 +296,10 @@
 		   that can space it. The label-as-h1 branch puts the same step on a
 		   nested `stack-l` instead, because there it IS a stack child and a
 		   margin would add to the stack's gap rather than replace it
-		   (ADR-0039). */
+		   (ADR-0039). It keeps the wrapper all the same: a `content`
+		   snippet is free to emit more than one element, and the wrapper is
+		   what makes those one block rather than two stack items the nested
+		   stack would push --space-7 apart. */
 		fieldset .thing {
 			margin-block-start: var(--space-7);
 		}
