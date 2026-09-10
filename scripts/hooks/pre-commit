@@ -55,3 +55,35 @@ if [ -n "$staged_app_files" ]; then
         bun run --cwd app test:unit:coverage || exit 1
     fi
 fi
+
+# 4. Blocks a commit that stages an unformatted .ts file in either of the
+#    repo's own tooling trees, .claude/hooks/ and scripts/ (#1120). Same
+#    shape as step 1, and for the same reason: .editorconfig and
+#    .prettierrc declare 2-space indentation and single quotes for these
+#    paths, and until this existed nothing measured it, so the trees had
+#    drifted to 22 tab-indented files out of 29. Prettier reads
+#    .editorconfig for indentation by default, so one --check covers both
+#    configs. The CI `format` job is the real backstop; this is the fast
+#    local half of it, on staged files only.
+#
+#    Resolved from the repo root rather than the working directory, since
+#    a worktree's root node_modules may be a symlink to the main
+#    checkout's. If it is missing at all, the commit is blocked with the
+#    command that fixes it rather than passed silently -- a formatting
+#    gate that quietly skips itself is the state this replaced.
+staged_tooling_ts=$(git diff --cached --name-only --diff-filter=ACM -- '.claude/hooks/*.ts' 'scripts/*.ts')
+if [ -n "$staged_tooling_ts" ]; then
+    repo_root=$(git rev-parse --show-toplevel)
+    prettier="$repo_root/node_modules/.bin/prettier"
+    if [ ! -x "$prettier" ]; then
+        echo "prettier: not installed at the repo root, so the tooling-tree" >&2
+        echo "formatting gate cannot run. Run 'bun install' at the repo root" >&2
+        echo "and commit again." >&2
+        exit 1
+    fi
+    if ! "$prettier" --check $staged_tooling_ts >&2; then
+        echo "The staged files above are not formatted. Run 'bun run format'" >&2
+        echo "at the repo root, re-stage, and commit again." >&2
+        exit 1
+    fi
+fi

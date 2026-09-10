@@ -39,6 +39,33 @@ jobs:
       - name: Test
         run: bun test scripts/
 
+  # The formatting gate for the repo's own tooling trees, `.claude/hooks/`
+  # and `scripts/` (#1120). `.editorconfig` and `.prettierrc` have always
+  # declared 2-space indentation and single quotes for them, but nothing
+  # ever checked it: `gofmt` is Go-only, the pre-commit hook's other steps
+  # are scoped to staged `app/*` paths, and `bun run --cwd app lint` is
+  # ESLint with no stylistic rules configured. Prettier reads
+  # `.editorconfig` for indentation by default, so this one command
+  # enforces both of those configs at once.
+  #
+  # A separate job from `scripts` above rather than another step in it,
+  # because that job deliberately installs nothing -- `bun test scripts/`
+  # needs no dependency, and giving it one would make every run pay for
+  # firebase-tools to check whitespace.
+  format:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: oven-sh/setup-bun@v2
+
+      - name: Install
+        run: bun install --frozen-lockfile
+
+      - name: Check formatting
+        run: bun run format:check
+
   actionlint:
     runs-on: ubuntu-latest
     timeout-minutes: 5
