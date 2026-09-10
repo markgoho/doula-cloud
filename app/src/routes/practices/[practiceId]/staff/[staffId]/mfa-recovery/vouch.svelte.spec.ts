@@ -4,7 +4,7 @@ import { render } from 'vitest-browser-svelte';
 import { jsonResponse } from '#lib/testResponse.js';
 import Page from './+page.svelte';
 import { toPageState } from '../../../../../routeFixture.js';
-import { fixture, roster, session } from './page.fixture.js';
+import { fixture, ownerSession, roster, session } from './page.fixture.js';
 
 /*
  * The `page` this route reads comes from its own fixture (#596), so the
@@ -66,15 +66,7 @@ async function setup({
 	sessionResponse = jsonResponse(session),
 	vouchResponse = jsonResponse(undefined, 204)
 }: SetupOptions = {}) {
-	pageState.data = {
-		session: {
-			practiceId: 'practice-1',
-			staffId: 'staff-1',
-			practiceName: 'Riverside Doula Collective',
-			roles,
-			isContractor: false
-		}
-	};
+	pageState.data = { session: { ...ownerSession, roles } };
 	apiFetchWithSession.mockImplementation((path: string) =>
 		Promise.resolve(path.startsWith('/api/staff/session') ? sessionResponse : rosterResponse)
 	);

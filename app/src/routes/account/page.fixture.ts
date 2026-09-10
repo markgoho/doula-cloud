@@ -33,9 +33,11 @@ export const session: SessionInfo = {
  * the widest the screen ever gets, and the only one where the Recovery
  * codes fieldset exists to be measured.
  */
+export const soleOwnerSession: SessionInfo = { ...session, secondFactor: true, soleOwner: true };
+
 export const asSoleOwnerWithSecondFactor: RouteVariant = {
 	name: 'Your account, as a sole Owner who has a second factor',
-	respond: () => jsonResponse({ ...session, secondFactor: true, soleOwner: true })
+	respond: () => jsonResponse(soleOwnerSession)
 };
 
 export const fixture: RouteFixture = {

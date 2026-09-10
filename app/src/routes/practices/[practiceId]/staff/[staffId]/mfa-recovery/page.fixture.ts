@@ -15,8 +15,19 @@
  */
 import { jsonResponse } from '#lib/testResponse.js';
 import type { SessionInfo } from '#lib/landing.js';
-import type { RouteFixture } from '../../../../../routeFixture.js';
+import type { RouteFixture, RouteVariant } from '../../../../../routeFixture.js';
 import Page from './+page.svelte';
+
+/**
+The Membership the Owner's own screen is drawn against.
+*/
+export const ownerSession = {
+	practiceId: 'practice-1',
+	staffId: 'staff-1',
+	practiceName: 'Riverside Doula Collective',
+	roles: ['owner'],
+	isContractor: false
+};
 
 export const roster = {
 	members: [
@@ -47,20 +58,27 @@ export const session: SessionInfo = {
 	soleOwner: false
 };
 
+/*
+ * The other screen this route renders (#913). An Admin is not the Owner's
+ * tree with a button removed -- the whole page is replaced by a notice
+ * saying who can do this, and nothing is fetched at all -- so it is a
+ * branch the sweep has to measure rather than a strict subset it can
+ * infer. `readyText` is the same heading, and it is the fallback wording,
+ * because no roster read ever happens to name anybody.
+ */
+export const asAdmin: RouteVariant = {
+	name: 'Owner vouching, as an Admin who cannot',
+	pageData: { session: { ...ownerSession, roles: ['admin'] } },
+	readyText: 'Help someone sign in again'
+};
+
 export const fixture: RouteFixture = {
 	name: 'Owner vouching for a locked-out Staff member',
 	component: Page,
 	params: { practiceId: 'practice-1', staffId: 'staff-2' },
 	url: 'https://example.test/practices/practice-1/staff/staff-2/mfa-recovery',
-	pageData: {
-		session: {
-			practiceId: 'practice-1',
-			staffId: 'staff-1',
-			practiceName: 'Riverside Doula Collective',
-			roles: ['owner'],
-			isContractor: false
-		}
-	},
+	pageData: { session: ownerSession },
+	variants: [asAdmin],
 	respond: (path: string) =>
 		jsonResponse(path.startsWith('/api/staff/session') ? session : roster),
 	readyText: 'Help Persephone Ochieng-Whitfield sign in again'

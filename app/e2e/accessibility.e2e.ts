@@ -268,6 +268,16 @@ test('Archetypes B, C, D, E, F, G -- the Staff side', async ({ page, request, co
 			h1: 'Staff'
 		},
 		{
+			// #694: the Owner-vouch screen, scanned against the Owner's own
+			// roster row -- this Practice has exactly one Staff member, and
+			// the endpoint takes any Membership at the Practice, so no second
+			// person has to be seeded to realize the screen.
+			key: 'practices/[practiceId]/staff/[staffId]/mfa-recovery',
+			archetype: 'C',
+			url: `/practices/${practiceId}/staff/${staffId}/mfa-recovery`,
+			h1: 'Help Alex Owner sign in again'
+		},
+		{
 			key: 'practices/[practiceId]/offers',
 			archetype: 'C',
 			url: `/practices/${practiceId}/offers`,

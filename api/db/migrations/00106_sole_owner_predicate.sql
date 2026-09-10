@@ -1,7 +1,14 @@
 -- +goose Up
 -- #694: "is this person the sole Owner of a Practice?" as a SECURITY
--- DEFINER predicate, so a caller may ask it about herself without being
--- given sight of anyone else's Membership row.
+-- DEFINER predicate, so a caller may ask it without being given sight of
+-- anyone else's Membership row.
+--
+-- It takes an arbitrary staff id rather than reading the current session,
+-- and that is deliberate: reconcileOwnersAtPractice (staffauth) asks it
+-- about every Owner at a Practice whenever one Membership changes, since
+-- one person's change can make or unmake somebody else's sole ownership.
+-- What is narrowed here is not who may be asked about; it is what comes
+-- back, which is one boolean and never a row.
 --
 -- The question cannot be answered from the asker's own rows alone: it
 -- turns on whether *another* Owner holds a Membership at the same
@@ -17,8 +24,7 @@
 --
 -- SECURITY DEFINER is the same instrument current_staff_id() (00003)
 -- already uses, for the same reason: it runs as the table's owner, which
--- bypasses RLS, and it returns one boolean rather than a row. The
--- widening is exactly the width of the answer.
+-- bypasses RLS, and it returns one boolean rather than a row.
 --
 -- deleted_at is deliberately not filtered, matching what
 -- isSoleOwnerAnywhere has always meant: saved-recovery-code eligibility

@@ -490,6 +490,16 @@
 			onClick={() => (isConfirmingSavedCodes = true)}
 		/>
 	{/if}
+	<!--
+		A `Notice` beside the control rather than the page-wide
+		`ErrorSummary`, for the same recorded reason the two-factor section
+		above gives: this fieldset's one button is not part of the form the
+		summary is about (the work state), and a summary at the top of the
+		page linking to nothing she can fix would send her away from the
+		thing that failed. Nothing here can produce a field-targeted
+		refusal -- there is no field -- so the guard is only that a refusal
+		exists at all.
+	-->
 	{#if savedCodesSubmission.errors.length > 0}
 		<Notice variant="error" message={savedCodesSubmission.errors[0].message} />
 	{/if}

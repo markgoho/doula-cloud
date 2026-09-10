@@ -26,6 +26,8 @@ const API_URL = `http://${E2E_API_HOST}:${E2E_API_PORT}`;
  * emulator token instead of by pressing "Send the code" -- with the same
  * two credentials that button sends, so the request shape is still what
  * is under test.
+ * [#1132](https://github.com/markgoho/doula-cloud/issues/1132) is the
+ * ticket for closing this one.
  *
  * **A successful spend cannot complete.** See the second block comment
  * below, and [#1128](https://github.com/markgoho/doula-cloud/issues/1128).

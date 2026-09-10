@@ -31,12 +31,11 @@
 	import type { User } from 'firebase/auth';
 	import { page } from '#lib/appState.svelte.js';
 	import { resolve } from '$app/paths';
-	import { apiFetch, apiFetchWithSession } from '#lib/api.js';
+	import { apiErrorMessage, apiFetch, apiFetchWithSession } from '#lib/api.js';
 	import { isOwner as checkIsOwner } from '#lib/roles.js';
 	import { loadStaff, type StaffSummary } from '#lib/staff.js';
 	import { vouchForStaff } from '#lib/mfaRecovery.js';
 	import type { SessionInfo } from '#lib/landing.js';
-	import { apiErrorMessage } from '#lib/api.js';
 	import { FormSubmission } from '#lib/formSubmission.svelte.js';
 	import Button from '#lib/components/atoms/Button.svelte';
 	import Link from '#lib/components/atoms/Link.svelte';
@@ -81,14 +80,23 @@
 		}
 
 		try {
-			const roster = await loadStaff(apiFetchWithSession, practiceId);
+			/*
+			 * Two independent facts -- who this screen is about, and the
+			 * address the code will actually arrive at -- so they are asked
+			 * for together rather than one after the other. Neither read
+			 * decides whether the other is worth making.
+			 */
+			const [roster, response] = await Promise.all([
+				loadStaff(apiFetchWithSession, practiceId),
+				apiFetchWithSession('/api/staff/session')
+			]);
+
 			member = roster.members.find((entry) => entry.staffId === staffId);
 			if (!member) {
 				loadError = 'That Staff member is not on this practice roster.';
 				return;
 			}
 
-			const response = await apiFetchWithSession('/api/staff/session');
 			if (!response.ok) {
 				loadError = await apiErrorMessage(response);
 				return;

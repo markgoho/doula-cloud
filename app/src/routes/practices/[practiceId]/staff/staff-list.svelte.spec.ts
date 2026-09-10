@@ -609,15 +609,11 @@ describe('staff screen', () => {
 	});
 
 	it('offers an Admin no such link', async () => {
-		pageState.data = {
-			session: {
-				practiceId: 'practice-1',
-				staffId: 'staff-1',
-				practiceName: 'Riverside Doula Collective',
-				roles: ['admin'],
-				isContractor: false
-			}
-		};
+		// A spread of the fixture's own session, never a second one written
+		// out here (svelte-tests.md): a `practiceId` that drifted from the
+		// fixture's would make every `respond(path)` match silently miss.
+		const { session } = fixture.pageData as { session: Record<string, unknown> };
+		pageState.data = { session: { ...session, roles: ['admin'] } };
 		await setup();
 
 		expect(testPage.getByRole('link', { name: 'Send a recovery code' }).elements()).toHaveLength(0);

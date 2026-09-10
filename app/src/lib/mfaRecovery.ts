@@ -12,10 +12,7 @@
  * said and never a sentence invented here -- the spend endpoint in
  * particular answers a wrong code and an unknown address identically
  * (#168), and this module must not undo that by branching on which one it
- * thinks it saw. `refusalMessage` rather than `refusalError`: none of
- * these three endpoints sends `APIError.details`, so there is no field map
- * to carry, and `refusalMessage` is the one that reads a bodyless 5xx as
- * "there is a problem with the service" rather than as an empty sentence.
+ * thinks it saw. `throwRefusal` below is the one reader all three share.
  */
 import type { Fetcher } from './fetcher.js';
 
@@ -28,6 +25,17 @@ function vouchPath(practiceId: string, staffId: string): string {
 const rotatePath = '/api/staff/mfa-recovery/saved-codes/rotate';
 
 const spendPath = '/api/staff/mfa-recovery/spend';
+
+/**
+ * Throws whatever the BFF said, for the three calls below that all report
+ * a refusal the same way. `refusalMessage` rather than `refusalError`:
+ * none of these endpoints sends `APIError.details`, so there is no field
+ * map to carry, and this is the reader that turns a bodyless 5xx into
+ * "there is a problem with the service" rather than an empty sentence.
+ */
+async function throwRefusal(response: Response): Promise<never> {
+	throw new Error(await refusalMessage(response));
+}
 
 /**
  * Mints a single-use, 24-hour code for one Staff member at this Practice
@@ -59,7 +67,7 @@ export async function vouchForStaff(
 		headers: { Authorization: `Bearer ${idToken}`, 'X-Confirmed': 'true' }
 	});
 	if (!response.ok) {
-		throw new Error(await refusalMessage(response));
+		await throwRefusal(response);
 	}
 }
 
@@ -79,7 +87,7 @@ export async function vouchForStaff(
 export async function rotateSavedCodes(fetcher: Fetcher): Promise<string[]> {
 	const response = await fetcher(rotatePath, { method: 'POST' });
 	if (!response.ok) {
-		throw new Error(await refusalMessage(response));
+		await throwRefusal(response);
 	}
 	const body: { codes: string[] } = await response.json();
 	return body.codes;
@@ -110,6 +118,6 @@ export async function spendRecoveryCode(
 		body: JSON.stringify({ email, code })
 	});
 	if (!response.ok) {
-		throw new Error(await refusalMessage(response));
+		await throwRefusal(response);
 	}
 }
