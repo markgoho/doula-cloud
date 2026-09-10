@@ -69,7 +69,7 @@ Single-context — `CONTEXT.md` + `docs/adr/` at the repo root. See `docs/agents
 
 ### Manifesto
 
-Before deciding what to build or refuse, a price, a marketing channel or its copy, or a metric, read `docs/manifesto.md`: the product and business principles, ranked below recorded decisions.
+Before deciding what to build or refuse, what the product asks a person for, alerts on, or collects, a price, a marketing channel or its copy, or a metric, read `docs/manifesto.md`: the product and business principles, ranked below recorded decisions.
 
 ### Service patterns
 

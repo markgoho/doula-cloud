@@ -1,11 +1,12 @@
 # Doula Cloud manifesto
 
-This is how Doula Cloud decides what to build, what to refuse, what to charge, how to reach the doulas it is for, what to measure, and where founder time goes. It distills two books by Rob Walling and applies them to this product:
+This is how Doula Cloud decides what to build, what to refuse, how the product treats the people using it, what to charge, how to reach the doulas it is for, what to measure, and where founder time goes. It distills three books and applies them to this product:
 
-- **SP** — *The SaaS Playbook* (2023).
-- **SM** — *Start Marketing the Day You Start Coding* (2023 edition; the essays date from 2006–2016).
+- **SP** — Rob Walling, *The SaaS Playbook* (2023).
+- **SM** — Rob Walling, *Start Marketing the Day You Start Coding* (2023 edition; the essays date from 2006–2016).
+- **NI** — Golden Krishna, *The Best Interface Is No Interface* (2015).
 
-Page numbers are printed pages. Every figure from either book is a rule of thumb, never a target.
+Page numbers are printed pages. Every figure from these books is a rule of thumb, never a target.
 
 ## How to use it
 
@@ -77,6 +78,83 @@ Both books speak in subscriptions. Doula Cloud sells prepaid Credits, one per En
 - **Means here:** the pilot agency is today's one real customer contact (#991). A second Practice with a different shape, most naturally a solo doula, enters real Clients before launch.
 - **Does not mean:** seed data or a test Practice counts.
 - **Broken when:** a decision about how Practices work rests on one Practice's habits.
+
+## How the product treats the people using it
+
+These principles govern the product itself: what it asks of doulas, Admins, and Clients, and what it does for them without being asked.
+
+### The ask is the last resort
+
+`NI ch.11–12, p.131–142`
+
+- **Claim:** before a screen asks a person for something, derive it, infer it from an act the person already did, or drop the field.
+- **Means here:** a status the product can infer is a candidate for automation (ADR-0015). An Engagement becomes active on its first scheduled Visit (#895), a Visit's type is derived, Contract merge fields fill themselves (#258), and the Owner confirms the timezone the browser already supplied rather than typing it (#1166).
+- **Does not mean:** removing a decision that belongs to the person.
+- **Broken when:** a new field, or a status moved by hand, holds a value the system already has.
+
+### Start from the goal and count the steps
+
+`NI ch.2, ch.9–10, p.8–13, p.113`
+
+- **Claim:** design starts from what the person is trying to get done, not from a screen. A car-key app took thirteen steps to do what a key does in two.
+- **Means here:** **steps from goal** is every act from the person's trigger to their goal, including acts outside the product, with the acts on an interface marked. Each journey map in `docs/journeys/` records the count at its moment of truth (#1267), and a design is judged by whether the count goes down.
+- **Does not mean:** a product with no screens.
+- **Broken when:** a spec starts from a wireframe, or a journey's steps from goal go up.
+
+### Take chores away; never add one
+
+`NI ch.13, p.147–157`
+
+- **Claim:** software keeps turning analog chores into digital ones, such as updating, filing, and marking things done, when its job is to remove them.
+- **Means here:** keeping a record true is the product's job. Where only a person can know, as with ADR-0015's "is this care finished?", the product asks at the moment it matters (#1262) instead of leaving the record wrong until someone remembers.
+- **Does not mean:** completing an Engagement automatically; bereavement Visits continue after a loss (ADR-0015).
+- **Broken when:** a record stays wrong unless someone remembers to fix it.
+
+### An act starts every message; a badge never exists
+
+`NI ch.15, p.178–180` `ADR-0028, ADR-0035, ADR-0038`
+
+- **Claim:** alarms driven by clocks and thresholds get ignored. A hospital monitoring system went from about 120 alarms to about 2 targeted ones and became useful.
+- **Recorded:** a date passing alone notifies nobody (ADR-0038), and the shell has no notification bell (ADR-0028). A delay that the person's next act can cancel is allowed: the payout email waits 48 hours and is skipped if the Owner finished in that window (ADR-0035). A sweep with no starting act exists only for a legal duty: the dormancy notice sent before New York escheats an unspent balance (`api/internal/billing/dormancy.go`, APL §1315).
+- **Means here:** a notification is caused by something a person did that another person must act on. NI adds a judgment: passing the timing rule does not make a message wanted, so a message must report a condition that needs the person, never only ask them to come back (ADR-0035, ADR-0038). SM argues the opposite for trial check-ins, which raised activation from about 25% to about 75% (SM p.213, p.224). Which rule governs the product is open, and #1266 decides it. When a coverage gap is saved with no cover, Owners and Admins get an email (#1093).
+- **Does not mean:** chasing a Client on a timer. A founder writing personally to a Practice that went quiet or never started, working from a list the product derives, is not a product alert either.
+- **Broken when:** the product gains a bell, a badge, or a timed sweep with no legal duty behind it, or a coverage hole can be found only by opening a list at 2 a.m.
+
+### Success is time given back, not time spent
+
+`NI ch.5–6, p.47–62`
+
+- **Claim:** products built to hold attention measure the wrong thing. A tool succeeds when the person finishes and leaves.
+- **Means here:** measure work done through the product (Engagements run, Visits logged, invoices paid), never daily active users, sessions, or minutes in the app. This is what "retention" means everywhere in this document.
+- **Does not mean:** having no retention measure.
+- **Broken when:** a metric rises when a task takes longer.
+
+### Adapt to the Practice and the person from their own data
+
+`NI ch.14–15, p.161–181`
+
+- **Claim:** a good system learns from its own users' patterns instead of applying one default to everyone.
+- **Means here:** a per-doula count of concurrent on-call windows, and a Practice-set rule for when on-call starts (#1093).
+- **Does not mean:** predicting anything from a Client's health data.
+- **Broken when:** a one-size default applies where the Practice's own data already says otherwise.
+
+### Collect only what the task needs, and forget it when the task ends
+
+`NI ch.17, p.187–197`
+
+- **Claim:** every piece of data collected is a liability and a cost to trust.
+- **Means here:** an Offer shows a thin copy of the Client and stops serving her details when it ends (#230); Erasure redacts in place (ADR-0027); the teaser is cookieless (ADR-0016); notification email carries no third-party open or click tracking (ADR-0030).
+- **Does not mean:** collecting nothing.
+- **Broken when:** a read outlives the job, or a field is collected "for later".
+
+### Every automation keeps a manual path, and big decisions keep a person's act
+
+`NI ch.19–20, p.203–205, p.208`
+
+- **Claim:** automation fails, so a person must be able to correct it by hand, the way a smart thermostat still has a dial. Some decisions are big enough to keep a deliberate act, the way a $200,000 home loan keeps a button.
+- **Means here:** the manual status move stays (ADR-0015), a Payment can be recorded by hand (#271), and nothing ever completes an Engagement automatically, because a bereaved Client's care continues after a loss (ADR-0015). Spending a Credit, signing, voiding, Erasure, deletion, and completing an Engagement each keep a person's act.
+- **Does not mean:** building both the automatic and the manual path badly, or adding friction everywhere.
+- **Broken when:** an automation has no correction by hand, or an automation spends money, signs, or ends care.
 
 ## How to compete
 
@@ -176,12 +254,13 @@ Both books speak in subscriptions. Doula Cloud sells prepaid Credits, one per En
 - **Means here:** marketing surfaces speak the doula's words ("doula", "my clients", "birth", "on call"), not `CONTEXT.md` terms. The product glossary and the marketing vocabulary are separate on purpose (#991).
 - **Broken when:** a headline or a post says "Engagement" or "Practice".
 
-### The site's first job is the second visit
+### The marketing site's first job is the second visit
 
 `SM p.22–29, p.125`
 
 - **Claim:** most first visitors will not buy, and returning visitors bought four to sixteen times more in Walling's data, so give the visitor who leaves a way back.
 - **Means here:** an input to #868. An evaluator who is not ready still leaves with a way to come back; the evaluator-doula journey (`docs/journeys/evaluator-doula.md`) counts "an intention to come back", or a clear reason she left, as done. Price and signup stay visible (#285).
+- **Does not mean:** the app. The app's job is to let a person finish and leave (see "Success is time given back, not time spent").
 - **Broken when:** the January site's only call to action is creating a Practice.
 
 ### Ship on a public date; consistency beats a big break
@@ -216,7 +295,7 @@ Both books speak in subscriptions. Doula Cloud sells prepaid Credits, one per En
 `SM p.9–17` `SP p.154–161`
 
 - **Claim:** a lost customer costs as much as a hundred visitors at 1% conversion, so fix retention before conversion, and conversion before traffic (SM). Segment churn by price, channel, and cohort; churn in the first 60 days is an onboarding problem. Before product-market fit, ask why people leave, and never game the number with a hard cancel. Send a short founder note within minutes of a cancellation and ask for a reply (SP).
-- **Means here:** a quiet Practice and a deleted Practice each get a founder question. Churn is segmented by persona (solo, agency, contractor-heavy), by source, and by signup month. From launch, a pilot Practice's request outranks channel work.
+- **Means here:** retention means a Practice keeps running Engagements through the product, never sessions or time in the app (see "Success is time given back, not time spent"). A quiet Practice and a deleted Practice each get a founder question. Churn is segmented by persona (solo, agency, contractor-heavy), by source, and by signup month. From launch, a pilot Practice's request outranks channel work.
 - **Does not mean:** ranking work by severity before launch, or making it harder to leave.
 - **Broken when:** a Practice goes quiet and nobody knows why, or channel spend rises while a pilot Practice consumes no Credits.
 
@@ -226,7 +305,7 @@ Both books speak in subscriptions. Doula Cloud sells prepaid Credits, one per En
 
 - **Claim:** "word of mouth" usually means "we don't know" (SP). Store the first-touch source, and also ask "how did you hear about us?", because self-report and analytics disagree: in one survey 85% named search where analytics credited it with 37% (SM).
 - **Means here:** ADR-0016 carries the source for the teaser. The source travels from first touch to the Practice record, beside a self-reported answer.
-- **Does not mean:** cookies or fingerprinting; ADR-0016's cookieless posture stands.
+- **Does not mean:** cookies or fingerprinting (ADR-0016's cookieless posture stands), or measuring behavior inside a Practice's Client records. Measure the acquisition channel and customer outcomes.
 - **Broken when:** a channel decision is made with no source data.
 
 ### Find the minimum path to awesome
@@ -257,14 +336,14 @@ Both books speak in subscriptions. Doula Cloud sells prepaid Credits, one per En
 - **Does not mean:** skipping the cross-cutting expectations in `CLAUDE.md`.
 - **Broken when:** a dated milestone slips for work its criteria never asked for, or a reversible copy change waits on the process a schema change needs.
 
-### From launch, by hand until a written threshold
+### From launch, the founder works by hand until a written threshold
 
 `SM p.132–135`
 
 - **Claim:** do a task by hand until it hurts, and know before you start the point at which it gets automated. Walling's example went from 160 hours to 10.
 - **Recorded:** before launch, everything found is fixed (`CLAUDE.md`; the launch split above).
-- **Means here:** from launch, a manual path carries its threshold, a number, on its ticket.
-- **Does not mean:** handling security, the audit trail, or money movement by hand.
+- **Means here:** from launch, the founder may do by hand what the product will later do, and that manual path carries its threshold, a number, on its ticket. This covers the founder's own operations only.
+- **Does not mean:** handing a customer a chore the product could infer (see "Take chores away; never add one"), or handling security, the audit trail, or money movement by hand.
 - **Broken when:** a manual process has no number, or its number is passed and no ticket exists.
 
 ### Operate as if someone else will run it
