@@ -66,13 +66,16 @@ import { registerLayoutPrimitives } from '#lib/primitives/index.js';
 import '#lib/styles/app.css';
 import { atomPages, moleculePages, organismPages, templatePages, toSlug } from './components.js';
 import {
+	afterQueuedToggles,
 	CONFORMANCE_COMMITMENT,
 	frameHolding,
+	frameHoldingLoadingLedger,
 	isCanonicalEnvironment,
 	ledgerMarkup,
 	mountInFrame,
 	OVERFLOWING,
 	RESOLUTION,
+	revealDisclosures,
 	TOLERANCE
 } from './continuum.js';
 import { toDemos, type PageModule } from './drag-surface/dragSurface.js';
@@ -626,7 +629,7 @@ describe("the floor check's overflow measurement, over a closed disclosure (#112
 
 			atWidth(frame, AT_WIDTH);
 			const measurement = measureOverflow(frame, AT_WIDTH);
-			await new Promise((resolve) => setTimeout(resolve, 50));
+			await afterQueuedToggles();
 
 			// That the measurement saw the hidden content is what says it
 			// really did open the disclosure -- without it this passes on a
@@ -687,6 +690,65 @@ describe("the floor check's overflow measurement, over a closed disclosure (#112
 
 			expect(closedRows.size).toBe(2);
 			expect([...closedRows]).toEqual([...openRows]);
+		} finally {
+			remove();
+		}
+	});
+});
+
+/*
+ * The same measurement, over a disclosure that loads its content on open
+ * (#1126).
+ *
+ * #1124 gave this measurement the sweep's own open/undo pair and inherited
+ * the limit that came with it: a disclosure whose content arrives from a
+ * fetch was measured on the word `Loading...`, here as much as in the
+ * sweep. The fix is one function for both, and this block is what says so
+ * about this one rather than leaving it to the other instrument's tests --
+ * the floor check reaches every subject through `mountInFrame`, which is
+ * where `revealDisclosures` runs, so what these two assert about the
+ * measurement is what the floor check gets for every component it mounts.
+ *
+ * The first assertion is the blind spot itself, kept for the reason the
+ * block above keeps its own: it is the guard on the claim the second one
+ * rests on.
+ */
+describe("the floor check's overflow measurement, over a disclosure that loads on open (#1126)", () => {
+	const AT_WIDTH = CONFORMANCE_COMMITMENT;
+
+	it('measures the loading state when nothing has prepared the disclosure', async () => {
+		const { frame, remove, loads } = frameHoldingLoadingLedger();
+		try {
+			atWidth(frame, AT_WIDTH);
+
+			const measurement = measureOverflow(frame, AT_WIDTH);
+			// The load count is read after the queued toggles have had their
+			// turn, never in the same one: a `toggle` is dispatched from an
+			// element task, so a count read here would be zero whatever this
+			// measurement did to the disclosure -- a guard that cannot fail.
+			await afterQueuedToggles();
+
+			expect(measurement.needed).toBe(AT_WIDTH);
+			expect(isOverflowAcceptable(measurement)).toBe(true);
+			// And it asked the screen for nothing to reach that number, which
+			// is the property the fix had to keep rather than trade.
+			expect(loads()).toBe(0);
+		} finally {
+			remove();
+		}
+	});
+
+	it('measures the content a disclosure loaded on open', async () => {
+		const { frame, remove, loads } = frameHoldingLoadingLedger();
+		try {
+			await revealDisclosures(frame, 'The loading ledger');
+			atWidth(frame, AT_WIDTH);
+
+			const measurement = measureOverflow(frame, AT_WIDTH);
+
+			expect(measurement.needed).toBeGreaterThanOrEqual(OVERFLOWING);
+			expect(isOverflowAcceptable(measurement)).toBe(false);
+			expect(loads()).toBe(1);
 		} finally {
 			remove();
 		}

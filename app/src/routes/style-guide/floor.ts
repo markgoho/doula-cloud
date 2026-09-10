@@ -347,16 +347,23 @@ export interface OverflowMeasurement {
  * an oversight: a component that hides its own closed content with a plain
  * `display: none` (`DataTable`'s `details:not([open]) > .frame` rule does
  * exactly this) takes the geometry away from every criterion, not just this
- * one. No component with a non-overflow criterion does that today.
+ * one. No component with a non-overflow criterion does that today, and
+ * since #1126 no subject this check MOUNTS is closed by the time a criterion
+ * reads it anyway -- `mountInFrame` reveals every disclosure before handing
+ * the frame over. The limit stands for a frame measured without that
+ * preparation, which is what the hand-built subjects in this check's own
+ * spec are.
  *
  * `openDisclosures` is imported rather than re-queried here: one artifact is
  * enforced by there being one function (#570), and that function's own
  * comment named this ticket as the second caller before the second caller
  * existed. Its guarantees come with it -- only disclosures that were CLOSED
- * are touched, the undo runs inside the same task so no `ontoggle` handler
- * ever sees `open`, and therefore content a disclosure LOADS on open is
- * still measured in its loading state (#1126, which owns that separately for
- * both instruments).
+ * are touched, and the undo runs inside the same task so no `ontoggle`
+ * handler ever sees `open`. That is why this measurement can never be what
+ * reaches content a disclosure LOADS on open: `revealDisclosures`
+ * (`continuum.ts`) does that in preparation, and every subject this check
+ * measures arrives through `mountInFrame`, which calls it (#1126). By the
+ * time this runs there is usually nothing left closed to open at all.
  */
 export function measureOverflow(frame: HTMLElement, given: number): OverflowMeasurement {
 	const close = openDisclosures(frame);

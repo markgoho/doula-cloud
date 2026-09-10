@@ -54,7 +54,10 @@
  * reason the next section gives. A route whose disclosure FETCHES its
  * content when it opens is still measured on its loading state, since the
  * sweep opens and closes again inside one task and a `toggle` handler
- * never sees it open; the Staff roster is that case, and #1126 holds it.
+ * never sees it open -- so #1126 opens them a second time here, in
+ * preparation, once the fixture's answering has gone quiet and the rows
+ * that carry them exist. The Staff roster is that case: what the sweep
+ * measures is a Member's work-state history, not the word `Loading...`.
  *
  * ## It waits for the screen, not for its title
  *
@@ -109,7 +112,14 @@ import { page as testPage } from 'vitest/browser';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { registerLayoutPrimitives } from '#lib/primitives/index.js';
 import '#lib/styles/app.css';
-import { mountInFrame, overflowReport, sweep } from './style-guide/continuum.js';
+import {
+	awaitSettled,
+	mountInFrame,
+	overflowReport,
+	quiescence,
+	revealDisclosures,
+	sweep
+} from './style-guide/continuum.js';
 import {
 	toApiResponder,
 	toPageState,
@@ -144,15 +154,6 @@ vi.mock('$app/state', () => ({ page: pageState }));
  * navigates -- the sweep measures, it does not interact -- so these exist
  * to be importable, not to be asserted on.
  */
-/*
- * How many macrotask turns a route's own load cascade may take before the
- * sweep gives up waiting for it (#885). A guard against a route that
- * polls, never a budget: a fixture answers synchronously, so one turn
- * drains a whole section and the deepest cascade this app has is eight
- * reads long.
- */
-const SETTLE_TURNS = 50;
-
 vi.mock('$app/navigation', () => ({
 	goto: vi.fn(),
 	invalidate: vi.fn(),
@@ -365,21 +366,44 @@ describe('the continuum check, over routes', () => {
 				 * new, and the bound is a guard against a route that polls
 				 * rather than a budget anything is expected to spend.
 				 */
-				let quiet = -1;
-				for (let turn = 0; quiet !== answered && turn < SETTLE_TURNS; turn += 1) {
-					quiet = answered;
-					await new Promise((resolve) => setTimeout(resolve, 0));
-				}
+				// A fresh reader per wait, rather than one closure serving both:
+				// a `quiescence` carries the last count it saw, so a reused one
+				// can report quiet without ever yielding a turn, and a wait that
+				// can return without waiting is not the same wait twice.
+				const answering = quiescence(() => answered);
 				/*
 				 * A bound that ran out is a screen still arriving, and
 				 * measuring it anyway would reopen the hole this wait exists
 				 * to close -- silently, which is the one way this file must
-				 * not fail. So it says so instead.
+				 * not fail. `awaitSettled` throws instead, and it is the same
+				 * bounded wait the disclosures below are revealed through:
+				 * #1126 made it one function rather than two loops that would
+				 * have had to be got right separately.
 				 */
-				expect(
-					answered,
-					`${fixture.name} was still fetching after ${SETTLE_TURNS} turns`
-				).toBe(quiet);
+				await awaitSettled(answering, `${fixture.name} was still fetching`);
+				/*
+				 * And then the screen's own disclosures, opened and filled in
+				 * (#1126). This is the second call -- `mountInFrame` made the
+				 * first, before the route had fetched anything, and a route
+				 * keeps its disclosures behind rows that only exist once the
+				 * cascade above has run. The Staff roster is that case: two
+				 * `HistoryDisclosure`s per Member, each fetching its own
+				 * history when it opens, none of them in the DOM at mount.
+				 *
+				 * It happens HERE, in preparation, and not inside `sweep` --
+				 * which still opens and closes inside one task and still fires
+				 * no handler, so the measurement itself asks the screen for
+				 * nothing. What a fixture answers during this reveal is the
+				 * route's own request, made because a disclosure is open, the
+				 * same way a person opening one on the drag surface makes it.
+				 */
+				await revealDisclosures(frame, fixture.name);
+				// What the reveal asked for, drained through the same wait the
+				// cascade above used -- a history is a fetch like any other.
+				await awaitSettled(
+					quiescence(() => answered),
+					`${fixture.name} was still fetching a disclosure's content`
+				);
 				const found = sweep(frame, run.clientWidth);
 				expect(found, found && overflowReport(fixture.name, found)).toBeUndefined();
 			} finally {
