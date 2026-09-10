@@ -78,17 +78,85 @@ export interface Break {
  * unconstrained (#542). `floor.svelte.spec.ts` owns that case: it forces
  * each discovered condition live and measures at its own floor, above
  * this ceiling.
+ *
+ * ## It looks inside a closed disclosure (#710)
+ *
+ * A closed `<details>` renders nothing but its `<summary>`: its content
+ * takes no box at all, so `scrollWidth` cannot see it at any width. Until
+ * #710 that made every disclosure a hole in this instrument -- #486 put
+ * the Client portal's Activity ledger behind one, and the only thing that
+ * measured what is actually in it was a second, hand-written overflow test
+ * beside that one route. The next disclosure would have needed its own,
+ * and a check a screen can be added to without joining is the shape #521
+ * already proved gets walked past.
+ *
+ * So the sweep opens every closed disclosure under the frame before it
+ * measures, and closes again after. It does that itself rather than
+ * offering a fixture a hook to do it with: this repo's checks discover
+ * their subjects and never wait to be opted into (`route-continuum`'s
+ * `UNSWEPT`, `floor.svelte.spec.ts`'s `UNDERIVABLE`), and a hook a fixture
+ * may decline is an opt-in with a longer name.
+ *
+ * Measuring the open state loses nothing the closed state held: a
+ * `<summary>` renders in both, so an open disclosure's content is a
+ * superset of a closed one's, and one sweep covers the pair. The drag
+ * surface is untouched by this and needs to be -- a person standing in
+ * front of it opens the disclosure by clicking it, which is the screen
+ * behaving rather than the instrument reaching in.
  */
 export function sweep(frame: HTMLElement, availableSpace: number): Break | undefined {
-	const widestSpace = Math.max(availableSpace, CONFORMANCE_COMMITMENT);
-	for (let width = CONFORMANCE_COMMITMENT; width <= widestSpace; width += RESOLUTION) {
-		frame.style.inlineSize = `${width}px`;
-		void frame.offsetWidth;
-		if (frame.scrollWidth - width > TOLERANCE) {
-			return { width, needed: frame.scrollWidth };
+	const close = openDisclosures(frame);
+	try {
+		const widestSpace = Math.max(availableSpace, CONFORMANCE_COMMITMENT);
+		for (let width = CONFORMANCE_COMMITMENT; width <= widestSpace; width += RESOLUTION) {
+			frame.style.inlineSize = `${width}px`;
+			void frame.offsetWidth;
+			if (frame.scrollWidth - width > TOLERANCE) {
+				return { width, needed: frame.scrollWidth };
+			}
 		}
+		return undefined;
+	} finally {
+		close();
 	}
-	return undefined;
+}
+
+/*
+ * Opens every closed `<details>` under `frame` and hands back the undo
+ * (#710). It is exported rather than kept private to `sweep` because the
+ * floor check takes a measurement of its own and has the same blind spot:
+ * #1124 is that work, and the query belongs in one place before a second
+ * instrument writes its own copy -- which is #570's rule stated before the
+ * copy exists rather than after.
+ *
+ * Only the disclosures that were CLOSED are touched -- a subject that
+ * ships one already open (`StepRail`'s completed steps) is left as its own
+ * markup declared it, since closing that would leave the frame in a state
+ * the screen never has. Nothing here re-renders between the open and the
+ * undo, so a Svelte-controlled `open={...}` is never reasserted mid-sweep.
+ *
+ * The undo is what keeps a measurement from being an action. A `toggle`
+ * event is queued rather than dispatched synchronously, and repeated
+ * changes coalesce, so a disclosure opened and closed again inside one
+ * task never runs its `ontoggle` handler as open -- which is how the Staff
+ * roster's work-state history is not fetched by the act of measuring the
+ * roster. It is also why content a disclosure loads on open is measured in
+ * its loading state, the gap #1126 holds. The undo serves a plainer
+ * purpose too: a spec that reads the DOM after a sweep sees the screen it
+ * mounted rather than the one the instrument left behind.
+ *
+ * What this does not handle, named because it is a limit rather than an
+ * oversight: a grouped `<details name="...">`, where opening one closes
+ * its siblings, would leave only the last of a group open and measured.
+ * The app has no grouped disclosure today.
+ */
+export function openDisclosures(frame: HTMLElement): () => void {
+	const closed = [...frame.querySelectorAll<HTMLDetailsElement>('details:not([open])')];
+	for (const disclosure of closed) disclosure.open = true;
+	void frame.offsetWidth;
+	return () => {
+		for (const disclosure of closed) disclosure.open = false;
+	};
 }
 
 /*

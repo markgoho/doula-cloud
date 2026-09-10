@@ -2,7 +2,6 @@ import { page } from 'vitest/browser';
 import { describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import { registerLayoutPrimitives } from '#lib/primitives/index.js';
-import { mountInFrame, overflowReport, sweep } from '../../../../style-guide/continuum.js';
 import Hub from './+page.svelte';
 // Rendering `+page.svelte` directly bypasses `+layout.svelte`, the only
 // place the real app calls this -- without it a layout primitive sits
@@ -11,7 +10,7 @@ import Hub from './+page.svelte';
 // table-view/record-view switch.
 import '#lib/styles/app.css';
 import { toApiResponder, toPageState } from '../../../../routeFixture.js';
-import { activity, createdAt, detail, fixture, practiceName, visits } from './page.fixture.js';
+import { createdAt, detail, fixture, practiceName, visits } from './page.fixture.js';
 import { engagementLabel } from '#lib/clientRegister.js';
 if (!customElements.get('center-l')) registerLayoutPrimitives();
 
@@ -245,49 +244,43 @@ describe('the Activity disclosure (#486)', () => {
 		await expect.element(tableView.getByText('Your practice')).toBeVisible();
 	});
 
-	// ADR-0024/0025: route-continuum.svelte.spec.ts sweeps every route from
-	// 320px up, but a closed <details> takes no box at all while closed --
-	// its content is unrendered, not merely hidden -- so that sweep can
-	// never measure what is actually inside this disclosure, at any width.
-	// This test opens it first and reuses the same sweep instrument
-	// (continuum.ts), so #486's AC7 ("free of horizontal scroll from
-	// 320px up") is checked for the ledger's own open-state layout rather
-	// than only asserted in a doc comment.
+	// This describe once carried an overflow sweep of its own, opening the
+	// disclosure by hand and then reusing `continuum.ts`'s instrument on
+	// it. #486 needed it because a closed `<details>` takes no box at all,
+	// so `route-continuum.svelte.spec.ts` measured a ledger it could not
+	// see into -- and #710 fixed that where it belonged, in the sweep,
+	// which now opens every closed disclosure under the frame before it
+	// measures and closes it again after. A second copy of the instrument
+	// beside one route is exactly what #570 says not to keep.
 	//
-	// #708 made the What column's text longer than the action string it
-	// replaced, so the row swept here is the longest phrase the register
-	// holds rather than an average one -- the widest thing this column can
-	// actually be asked to lay out at 320px. Which action that is, is
-	// pinned in `activityPhrases.usage.spec.ts`, so a longer phrase added
-	// later fails there rather than silently demoting this sweep. The row
-	// itself comes from the route's own fixture, which already carries that
-	// worst case as its first entry -- one description of this screen, not
-	// two (`.claude/rules/svelte-tests.md`).
-	it('is free of horizontal overflow from 320px up once opened (ADR-0024/0025)', async () => {
-		mockFetch(detail, [activity[0]]);
+	// What the copy is replaced by is the test below, not nothing. The
+	// shared sweep waits on one signal -- the fixture's `readyText`, this
+	// screen's `<h1>` -- and this route answers three requests, of which
+	// the ledger's is neither the first nor the one the heading depends
+	// on. So the thing that has to hold for #486's own AC to still be
+	// checked is that the rows are already rendered when that signal is
+	// met. Measured, and now asserted, rather than assumed: the deleted
+	// test polled for the row text itself and so carried this guarantee
+	// inside it, and dropping the test without keeping the guarantee is
+	// how a sweep goes on passing over an empty table.
+	it("has the ledger's rows rendered by the time the sweep's own signal is met", async () => {
+		apiFetchWithSession.mockImplementation(toApiResponder(fixture));
 
-		const { run, frame, remove } = await mountInFrame(Hub);
-		try {
-			await expect
-				.element(page.getByRole('heading', { name: 'Everything that has happened' }))
-				.toBeVisible();
-			await page.getByText('Show what has happened').click();
-			// Confirms the disclosure actually opened before sweeping, via a
-			// plain DOM read rather than an accessible query: DataTable
-			// renders both a table view and a record view for the same row
-			// at once (#508), one of them display:none depending on the
-			// frame's own width at this point in the test, so a role/text
-			// query would either hit a strict-mode multiple match or resolve
-			// against whichever tree is currently hidden.
-			await expect
-				.poll(() => frame.querySelector(':scope details .frame')?.textContent)
-				.toContain('A payment recorded earlier was removed.');
+		const { container } = await render(Hub);
+		await expect
+			.element(page.getByRole('heading', { name: fixture.readyText, level: 1 }))
+			.toBeVisible();
 
-			const found = sweep(frame, run.clientWidth);
-			expect(found, found && overflowReport('Client-portal Activity disclosure (open)', found)).toBeUndefined();
-		} finally {
-			remove();
-		}
+		// Read synchronously off the DOM, with no poll of its own: a poll
+		// here would wait for the rows the sweep does not wait for, and
+		// would pass in exactly the case this exists to fail. Scoped
+		// through `querySelector` for the reason every other Activity
+		// test in this file is (`.claude/rules/svelte-tests.md` case 1):
+		// a closed `<details>` puts its content outside the accessibility
+		// tree entirely, so no accessible query can reach in.
+		expect(container.querySelector(':scope details')?.textContent).toContain(
+			'A payment recorded earlier was removed.'
+		);
 	});
 
 	// #708's own acceptance criterion, on the row the ticket names: the
