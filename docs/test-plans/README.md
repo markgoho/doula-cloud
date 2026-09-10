@@ -266,10 +266,10 @@ Every plan has been executed once ([#209](https://github.com/markgoho/doula-clou
 | [non-doula-admin.md](non-doula-admin.md) | Dee Whitlock | 0 | 21 | 0 | 3 |
 | [employed-doula.md](employed-doula.md) | Priya Raman | 3 | 21 | 0 | 5 |
 | [contractor-doula.md](contractor-doula.md) | Lena Vasquez | 1 | 17 | 0 | 9 |
-| [loss-client.md](loss-client.md) | Nadia Haddad | 5 | 13 | 0 | 9 |
+| [loss-client.md](loss-client.md) | Nadia Haddad | 5 | 14 | 0 | 8 |
 | [first-time-client.md](first-time-client.md) | Hannah Sorensen | 8 | 18 | 0 | 6 |
 | [returning-postpartum-client.md](returning-postpartum-client.md) | Camille Boyd | 1 | 11 | 0 | 7 |
-| **Total** | | **39** | **147** | **0** | **54** |
+| **Total** | | **39** | **148** | **0** | **53** |
 
 Every `automated` step passed. **No plan carries a `blocked` step any more** — Stripe was the last holdout and [#242](https://github.com/markgoho/doula-cloud/issues/242) opened the Sandbox, after which Connect, Checkout and Invoices were all walked for real.
 
@@ -279,7 +279,7 @@ Every `automated` step passed. **No plan carries a `blocked` step any more** —
 
 **The run-status table above is recounted at the same time, and four of its rows moved for a second reason.** solo-birth-doula.md, practice-owner.md, non-doula-admin.md and employed-doula.md each carried a Marks summary that no longer agreed with its own Steps table — a step re-marked by some later ticket without the summary being brought along, three times over RA-G2 alone, which **Edit membership** answered. Every plan's marks were recounted from its Steps table for this pass, the four summaries corrected, and the Total row with them. That is arithmetic and not a re-mark: no step's own mark changed for this reason, and solo-birth-doula.md and employed-doula.md are otherwise untouched here.
 
-**What the pass declined to re-mark is the more useful half.** Both new specs run as the founding Owner, so a step whose whole claim is *what an Admin gets*, or *what a contractor gets*, is not driven by them however closely the clicks match — the [four marks](#the-four-marks)' own rule is that a spec counts only when it exercises the step the way the Persona would. That is why Dee Whitlock's Contract cells, Lena Vasquez's Add Client cell and Renata Alvarez's Visits cells are all corrected in place and all still `manual`. Two things it found are filed rather than left as prose: [#1119](https://github.com/markgoho/doula-cloud/issues/1119), where a voided Contract's signed PDF is served by the API and hidden by the portal screen, and [#1121](https://github.com/markgoho/doula-cloud/issues/1121), which holds the same stale Add Client story on Tasha Bell's and Maya Okonkwo's plans — outside #685's six, and not half-correctable without a re-mark of its own.
+**What the pass declined to re-mark is the more useful half.** Both new specs run as the founding Owner, so a step whose whole claim is *what an Admin gets*, or *what a contractor gets*, is not driven by them however closely the clicks match — the [four marks](#the-four-marks)' own rule is that a spec counts only when it exercises the step the way the Persona would. That is why Dee Whitlock's Contract cells, Lena Vasquez's Add Client cell and Renata Alvarez's Visits cells are all corrected in place and all still `manual`. Two things it found are filed rather than left as prose: [#1119](https://github.com/markgoho/doula-cloud/issues/1119), where a voided Contract's signed PDF was served by the API and hidden by both screens (fixed, and Nadia Haddad's 6.2-a re-marked `manual` with it — the one row of the table above that has moved since), and [#1121](https://github.com/markgoho/doula-cloud/issues/1121), which holds the same stale Add Client story on Tasha Bell's and Maya Okonkwo's plans — outside #685's six, and not half-correctable without a re-mark of its own.
 
 ### Gap issues
 
