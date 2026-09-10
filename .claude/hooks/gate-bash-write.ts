@@ -243,7 +243,7 @@ function writeTargets(segment: string): string[] {
 
 // A write target together with the directory it should resolve against
 // (#680). `base` is `null` when a `cd` in the command made the working
-// directory unknowable; see `trackedBase` for what that falls back to.
+// directory unknowable; see `resolveCandidate` for what that falls back to.
 interface Candidate {
 	target: string;
 	base: string | null;
