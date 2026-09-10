@@ -4,13 +4,7 @@ Multi-tenant CRM for doula practices — Practices employ Staff who work Engagem
 
 ## Language
 
-Each entry may carry a `_Client says_:` line. This is the **Client register** — the
-word a Client reads in the portal for a term the team says differently. Doula Cloud is
-**one bounded context**; the register translates at the UI edge and does not create a
-second model. It is **binding on the client portal** and advisory everywhere else. It
-holds single words and short phrases, never sentences. Where the model cannot hold a
-fact at all, the register stays silent and the fact becomes a `journey-gap` issue. See
-[ADR-0005](docs/adr/0005-one-context-client-register-at-the-ui-edge.md).
+Each entry may carry a `_Client says_:` line. This is the **Client register** — what a Client reads in the portal for something the team says differently. Doula Cloud is **one bounded context**; the register translates at the UI edge and does not create a second model. It is **binding on the client portal** and advisory everywhere else. It holds wording chosen once and used unchanged for every Client — a word, a phrase, or a sentence, whichever says the thing honestly — and never wording that bends to a Client's circumstance. A line either carries the wording or names where its table is kept; this glossary does not enumerate copy. Where the model cannot hold a fact at all, the register stays silent and the fact becomes a `journey-gap` issue. See [ADR-0005](docs/adr/0005-one-context-client-register-at-the-ui-edge.md).
 
 A bare **Template** is not a domain term. The domain's templates are always written
 qualified — **Plan Template**, **Client Field Template** — and an unqualified "Template"
