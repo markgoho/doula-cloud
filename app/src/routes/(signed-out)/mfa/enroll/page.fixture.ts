@@ -1,12 +1,12 @@
 /*
- * TOTP enrolment, as the continuum check sees it (#595). On mount this
+ * TOTP enrollment, as the continuum check sees it (#595). On mount this
  * screen probes `/api/staff/session` for the email to re-authenticate
  * with (its own header comment explains why) -- the fixture answers that
  * probe rather than leaving the screen on a step it can never reach.
  */
 import { jsonResponse } from '#lib/testResponse.js';
 import type { SessionInfo } from '#lib/landing.js';
-import type { RouteFixture } from '../../routeFixture.js';
+import type { RouteFixture } from '../../../routeFixture.js';
 import Page from './+page.svelte';
 
 const session: SessionInfo = {
@@ -22,7 +22,7 @@ const session: SessionInfo = {
 };
 
 export const fixture: RouteFixture = {
-	name: 'TOTP enrolment',
+	name: 'TOTP enrollment',
 	component: Page,
 	params: {},
 	url: 'https://example.test/mfa/enroll',

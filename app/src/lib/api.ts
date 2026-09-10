@@ -50,9 +50,9 @@ export async function apiFetchWithSession(path: string, init: RequestInit = {}):
 		await handleExpiredSession();
 		redirectGuard.isRedirecting = false;
 	} else if (await isMFARequired(response)) {
-		if (redirectGuard.isRedirecting || location.pathname === resolve('/mfa/enroll')) return response;
+		if (redirectGuard.isRedirecting || location.pathname === resolve('/(signed-out)/mfa/enroll')) return response;
 		redirectGuard.isRedirecting = true;
-		await goto(`${resolve('/mfa/enroll')}?returnTo=${encodeURIComponent(location.pathname)}`);
+		await goto(`${resolve('/(signed-out)/mfa/enroll')}?returnTo=${encodeURIComponent(location.pathname)}`);
 		redirectGuard.isRedirecting = false;
 	}
 	return response;

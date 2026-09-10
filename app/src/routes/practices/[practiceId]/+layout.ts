@@ -80,7 +80,7 @@ export const load: LayoutLoad = async ({ params, url }): Promise<{ session: Prac
 	if (response.status === 401) {
 		redirect(303, `${resolve('/(signed-out)/login')}?sessionEnded=true`);
 	} else if (await isMFARequired(response)) {
-		redirect(303, `${resolve('/mfa/enroll')}?returnTo=${encodeURIComponent(url.pathname)}`);
+		redirect(303, `${resolve('/(signed-out)/mfa/enroll')}?returnTo=${encodeURIComponent(url.pathname)}`);
 	} else if (response.status === 403 || response.status === 404) {
 		await redirectAwayFromStalePractice();
 	} else if (!response.ok) {

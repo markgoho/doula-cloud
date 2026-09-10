@@ -6,9 +6,11 @@ const routesRoot = new URL('.', import.meta.url);
 /*
  * Archetype A -- the screens a person reaches with no session -- gets
  * its own route group so it can carry the reduced signed-out bar (#431).
- * Two screens a session can reach sit here too, because the reduced bar
- * is the true one for both: `/no-practice` (#745) and the wayfinding
- * root `/` (#678).
+ * Three screens a session can reach sit here too, because the reduced
+ * bar is the true one for each: `/no-practice` (#745), the wayfinding
+ * root `/` (#678), and TOTP enrollment `mfa/enroll` (#1114), whose
+ * person holds a session that has not cleared MFA and so has no
+ * reachable Practice-scoped destination for a Staff bar to offer.
  *
  * It cannot live in the root layout: SvelteKit layouts nest rather than
  * replace, so a bar there would render above the Staff bar as well. That
@@ -25,7 +27,8 @@ describe('the signed-out route group', () => {
 		['signup', '(signed-out)/signup/+page.svelte'],
 		['accept-invite', '(signed-out)/accept-invite/+page.svelte'],
 		['the pre-account Offer read', '(signed-out)/offers/[offerId]/+page.svelte'],
-		['the wayfinding root', '(signed-out)/+page.svelte']
+		['the wayfinding root', '(signed-out)/+page.svelte'],
+		['TOTP enrollment', '(signed-out)/mfa/enroll/+page.svelte']
 	])('holds %s', (_name, path) => {
 		expect(existsSync(new URL(path, routesRoot))).toBe(true);
 	});
@@ -35,7 +38,8 @@ describe('the signed-out route group', () => {
 		['signup', 'signup/+page.svelte'],
 		['accept-invite', 'accept-invite/+page.svelte'],
 		['the pre-account Offer read', 'offers/[offerId]/+page.svelte'],
-		['the wayfinding root', '+page.svelte']
+		['the wayfinding root', '+page.svelte'],
+		['TOTP enrollment', 'mfa/enroll/+page.svelte']
 	])('leaves %s behind at no ungrouped path', (_name, path) => {
 		expect(existsSync(new URL(path, routesRoot))).toBe(false);
 	});

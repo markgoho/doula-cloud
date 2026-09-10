@@ -27,8 +27,10 @@ import { describe, expect, it } from 'vitest';
  * 1. anything under `(signed-out)` -- the Staff side's own route group
  * 2. anything under `portal/(signed-out)` -- the Client portal's
  * 3. anything importing `EntryPage`, which is what makes a route archetype
- *    A wherever it lives (`mfa/enroll` and the style guide's own demo are
- *    both outside the two groups)
+ *    A wherever it lives -- the style guide's own demo is outside both
+ *    groups, and rule 3 is what reaches it (`mfa/enroll` used to be the
+ *    other such route, until #1114 moved it under `(signed-out)`, where
+ *    rule 1 now catches it)
  *
  * ## What it asks
  *

@@ -3,12 +3,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import { jsonResponse } from '#lib/testResponse.js';
 import Page from './+page.svelte';
-import { toPageState } from '../../routeFixture.js';
+import { toPageState } from '../../../routeFixture.js';
 import { fixture } from './page.fixture.js';
 
 /*
- * TOTP enrolment (#606): step one re-authenticates and opens an
- * enrolment session, step two shows the QR code/secret and confirms the
+ * TOTP enrollment (#606): step one re-authenticates and opens an
+ * enrollment session, step two shows the QR code/secret and confirms the
  * code it produces. These specs fake the Firebase SDK surface entirely
  * -- `#lib/firebase.js`'s own doc comment is why: it needs a live
  * project or emulator this suite never runs against.
@@ -147,7 +147,7 @@ async function confirmCode() {
 	await testPage.getByRole('button', { name: 'Confirm and turn on' }).click();
 }
 
-describe('TOTP enrolment -- step one, re-authenticating', () => {
+describe('TOTP enrollment -- step one, re-authenticating', () => {
 	it('asks for the password again rather than assuming a live sign-in', async () => {
 		await render(Page, {});
 
@@ -193,8 +193,8 @@ describe('TOTP enrolment -- step one, re-authenticating', () => {
 	});
 });
 
-describe('TOTP enrolment -- step two, the QR code and secret', () => {
-	it('opens an enrolment session and shows the QR code and secret as text', async () => {
+describe('TOTP enrollment -- step two, the QR code and secret', () => {
+	it('opens an enrollment session and shows the QR code and secret as text', async () => {
 		await goToSetupStep();
 
 		await expect
@@ -227,7 +227,7 @@ describe('TOTP enrolment -- step two, the QR code and secret', () => {
 		);
 	});
 
-	it('force-refreshes the ID token before finishing enrolment', async () => {
+	it('force-refreshes the ID token before finishing enrollment', async () => {
 		const getIdToken = vi.fn().mockResolvedValue('fresh-id-token');
 		signInWithEmailAndPassword.mockResolvedValue({ user: { getIdToken } });
 		globalFetch.mockResolvedValue(jsonResponse({ ok: true }));
@@ -255,7 +255,7 @@ describe('TOTP enrolment -- step two, the QR code and secret', () => {
 		expect(signOut).toHaveBeenCalled();
 	});
 
-	it('lands on a same-origin returnTo once enrolment finishes', async () => {
+	it('lands on a same-origin returnTo once enrollment finishes', async () => {
 		pageState.url = urlWith('/practices/practice-1');
 		globalFetch.mockResolvedValue(jsonResponse({ ok: true }));
 		await goToSetupStep();
@@ -277,7 +277,7 @@ describe('TOTP enrolment -- step two, the QR code and secret', () => {
 		await vi.waitFor(() => expect(goto).toHaveBeenCalledWith('/'));
 	});
 
-	// Decision 4: the post-enrolment token turned out not to carry the
+	// Decision 4: the post-enrollment token turned out not to carry the
 	// claim yet. Fallback plumbing, not a form refusal.
 	it('routes to the ordinary sign-in flow when the fresh token still shows no second factor', async () => {
 		globalFetch.mockResolvedValue(jsonResponse('that sign-in does not show a second factor', 400));
@@ -303,7 +303,7 @@ describe('TOTP enrolment -- step two, the QR code and secret', () => {
 	});
 });
 
-describe('TOTP enrolment -- leaving the JS SDK signed out (#167)', () => {
+describe('TOTP enrollment -- leaving the JS SDK signed out (#167)', () => {
 	it('signs out of the JS SDK when the screen is left mid-flow', async () => {
 		const { unmount } = await render(Page, {});
 

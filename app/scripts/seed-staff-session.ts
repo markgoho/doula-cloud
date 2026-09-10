@@ -6,7 +6,7 @@
 // Why this exists (#900): the Firebase Auth emulator vendored in
 // app/node_modules has no TOTP enrollment path at all -- only PHONE_SMS --
 // so the product's real /mfa/enroll screen (TotpMultiFactorGenerator,
-// app/src/routes/mfa/enroll/+page.svelte) 400s against it with
+// app/src/routes/(signed-out)/mfa/enroll/+page.svelte) 400s against it with
 // `INVALID_ARGUMENT : ((Missing phoneEnrollmentInfo.))` the instant it
 // calls generateSecret(). That is an emulator capability gap
 // (firebase/firebase-tools#6224), not a bug in this app's client code, the
