@@ -195,19 +195,20 @@
 		 * two- and four-character widths are more generous still.
 		 *
 		 * The box is the width and the control fills it, because
-		 * `TextInput` stretches to whatever it is given (#805). Two rules
-		 * that stood here until then are gone: a `:global(input)` sizing
-		 * the control, and a `min-inline-size: 0` on this box. The second
-		 * was there because a flex item's automatic minimum is its
-		 * min-content and an unsized <input>'s min-content is the
-		 * browser's default `size` -- about 193px -- so every box
-		 * rendered at the full column width. With a definite
-		 * `inline-size` here and a control that no longer contributes
-		 * that default, Flexbox 4.5's smaller-of-the-two rule picks the
-		 * specified size on its own; "sizes a two-digit box to two digits
-		 * without a flex-minimum override" in this component's spec is
-		 * what holds that, since neither box overflows either way and the
-		 * continuum sweep cannot see a box that is merely too wide.
+		 * `TextInput` stretches to whatever it is given -- that atom's
+		 * own module comment is where the width argument lives (#805).
+		 * Two rules that stood here until then are gone: a
+		 * `:global(input)` sizing the control, and a `min-inline-size: 0`
+		 * on this box. The second was there because a flex item's
+		 * automatic minimum is its min-content, and an unsized <input>
+		 * contributed the browser's default there, so every box rendered
+		 * at the full column width. With a definite `inline-size` here
+		 * and a control that no longer contributes that default, Flexbox
+		 * 4.5's smaller-of-the-two rule picks the specified size on its
+		 * own; "sizes each box to the digits it holds, in a column that
+		 * could hold a sentence" in this component's spec is what holds
+		 * that, since neither box overflows either way and the continuum
+		 * sweep cannot see a box that is merely too wide.
 		 *
 		 * `cluster-l` still wraps, so at a large text size the three
 		 * boxes drop onto their own lines rather than overflowing

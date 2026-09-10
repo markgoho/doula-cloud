@@ -18,11 +18,14 @@
 	 * this ticket: what actually differs between them is the column, its
 	 * label and how wide the box is. `width` is a class rather than a
 	 * length so the sizes stay together in one place in the stylesheet
-	 * below, where the reason for each is written once.
+	 * below, where the reason for each is written once. It is optional
+	 * because a full-width row needs no class at all: `TextInput` fills
+	 * whatever it is given (#805), so the two address lines are already
+	 * the column.
 	 */
-	const lines: { key: keyof IntakeAnswers; label: string; width: 'line' | 'town' | 'short' }[] = [
-		{ key: 'addressLine1', label: 'Address line 1', width: 'line' },
-		{ key: 'addressLine2', label: 'Address line 2 (optional)', width: 'line' },
+	const lines: { key: keyof IntakeAnswers; label: string; width?: 'town' | 'short' }[] = [
+		{ key: 'addressLine1', label: 'Address line 1' },
+		{ key: 'addressLine2', label: 'Address line 2 (optional)' },
 		{ key: 'addressLocality', label: 'City', width: 'town' },
 		{ key: 'addressRegion', label: 'State', width: 'short' },
 		{ key: 'addressPostalCode', label: 'ZIP code', width: 'short' }
@@ -71,12 +74,10 @@
 		 * shrinks with the column instead of overflowing it (ADR-0024).
 		 *
 		 * A cap on the wrapper is all it takes, because `TextInput` fills
-		 * whatever it is given (#805). Three `:global(input)` rules stood
-		 * here until then, sizing the control past the atom because an
-		 * unsized <input> took the browser's default `size` -- about
-		 * 208px -- and painted straight out of a 12ch wrapper. The `line`
-		 * class carries no width at all now and stays only as the name
-		 * the snippet passes for a full-width row.
+		 * whatever it is given -- see that atom's own module comment for
+		 * why (#805). Three `:global(input)` rules stood here until then,
+		 * reaching past the atom to size a control that would otherwise
+		 * have painted straight out of a 12ch wrapper.
 		 */
 		.town {
 			max-inline-size: 24ch;

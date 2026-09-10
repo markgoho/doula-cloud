@@ -24,6 +24,11 @@ async function setup({ parts = { month: '', day: '', year: '' }, ...rest }: Setu
 	return { onChange, container };
 }
 
+// The rendered width of one box, by the label it carries.
+function widthOf(label: string) {
+	return page.getByLabelText(label).element().getBoundingClientRect().width;
+}
+
 describe('DateFields', () => {
 	it('asks for the month, the day and the year, in that order', async () => {
 		await setup();
@@ -149,22 +154,25 @@ describe('DateFields', () => {
 	 * that used to (#805's `:global(input)` and a `min-inline-size: 0` on
 	 * each box) are gone. The continuum sweep cannot: three boxes that
 	 * are each too wide for their content still fit, one under the other,
-	 * which is how they went unnoticed in the first place. The figure to
-	 * beat is the browser's default input `size` -- about 193px in this
-	 * column -- so a box measured well under that is a box that was
-	 * sized rather than left alone.
+	 * which is how they went unnoticed in the first place.
+	 *
+	 * Both assertions are relative rather than a stated number of pixels
+	 * (ADR-0025). The three boxes together taking under half a column is
+	 * what separates a sized box from an unsized one: three controls at
+	 * the browser's own default fill nearly all of it.
 	 */
 	describe('box widths', () => {
-		it('sizes a two-digit box to two digits and a four-digit box wider, in a column that could hold a sentence', async () => {
+		it('sizes each box to the digits it holds, in a column that could hold a sentence', async () => {
 			const { container } = await setup();
 			container.style.inlineSize = '600px';
 
-			const month = page.getByLabelText('Month').element().getBoundingClientRect().width;
-			const year = page.getByLabelText('Year').element().getBoundingClientRect().width;
+			const month = widthOf('Month');
+			const year = widthOf('Year');
 
-			expect(month).toBeLessThan(100);
+			expect(month + widthOf('Day') + year).toBeLessThan(
+				container.getBoundingClientRect().width / 2
+			);
 			expect(year).toBeGreaterThan(month);
-			expect(year).toBeLessThan(150);
 		});
 	});
 });
