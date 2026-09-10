@@ -1,7 +1,7 @@
-import { globSync, readFileSync } from 'node:fs';
-import path from 'node:path';
+import { globSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
+import { quotedStrings, quotedStringsInSource } from './quotedCopy.js';
 
 /*
  * #1131's first AC as a gate, in the mold of `roles.usage.spec.ts` (#262)
@@ -20,18 +20,27 @@ import { describe, expect, it } from 'vitest';
  * lexical, and it runs in the unit suite, which `scripts/hooks/pre-commit`
  * runs in full -- a new bypass fails a commit rather than reaching CI.
  *
- * The check is deliberately narrow: a *quoted or template literal* that
- * names the flag. Prose that mentions it in a comment is not an offense,
- * and neither is an identifier like `hasSessionEnded` -- only a file
- * saying the wire word to itself is.
+ * The walk is `quotedCopy.ts`'s, not this file's, for the reason that
+ * module gives: every gate here asks "what quoted text does this file
+ * carry, once its comments are gone", and differs only in what it looks
+ * for. Taking it from there is also what keeps this gate off prose --
+ * comments are stripped before a single literal is read, so a doc comment
+ * may go on quoting `sessionEnded=true` verbatim. Only a file saying the
+ * wire word to itself is an offense; an identifier built from the same
+ * words is not one either.
  *
  * Spec and fixture files are exempt, and that is not a hole. Asserting
- * the exact address is the point of those files: `api.spec.ts`, the eight
- * route-load specs, `account.svelte.spec.ts` and the two `page.fixture.ts`
- * route variants are what pin `/login?sessionEnded=true` and
- * `/portal/login?sessionEnded=true` byte-for-byte (#1131's fourth AC). If
- * the module ever changes the address, those pins are what go red. They
- * are the counter-check to the owner, not a second copy of it.
+ * the exact address is the point of a spec: `api.spec.ts`, the eight
+ * route-load specs and `account.svelte.spec.ts` are what pin
+ * `/login?sessionEnded=true` and `/portal/login?sessionEnded=true`
+ * byte-for-byte (#1131's fourth AC). If the module ever changes an
+ * address, those pins are what go red -- they are the counter-check to
+ * the owner, not a second copy of it.
+ *
+ * The two `page.fixture.ts` route variants are exempt on their own
+ * grounds: a fixture describes the address a person lands on as the
+ * unresolved route id (`/(signed-out)/login?...`), which is not what any
+ * builder here produces and could not be, since the builders resolve.
  */
 
 const appRoot = fileURLToPath(new URL('../../', import.meta.url));
@@ -39,14 +48,8 @@ const appRoot = fileURLToPath(new URL('../../', import.meta.url));
 const OWNER = 'src/lib/sessionEnded.ts';
 
 /*
- * Single-quoted, double-quoted, and backticked spans alike -- the writers
- * this replaces all built the address inside a template literal.
- */
-const LITERAL = /'([^'\n]*)'|"([^"\n]*)"|`([^`]*)`/g;
-
-/*
- * Importing the owner is the opposite of an offense, and its module id
- * is a quoted literal that spells the flag. Dropped before the test, so
+ * Importing the owner is the opposite of an offense, and its module id is
+ * a quoted literal that spells the flag. Dropped before the test, so
  * `'#lib/sessionEnded.js'` reads as what it is.
  */
 const OWNER_MODULE_ID = /sessionEnded\.js/g;
@@ -54,23 +57,18 @@ const FLAG = /sessionEnded/;
 
 interface Offense {
 	file: string;
+	line: number;
 	found: string;
 }
 
-/**
- * Every quoted or templated string span in a source file.
- */
-function literals(source: string): string[] {
-	return source
-		.matchAll(LITERAL)
-		.map((match) => match[1] ?? match[2] ?? match[3] ?? '')
-		.toArray();
+function offensesIn(file: string, literals: { line: number; text: string }[]): Offense[] {
+	return literals
+		.filter((literal) => FLAG.test(literal.text.replaceAll(OWNER_MODULE_ID, '')))
+		.map((literal) => ({ file, line: literal.line, found: literal.text }));
 }
 
 function findOffenses(file: string, source: string): Offense[] {
-	return literals(source)
-		.filter((literal) => FLAG.test(literal.replaceAll(OWNER_MODULE_ID, '')))
-		.map((literal) => ({ file, found: literal }));
+	return offensesIn(file, quotedStringsInSource(source));
 }
 
 const sourceFiles = globSync('src/**/*.{svelte,ts}', { cwd: appRoot }).filter(
@@ -85,40 +83,36 @@ describe('the session-ended flag is spelled in one place', () => {
 	});
 
 	it('finds no file but the owner naming the flag', () => {
-		const offenses = sourceFiles.flatMap((file) =>
-			findOffenses(file, readFileSync(path.join(appRoot, file), 'utf8'))
-		);
+		const offenses = sourceFiles.flatMap((file) => offensesIn(file, quotedStrings(file, appRoot)));
 
-		expect(offenses.map((offense) => `${offense.file}: ${offense.found}`)).toEqual([]);
+		expect(offenses.map((offense) => `${offense.file}:${offense.line}: ${offense.found}`)).toEqual([]);
 	});
 });
 
 describe('findOffenses', () => {
 	it('flags a redirect that builds the query string itself', () => {
 		expect(findOffenses('x.ts', 'redirect(303, `${resolve(r)}?sessionEnded=true`);')).toEqual([
-			{ file: 'x.ts', found: '${resolve(r)}?sessionEnded=true' }
+			{ file: 'x.ts', line: 1, found: '${resolve(r)}?sessionEnded=true' }
 		]);
 	});
 
 	it('flags a reader that names the param itself', () => {
 		expect(findOffenses('x.svelte', "url.searchParams.get('sessionEnded') === 'true'")).toEqual([
-			{ file: 'x.svelte', found: 'sessionEnded' }
+			{ file: 'x.svelte', line: 1, found: 'sessionEnded' }
 		]);
 	});
 
-	it('allows a comment that mentions the flag in prose', () => {
-		expect(findOffenses('x.ts', '// carries sessionEnded=true to the login screen')).toEqual([]);
+	it('allows a doc comment quoting the flag verbatim', () => {
+		expect(findOffenses('x.ts', '/*\n * carries `sessionEnded=true` to the login screen\n */')).toEqual([]);
 	});
 
 	it('allows importing the owner', () => {
-		expect(
-			findOffenses('x.ts', "import { didSessionEnd } from '#lib/sessionEnded.js';")
-		).toEqual([]);
+		expect(findOffenses('x.ts', "import { didSessionEnd } from '#lib/sessionEnded.js';")).toEqual([]);
 	});
 
 	it('allows an identifier built from the same words', () => {
-		expect(findOffenses('x.svelte', 'const hasSessionEnded = $derived(didSessionEnd(page.url));')).toEqual(
-			[]
-		);
+		const source = 'const hasSessionEnded = $derived(didSessionEnd(page.url));';
+
+		expect(findOffenses('x.svelte', source)).toEqual([]);
 	});
 });

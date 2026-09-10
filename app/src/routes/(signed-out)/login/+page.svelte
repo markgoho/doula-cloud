@@ -92,9 +92,7 @@
 	 * authenticator app and minted no session -- so she arrives back here
 	 * with nothing to show for it unless this screen says what happened.
 	 * A query flag rather than state carried across a navigation, the same
-	 * shape the session-ended flag already uses on this URL. Spelled here
-	 * rather than owned by a module of its own, unlike that one (#1131):
-	 * one writer, one reader, no population to pick between.
+	 * shape `sessionEnded=true` already uses on this URL.
 	 */
 	const hasSpentRecoveryCode = $derived(page.url.searchParams.get('codeSpent') === 'true');
 

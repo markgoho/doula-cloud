@@ -27,14 +27,15 @@ const PARAM = 'sessionEnded';
  * with any other value reads as an ordinary visit rather than a
  * half-recognized one.
  */
-const SET = 'true';
+const FLAG_VALUE = 'true';
 
 /**
 Everything this module needs of an address: the ability to be asked for
-one query parameter. A real `URL` satisfies it, and so does SvelteKit's
-`page.url`, whose `searchParams` is a `ReadonlyURLSearchParams` and so
-is not assignable to `URL` -- which is what both login screens have to
-hand.
+one query parameter. A real `URL` satisfies it, and so does what both
+login screens actually have to hand -- `page.url` through
+`#lib/appState.svelte.js`, typed as `$app/state`'s own page URL, whose
+`searchParams` is a `ReadonlyURLSearchParams` and is therefore not
+assignable to `URL`.
 */
 interface AddressQuery {
 	readonly searchParams: { get(name: string): string | null };
@@ -47,7 +48,7 @@ than its `searchParams` so a caller passes what it already has -- both
 login screens read `page.url`.
 */
 export function didSessionEnd(url: AddressQuery): boolean {
-	return url.searchParams.get(PARAM) === SET;
+	return url.searchParams.get(PARAM) === FLAG_VALUE;
 }
 
 /*
@@ -61,7 +62,7 @@ export function didSessionEnd(url: AddressQuery): boolean {
 The Staff login address to send someone to when her Staff session ended.
 */
 export function staffLoginAfterSessionEnded(): string {
-	return `${resolve('/(signed-out)/login')}?${PARAM}=${SET}`;
+	return `${resolve('/(signed-out)/login')}?${PARAM}=${FLAG_VALUE}`;
 }
 
 /**
@@ -69,5 +70,5 @@ The Client-portal login address to send someone to when her portal
 session ended.
 */
 export function portalLoginAfterSessionEnded(): string {
-	return `${resolve('/portal/(signed-out)/login')}?${PARAM}=${SET}`;
+	return `${resolve('/portal/(signed-out)/login')}?${PARAM}=${FLAG_VALUE}`;
 }
