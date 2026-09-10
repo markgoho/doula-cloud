@@ -4,7 +4,7 @@ import { signIn, sessionCookieFrom } from './auth';
 import { readStaffInviteToken } from './stack';
 import { enrollSecondFactor, signInEnrolled } from './mfa';
 import { seedContractorDoula, PORTAL_CLIENT_PASSWORD } from './portalClient';
-import { seedFoundingOwner } from './staffSignup';
+import { acceptStaffInvite, seedFoundingOwner } from './staffSignup';
 
 // #606: TOTP MFA for Staff, required for Owners always, and raisable to
 // required-for-everyone per Practice by the mfa-required switch. The
@@ -163,10 +163,7 @@ test('one identity, two Practices: MFA required at one and not the other', async
 	// token is in neither -- so there is nothing left here to assert.
 	const inviteToken = await readStaffInviteToken(invitationId);
 
-	const accept = await request.post(`${API_URL}/api/staff/accept-invite`, {
-		headers: { Authorization: `Bearer ${xIdToken}` },
-		data: { inviteToken, name: 'Sasha Owner', workState: 'NY' }
-	});
+	const accept = await acceptStaffInvite(request, xIdToken, { inviteToken, name: 'Sasha Owner' });
 	const acceptBody = await accept.text();
 	expect(accept.ok(), `X accept-invite at Practice B failed: ${accept.status()} ${acceptBody}`).toBe(true);
 

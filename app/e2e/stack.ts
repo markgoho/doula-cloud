@@ -336,6 +336,41 @@ export function seedEngagement(clientId: string, practiceId: string, status = 'i
 }
 
 /**
+ * Clears every rate-limit counter the BFF is holding (#1138), so a
+ * repeated batch can keep spending budgets a person never would.
+ *
+ * All of them, not one endpoint's: a repeated batch reaches more than one
+ * ceiling, so clearing an endpoint at a time only moves the wall rather
+ * than removing it. retryPastRateLimit (rateLimit.ts) is the one place
+ * that argument is written out, along with which budgets this suite spends
+ * and why the recovery is reactive; this function is only its hands.
+ * `rate_limit_buckets` holds nothing but counters
+ * (`api/internal/ratelimit`), so emptying it leaves the stack in the state
+ * it was in before it had served any traffic.
+ *
+ * **This is not a switch anything can turn on.** It is a DELETE issued by
+ * psql inside the e2e stack's own compose database, the same seam
+ * seedEngagement and seedPracticeRate already write rows through. There
+ * is no environment variable, no header and no product code path, so
+ * there is nothing here that could be enabled against a deployed BFF --
+ * the mechanism *is* holding the database. The limiter itself is
+ * untouched and still refuses a genuine burst;
+ * `TestSignupRefusesAGenuineBurst` (api/internal/staffauth) asserts that
+ * refusal at the mounted route so this escape hatch cannot quietly become
+ * a disabled limiter. 00060 grants app_runtime only SELECT, INSERT and
+ * UPDATE on this table, so the role the BFF connects as could not run
+ * this statement even if some future handler tried to: clearing a counter
+ * is the table owner's to do, and in a deploy that is not the BFF.
+ *
+ * Two workers clearing at once is harmless -- clearing only ever raises
+ * what is allowed -- and no e2e spec asserts a 429 on any endpoint, so
+ * there is no assertion for a clear to race.
+ */
+export function resetRateLimits() {
+	execSQL('DELETE FROM rate_limit_buckets');
+}
+
+/**
  * Seeds a practice_rates row directly (#966/#967): PostContractHandler
  * refuses to create a Contract at all when the Practice has no rate set
  * for the Engagement's kind, so every e2e spec that creates a Contract

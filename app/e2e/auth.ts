@@ -1,4 +1,5 @@
 import { expect, type APIRequestContext, type APIResponse } from '@playwright/test';
+import { retryPastRateLimit } from './rateLimit';
 
 // Since #151 the BFF reads a Bearer ID token on three bootstrap endpoints
 // only -- Staff signup, the two invitation-acceptance endpoints -- plus
@@ -21,9 +22,13 @@ export async function signIn(
 	apiURL: string,
 	idToken: string
 ): Promise<{ Cookie: string }> {
-	const created = await request.post(`${apiURL}/api/session`, {
-		headers: { Authorization: `Bearer ${idToken}` }
-	});
+	// retryPastRateLimit (rateLimit.ts) for why a repeated batch needs it
+	// here too, a repeat or two after it needs it at signup (#1138).
+	const created = await retryPastRateLimit(() =>
+		request.post(`${apiURL}/api/session`, {
+			headers: { Authorization: `Bearer ${idToken}` }
+		})
+	);
 	expect(
 		created.ok(),
 		`create-session failed: ${created.status()} ${await created.text()}`

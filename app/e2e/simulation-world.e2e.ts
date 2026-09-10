@@ -13,7 +13,7 @@ import { E2E_API_HOST, E2E_API_PORT, E2E_EMULATOR_HOST, E2E_EMULATOR_PORT } from
 import { provisionTail, standUpRidgeline, writeWorldRecord } from './simulation/provision';
 import { describeWorld, ROOTED_TAIL_TOTAL, type SeededClient } from './simulation/world';
 import { readStaffInviteToken } from './stack';
-import { seedFoundingOwner, uniqueEmail } from './staffSignup';
+import { acceptStaffInvite, seedFoundingOwner, uniqueEmail } from './staffSignup';
 
 const API_URL = `http://${E2E_API_HOST}:${E2E_API_PORT}`;
 const EMULATOR_URL = `http://${E2E_EMULATOR_HOST}:${E2E_EMULATOR_PORT}`;
@@ -88,10 +88,7 @@ test.describe.serial('The World stands up: description, Ridgeline, the tail', ()
 			data: { email: doulaEmail, password: 'password123', returnSecureToken: true }
 		});
 		const { idToken: doulaIdToken } = await signedUp.json();
-		const accepted = await request.post(`${API_URL}/api/staff/accept-invite`, {
-			headers: { Authorization: `Bearer ${doulaIdToken}` },
-			data: { inviteToken, name: 'Test Doula', workState: 'NY' }
-		});
+		const accepted = await acceptStaffInvite(request, doulaIdToken, { inviteToken, name: 'Test Doula' });
 		const doulaHeaders = sessionCookieFrom(accepted, 'accept-invite');
 		const { staffId: doulaStaffId } = JSON.parse(await accepted.text());
 
