@@ -40,8 +40,16 @@ func legacyCaught(stmt string) bool {
 	return false
 }
 
-// rowCase is one statement shape, the schema it needs, and the single
-// row that makes trunk refuse it.
+// The fixtures more than one case shares, named so the same schema and
+// the same offending row are one thing rather than several.
+const (
+	oneRow         = `INSERT INTO t VALUES (1);`
+	amountSchema   = `CREATE TABLE t (id int, amount bigint);`
+	negativeAmount = `INSERT INTO t VALUES (1, -1);`
+)
+
+// rowCase is one statement shape, the schema it needs, and the rows
+// that make trunk refuse it.
 type rowCase struct {
 	// name is the case, and the class rowsafety.go must report unless
 	// class says otherwise.
@@ -71,7 +79,7 @@ var rowCases = []rowCase{
 	{
 		name:   "ADD COLUMN ... NOT NULL without DEFAULT",
 		schema: `CREATE TABLE t (id int);`,
-		row:    `INSERT INTO t VALUES (1);`,
+		row:    oneRow,
 		stmt:   `ALTER TABLE t ADD COLUMN amount_cents bigint NOT NULL;`,
 		safe: `ALTER TABLE t ADD COLUMN amount_cents bigint NOT NULL DEFAULT 0;
 		       ALTER TABLE t ALTER COLUMN amount_cents DROP DEFAULT;`,
@@ -85,7 +93,7 @@ var rowCases = []rowCase{
 		name: "ADD COLUMN ... DEFAULT with an inline constraint",
 		schema: `CREATE TABLE parent (id int PRIMARY KEY);
 		         CREATE TABLE t (id int);`,
-		row:  `INSERT INTO t VALUES (1);`,
+		row:  oneRow,
 		stmt: `ALTER TABLE t ADD COLUMN parent_id int NOT NULL DEFAULT 99 REFERENCES parent (id);`,
 	},
 	{
@@ -93,8 +101,8 @@ var rowCases = []rowCase{
 		// action's marker must not cover the action beside it.
 		name:   "a NOT VALID action beside one without it",
 		class:  "ADD CONSTRAINT ... CHECK",
-		schema: `CREATE TABLE t (id int, amount bigint);`,
-		row:    `INSERT INTO t VALUES (1, -1);`,
+		schema: amountSchema,
+		row:    negativeAmount,
 		stmt: `ALTER TABLE t ADD CONSTRAINT t_id_positive CHECK (id > 0) NOT VALID,
 		                     ADD CONSTRAINT t_amount_positive CHECK (amount > 0);`,
 	},
@@ -118,8 +126,8 @@ var rowCases = []rowCase{
 	},
 	{
 		name:   "ADD CONSTRAINT ... CHECK",
-		schema: `CREATE TABLE t (id int, amount bigint);`,
-		row:    `INSERT INTO t VALUES (1, -1);`,
+		schema: amountSchema,
+		row:    negativeAmount,
 		stmt:   `ALTER TABLE t ADD CONSTRAINT t_amount_positive CHECK (amount > 0);`,
 		safe:   `ALTER TABLE t ADD CONSTRAINT t_amount_positive CHECK (amount > 0) NOT VALID;`,
 	},
@@ -133,8 +141,8 @@ var rowCases = []rowCase{
 	},
 	{
 		name:   "VALIDATE CONSTRAINT",
-		schema: `CREATE TABLE t (id int, amount bigint);`,
-		row:    `INSERT INTO t VALUES (1, -1);`,
+		schema: amountSchema,
+		row:    negativeAmount,
 		pre:    `ALTER TABLE t ADD CONSTRAINT t_amount_positive CHECK (amount > 0) NOT VALID;`,
 		stmt:   `ALTER TABLE t VALIDATE CONSTRAINT t_amount_positive;`,
 	},
@@ -160,7 +168,7 @@ var rowCases = []rowCase{
 	{
 		name:   "DO block",
 		schema: `CREATE TABLE t (id int);`,
-		row:    `INSERT INTO t VALUES (1);`,
+		row:    oneRow,
 		stmt: `DO $$ BEGIN
 		         IF EXISTS (SELECT 1 FROM t) THEN
 		           RAISE EXCEPTION 'a row was already here';

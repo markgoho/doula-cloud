@@ -5,6 +5,11 @@ import (
 	"testing"
 )
 
+// one is the stand-in statement these tests carry through the splitter.
+// Its content is beside the point; naming it keeps the same three words
+// from reading as three unrelated literals.
+const one = "SELECT 1"
+
 // TestUpSectionBounds proves the Up section is exactly what runs on
 // trunk: the annotation line itself is gone, so a statement recognized
 // by what it starts with is not hidden behind it, and a Down section is
@@ -15,9 +20,9 @@ func TestUpSectionBounds(t *testing.T) {
 		body string
 		want []string
 	}{
-		{"no annotations at all", "SELECT 1;", []string{"SELECT 1"}},
-		{"up with no down", "-- +goose Up\nSELECT 1;", []string{"\nSELECT 1"}},
-		{"down is excluded", "-- +goose Up\nSELECT 1;\n-- +goose Down\nSELECT 2;", []string{"\nSELECT 1"}},
+		{"no annotations at all", one + ";", []string{one}},
+		{"up with no down", "-- +goose Up\n" + one + ";", []string{"\n" + one}},
+		{"down is excluded", "-- +goose Up\n" + one + ";\n-- +goose Down\nSELECT 2;", []string{"\n" + one}},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -42,7 +47,7 @@ func TestSplitStatements(t *testing.T) {
 		want []string
 	}{
 		{"blank input has no statements", "  \n ", nil},
-		{"comments are dropped", "-- a note\nSELECT 1;", []string{"\nSELECT 1"}},
+		{"comments are dropped", "-- a note\n" + one + ";", []string{"\n" + one}},
 		{"a comment need not end in a newline", "SELECT 1; -- trailing", []string{"SELECT 1"}},
 		{"a semicolon inside a string does not split", "SELECT 'a;b';", []string{"SELECT 'a;b'"}},
 		{"a doubled quote is an escape, not a close", "SELECT 'it''s; fine';", []string{"SELECT 'it''s; fine'"}},
