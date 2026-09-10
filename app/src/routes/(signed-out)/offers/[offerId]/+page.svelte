@@ -21,90 +21,123 @@
 		loadPreAccountOffer,
 		type PreAccountOffer
 	} from '#lib/offer.js';
+	import { FormSubmission, orThrownMessage, type FormError } from '#lib/formSubmission.svelte.js';
 	import Heading from '#lib/components/atoms/Heading.svelte';
 	import Text from '#lib/components/atoms/Text.svelte';
 	import Notice from '#lib/components/atoms/Notice.svelte';
 	import Button from '#lib/components/atoms/Button.svelte';
 	import Link from '#lib/components/atoms/Link.svelte';
 	import TextInput from '#lib/components/atoms/TextInput.svelte';
+	import ErrorSummary from '#lib/components/molecules/ErrorSummary.svelte';
 	import LabeledField from '#lib/components/molecules/LabeledField.svelte';
+	import StackedForm from '#lib/components/molecules/StackedForm.svelte';
 	import ConfirmDialog from '#lib/components/molecules/ConfirmDialog.svelte';
 	import PageTitle from '#lib/components/PageTitle.svelte';
+
+	const codeId = 'offer-access-code';
+	const CODE_PATTERN = /^\d{6}$/;
 
 	const token = $derived(page.url.searchParams.get('token') ?? '');
 	const offerId = $derived(page.params.offerId!);
 
 	let code = $state('');
 	let offer = $state<PreAccountOffer | undefined>();
-	let error = $state('');
-	let isOpening = $state(false);
+	/*
+	 * Declining's own failure, kept apart from the access-code form's
+	 * (#804): a rejected `onConfirm` leaves the dialog open over an
+	 * `inert` page, so it is reported as a `Notice` inside the dialog
+	 * rather than as an entry in the summary behind it, whose fragment
+	 * link could not focus anything anyway.
+	 */
+	let declineError = $state('');
 	let isDeclineDialogOpen = $state(false);
+	const submission = new FormSubmission();
+
+	/*
+	 * The page's own refusal, in our words rather than the browser's
+	 * (#1107, ADR-0021's Recover from validation errors pattern). Both
+	 * messages name the next action and what a code looks like, because a
+	 * person reaching this screen is often unsure why she is being asked
+	 * for a code at all.
+	 */
+	function refusedCode(entered: string): FormError[] | undefined {
+		if (entered === '') {
+			return [{ message: 'Enter the six-digit code from your email', targetId: codeId }];
+		}
+		if (!CODE_PATTERN.test(entered)) {
+			return [
+				{ message: 'The code from your email is six digits, like 123456', targetId: codeId }
+			];
+		}
+		return undefined;
+	}
 
 	async function handleOpen(event: SubmitEvent) {
 		event.preventDefault();
-		error = '';
-		isOpening = true;
-		try {
-			offer = await loadPreAccountOffer(apiFetch, offerId, token, code);
-		} catch (error_) {
-			error = error_ instanceof Error ? error_.message : 'Could not open this offer';
-		} finally {
-			isOpening = false;
-		}
+		await submission.run(async () => {
+			const entered = code.trim();
+			const refused = refusedCode(entered);
+			if (refused) return refused;
+
+			/*
+			 * A wrong code and an expired token come back as one sentence
+			 * the BFF wrote, and it deliberately does not say which of the
+			 * two credentials was the wrong one -- so the refusal it throws
+			 * reports untargeted, the same way `recovery-code`'s does.
+			 */
+			offer = await loadPreAccountOffer(apiFetch, offerId, token, entered);
+		}, orThrownMessage);
 	}
 
 	async function handleDecline() {
-		error = '';
+		declineError = '';
 		try {
-			const decided = await declinePreAccountOffer(apiFetch, offerId, token, code);
+			const decided = await declinePreAccountOffer(apiFetch, offerId, token, code.trim());
 			offer &&= { ...offer, state: decided.state };
 		} catch (error_) {
 			// Rethrown so ConfirmDialog stays open and renders this inside
 			// itself (#804), rather than closing over a failure with no
 			// account to sign back into and try again from.
-			error = error_ instanceof Error ? error_.message : 'Could not decline this offer';
+			declineError = error_ instanceof Error ? error_.message : 'Could not decline this offer';
 			throw error_;
 		}
 	}
 </script>
 
-<PageTitle page="An offer of work" />
+<PageTitle page="An offer of work" isError={submission.errors.length > 0} />
+
+<!--
+	Above the `<h1>`, which is GOV.UK's own markup for the summary and the
+	position every other signed-out screen puts it in (`forgot-password`
+	and `reset-password` render it inline the same way, having no
+	`EntryPage` to position it for them).
+-->
+<ErrorSummary errors={submission.errors} />
+
 <Heading level={1} text="An offer of work" />
 
 {#if !token}
 	<Notice message="This link is missing its token. Open the offer from the email you were sent." variant="error" />
 {:else if !offer}
 	<Text text="Enter the six-digit code from the email to open this offer." tone="variant" />
-	<!--
-		#660: this is the one signed-out form that is not a `StackedForm`.
-		That molecule sets `novalidate`, because ADR-0021's Recover from
-		validation errors pattern is that the page refuses the submit and
-		says so once at the top -- and this screen has no `ErrorSummary` and
-		no refusal path to say it with, so it is still relying on the
-		browser's own bubble to stop an empty access code. Adopting the
-		molecule here would take that refusal away and put nothing in its
-		place, so the wrapper is inline until this screen gets #467's error
-		summary of its own (#1107).
-	-->
-	<form onsubmit={handleOpen}>
-		<stack-l space="var(--space-5)">
-			<LabeledField label="Access code">
-				{#snippet children({ id, describedBy, invalid })}
-					<TextInput
-						{id}
-						{describedBy}
-						{invalid}
-						inputmode="numeric"
-						maxlength={6}
-						value={code}
-						onInput={(value) => (code = value)}
-						required
-					/>
-				{/snippet}
-			</LabeledField>
-			<Button label="Open offer" type="submit" loading={isOpening} />
-		</stack-l>
-	</form>
+	<StackedForm onSubmit={handleOpen}>
+		<LabeledField id={codeId} label="Access code" error={submission.errorFor(codeId)}>
+			{#snippet children({ id, describedBy, invalid })}
+				<TextInput
+					{id}
+					{describedBy}
+					{invalid}
+					inputmode="numeric"
+					maxlength={6}
+					value={code}
+					onInput={(value) => (code = value)}
+					required
+					autocomplete="one-time-code"
+				/>
+			{/snippet}
+		</LabeledField>
+		<Button label="Open offer" type="submit" loading={submission.isSubmitting} />
+	</StackedForm>
 {:else}
 	<dl>
 		<!-- #230: she opens the link in March and gets a closed offer, not
@@ -137,15 +170,8 @@
 			title="Decline this offer"
 			consequence="Declining this offer cannot be undone."
 			confirmLabel="Decline this offer"
-			error={error}
+			error={declineError}
 			onConfirm={handleDecline}
 		/>
 	{/if}
-{/if}
-
-{#if error && !isDeclineDialogOpen}
-	<!-- Decline's own failure renders inside ConfirmDialog while it is
-	     open (#804); this is the access-code form's, which has no dialog
-	     to gate it. -->
-	<Notice message={error} variant="error" />
 {/if}

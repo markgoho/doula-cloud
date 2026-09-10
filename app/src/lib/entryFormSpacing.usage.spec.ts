@@ -33,24 +33,17 @@ import { describe, expect, it } from 'vitest';
  * ## What it asks
  *
  * That the route contains no bare `<form>` element -- `StackedForm` owns
- * that element now -- unless the form opens with the stack wrapper itself.
- * The exception is deliberate and there is exactly one user of it today:
- * see `EXEMPT` below.
+ * that element now.
+ *
+ * There was one exemption when this file was written: the pre-account
+ * Offer screen carried the stack wrapper inline, because `StackedForm`
+ * sets `novalidate` and that screen had no `ErrorSummary` to refuse an
+ * empty access code with, so adopting the molecule there would have taken
+ * the browser's refusal away and put nothing in its place. #1107 gave it
+ * the refusal path, it adopted the molecule with everything else, and the
+ * exemption went with it -- so the question this file asks is now the same
+ * one for every entry screen, with no list of paths anywhere in it.
  */
-
-const REQUIRED_WRAPPER = '<stack-l space="var(--space-5)">';
-
-/*
- * The pre-account Offer screen. `StackedForm` sets `novalidate`, because
- * ADR-0021's Recover from validation errors pattern is that the page
- * refuses the submit and says so once at the top -- and this screen has no
- * `ErrorSummary` and no refusal path to say it with, so it is still relying
- * on the browser's own bubble to stop an empty access code. Adopting the
- * molecule there would take that refusal away and put nothing in its place.
- * It carries the wrapper inline instead, which is what this file lets it
- * do, until #1107 gives it an error summary of its own.
- */
-const EXEMPT = ['src/routes/(signed-out)/offers/[offerId]/+page.svelte'];
 
 const appRoot = fileURLToPath(new URL('../../', import.meta.url));
 
@@ -82,20 +75,9 @@ describe('every unauthenticated entry form stacks its own fields', () => {
 		expect(entryRoutes.length).toBeGreaterThan(0);
 	});
 
-	it('names only exemptions that still exist', () => {
-		expect(EXEMPT.filter((file) => entryRoutes.includes(file))).toEqual(EXEMPT);
-	});
-
 	for (const file of entryRoutes) {
 		it(`${file} builds its forms with StackedForm`, () => {
-			const markup = withoutComments(read(file));
-
-			if (EXEMPT.includes(file)) {
-				expect(markup.includes(REQUIRED_WRAPPER)).toBe(true);
-				return;
-			}
-
-			expect(markup.includes('<form')).toBe(false);
+			expect(withoutComments(read(file)).includes('<form')).toBe(false);
 		});
 	}
 });
