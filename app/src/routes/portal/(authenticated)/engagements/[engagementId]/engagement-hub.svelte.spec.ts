@@ -56,13 +56,47 @@ function mockFetch(body: unknown, activityItems: unknown[] = [], visitItems: unk
 	});
 }
 
+/*
+ * One `setup()` per `describe` below, per `.claude/rules/svelte-tests.md`
+ * -- each named for the block it serves rather than all four named
+ * `setup`, because they live out here rather than inside their blocks.
+ * `unicorn/consistent-function-scoping` refuses a nested function that
+ * closes over nothing its enclosing scope owns, and none of these does:
+ * every one of them reaches only for this file's own mocks, the fixture,
+ * and the route.
+ */
+
+/** The `Client portal Engagement hub` block's setup. The happy path is
+ * the fixture answering every read itself, which is also what the
+ * continuum sweep installs -- so `record` is left out for a test that
+ * asserts on the fixture's own Engagement. A test that needs a state the
+ * fixture does not hold passes a spread of `detail` here, which routes
+ * through `mockFetch` instead: the fixture's `respond` answers from its
+ * own content and cannot be handed a departure from it. Nothing in that
+ * block reads the render result. */
+async function setupHub({ record }: { record?: unknown } = {}) {
+	if (record === undefined) {
+		apiFetchWithSession.mockImplementation(toApiResponder(fixture));
+	} else {
+		mockFetch(record);
+	}
+	await render(Hub);
+}
+
+/** The `#296` heading block's setup. The fixture's own Engagement is the
+ * happy path; a state that ticket has to hold for is a spread of it,
+ * never a second record. Nothing in that block reads the render result:
+ * the heading is asserted through the role tree. */
+async function setupHeading(record: unknown = detail) {
+	mockFetch(record);
+	await render(Hub);
+}
+
 describe('Client portal Engagement hub', () => {
 	// The happy path: the fixture's own detail already carries a due date
 	// (2027-03-01), so this is the fixture's content unmodified.
 	it("shows the due date under its own label, not 'Created' (#505)", async () => {
-		apiFetchWithSession.mockImplementation(toApiResponder(fixture));
-
-		await render(Hub);
+		await setupHub();
 
 		await expect.element(page.getByText('Due date')).toBeVisible();
 		await expect.element(page.getByText('Mar 1, 2027')).toBeVisible();
@@ -77,9 +111,7 @@ describe('Client portal Engagement hub', () => {
 	// builds `engagementLabel` from the ancestor layout's `practiceName`
 	// and `createdAt` rather than the bare Practice name.
 	it('titles the tab with the same distinguishing label the switcher uses (#310)', async () => {
-		apiFetchWithSession.mockImplementation(toApiResponder(fixture));
-
-		await render(Hub);
+		await setupHub();
 
 		await expect.element(page.getByText('Due date')).toBeVisible();
 		expect(document.title).toContain(engagementLabel({ practiceName, createdAt }));
@@ -92,9 +124,7 @@ describe('Client portal Engagement hub', () => {
 	// the fixture's own detail has a due date (see the previous test) --
 	// so this is a departure from it, spread rather than restated.
 	it('shows nothing for a null due date -- no blank label, no placeholder', async () => {
-		mockFetch({ ...detail, dueDate: undefined });
-
-		await render(Hub);
+		await setupHub({ record: { ...detail, dueDate: undefined } });
 
 		// #212: the register's own label ("Ongoing" for `active`), not the
 		// raw enum value -- this is also this suite's own assertion for
@@ -109,9 +139,7 @@ describe('Client portal Engagement hub', () => {
 	// the fixture's own detail offers one (see the first test above) -- so
 	// this is a departure from it, spread rather than restated.
 	it('offers no Birth plan link when the Engagement does not call for one', async () => {
-		mockFetch({ ...detail, offersBirthPlan: false });
-
-		await render(Hub);
+		await setupHub({ record: { ...detail, offersBirthPlan: false } });
 
 		await expect.element(page.getByText('Ongoing')).toBeVisible();
 		await expect.element(page.getByRole('link', { name: 'Birth plan' })).not.toBeInTheDocument();
@@ -138,15 +166,8 @@ describe('Client portal Engagement hub', () => {
  * passing quietly.
  */
 describe("the hub's heading (#296)", () => {
-	// The fixture's own Engagement is the happy path; a state this ticket
-	// has to hold for is a spread of it, never a second record.
-	async function setup(record: unknown = detail) {
-		mockFetch(record);
-		return await render(Hub);
-	}
-
 	it("names the page with the register's own word, and greets nobody", async () => {
-		await setup();
+		await setupHeading();
 
 		await expect.element(page.getByRole('heading', { name: 'Your care', level: 1 })).toBeVisible();
 		// Still the page's only <h1>, so the document outline and where a
@@ -182,7 +203,7 @@ describe("the hub's heading (#296)", () => {
 	];
 
 	it.each(records)('says the same words to $name', async ({ detail: record }) => {
-		await setup(record);
+		await setupHeading(record);
 
 		await expect.element(page.getByRole('heading', { name: 'Your care', level: 1 })).toBeVisible();
 		await expect.element(page.getByText(/welcome/i)).not.toBeInTheDocument();
@@ -192,6 +213,50 @@ describe("the hub's heading (#296)", () => {
 // #486 AC5: CONTEXT.md's own vocabulary for this to a Client -- "Everything
 // that has happened" -- behind a closed disclosure, per the design brief's
 // own #433 amendment for the Client portal.
+/** One ledger entry, named by the action whose wording the test is about
+ * -- the only field any of the Activity tests varies. The actor is a
+ * generic name, not a person's: portal.ActivityHandler (Go) already
+ * replaces a staff actor's name before this response ever reaches the
+ * browser (CONTEXT.md's Activity entry: "never who inside the Practice
+ * did what"). This spec only proves the frontend renders whatever name it
+ * is given, muted; the redaction itself has its own Go test. */
+function activityEntry(action: string) {
+	return {
+		subjectKind: 'engagement',
+		subjectId: detail.engagementId,
+		action,
+		actorKind: 'staff',
+		actorName: 'Your practice',
+		createdAt: new Date().toISOString()
+	};
+}
+
+/** The `#486` Activity block's setup. The happy path is the fixture
+ * answering every read itself, the same installation the continuum sweep
+ * makes -- so a test asserting on the fixture's own ledger passes
+ * nothing. `activity` is the ledger this screen is handed instead, and
+ * `refusal` is the ledger read failing rather than answering, which no
+ * list content can express. `container` is returned because a closed
+ * `<details>` is outside the accessibility tree, so those tests have to
+ * reach past it -- the reason each of them restates at its own scoping
+ * line. */
+async function setupActivity({ activity, refusal }: { activity?: unknown[]; refusal?: string } = {}) {
+	if (refusal !== undefined) {
+		apiFetchWithSession.mockImplementation((path: string) => {
+			if (path.includes('/activity'))
+				return Promise.resolve({ ok: false, text: () => Promise.resolve(refusal) } as Response);
+			if (path.includes('/visits')) return Promise.resolve(jsonResponse({ items: [], hasMore: false }));
+			return Promise.resolve(jsonResponse(detail));
+		});
+	} else if (activity === undefined) {
+		apiFetchWithSession.mockImplementation(toApiResponder(fixture));
+	} else {
+		mockFetch(detail, activity);
+	}
+	const { container } = await render(Hub);
+	return { container };
+}
+
 describe('the Activity disclosure (#486)', () => {
 	// DataTable renders both a <table> and a record view at once (#508,
 	// ADR-0024), so a bare page-wide getByText matches both -- scoped here
@@ -205,24 +270,8 @@ describe('the Activity disclosure (#486)', () => {
 	// resolve anything inside it to assert against.
 	it('renders closed under its own heading, with a descriptive toggle', async () => {
 		await page.viewport(1440, 900);
-		mockFetch(detail, [
-			{
-				subjectKind: 'engagement',
-				subjectId: detail.engagementId,
-				action: 'contract_sent',
-				actorKind: 'staff',
-				// A generic name, not a person's -- portal.ActivityHandler
-				// (Go) already replaces a staff actor's name before this
-				// response ever reaches the browser (CONTEXT.md's Activity
-				// entry: "never who inside the Practice did what"). This
-				// spec only proves the frontend renders whatever name it is
-				// given, muted; the redaction itself has its own Go test.
-				actorName: 'Your practice',
-				createdAt: new Date().toISOString()
-			}
-		]);
 
-		const { container } = await render(Hub);
+		const { container } = await setupActivity({ activity: [activityEntry('contract_sent')] });
 
 		await expect
 			.element(page.getByRole('heading', { name: 'Everything that has happened' }))
@@ -264,9 +313,7 @@ describe('the Activity disclosure (#486)', () => {
 	// inside it, and dropping the test without keeping the guarantee is
 	// how a sweep goes on passing over an empty table.
 	it("has the ledger's rows rendered by the time the sweep's own signal is met", async () => {
-		apiFetchWithSession.mockImplementation(toApiResponder(fixture));
-
-		const { container } = await render(Hub);
+		const { container } = await setupActivity();
 		await expect
 			.element(page.getByRole('heading', { name: fixture.readyText, level: 1 }))
 			.toBeVisible();
@@ -289,18 +336,7 @@ describe('the Activity disclosure (#486)', () => {
 	// Asserted through the opened disclosure's own table view, the same
 	// scoping the two tests above take and for the same #508 reason.
 	it("speaks the Client register, not the write side's action name", async () => {
-		mockFetch(detail, [
-			{
-				subjectKind: 'engagement',
-				subjectId: detail.engagementId,
-				action: 'plan_instance_edited',
-				actorKind: 'staff',
-				actorName: 'Your practice',
-				createdAt: new Date().toISOString()
-			}
-		]);
-
-		const { container } = await render(Hub);
+		const { container } = await setupActivity({ activity: [activityEntry('plan_instance_edited')] });
 
 		await page.getByText('Show what has happened').click();
 		const tableView = page.elementLocator(container.querySelector(':scope details .table-view')!);
@@ -309,14 +345,7 @@ describe('the Activity disclosure (#486)', () => {
 	});
 
 	it('says so when the ledger cannot be read', async () => {
-		apiFetchWithSession.mockImplementation((path: string) => {
-			if (path.includes('/activity'))
-				return Promise.resolve({ ok: false, text: () => Promise.resolve('nope') } as Response);
-			if (path.includes('/visits')) return Promise.resolve(jsonResponse({ items: [], hasMore: false }));
-			return Promise.resolve(jsonResponse(detail));
-		});
-
-		await render(Hub);
+		await setupActivity({ refusal: 'nope' });
 
 		await expect.element(page.getByText('nope')).toBeVisible();
 	});
@@ -339,12 +368,11 @@ function visitsTableText(container: HTMLElement) {
 // #478: CONTEXT.md's Visit entry settles the Client register's word for
 // this section -- "visits", "Your visits" as a heading -- and settles
 // what a Client is told about one: when it is, and who is coming.
-/** This section's own setup: the fixture's two Visits are the happy
- * path, and a state it has to hold for is a departure passed here rather
- * than a second screen written out. `refusal` is the read failing rather
- * than answering, which no list content can express. At module scope
- * because it closes over nothing this `describe` owns. */
-async function setup({ items = visits, refusal }: { items?: unknown[]; refusal?: string } = {}) {
+/** The `#478` Your visits block's setup: the fixture's two Visits are the
+ * happy path, and a state it has to hold for is a departure passed here
+ * rather than a second screen written out. `refusal` is the read failing
+ * rather than answering, which no list content can express. */
+async function setupVisits({ items = visits, refusal }: { items?: unknown[]; refusal?: string } = {}) {
 	if (refusal === undefined) {
 		mockFetch(detail, [], items);
 	} else {
@@ -355,12 +383,16 @@ async function setup({ items = visits, refusal }: { items?: unknown[]; refusal?:
 			return Promise.resolve(jsonResponse(detail));
 		});
 	}
-	return await render(Hub);
+	// `container` alone: `visitsTableText` reaches past the accessibility
+	// tree for the reason its own comment gives, and nothing here needs
+	// the rest of the render result.
+	const { container } = await render(Hub);
+	return { container };
 }
 
 describe('Your visits (#478)', () => {
 	it("heads the section with the register's own word", async () => {
-		await setup();
+		await setupVisits();
 
 		await expect.element(page.getByRole('heading', { name: 'Your visits' })).toBeVisible();
 	});
@@ -374,7 +406,7 @@ describe('Your visits (#478)', () => {
 	it('renders a scheduled Visit and a past one differently, each naming who is coming', async () => {
 		await page.viewport(1440, 900);
 
-		const { container } = await setup();
+		const { container } = await setupVisits();
 		const text = visitsTableText(container);
 
 		// The upcoming one: weekday first, then the clock, because the
@@ -409,7 +441,7 @@ describe('Your visits (#478)', () => {
 	// type at all; this proves the screen renders none either, from a
 	// payload that carried one anyway.
 	it('names no Visit type, even if the response carries one', async () => {
-		await setup({ items: [{ ...visits[0], type: 'postpartum' }] });
+		await setupVisits({ items: [{ ...visits[0], type: 'postpartum' }] });
 
 		await expect.element(page.getByRole('heading', { name: 'Your visits' })).toBeVisible();
 		await expect.element(page.getByText(/prenatal|postpartum/i)).not.toBeInTheDocument();
@@ -422,14 +454,14 @@ describe('Your visits (#478)', () => {
 	it('promises nothing when nothing is booked', async () => {
 		await page.viewport(1440, 900);
 
-		const { container } = await setup({ items: [] });
+		const { container } = await setupVisits({ items: [] });
 
 		await expect.poll(visitsTableText(container)).toContain('Nothing is booked yet.');
 		await expect.element(page.getByText(/will be|soon|shortly|coming up/i)).not.toBeInTheDocument();
 	});
 
 	it('says so when the visits cannot be read', async () => {
-		await setup({ refusal: 'no visits for you' });
+		await setupVisits({ refusal: 'no visits for you' });
 
 		await expect.element(page.getByText('no visits for you')).toBeVisible();
 	});
@@ -444,7 +476,7 @@ describe('Your visits (#478)', () => {
 		await page.viewport(1440, 900);
 		const later = { ...visits[0]!, visitId: 'visit-later', scheduledAt: '2027-04-20T15:00:00Z' };
 
-		const { container } = await setup({ items: [later, ...visits] });
+		const { container } = await setupVisits({ items: [later, ...visits] });
 		const text = visitsTableText(container);
 
 		const soonest = new Date(visits[0]!.scheduledAt);
