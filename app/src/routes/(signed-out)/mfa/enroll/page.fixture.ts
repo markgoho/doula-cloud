@@ -6,7 +6,7 @@
  */
 import { jsonResponse } from '#lib/testResponse.js';
 import type { SessionInfo } from '#lib/landing.js';
-import type { RouteFixture } from '../../routeFixture.js';
+import type { RouteFixture } from '../../../routeFixture.js';
 import Page from './+page.svelte';
 
 const session: SessionInfo = {

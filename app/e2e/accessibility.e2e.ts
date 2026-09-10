@@ -49,6 +49,15 @@ const WCAG_TAGS = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'];
  *   its link by `aria-describedby`; that join is asserted directly in
  *   this repo's unit suite rather than here, since axe scans the DOM
  *   instances it is pointed at and not the pattern behind them.
+ * - `mfa/enroll`'s second step -- the QR code, the fallback secret and
+ *   the code field. Step one, the password re-authentication, IS scanned
+ *   below (#1114); step two cannot be reached here at all, because the
+ *   vendored Firebase Auth emulator has no TOTP enrollment path and 400s
+ *   the `TotpMultiFactorGenerator.generateSecret()` call that opens it
+ *   (firebase-tools#6224, and docs/testing.md's own note). No Playwright
+ *   test in this repo has ever driven a TOTP screen for that reason, and
+ *   #1132 owns closing it -- when it does, step two gets its own entry
+ *   here rather than staying in this list.
  */
 
 /**
@@ -149,18 +158,26 @@ test('Archetype A -- the screens a person meets signed out', async ({ page }) =>
 	}
 });
 
-// Archetype A's one outlier (#745, #749): `/no-practice` needs a live
-// session, unlike every route in the no-fixture batch above. Opened with
-// no session at all, it hits its own onMount redirect to /login (see
-// the page's doc comment) and a scan there would measure the login
-// screen, not this one -- so the session here has to resolve to no
-// Practice specifically, not to no session. seedAccountWithNoPractice
-// (staffSignup.ts) provisions exactly that: an Identity Platform account
-// exchanged for a session with no POST /api/staff/signup in between. The
-// cookie is injected straight into the browser context -- the same
-// shape mfa.ts's enterPracticeAsEnrolled uses -- since nothing here
-// needs an interactive sign-in.
-test('Archetype A -- the no-Practice landing, behind a session with no Practice', async ({
+// Archetype A's two outliers (#745, #749, #1114): `/no-practice` and
+// `mfa/enroll` each need a live session, unlike every route in the
+// no-fixture batch above. Opened with no session at all, each hits its
+// own onMount redirect to /login (see the pages' doc comments) and a
+// scan there would measure the login screen, not these -- so the session
+// here has to resolve to no Practice specifically, not to no session.
+// seedAccountWithNoPractice (staffSignup.ts) provisions exactly that: an
+// Identity Platform account exchanged for a session with no POST
+// /api/staff/signup in between. The cookie is injected straight into the
+// browser context -- the same shape mfa.ts's enterPracticeAsEnrolled
+// uses -- since nothing here needs an interactive sign-in.
+//
+// Both behind one seed rather than a test each: they want the identical
+// session, and provisioning it twice would buy nothing but a second
+// account. `mfa/enroll` reads that session only for the email it
+// re-authenticates with, so a Practice-less one realizes its step one
+// exactly as a Practice-bearing one would -- and it is step one that
+// this repo can scan at all (see the exclusion note at the top of this
+// file for why step two cannot be reached).
+test('Archetype A -- the two screens behind a session with no Practice', async ({
 	page,
 	request,
 	context
@@ -177,6 +194,27 @@ test('Archetype A -- the no-Practice landing, behind a session with no Practice'
 		url: '/no-practice',
 		h1: 'Your account is not part of a Practice'
 	});
+
+	await scan(page, {
+		key: 'mfa/enroll',
+		archetype: 'A',
+		url: '/mfa/enroll',
+		h1: 'Set up two-factor authentication'
+	});
+
+	/*
+	 * The shell itself, asserted rather than left to the scan above
+	 * (#1114). axe's `landmark-one-main` and `region` rules live under
+	 * its `best-practice` tag, which WCAG_TAGS deliberately leaves out --
+	 * so a clean scan of this route would have been just as clean while
+	 * it still rendered no shell at all, which is the gap #1114 closed.
+	 * These three are what "renders inside a shell" means, named where a
+	 * regression would show: the skip link, the reduced bar, and the
+	 * `<main>` the skip link lands in.
+	 */
+	await expect(page.getByRole('link', { name: 'Skip to main content' })).toBeAttached();
+	await expect(page.getByRole('banner')).toBeVisible();
+	await expect(page.getByRole('main')).toBeVisible();
 });
 
 // Archetypes B, C, D, E, F and G, all behind one Staff session. Provisioned

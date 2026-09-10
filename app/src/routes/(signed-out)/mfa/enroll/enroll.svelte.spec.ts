@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import { jsonResponse } from '#lib/testResponse.js';
 import Page from './+page.svelte';
-import { toPageState } from '../../routeFixture.js';
+import { toPageState } from '../../../routeFixture.js';
 import { fixture } from './page.fixture.js';
 
 /*

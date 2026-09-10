@@ -1,6 +1,6 @@
 <script lang="ts">
 	/*
-	 * TOTP enrolment (#606). Reached two ways: driven here by
+	 * TOTP enrollment (#606). Reached two ways: driven here by
 	 * `apiFetchWithSession`'s `MFA_REQUIRED` redirect (#lib/api.js), with
 	 * `returnTo` naming the Practice-scoped page that refused her, or
 	 * navigated to voluntarily from account settings, hours into an
@@ -16,6 +16,13 @@
 	 * been signed out (#149 fires right after every session exchange this
 	 * app makes). So step one always asks for the password again; there is
 	 * no branch on `getFirebaseAuth().currentUser` to skip it.
+	 *
+	 * The shell around it is the `(signed-out)` group's (#1114), not a
+	 * layout of this route's own: the person here holds a live Staff
+	 * session that has not cleared MFA, so there is no chosen Practice
+	 * for a Staff bar to name and no Practice-scoped destination she can
+	 * reach until she enrolls. That group's own layout comment carries the
+	 * full reasoning.
 	 *
 	 * Two steps, never rendered together, the same shape `accept-invite`
 	 * already uses for its own two-step form: step one re-authenticates

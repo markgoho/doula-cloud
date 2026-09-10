@@ -407,7 +407,7 @@
 			her back here once enrolment finishes (docs/design's link-text
 			rule is why the label matches /mfa/enroll's own title verbatim).
 		-->
-		<Link href={`${resolve('/mfa/enroll')}?returnTo=${encodeURIComponent(resolve('/account'))}`} label="Set up two-factor authentication" />
+		<Link href={`${resolve('/(signed-out)/mfa/enroll')}?returnTo=${encodeURIComponent(resolve('/account'))}`} label="Set up two-factor authentication" />
 	{/if}
 	<!--
 		Field-targeted refusals (a wrong password, a wrong code) already
