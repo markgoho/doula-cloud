@@ -456,6 +456,12 @@ jobs:
           done
           exit 1
 
+      # The only secret payload this workflow reads. Since #1078,
+      # github-action-733741680@ holds roles/secretmanager.secretAccessor
+      # on this secret alone rather than on the whole project, as a
+      # google_secret_manager_secret_iam_member in terraform/secrets.tf --
+      # so a new get-secretmanager-secrets step anywhere in CI needs its
+      # own grant added beside the secret, or it 403s.
       - name: Fetch migration DSN
         id: secrets
         uses: google-github-actions/get-secretmanager-secrets@v3
