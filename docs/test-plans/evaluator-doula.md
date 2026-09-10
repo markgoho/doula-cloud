@@ -83,7 +83,7 @@ marketing site is out of scope for this map).
 | Step | Action | Expected result | Mark |
 | --- | --- | --- | --- |
 | 7.1 | Import two years of Clients from a spreadsheet | No import exists | `missing-feature (TB-G6)` [#289](https://github.com/markgoho/doula-cloud/issues/289) |
-| 7.1-a | Reproduce one spreadsheet row by hand instead | Possible now, one row at a time: intake asks given, family and preferred name, date of birth, email, phone and address, and a Practice adds the columns we did not think of to its own Client Field Template ([MO-G3](https://github.com/markgoho/doula-cloud/issues/252) is closed). What still cannot happen is two years of rows arriving together — that is [TB-G6](https://github.com/markgoho/doula-cloud/issues/289) at 7.1, and it is untouched. `manual`, because the claim is about the whole sequence and every Practice-defined field behind it, and no spec walks past the first question | `manual` |
+| 7.1-a | Reproduce one spreadsheet row by hand instead | Possible now, one row at a time: intake asks given, family and preferred name, date of birth, email, phone and address, and a Practice adds the columns we did not think of to its own Client Field Template ([MO-G3](https://github.com/markgoho/doula-cloud/issues/252) is closed). What still cannot happen is two years of rows arriving together — that is [TB-G6](https://github.com/markgoho/doula-cloud/issues/289) at 7.1, and it is untouched. `manual`, because the claim is about the whole sequence and every Practice-defined field behind it, and no spec answers a question past the first one — `accessibility.e2e.ts` opens four of the routes to run axe over them, which tests the pages and not the transcription | `manual` |
 
 **Abandon check**: her existing data is the reason switching is expensive, and it
 cannot come with her.
@@ -112,6 +112,18 @@ run against a marketing site that has not been written.
 
 ## Run log
 
+### 2026-08-22 — automated steps ([#209](https://github.com/markgoho/doula-cloud/issues/209))
+
+`bun run test:e2e` in `app/`, whole suite, one run: **16 passed, 0 failed** (20.5s).
+Stack per [docs/testing.md](../testing.md) — Postgres in compose, the goose
+migration, the Go BFF and the Firebase Auth emulator, all local.
+
+| Step | Spec | Result |
+| --- | --- | --- |
+| 5.3 | `birth-plan.e2e.ts` | pass |
+
+**1 automated steps: all pass.**
+
 ### 2026-09-10 — Add Client corrected against ADR-0017 ([#1121](https://github.com/markgoho/doula-cloud/issues/1121))
 
 A desk pass, not a walk, over the cells [#685](https://github.com/markgoho/doula-cloud/issues/685) held back because they could not be half-corrected: 5.1, 5.2, 5.2-a and 7.1-a. Every claim below was read out of the code, not out of the ticket.
@@ -128,21 +140,16 @@ A desk pass, not a walk, over the cells [#685](https://github.com/markgoho/doula
 
 The Marks summary is recounted from the Steps table above — 5 / 10 / 0 / 5 — and [README.md](README.md)'s run-status row and Total move with it.
 
+`bun run test:e2e -- add-client-visits` in `app/`, one spec, one run: **1 passed** (51.5s), on the stack [docs/testing.md](../testing.md) describes. The re-marked step is the only one this pass moved onto a spec, so the whole suite was not re-run for a Markdown change; CI on the pull request is the run that covers the rest.
+
+| Step | Spec | Result |
+| --- | --- | --- |
+| 5.1 | `add-client-visits.e2e.ts` | pass |
+
 **5.2-b is appended to the map as well as to the plan.** A plan never renumbers a map, and this does not — but ADR-0017 split one act into two, and a map whose stage 5 still runs 5.1, 5.2, 5.3 would leave the plan's new step with nothing to sit beside. The map carries the same id, and the gap IDs on it are untouched.
 
 **Left alone on purpose.** The 2026-08-22 walk log below is a record of what was seen on the day and is not rewritten. Tasha's other stale cells — TB-G2's credit price, TB-G4's closure, TB-G7's `office_manager`, and the ledger origin printed as a raw enum at 2.1-a — belong to [#873](https://github.com/markgoho/doula-cloud/issues/873), which was open when this pass ran.
 
-### 2026-08-22 — automated steps ([#209](https://github.com/markgoho/doula-cloud/issues/209))
-
-`bun run test:e2e` in `app/`, whole suite, one run: **16 passed, 0 failed** (20.5s).
-Stack per [docs/testing.md](../testing.md) — Postgres in compose, the goose
-migration, the Go BFF and the Firebase Auth emulator, all local.
-
-| Step | Spec | Result |
-| --- | --- | --- |
-| 5.3 | `birth-plan.e2e.ts` | pass |
-
-**1 automated steps: all pass.**
 
 ### 2026-09-03 — new automated steps ([#318](https://github.com/markgoho/doula-cloud/issues/318))
 
