@@ -2,7 +2,6 @@ package engagement
 
 import (
 	"database/sql"
-	"encoding/json"
 	"errors"
 	"net/http"
 
@@ -159,8 +158,12 @@ func refuseUnexplainedCompletion(w http.ResponseWriter, current engagementStatus
 // TransitionHandler is the single Engagement status-transition endpoint
 // ADR-0015 specifies (#253), replacing the old completion-only endpoint:
 // pre-launch, keeping both would mean the same lifecycle logic living in
-// two places, so this one is the whole write surface for
-// engagements.status now.
+// two places, so this one is the whole *requested* write surface for
+// engagements.status. It is not the only writer: ADR-0015's one automatic
+// move writes the column too, when a Visit is scheduled (#895) -- but it
+// runs activateFromIntake, which is the same body this handler runs for
+// the manual intake -> active, so there is still one implementation of
+// the move rather than two.
 //
 // Every legal move writes an engagement_events row (ADR-0015's audit
 // table, staff-only, never portal-readable -- see 00090's RLS policy).
@@ -278,7 +281,28 @@ func TransitionHandler() http.Handler {
 			return
 		}
 
-		if !isNoOp {
+		// The manual intake -> active move runs activateFromIntake, the
+		// same body the automatic move a scheduled Visit makes runs
+		// (#895), rather than a second copy of the UPDATE and the two
+		// audit writes here. moved=false means a concurrent writer took
+		// the Engagement out of 'intake' between the read above and this
+		// write -- the same case the generic branch's own n != 1 answers,
+		// and answered the same way.
+		isActivation := current.status == StatusIntake && req.Status == StatusActive
+
+		switch {
+		case isNoOp:
+			// Nothing is written for a re-request of the status the
+			// Engagement already holds; the completion cascade below
+			// still runs.
+		case isActivation:
+			moved, err := activateFromIntake(r.Context(), tx, practiceID, engagementID, actorStaffID)
+			if err != nil || !moved {
+				// coverage:ignore reason: DB write failure or a concurrent writer already moved this Engagement, neither exercised by unit tests
+				apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+				return
+			}
+		default:
 			newEndingReason, newEndingNote := current.endingReason, current.endingNote
 			switch {
 			case req.Status == StatusCompleted:
@@ -319,26 +343,6 @@ func TransitionHandler() http.Handler {
 				return
 			}
 
-			if current.status == StatusIntake && req.Status == StatusActive {
-				diff, err := json.Marshal(map[string]any{"statusBefore": current.status, "statusAfter": req.Status})
-				if err != nil {
-					// coverage:ignore reason: marshaling two strings never fails
-					apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
-					return
-				}
-				if err := activity.Record(r.Context(), tx, activity.Entry{
-					PracticeID:  practiceID,
-					SubjectKind: activity.SubjectEngagement,
-					SubjectID:   engagementID,
-					Action:      string(activity.ActionCarePhaseChanged),
-					Diff:        diff,
-					Actor:       activity.StaffActor(actorStaffID),
-				}); err != nil {
-					// coverage:ignore reason: DB query failure, not exercised by unit tests
-					apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
-					return
-				}
-			}
 			if req.Status == StatusCompleted {
 				if err := activity.Record(r.Context(), tx, activity.Entry{
 					PracticeID:  practiceID,

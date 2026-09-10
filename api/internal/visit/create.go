@@ -11,6 +11,7 @@ import (
 
 	"doula-cloud/api/internal/activity"
 	"doula-cloud/api/internal/apierr"
+	"doula-cloud/api/internal/engagement"
 	"doula-cloud/api/internal/staffauth"
 )
 
@@ -48,6 +49,10 @@ type CreateResponse struct {
 // CreateHandler creates a Visit under an Engagement, assigned to the
 // Staff member the body names or, with no name in it, to the caller
 // herself. Must be mounted behind staffauth.Middleware.
+//
+// A Visit created with a scheduledAt can move the Engagement itself from
+// 'intake' to 'active' (#895); one created without leaves it alone. See
+// the activation call at the end of this handler.
 //
 // Who may do which of those two, whether a named Staff member may be
 // named at all, and whether she is granted an attachment for it are all
@@ -136,6 +141,24 @@ func CreateHandler() http.Handler {
 		if !grantAssignee(w, r, c, engagementID, staffID, isEmployee) {
 			// coverage:ignore reason: grantAssignee only reports false on a DB write failure, not exercised by unit tests
 			return
+		}
+
+		// ADR-0015's one automatic status move (#895). A Visit created
+		// already scheduled is "the first time a Visit is scheduled" just
+		// as much as a later PATCH .../schedule is, so both write paths
+		// call the same activation; one created with no scheduledAt (the
+		// "log a past meeting" shape) leaves the Engagement where it is.
+		//
+		// The actor is c.staffID, the caller, never staffID, the person
+		// the Visit is assigned to: ADR-0015 records "the person who
+		// scheduled", and an Admin booking a Visit for a colleague is
+		// that person.
+		if scheduledAt != nil {
+			if err := engagement.ActivateOnVisitScheduled(r.Context(), c.tx, c.practiceID, engagementID, c.staffID); err != nil {
+				// coverage:ignore reason: DB write failure inside the activation, not exercised by unit tests
+				apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+				return
+			}
 		}
 
 		apierr.WriteJSON(w, http.StatusCreated, CreateResponse{
