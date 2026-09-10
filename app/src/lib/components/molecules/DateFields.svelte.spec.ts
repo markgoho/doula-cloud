@@ -1,6 +1,12 @@
 import { page } from 'vitest/browser';
 import { render } from 'vitest-browser-svelte';
 import { describe, expect, it, vi } from 'vitest';
+/*
+ * The real cascade: the box widths asserted at the foot of this file are
+ * `calc(3ch + var(--space-6))`, which computes to nothing without the
+ * token layer, and they are measured with `border-box` from the reset.
+ */
+import '#lib/styles/app.css';
 import DateFields from './DateFields.svelte';
 import type { DateField, DateParts } from '#lib/intakeDate.js';
 
@@ -16,6 +22,11 @@ async function setup({ parts = { month: '', day: '', year: '' }, ...rest }: Setu
 	const onChange = vi.fn();
 	const { container } = await render(DateFields, { name: 'dob', parts, onChange, ...rest });
 	return { onChange, container };
+}
+
+// The rendered width of one box, by the label it carries.
+function widthOf(label: string) {
+	return page.getByLabelText(label).element().getBoundingClientRect().width;
 }
 
 describe('DateFields', () => {
@@ -136,5 +147,32 @@ describe('DateFields', () => {
 
 		await expect.element(page.getByText('The day the pregnancy ended.')).toBeVisible();
 		await expect.element(page.getByLabelText('Year')).toHaveAttribute('aria-describedby', 'dob-hint');
+	});
+
+	/*
+	 * GOV.UK's Dates sizing, and what holds it now that the two rules
+	 * that used to (#805's `:global(input)` and a `min-inline-size: 0` on
+	 * each box) are gone. The continuum sweep cannot: three boxes that
+	 * are each too wide for their content still fit, one under the other,
+	 * which is how they went unnoticed in the first place.
+	 *
+	 * Both assertions are relative rather than a stated number of pixels
+	 * (ADR-0025). The three boxes together taking under half a column is
+	 * what separates a sized box from an unsized one: three controls at
+	 * the browser's own default fill nearly all of it.
+	 */
+	describe('box widths', () => {
+		it('sizes each box to the digits it holds, in a column that could hold a sentence', async () => {
+			const { container } = await setup();
+			container.style.inlineSize = '600px';
+
+			const month = widthOf('Month');
+			const year = widthOf('Year');
+
+			expect(month + widthOf('Day') + year).toBeLessThan(
+				container.getBoundingClientRect().width / 2
+			);
+			expect(year).toBeGreaterThan(month);
+		});
 	});
 });

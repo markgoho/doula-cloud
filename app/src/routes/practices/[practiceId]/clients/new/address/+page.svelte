@@ -18,11 +18,14 @@
 	 * this ticket: what actually differs between them is the column, its
 	 * label and how wide the box is. `width` is a class rather than a
 	 * length so the sizes stay together in one place in the stylesheet
-	 * below, where the reason for each is written once.
+	 * below, where the reason for each is written once. It is optional
+	 * because a full-width row needs no class at all: `TextInput` fills
+	 * whatever it is given (#805), so the two address lines are already
+	 * the column.
 	 */
-	const lines: { key: keyof IntakeAnswers; label: string; width: 'line' | 'town' | 'short' }[] = [
-		{ key: 'addressLine1', label: 'Address line 1', width: 'line' },
-		{ key: 'addressLine2', label: 'Address line 2 (optional)', width: 'line' },
+	const lines: { key: keyof IntakeAnswers; label: string; width?: 'town' | 'short' }[] = [
+		{ key: 'addressLine1', label: 'Address line 1' },
+		{ key: 'addressLine2', label: 'Address line 2 (optional)' },
 		{ key: 'addressLocality', label: 'City', width: 'town' },
 		{ key: 'addressRegion', label: 'State', width: 'short' },
 		{ key: 'addressPostalCode', label: 'ZIP code', width: 'short' }
@@ -70,21 +73,12 @@
 		 * `max-inline-size` rather than a width, so at 320px each box
 		 * shrinks with the column instead of overflowing it (ADR-0024).
 		 *
-		 * The `:global(input)` is what makes any of it visible.
-		 * `TextInput` sets no width of its own, so an <input> takes the
-		 * browser's default `size` -- about 208px -- whatever column it is
-		 * put in, and a 12ch wrapper around one would have been a box the
-		 * control painted straight out of. `Select` and `Textarea` both
-		 * stretch, so the three controls in one form do not agree; that is
-		 * app-wide, predates this ticket, and is #805, which takes these
-		 * three rules out when it lands.
+		 * A cap on the wrapper is all it takes, because `TextInput` fills
+		 * whatever it is given -- see that atom's own module comment for
+		 * why (#805). Three `:global(input)` rules stood here until then,
+		 * reaching past the atom to size a control that would otherwise
+		 * have painted straight out of a 12ch wrapper.
 		 */
-		.line :global(input),
-		.town :global(input),
-		.short :global(input) {
-			inline-size: 100%;
-		}
-
 		.town {
 			max-inline-size: 24ch;
 		}

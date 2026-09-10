@@ -1,3 +1,47 @@
+<!--
+	The single-line text control, and the one decision that is not a prop.
+
+	## It fills the space it is given
+
+	An `<input>` with no width of its own paints at the browser's default
+	`size` -- about 208px, whichever column it is put in. That is not a
+	width anybody chose, and it is the reason a form holding all three
+	controls did not agree with itself: `Select` and `Textarea` both
+	stretch, so a full-width Select sat directly above a 208px box asking
+	for a street address (#805).
+
+	So this one stretches too, and that is govuk-frontend's own base
+	rather than a departure from it. Its `_mixin.scss` sets `.govuk-input
+	{ width: 100% }`, and every `govuk-input--width-N` class is a
+	`max-width` that *narrows* that base. GOV.UK's Text input sizing rule
+	-- a box that could hold a sentence invites one -- is the per-field
+	step layered on top, never the default.
+
+	## How a caller narrows one field
+
+	By sizing the element it already wraps the control in: a
+	`max-inline-size` on the wrapper for a ZIP code or a state, a definite
+	`inline-size` for a two-digit day box. The control follows it, and no
+	`:global` selector has to reach past this atom to make it -- which is
+	what `DateFields` and the intake address route both carried until this
+	landed, along with a `min-inline-size: 0` neither of them needs now.
+
+	**The wrapper has to have a size of its own for that to be true.** A
+	percentage resolves against the containing block, so where the
+	containing block is shrink-to-fit -- a direct `cluster-l` child, an
+	inline-block, an auto-layout table cell -- it resolves against an
+	intrinsic width this control itself contributes, and the control is
+	back on the browser's default. `LabeledField`'s `orientation="inline"`
+	is that case today, deliberately: its `auto` track sizes to the
+	control rather than the other way round. A caller that wants a stated
+	width states it on a wrapper that has one.
+
+	No named width prop is extracted. Two callers each narrowing with one
+	declaration on a wrapper they already render is below the bar for a
+	new prop on this atom; a third with the same shape, or the first
+	caller that cannot wrap the control, is what would justify naming the
+	widths here instead.
+-->
 <script lang="ts">
 	import type { HTMLInputAttributes } from 'svelte/elements';
 	import Icon from './Icon.svelte';
@@ -162,6 +206,11 @@
 <style>
 	@layer components {
 		input {
+			/* The width nobody chose, chosen -- see the comment at the top
+			   of this file. `border-box` is global (reset.css), so the
+			   padding below sits inside the 100% rather than pushing the
+			   control past its column. */
+			inline-size: 100%;
 			min-height: 2.5rem;
 			padding: var(--space-2) var(--space-3);
 			color: var(--color-on-surface);
@@ -190,6 +239,10 @@
 			inline-size: 100%;
 		}
 
+		/* `min-inline-size: 0` is this atom's own, not the kind a caller
+		   was made to write: the field is a flex item beside the reveal
+		   toggle, and a flex item's automatic minimum would otherwise
+		   stop it shrinking far enough to leave the toggle its room. */
 		input.password-input {
 			flex: 1;
 			min-inline-size: 0;

@@ -194,13 +194,21 @@
 		 * the kind of thing only the rendered page says. GOV.UK's own
 		 * two- and four-character widths are more generous still.
 		 *
-		 * `min-inline-size: 0` is what makes any of it apply. A flex
-		 * item's automatic minimum is its min-content, and an <input>'s
-		 * min-content is the browser's default `size` -- about 193px --
-		 * so every box rendered at the full column width until this was
-		 * added. Caught by looking at the rendered page: the 320px sweep
-		 * measures overflow, and three boxes that are each too WIDE for
-		 * their content still fit, one under the other.
+		 * The box is the width and the control fills it, because
+		 * `TextInput` stretches to whatever it is given -- that atom's
+		 * own module comment is where the width argument lives (#805).
+		 * Two rules that stood here until then are gone: a
+		 * `:global(input)` sizing the control, and a `min-inline-size: 0`
+		 * on this box. The second was there because a flex item's
+		 * automatic minimum is its min-content, and an unsized <input>
+		 * contributed the browser's default there, so every box rendered
+		 * at the full column width. With a definite `inline-size` here
+		 * and a control that no longer contributes that default, Flexbox
+		 * 4.5's smaller-of-the-two rule picks the specified size on its
+		 * own; "sizes each box to the digits it holds, in a column that
+		 * could hold a sentence" in this component's spec is what holds
+		 * that, since neither box overflows either way and the continuum
+		 * sweep cannot see a box that is merely too wide.
 		 *
 		 * `cluster-l` still wraps, so at a large text size the three
 		 * boxes drop onto their own lines rather than overflowing
@@ -208,25 +216,11 @@
 		 */
 		.box {
 			flex: 0 1 auto;
-			min-inline-size: 0;
 			inline-size: calc(3ch + var(--space-6));
 		}
 
 		.box.wide {
 			inline-size: calc(5ch + var(--space-6));
-		}
-
-		/*
-		 * `TextInput` sets no width of its own, so an <input> takes the
-		 * browser's default `size` -- about 208px -- whatever column it is
-		 * put in. `Select` and `Textarea` both stretch, which is why the
-		 * three controls in one form do not agree; that is app-wide and is
-		 * #805, which takes this rule out when it lands. Here the box is
-		 * the width and the input fills it, so a two-character box holds a
-		 * two-character control rather than painting over its neighbour.
-		 */
-		.box :global(input) {
-			inline-size: 100%;
 		}
 	}
 </style>

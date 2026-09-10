@@ -2,14 +2,55 @@ import type { ComponentProps } from 'svelte';
 import { page, userEvent } from 'vitest/browser';
 import { describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
+/*
+ * The real cascade, because the width assertions below are measurements
+ * rather than attribute checks: without the reset this atom's padding
+ * would sit outside its 100% (`box-sizing` is `border-box` there, not by
+ * default), and without the tokens the padding and border would compute
+ * to zero. Imported the way `styles/zoom.svelte.spec.ts` imports the
+ * tokens -- one entry point, so the layer order is the app's own.
+ */
+import '#lib/styles/app.css';
 import TextInput from './TextInput.svelte';
+/*
+ * The other two controls a form puts in the same column. Imported here
+ * rather than asserted from each atom's own file because the claim is
+ * about the three of them together: one form, one column, one width
+ * (#805).
+ */
+import Select from './Select.svelte';
+import Textarea from './Textarea.svelte';
 
 type SetupOptions = Partial<Omit<ComponentProps<typeof TextInput>, 'onInput'>>;
 
 async function setup({ value = '', ...rest }: SetupOptions = {}) {
 	const onInput = vi.fn();
-	await render(TextInput, { value, onInput, ...rest });
-	return { onInput };
+	const rendered = await render(TextInput, { value, onInput, ...rest });
+	return { onInput, ...rendered };
+}
+
+/*
+ * The form column the width cases below put a control in: wide enough
+ * that a control which sizes itself to its own content stops well short
+ * of the edge, so "fills what it is given" and "takes the browser's
+ * default" cannot both pass.
+ */
+const column: Partial<CSSStyleDeclaration> = { display: 'block', inlineSize: '600px' };
+
+/*
+ * The setup for the width cases at the foot of this file: style the
+ * wrapper the atom was rendered into the way a caller would style one,
+ * and report both measured widths. At module scope because
+ * `unicorn/consistent-function-scoping` refuses a helper that closes over
+ * nothing its block owns (`.claude/rules/svelte-tests.md`).
+ */
+async function measureInWrapper(wrapperStyle: Partial<CSSStyleDeclaration>) {
+	const { container } = await setup();
+	Object.assign(container.style, wrapperStyle);
+	return {
+		inputWidth: page.getByRole('textbox').element().getBoundingClientRect().width,
+		wrapperWidth: container.getBoundingClientRect().width
+	};
 }
 
 describe('TextInput.svelte', () => {
@@ -268,6 +309,71 @@ describe('TextInput.svelte', () => {
 			await setup({ type: 'password', disabled: true });
 
 			await expect.element(page.getByRole('button')).toBeDisabled();
+		});
+	});
+
+	/*
+	 * The width this atom chose (#805 -- the argument is in the
+	 * component's own module comment). The continuum sweep cannot hold
+	 * any of it: it measures whether a subject needs more room than it is
+	 * given, and a control that is too WIDE for what it holds still fits.
+	 * So it is measured here, off the rendered box.
+	 *
+	 * Every assertion is relative -- the control against the wrapper it
+	 * was put in, one control against another -- never against a stated
+	 * number of pixels, per ADR-0025: nothing in this repo's verification
+	 * names a width except 320.
+	 */
+	describe('inline size', () => {
+		it('fills the space it is given', async () => {
+			const { inputWidth, wrapperWidth } = await measureInWrapper(column);
+
+			expect(inputWidth).toBeCloseTo(wrapperWidth, 1);
+		});
+
+		it('narrows to a wrapper that caps it, with no :global selector reaching past this atom', async () => {
+			const { inputWidth, wrapperWidth } = await measureInWrapper({
+				...column,
+				maxInlineSize: '120px'
+			});
+
+			expect(inputWidth).toBeCloseTo(wrapperWidth, 1);
+		});
+
+		it('takes a flex wrapper at its stated width, with no min-inline-size override to make it apply', async () => {
+			const { inputWidth, wrapperWidth } = await measureInWrapper({
+				display: 'flex',
+				inlineSize: '80px'
+			});
+
+			expect(inputWidth).toBeCloseTo(wrapperWidth, 1);
+		});
+
+		/*
+		 * The defect #805 is named for: a form holding all three controls
+		 * did not agree with itself, because only this one had no width.
+		 * Each is mounted into a wrapper of the same size in turn rather
+		 * than into one shared form, because `render` mounts one component
+		 * -- what is being asserted is that the three answer the same
+		 * column identically, which is the same claim either way.
+		 */
+		it('renders to the same width as Select and Textarea in a column of the same size', async () => {
+			const input = await setup();
+			Object.assign(input.container.style, column);
+			const inputWidth = page.getByRole('textbox').element().getBoundingClientRect().width;
+			await input.unmount();
+
+			const select = await render(Select, { options: ['Home', 'Hospital'] });
+			Object.assign(select.container.style, column);
+			const selectWidth = page.getByRole('combobox').element().getBoundingClientRect().width;
+			await select.unmount();
+
+			const textarea = await render(Textarea, { value: '', onInput: vi.fn() });
+			Object.assign(textarea.container.style, column);
+			const textareaWidth = page.getByRole('textbox').element().getBoundingClientRect().width;
+
+			expect(selectWidth).toBeCloseTo(inputWidth, 1);
+			expect(textareaWidth).toBeCloseTo(inputWidth, 1);
 		});
 	});
 });
