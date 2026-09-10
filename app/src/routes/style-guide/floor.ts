@@ -347,7 +347,12 @@ export interface OverflowMeasurement {
  * an oversight: a component that hides its own closed content with a plain
  * `display: none` (`DataTable`'s `details:not([open]) > .frame` rule does
  * exactly this) takes the geometry away from every criterion, not just this
- * one. No component with a non-overflow criterion does that today.
+ * one. No component with a non-overflow criterion does that today, and
+ * since #1126 no subject this check MOUNTS is closed by the time a criterion
+ * reads it anyway -- `mountInFrame` reveals every disclosure before handing
+ * the frame over. The limit stands for a frame measured without that
+ * preparation, which is what the hand-built subjects in this check's own
+ * spec are.
  *
  * `openDisclosures` is imported rather than re-queried here: one artifact is
  * enforced by there being one function (#570), and that function's own

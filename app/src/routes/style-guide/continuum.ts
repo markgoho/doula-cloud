@@ -199,18 +199,31 @@ export async function awaitSettled(isSettled: () => boolean, stillArriving: stri
 }
 
 /*
- * "Nothing new happened this turn", as a signal `awaitSettled` can read
- * (#885, #1126). The caller counts whatever it can count -- responses
- * answered, DOM mutations seen -- and this reports the first turn that
- * added none.
+ * How many turns in a row must add nothing before a count is called
+ * quiet. Two, not one: a single quiet turn is satisfied by a screen that
+ * is merely BETWEEN hops -- a handler that awaits a response in one
+ * macrotask and renders it in the next adds nothing at all to the turn in
+ * between, and a wait that stopped there would measure `Loading...` and
+ * call it the screen. Two consecutive empty turns cost one extra macrotask
+ * per subject and cover every hop this repo's fixtures actually take,
+ * since a fixture answers synchronously.
+ */
+const QUIET_TURNS = 2;
+
+/*
+ * "Nothing new has happened for a while now", as a signal `awaitSettled`
+ * can read (#885, #1126). The caller counts whatever it can count --
+ * responses answered, DOM mutations seen -- and this reports the turn that
+ * completes a run of empty ones.
  */
 export function quiescence(sample: () => number): () => boolean {
 	let previous = -1;
+	let quietTurns = 0;
 	return () => {
 		const seen = sample();
-		const isSettled = seen === previous;
+		quietTurns = seen === previous ? quietTurns + 1 : 0;
 		previous = seen;
-		return isSettled;
+		return quietTurns >= QUIET_TURNS;
 	};
 }
 
@@ -473,11 +486,13 @@ export async function ensureFontLoaded(): Promise<void> {
  * quiet, which is the same function called at the moment the subject
  * actually has them.
  *
- * A revealed disclosure is left open, and nothing re-closes it: the floor
- * check's `forceLive` re-renders nothing (it writes classes and inline
- * styles onto elements already mounted), and no component in this repo
- * binds `open`, so a subject that was opened here stays open for the
- * measurement that follows.
+ * A revealed disclosure is left open, and nothing between here and the
+ * measurement re-closes it. `StepRail` is the one component that controls
+ * the property at all (`<details open={expand === 'completed'}>`), and
+ * Svelte reasserts it only when that expression changes -- which takes an
+ * interaction or a prop change, and neither check makes one. The floor
+ * check's `forceLive` cannot either: it appends a `<style>` element to the
+ * document head and re-renders nothing.
  *
  * It lives here, beside `sweep`, because it was already written three
  * times. `continuum.svelte.spec.ts` had it inline in its own `it`;

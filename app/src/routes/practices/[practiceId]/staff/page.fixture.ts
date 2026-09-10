@@ -97,8 +97,9 @@ export const roster = {
  *
  * The values are the longest the type allows, not representative ones
  * (#537): `District of Columbia` is the widest of the 51 names
- * `workStates.ts` carries, and the widest sentence this screen can render
- * is a move between it and another long one, inside a table cell at 320px.
+ * `workStates.ts` carries and `North Carolina` the next, so the widest
+ * sentence this screen can render is a move between those two, inside a
+ * table cell at 320px.
  */
 export const workStateHistories: Record<string, WorkStateHistory> = {
 	'staff-1': {
@@ -110,16 +111,19 @@ export const workStateHistories: Record<string, WorkStateHistory> = {
 				workState: 'NY',
 				createdAt: '2026-01-01T00:00:00Z'
 			},
+			// The widest sentence this screen can render: the two longest of
+			// the 51 names `workStates.ts` carries, on either side of a move,
+			// inside a table cell at 320px.
 			{
 				eventId: 'event-2',
-				previousWorkState: 'NJ',
+				previousWorkState: 'NC',
 				workState: 'DC',
 				createdAt: '2025-12-15T00:00:00Z'
 			},
 			// Her first assertion, made before this Practice existed to be
 			// joined -- so the row that carries no previous value is also the
 			// row that carries the "(before joining this practice)" line.
-			{ eventId: 'event-1', workState: 'NJ', createdAt: '2025-06-01T00:00:00Z' }
+			{ eventId: 'event-1', workState: 'NC', createdAt: '2025-06-01T00:00:00Z' }
 		],
 		hasMore: true,
 		nextCursor: 'cursor-1'

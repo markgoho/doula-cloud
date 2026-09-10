@@ -476,7 +476,7 @@ describe('staff screen', () => {
 
 			await tableView.getByText('Work state history').first().click();
 
-			await expect.element(tableView.getByText('Reported New Jersey')).toBeVisible();
+			await expect.element(tableView.getByText('Reported North Carolina')).toBeVisible();
 		});
 
 		// A contractor doula who asserted her work state at another Practice

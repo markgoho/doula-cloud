@@ -172,8 +172,11 @@ describe('the sweep, over a closed disclosure (#710)', () => {
 	 * dispatched synchronously and repeated changes coalesce, so a
 	 * disclosure opened and closed again inside one task reports only the
 	 * state it ended in. Measured against the real route as well as here
-	 * -- a full sweep of the Staff roster makes zero history requests of
-	 * either kind -- and this is the assertion that keeps it true if the
+	 * -- the MEASUREMENT of the Staff roster makes zero history requests of
+	 * either kind, which is what #1126 had to leave standing while giving
+	 * the check a way to reach that history at all: what asks for it is
+	 * `revealDisclosures`, in preparation, and the sweep that follows asks
+	 * for nothing. This is the assertion that keeps that true if the
 	 * open/undo pair ever stops being synchronous.
 	 */
 	it('never lets a toggle handler see the disclosure open', async () => {
@@ -272,6 +275,32 @@ describe('the sweep, over a disclosure that loads on open (#1126)', () => {
 
 			expect(afterPreparing).toBe(1);
 			expect(loads()).toBe(1);
+		} finally {
+			remove();
+		}
+	});
+
+	/*
+	 * Where every instrument gets this for free (#1126). The floor check and
+	 * the component sweep both reach their subjects through `mountInFrame`
+	 * and neither reveals anything of its own, so what says they are covered
+	 * is that the shared mount procedure leaves nothing closed behind it.
+	 * That the line runs is not the same as that it worked -- coverage would
+	 * be satisfied either way -- so this reads the mounted DOM instead.
+	 *
+	 * `HistoryDisclosure`'s own demo page is the subject because it is the
+	 * one in the registry built out of closed disclosures, five of them, and
+	 * `querySelectorAll` rather than an accessible query for the reason this
+	 * file's other disclosure assertions give (`.claude/rules/
+	 * svelte-tests.md` case 3): what is asserted is a fact about the
+	 * document, and `open` is the property the instrument writes.
+	 */
+	it('leaves nothing closed behind it when it mounts a subject', async () => {
+		const demo = pageModules['./history-disclosure/+page.svelte'];
+		const { frame, remove } = await mountInFrame(demo.default);
+		try {
+			expect(frame.querySelectorAll('details').length).toBeGreaterThan(0);
+			expect(frame.querySelectorAll('details:not([open])')).toHaveLength(0);
 		} finally {
 			remove();
 		}
