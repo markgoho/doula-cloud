@@ -20,6 +20,14 @@ import (
 // repeated "doula" literals across this package's test surface.
 const doulaRole = "doula"
 
+// invitedAddress is the address every fixture invitation in this package
+// goes to. Named rather than repeated as a literal because two fixtures
+// have to agree on it for a reuse accept to reuse anything: the Portal
+// Account's sign-in address is the invited Client's own contact address
+// (ADR-0026), so a test seeding both sides is silently testing nothing
+// if the two drift apart.
+const invitedAddress = "invited@example.com"
+
 // newInviteServer mounts this package's whole surface through
 // portalinvite.Mount, the same call main.go makes on the real GatedRouter
 // and idempotency.Router, and seeds a live session for uid, returning the
@@ -95,13 +103,23 @@ func seedPendingPortalInvite(t *testing.T, db *testdb.DB) (clientID, inviteToken
 func seedPendingPortalInviteExpiringAt(t *testing.T, db *testdb.DB, expiresAt time.Time) (clientID, inviteToken string) {
 	t.Helper()
 	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, "portal-invite-owner", []string{doulaRole}, "employee")
-	clientID, _ = testdb.SeedNamedEngagement(t, db, practiceID, "Invited Client", "invited@example.com")
+	clientID, _ = testdb.SeedNamedEngagement(t, db, practiceID, "Invited Client", invitedAddress)
+	return clientID, insertPendingPortalInvite(t, db, clientID, expiresAt)
+}
 
+// insertPendingPortalInvite writes the unclaimed client_portal_users row
+// itself -- the one row AcceptInviteHandler's token names -- and hands
+// back the token. Split out from the fixture above so a test that needs a
+// differently shaped Practice around it (see the two-Practice walk in
+// accept_second_practice_test.go) reuses this row's exact shape rather
+// than writing a second INSERT that could drift from it.
+func insertPendingPortalInvite(t *testing.T, db *testdb.DB, clientID string, expiresAt time.Time) (inviteToken string) {
+	t.Helper()
 	if err := db.Admin.QueryRowContext(t.Context(),
 		`INSERT INTO client_portal_users (client_id, invite_token, invite_token_expires_at) VALUES ($1, gen_random_uuid(), $2) RETURNING invite_token::text`,
 		clientID, expiresAt,
 	).Scan(&inviteToken); err != nil {
 		t.Fatalf("seed pending portal invite: %v", err)
 	}
-	return clientID, inviteToken
+	return inviteToken
 }
