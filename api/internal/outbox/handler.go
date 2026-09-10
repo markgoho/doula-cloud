@@ -34,8 +34,7 @@ type Processor interface {
 // normally reach this through Register rather than directly.
 func ProcessHandler(db *sql.DB, worker Processor, auth *internalauth.Guard, door string) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if !auth.Allow(r) {
-			apierr.WriteError(w, "unauthorized", http.StatusUnauthorized)
+		if !auth.Require(w, r) {
 			return
 		}
 

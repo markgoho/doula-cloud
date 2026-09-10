@@ -36,8 +36,7 @@ func VerifyHandler(db *sql.DB, verifier Verifier, auth *internalauth.Guard) http
 // left here and it is the only thing that ever needed it.
 func internalHandler(db *sql.DB, auth *internalauth.Guard, run func(context.Context, *sql.Tx) error) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if !auth.Allow(r) {
-			apierr.WriteError(w, "unauthorized", http.StatusUnauthorized)
+		if !auth.Require(w, r) {
 			return
 		}
 

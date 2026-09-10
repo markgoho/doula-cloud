@@ -83,7 +83,7 @@ func runOutbox(ctx context.Context, db *sql.DB, worker Processor, door string) e
 
 // DrainHandler is ADR-0013's durability backstop: the endpoint one Cloud
 // Scheduler job calls on a fixed cadence to run every registered outbox
-// in turn. It authenticates the caller against secret rather than a
+// in turn. It authenticates the caller against auth rather than a
 // session, exactly as the per-outbox endpoints beside it do.
 //
 // Every outbox gets its turn regardless of what the ones before it did.
@@ -98,8 +98,7 @@ func runOutbox(ctx context.Context, db *sql.DB, worker Processor, door string) e
 // so the job shows red and its retry policy fires.
 func DrainHandler(db *sql.DB, auth *internalauth.Guard, registrations []Registration) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if !auth.Allow(r) {
-			apierr.WriteError(w, "unauthorized", http.StatusUnauthorized)
+		if !auth.Require(w, r) {
 			return
 		}
 

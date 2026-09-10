@@ -1,5 +1,8 @@
 # Outbox delivery gets a Cloud Tasks nudge, not just a Scheduler poll
 
+> **One paragraph superseded by [ADR-0037](0037-the-internal-boundary-is-a-caller-identity-not-a-shared-secret.md).**
+> The paragraph beginning "**The nudge is a plain `X-Internal-Secret` HTTP task, not OIDC**" ends with "Revisit this if the secret's blast radius ever needs narrowing", and [#1052](https://github.com/markgoho/doula-cloud/issues/1052) is that revisit: the same value sat in the clear in the Scheduler job spec, in Terraform state, and in any drifted `terraform plan` diff. A nudge now carries an OIDC token for the service account `INTERNAL_OIDC_SERVICE_ACCOUNT` names. The reason that paragraph gave for reusing the secret — that no `process-*` endpoint would have to change — no longer costs anything either way, because every one of them accepts both. Everything else here stands: one queue for all types, and the after-commit rule.
+
 Amends [ADR-0010](0010-notification-email-delivery-is-an-outbox-not-in-request.md). The sentence "a separate internal endpoint, invoked by Cloud Scheduler on a fixed cadence, reads pending rows afterward" gains a second trigger: **and nudged immediately after each write**.
 
 **Where this ADR says "the `process-*` endpoint Cloud Scheduler already calls", read "the `process-*` endpoint the drain runs".** [#481](https://github.com/markgoho/doula-cloud/issues/481) moved Cloud Scheduler off the per-outbox endpoints and onto one job that drains every outbox — see ADR-0010's amendment. Nothing about the nudge changed: it still POSTs each outbox's own path, and the cadence behind that path is still the backstop for a nudge that never arrives.

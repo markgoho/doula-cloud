@@ -98,9 +98,9 @@ func TestRegister_MountsHandlersThatRunTheirOwnWorker(t *testing.T) {
 	}
 }
 
-// TestRegister_CarriesTheSecretToEveryHandler proves the secret check is
+// TestRegister_CarriesTheGuardToEveryHandler proves the caller check is
 // not lost on the way through the registry.
-func TestRegister_CarriesTheSecretToEveryHandler(t *testing.T) {
+func TestRegister_CarriesTheGuardToEveryHandler(t *testing.T) {
 	db := testdb.New(t)
 	worker := &stubProcessor{}
 

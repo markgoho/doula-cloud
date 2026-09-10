@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"doula-cloud/api/internal/internalauth"
@@ -196,6 +197,32 @@ func TestAllow_NoSecretConfiguredRefusesTheHeader(t *testing.T) {
 
 	if g.Allow(request(t, map[string]string{internalHeader: ""})) {
 		t.Error("Allow() = true for an empty secret against an empty configured secret, want false")
+	}
+}
+
+// Require is the refusal every internal endpoint shares, so that the
+// five of them cannot drift into answering an unauthenticated caller
+// differently from each other.
+func TestRequire_WritesOneRefusal(t *testing.T) {
+	g := internalauth.FromSecret("e2e-worker-secret")
+
+	allowed := httptest.NewRecorder()
+	if !g.Require(allowed, request(t, map[string]string{internalHeader: "e2e-worker-secret"})) {
+		t.Fatal("Require() = false for the configured secret, want true")
+	}
+	if allowed.Code != http.StatusOK {
+		t.Errorf("an allowed request was written %d, want the handler left untouched", allowed.Code)
+	}
+
+	refused := httptest.NewRecorder()
+	if g.Require(refused, request(t, nil)) {
+		t.Fatal("Require() = true for a request carrying nothing, want false")
+	}
+	if refused.Code != http.StatusUnauthorized {
+		t.Errorf("status = %d, want %d", refused.Code, http.StatusUnauthorized)
+	}
+	if body := refused.Body.String(); !strings.Contains(body, "UNAUTHORIZED") {
+		t.Errorf("body = %q, want the shared unauthorized error", body)
 	}
 }
 

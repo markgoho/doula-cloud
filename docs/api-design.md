@@ -170,8 +170,10 @@ Deliberately not limited:
   invalid session is a `401` at that gate; there is no bootstrap-style window here for an
   attacker to spend.
 - `POST /api/internal/**` and `POST /api/stripe/**` / `POST /api/mailgun/webhook` — authenticated
-  by `X-Internal-Secret` or a signature over the request body, not a session, and called only by
-  Cloud Scheduler, Cloud Tasks, or the vendor itself.
+  by a Google-signed OIDC ID token from an allowlisted service account
+  ([ADR-0037](adr/0037-the-internal-boundary-is-a-caller-identity-not-a-shared-secret.md);
+  `X-Internal-Secret` is the local and end-to-end fallback only) or a signature over the request
+  body, not a session, and called only by Cloud Scheduler, Cloud Tasks, or the vendor itself.
 
 ---
 

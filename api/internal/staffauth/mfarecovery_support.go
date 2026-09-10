@@ -11,18 +11,6 @@ import (
 	"doula-cloud/api/internal/internalauth"
 )
 
-// authorizeInternal is the same guard every process-* and operator
-// endpoint uses (billing.authorizeInternal, registerInternalRoutes) --
-// no session, no Practice context, a caller identity only Doula Cloud's
-// own operators and its Scheduler jobs can present (ADR-0037).
-func authorizeInternal(w http.ResponseWriter, r *http.Request, auth *internalauth.Guard) bool {
-	if !auth.Allow(r) {
-		apierr.WriteError(w, "unauthorized", http.StatusUnauthorized)
-		return false
-	}
-	return true
-}
-
 // SupportClearRequest is the body a Doula Cloud operator's own tooling
 // sends: which Staff member's enrolment to clear, and the operator's own
 // name -- staff_auth_events.actor_operator, docs/runbooks/mfa-recovery-
@@ -46,7 +34,7 @@ type SupportClearRequest struct {
 // at the moment of the reset, same as every other path.
 func SupportClearHandler(accounts authn.AccountManager, db *sql.DB, auth *internalauth.Guard) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if !authorizeInternal(w, r, auth) {
+		if !auth.Require(w, r) {
 			return
 		}
 

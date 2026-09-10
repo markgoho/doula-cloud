@@ -55,21 +55,21 @@ func NewCloudTasksEnqueuer(client *cloudtasks.Client, queue, targetBaseURL strin
 	return &CloudTasksEnqueuer{client: client, queue: queue, targetBaseURL: targetBaseURL, auth: auth, endpointPath: endpointPath}
 }
 
-// Enqueue creates a Cloud Task that POSTs outboxType's process-* endpoint
-// as the caller auth names. No task
-// name is set, so Cloud Tasks assigns a random one -- de-duplication by
-// name isn't wanted here: a burst of writes to the same outbox should
-// nudge every time, not collapse into a single task.
-func (e *CloudTasksEnqueuer) Enqueue(ctx context.Context, outboxType OutboxType) error {
-	// coverage:ignore reason: requires a real Cloud Tasks queue and network access, not exercised by unit tests
+// task builds the Cloud Task that nudges outboxType's process-*
+// endpoint. Separated from Enqueue because everything it decides -- the
+// URL, how the task identifies itself, and #443's delay -- is worth
+// asserting on, and none of it needs a queue to assert.
+//
+// No task name is set, so Cloud Tasks assigns a random one:
+// de-duplication by name isn't wanted here, since a burst of writes to
+// the same outbox should nudge every time rather than collapse into a
+// single task.
+func (e *CloudTasksEnqueuer) task(outboxType OutboxType) (*cloudtaskspb.Task, error) {
 	path, ok := e.endpointPath[outboxType]
-	// coverage:ignore reason: requires a real Cloud Tasks queue and network access, not exercised by unit tests
 	if !ok {
-		// coverage:ignore reason: requires a real Cloud Tasks queue and network access, not exercised by unit tests
-		return fmt.Errorf("tasknudge: unknown outbox type %q", outboxType)
+		return nil, fmt.Errorf("tasknudge: unknown outbox type %q", outboxType)
 	}
-	// coverage:ignore reason: requires a real Cloud Tasks queue and network access, not exercised by unit tests
-	// coverage:ignore reason: requires a real Cloud Tasks queue and network access, not exercised by unit tests
+
 	request := &cloudtaskspb.HttpRequest{
 		Url:        e.targetBaseURL + path,
 		HttpMethod: cloudtaskspb.HttpMethod_POST,
@@ -77,9 +77,7 @@ func (e *CloudTasksEnqueuer) Enqueue(ctx context.Context, outboxType OutboxType)
 	// The production shape: Cloud Tasks mints the token itself at
 	// dispatch, so nothing durable carries a credential. The header is
 	// what a stack with no metadata server falls back to.
-	// coverage:ignore reason: requires a real Cloud Tasks queue and network access, not exercised by unit tests
 	if e.auth.ServiceAccount != "" {
-		// coverage:ignore reason: requires a real Cloud Tasks queue and network access, not exercised by unit tests
 		request.AuthorizationHeader = &cloudtaskspb.HttpRequest_OidcToken{
 			OidcToken: &cloudtaskspb.OidcToken{
 				ServiceAccountEmail: e.auth.ServiceAccount,
@@ -87,22 +85,28 @@ func (e *CloudTasksEnqueuer) Enqueue(ctx context.Context, outboxType OutboxType)
 			},
 		}
 	} else {
-		// coverage:ignore reason: requires a real Cloud Tasks queue and network access, not exercised by unit tests
 		request.Headers = map[string]string{"X-Internal-Secret": e.auth.Secret}
 	}
-	// coverage:ignore reason: requires a real Cloud Tasks queue and network access, not exercised by unit tests
+
 	task := &cloudtaskspb.Task{MessageType: &cloudtaskspb.Task_HttpRequest{HttpRequest: request}}
 	// Zero for every type but #443's site rebuild, whose worker can only
 	// collapse queued rows that have had a moment to accumulate. Left
 	// unset when the delay is zero, which is what "as soon as you can"
 	// has always meant here.
-	// coverage:ignore reason: requires a real Cloud Tasks queue and network access, not exercised by unit tests
 	if d := Delay(outboxType); d > 0 {
-		// coverage:ignore reason: requires a real Cloud Tasks queue and network access, not exercised by unit tests
 		task.ScheduleTime = timestamppb.New(time.Now().Add(d))
 	}
+	return task, nil
+}
+
+// Enqueue creates the task built above on the shared queue.
+func (e *CloudTasksEnqueuer) Enqueue(ctx context.Context, outboxType OutboxType) error {
+	task, err := e.task(outboxType)
+	if err != nil {
+		return err
+	}
 	// coverage:ignore reason: requires a real Cloud Tasks queue and network access, not exercised by unit tests
-	_, err := e.client.CreateTask(ctx, &cloudtaskspb.CreateTaskRequest{Parent: e.queue, Task: task})
+	_, err = e.client.CreateTask(ctx, &cloudtaskspb.CreateTaskRequest{Parent: e.queue, Task: task})
 	// coverage:ignore reason: requires a real Cloud Tasks queue and network access, not exercised by unit tests
 	if err != nil {
 		// coverage:ignore reason: requires a real Cloud Tasks queue and network access, not exercised by unit tests

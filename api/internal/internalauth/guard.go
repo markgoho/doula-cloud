@@ -23,6 +23,8 @@ import (
 	"crypto/subtle"
 	"net/http"
 	"strings"
+
+	"doula-cloud/api/internal/apierr"
 )
 
 // ValidateFunc verifies one Google-signed OIDC ID token against the
@@ -95,6 +97,18 @@ func (g *Guard) Allow(r *http.Request) bool {
 	}
 	return g.secret != "" &&
 		subtle.ConstantTimeCompare([]byte(r.Header.Get("X-Internal-Secret")), []byte(g.secret)) == 1
+}
+
+// Require is Allow plus the refusal every internal endpoint writes when
+// it says no -- one refusal, so the five endpoints behind this boundary
+// cannot drift into answering differently from each other. It returns
+// true when the handler should carry on.
+func (g *Guard) Require(w http.ResponseWriter, r *http.Request) bool {
+	if g.Allow(r) {
+		return true
+	}
+	apierr.WriteError(w, "unauthorized", http.StatusUnauthorized)
+	return false
 }
 
 // allowToken is the OIDC leg. Every one of the three configuration

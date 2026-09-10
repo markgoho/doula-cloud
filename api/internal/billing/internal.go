@@ -18,19 +18,6 @@ type RefundRequest struct {
 	Quantity   int    `json:"quantity"`
 }
 
-// authorizeInternal is the caller check the two endpoints below share --
-// the same guard registerInternalRoutes puts in front of every worker
-// endpoint, because these are the same kind of thing: no session, no
-// Practice context of their own, authenticated by the identity on the
-// call (ADR-0037).
-func authorizeInternal(w http.ResponseWriter, r *http.Request, auth *internalauth.Guard) bool {
-	if !auth.Allow(r) {
-		apierr.WriteError(w, "unauthorized", http.StatusUnauthorized)
-		return false
-	}
-	return true
-}
-
 // RefundHandler issues a refund a Practice has asked for.
 //
 // It is deliberately not a screen a Practice can press. /support says "To
@@ -44,7 +31,7 @@ func authorizeInternal(w http.ResponseWriter, r *http.Request, auth *internalaut
 // operation is reached.
 func RefundHandler(db *sql.DB, client StripeClient, auth *internalauth.Guard) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if !authorizeInternal(w, r, auth) {
+		if !auth.Require(w, r) {
 			return
 		}
 
@@ -123,7 +110,7 @@ func RefundHandler(db *sql.DB, client StripeClient, auth *internalauth.Guard) ht
 // only: it identifies balances, and nothing anywhere writes one off.
 func DormantPracticesHandler(db *sql.DB, auth *internalauth.Guard) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if !authorizeInternal(w, r, auth) {
+		if !auth.Require(w, r) {
 			return
 		}
 
@@ -165,7 +152,7 @@ type FoundingGrantRequest struct {
 // one.
 func FoundingGrantHandler(db *sql.DB, auth *internalauth.Guard) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if !authorizeInternal(w, r, auth) {
+		if !auth.Require(w, r) {
 			return
 		}
 
