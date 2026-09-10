@@ -1,5 +1,5 @@
-import { expect, type APIRequestContext, type Page } from '@playwright/test';
-import { E2E_EMULATOR_HOST, E2E_EMULATOR_PORT } from './ports';
+import { expect, type APIRequestContext, type APIResponse, type Page, type Route } from '@playwright/test';
+import { EMULATOR_URL, enrollPhoneFactor, readVerificationCode } from './mfa';
 
 /*
  * #1132: how a Playwright spec drives a real TOTP screen against an
@@ -43,36 +43,32 @@ import { E2E_EMULATOR_HOST, E2E_EMULATOR_PORT } from './ports';
  * multiFactor().enroll), TotpCodeField, the session exchange, and the
  * Go gate in api/internal/staffauth that reads the claim.
  *
- * **Faked, and never to be read as more:** the second factor's provider
- * string, and whether the six digits are the right six digits. Checking
- * a TOTP code against a shared secret is the live service's contract,
- * not this stub's -- so any well-formed 6-digit code is accepted and
- * anything else is refused as INVALID_CODE, which is the server error
- * the SDK maps to `auth/invalid-verification-code`. A spec that wants to
- * prove a *wrong* code is refused gets that from this stub's shape
- * check, and should say so where it asserts it.
+ * **Faked, and never to be read as more:**
  *
- * **Token refresh is out of reach.** `securetoken` refresh reissues from
- * the stored refresh-token record, whose secondFactor is still `phone`.
- * The session cookie is minted from the first token, so a spec that
- * signs in and lands is safe; one that lingers past a refresh is not.
+ * - The second factor's provider string. Behind every relabeled token is
+ *   a real PHONE_SMS factor the emulator enrolled -- so an account this
+ *   stub has enrolled through really does carry a phone factor in the
+ *   emulator's own state, and a spec that reads that state back sees
+ *   `phoneInfo`, not `totpInfo`.
+ * - Whether the six digits are the right six digits. Checking a TOTP
+ *   code against a shared secret is the live service's contract, not
+ *   this stub's, so any well-formed 6-digit code is accepted. Only a
+ *   *malformed* one -- the wrong length, or not digits -- is refused, as
+ *   INVALID_CODE, which is the server error the SDK maps to
+ *   `auth/invalid-verification-code`. No spec here can prove a *wrong*
+ *   code is refused, and none should claim to.
+ * - The enrollment secret. `mfaEnrollment:start` is answered outright,
+ *   so the key the screen renders is this file's fixture text and not
+ *   anything the SDK negotiated with a server.
+ *
+ * A refreshed token keeps telling the same story: `securetoken` reissues
+ * from the stored refresh-token record, which still says `phone`, so
+ * that response is relabeled too -- but only when it already names a
+ * second factor, so an ordinary refresh for an unenrolled identity is
+ * never told about a factor it has not got. The enrollment screen forces
+ * exactly such a refresh the moment it enrolls, which is why this
+ * matters at all.
  */
-
-const EMULATOR_URL = `http://${E2E_EMULATOR_HOST}:${E2E_EMULATOR_PORT}`;
-
-// The e2e stack always starts the emulator against this one project (see
-// stack.ts's `--project doula-cloud`), the same constant mfa.ts pins for
-// the same reason.
-const PROJECT_ID = 'doula-cloud';
-
-// A syntactically valid, fixture-only E.164 US number in the 555-01xx
-// range reserved for fiction (ITU/NANP). The phone factor behind every
-// relabeled token is enrolled against one of these; it is never
-// dialable and never shown to anyone.
-function randomPhoneNumber(): string {
-	const digits = String(Math.floor(Math.random() * 10_000_000)).padStart(7, '0');
-	return `+1555${digits}`;
-}
 
 /*
  * The base32 secret the enrollment screen renders as a QR code and
@@ -97,11 +93,31 @@ function matchesPath(suffix: string): (url: URL) => boolean {
 }
 
 /**
- * The emulator's error envelope, in the shape the JS SDK unwraps to an
- * `auth/...` code.
+ * Refuses a code that is not shaped like an authenticator app's output,
+ * in the emulator's own error envelope. INVALID_CODE is what the JS SDK
+ * unwraps to `auth/invalid-verification-code`, which is the one refusal
+ * the screens translate into a sentence about the code rather than
+ * about the service.
  */
-function serverError(message: string) {
-	return { error: { code: 400, message, errors: [{ message, reason: 'invalid', domain: 'global' }] } };
+async function refuseMalformedCode(route: Route): Promise<void> {
+	const message = 'INVALID_CODE : Invalid TOTP verification code.';
+	await route.fulfill({
+		status: 400,
+		json: { error: { code: 400, message, errors: [{ message, reason: 'invalid', domain: 'global' }] } }
+	});
+}
+
+/**
+ * Serves a passed-through response with a rewritten body. The original
+ * headers come along, minus the two that describe bytes this no longer
+ * has: the relabeled payload is a different length, and `route.fetch`
+ * already decoded whatever encoding the header named.
+ */
+async function fulfillRewritten(route: Route, response: APIResponse, body: unknown): Promise<void> {
+	const headers = { ...response.headers() };
+	delete headers['content-length'];
+	delete headers['content-encoding'];
+	await route.fulfill({ status: response.status(), headers, json: body });
 }
 
 /**
@@ -121,11 +137,18 @@ function isWellFormedCode(code: unknown): boolean {
  * operation.
  */
 function relabelSecondFactor(idToken: string): string {
-	const [header, payload, signature] = idToken.split('.', 3);
-	const claims = JSON.parse(Buffer.from(payload, 'base64url').toString('utf8'));
+	const [header, , signature] = idToken.split('.', 3);
+	const claims = claimsOf(idToken);
 	claims.firebase = { ...claims.firebase, sign_in_second_factor: 'totp' };
 	const rewritten = Buffer.from(JSON.stringify(claims), 'utf8').toString('base64url');
 	return [header, rewritten, signature].join('.');
+}
+
+/**
+ * An emulator ID token's payload, decoded.
+ */
+function claimsOf(idToken: string): { firebase?: Record<string, unknown>; [claim: string]: unknown } {
+	return JSON.parse(Buffer.from(idToken.split('.', 3)[1], 'base64url').toString('utf8'));
 }
 
 /**
@@ -156,47 +179,6 @@ async function resolvePhoneChallenge(
 	);
 	expect(finalize.ok(), `mfaSignIn:finalize failed: ${finalize.status()} ${await finalize.text()}`).toBe(true);
 	return await finalize.json();
-}
-
-/**
- * Runs the emulator's real phone enrollment for an already-signed-in
- * identity and returns the ID token it issues, which is the only token
- * the emulator ever stamps a second factor onto. `idToken`'s identity
- * must already have a verified email (mfa.ts's verifyEmail) or the
- * emulator refuses with UNVERIFIED_EMAIL, exactly as the live service
- * does.
- */
-async function enrollPhoneFactor(
-	request: APIRequestContext,
-	idToken: string
-): Promise<{ idToken: string; refreshToken: string }> {
-	const phoneNumber = randomPhoneNumber();
-	const start = await request.post(
-		`${EMULATOR_URL}/identitytoolkit.googleapis.com/v2/accounts/mfaEnrollment:start?key=fake-key`,
-		{ data: { idToken, phoneEnrollmentInfo: { phoneNumber } } }
-	);
-	expect(start.ok(), `mfaEnrollment:start failed: ${start.status()} ${await start.text()}`).toBe(true);
-	const {
-		phoneSessionInfo: { sessionInfo }
-	} = await start.json();
-
-	const code = await readVerificationCode(request, sessionInfo);
-
-	const finalize = await request.post(
-		`${EMULATOR_URL}/identitytoolkit.googleapis.com/v2/accounts/mfaEnrollment:finalize?key=fake-key`,
-		{ data: { idToken, phoneVerificationInfo: { sessionInfo, code } } }
-	);
-	expect(finalize.ok(), `mfaEnrollment:finalize failed: ${finalize.status()} ${await finalize.text()}`).toBe(true);
-	return await finalize.json();
-}
-
-async function readVerificationCode(request: APIRequestContext, sessionInfo: string): Promise<string> {
-	const response = await request.get(`${EMULATOR_URL}/emulator/v1/projects/${PROJECT_ID}/verificationCodes`);
-	expect(response.ok(), `listing verification codes failed: ${response.status()}`).toBe(true);
-	const { verificationCodes } = await response.json();
-	const match = verificationCodes.find((entry: { sessionInfo: string; code: string }) => entry.sessionInfo === sessionInfo);
-	expect(match, `no verification code logged for sessionInfo ${sessionInfo}`).toBeTruthy();
-	return match.code;
 }
 
 /**
@@ -235,7 +217,7 @@ export async function stubTotpFactor(page: Page, request: APIRequestContext): Pr
 				return relabeled;
 			});
 		}
-		await route.fulfill({ response, json: body });
+		await fulfillRewritten(route, response, body);
 	});
 
 	await page.route(matchesPath('/identitytoolkit.googleapis.com/v2/accounts/mfaEnrollment:start'), async (route) => {
@@ -265,7 +247,7 @@ export async function stubTotpFactor(page: Page, request: APIRequestContext): Pr
 			return;
 		}
 		if (!isWellFormedCode(body.totpVerificationInfo.verificationCode)) {
-			await route.fulfill({ status: 400, json: serverError('INVALID_CODE : Invalid TOTP verification code.') });
+			await refuseMalformedCode(route);
 			return;
 		}
 		const enrolled = await enrollPhoneFactor(request, body.idToken);
@@ -281,7 +263,7 @@ export async function stubTotpFactor(page: Page, request: APIRequestContext): Pr
 			return;
 		}
 		if (!isWellFormedCode(body.totpVerificationInfo.verificationCode)) {
-			await route.fulfill({ status: 400, json: serverError('INVALID_CODE : Invalid TOTP verification code.') });
+			await refuseMalformedCode(route);
 			return;
 		}
 		const { idToken, refreshToken } = await resolvePhoneChallenge(request, body.mfaPendingCredential, body.mfaEnrollmentId);
@@ -305,7 +287,7 @@ export async function stubTotpFactor(page: Page, request: APIRequestContext): Pr
 			body.id_token = relabelSecondFactor(body.id_token);
 			body.access_token = body.id_token;
 		}
-		await route.fulfill({ response, json: body });
+		await fulfillRewritten(route, response, body);
 	});
 }
 
@@ -314,9 +296,6 @@ export async function stubTotpFactor(page: Page, request: APIRequestContext): Pr
  * provider.
  */
 function hasSecondFactor(idToken: string): boolean {
-	const payload = idToken.split('.', 3)[1];
-	if (payload === undefined) return false;
-	const claims = JSON.parse(Buffer.from(payload, 'base64url').toString('utf8'));
-	return Boolean(claims?.firebase?.sign_in_second_factor);
+	return Boolean(claimsOf(idToken).firebase?.sign_in_second_factor);
 }
 

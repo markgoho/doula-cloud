@@ -55,7 +55,10 @@ test('An Owner sets up an authenticator app and lands on the Practice she was se
 
 	// #606's own AC: a person enrolling on the device she is reading the
 	// screen on cannot scan her own screen, so the key is offered as text
-	// beside the QR code rather than only inside it.
+	// beside the QR code rather than only inside it. That both are
+	// rendered is the claim; the secret inside them is totpStub.ts's
+	// fixture text, since the emulator has no enrollment session to
+	// negotiate one with.
 	await expect(
 		page.getByRole('img', { name: 'QR code for setting up two-factor authentication in an authenticator app' })
 	).toBeVisible();
@@ -85,6 +88,19 @@ test('An enrolled Owner answers the code challenge at sign-in and is admitted', 
 	// thing and shows no email or password field to re-answer.
 	const codeField = page.getByLabel('Authenticator app code');
 	await expect(codeField).toBeVisible();
+	await expect(page.getByLabel('Password')).toBeHidden();
+
+	// A code that is not shaped like an authenticator app's output is a
+	// sign-in failure, not an app error -- one sentence about the code,
+	// and the password never asked for again. This is the *malformed*
+	// case, which is as far as any test here can go: nothing in this repo
+	// can tell a wrong six digits from a right six digits, because the
+	// emulator holds no shared secret to check them against.
+	await codeField.fill('123');
+	await page.getByRole('button', { name: 'Continue' }).click();
+	await expect(
+		page.getByText('The code is not correct. Enter the 6-digit code from your authenticator app.').first()
+	).toBeVisible();
 	await expect(page.getByLabel('Password')).toBeHidden();
 
 	await codeField.fill(STUB_TOTP_CODE);
