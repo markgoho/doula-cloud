@@ -101,6 +101,22 @@ describe('the GCP spend dashboard page', () => {
 		await expect.element(testPage.getByText('4.79K')).toBeVisible();
 	});
 
+	it('reports Hosting egress as the period total it now is, not as month to date', async () => {
+		loadDashboard.mockResolvedValue({
+			...data,
+			usage: { ...data.usage, firebaseHosting: { sentBytes: 13_272_057 } }
+		});
+		await render(Page, {});
+
+		await expect
+			.element(testPage.getByRole('heading', { name: 'Firebase Hosting usage' }))
+			.toBeVisible();
+		await expect.element(testPage.getByText('12.7')).toBeVisible();
+		await expect
+			.element(testPage.getByText('Bytes served this billing period', { exact: false }))
+			.toBeVisible();
+	});
+
 	it('shows why the mount read failed', async () => {
 		loadDashboard.mockRejectedValue(new Error('query timed out'));
 		await render(Page, {});

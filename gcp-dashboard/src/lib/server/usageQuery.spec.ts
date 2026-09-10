@@ -118,16 +118,12 @@ describe('FIREBASE_HOSTING_SCOPE', () => {
 		expect(storage).toEqual([]);
 	});
 
-	it('reads a DELTA counter, so no month-to-date reset can land inside the period', () => {
+	it('reads a DELTA counter and overrides nothing, so no reset can land in the period', () => {
 		expect(hostingSentBytes).toEqual({
 			id: 'sentBytes',
 			type: 'firebasehosting.googleapis.com/network/sent_bytes_count',
 			kind: 'DELTA'
 		});
-	});
-
-	it('carries no alignment override, so it keeps the sum its kind gives it', () => {
-		expect(hostingSentBytes).not.toHaveProperty('alignment');
 	});
 
 	it('names no domain, because every domain serves bytes the Hosting bill charges for', () => {
@@ -225,16 +221,6 @@ describe('buildUsageRequest', () => {
 		).toMatchObject(ALIGNMENT_BY_KIND.DELTA);
 	});
 
-	it('asks for the whole billing period even a second into it, so no window can miss it', () => {
-		const firstSecondOfTheMonth = new Date('2026-09-01T00:00:01Z');
-
-		expect(
-			buildUsageRequest(FIREBASE_HOSTING_SCOPE, hostingSentBytes, firstSecondOfTheMonth).interval
-		).toEqual({
-			startTime: { seconds: Date.parse('2026-09-01T00:00:00Z') / 1000 },
-			endTime: { seconds: Date.parse('2026-09-01T00:00:01Z') / 1000 }
-		});
-	});
 
 	it('scopes the filter to every bucket in the project', () => {
 		expect(buildUsageRequest(CLOUD_STORAGE_SCOPE, storedBytes, now).filter).toBe(

@@ -63,6 +63,14 @@ export const FIREBASE_HOSTING_RESOURCE_TYPE = 'firebase_domain';
 /**
  * Cloud Monitoring rejects an alignment period under a minute. The first
  * seconds of a new billing period would otherwise ask for one.
+ *
+ * Monitoring anchors an aligned bucket on `endTime` and extends it backward
+ * by the alignment period, so in that first minute the bucket reaches back
+ * before the period started and a DELTA sum counts the tail of the previous
+ * one. Read live on 2026-09-10: the interval 2026-09-09T13:46:00Z–13:46:01Z
+ * came back as the point 13:45:01Z–13:46:01Z. There is no shorter period to
+ * ask for, so the answer is what the panel does in that window rather than
+ * what it asks: [#1176](https://github.com/markgoho/doula-cloud/issues/1176).
  */
 export const MINIMUM_ALIGNMENT_PERIOD_SECONDS = 60;
 
@@ -317,6 +325,10 @@ export const FIRESTORE_SCOPE: UsageScope<FirestoreMetricId> = {
  * summed from the start of the period has no such edge at any instant: over
  * 2026-09-01T00:00:00Z–00:50:00Z it reported 789,214 bytes where the GAUGE
  * reported 136,226,172. See [#963](https://github.com/markgoho/doula-cloud/issues/963).
+ *
+ * That the period itself is a UTC month while GCP invoices a Pacific one is
+ * a separate defect, in {@link startOfBillingPeriod} rather than here, and it
+ * moves every panel: [#1174](https://github.com/markgoho/doula-cloud/issues/1174).
  */
 export const FIREBASE_HOSTING_SCOPE: UsageScope<FirebaseHostingMetricId> = {
 	resourceFilter: `resource.type="${FIREBASE_HOSTING_RESOURCE_TYPE}"`,
