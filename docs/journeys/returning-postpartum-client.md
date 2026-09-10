@@ -3,8 +3,7 @@
 - **Persona**: [returning-postpartum-client.md](../personas/returning-postpartum-client.md)
 - **Goal**: a second Engagement at a Practice that already knows her, doing
   postpartum work only, without starting from scratch
-- **Entry point**: she calls Priya. In the product, she arrives as a second portal
-  invite
+- **Entry point**: she calls Priya. In the product, she arrives as a second Engagement on the Client the Practice already holds — not as a second invitation, which is what her old path assumed
 - **Done looks like**: two Engagements at one Practice — one closed and still
   readable, one live and postpartum — reachable from one portal account
 
