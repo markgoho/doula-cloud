@@ -337,8 +337,10 @@ func TestCanSeeAction_MembershipRestrictsNothing(t *testing.T) {
 		t.Fatalf("RestrictedActions(membership) = %v, want nil", got)
 	}
 	owner := staffauth.NewReader("owner-id", []string{ownerRole}, employeeType)
-	for _, action := range []string{"joined", "roles_changed", "employment_type_changed", "removed", "sessions_ended"} {
-		if !activitygate.CanSeeAction(owner, activity.SubjectMembership, action) {
+	// The write side's own vocabulary, not a copy of it: a sixth
+	// Membership action is one this test covers the moment it is named.
+	for _, action := range activity.MembershipActions() {
+		if !activitygate.CanSeeAction(owner, activity.SubjectMembership, string(action)) {
 			t.Errorf("CanSeeAction(owner, membership, %q) = false, want true", action)
 		}
 	}

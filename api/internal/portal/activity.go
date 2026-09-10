@@ -78,6 +78,17 @@ func redactStaffActorNames(items []activityfeed.Entry) {
 // redactStaffActorNames replaces every surviving Staff actor's own name --
 // together the two halves of that same CONTEXT.md sentence. Must be
 // mounted behind clientauth.Middleware.
+//
+// A Membership row never belongs here, decided rather than inherited
+// (#1148, which put those rows on the Practice's own feed): the roster is
+// the far side of the same CONTEXT.md sentence -- she reads her own
+// Activity, "never who inside the Practice did what" -- and who joined,
+// whose roles moved, whose employment type changed and who left is that
+// sentence exactly. It is already structurally impossible, since this is
+// the only Client-facing reader and it names activity.SubjectEngagement,
+// so nothing enforces it beyond that; the reason is written here so the
+// next person to widen this call knows it was a decision and not an
+// omission.
 func ActivityHandler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		tx, ok := clientauth.Tx(r.Context())

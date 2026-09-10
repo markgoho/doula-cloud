@@ -13,6 +13,7 @@ import (
 
 const (
 	ownerRole      = "owner"
+	adminRole      = "admin"
 	doulaRole      = "doula"
 	employeeType   = "employee"
 	contractorType = "contractor"

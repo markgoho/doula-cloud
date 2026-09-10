@@ -97,7 +97,11 @@ var registry = map[string]Rule{
 		// not read the roster's history, so the check is the reader's own
 		// role and nothing about subjectID. It takes tx anyway because
 		// Rule's signature is one shape for every kind; a kind that needs
-		// no query simply asks none.
+		// no query simply asks none. It ignores subjectID for the same
+		// reason, so this Rule alone never says a staff id belongs to the
+		// current Practice -- every reader that calls it scopes its own
+		// query by practice_id, and activity's RLS policy scopes it
+		// again, which is where that question is answered.
 		//
 		// RestrictedActions stays nil: no Membership action carries what
 		// the Practice charges, which is the whole of what ADR-0008's
@@ -119,13 +123,16 @@ var registry = map[string]Rule{
 // unknown string is -- this map changes no behavior at all, and is read
 // only by registry_test.go. Registering a Rule is what admits a kind to
 // #486's feed; moving it out of here is the same edit.
+//
+// It lives beside registry rather than in that test file, though it is
+// the test's only reader, because the two maps are one statement: this is
+// the one place a subject kind's disposition toward the feed is written
+// down, and splitting the "yes, on these terms" half from the "no, for
+// this reason" half would leave a reader of registry alone unable to tell
+// a considered omission from the bug this ticket fixed.
 var unregistered = map[string]string{
-	activity.SubjectPractice: "a Practice-scoped row (the MFA-required switch, a whole-Practice export) names the Practice itself rather than a record inside it, so who may read one is a separate decision from the roster's and the Client's -- tracked on its own ticket, not settled here.",
-	// clientfieldtemplate.Save writes this one, and nothing reads it
-	// back: no handler queries activity WHERE subject_kind =
-	// 'client_field_template'. A reader added later must register a Rule
-	// before this gate will ever return true for it (#485's AC5).
-	"client_field_template": "written by clientfieldtemplate.Save and read back by nothing; a template is not a person or a record a feed reader would recognize.",
+	activity.SubjectPractice: "a Practice-scoped row (the MFA-required switch, a whole-Practice export) names the Practice itself rather than a record inside it, so who may read one is a separate decision from the roster's and the Client's -- tracked on #1255, not settled here.",
+	"client_field_template":  "written by clientfieldtemplate.Save (which spells the kind as a literal, having no constant) and read back by nothing -- no handler queries activity WHERE subject_kind = 'client_field_template'. A reader added later must register a Rule before this gate will ever return true for it (#485's AC5).",
 }
 
 // engagementRestrictedActions adapts activity.MoneyActions() (the write

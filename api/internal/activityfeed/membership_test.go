@@ -11,15 +11,19 @@ import (
 )
 
 // membershipActions is every action a write site records against
-// activity.SubjectMembership today -- staffauth.RecordMembershipEvent's
-// four, plus EndSessionsHandler's own. Named here rather than inline so
-// this test fails loudly the day a sixth is written and left out.
-var membershipActions = []string{
-	"joined",
-	"roles_changed",
-	"employment_type_changed",
-	"removed",
-	"sessions_ended",
+// activity.SubjectMembership, read from the write side's own vocabulary
+// rather than hand-copied here -- so a sixth action added to that
+// vocabulary is one this test demands of the feed the moment it exists,
+// which a literal list of five could never do. activity's own
+// TestMembershipActions_HoldsEveryConstant is what keeps the vocabulary
+// itself honest.
+func membershipActions() []string {
+	actions := activity.MembershipActions()
+	out := make([]string, len(actions))
+	for i, a := range actions {
+		out[i] = string(a)
+	}
+	return out
 }
 
 // TestPracticeHandler_SurfacesEveryMembershipEvent is #1148's own AC1 and
@@ -35,7 +39,7 @@ func TestPracticeHandler_SurfacesEveryMembershipEvent(t *testing.T) {
 	ownerID := testdb.SeedNamedStaffAtPractice(t, db, practiceID, identityUID, "Priya Raman", []string{ownerRole}, employeeType)
 	subjectID := testdb.SeedNamedStaffAtPractice(t, db, practiceID, "doula-feed-membership", "Renata Alvarez", []string{doulaRole}, employeeType)
 
-	for _, action := range membershipActions {
+	for _, action := range membershipActions() {
 		testdb.SeedActivity(t, db, practiceID, activity.SubjectMembership, subjectID, action, activity.StaffActor(ownerID))
 	}
 
@@ -56,7 +60,7 @@ func TestPracticeHandler_SurfacesEveryMembershipEvent(t *testing.T) {
 	for _, entry := range got.Items {
 		seen[entry.Action] = entry
 	}
-	for _, action := range membershipActions {
+	for _, action := range membershipActions() {
 		entry, ok := seen[action]
 		if !ok {
 			t.Fatalf("membership action %q missing from the practice feed: %+v", action, got.Items)
@@ -87,10 +91,15 @@ func TestPracticeHandler_NamesADepartedMembershipSubject(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "owner-feed-departed-subject"
 	practiceID := testdb.SeedPractice(t, db, "Feed Departed Subject Practice")
-	ownerID := testdb.SeedStaffAtPractice(t, db, practiceID, identityUID, []string{ownerRole}, employeeType)
+	testdb.SeedStaffAtPractice(t, db, practiceID, identityUID, []string{ownerRole}, employeeType)
 	departedID := testdb.SeedNamedStaffAtPractice(t, db, practiceID, "doula-feed-departed", "Renata Alvarez", []string{doulaRole}, employeeType)
 
-	testdb.SeedActivity(t, db, practiceID, activity.SubjectMembership, departedID, "removed", activity.StaffActor(ownerID))
+	// The actor is the departed person herself, which is the shape
+	// logindeletion's endEveryMembership writes: somebody deleting her own
+	// login ends every Membership she holds, so both halves of the
+	// sentence -- who it happened to, and who did it -- resolve to a staff
+	// row no reader can reach.
+	testdb.SeedActivity(t, db, practiceID, activity.SubjectMembership, departedID, string(activity.ActionMembershipRemoved), activity.StaffActor(departedID))
 	testdb.RemoveMembership(t, db, departedID)
 
 	srv, session := newServer(t, db, identityUID)
@@ -106,15 +115,22 @@ func TestPracticeHandler_NamesADepartedMembershipSubject(t *testing.T) {
 		t.Fatalf("Items = %+v, want 1", got.Items)
 	}
 	if got.Items[0].SubjectName != activity.DepartedStaffName {
-		t.Fatalf("SubjectName = %q, want %q", got.Items[0].SubjectName, activity.DepartedStaffName)
+		t.Errorf("SubjectName = %q, want %q", got.Items[0].SubjectName, activity.DepartedStaffName)
+	}
+	// Both halves, not only the subject: a blank Who column is a worse
+	// answer than a plain one, and this row is the case that produces it.
+	if got.Items[0].ActorName != activity.DepartedStaffName {
+		t.Errorf("ActorName = %q, want %q", got.Items[0].ActorName, activity.DepartedStaffName)
 	}
 }
 
 // TestPracticeHandler_MembershipRowsFollowTheRoster is #1148's AC3: who
 // may see a Membership row in the feed matches who may read the roster it
-// describes -- ListStaffHandler's own OwnerAndAdmin mount. A Doula sees
-// the Practice's Engagement and Client activity beside it, so this
-// asserts the feed is not simply empty for her.
+// describes -- ListStaffHandler's own OwnerAndAdmin mount. Each case
+// seeds an Engagement row beside the Membership one and asserts that it
+// arrives, so a refusal reads as "she sees the Practice's activity and
+// not the roster's" rather than as an empty feed, which would also pass
+// if the gate refused every kind.
 func TestPracticeHandler_MembershipRowsFollowTheRoster(t *testing.T) {
 	for _, tc := range []struct {
 		name           string
@@ -124,7 +140,7 @@ func TestPracticeHandler_MembershipRowsFollowTheRoster(t *testing.T) {
 		wantMembership bool
 	}{
 		{"owner", "roster-owner", []string{ownerRole}, employeeType, true},
-		{"admin", "roster-admin", []string{"admin"}, employeeType, true},
+		{"admin", "roster-admin", []string{adminRole}, employeeType, true},
 		{"employee doula", "roster-employee", []string{doulaRole}, employeeType, false},
 		{"contractor doula", "roster-contractor", []string{doulaRole}, contractorType, false},
 	} {
@@ -132,7 +148,21 @@ func TestPracticeHandler_MembershipRowsFollowTheRoster(t *testing.T) {
 			db := testdb.New(t)
 			practiceID := testdb.SeedPractice(t, db, "Roster Reach Practice")
 			readerID := testdb.SeedStaffAtPractice(t, db, practiceID, tc.uid, tc.roles, tc.employmentType)
-			testdb.SeedActivity(t, db, practiceID, activity.SubjectMembership, readerID, "roles_changed", activity.StaffActor(readerID))
+			testdb.SeedActivity(t, db, practiceID, activity.SubjectMembership, readerID, string(activity.ActionRolesChanged), activity.StaffActor(readerID))
+
+			// An Engagement row beside it, so a refusal reads as "this
+			// reader sees the Practice's activity and not the roster's"
+			// rather than as an empty feed that would also pass if the
+			// gate refused everything. A contractor reaches an Engagement
+			// only through a granted attachment (ADR-0008), so she gets
+			// one -- otherwise her feed really would be empty for a
+			// reason that has nothing to do with this ticket.
+			_, engagementID := testdb.SeedEngagement(t, db, practiceID)
+			if tc.employmentType == contractorType {
+				testdb.SeedAttachment(t, db, engagementID, readerID, "granted", false)
+			}
+			testdb.SeedActivity(t, db, practiceID, activity.SubjectEngagement, engagementID,
+				string(activity.ActionVisitLogged), activity.StaffActor(readerID))
 
 			srv, session := newServer(t, db, tc.uid)
 			defer srv.Close()
@@ -143,11 +173,17 @@ func TestPracticeHandler_MembershipRowsFollowTheRoster(t *testing.T) {
 			if err := json.NewDecoder(resp.Body).Decode(&got); err != nil {
 				t.Fatalf("decode: %v", err)
 			}
-			hasMembership := false
+			hasMembership, hasEngagement := false, false
 			for _, entry := range got.Items {
-				if entry.SubjectKind == activity.SubjectMembership {
+				switch entry.SubjectKind {
+				case activity.SubjectMembership:
 					hasMembership = true
+				case activity.SubjectEngagement:
+					hasEngagement = true
 				}
+			}
+			if !hasEngagement {
+				t.Fatalf("the Engagement row is missing too, so this case proves nothing about the roster (items: %+v)", got.Items)
 			}
 			if hasMembership != tc.wantMembership {
 				t.Fatalf("membership row visible = %v, want %v (items: %+v)", hasMembership, tc.wantMembership, got.Items)

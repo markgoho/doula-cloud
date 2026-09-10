@@ -76,16 +76,16 @@ func TestUnregistered_HoldsNoKindTheWriteSideStoppedWriting(t *testing.T) {
 	}
 }
 
-// TestEverySubjectKindHasAReason proves the two maps are not both empty
-// -- a scan that silently found nothing would pass both tests above
-// while guarding nothing at all.
-func TestEverySubjectKindHasAReason(t *testing.T) {
+// TestWrittenSubjectKinds_ScanFindsTheKindsThatExist proves the scan
+// itself still finds something -- a regex that silently matched nothing
+// would pass both tests above while guarding nothing at all.
+func TestWrittenSubjectKinds_ScanFindsTheKindsThatExist(t *testing.T) {
 	if got := len(writtenSubjectKinds(t)); got < 4 {
 		t.Fatalf("scanned %d subject kinds, want at least the four that exist (engagement, client, practice, membership) -- the scan itself has broken", got)
 	}
 }
 
-// writtenSubjectKinds maps each subject kind the api/ tree records to a
+// writtenSubjectKinds maps each subject kind api/internal records to a
 // human description of where it was found, for the failure message.
 func writtenSubjectKinds(t *testing.T) map[string]string {
 	t.Helper()
@@ -93,7 +93,6 @@ func writtenSubjectKinds(t *testing.T) map[string]string {
 
 	actions, err := os.ReadFile(filepath.Join("..", "activity", "actions.go"))
 	if err != nil {
-		// coverage:ignore reason: the file is in this repo; a missing one is a broken checkout, not a case under test
 		t.Fatalf("read activity/actions.go: %v", err)
 	}
 	for _, m := range subjectConstant.FindAllStringSubmatch(string(actions), -1) {
@@ -103,15 +102,13 @@ func writtenSubjectKinds(t *testing.T) map[string]string {
 	root := ".."
 	err = filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
-			// coverage:ignore reason: walk error on a readable checkout, not a case under test
-			return err
+			return fmt.Errorf("walk %s: %w", path, err)
 		}
 		if d.IsDir() || !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
 			return nil
 		}
 		src, err := os.ReadFile(path) //nolint:gosec // path comes from WalkDir over this package's own parent directory, never from input
 		if err != nil {
-			// coverage:ignore reason: read error on a readable checkout, not a case under test
 			return fmt.Errorf("read %s: %w", path, err)
 		}
 		for _, m := range subjectKindLiteral.FindAllStringSubmatch(string(src), -1) {
@@ -122,7 +119,6 @@ func writtenSubjectKinds(t *testing.T) map[string]string {
 		return nil
 	})
 	if err != nil {
-		// coverage:ignore reason: walk error on a readable checkout, not a case under test
 		t.Fatalf("walk api/internal: %v", err)
 	}
 	return found

@@ -75,6 +75,17 @@ func PracticeHandler() http.Handler {
 	})
 }
 
+// personSubjectKind is the one subject kind whose subject_id names a
+// person the feed can put a name to (#1148): a membership row's is a
+// staff_id. Named once because both halves of the answer need it -- the
+// query's own join guard, and resolveSubjectName's decision about which
+// rows get a name -- and two spellings of "which kind is a person" is
+// exactly the drift a second person-kind would land in. A second one
+// turns this into a set and both readers follow it; activitygate's
+// registry is the third place that would change, and its own guard test
+// is what makes sure that one is not forgotten.
+const personSubjectKind = activity.SubjectMembership
+
 // listPracticeActivityQueryTemplate and its "after" counterpart carry no
 // subject_kind clause at all -- the one thing that makes this a
 // practice-wide feed rather than engagement.listEngagementActivity's own
@@ -140,6 +151,7 @@ func PracticeHandler() http.Handler {
 // Heap Scan keeps fast, that is new evidence for a follow-up ticket to
 // add a (practice_id, created_at DESC, id DESC) index -- not a case this
 // one needs to solve against a fixture.
+//
 // The subject join (subj) is #1148's own addition: a feed spanning many
 // subject kinds has to say who a roster change happened to, or "Roles
 // changed" names the actor and nobody else, and a reader cannot tell one
@@ -155,7 +167,7 @@ func PracticeHandler() http.Handler {
 // a diff at write time would be a second place a Practice's roster
 // spells a person, free to drift from the staff row.
 //
-// %[2]s is activity.SubjectMembership, interpolated for the same reason
+// %[2]s is personSubjectKind, interpolated for the same reason
 // %[1]d is: a package-internal constant, never request input, and naming
 // the constant rather than repeating the literal is what keeps the write
 // side and this join from drifting apart.
@@ -178,9 +190,9 @@ const listPracticeActivityAfterQueryTemplate = `SELECT a.id, a.subject_kind, a.s
 	  AND (a.created_at, a.id) < ($2, $3)
 	ORDER BY a.created_at DESC, a.id DESC LIMIT %[1]d`
 
-var listPracticeActivityQuery = fmt.Sprintf(listPracticeActivityQueryTemplate, practiceBatchSize+1, activity.SubjectMembership) //nolint:gosec // both interpolated values are package-internal constants, not request input
+var listPracticeActivityQuery = fmt.Sprintf(listPracticeActivityQueryTemplate, practiceBatchSize+1, personSubjectKind) //nolint:gosec // both interpolated values are package-internal constants, not request input
 
-var listPracticeActivityAfterQuery = fmt.Sprintf(listPracticeActivityAfterQueryTemplate, practiceBatchSize+1, activity.SubjectMembership) //nolint:gosec // both interpolated values are package-internal constants, not request input
+var listPracticeActivityAfterQuery = fmt.Sprintf(listPracticeActivityAfterQueryTemplate, practiceBatchSize+1, personSubjectKind) //nolint:gosec // both interpolated values are package-internal constants, not request input
 
 // rawEntry is Entry plus the row id fetchPage needs to mint a cursor but
 // never puts in the response, the same shape engagement.activityRow
@@ -300,18 +312,21 @@ func queryBatch(ctx context.Context, tx *sql.Tx, practiceID string, after *pagec
 // by id, and are left empty rather than given a second, differently-
 // shaped label.
 //
-// The one case this degrades in, said plainly rather than left to be
-// discovered: a 'removed' row's subject is by construction someone whose
-// practice_memberships row is gone, and staff_practice_visibility (00002)
-// reaches a staff row only through a live one, so the join finds nothing
-// and the feed says activity.DepartedStaffName -- the same word #887
+// Where this degrades, said plainly rather than left to be discovered:
+// staff_practice_visibility (00002) reaches a staff row only through a
+// live practice_memberships row, so once a person leaves, EVERY row about
+// her loses its name at once -- the 'removed' event itself, whose subject
+// is by construction somebody whose Membership has just gone, and equally
+// the 'joined' and 'roles_changed' rows still sitting further down the
+// same feed from when she was here. The feed says
+// activity.DepartedStaffName -- the same word #887
 // settled on for an actor who has left, so a Practice never meets two
 // different words for the same absence. Recovering the name would mean
 // either a fourth policy on staff, which #1077 measured the cost of, or
 // copying the name into the event's diff at write time; neither is this
 // ticket's to spend.
 func resolveSubjectName(subjectKind string, subjectName sql.NullString) string {
-	if subjectKind != activity.SubjectMembership {
+	if subjectKind != personSubjectKind {
 		return ""
 	}
 	if !subjectName.Valid {
@@ -327,6 +342,18 @@ func resolveSubjectName(subjectKind string, subjectName sql.NullString) string {
 func resolveActorName(actorKind string, staffName, clientGivenName, clientPreferredName sql.NullString) string {
 	switch actorKind {
 	case "staff":
+		// A Staff actor whose Membership has ended is unreachable through
+		// staff_practice_visibility (00002), so the join finds nothing and
+		// the Who column would render blank. #1148 makes that a certainty
+		// rather than an edge: a 'removed' row written by a person
+		// deleting her own login has actor and subject as the same
+		// departed person, so both halves of the sentence resolve to
+		// nothing at once. Say the same word the subject side and #872's
+		// own membership history already say -- a Practice must not meet
+		// two different words, or an empty cell, for one absence.
+		if !staffName.Valid {
+			return activity.DepartedStaffName
+		}
 		return staffName.String
 	case "client":
 		return client.PreferredName(clientGivenName.String, clientPreferredName.String)

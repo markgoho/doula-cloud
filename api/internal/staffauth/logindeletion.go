@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"doula-cloud/api/internal/activity"
 	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/authn"
 )
@@ -357,7 +358,7 @@ func endEveryMembership(ctx context.Context, tx *sql.Tx, staffID string, members
 		// The event goes first: it names the roles and employment type the
 		// next statement destroys.
 		if err := RecordMembershipEvent(ctx, tx, MembershipEvent{
-			PracticeID: m.practiceID, StaffID: staffID, Type: "removed",
+			PracticeID: m.practiceID, StaffID: staffID, Type: activity.ActionMembershipRemoved,
 			PreviousRoles: "{" + m.roles + "}", PreviousEmploymentType: m.employmentType,
 			ActorStaffID: staffID,
 		}); err != nil {
