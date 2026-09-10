@@ -177,6 +177,41 @@ describe('the sweep, over a closed disclosure (#710)', () => {
 		}
 	});
 
+	/*
+	 * A measurement must not be an action. The Staff roster loads its
+	 * work-state history from an `ontoggle` handler, so a sweep that left
+	 * a handler seeing `open` would make measuring a screen issue that
+	 * screen's requests. It does not, and this pins why rather than
+	 * leaving it to a doc comment: a `toggle` event is queued rather than
+	 * dispatched synchronously and repeated changes coalesce, so a
+	 * disclosure opened and closed again inside one task reports only the
+	 * state it ended in. Measured against the real route as well as here
+	 * -- a full sweep of the Staff roster makes zero work-state-history
+	 * requests -- and this is the assertion that keeps it true if the
+	 * open/undo pair ever stops being synchronous.
+	 */
+	it('never lets a toggle handler see the disclosure open', async () => {
+		const { run, frame, remove } = frameHolding(ledger());
+		try {
+			const openStates: boolean[] = [];
+			const disclosure = frame.querySelector('details')!;
+			disclosure.addEventListener('toggle', () => {
+				openStates.push(disclosure.open);
+			});
+
+			const found = sweep(frame, run.clientWidth);
+			await new Promise((resolve) => setTimeout(resolve, 50));
+
+			// That the sweep found the break is what says it really did open
+			// the disclosure -- without it this passes on a sweep that never
+			// touched one, which is the same thing said the other way round.
+			expect(found).toBeDefined();
+			expect(openStates).not.toContain(true);
+		} finally {
+			remove();
+		}
+	});
+
 	it('leaves a disclosure the subject ships open alone', () => {
 		const { run, frame, remove } = frameHolding(ledger(true));
 		try {
