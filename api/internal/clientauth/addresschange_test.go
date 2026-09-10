@@ -340,6 +340,77 @@ func TestSpendAddressChangeHandler_MovesTheAddressAndRecordsIt(t *testing.T) {
 	}
 }
 
+// TestSpendAddressChangeHandler_RecordsOnceAtEachPractice is #819's own
+// proof that ADR-0015's cardinality reaches the ledger: a Portal Account
+// holding a Client at two Practices is one person changing one address,
+// and each Practice keeps its own history of it. The test above seeds a
+// single Practice, so it cannot tell "one row per Practice" apart from
+// "one row"; this one can, and it is the case the schema forbade
+// outright until #309 lifted client_portal_users.identity_uid's
+// table-wide UNIQUE constraint.
+func TestSpendAddressChangeHandler_RecordsOnceAtEachPractice(t *testing.T) {
+	db := testdb.New(t)
+	srv := newAddressChangeServer(db)
+	defer srv.Close()
+
+	identifier, clientA, session := seedSignedInClient(t, db, oldSignInAddress)
+	practiceA := testdb.PracticeOfClient(t, db, clientA)
+	practiceB := testdb.SeedPractice(t, db, "Second Practice")
+	clientB, _ := testdb.SeedEngagementInStatus(t, db, practiceB, "Camille at B", "camille-b@example.com", "active")
+	testdb.AttachPortalUser(t, db, identifier, clientB)
+
+	req := postAddressJSON(t, srv, "/api/portal/sign-in-address/request", session, `{"email":"`+newSignInAddress+`"}`)
+	_ = req.Body.Close()
+	token, _ := pendingAddressChangeToken(t, db, identifier)
+
+	resp := postAddressJSON(t, srv, "/api/portal/sign-in-address", "", `{"token":"`+token+`"}`)
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
+	}
+
+	rows, err := db.Admin.QueryContext(t.Context(),
+		`SELECT subject_id, practice_id, actor_client_id FROM activity WHERE subject_kind = 'client' AND action = 'portal_sign_in_address_changed'`,
+	)
+	if err != nil {
+		t.Fatalf("read activity rows: %v", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	recorded := map[string]string{}
+	// Counted as well as collected: a map keyed on the subject cannot
+	// tell one row at a Practice from two, and "once at each" is half of
+	// what this test is for.
+	total := 0
+	for rows.Next() {
+		var subject, practice, actor string
+		if err := rows.Scan(&subject, &practice, &actor); err != nil {
+			t.Fatalf("scan activity row: %v", err)
+		}
+		if actor != subject {
+			t.Fatalf("actor_client_id = %q on the row for Client %q; each Practice's row names its own Client as the actor", actor, subject)
+		}
+		recorded[subject] = practice
+		total++
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatalf("iterate activity rows: %v", err)
+	}
+
+	if total != 2 {
+		t.Fatalf("%d rows recorded, want exactly one at each of the two Practices holding this Portal Account", total)
+	}
+	if len(recorded) != 2 {
+		t.Fatalf("recorded = %v, want one row at each of the two Practices holding this Portal Account", recorded)
+	}
+	if recorded[clientA] != practiceA {
+		t.Fatalf("Client A's row sits at Practice %q, want %q", recorded[clientA], practiceA)
+	}
+	if recorded[clientB] != practiceB {
+		t.Fatalf("Client B's row sits at Practice %q, want %q", recorded[clientB], practiceB)
+	}
+}
+
 // TestSpendAddressChangeHandler_OldAddressStopsSigningIn is the other
 // half of the "until the new one is proved" AC: once proved, the old
 // address is nobody's.
