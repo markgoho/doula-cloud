@@ -55,6 +55,32 @@
 // (see `tokenize` below), so a real write target that is itself quoted and
 // contains a `;`/`|`/`&` that `segments` splits on is still missed -- the
 // same accepted gap as before, now stated for the masking pass too.
+//
+// Decision (#680): a relative write target is resolved against the
+// directory a leading `cd` in the same command would put a real shell in,
+// not against the hook process's own cwd. `path.resolve(candidate)` binds a
+// relative candidate to `process.cwd()`, and a Bash tool call's cwd is
+// reset to the main checkout root before every invocation -- so
+// `cd <worktree> && sed -i '' '...' <relative-path>` was measured against
+// the main checkout and blocked, even though the write genuinely lands
+// inside the worktree. That is the inverse of the gaps above: a write this
+// hook does recognize, mislocated. `segments` already yields the stages in
+// order, so a stage whose first token is `cd` now updates a tracked base
+// directory for every later stage, chained `cd a && cd b` included, and a
+// candidate resolves against that base. Two guards keep this from ever
+// weakening the gate. A base is only honored when it lands inside the main
+// checkout root -- the checkout itself or the worktree pool under it -- so
+// a `cd` into a directory this hook knows nothing about (`cd /tmp`) cannot
+// move a relative candidate out of reach; #680's report sketched a
+// pool-only rule, and honoring the whole checkout root is strictly
+// stricter, since a `cd` into main keeps blocking whichever checkout the
+// hook process itself happens to stand in. And a base that cannot be
+// established at all -- a bare `cd`, `cd -`, `cd ~...`, or an argument
+// still holding an unexpanded variable or command substitution -- falls
+// back to today's behavior rather than guessing, with only a later
+// absolute `cd` restoring tracking. What this still gives up, on purpose:
+// `pushd`/`popd` and a `cd` scoped to a subshell are not modeled. This
+// stays a textual scanner, not a shell parser.
 import path from 'node:path';
 import { isTrackedInMainCheckout, readStdin } from './tracked-path.ts';
 import { findMainCheckoutRoot } from './worktree-root.ts';
@@ -215,6 +241,68 @@ function writeTargets(segment: string): string[] {
 	return targets.map(stripQuotes).filter(target => !hasUnexpandedVariable(target));
 }
 
+// A write target together with the directory it should resolve against
+// (#680). `base` is `null` when a `cd` in the command made the working
+// directory unknowable; see `trackedBase` for what that falls back to.
+interface Candidate {
+	target: string;
+	base: string | null;
+}
+
+// The argument of a `cd` stage: the path string when it can be trusted,
+// `null` when the stage is a `cd` whose destination cannot be established
+// (bare `cd`, `cd -`, `cd ~...`, or an argument still holding a shell
+// variable or command substitution), and `undefined` when the stage is not
+// a `cd` at all.
+function cdArgument(segment: string): string | null | undefined {
+	const tokens = tokenize(segment);
+	if (tokens[0] !== 'cd') return undefined;
+
+	const argument = tokens.slice(1).find(token => !token.startsWith('-'));
+	if (!argument) return null;
+
+	const stripped = stripQuotes(argument);
+	if (stripped.startsWith('~') || hasUnexpandedVariable(stripped)) return null;
+
+	return stripped;
+}
+
+// Walks the stages in order, carrying the working directory a real shell
+// would be standing in. A `cd` stage is scanned for write targets too
+// before it moves the base -- a redirection on a `cd` line takes effect in
+// the directory the shell is leaving, not the one it is entering.
+function collectCandidates(stages: string[]): Candidate[] {
+	const candidates: Candidate[] = [];
+	let base: string | null = process.cwd();
+
+	for (const stage of stages) {
+		for (const target of writeTargets(stage)) candidates.push({ target, base });
+
+		const argument = cdArgument(stage);
+		if (argument === undefined) continue;
+
+		if (argument === null) base = null;
+		else if (path.isAbsolute(argument)) base = path.resolve(argument);
+		else if (base !== null) base = path.resolve(base, argument);
+	}
+
+	return candidates;
+}
+
+// Where a candidate actually lands. An absolute target ignores the base
+// entirely. A relative one uses the tracked base only when that base is
+// inside the main checkout root; anything else falls back to resolving
+// against the hook process's own cwd, which is what this file did before
+// #680.
+function resolveCandidate(candidate: Candidate, sourceRoot: string): string {
+	if (path.isAbsolute(candidate.target)) return path.resolve(candidate.target);
+
+	const base = candidate.base;
+	const insideCheckout = base !== null && (base === sourceRoot || base.startsWith(sourceRoot + path.sep));
+
+	return insideCheckout ? path.resolve(base, candidate.target) : path.resolve(candidate.target);
+}
+
 function block(reason: string): never {
 	process.stdout.write(JSON.stringify({ decision: 'block', reason }));
 	process.exit(2);
@@ -242,7 +330,7 @@ async function main(): Promise<void> {
 	if (typeof command !== 'string') process.exit(0);
 
 	const scannable = maskQuotedRedirectionChars(stripHeredocBodies(command));
-	const candidates = segments(scannable).flatMap(writeTargets);
+	const candidates = collectCandidates(segments(scannable));
 	if (candidates.length === 0) process.exit(0);
 
 	// Only pay for a git subprocess once there is something to check.
@@ -250,7 +338,7 @@ async function main(): Promise<void> {
 	const worktreesRoot = path.join(sourceRoot, '.claude', 'worktrees');
 
 	for (const candidate of candidates) {
-		const resolvedFile = path.resolve(candidate);
+		const resolvedFile = resolveCandidate(candidate, sourceRoot);
 
 		if (!isTrackedInMainCheckout(resolvedFile, sourceRoot, worktreesRoot)) continue;
 
