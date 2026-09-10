@@ -52,6 +52,8 @@ The lock is a directory created with a non-recursive `mkdir`, which is the atomi
 - **The wrapper itself is optional.** `scripts/hooks/pre-commit` resolves it from `$0` (the hook's absolute path in the main checkout, since `core.hooksPath` is absolute) rather than the committing worktree's cwd, and runs the step unwrapped if the file is not there. A worktree branched before this landed still commits.
 - **Anything unexpected.** No git directory, an unwritable parent, a lock that cannot be reasoned about: the wrapper prints `gate-lock: running without the lock (…)` and runs the command.
 
+**Landing this is not the same as switching it on.** `core.hooksPath` is absolute into the main checkout, so every worktree runs *main's* `scripts/hooks/pre-commit` and therefore *main's* `scripts/gate-lock.ts`. Until main's own tree carries both, the hook's `-f` fallback runs the step unwrapped everywhere — by design, but it means the lock starts working only once main's `trunk` has fast-forwarded past the merge. `.claude/hooks/sync-trunk.ts` does that on `SessionStart`, so in practice it is live from each session's next start.
+
 Two escape hatches, for when you do not want to wait:
 
 ```sh
@@ -76,7 +78,7 @@ Three sessions committing at once cost about a fifth more than one, not three ti
 
 The unlocked row was deliberately **not** reproduced. Doing so means intentionally exhausting memory on a machine with other live agent sessions mid-commit, and the figure is already known from the per-gate one: ~18 GB against the ~10.5 GB of non-repo residents #936 measured is well past 24 GB, the same arithmetic that killed a commit at two *uncapped* gates in #935.
 
-"12 renderers" is one gate's own peak, not two overlapping ones: the `maxWorkers` cap above is 6 browser *workers*, and each shows up as more than one `--type=renderer` process. Compare against the one-gate row, not against the cap.
+**Do not read the renderer count as a worker count.** A single capped gate was observed at both 6 and 12 `--type=renderer` processes across runs of the same command, so the number does not map one-to-one onto the `maxWorkers` cap of 6 and the reason for the spread was not chased down. Compare it against the one-gate row above, never against the cap — the same caution applies to [#937](https://github.com/markgoho/doula-cloud/issues/937), which plans to size Playwright's workers with this idiom.
 
 ### When a commit is killed for memory
 
