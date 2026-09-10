@@ -155,6 +155,26 @@
 		disclosure,
 		emptyMessage
 	}: Properties<T> = $props();
+
+	/*
+	 * Whether a given cell actually renders its column's snippet (#740),
+	 * spent as a class on the `<td>` so the cell's geometry follows from
+	 * the COLUMN rather than from a class name the caller's markup had to
+	 * carry. `columnIndex === 0 && rowHref` is the documented refusal on
+	 * `Column.content`: the row link wins there and the cell is one line
+	 * of link text, so it is not a content cell for styling either.
+	 *
+	 * This restates a condition the `cell` snippet's own `{#if}` chain
+	 * writes inline, and that is not an oversight: the inline form is what
+	 * narrows `rowHref` and `column.content` from optional to callable for
+	 * the compiler, and a call through this function narrows neither. The
+	 * two must agree, so a spec asserts the pair together -- a linked
+	 * first column renders the link AND takes no content padding -- and
+	 * disagreement fails there rather than showing up on screen.
+	 */
+	function isContentCell(column: Column<T>, columnIndex: number): boolean {
+		return Boolean(column.content) && !(columnIndex === 0 && rowHref);
+	}
 </script>
 
 <!--
@@ -207,11 +227,16 @@
 				{#each rows as row, index (index)}
 					<tr>
 						{#each columns as column, columnIndex (column.label)}
+							<!-- `content` has no counterpart on the record view's
+							     own `<dd>` below, and that asymmetry is deliberate:
+							     all it turns on is `td.content`'s vertical padding,
+							     which a `<dd>` already carries for every cell. -->
 							<td
 								class:numeric={column.numeric}
 								class:meta={column.variant === 'meta'}
 								class:variant-body={column.variant === 'body'}
 								class:muted={column.variant === 'muted'}
+								class:content={isContentCell(column, columnIndex)}
 							>
 								{@render cell(column, columnIndex, row, 'table')}
 							</td>
@@ -247,10 +272,13 @@
 				<dl>
 					{#each columns as column, columnIndex (column.label)}
 						<dt>{column.label}</dt>
+						<!-- Neither `variant-body` nor `content` is written here,
+						     and for one reason: each would name a rule that
+						     overrides nothing in this tree. See the mirror
+						     block in the style below. -->
 						<dd
 							class:numeric={column.numeric}
 							class:meta={column.variant === 'meta'}
-							class:variant-body={column.variant === 'body'}
 							class:muted={column.variant === 'muted'}
 						>
 							{@render cell(column, columnIndex, row, 'record')}
@@ -398,32 +426,43 @@
 			color: var(--color-on-surface-muted);
 		}
 
-		/* #264: a `content` column's markup comes from the caller's own
-		   snippet (rendered via `{@render column.content(row, view)}`), so
-		   `.rollup-list` never appears in this file's own template --
-		   `:global()` is what tells Svelte's scoped-CSS analyzer that on
-		   purpose, the same reason PortalTopBar.svelte reaches for it on
-		   its own injected content. `:has()` scopes the height override to
-		   only the cell that actually holds a rollup, so th/td's own fixed
-		   2.5rem (the brief's Density section, and what Skeleton reserves
-		   before rows arrive) stays exactly as it was for every other
-		   column. */
-		td:has(:global(.rollup-list)),
-		dd:has(:global(.rollup-list)) {
-			block-size: auto;
-		}
+		/* A cell rendering a caller's snippet, which is the one cell that
+		   can be more than a single line (#264, #740). What it needs is
+		   vertical room INSIDE the cell: `th, td` above writes
+		   `padding: 0 var(--space-3)`, so a three-line rollup measured
+		   75.2px tall in a 75.2px row -- every line touching the row rule
+		   above or below it.
 
-		:global(.rollup-list) {
-			display: grid;
-			gap: var(--space-1);
-			margin: 0;
-			padding: 0;
-			list-style: none;
-		}
+		   It does NOT need a height override. A table cell's `block-size`
+		   is a MINIMUM, not a ceiling (CSS 2.1 17.5.3: the row is the
+		   greater of the specified height and the content's), so the
+		   2.5rem the brief's Density section fixes has always let a taller
+		   cell grow -- measured, not assumed. Two rules used to say
+		   otherwise here, keyed on `.rollup-list`, a class only the Clients
+		   route's own snippet carried and nothing on `Column<T>` ever
+		   mentioned; both overrode nothing, and the `:global` that reached
+		   for that class leaked its list treatment app-wide from a
+		   component that never renders it. The treatment moved to the
+		   route that writes the markup, where its own scope holds it.
 
-		:global(.rollup-list li + li) {
-			padding-block-start: var(--space-1);
-			border-block-start: var(--border-thin) solid var(--color-outline-variant);
+		   `--space-1` rather than `--space-2`, which is what the record
+		   view's `dd` spends: the padding lands inside the 2.5rem floor
+		   (`box-sizing: border-box`, reset.css), so a ONE-line content
+		   cell -- the Clients list's Portal invite column is one -- must
+		   still fit that floor or every row in the table grows and
+		   Skeleton stops reserving the right space. Both tokens are
+		   container-relative clamps and so is `body-sm`, so the margin is
+		   not the same at every width: one line plus 2 x --space-1 fits
+		   the floor everywhere the table view renders, while 2 x
+		   --space-2 stops fitting as the frame widens -- measured going
+		   over at the drag surface's own full width, which is enough to
+		   disqualify it.
+
+		   No counterpart for the record view's `<dd>`: it carries
+		   `padding-block` for EVERY cell already (below) and sets no
+		   height at all, so a rule there would override nothing. */
+		td.content {
+			padding-block: var(--space-1);
 		}
 
 		/* Unavoidable (#564): a <table> and one <dl> per record are
@@ -513,17 +552,21 @@
 			font-variant-numeric: tabular-nums;
 		}
 
-		/* The record view's own mirror of td.meta/variant-body/muted above. */
+		/* The record view's own mirror of td.meta/muted above -- two of
+		   the three, not all three (#740). `variant: 'body'` asks for
+		   `--text-body-size`, which is what `th, td` has to be overridden
+		   to give and what a `<dd>` here already inherits from `.frame >
+		   *`: measured, `dd.variant-body` and its own `.record-view`
+		   ancestor both compute to 15.13px at a 390px frame. A rule
+		   restating that would have overridden nothing, so neither it nor
+		   the class that selected it is written -- the same rule this
+		   ticket applied to `td.content`'s missing `<dd>` counterpart. */
 		.record-view dd.meta {
 			font-size: var(--text-meta-size);
 			font-weight: var(--text-meta-weight);
 			line-height: var(--text-meta-leading);
 			letter-spacing: var(--text-meta-tracking);
 			font-variant-numeric: tabular-nums;
-		}
-
-		.record-view dd.variant-body {
-			font-size: var(--text-body-size);
 		}
 
 		.record-view dd.muted {

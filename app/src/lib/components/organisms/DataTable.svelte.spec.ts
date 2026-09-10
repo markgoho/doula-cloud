@@ -76,6 +76,41 @@ const trailingContentColumns = [
 	{ label: 'Status', accessor: (row: Row) => row.status, content: markerSnippet() }
 ];
 
+/*
+ * #740: a caller's snippet under NO class DataTable could recognize. The
+ * component used to size a content cell off `.rollup-list`, a string only
+ * the Clients list's own markup carried and nothing on `Column<T>` ever
+ * named, so the fixtures below deliberately hand it a bare `<ul>` and a
+ * bare run of text instead.
+ */
+function bareListSnippet() {
+	return createRawSnippet<[Row]>(() => ({
+		render: () =>
+			`<ul data-testid="column-content"><li>Birth Engagement, contract signed</li><li>Postpartum Engagement awaiting a contract</li><li>Refused: no capacity this week</li></ul>`
+	}));
+}
+
+function oneLineSnippet() {
+	return createRawSnippet<[Row]>(() => ({
+		render: () => `<span data-testid="column-content">Undeliverable</span>`
+	}));
+}
+
+const bareListColumns = [
+	{ label: 'Name', accessor: (row: Row) => row.name },
+	{ label: 'Open Engagements', accessor: (row: Row) => row.status, content: bareListSnippet() }
+];
+
+const oneLineContentColumns = [
+	{ label: 'Name', accessor: (row: Row) => row.name },
+	{ label: 'Portal invite', accessor: (row: Row) => row.status, content: oneLineSnippet() }
+];
+
+// The brief's Density section, and what Skeleton reserves before rows
+// arrive: `th, td { block-size: 2.5rem }`, which is 40px at any container
+// size because `rem` is root-relative.
+const ROW_HEIGHT = 40;
+
 interface SetupOptions {
 	columns?: typeof columns;
 	rows?: Row[];
@@ -462,6 +497,101 @@ describe('the activity ledger treatment (#486)', () => {
 		await page.getByText('Everything that has happened').click();
 		await expect.element(page.getByRole('cell', { name: 'Ada Lovelace' })).toBeVisible();
 		expect(getComputedStyle(container.querySelector('.frame')!).display).not.toBe('none');
+	});
+});
+
+/*
+ * #740: the geometry of a cell a caller drew itself.
+ *
+ * `querySelector` throughout, under svelte-tests.md's THIRD sanctioned
+ * case -- a fact that is not about any one element's accessible identity.
+ * A box is that kind of fact: how tall the row is, and whether the
+ * snippet's own box clears the row rule above and below it, are geometry,
+ * and geometry is not in the accessible tree for any query to ask about.
+ * Rule 1's sibling case applies on top of it, since both trees carry the
+ * same accessible content and a role query cannot say which of the two
+ * boxes it returned.
+ *
+ * Measured rather than asserted against a class name on purpose. The
+ * defect this closes was a class name doing the work -- `.rollup-list`,
+ * which `Column<T>` never mentioned -- so a spec keyed on `td.content`
+ * would only have swapped one unstated string for another. What a caller
+ * can actually observe is the room its markup gets.
+ */
+function firstRow(container: HTMLElement): HTMLElement {
+	return container.querySelector<HTMLElement>(':scope .table-view tbody tr')!;
+}
+
+function firstRowCells(container: HTMLElement): HTMLElement[] {
+	return [...container.querySelectorAll<HTMLElement>(':scope .table-view tbody tr:first-child td')];
+}
+
+/**
+`getComputedStyle` answers in `px` strings; this is the number in one.
+*/
+function toPixels(length: string): number {
+	return Number(length.replace('px', ''));
+}
+
+describe('a cell that renders a column snippet (#740)', () => {
+	it('grows past the fixed row height for a snippet taller than one line', async () => {
+		const { container } = await setup({ columns: bareListColumns });
+
+		expect(firstRow(container).getBoundingClientRect().height).toBeGreaterThan(ROW_HEIGHT);
+	});
+
+	/*
+	 * The half a fixed row height never broke and vertical padding did:
+	 * `th, td` writes `padding: 0 var(--space-3)`, so before this the
+	 * three lines filled the cell edge to edge and sat on the row rule.
+	 */
+	it('keeps a snippet clear of the row rule its plain siblings sit against', async () => {
+		const { container } = await setup({ columns: bareListColumns });
+
+		const [plain, content] = firstRowCells(container);
+		const room = toPixels(getComputedStyle(content).paddingBlockStart);
+		// The comparison is against a plain cell in the SAME row rather than
+		// against a number: `th, td` writes `padding: 0 var(--space-3)`, and
+		// what a content cell needs is that zero to stop applying to it.
+		expect(toPixels(getComputedStyle(plain).paddingBlockStart)).toBe(0);
+		expect(room).toBeGreaterThan(0);
+
+		const cell = content.getBoundingClientRect();
+		const snippet = container
+			.querySelector(':scope .table-view [data-testid="column-content"]')!
+			.getBoundingClientRect();
+		expect(snippet.top - cell.top).toBeGreaterThanOrEqual(room);
+		expect(cell.bottom - snippet.bottom).toBeGreaterThanOrEqual(room);
+	});
+
+	/*
+	 * The other side of that padding, and the reason it is `--space-1`
+	 * rather than the `--space-2` the record view spends: the Clients
+	 * list's Portal invite column is a ONE-line snippet, and a table whose
+	 * every row grew because one column declared `content` would break the
+	 * brief's Density section and stop Skeleton reserving the right space.
+	 */
+	it('leaves the fixed row height alone for a snippet of a single line', async () => {
+		const { container } = await setup({ columns: oneLineContentColumns });
+
+		expect(firstRow(container).getBoundingClientRect().height).toBe(ROW_HEIGHT);
+	});
+
+	/*
+	 * The documented refusal on `Column.content`, seen as geometry: a
+	 * first column carrying `rowHref` renders the row link and skips the
+	 * snippet, so that cell is one line of link text and must not be
+	 * treated as a content cell either.
+	 */
+	it('treats a first column whose snippet is refused as the plain cell it renders', async () => {
+		const { container } = await setup({
+			columns: linkedContentColumns,
+			rowHref: (row) => `/clients/${row.name}`
+		});
+
+		const [linked] = firstRowCells(container);
+		expect(toPixels(getComputedStyle(linked).paddingBlockStart)).toBe(0);
+		expect(firstRow(container).getBoundingClientRect().height).toBe(ROW_HEIGHT);
 	});
 });
 

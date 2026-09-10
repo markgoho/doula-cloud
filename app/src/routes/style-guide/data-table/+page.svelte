@@ -1,6 +1,7 @@
 <script lang="ts">
 	import DataTable, { type DataTableView } from '#lib/components/organisms/DataTable.svelte';
 	import Button from '#lib/components/atoms/Button.svelte';
+	import Link from '#lib/components/atoms/Link.svelte';
 	import { formatSignedQuantity } from '#lib/billing.js';
 
 	interface Client {
@@ -160,6 +161,59 @@
 		{ label: 'What', accessor: (row: HistoryRow) => row.what }
 	];
 
+	/*
+	 * The second `content` consumer #740 asks for, and the whole of what
+	 * it proves: this page copies NO class from the Clients list, whose
+	 * rollup was the seam's only consumer when the seam was written. The
+	 * cell it lands in sizes and pads itself because the column declares
+	 * `content`, not because the markup below carries a name DataTable
+	 * recognizes -- so a route can put a list, a sentence, or a sentence
+	 * and a link in a cell and get a cell that fits it.
+	 *
+	 * Two shapes, because they fail differently: `stateList` is several
+	 * lines and is what a fixed row height would have clipped, while
+	 * `stateNote` is one line and is what vertical padding would have
+	 * pushed past the brief's 40px row. Values are the longest realistic
+	 * ones, including #530's unbreakable URL (ADR-0025).
+	 */
+	interface StateRow {
+		client: string;
+		summary: string;
+		lines: string[];
+		note: string;
+		noteHref?: string;
+	}
+
+	const stateColumns = [
+		{ label: 'Client', accessor: (row: StateRow) => row.client },
+		{
+			label: 'Open Engagements',
+			accessor: (row: StateRow) => row.summary,
+			content: stateList
+		},
+		{ label: 'Portal invite', accessor: (row: StateRow) => row.note, content: stateNote }
+	];
+
+	const states: StateRow[] = [
+		{
+			client: 'Persephone Adeyemi-Wollstonecraft',
+			summary: 'Two open Engagements',
+			lines: [
+				'Birth Engagement, contract signed, with Anne-Marie Ochieng-Whitfield',
+				'Postpartum Engagement awaiting a contract, with Anne-Marie Ochieng-Whitfield',
+				'Refused: https://highland-midwifery-group.example.org/policies/scheduling-and-availability#postpartum-capacity-window'
+			],
+			note: 'Undeliverable -- the address bounced',
+			noteHref: '#blocked-email-addresses'
+		},
+		{
+			client: 'Anne-Marie Ochieng-Whitfield',
+			summary: 'No open Engagements',
+			lines: [],
+			note: 'Accepted'
+		}
+	];
+
 	const history: HistoryRow[] = [
 		{
 			when: '31 August 2026, 09:14',
@@ -178,6 +232,31 @@
 		}
 	];
 </script>
+
+{#snippet stateList(row: StateRow)}
+	<!--
+		A plain `<ul>` under this page's OWN class name. Nothing about it
+		is copied from the Clients list's rollup, and DataTable does not
+		know the name: the cell it lands in is sized by the column having
+		declared `content` at all (#740).
+	-->
+	{#if row.lines.length > 0}
+		<ul class="state-list">
+			{#each row.lines as line (line)}
+				<li>{line}</li>
+			{/each}
+		</ul>
+	{/if}
+{/snippet}
+
+{#snippet stateNote(row: StateRow)}
+	<!-- A one-line content cell, which is the case a cell's own vertical
+	     padding must not push past the brief's 40px row (#740). -->
+	{row.note}
+	{#if row.noteHref}
+		<Link href={row.noteHref} label="Blocked email addresses" />
+	{/if}
+{/snippet}
 
 {#snippet removeAction(client: Client, view: DataTableView)}
 	<!-- #515: a bare "Remove" reads the same on every row -- the real Staff
@@ -283,6 +362,15 @@
 	</section>
 
 	<section>
+		<h2>Columns whose cells a caller draws itself</h2>
+		<DataTable
+			columns={stateColumns}
+			rows={states}
+			emptyMessage="No Clients yet."
+		/>
+	</section>
+
+	<section>
 		<h2>Row actions</h2>
 		<DataTable
 			{columns}
@@ -292,3 +380,22 @@
 		/>
 	</section>
 </stack-l>
+
+<style>
+	@layer components {
+		/*
+		 * This demo's own list treatment, written here rather than
+		 * inherited from anywhere (#740). It is deliberately NOT the
+		 * Clients list's rollup: a bordered separator there, a plain
+		 * bullet-free stack here, so the two consumers visibly disagree
+		 * about their content and still get the same cell.
+		 */
+		.state-list {
+			display: grid;
+			gap: var(--space-1);
+			margin: 0;
+			padding: 0;
+			list-style: none;
+		}
+	}
+</style>
