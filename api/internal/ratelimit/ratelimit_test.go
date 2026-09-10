@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/apierrtest"
 	"doula-cloud/api/internal/ratelimit"
 	"doula-cloud/api/internal/testdb"
@@ -82,8 +83,8 @@ func TestWrap_OverLimitRefuses(t *testing.T) {
 	}
 
 	body := apierrtest.Decode(t, resp)
-	if body.Code != "RATE_LIMITED" {
-		t.Fatalf("code = %q, want RATE_LIMITED", body.Code)
+	if body.Code != apierr.CodeRateLimited {
+		t.Fatalf("code = %q, want %q", body.Code, apierr.CodeRateLimited)
 	}
 	if body.Message == "" {
 		t.Fatal("message empty")

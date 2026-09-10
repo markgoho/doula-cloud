@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/apierrtest"
 	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/idempotency"
@@ -687,8 +688,8 @@ func TestPostConnectHandler_RefusesWithoutDeclaredWebsite(t *testing.T) {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusConflict)
 	}
 	out := apierrtest.Decode(t, resp)
-	if out.Code != "FAILED_PRECONDITION" {
-		t.Fatalf("code = %q, want %q", out.Code, "FAILED_PRECONDITION")
+	if out.Code != apierr.CodeFailedPrecondition {
+		t.Fatalf("code = %q, want %q", out.Code, apierr.CodeFailedPrecondition)
 	}
 	if out.Message != payments.MsgWebsiteRequired {
 		t.Fatalf("message = %q, want %q", out.Message, payments.MsgWebsiteRequired)

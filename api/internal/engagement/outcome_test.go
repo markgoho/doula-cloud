@@ -40,6 +40,10 @@ func outcomeBody(outcome, endedOn string, correction bool) map[string]any {
 // success DTO, and apierr's own error envelope, whose Code a caller is
 // required to branch on rather than on the prose beside it
 // (docs/api-design.md section 7).
+//
+// Stays a struct of its own rather than reaching for apierrtest.Decode,
+// #811's one reader of the envelope, for the reason
+// transitionResponseBody records: one decode has to serve both shapes.
 type outcomeResponseBody struct {
 	EngagementID     string      `json:"engagementId"`
 	BirthOutcome     *string     `json:"birthOutcome"`

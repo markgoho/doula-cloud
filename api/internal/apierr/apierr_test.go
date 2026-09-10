@@ -31,7 +31,10 @@ func TestAPIError_CodeSerializesAsAPlainJSONString(t *testing.T) {
 	}
 
 	// And it reads back the same way, so a caller decoding the envelope
-	// gets the enumerated value rather than an empty Code.
+	// gets the enumerated value rather than an empty Code. json.Unmarshal
+	// directly rather than apierrtest.Decode, which every other test in
+	// api/ now uses: this half asserts on the literal bytes above, and
+	// there is no *http.Response here to hand the shared reader.
 	var out apierr.APIError
 	if err := json.Unmarshal([]byte(want), &out); err != nil {
 		t.Fatalf("unmarshal: %v", err)

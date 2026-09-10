@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/apierrtest"
 	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/contracts"
@@ -319,7 +320,7 @@ func TestAwaitingSignatureHandler_RejectsAMalformedCursor(t *testing.T) {
 		if resp.StatusCode != http.StatusBadRequest {
 			t.Fatalf("cursor %q: status = %d, want %d", cursor, resp.StatusCode, http.StatusBadRequest)
 		}
-		if out.Code != "INVALID_ARGUMENT" || out.Message != contracts.MsgInvalidCursor {
+		if out.Code != apierr.CodeInvalidArgument || out.Message != contracts.MsgInvalidCursor {
 			t.Fatalf("cursor %q: error = %+v, want the structured refusal", cursor, out)
 		}
 	}

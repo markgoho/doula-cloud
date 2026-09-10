@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/apierrtest"
 	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/idempotency"
@@ -391,7 +392,7 @@ func TestPutHandler_RefusesAMalformedBody(t *testing.T) {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
 	}
 	got := apierrtest.Decode(t, resp)
-	if got.Code != "INVALID_ARGUMENT" || got.Message != website.MsgInvalidBody {
+	if got.Code != apierr.CodeInvalidArgument || got.Message != website.MsgInvalidBody {
 		t.Fatalf("error = %+v, want INVALID_ARGUMENT/%q", got, website.MsgInvalidBody)
 	}
 }

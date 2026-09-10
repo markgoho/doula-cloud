@@ -104,10 +104,13 @@ const (
 //
 // Code is the enumerated Code type, not a bare string: #811 retyped it so
 // a reader compares against the constants above directly rather than
-// writing string(CodeConflict) at every assertion, and so a code invented
-// at a call site does not type-check. Code's underlying type is string,
-// so the JSON is unchanged either way -- see
-// TestAPIError_CodeSerializesAsAPlainJSONString, which holds that.
+// writing string(CodeConflict) at every assertion, and so a code that
+// travels between packages stays typed instead of decaying to a string
+// on the way. It does not stop a bare literal being compared against --
+// an untyped string constant still converts -- so the enumeration is a
+// convenience for readers, not a closed set the compiler enforces.
+// Code's underlying type is string, so the JSON is unchanged either way
+// -- see TestAPIError_CodeSerializesAsAPlainJSONString, which holds that.
 type APIError struct {
 	Code    Code              `json:"code"`
 	Message string            `json:"message"`

@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/apierrtest"
 	"doula-cloud/api/internal/mailsuppress"
 	"doula-cloud/api/internal/portalinvite"
@@ -203,8 +204,8 @@ func TestInviteHandler_AlreadyAcceptedConflict(t *testing.T) {
 	}
 
 	out := apierrtest.Decode(t, resp)
-	if out.Code != "CONFLICT" {
-		t.Fatalf("code = %q, want %q", out.Code, "CONFLICT")
+	if out.Code != apierr.CodeConflict {
+		t.Fatalf("code = %q, want %q", out.Code, apierr.CodeConflict)
 	}
 }
 
@@ -232,8 +233,8 @@ func TestInviteHandler_SuppressedAddressRefused(t *testing.T) {
 	}
 
 	out := apierrtest.Decode(t, resp)
-	if out.Code != "FAILED_PRECONDITION" {
-		t.Fatalf("code = %q, want %q", out.Code, "FAILED_PRECONDITION")
+	if out.Code != apierr.CodeFailedPrecondition {
+		t.Fatalf("code = %q, want %q", out.Code, apierr.CodeFailedPrecondition)
 	}
 	if !strings.Contains(out.Message, "Blocked email addresses") {
 		t.Fatalf("message = %q, want it to name Blocked email addresses", out.Message)

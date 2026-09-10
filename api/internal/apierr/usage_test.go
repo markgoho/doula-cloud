@@ -37,7 +37,7 @@ func TestNoDirectHTTPError(t *testing.T) {
 		if err != nil {
 			return fmt.Errorf("rel %s: %w", path, err)
 		}
-		if isEnvelopePackage(rel) {
+		if strings.HasPrefix(rel, filepath.Join("internal", "apierr")+string(filepath.Separator)) {
 			return nil
 		}
 
@@ -75,13 +75,16 @@ func TestNoDirectHTTPError(t *testing.T) {
 	}
 }
 
-// isEnvelopePackage reports whether rel names a file in one of the two
-// packages that are allowed to touch the section 7 envelope's JSON
-// directly: apierr, which is the one writer of it, and apierrtest, which
-// #811 made the one reader of it back off the wire in a test. Both walks
-// below skip these -- a guardrail that flagged the implementation it is
-// guarding would only ever be answered by an exception entry.
-func isEnvelopePackage(rel string) bool {
+// isJSONEnvelopePackage reports whether rel names a file in one of the
+// two packages allowed to touch the section 7 envelope's JSON directly:
+// apierr, which is the one writer of it, and apierrtest, which #811 made
+// the one reader of it back off the wire in a test. Only the JSON walk
+// below skips these -- a guardrail that flagged the implementation it is
+// guarding would only ever be answered by an exception entry. The
+// http.Error walk keeps its own narrower apierr-only skip: nothing in
+// apierrtest calls http.Error, so exempting it there would widen a
+// guardrail #811 has no reason to widen.
+func isJSONEnvelopePackage(rel string) bool {
 	for _, pkg := range []string{"apierr", "apierrtest"} {
 		if strings.HasPrefix(rel, filepath.Join("internal", pkg)+string(filepath.Separator)) {
 			return true
@@ -127,7 +130,7 @@ func TestNoDirectJSONUsage(t *testing.T) {
 		if err != nil {
 			return fmt.Errorf("rel %s: %w", path, err)
 		}
-		if isEnvelopePackage(rel) {
+		if isJSONEnvelopePackage(rel) {
 			return nil
 		}
 		if jsonUsageExceptions[rel] {

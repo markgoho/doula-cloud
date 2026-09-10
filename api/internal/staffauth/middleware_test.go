@@ -344,7 +344,7 @@ func TestMiddleware_MFAGate(t *testing.T) {
 		assertStatus(t, resp, http.StatusForbidden)
 
 		body := apierrtest.Decode(t, resp)
-		if body.Code != "MFA_REQUIRED" {
+		if body.Code != apierr.CodeMFARequired {
 			t.Fatalf("code = %q, want MFA_REQUIRED", body.Code)
 		}
 	})
