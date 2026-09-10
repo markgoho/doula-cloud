@@ -30,6 +30,7 @@
 	import MembershipFields from '#lib/components/molecules/MembershipFields.svelte';
 	import ConfirmDialog from '#lib/components/molecules/ConfirmDialog.svelte';
 	import HistoryDisclosure from '#lib/components/molecules/HistoryDisclosure.svelte';
+	import StackedForm from '#lib/components/molecules/StackedForm.svelte';
 	import ListPage from '#lib/components/templates/ListPage.svelte';
 	import { formatActivityTimestamp } from '#lib/dates.js';
 	import { membershipChangeSentence } from '#lib/membershipHistory.js';
@@ -392,7 +393,18 @@
 		<span class="actor">by {change.actorName}</span>
 	{/snippet}
 	{#if editingStaffId === member.staffId}
-		<form onsubmit={handleSaveMembership}>
+		<!--
+			#1108: the ordinary form rhythm, not a tighter one, even though
+			this sits inside a `DataTable` row. The row's detail region is a
+			full-width panel rather than a dense cell -- `HistoryDisclosure`
+			opens a whole ledger beside it -- so nothing here is short of
+			room, and a membership editor that spaced its fields differently
+			from every other form would be the fifth arrangement this ticket
+			set out to remove. `ReauthPrompt` is the precedent for the
+			confirm-and-cancel pair below stacking rather than sitting in a
+			row.
+		-->
+		<StackedForm onSubmit={handleSaveMembership}>
 			<MembershipFields
 				roles={editRoles}
 				employmentType={editEmploymentType}
@@ -409,7 +421,7 @@
 			{#if editError}
 				<Notice variant="error" message={editError} />
 			{/if}
-		</form>
+		</StackedForm>
 	{:else}
 		<Button
 			label="Edit membership"

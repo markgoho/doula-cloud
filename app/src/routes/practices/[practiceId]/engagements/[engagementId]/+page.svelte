@@ -103,6 +103,7 @@
 	import TextInput from '#lib/components/atoms/TextInput.svelte';
 	import Textarea from '#lib/components/atoms/Textarea.svelte';
 	import LabeledField from '#lib/components/molecules/LabeledField.svelte';
+	import StackedForm from '#lib/components/molecules/StackedForm.svelte';
 	import Select from '#lib/components/atoms/Select.svelte';
 
 	type Detail = {
@@ -1066,7 +1067,7 @@
 			<Notice variant="error" message={directMove.error} />
 		{/if}
 		{#if isCompleteFormShown}
-			<form onsubmit={handleCompleteSubmit} novalidate>
+			<StackedForm onSubmit={handleCompleteSubmit}>
 				{#if completeSubmission.errors.length > 0}
 					<ErrorSummary errors={completeSubmission.errors} />
 				{/if}
@@ -1096,7 +1097,7 @@
 					variant="secondary"
 					onClick={() => (isCompleteFormShown = false)}
 				/>
-			</form>
+			</StackedForm>
 		{/if}
 
 		<!--
@@ -1192,33 +1193,36 @@
 		{#if reassignOptions.length === 0}
 			<p>There is nobody else to reassign this Visit to.</p>
 		{:else}
+			<!-- stacked-form:ignore: #1108 -- the Select below is `required`, and that is the only thing standing between an empty pick and the endpoint. `StackedForm` sets `novalidate` (ADR-0021), so adopting it here would take that refusal away and put nothing in its place; #1228 is where this form gets a refusal of its own and then adopts the molecule. The stack below is `StackedForm`'s own arrangement, written inline meanwhile. -->
 			<form onsubmit={(event) => handleReassign(visit.visitId, event)}>
-				<LabeledField
-					id={`${view}-reassign-staff-${visit.visitId}`}
-					label="Reassign to"
-					hint={assigneeHint}
-					error={reassignBlock(visit.visitId)}
-				>
-					{#snippet children({ id, describedBy, invalid })}
-						<Select
-							{id}
-							{describedBy}
-							{invalid}
-							options={reassignOptions}
-							placeholder="Choose a Doula"
-							value={reassignStaffId[visit.visitId] ?? ''}
-							onChange={(value) => (reassignStaffId[visit.visitId] = value)}
-							required
-						/>
-					{/snippet}
-				</LabeledField>
-				<Button
-					label="Reassign"
-					type="submit"
-					size="sm"
-					variant="secondary"
-					describedBy="{view}-visit-{visit.visitId}-name"
-				/>
+				<stack-l space="var(--space-5)">
+					<LabeledField
+						id={`${view}-reassign-staff-${visit.visitId}`}
+						label="Reassign to"
+						hint={assigneeHint}
+						error={reassignBlock(visit.visitId)}
+					>
+						{#snippet children({ id, describedBy, invalid })}
+							<Select
+								{id}
+								{describedBy}
+								{invalid}
+								options={reassignOptions}
+								placeholder="Choose a Doula"
+								value={reassignStaffId[visit.visitId] ?? ''}
+								onChange={(value) => (reassignStaffId[visit.visitId] = value)}
+								required
+							/>
+						{/snippet}
+					</LabeledField>
+					<Button
+						label="Reassign"
+						type="submit"
+						size="sm"
+						variant="secondary"
+						describedBy="{view}-visit-{visit.visitId}-name"
+					/>
+				</stack-l>
 			</form>
 		{/if}
 		{#if reassignSections[visit.visitId]?.error}
@@ -1231,7 +1235,7 @@
 		"Clear" control, since emptying the field the datetime picker
 		already offers is the plainer way to ask for the same thing.
 	-->
-	<form onsubmit={(event) => handleSchedule(visit.visitId, event)}>
+	<StackedForm onSubmit={(event) => handleSchedule(visit.visitId, event)}>
 		<LabeledField id={`${view}-schedule-visit-${visit.visitId}`} label="Scheduled date and time">
 			{#snippet children({ id, describedBy, invalid })}
 				<TextInput
@@ -1251,7 +1255,7 @@
 			variant="secondary"
 			describedBy="{view}-visit-{visit.visitId}-name"
 		/>
-	</form>
+	</StackedForm>
 	{#if scheduleSections[visit.visitId]?.error}
 		<Notice variant="error" message={scheduleSections[visit.visitId]!.error} />
 	{/if}
@@ -1261,7 +1265,7 @@
 		notes -- there is no Doula-only restriction on this form the way
 		reassign and schedule carry, matching the read rule.
 	-->
-	<form onsubmit={(event) => handleSaveNotes(visit.visitId, event)}>
+	<StackedForm onSubmit={(event) => handleSaveNotes(visit.visitId, event)}>
 		<LabeledField id={`${view}-notes-visit-${visit.visitId}`} label="Notes">
 			{#snippet children({ id, describedBy, invalid })}
 				<Textarea
@@ -1280,7 +1284,7 @@
 			variant="secondary"
 			describedBy="{view}-visit-{visit.visitId}-name"
 		/>
-	</form>
+	</StackedForm>
 	{#if notesSections[visit.visitId]?.error}
 		<Notice variant="error" message={notesSections[visit.visitId]!.error} />
 	{/if}
@@ -1294,52 +1298,55 @@
 		control rather than a button that 403s.
 	-->
 	{#if canAssignVisits || canLogOwnVisit}
+		<!-- stacked-form:ignore: #1108 -- the assignee Select is `required`, and that is the only thing standing between an empty pick and the endpoint. `StackedForm` sets `novalidate` (ADR-0021), so adopting it here would take that refusal away and put nothing in its place; #1228 is where this form gets a refusal of its own and then adopts the molecule. The stack below is `StackedForm`'s own arrangement, written inline meanwhile. -->
 		<form onsubmit={handleCreateVisit}>
-			{#if canAssignVisits}
-				<!--
-					#909: this picker opens on the reader herself when she is on
-					the roster, with her own option first and marked "(you)".
-					GOV.UK's Select guidance says not to pre-select an option for
-					a question, and this departs from it on purpose -- the reason
-					is recorded in docs/design/govuk-alignment.md, on the commit
-					that departed.
-					#911: and every name says whether this Engagement can admit
-					her, with the hint explaining the marker and the error
-					refusing the choice before anything is sent.
-				-->
-				<LabeledField
-					id="new-visit-staff"
-					label="Who is this Visit for?"
-					hint={assigneeHint}
-					error={newVisitBlock}
-				>
+			<stack-l space="var(--space-5)">
+				{#if canAssignVisits}
+					<!--
+						#909: this picker opens on the reader herself when she is on
+						the roster, with her own option first and marked "(you)".
+						GOV.UK's Select guidance says not to pre-select an option for
+						a question, and this departs from it on purpose -- the reason
+						is recorded in docs/design/govuk-alignment.md, on the commit
+						that departed.
+						#911: and every name says whether this Engagement can admit
+						her, with the hint explaining the marker and the error
+						refusing the choice before anything is sent.
+					-->
+					<LabeledField
+						id="new-visit-staff"
+						label="Who is this Visit for?"
+						hint={assigneeHint}
+						error={newVisitBlock}
+					>
+						{#snippet children({ id, describedBy, invalid })}
+							<Select
+								{id}
+								{describedBy}
+								{invalid}
+								options={createAssigneeOptions}
+								placeholder="Choose a Doula"
+								value={visitStaffId}
+								onChange={(value) => (newVisitStaffId = value)}
+								required
+							/>
+						{/snippet}
+					</LabeledField>
+				{/if}
+				<LabeledField id="new-visit-scheduled-at" label="Scheduled date and time (optional)">
 					{#snippet children({ id, describedBy, invalid })}
-						<Select
+						<TextInput
 							{id}
 							{describedBy}
 							{invalid}
-							options={createAssigneeOptions}
-							placeholder="Choose a Doula"
-							value={visitStaffId}
-							onChange={(value) => (newVisitStaffId = value)}
-							required
+							type="datetime-local"
+							value={newVisitScheduledAt}
+							onInput={(value) => (newVisitScheduledAt = value)}
 						/>
 					{/snippet}
 				</LabeledField>
-			{/if}
-			<LabeledField id="new-visit-scheduled-at" label="Scheduled date and time (optional)">
-				{#snippet children({ id, describedBy, invalid })}
-					<TextInput
-						{id}
-						{describedBy}
-						{invalid}
-						type="datetime-local"
-						value={newVisitScheduledAt}
-						onInput={(value) => (newVisitScheduledAt = value)}
-					/>
-				{/snippet}
-			</LabeledField>
-			<Button label="Add a Visit" type="submit" loading={isCreatingVisit} />
+				<Button label="Add a Visit" type="submit" loading={isCreatingVisit} />
+			</stack-l>
 		</form>
 	{/if}
 

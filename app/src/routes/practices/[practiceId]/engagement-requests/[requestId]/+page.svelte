@@ -54,6 +54,7 @@
 	import DescriptionList from '#lib/components/molecules/DescriptionList.svelte';
 	import ErrorSummary from '#lib/components/molecules/ErrorSummary.svelte';
 	import LabeledField from '#lib/components/molecules/LabeledField.svelte';
+	import StackedForm from '#lib/components/molecules/StackedForm.svelte';
 	import { FormSubmission, orThrownMessage } from '#lib/formSubmission.svelte.js';
 
 	const reasonId = 'engagement-request-refusal-reason';
@@ -211,27 +212,30 @@
 {#snippet decideSection()}
 	<stack-l space="var(--space-5)">
 		<Button label="Approve and start the work" loading={isApproving} disabled={isDeciding} onClick={handleApprove} />
-		<form onsubmit={handleRefuse} novalidate>
-			<stack-l space="var(--space-4)">
-				<LabeledField
-					id={reasonId}
-					label="Why are you refusing this?"
-					hint="The doula who asked will see this."
-					error={submission.errorFor(reasonId)}
-				>
-					{#snippet children({ id, describedBy, invalid })}
-						<Textarea {id} {describedBy} {invalid} value={reason} onInput={(v) => (reason = v)} />
-					{/snippet}
-				</LabeledField>
-				<Button
-					type="submit"
-					variant="destructive"
-					label="Refuse this request"
-					loading={isRefusing}
-					disabled={isDeciding}
-				/>
-			</stack-l>
-		</form>
+		<!--
+			#1108: this used to stack at `var(--space-4)`, the one form in
+			the product that did. Nothing on record asked for the tighter
+			rhythm, so it takes the same one every other form takes.
+		-->
+		<StackedForm onSubmit={handleRefuse}>
+			<LabeledField
+				id={reasonId}
+				label="Why are you refusing this?"
+				hint="The doula who asked will see this."
+				error={submission.errorFor(reasonId)}
+			>
+				{#snippet children({ id, describedBy, invalid })}
+					<Textarea {id} {describedBy} {invalid} value={reason} onInput={(v) => (reason = v)} />
+				{/snippet}
+			</LabeledField>
+			<Button
+				type="submit"
+				variant="destructive"
+				label="Refuse this request"
+				loading={isRefusing}
+				disabled={isDeciding}
+			/>
+		</StackedForm>
 	</stack-l>
 {/snippet}
 

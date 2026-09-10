@@ -142,6 +142,7 @@
 	{/snippet}
 
 	{#snippet content()}
+		<!-- stacked-form:ignore: #1108 -- a `method="get"` narrowing control, not a run of fields. Its controls sit side by side in `.controls` and wrap to one per row on their own, and `StackedForm` would both stack them and take away the GET submission this form is built on. -->
 		<form method="get" action={basePath} onsubmit={applyNarrowing}>
 			<fieldset>
 				<legend>Narrow the schedule</legend>
@@ -232,6 +233,13 @@
 		   one control per row; in a wide column all four sit together. No
 		   viewport media query, and the same behavior whether the form is
 		   the page or a panel inside something else. */
+		/* #1108: `var(--space-4)` rather than the `var(--space-5)` a run of
+		   form fields takes, and deliberately. This gap is read on both
+		   axes -- it is the space between two controls sitting side by
+		   side as much as the space between two rows of them -- and the
+		   token that reads right down a column is too loose across one.
+		   A form whose fields only ever stack has no such second reading,
+		   which is why the ordinary rhythm is the ordinary rhythm. */
 		.controls {
 			display: flex;
 			flex-wrap: wrap;

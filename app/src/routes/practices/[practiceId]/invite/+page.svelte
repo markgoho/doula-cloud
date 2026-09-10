@@ -144,6 +144,7 @@
 -->
 <!-- `novalidate`: the page refuses the submit and lists every reason at
      once, rather than the browser stopping at the first empty field (#467). -->
+<!-- stacked-form:ignore: #1108 -- this form wraps a Template. `FormPage` stacks each fieldset's content itself, so the `<form>` here owns the submit and arranges nothing; a `StackedForm` would put a second, empty stack around one child. -->
 <form onsubmit={handleSubmit} novalidate>
 	<FormPage
 		title="Invite a Staff member"

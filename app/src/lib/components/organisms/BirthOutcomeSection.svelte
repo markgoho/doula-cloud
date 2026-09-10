@@ -55,6 +55,7 @@
 	import DescriptionList from '#lib/components/molecules/DescriptionList.svelte';
 	import ErrorSummary from '#lib/components/molecules/ErrorSummary.svelte';
 	import RadioGroup from '#lib/components/molecules/RadioGroup.svelte';
+	import StackedForm from '#lib/components/molecules/StackedForm.svelte';
 
 	interface Properties {
 		/** The recorded outcome, or undefined for an Engagement that has
@@ -285,57 +286,55 @@
 	{/if}
 
 	{#if isFormShown}
-		<form onsubmit={handleSubmit} novalidate>
-			<stack-l space="var(--space-5)">
-				<!--
-					A refused *form*, so the summary rather than a Notice: the
-					same shape the hub's own "Mark care complete" question uses
-					a few hundred lines up, and the same reason #467 gives for
-					it -- there are fields to send her back to. #467's Notice
-					exception on this page is for a control's own outcome,
-					which is what the clear above renders as.
-				-->
-				{#if submission.errors.length > 0}
-					<ErrorSummary errors={submission.errors} />
-				{/if}
-				<RadioGroup
-					legend="What happened to the pregnancy?"
-					name={OUTCOME_NAME}
-					options={BIRTH_OUTCOMES}
-					value={choice}
-					onChange={(value) => (choice = value)}
-					error={submission.errorFor(OUTCOME_FIELD_ID)}
+		<StackedForm onSubmit={handleSubmit}>
+			<!--
+				A refused *form*, so the summary rather than a Notice: the
+				same shape the hub's own "Mark care complete" question uses
+				a few hundred lines up, and the same reason #467 gives for
+				it -- there are fields to send her back to. #467's Notice
+				exception on this page is for a control's own outcome,
+				which is what the clear above renders as.
+			-->
+			{#if submission.errors.length > 0}
+				<ErrorSummary errors={submission.errors} />
+			{/if}
+			<RadioGroup
+				legend="What happened to the pregnancy?"
+				name={OUTCOME_NAME}
+				options={BIRTH_OUTCOMES}
+				value={choice}
+				onChange={(value) => (choice = value)}
+				error={submission.errorFor(OUTCOME_FIELD_ID)}
+			/>
+
+			{#if isDateAsked}
+				<DateFields
+					legend="When did the pregnancy end?"
+					hint="The day the pregnancy ended, which is often not the day you are recording it. For example, 11 3 2026 for November 3, 2026."
+					name={DATE_NAME}
+					{parts}
+					onChange={(next) => (parts = next)}
+					error={dateRefusal?.message}
+					invalidField={dateRefusal?.field}
 				/>
+			{/if}
 
-				{#if isDateAsked}
-					<DateFields
-						legend="When did the pregnancy end?"
-						hint="The day the pregnancy ended, which is often not the day you are recording it. For example, 11 3 2026 for November 3, 2026."
-						name={DATE_NAME}
-						{parts}
-						onChange={(next) => (parts = next)}
-						error={dateRefusal?.message}
-						invalidField={dateRefusal?.field}
-					/>
-				{/if}
-
-				<cluster-l space="var(--space-3)">
-					<Button
-						label={isRecorded ? 'Save the correction' : 'Record this outcome'}
-						type="submit"
-						size="sm"
-						loading={submission.isSubmitting}
-					/>
-					<Button
-						label="Cancel"
-						type="button"
-						size="sm"
-						variant="secondary"
-						onClick={() => (isFormShown = false)}
-					/>
-				</cluster-l>
-			</stack-l>
-		</form>
+			<cluster-l space="var(--space-3)">
+				<Button
+					label={isRecorded ? 'Save the correction' : 'Record this outcome'}
+					type="submit"
+					size="sm"
+					loading={submission.isSubmitting}
+				/>
+				<Button
+					label="Cancel"
+					type="button"
+					size="sm"
+					variant="secondary"
+					onClick={() => (isFormShown = false)}
+				/>
+			</cluster-l>
+		</StackedForm>
 	{/if}
 </stack-l>
 
