@@ -28,6 +28,32 @@ import { describe, expect, it } from 'vitest';
  * since a spelling rule that only watched half the repo was gating nothing
  * for the other half.
  *
+ * #1154 was a third wave -- "double-barrelled" -- and the reason there was
+ * a third is the shape of RULES rather than any word missing from it. RULES
+ * is a denylist of exact spellings, so, as the `ageing` note below puts it,
+ * "a spelling absent from it is unenforced, not allowed": it can only ever
+ * hold words somebody already found by eye, which is how #921 followed #899
+ * and #1154 followed both. `model\u{6C}ing` is the proof -- #921 added the
+ * -ing form it happened to meet and left the -ed form of the same word to
+ * be found three waves later.
+ *
+ * FAMILY below is the other shape, and it is an allowlist. British English
+ * doubles a final `l` before `-ed`/`-ing` whatever the stress; American
+ * English doubles it only when the last syllable is stressed ("compelled")
+ * or when the base word already ends in `ll` ("spelled"). So every
+ * `-alled`/`-elled`/`-alling`/`-elling` word is an offense unless it is
+ * named in KEEPS_ITS_DOUBLE_L, and the fix is computed by dropping one `l`
+ * rather than written down per word. A fourth wave of this family cannot
+ * arrive quietly: an unfamiliar word turns the gate red and is either
+ * corrected or added to the allowlist with a reason.
+ *
+ * The other vowels are deliberately not in FAMILY. `-illed`, `-olled` and
+ * `-ulled` are almost entirely base words that already end in `ll`
+ * ("filled", "rolled", "pulled") or are stressed ("controlled"), so their
+ * allowlist would be open-ended while the tree holds no British form of
+ * them at all; they stay in reach of RULES, one word at a time, if one ever
+ * shows up.
+ *
  * Each pattern hides one of its letters behind a unicode escape rather than
  * spelling the word out, for two reasons: the file would otherwise fail its
  * own check, and a grep of the repo for a British form should return real
@@ -113,6 +139,122 @@ const RULES: readonly Rule[] = [
 	{ british: 'fulfi\u{6C}ment', american: 'fulfillment' }
 ];
 
+// One word of the `-alled`/`-elled`/`-alling`/`-elling` family, matched
+// whole rather than as a substring: "modelled" and "compelling" differ by
+// name, not by any substring one of them holds and the other does not.
+const FAMILY = /\b[a-z]+[ae]l\u{6C}(?:ed|ing)\b/gu;
+
+// Every word that reaches this family the American way. Two groups: a base
+// word that already ends in `ll` ("spell", "sell", "install", "eyeball"),
+// and a base word ending in one `l` whose last syllable is stressed
+// ("compel", "excel", "corral"). Anything else with two `l`s here is
+// British, so an addition to this list is a claim about one of those two
+// groups and belongs beside a word that is really in one of them.
+const KEEPS_ITS_DOUBLE_L: ReadonlySet<string> = new Set([
+	// Base word ends in `ll`.
+	'belled',
+	'belling',
+	'dwelled',
+	'dwelling',
+	'felled',
+	'felling',
+	'gelled',
+	'gelling',
+	'jelled',
+	'jelling',
+	'misspelled',
+	'misspelling',
+	'quelled',
+	'quelling',
+	'shelled',
+	'shelling',
+	'smelled',
+	'smelling',
+	'spelled',
+	'spelling',
+	'swelled',
+	'swelling',
+	'welled',
+	'welling',
+	'yelled',
+	'yelling',
+	'bestselling',
+	'foretelling',
+	'outselling',
+	'reselling',
+	'retelling',
+	'selling',
+	'storytelling',
+	'telling',
+	'underselling',
+	'upselling',
+	'appalled',
+	'appalling',
+	'balled',
+	'balling',
+	'befalling',
+	'called',
+	'calling',
+	'enthralled',
+	'enthralling',
+	'eyeballed',
+	'eyeballing',
+	'falling',
+	'forestalled',
+	'forestalling',
+	'galled',
+	'galling',
+	'installed',
+	'installing',
+	'miscalled',
+	'preinstalled',
+	'recalled',
+	'recalling',
+	'reinstalled',
+	'reinstalling',
+	'snowballed',
+	'snowballing',
+	'stalled',
+	'stalling',
+	'stonewalled',
+	'stonewalling',
+	'uninstalled',
+	'uninstalling',
+	'walled',
+	'walling',
+	// Base word ends in one `l` on a stressed syllable, which American
+	// English doubles as well.
+	'compelled',
+	'compelling',
+	'corralled',
+	'corralling',
+	'dispelled',
+	'dispelling',
+	'excelled',
+	'excelling',
+	'expelled',
+	'expelling',
+	'impelled',
+	'impelling',
+	'propelled',
+	'propelling',
+	'rebelled',
+	'rebelling',
+	'repelled',
+	'repelling'
+]);
+
+// A word of this family hides inside an identifier as often as it sits in
+// prose, and `\b` does not fall between `is` and `Cancelled` or either side
+// of the `_` in a Go tag. Split those seams before the match so
+// `isCancelledFlag` and `total_cancelled` read as words.
+function asWords(line: string): string {
+	return line
+		.replace(/([a-z0-9])([A-Z])/gu, '$1 $2')
+		.replaceAll('_', ' ')
+		.toLowerCase();
+}
+
 interface Offense {
 	readonly file: string;
 	readonly line: number;
@@ -124,12 +266,22 @@ function findOffensesInLines(file: string, source: string): Offense[] {
 	return source.split('\n').flatMap((line, index) => {
 		if (line.includes(IGNORE_MARKER)) return [];
 		const lower = line.toLowerCase();
-		return RULES.filter((rule) => lower.includes(rule.british)).map((rule) => ({
+		const named = RULES.filter((rule) => lower.includes(rule.british)).map((rule) => ({
 			file,
 			line: index + 1,
 			found: rule.british,
 			american: rule.american
 		}));
+		const family = [...asWords(line).matchAll(FAMILY)]
+			.map(([word]) => word)
+			.filter((word) => !KEEPS_ITS_DOUBLE_L.has(word))
+			.map((word) => ({
+				file,
+				line: index + 1,
+				found: word,
+				american: word.replace(/l(l(?:ed|ing))$/u, '$1')
+			}));
+		return [...named, ...family];
 	});
 }
 
@@ -152,6 +304,39 @@ describe('app/src and api/ spell every word the American way', () => {
 
 	it('reads the whole api Go source tree', () => {
 		expect(apiFiles.length).toBeGreaterThan(100);
+	});
+
+	// The family rule is the one rule here that can be wrong in both
+	// directions -- it can miss a British word, and, unlike the substring
+	// RULES, it can also fire on an American one. Both directions are
+	// asserted against fixture lines rather than against the tree, so the
+	// day the tree happens to hold none of these words the guarantee is
+	// still checked.
+	it('reads a doubled L as British only when American English keeps one', () => {
+		const american = 'const spelling = compelling ? storytelling : dwelling; // installed, recalled';
+		expect(findOffensesInLines('fixture.ts', american)).toEqual([]);
+
+		const british = [
+			`a double-barrel\u{6C}ed name`,
+			`mode\u{6C}led on the row above`,
+			`he trave\u{6C}led`,
+			`const isCance\u{6C}ledFlag = true;`,
+			`total_signa\u{6C}led`
+		].join('\n');
+		expect(findOffensesInLines('fixture.ts', british).map((offense) => offense.american)).toEqual([
+			'barreled',
+			'modeled',
+			'traveled',
+			// The named `cance\u{6C}led` rule and the family both see this
+			// one; the family is the half that reads it inside camelCase.
+			'canceled',
+			'canceled',
+			'signaled'
+		]);
+
+		expect(findOffensesInLines('fixture.ts', `a mode\u{6C}led row ${IGNORE_MARKER}: fixture`)).toEqual(
+			[]
+		);
 	});
 
 	it('finds no British spelling of a word the repo already spells one way', () => {
