@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
 	CARE_HEADING,
+	NO_CARE_HEADING,
 	NO_CARE_MESSAGE,
 	contractStatusLabel,
 	contractVoidedNotice,
@@ -88,5 +89,13 @@ describe('the register nouns', () => {
 
 	it('NO_CARE_MESSAGE never says Engagement', () => {
 		expect(NO_CARE_MESSAGE).not.toMatch(/engagement/i);
+	});
+
+	// #1116: the heading names the state, which is what leaves the
+	// paragraph beneath it free to say what to do about it.
+	it('NO_CARE_HEADING names the state, and the message does not repeat it', () => {
+		expect(NO_CARE_HEADING).toBe("You don't have care set up yet");
+		expect(NO_CARE_HEADING).not.toMatch(/engagement/i);
+		expect(NO_CARE_MESSAGE).not.toContain(NO_CARE_HEADING);
 	});
 });
