@@ -40,16 +40,6 @@
 		failureMessage: 'Failed to load more ledger entries'
 	});
 
-	// This screen reads no role of its own (#1162). Who may be here at all
-	// is ADR-0008's Credit row -- Owner and Admin, Doula ✗ -- and both the
-	// balance read and the purchase declare that same seat,
-	// staffauth.OwnerAndAdmin in billing/mount.go. The balance arrives
-	// through +page.ts's own load, so a session outside that seat meets its
-	// refuseRead and practices/+error.svelte and never mounts this
-	// component; every session that does mount it may buy. The button is
-	// therefore unconditional, rather than drawn disabled for a caller who
-	// cannot reach the page (#257's fix, which #272 and #910 between them
-	// left with no session to fire for).
 	let checkoutStatus = $derived(page.url.searchParams.get('checkout'));
 
 	const columns = [
@@ -201,6 +191,19 @@
 				<Text text="This purchase's exact price could not be confirmed with Stripe right now." step="body-sm" tone="variant" />
 			{/if}
 
+			<!--
+				Unconditional, and this screen reads no role of its own
+				(#1162). Who may be here at all is ADR-0008's Credit row --
+				Owner and Admin, never a Doula -- and both the balance read
+				and the purchase declare that same seat,
+				staffauth.OwnerAndAdmin in billing/mount.go. The balance
+				arrives through +page.ts's own load, so a session outside that
+				seat meets its refuseRead and practices/+error.svelte and
+				never mounts this component; every session that does mount it
+				may buy. Drawing this button disabled for a caller who cannot
+				reach the page was #257's fix, which #272 and #910 between
+				them left with no session to fire for.
+			-->
 			<Button label="Buy credits" type="submit" loading={isPurchasing} />
 			{#if purchaseError}
 				<Notice message={purchaseError} variant="error" />
