@@ -425,9 +425,9 @@ test('Archetypes B, C, D, E, F, G -- the Staff side', async ({ page, request, co
 			url: `/practices/${practiceId}/settings/plan-templates`,
 			h1: 'Plan Templates'
 		},
-		// The last two settings screens postdate #405's A-G survey -- they
-		// arrived with #452's Settings hub -- so they are archetype F by
-		// shape rather than by that table.
+		// The settings screens from here down postdate #405's A-G survey --
+		// the first two arrived with #452's Settings hub -- so they are
+		// archetype F by shape rather than by that table.
 		{
 			key: 'practices/[practiceId]/settings/website',
 			archetype: 'F',
@@ -452,13 +452,13 @@ test('Archetypes B, C, D, E, F, G -- the Staff side', async ({ page, request, co
 		},
 		{
 			// #894: archetype F by shape, like the settings screens above
-			// that postdate #405's survey. Scanned as the Owner this batch
-			// signs in as, so it reads the branch that carries the setting
-			// itself -- the status Badge, the Staff-count sentence and the
-			// toggle -- rather than the one-Notice screen a non-Owner meets.
-			// The default "optional for other Staff" state, since a fresh
-			// Practice starts there and the two states differ by a Badge
-			// label and a Button label, not by a node axe reads differently.
+			// that postdate #405's survey. This batch signs in as the
+			// founding Owner, so the screen renders its Owner branch -- the
+			// status Badge, the Staff-count sentence and the toggle -- and
+			// not the one-Notice screen a non-Owner meets. In its default
+			// "optional for other Staff" state, since a fresh Practice
+			// starts there and the required state differs by a Badge label
+			// and a Button label, not by a node axe reads differently.
 			key: 'practices/[practiceId]/settings/mfa',
 			archetype: 'F',
 			url: `/practices/${practiceId}/settings/mfa`,
