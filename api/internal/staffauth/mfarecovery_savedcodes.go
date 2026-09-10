@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/rand"
 	"database/sql"
-	"errors"
 	"fmt"
 	"net/http"
 
@@ -190,31 +189,31 @@ func RotateSavedCodesHandler(db *sql.DB) http.Handler {
 			}
 		}()
 
-		// Self-only, like PUT /api/staff/work-state: no app.current_practice_id
-		// is ever set here, and staff_self_visibility (00006) only admits a
-		// row matching app.current_identity_uid, which authn.Begin does not
-		// set either (#151 -- session ownership moved off Identity Platform
-		// entirely). isSoleOwnerAnywhere also needs to read practice_memberships
-		// across every Practice this person belongs to, which no per-Practice
-		// policy can admit by construction. Same reuse of 00033's trust flag
-		// as the two unauthenticated/internal MFA-recovery handlers.
+		// 00033's trust flag, for the read requireSelf below cannot
+		// open: isSoleOwnerAnywhere looks across every Practice this
+		// person belongs to, which no per-Practice policy can admit by
+		// construction. Same reuse as the two unauthenticated/internal
+		// MFA-recovery handlers.
+		//
+		// Only for that read. This handler used to resolve the caller's
+		// own row through this flag alone, holding the second half of
+		// the pre-Practice pair without the first --
+		// app.current_identity_uid was never set here at all, so
+		// staff_self_visibility (00006) was not the policy admitting
+		// her row and #1182's whole point had a silent exception in it.
+		// requireSelf sets it now, and the row it resolves comes back
+		// through 00006 the way every other route in this family's does.
 		if _, err := tx.ExecContext(r.Context(), `SELECT set_config('app.notification_worker_trusted', 'true', true)`); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
-		var staffID string
-		err := tx.QueryRowContext(r.Context(), `SELECT id FROM staff WHERE identity_uid = $1`, uid).Scan(&staffID)
-		if errors.Is(err, sql.ErrNoRows) {
-			apierr.WriteError(w, MsgNoMatchingStaffAccount, http.StatusNotFound)
+		self, ok := requireSelf(w, r, tx, uid)
+		if !ok {
 			return
 		}
-		if err != nil {
-			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
-			return
-		}
+		staffID := self.ID
 
 		sole, err := isSoleOwnerAnywhere(r.Context(), tx, staffID)
 		if err != nil {

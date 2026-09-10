@@ -34,16 +34,15 @@ func RemoveSecondFactorHandler(verifier authn.Verifier, accounts authn.AccountMa
 			}
 		}()
 
-		staffID, found, err := setIdentityAndResolveStaff(r.Context(), tx, uid)
-		if err != nil {
-			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+		// #1182: this route used to answer 403 here, alone with
+		// FinishEnrollmentHandler, where the other six pre-Practice
+		// routes answered 404. It answers the family's 404 now -- see
+		// requireSelf for why that is the right one.
+		self, ok := requireSelf(w, r, tx, uid)
+		if !ok {
 			return
 		}
-		if !found {
-			apierr.WriteError(w, MsgNoMatchingStaffAccount, http.StatusForbidden)
-			return
-		}
+		staffID := self.ID
 
 		if !RequireRecentAuth(w, r, verifier, tx, staffID) {
 			return

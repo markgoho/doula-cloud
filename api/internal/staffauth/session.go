@@ -3,7 +3,6 @@ package staffauth
 import (
 	"context"
 	"database/sql"
-	"errors"
 	"fmt"
 	"net/http"
 	"strings"
@@ -85,9 +84,21 @@ func SessionHandler(db *sql.DB) http.Handler {
 		}
 		defer func() { _ = tx.Rollback() }()
 
-		resp, status, msg := resolveSession(r, tx, uid, secondFactor)
-		if status != http.StatusOK {
-			apierr.WriteError(w, msg, status)
+		// #1182 settled that this handler belongs behind the same seam
+		// as the rest of the family rather than beside it. It reads more
+		// of the row than the others do, which is why the seam returns
+		// the row and not only its id -- the columns this response is
+		// built from are the ones requireSelf already fetched, so
+		// joining the family costs it no second query.
+		self, ok := requireSelf(w, r, tx, uid)
+		if !ok {
+			return
+		}
+
+		resp, err := resolveSession(r, tx, self, secondFactor)
+		if err != nil {
+			// coverage:ignore reason: DB query failure, not exercised by unit tests
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
@@ -95,55 +106,36 @@ func SessionHandler(db *sql.DB) http.Handler {
 	})
 }
 
-func resolveSession(r *http.Request, tx *sql.Tx, identityUID string, secondFactor bool) (SessionResponse, int, string) {
+func resolveSession(r *http.Request, tx *sql.Tx, self selfStaff, secondFactor bool) (SessionResponse, error) {
 	ctx := r.Context()
-
-	// coverage:ignore reason: DB query failure, not exercised by unit tests
-	if _, err := tx.ExecContext(ctx, `SELECT set_config('app.current_identity_uid', $1, true)`, identityUID); err != nil {
-		return SessionResponse{}, http.StatusInternalServerError, apierr.MsgInternalError
-	}
-
-	var staffID, name, email, workState string
-	var workStateReportedAt time.Time
-	var lastPracticeID sql.NullString
-	err := tx.QueryRowContext(ctx,
-		`SELECT id, name, email, work_state, work_state_reported_at, last_practice_id
-		   FROM staff WHERE identity_uid = $1`, identityUID,
-	).Scan(&staffID, &name, &email, &workState, &workStateReportedAt, &lastPracticeID)
-	if errors.Is(err, sql.ErrNoRows) {
-		return SessionResponse{}, http.StatusNotFound, MsgNoMatchingStaffAccount
-	}
-	if err != nil {
-		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		return SessionResponse{}, http.StatusInternalServerError, apierr.MsgInternalError
-	}
+	staffID := self.ID
 
 	memberships, err := listMemberships(ctx, tx, staffID)
 	if err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		return SessionResponse{}, http.StatusInternalServerError, apierr.MsgInternalError
+		return SessionResponse{}, err
 	}
 
 	soleOwner, err := isSoleOwnerAnywhere(ctx, tx, staffID)
 	if err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		return SessionResponse{}, http.StatusInternalServerError, apierr.MsgInternalError
+		return SessionResponse{}, err
 	}
 
 	resp := SessionResponse{
 		StaffID:             staffID,
-		Name:                name,
-		Email:               email,
-		WorkState:           workState,
-		WorkStateReportedAt: workStateReportedAt,
+		Name:                self.Name,
+		Email:               self.Email,
+		WorkState:           self.WorkState,
+		WorkStateReportedAt: self.WorkStateReportedAt,
 		Memberships:         memberships,
 		SecondFactor:        secondFactor,
 		SoleOwner:           soleOwner,
 	}
-	if lastPracticeID.Valid {
-		resp.LastPracticeID = &lastPracticeID.String
+	if self.LastPracticeID.Valid {
+		resp.LastPracticeID = &self.LastPracticeID.String
 	}
-	return resp, http.StatusOK, ""
+	return resp, nil
 }
 
 func listMemberships(ctx context.Context, tx *sql.Tx, staffID string) ([]Membership, error) {

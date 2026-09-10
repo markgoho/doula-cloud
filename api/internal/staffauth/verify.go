@@ -53,14 +53,10 @@ func RequestVerificationHandler(db *sql.DB) http.Handler {
 		}()
 
 		// Sets app.current_identity_uid on the way, which is what `staff`'s
-		// own self-visibility RLS policy reads -- the same call
-		// staffauth.Middleware makes before any Practice is known.
-		if _, found, err := setIdentityAndResolveStaff(r.Context(), tx, uid); err != nil {
-			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
-			return
-		} else if !found {
-			apierr.WriteError(w, MsgNoMatchingStaffAccount, http.StatusNotFound)
+		// own self-visibility RLS policy reads -- the pre-Practice
+		// preamble every route in this family now reaches for rather
+		// than writing out (#1182).
+		if _, ok := requireSelf(w, r, tx, uid); !ok {
 			return
 		}
 
