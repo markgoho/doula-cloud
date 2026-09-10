@@ -138,7 +138,9 @@ test('An Owner vouches for a locked-out doula, and the code reaches her and nobo
 		'the recovery code was mailed to the locked-out doula'
 	).toEqual([]);
 
-	expect(message.subject).toBe(RECOVERY_SUBJECT);
+	// The subject is not re-asserted here: the wait above is *for* a
+	// message carrying it, so a copy of that claim below could only ever
+	// pass.
 	const code = /Recovery code: (\S+)/.exec(message.text)?.[1];
 	expect(code, `no code in the recovery mail:\n${message.text}`).toBeTruthy();
 
