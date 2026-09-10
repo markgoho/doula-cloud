@@ -7,10 +7,15 @@ import {
 	seedEngagement,
 	seedPracticeRate,
 	readStaffInviteToken,
-	MAILBOX_URL,
-	WORKER_SECRET
+	MAILBOX_URL
 } from './stack';
+import { drainUntilMailArrives } from './outboxMail';
 import { acceptStaffInvite, seedFoundingOwner } from './staffSignup';
+
+// The subject portalauth's magic-link Compose gives the sign-in mail --
+// the wait below and the click that follows it are about one message, so
+// they name it once.
+const MAGIC_LINK_SUBJECT = 'Your Doula Cloud sign-in link';
 
 // The Firebase Auth emulator and the Go BFF -- both host processes -- see
 // e2e/global-setup.ts and e2e/stack.ts for how these get started.
@@ -72,13 +77,21 @@ export async function openMagicLink(page: Page, request: APIRequestContext, emai
 	const requested = await request.post(`${API_URL}/api/portal/magic-link/request`, { data: { email } });
 	expect(requested.ok(), `magic-link request failed: ${requested.status()}`).toBe(true);
 
-	const drained = await request.post(`${API_URL}/api/internal/notifications/process-portal-magic-link-outbox`, {
-		headers: { 'X-Internal-Secret': WORKER_SECRET }
-	});
-	expect(drained.ok(), 'draining the portal magic-link outbox failed').toBe(true);
+	// Drained until this Client's own link has arrived, not once (#1141):
+	// outboxMail.ts writes out why one drain and one read cannot mean "my
+	// row was processed". It matters more here than anywhere, because the
+	// mailbox page below renders once and never refreshes itself -- so
+	// arriving there early is a timeout on a link that was never in the
+	// page, not a wait for one on its way.
+	await drainUntilMailArrives(
+		request,
+		'process-portal-magic-link-outbox',
+		email,
+		MAGIC_LINK_SUBJECT
+	);
 
 	await page.goto(`${MAILBOX_URL}/inbox/${encodeURIComponent(email)}`);
-	await page.getByRole('link', { name: 'Your Doula Cloud sign-in link' }).click();
+	await page.getByRole('link', { name: MAGIC_LINK_SUBJECT }).click();
 	await page.getByRole('link', { name: /\/portal\/sign-in\?token=/ }).click();
 }
 

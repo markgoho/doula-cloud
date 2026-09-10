@@ -25,7 +25,7 @@ import { E2E_API_HOST, E2E_API_PORT, MAILBOX_HOST, MAILBOX_PORT } from './ports'
 
 // One captured message. `seq` is arrival order and it is deliberately
 // the only ordering the inbox shows -- see the clock note on `label`.
-type Captured = {
+export type Captured = {
 	id: string;
 	seq: number;
 	to: string;
