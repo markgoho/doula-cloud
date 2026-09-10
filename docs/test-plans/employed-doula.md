@@ -119,7 +119,7 @@ ground.
 | --- | --- |
 | `automated` | 3 |
 | `manual` | 21 (five of them the permission boundary; 5.2-a added by the walk) |
-| `missing-feature` | 6 ([RA-G2](https://github.com/markgoho/doula-cloud/issues/261), [RA-G4](https://github.com/markgoho/doula-cloud/issues/225), [PR-G5](https://github.com/markgoho/doula-cloud/issues/280), [PR-G6](https://github.com/markgoho/doula-cloud/issues/281), [MO-G1](https://github.com/markgoho/doula-cloud/issues/250), [MO-G2](https://github.com/markgoho/doula-cloud/issues/251)) |
+| `missing-feature` | 5 ([RA-G4](https://github.com/markgoho/doula-cloud/issues/225), [PR-G5](https://github.com/markgoho/doula-cloud/issues/280), [PR-G6](https://github.com/markgoho/doula-cloud/issues/281), [MO-G1](https://github.com/markgoho/doula-cloud/issues/250), [MO-G2](https://github.com/markgoho/doula-cloud/issues/251)) |
 
 PR-G1, PR-G2, PR-G3, PR-G4 and PR-G8 are observed inside walkable steps (4.2, 5.2,
 5.2-a, 2.1-b, PR-B3 to PR-B6) rather than given steps of their own: the step can be
@@ -140,6 +140,10 @@ migration, the Go BFF and the Firebase Auth emulator, all local.
 | 8.2-a | `push-notification.e2e.ts` | pass |
 
 **2 automated steps: all pass.**
+
+### 2026-09-10 — Marks summary recounted ([#685](https://github.com/markgoho/doula-cloud/issues/685))
+
+No step is re-marked and no cell is rewritten here. The `missing-feature` count above read 6 and listed RA-G2, which no step in the Steps table carries any more — 2.1's roster question was answered by **Edit membership**, and the summary kept counting it. Recounted to 5, and [docs/test-plans/README.md](README.md)'s run-status row with it.
 
 ### 2026-09-03 — new automated step ([#318](https://github.com/markgoho/doula-cloud/issues/318))
 

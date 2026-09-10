@@ -116,7 +116,7 @@ on 2026-08-22.
 | Mark | Steps |
 | --- | --- |
 | `automated` | 12 |
-| `manual` | 16 |
+| `manual` | 19 |
 | `blocked` | 0 |
 | `missing-feature` | 4 ([MO-G1](https://github.com/markgoho/doula-cloud/issues/250), [MO-G2](https://github.com/markgoho/doula-cloud/issues/251), [MO-G3](https://github.com/markgoho/doula-cloud/issues/252), [MO-G4](https://github.com/markgoho/doula-cloud/issues/253)) |
 
@@ -147,6 +147,10 @@ migration, the Go BFF and the Firebase Auth emulator, all local.
 
 The `manual`, `blocked` and `missing-feature` steps are **not walked yet**.
 That is [#234](https://github.com/markgoho/doula-cloud/issues/234).
+
+### 2026-09-10 — Marks summary recounted ([#685](https://github.com/markgoho/doula-cloud/issues/685))
+
+No step is re-marked and no cell is rewritten here. The `manual` count above read 16 against a Steps table holding 19, drift left by later tickets that added or moved a step without bringing the summary along. Recounted to 19, and [docs/test-plans/README.md](README.md)'s run-status row with it. This plan's own Add Client narrative is still stale — a two-field form, a Client and an Engagement in one request, a credit spent — and that correction is [#1121](https://github.com/markgoho/doula-cloud/issues/1121), deliberately not half-done here.
 
 ### 2026-09-03 — new automated steps ([#318](https://github.com/markgoho/doula-cloud/issues/318))
 

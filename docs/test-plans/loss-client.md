@@ -83,15 +83,15 @@ Walked as Maya. Nadia is not in the app.
 | Step | Action | Expected result | Mark |
 | --- | --- | --- | --- |
 | 6.1 | Open the Contract link | The full signed prose renders. A `voided` Contract is not withheld; only the **Sign** form is, and only because it keys on `status === 'sent'` | `manual` |
-| 6.2 | Read the status | `Status: voided`, then "Voided — this Contract is no longer active." The Client portal reuses the Staff `ContractStatus` component and passes no `onVoid`, so she gets the ledger's word with no Void button and no human context ([NH-G5](https://github.com/markgoho/doula-cloud/issues/212)) | `manual` |
-| 6.2-a | Keep a copy of what she signed | `GET /api/portal/engagements/{id}/contract/pdf` 404s outright once the Contract is `voided` — `serveSignedPDF` (`signed_pdf.go:66-69`) queries `WHERE status = 'signed'`, so linking it (HS-G3) would not be enough | `missing-feature (HS-G3, NH-G8)` [#302](https://github.com/markgoho/doula-cloud/issues/302) [#299](https://github.com/markgoho/doula-cloud/issues/299) |
+| 6.2 | Read the status | **No longer active**, then "Rooted Birth Collective ended this Contract." The portal stopped reusing the Staff component's raw enum: the label and the notice both come from the Client register (`app/src/lib/clientRegister.ts`), which is the one place either wording is decided, and the notice names the Practice rather than leaving her with the ledger's word ([NH-G5](https://github.com/markgoho/doula-cloud/issues/212) closed) | `manual` |
+| 6.2-a | Keep a copy of what she signed | **The endpoint answers her now, and the screen still will not ask it.** `serveSignedPDF` compares no status at all — it keys on `signed_pdf_object_path IS NOT NULL`, which only the sent -> signed transition ever writes, so a Contract that *has ever been* signed serves its PDF whatever it says today ([NH-G8](https://github.com/markgoho/doula-cloud/issues/299) closed). The **Download signed Contract (PDF)** control HS-G3 asked for exists ([#302](https://github.com/markgoho/doula-cloud/issues/302) closed) but the portal's Contract page renders it only while `status === 'signed'`, so a Client whose Contract was voided still meets no way to her own copy. What is left of this step is [#1119](https://github.com/markgoho/doula-cloud/issues/1119) | `missing-feature (HS-G3, NH-G8)` [#302](https://github.com/markgoho/doula-cloud/issues/302) [#299](https://github.com/markgoho/doula-cloud/issues/299) |
 | 6.2-b | Find what she still owes, or what was refunded | The portal has no Invoice, balance or payment surface at all. The question she is most likely to have cannot be asked on screen | `missing-feature (NH-G6)` [#297](https://github.com/markgoho/doula-cloud/issues/297) |
 
 ### Stage 7 — Postpartum support continues anyway
 
 | Step | Action | Expected result | Mark |
 | --- | --- | --- | --- |
-| 7.1 | As Maya, log a bereavement Visit | A row of a Staff name and a creation timestamp — no date (**[MO-G1](https://github.com/markgoho/doula-cloud/issues/250)**), no type (**[PR-G6](https://github.com/markgoho/doula-cloud/issues/281)**), no notes (**[MO-G2](https://github.com/markgoho/doula-cloud/issues/251)**). Indistinguishable from the prenatal ones | `manual` |
+| 7.1 | As Maya, log a bereavement Visit | The row now carries a scheduled date and time, a type and notes (**[MO-G1](https://github.com/markgoho/doula-cloud/issues/250)**, **[PR-G6](https://github.com/markgoho/doula-cloud/issues/281)**, **[MO-G2](https://github.com/markgoho/doula-cloud/issues/251)** all closed), so it is no longer indistinguishable from the prenatal ones. The type is not chosen, though — ADR-0015 derives it from when the Visit falls against the end of the pregnancy, and a bereavement Visit types as `postpartum` for the same reason postpartum care after a loss is still postpartum. That is the honest word the model holds, and it is not the word for what Maya went to do | `manual` |
 | 7.1-a | As Nadia, find any trace of that Visit | None. There is no client-facing Visit surface (`CONTEXT.md`), by design. The support is real; the record of it is empty on both sides | `manual` |
 | 7.2 | Continue the thread both ways | Unchanged and unchangeable — immutable by design, which is correct here | `manual` |
 | 7.2-a | Mark that the thread's subject has changed, or pause push | Neither exists. Push unregistration happens only at sign-out, so her only mute is to leave | `missing-feature (NH-G7)` [#298](https://github.com/markgoho/doula-cloud/issues/298) |
@@ -147,6 +147,18 @@ migration, the Go BFF and the Firebase Auth emulator, all local.
 
 The `manual`, `blocked` and `missing-feature` steps are **not walked yet**.
 That is [#239](https://github.com/markgoho/doula-cloud/issues/239).
+
+### 2026-09-10 — narrative reconciliation ([#685](https://github.com/markgoho/doula-cloud/issues/685))
+
+A desk pass over this plan's Contract and Visits cells, which [#318](https://github.com/markgoho/doula-cloud/issues/318) left alone. Nothing was re-walked and no mark moved.
+
+| Step | Cell corrected | What settled it |
+| --- | --- | --- |
+| 6.2 | "`Status: voided`" and the Staff component's ledger word -> **No longer active**, then the Practice's own name in the notice | `app/src/lib/clientRegister.ts`'s `contractStatusLabel` and `contractVoidedNotice`, and the portal Contract page that reads them. [NH-G5](https://github.com/markgoho/doula-cloud/issues/212) is closed |
+| 6.2-a | "the endpoint 404s once voided" -> the endpoint serves her, and the screen hides the control | `serveSignedPDF`'s own doc comment in `api/internal/contracts/signed_pdf.go` ("has ever been signed"), against the portal page's `status === 'signed'` gate. [NH-G8](https://github.com/markgoho/doula-cloud/issues/299) and [HS-G3](https://github.com/markgoho/doula-cloud/issues/302) are both closed, and what is left of the step is [#1119](https://github.com/markgoho/doula-cloud/issues/1119) |
+| 7.1 | "no date, no type, no notes" -> the row carries all three, and a bereavement Visit types as `postpartum` because ADR-0015 derives the type rather than asking for it | The Visits table's Type / Date / Notes columns, and `api/internal/visit/type.go`. [MO-G1](https://github.com/markgoho/doula-cloud/issues/250), [MO-G2](https://github.com/markgoho/doula-cloud/issues/251) and [PR-G6](https://github.com/markgoho/doula-cloud/issues/281) are closed |
+
+**No step is re-marked.** 6.2-a stays `missing-feature` because the step still cannot be performed from any screen she has; the two gap IDs it cites are the ones it came from, and the remaining half is now [#1119](https://github.com/markgoho/doula-cloud/issues/1119). A plan never mints a gap ID, so that finding is a ticket rather than a new `-a` row. `contract-lifecycle.e2e.ts` drives a Contract through to `signed`, never to `voided`, so it exercises no step on this plan.
 
 ### 2026-08-23 — manual and missing-feature steps ([#239](https://github.com/markgoho/doula-cloud/issues/239))
 

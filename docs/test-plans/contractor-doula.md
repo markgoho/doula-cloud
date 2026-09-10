@@ -66,15 +66,15 @@ hole. Nothing here degrades to a manual walk-through: there is no screen to open
 | 4.1 | Open `/practices/[practiceId]/clients` | The list renders for a non-owner | `manual` |
 | 4.2 | Count the rows | **Every Client at Rooted Birth Collective.** For Priya this is a scope failure inside one team; here it is one business reading another's book ([LV-G5](https://github.com/markgoho/doula-cloud/issues/225), same root as [PR-G1](https://github.com/markgoho/doula-cloud/issues/225)) | `manual` |
 | 4.2-a | Pick hers out | Only by remembering the name from the offer — no column marks it ([RA-G4](https://github.com/markgoho/doula-cloud/issues/225)) | `manual` |
-| 4.1-a | Add a Client to the agency's book | **Nothing refuses her.** `engagement.CreateHandler` sits behind `staffauth.Middleware` with no role check (`api/main.go:169`) and consumes a Practice credit on the way through (`engagement/create.go:97`), so an outside contractor spends the agency's money ([LV-G9](https://github.com/markgoho/doula-cloud/issues/292)) | `manual` |
+| 4.1-a | Add a Client to the agency's book | **She is refused, by name.** `client.CreateHandler` turns away a contractor doula outright — *"a contractor doula does not create clients at a practice she contracts for -- work reaches her as an offer"* — and the `clients_insert` RLS policy refuses the same write independently, so the refusal does not rest on the handler remembering to ask. Nor is there money on the other side of it to spend: saving a Client is free now, and the Credit locks when an Engagement Request is approved (ADR-0017) ([LV-G9](https://github.com/markgoho/doula-cloud/issues/292) closed) | `manual` |
 
 ### Stage 5 — Check the terms and the fee
 
 | Step | Action | Expected result | Mark |
 | --- | --- | --- | --- |
 | 5.1 | Open her Engagement | The single-page view renders | `manual` |
-| 5.2 | Read the Contract section | Prose, merge fields and values in one object with no role check — **she gets the money**, on every Engagement in the Practice, not only hers. ADR-0006 says she should read it on her own work and Priya should not, which needs a split the read cannot make ([PR-G2](https://github.com/markgoho/doula-cloud/issues/277)) | `manual` |
-| 5.2-a | Price and send a Contract on a Client who is not hers | **Nothing refuses her.** The write side has no role check either, so an outsider can put a priced agreement in front of another business's Client ([PR-G8](https://github.com/markgoho/doula-cloud/issues/282)) | `manual` |
+| 5.2 | Read the Contract section | **She does not get the money, and she reaches only her own work.** ADR-0008 is the split ADR-0006 could not make: a contractor doula reaches an Engagement she holds an open, granted attachment on and no other, and every read on the page runs through `CanAccessEngagement` (`api/internal/staffauth/access.go`). On the February Engagement she reads the prose, the merge fields and their values — but `priceForReader` strips the one reserved `price` key for a contractor, so an Owner, an Admin and an *employed* Doula read the figure resolved and she never does ([PR-G2](https://github.com/markgoho/doula-cloud/issues/277)) | `manual` |
+| 5.2-a | Price and send a Contract on a Client who is not hers | **She never reaches the Engagement.** `CanAccessEngagement` answers false for a contractor holding no granted attachment on it, and the callers translate that into the same "not found" an Engagement at another Practice gets, so she cannot tell an Engagement she is not on from one that does not exist. [PR-G8](https://github.com/markgoho/doula-cloud/issues/282) stands as an *inside* the Practice finding — a Contract write is still declared `AnyStaff` — but the escalation this step recorded, an outside business pricing another's Client, is gone | `manual` |
 | 5.3 | Find what *she* is owed | Nothing holds it. The Contract prices the Client's care, and her rate lives in the phone call | `missing-feature (LV-G3)` [#225](https://github.com/markgoho/doula-cloud/issues/225) |
 
 ### Stage 6 — Do the work
@@ -87,7 +87,7 @@ half is the half the product already treats correctly.
 | Step | Action | Expected result | Mark |
 | --- | --- | --- | --- |
 | 6.1 | Read the Birth Plan | As Priya 6.1–6.2, including no deep link and no handoff from her side ([PR-G5](https://github.com/markgoho/doula-cloud/issues/280)) | `manual` |
-| 6.2 | Log a Visit | As Priya 7.1: no date, no type, no note ([MO-G1](https://github.com/markgoho/doula-cloud/issues/250), [MO-G2](https://github.com/markgoho/doula-cloud/issues/251), [PR-G6](https://github.com/markgoho/doula-cloud/issues/281)) | `manual` |
+| 6.2 | Log a Visit | As Priya 7.1, and the row is a record now: a scheduled date and time, a type and notes ([MO-G1](https://github.com/markgoho/doula-cloud/issues/250), [MO-G2](https://github.com/markgoho/doula-cloud/issues/251) and [PR-G6](https://github.com/markgoho/doula-cloud/issues/281) all closed). She logs it for herself, holding the Doula role; she may name nobody else, and she reaches this Engagement at all only through the granted attachment her acceptance of the Offer opened | `manual` |
 | 6.3 | Message the Client | As Priya 8.1–8.2 | `manual` |
 
 ### Stage 7 — Get paid
@@ -127,6 +127,21 @@ migration, the Go BFF and the Firebase Auth emulator, all local.
 | 2.1 | `staff-login.e2e.ts` | pass |
 
 **1 automated steps: all pass.**
+
+### 2026-09-10 — narrative reconciliation ([#685](https://github.com/markgoho/doula-cloud/issues/685))
+
+A desk pass, not a walk, over this plan's Add Client, Visits and Contract cells — the ones [#318](https://github.com/markgoho/doula-cloud/issues/318) left alone. Nothing was re-walked and no mark moved.
+
+| Step | Cell corrected | What settled it |
+| --- | --- | --- |
+| 4.1-a | "Nothing refuses her" -> she is refused by name, twice over, and there is no credit left on that path to spend | `CreateHandler`'s `IsAmbientContractor` refusal in `api/internal/client/create.go`, the `clients_insert` RLS policy behind it, and ADR-0017 on when a Credit locks. [LV-G9](https://github.com/markgoho/doula-cloud/issues/292) is closed |
+| 5.2 | "she gets the money, on every Engagement in the Practice, not only hers" -> she reaches only her own work, and the price is stripped for her there | ADR-0008 and `CanAccessEngagement` in `api/internal/staffauth/access.go` for the reach; `priceForReader` in `api/internal/contracts/contract.go` for the money |
+| 5.2-a | "Nothing refuses her" -> she never reaches another Client's Engagement at all; [PR-G8](https://github.com/markgoho/doula-cloud/issues/282) survives as an inside-the-Practice finding | The same `CanAccessEngagement` check, and `api/internal/contracts/mount.go`, where the Contract write is still `AnyStaff` |
+| 6.2 | "no date, no type, no note" -> the Visit row carries all three, and she may log only her own | The Visits table's Type / Date / Notes columns, and `resolveAssignee` in `api/internal/visit/roles.go`. [MO-G1](https://github.com/markgoho/doula-cloud/issues/250), [MO-G2](https://github.com/markgoho/doula-cloud/issues/251) and [PR-G6](https://github.com/markgoho/doula-cloud/issues/281) are closed |
+
+**No step is re-marked.** Both new specs run as a founding Owner inside her own Practice, which is the one thing every cell above is not about.
+
+**Left alone on purpose.** 4.2's LV-G5 reading — "one business reading another's book" — is contradicted by the same `CanAccessClient` rule, but it is a Clients-list step rather than one of the three this ticket reviewed, and re-walking it belongs to [#329](https://github.com/markgoho/doula-cloud/issues/329).
 
 ### 2026-08-23 — manual walk ([#238](https://github.com/markgoho/doula-cloud/issues/238))
 
