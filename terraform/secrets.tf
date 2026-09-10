@@ -146,30 +146,14 @@ resource "google_secret_manager_secret" "notification_worker_secret" {
   }
 }
 
-# Three accessors, not one: the runtime container itself, `deploy-api` (which
-# writes the header value onto the Scheduler jobs at deploy time — see
-# docs/environment.md), and `terraform-plan@`, added in #1044 so the `data`
-# source in `scheduler.tf` can read this secret during `plan`.
-resource "google_secret_manager_secret_iam_member" "notification_worker_secret_runtime_accessor" {
-  member    = google_service_account.doula_api_runtime.member
-  project   = "doula-cloud"
-  role      = "roles/secretmanager.secretAccessor"
-  secret_id = google_secret_manager_secret.notification_worker_secret.id
-}
-
-resource "google_secret_manager_secret_iam_member" "notification_worker_secret_deploy_accessor" {
-  member    = "serviceAccount:github-action-733741680@doula-cloud.iam.gserviceaccount.com"
-  project   = "doula-cloud"
-  role      = "roles/secretmanager.secretAccessor"
-  secret_id = google_secret_manager_secret.notification_worker_secret.id
-}
-
-resource "google_secret_manager_secret_iam_member" "notification_worker_secret_terraform_plan_accessor" {
-  member    = "serviceAccount:terraform-plan@doula-cloud.iam.gserviceaccount.com"
-  project   = "doula-cloud"
-  role      = "roles/secretmanager.secretAccessor"
-  secret_id = google_secret_manager_secret.notification_worker_secret.id
-}
+# This secret had three accessors until #1183 and now has none. The runtime
+# container no longer references it (ADR-0037 made the deployed boundary a
+# caller identity, and `cloud_run.tf` sets no `NOTIFICATION_WORKER_SECRET`);
+# `firebase-hosting-merge.yml` no longer reads it, because its `verify-pages`
+# step presents an ID token; and `terraform-plan@`'s grant existed only so
+# `scheduler.tf`'s `data` source could read the header value during `plan`,
+# which is gone with the header. The shell itself stays — deleting it is a
+# separate act, and nothing reads it in the meantime.
 
 resource "google_secret_manager_secret" "pg_app_runtime_dsn" {
   annotations         = {}

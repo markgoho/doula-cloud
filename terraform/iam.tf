@@ -170,9 +170,11 @@ resource "google_project_iam_member" "firebase_app_hosting_compute_apphosting_co
 #     secret. The Cloud Run runtime resolves those references as this
 #     account, so a missing grant is a container that will not start.
 #   - `roles/cloudtasks.enqueuer` on `doula-cloud-notification-nudge`
-#     (scheduler.tf) — ADR-0013's nudge path. The task carries
-#     `X-Internal-Secret` as a plain header and no OIDC token, so nothing
-#     here needs to act as any account.
+#     (scheduler.tf) — ADR-0013's nudge path. Since #1183 the task carries
+#     an OIDC token minted for this same account rather than a plain header,
+#     which is why `roles/iam.serviceAccountUser` on itself is below: Cloud
+#     Tasks checks that the creating identity may act as the account the
+#     token names, and a service account has no implicit `actAs` on itself.
 #   - `roles/storage.objectUser` on `doula-cloud-attachments` (storage.tf).
 #
 # Nothing for logging or monitoring: Cloud Run collects a container's
@@ -248,6 +250,59 @@ resource "google_project_iam_member" "doula_api_runtime_staff_accounts" {
 # here rather than left to a console.
 resource "google_service_account_iam_member" "github_action_doula_api_runtime_service_account_user" {
   member             = google_service_account.github_action.member
+  role               = "roles/iam.serviceAccountUser"
+  service_account_id = google_service_account.doula_api_runtime.name
+}
+
+# `internal-caller@`: the identity the two Cloud Scheduler jobs present at
+# `/api/internal/**` (#1183, ADR-0037). It holds **no project role**, and that
+# is not an omission — the boundary is the `email` claim on the token it
+# presents, checked against `INTERNAL_OIDC_CALLERS` inside the process, so the
+# account needs nothing but to exist and to be mintable. A project role here
+# would be power the boundary does not read.
+#
+# It is a separate account from `doula-api-runtime@` deliberately. The two
+# callers arrive by different routes — a schedule Google runs, and this
+# service enqueueing to itself — and one account per route is what makes a
+# Cloud Run log line say which. Cloud Scheduler mints the token through its
+# own service agent, `service-850855848778@gcp-sa-cloudscheduler…`, which
+# holds `iam.serviceAccounts.getOpenIdToken` project-wide through
+# `roles/cloudscheduler.serviceAgent`; the same is true of Cloud Tasks'
+# agent. Read from `gcloud iam roles describe`, so neither agent needs a
+# `roles/iam.serviceAccountTokenCreator` grant here.
+resource "google_service_account" "internal_caller" {
+  account_id                   = "internal-caller"
+  create_ignore_already_exists = null
+  deletion_policy              = "DELETE"
+  description                  = "The identity the two Cloud Scheduler jobs present at /api/internal/** (#1183, ADR-0037). Holds no project role: the boundary is the token's email claim."
+  disabled                     = false
+  display_name                 = "Internal caller"
+  project                      = "doula-cloud"
+
+  lifecycle {
+    prevent_destroy = true
+  }
+}
+
+# `roles/owner` carries `iam.serviceAccounts.actAs` and not
+# `iam.serviceAccounts.getOpenIdToken` — read from `gcloud iam roles describe
+# roles/owner` — so the one human principal in this project cannot mint a
+# token for this account without this grant, and every operator endpoint in
+# `docs/runbooks/` is reached by minting one.
+resource "google_service_account_iam_member" "markgoho_internal_caller_token_creator" {
+  member             = "user:markgoho@gmail.com"
+  role               = "roles/iam.serviceAccountTokenCreator"
+  service_account_id = google_service_account.internal_caller.name
+}
+
+# Cloud Tasks refuses to create a task whose `oidc_token` names a service
+# account the *creating* identity cannot act as, and a service account holds
+# no implicit `actAs` on itself. `doula-api-runtime@` both creates the nudge
+# and is named in its token, so it needs this binding on itself — without it
+# every enqueue fails with a permission error rather than a 401, and ADR-0013's
+# nudge silently stops while the five-minute drain keeps covering for it.
+resource "google_service_account_iam_member" "doula_api_runtime_acts_as_itself" {
+  member             = google_service_account.doula_api_runtime.member
   role               = "roles/iam.serviceAccountUser"
   service_account_id = google_service_account.doula_api_runtime.name
 }

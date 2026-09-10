@@ -42,18 +42,22 @@ above already is.
 
 ## Running it
 
-There is no screen for this — deliberately, per #615's AC. It is one authenticated HTTP call,
-made by an operator who holds `NOTIFICATION_WORKER_SECRET`:
+There is no screen for this — deliberately, per #615's AC. It is one authenticated HTTP call, made by an operator who can mint a token for `internal-caller@doula-cloud.iam.gserviceaccount.com` (ADR-0037: the boundary is a caller identity, not a shared secret, and the token expires within the hour rather than being a string somebody keeps):
 
 ```bash
-SECRET=$(gcloud secrets versions access latest --secret=doula-cloud-notification-worker-secret --project=doula-cloud)
+TOKEN=$(gcloud auth print-identity-token \
+  --impersonate-service-account=internal-caller@doula-cloud.iam.gserviceaccount.com \
+  --audiences=https://doula-api-850855848778.us-central1.run.app \
+  --include-email)
 
 curl -s -o /dev/null -w '%{http_code}\n' \
   -X POST 'https://doula-api-850855848778.us-central1.run.app/api/internal/staffauth/mfa-recovery/support-clear' \
-  -H "X-Internal-Secret: $SECRET" \
+  -H "Authorization: Bearer $TOKEN" \
   -H 'Content-Type: application/json' \
   -d '{"staffId": "<the staff row id>", "operator": "<your name>"}'
 ```
+
+`--audiences` is the service's **base** URL, not this endpoint's own URL, and `--include-email` is required: the guard checks the token's `email` claim against the allowlist, and a token minted without that flag carries none. Getting either wrong produces a `401` from a token that is otherwise perfectly valid.
 
 - `staffId` is the `staff.id` UUID of the person whose enrolment you are clearing — find it
   from the Practice's roster in a support tool, or by asking engineering to look it up by
@@ -63,8 +67,7 @@ curl -s -o /dev/null -w '%{http_code}\n' \
   the audit trail later would recognize, not an initials or a ticket number.
 - A `204` means it worked: the enrolment is cleared, every session for that identity is
   ended, and the person has been mailed a notice. A `404` means the `staffId` does not name
-  a real Staff row — double-check it before retrying. A `401` means the secret is wrong;
-  fetch it again rather than guessing at a stale copy.
+  a real Staff row — double-check it before retrying. A `401` means the token is wrong — most often an expired one, a missing `--include-email`, or an `--audiences` carrying this endpoint's path rather than the base URL. Mint a fresh one rather than reusing a stale copy.
 
 **What happens next, for the person.** She receives an email that her two-factor
 authenticator was reset and every session was signed out. She signs in with her password —

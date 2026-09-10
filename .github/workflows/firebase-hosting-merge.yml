@@ -139,12 +139,23 @@ jobs:
           name: hugo-public
           path: hugo/public
 
+      # `token_format: id_token` mints the credential the `verify-pages` step
+      # below presents, alongside the credentials file the Firebase deploy
+      # uses. `id_token_include_email` is not decoration: it defaults to false
+      # upstream, and `internalauth.Guard` refuses a token carrying no verified
+      # `email` claim, since the allowlist is compared against exactly that
+      # claim (ADR-0037). The audience is the service's base URL, which is what
+      # `INTERNAL_OIDC_AUDIENCE` holds — never the endpoint's own URL.
       - name: Authenticate to Google Cloud
+        id: gcp
         uses: ./.github/actions/gcp-auth
         with:
           project_id: doula-cloud
           workload_identity_provider: projects/850855848778/locations/global/workloadIdentityPools/github-actions/providers/github
           service_account: github-action-733741680@doula-cloud.iam.gserviceaccount.com
+          token_format: id_token
+          id_token_audience: https://doula-api-850855848778.us-central1.run.app
+          id_token_include_email: "true"
 
       - uses: oven-sh/setup-bun@v2
 
@@ -160,21 +171,18 @@ jobs:
       # tables and writes nothing, deliberately (00046). The probe is one
       # Go function, shared with the Cloud Scheduler sweep that covers
       # what this step cannot: a build that fails never gets here at all.
-      - name: Fetch the site worker secret
-        id: worker
-        uses: google-github-actions/get-secretmanager-secrets@v3
-        with:
-          secrets: |-
-            secret:doula-cloud/doula-cloud-notification-worker-secret
-
       # The raw Cloud Run URL, the same one Cloud Tasks targets, rather
       # than going in through Firebase Hosting's /api/** rewrite: this
       # endpoint is not the app's, and the rewrite strips headers this
       # request is authenticated by (#138).
+      #
+      # The credential is the ID token minted above, not a secret read out of
+      # Secret Manager (#1183): this workflow's own identity,
+      # `github-action-733741680@`, is on `INTERNAL_OIDC_CALLERS`.
       - name: Confirm every published page resolves
         env:
-          WORKER_SECRET: ${{ steps.worker.outputs.secret }}
+          ID_TOKEN: ${{ steps.gcp.outputs.id_token }}
         run: |
           curl -fsS --retry 3 --retry-delay 5 --max-time 120 \
             -X POST "https://doula-api-850855848778.us-central1.run.app/api/internal/site/verify-pages" \
-            -H "X-Internal-Secret: ${WORKER_SECRET}"
+            -H "Authorization: Bearer ${ID_TOKEN}"

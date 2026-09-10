@@ -3,13 +3,13 @@
 # misconfigured job was invisible until an outbox's own close-out went and
 # looked, and this is what turns that into a red `terraform plan` instead.
 #
-# The `X-Internal-Secret` header both jobs send is read from Secret Manager
-# through this data source, never written as a literal here. It still lands
-# in Terraform state as a field on the job — docs/infrastructure.md accepts
-# that explicitly as the one secret state carries.
-data "google_secret_manager_secret_version" "notification_worker_secret" {
-  secret = "doula-cloud-notification-worker-secret"
-}
+# Both jobs authenticate with a Google-signed OIDC token minted for
+# `internal-caller@` (ADR-0037, #1183), replacing the `X-Internal-Secret`
+# header each used to carry. The header's value was read from Secret Manager
+# through a `nonsensitive()` data source and still landed in Terraform state
+# as a field on the job — a cost docs/infrastructure.md accepted while a
+# shared string was the boundary. A service account address is not a secret,
+# so state now carries none at all.
 
 # `prevent_destroy` is deliberately not set on any of the four resources in
 # this file. None holds data or identity: a Scheduler job is a schedule and a
@@ -31,9 +31,18 @@ resource "google_cloud_scheduler_job" "process_outbox_drain" {
 
   http_target {
     http_method = "POST"
-    uri         = "https://doula-api-850855848778.us-central1.run.app/api/internal/outboxes/drain"
-    headers = {
-      X-Internal-Secret = nonsensitive(data.google_secret_manager_secret_version.notification_worker_secret.secret_data)
+    uri         = "${local.doula_api_base_url}/api/internal/outboxes/drain"
+
+    # `audience` is set explicitly, and must be. Cloud Scheduler defaults an
+    # unset audience to the full target URI — the `/api/internal/outboxes/drain`
+    # path included — while `internalauth.Guard` validates against
+    # `INTERNAL_OIDC_AUDIENCE`, the service's base URL, because one value has
+    # to serve all twenty-three internal addresses. A job left to the default
+    # therefore 401s on its first tick with a token that is otherwise
+    # perfectly valid and signed by the right account.
+    oidc_token {
+      audience              = local.doula_api_base_url
+      service_account_email = google_service_account.internal_caller.email
     }
   }
 
@@ -59,9 +68,13 @@ resource "google_cloud_scheduler_job" "verify_practice_pages" {
 
   http_target {
     http_method = "POST"
-    uri         = "https://doula-api-850855848778.us-central1.run.app/api/internal/site/verify-pages"
-    headers = {
-      X-Internal-Secret = nonsensitive(data.google_secret_manager_secret_version.notification_worker_secret.secret_data)
+    uri         = "${local.doula_api_base_url}/api/internal/site/verify-pages"
+
+    # Explicit for the same reason as the drain job above: the default
+    # audience is this full URI, and the guard checks the base URL.
+    oidc_token {
+      audience              = local.doula_api_base_url
+      service_account_email = google_service_account.internal_caller.email
     }
   }
 
