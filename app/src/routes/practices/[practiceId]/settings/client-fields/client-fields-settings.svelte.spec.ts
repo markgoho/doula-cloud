@@ -126,46 +126,45 @@ describe('client fields settings screen', () => {
  * read the list needs to know what it is as much as the Owner who edits
  * it.
  */
+async function setup({ roles = ['owner'] }: MockOptions = {}) {
+	mockApi({ roles });
+	await render(Page, {});
+}
+
+/*
+ * `intro` matches a substring rather than the whole paragraph: the
+ * assertion should fail when a fact goes missing, not when a comma moves.
+ */
+function intro(fact: string) {
+	return testPage.getByText(fact, { exact: false });
+}
+
 describe('client fields settings screen: it introduces itself (#865)', () => {
 	it('says what the fields are, for a caller who cannot edit them', async () => {
-		mockApi({ roles: ['doula'] });
-		await render(Page, {});
+		await setup({ roles: ['doula'] });
 
 		await expect
 			.element(
-				testPage.getByText(
-					'Extra facts this Practice records about every Client, beyond name, contact details and address',
-					{ exact: false }
+				intro(
+					'The extra questions this Practice asks about every Client, beyond name, contact details and address'
 				)
 			)
 			.toBeVisible();
 	});
 
 	it('says the list starts empty and that no Client ever sees a field', async () => {
-		mockApi({ roles: ['owner'] });
-		await render(Page, {});
+		await setup();
 
 		await expect
-			.element(
-				testPage.getByText(
-					'Nothing is here to start with, and every field is staff-only: a Client never sees one',
-					{ exact: false }
-				)
-			)
+			.element(intro('Nothing is here to start with, no Client ever sees one'))
 			.toBeVisible();
 	});
 
 	it('says removing a field archives it rather than losing what was recorded', async () => {
-		mockApi({ roles: ['owner'] });
-		await render(Page, {});
+		await setup();
 
 		await expect
-			.element(
-				testPage.getByText(
-					'Removing a field archives it, so what was already recorded about a Client stays',
-					{ exact: false }
-				)
-			)
+			.element(intro('removing a field archives it, so what was already recorded stays'))
 			.toBeVisible();
 	});
 });

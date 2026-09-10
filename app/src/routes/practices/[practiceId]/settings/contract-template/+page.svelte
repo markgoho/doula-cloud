@@ -68,7 +68,7 @@
 -->
 {#snippet intro()}
 	<Text
-		text="Every Contract this Practice sends starts from the terms written here, with the Client's name, dates and price filled in. Doula Cloud wrote a first set of terms to start from, and it is meant to be replaced with this Practice's own. A Contract already written for a Client keeps the terms it was written from, so nothing changed here reaches a Contract already made."
+		text="Every Contract this Practice sends starts from the terms written here, with the Client's name, dates and price filled in, and the terms Doula Cloud seeded are meant to be replaced with this Practice's own. A Contract already written for a Client keeps the terms it was written from, so nothing changed here reaches a Contract already made."
 	/>
 {/snippet}
 

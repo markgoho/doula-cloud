@@ -5,7 +5,7 @@
  * ticket added and nothing else -- the Owner/non-Owner split (#970) is
  * already realized as a fixture variant and swept there.
  *
- * The reassurance is asserted for both callers on purpose. A non-Owner
+ * The first fact is asserted for both callers on purpose. A non-Owner
  * reads this screen and cannot save from it, but "editing here cannot
  * reach a Contract already written" is orientation, not a write control,
  * and a screen that explains itself only to the person who may change it
@@ -15,7 +15,7 @@ import { page as testPage } from 'vitest/browser';
 import { describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import Page from './+page.svelte';
-import { toApiResponder, toPageState } from '../../../../routeFixture.js';
+import { toApiResponder, toPageState, type RouteVariant } from '../../../../routeFixture.js';
 import { fixture, nonOwner } from './page.fixture.js';
 
 const pageState = vi.hoisted(() => ({
@@ -31,11 +31,17 @@ vi.mock('#lib/api.js', () => ({
 	apiErrorMessage: (response: Response) => response.text()
 }));
 
+/*
+ * What the screen says it is -- the one fact both sessions are asked for.
+ */
+const PURPOSE = 'Every Contract this Practice sends starts from the terms written here';
+
 interface SetupOptions {
 	/*
-	 * The fixture variant to mount, defaulting to the base Owner.
+	 * The fixture variant to mount. Omitted is the fixture's own session,
+	 * which is an Owner.
 	 */
-	as?: typeof nonOwner;
+	as?: RouteVariant;
 }
 
 async function setup({ as }: SetupOptions = {}) {
@@ -45,27 +51,26 @@ async function setup({ as }: SetupOptions = {}) {
 	await render(Page, {});
 }
 
+/*
+ * `intro` matches a substring rather than the whole paragraph: the
+ * assertion should fail when a fact goes missing, not when a comma moves.
+ */
+function intro(fact: string) {
+	return testPage.getByText(fact, { exact: false });
+}
+
 describe('contract-template settings screen: it introduces itself (#865)', () => {
 	it('says what the terms on it are for', async () => {
 		await setup();
 
-		await expect
-			.element(
-				testPage.getByText(
-					'Every Contract this Practice sends starts from the terms written here',
-					{ exact: false }
-				)
-			)
-			.toBeVisible();
+		await expect.element(intro(PURPOSE)).toBeVisible();
 	});
 
 	it('says the seeded terms are a starting point meant to be replaced', async () => {
 		await setup();
 
 		await expect
-			.element(
-				testPage.getByText("it is meant to be replaced with this Practice's own", { exact: false })
-			)
+			.element(intro("are meant to be replaced with this Practice's own"))
 			.toBeVisible();
 	});
 
@@ -74,9 +79,8 @@ describe('contract-template settings screen: it introduces itself (#865)', () =>
 
 		await expect
 			.element(
-				testPage.getByText(
-					'keeps the terms it was written from, so nothing changed here reaches a Contract already made',
-					{ exact: false }
+				intro(
+					'keeps the terms it was written from, so nothing changed here reaches a Contract already made'
 				)
 			)
 			.toBeVisible();
@@ -85,13 +89,6 @@ describe('contract-template settings screen: it introduces itself (#865)', () =>
 	it('introduces itself to a caller who cannot change the terms', async () => {
 		await setup({ as: nonOwner });
 
-		await expect
-			.element(
-				testPage.getByText(
-					'Every Contract this Practice sends starts from the terms written here',
-					{ exact: false }
-				)
-			)
-			.toBeVisible();
+		await expect.element(intro(PURPOSE)).toBeVisible();
 	});
 });

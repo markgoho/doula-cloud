@@ -100,18 +100,21 @@ describe('plan-templates settings screen: the plan-type switcher (#866)', () => 
  * refactor that drops the `intro` prop fails here rather than quietly
  * shipping the bare screen back.
  *
- * Substring matches rather than the whole paragraph: the assertion should
- * fail when a fact goes missing, not when a comma moves.
+ * `intro` matches a substring rather than the whole paragraph: the
+ * assertion should fail when a fact goes missing, not when a comma moves.
  */
+function intro(fact: string) {
+	return testPage.getByText(fact, { exact: false });
+}
+
 describe('plan-templates settings screen: it introduces itself (#865)', () => {
 	it('says what the questions on it are for', async () => {
 		await setup();
 
 		await expect
 			.element(
-				testPage.getByText(
-					'Every Care Plan and Birth Plan this Practice fills in starts from the questions set here',
-					{ exact: false }
+				intro(
+					'Every Care Plan and Birth Plan this Practice fills in starts from the questions set here'
 				)
 			)
 			.toBeVisible();
@@ -121,7 +124,7 @@ describe('plan-templates settings screen: it introduces itself (#865)', () => {
 		await setup();
 
 		await expect
-			.element(testPage.getByText('it is meant to be changed', { exact: false }))
+			.element(intro('the set Doula Cloud seeded is meant to be changed'))
 			.toBeVisible();
 	});
 
@@ -130,9 +133,8 @@ describe('plan-templates settings screen: it introduces itself (#865)', () => {
 
 		await expect
 			.element(
-				testPage.getByText(
-					'keeps the questions it was filled in against, so nothing changed here reaches a plan already written',
-					{ exact: false }
+				intro(
+					'keeps the questions it was filled in against, so nothing changed here reaches a plan already written'
 				)
 			)
 			.toBeVisible();

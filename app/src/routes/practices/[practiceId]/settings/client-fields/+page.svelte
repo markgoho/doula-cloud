@@ -84,8 +84,11 @@
 	#865 aligned this with its two siblings, which had no intro at all until
 	that ticket. Three changes, all of them the same rule: say what is true
 	of *this* screen. "this Practice", not "your Practice", so the three
-	settings screens and the Settings hub speak with one voice. The list
-	starts empty rather than seeded -- `staffauth/signup.go` seeds Plan
+	settings screens and the Settings hub speak with one voice, and the hub's
+	own noun for what this screen holds -- questions this Practice asks about
+	a Client -- rather than "facts", which was the one place the hub and the
+	screen named the same thing differently. The list starts empty rather
+	than seeded -- `staffauth/signup.go` seeds Plan
 	Templates and the Contract Template and deliberately seeds no Client
 	fields, which `clientfieldtemplate/template.go` calls the designed state
 	for a new Practice -- so the "a default meant to be changed" sentence the
@@ -96,7 +99,7 @@
 -->
 {#snippet intro()}
 	<Text
-		text="Extra facts this Practice records about every Client, beyond name, contact details and address. Nothing is here to start with, and every field is staff-only: a Client never sees one. Removing a field archives it, so what was already recorded about a Client stays."
+		text="The extra questions this Practice asks about every Client, beyond name, contact details and address. Nothing is here to start with, no Client ever sees one, and removing a field archives it, so what was already recorded stays."
 	/>
 {/snippet}
 
