@@ -140,7 +140,7 @@ describe('the narrow sheet', () => {
 			.not.toBeInTheDocument();
 	});
 
-	it('still opens, and still closes, on a route with no Practice', async () => {
+	it('still opens, traps, and still closes, on a route with no Practice', async () => {
 		const { hamburger } = await setupNarrow({ practices: [], currentPracticeId: '' });
 
 		await hamburger.click();
@@ -150,6 +150,10 @@ describe('the narrow sheet', () => {
 		for (const item of NAV_ITEMS) {
 			await expect.element(sheet.getByRole('link', { name: item.label })).toBeVisible();
 		}
+		// A block removed from the sheet is a block removed from the focus
+		// order, so the trap is asserted here too and not only on a route
+		// that has a Practice in it.
+		expect(sheet.element().contains(document.activeElement)).toBe(true);
 		await page.getByRole('button', { name: 'Close menu' }).click();
 		expect(document.activeElement).toBe(hamburger.element());
 	});
