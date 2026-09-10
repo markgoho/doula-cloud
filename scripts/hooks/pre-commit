@@ -34,6 +34,24 @@ if [ -n "$staged_app_files" ]; then
     #    comment there for why the browser pool is capped (#935). The
     #    Playwright e2e suite deliberately stays out, since it builds the
     #    app and starts Postgres, the BFF and an emulator.
+    #    Only one session at a time may run this step (#936). Capping the
+    #    pool got two concurrent gates onto a 24GB machine; the ~3.5GB of
+    #    fixed cost per gate that no worker count removes is why a third
+    #    needs admission control instead. scripts/gate-lock.ts holds a
+    #    machine-wide lock across every worktree and fails open on every
+    #    error path -- see docs/testing.md.
+    #
+    #    $0 is this hook's absolute path in the MAIN checkout
+    #    (core.hooksPath is absolute), while the working directory is the
+    #    committing worktree. Resolving the wrapper from $0 rather than
+    #    the cwd is what lets a worktree branched before #936 landed still
+    #    commit, and the -f test is the same guard once more: no wrapper,
+    #    no lock, but never a blocked commit.
     echo "Running unit tests and the coverage gate on app/..." >&2
-    bun run --cwd app test:unit:coverage || exit 1
+    gate_lock="$(dirname "$0")/../gate-lock.ts"
+    if [ -f "$gate_lock" ]; then
+        bun "$gate_lock" -- bun run --cwd app test:unit:coverage || exit 1
+    else
+        bun run --cwd app test:unit:coverage || exit 1
+    fi
 fi
