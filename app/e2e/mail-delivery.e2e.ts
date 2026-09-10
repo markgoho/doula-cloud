@@ -46,6 +46,14 @@ test('An invitation arrives as readable mail, and a complaint stops the next one
 	// Nothing fires by itself locally (#762): this POSTs the one
 	// `process-*` endpoint under test, which deployed is reached by
 	// ADR-0013's nudge and by `process-outbox-drain` (#481).
+	//
+	// It drains the whole table, not just this spec's row (staffinvite's
+	// claimQuery filters on status and next_attempt_at and nothing else),
+	// and Playwright runs spec files in parallel against one shared stack
+	// -- so this call mails, and clears the token from, whatever other
+	// spec's invitation happens to be pending at this instant. That is
+	// deliberate here and handled there: stack.ts's readStaffInviteToken
+	// falls back to this same mailbox when its outbox row has gone (#827).
 	const drain = async () =>
 		request.post(`${API_URL}/api/internal/notifications/process-staff-invite-outbox`, {
 			headers: { 'X-Internal-Secret': WORKER_SECRET }

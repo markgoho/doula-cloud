@@ -159,7 +159,7 @@ test('one identity, two Practices: MFA required at one and not the other', async
 	const inviteBody = await invite.text();
 	expect(invite.ok(), `invite to Practice B failed: ${invite.status()} ${inviteBody}`).toBe(true);
 	const { invitationId } = JSON.parse(inviteBody);
-	const inviteToken = readStaffInviteToken(invitationId);
+	const inviteToken = await readStaffInviteToken(invitationId);
 	expect(inviteToken, `no pending invite token for ${invitationId}`).toBeTruthy();
 
 	const accept = await request.post(`${API_URL}/api/staff/accept-invite`, {
