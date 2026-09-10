@@ -553,3 +553,172 @@ func TestSignedContractPDFHandlers_DraftNotFound(t *testing.T) {
 	}
 	assertNoSignedContractMessage(t, portalResp)
 }
+
+// decodeContract reads a ContractResponse off a 200 body, failing the
+// test on any other status -- the shape every hasSignedPdf assertion
+// below starts from.
+func decodeContract(t *testing.T, resp *http.Response) contracts.ContractResponse {
+	t.Helper()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
+	}
+	var out contracts.ContractResponse
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	return out
+}
+
+// TestContractReads_VoidedContractReportsSignedPDF is #1119's root: the
+// Contract read has to say that a Signed PDF exists, because the screens
+// were deciding from status instead and hid the download the moment a
+// Contract was voided -- while the route behind it went on serving. Both
+// populations are asserted here: the Client is the one who loses her own
+// copy of what she signed, and the Staff Engagement page reads the same
+// fact for the Practice's copy.
+func TestContractReads_VoidedContractReportsSignedPDF(t *testing.T) {
+	db := testdb.New(t)
+	const uid = "read-voided-has-pdf"
+	const identityUID = "client-read-voided-has-pdf"
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
+	clientID, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jordan Client", "jordan@example.com")
+	testdb.SeedPortalUser(t, db, testdb.PortalUID(identityUID), clientID)
+	contractID, _ := seedSignedContract(t, db, engagementID)
+	voidContractRow(t, db, contractID)
+
+	srv, session := newContractServer(t, db, uid)
+	defer srv.Close()
+	staffResp := getContract(t, srv, session, practiceID, engagementID)
+	defer staffResp.Body.Close()
+	staffOut := decodeContract(t, staffResp)
+	if staffOut.Status != statusVoided {
+		t.Fatalf("staff status = %q, want %q", staffOut.Status, statusVoided)
+	}
+	if !staffOut.HasSignedPDF {
+		t.Fatalf("staff hasSignedPdf = false on a voided Contract whose Signed PDF the route still serves (#1119)")
+	}
+
+	portalSrv, portalSession := newPortalServer(t, db, identityUID)
+	defer portalSrv.Close()
+	clientResp := getClientContract(t, portalSrv, portalSession, engagementID)
+	defer clientResp.Body.Close()
+	clientOut := decodeContract(t, clientResp)
+	if clientOut.Status != statusVoided {
+		t.Fatalf("client status = %q, want %q", clientOut.Status, statusVoided)
+	}
+	if !clientOut.HasSignedPDF {
+		t.Fatalf("client hasSignedPdf = false on a voided Contract she signed -- she has no path to her own copy (#1119)")
+	}
+}
+
+// TestContractReads_UnsignedContractReportsNoSignedPDF is the other
+// half: a Contract that has never been signed offers nothing to
+// download, and the field says so on both surfaces, for both statuses
+// that can precede a signature.
+func TestContractReads_UnsignedContractReportsNoSignedPDF(t *testing.T) {
+	for _, status := range []string{statusDraft, statusSent} {
+		t.Run(status, func(t *testing.T) {
+			db := testdb.New(t)
+			uid := "read-unsigned-" + status
+			identityUID := "client-read-unsigned-" + status
+			practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
+			clientID, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jordan Client", "jordan@example.com")
+			testdb.SeedPortalUser(t, db, testdb.PortalUID(identityUID), clientID)
+			seedContract(t, db, engagementID, status, mergeFieldProse)
+
+			srv, session := newContractServer(t, db, uid)
+			defer srv.Close()
+			staffResp := getContract(t, srv, session, practiceID, engagementID)
+			defer staffResp.Body.Close()
+			if decodeContract(t, staffResp).HasSignedPDF {
+				t.Fatalf("staff hasSignedPdf = true on a %s Contract, which has no Signed PDF at all", status)
+			}
+
+			// The PDF route is the fact the field claims to mirror, so
+			// the refusal is asserted beside it rather than assumed.
+			pdfResp := getContractPDF(t, srv, session, practiceID, engagementID)
+			defer pdfResp.Body.Close()
+			if pdfResp.StatusCode != http.StatusNotFound {
+				t.Fatalf("pdf route status = %d, want %d", pdfResp.StatusCode, http.StatusNotFound)
+			}
+
+			if status == statusDraft {
+				// A Draft is unreachable from the portal at all (RLS),
+				// so there is no Client-side read to make here.
+				return
+			}
+			portalSrv, portalSession := newPortalServer(t, db, identityUID)
+			defer portalSrv.Close()
+			clientResp := getClientContract(t, portalSrv, portalSession, engagementID)
+			defer clientResp.Body.Close()
+			if decodeContract(t, clientResp).HasSignedPDF {
+				t.Fatalf("client hasSignedPdf = true on a %s Contract, which has no Signed PDF at all", status)
+			}
+		})
+	}
+}
+
+// TestGetContractHandler_DraftBesideVoidedSignedReportsSignedPDF proves
+// the field is scoped to the Engagement, the way the route is, and not
+// to the one Contract row the read happens to resolve. Void-then-recreate
+// (#72) leaves a fresh Draft as the current Contract beside an older
+// signed-and-voided row whose PDF is still what the route serves; a
+// per-row reading would say "no PDF" for exactly that Engagement while
+// the route streamed one.
+func TestGetContractHandler_DraftBesideVoidedSignedReportsSignedPDF(t *testing.T) {
+	db := testdb.New(t)
+	const uid = "read-draft-beside-voided"
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
+	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
+	_, priorObjectPath := seedPriorSignedContract(t, db, engagementID)
+	seedContract(t, db, engagementID, "draft", mergeFieldProse)
+
+	store := objectstore.NewMemoryStore()
+	if err := store.Put(t.Context(), priorObjectPath, "application/pdf", bytes.NewReader([]byte(priorSignedPDFBytes))); err != nil {
+		t.Fatalf("seed stored pdf: %v", err)
+	}
+	srv, session := newContractServerWithStore(t, db, uid, store)
+	defer srv.Close()
+
+	resp := getContract(t, srv, session, practiceID, engagementID)
+	defer resp.Body.Close()
+	out := decodeContract(t, resp)
+	if out.Status != statusDraft {
+		t.Fatalf("status = %q, want %q -- the current Contract is the fresh Draft", out.Status, statusDraft)
+	}
+	if !out.HasSignedPDF {
+		t.Fatalf("hasSignedPdf = false while the route still serves the voided Contract's PDF for this Engagement")
+	}
+
+	pdfResp := getContractPDF(t, srv, session, practiceID, engagementID)
+	defer pdfResp.Body.Close()
+	if pdfResp.StatusCode != http.StatusOK {
+		t.Fatalf("pdf route status = %d, want %d -- the field and the route must answer the same question", pdfResp.StatusCode, http.StatusOK)
+	}
+}
+
+// TestSignContractHandler_ResponseReportsSignedPDF proves the Sign
+// response itself carries the field. Both Contract screens update their
+// in-memory Contract from this body rather than reloading, so a false
+// here would leave the download control hidden until a page refresh.
+func TestSignContractHandler_ResponseReportsSignedPDF(t *testing.T) {
+	db := testdb.New(t)
+	const identityUID = "client-sign-reports-pdf"
+	practiceID := testdb.SeedPractice(t, db, "Practice")
+	clientID, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jordan Client", "jordan@example.com")
+	testdb.SeedPortalUser(t, db, testdb.PortalUID(identityUID), clientID)
+	seedContract(t, db, engagementID, "sent", mergeFieldProse)
+
+	srv, session := newPortalServer(t, db, identityUID)
+	defer srv.Close()
+
+	resp := postSignContract(t, srv, session, engagementID, "Jordan Client", true)
+	defer resp.Body.Close()
+	out := decodeContract(t, resp)
+	if out.Status != statusSigned {
+		t.Fatalf("status = %q, want %q", out.Status, statusSigned)
+	}
+	if !out.HasSignedPDF {
+		t.Fatalf("hasSignedPdf = false on the Sign response -- the screen that just signed would still hide the download")
+	}
+}
