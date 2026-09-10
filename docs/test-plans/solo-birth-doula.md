@@ -116,8 +116,8 @@ on 2026-08-22.
 
 | Mark | Steps |
 | --- | --- |
-| `automated` | 12 |
-| `manual` | 19 |
+| `automated` | 13 |
+| `manual` | 20 |
 | `blocked` | 0 |
 | `missing-feature` | 3 ([MO-G1](https://github.com/markgoho/doula-cloud/issues/250), [MO-G2](https://github.com/markgoho/doula-cloud/issues/251), [MO-G4](https://github.com/markgoho/doula-cloud/issues/253)) |
 
@@ -131,6 +131,25 @@ well — 3.4 still meets a wall, but a paid one she can walk through, not the de
 end that gap named.
 
 ## Run log
+
+### 2026-09-10 — Add Client corrected against ADR-0017 ([#1121](https://github.com/markgoho/doula-cloud/issues/1121))
+
+A desk pass, not a walk, over 3.1, 3.1-a, 3.2, 3.2-a and 3.4 — the cells [#685](https://github.com/markgoho/doula-cloud/issues/685) named and deliberately did not half-correct. Everything below was read out of the code.
+
+| Cell | Was | Is, and what settled it |
+| --- | --- | --- |
+| 3.1 | "A form of exactly two fields, Name and Email" -> intake's first question, reached through the search that fronts it | `clients/new`'s `load` redirects to the name question and carries the search's query string. ADR-0017, `#466`, and the intake routes |
+| 3.1-a | `missing-feature (MO-G3)` -> `manual` | Phone, address and date of birth are their own questions; hospital, partner and notes are Practice-defined fields on the Client Field Template, which intake then asks as its own pages. [#252](https://github.com/markgoho/doula-cloud/issues/252) is closed and the step can be performed |
+| 3.2 | Client **and** Engagement in one request, one credit consumed -> a free save of a Client alone, landing on her detail hub | `client.CreateHandler`'s own test asserts zero `engagements` and zero `credit_ledger` rows after a save |
+| 3.2-a | `Credit balance: 2` and a consumption row -> `Credit balance: 3` and the `signup_bonus` row alone | Same test. Nothing debits the ledger on the intake path |
+| 3.2-b | **new** — the act that creates the Engagement and locks the Credit | `RequestHandler` -> `collapse` for an Owner, then `approve` -> `billing.ConsumeCredit`. The form names `Credit cost` and `Balance after` first |
+| 3.4 | The fourth **Client** returns `402` -> Clients are free and unlimited; the fourth **Engagement** is what is refused | `writeApproveErr`'s `402 no credits remaining, ask a practice owner or admin to buy more`, with the request transaction rolled back so no half-written Request survives |
+
+**One mark moved to `automated` and one to `manual`, and one step was appended.** 3.1 is `automated (add-client-visits.e2e.ts)` — the spec is the founding Owner, which is who Maya is, and it opens the sequence and answers its first question exactly as she would. 3.1-a is `manual` because its gap is closed. **3.2 is held at `manual` on purpose**: the spec asserts where the save lands and asserts nothing about the Engagement and ledger rows that do not appear, which is what that cell now claims — the [four marks](README.md#the-four-marks)' rule is that a spec counts only where it asserts the step's own result. 3.2-b and 3.4 are `manual` because no spec asks for an Engagement through the UI at all.
+
+The Marks summary is recounted from the Steps table above — 13 / 20 / 0 / 3 — and [README.md](README.md)'s run-status row and Total move with it. MO-G3 leaves the `missing-feature` row; MO-G9 ([#257](https://github.com/markgoho/doula-cloud/issues/257)) is noted as closed where the summary observes it at 3.4.
+
+**Left alone on purpose.** The 2026-08-22 walk log below, including its verdict prose about a two-field form, is a record of what was seen on the day. Stages 4 to 8 are untouched: nothing in them turns on ADR-0017.
 
 ### 2026-08-22 — automated steps ([#209](https://github.com/markgoho/doula-cloud/issues/209))
 

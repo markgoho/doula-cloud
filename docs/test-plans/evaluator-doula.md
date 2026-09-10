@@ -92,7 +92,7 @@ cannot come with her.
 
 | Mark | Steps |
 | --- | --- |
-| `automated` | 4 |
+| `automated` | 5 |
 | `manual` | 10 |
 | `missing-feature` | 5 steps over 4 gaps ([TB-G1](https://github.com/markgoho/doula-cloud/issues/284), [TB-G2](https://github.com/markgoho/doula-cloud/issues/285), [TB-G5](https://github.com/markgoho/doula-cloud/issues/288), [TB-G6](https://github.com/markgoho/doula-cloud/issues/289)) |
 
@@ -104,11 +104,33 @@ screens open, and what they show is the finding. TB-G1 backs two steps.
 below: the step can be performed, and what the Staff screen hands back is the
 result.
 
+5.1 moved from `manual` to `automated (add-client-visits.e2e.ts)` in the 2026-09-10
+desk pass below, and 5.2-b was appended: the free save and the act that spends the
+Credit are two acts now, so they are two steps.
+
 Her plan is the least automatable of the six, and for a reason worth keeping: two
 of her seven stages happen before the product exists, and a Playwright spec cannot
 run against a marketing site that has not been written.
 
 ## Run log
+
+### 2026-09-10 — Add Client corrected against ADR-0017 ([#1121](https://github.com/markgoho/doula-cloud/issues/1121))
+
+A desk pass, not a walk, over the cells [#685](https://github.com/markgoho/doula-cloud/issues/685) held back because they could not be half-corrected: 5.1, 5.2, 5.2-a and 7.1-a. Every claim below was read out of the code, not out of the ticket.
+
+| Cell | Was | Is, and what settled it |
+| --- | --- | --- |
+| 5.1 | "Two fields" -> a one-question-per-page sequence reached through **Find or add a Client** | `clients/new` is a redirecting door, not a form; the sequence asks name, date of birth, email, phone, address, then one page per section of the Practice's Client Field Template. ADR-0017, and the intake routes under `clients/new` |
+| 5.2 | A Client **and** an Engagement in one request, one credit silently spent -> a free save of a Client alone, landing on her detail hub | `client.CreateHandler`'s own test asserts zero `engagements` rows and zero `credit_ledger` rows after a save. The Credit is consumed in `engagementrequest.approve`, tagged to the Engagement it creates |
+| 5.2-a | "None. The wall arrives at her fourth Client with a `402`" -> nothing on intake mentions credits because nothing is spent there; the size of the trial is named at 5.2-b | The Engagement Request form renders `Credit cost` and `Balance after` to an approver before the act, and **Buy credits** inline on an empty balance |
+| 5.2-b | **new** — the act that costs, split out from 5.2 | `RequestHandler` collapses request and approval into one act for an Owner (ADR-0017's solo-Practice rule); `writeApproveErr` answers `402 no credits remaining, ask a practice owner or admin to buy more` and rolls the whole act back |
+| 7.1-a | "only name and email can be typed" -> the row can be transcribed by hand, one at a time | Same intake routes, plus `settings/client-fields`. [MO-G3](https://github.com/markgoho/doula-cloud/issues/252) is closed; [TB-G6](https://github.com/markgoho/doula-cloud/issues/289) (no bulk import) is untouched and still owns 7.1 |
+
+**One mark moved and one step was appended.** 5.1 is `automated (add-client-visits.e2e.ts)`: the spec opens `clients/new` as the founding Owner — which is who Tasha is — asserts the first question's heading, and answers it, which is the step the way she would walk it. **5.2 is deliberately held at `manual`**, and the reason is the [four marks](README.md#the-four-marks)' own rule: the spec asserts the landing on the Client detail hub and asserts nothing at all about the absence of an Engagement or a ledger row, which is the whole claim of that cell. The API-level assertion of it lives in `client`'s Go tests, and fixture-shaped evidence is not coverage of a step. 5.2-b is `manual` for the plainer reason that no spec asks for an Engagement through the UI.
+
+The Marks summary is recounted from the Steps table above — 5 / 10 / 0 / 5 — and [README.md](README.md)'s run-status row and Total move with it.
+
+**Left alone on purpose.** The 2026-08-22 walk log below is a record of what was seen on the day and is not rewritten. Tasha's other stale cells — TB-G2's credit price, TB-G4's closure, TB-G7's `office_manager`, and the ledger origin printed as a raw enum at 2.1-a — belong to [#873](https://github.com/markgoho/doula-cloud/issues/873), which was open when this pass ran.
 
 ### 2026-08-22 — automated steps ([#209](https://github.com/markgoho/doula-cloud/issues/209))
 
