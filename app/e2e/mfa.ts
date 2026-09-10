@@ -13,6 +13,25 @@ import { signIn } from './auth';
 // gate in api/internal/staffauth/middleware.go reads exactly that claim,
 // off the session row, and does not care which provider produced it.
 //
+// #1132 re-ran that check rather than inheriting it, across
+// firebase-tools 15.27.0 (vendored here), 15.28.1 (pinned at the repo
+// root) and 15.30.0 (the newest published release as of 2026-09-10):
+// `totp` appears in exactly one file under lib/emulator/auth/ in all
+// three -- apiSpec.js, the generated OpenAPI schema -- and in none of
+// operations.js, state.js, handlers.js, server.js or errors.js. The
+// emulator's own words, so nobody has to derive them again:
+// mfaEnrollment:start with `totpEnrollmentInfo` answers
+// `400 INVALID_ARGUMENT : ((Missing phoneEnrollmentInfo.))`, and
+// accounts:update with `mfa.enrollments[].totpInfo` answers
+// `400 INVALID_MFA_PHONE_NUMBER : Invalid format.`
+//
+// A spec that needs a *screen* to meet TOTP -- the sign-in challenge,
+// enrollment, or the step-up in front of an Owner vouch -- uses
+// totpStub.ts instead of this file, which relabels the emulator's own
+// second factor at the browser's network boundary. Its header says what
+// stays faked. This file remains the way to get a session carrying the
+// claim without a browser at all.
+//
 // MFA itself needs no enabling here: AgentProjectState.mfaConfig in
 // firebase-tools' emulator/auth/state.js is hardcoded to
 // `{state: "ENABLED", enabledProviders: ["PHONE_SMS"]}` for the default
@@ -39,7 +58,7 @@ import { signIn } from './auth';
 // GoogleCloudIdentitytoolkitV1MfaInfo types `enrollments` as `array`,
 // with no null allowed, in each. The SDK side is
 // firebase.google.com/go/v4 v4.21.0, its newest release.
-const EMULATOR_URL = `http://${E2E_EMULATOR_HOST}:${E2E_EMULATOR_PORT}`;
+export const EMULATOR_URL = `http://${E2E_EMULATOR_HOST}:${E2E_EMULATOR_PORT}`;
 const API_URL = `http://${E2E_API_HOST}:${E2E_API_PORT}`;
 
 // The e2e stack always starts the emulator against this one project (see
@@ -69,19 +88,22 @@ export async function verifyEmail(request: APIRequestContext, localId: string): 
 }
 
 /**
- * Enrols a phone second factor against idToken's identity and returns a
- * fresh ID token carrying `firebase.sign_in_second_factor: "phone"` --
- * the one claim api/internal/authn.secondFactorClaim reads. Feed the
- * returned token to signIn() (auth.ts) to mint a session with
- * second_factor recorded true; there is no other way to get that claim
- * onto a token against this emulator.
+ * Enrolls a phone second factor against idToken's identity and returns
+ * the tokens the emulator issues for it -- an ID token carrying
+ * `firebase.sign_in_second_factor: "phone"`, the one claim
+ * api/internal/authn.secondFactorClaim reads, and the refresh token
+ * whose stored record carries the same factor. Feed the ID token to
+ * signIn() (auth.ts) to mint a session with second_factor recorded
+ * true; there is no other way to get that claim onto a token against
+ * this emulator. Most callers want enrollSecondFactor below, which is
+ * this call with the refresh token dropped.
  *
- * Runs the real (v2) enrolment dance rather than the Admin-SDK-shaped
+ * Runs the real (v2) enrollment dance rather than the Admin-SDK-shaped
  * accounts:update `mfa.enrollments` shortcut on purpose: that shortcut
  * persists mfaInfo on the account for a *future* sign-in to challenge,
  * but never itself issues a token carrying the claim (only
  * mfaEnrollmentFinalize and a completed mfaSignIn call issueTokens with
- * a `secondFactor` argument) -- it would enrol the factor but leave the
+ * a `secondFactor` argument) -- it would enroll the factor but leave the
  * caller with nothing to hand signIn().
  *
  * localId must already have a verified email (verifyEmail above) or
@@ -96,11 +118,11 @@ export async function verifyEmail(request: APIRequestContext, localId: string): 
  * account, but two Playwright workers enrolling through the emulator at
  * the same instant are still better off never sharing one.
  */
-export async function enrollSecondFactor(
+export async function enrollPhoneFactor(
 	request: APIRequestContext,
 	idToken: string,
 	phoneNumber = randomPhoneNumber()
-): Promise<string> {
+): Promise<{ idToken: string; refreshToken: string }> {
 	const start = await request.post(
 		`${EMULATOR_URL}/identitytoolkit.googleapis.com/v2/accounts/mfaEnrollment:start?key=fake-key`,
 		{ data: { idToken, phoneEnrollmentInfo: { phoneNumber } } }
@@ -119,7 +141,21 @@ export async function enrollSecondFactor(
 	);
 	const finalizeBody = await finalize.text();
 	expect(finalize.ok(), `mfaEnrollment:finalize failed: ${finalize.status()} ${finalizeBody}`).toBe(true);
-	const { idToken: enrolledIdToken } = JSON.parse(finalizeBody);
+	return JSON.parse(finalizeBody);
+}
+
+/**
+ * enrollPhoneFactor's ID token alone, which is all any caller here has
+ * ever wanted. The refresh token beside it matters only to totpStub.ts,
+ * whose enrollment interception has to hand the browser a refresh token
+ * whose stored record carries a second factor.
+ */
+export async function enrollSecondFactor(
+	request: APIRequestContext,
+	idToken: string,
+	phoneNumber = randomPhoneNumber()
+): Promise<string> {
+	const { idToken: enrolledIdToken } = await enrollPhoneFactor(request, idToken, phoneNumber);
 	return enrolledIdToken;
 }
 
@@ -127,11 +163,11 @@ export async function enrollSecondFactor(
  * Reads the code a pending phone verification (enrolment or sign-in)
  * would otherwise only reveal by SMS -- the emulator instead logs it to
  * its own stdout and exposes it on this debug listing, keyed by the same
- * sessionInfo the start call returned. Shared by enrollSecondFactor
- * above and any future caller driving the sign-in-time MFA challenge
- * (mfaSignIn:start/finalize) rather than enrolment.
+ * sessionInfo the start call returned. Shared by enrollPhoneFactor
+ * above and by totpStub.ts, which drives the sign-in-time MFA challenge
+ * (mfaSignIn:start/finalize) rather than enrollment.
  */
-async function readVerificationCode(request: APIRequestContext, sessionInfo: string): Promise<string> {
+export async function readVerificationCode(request: APIRequestContext, sessionInfo: string): Promise<string> {
 	const response = await request.get(`${EMULATOR_URL}/emulator/v1/projects/${PROJECT_ID}/verificationCodes`);
 	expect(response.ok(), `listing verification codes failed: ${response.status()}`).toBe(true);
 	const { verificationCodes } = await response.json();
@@ -143,16 +179,17 @@ async function readVerificationCode(request: APIRequestContext, sessionInfo: str
 }
 
 /**
- * verifyEmail + enrollSecondFactor + signIn, composed: the one call every
- * fixture that used to walk /login as an Owner (or any Staff a Practice
- * now requires MFA from) needs instead, since that account can no longer
- * complete a plain password sign-in through the real login form (see
- * enrollSecondFactor's own doc comment on why -- every future
- * signInWithPassword for it now demands a PHONE_SMS challenge the
- * product's TOTP-only login screen cannot resolve). Returns session
- * headers carrying second_factor -- good for calling any Practice-scoped
- * route directly, and for enterPracticeAsEnrolled below to hand the
- * browser.
+ * verifyEmail + enrollSecondFactor + signIn, composed: the one call a
+ * fixture makes when it wants an enrolled Owner's session (or any
+ * Staff's, at a Practice that now requires MFA of everyone) without
+ * spending a browser on the walk. Every future signInWithPassword for
+ * that account demands a second-factor challenge, and against this
+ * emulator the factor is PHONE_SMS, which the product's TOTP-only
+ * screens cannot answer on their own -- a spec that wants those screens
+ * driven installs totpStub.ts instead of calling this. Returns session
+ * headers carrying second_factor -- good for calling any
+ * Practice-scoped route directly, and for enterPracticeAsEnrolled below
+ * to hand the browser.
  */
 export async function signInEnrolled(
 	request: APIRequestContext,
@@ -167,8 +204,9 @@ export async function signInEnrolled(
 /**
  * Puts headers' session cookie directly into context's cookie jar and
  * navigates page to practiceId's landing route -- the browser-level
- * equivalent of the /login walk these fixtures can no longer perform
- * once their Owner is enrolled. A direct cookie injection rather than a
+ * equivalent of a /login walk, for a fixture that has no interest in
+ * spending one (totpStub.ts is what a spec that does want the walk
+ * installs). A direct cookie injection rather than a
  * second interactive sign-in on purpose: Playwright's request-context
  * `secure: false` sidesteps whether its own cookie jar treats loopback
  * as a trustworthy origin the way a real browser does (see auth.ts's
@@ -190,12 +228,14 @@ export async function enterPracticeAsEnrolled(
 }
 
 /**
- * A syntactically valid, fixture-only E.164 US number in the 555
- * exchange -- never a real, dialable number (555-01xx is the range
- * reserved for fiction, ITU/NANP) -- with enough random digits that two
- * Playwright workers enrolling in the same instant don't collide.
+ * A fixture-only US number in the 555 exchange, never a real dialable
+ * one, with enough random digits that two Playwright workers enrolling
+ * in the same instant don't collide. Seven random digits after `+1555`
+ * rather than the four of the 555-01xx range reserved for fiction: the
+ * emulator only parses the shape, nothing ever dials it, and the extra
+ * three digits are what buy the collision margin.
  */
-function randomPhoneNumber(): string {
+export function randomPhoneNumber(): string {
 	const digits = String(Math.floor(Math.random() * 10_000_000)).padStart(7, '0');
 	return `+1555${digits}`;
 }
