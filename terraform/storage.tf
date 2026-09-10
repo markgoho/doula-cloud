@@ -92,10 +92,9 @@ resource "google_storage_bucket_iam_member" "attachments_runtime_object_user" {
 # its own, and importing it would be Terraform owning a binding Google
 # maintains.
 #
-# `terraform-plan@`'s `roles/storage.objectUser` on `gs://doula-cloud-tfstate`
-# is not here and should not be: that bucket is deliberately not owned at
-# all (docs/infrastructure.md, "State"), because a configuration that owns
-# its own state bucket can propose to delete it.
+# `terraform-plan@`'s other bucket grant, `roles/storage.objectUser` on
+# `gs://doula-cloud-tfstate`, is not here for the reason given at the top of
+# this file: that bucket is not owned at all.
 resource "google_storage_bucket_iam_member" "attachments_plan_legacy_bucket_reader" {
   bucket = google_storage_bucket.attachments.name
   member = google_service_account.terraform_plan.member

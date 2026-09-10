@@ -40,6 +40,17 @@
 # not read its migration DSN. It was applied as `-target` on the two
 # `*_deploy_accessor` resources, then a full apply for the destroy.
 
+# The one principal set both `github-action-733741680@` and
+# `terraform-plan@` federate as, written once because the two
+# `workloadIdentityUser` bindings below have to name the identical string or
+# one of them is silently admitting a different caller. It is built from the
+# pool's `name`, which carries the project *number* rather than the project
+# id — the form the live bindings use, and the only form the exchange
+# matches on.
+locals {
+  github_actions_repository_principal_set = "principalSet://iam.googleapis.com/${google_iam_workload_identity_pool.github_actions.name}/attribute.repository/markgoho/doula-cloud"
+}
+
 # `github-action-733741680@`: the identity every deploy in `ci.yml` runs as.
 resource "google_service_account" "github_action" {
   account_id                   = "github-action-733741680"
@@ -334,12 +345,16 @@ resource "google_project_iam_member" "markgoho_owner" {
 # failure this whole effort cannot detect on its own: the account being
 # re-created with different properties, or losing the bindings a plan needs
 # to authenticate and refresh, with nothing in the configuration to notice.
-# Every one of those bindings is now a resource — the two on the account
-# below, and `roles/storage.legacyBucketReader` in storage.tf.
+# Those bindings are resources now — the two on the account below, and
+# `roles/storage.legacyBucketReader` in storage.tf. The one exception is
+# `roles/storage.objectUser` on `gs://doula-cloud-tfstate`, which the GCS
+# backend needs and which stays by hand because that bucket is not owned at
+# all (docs/infrastructure.md, "State").
 #
-# There is no `description` argument, because the live account has no
-# description. ADR-0034's first mechanism is import-only until the plan is
-# empty: writing one here would be a change, not an import.
+# `description` is explicitly `null`, matching the three accounts above,
+# because the live account has none. ADR-0034's first mechanism is
+# import-only until the plan is empty: writing one here would be a change,
+# not an import.
 resource "google_service_account" "terraform_plan" {
   account_id                   = "terraform-plan"
   create_ignore_already_exists = null
@@ -378,17 +393,19 @@ resource "google_project_iam_member" "terraform_plan_workload_identity_pool_view
 # the exchange is refused and every scheduled and pull-request plan fails at
 # the auth step. It is a binding on the service account, not on the project,
 # so none of the three `google_project_iam_member` resources above covers
-# it — removing it by hand used to be invisible to `plan`, which is the one
-# failure a drift check cannot report on itself.
+# it. Removing it by hand used to leave nothing behind at all: the CI job
+# fails before Terraform starts, and no configuration named the missing
+# thing. Declared here, the next plan that can run — a laptop one — says
+# which binding is gone.
 resource "google_service_account_iam_member" "terraform_plan_workload_identity_user" {
   member             = local.github_actions_repository_principal_set
   role               = "roles/iam.workloadIdentityUser"
   service_account_id = google_service_account.terraform_plan.name
 }
 
-# The same exchange for the deploy identity: `ci.yml` and the four preview
-# and cleanup workflows all authenticate as `github-action-733741680@`
-# through the same pool and the same principal set. It was as unowned as
+# The same exchange for the deploy identity: every workflow that touches
+# GCP authenticates as `github-action-733741680@` through this same pool
+# and the same principal set. It was as unowned as
 # `terraform-plan@`'s was — found while closing #1091, and the same shape,
 # so it is closed here rather than left as the last one of its class.
 resource "google_service_account_iam_member" "github_action_workload_identity_user" {
@@ -410,16 +427,6 @@ resource "google_service_account_iam_member" "markgoho_terraform_plan_token_crea
   member             = "user:markgoho@gmail.com"
   role               = "roles/iam.serviceAccountTokenCreator"
   service_account_id = google_service_account.terraform_plan.name
-}
-
-# The one principal set both service accounts federate as, written once
-# because both `workload_identity_user` bindings above have to name the
-# identical string or one of them is silently granting a different caller.
-# It is built from the pool's `name`, which carries the project *number*
-# rather than the project id — the form the live binding uses, and the only
-# form the exchange matches on.
-locals {
-  github_actions_repository_principal_set = "principalSet://iam.googleapis.com/${google_iam_workload_identity_pool.github_actions.name}/attribute.repository/markgoho/doula-cloud"
 }
 
 # The pool and provider `ci.yml`'s `deploy-api` and `terraform-plan@` both
