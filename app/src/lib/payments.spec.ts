@@ -3,6 +3,7 @@ import {
 	canConnectStatusStillMove,
 	connect,
 	loadConnectStatus,
+	nudgeOwnersToConnect,
 	pollConnectStatus,
 	type ConnectStatusResult
 } from './payments.js';
@@ -73,6 +74,22 @@ function statusResult(overrides: Partial<ConnectStatusResult> = {}): ConnectStat
 		...overrides
 	};
 }
+
+describe('nudgeOwnersToConnect', () => {
+	it('posts to the nudge path under the connect path', async () => {
+		const fetcher = vi.fn().mockResolvedValue(new Response(undefined, { status: 202 }));
+
+		await nudgeOwnersToConnect(fetcher, 'practice-1');
+
+		expect(fetcher).toHaveBeenCalledWith('/api/practices/practice-1/payments/connect/nudge', { method: 'POST' });
+	});
+
+	it('throws with the refusal the server sent', async () => {
+		const fetcher = vi.fn().mockResolvedValue(jsonResponse('asked already this week', 409));
+
+		await expect(nudgeOwnersToConnect(fetcher, 'practice-1')).rejects.toThrow('asked already this week');
+	});
+});
 
 describe('canConnectStatusStillMove', () => {
 	it('is true for pending, which always reports nothing outstanding', () => {

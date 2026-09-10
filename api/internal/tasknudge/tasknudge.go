@@ -16,7 +16,7 @@ import (
 // should call.
 type OutboxType string
 
-// The eleven outbox types a nudge can target (ADR-0010, ADR-0013). Where
+// The twelve outbox types a nudge can target (ADR-0010, ADR-0013). Where
 // each one is served is not held here: the BFF's own outbox list names
 // both the type and the path, and hands this package the map at
 // construction (outbox.NudgePaths). A constant here with no registration
@@ -39,6 +39,14 @@ const (
 	// same: durable rows, retried with backoff, dead-lettered when they
 	// stop being worth retrying.
 	ClientErasure OutboxType = "client-erasure"
+	// ConnectNudge is #917's "your Practice still has to connect Stripe"
+	// mail, and the only nudge target a Staff member presses a button to
+	// queue rather than a webhook or a background transition queueing it
+	// (ADR-0035). Nudged for the reason MFARecoveryCode is: a colleague is
+	// standing at the screen having decided this is now urgent, so five
+	// minutes of Cloud Scheduler cadence is exactly the latency ADR-0013
+	// exists to remove.
+	ConnectNudge OutboxType = "connect-nudge"
 )
 
 // delay is how long a nudge waits before it fires, per outbox type.

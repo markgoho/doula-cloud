@@ -187,3 +187,38 @@ export async function connect(fetcher: Fetcher, practiceId: string): Promise<str
 	const body: { onboardingUrl: string } = await response.json();
 	return body.onboardingUrl;
 }
+
+/** What the screen says once the nudge is queued (#917, ADR-0035).
+ * Exported so the screen and its spec share one sentence rather than two
+ * that can drift apart, the way `CONNECT_STATUS_CHECK_FAILED_MESSAGE`
+ * already is. It says the mail is on its way rather than that it
+ * arrived, because ADR-0010's outbox is exactly the difference between
+ * those two claims. */
+export const CONNECT_NUDGE_SENT_MESSAGE =
+	'Every Practice Owner is being emailed about connecting Stripe. Doula Cloud sends this at most once a week.';
+
+/** What the screen tells a non-Owner reader in the unconnected statuses
+ * that are *not* `not_connected` (#917, ADR-0035). There is no control
+ * in those, because #343's payout notification has already mailed every
+ * Owner once for this episode -- so the honest thing to say is that it
+ * has, rather than offering a second send she cannot know is a
+ * duplicate. */
+export const CONNECT_OWNERS_ALREADY_EMAILED_MESSAGE =
+	'Every Practice Owner has already been emailed about what Stripe is waiting for.';
+
+/** Asks Doula Cloud to email every Practice Owner that Stripe still has
+ * to be connected (#917, ADR-0035).
+ *
+ * Offered only to a reader who may read Connect status and may not act
+ * on it, and only while the status is `not_connected` -- in every other
+ * unconnected status #343's payout notification has already mailed the
+ * Owners on its own. The server refuses a Practice that has already
+ * connected and a second ask inside its cooldown; both refusals are
+ * sentences a person reads, so they come back through `apiErrorMessage`
+ * like every other refusal on this screen. */
+export async function nudgeOwnersToConnect(fetcher: Fetcher, practiceId: string): Promise<void> {
+	const response = await fetcher(`${connectPath(practiceId)}/nudge`, { method: 'POST' });
+	if (!response.ok) {
+		throw new Error(await apiErrorMessage(response));
+	}
+}

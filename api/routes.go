@@ -91,6 +91,7 @@ type Deps struct {
 	PortalInviteWorker      portalinvite.Worker
 	LowCreditWorker         billing.Worker
 	PayoutWorker            payments.Worker
+	ConnectNudgeWorker      payments.ConnectNudgeWorker
 	PaymentReceivedWorker   payments.PaymentReceivedWorker
 	SessionNoticeWorker     sessionnotice.Worker
 	StaffInviteWorker       staffinvite.Worker

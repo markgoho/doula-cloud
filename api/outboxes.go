@@ -61,6 +61,17 @@ func outboxRegistrations(d Deps) []outbox.Registration {
 			Worker: d.PayoutWorker,
 		},
 		{
+			// #917's connect-nudge outbox (ADR-0035), whose write site is
+			// payments.PostConnectNudgeHandler -- the one outbox in this
+			// list a Staff member queues by pressing a control. Nudged:
+			// she is standing at the screen having decided the wait has
+			// gone on long enough.
+			Path:   "/api/internal/notifications/process-connect-nudge-outbox",
+			Door:   outbox.NotificationDoor,
+			Nudge:  tasknudge.ConnectNudge,
+			Worker: d.ConnectNudgeWorker,
+		},
+		{
 			// #344's payment-received outbox.
 			Path:   "/api/internal/notifications/process-payment-outbox",
 			Door:   outbox.NotificationDoor,

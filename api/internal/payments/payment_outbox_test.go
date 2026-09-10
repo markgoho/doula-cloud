@@ -23,7 +23,7 @@ const (
 // outbox test needs one, only the injected Sender and (occasionally) Now
 // vary.
 func newTestPaymentWorker(sender mail.Sender) payments.PaymentReceivedWorker {
-	return payments.PaymentReceivedWorker{Mailer: outbox.Mailer{Sender: sender, Now: time.Now, AppBaseURL: testPaymentAppBaseURL, From: "a@b.test", ReplyTo: "support@b.test"}}
+	return payments.PaymentReceivedWorker{Mailer: outbox.Mailer{Sender: sender, Now: time.Now, AppBaseURL: testPaymentAppBaseURL, From: testOutboxFrom, ReplyTo: testOutboxReplyTo}}
 }
 
 // seedPaymentOutboxAmountCents is every seedPaymentOutboxRow fixture's

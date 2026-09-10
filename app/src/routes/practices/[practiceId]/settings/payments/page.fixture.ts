@@ -96,6 +96,38 @@ export const asDoula: RouteVariant = {
 	pageData: session(['doula'])
 };
 
+/*
+ * #917's own branch, and the one reason this screen needs a fourth
+ * session rather than three. The Admin variant above inherits a
+ * `payouts_restricted` account with three outstanding requirements, which
+ * is a Practice #343's payout Notification has already mailed -- so she
+ * reads a single sentence saying so and is offered nothing. A Practice
+ * with no Stripe account at all is the state no webhook can reach
+ * (ADR-0035), and it is the only one that puts a control on her screen:
+ * a sentence, and a button under it. That tree is not a subset of any
+ * branch declared above, so the sweep would otherwise never mount it.
+ *
+ * `respond` is restated whole because a variant's is a replacement, not a
+ * merge -- the website and payment-terms answers are the base's own, and
+ * only the status differs. `requirementsDue` is empty because a Practice
+ * with no account has nothing outstanding: the count sentence is one the
+ * Admin variant above already carries.
+ */
+export const asAdminWithNoAccount: RouteVariant = {
+	name: 'The Stripe Connect settings screen, as an Admin with no Stripe account',
+	pageData: session(['admin']),
+	respond: (path) => {
+		if (path.endsWith('/website')) return jsonResponse(website);
+		if (path.endsWith('/payments/payment-terms')) return jsonResponse(paymentTerms);
+		return jsonResponse({
+			status: 'not_connected',
+			cardPaymentsStatus: 'unsupported',
+			payoutsStatus: 'unsupported',
+			requirementsDue: []
+		} satisfies ConnectStatusResult);
+	}
+};
+
 export const fixture: RouteFixture = {
 	name: 'The Stripe Connect settings screen, as an Owner',
 	component: Page,
@@ -108,5 +140,5 @@ export const fixture: RouteFixture = {
 		return jsonResponse(status);
 	},
 	readyText: 'Getting paid',
-	variants: [asAdmin, asDoula]
+	variants: [asAdmin, asAdminWithNoAccount, asDoula]
 };

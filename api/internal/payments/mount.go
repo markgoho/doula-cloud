@@ -3,11 +3,12 @@ package payments
 import (
 	"doula-cloud/api/internal/idempotency"
 	"doula-cloud/api/internal/staffauth"
+	"doula-cloud/api/internal/tasknudge"
 )
 
 // Mount registers Stripe Connect account creation and status, per-Engagement
 // Invoice creation and history, and the Practice-wide Invoice list (#265).
-func Mount(g *staffauth.GatedRouter, ir *idempotency.Router, client Client) {
+func Mount(g *staffauth.GatedRouter, ir *idempotency.Router, client Client, enq tasknudge.Enqueuer) {
 	ir.Exempt("POST /api/practices/{practiceId}/payments/connect",
 		"lazily creates the Stripe Connect account and reuses the stored account id on any retry, row-locked against a concurrent create; a duplicate call resumes the same account, not a second one",
 		false, PostConnectHandler(client))
@@ -19,6 +20,18 @@ func Mount(g *staffauth.GatedRouter, ir *idempotency.Router, client Client) {
 	// Invoices are paid on. Reading is Owner-or-Admin; starting or
 	// resuming hosted onboarding stays Owner-only above.
 	g.Get("/api/practices/{practiceId}/payments/connect", staffauth.OwnerAndAdmin, GetConnectStatusHandler(client))
+	// #917 (ADR-0035): telling every Owner the account still has to be
+	// connected. Same Owner-and-Admin pair as the read directly above,
+	// and for the same reason -- being allowed to see that the account is
+	// unfinished is what makes a person able to say so. State-guarded
+	// rather than money-creating: it refuses a Practice that already has
+	// a Stripe account and refuses a second ask inside its cooldown, so a
+	// retry after the first success 409s instead of mailing twice.
+	// ExemptGated, not Replayable, on the same rule the void/write-off
+	// pair below follows.
+	ir.ExemptGated("POST /api/practices/{practiceId}/payments/connect/nudge",
+		"refuses a Practice that has already connected Stripe and a second nudge inside its cooldown, so a retry 409s instead of mailing every Owner twice",
+		false, staffauth.OwnerAndAdmin, PostConnectNudgeHandler(enq))
 	// Newly wrapped (2026 idempotency-stance review): every call
 	// unconditionally calls Stripe CreateInvoice + FinalizeInvoice and
 	// inserts a new invoices row, with no dedup guard -- a double-click

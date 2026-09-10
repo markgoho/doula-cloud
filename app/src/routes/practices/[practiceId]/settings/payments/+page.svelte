@@ -30,7 +30,10 @@
 		connect,
 		canConnectStatusStillMove,
 		pollConnectStatus,
+		nudgeOwnersToConnect,
 		CONNECT_STATUS_CHECK_FAILED_MESSAGE,
+		CONNECT_NUDGE_SENT_MESSAGE,
+		CONNECT_OWNERS_ALREADY_EMAILED_MESSAGE,
 		type ConnectStatus,
 		type ConnectStatusResult,
 		type ConnectStatusPollHandle
@@ -263,6 +266,38 @@
 			refreshError = CONNECT_STATUS_CHECK_FAILED_MESSAGE;
 		} finally {
 			isCheckingStatus = false;
+		}
+	}
+
+	/*
+	 * #917 (ADR-0035). The one status where nothing else reaches an Owner
+	 * at all: with no Stripe account there is no webhook, so #343's
+	 * payout notification can never fire, and ADR-0033 rules out a
+	 * sweep. So a reader who can see the gap and cannot close it gets one
+	 * control, and pressing it queues a Notification to every Owner.
+	 *
+	 * `wasNudgeSent` never reverts. The bound lives on the server -- one ask
+	 * per Practice per week -- and hiding the control after a press is
+	 * the client-side half of it (per "block over warn": prevent here,
+	 * enforce at the boundary). A refusal that comes back anyway is
+	 * rendered as its own sentence rather than swallowed, because the
+	 * ordinary way to meet it is a colleague having asked yesterday from
+	 * her own screen, which this one cannot see.
+	 */
+	let isNudging = $state(false);
+	let wasNudgeSent = $state(false);
+	let nudgeError = $state('');
+
+	async function handleNudgeOwners() {
+		nudgeError = '';
+		isNudging = true;
+		try {
+			await nudgeOwnersToConnect(apiFetchWithSession, page.params.practiceId!);
+			wasNudgeSent = true;
+		} catch (error_) {
+			nudgeError = error_ instanceof Error ? error_.message : 'Failed to email the Practice Owners';
+		} finally {
+			isNudging = false;
 		}
 	}
 
@@ -637,6 +672,44 @@
 				the Owner's half-finished errand.
 			-->
 			<Text text="A Practice Owner has to connect Stripe." />
+			<!--
+				#917 (ADR-0035). Two different true things, and which one she
+				reads turns on whether anything else in the product can reach
+				an Owner about this at all.
+
+				`not_connected` is the one status that produces no Stripe
+				webhook, so #343's payout Notification can never fire for it
+				and ADR-0033 rules out a sweep that would notice it. Nobody
+				has been told, and nobody will be, so she is offered the ask.
+
+				Every other status on this branch has an account behind it,
+				which means Stripe raised requirements, which means #343
+				already mailed every Owner once for this episode. A second
+				control there would be a duplicate she has no way to know she
+				is sending, so she is told what already happened instead.
+			-->
+			{#if status!.status === 'not_connected'}
+				{#if wasNudgeSent}
+					<Notice variant="status" message={CONNECT_NUDGE_SENT_MESSAGE} />
+				{:else}
+					<Text
+						text="Doula Cloud can email every Practice Owner about this. It sends this reminder at most once a week."
+					/>
+					<cluster-l space="var(--space-3)">
+						<Button
+							label="Email the Practice Owners"
+							variant="secondary"
+							onClick={handleNudgeOwners}
+							loading={isNudging}
+						/>
+					</cluster-l>
+				{/if}
+				{#if nudgeError}
+					<Notice variant="error" message={nudgeError} />
+				{/if}
+			{:else}
+				<Notice variant="status" message={CONNECT_OWNERS_ALREADY_EMAILED_MESSAGE} />
+			{/if}
 		{:else if canStartOnboarding && !hasDeclaredWebsite}
 			<!--
 				Block, do not warn. A disabled button with a tooltip would leave

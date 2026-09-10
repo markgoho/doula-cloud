@@ -19,6 +19,7 @@ import (
 // provisioning that made every one of these a console entry.
 var wantOutboxPaths = []string{
 	"/api/internal/clients/process-erasure-outbox",
+	"/api/internal/notifications/process-connect-nudge-outbox",
 	"/api/internal/notifications/process-engagement-request-outbox",
 	"/api/internal/notifications/process-low-credit-outbox",
 	"/api/internal/notifications/process-mfa-recovery-outbox",
