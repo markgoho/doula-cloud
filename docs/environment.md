@@ -220,7 +220,7 @@ gcloud run services update doula-api --region us-central1 --project=doula-cloud 
 
 ### The outbox backstop: one drain job
 
-**Which Cloud Scheduler jobs exist.** Two, both in `us-central1`. Both still carry `X-Internal-Secret` in the clear in their job spec; [ADR-0037](adr/0037-the-internal-boundary-is-a-caller-identity-not-a-shared-secret.md) replaces that with an `oidc_token` on each job, which is the Terraform half, [#1183](https://github.com/markgoho/doula-cloud/issues/1183), and is sequenced behind [#1051](https://github.com/markgoho/doula-cloud/issues/1051):
+**Which Cloud Scheduler jobs exist.** Two, both in `us-central1`. Both still carry `X-Internal-Secret` in the clear in their job spec; [ADR-0037](adr/0037-the-internal-boundary-is-a-caller-identity-not-a-shared-secret.md) replaces that with an `oidc_token` on each job, which is the Terraform half, [#1183](https://github.com/markgoho/doula-cloud/issues/1183):
 
 | Job | Cadence | Calls |
 | --- | --- | --- |
