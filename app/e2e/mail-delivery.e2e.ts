@@ -1,10 +1,11 @@
 import { expect, test } from '@playwright/test';
-import { E2E_API_HOST, E2E_API_PORT } from './ports';
-import { MAILBOX_DOMAIN, MAILBOX_URL, WORKER_SECRET } from './stack';
+import { MAILBOX_DOMAIN, MAILBOX_URL } from './stack';
+import { drainOutbox, drainUntilMailArrives, readMailbox, withSubject } from './outboxMail';
 import { signInEnrolled, enterPracticeAsEnrolled } from './mfa';
 import { seedFoundingOwner } from './staffSignup';
 
-const API_URL = `http://${E2E_API_HOST}:${E2E_API_PORT}`;
+const STAFF_INVITE_OUTBOX = 'process-staff-invite-outbox';
+const INVITE_SUBJECT = "You've been invited to join a practice on Doula Cloud";
 
 // The one spec that walks mail as mail (#764, map #759). Every other
 // spec that needs an invite token reads it off the pending outbox row
@@ -54,25 +55,27 @@ test('An invitation arrives as readable mail, and a complaint stops the next one
 	// spec's invitation happens to be pending at this instant. That is
 	// deliberate here and handled there: stack.ts's readStaffInviteToken
 	// falls back to this same mailbox when its outbox row has gone (#827).
-	const drain = async () =>
-		request.post(`${API_URL}/api/internal/notifications/process-staff-invite-outbox`, {
-			headers: { 'X-Internal-Secret': WORKER_SECRET }
-		});
-	const drained = await drain();
-	expect(drained.ok(), 'draining the staff-invite outbox failed').toBe(true);
-
+	//
+	// It runs the other way too, which is why this is a wait rather than
+	// one call (#1141): another spec's drain can be holding *this* row
+	// locked for the length of its own transaction, and a locked row is
+	// skipped -- so a single call can answer 200 having sent nothing this
+	// spec is about. See outboxMail.ts.
+	//
 	// The harness's read: JSON, for assertions. Never an observed act.
-	const inbox = await request.get(`${MAILBOX_URL}/api/messages?to=${encodeURIComponent(doulaEmail)}`);
-	const [message] = await inbox.json();
-	expect(message, `no mail reached ${doulaEmail}`).toBeTruthy();
-	expect(message.subject).toBe("You've been invited to join a practice on Doula Cloud");
+	const message = await drainUntilMailArrives(
+		request,
+		STAFF_INVITE_OUTBOX,
+		doulaEmail,
+		withSubject(INVITE_SUBJECT)
+	);
 	expect(message.from).toBe(`Doula Cloud <notifications@${MAILBOX_DOMAIN}>`);
 
 	// The persona's read: the inbox, in a browser, clicking the link out
 	// of the message body rather than lifting a token from a table.
 	await page.goto(`${MAILBOX_URL}/inbox/${encodeURIComponent(doulaEmail)}`);
-	await expect(page.getByRole('link', { name: "You've been invited to join a practice on Doula Cloud" })).toBeVisible();
-	await page.getByRole('link', { name: "You've been invited to join a practice on Doula Cloud" }).click();
+	await expect(page.getByRole('link', { name: INVITE_SUBJECT })).toBeVisible();
+	await page.getByRole('link', { name: INVITE_SUBJECT }).click();
 	await page.getByRole('link', { name: /\/accept-invite\?token=/ }).click();
 
 	await expect(page.getByLabel('Email')).toBeVisible();
@@ -102,9 +105,11 @@ test('An invitation arrives as readable mail, and a complaint stops the next one
 	await expect(
 		page.getByText('This email address is blocked. Blocked email addresses shows why and what can be done.').first()
 	).toBeVisible();
-	const drainedAgain = await drain();
-	expect(drainedAgain.ok(), 'draining after the complaint failed').toBe(true);
+	// One drain, not a wait: this claim is that nothing was ever queued
+	// for that address, so there is no message to wait for and any wait
+	// would only be a wait for the deadline.
+	await drainOutbox(request, STAFF_INVITE_OUTBOX);
 
-	const suppressed = await request.get(`${MAILBOX_URL}/api/messages?to=${encodeURIComponent(complainerEmail)}`);
-	expect(await suppressed.json(), 'a suppressed address still received mail').toEqual([]);
+	const suppressed = await readMailbox(request, complainerEmail);
+	expect(suppressed, 'a suppressed address still received mail').toEqual([]);
 });

@@ -1,12 +1,18 @@
 import { expect, test, type APIRequestContext } from '@playwright/test';
 import { E2E_API_HOST, E2E_API_PORT } from './ports';
-import { MAILBOX_URL, WORKER_SECRET, readStaffInviteToken } from './stack';
+import { readStaffInviteToken } from './stack';
+import { drainUntilMailArrives, readMailbox, withSubject } from './outboxMail';
 import { signIn } from './auth';
 import { enrollSecondFactor, enterPracticeAsEnrolled, verifyEmail } from './mfa';
 import { seedFoundingOwner } from './staffSignup';
 import { STUB_TOTP_CODE, stubTotpFactor } from './totpStub';
 
 const API_URL = `http://${E2E_API_HOST}:${E2E_API_PORT}`;
+
+// The subject mfarecoverymail's Compose gives the vouched code. Named
+// once because both claims below are about it: that the Owner received
+// it, and that the locked-out doula did not.
+const RECOVERY_SUBJECT = 'Doula Cloud: account recovery code';
 
 /*
  * #615's recovery path, walked as the two people who actually walk it
@@ -106,22 +112,33 @@ test('An Owner vouches for a locked-out doula, and the code reaches her and nobo
 
 	// Nothing fires by itself locally (#762): deployed this is reached by
 	// ADR-0013's nudge and by process-outbox-drain (#481).
-	const drained = await request.post(
-		`${API_URL}/api/internal/notifications/process-mfa-recovery-outbox`,
-		{ headers: { 'X-Internal-Secret': WORKER_SECRET } }
+	//
+	// Drained until *this* Owner's code has arrived, not once (#1141): the
+	// drain is table-wide and holds the rows it claims for the length of
+	// its transaction, so a second copy of this spec in flight can claim
+	// and lock this copy's row, leaving this call to skip it and answer
+	// 200 with nothing sent. See outboxMail.ts.
+	const message = await drainUntilMailArrives(
+		request,
+		'process-mfa-recovery-outbox',
+		ownerEmail,
+		withSubject(RECOVERY_SUBJECT)
 	);
-	expect(drained.ok(), 'draining the MFA-recovery outbox failed').toBe(true);
 
 	// It arrives at the Owner's address, never the doula's -- asserted
 	// both ways, because "went to the right person" and "did not go to the
-	// wrong one" are two different claims.
-	const doulaInbox = await request.get(`${MAILBOX_URL}/api/messages?to=${encodeURIComponent(doulaEmail)}`);
-	expect(await doulaInbox.json(), 'the recovery code was mailed to the locked-out doula').toEqual([]);
+	// wrong one" are two different claims. After the Owner's copy has
+	// landed, so the negative claim is made at the moment the code exists
+	// rather than before it was ever sent; and about the recovery mail
+	// alone, because the doula's inbox legitimately holds the invitation
+	// she accepted above.
+	const doulaInbox = await readMailbox(request, doulaEmail);
+	expect(
+		doulaInbox.filter((mail) => mail.subject === RECOVERY_SUBJECT),
+		'the recovery code was mailed to the locked-out doula'
+	).toEqual([]);
 
-	const ownerInbox = await request.get(`${MAILBOX_URL}/api/messages?to=${encodeURIComponent(ownerEmail)}`);
-	const [message] = await ownerInbox.json();
-	expect(message, `no recovery mail reached ${ownerEmail}`).toBeTruthy();
-	expect(message.subject).toBe('Doula Cloud: account recovery code');
+	expect(message.subject).toBe(RECOVERY_SUBJECT);
 	const code = /Recovery code: (\S+)/.exec(message.text)?.[1];
 	expect(code, `no code in the recovery mail:\n${message.text}`).toBeTruthy();
 
