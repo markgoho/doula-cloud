@@ -17,6 +17,7 @@ import (
 	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/billing"
 	"doula-cloud/api/internal/engagementrequest"
+	"doula-cloud/api/internal/internalauth"
 	"doula-cloud/api/internal/mail"
 	"doula-cloud/api/internal/mailsuppress"
 	"doula-cloud/api/internal/objectstore"
@@ -136,7 +137,7 @@ func testDeps() Deps {
 
 		MailgunWebhookSigningKey: "mailgun_webhook_test_key",
 		BounceClearer:            &mail.FakeSender{},
-		WorkerSecret:             testWorkerSecret,
+		InternalAuth:             internalauth.FromSecret(testWorkerSecret),
 
 		PortalInviteWorker:      testWorker,
 		LowCreditWorker:         testLowCreditWorker,
@@ -508,6 +509,43 @@ func TestResolveExpectedOrigins(t *testing.T) {
 	want := []string{"https://a.example", "https://b.example"}
 	if len(got) != len(want) || got[0] != want[0] || got[1] != want[1] {
 		t.Fatalf("resolveExpectedOrigins() = %v, want %v", got, want)
+	}
+}
+
+// TestInternalCallerAuth_ReadsTheOIDCIdentityItNudgesAs covers the
+// other side of ADR-0037's boundary: a Cloud Tasks nudge identifies
+// itself as the service account named here, for the same audience the
+// guard checks, so the two halves cannot be configured to disagree.
+func TestInternalCallerAuth_ReadsTheOIDCIdentityItNudgesAs(t *testing.T) {
+	env := map[string]string{
+		"INTERNAL_OIDC_SERVICE_ACCOUNT": "doula-api@doula-cloud.iam.gserviceaccount.com",
+		"INTERNAL_OIDC_AUDIENCE":        "https://doula-api.example",
+		"NOTIFICATION_WORKER_SECRET":    "",
+	}
+
+	got := internalCallerAuth(func(name string) string { return env[name] })
+
+	if got.ServiceAccount != env["INTERNAL_OIDC_SERVICE_ACCOUNT"] {
+		t.Errorf("ServiceAccount = %q, want %q", got.ServiceAccount, env["INTERNAL_OIDC_SERVICE_ACCOUNT"])
+	}
+	if got.Audience != env["INTERNAL_OIDC_AUDIENCE"] {
+		t.Errorf("Audience = %q, want %q", got.Audience, env["INTERNAL_OIDC_AUDIENCE"])
+	}
+	if got.Secret != "" {
+		t.Errorf("Secret = %q, want empty -- production carries no shared secret", got.Secret)
+	}
+}
+
+// TestInternalGuard_AcceptsNothingWhenNothingIsConfigured is the failure
+// this wiring must not have: a service started with no internal
+// configuration at all serving the outbox drain to whoever asks.
+func TestInternalGuard_AcceptsNothingWhenNothingIsConfigured(t *testing.T) {
+	guard := internalGuard(func(string) string { return "" })
+
+	r := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/api/internal/outboxes/drain", nil)
+	r.Header.Set("Authorization", "Bearer anything")
+	if guard.Allow(r) {
+		t.Error("Allow() = true with nothing configured, want false")
 	}
 }
 

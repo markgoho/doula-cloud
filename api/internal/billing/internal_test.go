@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"doula-cloud/api/internal/billing"
+	"doula-cloud/api/internal/internalauth"
 	"doula-cloud/api/internal/testdb"
 )
 
@@ -17,9 +18,9 @@ const internalTestSecret = "internal-test-secret"
 
 func newInternalBillingServer(db *testdb.DB, client billing.StripeClient) *httptest.Server {
 	mux := http.NewServeMux()
-	mux.Handle("POST /api/internal/billing/refunds", billing.RefundHandler(db.App, client, internalTestSecret))
-	mux.Handle("GET /api/internal/billing/dormant-practices", billing.DormantPracticesHandler(db.App, internalTestSecret))
-	mux.Handle("POST /api/internal/billing/founding-grants", billing.FoundingGrantHandler(db.App, internalTestSecret))
+	mux.Handle("POST /api/internal/billing/refunds", billing.RefundHandler(db.App, client, internalauth.FromSecret(internalTestSecret)))
+	mux.Handle("GET /api/internal/billing/dormant-practices", billing.DormantPracticesHandler(db.App, internalauth.FromSecret(internalTestSecret)))
+	mux.Handle("POST /api/internal/billing/founding-grants", billing.FoundingGrantHandler(db.App, internalauth.FromSecret(internalTestSecret)))
 	return httptest.NewServer(mux)
 }
 

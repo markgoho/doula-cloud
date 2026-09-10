@@ -22,6 +22,7 @@ import (
 	"doula-cloud/api/internal/client"
 	"doula-cloud/api/internal/clientauth"
 	"doula-cloud/api/internal/engagementrequest"
+	"doula-cloud/api/internal/internalauth"
 	"doula-cloud/api/internal/mail"
 	"doula-cloud/api/internal/mailsuppress"
 	"doula-cloud/api/internal/mfarecoverymail"
@@ -69,6 +70,38 @@ func resolveExpectedOrigins() []string {
 		}
 	}
 	return origins
+}
+
+// internalGuard builds the boundary on /api/internal/** (ADR-0037) from
+// the environment. getenv is a parameter rather than os.Getenv directly
+// so the wiring itself is testable -- what a service is willing to
+// accept as an internal caller is worth an assertion, not a read-through.
+//
+// INTERNAL_OIDC_AUDIENCE is the Cloud Run service's own base URL and
+// INTERNAL_OIDC_CALLERS the comma-separated service accounts whose
+// tokens are accepted. NOTIFICATION_WORKER_SECRET is the end-to-end
+// stack's and a local run's mechanism, and is deliberately unset on
+// Cloud Run: unset means the header is refused outright.
+func internalGuard(getenv func(string) string) *internalauth.Guard {
+	return internalauth.New(internalauth.Config{
+		Audience: getenv("INTERNAL_OIDC_AUDIENCE"),
+		Callers:  strings.Split(getenv("INTERNAL_OIDC_CALLERS"), ","),
+		Validate: internalauth.GoogleValidator,
+		Secret:   getenv("NOTIFICATION_WORKER_SECRET"),
+	})
+}
+
+// internalCallerAuth is the other side of the same boundary: how this
+// service's own Cloud Tasks nudges identify themselves when they call
+// back in. INTERNAL_OIDC_SERVICE_ACCOUNT names the identity Cloud Tasks
+// mints a token for, and it is the same account INTERNAL_OIDC_CALLERS
+// allowlists -- doula-api nudging itself.
+func internalCallerAuth(getenv func(string) string) tasknudge.CallerAuth {
+	return tasknudge.CallerAuth{
+		ServiceAccount: getenv("INTERNAL_OIDC_SERVICE_ACCOUNT"),
+		Audience:       getenv("INTERNAL_OIDC_AUDIENCE"),
+		Secret:         getenv("NOTIFICATION_WORKER_SECRET"),
+	}
 }
 
 func main() {
@@ -248,7 +281,7 @@ func main() {
 		// The raw Mailgun client, not mailgunSender: clearing a bounce is
 		// the one call that must reach past ADR-0029's own guard.
 		BounceClearer: mailgunAPI,
-		WorkerSecret:  os.Getenv("NOTIFICATION_WORKER_SECRET"),
+		InternalAuth:  internalGuard(os.Getenv),
 
 		PortalInviteWorker:      outboxWorker,
 		LowCreditWorker:         lowCreditOutboxWorker,
@@ -283,8 +316,8 @@ func main() {
 	}
 
 	// ADR-0013: one shared queue nudging eleven of the thirteen outboxes
-	// (outboxes.go), reusing NOTIFICATION_WORKER_SECRET rather than a
-	// second credential. #613's two Staff auth mail outboxes are the two
+	// (outboxes.go), crossing the same boundary Cloud Scheduler does
+	// rather than carrying a second credential. #613's two Staff auth mail outboxes are the two
 	// left out -- that ticket accepts ADR-0010's plain delay for them, so
 	// Cloud Scheduler's cadence alone is enough; see authmail's package
 	// doc, and the registrations that carry no Nudge.
@@ -308,7 +341,7 @@ func main() {
 		// tasknudge used to keep its own second copy of every one.
 		//
 		// coverage:ignore reason: constructs the real Cloud-Tasks-backed enqueuer, not exercised by unit tests
-		nudgeEnqueuer = tasknudge.NewCloudTasksEnqueuer(cloudTasksClient, queue, os.Getenv("NOTIFICATION_TASKS_TARGET_BASE_URL"), os.Getenv("NOTIFICATION_WORKER_SECRET"), outbox.NudgePaths(outboxRegistrations(deps)))
+		nudgeEnqueuer = tasknudge.NewCloudTasksEnqueuer(cloudTasksClient, queue, os.Getenv("NOTIFICATION_TASKS_TARGET_BASE_URL"), internalCallerAuth(os.Getenv), outbox.NudgePaths(outboxRegistrations(deps)))
 	}
 	deps.NudgeEnqueuer = nudgeEnqueuer
 

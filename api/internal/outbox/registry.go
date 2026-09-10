@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"sort"
 
+	"doula-cloud/api/internal/internalauth"
 	"doula-cloud/api/internal/tasknudge"
 )
 
@@ -69,20 +70,20 @@ type Mux interface {
 
 // Register mounts every registration's process endpoint on mux, plus the
 // one DrainPath endpoint that runs all of them, each authenticated by
-// secret rather than by a session. It returns the paths it mounted in
+// auth rather than by a session. It returns the paths it mounted in
 // sorted order so a caller can assert the published contract.
 //
 // The drain is mounted here rather than beside the other internal routes
 // so that it cannot be given a different list than the endpoints it is
 // the backstop for. An outbox added to the list is drained by having been
 // added; there is no second place to remember.
-func Register(mux Mux, db *sql.DB, secret string, registrations []Registration) []string {
+func Register(mux Mux, db *sql.DB, auth *internalauth.Guard, registrations []Registration) []string {
 	paths := make([]string, 0, len(registrations)+1)
 	for _, reg := range registrations {
-		mux.Write("POST "+reg.Path, ProcessHandler(db, reg.Worker, secret, reg.Door))
+		mux.Write("POST "+reg.Path, ProcessHandler(db, reg.Worker, auth, reg.Door))
 		paths = append(paths, reg.Path)
 	}
-	mux.Write("POST "+DrainPath, DrainHandler(db, secret, registrations))
+	mux.Write("POST "+DrainPath, DrainHandler(db, auth, registrations))
 	paths = append(paths, DrainPath)
 	sort.Strings(paths)
 	return paths

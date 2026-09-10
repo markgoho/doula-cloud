@@ -5,12 +5,13 @@ import (
 	"testing"
 	"time"
 
+	"doula-cloud/api/internal/internalauth"
 	"doula-cloud/api/internal/sitebuild"
 	"doula-cloud/api/internal/testdb"
 )
 
 func verifyHandler(db *testdb.DB, p sitebuild.Prober) http.Handler {
-	return sitebuild.VerifyHandler(db.App, sitebuild.Verifier{Prober: p, Now: time.Now}, workerSecret)
+	return sitebuild.VerifyHandler(db.App, sitebuild.Verifier{Prober: p, Now: time.Now}, internalauth.FromSecret(workerSecret))
 }
 
 func TestVerify_RefusesWithoutTheSecret(t *testing.T) {

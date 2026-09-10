@@ -2,7 +2,6 @@ package outbox
 
 import (
 	"context"
-	"crypto/subtle"
 	"database/sql"
 	"fmt"
 	"log"
@@ -11,6 +10,7 @@ import (
 	"time"
 
 	"doula-cloud/api/internal/apierr"
+	"doula-cloud/api/internal/internalauth"
 )
 
 // DrainPath is the one endpoint Cloud Scheduler is provisioned against:
@@ -96,9 +96,9 @@ func runOutbox(ctx context.Context, db *sql.DB, worker Processor, door string) e
 // The response tells Cloud Scheduler what the log tells a person: 200
 // only when every outbox succeeded, and 500 naming the ones that did not,
 // so the job shows red and its retry policy fires.
-func DrainHandler(db *sql.DB, secret string, registrations []Registration) http.Handler {
+func DrainHandler(db *sql.DB, auth *internalauth.Guard, registrations []Registration) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if secret == "" || subtle.ConstantTimeCompare([]byte(r.Header.Get("X-Internal-Secret")), []byte(secret)) != 1 {
+		if !auth.Allow(r) {
 			apierr.WriteError(w, "unauthorized", http.StatusUnauthorized)
 			return
 		}
