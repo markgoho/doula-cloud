@@ -96,7 +96,7 @@
 		return entry.engagementRequest.requestedByName;
 	}
 
-	// #813 (ADR-0039). A merged Client's history is two trails, not one,
+	// #813 (ADR-0040). A merged Client's history is two trails, not one,
 	// and it can never become one: each Client's entries are sealed under
 	// her own key and the activity log is append-only, so the absorbed
 	// woman's diffs may not be re-sealed under the survivor's. Every entry

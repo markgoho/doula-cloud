@@ -23,7 +23,7 @@
 	 *   is written; the reader is sent to this route's own `duplicate`
 	 *   sub-route, a question page rather than a dismissible dialog, per
 	 *   the ADR. "This is her" is offered on every match there since
-	 *   #813 (ADR-0039): two records that both carry history now merge,
+	 *   #813 (ADR-0040): two records that both carry history now merge,
 	 *   and attachment only decides which of them survives.
 	 */
 	import { onMount, tick } from 'svelte';

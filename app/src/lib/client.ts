@@ -251,7 +251,7 @@ export type ClientEditFields = Omit<ClientRecord, 'id'>;
  * the result exactly matches another Client on file; the one next step
  * is the existing override. `substitution` false is gate two -- a
  * possible duplicate, asked rather than blocked, where "This is her" is
- * always available -- #813 (ADR-0039) made two records that both carry
+ * always available -- #813 (ADR-0040) made two records that both carry
  * history mergeable, so there is no longer a `mergeOffered` flag saying
  * whether the question may be asked at all. */
 export type EditClientResult =

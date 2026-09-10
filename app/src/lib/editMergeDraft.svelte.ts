@@ -48,7 +48,7 @@ export class EditMergeDraft {
 	/**
 	 * Opens the draft with one edit's refused attempt.
 	 *
-	 * There was a `mergeOffered` flag here until #813 (ADR-0039), saying
+	 * There was a `mergeOffered` flag here until #813 (ADR-0040), saying
 	 * whether "This is her" was available at all. It always is now: two
 	 * records that both carry history merge, and attachment only decides
 	 * which of them survives -- which each match's own `wouldSurvive`

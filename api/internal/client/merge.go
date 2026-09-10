@@ -39,7 +39,7 @@ type MergeResponse struct {
 	Moved      movedCounts `json:"moved"`
 }
 
-// MergeHandler merges two Client records into one (#813, ADR-0039).
+// MergeHandler merges two Client records into one (#813, ADR-0040).
 // Direction never depends on which record is open: the record carrying
 // history survives, and where the two are alike the older row survives
 // -- resolveMergeDirection. clientId on the path is the record open for

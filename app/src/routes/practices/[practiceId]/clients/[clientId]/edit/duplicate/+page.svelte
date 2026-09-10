@@ -22,7 +22,7 @@
 	 * There used to be a third shape here: a page saying no merge was
 	 * possible at all, shown whenever the record being edited held an
 	 * Engagement, an Engagement Request or a portal account. #813
-	 * (ADR-0039) removed it. Two records that both carry history now
+	 * (ADR-0040) removed it. Two records that both carry history now
 	 * merge for real, so "This is her" is offered on every match and
 	 * attachment only decides which record survives.
 	 *

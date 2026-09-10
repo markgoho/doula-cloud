@@ -840,8 +840,8 @@ target — ADR-0027 already refuses an edit to her.
 
 The build is [#814](https://github.com/markgoho/doula-cloud/issues/814).
 
-## Superseded in part by ADR-0039: a Client record merges, and the Engagement moves with her
+## Superseded in part by ADR-0040: a Client record merges, and the Engagement moves with her
 
 The amendment above says **"Where both records are attached, nothing is merged"**, and rests on ADR-0015's rule that an Engagement belongs to one Client for life. Both of those were reversed on [#813](https://github.com/markgoho/doula-cloud/issues/813): two records that both carry history now merge, and their Engagements, Engagement Requests and accepted portal accounts move to the survivor. Attachment no longer decides whether the question may be asked — it decides which record survives.
 
-Everything else in the amendment stands unchanged: the two gates, the fold rule (a non-blank value from the absorbed record wins), the tombstone rather than a delete, the refusal of an erased Client as a merge target, and the rule that direction never depends on which record is open. See [ADR-0039](0039-a-client-record-merges-and-the-engagement-moves-with-her.md) for what changed and why the alternatives were not chosen.
+Everything else in the amendment stands unchanged: the two gates, the fold rule (a non-blank value from the absorbed record wins), the tombstone rather than a delete, the refusal of an erased Client as a merge target, and the rule that direction never depends on which record is open. See [ADR-0040](0040-a-client-record-merges-and-the-engagement-moves-with-her.md) for what changed and why the alternatives were not chosen.

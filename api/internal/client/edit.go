@@ -36,7 +36,7 @@ type EditRequest struct {
 // changes MergeHandler would actually make (direction never depends on
 // which record is open).
 //
-// There is no MergeOffered any more (#813, ADR-0039). It said whether
+// There is no MergeOffered any more (#813, ADR-0040). It said whether
 // "This is her" was available at all, and its answer was always "only
 // while the record being edited holds no Engagement, no Engagement
 // Request and no portal account" -- which is exactly the case the true

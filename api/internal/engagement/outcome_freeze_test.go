@@ -100,7 +100,7 @@ func TestFreezeTrigger_LeavesEveryOtherColumnAlone(t *testing.T) {
 // ADR-0015's freeze rule: re-pointing the row is how a second baby would
 // be served on a Credit already spent.
 //
-// The rule was narrowed on #813 (ADR-0039), never dropped. A merge may
+// The rule was narrowed on #813 (ADR-0040), never dropped. A merge may
 // move an Engagement, and only a merge -- the trigger admits the change
 // solely where the old Client is already tombstoned into the new one.
 // Neither Client here has been merged into anything, so the refusal

@@ -186,7 +186,7 @@ describe("when gate two names a possible duplicate", () => {
 });
 
 describe('what the page says a merge actually does', () => {
-	// #813 (ADR-0039) removed the page that said no merge was possible.
+	// #813 (ADR-0040) removed the page that said no merge was possible.
 	// What replaced it is not silence: the word "merge" promises more than
 	// the act delivers, so the screen has to say what it does not do
 	// before she chooses it.

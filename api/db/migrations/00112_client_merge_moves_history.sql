@@ -4,10 +4,10 @@
 -- absorb a record nothing pointed at; this migration is what lets the
 -- things that point at one Client point at the other instead.
 --
--- The reversal this carries is deliberate and recorded: ADR-0039
+-- The reversal this carries is deliberate and recorded: ADR-0040
 -- supersedes the part of ADR-0015/ADR-0017 that said an Engagement
 -- belongs to one Client for life. See
--- docs/adr/0039-a-client-record-merges-and-the-engagement-moves-with-her.md.
+-- docs/adr/0040-a-client-record-merges-and-the-engagement-moves-with-her.md.
 --
 -- 00093's own comment says "Nothing in the product updates client_id
 -- today -- a Client with Engagements cannot even be merged away

@@ -223,7 +223,7 @@ func TestMergeHandler_BothUnattachedOlderSurvives(t *testing.T) {
 }
 
 // TestMergeHandler_AttachedSourceSurvivesAndAbsorbsTheOther proves the
-// reversal #813 records (ADR-0039): an attached record open for editing
+// reversal #813 records (ADR-0040): an attached record open for editing
 // is no longer refused. It survives, and the other record is absorbed
 // into it -- attachment decides direction, not whether the question may
 // be asked at all.
