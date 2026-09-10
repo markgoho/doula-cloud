@@ -222,11 +222,12 @@ func TestMergeHandler_BothUnattachedOlderSurvives(t *testing.T) {
 	})
 }
 
-// TestMergeHandler_RefusesAttachedSource proves "This is her" is offered
-// only while the record open for editing is unattached -- an attached
-// source is refused even though the other record would happily be
-// absorbed the other way.
-func TestMergeHandler_RefusesAttachedSource(t *testing.T) {
+// TestMergeHandler_AttachedSourceSurvivesAndAbsorbsTheOther proves the
+// reversal #813 records (ADR-0039): an attached record open for editing
+// is no longer refused. It survives, and the other record is absorbed
+// into it -- attachment decides direction, not whether the question may
+// be asked at all.
+func TestMergeHandler_AttachedSourceSurvivesAndAbsorbsTheOther(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "staff-merge-attached-source"
 	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, "employee")
@@ -239,11 +240,14 @@ func TestMergeHandler_RefusesAttachedSource(t *testing.T) {
 	resp := authedJSON(t, session, http.MethodPost, srv.URL+"/api/practices/"+practiceID+"/clients/"+attachedID+"/merge",
 		client.MergeRequest{Record: client.Record{GivenName: "Cora James"}, OtherClientID: otherID})
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusConflict {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusConflict)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
 	}
-	if got := mergedIntoOf(t, db, otherID); got != nil {
-		t.Fatalf("other merged_into = %v, want nil -- nothing should have been written", got)
+	if got := mergedIntoOf(t, db, otherID); got == nil || *got != attachedID {
+		t.Fatalf("other merged_into = %v, want %q -- the record carrying history survives", got, attachedID)
+	}
+	if got := mergedIntoOf(t, db, attachedID); got != nil {
+		t.Fatalf("attached merged_into = %v, want nil", got)
 	}
 }
 

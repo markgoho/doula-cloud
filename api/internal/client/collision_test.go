@@ -171,8 +171,8 @@ func TestEditHandler_CollisionPredicate_SubstitutionBlocksWithSubstitutionFlag(t
 	if !out.Substitution {
 		t.Fatalf("substitution = false, want true (exact given+family match)")
 	}
-	if out.MergeOffered {
-		t.Fatalf("mergeOffered = true, want false -- gate one never offers a merge")
+	if len(out.Matches) != 1 || out.Matches[0].WouldSurvive {
+		t.Fatalf("matches = %+v, want one match with wouldSurvive false -- gate one never offers a merge", out.Matches)
 	}
 	if len(out.Matches) != 1 || out.Matches[0].ID != existingID {
 		t.Fatalf("matches = %+v, want exactly Nadia Haddad", out.Matches)
@@ -188,7 +188,7 @@ func TestEditHandler_RefusesEditingAMergedRecord(t *testing.T) {
 	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, "employee")
 	survivorID := testdb.SeedNamedClient(t, db, practiceID, "Survivor", "")
 	absorbedID := testdb.SeedNamedClient(t, db, practiceID, "Absorbed", "")
-	if _, err := db.Admin.ExecContext(t.Context(), `UPDATE clients SET merged_into = $2 WHERE id = $1`, absorbedID, survivorID); err != nil {
+	if _, err := db.Admin.ExecContext(t.Context(), `UPDATE clients SET merged_into = $2, merged_at = now() WHERE id = $1`, absorbedID, survivorID); err != nil {
 		t.Fatalf("seed merged_into: %v", err)
 	}
 

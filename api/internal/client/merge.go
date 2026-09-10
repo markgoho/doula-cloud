@@ -430,10 +430,14 @@ func setMergedInto(ctx context.Context, tx *sql.Tx, clientID, survivorID, staffI
 // count, never a value -- and it is what the endpoint's own response
 // says changed hands.
 type movedCounts struct {
-	Engagements  int `json:"engagements"`
-	Requests     int `json:"engagementRequests"`
-	PortalLinks  int `json:"portalAccounts"`
-	InviteRevoke int `json:"revokedInvitations"`
+	Engagements        int `json:"engagements"`
+	EngagementRequests int `json:"engagementRequests"`
+	PortalAccounts     int `json:"portalAccounts"`
+	// RevokedInvitations counts pending invitations the merge revoked
+	// rather than moved -- a different act from the three above, and
+	// counted separately so the diff never reads as though an invitation
+	// changed hands.
+	RevokedInvitations int `json:"revokedInvitations"`
 }
 
 // moveAttachments re-points everything that follows the woman from the
@@ -461,7 +465,7 @@ func moveAttachments(ctx context.Context, tx *sql.Tx, absorbedID, survivorID str
 	if err != nil {
 		return movedCounts{}, err
 	}
-	moved.Requests = requests
+	moved.EngagementRequests = requests
 
 	// A pending invitation is revoked rather than moved. It is
 	// re-sendable, moving one would collide with
@@ -476,7 +480,7 @@ func moveAttachments(ctx context.Context, tx *sql.Tx, absorbedID, survivorID str
 	if err != nil {
 		return movedCounts{}, err
 	}
-	moved.InviteRevoke = revoked
+	moved.RevokedInvitations = revoked
 	if revoked > 0 {
 		if err := portalinvite.RevokePending(ctx, tx, absorbedID); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
@@ -493,7 +497,7 @@ func moveAttachments(ctx context.Context, tx *sql.Tx, absorbedID, survivorID str
 	).Scan(&links); err != nil {
 		return movedCounts{}, fmt.Errorf("client: move portal links: %w", err)
 	}
-	moved.PortalLinks = links
+	moved.PortalAccounts = links
 
 	return moved, nil
 }
