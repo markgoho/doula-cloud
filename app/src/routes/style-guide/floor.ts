@@ -353,10 +353,12 @@ export interface OverflowMeasurement {
  * enforced by there being one function (#570), and that function's own
  * comment named this ticket as the second caller before the second caller
  * existed. Its guarantees come with it -- only disclosures that were CLOSED
- * are touched, the undo runs inside the same task so no `ontoggle` handler
- * ever sees `open`, and therefore content a disclosure LOADS on open is
- * still measured in its loading state (#1126, which owns that separately for
- * both instruments).
+ * are touched, and the undo runs inside the same task so no `ontoggle`
+ * handler ever sees `open`. That is why this measurement can never be what
+ * reaches content a disclosure LOADS on open: `revealDisclosures`
+ * (`continuum.ts`) does that in preparation, and every subject this check
+ * measures arrives through `mountInFrame`, which calls it (#1126). By the
+ * time this runs there is usually nothing left closed to open at all.
  */
 export function measureOverflow(frame: HTMLElement, given: number): OverflowMeasurement {
 	const close = openDisclosures(frame);

@@ -11,9 +11,10 @@ import { registerLayoutPrimitives } from '#lib/primitives/index.js';
 // via the custom element's own attribute handling, and an unregistered
 // center-l never runs it, leaving every DataTable narrower than its floor.
 import '#lib/styles/app.css';
+import { revealDisclosures } from '../../../style-guide/continuum.js';
 import Page from './+page.svelte';
 import { toPageState } from '../../../routeFixture.js';
-import { fixture, roster } from './page.fixture.js';
+import { fixture, membershipHistories, roster, workStateHistories } from './page.fixture.js';
 
 if (!customElements.get('center-l')) registerLayoutPrimitives();
 
@@ -69,80 +70,13 @@ const invitations = roster.invitations.items;
 const [ownerMember, contractorMember] = members;
 const [liveInvitation, lapsedInvitation] = invitations;
 
-// One page of #459's work state history, keyed by staff id. It stays
-// this spec's own (#596): the roster fixture's `respond` never answers
-// it, because a disclosure fetches it only once somebody opens the
-// disclosure. memberSince dates the Membership, which is what lets the
-// screen mark an assertion made before she joined -- a contractor doula
-// carries her earlier Practice's rows in with her.
-const workStateHistories: Record<string, unknown> = {
-	'staff-1': {
-		memberSince: '2026-08-01T00:00:00Z',
-		items: [
-			{
-				eventId: 'event-2',
-				previousWorkState: 'NY',
-				workState: 'NJ',
-				createdAt: '2027-03-14T09:30:00Z'
-			},
-			{ eventId: 'event-1', workState: 'NY', createdAt: '2026-08-28T12:00:00Z' }
-		],
-		hasMore: false
-	},
-	'staff-2': {
-		// Asserted at another Practice, a year before this Membership.
-		memberSince: '2026-08-01T00:00:00Z',
-		items: [{ eventId: 'event-3', workState: 'CA', createdAt: '2025-05-04T12:00:00Z' }],
-		hasMore: false
-	}
-};
-
-// One page of #872's Membership history, keyed by staff id. This spec's
-// own for the same reason the work state history above is: the
-// disclosure fetches it only once somebody opens it, so the roster
-// fixture never answers for it.
-//
-// Every value here is the *stored* one -- `owner`, `contractor` -- which
-// is what the BFF sends and what the screen has to map to the team's
-// words through `roles.ts` (#262). An assertion below that reads
-// "Contractor" is therefore an assertion about the mapping, not an echo
-// of the fixture.
-const membershipHistories: Record<string, unknown> = {
-	'staff-1': {
-		items: [
-			{
-				eventId: 'membership-event-2',
-				action: 'employment_type_changed',
-				actorName: 'Renata Alvarez',
-				previousEmploymentType: 'employee',
-				employmentType: 'contractor',
-				createdAt: '2027-01-06T11:00:00Z'
-			},
-			{
-				eventId: 'membership-event-1',
-				action: 'joined',
-				actorName: 'Renata Alvarez',
-				roles: ['owner', 'admin', 'doula'],
-				employmentType: 'employee',
-				createdAt: '2026-08-01T00:00:00Z'
-			}
-		],
-		hasMore: false
-	},
-	'staff-2': {
-		items: [
-			{
-				eventId: 'membership-event-3',
-				action: 'roles_changed',
-				actorName: 'Renata Alvarez',
-				previousRoles: ['doula'],
-				roles: ['admin', 'doula'],
-				createdAt: '2026-11-11T11:00:00Z'
-			}
-		],
-		hasMore: false
-	}
-};
+// #459's work state history and #872's Membership history both come from
+// the fixture beside this route now (#596, #1126): the check opens each
+// disclosure in preparation and waits for what it loads, so the content
+// the sweep measures and the content asserted on below are one object
+// rather than two that drift. This spec still owns what is not the happy
+// path -- a read that fails, a second page -- and each of those is written
+// as a departure from the fixture at the test that needs it.
 
 interface MockOptions {
 	roster?: { members: typeof members; invitations: typeof invitations };
@@ -174,15 +108,15 @@ function mockApi({
 			if (historyResponse) {
 				return Promise.resolve(historyResponse);
 			}
-			const staffId = path.split('/').at(-2);
-			return Promise.resolve(jsonResponse(workStateHistories[String(staffId)]));
+			const staffId = String(path.split('/').at(-2));
+			return Promise.resolve(jsonResponse(workStateHistories[staffId]));
 		}
 		if (path.includes('/membership-history')) {
 			if (membershipHistoryResponse) {
 				return Promise.resolve(membershipHistoryResponse);
 			}
-			const staffId = path.split('/').at(-2);
-			return Promise.resolve(jsonResponse(membershipHistories[String(staffId)]));
+			const staffId = String(path.split('/').at(-2));
+			return Promise.resolve(jsonResponse(membershipHistories[staffId]));
 		}
 		if (path.endsWith('/sessions') && init?.method === 'DELETE') {
 			return Promise.resolve(sessionsResponse ?? jsonResponse({}));
@@ -530,7 +464,7 @@ describe('staff screen', () => {
 			await disclosures.first().click();
 
 			await expect
-				.element(tableView.getByText('Changed from New York to New Jersey'))
+				.element(tableView.getByText('Changed from District of Columbia to New York'))
 				.toBeVisible();
 		});
 
@@ -542,7 +476,7 @@ describe('staff screen', () => {
 
 			await tableView.getByText('Work state history').first().click();
 
-			await expect.element(tableView.getByText('Reported New York')).toBeVisible();
+			await expect.element(tableView.getByText('Reported New Jersey')).toBeVisible();
 		});
 
 		// A contractor doula who asserted her work state at another Practice
@@ -556,6 +490,35 @@ describe('staff screen', () => {
 
 			await expect.element(tableView.getByText('Reported California')).toBeVisible();
 			await expect.element(tableView.getByText('(before joining this practice)')).toBeVisible();
+		});
+
+		/*
+		 * What the continuum check measures on this row (#1126). The check
+		 * never clicks: it reveals every closed disclosure while it prepares
+		 * the subject and waits for what that loads, which is this route's
+		 * own `revealDisclosures` call and not a second procedure written
+		 * here. Before that it measured the word `Loading...` at 320px and
+		 * reported a screen that fits, and the fixture beside this file
+		 * answered the roster for the history path, so what it would have
+		 * laid out once it waited was an error notice.
+		 *
+		 * This asserts the entry sentence rather than the request, because
+		 * what the sweep needs is content in the frame -- an answered fetch
+		 * that never rendered would pass a call-count assertion and measure
+		 * nothing.
+		 */
+		it('is already showing its entries by the time the check measures the screen', async () => {
+			await setup();
+			const tableView = membersTable();
+
+			await revealDisclosures(document.querySelector('.table-view')!, 'The Staff roster');
+
+			await expect
+				.element(tableView.getByText('Changed from District of Columbia to New York'))
+				.toBeVisible();
+			await expect
+				.element(tableView.getByRole('button', { name: 'Show older changes' }).first())
+				.toBeVisible();
 		});
 
 		it('shows a per-row error notice when the history fails to load', async () => {
