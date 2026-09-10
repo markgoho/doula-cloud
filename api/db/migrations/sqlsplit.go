@@ -69,9 +69,9 @@ func appendStatement(out []string, stmt string) []string {
 	return append(out, stmt)
 }
 
-// skipLineComment returns the length of the comment starting at s,
-// including its newline, so the newline still separates the tokens
-// around it.
+// skipLineComment returns the length of the comment starting at s, up
+// to but not including its newline -- the newline is left to be written
+// out, so it still separates the tokens around the comment.
 func skipLineComment(s string) int {
 	if end := strings.IndexByte(s, '\n'); end >= 0 {
 		return end

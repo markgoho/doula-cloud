@@ -1,40 +1,13 @@
 // The row-safety classifier that guardrail_test.go enforces over the
-// embedded migrations.
-//
-// The problem it exists for: the job that applies migrations to a real
-// database (migrate, .github/workflows/ci.yml) runs only on a push to
-// trunk, alongside deploy-api and deploy-app. Every pull request builds
-// an empty Postgres per test process instead, so any statement whose
-// success depends on the rows a table already holds is green on the PR
-// and red on the first trunk push -- and the deploys queued behind
-// migrate never run. #1021 is the incident: #967 shipped
-// `ALTER TABLE contracts ADD COLUMN amount_cents bigint NOT NULL`, green
-// on its PR, and trunk stayed red across seven merges.
-//
-// The rule enforced here, stated once: a migration's Up section may
-// contain no statement whose success depends on the rows a table already
-// holds, unless a safety note in safety/ says why those rows cannot
-// break it. RowDependent reports every such statement; rowClasses
-// enumerates the family, each member derived from a Postgres operation
-// documented as scanning, rewriting or verifying existing rows, and each
-// proved against a real populated Postgres in rowsafety_pg_test.go.
+// embedded migrations. The rule it enforces, and why CI cannot see the
+// failure any other way, is the package doc in embed.go.
 
 package migrations
 
 import (
-	"embed"
 	"regexp"
 	"strings"
 )
-
-// SafetyFS holds the safety notes that attest to a row-dependent
-// statement being safe against the rows already in the table. They are a
-// separate embed from FS so goose never sees them: a migration that has
-// already applied cannot be edited to carry its own marker, so the
-// marker lives beside the file rather than inside it.
-//
-//go:embed safety/*.md
-var SafetyFS embed.FS
 
 // Finding is one row-dependent statement found in an Up section.
 type Finding struct {
@@ -74,6 +47,20 @@ var rowClasses = []rowClass{
 		failure: `column "..." of relation "..." contains null values (23502) -- every existing row gets NULL`,
 		remedy: "ALTER TABLE <table> ADD COLUMN <col> <type> NOT NULL DEFAULT <value>;\n" +
 			"    ALTER TABLE <table> ALTER COLUMN <col> DROP DEFAULT;",
+	},
+	{
+		name: "ADD COLUMN ... DEFAULT with an inline constraint",
+		// A DEFAULT fills the new column in every existing row, so a
+		// constraint written on the column itself is checked against
+		// those filled-in values -- the one case where DEFAULT, which
+		// makes NOT NULL safe, is what makes something else unsafe.
+		// Written twice because the column's clauses come in either
+		// order and RE2 has no lookahead.
+		pattern: regexp.MustCompile(`\bADD COLUMN\b.*\bDEFAULT\b.*\b(REFERENCES|CHECK|UNIQUE)\b|` +
+			`\bADD COLUMN\b.*\b(REFERENCES|CHECK|UNIQUE)\b.*\bDEFAULT\b`),
+		failure: "the DEFAULT gives every existing row a value, and the inline constraint is then checked against it -- an orphan (23503), a violated predicate (23514), or, since every row gets the same value, a duplicate (23505)",
+		remedy: "Add the column with its DEFAULT first, drop the default, and add the\n" +
+			"    constraint in a later statement whose own safety you can state.",
 	},
 	{
 		name:    "ALTER COLUMN ... SET NOT NULL",
@@ -153,6 +140,53 @@ var rowClasses = []rowClass{
 // this migration just created holds no rows for any class to trip over.
 var createTable = regexp.MustCompile(`^CREATE TABLE (?:IF NOT EXISTS )?([A-Z0-9_."]+)`)
 
+// alterHeader matches the "ALTER TABLE <name>" an action hangs off, so
+// each action can be read with its table still attached.
+var alterHeader = regexp.MustCompile(`^ALTER TABLE (?:IF EXISTS )?(?:ONLY )?[A-Z0-9_."]+ `)
+
+// alterActions splits one statement into the units a safe marker
+// belongs to. A DEFAULT or a NOT VALID is written inside one action of
+// an ALTER TABLE and exempts that action alone; reading the statement
+// whole would let one action's NOT VALID cover the action beside it, and
+// would report a second action's missing DEFAULT against the first one's
+// present one. Anything that is not an ALTER TABLE is a single action.
+func alterActions(norm string) []string {
+	header := alterHeader.FindString(norm)
+	if header == "" {
+		return []string{norm}
+	}
+	var actions []string
+	for _, action := range splitTopLevel(norm[len(header):]) {
+		actions = append(actions, header+strings.TrimSpace(action))
+	}
+	return actions
+}
+
+// splitTopLevel splits on the commas that separate one ALTER TABLE
+// action from the next -- those outside any parentheses and outside any
+// quoted string, so a CHECK's value list and a DEFAULT's literal stay
+// with the action that wrote them.
+func splitTopLevel(s string) []string {
+	var out []string
+	depth, quoted, start := 0, false, 0
+	for i := range len(s) {
+		switch {
+		case quoted:
+			quoted = s[i] != '\''
+		case s[i] == '\'':
+			quoted = true
+		case s[i] == '(':
+			depth++
+		case s[i] == ')':
+			depth--
+		case s[i] == ',' && depth == 0:
+			out = append(out, s[start:i])
+			start = i + 1
+		}
+	}
+	return append(out, s[start:])
+}
+
 // targetTable finds the table an ALTER TABLE, CREATE INDEX or DML
 // statement acts on.
 var targetTable = regexp.MustCompile(`^(?:ALTER TABLE (?:IF EXISTS )?(?:ONLY )?|CREATE (?:UNIQUE )?INDEX (?:CONCURRENTLY )?(?:IF NOT EXISTS )?\S+ ON (?:ONLY )?|UPDATE |DELETE FROM |INSERT INTO )([A-Z0-9_."]+)`)
@@ -174,19 +208,21 @@ func RowDependent(up string) []Finding {
 		if m := targetTable.FindStringSubmatch(norm); m != nil && fresh[m[1]] {
 			continue
 		}
-		for _, c := range rowClasses {
-			if !c.pattern.MatchString(norm) {
-				continue
+		for _, action := range alterActions(norm) {
+			for _, c := range rowClasses {
+				if !c.pattern.MatchString(action) {
+					continue
+				}
+				if c.safe != nil && c.safe.MatchString(action) {
+					continue
+				}
+				findings = append(findings, Finding{
+					Class:     c.name,
+					Statement: action,
+					Failure:   c.failure,
+					Remedy:    c.remedy,
+				})
 			}
-			if c.safe != nil && c.safe.MatchString(norm) {
-				continue
-			}
-			findings = append(findings, Finding{
-				Class:     c.name,
-				Statement: collapse(stmt),
-				Failure:   c.failure,
-				Remedy:    c.remedy,
-			})
 		}
 	}
 	return findings

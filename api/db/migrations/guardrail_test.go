@@ -1,17 +1,27 @@
 package migrations
 
 import (
+	"embed"
 	"fmt"
 	"strings"
 	"testing"
 )
 
+// safetyFS holds the safety notes that attest to a row-dependent
+// statement being safe against the rows already in the table. It is a
+// separate embed from FS so goose never sees the notes, and it lives in
+// this test file so the running BFF -- which imports this package for
+// the migrations themselves -- does not carry them.
+//
+//go:embed safety/*.md
+var safetyFS embed.FS
+
 // The reasons that repeat across the list below, each named once rather
 // than written out five times.
 const (
-	uniqueIndexBefore = "CREATE UNIQUE INDEX; applied before the guardrail covered the class (#1139)"
-	checkBefore       = "ADD CONSTRAINT ... CHECK; applied before the guardrail covered the class (#1139)"
-	checkAndDMLBefore = "ADD CONSTRAINT ... CHECK and DML; applied before the guardrail covered the classes (#1139)"
+	uniqueIndexBefore = "CREATE UNIQUE INDEX; already applied to doula-cloud-pg before the guardrail covered the class (#1139)"
+	checkBefore       = "ADD CONSTRAINT ... CHECK; already applied to doula-cloud-pg before the guardrail covered the class (#1139)"
+	checkAndDMLBefore = "ADD CONSTRAINT ... CHECK and DML; already applied to doula-cloud-pg before the guardrail covered the classes (#1139)"
 )
 
 // grandfathered are migrations that carry a row-dependent statement,
@@ -22,27 +32,27 @@ const (
 // TestGrandfatheredListDoesNotGrow pins its exact size, so a new
 // migration takes the safe form or writes a safety note, never an
 // exemption.
-// nolint:gosec // G101 reads the migration names and constraint classes
-// below as a possible credential; every value here is a filename and a
-// sentence of English, and nothing in this package holds a secret.
+//
+//nolint:gosec // G101 reads the constraint classes below as a possible credential; every value is a filename and a sentence of English, and nothing in this package holds a secret
 var grandfathered = map[string]string{
-	"00002_practice_staff_tenancy.sql":                 "DO block; applied before the guardrail covered the class (#1139)",
+	"00002_practice_staff_tenancy.sql":                 "DO block; already applied to doula-cloud-pg before the guardrail covered the class (#1139)",
 	"00020_contracts_recreate_after_void.sql":          uniqueIndexBefore,
 	"00026_client_portal_provisioning.sql":             uniqueIndexBefore,
+	"00029_stripe_connect_accounts_v2.sql":             "ADD COLUMN ... DEFAULT with an inline CHECK the default satisfies; already applied to doula-cloud-pg before the guardrail covered the class (#1139)",
 	"00030_employment_attachment_offer.sql":            "ADD COLUMN ... NOT NULL without DEFAULT; applied 2026-06 against an empty staff_practices",
 	"00039_membership_events.sql":                      uniqueIndexBefore,
-	"00042_client_intake_schema.sql":                   "ALTER COLUMN ... SET NOT NULL and DML; applied before the guardrail covered the classes (#1139)",
-	"00043_staff_work_state.sql":                       "ADD CONSTRAINT ... CHECK, ALTER COLUMN ... SET NOT NULL and DML; applied before the guardrail covered the classes (#1139)",
-	"00046_practice_page_slug.sql":                     "ADD CONSTRAINT ... CHECK, CREATE UNIQUE INDEX, DML and a DO block; applied before the guardrail covered the classes (#1139)",
+	"00042_client_intake_schema.sql":                   "ALTER COLUMN ... SET NOT NULL and DML; already applied to doula-cloud-pg before the guardrail covered the classes (#1139)",
+	"00043_staff_work_state.sql":                       "ADD CONSTRAINT ... CHECK, ALTER COLUMN ... SET NOT NULL and DML; already applied to doula-cloud-pg before the guardrail covered the classes (#1139)",
+	"00046_practice_page_slug.sql":                     "ADD CONSTRAINT ... CHECK, CREATE UNIQUE INDEX, DML and a DO block; already applied to doula-cloud-pg before the guardrail covered the classes (#1139)",
 	"00049_site_build_and_page_liveness.sql":           checkAndDMLBefore,
-	"00052_credit_lot_provenance.sql":                  "ADD CONSTRAINT ... CHECK, ALTER COLUMN ... TYPE and DML; applied before the guardrail covered the classes (#1139)",
-	"00054_one_refund_per_request.sql":                 "ADD CONSTRAINT ... CHECK and CREATE UNIQUE INDEX; applied before the guardrail covered the classes (#1139)",
-	"00055_founding_grant.sql":                         "ADD CONSTRAINT ... CHECK, ALTER COLUMN ... TYPE and CREATE UNIQUE INDEX; applied before the guardrail covered the classes (#1139)",
-	"00057_engagement_status_drop_postpartum.sql":      "ALTER COLUMN ... TYPE; applied before the guardrail covered the class (#1139)",
+	"00052_credit_lot_provenance.sql":                  "ADD CONSTRAINT ... CHECK, ALTER COLUMN ... TYPE and DML; already applied to doula-cloud-pg before the guardrail covered the classes (#1139)",
+	"00054_one_refund_per_request.sql":                 "ADD CONSTRAINT ... CHECK and CREATE UNIQUE INDEX; already applied to doula-cloud-pg before the guardrail covered the classes (#1139)",
+	"00055_founding_grant.sql":                         "ADD CONSTRAINT ... CHECK, ALTER COLUMN ... TYPE and CREATE UNIQUE INDEX; already applied to doula-cloud-pg before the guardrail covered the classes (#1139)",
+	"00057_engagement_status_drop_postpartum.sql":      "ALTER COLUMN ... TYPE; already applied to doula-cloud-pg before the guardrail covered the class (#1139)",
 	"00063_mfa_recovery_cleared_notice.sql":            uniqueIndexBefore,
 	"00072_totp_mfa_auth_events.sql":                   checkBefore,
-	"00073_portal_accounts.sql":                        "ADD CONSTRAINT ... FOREIGN KEY, CREATE UNIQUE INDEX and DML; applied before the guardrail covered the classes (#1139)",
-	"00075_retire_identity_account_delete.sql":         "ALTER COLUMN ... TYPE; applied before the guardrail covered the class (#1139)",
+	"00073_portal_accounts.sql":                        "ADD CONSTRAINT ... FOREIGN KEY, CREATE UNIQUE INDEX and DML; already applied to doula-cloud-pg before the guardrail covered the classes (#1139)",
+	"00075_retire_identity_account_delete.sql":         "ALTER COLUMN ... TYPE; already applied to doula-cloud-pg before the guardrail covered the class (#1139)",
 	"00078_session_evicted_one_pending.sql":            uniqueIndexBefore,
 	"00089_credit_ledger_forfeit_shape.sql":            checkBefore,
 	"00090_engagement_status_transition.sql":           checkBefore,
@@ -50,7 +60,7 @@ var grandfathered = map[string]string{
 	"00094_engagement_completion_requires_outcome.sql": checkAndDMLBefore,
 	"00095_manual_payment_recording.sql":               "ADD COLUMN ... NOT NULL without DEFAULT; applied 2026-09-08 against an empty invoices",
 	"00101_staff_login_deletion_rules.sql":             checkBefore,
-	"00103_payment_reversal.sql":                       "ADD CONSTRAINT ... CHECK and CREATE UNIQUE INDEX; applied before the guardrail covered the classes (#1139)",
+	"00103_payment_reversal.sql":                       "ADD CONSTRAINT ... CHECK and CREATE UNIQUE INDEX; already applied to doula-cloud-pg before the guardrail covered the classes (#1139)",
 	"00112_client_merge_moves_history.sql":             checkAndDMLBefore,
 }
 
@@ -103,7 +113,7 @@ Write it this way instead:
 
 If the statement is already safe, say why in
 api/db/migrations/safety/%s.md under a "## %s" heading. See #1021, #1139
-and the rule at the top of rowsafety.go.`,
+and the package doc in embed.go.`,
 		name, f.Class, f.Statement, f.Failure, f.Remedy,
 		strings.TrimSuffix(name, ".sql"), f.Class)
 }
@@ -112,7 +122,7 @@ and the rule at the top of rowsafety.go.`,
 // to, keyed by the guardrail's own name for each class.
 func safetyNoteClasses(t *testing.T, name string) map[string]bool {
 	t.Helper()
-	body, err := SafetyFS.ReadFile(safetyNotePath(name))
+	body, err := safetyFS.ReadFile(safetyNotePath(name))
 	if err != nil {
 		return nil
 	}
@@ -134,7 +144,7 @@ func safetyNotePath(name string) string {
 // statement it justifies: every heading in every note must name a class
 // the guardrail still reports on that migration.
 func TestSafetyNotesAreStillNeeded(t *testing.T) {
-	entries, err := SafetyFS.ReadDir("safety")
+	entries, err := safetyFS.ReadDir("safety")
 	if err != nil {
 		t.Fatalf("read safety notes: %v", err)
 	}
@@ -165,7 +175,7 @@ func TestSafetyNotesAreStillNeeded(t *testing.T) {
 // an offender, so a migration that gets fixed or deleted is removed from
 // the list rather than left as cover for a future one.
 func TestGrandfatheredListDoesNotGrow(t *testing.T) {
-	const want = 26
+	const want = 27
 	if len(grandfathered) != want {
 		t.Fatalf("grandfathered has %d entries, want exactly %d -- a new migration takes the safe form or writes a safety note, not an exemption", len(grandfathered), want)
 	}
