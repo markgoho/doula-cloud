@@ -112,7 +112,6 @@ describe('the continuum check', () => {
  * the guard on the claim the rest of this rests on -- that a closed
  * disclosure's content is not laid out at all.
  */
-
 describe('the sweep, over a closed disclosure (#710)', () => {
 	it('measures nothing at all while the disclosure stays closed', () => {
 		const { frame, remove } = frameHolding(ledgerMarkup());

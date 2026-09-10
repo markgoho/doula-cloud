@@ -337,7 +337,11 @@ export interface OverflowMeasurement {
  * and the single-row criterion's element tops read the SAME numbers closed
  * as open -- while the disclosure itself contributes nothing to any
  * ancestor's `scrollWidth`. So the overflow criterion is the only one of the
- * four that was blind, and the other three need no open/undo pair.
+ * four that was blind, and the other three need no open/undo pair. That is
+ * asserted rather than merely written down: `floor.svelte.spec.ts`'s
+ * disclosure block reads each of those two criteria closed and open and
+ * expects the pair to agree, so the day this engine changes its mind about a
+ * closed `<details>` the claim fails instead of quietly going stale.
  *
  * The limit that would change that, named because it is a limit rather than
  * an oversight: a component that hides its own closed content with a plain
