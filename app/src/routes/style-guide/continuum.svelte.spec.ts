@@ -30,7 +30,14 @@ import { describe, expect, it } from 'vitest';
 import { registerLayoutPrimitives } from '#lib/primitives/index.js';
 import '#lib/styles/app.css';
 import { atomPages, moleculePages, organismPages, templatePages } from './components.js';
-import { mountInFrame, overflowReport, sweep } from './continuum.js';
+import {
+	frameHolding,
+	ledgerMarkup,
+	mountInFrame,
+	overflowReport,
+	OVERFLOWING,
+	sweep
+} from './continuum.js';
 import { toDemos, type PageModule } from './drag-surface/dragSurface.js';
 
 const pageModules = import.meta.glob<PageModule>('./*/+page.svelte', { eager: true });
@@ -95,11 +102,9 @@ describe('the continuum check', () => {
  * What the sweep does to a disclosure before it measures one (#710).
  *
  * This is the instrument under test rather than a subject swept by it, so
- * the frame is built by hand instead of through `mountInFrame`: what it
- * needs is a `<details>` whose content is wider than any space the sweep
- * will offer it, and no component this repo ships is allowed to be that.
- * It needs no webfont wait either -- the overflow here is a declared
- * inline size, not a measured glyph.
+ * the frame is built by hand instead of through `mountInFrame`
+ * (`continuum.ts`'s `frameHolding` and `ledgerMarkup`, shared with the
+ * floor check's own disclosure block since #1124).
  *
  * The first assertion is the blind spot itself, kept rather than deleted:
  * a plain `scrollWidth` read is exactly what the sweep was before #710,
@@ -107,32 +112,9 @@ describe('the continuum check', () => {
  * the guard on the claim the rest of this rests on -- that a closed
  * disclosure's content is not laid out at all.
  */
-// Wider than the ~414px window this file runs in, so what breaks is the
-// disclosure's own content rather than anything the frame could absorb.
-const OVERFLOWING = 900;
-
-function frameHolding(markup: string) {
-	const run = document.createElement('div');
-	const frame = document.createElement('div');
-	frame.style.containerType = 'inline-size';
-	frame.innerHTML = markup;
-	run.append(frame);
-	document.body.append(run);
-	return { run, frame, remove: () => run.remove() };
-}
-
-// The Client portal's Activity ledger in miniature (#486): a summary a
-// Client clicks, and behind it content that has to fit at 320px.
-function ledger(isOpen = false): string {
-	return (
-		`<details${isOpen ? ' open' : ''}><summary>Show what has happened</summary>` +
-		`<div style="inline-size: ${OVERFLOWING}px">Everything that has happened</div></details>`
-	);
-}
-
 describe('the sweep, over a closed disclosure (#710)', () => {
 	it('measures nothing at all while the disclosure stays closed', () => {
-		const { frame, remove } = frameHolding(ledger());
+		const { frame, remove } = frameHolding(ledgerMarkup());
 		try {
 			frame.style.inlineSize = '320px';
 			void frame.offsetWidth;
@@ -144,7 +126,7 @@ describe('the sweep, over a closed disclosure (#710)', () => {
 	});
 
 	it('finds the overflow a closed disclosure was hiding', () => {
-		const { run, frame, remove } = frameHolding(ledger());
+		const { run, frame, remove } = frameHolding(ledgerMarkup());
 		try {
 			const found = sweep(frame, run.clientWidth);
 
@@ -167,7 +149,7 @@ describe('the sweep, over a closed disclosure (#710)', () => {
 	 * about).
 	 */
 	it('leaves the disclosure closed again afterwards', () => {
-		const { run, frame, remove } = frameHolding(ledger());
+		const { run, frame, remove } = frameHolding(ledgerMarkup());
 		try {
 			sweep(frame, run.clientWidth);
 
@@ -192,7 +174,7 @@ describe('the sweep, over a closed disclosure (#710)', () => {
 	 * open/undo pair ever stops being synchronous.
 	 */
 	it('never lets a toggle handler see the disclosure open', async () => {
-		const { run, frame, remove } = frameHolding(ledger());
+		const { run, frame, remove } = frameHolding(ledgerMarkup());
 		try {
 			const openStates: boolean[] = [];
 			const disclosure = frame.querySelector('details')!;
@@ -214,7 +196,7 @@ describe('the sweep, over a closed disclosure (#710)', () => {
 	});
 
 	it('leaves a disclosure the subject ships open alone', () => {
-		const { run, frame, remove } = frameHolding(ledger(true));
+		const { run, frame, remove } = frameHolding(ledgerMarkup(true));
 		try {
 			sweep(frame, run.clientWidth);
 

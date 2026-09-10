@@ -124,10 +124,10 @@ export function sweep(frame: HTMLElement, availableSpace: number): Break | undef
 /*
  * Opens every closed `<details>` under `frame` and hands back the undo
  * (#710). It is exported rather than kept private to `sweep` because the
- * floor check takes a measurement of its own and has the same blind spot:
- * #1124 is that work, and the query belongs in one place before a second
- * instrument writes its own copy -- which is #570's rule stated before the
- * copy exists rather than after.
+ * floor check takes a measurement of its own and had the same blind spot:
+ * `floor.ts`'s `measureOverflow` is the second caller (#1124), so the query
+ * lives in one place rather than in two instruments -- #570's rule stated
+ * before the copy existed rather than after it.
  *
  * Only the disclosures that were CLOSED are touched -- a subject that
  * ships one already open (`StepRail`'s completed steps) is left as its own
@@ -157,6 +157,53 @@ export function openDisclosures(frame: HTMLElement): () => void {
 	return () => {
 		for (const disclosure of closed) disclosure.open = false;
 	};
+}
+
+/*
+ * The subject the two disclosure checks share (#710, #1124): a frame built
+ * by hand around a `<details>` whose content is wider than any space either
+ * instrument will offer it.
+ *
+ * Built by hand rather than through `mountInFrame` because what it needs is
+ * a component no repo can ship -- the whole point is content that overflows
+ * at every width, which every real subject is forbidden to be. It needs no
+ * webfont wait either: the overflow is a declared inline size, not a
+ * measured glyph.
+ *
+ * It lives here rather than beside either check because both take the same
+ * measurement of the same blind spot -- `sweep` for the continuum check and
+ * `measureOverflow` (`floor.ts`) for the floor check -- and #570's rule is
+ * that one artifact is enforced by there being one function. The second
+ * consumer is the bar, and #1124 is the second consumer.
+ */
+
+// Wider than the ~414px window these checks run in, so what breaks is the
+// disclosure's own content rather than anything the frame could absorb.
+export const OVERFLOWING = 900;
+
+export interface HeldFrame {
+	run: HTMLElement;
+	frame: HTMLElement;
+	remove(): void;
+}
+
+export function frameHolding(markup: string): HeldFrame {
+	const run = document.createElement('div');
+	const frame = document.createElement('div');
+	frame.style.containerType = 'inline-size';
+	frame.innerHTML = markup;
+	run.append(frame);
+	document.body.append(run);
+	return { run, frame, remove: () => run.remove() };
+}
+
+// The Client portal's Activity ledger in miniature (#486): a summary a
+// Client clicks, and behind it content that has to fit at 320px.
+export function ledgerMarkup(isOpen = false): string {
+	return (
+		`<details${isOpen ? ' open' : ''}><summary>Show what has happened</summary>` +
+		`<div style="inline-size: ${OVERFLOWING}px">Everything that has happened</div></details>`
+	);
 }
 
 /*

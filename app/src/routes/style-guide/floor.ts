@@ -16,7 +16,7 @@
  * `@container` mentioned in a markup comment -- DataTable.svelte carries
  * exactly one -- is never mistaken for a rule.
  */
-import { CONFORMANCE_COMMITMENT } from './continuum.js';
+import { CONFORMANCE_COMMITMENT, openDisclosures } from './continuum.js';
 import { styleLines } from '#lib/styles/styleLines.js';
 
 // No `layout:ignore`-style marker applies here, so this sentinel -- which
@@ -312,8 +312,59 @@ export interface OverflowMeasurement {
 	readonly needed: number;
 }
 
+/*
+ * ## It looks inside a closed disclosure (#1124)
+ *
+ * A closed `<details>` contributes nothing but its `<summary>` to any
+ * ancestor's scroll size, so a plain `scrollWidth` read reports the width the
+ * frame was given for content that may need any width at all. The paragraph
+ * below says what that does and does not mean for the other criteria, which
+ * is narrower than it sounds. `sweep` (`continuum.ts`) closed that hole on
+ * #710 and this measurement was deliberately left open: no condition the
+ * floor check has discovered sits behind a disclosure today, so the gap was
+ * latent rather than live, and #710 declined to change what a green check
+ * measures for a gap nothing was hitting.
+ *
+ * Latent is still blind. The day a component declares a content floor for a
+ * tree inside a disclosure, sufficiency passes because an empty box
+ * overflows nothing, and minimality fails to fail -- which reads as the
+ * floor being wrong rather than as the instrument being unable to see, and
+ * a gate that cannot see a region is worth nothing.
+ *
+ * This measurement and no other, and that is a measured fact rather than a
+ * scoping choice. A closed disclosure's descendants still report their own
+ * geometry in this engine -- measured on #1124, `measureWrap`'s line counts
+ * and the single-row criterion's element tops read the SAME numbers closed
+ * as open -- while the disclosure itself contributes nothing to any
+ * ancestor's `scrollWidth`. So the overflow criterion is the only one of the
+ * four that was blind, and the other three need no open/undo pair. That is
+ * asserted rather than merely written down: `floor.svelte.spec.ts`'s
+ * disclosure block reads each of those two criteria closed and open and
+ * expects the pair to agree, so the day this engine changes its mind about a
+ * closed `<details>` the claim fails instead of quietly going stale.
+ *
+ * The limit that would change that, named because it is a limit rather than
+ * an oversight: a component that hides its own closed content with a plain
+ * `display: none` (`DataTable`'s `details:not([open]) > .frame` rule does
+ * exactly this) takes the geometry away from every criterion, not just this
+ * one. No component with a non-overflow criterion does that today.
+ *
+ * `openDisclosures` is imported rather than re-queried here: one artifact is
+ * enforced by there being one function (#570), and that function's own
+ * comment named this ticket as the second caller before the second caller
+ * existed. Its guarantees come with it -- only disclosures that were CLOSED
+ * are touched, the undo runs inside the same task so no `ontoggle` handler
+ * ever sees `open`, and therefore content a disclosure LOADS on open is
+ * still measured in its loading state (#1126, which owns that separately for
+ * both instruments).
+ */
 export function measureOverflow(frame: HTMLElement, given: number): OverflowMeasurement {
-	return { given, needed: frame.scrollWidth };
+	const close = openDisclosures(frame);
+	try {
+		return { given, needed: frame.scrollWidth };
+	} finally {
+		close();
+	}
 }
 
 export function overflowFloorReport(name: string, measurement: OverflowMeasurement): string {
