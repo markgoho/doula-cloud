@@ -28,7 +28,12 @@
 	import ConfirmDialog from '#lib/components/molecules/ConfirmDialog.svelte';
 	import ListPage from '#lib/components/templates/ListPage.svelte';
 	import { workStateName, workStateReportedOn } from '#lib/workStates.js';
-	import { rolesLabel, employmentTypeLabel, type EmploymentType } from '#lib/roles.js';
+	import { isOwner, rolesLabel, employmentTypeLabel, type EmploymentType } from '#lib/roles.js';
+	import type { PracticeSession } from '../+layout.js';
+
+	// #694: the Membership comes off practices/[practiceId]/+layout.ts's
+	// already-resolved read (#835), not a fetch of this page's own.
+	const isPracticeOwner = $derived(isOwner((page.data as { session: PracticeSession }).session));
 
 	let members = $state<StaffSummary[]>([]);
 	// Only the Invitations grow: the Members roster stays whole (#446 --
@@ -359,6 +364,27 @@
 			onClick={() => startEditing(member)}
 		/>
 		<span class="visually-hidden" id="{view}-{member.staffId}-edit-name">{member.name}</span>
+	{/if}
+	<!--
+		#694: Owner-only, matching the vouch endpoint's own guard -- an
+		Admin who followed this would meet a 403 and nothing else. Drawing,
+		never a gate (roles.ts): the BFF refuses the POST regardless.
+
+		A Link rather than a Button: it only ever navigates, and what it
+		navigates to is a screen with a consequence to read and a
+		re-authentication of its own -- neither of which fits in a table
+		cell at 320px.
+	-->
+	{#if isPracticeOwner}
+		<Link
+			href={resolve('/practices/[practiceId]/staff/[staffId]/mfa-recovery', {
+				practiceId: page.params.practiceId!,
+				staffId: member.staffId
+			})}
+			label="Send a recovery code"
+			describedBy="{view}-{member.staffId}-recovery-name"
+		/>
+		<span class="visually-hidden" id="{view}-{member.staffId}-recovery-name">{member.name}</span>
 	{/if}
 	<Button
 		label="End sessions everywhere"

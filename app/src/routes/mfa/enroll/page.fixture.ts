@@ -17,7 +17,8 @@ const session: SessionInfo = {
 	email: 'anne-marie@example.test',
 	workState: 'NY',
 	workStateReportedAt: '2026-01-01T00:00:00Z',
-	secondFactor: false
+	secondFactor: false,
+	soleOwner: false
 };
 
 export const fixture: RouteFixture = {

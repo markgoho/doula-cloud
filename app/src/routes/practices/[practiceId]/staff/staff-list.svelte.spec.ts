@@ -164,6 +164,10 @@ function mockApi({
 
 beforeEach(() => {
 	apiFetchWithSession.mockReset();
+	// #694 gave this screen a role-gated row action, so a test that
+	// installs another session must not leave it installed -- the fixture's
+	// own Owner is the default every other test here reads.
+	Object.assign(pageState, toPageState(fixture));
 });
 
 /*
@@ -585,5 +589,37 @@ describe('staff screen', () => {
 			.toBeVisible();
 
 		expect(findDuplicateIds(document)).toEqual([]);
+	});
+
+	/*
+	 * #694: the way in to Owner vouching. Drawing only -- the endpoint
+	 * refuses an Admin regardless (roles.ts) -- but an Admin offered a
+	 * link that can only ever 403 is a screen lying about what she can do.
+	 */
+	it('offers each member a way to send a recovery code, named by whose it is', async () => {
+		await setup();
+
+		const links = membersTable().getByRole('link', { name: 'Send a recovery code' });
+		await expect.element(links.first()).toHaveAttribute(
+			'href',
+			`/practices/practice-1/staff/${ownerMember.staffId}/mfa-recovery`
+		);
+		expect(describedByText(links.first())).toBe(ownerMember.name);
+		expect(describedByText(links.nth(1))).toBe(contractorMember.name);
+	});
+
+	it('offers an Admin no such link', async () => {
+		pageState.data = {
+			session: {
+				practiceId: 'practice-1',
+				staffId: 'staff-1',
+				practiceName: 'Riverside Doula Collective',
+				roles: ['admin'],
+				isContractor: false
+			}
+		};
+		await setup();
+
+		expect(testPage.getByRole('link', { name: 'Send a recovery code' }).elements()).toHaveLength(0);
 	});
 });

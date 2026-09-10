@@ -189,3 +189,77 @@ func TestSessionHandler_MultiplePracticesWithLastUsed(t *testing.T) {
 		t.Fatalf("lastPracticeId = %v, want %q", out.LastPracticeID, practiceB)
 	}
 }
+
+// TestSessionHandler_SoleOwner is the two-Owner fixture #694's account
+// screen turns on: a sole Owner is offered saved recovery codes, a
+// co-Owner is offered none.
+//
+// It is here rather than beside the rotate endpoint because of what it
+// is really guarding. The "is there another Owner?" half of the question
+// reads Membership rows belonging to *other people*, and this endpoint's
+// transaction sets only app.current_identity_uid -- so under
+// practice_memberships_self_visibility that subquery sees nothing, finds
+// no other Owner, and answers "sole" for everyone. The failure is
+// silent: no error, no 403, just a co-Owner shown a section whose button
+// then 403s. The second half of this test, with a second Owner seeded at
+// the same Practice, is the assertion that catches it.
+func TestSessionHandler_SoleOwner(t *testing.T) {
+	db := testdb.New(t)
+	const soleUID = "session-sole-owner"
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, soleUID, []string{ownerRole}, employeeType)
+
+	srv, soleSession := newSessionServer(t, db, soleUID)
+	defer srv.Close()
+
+	if got := decodeSession(t, srv, soleSession); !got.SoleOwner {
+		t.Fatalf("soleOwner = false for the only Owner of a practice, want true")
+	}
+
+	// A second Owner at the same Practice. Neither of them is sole now,
+	// and neither can see the other's Membership row through RLS -- which
+	// is the whole point of the assertions below.
+	const secondUID = "session-second-owner"
+	secondStaffID := testdb.SeedStaff(t, db, secondUID)
+	seedMembershipWithRoles(t, db, practiceID, secondStaffID, "{owner}")
+
+	if got := decodeSession(t, srv, soleSession); got.SoleOwner {
+		t.Fatalf("soleOwner = true once a second Owner holds a membership at the same practice, want false")
+	}
+
+	secondSession := authntest.SeedSession(t, db.App, secondUID)
+	if got := decodeSession(t, srv, secondSession); got.SoleOwner {
+		t.Fatalf("soleOwner = true for the second Owner, want false")
+	}
+}
+
+// TestSessionHandler_SoleOwnerFalseForNonOwner covers the population
+// #615's AC names last: somebody who is not an Owner anywhere holds no
+// saved codes, and the account screen must not imply she does.
+func TestSessionHandler_SoleOwnerFalseForNonOwner(t *testing.T) {
+	db := testdb.New(t)
+	const identityUID = "session-doula-not-owner"
+	testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, employeeType)
+
+	srv, session := newSessionServer(t, db, identityUID)
+	defer srv.Close()
+
+	if got := decodeSession(t, srv, session); got.SoleOwner {
+		t.Fatalf("soleOwner = true for a Doula, want false")
+	}
+}
+
+// decodeSession reads one GET /api/staff/session into its DTO, failing
+// the test on any status but 200.
+func decodeSession(t *testing.T, srv *httptest.Server, session string) staffauth.SessionResponse {
+	t.Helper()
+	resp := getSession(t, srv, session)
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
+	}
+	var out staffauth.SessionResponse
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	return out
+}

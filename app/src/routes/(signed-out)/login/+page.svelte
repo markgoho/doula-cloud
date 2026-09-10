@@ -18,6 +18,7 @@
 	import TextInput from '#lib/components/atoms/TextInput.svelte';
 	import Button from '#lib/components/atoms/Button.svelte';
 	import Link from '#lib/components/atoms/Link.svelte';
+	import Notice from '#lib/components/atoms/Notice.svelte';
 	import LabeledField from '#lib/components/molecules/LabeledField.svelte';
 	import StackedForm from '#lib/components/molecules/StackedForm.svelte';
 	import TotpCodeField from '#lib/components/molecules/TotpCodeField.svelte';
@@ -83,6 +84,15 @@
 	 * reads it once, to resolve, and the markup never does.
 	 */
 	let mfaResolver: MultiFactorResolver | undefined;
+
+	/*
+	 * #694: she has just spent a recovery code, which cleared her
+	 * authenticator app and minted no session -- so she arrives back here
+	 * with nothing to show for it unless this screen says what happened.
+	 * A query flag rather than state carried across a navigation, the same
+	 * shape `sessionEnded=true` already uses on this URL.
+	 */
+	const hasSpentRecoveryCode = $derived(page.url.searchParams.get('codeSpent') === 'true');
 
 	/*
 	 * A visitor who already holds a live Staff session and opens this URL
@@ -342,6 +352,18 @@
 				message="For your security, we signed you out. Log in again to continue."
 			/>
 		{/if}
+		<!--
+			#694's own arrival here, in the same position and on the same
+			step, for the same reason: spending a recovery code mints no
+			session, so without a word she would be looking at an unchanged
+			log-in form with nothing to show for what she just did.
+		-->
+		{#if hasSpentRecoveryCode}
+			<Notice
+				variant="status"
+				message="Your recovery code worked. Two-factor authentication is off, so log in with your password and set up an authenticator app again."
+			/>
+		{/if}
 
 		<StackedForm onSubmit={handleSubmit}>
 			<LabeledField id={emailId} label="Email" error={submission.errorFor(emailId)}>
@@ -376,6 +398,13 @@
 		</StackedForm>
 
 		<Link href={resolve('/(signed-out)/forgot-password')} label="Forgot your password?" />
+		<!--
+			#694: the way back for a lost authenticator app. It is offered
+			here as well as on the challenge step below because a person who
+			already knows her phone is gone starts from this screen, not from
+			a code prompt she cannot answer.
+		-->
+		<Link href={resolve('/(signed-out)/recovery-code')} label="Use a recovery code" />
 	{:else if step === 'confirm-sign-out'}
 		<!--
 			#610: the warning goes on the button that acts, not on a screen
@@ -404,6 +433,13 @@
 			<TotpCodeField id={codeId} value={totpCode} onInput={(value) => (totpCode = value)} error={submission.errorFor(codeId)} />
 			<Button type="submit" label="Continue" loading={submission.isSubmitting} />
 		</StackedForm>
+
+		<!--
+			#694: the screen a person whose phone is gone is actually stuck
+			on. Her password was accepted a moment ago and the only thing
+			between her and her account is a code she cannot produce.
+		-->
+		<Link href={resolve('/(signed-out)/recovery-code')} label="Use a recovery code" />
 	{/if}
 
 	<!--

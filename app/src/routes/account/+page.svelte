@@ -25,37 +25,23 @@
 	 * and a load function would buy nothing but a second place to look.
 	 */
 	import { onMount } from 'svelte';
-	import {
-		getMultiFactorResolver,
-		signInWithEmailAndPassword,
-		signOut,
-		TotpMultiFactorGenerator,
-		type MultiFactorError,
-		type MultiFactorResolver,
-		type User
-	} from 'firebase/auth';
+	import { signOut, type User } from 'firebase/auth';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { apiBaseURL, apiFetchWithSession } from '#lib/api.js';
 	import { getFirebaseAuth } from '#lib/firebase.js';
-	import {
-		isMultiFactorAuthRequired,
-		passwordReauthRefusal,
-		refusalErrors,
-		refusalMessage,
-		SERVICE_PROBLEM,
-		totpCodeRefusal
-	} from '#lib/formErrors.js';
-	import { FormSubmission, orServiceProblem } from '#lib/formSubmission.svelte.js';
+	import { refusalErrors, refusalMessage, SERVICE_PROBLEM } from '#lib/formErrors.js';
+	import { FormSubmission, orServiceProblem, orThrownMessage } from '#lib/formSubmission.svelte.js';
+	import { rotateSavedCodes } from '#lib/mfaRecovery.js';
+	import { triggerBlobDownload } from '#lib/blobDownload.js';
 	import { workStateCode, workStateName, workStateReportedOn } from '#lib/workStates.js';
 	import FormPage from '#lib/components/templates/FormPage.svelte';
 	import Button from '#lib/components/atoms/Button.svelte';
 	import Link from '#lib/components/atoms/Link.svelte';
 	import Notice from '#lib/components/atoms/Notice.svelte';
 	import Text from '#lib/components/atoms/Text.svelte';
-	import TextInput from '#lib/components/atoms/TextInput.svelte';
-	import LabeledField from '#lib/components/molecules/LabeledField.svelte';
-	import TotpCodeField from '#lib/components/molecules/TotpCodeField.svelte';
+	import WarningText from '#lib/components/atoms/WarningText.svelte';
+	import ReauthPrompt from '#lib/components/molecules/ReauthPrompt.svelte';
 	import WorkStateField from '#lib/components/molecules/WorkStateField.svelte';
 	import ErrorSummary from '#lib/components/molecules/ErrorSummary.svelte';
 	import { deleteOwnLogin } from '#lib/loginDeletion.js';
@@ -79,24 +65,21 @@
 	const saveSubmission = new FormSubmission();
 	let savedState = $state('');
 
-	const mfaPasswordId = 'account-mfa-password';
-	const mfaCodeId = 'account-mfa-code';
-
-	// #606: voluntary removal of a second factor, from idle status through
-	// the step-up reauth Identity Platform itself demands of an already
-	// enrolled identity -- see the two-step shape below.
-	let mfaStep = $state<'idle' | 'password' | 'code'>('idle');
-	let mfaPassword = $state('');
-	let mfaCode = $state('');
+	// #606: voluntary removal of a second factor. The step-up Identity
+	// Platform demands of an already-enrolled identity is `ReauthPrompt`'s
+	// (#694), so all this screen holds is whether she has asked for it.
+	let isRemovingSecondFactor = $state(false);
 	const mfaSubmission = new FormSubmission();
 
-	/*
-	 * The in-progress reauthentication Identity Platform is waiting on,
-	 * kept across the password and code steps without being `$state` --
-	 * the code step reads it once, to resolve, and the markup never does.
-	 * Same shape as the login screen's own `mfaResolver`.
-	 */
-	let mfaResolver: MultiFactorResolver | undefined;
+	// #615: whether she is the only Owner of some Practice, which is the
+	// whole population that ever holds saved recovery codes. Read off the
+	// session rather than derived here -- the same session-carried fact
+	// `hasSecondFactor` is, and the rotate endpoint re-derives it and
+	// refuses on its own regardless (ADR-0006).
+	let isSoleOwner = $state(false);
+	const savedCodesSubmission = new FormSubmission();
+	let savedCodes = $state<string[]>([]);
+	let isConfirmingSavedCodes = $state(false);
 
 	// #613: no verified-email flag is exposed here, so this is offered
 	// unconditionally rather than only when unverified -- harmless either
@@ -139,6 +122,7 @@
 		reportedAt = result.session.workStateReportedAt;
 		selectedState = workStateName(result.session.workState);
 		hasSecondFactor = result.session.secondFactor;
+		isSoleOwner = result.session.soleOwner;
 		isLoaded = true;
 	}
 
@@ -215,16 +199,12 @@
 
 	function beginMfaRemoval() {
 		mfaSubmission.errors = [];
-		mfaPassword = '';
-		mfaCode = '';
-		mfaStep = 'password';
+		isRemovingSecondFactor = true;
 	}
 
 	function cancelMfaRemoval() {
 		mfaSubmission.errors = [];
-		mfaPassword = '';
-		mfaCode = '';
-		mfaStep = 'idle';
+		isRemovingSecondFactor = false;
 	}
 
 	/*
@@ -245,7 +225,7 @@
 	 * single-use, so both callers fall back to the password step and ask
 	 * her to start the step-up over.
 	 */
-	async function didRemoveSecondFactor(user: User): Promise<boolean> {
+	async function removeSecondFactor(user: User): Promise<void> {
 		const idToken = await user.getIdToken();
 		const response = await fetch(`${apiBaseURL()}/api/staff/mfa`, {
 			method: 'DELETE',
@@ -253,53 +233,43 @@
 			headers: { Authorization: `Bearer ${idToken}` }
 		});
 
-		if (response.ok) {
-			await signOut(getFirebaseAuth());
-			await goto(`${resolve('/(signed-out)/login')}?sessionEnded=true`);
-			return true;
+		// Thrown rather than returned: `ReauthPrompt` reads a rejection as
+		// the act's own refusal and shows its words, which are the BFF's --
+		// or the service sentence, where a 5xx had none of its own.
+		if (!response.ok) {
+			throw new Error(await refusalMessage(response));
 		}
 
-		await signOut(getFirebaseAuth());
-		mfaSubmission.errors = [{ message: await refusalMessage(response) }];
-		return false;
+		await goto(`${resolve('/(signed-out)/login')}?sessionEnded=true`);
 	}
 
-	async function handleMfaPasswordSubmit() {
-		await mfaSubmission.run(async () => {
-			if (mfaPassword === '') {
-				return [{ message: 'Enter your password', targetId: mfaPasswordId }];
-			}
-
-			try {
-				const credential = await signInWithEmailAndPassword(getFirebaseAuth(), email, mfaPassword);
-				const didRemove = await didRemoveSecondFactor(credential.user);
-				if (!didRemove) mfaStep = 'password';
-			} catch (error_) {
-				if (isMultiFactorAuthRequired(error_)) {
-					// Expected for an identity that already holds the factor
-					// she is trying to remove: Identity Platform challenges the
-					// second factor on every sign-in once one is enrolled.
-					mfaResolver = getMultiFactorResolver(getFirebaseAuth(), error_ as MultiFactorError);
-					mfaCode = '';
-					mfaStep = 'code';
-					return;
-				}
-				throw error_;
-			}
-		}, (refusal) => (Array.isArray(refusal) ? refusal : [passwordReauthRefusal(refusal, mfaPasswordId)]));
+	/*
+	 * #615's saved recovery codes, and the one moment their plaintext ever
+	 * exists outside her own notes.
+	 *
+	 * There is no "show me the ones I already have": the set minted when
+	 * she became a Practice's sole Owner was discarded unread, and so is
+	 * every replacement minted when she spends one. So being shown them
+	 * and rotating them are one act, which is why the confirmation says
+	 * plainly that anything she has already written down stops working.
+	 */
+	async function handleShowSavedCodes(): Promise<void> {
+		await savedCodesSubmission.run(async () => {
+			savedCodes = await rotateSavedCodes(apiFetchWithSession);
+			isConfirmingSavedCodes = false;
+		}, orThrownMessage);
 	}
 
-	async function handleMfaCodeSubmit() {
-		await mfaSubmission.run(async () => {
-			if (mfaCode.trim() === '') {
-				return [{ message: 'Enter the 6-digit code from your authenticator app', targetId: mfaCodeId }];
-			}
-
-			const assertion = TotpMultiFactorGenerator.assertionForSignIn(mfaResolver!.hints[0].uid, mfaCode);
-			const credential = await mfaResolver!.resolveSignIn(assertion);
-			const didRemove = await didRemoveSecondFactor(credential.user);
-			if (!didRemove) mfaStep = 'password';
-		}, (refusal) => (Array.isArray(refusal) ? refusal : [totpCodeRefusal(refusal, mfaCodeId)]));
+	/*
+	 * One code per line, as a plain text file. The list stays on screen
+	 * either way -- this is the half that works on a phone, where writing
+	 * ten opaque strings down by hand is not a real option.
+	 */
+	function handleDownloadSavedCodes(): void {
+		triggerBlobDownload(
+			new Blob([savedCodes.join('\n')], { type: 'text/plain' }),
+			'doula-cloud-recovery-codes.txt'
+		);
 	}
 
 	/*
@@ -407,31 +377,26 @@
 		`actions`, below) already uses for a same-page secondary action.
 	-->
 	{#if hasSecondFactor}
-		{#if mfaStep === 'idle'}
+		{#if isRemovingSecondFactor}
+			<!--
+				`insideForm`: this fieldset is inside the page's own `<form>`
+				(below), and HTML forbids nesting one form inside another --
+				see ReauthPrompt's own prop doc.
+			-->
+			<ReauthPrompt
+				idPrefix="account-mfa"
+				{email}
+				prompt="Confirm your password to remove two-factor authentication."
+				confirmLabel="Remove"
+				confirmVariant="destructive"
+				submission={mfaSubmission}
+				onAuthenticated={removeSecondFactor}
+				onCancel={cancelMfaRemoval}
+				insideForm
+			/>
+		{:else}
 			<Text text="Turned on. You'll be asked for a code from your authenticator app when you sign in." />
 			<Button type="button" variant="destructive" label="Remove" onClick={beginMfaRemoval} />
-		{:else if mfaStep === 'password'}
-			<Text text="Confirm your password to remove two-factor authentication." />
-			<LabeledField id={mfaPasswordId} label="Password" error={mfaSubmission.errorFor(mfaPasswordId)}>
-				{#snippet children({ id, describedBy, invalid })}
-					<TextInput
-						{id}
-						{describedBy}
-						{invalid}
-						type="password"
-						value={mfaPassword}
-						onInput={(value) => (mfaPassword = value)}
-						required
-						autocomplete="current-password"
-					/>
-				{/snippet}
-			</LabeledField>
-			<Button type="button" variant="destructive" label="Continue" loading={mfaSubmission.isSubmitting} onClick={handleMfaPasswordSubmit} />
-			<Button type="button" variant="secondary" label="Cancel" onClick={cancelMfaRemoval} disabled={mfaSubmission.isSubmitting} />
-		{:else}
-			<TotpCodeField id={mfaCodeId} value={mfaCode} onInput={(value) => (mfaCode = value)} error={mfaSubmission.errorFor(mfaCodeId)} />
-			<Button type="button" variant="destructive" label="Remove" loading={mfaSubmission.isSubmitting} onClick={handleMfaCodeSubmit} />
-			<Button type="button" variant="secondary" label="Cancel" onClick={cancelMfaRemoval} disabled={mfaSubmission.isSubmitting} />
 		{/if}
 	{:else}
 		<Text text="Not turned on." />
@@ -454,6 +419,79 @@
 	-->
 	{#if mfaSubmission.errors.length > 0 && !mfaSubmission.errors[0].targetId}
 		<Notice variant="error" message={mfaSubmission.errors[0].message} />
+	{/if}
+{/snippet}
+
+{#snippet savedCodesSection()}
+	<!--
+		Offered only to a Practice's sole Owner, because she is the only
+		person who holds these: everyone else has an Owner above her who can
+		vouch for her, and offering a control here that would only ever 403
+		would be implying she has a set she does not.
+
+		Three states, never rendered together: the offer, the confirmation
+		of what pressing it costs, and the codes themselves.
+	-->
+	{#if savedCodes.length > 0}
+		<WarningText
+			message="Write these down now. This is the only time they are shown, and each one works once."
+		/>
+		<!--
+			Selectable plain text in a list, not inputs: they are read and
+			copied, never edited, and an <ol> is what a numbered set of
+			one-shot codes is. The same reasoning /mfa/enroll's own secret
+			key uses.
+		-->
+		<ol class="codes">
+			{#each savedCodes as code (code)}
+				<li><code>{code}</code></li>
+			{/each}
+		</ol>
+		<!--
+			The way to keep them from a phone, where writing ten opaque
+			strings on paper is not realistic. A text file lands in Files or
+			Downloads on every mobile browser; the list above stays on
+			screen for anyone who would rather copy them by hand.
+		-->
+		<Button
+			type="button"
+			variant="secondary"
+			label="Download these codes"
+			onClick={handleDownloadSavedCodes}
+		/>
+	{:else if isConfirmingSavedCodes}
+		<WarningText
+			message="Showing a new set replaces the one you have. Any code you wrote down earlier stops working."
+		/>
+		<Button
+			type="button"
+			label="Show a new set"
+			loading={savedCodesSubmission.isSubmitting}
+			onClick={handleShowSavedCodes}
+		/>
+		<Button
+			type="button"
+			variant="secondary"
+			label="Cancel"
+			disabled={savedCodesSubmission.isSubmitting}
+			onClick={() => (isConfirmingSavedCodes = false)}
+		/>
+	{:else}
+		<Text
+			text="You are the only owner of a practice, so nobody else can vouch for you. Recovery codes are how you get back in if you lose your authenticator app."
+		/>
+		<Text
+			text="They are shown once, when you ask for them. Doula Cloud keeps no copy it can read back to you."
+			tone="variant"
+		/>
+		<Button
+			type="button"
+			label="Show my recovery codes"
+			onClick={() => (isConfirmingSavedCodes = true)}
+		/>
+	{/if}
+	{#if savedCodesSubmission.errors.length > 0}
+		<Notice variant="error" message={savedCodesSubmission.errors[0].message} />
 	{/if}
 {/snippet}
 
@@ -549,6 +587,7 @@
 			? [
 					{ legend: `Your details, ${name}`, content: workState },
 					{ legend: 'Two-factor authentication', content: mfaSection },
+					...(isSoleOwner ? [{ legend: 'Recovery codes', content: savedCodesSection }] : []),
 					{ legend: 'Delete your login', content: deleteLoginSection }
 				]
 			: []}
@@ -558,3 +597,28 @@
 		{loadError}
 	/>
 </form>
+
+<style>
+	@layer components {
+		/* An ordered set of one-shot codes, with its markers kept: the
+		   numbers are how she checks she has copied all ten. Wrapping is
+		   intrinsic -- each code is one unbreakable word, so the list
+		   reflows into the space it is given rather than at any width this
+		   file names. */
+		.codes {
+			margin: 0;
+			padding-inline-start: var(--space-6);
+		}
+
+		.codes li {
+			padding-block: var(--space-1);
+		}
+
+		.codes code {
+			font-size: var(--text-body-size);
+			/* Long enough to reach past a 320px column on its own, so it is
+			   allowed to break rather than pushing the page sideways. */
+			overflow-wrap: anywhere;
+		}
+	}
+</style>

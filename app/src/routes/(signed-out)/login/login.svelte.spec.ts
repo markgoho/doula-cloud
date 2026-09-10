@@ -97,12 +97,57 @@ beforeEach(() => {
 		mock.mockReset();
 
 	// Back to the base fixture's own address, so a test that installed
-	// #757's ended-session variant does not leave it on the next one.
+	// #757's ended-session variant -- or #694's spent-code one -- does not
+	// leave it on the next one.
 	Object.assign(pageState, toPageState(fixture));
 });
 
 afterEach(() => {
 	vi.unstubAllGlobals();
+});
+
+/*
+ * #694's way back for a lost authenticator app. Both halves matter: the
+ * link has to be findable from the screen a locked-out person is
+ * actually stuck on, and coming back from having spent a code has to say
+ * what just happened -- the spend mints no session, so without a word
+ * here she lands on an unchanged log-in form with nothing to show for it.
+ */
+describe('Staff login -- the way back from a lost authenticator app (#694)', () => {
+	it('offers the recovery-code screen from the credentials step', async () => {
+		apiFetch.mockResolvedValue(jsonResponse('no session', 401));
+		await render(Page, {});
+
+		await expect
+			.element(testPage.getByRole('link', { name: 'Use a recovery code' }))
+			.toHaveAttribute('href', '/recovery-code');
+	});
+
+	it('offers it again on the code challenge, the screen she is actually stuck on', async () => {
+		apiFetch.mockResolvedValue(jsonResponse('no session', 401));
+		signInWithEmailAndPassword.mockRejectedValue({ code: 'auth/multi-factor-auth-required' });
+		getMultiFactorResolver.mockReturnValue({ hints: [{ uid: 'enrollment-1' }] });
+		await render(Page, {});
+
+		await testPage.getByLabelText('Email').fill('anne-marie@example.test');
+		await testPage.getByLabelText('Password').fill('correct horse');
+		await testPage.getByRole('button', { name: 'Log in' }).click();
+
+		await expect.element(testPage.getByLabelText('Authenticator app code')).toBeVisible();
+		await expect
+			.element(testPage.getByRole('link', { name: 'Use a recovery code' }))
+			.toHaveAttribute('href', '/recovery-code');
+	});
+
+	it('says what a spent code did, since spending one mints no session', async () => {
+		apiFetch.mockResolvedValue(jsonResponse('no session', 401));
+		pageState.url = new URL('https://example.test/login?codeSpent=true');
+		await render(Page, {});
+
+		await expect
+			.element(testPage.getByText('Your recovery code worked.', { exact: false }))
+			.toBeVisible();
+	});
 });
 
 const [firstMembership, secondMembership] = session.memberships;
