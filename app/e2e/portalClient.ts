@@ -9,7 +9,7 @@ import {
 	readStaffInviteToken,
 	MAILBOX_URL
 } from './stack';
-import { drainUntilMailArrives, withSubject } from './outboxMail';
+import { drainUntilMailArrives } from './outboxMail';
 import { acceptStaffInvite, seedFoundingOwner } from './staffSignup';
 
 // The subject portalauth's magic-link Compose gives the sign-in mail --
@@ -78,17 +78,16 @@ export async function openMagicLink(page: Page, request: APIRequestContext, emai
 	expect(requested.ok(), `magic-link request failed: ${requested.status()}`).toBe(true);
 
 	// Drained until this Client's own link has arrived, not once (#1141):
-	// the drain is table-wide and holds each row it claims for the length
-	// of its transaction, so another spec's drain can claim and lock this
-	// row, leaving this call to skip it and answer 200 with nothing sent.
-	// The mailbox page below renders once and never refreshes itself, so
-	// arriving early there is a timeout on a link that was never in the
-	// page rather than a wait for one on its way. See outboxMail.ts.
+	// outboxMail.ts writes out why one drain and one read cannot mean "my
+	// row was processed". It matters more here than anywhere, because the
+	// mailbox page below renders once and never refreshes itself -- so
+	// arriving there early is a timeout on a link that was never in the
+	// page, not a wait for one on its way.
 	await drainUntilMailArrives(
 		request,
 		'process-portal-magic-link-outbox',
 		email,
-		withSubject(MAGIC_LINK_SUBJECT)
+		MAGIC_LINK_SUBJECT
 	);
 
 	await page.goto(`${MAILBOX_URL}/inbox/${encodeURIComponent(email)}`);

@@ -1,22 +1,13 @@
 import { expect, type APIRequestContext } from '@playwright/test';
 import { E2E_API_HOST, E2E_API_PORT } from './ports';
 import { MAILBOX_URL, WORKER_SECRET } from './stack';
+// One message as the sandbox mailbox serves it back over
+// `/api/messages`: the catcher's own row shape, not a second copy of it
+// that nothing keeps in step. Type-only, so a spec importing this file
+// never loads mailbox.ts's `Bun.serve` half.
+import type { Captured as MailboxMessage } from './mailbox';
 
 const API_URL = `http://${E2E_API_HOST}:${E2E_API_PORT}`;
-
-/**
- * One message as e2e/mailbox.ts serves it back over `/api/messages`.
- */
-export interface MailboxMessage {
-	id: string;
-	seq: number;
-	to: string;
-	from: string;
-	replyTo: string;
-	subject: string;
-	text: string;
-	label: string;
-}
 
 /**
  * Reads one address's sandbox mailbox (e2e/mailbox.ts) as JSON.
@@ -43,11 +34,17 @@ export async function drainOutbox(request: APIRequestContext, outbox: string): P
 }
 
 // How long a spec waits for its own message, and how often it looks
-// again. Comfortably under Playwright's own per-test timeout, so a
-// genuine failure to deliver reports as the sentence below -- naming the
-// address and the outbox -- rather than as a bare test timeout that says
-// only that something took too long.
-const DELIVERY_TIMEOUT_MS = 20_000;
+// again. A third of Playwright's 30s per-test default (this repo's
+// playwright.config.ts sets no timeout of its own), because the wait is
+// never the first thing a spec does: the walk that queues the mail comes
+// first, and a budget near the whole test's would be spent past the
+// test's own deadline, reporting as a bare timeout instead of the
+// sentence below -- which names the address and the outbox. It is not a
+// failure this can *cause*: mail that never arrives fails the spec at
+// whichever deadline comes first. Delivery here is sub-second and a
+// neighbor's transaction is milliseconds, so ten seconds is already
+// orders of magnitude of headroom.
+const DELIVERY_TIMEOUT_MS = 10_000;
 const DELIVERY_POLL_MS = 250;
 
 /**
@@ -77,40 +74,42 @@ const DELIVERY_POLL_MS = 250;
  * `runOutbox` rolls the whole transaction back and A's row is pending
  * and unclaimed again with no drain left in flight to take it.
  *
- * `isWanted` rather than "the inbox is no longer empty", because an
+ * A subject rather than "the inbox is no longer empty", because an
  * address usually holds mail this caller is not waiting for -- a Staff
  * invitation to the same person, an earlier verification -- and a
  * message already sitting there would end the wait before the message
- * under test had been sent at all. A caller that requests two of the
+ * under test had been sent at all. A caller that requested two of the
  * same kind of mail for one address would need more than a subject to
- * tell them apart; no spec does that today.
+ * tell them apart; no spec does that, so this stays a string rather than
+ * a predicate until one does.
+ *
+ * ## The one drain that does not come through here
+ *
+ * simulation/clock.ts's `jump` POSTs `/api/internal/outboxes/drain`,
+ * which runs every registered outbox and so carries exactly this shape.
+ * It is left alone because nothing is exposed to it: the runs that call
+ * it assert that the clock moved, and none of them reads a mailbox in
+ * the same breath. A simulation act that starts doing so belongs here.
  */
 export async function drainUntilMailArrives(
 	request: APIRequestContext,
 	outbox: string,
 	address: string,
-	isWanted: (message: MailboxMessage) => boolean
+	subject: string
 ): Promise<MailboxMessage> {
 	const deadline = Date.now() + DELIVERY_TIMEOUT_MS;
 	for (;;) {
 		await drainOutbox(request, outbox);
 		const inbox = await readMailbox(request, address);
-		const found = inbox.find((message) => isWanted(message));
+		const found = inbox.find((message) => message.subject === subject);
 		if (found) {
 			return found;
 		}
 		if (Date.now() >= deadline) {
 			throw new Error(
-				`e2e: no matching mail reached ${address} within ${DELIVERY_TIMEOUT_MS}ms of draining ${outbox} repeatedly`
+				`e2e: no mail titled ${JSON.stringify(subject)} reached ${address} within ${DELIVERY_TIMEOUT_MS}ms of draining ${outbox} repeatedly`
 			);
 		}
 		await new Promise((resolve) => setTimeout(resolve, DELIVERY_POLL_MS));
 	}
-}
-
-/**
- * Matches a message by its exact subject line.
- */
-export function withSubject(subject: string): (message: MailboxMessage) => boolean {
-	return (message) => message.subject === subject;
 }

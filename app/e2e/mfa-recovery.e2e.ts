@@ -1,7 +1,7 @@
 import { expect, test, type APIRequestContext } from '@playwright/test';
 import { E2E_API_HOST, E2E_API_PORT } from './ports';
 import { readStaffInviteToken } from './stack';
-import { drainUntilMailArrives, readMailbox, withSubject } from './outboxMail';
+import { drainUntilMailArrives, readMailbox } from './outboxMail';
 import { signIn } from './auth';
 import { enrollSecondFactor, enterPracticeAsEnrolled, verifyEmail } from './mfa';
 import { seedFoundingOwner } from './staffSignup';
@@ -113,16 +113,14 @@ test('An Owner vouches for a locked-out doula, and the code reaches her and nobo
 	// Nothing fires by itself locally (#762): deployed this is reached by
 	// ADR-0013's nudge and by process-outbox-drain (#481).
 	//
-	// Drained until *this* Owner's code has arrived, not once (#1141): the
-	// drain is table-wide and holds the rows it claims for the length of
-	// its transaction, so a second copy of this spec in flight can claim
-	// and lock this copy's row, leaving this call to skip it and answer
-	// 200 with nothing sent. See outboxMail.ts.
+	// Drained until *this* Owner's code has arrived, not once (#1141):
+	// outboxMail.ts writes out why one drain and one read cannot mean
+	// "my row was processed".
 	const message = await drainUntilMailArrives(
 		request,
 		'process-mfa-recovery-outbox',
 		ownerEmail,
-		withSubject(RECOVERY_SUBJECT)
+		RECOVERY_SUBJECT
 	);
 
 	// It arrives at the Owner's address, never the doula's -- asserted

@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
 import { MAILBOX_DOMAIN, MAILBOX_URL } from './stack';
-import { drainOutbox, drainUntilMailArrives, readMailbox, withSubject } from './outboxMail';
+import { drainOutbox, drainUntilMailArrives, readMailbox } from './outboxMail';
 import { signInEnrolled, enterPracticeAsEnrolled } from './mfa';
 import { seedFoundingOwner } from './staffSignup';
 
@@ -58,16 +58,14 @@ test('An invitation arrives as readable mail, and a complaint stops the next one
 	//
 	// It runs the other way too, which is why this is a wait rather than
 	// one call (#1141): another spec's drain can be holding *this* row
-	// locked for the length of its own transaction, and a locked row is
-	// skipped -- so a single call can answer 200 having sent nothing this
-	// spec is about. See outboxMail.ts.
+	// locked, and outboxMail.ts writes out what that costs a single read.
 	//
 	// The harness's read: JSON, for assertions. Never an observed act.
 	const message = await drainUntilMailArrives(
 		request,
 		STAFF_INVITE_OUTBOX,
 		doulaEmail,
-		withSubject(INVITE_SUBJECT)
+		INVITE_SUBJECT
 	);
 	expect(message.from).toBe(`Doula Cloud <notifications@${MAILBOX_DOMAIN}>`);
 
