@@ -7,6 +7,25 @@ const API_URL = `http://${E2E_API_HOST}:${E2E_API_PORT}`;
 
 const FOUNDING_OWNER_PASSWORD = 'password123';
 
+/**
+ * An address no other call to this function will ever produce.
+ *
+ * Random suffix, not just `Date.now()`: millisecond-only uniqueness
+ * collides across parallel Playwright workers -- confirmed as a real,
+ * intermittent failure across this suite, not a theoretical one.
+ *
+ * Per *call*, not per run. The e2e stack -- its Postgres volume and its
+ * Identity Platform emulator both -- outlives a spec's retries, so a
+ * fixture that hardcodes its address fails its second attempt at
+ * `accounts:signUp` with `EMAIL_EXISTS` on the account its own first
+ * attempt left behind, whatever the first attempt actually failed at.
+ * That is the whole of #958: three attempts spent on one flake's
+ * leftovers instead of on the flake.
+ */
+export function uniqueEmail(localPart: string, domain = 'example.com'): string {
+	return `${localPart}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}@${domain}`;
+}
+
 export interface FoundingOwnerFields {
 	practiceName?: string;
 	staffName?: string;
@@ -34,11 +53,7 @@ export async function seedFoundingOwner(
 	fields: FoundingOwnerFields = {}
 ): Promise<SeededFoundingOwner> {
 	const { practiceName = 'Riverside Doulas', staffName = 'Jamie Owner', workState = 'NY' } = fields;
-	// Random suffix, not just Date.now(): millisecond-only uniqueness
-	// collides across parallel Playwright workers -- confirmed as a real,
-	// intermittent failure across this suite, not a theoretical one.
-	const unique = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-	const email = `staff-${unique}@example.com`;
+	const email = uniqueEmail('staff');
 
 	const signUp = await request.post(
 		`${EMULATOR_URL}/identitytoolkit.googleapis.com/v1/accounts:signUp?key=fake-key`,
@@ -72,9 +87,7 @@ export interface SeededNoPracticeAccount {
  * scan needs a fixture for, distinct from holding no session at all.
  */
 export async function seedAccountWithNoPractice(request: APIRequestContext): Promise<SeededNoPracticeAccount> {
-	// Same random-suffix reasoning as seedFoundingOwner above.
-	const unique = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-	const email = `no-practice-${unique}@example.com`;
+	const email = uniqueEmail('no-practice');
 
 	// No password constant of its own: this account never signs in through
 	// a form, only ever by ID token, so the value only has to satisfy

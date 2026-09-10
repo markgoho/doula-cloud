@@ -12,7 +12,7 @@ import { type APIRequestContext, expect } from '@playwright/test';
 import { E2E_API_HOST, E2E_API_PORT, E2E_EMULATOR_HOST, E2E_EMULATOR_PORT } from '../ports';
 import { MAILBOX_URL, readStaffInviteToken } from '../stack';
 import { signInEnrolled } from '../mfa';
-import { seedFoundingOwner } from '../staffSignup';
+import { seedFoundingOwner, uniqueEmail } from '../staffSignup';
 import type { SeededClient, WorldDescription } from './world';
 
 const API_URL = `http://${E2E_API_HOST}:${E2E_API_PORT}`;
@@ -76,7 +76,17 @@ export async function standUpRidgeline(request: APIRequestContext): Promise<Ridg
 	// session carrying that claim.
 	const ownerHeaders = await signInEnrolled(request, owner.idToken, owner.localId);
 
-	const lenaEmail = 'lena-vasquez@sim.doula.cloud';
+	// Unique per call, not a literal (#958). The stack -- Postgres volume
+	// and Identity Platform emulator alike -- outlives a spec's retries,
+	// so a hardcoded address means every retry re-fails at signUp with
+	// EMAIL_EXISTS on the account the *first* attempt created, and the
+	// retry budget is spent on that leftover instead of on the flake it
+	// was meant to re-try. Callers read the address off the returned
+	// RidgelineLenaAccount, which is what #823 signs her back in with, so
+	// nothing depends on the literal; the `@sim.doula.cloud` domain stays
+	// because docs/simulation/environment.md makes it how a log says at a
+	// glance that an address belongs to a simulated person.
+	const lenaEmail = uniqueEmail('lena-vasquez', 'sim.doula.cloud');
 	const invited = await request.post(`${API_URL}/api/practices/${owner.practiceId}/staff/invitations`, {
 		headers: ownerHeaders,
 		data: { email: lenaEmail, roles: ['doula'], employmentType: 'contractor' }
@@ -93,8 +103,13 @@ export async function standUpRidgeline(request: APIRequestContext): Promise<Ridg
 	const signedUp = await request.post(`${EMULATOR_URL}/identitytoolkit.googleapis.com/v1/accounts:signUp?key=fake-key`, {
 		data: { email: lenaEmail, password: LENA_PASSWORD, returnSecureToken: true }
 	});
-	expect(signedUp.ok(), `standUpRidgeline: creating Lena's Identity Platform account failed: ${signedUp.status()}`).toBe(true);
-	const { idToken: lenaIdToken, localId } = await signedUp.json();
+	// readBody, not a status-only assertion: the emulator's own body is
+	// the only thing that names *which* signUp refusal this is
+	// (EMAIL_EXISTS, WEAK_PASSWORD, ...), and #958 spent three CI
+	// attempts on a bare `400` that could not say so.
+	const { idToken: lenaIdToken, localId } = JSON.parse(
+		await readBody(signedUp, "standUpRidgeline: creating Lena's Identity Platform account")
+	);
 
 	const accepted = await request.post(`${API_URL}/api/staff/accept-invite`, {
 		headers: { Authorization: `Bearer ${lenaIdToken}` },
