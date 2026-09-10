@@ -1,7 +1,7 @@
 import { expect, type APIRequestContext } from '@playwright/test';
 import { E2E_API_HOST, E2E_API_PORT, E2E_EMULATOR_HOST, E2E_EMULATOR_PORT } from './ports';
 import { signIn } from './auth';
-import { resetRateLimit } from './stack';
+import { retryPastRateLimit } from './rateLimit';
 
 const EMULATOR_URL = `http://${E2E_EMULATOR_HOST}:${E2E_EMULATOR_PORT}`;
 const API_URL = `http://${E2E_API_HOST}:${E2E_API_PORT}`;
@@ -66,48 +66,21 @@ export async function seedFoundingOwner(
 	expect(signUp.ok(), `owner signUp failed: ${signUp.status()} ${await signUp.text()}`).toBe(true);
 	const { idToken, localId } = await signUp.json();
 
-	const signup = await postSignup(request, idToken, { practiceName, staffName, workState });
+	// retryPastRateLimit (rateLimit.ts): the whole suite reaches the BFF
+	// from one address, and a repeated batch spends this endpoint's hourly
+	// budget for that address well before it has repeated enough times to
+	// confirm a flake (#1138).
+	const signup = await retryPastRateLimit(() =>
+		request.post(`${API_URL}/api/staff/signup`, {
+			headers: { Authorization: `Bearer ${idToken}` },
+			data: { practiceName, staffName, workState }
+		})
+	);
 	const signupBody = await signup.text();
 	expect(signup.ok(), `staff signup failed: ${signup.status()} ${signupBody}`).toBe(true);
 	const { practiceId, staffId } = JSON.parse(signupBody);
 
 	return { email, password: FOUNDING_OWNER_PASSWORD, idToken, localId, practiceId, staffId };
-}
-
-/**
- * POSTs the signup route, and clears this endpoint's rate-limit counters
- * and tries once more if the limiter refused the first attempt (#1138).
- *
- * `POST /api/staff/signup` allows one address 50 requests an hour
- * (`bootstrapRules`, `api/internal/staffauth`). Every seeded Owner here
- * mints a fresh Identity Platform token, so the per-token half of that
- * rule is never what trips -- the whole suite arrives from one address,
- * and the address's budget is the ceiling. A repeated batch spends it
- * fast: the three specs #827 was confirmed against seed six Owners per
- * repeat, so nine repeats is 51 signups, and the window is an hour, which
- * a run cannot outlast. That is a confirmation run truncated at eight
- * repeats by the harness rather than by the flake it went looking for.
- *
- * Reactive, and deliberately so. Nothing is pre-cleared and no budget is
- * raised, so a single-pass run and CI behave exactly as they did; the
- * limiter is a live participant in every request this helper makes, and
- * only a refusal that has actually happened triggers a clear. One retry,
- * not a loop: a second 429 means something other than this suite's own
- * volume is refusing, and the caller's `expect(signup.ok())` below should
- * say so as loudly as it always has.
- *
- * See resetRateLimit (stack.ts) for why clearing the counter is not a
- * switch that could exist against a deployed BFF.
- */
-async function postSignup(request: APIRequestContext, idToken: string, data: Record<string, string>) {
-	const send = () =>
-		request.post(`${API_URL}/api/staff/signup`, { headers: { Authorization: `Bearer ${idToken}` }, data });
-
-	const first = await send();
-	if (first.status() !== 429) return first;
-
-	resetRateLimit('staff_signup');
-	return send();
 }
 
 export interface SeededNoPracticeAccount {

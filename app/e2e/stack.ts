@@ -336,14 +336,17 @@ export function seedEngagement(clientId: string, practiceId: string, status = 'i
 }
 
 /**
- * Clears every rate-limit counter the BFF holds for one endpoint (#1138),
- * so a repeated batch can keep spending a budget a person never would.
+ * Clears every rate-limit counter the BFF is holding (#1138), so a
+ * repeated batch can keep spending budgets a person never would.
  *
- * The endpoint names a `ratelimit.Wrap` mount point -- `staff_signup`,
- * `staff_accept_invite` -- and `rate_limit_buckets` keys every row
- * `<endpoint>:<dimension>:<key>` (`api/internal/ratelimit`), so a prefix
- * match is what clears an endpoint whatever dimension tripped and
- * whatever address the harness happened to reach the BFF from.
+ * All of them, not one endpoint's: this suite trips more than one ceiling.
+ * `POST /api/staff/signup` allows one address 50 requests an hour
+ * (`bootstrapRules`) and `POST /api/session` allows it 100 (`loginRules`),
+ * and a batch repeated often enough reaches both -- clearing one endpoint
+ * at a time only moves the wall rather than removing it, which a repeated
+ * run of #827's three specs demonstrated. `rate_limit_buckets` holds
+ * nothing but counters (`api/internal/ratelimit`), so emptying it leaves
+ * the stack in the state it was in before it had served any traffic.
  *
  * **This is not a switch anything can turn on.** It is a DELETE issued by
  * psql inside the e2e stack's own compose database, the same seam
@@ -359,19 +362,14 @@ export function seedEngagement(clientId: string, practiceId: string, status = 'i
  * this statement even if some future handler tried to: clearing a counter
  * is the table owner's to do, and in a deploy that is not the BFF.
  *
- * Reactive rather than scheduled: seedFoundingOwner calls it only after a
- * 429 has actually come back, so a normal single-pass run and CI never
- * pay for it, and two workers clearing at once is harmless -- clearing
- * only ever raises what is allowed. No e2e spec asserts a 429 on any
- * endpoint, so there is no assertion for a clear to race.
+ * Reactive rather than scheduled: retryPastRateLimit (rateLimit.ts) calls
+ * it only after a 429 has actually come back, so a normal single-pass run
+ * and CI never pay for it, and two workers clearing at once is harmless --
+ * clearing only ever raises what is allowed. No e2e spec asserts a 429 on
+ * any endpoint, so there is no assertion for a clear to race.
  */
-export function resetRateLimit(endpoint: string) {
-	if (!/^[a-z_]+$/.test(endpoint)) {
-		throw new Error(`stack: invalid rate-limit endpoint ${JSON.stringify(endpoint)}`);
-	}
-	// starts_with, not LIKE: every endpoint name here contains an
-	// underscore, which LIKE reads as a single-character wildcard.
-	execSQL(`DELETE FROM rate_limit_buckets WHERE starts_with(key, ${sqlLiteral(`${endpoint}:`)})`);
+export function resetRateLimits() {
+	execSQL('DELETE FROM rate_limit_buckets');
 }
 
 /**
