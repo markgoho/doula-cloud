@@ -1,7 +1,7 @@
 import { error, redirect } from '@sveltejs/kit';
-import { resolve } from '$app/paths';
 import { apiFetch, apiErrorMessage } from '#lib/api.js';
 import { refuseRead } from '#lib/errorPage.js';
+import { staffLoginAfterSessionEnded } from '#lib/sessionEnded.js';
 import { practiceAwaitingContractsPath, practiceAwaitingVoidRequestsPath } from '#lib/contract.js';
 import type { CursorPage } from '#lib/paginatedList.svelte.js';
 import type { AwaitingContract, AwaitingVoidRequest } from '#lib/contract.js';
@@ -37,7 +37,7 @@ export const load: PageLoad = async ({ params }): Promise<ContractsPageData> => 
 
 	for (const response of [contractsResponse, voidRequestsResponse]) {
 		if (response.status === 401) {
-			redirect(303, `${resolve('/(signed-out)/login')}?sessionEnded=true`);
+			redirect(303, staffLoginAfterSessionEnded());
 		} else if (response.status === 403) {
 			await refuseRead(response);
 		} else if (!response.ok) {

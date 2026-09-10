@@ -43,6 +43,13 @@ const OWNER = 'src/lib/sessionEnded.ts';
  * this replaces all built the address inside a template literal.
  */
 const LITERAL = /'([^'\n]*)'|"([^"\n]*)"|`([^`]*)`/g;
+
+/*
+ * Importing the owner is the opposite of an offense, and its module id
+ * is a quoted literal that spells the flag. Dropped before the test, so
+ * `'#lib/sessionEnded.js'` reads as what it is.
+ */
+const OWNER_MODULE_ID = /sessionEnded\.js/g;
 const FLAG = /sessionEnded/;
 
 interface Offense {
@@ -62,7 +69,7 @@ function literals(source: string): string[] {
 
 function findOffenses(file: string, source: string): Offense[] {
 	return literals(source)
-		.filter((literal) => FLAG.test(literal))
+		.filter((literal) => FLAG.test(literal.replace(OWNER_MODULE_ID, '')))
 		.map((literal) => ({ file, found: literal }));
 }
 
@@ -101,6 +108,12 @@ describe('findOffenses', () => {
 
 	it('allows a comment that mentions the flag in prose', () => {
 		expect(findOffenses('x.ts', '// carries sessionEnded=true to the login screen')).toEqual([]);
+	});
+
+	it('allows importing the owner', () => {
+		expect(
+			findOffenses('x.ts', "import { sessionEndedFrom } from '#lib/sessionEnded.js';")
+		).toEqual([]);
 	});
 
 	it('allows an identifier built from the same words', () => {

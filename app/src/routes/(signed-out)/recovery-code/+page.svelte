@@ -61,8 +61,8 @@
 			 * No session was minted, deliberately -- the code clears her
 			 * authenticator app and nothing else, so the next thing she does
 			 * is sign in with her password alone. `codeSpent` is what tells
-			 * the login screen to say so, the same shape `sessionEnded=true`
-			 * already uses there.
+			 * the login screen to say so, the same shape the session-ended
+			 * flag already uses there (#1131).
 			 */
 			await goto(`${resolve('/(signed-out)/login')}?codeSpent=true`);
 		}, orThrownMessage);

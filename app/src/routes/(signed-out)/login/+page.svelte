@@ -15,6 +15,7 @@
 	import { getFirebaseAuth } from '#lib/firebase.js';
 	import { apiBaseURL, apiFetchWithSession, probeSession } from '#lib/api.js';
 	import { decideLanding, type Membership, type SessionInfo } from '#lib/landing.js';
+	import { sessionEndedFrom } from '#lib/sessionEnded.js';
 	import TextInput from '#lib/components/atoms/TextInput.svelte';
 	import Button from '#lib/components/atoms/Button.svelte';
 	import Link from '#lib/components/atoms/Link.svelte';
@@ -37,9 +38,11 @@
 	/*
 	 * #757: why she is looking at this form again. `handleExpiredSession`
 	 * (#lib/api.js) and the account screen's own second-factor removal
-	 * both send her here carrying `sessionEnded=true`, and without this
-	 * she arrives at a bare login form that says nothing about the
-	 * session that ended under her.
+	 * both send her here flagged as such, and without this she arrives at
+	 * a bare login form that says nothing about the session that ended
+	 * under her. Read through `#lib/sessionEnded.js` (#1131), the one
+	 * place that flag is spelled, so this screen and every writer cannot
+	 * drift apart.
 	 *
 	 * `$derived`, not a plain read: `page` here is the seam
 	 * (`#lib/appState.svelte.js`), whose per-property getters exist so a
@@ -47,7 +50,7 @@
 	 * override set after this component mounts. A plain read would
 	 * resolve once, at init, and never see either.
 	 */
-	const hasSessionEnded = $derived(page.url.searchParams.get('sessionEnded') === 'true');
+	const hasSessionEnded = $derived(sessionEndedFrom(page.url));
 
 	const emailId = 'login-email';
 	const passwordId = 'login-password';
@@ -89,7 +92,9 @@
 	 * authenticator app and minted no session -- so she arrives back here
 	 * with nothing to show for it unless this screen says what happened.
 	 * A query flag rather than state carried across a navigation, the same
-	 * shape `sessionEnded=true` already uses on this URL.
+	 * shape the session-ended flag already uses on this URL. Spelled here
+	 * rather than owned by a module of its own, unlike that one (#1131):
+	 * one writer, one reader, no population to pick between.
 	 */
 	const hasSpentRecoveryCode = $derived(page.url.searchParams.get('codeSpent') === 'true');
 
