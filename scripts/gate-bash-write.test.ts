@@ -272,5 +272,75 @@ describe("gate-bash-write", () => {
 			});
 			expect(exitCode).toBe(2);
 		});
+
+		test("still blocks when the `cd` has no argument at all", async () => {
+			const { exitCode } = await invoke("cd && sed -i '' 's/x/y/' CLAUDE.md", { cwd: SOURCE_ROOT });
+			expect(exitCode).toBe(2);
+		});
+
+		test("still blocks when the `cd` argument is a home-relative path", async () => {
+			const { exitCode } = await invoke("cd ~/Github && sed -i '' 's/x/y/' CLAUDE.md", { cwd: SOURCE_ROOT });
+			expect(exitCode).toBe(2);
+		});
+
+		// Only `&&` guarantees the shell is standing in the new directory when
+		// the write runs: a failed `cd` short-circuits the chain. Past every
+		// other separator the write genuinely lands in the main checkout, so
+		// the base must not survive it -- otherwise this change would make the
+		// gate weaker than it was before #680, which it must never do.
+		describe("a `cd` does not survive any separator but `&&`", () => {
+			test("`||` runs the write precisely when the `cd` failed", async () => {
+				const { exitCode } = await invoke(`cd ${WORKTREE} || sed -i '' 's/x/y/' CLAUDE.md`, {
+					cwd: SOURCE_ROOT
+				});
+				expect(exitCode).toBe(2);
+			});
+
+			test("`;` leaves the shell where it was when the `cd` failed", async () => {
+				const { exitCode } = await invoke(`cd ${WORKTREE} ; sed -i '' 's/x/y/' CLAUDE.md`, {
+					cwd: SOURCE_ROOT
+				});
+				expect(exitCode).toBe(2);
+			});
+
+			test("`&` backgrounds the `cd` in a subshell of its own", async () => {
+				const { exitCode } = await invoke(`cd ${WORKTREE} & sed -i '' 's/x/y/' CLAUDE.md`, {
+					cwd: SOURCE_ROOT
+				});
+				expect(exitCode).toBe(2);
+			});
+
+			test("`|` puts the `cd` in a pipeline subshell whose directory dies with it", async () => {
+				const { exitCode } = await invoke(`cd ${WORKTREE} | true && sed -i '' 's/x/y/' CLAUDE.md`, {
+					cwd: SOURCE_ROOT
+				});
+				expect(exitCode).toBe(2);
+			});
+
+			test("a newline is not a chain", async () => {
+				const { exitCode } = await invoke(`cd ${WORKTREE}\nsed -i '' 's/x/y/' CLAUDE.md`, {
+					cwd: SOURCE_ROOT
+				});
+				expect(exitCode).toBe(2);
+			});
+
+			test("a subshell's `cd` does not outlive its closing parenthesis", async () => {
+				const { exitCode } = await invoke(`(cd ${WORKTREE}) && sed -i '' 's/x/y/' CLAUDE.md`, {
+					cwd: SOURCE_ROOT
+				});
+				expect(exitCode).toBe(2);
+			});
+
+			// An unquoted parenthesis switches `cd` tracking off for the whole
+			// command, so this write is refused even though a real shell would
+			// have performed it inside the worktree. Erring toward a block is
+			// this file's safe direction.
+			test("a write inside the same subshell as its `cd` is refused too", async () => {
+				const { exitCode } = await invoke(`(cd ${WORKTREE} && sed -i '' 's/x/y/' CLAUDE.md)`, {
+					cwd: SOURCE_ROOT
+				});
+				expect(exitCode).toBe(2);
+			});
+		});
 	});
 });
