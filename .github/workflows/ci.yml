@@ -40,18 +40,21 @@ jobs:
         run: bun test scripts/
 
   # The formatting gate for the repo's own tooling trees, `.claude/hooks/`
-  # and `scripts/` (#1120). `.editorconfig` and `.prettierrc` have always
-  # declared 2-space indentation and single quotes for them, but nothing
-  # ever checked it: `gofmt` is Go-only, the pre-commit hook's other steps
-  # are scoped to staged `app/*` paths, and `bun run --cwd app lint` is
-  # ESLint with no stylistic rules configured. Prettier reads
-  # `.editorconfig` for indentation by default, so this one command
-  # enforces both of those configs at once.
+  # and `scripts/` (#1120). Which tree is gated by what, and why these two
+  # needed a gate of their own, is in docs/testing.md's "Formatting" section
+  # -- this comment covers only the shape of the job.
   #
-  # A separate job from `scripts` above rather than another step in it,
-  # because that job deliberately installs nothing -- `bun test scripts/`
-  # needs no dependency, and giving it one would make every run pay for
-  # firebase-tools to check whitespace.
+  # A separate job from `scripts` above rather than another step in it. That
+  # job deliberately installs nothing, because `bun test scripts/` needs no
+  # dependency and finishes in seconds; this one cannot avoid a root
+  # install, since Prettier and the plugin `.prettierrc` declares both have
+  # to be present. Keeping them apart is what stops the fast job from
+  # inheriting the slow one's install on every run.
+  #
+  # It is a required status check on `trunk` (see docs/agents/worktree-flow.md).
+  # It has to be: this repo lands work with `gh pr merge --squash --auto`,
+  # and auto-merge does not wait on a job that is merely red -- an advisory
+  # gate here would be the same silent drift the job exists to end.
   format:
     runs-on: ubuntu-latest
     timeout-minutes: 5

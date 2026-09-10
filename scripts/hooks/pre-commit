@@ -58,26 +58,30 @@ fi
 
 # 4. Blocks a commit that stages an unformatted .ts file in either of the
 #    repo's own tooling trees, .claude/hooks/ and scripts/ (#1120). Same
-#    shape as step 1, and for the same reason: .editorconfig and
-#    .prettierrc declare 2-space indentation and single quotes for these
-#    paths, and until this existed nothing measured it, so the trees had
-#    drifted to 22 tab-indented files out of 29. Prettier reads
-#    .editorconfig for indentation by default, so one --check covers both
-#    configs. The CI `format` job is the real backstop; this is the fast
-#    local half of it, on staged files only.
+#    shape as step 1, and for the same reason. What the rule is and why
+#    these two trees needed a gate is in docs/testing.md's "Formatting"
+#    section; the CI `format` job is the backstop, and this is the fast
+#    local half of it, over staged files only.
 #
-#    Resolved from the repo root rather than the working directory, since
-#    a worktree's root node_modules may be a symlink to the main
-#    checkout's. If it is missing at all, the commit is blocked with the
-#    command that fixes it rather than passed silently -- a formatting
-#    gate that quietly skips itself is the state this replaced.
+#    Prettier is resolved from the repo root rather than the working
+#    directory, since a worktree's root node_modules is usually a symlink
+#    to the main checkout's. If it is missing, the commit is blocked
+#    rather than passed silently -- a formatting gate that quietly skips
+#    itself is the state this replaced -- and the message has to name the
+#    checkout to install in, which through a symlink is the main one:
+#    `bun install` inside a worktree with a live symlink would mutate the
+#    modules every other worktree is sharing (docs/agents/worktree-flow.md).
 staged_tooling_ts=$(git diff --cached --name-only --diff-filter=ACM -- '.claude/hooks/*.ts' 'scripts/*.ts')
 if [ -n "$staged_tooling_ts" ]; then
     repo_root=$(git rev-parse --show-toplevel)
     prettier="$repo_root/node_modules/.bin/prettier"
     if [ ! -x "$prettier" ]; then
-        echo "prettier: not installed at the repo root, so the tooling-tree" >&2
-        echo "formatting gate cannot run. Run 'bun install' at the repo root" >&2
+        install_root="$repo_root"
+        if [ -L "$repo_root/node_modules" ]; then
+            install_root=$(dirname "$(readlink "$repo_root/node_modules")")
+        fi
+        echo "prettier: not installed, so the tooling-tree formatting gate" >&2
+        echo "cannot run. Run 'bun install' in $install_root" >&2
         echo "and commit again." >&2
         exit 1
     fi
