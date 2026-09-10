@@ -10,17 +10,36 @@ import (
 	"doula-cloud/api/internal/tasknudge"
 )
 
+// offerRequestsPerOfferPerHour caps how many pre-account requests one
+// Offer will answer in an hour -- both routes offerRules fronts, the
+// read and the token decline, each on its own bucket (ratelimit's
+// bucketKey namespaces by endpoint). It is deliberately *not*
+// maxAccessCodeAttempts (#846): the two counters count different
+// things. The row counter
+// (offer.go, 00041) counts wrong guesses and nothing else, permanently;
+// this one counts every request against the Offer, right code or wrong.
+// Sizing the two alike made a legitimate sequence unreachable -- ten
+// fumbled guesses exhaust the row counter, the Practice re-issues the
+// Offer (target.go resets access_code_attempts with the code), and the
+// very next read, with the freshly mailed code, 429s here for up to an
+// hour. The cap therefore has to clear a full exhaustion (10), the
+// re-issued read that follows it (1), and the handful of ordinary
+// re-reads a Doula makes of a page she was mailed a link to.
+//
+// Brute force is bounded by the row counter, not by this rule: a
+// permanent ten guesses against a 10^6 space, which no amount of hourly
+// budget widens. What this rule bounds is request *volume* against one
+// Offer -- cost, not credential guessing -- alongside IPRule for volume
+// across many different Offers from one caller.
+const offerRequestsPerOfferPerHour = 30
+
 // offerRules limits the pre-account Offer routes. Neither endpoint has a
 // Bearer token or an email to key on before its own token+code check
 // runs (preaccount.go), so PathValueRule's offerId is the "subject"
 // dimension here: the resource being probed, rather than who's probing
-// it. Brute-forcing one Offer's six-digit code is already bounded
-// permanently by maxAccessCodeAttempts (offer.go, 00041) -- 10, which
-// PathValueRule's cap matches -- so what this rule set adds is a per-hour
-// cap on the same thing, plus IPRule for volume across many different
-// Offers from one caller.
+// it.
 var offerRules = []ratelimit.Rule{
-	ratelimit.PathValueRule("offerId", 10, time.Hour),
+	ratelimit.PathValueRule("offerId", offerRequestsPerOfferPerHour, time.Hour),
 	ratelimit.IPRule(50, time.Hour),
 }
 

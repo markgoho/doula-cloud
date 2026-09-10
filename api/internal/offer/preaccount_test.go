@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"testing"
 
+	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/offer"
 	"doula-cloud/api/internal/testdb"
 )
@@ -101,12 +102,10 @@ func TestReadHandler_DoesNotReachAStaffTargetOffer(t *testing.T) {
 // Ten wrong guesses burn the Offer: a six-digit code in front of an
 // unauthenticated endpoint is otherwise a space anyone may walk.
 //
-// #836 mounted this read behind offer.Mount's real ratelimit.Wrap
-// (offerRules' PathValueRule also caps 10 requests per offerId per hour,
-// by design -- see offerRules' own doc comment). Without
-// resetOfferReadBucket, the 11th request below would 429 at that outer
-// layer instead of resolveByToken's own maxAccessCodeAttempts check,
-// which is what this test is actually about.
+// This read is mounted behind offer.Mount's real ratelimit.Wrap (#836),
+// whose per-Offer cap answers 429 too. The refusal asserted here has to
+// be the row counter's, which is why it carries its own apierr code
+// (#846) rather than leaving a caller to read the prose.
 func TestReadHandler_BoundsCodeGuessing(t *testing.T) {
 	f := newFixture(t)
 	offerID, token, code := seedEmailOffer(t, f)
@@ -114,9 +113,41 @@ func TestReadHandler_BoundsCodeGuessing(t *testing.T) {
 	for range 10 {
 		expectStatus(t, do(t, http.MethodGet, f.readURL(offerID, token, "000000"), "", nil), http.StatusForbidden)
 	}
-	resetOfferReadBucket(t, f.db)
 	// Even the right code no longer opens it.
-	expectStatus(t, do(t, http.MethodGet, f.readURL(offerID, token, code), "", nil), http.StatusTooManyRequests)
+	expectRefusalCode(t, do(t, http.MethodGet, f.readURL(offerID, token, code), "", nil), apierr.CodeOfferCodeExhausted)
+}
+
+// #846: the per-Offer cap is still a cap. Once a burned Offer is only
+// answering the row counter's own 429, the requests still count against
+// ratelimit.Wrap's bucket, and request 31 is turned away by the limiter
+// instead -- RATE_LIMITED, the code that means "wait and this works".
+func TestReadHandler_StillCapsRequestsAgainstOneOffer(t *testing.T) {
+	f := newFixture(t)
+	offerID, token, _ := seedEmailOffer(t, f)
+
+	// The first ten are wrong guesses; the twenty after them are the row
+	// counter's own refusal. Every one of the thirty still counts against
+	// the limiter's bucket, and none of them is the limiter's refusal.
+	for i := range 30 {
+		resp := do(t, http.MethodGet, f.readURL(offerID, token, "000000"), "", nil)
+		if i < 10 {
+			expectStatus(t, resp, http.StatusForbidden)
+			continue
+		}
+		expectRefusalCode(t, resp, apierr.CodeOfferCodeExhausted)
+	}
+	expectRefusalCode(t, do(t, http.MethodGet, f.readURL(offerID, token, "000000"), "", nil), apierr.CodeRateLimited)
+}
+
+// expectRefusalCode fails unless resp is a 429 carrying want -- the one
+// assertion that tells this route's two 429s apart, since both share the
+// status and only the code separates them (#692, #846).
+func expectRefusalCode(t *testing.T, resp response, want apierr.Code) {
+	t.Helper()
+	expectStatus(t, resp, http.StatusTooManyRequests)
+	if got := decodeRefusal(t, resp).Code; got != want {
+		t.Fatalf("code = %q, want %q: %s", got, want, resp.body)
+	}
 }
 
 func TestReadHandler_ReportsAnExpiredOffer(t *testing.T) {
@@ -270,18 +301,10 @@ func TestCreate_ReissuesAnOpenOfferWhenTheTokenRotates(t *testing.T) {
 // spent against a code nobody can use any more are not held against its
 // successor.
 //
-// #836 mounted this package's pre-account read through offer.Mount, the
-// same ratelimit.Wrap(offerRules) production always ran it behind --
-// PathValueRule caps 10 requests per offerId per hour, matching
-// maxAccessCodeAttempts by design (offerRules' own doc comment). This
-// test's 10 deliberate wrong guesses spend that whole budget on purpose,
-// so the reissue's own correct read below would 429 on the rate limit
-// rather than exercise what this test is actually about -- a real,
-// pre-existing gap between the read-rate-limit and the reissue flow,
-// filed as #846 rather than fixed here (#836 is the routing seam, not
-// ratelimit's sizing policy). resetOfferReadBucket clears the counter the
-// same way expireOffer above backdates one, so the test can still prove
-// the guess-count reset without waiting on -- or changing -- that limit.
+// This runs end to end through offer.Mount's real ratelimit.Wrap, with
+// no reach into rate_limit_buckets: #846 sized the per-Offer cap to
+// clear exactly this sequence -- a full ten-guess exhaustion, the
+// re-issue, and the read that follows it.
 func TestCreate_ReissueResetsTheGuessCounter(t *testing.T) {
 	f := newFixture(t)
 	firstOffer, firstToken, _ := seedEmailOffer(t, f)
@@ -295,17 +318,6 @@ func TestCreate_ReissueResetsTheGuessCounter(t *testing.T) {
 		f.srv+"/api/practices/"+f.practiceID+"/engagements/"+secondEngagement+"/offers",
 		f.ownerSession, emailOfferBody(testAddress, &fee)), http.StatusCreated, nil)
 
-	resetOfferReadBucket(t, f.db)
 	reissuedToken, reissuedCode := outboxCredentials(t, f.db, firstOffer)
 	expectStatus(t, do(t, http.MethodGet, f.readURL(firstOffer, reissuedToken, reissuedCode), "", nil), http.StatusOK)
-}
-
-// resetOfferReadBucket clears every offer_read rate-limit bucket, the
-// same "reach past the seam under test to move time/state along" pattern
-// expireOffer already uses for expires_at.
-func resetOfferReadBucket(t *testing.T, db *testdb.DB) {
-	t.Helper()
-	if _, err := db.Admin.ExecContext(t.Context(), `DELETE FROM rate_limit_buckets WHERE key LIKE 'offer_read:%'`); err != nil {
-		t.Fatalf("reset offer_read rate limit bucket: %v", err)
-	}
 }
