@@ -9,6 +9,7 @@ import (
 	"reflect"
 	"testing"
 
+	"doula-cloud/api/internal/internalauth"
 	"doula-cloud/api/internal/outbox"
 	"doula-cloud/api/internal/tasknudge"
 	"doula-cloud/api/internal/testdb"
@@ -41,7 +42,7 @@ func TestRegister_MountsEveryRegistrationAsAPOST(t *testing.T) {
 	db := testdb.New(t)
 	mux := &recordingMux{}
 
-	paths := outbox.Register(mux, db.App, "secret", []outbox.Registration{
+	paths := outbox.Register(mux, db.App, internalauth.FromSecret("secret"), []outbox.Registration{
 		{Path: "/api/internal/notifications/process-outbox", Door: outbox.NotificationDoor, Worker: &stubProcessor{}},
 		{Path: "/api/internal/site/process-build-outbox", Worker: &stubProcessor{}},
 	})
@@ -76,7 +77,7 @@ func TestRegister_MountsHandlersThatRunTheirOwnWorker(t *testing.T) {
 	first, second := &stubProcessor{}, &stubProcessor{}
 
 	mux := http.NewServeMux()
-	outbox.Register(muxWriter{mux}, db.App, "correct-secret", []outbox.Registration{
+	outbox.Register(muxWriter{mux}, db.App, internalauth.FromSecret("correct-secret"), []outbox.Registration{
 		{Path: firstPath, Door: outbox.NotificationDoor, Worker: first},
 		{Path: secondPath, Door: outbox.NotificationDoor, Worker: second},
 	})
@@ -97,14 +98,14 @@ func TestRegister_MountsHandlersThatRunTheirOwnWorker(t *testing.T) {
 	}
 }
 
-// TestRegister_CarriesTheSecretToEveryHandler proves the secret check is
+// TestRegister_CarriesTheGuardToEveryHandler proves the caller check is
 // not lost on the way through the registry.
-func TestRegister_CarriesTheSecretToEveryHandler(t *testing.T) {
+func TestRegister_CarriesTheGuardToEveryHandler(t *testing.T) {
 	db := testdb.New(t)
 	worker := &stubProcessor{}
 
 	mux := http.NewServeMux()
-	outbox.Register(muxWriter{mux}, db.App, "correct-secret", []outbox.Registration{
+	outbox.Register(muxWriter{mux}, db.App, internalauth.FromSecret("correct-secret"), []outbox.Registration{
 		{Path: onlyPath, Door: outbox.NotificationDoor, Worker: worker},
 	})
 	srv := httptest.NewServer(mux)

@@ -15,6 +15,7 @@ import (
 	"doula-cloud/api/internal/apierrtest"
 	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/client"
+	"doula-cloud/api/internal/internalauth"
 	"doula-cloud/api/internal/outbox"
 	"doula-cloud/api/internal/testdb"
 )
@@ -567,7 +568,7 @@ func TestProcessErasureOutboxHandler_RunsDueActsBehindTheWorkerSecret(t *testing
 	worker := client.ErasureWorker{Stripe: stripe, Now: time.Now}
 	mux := http.NewServeMux()
 	mux.Handle("POST /internal/clients/process-erasure-outbox",
-		outbox.ProcessHandler(db.App, worker, "correct-secret", outbox.NotificationDoor))
+		outbox.ProcessHandler(db.App, worker, internalauth.FromSecret("correct-secret"), outbox.NotificationDoor))
 	workerSrv := httptest.NewServer(mux)
 	defer workerSrv.Close()
 

@@ -12,6 +12,7 @@ import (
 	"doula-cloud/api/internal/csrf"
 	"doula-cloud/api/internal/engagementrequest"
 	"doula-cloud/api/internal/idempotency"
+	"doula-cloud/api/internal/internalauth"
 	"doula-cloud/api/internal/mailsuppress"
 	"doula-cloud/api/internal/mfarecoverymail"
 	"doula-cloud/api/internal/objectstore"
@@ -80,10 +81,11 @@ type Deps struct {
 	// that must reach past it to Mailgun's own bounce list.
 	BounceClearer mailsuppress.BounceClearer
 
-	// WorkerSecret is NOTIFICATION_WORKER_SECRET, which every
-	// process-* endpoint and #443's two site endpoints check the
-	// X-Internal-Secret header against.
-	WorkerSecret string
+	// InternalAuth is the boundary on /api/internal/** (ADR-0037): the
+	// caller identity every process-* endpoint, the drain, #443's page
+	// verifier and the operator endpoints authenticate against. Nil
+	// refuses every one of them.
+	InternalAuth *internalauth.Guard
 
 	// The outbox workers, one per table (ADR-0010). Named for what each
 	// one processes rather than for being an outbox worker, which all of

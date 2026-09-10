@@ -11,6 +11,7 @@ import (
 	"strings"
 	"testing"
 
+	"doula-cloud/api/internal/internalauth"
 	"doula-cloud/api/internal/outbox"
 	"doula-cloud/api/internal/testdb"
 )
@@ -31,7 +32,7 @@ const (
 // tests drive the drain rather than the per-outbox endpoints beside it.
 func newDrainServer(db *testdb.DB, secret string, registrations []outbox.Registration) *httptest.Server {
 	mux := http.NewServeMux()
-	mux.Handle("POST "+outbox.DrainPath, outbox.DrainHandler(db.App, secret, registrations))
+	mux.Handle("POST "+outbox.DrainPath, outbox.DrainHandler(db.App, internalauth.FromSecret(secret), registrations))
 	return httptest.NewServer(mux)
 }
 

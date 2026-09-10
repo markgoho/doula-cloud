@@ -1,7 +1,6 @@
 package staffauth
 
 import (
-	"crypto/subtle"
 	"database/sql"
 	"errors"
 	"net/http"
@@ -9,19 +8,8 @@ import (
 
 	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/authn"
+	"doula-cloud/api/internal/internalauth"
 )
-
-// authorizeInternal is the same X-Internal-Secret guard every
-// process-* and operator endpoint uses (billing.authorizeInternal,
-// registerInternalRoutes) -- no session, no Practice context, a shared
-// secret only Doula Cloud's own operators and Cloud Scheduler hold.
-func authorizeInternal(w http.ResponseWriter, r *http.Request, secret string) bool {
-	if secret == "" || subtle.ConstantTimeCompare([]byte(r.Header.Get("X-Internal-Secret")), []byte(secret)) != 1 {
-		apierr.WriteError(w, "unauthorized", http.StatusUnauthorized)
-		return false
-	}
-	return true
-}
 
 // SupportClearRequest is the body a Doula Cloud operator's own tooling
 // sends: which Staff member's enrolment to clear, and the operator's own
@@ -37,16 +25,16 @@ type SupportClearRequest struct {
 // ID against the identity-verified representative on her Practice's
 // Stripe Connect account (ADR-0007) -- proof this endpoint has no way to
 // check itself, which is exactly why the AC asks for no product surface.
-// Shaped like billing.FoundingGrantHandler: X-Internal-Secret-gated,
+// Shaped like billing.FoundingGrantHandler: internal-caller-gated,
 // invoked by an operator's own tooling, never a screen a Practice can
 // reach -- "no self-service endpoint" means no Staff or Owner session
 // can call this, not that it has to be an ad-hoc INSERT. No mandatory
 // hold (#605: "a delay adds little against a determined attacker while
 // costing a real doula a day of lockout during a birth"); notice fires
 // at the moment of the reset, same as every other path.
-func SupportClearHandler(accounts authn.AccountManager, db *sql.DB, secret string) http.Handler {
+func SupportClearHandler(accounts authn.AccountManager, db *sql.DB, auth *internalauth.Guard) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if !authorizeInternal(w, r, secret) {
+		if !auth.Require(w, r) {
 			return
 		}
 
@@ -76,7 +64,7 @@ func SupportClearHandler(accounts authn.AccountManager, db *sql.DB, secret strin
 			}
 		}()
 
-		// Authenticated by X-Internal-Secret, not a session -- neither
+		// Authenticated by the internal guard, not a session -- neither
 		// app.current_practice_id nor app.current_identity_uid is ever set
 		// here, so staff's own RLS policies admit nothing. Same reuse of
 		// 00033's trust flag as SpendMFARecoveryHandler, and for the same

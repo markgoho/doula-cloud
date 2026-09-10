@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"doula-cloud/api/internal/engagementrequest"
+	"doula-cloud/api/internal/internalauth"
 	"doula-cloud/api/internal/mail"
 	"doula-cloud/api/internal/outbox"
 	"doula-cloud/api/internal/tasknudge"
@@ -32,7 +33,7 @@ func newWorker(sender mail.Sender, now time.Time) engagementrequest.Worker {
 // policies read is set the way production sets it.
 func runWorker(t *testing.T, db *testdb.DB, worker engagementrequest.Worker) response {
 	t.Helper()
-	srv := httptest.NewServer(outbox.ProcessHandler(db.App, worker, outboxWorkerSecret, outbox.NotificationDoor))
+	srv := httptest.NewServer(outbox.ProcessHandler(db.App, worker, internalauth.FromSecret(outboxWorkerSecret), outbox.NotificationDoor))
 	t.Cleanup(srv.Close)
 	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, srv.URL, nil)
 	if err != nil {
@@ -88,7 +89,7 @@ func TestWorker_SendsOneMailPerOwnerAndAdminContentFree(t *testing.T) {
 // endpoint refuses a request without the right secret.
 func TestProcessOutboxHandler_WrongSecretUnauthorized(t *testing.T) {
 	db := testdb.New(t)
-	srv := httptest.NewServer(outbox.ProcessHandler(db.App, newWorker(&mail.FakeSender{}, time.Now()), outboxWorkerSecret, outbox.NotificationDoor))
+	srv := httptest.NewServer(outbox.ProcessHandler(db.App, newWorker(&mail.FakeSender{}, time.Now()), internalauth.FromSecret(outboxWorkerSecret), outbox.NotificationDoor))
 	defer srv.Close()
 
 	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, srv.URL, nil)

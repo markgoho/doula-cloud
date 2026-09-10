@@ -45,7 +45,10 @@ The account now holds, and holds nothing beyond: `roles/cloudsql.client` and a t
 | `MAILGUN_API_KEY` | `e2e-mailgun-key`, set by `stack.ts` -- the sandbox mailbox does not check it | same | Secret Manager `doula-cloud-mailgun-api-key` |
 | `MAILGUN_DOMAIN` | `sim.doula.cloud`, set by `stack.ts` -- the domain every persona's and every fixture's address sits under | same | `mg.doula.cloud`, plain env var |
 | `MAILGUN_API_BASE` | the sandbox mailbox's origin, set by `stack.ts` (#764) | same | unset -- `mail.NewMailgunSender` keeps its `https://api.mailgun.net` default |
-| `NOTIFICATION_WORKER_SECRET` | `e2e-worker-secret`, set by `stack.ts`; matched against the `X-Internal-Secret` header on calls to any of the fourteen `/api/internal/**/process-*` endpoints and to `/api/internal/outboxes/drain` | same | Secret Manager `doula-cloud-notification-worker-secret`, also set as the `process-outbox-drain` Scheduler job's header |
+| `NOTIFICATION_WORKER_SECRET` | `e2e-worker-secret`, set by `stack.ts`; matched against the `X-Internal-Secret` header on calls to any of the seventeen `/api/internal/**/process-*` endpoints and to `/api/internal/outboxes/drain` | same | **being removed** — the local and end-to-end mechanism only, since ADR-0037 made the deployed boundary a caller identity. Still Secret Manager `doula-cloud-notification-worker-secret` and still on both Scheduler jobs until the Terraform half, [#1183](https://github.com/markgoho/doula-cloud/issues/1183), lands; unset here refuses the header outright |
+| `INTERNAL_OIDC_AUDIENCE` | unset (the end-to-end stack mints no tokens) | unset | **not set yet ([#1183](https://github.com/markgoho/doula-cloud/issues/1183))** — the raw Cloud Run URL, the `aud` every internal caller's OIDC token must carry (ADR-0037), plain env var |
+| `INTERNAL_OIDC_CALLERS` | unset | unset | **not set yet ([#1183](https://github.com/markgoho/doula-cloud/issues/1183))** — comma-separated service account emails whose ID tokens `/api/internal/**` accepts — the Scheduler jobs' caller and `doula-api`'s own runtime account, which is what its Cloud Tasks nudges arrive as. Plain env var; an empty list accepts nobody |
+| `INTERNAL_OIDC_SERVICE_ACCOUNT` | unset (nothing local enqueues a real task) | unset | **not set yet ([#1183](https://github.com/markgoho/doula-cloud/issues/1183))** — the account Cloud Tasks mints each nudge's OIDC token for. Unset falls back to sending `X-Internal-Secret`, which is what the local stack does |
 | `MAILGUN_WEBHOOK_SIGNING_KEY` | `e2e-mailgun-signing-key`, set by `stack.ts` on both the BFF and the mailbox, which signs its bounce and complaint webhooks with it | same | Secret Manager `doula-cloud-mailgun-webhook-signing-key`, set (#743) -- Mailgun's `permanent_fail` and `complained` webhooks point at the deployed endpoint |
 | `NOTIFICATION_TASKS_QUEUE` | unset (no real `tasknudge.CloudTasksEnqueuer` is constructed in `routes()` tests, which inject `tasknudge.FakeEnqueuer` instead) | unset | the Cloud Tasks queue's full resource name, `projects/doula-cloud/locations/us-central1/queues/doula-cloud-notification-nudge`, plain env var |
 | `NOTIFICATION_TASKS_TARGET_BASE_URL` | unset | unset | the same raw Cloud Run URL `gcloud run services describe` reports (see [Deployed webhook endpoints](#deployed-webhook-endpoints)), plain env var |
@@ -159,7 +162,7 @@ done
 
 Proved end to end on #743: a real message to `bounce-743@bounce-test.doula.cloud` (an NXDOMAIN subdomain of our own domain, so a genuine first-time permanent failure with no ISP reputation cost -- Mailgun answered `498 No MX for bounce-test.doula.cloud`, reason `generic`, not a `suppress-*` reason) produced Mailgun event `ebsa_POBSEipJK4ci4LETg`, which the deployed endpoint turned into an `email_suppressions` row with cause `bounce`. A Practice signed up on the deployed app with that same address then had its verification email dead-lettered by `mailsuppress.Sender` -- `mail: address is suppressed: bounce-743@bounce-test.doula.cloud`, with no Mailgun request made -- while two unrelated rows drained in the same worker run reached Mailgun normally.
 
-#348 (ADR-0013's Cloud Tasks nudge) adds `NOTIFICATION_TASKS_QUEUE` and `NOTIFICATION_TASKS_TARGET_BASE_URL`, both consumed only by `tasknudge.NewCloudTasksEnqueuer` at startup. No new secret: the enqueued task's `X-Internal-Secret` header is `NOTIFICATION_WORKER_SECRET`, the same value the fourteen `process-*` endpoints already check. One queue serves all nine outbox types (`main.go` builds one `CloudTasksEnqueuer` and passes it into `routes()` as `nudgeEnqueuer`), provisioned once:
+#348 (ADR-0013's Cloud Tasks nudge) adds `NOTIFICATION_TASKS_QUEUE` and `NOTIFICATION_TASKS_TARGET_BASE_URL`, both consumed only by `tasknudge.NewCloudTasksEnqueuer` at startup. No new secret: the enqueued task identifies itself the same way Cloud Scheduler does — an OIDC token where `INTERNAL_OIDC_SERVICE_ACCOUNT` names an account, and `X-Internal-Secret` where it does not (ADR-0037). One queue serves all nine outbox types (`main.go` builds one `CloudTasksEnqueuer` and passes it into `routes()` as `nudgeEnqueuer`), provisioned once:
 
 ```bash
 gcloud tasks queues create doula-cloud-notification-nudge \
@@ -174,9 +177,25 @@ gcloud run services update doula-api --region us-central1 \
 
 `doula-api`'s own runtime service account also needs `roles/cloudtasks.enqueuer` on the queue (the binding above) to call `CreateTask` -- it already reaches Secret Manager and GCS under its existing identity, so no new service account is created for this.
 
+### The boundary on `/api/internal/**`
+
+Twenty-three addresses sit under `/api/internal/**` — the drain, seventeen `process-*` outbox endpoints, #443's page probe, and four operator endpoints. `api/routes_internal_guardrail_test.go` holds the list, read from the router rather than written from memory, and asserts that every one of them answers `401` to a request carrying nothing.
+
+`doula-api` is `allUsers` → `roles/run.invoker` and stays that way — it serves the app and three webhooks that arrive with no Google credential — and Cloud Run's IAM is per-service, so the boundary can only be inside the process. [ADR-0037](adr/0037-the-internal-boundary-is-a-caller-identity-not-a-shared-secret.md) makes it a caller identity: `internalauth.Guard` verifies a Google-signed OIDC ID token against `INTERNAL_OIDC_AUDIENCE` and then the token's own `email` claim against `INTERNAL_OIDC_CALLERS`.
+
+`X-Internal-Secret` remains the mechanism for the local stack and the end-to-end suite, which run the BFF with no metadata server to mint a token with. It is refused outright wherever `NOTIFICATION_WORKER_SECRET` is unset, so a deployment that carries no secret accepts no header.
+
+The deployed service does not accept a token **yet**: none of the three `INTERNAL_OIDC_*` variables above is set on Cloud Run until [#1183](https://github.com/markgoho/doula-cloud/issues/1183) lands, so today an operator endpoint is still reached with the header (`docs/runbooks/mfa-recovery-support.md`). Once they are set, the call is minted rather than pasted:
+
+```sh
+gcloud auth print-identity-token \
+  --impersonate-service-account=<an allowlisted caller> \
+  --audiences=https://doula-api-850855848778.us-central1.run.app
+```
+
 ### #443's site rebuild and page probe
 
-Two more endpoints on the same `X-Internal-Secret` shape, under `/api/internal/site` rather than `/notifications` because neither of them notifies anybody. `NOTIFICATION_WORKER_SECRET` again, not a second credential.
+Two more endpoints behind the same internal guard, under `/api/internal/site` rather than `/notifications` because neither of them notifies anybody. The same guard again, not a second credential.
 
 `POST /api/internal/site/process-build-outbox` turns queued rebuilds into one `repository_dispatch`, and is the ninth type on ADR-0013's shared Cloud Tasks queue. It is the one type whose nudge is **delayed** -- 90 seconds, `tasknudge.Delay` -- because the worker collapses every pending row into a single deploy and can only collapse rows that have had a moment to gather. The drain job is its durability backstop: a dispatch that fails leaves the rows pending, and the next tick retries.
 
@@ -184,7 +203,7 @@ Two more endpoints on the same `X-Internal-Secret` shape, under `/api/internal/s
 
 `GITHUB_DISPATCH_TOKEN` is the one new credential. **Contents: write** is the narrowest permission GitHub's dispatch endpoint accepts, and it is the same level a GitHub App would need, which is why #443 chose the simpler thing. Give it a real expiry rather than "no expiration": a lapsed token is not silent here -- the dispatch fails, the page never leaves `pending`, and the Practice's website settings screen says her page is not confirmed.
 
-**Provisioned.** `verify-practice-pages` runs every fifteen minutes in `us-central1`, carrying `X-Internal-Secret`. #443's own `process-site-build-outbox` job existed too, and was deleted by #481 once the drain covered it -- see [The outbox backstop](#the-outbox-backstop-one-drain-job). The deploy workflow's service account (`github-action-733741680@doula-cloud.iam.gserviceaccount.com`) has been granted `roles/secretmanager.secretAccessor` on `doula-cloud-notification-worker-secret`, which it needs to read the secret its last step posts.
+**Provisioned.** `verify-practice-pages` runs every fifteen minutes in `us-central1`, carrying `X-Internal-Secret`, until [#1183](https://github.com/markgoho/doula-cloud/issues/1183) moves it onto an OIDC token. #443's own `process-site-build-outbox` job existed too, and was deleted by #481 once the drain covered it -- see [The outbox backstop](#the-outbox-backstop-one-drain-job). The deploy workflow's service account (`github-action-733741680@doula-cloud.iam.gserviceaccount.com`) has been granted `roles/secretmanager.secretAccessor` on `doula-cloud-notification-worker-secret`, which it needs to read the secret its last step posts.
 
 **Still outstanding: the token itself.** It is created by hand at <https://github.com/settings/personal-access-tokens> -- resource owner `markgoho`, repository access *"Only select repositories"* → `doula-cloud`, Repository permissions → **Contents: Read and write**, expiry 366 days. Until it is in Secret Manager and on the service, `process-site-build-outbox` runs green with nothing to do and a real publish would sit at `pending` with the outbox retrying.
 
@@ -201,7 +220,7 @@ gcloud run services update doula-api --region us-central1 --project=doula-cloud 
 
 ### The outbox backstop: one drain job
 
-**Which Cloud Scheduler jobs exist.** Two, both in `us-central1`, both carrying `X-Internal-Secret`:
+**Which Cloud Scheduler jobs exist.** Two, both in `us-central1`. Both still carry `X-Internal-Secret` in the clear in their job spec; [ADR-0037](adr/0037-the-internal-boundary-is-a-caller-identity-not-a-shared-secret.md) replaces that with an `oidc_token` on each job, which is the Terraform half, [#1183](https://github.com/markgoho/doula-cloud/issues/1183):
 
 | Job | Cadence | Calls |
 | --- | --- | --- |

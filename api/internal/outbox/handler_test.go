@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"doula-cloud/api/internal/internalauth"
 	"doula-cloud/api/internal/outbox"
 	"doula-cloud/api/internal/testdb"
 )
@@ -39,7 +40,7 @@ func newHandlerServer(db *testdb.DB, worker outbox.Processor, secret string) *ht
 // rebuild passes none because its table is not under RLS.
 func newHandlerServerWithDoor(db *testdb.DB, worker outbox.Processor, secret, door string) *httptest.Server {
 	mux := http.NewServeMux()
-	mux.Handle("POST /process", outbox.ProcessHandler(db.App, worker, secret, door))
+	mux.Handle("POST /process", outbox.ProcessHandler(db.App, worker, internalauth.FromSecret(secret), door))
 	return httptest.NewServer(mux)
 }
 
@@ -101,7 +102,7 @@ func TestProcessHandler_CorrectSecretRunsWorkerAndReturns200(t *testing.T) {
 
 func TestProcessHandler_BeginTxFailureReturns500(t *testing.T) {
 	db := testdb.New(t)
-	handler := outbox.ProcessHandler(db.App, &stubProcessor{}, "correct-secret", outbox.NotificationDoor)
+	handler := outbox.ProcessHandler(db.App, &stubProcessor{}, internalauth.FromSecret("correct-secret"), outbox.NotificationDoor)
 
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()

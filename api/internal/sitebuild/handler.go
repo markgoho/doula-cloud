@@ -2,42 +2,41 @@ package sitebuild
 
 import (
 	"context"
-	"crypto/subtle"
 	"database/sql"
 	"net/http"
 
 	"doula-cloud/api/internal/apierr"
+	"doula-cloud/api/internal/internalauth"
 )
 
 // VerifyHandler is the internal endpoint that probes every published
 // page and records whether it resolved.
 //
-// Two callers, both authenticated by secret rather than a session, and
+// Two callers, both authenticated by auth rather than a session, and
 // deliberately the same behavior for both: the deploy workflow POSTs it
 // once as its last step, and Cloud Scheduler calls it on a cadence. The
 // cadence is what makes AC5 hold -- a build that fails produces no deploy
 // and no callback at all, so only something that runs anyway can notice
 // that a page never went live.
 //
-// secret must be non-empty: an empty configured secret refuses every
-// request rather than accepting an unauthenticated one.
+// A guard with nothing configured refuses every request rather than
+// accepting an unauthenticated one.
 //
 // This package's rebuild outbox used to sit beside it on this same shape.
 // It is now one entry in the BFF's outbox list and runs through
 // outbox.ProcessHandler like every other, which is why what remains here
 // serves one endpoint rather than two.
-func VerifyHandler(db *sql.DB, verifier Verifier, secret string) http.Handler {
-	return internalHandler(db, secret, verifier.Verify)
+func VerifyHandler(db *sql.DB, verifier Verifier, auth *internalauth.Guard) http.Handler {
+	return internalHandler(db, auth, verifier.Verify)
 }
 
-// internalHandler is the secret-checked, one-transaction shape the verify
+// internalHandler is the guarded, one-transaction shape the verify
 // endpoint runs on. It always opens the site worker door, which licenses
 // 00049's policies on practice_websites -- the probe is the only thing
 // left here and it is the only thing that ever needed it.
-func internalHandler(db *sql.DB, secret string, run func(context.Context, *sql.Tx) error) http.Handler {
+func internalHandler(db *sql.DB, auth *internalauth.Guard, run func(context.Context, *sql.Tx) error) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if secret == "" || subtle.ConstantTimeCompare([]byte(r.Header.Get("X-Internal-Secret")), []byte(secret)) != 1 {
-			apierr.WriteError(w, "unauthorized", http.StatusUnauthorized)
+		if !auth.Require(w, r) {
 			return
 		}
 

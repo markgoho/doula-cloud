@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"doula-cloud/api/internal/authntest"
+	"doula-cloud/api/internal/internalauth"
 	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/testdb"
 )
@@ -15,7 +16,7 @@ const supportTestSecret = "support-internal-test-secret"
 
 func newSupportClearServer(accounts *authntest.FakeAccountManager, db *testdb.DB, secret string) *httptest.Server {
 	mux := http.NewServeMux()
-	mux.Handle("POST /internal/staffauth/mfa-recovery/support-clear", staffauth.SupportClearHandler(accounts, db.App, secret))
+	mux.Handle("POST /internal/staffauth/mfa-recovery/support-clear", staffauth.SupportClearHandler(accounts, db.App, internalauth.FromSecret(secret)))
 	return httptest.NewServer(mux)
 }
 

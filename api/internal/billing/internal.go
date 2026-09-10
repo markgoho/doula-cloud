@@ -1,13 +1,13 @@
 package billing
 
 import (
-	"crypto/subtle"
 	"database/sql"
 	"errors"
 	"net/http"
 	"time"
 
 	"doula-cloud/api/internal/apierr"
+	"doula-cloud/api/internal/internalauth"
 	"doula-cloud/api/internal/staffauth"
 )
 
@@ -16,19 +16,6 @@ import (
 type RefundRequest struct {
 	PracticeID string `json:"practiceId"`
 	Quantity   int    `json:"quantity"`
-}
-
-// authorizeInternal is the X-Internal-Secret check the two endpoints
-// below share -- the same guard registerInternalRoutes puts in front of
-// every worker endpoint, because these are the same kind of thing: no
-// session, no Practice context of their own, authenticated by a secret
-// only the operator holds.
-func authorizeInternal(w http.ResponseWriter, r *http.Request, secret string) bool {
-	if secret == "" || subtle.ConstantTimeCompare([]byte(r.Header.Get("X-Internal-Secret")), []byte(secret)) != 1 {
-		apierr.WriteError(w, "unauthorized", http.StatusUnauthorized)
-		return false
-	}
-	return true
 }
 
 // RefundHandler issues a refund a Practice has asked for.
@@ -42,9 +29,9 @@ func authorizeInternal(w http.ResponseWriter, r *http.Request, secret string) bo
 //
 // The refusal rules live in Refund, not here, so they hold however the
 // operation is reached.
-func RefundHandler(db *sql.DB, client StripeClient, secret string) http.Handler {
+func RefundHandler(db *sql.DB, client StripeClient, auth *internalauth.Guard) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if !authorizeInternal(w, r, secret) {
+		if !auth.Require(w, r) {
 			return
 		}
 
@@ -86,7 +73,7 @@ func RefundHandler(db *sql.DB, client StripeClient, secret string) http.Handler 
 
 		// No staffauth.Middleware in front of this endpoint, so nothing
 		// else sets the variable credit_ledger's policy reads -- the
-		// secret checked above is what licenses setting it, exactly as
+		// caller checked above is what licenses setting it, exactly as
 		// the Stripe signature does in PostPurchaseWebhookHandler.
 		if _, err := tx.ExecContext(r.Context(),
 			`SELECT set_config('app.current_practice_id', $1, true)`, req.PracticeID,
@@ -121,9 +108,9 @@ func RefundHandler(db *sql.DB, client StripeClient, secret string) http.Handler 
 // touched for DormancyNoticeYears -- the list the annual balance notice
 // and the December/January due-diligence mailings are worked from. Read
 // only: it identifies balances, and nothing anywhere writes one off.
-func DormantPracticesHandler(db *sql.DB, secret string) http.Handler {
+func DormantPracticesHandler(db *sql.DB, auth *internalauth.Guard) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if !authorizeInternal(w, r, secret) {
+		if !auth.Require(w, r) {
 			return
 		}
 
@@ -155,7 +142,7 @@ type FoundingGrantRequest struct {
 
 // FoundingGrantHandler issues a Practice's founding grant (#449).
 //
-// It is an operator endpoint on the same X-Internal-Secret guard as the
+// It is an operator endpoint behind the same internal guard as the
 // refund, and for the same reason: at roughly fifty doulas across a
 // handful of Practices, issuing grants by hand is right and an admin
 // screen is not worth building. "By hand" still has to leave an audit
@@ -163,9 +150,9 @@ type FoundingGrantRequest struct {
 // grantor, sizes the grant from the roster rather than from whatever the
 // caller typed, and refuses a second grant to a Practice that already has
 // one.
-func FoundingGrantHandler(db *sql.DB, secret string) http.Handler {
+func FoundingGrantHandler(db *sql.DB, auth *internalauth.Guard) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if !authorizeInternal(w, r, secret) {
+		if !auth.Require(w, r) {
 			return
 		}
 
