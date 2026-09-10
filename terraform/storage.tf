@@ -48,26 +48,28 @@ resource "google_storage_bucket" "attachments" {
   }
 }
 
-# #1051: the attachments half of `doula-api-runtime@`'s grants. Two narrow
-# roles rather than one broad `roles/storage.objectUser`, because
-# `objectstore.GCSStore` exposes exactly two operations — `Put`, which needs
-# `storage.objects.create`, and `Get`, which needs `storage.objects.get`.
-# `objectUser` would add `storage.objects.delete` and `storage.objects.update`
-# on top, and nothing in `api/` deletes or overwrites an attachment. Before
-# this the bucket had no per-principal grant at all: the container reached it
-# through project `roles/editor` on the default compute account.
+# #1051: the attachments half of `doula-api-runtime@`'s grants, and the one
+# place the runtime identity is granted anything on this bucket. The binding
+# is on the bucket, never on an object: uniform bucket-level access is on, so
+# an object ACL would be ignored even if something set one.
 #
-# Bucket IAM is the enforcement point here, not object ACLs — the bucket has
-# uniform bucket-level access on, so an object-level ACL would be ignored
-# even if something tried to set one.
-resource "google_storage_bucket_iam_member" "attachments_runtime_object_creator" {
+# `roles/storage.objectUser`, on this bucket alone, rather than the narrower
+# `objectCreator` + `objectViewer` pair. `objectstore.GCSStore` exposes two
+# operations, `Put` and `Get`, and the narrow pair covers them right up until
+# `Put` writes a key that already exists — which it is documented to do, and
+# which `contracts.SignedPDFObjectPath` makes reachable, because that key is
+# derived from the contract rather than made unique per write. Overwriting an
+# object in a bucket with no versioning needs `storage.objects.delete` as
+# well as `.create`, so the narrow pair turns a re-signed contract into a
+# `403` at the moment it is written. `objectUser` is the narrowest predefined
+# role that covers create, read and the delete that an overwrite performs.
+#
+# It is still an object-level role on one bucket: it cannot read the bucket's
+# IAM policy, change its configuration, or reach any other bucket in the
+# project. Before this, the container reached the bucket through project
+# `roles/editor` on the default compute account, which could do all three.
+resource "google_storage_bucket_iam_member" "attachments_runtime_object_user" {
   bucket = google_storage_bucket.attachments.name
   member = google_service_account.doula_api_runtime.member
-  role   = "roles/storage.objectCreator"
-}
-
-resource "google_storage_bucket_iam_member" "attachments_runtime_object_viewer" {
-  bucket = google_storage_bucket.attachments.name
-  member = google_service_account.doula_api_runtime.member
-  role   = "roles/storage.objectViewer"
+  role   = "roles/storage.objectUser"
 }

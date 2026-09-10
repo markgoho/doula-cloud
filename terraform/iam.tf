@@ -144,35 +144,72 @@ resource "google_project_iam_member" "firebase_app_hosting_compute_apphosting_co
 
 # `doula-api-runtime@`: the identity the `doula-api` container runs as
 # (cloud_run.tf), created by #1051. Before it, `doula-api` ran as the
-# Google-created default compute service account, which holds project
+# Google-created default compute service account, which held project
 # `roles/editor` — so a remote-code-execution bug in the BFF was a
 # whole-project compromise: every secret readable, every Cloud Run service
-# and the Cloud SQL instance modifiable, every bucket writable.
+# and the Cloud SQL instance modifiable, every bucket writable. That account
+# now holds no role in this project at all.
 #
 # Every grant this account holds is derived from what `api/main.go` and the
-# service's own configuration actually do, and each one is written next to
-# the resource it is granted on rather than gathered here:
+# packages it constructs actually call. Each grant is written next to the
+# resource it is granted on, so the authoritative list is the set of
+# resources naming `google_service_account.doula_api_runtime`, not this
+# comment — `grep -rn doula_api_runtime terraform/` is the honest inventory:
 #
-#   - `roles/cloudsql.client`, below — the only one that has to be project
-#     level, because Cloud SQL exposes no instance-level IAM. It carries
-#     `cloudsql.instances.connect` and nothing that can change the instance.
-#   - `roles/secretmanager.secretAccessor` on the ten secrets the service
+#   - `roles/cloudsql.client`, below. Project level because Cloud SQL
+#     exposes no instance-level IAM. It carries `cloudsql.instances.connect`
+#     and nothing that can change the instance.
+#   - The Identity Platform custom role, below. Also project level, because
+#     Identity Platform has no per-resource IAM at all.
+#   - `roles/secretmanager.secretAccessor` on the secrets the service
 #     declares as `value_source.secret_key_ref` (secrets.tf), one grant per
 #     secret. The Cloud Run runtime resolves those references as this
 #     account, so a missing grant is a container that will not start.
 #   - `roles/cloudtasks.enqueuer` on `doula-cloud-notification-nudge`
-#     (scheduler.tf) — ADR-0013's nudge path.
-#   - `roles/storage.objectCreator` and `roles/storage.objectViewer` on
-#     `doula-cloud-attachments` (storage.tf). Not `roles/storage.objectUser`:
-#     the store exposes exactly `Put` and `Get`, so nothing here deletes an
-#     object and nothing should be able to.
+#     (scheduler.tf) — ADR-0013's nudge path. The task carries
+#     `X-Internal-Secret` as a plain header and no OIDC token, so nothing
+#     here needs to act as any account.
+#   - `roles/storage.objectUser` on `doula-cloud-attachments` (storage.tf).
 #
 # Nothing for logging or monitoring: Cloud Run collects a container's
 # stdout/stderr and its request logs at the platform level, not as the
 # runtime identity, and `api/` constructs no logging or monitoring client.
-# Nothing for Identity Platform either — the Firebase verifier only calls
-# `VerifyIDToken`, which fetches Google's public signing certificates over
-# plain HTTPS and makes no authenticated GCP call.
+# Nothing for Artifact Registry either: Cloud Run pulls the image as its own
+# service agent, not as this account.
+
+# Identity Platform has no resource-level IAM — a grant is project-wide or it
+# does not exist — so the only way to narrow it is to narrow the permissions
+# themselves. `roles/firebaseauth.admin`, the obvious predefined choice and
+# the one `github-action-733741680@` holds, also carries
+# `firebaseauth.configs.*`: the power to change sign-in providers, MFA
+# enforcement and authorized domains, which is ADR-0026's product decision
+# and not something the container should be able to rewrite.
+#
+# These three permissions are exactly what `authn.FirebaseVerifier`'s
+# `*auth.Client` calls: `GetUser`, `GetUserByEmail` and `GetUsers` (get);
+# `UpdateUser` for the email-verified flag, a password set, an address
+# change and an MFA reset (update); and `DeleteUser` (delete). Adding a
+# fourth admin call to `api/` means adding its permission here, which is the
+# point. `VerifyIDToken` itself is not in this list and needs nothing: it
+# fetches Google's public signing certificates over plain HTTPS.
+#
+# This gap was the reason the switch below could not have been made blind.
+# It was invisible while the container held `roles/editor`, and it is
+# invisible in the Cloud Run configuration too — no environment variable, no
+# secret reference, nothing but a Go client constructed at startup that does
+# not fail until a person tries to change their own email address.
+resource "google_project_iam_custom_role" "doula_api_staff_accounts" {
+  description = "What doula-api's runtime identity does to Identity Platform accounts: read them, update them, delete them. Never the Identity Platform configuration itself (#1051)."
+  permissions = [
+    "firebaseauth.users.delete",
+    "firebaseauth.users.get",
+    "firebaseauth.users.update",
+  ]
+  project = "doula-cloud"
+  role_id = "doulaApiStaffAccounts"
+  stage   = "GA"
+  title   = "doula-api staff accounts"
+}
 resource "google_service_account" "doula_api_runtime" {
   account_id                   = "doula-api-runtime"
   create_ignore_already_exists = null
@@ -193,13 +230,19 @@ resource "google_project_iam_member" "doula_api_runtime_cloudsql_client" {
   role    = "roles/cloudsql.client"
 }
 
+resource "google_project_iam_member" "doula_api_runtime_staff_accounts" {
+  member  = google_service_account.doula_api_runtime.member
+  project = "doula-cloud"
+  role    = google_project_iam_custom_role.doula_api_staff_accounts.id
+}
+
 # `deploy-api` in ci.yml passes `--service-account` on every deploy, and
 # Cloud Run refuses a deploy whose caller cannot act as the runtime identity
 # it names. The equivalent binding for the default compute account was made
 # by hand and was never a Terraform resource at all — the same unowned-shell
 # gap #1091 closes for `terraform-plan@` — which is why this one is declared
 # here rather than left to a console.
-resource "google_service_account_iam_member" "doula_api_runtime_deploy_actor" {
+resource "google_service_account_iam_member" "github_action_doula_api_runtime_service_account_user" {
   member             = google_service_account.github_action.member
   role               = "roles/iam.serviceAccountUser"
   service_account_id = google_service_account.doula_api_runtime.name

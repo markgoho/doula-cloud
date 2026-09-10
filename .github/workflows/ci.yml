@@ -575,15 +575,16 @@ jobs:
           env_vars_update_strategy: merge
           # --service-account is named here rather than left to whatever the
           # service already carries (#1051). The action has no input for it,
-          # so it goes in flags. It is not decoration: without it a deploy
-          # that happened to omit the runtime identity would silently fall
-          # back to the project's default compute account, which holds
-          # roles/editor -- the whole-project authority this ticket removed.
-          # terraform/iam.tf owns the account and its four narrow grants, and
-          # terraform/cloud_run.tf declares the same address, so a drift here
-          # is a red `plan` as well as a wrong deploy. github-action-733741680@
-          # holds roles/iam.serviceAccountUser on this account alone, which is
-          # what lets a deploy name it at all.
+          # so it goes in flags. It is not decoration: a Cloud Run service
+          # created or reset without an explicit runtime identity falls back
+          # to the project's default compute account, which held roles/editor
+          # until this ticket -- the whole-project authority it removed.
+          # terraform/iam.tf owns the account, and its grants live next to the
+          # resources they are granted on across terraform/; cloud_run.tf
+          # declares this same address, so a drift here is a red `plan` as
+          # well as a wrong deploy. github-action-733741680@ holds
+          # roles/iam.serviceAccountUser on this account alone, which is what
+          # lets a deploy name it at all.
           flags: --min-instances=1 --add-cloudsql-instances=doula-cloud:us-central1:doula-cloud-pg --service-account=doula-api-runtime@doula-cloud.iam.gserviceaccount.com
 
       - name: Smoke test deployed revision
