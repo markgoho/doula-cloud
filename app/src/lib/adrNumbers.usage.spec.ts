@@ -10,12 +10,18 @@ import { describe, expect, it } from 'vitest';
  * bodies, so a number that names two decisions makes every one of those
  * citations ambiguous.
  *
- * It has happened once. #1025 and #1026 merged twenty-three minutes apart
- * on 2026-09-08 and both took 0033, because nothing looked. Neither PR
- * could have seen the other: each picked the next free number against
+ * It has happened twice. #1025 and #1026 merged twenty-three minutes
+ * apart on 2026-09-08 and both took 0033, because nothing looked. Neither
+ * PR could have seen the other: each picked the next free number against
  * trunk, and trunk was right for both of them at the moment they looked.
  * That is why this is a check rather than a line of advice -- the mistake
  * is invisible to the person making it.
+ *
+ * The second time was this check's own PR. #1184 landed 0037 while #1053
+ * was in flight holding 0037 too, and this spec turned #1053's PR red
+ * before it could merge -- the first collision caught by anything other
+ * than a person noticing months later. The renumber to 0038 cost one
+ * rebase instead of the reference sweep the rest of this ticket was.
  *
  * **Where it catches the collision.** On the PR, when the number is
  * already taken on trunk. In the #1025/#1026 shape -- two PRs branched
@@ -93,7 +99,7 @@ describe('findCollisions', () => {
 		expect(
 			findCollisions([
 				'0033-staff-login-deletion-is-immediate-and-redacts-the-person.md',
-				'0037-overdue-is-derived-and-notifies-nobody.md'
+				'0038-overdue-is-derived-and-notifies-nobody.md'
 			])
 		).toEqual([]);
 	});

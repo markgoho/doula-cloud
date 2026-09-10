@@ -116,4 +116,4 @@ That a held-open Admin SDK round trip is acceptable at a once-per-person seam is
 
 ## If you arrived here from a citation about clocks or sweeps
 
-A second ADR briefly carried this number, and it is the one that says nothing in this repo fires on a clock. It is now [ADR-0037](0037-overdue-is-derived-and-notifies-nobody.md), renumbered on [#1053](https://github.com/markgoho/doula-cloud/issues/1053). One citation still points the old way and cannot be corrected: `api/db/migrations/00109_connect_nudge_outbox.sql` has already run, and `api/db/migrations/guardrail_test.go` records why an applied migration must not change.
+A second ADR briefly carried this number, and it is the one that says nothing in this repo fires on a clock. It is now [ADR-0038](0038-overdue-is-derived-and-notifies-nobody.md), renumbered on [#1053](https://github.com/markgoho/doula-cloud/issues/1053). One citation still points the old way and cannot be corrected: `api/db/migrations/00109_connect_nudge_outbox.sql` has already run, and `api/db/migrations/guardrail_test.go` records why an applied migration must not change.
