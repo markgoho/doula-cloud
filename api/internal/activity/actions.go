@@ -288,20 +288,29 @@ func MoneyActions() []EngagementAction {
 
 // staffingActions is what CONTEXT.md's Activity entry keeps off a
 // Client's own portal ledger (#486): "she reads her own Activity ...
-// never who inside the Practice did what." An Offer is Doula staffing --
-// who was asked, who accepted, who was bumped -- and a Visit
-// reassignment is which Doula covers it, not that a Visit happened; both
-// are facts about the Practice's own roster, not about her. Money
-// actions (moneyActions above) are a different, Staff-role-only cut and
-// are deliberately absent here: CONTEXT.md also says "her money", so a
-// Client keeps every Contract and Invoice entry on her own Engagement.
+// never who inside the Practice did what." The set is that whole
+// sentence, not the roster alone. An Offer is Doula staffing -- who was
+// asked, who accepted, who was bumped -- and a Visit reassignment is
+// which Doula covers it, not that a Visit happened; both are facts about
+// the Practice's own roster. A void request and its refusal (#971) are
+// the same sentence in its other framing: the Practice deliberating with
+// itself about her Contract, with nothing of hers changed either way
+// (#1096). The test that decides membership is whether something of hers
+// changed -- ActionContractVoided does, and stays on her ledger, so a
+// granted ask still reaches her as the void itself.
+//
+// Money actions (moneyActions above) are a different, Staff-role-only cut
+// and are deliberately absent here: CONTEXT.md also says "her money", so
+// a Client keeps every Contract and Invoice entry on her own Engagement.
 var staffingActions = map[EngagementAction]bool{
-	ActionOfferSent:       true,
-	ActionOfferAccepted:   true,
-	ActionOfferDeclined:   true,
-	ActionOfferSuperseded: true,
-	ActionOfferWithdrawn:  true,
-	ActionVisitReassigned: true,
+	ActionOfferSent:             true,
+	ActionOfferAccepted:         true,
+	ActionOfferDeclined:         true,
+	ActionOfferSuperseded:       true,
+	ActionOfferWithdrawn:        true,
+	ActionVisitReassigned:       true,
+	ActionContractVoidRequested: true,
+	ActionContractVoidDeclined:  true,
 }
 
 // StaffingActions returns every action CONTEXT.md's Activity entry keeps

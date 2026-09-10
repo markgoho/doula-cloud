@@ -176,13 +176,16 @@ func TestMoneyActions_Sorted(t *testing.T) {
 }
 
 // TestStaffingActions_ContainsExactlyTheRosterSet pins the set CONTEXT.md's
-// Activity entry keeps off a Client's own portal ledger -- "never who
-// inside the Practice did what": an Offer is which Doula was asked,
-// accepted or bumped, and a Visit reassignment is which Doula covers it,
-// both Practice-roster facts rather than facts about her. Money actions
-// are deliberately absent from this set (CONTEXT.md: "her money" stays on
-// her own ledger) -- a drift here would either leak roster facts to a
-// Client or hide a fact she is owed.
+// Activity entry keeps off a Client's own portal ledger -- the whole of
+// "never who inside the Practice did what", not the roster alone. An
+// Offer is which Doula was asked, accepted or bumped, and a Visit
+// reassignment is which Doula covers it, both Practice-roster facts
+// rather than facts about her; a void request and its refusal (#1096) are
+// the Practice deliberating with itself about her Contract, with nothing
+// of hers changed either way. Money actions are deliberately absent from
+// this set (CONTEXT.md: "her money" stays on her own ledger) -- a drift
+// here would either leak the Practice's own facts to a Client or hide a
+// fact she is owed.
 func TestStaffingActions_ContainsExactlyTheRosterSet(t *testing.T) {
 	got := map[activity.EngagementAction]bool{}
 	for _, a := range activity.StaffingActions() {
@@ -195,6 +198,8 @@ func TestStaffingActions_ContainsExactlyTheRosterSet(t *testing.T) {
 		activity.ActionOfferSuperseded,
 		activity.ActionOfferWithdrawn,
 		activity.ActionVisitReassigned,
+		activity.ActionContractVoidRequested,
+		activity.ActionContractVoidDeclined,
 	}
 	if len(got) != len(want) {
 		t.Fatalf("StaffingActions() = %v, want exactly %v", activity.StaffingActions(), want)

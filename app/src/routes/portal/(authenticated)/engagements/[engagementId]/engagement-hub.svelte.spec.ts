@@ -265,7 +265,7 @@ describe('the Activity disclosure (#486)', () => {
 			{
 				subjectKind: 'engagement',
 				subjectId: detail.engagementId,
-				action: 'contract_void_requested',
+				action: 'payment_reversed',
 				actorKind: 'staff',
 				actorName: 'Your practice',
 				createdAt: new Date().toISOString()
@@ -287,7 +287,7 @@ describe('the Activity disclosure (#486)', () => {
 			// against whichever tree is currently hidden.
 			await expect
 				.poll(() => frame.querySelector(':scope details .frame')?.textContent)
-				.toContain('Someone at your practice asked for your Contract to be ended.');
+				.toContain('A payment recorded earlier was removed.');
 
 			const found = sweep(frame, run.clientWidth);
 			expect(found, found && overflowReport('Client-portal Activity disclosure (open)', found)).toBeUndefined();

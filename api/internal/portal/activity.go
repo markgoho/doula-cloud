@@ -23,7 +23,11 @@ const activityPageSize = 30
 // Client reads her own Activity, "never who inside the Practice did
 // what." An Offer names which Doula was asked, accepted or bumped, and a
 // Visit reassignment names which Doula covers it; both are Practice
-// roster facts, not facts about her. Every value here is a compile-time
+// roster facts, not facts about her. A void request and its refusal are
+// the same sentence in its other framing -- the Practice deliberating
+// with itself about her Contract, nothing of hers changed either way
+// (#1096); the void itself is not in the set and still reaches her. Every
+// value here is a compile-time
 // constant this package itself wrote, never request input, matching
 // engagement.moneyActionsNotIn's own reasoning.
 var staffingActionsNotIn = buildStaffingActionsNotIn()

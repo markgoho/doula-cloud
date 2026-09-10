@@ -157,22 +157,12 @@ const CLIENT_ACTIVITY_PHRASES: Record<string, string> = {
 	contract_amount_overridden: "Your Contract's price changed.",
 	contract_amount_repriced: "Your Contract's price changed.",
 
-	// #971's two workflow acts. Both are the Practice talking to itself,
-	// and both reach her ledger today because neither is in the staffing
-	// set -- phrased here rather than left to throw, with whether they
-	// should reach her at all left to #1096, which is a filter question
-	// rather than a wording one.
-	//
-	// "Someone at your practice", not "Your practice asked you": the ask
-	// goes to an Owner or Admin, never to her, and a phrase that read as
-	// addressed to her would invite a reply she has no way to give. It
-	// still names nobody, which is the half of CONTEXT.md's Activity
-	// entry portal.staffActorDisplayName holds on the actor column.
-	// Lower-case "practice" in both, matching that column's own
-	// "Your practice" -- two spellings of the same word in one row is
-	// exactly the seam a Client would read as two different things.
-	contract_void_requested: 'Someone at your practice asked for your Contract to be ended.',
-	contract_void_declined: 'Your practice decided to keep your Contract.',
+	// #971's two workflow acts -- a void request and its refusal -- are
+	// deliberately absent, and their absence is not a gap: #1096 put both
+	// in the staffing set, so the portal reader excludes them in SQL and
+	// no such row reaches this table. A phrase for either would fail the
+	// drift guard, which runs in both directions. `contract_voided` above
+	// is the outcome she does read, so her record stays complete.
 
 	// Visits, in her own phrasing. Both of the last two say "updated"
 	// rather than naming a direction, because the write side does not hold

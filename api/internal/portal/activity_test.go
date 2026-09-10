@@ -191,6 +191,36 @@ func TestActivityHandler_HidesStaffingEntries(t *testing.T) {
 	}
 }
 
+// TestActivityHandler_HidesVoidDeliberation proves #1096 at the reader
+// rather than only at the set: a Doula asking for a signed Contract to be
+// voided, and an Owner or Admin refusing that ask, are the Practice
+// deliberating with itself about her Contract, with nothing of hers
+// changed either way. A granted ask still reaches her as contract_voided,
+// which is why her record stays complete on every outcome.
+func TestActivityHandler_HidesVoidDeliberation(t *testing.T) {
+	db := testdb.New(t)
+	const identityUID = "portal-activity-void-deliberation"
+	practiceID, engagementID := seedEngagementForActivity(t, db, identityUID, "Activity Void Deliberation Practice")
+	staffID := testdb.SeedStaffAtPractice(t, db, practiceID, "portal-activity-void-staff", []string{ownerRole}, "employee")
+
+	testdb.SeedActivity(t, db, practiceID, activity.SubjectEngagement, engagementID, string(activity.ActionContractVoidRequested), activity.StaffActor(staffID))
+	testdb.SeedActivity(t, db, practiceID, activity.SubjectEngagement, engagementID, string(activity.ActionContractVoidDeclined), activity.StaffActor(staffID))
+	testdb.SeedActivity(t, db, practiceID, activity.SubjectEngagement, engagementID, string(activity.ActionContractVoided), activity.StaffActor(staffID))
+
+	srv, session := activityServer(t, db, identityUID)
+	defer srv.Close()
+
+	resp := authedActivityGet(t, session, srv.URL+"/api/portal/engagements/"+engagementID+"/activity")
+	defer resp.Body.Close()
+	var got activityfeed.ListResponse
+	if err := json.NewDecoder(resp.Body).Decode(&got); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if len(got.Items) != 1 || got.Items[0].Action != string(activity.ActionContractVoided) {
+		t.Fatalf("Items = %+v, want only the contract_voided row (the deliberation hidden)", got.Items)
+	}
+}
+
 // TestActivityHandler_PaginatesNewestFirst mirrors
 // engagement.TestListActivityHandler_PaginatesNewestFirst.
 func TestActivityHandler_PaginatesNewestFirst(t *testing.T) {

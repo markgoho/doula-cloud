@@ -370,3 +370,39 @@ func TestListActivityHandler_OtherActionsCarryNoDetail(t *testing.T) {
 		t.Fatalf("a visit_logged entry carried a detail field: %v", raw.Items[0])
 	}
 }
+
+// TestListActivityHandler_StaffStillSeeVoidDeliberation proves the half of
+// #1096 that does not change: a void request and its refusal leave a
+// Client's own portal ledger, and stay exactly where the Practice does its
+// deliberating. Neither carries a dollar figure, so the money gate does not
+// reach them either -- this is a Client-portal filter, not a Staff one.
+func TestListActivityHandler_StaffStillSeeVoidDeliberation(t *testing.T) {
+	db := testdb.New(t)
+	const identityUID = "owner-activity-void-deliberation"
+	practiceID := testdb.SeedPractice(t, db, "Void Deliberation")
+	ownerID := testdb.SeedStaffAtPractice(t, db, practiceID, identityUID, []string{ownerRole}, "employee")
+	_, engagementID := testdb.SeedEngagementInStatus(t, db, practiceID, "Client", "void-deliberation-client@example.com", "active")
+
+	testdb.SeedActivity(t, db, practiceID, activity.SubjectEngagement, engagementID,
+		string(activity.ActionContractVoidRequested), activity.StaffActor(ownerID))
+	testdb.SeedActivity(t, db, practiceID, activity.SubjectEngagement, engagementID,
+		string(activity.ActionContractVoidDeclined), activity.StaffActor(ownerID))
+
+	srv, session := newServer(t, db, identityUID)
+	defer srv.Close()
+	resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/activity")
+	defer resp.Body.Close()
+
+	var got engagement.ActivityListResponse
+	if err := json.NewDecoder(resp.Body).Decode(&got); err != nil {
+		// coverage:ignore reason: decode failure of a response this handler just wrote
+		t.Fatalf("decode: %v", err)
+	}
+	seen := map[string]bool{}
+	for _, item := range got.Items {
+		seen[item.Action] = true
+	}
+	if !seen[string(activity.ActionContractVoidRequested)] || !seen[string(activity.ActionContractVoidDeclined)] {
+		t.Fatalf("Items = %+v, want both void-deliberation rows on the Staff feed", got.Items)
+	}
+}
