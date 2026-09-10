@@ -16,7 +16,7 @@
  * `@container` mentioned in a markup comment -- DataTable.svelte carries
  * exactly one -- is never mistaken for a rule.
  */
-import { CONFORMANCE_COMMITMENT } from './continuum.js';
+import { CONFORMANCE_COMMITMENT, openDisclosures } from './continuum.js';
 import { styleLines } from '#lib/styles/styleLines.js';
 
 // No `layout:ignore`-style marker applies here, so this sentinel -- which
@@ -312,8 +312,39 @@ export interface OverflowMeasurement {
 	readonly needed: number;
 }
 
+/*
+ * ## It looks inside a closed disclosure (#1124)
+ *
+ * A closed `<details>` lays out nothing but its `<summary>`, so a plain
+ * `scrollWidth` read reports the width the frame was given for content that
+ * may need any width at all. `sweep` (`continuum.ts`) closed that hole on
+ * #710 and this measurement was deliberately left open: no condition the
+ * floor check has discovered sits behind a disclosure today, so the gap was
+ * latent rather than live, and #710 declined to change what a green check
+ * measures for a gap nothing was hitting.
+ *
+ * Latent is still blind. The day a component declares a content floor for a
+ * tree inside a disclosure, sufficiency passes because an empty box
+ * overflows nothing, and minimality fails to fail -- which reads as the
+ * floor being wrong rather than as the instrument being unable to see, and
+ * a gate that cannot see a region is worth nothing.
+ *
+ * `openDisclosures` is imported rather than re-queried here: one artifact is
+ * enforced by there being one function (#570), and that function's own
+ * comment named this ticket as the second caller before the second caller
+ * existed. Its guarantees come with it -- only disclosures that were CLOSED
+ * are touched, the undo runs inside the same task so no `ontoggle` handler
+ * ever sees `open`, and therefore content a disclosure LOADS on open is
+ * still measured in its loading state (#1126, which owns that separately for
+ * both instruments).
+ */
 export function measureOverflow(frame: HTMLElement, given: number): OverflowMeasurement {
-	return { given, needed: frame.scrollWidth };
+	const close = openDisclosures(frame);
+	try {
+		return { given, needed: frame.scrollWidth };
+	} finally {
+		close();
+	}
 }
 
 export function overflowFloorReport(name: string, measurement: OverflowMeasurement): string {

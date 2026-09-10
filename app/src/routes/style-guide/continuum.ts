@@ -124,10 +124,10 @@ export function sweep(frame: HTMLElement, availableSpace: number): Break | undef
 /*
  * Opens every closed `<details>` under `frame` and hands back the undo
  * (#710). It is exported rather than kept private to `sweep` because the
- * floor check takes a measurement of its own and has the same blind spot:
- * #1124 is that work, and the query belongs in one place before a second
- * instrument writes its own copy -- which is #570's rule stated before the
- * copy exists rather than after.
+ * floor check takes a measurement of its own and had the same blind spot:
+ * `floor.ts`'s `measureOverflow` is the second caller (#1124), so the query
+ * lives in one place rather than in two instruments -- #570's rule stated
+ * before the copy existed rather than after it.
  *
  * Only the disclosures that were CLOSED are touched -- a subject that
  * ships one already open (`StepRail`'s completed steps) is left as its own
