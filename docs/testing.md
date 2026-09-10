@@ -326,7 +326,7 @@ The host and the database run on different clocks whenever the container engine 
 
 That makes a coin flip out of any fixture that inserts `next_attempt_at` from a host-side `time.Now()` and then claims the row back through a predicate like `WHERE next_attempt_at <= now()` — a coin flip on the sign of the drift. With the VM's clock even milliseconds behind the host's, the row is not yet due, the worker claims nothing, and the assertion reads the row back exactly as inserted — which looks like the worker silently did nothing rather than like a clock problem. [#987](https://github.com/markgoho/doula-cloud/issues/987) was eight `internal/outbox` tests failing this way.
 
-Seed a due-time from the database's own clock, never the host's. `insertTestRow` in `api/internal/outbox/outbox_test.go` is the pattern: it takes an offset (`0` for "due now", `-time.Minute` for "overdue", `time.Hour` for "not yet due") and computes the timestamp in SQL as `now() + $3 * interval '1 millisecond'`, so one clock decides. Where a fixture must pass a host-side `time.Time`, give it a margin far larger than any plausible skew, and say in a comment that the margin is what absorbs it.
+Seed a due-time from the database's own clock, never the host's. `insertTestRow` in `api/internal/outbox/outbox_test.go` is the pattern: it takes an offset (`0` for "due now", `-time.Minute` for "overdue", `time.Hour` for "not yet due") and computes the timestamp in SQL as `now() + $3 * interval '1 microsecond'`, so one clock decides. Where a fixture must pass a host-side `time.Time`, give it a margin far larger than any plausible skew, and say in a comment that the margin is what absorbs it.
 
 ## Reaping orphaned testcontainers
 

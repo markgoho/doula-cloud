@@ -48,27 +48,23 @@ func createTestTable(t *testing.T, db *testdb.DB) {
 	}
 }
 
-// insertTestRow seeds one row whose due-time is expressed as an offset
-// from the *database's* clock, not the host's -- dueIn of 0 means "due
-// now", a negative value means "overdue", a positive one "not yet due".
+// insertTestRow seeds one row whose due-time is an offset from the
+// *database's* clock: dueIn of 0 means "due now", a negative value
+// "overdue", a positive one "not yet due". Rounded to whole microseconds,
+// which is Postgres timestamp resolution anyway.
 //
-// It cannot take a host-side time.Time. testClaimQuery decides dueness
-// with `next_attempt_at <= now()`, and `now()` is read from the clock of
-// whatever machine Postgres runs on. Under Podman (and Docker Desktop)
-// on macOS that is a Linux VM keeping its own clock, which drifts
-// against the host's and does not resync when the Mac wakes. Seeding
-// `next_attempt_at` from the host's time.Now() therefore made every
-// zero-margin row a coin flip on the sign of that drift: with the VM's
-// clock even milliseconds behind the host's, the row was not yet due,
-// ProcessPending claimed nothing, and the assertion read the row back
-// untouched -- see #987. Computing the due-time in SQL keeps both sides
-// of the comparison on one clock.
+// It deliberately takes no host-side time.Time. testClaimQuery decides
+// dueness against Postgres's own now(), so a due-time written from the
+// host's clock is a comparison of two clocks nothing keeps in step, and
+// under a VM-backed container engine it decided these tests by the sign
+// of the drift -- see #987, and "A due-time fixture must not compare two
+// clocks" in docs/testing.md for the rule this follows.
 func insertTestRow(t *testing.T, db *testdb.DB, id string, attemptCount int, dueIn time.Duration) {
 	t.Helper()
 	if _, err := db.Admin.ExecContext(t.Context(),
 		`INSERT INTO outbox_test_rows (id, attempt_count, next_attempt_at, secret_a, secret_b)
-		 VALUES ($1, $2, now() + $3 * interval '1 millisecond', 'a-secret', 'b-secret')`,
-		id, attemptCount, dueIn.Milliseconds(),
+		 VALUES ($1, $2, now() + $3 * interval '1 microsecond', 'a-secret', 'b-secret')`,
+		id, attemptCount, dueIn.Microseconds(),
 	); err != nil {
 		t.Fatalf("insert test row: %v", err)
 	}
