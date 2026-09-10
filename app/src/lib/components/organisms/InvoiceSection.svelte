@@ -435,7 +435,7 @@
 		<section aria-label="Record a payment">
 			<h3>Record a payment of {formatAmount(invoice.amountCents)}</h3>
 			{#if paymentStep === 'form'}
-				<!-- stacked-form:ignore: #1108 -- the "Date received" box is `required`, and the comment on `reviewPayment` above says so in as many words: it covers emptiness so that function only has to cover the semantic checks. `StackedForm` sets `novalidate` (ADR-0021), so adopting it here would take that refusal away and put nothing in its place; #1226 is where this form gets a refusal of its own and then adopts the molecule. The stack below is `StackedForm`'s own arrangement, written inline meanwhile. -->
+				<!-- stacked-form:ignore: #1108 -- the "Date received" box is `required`, and the comment on `reviewPayment` above says so in as many words: it covers emptiness so that function only has to cover the semantic checks. `StackedForm` sets `novalidate` (ADR-0021), so adopting it here would take that refusal away and put nothing in its place; #1228 is where this form gets a refusal of its own and then adopts the molecule. The stack below is `StackedForm`'s own arrangement, written inline meanwhile. -->
 				<form onsubmit={reviewPayment}>
 					<stack-l space="var(--space-5)">
 						<RadioGroup

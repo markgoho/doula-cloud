@@ -47,7 +47,7 @@
 		/>
 	</section>
 {:else}
-	<!-- stacked-form:ignore: #1108 -- both controls are `required`, and that is the only thing standing between an unsigned name or an unticked attestation and the signing endpoint. `StackedForm` sets `novalidate` (ADR-0021), so adopting it here would take that refusal away and put nothing in its place; #1226 is where this form gets a refusal of its own and then adopts the molecule. The stack below is `StackedForm`'s own arrangement, written inline meanwhile. -->
+	<!-- stacked-form:ignore: #1108 -- both controls are `required`, and that is the only thing standing between an unsigned name or an unticked attestation and the signing endpoint. `StackedForm` sets `novalidate` (ADR-0021), so adopting it here would take that refusal away and put nothing in its place; #1228 is where this form gets a refusal of its own and then adopts the molecule. The stack below is `StackedForm`'s own arrangement, written inline meanwhile. -->
 	<form onsubmit={handleSubmit}>
 		<stack-l space="var(--space-5)">
 			<LabeledField label="Full legal name">

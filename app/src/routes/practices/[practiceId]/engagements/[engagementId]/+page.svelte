@@ -1193,7 +1193,7 @@
 		{#if reassignOptions.length === 0}
 			<p>There is nobody else to reassign this Visit to.</p>
 		{:else}
-			<!-- stacked-form:ignore: #1108 -- the Select below is `required`, and that is the only thing standing between an empty pick and the endpoint. `StackedForm` sets `novalidate` (ADR-0021), so adopting it here would take that refusal away and put nothing in its place; #1226 is where this form gets a refusal of its own and then adopts the molecule. The stack below is `StackedForm`'s own arrangement, written inline meanwhile. -->
+			<!-- stacked-form:ignore: #1108 -- the Select below is `required`, and that is the only thing standing between an empty pick and the endpoint. `StackedForm` sets `novalidate` (ADR-0021), so adopting it here would take that refusal away and put nothing in its place; #1228 is where this form gets a refusal of its own and then adopts the molecule. The stack below is `StackedForm`'s own arrangement, written inline meanwhile. -->
 			<form onsubmit={(event) => handleReassign(visit.visitId, event)}>
 				<stack-l space="var(--space-5)">
 					<LabeledField
@@ -1298,7 +1298,7 @@
 		control rather than a button that 403s.
 	-->
 	{#if canAssignVisits || canLogOwnVisit}
-		<!-- stacked-form:ignore: #1108 -- the assignee Select is `required`, and that is the only thing standing between an empty pick and the endpoint. `StackedForm` sets `novalidate` (ADR-0021), so adopting it here would take that refusal away and put nothing in its place; #1226 is where this form gets a refusal of its own and then adopts the molecule. The stack below is `StackedForm`'s own arrangement, written inline meanwhile. -->
+		<!-- stacked-form:ignore: #1108 -- the assignee Select is `required`, and that is the only thing standing between an empty pick and the endpoint. `StackedForm` sets `novalidate` (ADR-0021), so adopting it here would take that refusal away and put nothing in its place; #1228 is where this form gets a refusal of its own and then adopts the molecule. The stack below is `StackedForm`'s own arrangement, written inline meanwhile. -->
 		<form onsubmit={handleCreateVisit}>
 			<stack-l space="var(--space-5)">
 				{#if canAssignVisits}
