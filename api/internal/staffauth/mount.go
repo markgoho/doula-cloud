@@ -142,6 +142,13 @@ func mountPracticeRoutes(g *GatedRouter, ir WriteRouter, verifier authn.Verifier
 	// policy already admits -- a reader, not a widening.
 	g.Get("/api/practices/{practiceId}/staff/{staffId}/work-state-history",
 		OwnerAndAdmin, ListWorkStateHistoryHandler())
+	// The history behind the roster row itself (#872) -- how this person
+	// came to hold these roles and this employment type. Same gate as the
+	// roster, and the same rows 00051's existing policy already admits:
+	// a reader for events every Membership write site has been recording
+	// all along, not a widening.
+	g.Get("/api/practices/{practiceId}/staff/{staffId}/membership-history",
+		OwnerAndAdmin, ListMembershipHistoryHandler())
 	ir.Exempt("DELETE /api/practices/{practiceId}/staff/{staffId}/sessions",
 		"EndAllSessions ends whatever remains and no-ops once already ended, and QueueSessionRevoked's own ON CONFLICT ... WHERE status = 'pending' DO NOTHING dedupes the notification; a retry can't double-notify",
 		false, EndSessionsHandler(enq))

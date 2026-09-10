@@ -66,7 +66,7 @@ func EndSessionsHandler(enq tasknudge.Enqueuer) http.Handler {
 		// relationship the row names.
 		if err := activity.Record(r.Context(), tx, activity.Entry{
 			PracticeID:  practiceID,
-			SubjectKind: "membership",
+			SubjectKind: activity.SubjectMembership,
 			SubjectID:   targetStaffID,
 			Action:      "sessions_ended",
 			Diff:        json.RawMessage("{}"),

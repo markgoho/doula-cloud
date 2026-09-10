@@ -38,6 +38,24 @@ type fromTo struct {
 	To   string `json:"to"`
 }
 
+// membershipDiff is the whole shape a Membership event's diff column
+// holds -- the two facts about a Membership that can change, each with
+// its before and after. Named rather than left anonymous inside
+// RecordMembershipEvent because the reader (ListMembershipHistoryHandler,
+// #872) unmarshals the same shape: one declaration means the write side
+// cannot rename a key out from under the read side.
+//
+// An event that moved only one of the two carries the other as a pair of
+// empty strings, and sessions_ended (endsessions.go, #473) carries the
+// bare "{}" that unmarshals to all four empty -- so an empty string here
+// means "this fact did not move", never "this fact became blank". A
+// Membership always holds at least one role and exactly one employment
+// type, so no real value is ever empty and the two cases cannot collide.
+type membershipDiff struct {
+	Roles          fromTo `json:"roles"`
+	EmploymentType fromTo `json:"employmentType"`
+}
+
 // rolesLiteralToCSV strips a Postgres array literal's braces, e.g.
 // "{owner,doula}" -> "owner,doula", leaving the diff's JSON free of
 // Postgres-specific syntax. A MembershipEvent whose roles did not
@@ -56,10 +74,7 @@ func rolesLiteralToCSV(literal string) string {
 // does -- CLAUDE.md's audit-trail expectation, answered where the change
 // happens rather than by a listener that can miss one.
 func RecordMembershipEvent(ctx context.Context, tx *sql.Tx, e MembershipEvent) error {
-	diff, err := json.Marshal(struct {
-		Roles          fromTo `json:"roles"`
-		EmploymentType fromTo `json:"employmentType"`
-	}{
+	diff, err := json.Marshal(membershipDiff{
 		Roles:          fromTo{From: rolesLiteralToCSV(e.PreviousRoles), To: rolesLiteralToCSV(e.Roles)},
 		EmploymentType: fromTo{From: e.PreviousEmploymentType, To: e.EmploymentType},
 	})
@@ -70,7 +85,7 @@ func RecordMembershipEvent(ctx context.Context, tx *sql.Tx, e MembershipEvent) e
 
 	if err := activity.Record(ctx, tx, activity.Entry{
 		PracticeID:  e.PracticeID,
-		SubjectKind: "membership",
+		SubjectKind: activity.SubjectMembership,
 		SubjectID:   e.StaffID,
 		Action:      e.Type,
 		Diff:        diff,

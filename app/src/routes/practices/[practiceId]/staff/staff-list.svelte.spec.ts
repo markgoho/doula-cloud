@@ -47,7 +47,18 @@ const apiFetchWithSession = vi.hoisted(() => vi.fn());
 // section 7) is what that real reader expects; a bare JSON-encoded
 // string would parse to a non-object and fall through to the quoted raw
 // text instead of `message`.
-vi.mock('#lib/api.js', () => ({ apiFetchWithSession }));
+// The real `apiErrorMessage` comes along because #872 puts
+// `#lib/activityLedger.js` in this page's import graph -- the Membership
+// history's fallback sentence for an action this build has no words for
+// is that module's `describeActivityAction`, and the module reads a
+// refusal through `#lib/api.js`'s re-export. It is imported from the leaf
+// module it actually lives in rather than through `importOriginal`, which
+// would drag the whole of `api.ts` (and Firebase with it) into a spec
+// that exists to keep both out.
+vi.mock('#lib/api.js', async () => ({
+	apiFetchWithSession,
+	...(await vi.importActual<typeof import('#lib/apiErrorMessage.js')>('#lib/apiErrorMessage.js'))
+}));
 
 function textResponse(message: string): Response {
 	return jsonResponse({ code: 'FAILED_PRECONDITION', message }, 403);
@@ -86,6 +97,53 @@ const workStateHistories: Record<string, unknown> = {
 	}
 };
 
+// One page of #872's Membership history, keyed by staff id. This spec's
+// own for the same reason the work state history above is: the
+// disclosure fetches it only once somebody opens it, so the roster
+// fixture never answers for it.
+//
+// Every value here is the *stored* one -- `owner`, `contractor` -- which
+// is what the BFF sends and what the screen has to map to the team's
+// words through `roles.ts` (#262). An assertion below that reads
+// "Contractor" is therefore an assertion about the mapping, not an echo
+// of the fixture.
+const membershipHistories: Record<string, unknown> = {
+	'staff-1': {
+		items: [
+			{
+				eventId: 'membership-event-2',
+				action: 'employment_type_changed',
+				actorName: 'Renata Alvarez',
+				previousEmploymentType: 'employee',
+				employmentType: 'contractor',
+				createdAt: '2027-01-06T11:00:00Z'
+			},
+			{
+				eventId: 'membership-event-1',
+				action: 'joined',
+				actorName: 'Renata Alvarez',
+				roles: ['owner', 'admin', 'doula'],
+				employmentType: 'employee',
+				createdAt: '2026-08-01T00:00:00Z'
+			}
+		],
+		hasMore: false
+	},
+	'staff-2': {
+		items: [
+			{
+				eventId: 'membership-event-3',
+				action: 'roles_changed',
+				actorName: 'Renata Alvarez',
+				previousRoles: ['doula'],
+				roles: ['admin', 'doula'],
+				createdAt: '2026-11-11T11:00:00Z'
+			}
+		],
+		hasMore: false
+	}
+};
+
 interface MockOptions {
 	roster?: { members: typeof members; invitations: typeof invitations };
 	listOk?: boolean;
@@ -94,6 +152,7 @@ interface MockOptions {
 	revokeResponse?: Response;
 	removeResponse?: Response;
 	historyResponse?: Response;
+	membershipHistoryResponse?: Response;
 }
 
 // The API double is stateful: a successful PATCH or revoke changes what
@@ -106,7 +165,8 @@ function mockApi({
 	membershipResponse,
 	revokeResponse,
 	removeResponse,
-	historyResponse
+	historyResponse,
+	membershipHistoryResponse
 }: MockOptions = {}) {
 	const state = structuredClone(roster);
 	apiFetchWithSession.mockImplementation((path: string, init?: RequestInit) => {
@@ -116,6 +176,13 @@ function mockApi({
 			}
 			const staffId = path.split('/').at(-2);
 			return Promise.resolve(jsonResponse(workStateHistories[String(staffId)]));
+		}
+		if (path.includes('/membership-history')) {
+			if (membershipHistoryResponse) {
+				return Promise.resolve(membershipHistoryResponse);
+			}
+			const staffId = path.split('/').at(-2);
+			return Promise.resolve(jsonResponse(membershipHistories[String(staffId)]));
 		}
 		if (path.endsWith('/sessions') && init?.method === 'DELETE') {
 			return Promise.resolve(sessionsResponse ?? jsonResponse({}));
@@ -537,6 +604,118 @@ describe('staff screen', () => {
 				.toBeVisible();
 			await expect
 				.element(tableView.getByText(`Work state history for ${contractorMember.name}`))
+				.toBeVisible();
+		});
+	});
+
+	/*
+	 * #872: the roster shows what a person is today; this is what is
+	 * behind it. Scoped to `.table-view` for the same reason the work
+	 * state history block above is -- DataTable renders every row's
+	 * snippet into both of its trees, so a disclosure's revealed content
+	 * exists twice in the DOM.
+	 */
+	describe('membership history', () => {
+		it('is closed until it is opened, and then names both sides of a change in the team’s words', async () => {
+			await setup();
+			const tableView = membersTable();
+
+			const disclosures = tableView.getByText('Membership history');
+			await expect.element(disclosures.first()).toBeVisible();
+			// Nothing is fetched until she asks for it: the roster read is
+			// the only request so far. This is the AC "the history is
+			// fetched only when it is asked for, never as part of loading
+			// the roster".
+			expect(
+				apiFetchWithSession.mock.calls.filter((call: unknown[]) =>
+					String(call[0]).includes('/membership-history')
+				)
+			).toHaveLength(0);
+
+			await disclosures.first().click();
+
+			// The fixture stores `employee` and `contractor`; the words on
+			// screen are the mapping's (#262), which is this ticket's fourth
+			// acceptance criterion.
+			await expect
+				.element(tableView.getByText('Employment type changed from Employee to Contractor'))
+				.toBeVisible();
+		});
+
+		// #316: the founding Owner gets the same 'joined' record everybody
+		// else does and is named as her own actor, so "how did this person
+		// come to hold these roles?" has an answer for her too.
+		it('names who did it, and what a person joined as', async () => {
+			await setup();
+			const tableView = membersTable();
+
+			await tableView.getByText('Membership history').first().click();
+
+			await expect
+				.element(tableView.getByText('Joined as Owner, Admin, Doula (Employee)'))
+				.toBeVisible();
+			await expect.element(tableView.getByText('by Renata Alvarez').first()).toBeVisible();
+		});
+
+		it('names both sides of a role change', async () => {
+			await setup();
+			const tableView = membersTable();
+
+			await tableView.getByText('Membership history').nth(1).click();
+
+			await expect
+				.element(tableView.getByText('Roles changed from Doula to Admin, Doula'))
+				.toBeVisible();
+		});
+
+		it('shows a per-row error notice when the history fails to load', async () => {
+			await setup({
+				membershipHistoryResponse: textResponse('Failed to load membership history')
+			});
+			const tableView = membersTable();
+
+			await tableView.getByText('Membership history').first().click();
+
+			await expect.element(tableView.getByText('Failed to load membership history')).toBeVisible();
+		});
+
+		it('names the Show older membership changes button by its member', async () => {
+			await setup({
+				membershipHistoryResponse: jsonResponse({
+					items: [
+						{
+							eventId: 'membership-event-1',
+							action: 'sessions_ended',
+							actorName: 'Renata Alvarez',
+							createdAt: '2027-02-02T12:00:00Z'
+						}
+					],
+					hasMore: true,
+					nextCursor: 'cursor-1'
+				})
+			});
+			const tableView = membersTable();
+
+			await tableView.getByText('Membership history').first().click();
+
+			expect(
+				describedByText(
+					testPage.getByRole('button', { name: 'Show older membership changes' })
+				)
+			).toBe(ownerMember.name);
+		});
+
+		// #667, the same rule the work state disclosure carries: every row
+		// has one of these, so the bare words name them all alike.
+		it('names each row disclosure by the member it belongs to', async () => {
+			await setup();
+			const tableView = membersTable();
+
+			await expect
+				.element(tableView.getByText(`Membership history for ${ownerMember.name}`))
+				.toBeVisible();
+			await expect
+				.element(tableView.getByText(`Membership history for ${contractorMember.name}`))
 				.toBeVisible();
 		});
 	});

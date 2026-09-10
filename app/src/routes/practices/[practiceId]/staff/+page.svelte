@@ -6,12 +6,15 @@
 	import { apiFetchWithSession } from '#lib/api.js';
 	import {
 		endSessions,
+		loadMembershipHistory as fetchMembershipHistory,
 		loadStaff,
 		loadWorkStateHistory as fetchWorkStateHistory,
 		removeMember,
 		revokeInvitation,
 		updateMembership,
 		type InvitationSummary,
+		type MembershipChange,
+		type MembershipHistory,
 		type StaffSummary,
 		type WorkStateChange,
 		type WorkStateHistory
@@ -26,7 +29,10 @@
 	import Link from '#lib/components/atoms/Link.svelte';
 	import MembershipFields from '#lib/components/molecules/MembershipFields.svelte';
 	import ConfirmDialog from '#lib/components/molecules/ConfirmDialog.svelte';
+	import HistoryDisclosure from '#lib/components/molecules/HistoryDisclosure.svelte';
 	import ListPage from '#lib/components/templates/ListPage.svelte';
+	import { formatActivityTimestamp } from '#lib/dates.js';
+	import { membershipChangeSentence } from '#lib/membershipHistory.js';
 	import { workStateName, workStateReportedOn } from '#lib/workStates.js';
 	import { isOwner, rolesLabel, employmentTypeLabel, type EmploymentType } from '#lib/roles.js';
 	import type { PracticeSession } from '../+layout.js';
@@ -75,6 +81,16 @@
 	const requestedHistories = new SvelteSet<string>();
 	let historyLoading = $state<Record<string, boolean>>({});
 	let historyError = $state<Record<string, string>>({});
+
+	// The history behind the roster row itself (#872) -- how this person
+	// came to hold these roles and this employment type. Its own state,
+	// its own fetch record and its own disclosure, on the same terms as
+	// the work state history above: opened on demand, never loaded with
+	// the roster, asked for once.
+	let membershipHistories = $state<Record<string, MembershipHistory>>({});
+	const requestedMembershipHistories = new SvelteSet<string>();
+	let membershipHistoryLoading = $state<Record<string, boolean>>({});
+	let membershipHistoryError = $state<Record<string, string>>({});
 
 	let revokeError = $state<Record<string, string>>({});
 
@@ -158,13 +174,44 @@
 
 	// Opening the disclosure is what asks for the history; closing and
 	// reopening does not ask again, because an append-only trail that was
-	// correct a second ago is still correct.
-	function handleHistoryToggle(staffId: string, isOpen: boolean) {
-		if (!isOpen || requestedHistories.has(staffId)) {
+	// correct a second ago is still correct. HistoryDisclosure calls this
+	// on an open only, never on a close.
+	function handleHistoryToggle(staffId: string) {
+		if (requestedHistories.has(staffId)) {
 			return;
 		}
 		requestedHistories.add(staffId);
 		void loadWorkStateHistory(staffId);
+	}
+
+	// One page of a member's Membership history, appended to whatever is
+	// already on screen. cursor is undefined for the first page.
+	async function loadMembershipHistoryPage(staffId: string, cursor?: string) {
+		membershipHistoryError[staffId] = '';
+		membershipHistoryLoading[staffId] = true;
+		try {
+			const loaded = await fetchMembershipHistory(
+				apiFetchWithSession,
+				page.params.practiceId!,
+				staffId,
+				cursor
+			);
+			const existing = cursor ? (membershipHistories[staffId]?.items ?? []) : [];
+			membershipHistories[staffId] = { ...loaded, items: [...existing, ...loaded.items] };
+		} catch (error_) {
+			membershipHistoryError[staffId] =
+				error_ instanceof Error ? error_.message : 'Failed to load membership history';
+		} finally {
+			membershipHistoryLoading[staffId] = false;
+		}
+	}
+
+	function handleMembershipHistoryToggle(staffId: string) {
+		if (requestedMembershipHistories.has(staffId)) {
+			return;
+		}
+		requestedMembershipHistories.add(staffId);
+		void loadMembershipHistoryPage(staffId);
 	}
 
 	// What one entry says. A first assertion (no previous value, migration
@@ -285,57 +332,65 @@
 		moved; once it has, the earlier assertion -- the one every Credit
 		purchase before that date was apportioned on -- had nowhere to be
 		read.
-
-		A native <details>, so opening and closing costs no JavaScript and
-		the keyboard and screen-reader behavior is the browser's own
-		(GOV.UK's Details pattern, ADR-0021). The only script here is the
-		fetch the first open triggers.
 	-->
 	{@const history = histories[member.staffId]}
-	<details ontoggle={(event) => handleHistoryToggle(member.staffId, event.currentTarget.open)}>
-		<!--
-			Every row carries this disclosure, so the bare words name all of
-			them alike and a rotor's list of controls tells none of them apart
-			(#667, the sibling of #515's Buttons). A summary computes its
-			accessible name from its own content, so GOV.UK's visually-hidden
-			child applies literally here -- no id and no aria-describedby,
-			which is also why this never meets #666's duplicate ids across
-			DataTable's two trees. The space belongs to the summary's own text
-			node rather than the span: accessible-name computation
-			concatenates inline children without inserting one.
-		-->
-		<summary>Work state history <span class="visually-hidden">for {member.name}</span></summary>
-		{#if historyError[member.staffId]}
-			<Notice variant="error" message={historyError[member.staffId]} />
-		{:else if !history}
-			<Text text="Loading..." />
-		{:else if history.items.length === 0}
-			<Text text="Nothing recorded." />
-		{:else}
-			<ol>
-				{#each history.items as change (change.eventId)}
-					<li>
-						{workStateChangeSentence(change)} &mdash;
-						<time datetime={change.createdAt}>{workStateReportedOn(change.createdAt)}</time>
-						{#if isBeforeJoining(change, history.memberSince)}
-							<span class="elsewhere">(before joining this practice)</span>
-						{/if}
-					</li>
-				{/each}
-			</ol>
-			{#if history.hasMore}
-				<Button
-					label="Show older changes"
-					variant="secondary"
-					size="sm"
-					describedBy="{view}-{member.staffId}-history-name"
-					loading={historyLoading[member.staffId]}
-					onClick={() => loadWorkStateHistory(member.staffId, history.nextCursor)}
-				/>
-				<span class="visually-hidden" id="{view}-{member.staffId}-history-name">{member.name}</span>
-			{/if}
+	<HistoryDisclosure
+		label="Work state history"
+		subjectName={member.name}
+		items={history?.items}
+		key={(change: WorkStateChange) => change.eventId}
+		error={historyError[member.staffId]}
+		emptyMessage="Nothing recorded."
+		hasMore={history?.hasMore ?? false}
+		isLoadingMore={historyLoading[member.staffId]}
+		loadMoreLabel="Show older changes"
+		idPrefix="{view}-{member.staffId}-work-state"
+		onOpen={() => handleHistoryToggle(member.staffId)}
+		onLoadMore={() => loadWorkStateHistory(member.staffId, history?.nextCursor)}
+		entry={workStateEntry}
+	/>
+	{#snippet workStateEntry(change: WorkStateChange)}
+		{workStateChangeSentence(change)} &mdash;
+		<time datetime={change.createdAt}>{workStateReportedOn(change.createdAt)}</time>
+		{#if history && isBeforeJoining(change, history.memberSince)}
+			<span class="elsewhere">(before joining this practice)</span>
 		{/if}
-	</details>
+	{/snippet}
+
+	<!--
+		The history behind the row itself (#872): how this person came to
+		hold these roles and this employment type. Every Membership write
+		site has recorded itself since the beginning -- signup, an accepted
+		Invitation, an Owner's edit, a removal, an ended session -- and
+		until this disclosure none of it could be read anywhere in the
+		product.
+	-->
+	{@const membershipHistory = membershipHistories[member.staffId]}
+	<HistoryDisclosure
+		label="Membership history"
+		subjectName={member.name}
+		items={membershipHistory?.items}
+		key={(change: MembershipChange) => change.eventId}
+		error={membershipHistoryError[member.staffId]}
+		emptyMessage="Nothing recorded."
+		hasMore={membershipHistory?.hasMore ?? false}
+		isLoadingMore={membershipHistoryLoading[member.staffId]}
+		loadMoreLabel="Show older membership changes"
+		idPrefix="{view}-{member.staffId}-membership"
+		onOpen={() => handleMembershipHistoryToggle(member.staffId)}
+		onLoadMore={() => loadMembershipHistoryPage(member.staffId, membershipHistory?.nextCursor)}
+		entry={membershipEntry}
+	/>
+	{#snippet membershipEntry(change: MembershipChange)}
+		{membershipChangeSentence(change)} &mdash;
+		<time datetime={change.createdAt}>{formatActivityTimestamp(change.createdAt)}</time>
+		<!--
+			Who did it, which is half of what the audit trail is for. Quieter
+			than the change itself, the same treatment the activity ledger
+			gives an actor (brief.md's "One signature component").
+		-->
+		<span class="actor">by {change.actorName}</span>
+	{/snippet}
 	{#if editingStaffId === member.staffId}
 		<form onsubmit={handleSaveMembership}>
 			<MembershipFields
@@ -525,37 +580,16 @@
 
 <style>
 	@layer components {
-		/* A dated list of assertions, not a bulleted aside: the order is the
-		   history, so it is an <ol> with its markers off and the dates doing
-		   the numbering's job. */
-		ol {
-			margin: 0;
-			padding: 0;
-			list-style: none;
-			font-size: var(--text-body-sm-size);
-			line-height: var(--text-body-sm-leading);
-		}
+		/* The list, its items and the summary are HistoryDisclosure's own
+		   (#872), since both disclosures on this row want them identical.
+		   What stays here is what belongs to one entry's own words. */
 
-		li {
-			padding-block: var(--space-1);
-		}
-
-		/* WCAG 2.2 target size (minimum), which the axe archetype scan
-		   enforces and caught here: the summary is a touch target, and
-		   body-sm alone gives it a 21px line box. --space-6 is 24px
-		   exactly, and the padding puts it clear of the boundary rather
-		   than on it. */
-		summary {
-			font-size: var(--text-body-sm-size);
-			line-height: var(--text-body-sm-leading);
-			cursor: pointer;
-			min-block-size: var(--space-6);
-			padding-block: var(--space-1);
-		}
-
-		/* Quieter than the assertion it qualifies -- it is a caveat about
-		   where the row came from, not part of what she said. */
-		.elsewhere {
+		/* Both disclosures end an entry with something quieter than the
+		   entry itself: where the row came from, on a work state asserted
+		   before she joined, and who made the change, on a Membership
+		   event. Neither is part of what happened; both qualify it. */
+		.elsewhere,
+		.actor {
 			color: var(--color-on-surface-muted);
 		}
 	}
