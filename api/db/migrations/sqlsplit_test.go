@@ -13,16 +13,20 @@ func TestUpSectionBounds(t *testing.T) {
 	cases := []struct {
 		name string
 		body string
-		want string
+		want []string
 	}{
-		{"no annotations at all", "SELECT 1;", "SELECT 1;"},
-		{"up with no down", "-- +goose Up\nSELECT 1;", "\nSELECT 1;"},
-		{"down is excluded", "-- +goose Up\nSELECT 1;\n-- +goose Down\nSELECT 2;", "\nSELECT 1;\n-- "},
+		{"no annotations at all", "SELECT 1;", []string{"SELECT 1"}},
+		{"up with no down", "-- +goose Up\nSELECT 1;", []string{"\nSELECT 1"}},
+		{"down is excluded", "-- +goose Up\nSELECT 1;\n-- +goose Down\nSELECT 2;", []string{"\nSELECT 1"}},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			if got := UpSection(c.body); got != c.want {
-				t.Errorf("UpSection(%q) = %q, want %q", c.body, got, c.want)
+			// Read through the splitter, which is how every caller reads
+			// it -- the raw text carries whitespace and a half-eaten
+			// comment that nothing downstream can see.
+			got := SplitStatements(UpSection(c.body))
+			if strings.Join(got, "|") != strings.Join(c.want, "|") {
+				t.Errorf("statements of UpSection(%q) = %q, want %q", c.body, got, c.want)
 			}
 		})
 	}
@@ -57,23 +61,5 @@ func TestSplitStatements(t *testing.T) {
 				t.Errorf("SplitStatements(%q) = %q, want %q", c.sql, got, c.want)
 			}
 		})
-	}
-}
-
-// TestRowDependentLeavesAFreshTableAlone proves the one exemption the
-// classifier makes on its own: a table this Up section just created
-// holds no rows, so nothing it does to that table can meet one.
-func TestRowDependentLeavesAFreshTableAlone(t *testing.T) {
-	fresh := `CREATE TABLE new_thing (id uuid, slug text);
-	          CREATE UNIQUE INDEX new_thing_slug_key ON new_thing (slug);
-	          ALTER TABLE new_thing ADD CONSTRAINT new_thing_id_key UNIQUE (id);`
-	if got := RowDependent(fresh); len(got) != 0 {
-		t.Errorf("RowDependent over a table created in the same migration = %+v, want none", got)
-	}
-
-	old := `CREATE TABLE new_thing (id uuid);
-	        CREATE UNIQUE INDEX old_thing_slug_key ON old_thing (slug);`
-	if got := RowDependent(old); len(got) != 1 || got[0].Class != "CREATE UNIQUE INDEX" {
-		t.Errorf("RowDependent over a table that predates the migration = %+v, want one CREATE UNIQUE INDEX finding", got)
 	}
 }

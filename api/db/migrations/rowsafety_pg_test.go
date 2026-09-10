@@ -2,15 +2,16 @@
 // there is asserted here against a real Postgres instead of against the
 // Postgres documentation: each case builds the same schema twice, once
 // empty (what a pull request's testdb gives every migration) and once
-// holding a single row (what trunk's migrate job finds on
-// doula-cloud-pg), and requires the statement to succeed in the first
-// and fail in the second. That difference is the whole defect class of
-// #1021, and the reason a green PR proves nothing about migrate,
-// deploy-api or deploy-app -- all three run only on a push to trunk.
+// loaded (what trunk's migrate job finds on doula-cloud-pg -- one row,
+// or the fewest rows the class needs), and requires the statement to
+// succeed in the first and fail in the second. That difference is the
+// whole defect class of #1021, and the reason a green PR proves nothing
+// about migrate, deploy-api or deploy-app -- all three run only on a
+// push to trunk.
 //
 // Each case also records what the guardrail did before #1139 widened it:
-// legacyCaught is the pattern the guardrail shipped with, and every case
-// but the first one it never matched.
+// legacyCaught is the pattern the guardrail shipped with, and a case
+// that does not set legacy must be one it never matched.
 
 package migrations_test
 
@@ -42,15 +43,22 @@ func legacyCaught(stmt string) bool {
 // rowCase is one statement shape, the schema it needs, and the single
 // row that makes trunk refuse it.
 type rowCase struct {
-	// name is the class, spelled as rowsafety.go names it.
+	// name is the case, and the class rowsafety.go must report unless
+	// class says otherwise.
 	name string
+	// class overrides name where two cases prove the same class by
+	// different routes.
+	class string
 	// schema is the DDL both worlds get. It never depends on rows.
 	schema string
 	// row populates the loaded world, and only that one.
 	row string
-	// pre runs in both worlds after row, for the setup a statement needs
-	// that must not itself see the row first.
+	// pre runs in both worlds after row, for setup the statement needs
+	// that would itself have refused the row had it run first.
 	pre string
+	// legacy says the guardrail as #1022 shipped it already caught this
+	// class. Exactly one case sets it.
+	legacy bool
 	// stmt is the statement a migration's Up section would carry.
 	stmt string
 	// safe, when set, is the same intent written so no existing row can
@@ -67,6 +75,28 @@ var rowCases = []rowCase{
 		stmt:   `ALTER TABLE t ADD COLUMN amount_cents bigint NOT NULL;`,
 		safe: `ALTER TABLE t ADD COLUMN amount_cents bigint NOT NULL DEFAULT 0;
 		       ALTER TABLE t ALTER COLUMN amount_cents DROP DEFAULT;`,
+		legacy: true,
+	},
+	{
+		// The hole a per-statement reading of DEFAULT leaves: DEFAULT
+		// makes NOT NULL safe and is exactly what makes an inline
+		// constraint unsafe, since every existing row is handed the
+		// same value to be checked.
+		name: "ADD COLUMN ... DEFAULT with an inline constraint",
+		schema: `CREATE TABLE parent (id int PRIMARY KEY);
+		         CREATE TABLE t (id int);`,
+		row:  `INSERT INTO t VALUES (1);`,
+		stmt: `ALTER TABLE t ADD COLUMN parent_id int NOT NULL DEFAULT 99 REFERENCES parent (id);`,
+	},
+	{
+		// The hole a per-statement reading of NOT VALID leaves: one
+		// action's marker must not cover the action beside it.
+		name:   "a NOT VALID action beside one without it",
+		class:  "ADD CONSTRAINT ... CHECK",
+		schema: `CREATE TABLE t (id int, amount bigint);`,
+		row:    `INSERT INTO t VALUES (1, -1);`,
+		stmt: `ALTER TABLE t ADD CONSTRAINT t_id_positive CHECK (id > 0) NOT VALID,
+		                     ADD CONSTRAINT t_amount_positive CHECK (amount > 0);`,
 	},
 	{
 		name:   "ALTER COLUMN ... SET NOT NULL",
@@ -146,14 +176,15 @@ var rowCases = []rowCase{
 func TestEachRowClassIsRealAndCaught(t *testing.T) {
 	for _, c := range rowCases {
 		t.Run(c.name, func(t *testing.T) {
-			if got := migrations.RowDependent(upWrap(c.stmt)); len(got) != 1 || got[0].Class != c.name {
-				t.Fatalf("RowDependent(%s) = %+v, want exactly one finding of class %q", c.stmt, got, c.name)
+			class := c.class
+			if class == "" {
+				class = c.name
 			}
-			if c.name != rowCases[0].name && legacyCaught(c.stmt) {
-				t.Errorf("the pre-#1139 guardrail already caught %q; this case proves nothing new", c.name)
+			if got := migrations.RowDependent(upWrap(c.stmt)); len(got) != 1 || got[0].Class != class {
+				t.Fatalf("RowDependent(%s) = %+v, want exactly one finding of class %q", c.stmt, got, class)
 			}
-			if c.name == rowCases[0].name && !legacyCaught(c.stmt) {
-				t.Errorf("the pre-#1139 guardrail should still catch %q", c.name)
+			if got := legacyCaught(c.stmt); got != c.legacy {
+				t.Errorf("the pre-#1139 guardrail caught %q = %v, want %v -- a case it already caught proves nothing new", c.name, got, c.legacy)
 			}
 
 			db := testdb.New(t)
