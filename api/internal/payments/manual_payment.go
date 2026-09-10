@@ -198,7 +198,15 @@ func PostManualPaymentHandler(client Client) http.Handler {
 			return
 		}
 		if paidOn.After(time.Now().UTC().Truncate(24 * time.Hour)) {
-			apierr.WriteError(w, "paidOn cannot be in the future", http.StatusBadRequest)
+			// The details value names no calendar day -- not "today", not a
+			// date (#1062). The comparison above still runs against UTC's
+			// day rather than the Practice's own (#1167, ADR-0036), so a
+			// wording that named a day would name the wrong one for the
+			// last hours of every Eastern day, and would have to be
+			// rewritten once that comparison moves.
+			apierr.Write(w, http.StatusBadRequest, apierr.CodeInvalidArgument,
+				"paidOn cannot be in the future",
+				map[string]string{"paidOn": "paidOn cannot be in the future"})
 			return
 		}
 

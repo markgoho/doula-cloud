@@ -8,6 +8,8 @@ import (
 	"testing"
 	"time"
 
+	"doula-cloud/api/internal/apierr"
+	"doula-cloud/api/internal/apierrtest"
 	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/payments"
 	"doula-cloud/api/internal/testdb"
@@ -207,7 +209,11 @@ func TestPostManualPaymentHandler_InvalidMethodRefused(t *testing.T) {
 }
 
 // TestPostManualPaymentHandler_FutureDateRefused proves paidOn cannot be
-// in the future.
+// in the future, and that the refusal names the field it is about
+// (#1062): a client puts a details entry beside the control it is keyed
+// by, and this one used to arrive with nothing but a summary. The
+// summary message itself is asserted unchanged -- #1062 adds a details
+// map and rewords nothing.
 func TestPostManualPaymentHandler_FutureDateRefused(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "manual-payment-future-date"
@@ -223,6 +229,17 @@ func TestPostManualPaymentHandler_FutureDateRefused(t *testing.T) {
 
 	if resp.StatusCode != http.StatusBadRequest {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
+	}
+	out := apierrtest.Decode(t, resp)
+	const want = "paidOn cannot be in the future"
+	if out.Details["paidOn"] != want {
+		t.Fatalf("details[paidOn] = %q, want %q", out.Details["paidOn"], want)
+	}
+	if out.Message != want {
+		t.Fatalf("message = %q, want it unchanged at %q", out.Message, want)
+	}
+	if out.Code != apierr.CodeInvalidArgument {
+		t.Fatalf("code = %q, want %q", out.Code, apierr.CodeInvalidArgument)
 	}
 }
 
