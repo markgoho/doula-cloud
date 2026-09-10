@@ -79,22 +79,33 @@
 		/>
 	{:else}
 		<!-- `novalidate`: this page refuses the submit, not the browser. -->
+		<!--
+			#660: the fields are stacked by the form, not by `EntryPage`.
+			`EntryPage` spaces the top-level siblings of its `content` region,
+			and `LabeledField` spaces its own label, hint and control -- but
+			`stack-l`'s rule reaches a child, never a grandchild, so without
+			this wrapper the label of one field sits flush against the input
+			above it. `var(--space-5)` is the same token `FormPage` spends on
+			a fieldset's content, so a form reads the same on both archetypes.
+		-->
 		<form onsubmit={handleSubmit} novalidate>
-			<LabeledField id={emailId} label="Email" error={submission.errorFor(emailId)}>
-				{#snippet children({ id, describedBy, invalid })}
-					<TextInput
-						{id}
-						{describedBy}
-						{invalid}
-						type="email"
-						value={email}
-						onInput={(value) => (email = value)}
-						required
-						autocomplete="username"
-					/>
-				{/snippet}
-			</LabeledField>
-			<Button type="submit" label="Send me a sign-in link" loading={submission.isSubmitting} />
+			<stack-l space="var(--space-5)">
+				<LabeledField id={emailId} label="Email" error={submission.errorFor(emailId)}>
+					{#snippet children({ id, describedBy, invalid })}
+						<TextInput
+							{id}
+							{describedBy}
+							{invalid}
+							type="email"
+							value={email}
+							onInput={(value) => (email = value)}
+							required
+							autocomplete="username"
+						/>
+					{/snippet}
+				</LabeledField>
+				<Button type="submit" label="Send me a sign-in link" loading={submission.isSubmitting} />
+			</stack-l>
 		</form>
 	{/if}
 {/snippet}
