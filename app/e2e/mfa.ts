@@ -33,9 +33,12 @@ import { signIn } from './auth';
 // Platform accepts the same body and clears the factor -- #1128 probed
 // it against the real project on 2026-09-10, and the fact and its whole
 // reasoning live on ClearSecondFactors' own doc comment, which is the
-// one place to correct if this is ever re-probed. Verified against
-// firebase-tools 15.27 (apiSpec.js's GoogleCloudIdentitytoolkitV1MfaInfo)
-// and firebase.google.com/go/v4 v4.21.0.
+// one place to correct if this is ever re-probed. The schema was read in
+// both firebase-tools 15.27.0 (what app/node_modules holds) and 15.28.1
+// (what package.json pins): apiSpec.js's
+// GoogleCloudIdentitytoolkitV1MfaInfo types `enrollments` as `array`,
+// with no null allowed, in each. The SDK side is
+// firebase.google.com/go/v4 v4.21.0, its newest release.
 const EMULATOR_URL = `http://${E2E_EMULATOR_HOST}:${E2E_EMULATOR_PORT}`;
 const API_URL = `http://${E2E_API_HOST}:${E2E_API_PORT}`;
 
