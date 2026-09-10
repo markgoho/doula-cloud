@@ -207,6 +207,7 @@ type APIError struct {
 }
 ```
 5. **One Writer**: `api/internal/apierr` is the only place this shape is written from. Every handler calls `apierr.Write` (or `apierr.WriteError` for the common status+message case) rather than `http.Error` or a package-local helper; a new endpoint that needs a `Code` not yet in `apierr.Code`'s enumerated set adds one there (#529). The success body has the same rule: every handler calls `apierr.WriteJSON(w, status, v)` rather than setting `Content-Type` and calling `json.NewEncoder(w).Encode` itself, and every request-body decode calls `apierr.DecodeJSON(w, r, &v)`, which wraps the body in `http.MaxBytesReader` at `apierr.MaxRequestBodyBytes` (1 MiB) before decoding (#842).
+6. **A 403 says which kind of refusal it is** (#918). `403` on its own carries no cause, so a client that keys off the status alone can only assert one — and the app's error page asserted "your role does not have permission" for every 403 alike, including two that are not about a role. `apierr.ForbiddenCodes` is the closed set a 403 may carry, one entry per kind of thing the reader can do about it: `FORBIDDEN` for a role refusal (which `CodeForStatus` hands every 403 that names no more specific reason, so it is also the default), `PRACTICE_PENDING_DELETION` for a Practice-level condition that is nothing about the reader, and `MFA_REQUIRED` for a step the reader can take and then try again. A fourth kind of 403 adds a fourth code there and a fourth state on the app's error page, rather than a fourth shade of the role-refusal wording. `apierr`'s `TestEveryForbiddenWriteCarriesARecordedCode` fails the build on a `Write` that pairs a literal 403 with a code outside the set; the app reads an absent or unrecognized code as the role refusal, so an older client meets today's wording rather than nothing.
 
 ---
 
@@ -223,4 +224,4 @@ When adding or modifying an HTTP endpoint in `api/`:
 | **Idempotency** | Non-idempotent mutating `POST` actions accept `Idempotency-Key`. |
 | **Pagination** | Lists use cursor pagination with a standard `PaginatedResponse[T]` envelope. |
 | **Lean Payloads** | Expensive relations are opt-in via `?include=`. |
-| **Errors** | Refusals go through `apierr.Write`/`apierr.WriteError`, never `http.Error` or a package-local helper. A 4xx a form can cause carries `details` keyed by the DTO's `json:` tag, worded for a person. |
+| **Errors** | Refusals go through `apierr.Write`/`apierr.WriteError`, never `http.Error` or a package-local helper. A 4xx a form can cause carries `details` keyed by the DTO's `json:` tag, worded for a person. A 403 carries a code from `apierr.ForbiddenCodes`, so the reader is told which kind of refusal it is. |

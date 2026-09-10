@@ -110,6 +110,35 @@ const (
 	CodeOfferCodeExhausted Code = "OFFER_CODE_EXHAUSTED"
 )
 
+// ForbiddenCodes is the recorded set of reason codes a 403 may carry
+// (#918), and the reason the app's error page can tell one 403 from
+// another at all.
+//
+// Before this set existed, 403 was the only signal a refusal carried
+// across the wire, so the error page asserted the one cause a status
+// code cannot actually name -- "your role does not have permission" --
+// for every 403 alike, including two that are not about a role at all.
+// Three codes, one per kind of thing a reader can do about it:
+//
+//   - CodeForbidden -- a role refusal. CodeForStatus hands this to every
+//     403 that names no more specific reason, so it is also the default,
+//     and the app reads an absent or unrecognized code the same way.
+//   - CodePracticePendingDeletion -- a Practice-level condition. Nothing
+//     about the reader; a different Practice-level fact has to change.
+//   - CodeMFARequired -- a step the reader can take. Trying again does
+//     nothing, but enrolling a second factor and then trying again does.
+//
+// A fourth kind of 403 needs a fourth code here and a fourth state on
+// the app's error page, not a fourth shade of the role-refusal copy.
+// TestEveryForbiddenWriteCarriesARecordedCode holds the set closed: a
+// literal http.StatusForbidden paired with a code outside it -- in an
+// apierr.Write call or in a refusal struct literal -- fails the build.
+var ForbiddenCodes = map[Code]bool{
+	CodeForbidden:               true,
+	CodePracticePendingDeletion: true,
+	CodeMFARequired:             true,
+}
+
 // APIError is docs/api-design.md section 7's structured error shape.
 //
 // Code is the enumerated Code type, not a bare string: #811 retyped it so

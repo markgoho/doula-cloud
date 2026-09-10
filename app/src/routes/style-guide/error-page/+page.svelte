@@ -1,11 +1,13 @@
 <script lang="ts">
 	/*
-	 * All four kinds, not just notFound. #475 walked govuk-alignment.md's
+	 * Every kind, not just notFound. #475 walked govuk-alignment.md's
 	 * Aligned rows in a browser and found that Service unavailable and
 	 * There is a problem could not be walked at all -- the only place either
 	 * template state renders is a real 503 or 500, which no local stack
 	 * produces on demand. A style-guide entry that shows one of a
-	 * component's four states hides the other three.
+	 * component's states hides the rest. #918 added two more of them --
+	 * the two 403 reasons that are not a role refusal, neither of which
+	 * a local stack produces on demand either.
 	 */
 	import ErrorPage from '#lib/components/templates/ErrorPage.svelte';
 	import type { ErrorKind } from '#lib/errorPage.js';
@@ -25,6 +27,16 @@
 		{
 			kind: 'refused',
 			heading: 'Refused by role (403)',
+			wayOutLabel: 'Go to the Highland Midwifery Practice overview'
+		},
+		{
+			kind: 'practiceLocked',
+			heading: 'Practice locked (403 PRACTICE_PENDING_DELETION)',
+			wayOutLabel: 'Go to the Highland Midwifery Practice overview'
+		},
+		{
+			kind: 'secondFactor',
+			heading: 'Second sign-in factor (403 MFA_REQUIRED)',
 			wayOutLabel: 'Go to the Highland Midwifery Practice overview'
 		},
 		{

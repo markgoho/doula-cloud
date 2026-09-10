@@ -13,7 +13,7 @@
 </script>
 
 <ErrorPage
-	kind={errorKindForStatus(page.status)}
+	kind={errorKindForStatus(page.status, page.error?.code)}
 	wayOutHref={resolve('/portal/(authenticated)/engagements/[engagementId]', { engagementId })}
 	wayOutLabel="Go to your care"
 />

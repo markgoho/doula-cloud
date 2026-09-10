@@ -53,11 +53,14 @@ describe('engagements/[engagementId]/+page.ts load', () => {
 	// belongs in practices/+error.svelte rather than in a local error
 	// string the page owns.
 	it('throws a 403 SvelteKit error on a refusal, for practices/+error.svelte to render', async () => {
-		setup(403, 'not permitted to read this');
+		setup(403, { code: 'FORBIDDEN', message: 'not permitted to read this' });
 
+		// The reason rides along with the status (#918), so
+		// practices/+error.svelte renders the state matching the refusal
+		// rather than one state for every 403 alike.
 		await expect(callLoad()).rejects.toMatchObject({
 			status: 403,
-			body: { message: 'not permitted to read this' }
+			body: { code: 'FORBIDDEN', message: 'not permitted to read this' }
 		});
 	});
 

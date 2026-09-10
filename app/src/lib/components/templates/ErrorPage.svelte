@@ -3,9 +3,19 @@
 	 * Archetype for the page nobody wrote (#471): a `+error.svelte` renders
 	 * this instead of falling through to SvelteKit's default. GOV.UK's three
 	 * patterns -- page not found, there is a problem with the service,
-	 * service unavailable -- plus the refusal ADR-0008's read gate produces.
+	 * service unavailable -- plus the refusals a 403 can be.
 	 * Each `kind` answers the one thing GOV.UK says the person actually
 	 * needs: whether trying again will help.
+	 *
+	 * Three kinds are a 403, one per code in `apierr.ForbiddenCodes`
+	 * (#918). `refused` is ADR-0008's read gate and the fallback for a
+	 * refusal that names no reason: nothing will change, because a role
+	 * is not something the reader can go and alter. `practiceLocked` is
+	 * a fact about the Practice and says who can undo it, since telling
+	 * a Practice Owner her own role is the problem would be false.
+	 * `secondFactor` is the one refusal here a reader can clear herself,
+	 * so it is the one that does not end by saying trying again is
+	 * pointless -- it names the step, and trying again after it works.
 	 *
 	 * No chrome here, per ADR-0018 -- the nearest `+layout.svelte` above the
 	 * failure renders it. This owns only the gutter, the max-width, and the
@@ -33,6 +43,14 @@
 		refused: {
 			title: 'You cannot view this',
 			body: 'Your role does not have permission to see this. Trying again will not change that.'
+		},
+		practiceLocked: {
+			title: 'This Practice is locked',
+			body: 'Somebody has started deleting this Practice, so its screens are closed. A Practice Owner can restore it, or the deletion finishes on its own.'
+		},
+		secondFactor: {
+			title: 'Set up a second sign-in factor',
+			body: 'This Practice asks for a second sign-in factor before its screens open. Set one up from your Account screen, then try this page again.'
 		},
 		unavailable: {
 			title: 'Doula Cloud is unavailable',

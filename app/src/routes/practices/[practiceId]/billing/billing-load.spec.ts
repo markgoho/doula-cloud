@@ -45,6 +45,20 @@ describe('billing/+page.ts load', () => {
 		});
 	});
 
+	// #918: the refusal reason survives the trip from the BFF to
+	// practices/+error.svelte. Before it did, this load flattened every
+	// 403 into one sentence and the error page had only the status left
+	// to guess a cause from.
+	it('carries the refusal reason through, rather than flattening every 403 into one sentence', async () => {
+		const { load } = await import('./+page.js');
+		setup(403, { code: 'MFA_REQUIRED', message: 'this Practice requires a second sign-in factor' });
+
+		await expect(load({ params: { practiceId: 'practice-1' } } as Parameters<typeof load>[0])).rejects.toMatchObject({
+			status: 403,
+			body: { code: 'MFA_REQUIRED' }
+		});
+	});
+
 	it('throws with the response status on any other failure', async () => {
 		const { load } = await import('./+page.js');
 		setup(500, 'boom');
