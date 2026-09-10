@@ -512,6 +512,28 @@ describe('staff screen', () => {
 				describedByText(testPage.getByRole('button', { name: 'Show older changes' }))
 			).toBe(ownerMember.name);
 		});
+
+		/*
+		 * #667: the sibling of #515's Buttons. Without this every row's
+		 * disclosure announces the same three words, so a screen-reader user
+		 * tabbing the roster -- or reading the rotor's list of controls --
+		 * hears "Work state history" once per Member with nothing telling the
+		 * rows apart. A <summary> computes its accessible name from its own
+		 * content (HTML-AAM name-from-content), so the text this query
+		 * matches is the name itself -- which is also why the fix needs no id
+		 * and no aria-describedby, and so never meets #666's duplicate ids.
+		 */
+		it('names each row disclosure by the member it belongs to', async () => {
+			await setup();
+			const tableView = membersTable();
+
+			await expect
+				.element(tableView.getByText(`Work state history for ${ownerMember.name}`))
+				.toBeVisible();
+			await expect
+				.element(tableView.getByText(`Work state history for ${contractorMember.name}`))
+				.toBeVisible();
+		});
 	});
 
 	// #515: a screen-reader user tabbing through the roster hears the same
