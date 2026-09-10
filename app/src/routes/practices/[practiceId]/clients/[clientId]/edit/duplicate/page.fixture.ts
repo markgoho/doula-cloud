@@ -80,7 +80,7 @@ export const matches: CollisionMatch[] = [
  * renders the screen a reader would actually meet.
  */
 export function seedEditMergeDraft(): void {
-	editMergeDraft.open(clientId, fields, matches, true);
+	editMergeDraft.open(clientId, fields, matches);
 }
 
 // eslint-disable-next-line unicorn/no-top-level-side-effects -- installing state IS what a fixture does: the sweep mounts this route without the edit page's 409 that would have filled it, and the module has no other moment to do it in.

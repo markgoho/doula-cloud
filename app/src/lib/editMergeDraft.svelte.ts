@@ -45,20 +45,19 @@ export class EditMergeDraft {
 	 * The possible duplicates gate two named.
 	 */
 	matches = $state<CollisionMatch[]>([]);
-	/** Whether "This is her" is offered at all, or only "No, a different
-	 * person" is (ADR-0017's amendment: only while `clientId` holds no
-	 * Engagement, Engagement Request, portal invitation or portal
-	 * account). */
-	mergeOffered = $state(false);
-
 	/**
 	 * Opens the draft with one edit's refused attempt.
+	 *
+	 * There was a `mergeOffered` flag here until #813 (ADR-0039), saying
+	 * whether "This is her" was available at all. It always is now: two
+	 * records that both carry history merge, and attachment only decides
+	 * which of them survives -- which each match's own `wouldSurvive`
+	 * already says.
 	 */
-	open(clientId: string, fields: ClientEditFields, matches: CollisionMatch[], isMergeOffered: boolean): void {
+	open(clientId: string, fields: ClientEditFields, matches: CollisionMatch[]): void {
 		this.clientId = clientId;
 		this.fields = fields;
 		this.matches = matches;
-		this.mergeOffered = isMergeOffered;
 	}
 
 	/** Everything the draft holds, gone -- what a save that went through,
@@ -67,7 +66,6 @@ export class EditMergeDraft {
 		this.clientId = '';
 		this.fields = blankEditFields();
 		this.matches = [];
-		this.mergeOffered = false;
 	}
 }
 

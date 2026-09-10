@@ -72,7 +72,7 @@ describe('a direct load with nothing in the draft', () => {
 	});
 });
 
-describe('when a merge is possible (mergeOffered: true)', () => {
+describe("when gate two names a possible duplicate", () => {
 	it('offers every match plus a different person, and says nothing has been saved yet', async () => {
 		await setup();
 
@@ -136,7 +136,7 @@ describe('when a merge is possible (mergeOffered: true)', () => {
 
 	it('goes straight to the merge when nothing typed differs from the survivor', async () => {
 		const noChangeMatch: CollisionMatch = { ...matches[0]!, ...fields, id: 'client-5', wouldSurvive: true };
-		editMergeDraft.open(clientId, fields, [noChangeMatch], true);
+		editMergeDraft.open(clientId, fields, [noChangeMatch]);
 		await setup({ respond: jsonResponse({ id: noChangeMatch.id, ...fields }) });
 
 		await testPage.getByLabelText(displayName(noChangeMatch)).first().click();
@@ -154,7 +154,7 @@ describe('when a merge is possible (mergeOffered: true)', () => {
 			phone: '555-0199',
 			wouldSurvive: false
 		};
-		editMergeDraft.open(clientId, survivorFields, [absorbed], true);
+		editMergeDraft.open(clientId, survivorFields, [absorbed]);
 		const survivorName = displayName({ ...survivorFields, id: clientId });
 		await setup({ search: `?match=${absorbed.id}`, respond: jsonResponse({ id: clientId, ...survivorFields }) });
 
@@ -185,17 +185,37 @@ describe('when a merge is possible (mergeOffered: true)', () => {
 	});
 });
 
-describe('when no merge is possible (mergeOffered: false)', () => {
-	it('offers no match, explains why, and saves as a different person on the only choice', async () => {
-		editMergeDraft.open(clientId, fields, matches, false);
-		await setup({ respond: jsonResponse({ id: clientId, ...fields }) });
+describe('what the page says a merge actually does', () => {
+	// #813 (ADR-0039) removed the page that said no merge was possible.
+	// What replaced it is not silence: the word "merge" promises more than
+	// the act delivers, so the screen has to say what it does not do
+	// before she chooses it.
+	it('offers a match even when the record being edited carries history', async () => {
+		const attachedMatch: CollisionMatch = { ...matches[0]!, wouldSurvive: false };
+		editMergeDraft.open(clientId, fields, [attachedMatch]);
+		await setup();
 
-		await expect.element(testPage.getByRole('radio')).not.toBeInTheDocument();
+		await expect.element(testPage.getByLabelText(displayName(attachedMatch)).first()).toBeVisible();
 		await expect
 			.element(testPage.getByText("can't be combined with another record", { exact: false }))
-			.toBeVisible();
+			.not.toBeInTheDocument();
+	});
 
-		await testPage.getByRole('button', { name: 'Yes, a different person' }).click();
+	it('says the two histories stay two, that spent Credits stay spent, and that it cannot be undone', async () => {
+		await setup();
+
+		await expect.element(testPage.getByText('cannot be undone', { exact: false })).toBeVisible();
+		await expect
+			.element(testPage.getByText('does not join the two histories', { exact: false }))
+			.toBeVisible();
+		await expect.element(testPage.getByText('stay spent', { exact: false })).toBeVisible();
+	});
+
+	it('still offers "No, a different person" as the other answer', async () => {
+		await setup({ respond: jsonResponse({ id: clientId, ...fields }) });
+
+		await testPage.getByLabelText('No, a different person').click();
+		await testPage.getByRole('button', { name: 'Continue' }).click();
 
 		expect(requestBody(0).override).toBe(true);
 		expect(goto).toHaveBeenCalledWith(detailHref(clientId));
