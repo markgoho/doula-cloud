@@ -75,11 +75,15 @@ type erasureScope struct {
 	// removed, never whether the login itself survived because another
 	// Practice still reaches it (#830).
 	PortalAccount bool `json:"portalAccount"`
-	// SessionsEnded counts the sessions this act actually ended. A
-	// session is the person's, not a Practice's -- one reaches every
-	// Client she has -- so erasure ends them only when it is also taking
-	// the login, and this is 0 whenever the login survives.
-	SessionsEnded             int        `json:"sessionsEnded"`
+	// There is deliberately no session count here (#830). A session is
+	// the person's, not a Practice's -- one reaches every Client she has
+	// -- so erasure ends her sessions only when it is also taking the
+	// login, and a count would therefore read 0 exactly when another
+	// Practice still reaches her. An Owner who knows she was signed in an
+	// hour ago could read that 0 as "somebody else serves her", which is
+	// the fact ADR-0015 keeps inside the portal. What the sessions did is
+	// a consequence of the login's fate, and the login's fate is not this
+	// Practice's to be told.
 	StripeRedactionEligibleAt *time.Time `json:"stripeRedactionEligibleAt,omitempty"`
 	// PaymentNotes counts manually recorded Payments (#271) whose note
 	// this erasure emptied -- the same "count, never the value" rule
@@ -301,7 +305,7 @@ func Erase(ctx context.Context, tx *sql.Tx, practiceID, clientID string, actor a
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		return ErasureResponse{}, err
 	}
-	portalQueued, sessionsEnded, err := enqueuePortalErasure(ctx, tx, clientID)
+	portalQueued, err := enqueuePortalErasure(ctx, tx, clientID)
 	if err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		return ErasureResponse{}, err
@@ -311,7 +315,6 @@ func Erase(ctx context.Context, tx *sql.Tx, practiceID, clientID string, actor a
 		Contracts:                 contracts,
 		StripeCustomers:           len(customers),
 		PortalAccount:             portalQueued,
-		SessionsEnded:             sessionsEnded,
 		StripeRedactionEligibleAt: eligibleAt,
 		PaymentNotes:              paymentNotes,
 		PaymentReversalReasons:    paymentReversalReasons,
@@ -653,17 +656,17 @@ func enqueueStripeErasure(ctx context.Context, tx *sql.Tx, practiceID, clientID 
 // portal link at this Practice was removed", true in both branches, so
 // no Owner can read a Practice she has nothing to do with off her own
 // erasure's result.
-func enqueuePortalErasure(ctx context.Context, tx *sql.Tx, clientID string) (queued bool, sessionsEnded int, err error) {
+func enqueuePortalErasure(ctx context.Context, tx *sql.Tx, clientID string) (queued bool, err error) {
 	var identityUID sql.NullString
 	err = tx.QueryRowContext(ctx,
 		`SELECT identity_uid FROM client_portal_users WHERE client_id = $1`, clientID,
 	).Scan(&identityUID)
 	if errors.Is(err, sql.ErrNoRows) {
-		return false, 0, nil
+		return false, nil
 	}
 	if err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		return false, 0, fmt.Errorf("client: read portal account: %w", err)
+		return false, fmt.Errorf("client: read portal account: %w", err)
 	}
 	if !identityUID.Valid {
 		// An invitation that was never accepted: there is no Identity
@@ -673,17 +676,37 @@ func enqueuePortalErasure(ctx context.Context, tx *sql.Tx, clientID string) (que
 			`UPDATE client_portal_users SET invite_token = NULL, invite_token_expires_at = NULL WHERE client_id = $1`, clientID,
 		); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			return false, 0, fmt.Errorf("client: revoke pending portal invite: %w", err)
+			return false, fmt.Errorf("client: revoke pending portal invite: %w", err)
 		}
-		return false, 0, nil
+		return false, nil
 	}
 
-	// Asked before anything is destroyed, and asked of the database
-	// rather than of a read this transaction could do itself: a sibling
-	// row lives at another Practice, which the erasing Practice's own RLS
-	// hides, so an inline NOT EXISTS would see nothing and answer "safe to
-	// delete" every time. portal_account_reaches_a_live_client (00108) is
-	// the SECURITY DEFINER door for exactly this one question.
+	// Serialized on the login before the question is asked. Two Practices
+	// erasing her at once would otherwise each read the other's Client as
+	// still un-erased under READ COMMITTED, each conclude the login is
+	// still reached, and both commit -- leaving a portal_accounts row
+	// holding her sign-in address that no Client reaches and that no
+	// policy can ever again admit to a delete. That orphan is exactly the
+	// PII ADR-0027 exists to scrub, and it is permanent.
+	//
+	// An advisory lock rather than SELECT ... FOR UPDATE: app_runtime
+	// holds SELECT, INSERT and DELETE on portal_accounts (00073) and no
+	// UPDATE, which a row lock requires. It is transaction-scoped, so the
+	// same COMMIT or ROLLBACK that settles this erasure releases it, and
+	// the waiter's next statement takes a fresh snapshot that sees the
+	// first one's answer. A hash collision between two unrelated logins
+	// costs one of them a short wait and nothing else.
+	if _, err := tx.ExecContext(ctx, `SELECT pg_advisory_xact_lock(hashtext($1))`, identityUID.String); err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		return false, fmt.Errorf("client: lock portal account: %w", err)
+	}
+
+	// Asked of the database rather than of a read this transaction could
+	// do itself: a sibling row lives at another Practice, which the
+	// erasing Practice's own RLS hides, so an inline NOT EXISTS would see
+	// nothing and answer "safe to delete" every time.
+	// portal_account_reaches_a_live_client (00108) is the SECURITY
+	// DEFINER door for exactly this one question.
 	//
 	// redactRecord has already stamped erased_at on the Client being
 	// erased by the time Erase calls this, so she is not her own sibling.
@@ -692,33 +715,10 @@ func enqueuePortalErasure(ctx context.Context, tx *sql.Tx, clientID string) (que
 		`SELECT portal_account_reaches_a_live_client($1)`, identityUID.String,
 	).Scan(&reachedElsewhere); err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		return false, 0, fmt.Errorf("client: check portal account reach: %w", err)
+		return false, fmt.Errorf("client: check portal account reach: %w", err)
 	}
 
-	// Sessions are hers, not this Practice's: one session reaches every
-	// Client she has, so ending them all is only defensible when the
-	// login itself is going. While the login survives, this Practice's
-	// own access is already cut by the UPDATE below -- clientauth
-	// recomputes her reachable set from client_portal_users on every
-	// request, so a row with no identity_uid is a Client she can no
-	// longer address, with or without a live cookie.
-	//
-	// Counted before the delete, not read off RowsAffected: #837 routes
-	// this through authn.EndAllSessions (the same call
-	// clientauth.EndAllSessionsHandler uses), which reports no count of
-	// its own -- authn is one of #834's already-deep modules, kept as
-	// found.
-	var ended int
 	if !reachedElsewhere {
-		if err := tx.QueryRowContext(ctx, `SELECT count(*) FROM sessions WHERE identity_uid = $1`, identityUID.String).Scan(&ended); err != nil {
-			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			return false, 0, fmt.Errorf("client: count portal sessions: %w", err)
-		}
-		if err := authn.EndAllSessions(ctx, tx, identityUID.String); err != nil {
-			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			return false, 0, fmt.Errorf("client: end portal sessions: %w", err)
-		}
-
 		// The Portal Account itself (#616) is deleted here, synchronously,
 		// rather than through the outbox above: unlike the Identity Platform
 		// account, deleting it is a plain Postgres statement with no outside
@@ -729,9 +729,38 @@ func enqueuePortalErasure(ctx context.Context, tx *sql.Tx, clientID string) (que
 		// that column must still hold the identifier when this DELETE runs.
 		// The FK's ON DELETE SET NULL (#616's migration) is what clears it,
 		// as this statement's own side effect.
-		if _, err := tx.ExecContext(ctx, `DELETE FROM portal_accounts WHERE identifier = $1`, identityUID.String); err != nil {
+		res, err := tx.ExecContext(ctx, `DELETE FROM portal_accounts WHERE identifier = $1`, identityUID.String)
+		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			return false, 0, fmt.Errorf("client: delete portal account: %w", err)
+			return false, fmt.Errorf("client: delete portal account: %w", err)
+		}
+		// The policy carries the same predicate the function just
+		// answered, so a row this transaction believed it could remove and
+		// then could not means the two disagreed -- an invitation accepted
+		// against this login between the two statements is the reachable
+		// way. Refusing the whole erasure is the safe reading: absorbing a
+		// zero-row delete would end every session she holds and leave the
+		// login standing, which is #830's own harm in a new place.
+		affected, err := res.RowsAffected()
+		// coverage:ignore reason: lib/pq always reports a row count for a DELETE, not exercised by unit tests
+		if err != nil {
+			return false, fmt.Errorf("client: count deleted portal accounts: %w", err)
+		}
+		if affected != 1 {
+			// coverage:ignore reason: needs a concurrent invitation accept between two statements of one transaction, not reachable from a unit test
+			return false, fmt.Errorf("client: portal account %q was not deleted: %d rows", identityUID.String, affected)
+		}
+
+		// Ended only here, where the login is going with them. A session
+		// is hers, not this Practice's -- one reaches every Client she has
+		// -- so while the login survives, this Practice's own access is cut
+		// by the UPDATE below instead: clientauth recomputes her reachable
+		// set from client_portal_users on every request, so a row with no
+		// identity_uid is a Client she can no longer address, with or
+		// without a live cookie.
+		if err := authn.EndAllSessions(ctx, tx, identityUID.String); err != nil {
+			// coverage:ignore reason: DB query failure, not exercised by unit tests
+			return false, fmt.Errorf("client: end portal sessions: %w", err)
 		}
 	}
 
@@ -744,9 +773,9 @@ func enqueuePortalErasure(ctx context.Context, tx *sql.Tx, clientID string) (que
 		`UPDATE client_portal_users SET identity_uid = NULL, invite_token = NULL, invite_token_expires_at = NULL WHERE client_id = $1`, clientID,
 	); err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		return false, 0, fmt.Errorf("client: clear portal identity: %w", err)
+		return false, fmt.Errorf("client: clear portal identity: %w", err)
 	}
-	return true, ended, nil
+	return true, nil
 }
 
 // recordErasure writes the one activity row that outlives the shredding:

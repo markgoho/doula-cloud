@@ -1,6 +1,7 @@
 package client_test
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -682,9 +683,10 @@ func portalReach(t *testing.T, db *testdb.DB, clientID, portalUID string) (linke
 	return linkedUID, accounts, sessions
 }
 
-// erasureScopeOf decodes the plaintext 'erased' activity row's diff --
-// what the act says it covered, in the erasing Practice's own history.
-func erasureScopeOf(t *testing.T, db *testdb.DB, clientID string) (portalAccount bool, sessionsEnded int) {
+// erasureScopeRaw reads the plaintext 'erased' activity row's diff as it
+// was written -- what the act says it covered, in the erasing Practice's
+// own history, with nothing decoded away.
+func erasureScopeRaw(t *testing.T, db *testdb.DB, clientID string) []byte {
 	t.Helper()
 	var diff []byte
 	if err := db.Admin.QueryRowContext(t.Context(),
@@ -692,14 +694,7 @@ func erasureScopeOf(t *testing.T, db *testdb.DB, clientID string) (portalAccount
 	).Scan(&diff); err != nil {
 		t.Fatalf("query erased activity row: %v", err)
 	}
-	var scope struct {
-		PortalAccount bool `json:"portalAccount"`
-		SessionsEnded int  `json:"sessionsEnded"`
-	}
-	if err := json.Unmarshal(diff, &scope); err != nil {
-		t.Fatalf("decode erasure scope: %v", err)
-	}
-	return scope.PortalAccount, scope.SessionsEnded
+	return diff
 }
 
 // TestEraseHandler_LeavesTheLoginAnotherPracticeStillReaches is #830's
@@ -751,13 +746,7 @@ func TestEraseHandler_LeavesTheLoginAnotherPracticeStillReaches(t *testing.T) {
 		t.Fatalf("the other Practice's identity_uid = %v, want %q untouched", linkedB, portalUID)
 	}
 
-	portalAccount, ended := erasureScopeOf(t, db, clientA)
-	if !portalAccount {
-		t.Fatal("erasureScope.portalAccount = false, want true -- her portal link at this Practice was removed")
-	}
-	if ended != 0 {
-		t.Fatalf("erasureScope.sessionsEnded = %d, want 0 -- the login survived, so no session was hers to end", ended)
-	}
+	scopeA := erasureScopeRaw(t, db, clientA)
 
 	srvB, sessionB := newServer(t, db, uidB)
 	defer srvB.Close()
@@ -778,7 +767,21 @@ func TestEraseHandler_LeavesTheLoginAnotherPracticeStillReaches(t *testing.T) {
 		t.Fatalf("portal sessions = %d, want 0 -- she must not still be signed in", sessions)
 	}
 
-	if _, ended = erasureScopeOf(t, db, clientB); ended != 1 {
-		t.Fatalf("erasureScope.sessionsEnded = %d, want 1 -- the login went, and the session holding it with it", ended)
+	// The two Practices' own records of the act read identically. A
+	// Practice that keeps a login alive and a Practice that takes it away
+	// are told the same thing, so no Owner can read the existence of
+	// another Practice off her own erasure's history -- the erasing
+	// Practice's half of ADR-0015's "no Client fact crosses a Practice".
+	if scopeB := erasureScopeRaw(t, db, clientB); !bytes.Equal(scopeA, scopeB) {
+		t.Fatalf("erasure scopes differ:\n  survived login: %s\n  deleted login:  %s", scopeA, scopeB)
+	}
+	var scope struct {
+		PortalAccount bool `json:"portalAccount"`
+	}
+	if err := json.Unmarshal(scopeA, &scope); err != nil {
+		t.Fatalf("decode erasure scope: %v", err)
+	}
+	if !scope.PortalAccount {
+		t.Fatal("erasureScope.portalAccount = false, want true -- her portal link at this Practice was removed")
 	}
 }
