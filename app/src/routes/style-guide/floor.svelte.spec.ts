@@ -65,7 +65,15 @@ import { describe, expect, it } from 'vitest';
 import { registerLayoutPrimitives } from '#lib/primitives/index.js';
 import '#lib/styles/app.css';
 import { atomPages, moleculePages, organismPages, templatePages, toSlug } from './components.js';
-import { isCanonicalEnvironment, mountInFrame, RESOLUTION, TOLERANCE } from './continuum.js';
+import {
+	frameHolding,
+	isCanonicalEnvironment,
+	ledgerMarkup,
+	mountInFrame,
+	OVERFLOWING,
+	RESOLUTION,
+	TOLERANCE
+} from './continuum.js';
 import { toDemos, type PageModule } from './drag-surface/dragSurface.js';
 import {
 	capFloorReport,
@@ -508,4 +516,118 @@ describe('the floor check (#564)', () => {
 			it.skip(`${minimalityName} (skipped outside the canonical environment)`, () => {});
 		}
 	}
+});
+
+/*
+ * What the floor check's own overflow measurement does to a disclosure
+ * before it measures one (#1124).
+ *
+ * The sweep learned to open a closed `<details>` on #710 and this check was
+ * deliberately left alone: it takes its own measurement, and no condition it
+ * has discovered sits behind a disclosure today. That made the gap latent
+ * rather than live, and latent is still blind -- the day a component
+ * declares a content floor for a tree inside a disclosure, sufficiency
+ * passes because an empty box overflows nothing and minimality fails to
+ * fail, which reads as the floor being wrong rather than as the instrument
+ * being unable to see.
+ *
+ * The subject is `continuum.ts`'s own `frameHolding`/`ledgerMarkup` rather
+ * than a second copy beside this file, and the fix is that module's
+ * `openDisclosures` rather than a second copy of the query -- the same
+ * instrument, reached from the second of its two measurements.
+ *
+ * The first assertion is the blind spot itself, kept rather than deleted:
+ * a plain `scrollWidth` read is exactly what `measureOverflow` was before
+ * this ticket, and it is the guard on everything the rest rests on.
+ */
+describe("the floor check's overflow measurement, over a closed disclosure (#1124)", () => {
+	const AT_WIDTH = 320;
+
+	it('lays out nothing at all while the disclosure stays closed', () => {
+		const { frame, remove } = frameHolding(ledgerMarkup());
+		try {
+			atWidth(frame, AT_WIDTH);
+
+			expect(frame.scrollWidth).toBe(AT_WIDTH);
+		} finally {
+			remove();
+		}
+	});
+
+	it('measures the content a closed disclosure was hiding', () => {
+		const { frame, remove } = frameHolding(ledgerMarkup());
+		try {
+			atWidth(frame, AT_WIDTH);
+
+			const measurement = measureOverflow(frame, AT_WIDTH);
+
+			expect(measurement.needed).toBeGreaterThanOrEqual(OVERFLOWING);
+			expect(isOverflowAcceptable(measurement)).toBe(false);
+		} finally {
+			remove();
+		}
+	});
+
+	/*
+	 * `querySelector` deliberately, as in `continuum.svelte.spec.ts`'s own
+	 * pair: what this asserts is a fact about the instrument -- that it put
+	 * back the DOM property it changed -- and `open` is that property, where
+	 * a `<summary>`'s `aria-expanded` would assert the browser's mapping of
+	 * it instead.
+	 */
+	it('leaves the disclosure closed again afterwards', () => {
+		const { frame, remove } = frameHolding(ledgerMarkup());
+		try {
+			atWidth(frame, AT_WIDTH);
+			measureOverflow(frame, AT_WIDTH);
+
+			expect(frame.querySelector('details')?.open).toBe(false);
+		} finally {
+			remove();
+		}
+	});
+
+	it('leaves a disclosure the subject ships open alone', () => {
+		const { frame, remove } = frameHolding(ledgerMarkup(true));
+		try {
+			atWidth(frame, AT_WIDTH);
+			measureOverflow(frame, AT_WIDTH);
+
+			expect(frame.querySelector('details')?.open).toBe(true);
+		} finally {
+			remove();
+		}
+	});
+
+	/*
+	 * A measurement must not be an action -- the same property #710 pinned
+	 * on the sweep, restated here because this is a second caller of the
+	 * open/undo pair and the property belongs to the caller's own task, not
+	 * to the pair in the abstract. The Staff roster loads a row's histories
+	 * from an `ontoggle` handler, so a measurement that left a handler
+	 * seeing `open` would make measuring a screen issue that screen's
+	 * requests.
+	 */
+	it('never lets a toggle handler see the disclosure open', async () => {
+		const { frame, remove } = frameHolding(ledgerMarkup());
+		try {
+			const openStates: boolean[] = [];
+			const disclosure = frame.querySelector('details')!;
+			disclosure.addEventListener('toggle', () => {
+				openStates.push(disclosure.open);
+			});
+
+			atWidth(frame, AT_WIDTH);
+			const measurement = measureOverflow(frame, AT_WIDTH);
+			await new Promise((resolve) => setTimeout(resolve, 50));
+
+			// That the measurement saw the hidden content is what says it
+			// really did open the disclosure -- without it this passes on a
+			// measurement that never touched one.
+			expect(measurement.needed).toBeGreaterThanOrEqual(OVERFLOWING);
+			expect(openStates).not.toContain(true);
+		} finally {
+			remove();
+		}
+	});
 });
