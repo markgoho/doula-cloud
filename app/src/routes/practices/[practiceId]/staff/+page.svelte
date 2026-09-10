@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { SvelteSet } from 'svelte/reactivity';
+	import { SvelteMap } from 'svelte/reactivity';
 	import { page } from '#lib/appState.svelte.js';
 	import { resolve } from '$app/paths';
 	import { apiFetchWithSession } from '#lib/api.js';
@@ -14,12 +14,14 @@
 		updateMembership,
 		type InvitationSummary,
 		type MembershipChange,
-		type MembershipHistory,
 		type StaffSummary,
-		type WorkStateChange,
-		type WorkStateHistory
+		type WorkStateChange
 	} from '#lib/staff.js';
-	import { PaginatedList } from '#lib/paginatedList.svelte.js';
+	import {
+		PaginatedList,
+		type DeferredPaginatedList,
+		type PageLoader
+	} from '#lib/paginatedList.svelte.js';
 	import DataTable, { type DataTableView } from '#lib/components/organisms/DataTable.svelte';
 	import Heading from '#lib/components/atoms/Heading.svelte';
 	import Text from '#lib/components/atoms/Text.svelte';
@@ -69,29 +71,35 @@
 	let isSavingEdit = $state(false);
 	let editError = $state('');
 
-	// The history behind one member's "Works from" value (#459). Fetched
-	// when its disclosure is opened, never with the roster: the roster is
-	// one row per person and would otherwise grow with every correction
-	// anybody has ever made, which is the one thing this screen must not
-	// do.
-	let histories = $state<Record<string, WorkStateHistory>>({});
-	// Who has been asked for already: it stops a second open from asking
-	// again, because an append-only trail that was right a second ago is
-	// still right. Nothing renders it, but it is a SvelteSet because the
-	// repo's lint rule admits no unreactive Set.
-	const requestedHistories = new SvelteSet<string>();
-	let historyLoading = $state<Record<string, boolean>>({});
-	let historyError = $state<Record<string, string>>({});
+	/*
+	 * The two histories a roster row carries: what is behind her "Works
+	 * from" value (#459), and what is behind the row itself (#872). Each
+	 * is fetched when its disclosure is opened, never with the roster --
+	 * the roster is one row per person, and would otherwise grow with
+	 * every correction and every role change anybody has ever made.
+	 *
+	 * One deferred `PaginatedList` per member per history (#1149), rather
+	 * than the four parallel records per disclosure this screen used to
+	 * keep: the pages so far, whether one is in flight, the last failure,
+	 * and who had been asked for at all. The list owns all four, plus the
+	 * three guards the roster's own pair never had -- a superseded page
+	 * cannot land, a repeated ask is one request, and a zero-item page
+	 * with more to come is paged past (#709). A third history on this row
+	 * is a third map, not a third copy of the machinery.
+	 */
+	/*
+	 * One work state entry as this screen reads it: the endpoint's own
+	 * fields, plus whether the assertion predates her Membership here. A
+	 * contractor doula who recorded her work state at another Practice
+	 * carries that row into this one, and the screen must not read as
+	 * though she said it here (#459) -- so the answer travels with the
+	 * entry rather than the snippet asking a second question about the
+	 * page the entry came on.
+	 */
+	type WorkStateEntry = WorkStateChange & { beforeJoining: boolean };
 
-	// The history behind the roster row itself (#872) -- how this person
-	// came to hold these roles and this employment type. Its own state,
-	// its own fetch record and its own disclosure, on the same terms as
-	// the work state history above: opened on demand, never loaded with
-	// the roster, asked for once.
-	let membershipHistories = $state<Record<string, MembershipHistory>>({});
-	const requestedMembershipHistories = new SvelteSet<string>();
-	let membershipHistoryLoading = $state<Record<string, boolean>>({});
-	let membershipHistoryError = $state<Record<string, string>>({});
+	const workStateHistories = new SvelteMap<string, DeferredPaginatedList<WorkStateEntry>>();
+	const membershipHistories = new SvelteMap<string, DeferredPaginatedList<MembershipChange>>();
 
 	let revokeError = $state<Record<string, string>>({});
 
@@ -151,68 +159,68 @@
 
 	onMount(loadRoster);
 
-	// One page of a member's work state history, appended to whatever is
-	// already on screen. cursor is undefined for the first page.
-	async function loadWorkStateHistory(staffId: string, cursor?: string) {
-		historyError[staffId] = '';
-		historyLoading[staffId] = true;
-		try {
-			const loaded = await fetchWorkStateHistory(
-				apiFetchWithSession,
-				page.params.practiceId!,
-				staffId,
-				cursor
-			);
-			const existing = cursor ? (histories[staffId]?.items ?? []) : [];
-			histories[staffId] = { ...loaded, items: [...existing, ...loaded.items] };
-		} catch (error_) {
-			historyError[staffId] =
-				error_ instanceof Error ? error_.message : 'Failed to load work state history';
-		} finally {
-			historyLoading[staffId] = false;
-		}
+	/*
+	 * The list holding one member's history of `kind`, made the first time
+	 * anything asks for it and kept from then on -- reopening a disclosure
+	 * finds the entries it already has rather than fetching them twice,
+	 * because an append-only trail that was correct a second ago is still
+	 * correct.
+	 */
+	function historyFor<Item>(
+		histories: SvelteMap<string, DeferredPaginatedList<Item>>,
+		staffId: string,
+		loadPage: PageLoader<Item>,
+		failureMessage: string
+	): DeferredPaginatedList<Item> {
+		const existing = histories.get(staffId);
+		if (existing) return existing;
+		const history = PaginatedList.deferred<Item>({ loadPage, failureMessage });
+		histories.set(staffId, history);
+		return history;
 	}
 
-	// Opening the disclosure is what asks for the history; closing and
-	// reopening does not ask again, because an append-only trail that was
-	// correct a second ago is still correct. HistoryDisclosure calls this
-	// on an open only, never on a close.
-	function handleHistoryToggle(staffId: string) {
-		if (requestedHistories.has(staffId)) {
-			return;
-		}
-		requestedHistories.add(staffId);
-		void loadWorkStateHistory(staffId);
+	/*
+	 * Opening the disclosure is what asks for the history; HistoryDisclosure
+	 * calls this on an open only, never on a close, and `ask` is what makes
+	 * a second open cost no second request.
+	 *
+	 * Each entry is marked here with whether it was made before she joined
+	 * this Practice, rather than the snippet asking the page a second
+	 * question: `memberSince` belongs to the page the entry arrived on, and
+	 * folding it in as the page lands is what keeps it from becoming a
+	 * parallel record of its own.
+	 */
+	function openWorkStateHistory(staffId: string) {
+		void historyFor(
+			workStateHistories,
+			staffId,
+			async (cursor) => {
+				const loaded = await fetchWorkStateHistory(
+					apiFetchWithSession,
+					page.params.practiceId!,
+					staffId,
+					cursor
+				);
+				return {
+					...loaded,
+					items: loaded.items.map((change) => ({
+						...change,
+						beforeJoining: isBeforeJoining(change, loaded.memberSince)
+					}))
+				};
+			},
+			'Failed to load work state history'
+		).ask();
 	}
 
-	// One page of a member's Membership history, appended to whatever is
-	// already on screen. cursor is undefined for the first page.
-	async function loadMembershipHistoryPage(staffId: string, cursor?: string) {
-		membershipHistoryError[staffId] = '';
-		membershipHistoryLoading[staffId] = true;
-		try {
-			const loaded = await fetchMembershipHistory(
-				apiFetchWithSession,
-				page.params.practiceId!,
-				staffId,
-				cursor
-			);
-			const existing = cursor ? (membershipHistories[staffId]?.items ?? []) : [];
-			membershipHistories[staffId] = { ...loaded, items: [...existing, ...loaded.items] };
-		} catch (error_) {
-			membershipHistoryError[staffId] =
-				error_ instanceof Error ? error_.message : 'Failed to load membership history';
-		} finally {
-			membershipHistoryLoading[staffId] = false;
-		}
-	}
-
-	function handleMembershipHistoryToggle(staffId: string) {
-		if (requestedMembershipHistories.has(staffId)) {
-			return;
-		}
-		requestedMembershipHistories.add(staffId);
-		void loadMembershipHistoryPage(staffId);
+	function openMembershipHistory(staffId: string) {
+		void historyFor(
+			membershipHistories,
+			staffId,
+			(cursor) =>
+				fetchMembershipHistory(apiFetchWithSession, page.params.practiceId!, staffId, cursor),
+			'Failed to load membership history'
+		).ask();
 	}
 
 	// What one entry says. A first assertion (no previous value, migration
@@ -334,26 +342,26 @@
 		purchase before that date was apportioned on -- had nowhere to be
 		read.
 	-->
-	{@const history = histories[member.staffId]}
+	{@const history = workStateHistories.get(member.staffId)}
 	<HistoryDisclosure
 		label="Work state history"
 		subjectName={member.name}
-		items={history?.items}
-		key={(change: WorkStateChange) => change.eventId}
-		error={historyError[member.staffId]}
+		items={history?.entries}
+		key={(change: WorkStateEntry) => change.eventId}
+		error={history?.loadMoreError}
 		emptyMessage="Nothing recorded."
 		hasMore={history?.hasMore ?? false}
-		isLoadingMore={historyLoading[member.staffId]}
+		isLoadingMore={history?.isLoadingMore}
 		loadMoreLabel="Show older changes"
 		idPrefix="{view}-{member.staffId}-work-state"
-		onOpen={() => handleHistoryToggle(member.staffId)}
-		onLoadMore={() => loadWorkStateHistory(member.staffId, history?.nextCursor)}
+		onOpen={() => openWorkStateHistory(member.staffId)}
+		onLoadMore={() => history?.loadMore()}
 		entry={workStateEntry}
 	/>
-	{#snippet workStateEntry(change: WorkStateChange)}
+	{#snippet workStateEntry(change: WorkStateEntry)}
 		{workStateChangeSentence(change)} &mdash;
 		<time datetime={change.createdAt}>{workStateReportedOn(change.createdAt)}</time>
-		{#if history && isBeforeJoining(change, history.memberSince)}
+		{#if change.beforeJoining}
 			<span class="elsewhere">(before joining this practice)</span>
 		{/if}
 	{/snippet}
@@ -366,20 +374,20 @@
 		until this disclosure none of it could be read anywhere in the
 		product.
 	-->
-	{@const membershipHistory = membershipHistories[member.staffId]}
+	{@const membershipHistory = membershipHistories.get(member.staffId)}
 	<HistoryDisclosure
 		label="Membership history"
 		subjectName={member.name}
-		items={membershipHistory?.items}
+		items={membershipHistory?.entries}
 		key={(change: MembershipChange) => change.eventId}
-		error={membershipHistoryError[member.staffId]}
+		error={membershipHistory?.loadMoreError}
 		emptyMessage="Nothing recorded."
 		hasMore={membershipHistory?.hasMore ?? false}
-		isLoadingMore={membershipHistoryLoading[member.staffId]}
+		isLoadingMore={membershipHistory?.isLoadingMore}
 		loadMoreLabel="Show older membership changes"
 		idPrefix="{view}-{member.staffId}-membership"
-		onOpen={() => handleMembershipHistoryToggle(member.staffId)}
-		onLoadMore={() => loadMembershipHistoryPage(member.staffId, membershipHistory?.nextCursor)}
+		onOpen={() => openMembershipHistory(member.staffId)}
+		onLoadMore={() => membershipHistory?.loadMore()}
 		entry={membershipEntry}
 	/>
 	{#snippet membershipEntry(change: MembershipChange)}
