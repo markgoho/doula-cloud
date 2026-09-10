@@ -722,3 +722,44 @@ func TestSignContractHandler_ResponseReportsSignedPDF(t *testing.T) {
 		t.Fatalf("hasSignedPdf = false on the Sign response -- the screen that just signed would still hide the download")
 	}
 }
+
+// TestClientGetContractHandler_DraftBesideVoidedSignedReportsSignedPDF is
+// the portal's own reading of the same fixture: an Engagement whose
+// signed Contract was voided and then replaced by a fresh Draft. Her
+// client-tier RLS policy hides the Draft, so the Contract she reads is
+// the voided one -- and it reports its own PDF, which is the one the
+// route serves her. The case where a screen could still lose her copy
+// therefore does not exist, which is worth a test rather than an
+// assertion.
+func TestClientGetContractHandler_DraftBesideVoidedSignedReportsSignedPDF(t *testing.T) {
+	db := testdb.New(t)
+	const identityUID = "client-read-draft-beside-voided"
+	practiceID := testdb.SeedPractice(t, db, "Practice")
+	clientID, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jordan Client", "jordan@example.com")
+	testdb.SeedPortalUser(t, db, testdb.PortalUID(identityUID), clientID)
+	_, priorObjectPath := seedPriorSignedContract(t, db, engagementID)
+	seedContract(t, db, engagementID, "draft", mergeFieldProse)
+
+	store := objectstore.NewMemoryStore()
+	if err := store.Put(t.Context(), priorObjectPath, "application/pdf", bytes.NewReader([]byte(priorSignedPDFBytes))); err != nil {
+		t.Fatalf("seed stored pdf: %v", err)
+	}
+	srv, session := newPortalServerWithStore(t, db, identityUID, store)
+	defer srv.Close()
+
+	resp := getClientContract(t, srv, session, engagementID)
+	defer resp.Body.Close()
+	out := decodeContract(t, resp)
+	if out.Status != statusVoided {
+		t.Fatalf("status = %q, want %q -- the fresh Draft is hidden from her by RLS", out.Status, statusVoided)
+	}
+	if !out.HasSignedPDF {
+		t.Fatalf("hasSignedPdf = false while the route still serves her the Contract she signed")
+	}
+
+	pdfResp := getClientContractPDF(t, srv, session, engagementID)
+	defer pdfResp.Body.Close()
+	if pdfResp.StatusCode != http.StatusOK {
+		t.Fatalf("pdf route status = %d, want %d", pdfResp.StatusCode, http.StatusOK)
+	}
+}
