@@ -12,30 +12,33 @@
  * `staffName` carry it again, since both are exactly the free-text shape
  * `DataTable`/`ContractView` were already fixed against.
  *
- * One session is all this screen has, and that is a finding rather than
- * an omission (#928). This route reads four predicates -- `isOwner`,
- * `isOwnerOrAdmin`, `isDoula` and `isAmbientContractor` -- and hands two
- * of them down to `InvoiceSection` and `BirthOutcomeSection` as props, so
- * the branching continues below the route. Every one of those branches is
- * additive: not a single `{#if}` in the route or in either component
- * renders anything on the *negative* answer, and the two reads that a
- * narrower session is refused -- the roster and Offers -- answer
- * `undefined` rather than throwing, so their sections are left out
- * silently instead of drawing a refusal. The Contract and the Invoices
- * are `staffauth.AnyStaff`, so no session meets an error Notice here
- * either.
+ * Two sessions (#928). This route reads four predicates -- `isOwner`,
+ * `isOwnerOrAdmin`, `isDoula` and `isAmbientContractor` -- and hands
+ * three of them down to `ContractStatus`, `InvoiceSection` and
+ * `BirthOutcomeSection` as props, so the branching continues below the
+ * route and the subset question has to be asked there too.
  *
- * The session below is an Owner who is also a Doula, which is therefore
- * the union of every tree this route can draw: an Admin loses the
- * InvoiceSection's Owner link and her own Visit default, a contractor
- * Doula loses the Contract's PDF download, the Offers section, the Visit
- * picker and the birth-outcome control. Each of those is the tree below
- * with things removed, and a strict subset realizes nothing the sweep has
- * not already measured (svelte-tests.md, ADR-0025).
+ * Nearly all of it is additive, and the two reads a narrower session is
+ * refused -- the roster and Offers -- answer `undefined` rather than
+ * throwing, so their sections are left out silently instead of drawing a
+ * refusal; the Contract and the Invoices are `staffauth.AnyStaff`, so no
+ * session meets an error Notice here either. One branch is not additive,
+ * and it is the reason this route has a second declared session: #971's
+ * `onRequestVoid` is wired the other way round -- `isOwnerOrAdmin ?
+ * undefined : handleRequestVoidContract` -- so a Doula who is neither
+ * Owner nor Admin reads a whole affordance the base cannot draw. See
+ * `asDoula` below.
+ *
+ * Everything else is the base with things taken away. An Admin loses the
+ * InvoiceSection's Owner link and her own Visit default; a contractor
+ * Doula loses what `asDoula` has plus the Contract's PDF download and the
+ * birth-outcome control, so she is a strict subset of that variant rather
+ * than a third screen. A strict subset realizes nothing the sweep has
+ * already measured (svelte-tests.md, ADR-0025).
  */
 import type { Contract } from '#lib/contract.js';
 import { jsonResponse } from '#lib/testResponse.js';
-import type { RouteFixture } from '../../../../routeFixture.js';
+import type { RouteFixture, RouteVariant } from '../../../../routeFixture.js';
 import type { RouteParams as RouteParameters } from './$types';
 import Page from './+page.svelte';
 
@@ -157,9 +160,11 @@ export const detail = {
  * The `draft` branch is not declared here: it is a different Contract,
  * not a different session, and the route spec reaches it by spreading
  * this one. The Doula branch -- who is offered "Request void" rather than
- * Void -- is a session, and belongs to this route's `variants` under
- * [#928](https://github.com/markgoho/doula-cloud/issues/928) with the rest
- * of the sessions this screen renders differently under.
+ * Void -- is a session, and is now declared as `asDoula` below
+ * ([#928](https://github.com/markgoho/doula-cloud/issues/928)). This
+ * Contract's `signed` status is what makes that branch reachable at all:
+ * `ContractStatus` gates the whole request-void affordance on
+ * `status === 'signed' && onRequestVoid`.
  *
  * The values are hostile per #537: the Client's own double-barreled name
  * again, the Practice's full name, a four-figure price, a scope that runs
@@ -246,8 +251,49 @@ export const session = {
 	isContractor: true
 };
 
+/*
+ * The Doula's own reading of this Engagement (#928), and the one session
+ * besides the base with something of its own on screen.
+ *
+ * #971 wires `onRequestVoid` the opposite way from every other role prop
+ * on this page -- `isOwnerOrAdmin ? undefined : handleRequestVoidContract`
+ * -- because asking for a signed Contract to be voided is the errand of
+ * somebody who cannot void it herself. So `ContractStatus` opens a whole
+ * region to her that the base fixture's Owner-Doula cannot reach, and
+ * until now it was swept never.
+ *
+ * Which of that region's three states she lands in is the inherited
+ * Contract's doing, and the widest of them is the one she gets: the
+ * Contract above already carries an open void request, so she reads
+ * "Void requested -- waiting for an owner or admin to decide." where the
+ * Owner reads her Decline control. The other two are a single secondary
+ * Button, and the reason form behind it, which needs a click the sweep
+ * never makes.
+ *
+ * An employee Doula rather than a contractor one, because she is the
+ * wider of the two: `isAmbientContractor` would take away the Contract's
+ * PDF download and the birth-outcome controls and add nothing, so the
+ * contractor is a strict subset of this branch.
+ *
+ * `props`, not `pageData`: this route reads `data.session`, handed to it
+ * by its own `+page.ts` (#695), and `props` is restated whole -- so the
+ * Engagement itself is spread back in beside the changed session.
+ * `respond` is inherited deliberately. It answers the roster and the
+ * Offers a real Doula would be refused, which leaves her holding two
+ * sections she would not really have; that costs nothing, because both
+ * are already measured on the base, and the alternative is a second
+ * `respond` restating twelve answers to remove content rather than add
+ * it. The fixture is already deliberately not role-consistent for the
+ * same reason its Clients-list sibling is: what the sweep asks is how
+ * much room the widest line needs.
+ */
+export const asDoula: RouteVariant<RouteParameters> = {
+	name: 'The Staff-side Engagement detail hub, as a Doula',
+	props: { data: { ...detail, session: { ...session, roles: ['doula'], isContractor: false } } }
+};
+
 export const fixture: RouteFixture<RouteParameters> = {
-	name: 'The Staff-side Engagement detail hub',
+	name: 'The Staff-side Engagement detail hub, as an Owner who is also a Doula',
 	component: Page,
 	params: { practiceId: 'practice-1', engagementId: 'engagement-1' },
 	url: 'https://example.test/practices/practice-1/engagements/engagement-1',
@@ -317,5 +363,6 @@ export const fixture: RouteFixture<RouteParameters> = {
 		}
 		throw new Error(`engagements/[engagementId] fixture: unmatched fetch path ${path}`);
 	},
-	readyText: clientName
+	readyText: clientName,
+	variants: [asDoula]
 };

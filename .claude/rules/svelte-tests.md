@@ -221,6 +221,19 @@ second time under the variant's name, and nothing says so: the check
 goes green, the drag surface offers two entries that draw the same
 screen, and the branch is still swept never (#928).
 
+**Where a branch's extra answers go is a judgement, and it turns on
+whether an unanswered path is loud.** A variant that needs a read the
+base never makes can carry its own `respond`, or the base's can answer
+that path harmlessly for a branch that never asks. Prefer the base's
+where the route swallows a failed read — the Practice landing hub's
+`block()` turns an unanswered path into "Could not load …", so a
+variant with its own narrower `respond` would draw a smaller rail and
+the sweep would stay green about it. Prefer the variant's where the
+extra read is the branch's whole point and the base's `respond` would
+otherwise grow a path nothing reaches (the Client detail hub's
+`/erasure`). Either way it is a replacement, never a merge, so say in
+the comment which way it went and why.
+
 **A session that cannot reach the screen is not a session to declare.**
 Where a `+page.ts` refuses a read, the refused caller renders
 `practices/+error.svelte` and not the route at all, so a `{#if}` on her
