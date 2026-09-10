@@ -451,6 +451,22 @@ func TestSeedGrantedAttachment(t *testing.T) {
 	}
 }
 
+// TestPracticeOfClient proves the read-back helper answers with the
+// Practice the Client was seeded under. The fixture builders hand back
+// the Client and not the Practice behind it, so a test that needs both
+// -- clientauth's two-Practice ledger case, portalinvite's same-Practice
+// reuse refusal -- asks this rather than declaring its own copy of the
+// query.
+func TestPracticeOfClient(t *testing.T) {
+	db := testdb.New(t)
+	practiceID := testdb.SeedPractice(t, db, "Practice Of Client Test Practice")
+	clientID, _ := testdb.SeedEngagement(t, db, practiceID)
+
+	if got := testdb.PracticeOfClient(t, db, clientID); got != practiceID {
+		t.Fatalf("PracticeOfClient = %q, want the Practice the Client was seeded under, %q", got, practiceID)
+	}
+}
+
 // TestSeedEngagement proves the Client and Engagement it inserts are
 // actually linked to each other and to practiceID -- every package
 // deciding Engagement-scoped access against a fixture relies on that
