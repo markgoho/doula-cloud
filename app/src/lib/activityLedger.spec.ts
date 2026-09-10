@@ -121,6 +121,34 @@ describe('activityLedgerColumns', () => {
 
 		expect(what.accessor(entry({ action: 'invoice_raised' }))).toBe('Invoice raised');
 	});
+
+	it('names the person a roster change happened to (#1148)', () => {
+		const what = activityLedgerColumns()[1];
+
+		expect(
+			what.accessor(
+				entry({ action: 'roles_changed', subjectKind: 'membership', subjectName: 'Renata Alvarez' })
+			)
+		).toBe('Roles changed — Renata Alvarez');
+	});
+
+	it('leaves an entry with no subject name exactly as it reads today (#1148)', () => {
+		const what = activityLedgerColumns()[1];
+
+		expect(what.accessor(entry({ action: 'invoice_raised', subjectKind: 'engagement' }))).toBe(
+			'Invoice raised'
+		);
+	});
+
+	it("does not append a subject name to the server's own detail sentence (#1148)", () => {
+		const what = activityLedgerColumns()[1];
+
+		expect(
+			what.accessor(
+				entry({ detail: 'Visit reassigned from Ana Silva to Mira Osei', subjectName: 'Renata Alvarez' })
+			)
+		).toBe('Visit reassigned from Ana Silva to Mira Osei');
+	});
 });
 
 describe('clientActivityLedgerColumns (#708)', () => {
@@ -147,6 +175,14 @@ describe('clientActivityLedgerColumns (#708)', () => {
 				entry({ action: 'visit_logged', detail: 'Visit reassigned from Ana Silva to Mira Osei' })
 			)
 		).toBe('A visit was added to your care.');
+	});
+
+	it('never names a Staff member a subject name would carry (#1148)', () => {
+		const what = clientActivityLedgerColumns()[1];
+
+		expect(
+			what.accessor(entry({ action: 'plan_instance_edited', subjectName: 'Renata Alvarez' }))
+		).toBe('Your Birth Plan was updated.');
 	});
 
 	it('refuses an action the register does not phrase', () => {
