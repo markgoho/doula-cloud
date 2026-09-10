@@ -6,9 +6,9 @@
 	 * #484 asked either that `/` render inside a shell or that the reason
 	 * it does not be recorded; #357 built what `/` shows and never touched
 	 * chrome, so `/` rendered with no skip link, no `<main>` landmark and
-	 * no bar. Three of its four states -- the
-	 * signed-out landing, the Staff picker, the portal picker -- are pages
-	 * a person lands on and reads; only the single-destination redirect is
+	 * no bar. Three of its four states -- the signed-out landing, the
+	 * Staff picker, the portal picker -- are pages a
+	 * person lands on and reads; only the single-destination redirect is
 	 * gone before anyone sees it. A page a person reads gets the same
 	 * chrome as every other, so the decision is: `/` carries a shell.
 	 *
@@ -23,9 +23,17 @@
 	 *
 	 * Deliberately NOT swapped to `StaffTopBar`/`PortalTopBar` once
 	 * `data.type` resolves: each needs its own population's sign-out
-	 * handler and its own second render, on a page every item of which is
-	 * one click from a fully dressed shell that already carries sign-out.
-	 * Nobody is stranded here.
+	 * handler and its own second render, and in every state that offers a
+	 * destination each destination is one click away and lands in a fully
+	 * dressed shell that already carries sign-out.
+	 *
+	 * One state offers no destination: a Portal Account with no
+	 * Engagement at all, which reads NO_CARE_MESSAGE and holds a live
+	 * session with nothing to click. The reduced bar does not strand her
+	 * -- she was equally stuck before this ticket, on a page with no bar
+	 * at all -- but it does not release her either, and what that screen
+	 * should offer is a decision about what `/` shows rather than about
+	 * its chrome. Filed as #1116.
 	 *
 	 * The template is `EntryPage`, whose own doc comment already names
 	 * "a 'choose a Practice' or 'choose an Engagement' picker" as content
@@ -36,8 +44,9 @@
 	 * The signed-out state's heading used to be `Doula Cloud`. With the
 	 * bar above it now carrying the brand lockup, an `<h1>` repeating it
 	 * says nothing about the page; per ADR-0021 the heading names what
-	 * the page is for instead, and the tab title stops reading
-	 * `Doula Cloud — Doula Cloud`.
+	 * the page is for instead. `EntryPage` writes the tab title from the
+	 * same string, so the tab now names the page too rather than the
+	 * `Home` this route used to pass `PageTitle` directly.
 	 */
 	import { resolve } from '$app/paths';
 	import Link from '#lib/components/atoms/Link.svelte';
@@ -48,10 +57,8 @@
 
 	let { data }: PageProperties = $props();
 
-	const SIGNED_OUT_HEADING = 'Sign in or set up a Practice';
-
 	const HEADINGS: Record<RootLanding['type'], string> = {
-		'signed-out': SIGNED_OUT_HEADING,
+		'signed-out': 'Sign in or set up a Practice',
 		'staff-picker': 'Choose a Practice',
 		'portal-picker': CARE_HEADING
 	};

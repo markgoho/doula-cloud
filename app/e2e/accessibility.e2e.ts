@@ -44,9 +44,11 @@ const WCAG_TAGS = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'];
  *   scanned because they render the same nodes as the state that is --
  *   `EntryPage`, an `<h1>`, and a list of `Link`s -- while costing a
  *   Staff member with two Memberships and a Portal Account with two
- *   Engagements to provision. The portal picker's one extra node, a
- *   status paragraph joined to its link by `aria-describedby`, is
- *   `StepRail`'s own join and is scanned wherever that rail appears.
+ *   Engagements to provision. The one node they add that the scanned
+ *   state has not got is the portal picker's status paragraph, joined to
+ *   its link by `aria-describedby`; that join is asserted directly in
+ *   this repo's unit suite rather than here, since axe scans the DOM
+ *   instances it is pointed at and not the pattern behind them.
  */
 
 /**
