@@ -858,6 +858,36 @@ describe('the Contract PDF download is gated on the page (#302, amended by #969)
 	});
 });
 
+// #1119: the page passes the Contract's own hasSignedPdf through to
+// ContractStatus, so the control follows the PDF rather than the status.
+// Voiding a Contract used to take the Practice's copy of it off the
+// screen, while the endpoint went on serving it (#299).
+describe('the Contract PDF download survives a void (#1119)', () => {
+	beforeEach(() => {
+		apiFetchWithSession.mockReset();
+	});
+
+	it('offers the download on a voided Contract whose signed PDF still exists', async () => {
+		await testPage.viewport(1440, 900);
+		mockContract({ ...fixtureContract, status: 'voided', hasSignedPdf: true });
+		await render(Page, { data: { ...fixtureDetail, session }, params: fixture.params });
+
+		await expect.element(testPage.getByText('Status: voided')).toBeVisible();
+		await expect
+			.element(testPage.getByRole('button', { name: 'Download signed Contract (PDF)' }))
+			.toBeVisible();
+	});
+
+	it('offers no download on a voided Contract that was never signed', async () => {
+		await testPage.viewport(1440, 900);
+		mockContract({ ...fixtureContract, status: 'voided', hasSignedPdf: false });
+		await render(Page, { data: { ...fixtureDetail, session }, params: fixture.params });
+
+		await expect.element(testPage.getByText('Status: voided')).toBeVisible();
+		expect(testPage.getByRole('button', { name: 'Download signed Contract (PDF)' }).elements()).toHaveLength(0);
+	});
+});
+
 // #280: the Birth Plan's own address, one level down -- reading and
 // printing move there (see that route's own spec, including the PDF
 // download this file used to own before the move), and this page keeps

@@ -17,6 +17,7 @@ import Page from './+page.svelte';
 export const contract: Contract = {
 	engagementId: 'engagement-1',
 	status: 'sent',
+	hasSignedPdf: false,
 	prose: 'This Contract is between {{practice_name}} and {{client_name}} for {{scope_of_service}}.',
 	mergeFields: ['practice_name', 'client_name', 'scope_of_service'],
 	values: {

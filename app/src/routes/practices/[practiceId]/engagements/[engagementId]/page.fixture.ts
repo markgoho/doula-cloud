@@ -174,6 +174,7 @@ export const detail = {
 export const contract: Contract = {
 	engagementId: 'engagement-1',
 	status: 'signed',
+	hasSignedPdf: true,
 	prose:
 		'This agreement is between {{practice_name}} and {{client_name}}, for {{scope_of_service}}, beginning {{engagement_start_date}} and ending {{engagement_end_date}}, for a fee of {{price}}. Cancellation, refund and on-call terms are published at https://riverside-doula-collective.example.test/policies/client-agreement and are incorporated here by reference.',
 	mergeFields: [

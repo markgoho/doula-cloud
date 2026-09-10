@@ -81,7 +81,7 @@ describe('Client-portal signed Contract download (#302)', () => {
 			Promise.resolve(
 				path.endsWith('/pdf')
 					? new Response(new Blob(['%PDF-1.4'], { type: 'application/pdf' }), { status: 200 })
-					: jsonResponse({ ...contract, status: 'signed' })
+					: jsonResponse({ ...contract, status: 'signed', hasSignedPdf: true })
 			)
 		);
 
@@ -94,12 +94,37 @@ describe('Client-portal signed Contract download (#302)', () => {
 		expect(apiFetchWithSession).toHaveBeenCalledWith('/api/portal/engagements/engagement-1/contract/pdf');
 	});
 
+	// #1119: the control used to be gated on `status === 'signed'`, so the
+	// moment her Practice voided the Contract she had signed, she met no
+	// way to her own copy -- while the endpoint went on serving it (#299).
+	// The gate is the PDF's existence now, the same fact the endpoint
+	// keys on, so a void cannot take her copy away.
+	it('offers the download on a voided Contract she signed', async () => {
+		apiFetchWithSession.mockResolvedValue(jsonResponse({ ...contract, status: 'voided', hasSignedPdf: true }));
+
+		await render(Page);
+
+		await expect.element(page.getByText('No longer active')).toBeVisible();
+		await expect
+			.element(page.getByRole('button', { name: 'Download signed Contract (PDF)' }))
+			.toBeVisible();
+	});
+
+	it('offers no download on a voided Contract that was never signed', async () => {
+		apiFetchWithSession.mockResolvedValue(jsonResponse({ ...contract, status: 'voided', hasSignedPdf: false }));
+
+		await render(Page);
+
+		await expect.element(page.getByText('No longer active')).toBeVisible();
+		expect(page.getByRole('button', { name: 'Download signed Contract (PDF)' }).elements()).toHaveLength(0);
+	});
+
 	it('reports a failed PDF fetch in words rather than swallowing it (#305 is what fails this locally/in CI)', async () => {
 		apiFetchWithSession.mockImplementation((path: string) =>
 			Promise.resolve(
 				path.endsWith('/pdf')
 					? new Response('signed PDF not found', { status: 500 })
-					: jsonResponse({ ...contract, status: 'signed' })
+					: jsonResponse({ ...contract, status: 'signed', hasSignedPdf: true })
 			)
 		);
 

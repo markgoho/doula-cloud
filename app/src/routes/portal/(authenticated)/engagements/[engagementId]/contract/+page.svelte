@@ -82,7 +82,14 @@
 	{#if contract.status === 'sent'}
 		<SignContract onSign={handleSign} />
 	{/if}
-	{#if contract.status === 'signed'}
+	<!--
+		#1119: the control is gated on the PDF existing, never on the
+		Contract's status. A Contract her Practice has since voided is
+		still the one she signed, and the endpoint has always served it
+		(#299) -- gating on `status === 'signed'` here was the reason she
+		met no way to her own copy the moment it was voided.
+	-->
+	{#if contract.hasSignedPdf}
 		<Button
 			label="Download signed Contract (PDF)"
 			icon="file-text"

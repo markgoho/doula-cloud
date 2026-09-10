@@ -8,9 +8,17 @@
 	/**
 	 * Status display for a Contract on the Staff Engagement view: the raw
 	 * status, a clear terminal-state indicator once Voided, the PDF
-	 * download (#302) and the Void action -- both offered only on a Signed
-	 * Contract, since Void is a one-way transition into the terminal
-	 * Voided state and the PDF only exists once signed. The Client-portal
+	 * download (#302) and the Void action. Void is offered only on a
+	 * Signed Contract, since it is a one-way transition into the terminal
+	 * Voided state. The download is not: it is offered whenever a signed
+	 * PDF exists (hasSignedPdf, #1119), which a voided Contract's does --
+	 * voiding cancels the agreement and deliberately keeps the evidence
+	 * it was made (#299), and the endpoint has always served it. Two
+	 * separate gates, for two separate reasons: hasSignedPdf is the
+	 * existence gate, mirroring the endpoint's 404; the presence of
+	 * onDownloadPdf is the permission gate, mirroring its 403 for a
+	 * contractor. Gating the download on status instead was the drift
+	 * #1119 fixed. The Client-portal
 	 * Contract view stopped using this component on #212 (NH-G5): a Client
 	 * reads `clientRegister.ts`'s own label and voided notice, never this
 	 * component's Staff wording -- its own download control (#302) is
@@ -36,6 +44,7 @@
 	 */
 	let {
 		status,
+		hasSignedPdf = false,
 		amountChangedAt,
 		voidRequests = [],
 		onVoid,
@@ -44,6 +53,7 @@
 		onDeclineVoidRequest
 	}: {
 		status: string;
+		hasSignedPdf?: boolean;
 		amountChangedAt?: string;
 		voidRequests?: VoidRequestSummary[];
 		onVoid?: () => Promise<void>;
@@ -182,7 +192,7 @@
 	<p role="status">Voided — this Contract is no longer active.</p>
 {/if}
 
-{#if status === 'signed' && onDownloadPdf}
+{#if hasSignedPdf && onDownloadPdf}
 	<Button
 		label="Download signed Contract (PDF)"
 		icon="file-text"
