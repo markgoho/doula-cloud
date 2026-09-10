@@ -435,10 +435,23 @@ func listClientEvents(ctx context.Context, tx *sql.Tx, clientID string) ([]Event
 // presence at all.
 func readErasureState(ctx context.Context, tx *sql.Tx, clientID string) (erasedAt, redactionEligibleAt *time.Time, err error) {
 	var erased, eligible sql.NullTime
+	// The outbox is read over her surviving record AND every record
+	// merged into it (#813). A merge cannot move client_stripe_customers
+	// -- 00076 grants no UPDATE on that table -- so an absorbed record's
+	// Customers are erased under the absorbed record's own client_id, and
+	// a subquery keyed on the survivor alone would report the Stripe half
+	// finished while one of those redactions was still scheduled. Erase's
+	// own ErasureResponse already folds both, so this is the read
+	// agreeing with the write.
 	err = tx.QueryRowContext(ctx,
-		`SELECT c.erased_at,
+		`WITH RECURSIVE hers AS (
+		     SELECT $1::uuid AS id
+		     UNION ALL
+		     SELECT c.id FROM clients c JOIN hers h ON c.merged_into = h.id
+		 )
+		 SELECT c.erased_at,
 		        (SELECT max(o.redactable_after) FROM client_erasure_outbox o
-		          WHERE o.client_id = c.id AND o.redactable_after IS NOT NULL
+		          WHERE o.client_id IN (SELECT id FROM hers) AND o.redactable_after IS NOT NULL
 		            AND o.status <> 'sent')
 		 FROM clients c WHERE c.id = $1`,
 		clientID,
