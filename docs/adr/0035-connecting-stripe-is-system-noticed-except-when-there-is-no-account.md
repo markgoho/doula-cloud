@@ -27,7 +27,7 @@ This is not a departure from [ADR-0028](0028-the-shell-has-no-notification-bell.
 
 ### Recipients are not re-decided
 
-Every Owner the Practice currently has, resolved at send time from `staff`/`practice_memberships`, never stored on the row. That is #343's recorded rule and `payments.ownerEmails` is its implementation; #917's "all of them, or the one who created the account, or the sender's choice" is a question the precedent has already answered, and a second answer would mean two rules for who counts as an Owner of a Practice. A Practice with no Owners left is marked sent with nothing mailed, exactly as `SendAll` already handles for the payout mail.
+Every Owner the Practice currently has, resolved at send time from `staff`/`practice_memberships`, never chosen at queue time and never stored on the row as an instruction to the worker (what that resolution produced is written back afterwards — see the audit section below). That is #343's recorded rule and `payments.ownerEmails` is its implementation; #917's "all of them, or the one who created the account, or the sender's choice" is a question the precedent has already answered, and a second answer would mean two rules for who counts as an Owner of a Practice. A Practice with no Owners left is marked sent with nothing mailed, exactly as `SendAll` already handles for the payout mail.
 
 ### The bound is a cooldown, not an episode
 
