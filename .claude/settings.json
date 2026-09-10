@@ -116,7 +116,7 @@
           {
             "type": "command",
             "command": "bun \"$(git rev-parse --show-toplevel)/.claude/hooks/worktree-create.ts\"",
-            "timeout": 30
+            "timeout": 300
           }
         ]
       }
