@@ -10,7 +10,7 @@ import Page from './+page.svelte';
 // root layout.
 import '#lib/styles/app.css';
 import { toApiResponder, toPageState } from '../../routeFixture.js';
-import { fixture, offers, practiceName } from './page.fixture.js';
+import { asOwner, fixture, offers, practiceName } from './page.fixture.js';
 
 // Rendering `+page.svelte` directly bypasses `+layout.svelte`, which is the
 // only place that calls this in the real app -- without it every layout
@@ -242,6 +242,30 @@ describe('the Practice landing page', () => {
 		await expect.element(testPage.getByRole('button', { name: 'Accept' })).toBeVisible();
 		expect(testPage.getByRole('heading', { name: 'Your people' }).elements()).toHaveLength(0);
 		expect(testPage.getByRole('heading', { name: 'Credits' }).elements()).toHaveLength(0);
+	});
+
+	/*
+	 * The other half of the same pair, and the one guard the continuum
+	 * sweep cannot be (#928). The sweep mounts `asOwner` and measures it,
+	 * but `block()` in `practiceLanding.ts` swallows a thrown `respond`
+	 * into "Could not load ..." -- so a fixture that stopped answering one
+	 * of the Owner's four reads would draw a smaller rail and stay green
+	 * there. This asserts the fixture's own answers actually fill it.
+	 */
+	it('fills the whole rail for an Owner from the fixture that sweeps her', async () => {
+		Object.assign(pageState, toPageState({ ...fixture, ...asOwner }));
+		apiFetchWithSession.mockImplementation(toApiResponder(fixture));
+		await render(Page, {});
+
+		await expect.element(testPage.getByRole('heading', { name: 'Your people' })).toBeVisible();
+		await expect.element(testPage.getByText('4 invitations expired')).toBeVisible();
+		await expect.element(testPage.getByRole('heading', { name: 'Credits' })).toBeVisible();
+		await expect.element(testPage.getByText('1284')).toBeVisible();
+		await expect.element(testPage.getByText('30+ waiting')).toBeVisible();
+		await expect.element(testPage.getByText('Onboarding incomplete')).toBeVisible();
+		await expect
+			.element(testPage.getByText('Stripe is waiting on 3 more details.'))
+			.toBeVisible();
 	});
 
 	it('says so when a rail block fails, rather than letting it vanish', async () => {

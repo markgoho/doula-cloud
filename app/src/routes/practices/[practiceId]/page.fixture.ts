@@ -3,8 +3,10 @@
  *
  * A Doula role keeps `roster`/`credit`/`connect`/`requests` all
  * `undefined` (see `canReadRoster`/`canReadConnect` in
- * `practiceLanding.ts`), so only session, offers and the client-count
- * probe ever fetch -- the hub's title still carries #530's own URL as
+ * `practiceLanding.ts`), so on her branch only offers, the client-count
+ * probe, the awaiting-reply roll-up and the activity feed ever fetch --
+ * `respond` below answers the Owner's four blocks as well, for the reason
+ * written beside them. The hub's title still carries #530's own URL as
  * the Practice's registered name, and an Offer's `terms` carries #537's
  * hyphenated double-barrelled name where a Practice writes free text
  * about who it is offering the work to.
