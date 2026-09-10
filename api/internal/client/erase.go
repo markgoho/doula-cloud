@@ -689,9 +689,16 @@ func enqueuePortalErasure(ctx context.Context, tx *sql.Tx, clientID string) (que
 	// policy can ever again admit to a delete. That orphan is exactly the
 	// PII ADR-0027 exists to scrub, and it is permanent.
 	//
-	// An advisory lock rather than SELECT ... FOR UPDATE: app_runtime
-	// holds SELECT, INSERT and DELETE on portal_accounts (00073) and no
-	// UPDATE, which a row lock requires. It is transaction-scoped, so the
+	// An advisory lock rather than SELECT ... FOR UPDATE: a row lock
+	// applies portal_accounts' UPDATE policy as well as its SELECT one,
+	// and the only UPDATE policy the table has (00079) admits the row
+	// whose identifier equals app.current_identity_uid -- the Client's own
+	// session changing her own sign-in address. Inside a Staff
+	// transaction that variable never holds a Portal Account identifier,
+	// so FOR UPDATE would match no row and lock nothing at all, which
+	// looks exactly like a lock that was taken.
+	//
+	// It is transaction-scoped, so the
 	// same COMMIT or ROLLBACK that settles this erasure releases it, and
 	// the waiter's next statement takes a fresh snapshot that sees the
 	// first one's answer. A hash collision between two unrelated logins
@@ -742,7 +749,7 @@ func enqueuePortalErasure(ctx context.Context, tx *sql.Tx, clientID string) (que
 		// zero-row delete would end every session she holds and leave the
 		// login standing, which is #830's own harm in a new place.
 		affected, err := res.RowsAffected()
-		// coverage:ignore reason: lib/pq always reports a row count for a DELETE, not exercised by unit tests
+		// coverage:ignore reason: pgx always reports a row count for a DELETE, not exercised by unit tests
 		if err != nil {
 			return false, fmt.Errorf("client: count deleted portal accounts: %w", err)
 		}

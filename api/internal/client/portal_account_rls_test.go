@@ -65,7 +65,7 @@ func deleteLoginAs(t *testing.T, db *testdb.DB, practiceID, portalUID string) in
 	}
 	affected, err := res.RowsAffected()
 	if err != nil {
-		// coverage:ignore reason: lib/pq always reports a row count for a DELETE, not exercised by tests
+		// coverage:ignore reason: pgx always reports a row count for a DELETE, not exercised by tests
 		t.Fatalf("rows affected: %v", err)
 	}
 	return affected
