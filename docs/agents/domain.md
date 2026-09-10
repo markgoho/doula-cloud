@@ -10,6 +10,10 @@ How the engineering skills should consume this repo's domain documentation when 
 
 If any of these files don't exist, **proceed silently**. Don't flag their absence; don't suggest creating them upfront. The `/domain-modeling` skill (reached via `/grill-with-docs` and `/improve-codebase-architecture`) creates them lazily when terms or decisions actually get resolved.
 
+## Numbering a new ADR
+
+The next number is one past the highest already in `docs/adr/`, and a number is never reused. Take it as late as you can — two PRs that pick a number early and merge minutes apart both pick the same one, which is how ADR-0033 came to name two decisions ([#1053](https://github.com/markgoho/doula-cloud/issues/1053)). `app/src/lib/adrNumbers.usage.spec.ts` fails the build on a repeated number, so a collision is caught on the PR rather than after the merge; renumbering afterwards means finding and repointing every citation, which is the expensive half.
+
 ## File structure
 
 Single-context repo (most repos):

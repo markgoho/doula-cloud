@@ -215,7 +215,7 @@ export const CONNECT_NUDGE_SENT_MESSAGE =
  * 48-hour grace window before it sends, and skips the mail entirely if
  * the Owner finishes inside it. A past-tense claim would be false for
  * the first two days of every episode. This sentence is true at every
- * instant, which is the same standard ADR-0033 held its own derived
+ * instant, which is the same standard ADR-0037 held its own derived
  * facts to. */
 export const CONNECT_OWNERS_ALREADY_EMAILED_MESSAGE =
 	'Doula Cloud emails every Practice Owner when Stripe asks for something, so there is nothing to send from here.';

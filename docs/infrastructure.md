@@ -215,7 +215,7 @@ Terraform removed twelve bindings on the default compute account — project `ro
 
 Both are the same shape as [#1091](https://github.com/markgoho/doula-cloud/issues/1091): a binding that exists, matters, and is watched by nothing. Neither was drift — each was live and correct for the configuration that preceded it — but neither would have shown up in a diff if someone had added it yesterday.
 
-One unrelated thing, found while numbering ADR-0034: **two ADRs both number themselves 0033** — `0033-overdue-is-derived-and-notifies-nobody.md` and `0033-staff-login-deletion-is-immediate-and-redacts-the-person.md`. Renaming either one breaks existing links, so it is not done here. → [Two ADRs both number themselves 0033, so the citation names two decisions #1053](https://github.com/markgoho/doula-cloud/issues/1053)
+One unrelated thing, found while numbering ADR-0034: **two ADRs both numbered themselves 0033** — `0033-overdue-is-derived-and-notifies-nobody.md` and `0033-staff-login-deletion-is-immediate-and-redacts-the-person.md`. Renaming either one breaks existing links, so it was not done here. Fixed on [Two ADRs both number themselves 0033, so the citation names two decisions #1053](https://github.com/markgoho/doula-cloud/issues/1053): the later-merged of the two became `0037-overdue-is-derived-and-notifies-nobody.md`, and `app/src/lib/adrNumbers.usage.spec.ts` now fails the build on a repeated number.
 
 ## The build, as sub-issues
 
