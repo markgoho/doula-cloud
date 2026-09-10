@@ -72,6 +72,17 @@
 	let editError = $state('');
 
 	/*
+	 * One work state entry as this screen reads it: the endpoint's own
+	 * fields, plus whether the assertion predates her Membership here. A
+	 * contractor doula who recorded her work state at another Practice
+	 * carries that row into this one, and the screen must not read as
+	 * though she said it here (#459) -- so the answer travels with the
+	 * entry rather than the snippet asking a second question about the
+	 * page the entry came on.
+	 */
+	type WorkStateEntry = WorkStateChange & { beforeJoining: boolean };
+
+	/*
 	 * The two histories a roster row carries: what is behind her "Works
 	 * from" value (#459), and what is behind the row itself (#872). Each
 	 * is fetched when its disclosure is opened, never with the roster --
@@ -87,17 +98,6 @@
 	 * with more to come is paged past (#709). A third history on this row
 	 * is a third map, not a third copy of the machinery.
 	 */
-	/*
-	 * One work state entry as this screen reads it: the endpoint's own
-	 * fields, plus whether the assertion predates her Membership here. A
-	 * contractor doula who recorded her work state at another Practice
-	 * carries that row into this one, and the screen must not read as
-	 * though she said it here (#459) -- so the answer travels with the
-	 * entry rather than the snippet asking a second question about the
-	 * page the entry came on.
-	 */
-	type WorkStateEntry = WorkStateChange & { beforeJoining: boolean };
-
 	const workStateHistories = new SvelteMap<string, DeferredPaginatedList<WorkStateEntry>>();
 	const membershipHistories = new SvelteMap<string, DeferredPaginatedList<MembershipChange>>();
 
@@ -160,8 +160,8 @@
 	onMount(loadRoster);
 
 	/*
-	 * The list holding one member's history of `kind`, made the first time
-	 * anything asks for it and kept from then on -- reopening a disclosure
+	 * The list holding one member's entry in `histories`, made on the first
+	 * ask and kept from then on -- reopening a disclosure
 	 * finds the entries it already has rather than fetching them twice,
 	 * because an append-only trail that was correct a second ago is still
 	 * correct.
