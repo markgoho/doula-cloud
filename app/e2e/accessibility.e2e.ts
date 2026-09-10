@@ -137,7 +137,11 @@ test('Archetype A -- the screens a person meets signed out', async ({ page }) =>
 			url: '/offers/00000000-0000-0000-0000-000000000000',
 			h1: 'An offer of work'
 		},
-		{ key: 'portal/login', archetype: 'A', url: '/portal/login', h1: 'Log in' }
+		{ key: 'portal/login', archetype: 'A', url: '/portal/login', h1: 'Log in' },
+		// #694: the way back for a locked-out person, and one of the few
+		// screens somebody meets while already in trouble -- which is
+		// exactly when an accessibility defect costs the most.
+		{ key: 'recovery-code', archetype: 'A', url: '/recovery-code', h1: 'Use a recovery code' }
 	];
 
 	for (const route of routes) {
@@ -262,6 +266,16 @@ test('Archetypes B, C, D, E, F, G -- the Staff side', async ({ page, request, co
 			archetype: 'C',
 			url: `/practices/${practiceId}/staff`,
 			h1: 'Staff'
+		},
+		{
+			// #694: the Owner-vouch screen, scanned against the Owner's own
+			// roster row -- this Practice has exactly one Staff member, and
+			// the endpoint takes any Membership at the Practice, so no second
+			// person has to be seeded to realize the screen.
+			key: 'practices/[practiceId]/staff/[staffId]/mfa-recovery',
+			archetype: 'C',
+			url: `/practices/${practiceId}/staff/${staffId}/mfa-recovery`,
+			h1: 'Help Alex Owner sign in again'
 		},
 		{
 			key: 'practices/[practiceId]/offers',

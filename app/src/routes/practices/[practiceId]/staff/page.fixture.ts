@@ -76,6 +76,22 @@ export const fixture: RouteFixture = {
 	component: Page,
 	params: { practiceId: 'practice-1' },
 	url: 'https://example.test/practices/practice-1/staff',
+	/*
+	 * An Owner, because that is the widest this screen ever gets: #694's
+	 * "Send a recovery code" is the one row action gated on the role, and
+	 * an Admin's tree is that tree with one link removed. A variant for
+	 * her is deliberately not declared -- a strict subset realizes nothing
+	 * the sweep has not already measured (svelte-tests.md).
+	 */
+	pageData: {
+		session: {
+			practiceId: 'practice-1',
+			staffId: 'staff-1',
+			practiceName: 'Riverside Doula Collective',
+			roles: ['owner'],
+			isContractor: false
+		}
+	},
 	respond: () => jsonResponse(roster),
 	readyText: 'Staff'
 };

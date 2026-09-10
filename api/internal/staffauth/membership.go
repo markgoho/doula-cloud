@@ -398,19 +398,15 @@ func RemoveMembershipHandler() http.Handler {
 // ever show one Practice.
 func isSoleOwnerAnywhere(ctx context.Context, tx *sql.Tx, staffID string) (bool, error) {
 	var sole bool
-	err := tx.QueryRowContext(ctx,
-		`SELECT EXISTS (
-			SELECT 1 FROM practice_memberships pm
-			WHERE pm.staff_id = $1 AND 'owner' = ANY(pm.roles)
-			  AND NOT EXISTS (
-				  SELECT 1 FROM practice_memberships other
-				  WHERE other.practice_id = pm.practice_id
-				    AND other.staff_id <> pm.staff_id
-				    AND 'owner' = ANY(other.roles)
-			  )
-		)`,
-		staffID,
-	).Scan(&sole)
+	// staff_is_sole_owner (00106) rather than the NOT EXISTS spelled out
+	// here: the "is there another Owner at the same Practice?" half reads
+	// rows belonging to other people, which no pre-Practice caller can
+	// see. Under practice_memberships_self_visibility that subquery finds
+	// nothing and answers "sole" for every Owner alive -- wrong, and
+	// silent. The SECURITY DEFINER predicate answers the whole question
+	// at once and hands back only the boolean, so a caller like
+	// GET /api/staff/session needs no widening of its own.
+	err := tx.QueryRowContext(ctx, `SELECT staff_is_sole_owner($1)`, staffID).Scan(&sole)
 	if err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		return false, fmt.Errorf("staffauth: check sole ownership: %w", err)

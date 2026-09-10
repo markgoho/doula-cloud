@@ -164,6 +164,10 @@ function mockApi({
 
 beforeEach(() => {
 	apiFetchWithSession.mockReset();
+	// #694 gave this screen a role-gated row action, so a test that
+	// installs another session must not leave it installed -- the fixture's
+	// own Owner is the default every other test here reads.
+	Object.assign(pageState, toPageState(fixture));
 });
 
 /*
@@ -585,5 +589,33 @@ describe('staff screen', () => {
 			.toBeVisible();
 
 		expect(findDuplicateIds(document)).toEqual([]);
+	});
+
+	/*
+	 * #694: the way in to Owner vouching. Drawing only -- the endpoint
+	 * refuses an Admin regardless (roles.ts) -- but an Admin offered a
+	 * link that can only ever 403 is a screen lying about what she can do.
+	 */
+	it('offers each member a way to send a recovery code, named by whose it is', async () => {
+		await setup();
+
+		const links = membersTable().getByRole('link', { name: 'Send a recovery code' });
+		await expect.element(links.first()).toHaveAttribute(
+			'href',
+			`/practices/practice-1/staff/${ownerMember.staffId}/mfa-recovery`
+		);
+		expect(describedByText(links.first())).toBe(ownerMember.name);
+		expect(describedByText(links.nth(1))).toBe(contractorMember.name);
+	});
+
+	it('offers an Admin no such link', async () => {
+		// A spread of the fixture's own session, never a second one written
+		// out here (svelte-tests.md): a `practiceId` that drifted from the
+		// fixture's would make every `respond(path)` match silently miss.
+		const { session } = fixture.pageData as { session: Record<string, unknown> };
+		pageState.data = { session: { ...session, roles: ['admin'] } };
+		await setup();
+
+		expect(testPage.getByRole('link', { name: 'Send a recovery code' }).elements()).toHaveLength(0);
 	});
 });

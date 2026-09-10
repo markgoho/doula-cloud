@@ -5,7 +5,7 @@ import { workStateReportedOn } from '#lib/workStates.js';
 import { jsonResponse as buildResponse } from '#lib/testResponse.js';
 import Page from './+page.svelte';
 import { resetAccountSession } from './session.svelte.js';
-import { session } from './page.fixture.js';
+import { session, soleOwnerSession } from './page.fixture.js';
 
 const apiFetchWithSession = vi.hoisted(() => vi.fn());
 vi.mock('#lib/api.js', () => ({
@@ -520,5 +520,113 @@ describe('deleting your own login', () => {
 		await expect.element(dialog).toBeVisible();
 		await expect.element(dialog.getByText('The network dropped')).toBeVisible();
 		expect(goto).not.toHaveBeenCalled();
+	});
+});
+
+/*
+ * #615's saved recovery codes, offered here and nowhere else (#694).
+ *
+ * The thing worth stating once, because the screen's whole shape follows
+ * from it: there is no "show me the set I already have". Every set is
+ * minted with its plaintext discarded except the one this button asks
+ * for, so being shown them and rotating them are one act -- which is why
+ * a confirmation stands between the offer and the codes.
+ */
+const CODES = ['AAAA1111BBBB2222', 'CCCC3333DDDD4444'];
+
+// Press through the offer and its confirmation to the codes themselves.
+async function revealSavedCodes() {
+	await testPage.getByRole('button', { name: 'Show my recovery codes' }).click();
+	await testPage.getByRole('button', { name: 'Show a new set' }).click();
+}
+
+describe('recovery codes for a sole Owner (#615)', () => {
+
+	interface CodesSetupOptions {
+		soleOwner?: boolean;
+		rotateResponse?: Response;
+	}
+
+	/*
+	 * The session is the fixture's own sole-Owner variant (#596), not a
+	 * second one written here: that variant is what the continuum sweep
+	 * mounts, so this spec and the sweep describe one screen. `soleOwner:
+	 * false` is the departure, written as a spread.
+	 */
+	async function setup({ soleOwner = true, rotateResponse = jsonResponse({ codes: CODES }) }: CodesSetupOptions = {}) {
+		apiFetchWithSession.mockImplementation((path: string, init?: RequestInit) => {
+			if (path === '/api/staff/mfa-recovery/saved-codes/rotate' && init?.method === 'POST') {
+				return Promise.resolve(rotateResponse);
+			}
+			return Promise.resolve(jsonResponse({ ...soleOwnerSession, soleOwner }));
+		});
+		await render(Page, {});
+	}
+
+	// The AC's last clause, and the one a screen gets wrong by omission:
+	// somebody who holds no saved codes must not be shown a section
+	// implying she does. The two-factor line is asserted on its own
+	// distinctive clause rather than on "Turned on.", which is a prefix of
+	// nothing here but is one keystroke away from matching "Not turned
+	// on." if this session's `secondFactor` ever drifts.
+	it('offers nothing at all to a Staff member who is not a sole Owner', async () => {
+		await setup({ soleOwner: false });
+
+		await expect
+			.element(testPage.getByText("You'll be asked for a code", { exact: false }))
+			.toBeVisible();
+		expect(testPage.getByRole('button', { name: 'Show my recovery codes' }).elements()).toHaveLength(0);
+		expect(testPage.getByText('Recovery codes').elements()).toHaveLength(0);
+	});
+
+	it('says what pressing it costs before it mints anything', async () => {
+		await setup();
+
+		await testPage.getByRole('button', { name: 'Show my recovery codes' }).click();
+
+		await expect
+			.element(testPage.getByText('Showing a new set replaces the one you have.', { exact: false }))
+			.toBeVisible();
+		expect(apiFetchWithSession).not.toHaveBeenCalledWith(
+			'/api/staff/mfa-recovery/saved-codes/rotate',
+			expect.anything()
+		);
+	});
+
+	it('shows every code once, with the warning that this is the only time', async () => {
+		await setup();
+
+		await revealSavedCodes();
+
+		for (const code of CODES) {
+			await expect.element(testPage.getByText(code)).toBeVisible();
+		}
+		await expect
+			.element(testPage.getByText('Write these down now.', { exact: false }))
+			.toBeVisible();
+	});
+
+	// The half that works on a phone, where writing ten opaque strings
+	// down by hand is not a real option.
+	it('offers them as a file to keep', async () => {
+		await setup();
+
+		await revealSavedCodes();
+
+		await expect
+			.element(testPage.getByRole('button', { name: 'Download these codes' }))
+			.toBeVisible();
+	});
+
+	it("shows the BFF's own refusal when she is no longer a sole Owner", async () => {
+		await setup({
+			rotateResponse: refusal(403, "saved recovery codes are only issued to a practice's sole owner")
+		});
+
+		await revealSavedCodes();
+
+		await expect
+			.element(testPage.getByText("saved recovery codes are only issued to a practice's sole owner"))
+			.toBeVisible();
 	});
 });

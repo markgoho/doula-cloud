@@ -44,6 +44,14 @@ export interface SessionInfo {
 	// branch reads it as-is, which is deliberate (staffauth.Middleware
 	// reads the same session-carried fact, never re-derived per request).
 	secondFactor: boolean;
+	// Whether she is the only Owner of at least one Practice (#615's
+	// saved-recovery-code population). Drawing only: the account screen
+	// reads it to decide whether to offer saved recovery codes at all,
+	// and the rotate endpoint re-derives the same fact and refuses on its
+	// own (ADR-0006). It rides here rather than on an endpoint of its own
+	// because the only endpoint that could otherwise answer it -- the
+	// rotate -- answers by destroying the set she holds.
+	soleOwner: boolean;
 }
 
 export type Landing =

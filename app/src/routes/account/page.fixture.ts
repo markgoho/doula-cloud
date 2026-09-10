@@ -9,7 +9,7 @@
  */
 import { jsonResponse } from '#lib/testResponse.js';
 import type { SessionInfo } from '#lib/landing.js';
-import type { RouteFixture } from '../routeFixture.js';
+import type { RouteFixture, RouteVariant } from '../routeFixture.js';
 import Page from './+page.svelte';
 
 export const session: SessionInfo = {
@@ -20,11 +20,29 @@ export const session: SessionInfo = {
 	email: 'anne-marie@example.test',
 	workState: 'NY',
 	workStateReportedAt: '2026-01-01T00:00:00Z',
-	secondFactor: false
+	secondFactor: false,
+	soleOwner: false
+};
+
+/*
+ * The other screen this route renders (#694). Two of its sections branch
+ * on facts the session carries, and the base fixture above realizes
+ * neither: a person with no second factor is offered enrolment rather
+ * than removal, and a person who is not a Practice's sole Owner is
+ * offered no recovery codes at all. This is the branch that has both --
+ * the widest the screen ever gets, and the only one where the Recovery
+ * codes fieldset exists to be measured.
+ */
+export const soleOwnerSession: SessionInfo = { ...session, secondFactor: true, soleOwner: true };
+
+export const asSoleOwnerWithSecondFactor: RouteVariant = {
+	name: 'Your account, as a sole Owner who has a second factor',
+	respond: () => jsonResponse(soleOwnerSession)
 };
 
 export const fixture: RouteFixture = {
 	name: 'Your account',
+	variants: [asSoleOwnerWithSecondFactor],
 	component: Page,
 	params: {},
 	url: 'https://example.test/account',

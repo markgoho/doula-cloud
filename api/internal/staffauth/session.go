@@ -59,6 +59,18 @@ type SessionResponse struct {
 	// here until she signs in again on this one, at which point the
 	// TOTP challenge fires and the next session carries it.
 	SecondFactor bool `json:"secondFactor"`
+	// SoleOwner is whether this person is the only Owner of at least one
+	// Practice (#615's saved-recovery-code population, read through
+	// staff_is_sole_owner). It rides on this response for the same reason
+	// the work state does (#437): the account screen has to know whether
+	// to offer her saved recovery codes at all, and the only endpoint that
+	// could otherwise tell her -- the rotate -- answers by destroying the
+	// set she holds. A second round trip to learn a fact this one can
+	// carry is a round trip nobody needs.
+	//
+	// Drawing only, never a gate: POST /api/staff/mfa-recovery/saved-codes/
+	// rotate re-derives the same predicate and 403s on its own (ADR-0006).
+	SoleOwner bool `json:"soleOwner"`
 }
 
 // SessionHandler resolves the verified caller to a Staff row and reports
@@ -112,6 +124,12 @@ func resolveSession(r *http.Request, tx *sql.Tx, identityUID string, secondFacto
 		return SessionResponse{}, http.StatusInternalServerError, apierr.MsgInternalError
 	}
 
+	soleOwner, err := isSoleOwnerAnywhere(ctx, tx, staffID)
+	if err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		return SessionResponse{}, http.StatusInternalServerError, apierr.MsgInternalError
+	}
+
 	resp := SessionResponse{
 		StaffID:             staffID,
 		Name:                name,
@@ -120,6 +138,7 @@ func resolveSession(r *http.Request, tx *sql.Tx, identityUID string, secondFacto
 		WorkStateReportedAt: workStateReportedAt,
 		Memberships:         memberships,
 		SecondFactor:        secondFactor,
+		SoleOwner:           soleOwner,
 	}
 	if lastPracticeID.Valid {
 		resp.LastPracticeID = &lastPracticeID.String
