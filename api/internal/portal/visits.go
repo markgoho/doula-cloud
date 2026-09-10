@@ -46,13 +46,14 @@ type Visit struct {
 	// what" about a Practice's own roster acts, and who is coming to her
 	// home is a fact about her care, not about the roster.
 	//
-	// One case does fall back to that same word, and it is a known gap
-	// rather than a rule: a Staff member who has left the Practice is no
-	// longer resolvable to a Client (00105's own comment says why, and
-	// what happened when the policy that would fix it was tried), so a
-	// past Visit of hers reads "Your practice" instead of her name. The
-	// Visit itself never disappears -- that is what the LEFT JOIN in
-	// listPortalVisits is for.
+	// A Doula who has left the Practice is still named here (#1077):
+	// 00111's client_portal_sees_staff reaches her staff row through the
+	// Visit itself rather than through a Membership that no longer
+	// exists. The LEFT JOIN in listPortalVisits stays, and so does this
+	// fallback, for the one case that still has no name to reach: a
+	// Doula who deleted her own login, whose name ADR-0033 overwrites on
+	// the row, and whom 00111's policy therefore refuses rather than
+	// showing a Client "Deleted Staff Member".
 	DoulaName string `json:"doulaName"`
 	// HasHappened is decided in SQL against the database's own clock, so the
 	// browser never has to compare a parsed instant with its own -- the

@@ -144,6 +144,36 @@ func TestSeedNamedStaffAtPractice(t *testing.T) {
 	}
 }
 
+// TestRemoveMembership proves the undo half of SeedNamedStaffAtPractice
+// leaves the staff row standing and takes only the Membership -- which is
+// the whole point of it, since every policy that reaches a Staff row
+// through a live Membership is what a departed-Staff test is exercising.
+func TestRemoveMembership(t *testing.T) {
+	db := testdb.New(t)
+	practiceID := testdb.SeedPractice(t, db, "Removal Test Practice")
+	staffID := testdb.SeedNamedStaffAtPractice(t, db, practiceID, "removal-test-staff", "Maya Okonkwo", []string{"doula"}, "employee")
+
+	testdb.RemoveMembership(t, db, staffID)
+
+	var memberships, staffRows int
+	if err := db.Admin.QueryRowContext(t.Context(),
+		`SELECT count(*) FROM practice_memberships WHERE staff_id = $1`, staffID,
+	).Scan(&memberships); err != nil {
+		t.Fatalf("count memberships: %v", err)
+	}
+	if memberships != 0 {
+		t.Fatalf("memberships = %d, want none left", memberships)
+	}
+	if err := db.Admin.QueryRowContext(t.Context(),
+		`SELECT count(*) FROM staff WHERE id = $1`, staffID,
+	).Scan(&staffRows); err != nil {
+		t.Fatalf("count staff: %v", err)
+	}
+	if staffRows != 1 {
+		t.Fatalf("staff rows = %d, want the person herself still on file", staffRows)
+	}
+}
+
 // TestSeedPortalAccount proves the portal_accounts row lands with the
 // identifier and sign-in address passed in -- every package seeding an
 // accepted client_portal_users row relies on this existing first, or the

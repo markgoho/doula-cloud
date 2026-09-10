@@ -412,3 +412,51 @@ func TestClientAttachmentHandler_NotLinkedToClientForbidden(t *testing.T) {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusForbidden)
 	}
 }
+
+// TestClientListHandler_NamesASenderWhoHasLeftThePractice is the Message
+// thread's half of #1077. The portal thread resolves a Staff sender's
+// name through the same staff row the Visits screen does, so a Doula who
+// left used to take her name out of the conversation she was part of --
+// a thread of unattributed messages. 00111's reach through the Message
+// itself keeps it.
+func TestClientListHandler_NamesASenderWhoHasLeftThePractice(t *testing.T) {
+	const identityUIDStaff = "departed-sender-staff"
+	const identityUIDClient = "departed-sender-client"
+	const body = "I'll see you on Thursday."
+
+	db := testdb.New(t)
+	practiceID := testdb.SeedPractice(t, db, "Departed Sender Practice")
+	staffID := testdb.SeedNamedStaffAtPractice(t, db, practiceID, identityUIDStaff, "Maya Okonkwo", []string{doulaRole}, "employee")
+	clientID, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Nadia Client", "nadia-thread@example.com")
+	testdb.SeedPortalUser(t, db, testdb.PortalUID(identityUIDClient), clientID)
+
+	staffSrv, staffSession := newServer(t, db, identityUIDStaff)
+	defer staffSrv.Close()
+	staffBody, _ := json.Marshal(message.CreateRequest{Body: body})
+	created := authedPost(t, staffSession, staffSrv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/messages", staffBody)
+	defer created.Body.Close()
+	if created.StatusCode != http.StatusCreated {
+		t.Fatalf("staff create status = %d, want %d", created.StatusCode, http.StatusCreated)
+	}
+
+	testdb.RemoveMembership(t, db, staffID)
+
+	portalSrv, portalSession := newPortalServer(t, db, identityUIDClient)
+	defer portalSrv.Close()
+	resp := authedGet(t, portalSession, portalSrv.URL+"/api/portal/engagements/"+engagementID+"/messages")
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
+	}
+
+	var thread message.ListResponse
+	if err := json.NewDecoder(resp.Body).Decode(&thread); err != nil {
+		t.Fatalf("decode thread: %v", err)
+	}
+	if len(thread.Items) != 1 {
+		t.Fatalf("thread = %+v, want the one Message she was sent", thread.Items)
+	}
+	if thread.Items[0].SenderName != "Maya Okonkwo" {
+		t.Fatalf("senderName = %q, want the name of the Doula who wrote it", thread.Items[0].SenderName)
+	}
+}
