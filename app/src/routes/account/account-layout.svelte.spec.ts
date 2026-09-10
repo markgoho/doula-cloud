@@ -6,6 +6,11 @@ import type { SignOutOutcome } from '#lib/signOut.js';
 import { jsonResponse } from '#lib/testResponse.js';
 import Layout from './+layout.svelte';
 import { resetAccountSession } from './session.svelte.js';
+// The skip link parks itself off-screen with a transform written in
+// spacing tokens, so without these the token is invalid, the transform
+// computes to none, and an unfocused skip link sits over the top bar --
+// where it swallows a click meant for the hamburger.
+import '#lib/styles/tokens.css';
 
 const apiFetchWithSession = vi.hoisted(() => vi.fn());
 const apiFetch = vi.hoisted(() => vi.fn());
@@ -31,12 +36,14 @@ const session = {
 	memberships: [{ practiceId: 'practice-1', practiceName: 'Rochester Doulas', roles: ['doula'] }]
 };
 
-async function renderLayout(sessionResponse = jsonResponse(session)) {
-	// Pinned wide, same as practices-layout.svelte.spec.ts: StaffTopBar keeps
-	// both its wide and narrow trees in the document with one display:none,
-	// so which one is visible -- and so which holds the accessible avatar
-	// button this spec queries by role -- is a fact about the viewport.
-	await testPage.viewport(1440, 900);
+async function renderLayout(sessionResponse = jsonResponse(session), viewport = [1440, 900]) {
+	// Pinned wide by default, same as practices-layout.svelte.spec.ts:
+	// StaffTopBar keeps both its wide and narrow trees in the document with
+	// one display:none, so which one is visible -- and so which holds the
+	// accessible avatar button this spec queries by role -- is a fact about
+	// the viewport. One test below pins it narrow on purpose, to reach the
+	// sheet that only exists under the bar's content floor.
+	await testPage.viewport(viewport[0]!, viewport[1]!);
 	apiFetchWithSession.mockReset();
 	apiFetchWithSession.mockImplementation(() => Promise.resolve(sessionResponse));
 	apiFetch.mockReset();
@@ -79,6 +86,22 @@ describe('the account route layout', () => {
 
 		const practiceNav = testPage.getByRole('navigation', { name: 'Practice' });
 		expect(practiceNav.getByRole('link').elements()).toHaveLength(0);
+	});
+
+	/*
+	 * #673. /account is scoped to the person, so it hands the bar no
+	 * Practice at all -- and under the bar's content floor the nav and the
+	 * switcher move into a sheet. The sheet has to drop its Practice
+	 * heading here, not print it over an empty slot.
+	 */
+	it('shows no bare Practice heading in the narrow sheet', async () => {
+		await renderLayout(jsonResponse(session), [390, 844]);
+
+		await testPage.getByRole('button', { name: 'Menu' }).click();
+
+		const sheet = testPage.getByRole('dialog');
+		await expect.element(sheet).toBeVisible();
+		await expect.element(sheet.getByText('Practice', { exact: true })).not.toBeInTheDocument();
 	});
 
 	it('offers a way back to every Practice she belongs to', async () => {

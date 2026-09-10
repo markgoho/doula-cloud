@@ -12,6 +12,7 @@
 	import AvatarMenu from '#lib/components/molecules/AvatarMenu.svelte';
 	import BrandLockup from '#lib/components/molecules/BrandLockup.svelte';
 	import PracticeSwitcher, {
+		currentPracticeOf,
 		type PracticeOption
 	} from '#lib/components/molecules/PracticeSwitcher.svelte';
 	import type { SignOutOutcome } from '#lib/signOut.js';
@@ -54,6 +55,18 @@
 	 * focus to the hamburger -- none of which a popover promises.
 	 */
 	let sheet = $state<HTMLDialogElement>();
+
+	/*
+	 * The sheet's Practice block is a heading, a switcher, and a divider
+	 * above the pair. On a route scoped to the person rather than to a
+	 * Practice (/account, #484) the switcher renders nothing, so the whole
+	 * block goes rather than just the words (#673): a heading with nothing
+	 * under it announces an empty section, and hiding only the label would
+	 * leave the divider drawing a line under nothing. The condition is that
+	 * there is a Practice to name, not that there is somewhere to switch to
+	 * -- one Membership still puts her Practice's name under the heading.
+	 */
+	const hasPracticeToName = $derived(currentPracticeOf(practices, currentPracticeId) !== undefined);
 
 	function openSheet() {
 		sheet?.showModal();
@@ -98,10 +111,12 @@
 			<Link href={item.href} label={item.label} variant="sheet" current={item.current} />
 		{/each}
 	</nav>
-	<div class="sheet-switcher">
-		<p class="sheet-switcher-label">Practice</p>
-		<PracticeSwitcher {practices} {currentPracticeId} />
-	</div>
+	{#if hasPracticeToName}
+		<div class="sheet-switcher">
+			<p class="sheet-switcher-label">Practice</p>
+			<PracticeSwitcher {practices} {currentPracticeId} />
+		</div>
+	{/if}
 </dialog>
 
 <style>
