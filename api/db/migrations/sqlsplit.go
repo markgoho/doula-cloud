@@ -78,7 +78,7 @@ func skipLineComment(s string) int {
 }
 
 // skipQuoted returns the length of the single-quoted string starting at
-// s, treating ” as an escaped quote rather than a close.
+// s, treating a doubled quote as an escape rather than a close.
 func skipQuoted(s string) int {
 	for i := 1; i < len(s); i++ {
 		if s[i] != '\'' {

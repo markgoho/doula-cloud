@@ -1,151 +1,189 @@
-// Package migrations' guardrail: a migration that passes every PR and
-// fails the first trunk push is the one failure mode CI cannot show you
-// before you merge, because the job that applies migrations to a real
-// database (migrate, .github/workflows/ci.yml) runs only on trunk. Every
-// PR builds an empty database per run, so a constraint that only existing
-// rows can violate is invisible until it is too late to catch cheaply.
-//
-// #1021 is the incident this exists to prevent a repeat of: #967 shipped
-// `ALTER TABLE contracts ADD COLUMN amount_cents bigint NOT NULL`, green
-// on its PR, and trunk's migrate job then failed with `column
-// "amount_cents" of relation "contracts" contains null values`. Trunk
-// stayed red across seven merges and no deploy ran in that window.
 package migrations
 
 import (
-	"regexp"
+	"fmt"
 	"strings"
 	"testing"
 )
 
-// addColumnNotNull matches an ADD COLUMN whose definition carries NOT
-// NULL. The type sits between the name and the constraint and can be
-// anything (bigint, text, an enum name), so the pattern is deliberately
-// loose about it and strict about the two things that matter: that this
-// is an ADD COLUMN, and that NOT NULL appears in its definition.
-var addColumnNotNull = regexp.MustCompile(`(?i)ADD\s+COLUMN\s+[^;]*?\bNOT\s+NULL\b[^;]*;`)
-
-// grandfathered are the ADD COLUMN ... NOT NULL statements that predate
-// this guardrail and already applied cleanly, each against a table that
-// held no rows at the time. They are recorded by file rather than
-// rewritten: a migration that has already run on doula-cloud-pg must not
-// change, because goose will not re-run it and the two would silently
-// disagree. Nothing may be added to this list -- a new migration takes
-// the DEFAULT-then-DROP form instead.
+// grandfathered are migrations that carry a row-dependent statement,
+// already applied against doula-cloud-pg, and cannot be rewritten:
+// goose has recorded them, so editing one makes the file and the
+// database silently disagree. Each entry says why the statement was
+// harmless when it ran. The list is closed -- TestGrandfatheredListDoesNotGrow
+// pins its exact size, so a new migration takes the safe form or writes
+// a safety note, never an exemption.
 var grandfathered = map[string]string{
-	"00030_employment_attachment_offer.sql": "applied 2026-06 against an empty staff_practices; goose has recorded it, so it cannot be rewritten",
-	"00095_manual_payment_recording.sql":    "applied 2026-09-08 against an empty invoices; goose has recorded it, so it cannot be rewritten",
+	"00030_employment_attachment_offer.sql":            "ADD COLUMN ... NOT NULL without DEFAULT; applied 2026-06 against an empty staff_practices",
+	"00095_manual_payment_recording.sql":               "ADD COLUMN ... NOT NULL without DEFAULT; applied 2026-09-08 against an empty invoices",
+	"00002_practice_staff_tenancy.sql":                 "DO block; applied before the guardrail covered the class (#1139)",
+	"00020_contracts_recreate_after_void.sql":          "CREATE UNIQUE INDEX; applied before the guardrail covered the class (#1139)",
+	"00026_client_portal_provisioning.sql":             "CREATE UNIQUE INDEX; applied before the guardrail covered the class (#1139)",
+	"00039_membership_events.sql":                      "CREATE UNIQUE INDEX; applied before the guardrail covered the class (#1139)",
+	"00042_client_intake_schema.sql":                   "ALTER COLUMN ... SET NOT NULL and DML; applied before the guardrail covered the classes (#1139)",
+	"00043_staff_work_state.sql":                       "ADD CONSTRAINT ... CHECK, ALTER COLUMN ... SET NOT NULL and DML; applied before the guardrail covered the classes (#1139)",
+	"00046_practice_page_slug.sql":                     "ADD CONSTRAINT ... CHECK, CREATE UNIQUE INDEX, DML and a DO block; applied before the guardrail covered the classes (#1139)",
+	"00049_site_build_and_page_liveness.sql":           "ADD CONSTRAINT ... CHECK and DML; applied before the guardrail covered the classes (#1139)",
+	"00052_credit_lot_provenance.sql":                  "ADD CONSTRAINT ... CHECK, ALTER COLUMN ... TYPE and DML; applied before the guardrail covered the classes (#1139)",
+	"00054_one_refund_per_request.sql":                 "ADD CONSTRAINT ... CHECK and CREATE UNIQUE INDEX; applied before the guardrail covered the classes (#1139)",
+	"00055_founding_grant.sql":                         "ADD CONSTRAINT ... CHECK, ALTER COLUMN ... TYPE and CREATE UNIQUE INDEX; applied before the guardrail covered the classes (#1139)",
+	"00057_engagement_status_drop_postpartum.sql":      "ALTER COLUMN ... TYPE; applied before the guardrail covered the class (#1139)",
+	"00072_totp_mfa_auth_events.sql":                   "ADD CONSTRAINT ... CHECK; applied before the guardrail covered the class (#1139)",
+	"00073_portal_accounts.sql":                        "ADD CONSTRAINT ... FOREIGN KEY, CREATE UNIQUE INDEX and DML; applied before the guardrail covered the classes (#1139)",
+	"00075_retire_identity_account_delete.sql":         "ALTER COLUMN ... TYPE; applied before the guardrail covered the class (#1139)",
+	"00089_credit_ledger_forfeit_shape.sql":            "ADD CONSTRAINT ... CHECK; applied before the guardrail covered the class (#1139)",
+	"00090_engagement_status_transition.sql":           "ADD CONSTRAINT ... CHECK; applied before the guardrail covered the class (#1139)",
+	"00093_engagement_birth_outcome.sql":               "ADD CONSTRAINT ... CHECK; applied before the guardrail covered the class (#1139)",
+	"00094_engagement_completion_requires_outcome.sql": "ADD CONSTRAINT ... CHECK and DML; applied before the guardrail covered the classes (#1139)",
+	"00101_staff_login_deletion_rules.sql":             "ADD CONSTRAINT ... CHECK; applied before the guardrail covered the class (#1139)",
+	"00103_payment_reversal.sql":                       "ADD CONSTRAINT ... CHECK and CREATE UNIQUE INDEX; applied before the guardrail covered the classes (#1139)",
+	"00112_client_merge_moves_history.sql":             "ADD CONSTRAINT ... CHECK and DML; applied before the guardrail covered the classes (#1139)",
 }
 
-// TestNoAddColumnNotNullWithoutDefault fails a migration that adds a NOT
-// NULL column with no DEFAULT to backfill the rows already in the table.
-//
-// The form that is safe, and what a new migration must use:
-//
-//	ALTER TABLE t ADD COLUMN c bigint NOT NULL DEFAULT 0;
-//	ALTER TABLE t ALTER COLUMN c DROP DEFAULT;
-//
-// The DEFAULT backfills existing rows; dropping it afterwards means no
-// future INSERT silently gets a value it never supplied, so a column
-// whose zero value is meaningless (see #966's "no rate set is not zero")
-// still forces every new row to say what it means.
-func TestNoAddColumnNotNullWithoutDefault(t *testing.T) {
-	entries, err := FS.ReadDir(".")
-	if err != nil {
-		t.Fatalf("read migrations: %v", err)
-	}
-
+// TestNoRowDependentStatementWithoutASafetyNote is the guardrail. It
+// fails any migration whose Up section contains a statement that only
+// existing rows can refuse, unless safety/<migration>.md explains why
+// those rows cannot refuse it.
+func TestNoRowDependentStatementWithoutASafetyNote(t *testing.T) {
 	checked := 0
-	for _, e := range entries {
-		name := e.Name()
-		if !strings.HasSuffix(name, ".sql") {
+	for _, name := range migrationFiles(t) {
+		checked++
+		findings := RowDependent(UpSection(readMigration(t, name)))
+		if len(findings) == 0 {
 			continue
 		}
-		body, err := FS.ReadFile(name)
-		if err != nil {
-			t.Fatalf("read %s: %v", name, err)
-		}
-		// Only the Up section can add a column to a populated table; a
-		// Down runs against whatever the Up left behind and is not the
-		// failure mode this guards.
-		up := upSection(string(body))
-		for _, stmt := range addColumnNotNull.FindAllString(up, -1) {
-			if strings.Contains(strings.ToUpper(stmt), "DEFAULT") {
+		covered := safetyNoteClasses(t, name)
+		for _, f := range findings {
+			if covered[f.Class] {
 				continue
 			}
 			if reason, ok := grandfathered[name]; ok {
 				t.Logf("%s: grandfathered (%s)", name, reason)
 				continue
 			}
-			t.Errorf(`%s adds a NOT NULL column with no DEFAULT:
-
-    %s
-
-This passes every PR -- testdb builds an empty database, so no row can
-violate the constraint -- and fails the first time trunk's migrate job
-applies it to doula-cloud-pg, which has rows. Write it as two statements
-instead, so existing rows are backfilled and new rows still must supply
-a value:
-
-    ALTER TABLE <table> ADD COLUMN <col> <type> NOT NULL DEFAULT <value>;
-    ALTER TABLE <table> ALTER COLUMN <col> DROP DEFAULT;
-
-See #1021 and the comment at the top of this file.`, name, strings.TrimSpace(collapse(stmt)))
+			t.Error(violation(name, f))
 		}
-		checked++
 	}
-
 	if checked == 0 {
 		t.Fatal("no migrations found to check -- the embed pattern or this test's filter is wrong")
 	}
 }
 
-// TestGrandfatheredListDoesNotGrow keeps the exemption list from becoming
-// a habit: every name in it must still exist and must still be an
-// offender, so a migration that gets fixed or deleted is removed from the
-// list rather than left as cover for a future one.
-func TestGrandfatheredListDoesNotGrow(t *testing.T) {
-	const want = 2
-	if len(grandfathered) != want {
-		t.Fatalf("grandfathered has %d entries, want exactly %d -- a new migration must take the DEFAULT-then-DROP form, not an exemption", len(grandfathered), want)
+// violation is the failure message: the statement, the trunk-only
+// failure it risks, and what to write instead.
+func violation(name string, f Finding) string {
+	return fmt.Sprintf(`%s carries a row-dependent statement -- %s:
+
+    %s
+
+This passes every PR (testdb builds an empty database, so no existing row
+can refuse it) and fails the first time trunk's migrate job applies it to
+doula-cloud-pg, which has rows -- taking deploy-api and deploy-app down
+with it. What it hits there:
+
+    %s
+
+Write it this way instead:
+
+    %s
+
+If the statement is already safe, say why in
+api/db/migrations/safety/%s.md under a "## %s" heading. See #1021, #1139
+and the rule at the top of rowsafety.go.`,
+		name, f.Class, f.Statement, f.Failure, f.Remedy,
+		strings.TrimSuffix(name, ".sql"), f.Class)
+}
+
+// safetyNoteClasses returns the classes safety/<migration>.md attests
+// to, keyed by the guardrail's own name for each class.
+func safetyNoteClasses(t *testing.T, name string) map[string]bool {
+	t.Helper()
+	body, err := SafetyFS.ReadFile(safetyNotePath(name))
+	if err != nil {
+		return nil
 	}
-	for name := range grandfathered {
-		body, err := FS.ReadFile(name)
-		if err != nil {
-			t.Errorf("grandfathered migration %s no longer exists; drop it from the list", name)
+	covered := map[string]bool{}
+	for _, line := range strings.Split(string(body), "\n") {
+		if heading, ok := strings.CutPrefix(strings.TrimSpace(line), "## "); ok {
+			covered[strings.TrimSpace(heading)] = true
+		}
+	}
+	return covered
+}
+
+// safetyNotePath is where a migration's safety note lives.
+func safetyNotePath(name string) string {
+	return "safety/" + strings.TrimSuffix(name, ".sql") + ".md"
+}
+
+// TestSafetyNotesAreStillNeeded keeps a note from outliving the
+// statement it justifies: every heading in every note must name a class
+// the guardrail still reports on that migration.
+func TestSafetyNotesAreStillNeeded(t *testing.T) {
+	entries, err := SafetyFS.ReadDir("safety")
+	if err != nil {
+		t.Fatalf("read safety notes: %v", err)
+	}
+	notes := 0
+	for _, e := range entries {
+		if e.Name() == "README.md" {
 			continue
 		}
-		found := false
-		for _, stmt := range addColumnNotNull.FindAllString(upSection(string(body)), -1) {
-			if !strings.Contains(strings.ToUpper(stmt), "DEFAULT") {
-				found = true
+		notes++
+		migration := strings.TrimSuffix(e.Name(), ".md") + ".sql"
+		raised := map[string]bool{}
+		for _, f := range RowDependent(UpSection(readMigration(t, migration))) {
+			raised[f.Class] = true
+		}
+		for class := range safetyNoteClasses(t, migration) {
+			if !raised[class] {
+				t.Errorf("%s attests to %q, which %s no longer raises; drop the heading", e.Name(), class, migration)
 			}
 		}
-		if !found {
-			t.Errorf("grandfathered migration %s no longer adds a NOT NULL column without a DEFAULT; drop it from the list", name)
+	}
+	if notes == 0 {
+		t.Fatal("no safety notes found -- the embed pattern is wrong")
+	}
+}
+
+// TestGrandfatheredListDoesNotGrow keeps the exemption list from
+// becoming a habit: every name in it must still exist and must still be
+// an offender, so a migration that gets fixed or deleted is removed from
+// the list rather than left as cover for a future one.
+func TestGrandfatheredListDoesNotGrow(t *testing.T) {
+	const want = 24
+	if len(grandfathered) != want {
+		t.Fatalf("grandfathered has %d entries, want exactly %d -- a new migration takes the safe form or writes a safety note, not an exemption", len(grandfathered), want)
+	}
+	for name := range grandfathered {
+		if len(RowDependent(UpSection(readMigration(t, name)))) == 0 {
+			t.Errorf("grandfathered migration %s no longer carries a row-dependent statement; drop it from the list", name)
 		}
 	}
 }
 
-// upSection returns everything between the goose Up annotation and the
-// Down annotation, or the whole body when there is no Down.
-func upSection(body string) string {
-	const upMarker = "+goose Up"
-	const downMarker = "+goose Down"
-	start := strings.Index(body, upMarker)
-	if start < 0 {
-		return body
+// migrationFiles lists the embedded migrations, newest last.
+func migrationFiles(t *testing.T) []string {
+	t.Helper()
+	entries, err := FS.ReadDir(".")
+	if err != nil {
+		t.Fatalf("read migrations: %v", err)
 	}
-	rest := body[start:]
-	up, _, found := strings.Cut(rest, downMarker)
-	if found {
-		return up
+	var names []string
+	for _, e := range entries {
+		if strings.HasSuffix(e.Name(), ".sql") {
+			names = append(names, e.Name())
+		}
 	}
-	return rest
+	return names
 }
 
-// collapse squeezes a statement onto one line so a multi-line ALTER reads
-// as a single quotable line in the failure message.
-func collapse(s string) string {
-	return strings.Join(strings.Fields(s), " ")
+// readMigration returns one embedded migration's text.
+func readMigration(t *testing.T, name string) string {
+	t.Helper()
+	body, err := FS.ReadFile(name)
+	if err != nil {
+		t.Fatalf("read %s: %v", name, err)
+	}
+	return string(body)
 }
