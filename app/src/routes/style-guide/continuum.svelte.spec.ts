@@ -178,16 +178,17 @@ describe('the sweep, over a closed disclosure (#710)', () => {
 	});
 
 	/*
-	 * A measurement must not be an action. The Staff roster loads its
-	 * work-state history from an `ontoggle` handler, so a sweep that left
+	 * A measurement must not be an action. The Staff roster loads both of
+	 * a row's histories -- work state (#459) and Membership (#872), one
+	 * `HistoryDisclosure` each -- from an `ontoggle` handler, so a sweep that left
 	 * a handler seeing `open` would make measuring a screen issue that
 	 * screen's requests. It does not, and this pins why rather than
 	 * leaving it to a doc comment: a `toggle` event is queued rather than
 	 * dispatched synchronously and repeated changes coalesce, so a
 	 * disclosure opened and closed again inside one task reports only the
 	 * state it ended in. Measured against the real route as well as here
-	 * -- a full sweep of the Staff roster makes zero work-state-history
-	 * requests -- and this is the assertion that keeps it true if the
+	 * -- a full sweep of the Staff roster makes zero history requests of
+	 * either kind -- and this is the assertion that keeps it true if the
 	 * open/undo pair ever stops being synchronous.
 	 */
 	it('never lets a toggle handler see the disclosure open', async () => {

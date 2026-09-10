@@ -255,13 +255,6 @@ func listEngagementActivity(ctx context.Context, tx *sql.Tx, practiceID, engagem
 	return items, nil
 }
 
-// departedStaffName is what a reassignment reads as when one side of it
-// names a Staff member the LEFT JOIN no longer reaches. A name is what
-// the reader came for and a bare uuid tells her nothing, so the entry
-// says plainly that the person is gone rather than showing her the id
-// (#887).
-const departedStaffName = "a former colleague"
-
 // reassignmentDetail renders a visit_reassigned entry as the move it
 // records, in the two people's names -- the ids in the diff resolved by
 // the query's own LEFT JOINs, the same way actorName is resolved, so no
@@ -277,7 +270,7 @@ func reassignmentDetail(action string, before, after sql.NullString) string {
 
 func staffDisplayName(name sql.NullString) string {
 	if !name.Valid {
-		return departedStaffName
+		return activity.DepartedStaffName
 	}
 	return name.String
 }

@@ -58,11 +58,40 @@ const SubjectClient = "client"
 // prevents.
 const SubjectPractice = "practice"
 
+// SubjectMembership is the subject_kind every write site that touches
+// one person's standing at one Practice records against (subject_id =
+// staff_id): staffauth's RecordMembershipEvent (joined, roles_changed,
+// employment_type_changed, removed) and its EndSessionsHandler
+// (sessions_ended, #473), which names the same relationship even though
+// it changes nothing about what the Membership is.
+//
+// Exported for the same reason SubjectClient is, and with a second
+// reason of its own since #872: there is now a read side
+// (staffauth.ListMembershipHistoryHandler) whose WHERE clause has to
+// match these writers exactly, and one constant is what keeps a writer
+// from drifting out of a reader's sight.
+const SubjectMembership = "membership"
+
 // SystemActorName is what ActorSystem renders as -- ADR-0022: "Doula
 // Cloud", never "System". Every reader that resolves an activity row's
 // actor to a display name falls back to this constant for actor_kind =
 // 'system', rather than each caller inventing its own string.
 const SystemActorName = "Doula Cloud"
+
+// DepartedStaffName is what a Staff member reads as once no reader can
+// reach her staff row any more -- staff_practice_visibility (00002)
+// admits a staff row only while that person holds a Membership at the
+// current Practice, so a name a row still refers to (an actor's, or a
+// Visit reassignment's two sides) resolves to NULL the moment her
+// Membership ends. A name is what the reader came for and a bare uuid
+// tells her nothing, so the entry says plainly that the person is gone
+// (#887).
+//
+// Here rather than in one reader's own package because two readers now
+// need it -- the Engagement ledger's reassignment sentence and the
+// Membership history's actor (#872) -- and a Practice must not meet two
+// different words for the same absence.
+const DepartedStaffName = "a former colleague"
 
 // EngagementAction is one of the fixed action strings a write site
 // records against SubjectEngagement. Named in one place so a write site

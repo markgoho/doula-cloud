@@ -10,6 +10,7 @@ import {
 	endSessions,
 	loadDoulas,
 	loadDoulasOrNone,
+	loadMembershipHistory,
 	loadStaff,
 	loadWorkStateHistory,
 	removeMember,
@@ -95,6 +96,50 @@ describe('loadWorkStateHistory', () => {
 
 		await expect(loadWorkStateHistory(fetcher, 'practice-1', 'staff-1')).rejects.toThrow(
 			'Failed to load work state history'
+		);
+	});
+});
+
+describe('loadMembershipHistory', () => {
+	it('fetches the member’s membership-history path with no query on the first page', async () => {
+		const history = {
+			items: [
+				{
+					eventId: 'event-1',
+					action: 'joined',
+					actorName: 'Renata Alvarez',
+					roles: ['doula'],
+					employmentType: 'employee',
+					createdAt: '2026-08-28T12:00:00Z'
+				}
+			],
+			hasMore: false
+		};
+		const fetcher = vi.fn().mockResolvedValue(response(history));
+
+		const result = await loadMembershipHistory(fetcher, 'practice-1', 'staff-1');
+
+		expect(fetcher).toHaveBeenCalledWith(
+			'/api/practices/practice-1/staff/staff-1/membership-history'
+		);
+		expect(result).toEqual(history);
+	});
+
+	it('carries a later page’s cursor on the query string', async () => {
+		const fetcher = vi.fn().mockResolvedValue(response({ items: [], hasMore: false }));
+
+		await loadMembershipHistory(fetcher, 'practice-1', 'staff-1', 'cursor-1');
+
+		expect(fetcher).toHaveBeenCalledWith(
+			'/api/practices/practice-1/staff/staff-1/membership-history?cursor=cursor-1'
+		);
+	});
+
+	it('throws with the response body text on a non-ok response', async () => {
+		const fetcher = vi.fn().mockResolvedValue(response('Failed to load membership history', 500));
+
+		await expect(loadMembershipHistory(fetcher, 'practice-1', 'staff-1')).rejects.toThrow(
+			'Failed to load membership history'
 		);
 	});
 });

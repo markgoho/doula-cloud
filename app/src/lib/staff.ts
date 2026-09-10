@@ -105,6 +105,58 @@ export async function loadWorkStateHistory(
 	return response.json();
 }
 
+/** One entry of a Member's Membership history (#872): what happened to
+ * her standing at this Practice, who did it, and when.
+ *
+ * The values are the stored ones (`owner`, `contractor`), never display
+ * words -- `roles.ts` is the one place either is given the word a person
+ * reads (#262), and the BFF deliberately does not hold a second copy of
+ * that map.
+ *
+ * Every before/after field is optional, and an absent one means the fact
+ * did not move on this entry rather than that it became blank: a
+ * `joined` entry carries `roles`/`employmentType` with no previous, a
+ * `removed` entry carries only the previous, a `roles_changed` carries
+ * neither employment field, and `sessions_ended` (#473) carries none of
+ * the four -- it names something done to the Membership rather than a
+ * change to what it is. */
+export interface MembershipChange {
+	eventId: string;
+	action: string;
+	actorName: string;
+	previousRoles?: string[];
+	roles?: string[];
+	previousEmploymentType?: string;
+	employmentType?: string;
+	createdAt: string;
+}
+
+/** One page of a Member's Membership history. Unlike the work-state
+ * history it needs no `memberSince`: every entry is recorded against
+ * this Practice, so none of them was made anywhere else. */
+export type MembershipHistory = CursorPage<MembershipChange>;
+
+/** Loads one page of a Member's Membership history, fetched only when
+ * her disclosure is opened (never with the roster, which would otherwise
+ * grow with every role change anybody has ever made). `cursor` is the
+ * empty string for the first page. Throws with the response body text on
+ * a non-2xx response. */
+export async function loadMembershipHistory(
+	fetcher: Fetcher,
+	practiceId: string,
+	staffId: string,
+	cursor = ''
+): Promise<MembershipHistory> {
+	const query = cursor ? `?cursor=${encodeURIComponent(cursor)}` : '';
+	const response = await fetcher(
+		`${staffPath(practiceId)}/${staffId}/membership-history${query}`
+	);
+	if (!response.ok) {
+		throw new Error(await apiErrorMessage(response));
+	}
+	return response.json();
+}
+
 /** Saves a Membership's roles and employment type together, one change
  * (RA-G2, #261). Throws with the response body text on a non-2xx
  * response -- including the "a practice must keep at least one Owner"
