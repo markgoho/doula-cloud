@@ -194,7 +194,7 @@ func withTokenTx(w http.ResponseWriter, r *http.Request, db *sql.DB, token, code
 		}
 	}()
 
-	offer, status, msg := resolveByToken(r.Context(), tx, offerID, token, code)
+	offer, status, refusalCode, msg := resolveByToken(r.Context(), tx, offerID, token, code)
 	if status != http.StatusOK {
 		// A wrong code is a write -- the attempt counter moved -- and that
 		// discovery is worth keeping, the same reasoning acceptInvite
@@ -207,7 +207,10 @@ func withTokenTx(w http.ResponseWriter, r *http.Request, db *sql.DB, token, code
 			}
 			committed = true
 		}
-		apierr.WriteError(w, msg, status)
+		if refusalCode == "" {
+			refusalCode = apierr.CodeForStatus(status)
+		}
+		apierr.Write(w, status, refusalCode, msg, nil)
 		return
 	}
 
@@ -231,12 +234,17 @@ func withTokenTx(w http.ResponseWriter, r *http.Request, db *sql.DB, token, code
 // A wrong token and a wrong code are the same 403, and a token that opens
 // nothing is a 404 with no detail: whoever is holding a link they were
 // not sent learns only that it does not work.
-func resolveByToken(ctx context.Context, tx *sql.Tx, offerID, token, code string) (PreAccountOffer, int, string) {
+//
+// The apierr.Code returned alongside the status is empty for every
+// refusal that wants the default for its status; only the exhausted
+// guess counter names one, because ratelimit.Wrap answers this same
+// route with the other kind of 429 (#846).
+func resolveByToken(ctx context.Context, tx *sql.Tx, offerID, token, code string) (PreAccountOffer, int, apierr.Code, string) {
 	if _, err := tx.ExecContext(ctx,
 		`SELECT set_config('app.invite_token_digest', $1, true)`, staffauth.TokenDigest(token),
 	); err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		return PreAccountOffer{}, http.StatusInternalServerError, apierr.MsgInternalError
+		return PreAccountOffer{}, http.StatusInternalServerError, "", apierr.MsgInternalError
 	}
 
 	var o PreAccountOffer
@@ -252,29 +260,30 @@ func resolveByToken(ctx context.Context, tx *sql.Tx, offerID, token, code string
 	).Scan(&o.OfferID, &o.State, &o.ClientFirstInitial, &o.ClientArea, &dueDate, &amountCents, &terms,
 		&expiresAt, &codeDigest, &attempts)
 	if errors.Is(err, sql.ErrNoRows) {
-		return PreAccountOffer{}, http.StatusNotFound, "offer not found"
+		return PreAccountOffer{}, http.StatusNotFound, "", "offer not found"
 	}
 	if err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		return PreAccountOffer{}, http.StatusInternalServerError, apierr.MsgInternalError
+		return PreAccountOffer{}, http.StatusInternalServerError, "", apierr.MsgInternalError
 	}
 
 	if attempts >= maxAccessCodeAttempts {
-		return PreAccountOffer{}, http.StatusTooManyRequests, "too many incorrect codes -- ask the practice to send this offer again"
+		return PreAccountOffer{}, http.StatusTooManyRequests, apierr.CodeOfferCodeExhausted,
+			"too many incorrect codes -- ask the practice to send this offer again"
 	}
 	if subtle.ConstantTimeCompare([]byte(codeDigest.String), []byte(staffauth.TokenDigest(code))) != 1 {
 		if _, err := tx.ExecContext(ctx,
 			`UPDATE engagement_offers SET access_code_attempts = access_code_attempts + 1 WHERE id = $1`, o.OfferID,
 		); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			return PreAccountOffer{}, http.StatusInternalServerError, apierr.MsgInternalError
+			return PreAccountOffer{}, http.StatusInternalServerError, "", apierr.MsgInternalError
 		}
-		return PreAccountOffer{}, http.StatusForbidden, "that code is not right"
+		return PreAccountOffer{}, http.StatusForbidden, "", "that code is not right"
 	}
 
 	if err := expireOpen(ctx, tx, byID, o.OfferID); err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		return PreAccountOffer{}, http.StatusInternalServerError, apierr.MsgInternalError
+		return PreAccountOffer{}, http.StatusInternalServerError, "", apierr.MsgInternalError
 	}
 	if o.State == stateOffered && !expiresAt.After(time.Now()) {
 		o.State = stateExpired
@@ -290,5 +299,5 @@ func resolveByToken(ctx context.Context, tx *sql.Tx, offerID, token, code string
 	// asking, so a declined Offer does not leave a stranger holding a
 	// Client's details indefinitely.
 	lapseClientFields(o.State, &o.ClientFirstInitial, &o.ClientArea, &o.DueDate)
-	return o, http.StatusOK, ""
+	return o, http.StatusOK, "", ""
 }

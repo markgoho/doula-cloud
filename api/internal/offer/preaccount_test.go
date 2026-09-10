@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"testing"
 
+	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/offer"
 	"doula-cloud/api/internal/testdb"
 )
@@ -103,8 +104,8 @@ func TestReadHandler_DoesNotReachAStaffTargetOffer(t *testing.T) {
 //
 // This read is mounted behind offer.Mount's real ratelimit.Wrap (#836),
 // whose per-Offer cap answers 429 too. The refusal asserted here has to
-// be the row counter's, so expectRowCounterRefusal checks Retry-After is
-// absent -- see response's own doc comment in helpers_test.go.
+// be the row counter's, which is why it carries its own apierr code
+// (#846) rather than leaving a caller to read the prose.
 func TestReadHandler_BoundsCodeGuessing(t *testing.T) {
 	f := newFixture(t)
 	offerID, token, code := seedEmailOffer(t, f)
@@ -113,38 +114,39 @@ func TestReadHandler_BoundsCodeGuessing(t *testing.T) {
 		expectStatus(t, do(t, http.MethodGet, f.readURL(offerID, token, "000000"), "", nil), http.StatusForbidden)
 	}
 	// Even the right code no longer opens it.
-	expectRowCounterRefusal(t, do(t, http.MethodGet, f.readURL(offerID, token, code), "", nil))
+	expectRefusalCode(t, do(t, http.MethodGet, f.readURL(offerID, token, code), "", nil), apierr.CodeOfferCodeExhausted)
 }
 
 // #846: the per-Offer cap is still a cap. Once a burned Offer is only
 // answering the row counter's own 429, the requests still count against
 // ratelimit.Wrap's bucket, and request 31 is turned away by the limiter
-// instead -- Retry-After present, which the row-counter refusal never
-// carries.
+// instead -- RATE_LIMITED, the code that means "wait and this works".
 func TestReadHandler_StillCapsRequestsAgainstOneOffer(t *testing.T) {
 	f := newFixture(t)
 	offerID, token, _ := seedEmailOffer(t, f)
 
-	for range 30 {
+	// The first ten are wrong guesses; the twenty after them are the row
+	// counter's own refusal. Every one of the thirty still counts against
+	// the limiter's bucket, and none of them is the limiter's refusal.
+	for i := range 30 {
 		resp := do(t, http.MethodGet, f.readURL(offerID, token, "000000"), "", nil)
-		if resp.status == http.StatusTooManyRequests && resp.header.Get("Retry-After") != "" {
-			t.Fatalf("the per-offer cap bit before its own limit: %s", resp.body)
+		if i < 10 {
+			expectStatus(t, resp, http.StatusForbidden)
+			continue
 		}
+		expectRefusalCode(t, resp, apierr.CodeOfferCodeExhausted)
 	}
-	resp := do(t, http.MethodGet, f.readURL(offerID, token, "000000"), "", nil)
-	expectStatus(t, resp, http.StatusTooManyRequests)
-	if resp.header.Get("Retry-After") == "" {
-		t.Fatalf("request 31 was not the rate limiter's refusal: %s", resp.body)
-	}
+	expectRefusalCode(t, do(t, http.MethodGet, f.readURL(offerID, token, "000000"), "", nil), apierr.CodeRateLimited)
 }
 
-// expectRowCounterRefusal fails unless resp is 00041's own
-// "too many incorrect codes" refusal rather than ratelimit.Wrap's.
-func expectRowCounterRefusal(t *testing.T, resp response) {
+// expectRefusalCode fails unless resp is a 429 carrying want -- the one
+// assertion that tells this route's two 429s apart, since both share the
+// status and only the code separates them (#692, #846).
+func expectRefusalCode(t *testing.T, resp response, want apierr.Code) {
 	t.Helper()
 	expectStatus(t, resp, http.StatusTooManyRequests)
-	if retryAfter := resp.header.Get("Retry-After"); retryAfter != "" {
-		t.Fatalf("Retry-After = %q, want the row counter's refusal, not the rate limiter's: %s", retryAfter, resp.body)
+	if got := decodeRefusal(t, resp).Code; got != want {
+		t.Fatalf("code = %q, want %q: %s", got, want, resp.body)
 	}
 }
 

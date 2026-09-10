@@ -10,9 +10,12 @@ import (
 	"doula-cloud/api/internal/tasknudge"
 )
 
-// offerReadsPerOfferPerHour caps how many pre-account requests one Offer
-// will answer in an hour. It is deliberately *not* maxAccessCodeAttempts
-// (#846): the two counters count different things. The row counter
+// offerRequestsPerOfferPerHour caps how many pre-account requests one
+// Offer will answer in an hour -- both routes offerRules fronts, the
+// read and the token decline, each on its own bucket (ratelimit's
+// bucketKey namespaces by endpoint). It is deliberately *not*
+// maxAccessCodeAttempts (#846): the two counters count different
+// things. The row counter
 // (offer.go, 00041) counts wrong guesses and nothing else, permanently;
 // this one counts every request against the Offer, right code or wrong.
 // Sizing the two alike made a legitimate sequence unreachable -- ten
@@ -28,7 +31,7 @@ import (
 // budget widens. What this rule bounds is request *volume* against one
 // Offer -- cost, not credential guessing -- alongside IPRule for volume
 // across many different Offers from one caller.
-const offerReadsPerOfferPerHour = 30
+const offerRequestsPerOfferPerHour = 30
 
 // offerRules limits the pre-account Offer routes. Neither endpoint has a
 // Bearer token or an email to key on before its own token+code check
@@ -36,7 +39,7 @@ const offerReadsPerOfferPerHour = 30
 // dimension here: the resource being probed, rather than who's probing
 // it.
 var offerRules = []ratelimit.Rule{
-	ratelimit.PathValueRule("offerId", offerReadsPerOfferPerHour, time.Hour),
+	ratelimit.PathValueRule("offerId", offerRequestsPerOfferPerHour, time.Hour),
 	ratelimit.IPRule(50, time.Hour),
 }
 

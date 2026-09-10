@@ -98,6 +98,16 @@ const (
 	// rather than a field of that form. The code exists so a caller can
 	// branch, the same reasoning CodePracticePendingDeletion records.
 	CodeBirthOutcomeRequired Code = "BIRTH_OUTCOME_REQUIRED"
+	// CodeOfferCodeExhausted is #846's own 429: the pre-account Offer
+	// read has spent all of maxAccessCodeAttempts' guesses against one
+	// Offer's six-digit code (00041), and the Offer stays shut until the
+	// Practice sends it again. The other 429 on that same route is
+	// ratelimit.Wrap's per-Offer cap, which is CodeRateLimited and means
+	// the opposite thing -- wait, and the same request works later. A
+	// caller that told those two apart by their prose, or by a
+	// Retry-After header only one of them carries, would be doing what
+	// #692 forbids, so the permanent one gets its own code.
+	CodeOfferCodeExhausted Code = "OFFER_CODE_EXHAUSTED"
 )
 
 // APIError is docs/api-design.md section 7's structured error shape.
