@@ -155,7 +155,7 @@ gcloud storage buckets update gs://doula-cloud-tfstate --versioning
 - **No secret at all, since [#1183](https://github.com/markgoho/doula-cloud/issues/1183).** The two Scheduler jobs used to carry the `X-Internal-Secret` header value here, accepted as unavoidable if the jobs were owned at all — it is a field on the job — and that reasoning held only while a shared string was the boundary. [ADR-0037](adr/0037-the-internal-boundary-is-a-caller-identity-not-a-shared-secret.md) replaced the header with an `oidc_token` block naming a service account, which is not a secret, so state carries none rather than carrying one it has a good reason for.
 - **Not** any Secret Manager payload, because only the shells are owned.
 - **Not** any Cloud SQL password, because `google_sql_user` is not owned. This is the specific reason for that line in the by-hand table.
-- The 8 plain `doula-api` environment variables, none of which is a secret; the 11 secret references are references, not values.
+- The 12 plain `doula-api` environment variables, none of which is a secret; the 9 secret references are references, not values. It was 8 and 11 until [#1183](https://github.com/markgoho/doula-cloud/issues/1183) added the three `INTERNAL_OIDC_*` values and removed the `NOTIFICATION_WORKER_SECRET` reference.
 
 Read on the state bucket used to mean holding the internal worker secret, for as long as the jobs carried it — one principal and one service account, and the price of catching the next #481. ADR-0037 stopped paying that price rather than keeping it justified, and #1183 is the apply that did it.
 

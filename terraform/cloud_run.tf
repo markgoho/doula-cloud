@@ -1,14 +1,20 @@
-# `doula-api`'s own base URL, written once. Four things have to agree on it
-# and none of them can be checked against the others by anything but a human
-# reading two files: the `INTERNAL_OIDC_AUDIENCE` the guard validates against
-# (ADR-0037), the `audience` on each Scheduler job's `oidc_token`, and
-# `NOTIFICATION_TASKS_TARGET_BASE_URL`, which is both where a nudge is sent
-# and — through `internalCallerAuth` in `api/main.go` — the audience Cloud
-# Tasks mints each nudge's token for. Both Cloud Scheduler and Cloud Tasks
-# default an unset `audience` to the *full target URI*, path included, while
-# the guard checks the base URL, so a job written without an explicit
-# `audience` 401s with an otherwise perfectly valid token. A local is what
-# stops those four from drifting apart one edit at a time.
+# `doula-api`'s own base URL, written once. Four values in this directory
+# have to agree on it, and nothing but a human reading two files could
+# otherwise check them against each other: the `INTERNAL_OIDC_AUDIENCE` the
+# guard validates against (ADR-0037), the `audience` on each of the two
+# Scheduler jobs' `oidc_token`, and `NOTIFICATION_TASKS_TARGET_BASE_URL`,
+# which is both where a nudge is sent and — through `internalCallerAuth` in
+# `api/main.go` — the audience Cloud Tasks mints each nudge's token for. Both
+# Cloud Scheduler and Cloud Tasks default an unset `audience` to the *full
+# target URI*, path included, while the guard checks the base URL, so a job
+# written without an explicit `audience` 401s with an otherwise perfectly
+# valid token. A local is what stops those four from drifting apart one edit
+# at a time.
+#
+# It cannot reach the fifth copy: `.github/workflows/firebase-hosting-merge.yml`
+# holds this same URL twice, as `id_token_audience` and in the `verify-pages`
+# curl, and Terraform does not write that file. That one is checked by the
+# step failing loudly on the next deploy, not by anything here.
 locals {
   doula_api_base_url = "https://doula-api-850855848778.us-central1.run.app"
 }
