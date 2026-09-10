@@ -123,23 +123,35 @@ export function sweep(frame: HTMLElement, availableSpace: number): Break | undef
 
 /*
  * Opens every closed `<details>` under `frame` and hands back the undo
- * (#710). Exported so what the sweep does to a subject before measuring it
- * can be asserted on directly, and so a second measuring instrument can
- * take the same look without copying the query -- one artifact is enforced
- * by there being one function (#570).
+ * (#710). It is exported rather than kept private to `sweep` because the
+ * floor check takes a measurement of its own and has the same blind spot:
+ * #1124 is that work, and the query belongs in one place before a second
+ * instrument writes its own copy -- which is #570's rule stated before the
+ * copy exists rather than after.
  *
- * Only the disclosures that were CLOSED are reopened -- a subject that
- * ships one already open (`StepRail`'s completed steps at its own widths)
- * is left as its own markup declared it, since closing that would leave
- * the frame in a state the screen never has.
+ * Only the disclosures that were CLOSED are touched -- a subject that
+ * ships one already open (`StepRail`'s completed steps) is left as its own
+ * markup declared it, since closing that would leave the frame in a state
+ * the screen never has. Nothing here re-renders between the open and the
+ * undo, so a Svelte-controlled `open={...}` is never reasserted mid-sweep.
  *
- * The undo matters because a sweep is not the last thing a caller does:
- * `layout-exercise` sweeps the same mounted frame more than once, and a
- * spec that reads the DOM after a sweep should see the screen it mounted
- * rather than the one the instrument left behind.
+ * The undo is what keeps a measurement from being an action. A `toggle`
+ * event is queued rather than dispatched synchronously, and repeated
+ * changes coalesce, so a disclosure opened and closed again inside one
+ * task never runs its `ontoggle` handler as open -- which is how the Staff
+ * roster's work-state history is not fetched by the act of measuring the
+ * roster. It is also why content a disclosure loads on open is measured in
+ * its loading state, the gap #1126 holds. The undo serves a plainer
+ * purpose too: a spec that reads the DOM after a sweep sees the screen it
+ * mounted rather than the one the instrument left behind.
+ *
+ * What this does not handle, named because it is a limit rather than an
+ * oversight: a grouped `<details name="...">`, where opening one closes
+ * its siblings, would leave only the last of a group open and measured.
+ * The app has no grouped disclosure today.
  */
 export function openDisclosures(frame: HTMLElement): () => void {
-	const closed = [...frame.querySelectorAll('details:not([open])')] as HTMLDetailsElement[];
+	const closed = [...frame.querySelectorAll<HTMLDetailsElement>('details:not([open])')];
 	for (const disclosure of closed) disclosure.open = true;
 	void frame.offsetWidth;
 	return () => {

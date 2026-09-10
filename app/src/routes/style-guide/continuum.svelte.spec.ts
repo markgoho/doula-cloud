@@ -155,6 +155,17 @@ describe('the sweep, over a closed disclosure (#710)', () => {
 		}
 	});
 
+	/*
+	 * `querySelector` in these last two, deliberately. What they assert is
+	 * a fact about the instrument rather than about the screen -- that the
+	 * sweep put back the DOM property it changed -- and `open` is that
+	 * property. A `<summary>`'s `aria-expanded` describes the same state,
+	 * but reading it here would assert the browser's mapping of the
+	 * property instead of the property the sweep actually wrote, which is
+	 * the thing under test (`.claude/rules/svelte-tests.md` case 3: a fact
+	 * about the document with no element for an accessible query to ask
+	 * about).
+	 */
 	it('leaves the disclosure closed again afterwards', () => {
 		const { run, frame, remove } = frameHolding(ledger());
 		try {

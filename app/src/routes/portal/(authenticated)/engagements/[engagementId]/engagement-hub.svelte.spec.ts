@@ -250,12 +250,38 @@ describe('the Activity disclosure (#486)', () => {
 	// so `route-continuum.svelte.spec.ts` measured a ledger it could not
 	// see into -- and #710 fixed that where it belonged, in the sweep,
 	// which now opens every closed disclosure under the frame before it
-	// measures and closes it again after. The route's own fixture already
-	// carries the two worst-case rows this ledger can hold (the register's
-	// longest phrase and its longest unbreakable word), so the shared
-	// sweep now measures strictly more of this screen than the private
-	// test did, at the same widths, and a second copy of the instrument
+	// measures and closes it again after. A second copy of the instrument
 	// beside one route is exactly what #570 says not to keep.
+	//
+	// What the copy is replaced by is the test below, not nothing. The
+	// shared sweep waits on one signal -- the fixture's `readyText`, this
+	// screen's `<h1>` -- and this route answers three requests, of which
+	// the ledger's is neither the first nor the one the heading depends
+	// on. So the thing that has to hold for #486's own AC to still be
+	// checked is that the rows are already rendered when that signal is
+	// met. Measured, and now asserted, rather than assumed: the deleted
+	// test polled for the row text itself and so carried this guarantee
+	// inside it, and dropping the test without keeping the guarantee is
+	// how a sweep goes on passing over an empty table.
+	it("has the ledger's rows rendered by the time the sweep's own signal is met", async () => {
+		apiFetchWithSession.mockImplementation(toApiResponder(fixture));
+
+		const { container } = await render(Hub);
+		await expect
+			.element(page.getByRole('heading', { name: fixture.readyText, level: 1 }))
+			.toBeVisible();
+
+		// Read synchronously off the DOM, with no poll of its own: a poll
+		// here would wait for the rows the sweep does not wait for, and
+		// would pass in exactly the case this exists to fail. Scoped
+		// through `querySelector` for the reason every other Activity
+		// test in this file is (`.claude/rules/svelte-tests.md` case 1):
+		// a closed `<details>` puts its content outside the accessibility
+		// tree entirely, so no accessible query can reach in.
+		expect(container.querySelector(':scope details')?.textContent).toContain(
+			'A payment recorded earlier was removed.'
+		);
+	});
 
 	// #708's own acceptance criterion, on the row the ticket names: the
 	// staff surfaces render `plan_instance_edited` as "Plan instance
