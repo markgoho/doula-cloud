@@ -3,8 +3,26 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import { jsonResponse } from '#lib/testResponse.js';
 import Page from './+page.svelte';
-import { toApiResponder } from '../../routeFixture.js';
-import { fixture, session } from './page.fixture.js';
+import { toApiResponder, toPageState } from '../../routeFixture.js';
+import { afterSessionEnded, fixture, session } from './page.fixture.js';
+
+/*
+ * The screen reads its own URL for #757's `sessionEnded` flag, through
+ * `#lib/appState.svelte.js` -- which reads `$app/state` rather than
+ * replacing it, so mocking the source here is what reaches it. Same
+ * installation as `clients-list.svelte.spec.ts` and the continuum check:
+ * `vi.mock` is hoisted above every import, so the object is declared
+ * empty and filled from the fixture once the imports have run. A test
+ * that needs the ended-session address installs the fixture's own
+ * variant over it, before `render()`.
+ */
+const pageState = vi.hoisted(() => ({
+	params: {} as Record<string, string>,
+	url: new URL('https://example.test/'),
+	data: {} as Record<string, unknown>
+}));
+vi.mock('$app/state', () => ({ page: pageState }));
+Object.assign(pageState, toPageState(fixture));
 
 // #283: on load, this screen probes for a live Staff session of its own
 // and, if one exists, sends the visitor on exactly the way a fresh
@@ -77,6 +95,10 @@ beforeEach(() => {
 		assertionForSignIn
 	])
 		mock.mockReset();
+
+	// Back to the base fixture's own address, so a test that installed
+	// #757's ended-session variant does not leave it on the next one.
+	Object.assign(pageState, toPageState(fixture));
 });
 
 afterEach(() => {
@@ -374,5 +396,67 @@ describe('Staff login -- signing in over a live portal session (#610)', () => {
 		// Nothing further asked of the BFF, so the portal session stands.
 		expect(exchange).toHaveBeenCalledTimes(1);
 		expect(signOut).toHaveBeenCalled();
+	});
+});
+
+/*
+ * #757: `handleExpiredSession` (#lib/api.js) and the account screen's own
+ * second-factor removal both land here with `sessionEnded=true`. The flag
+ * is the only thing that separates that arrival from an ordinary visit,
+ * so both directions are asserted -- a notice that rendered
+ * unconditionally would tell a first-time visitor she was signed out of a
+ * session she never had.
+ *
+ * The flag is the whole variable, so it is `setup`'s one parameter, and
+ * the fixture's own ended-session variant is where its URL is written
+ * rather than a second copy of that address in this file. At module scope
+ * because it closes over nothing the describe owns.
+ */
+async function setupSessionEnded({ hasSessionEnded = true } = {}) {
+	// Nothing is signed in on this screen in any of these -- the probe
+	// answers the way it does for a visitor whose session just ended.
+	apiFetch.mockResolvedValue(jsonResponse('no matching staff session', 404));
+	if (hasSessionEnded) Object.assign(pageState, toPageState({ ...fixture, ...afterSessionEnded }));
+
+	await render(Page, {});
+}
+
+describe('Staff login -- the session-ended notice (#757)', () => {
+	const NOTICE = 'For your security, we signed you out. Log in again to continue.';
+
+	it('says why she is back here when the URL carries the flag', async () => {
+		await setupSessionEnded();
+
+		await expect.element(testPage.getByText(NOTICE)).toBeVisible();
+	});
+
+	it('leaves the form usable, rather than replacing it', async () => {
+		await setupSessionEnded();
+
+		await expect.element(testPage.getByLabelText('Email')).toBeVisible();
+		await expect.element(testPage.getByLabelText('Password')).toBeVisible();
+		await expect.element(testPage.getByRole('button', { name: 'Log in' })).toBeVisible();
+	});
+
+	it('says nothing on an ordinary visit', async () => {
+		await setupSessionEnded({ hasSessionEnded: false });
+
+		await expect.element(testPage.getByRole('button', { name: 'Log in' })).toBeVisible();
+		expect(testPage.getByText(NOTICE).elements()).toHaveLength(0);
+	});
+
+	it('drops the notice once Identity Platform asks for the second factor', async () => {
+		// By the challenge step the ended session is two steps back, and
+		// the screen is asking her something else.
+		signInWithEmailAndPassword.mockRejectedValue({ code: 'auth/multi-factor-auth-required' });
+		getMultiFactorResolver.mockReturnValue({ hints: [{ uid: 'enrollment-1' }] });
+
+		await setupSessionEnded();
+		await testPage.getByLabelText('Email').fill('priya@example.com');
+		await testPage.getByLabelText('Password').fill('correct horse');
+		await testPage.getByRole('button', { name: 'Log in' }).click();
+
+		await expect.element(testPage.getByLabelText('Authenticator app code')).toBeVisible();
+		expect(testPage.getByText(NOTICE).elements()).toHaveLength(0);
 	});
 });

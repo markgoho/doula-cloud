@@ -2,6 +2,7 @@
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
+	import { page } from '#lib/appState.svelte.js';
 	import { apiBaseURL, probeSession } from '#lib/api.js';
 	import { decidePortalLanding, type PortalSessionInfo } from '#lib/portalLanding.js';
 	import TextInput from '#lib/components/atoms/TextInput.svelte';
@@ -14,6 +15,16 @@
 	import { FormSubmission, orServiceProblem } from '#lib/formSubmission.svelte.js';
 
 	const emailId = 'portal-login-email';
+
+	/*
+	 * #757: `handleExpiredSession` (#lib/api.js) sends an ended Client
+	 * session to this screen with `sessionEnded=true`, exactly as it does
+	 * the Staff one, so this screen says why she is here for the same
+	 * reason. `$derived` for the reason the Staff screen's own copy of
+	 * this gives: `page` is the seam, and a plain read would resolve
+	 * once at init and never see a drag-surface override.
+	 */
+	const hasSessionEnded = $derived(page.url.searchParams.get('sessionEnded') === 'true');
 
 	let email = $state('');
 	const submission = new FormSubmission();
@@ -79,6 +90,19 @@
 			message="If that address is on our records, we have sent a sign-in link. It can take a minute to arrive."
 		/>
 	{:else}
+		<!--
+			#757: why she is looking at this form again. Not rendered beside
+			the "we have sent a link" notice above -- once she has asked for
+			one, the session that ended is no longer what the screen is
+			about, and two stacked notices say less than one.
+		-->
+		{#if hasSessionEnded}
+			<Notice
+				variant="info"
+				message="For your security, we signed you out. Ask for a new sign-in link to continue."
+			/>
+		{/if}
+
 		<!-- `novalidate`: this page refuses the submit, not the browser. -->
 		<StackedForm onSubmit={handleSubmit}>
 			<LabeledField id={emailId} label="Email" error={submission.errorFor(emailId)}>
