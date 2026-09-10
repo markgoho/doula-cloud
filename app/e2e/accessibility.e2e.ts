@@ -65,10 +65,16 @@ const WCAG_TAGS = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'];
 /**
  * One route to scan. `key` is the stable name a KNOWN entry points at --
  * the route pattern, not the provisioned URL, so an allowance survives a
- * new fixture. `h1` is the ready signal: this is a client-rendered SPA,
- * so `goto` resolves long before the data lands, and axe run against a
- * half-loaded page finds a different set of violations every time --
+ * new fixture. `h1` is HALF the ready signal: this is a client-rendered
+ * SPA, so `goto` resolves long before the data lands, and axe run against
+ * a half-loaded page finds a different set of violations every time --
  * which CI's `retries: 2` would then quietly launder into green.
+ *
+ * The other half is `LOADING_AFFORDANCE` below, and a new row needs
+ * nothing for it: `scan` waits on it for every route at once. Read that
+ * comment before adding a row -- it is why a row does not have to name a
+ * node its own loaded state renders, and why a row whose screen never
+ * finishes loading fails here rather than scanning a Skeleton.
  */
 interface Route {
 	key: string;
@@ -99,12 +105,42 @@ interface Known {
 // shape stays ready for the next genuinely-known violation.
 const KNOWN: Known[] = [];
 
+/*
+ * The loading affordance, as one selector every route is held against
+ * (#1152). `Skeleton` is the only one in the app, and it is matched by
+ * what it means rather than by a test hook: `role="status"` plus
+ * `aria-busy="true"` is what `Skeleton.svelte` renders, and the pair
+ * cannot be silently dropped without a screen-reader user losing the
+ * announcement too. `Button`'s in-flight state also sets `aria-busy` but
+ * carries the button role, so it is not matched here -- and nothing on a
+ * freshly-loaded route is submitting anyway.
+ *
+ * Why the h1 alone was never a ready signal for most of the inventory,
+ * what axe actually measured against a held Skeleton, and why this shape
+ * was chosen over the other two candidates -- a node named per row, or
+ * `FormPage` no longer rendering its title while loading, which it still
+ * does -- are all in docs/testing.md, per this file's own header: the
+ * argument lives there, and this file holds the assertion.
+ *
+ * It is a retrying `expect` rather than #1126's `awaitSettled` because
+ * that helper is an in-page DOM predicate written for the vitest-browser
+ * checks, and Playwright drives from Node. The two properties that matter
+ * are already a retrying locator assertion's: no fixed sleep, and a
+ * budget that expires LOUDLY rather than falling through into a
+ * measurement -- the same shape the h1 wait above it uses.
+ */
+const LOADING_AFFORDANCE_SELECTOR = '[role="status"][aria-busy="true"]';
+
 async function scan(page: Page, route: Route) {
 	await page.goto(route.url);
 	await expect(
 		page.getByRole('heading', { level: 1, name: route.h1 }),
 		`${route.key} never finished loading -- axe would have scanned a skeleton`
 	).toBeVisible();
+	await expect(
+		page.locator(LOADING_AFFORDANCE_SELECTOR),
+		`${route.key} still had a loading affordance on screen -- axe would have scanned a Skeleton and reported the placeholder's own clean bill of health as the screen's`
+	).toHaveCount(0);
 
 	const { violations } = await new AxeBuilder({ page }).withTags(WCAG_TAGS).analyze();
 
@@ -645,4 +681,58 @@ test('Archetypes D, G -- the Client portal', async ({ page, request }) => {
 	for (const route of routes) {
 		await scan(page, route);
 	}
+});
+
+// The guard on the gate itself (#1152), and the one test here that is not a
+// scan: it holds a screen in its loading state on purpose and asserts that
+// `scan` REFUSES it.
+//
+// Why this exists rather than trusting the wait. A ready signal that stops
+// being one fails silently -- the sweep goes green having measured a
+// placeholder, which is exactly what the h1-only signal did on every
+// FormPage and ListPage row until this ticket. Nothing about a green run
+// can tell those two apart, so the refusal is asserted directly.
+//
+// `settings/mfa` is the subject because its loading state is reached by
+// holding ONE request. `loading` there is derived from its Owner-only
+// impact read having not answered yet, and that read is this page's own --
+// not the authenticated layout's session read, which every screen shares
+// and whose 401 handling is a navigation (see mountSettled.ts). The route
+// handler below never fulfills, continues or aborts, so the request stays
+// in flight for the life of the test and the Skeleton never leaves: the
+// screen is held, rather than raced.
+//
+// It costs its own session rather than joining the Staff loop above. A
+// deliberately stalled route must never share a page with a real scan --
+// the interception would outlive the row that wanted it and quietly gate
+// another one.
+test('the sweep refuses a screen whose loading affordance is still up', async ({
+	page,
+	request,
+	context
+}) => {
+	const seeded = await seedPortalClient(request, 'Riverside Doulas');
+	const { practiceId } = seeded;
+	await enterPracticeAsEnrolled(context, page, seeded.staffHeaders, practiceId);
+
+	await page.route('**/mfa-required/impact', () => {
+		// Deliberately unanswered. Fulfilling, continuing or aborting here
+		// would each let the screen finish one way or another.
+	});
+
+	const held: Route = {
+		key: 'practices/[practiceId]/settings/mfa (held loading)',
+		// Not a row in the inventory above, and the label says so: this
+		// fixture exists to be refused, and a failure message reading a
+		// bare 'F' would imply a scanned route that does not exist.
+		archetype: 'F, as a guard fixture rather than an inventory row',
+		url: `/practices/${practiceId}/settings/mfa`,
+		h1: 'Multi-factor authentication'
+	};
+
+	// The h1 half of the signal is satisfied here -- FormPage renders the
+	// title in its loading branch -- so a `scan` that stopped at the h1
+	// would have gone on to run axe against the Skeleton and passed. It is
+	// the second wait that rejects, and it names what it saw.
+	await expect(scan(page, held)).rejects.toThrow(/still had a loading affordance on screen/);
 });
