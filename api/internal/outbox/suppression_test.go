@@ -46,7 +46,7 @@ func newSuppressingSender(refused ...string) *suppressingSender {
 func TestMarkFailed_SuppressedDeadLettersWithoutRetrying(t *testing.T) {
 	db := testdb.New(t)
 	createTestTable(t, db)
-	insertTestRow(t, db, "row-1", 0, time.Now())
+	insertTestRow(t, db, "row-1", 0, 0)
 	w := newTestWorker(&mail.FakeSender{})
 
 	tx, err := db.Admin.BeginTx(t.Context(), nil)
@@ -80,7 +80,7 @@ func TestMarkFailed_SuppressedDeadLettersWithoutRetrying(t *testing.T) {
 func TestMarkFailed_SuppressedClearsConfiguredColumns(t *testing.T) {
 	db := testdb.New(t)
 	createTestTable(t, db)
-	insertTestRow(t, db, "row-1", 0, time.Now())
+	insertTestRow(t, db, "row-1", 0, 0)
 	w := newTestWorker(&mail.FakeSender{}, "secret_a", "secret_b")
 
 	tx, err := db.Admin.BeginTx(t.Context(), nil)
@@ -106,7 +106,7 @@ func TestMarkFailed_SuppressedClearsConfiguredColumns(t *testing.T) {
 func TestSendAll_SkipsSuppressedAddressAndStillMarksSent(t *testing.T) {
 	db := testdb.New(t)
 	createTestTable(t, db)
-	insertTestRow(t, db, "row-1", 0, time.Now())
+	insertTestRow(t, db, "row-1", 0, 0)
 	sender := newSuppressingSender(addrB)
 	w := newTestWorker(sender)
 
@@ -137,7 +137,7 @@ func TestSendAll_SkipsSuppressedAddressAndStillMarksSent(t *testing.T) {
 func TestSendAll_EverySuppressedAddressDeadLetters(t *testing.T) {
 	db := testdb.New(t)
 	createTestTable(t, db)
-	insertTestRow(t, db, "row-1", 0, time.Now())
+	insertTestRow(t, db, "row-1", 0, 0)
 	sender := newSuppressingSender(addrA, addrB)
 	w := newTestWorker(sender)
 
@@ -172,7 +172,7 @@ func TestSendAll_EverySuppressedAddressDeadLetters(t *testing.T) {
 func TestSendAll_RealFailureAfterSuppressedStillRetries(t *testing.T) {
 	db := testdb.New(t)
 	createTestTable(t, db)
-	insertTestRow(t, db, "row-1", 0, time.Now())
+	insertTestRow(t, db, "row-1", 0, 0)
 	sender := newSuppressingSender(addrA)
 	w := newTestWorker(failAfterSuppressed{inner: sender})
 

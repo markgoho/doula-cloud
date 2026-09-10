@@ -80,7 +80,7 @@ func TestDeadLetterError_ErrorReturnsReason(t *testing.T) {
 func TestMailWorker_ComposeSendsAndMarksSent(t *testing.T) {
 	db := testdb.New(t)
 	createTestTable(t, db)
-	insertTestRow(t, db, "row-1", 0, time.Now())
+	insertTestRow(t, db, "row-1", 0, 0)
 	sender := &mail.FakeSender{}
 
 	runMailWorker(t, db, newMailWorker(sender, "send", "recipient@example.test"))
@@ -98,7 +98,7 @@ func TestMailWorker_ComposeSendsAndMarksSent(t *testing.T) {
 func TestMailWorker_ComposeAlreadyDoneMarksSentWithoutSending(t *testing.T) {
 	db := testdb.New(t)
 	createTestTable(t, db)
-	insertTestRow(t, db, "row-1", 0, time.Now())
+	insertTestRow(t, db, "row-1", 0, 0)
 	sender := &mail.FakeSender{}
 
 	runMailWorker(t, db, newMailWorker(sender, "already", ""))
@@ -115,7 +115,7 @@ func TestMailWorker_ComposeAlreadyDoneMarksSentWithoutSending(t *testing.T) {
 func TestMailWorker_ComposeDeadLetterErrorDeadLettersOnTheSpot(t *testing.T) {
 	db := testdb.New(t)
 	createTestTable(t, db)
-	insertTestRow(t, db, "row-1", 0, time.Now())
+	insertTestRow(t, db, "row-1", 0, 0)
 	sender := &mail.FakeSender{}
 
 	runMailWorker(t, db, newMailWorker(sender, "deadletter", ""))
@@ -143,7 +143,7 @@ func TestMailWorker_ComposeDeadLetterErrorDeadLettersOnTheSpot(t *testing.T) {
 func TestMailWorker_ComposePlainErrorSchedulesRetryWithOwnErrorText(t *testing.T) {
 	db := testdb.New(t)
 	createTestTable(t, db)
-	insertTestRow(t, db, "row-1", 0, time.Now())
+	insertTestRow(t, db, "row-1", 0, 0)
 	sender := &mail.FakeSender{}
 
 	runMailWorker(t, db, newMailWorker(sender, "boom", ""))
@@ -163,7 +163,7 @@ func TestMailWorker_ComposePlainErrorSchedulesRetryWithOwnErrorText(t *testing.T
 func TestMailWorker_SendFailureSchedulesRetry(t *testing.T) {
 	db := testdb.New(t)
 	createTestTable(t, db)
-	insertTestRow(t, db, "row-1", 0, time.Now())
+	insertTestRow(t, db, "row-1", 0, 0)
 	sender := &mail.FakeSender{Err: errors.New("mailgun down")}
 
 	runMailWorker(t, db, newMailWorker(sender, "send", "recipient@example.test"))
@@ -184,7 +184,7 @@ func TestMailWorker_SendFailureSchedulesRetry(t *testing.T) {
 func TestMailWorker_SuppressedAddressDeadLettersThroughWrappedSender(t *testing.T) {
 	db := testdb.New(t)
 	createTestTable(t, db)
-	insertTestRow(t, db, "row-1", 0, time.Now())
+	insertTestRow(t, db, "row-1", 0, 0)
 	sender := newSuppressingSender("recipient@example.test")
 
 	runMailWorker(t, db, newMailWorker(sender, "send", "recipient@example.test"))
@@ -201,7 +201,7 @@ func TestMailWorker_SuppressedAddressDeadLettersThroughWrappedSender(t *testing.
 func TestMailWorker_MarkSentClearsConfiguredTerminalColumns(t *testing.T) {
 	db := testdb.New(t)
 	createTestTable(t, db)
-	insertTestRow(t, db, "row-1", 0, time.Now())
+	insertTestRow(t, db, "row-1", 0, 0)
 	sender := &mail.FakeSender{}
 
 	w := newMailWorker(sender, "send", "recipient@example.test")
