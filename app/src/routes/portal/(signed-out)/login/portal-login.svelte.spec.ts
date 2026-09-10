@@ -4,16 +4,15 @@ import { render } from 'vitest-browser-svelte';
 import { jsonResponse } from '#lib/testResponse.js';
 import Page from './+page.svelte';
 import { toApiResponder, toPageState } from '../../../routeFixture.js';
-import { fixture, session } from './page.fixture.js';
+import { afterSessionEnded, fixture, session } from './page.fixture.js';
 
 /*
  * The screen reads its own URL for #757's `sessionEnded` flag, through
  * `#lib/appState.svelte.js` -- which reads `$app/state` rather than
  * replacing it, so mocking the source here is what reaches it. Declared
  * empty because `vi.mock` is hoisted above every import, then filled from
- * the fixture; `pageState.url` is a real `URL`, so a test sets the flag on
- * its `searchParams` before `render()` rather than during, since the mock
- * is not Svelte-reactive.
+ * the fixture. A test that needs the ended-session address installs the
+ * fixture's own variant over it, before `render()`.
  */
 const pageState = vi.hoisted(() => ({
 	params: {} as Record<string, string>,
@@ -59,7 +58,9 @@ vi.mock('#lib/api.js', () => ({
 beforeEach(() => {
 	goto.mockReset();
 	apiFetch.mockReset();
-	pageState.url.searchParams.delete('sessionEnded');
+	// Back to the base fixture's own address, so a test that installed
+	// #757's ended-session variant does not leave it on the next one.
+	Object.assign(pageState, toPageState(fixture));
 });
 
 afterEach(() => {
@@ -137,25 +138,31 @@ describe('Client-portal login -- on-load session probe (#283)', () => {
  * Staff one, so this screen answers "why am I here?" for the same reason.
  * The wording differs because what she does next does: a Client has no
  * password to re-enter (#617), only a link to ask for.
+ *
+ * The flag is the whole variable, so it is `setup`'s one parameter, and
+ * the fixture's own ended-session variant is where its URL is written
+ * rather than a second copy of that address in this file. At module scope
+ * because it closes over nothing the describe owns.
  */
+async function setupSessionEnded({ hasSessionEnded = true } = {}) {
+	apiFetch.mockResolvedValue(jsonResponse('no matching portal session', 404));
+	if (hasSessionEnded) Object.assign(pageState, toPageState({ ...fixture, ...afterSessionEnded }));
+
+	await render(Page, {});
+}
+
 describe('Client-portal login -- the session-ended notice (#757)', () => {
 	const NOTICE = 'For your security, we signed you out. Ask for a new sign-in link to continue.';
 
-	beforeEach(() => {
-		apiFetch.mockResolvedValue(jsonResponse('no matching portal session', 404));
-	});
-
 	it('says why she is back here when the URL carries the flag', async () => {
-		pageState.url.searchParams.set('sessionEnded', 'true');
-
-		await render(Page, {});
+		await setupSessionEnded();
 
 		await expect.element(testPage.getByText(NOTICE)).toBeVisible();
 		await expect.element(testPage.getByLabelText('Email')).toBeVisible();
 	});
 
 	it('says nothing on an ordinary visit', async () => {
-		await render(Page, {});
+		await setupSessionEnded({ hasSessionEnded: false });
 
 		await expect
 			.element(testPage.getByRole('button', { name: 'Send me a sign-in link' }))
@@ -164,10 +171,9 @@ describe('Client-portal login -- the session-ended notice (#757)', () => {
 	});
 
 	it('steps aside once she has asked for a link, rather than stacking two notices', async () => {
-		pageState.url.searchParams.set('sessionEnded', 'true');
 		vi.stubGlobal('fetch', vi.fn(async () => jsonResponse({}, 200)));
 
-		await render(Page, {});
+		await setupSessionEnded();
 		await testPage.getByLabelText('Email').fill('priya@example.com');
 		await testPage.getByRole('button', { name: 'Send me a sign-in link' }).click();
 

@@ -20,10 +20,11 @@
 	 * #757: `handleExpiredSession` (#lib/api.js) sends an ended Client
 	 * session to this screen with `sessionEnded=true`, exactly as it does
 	 * the Staff one, so this screen says why she is here for the same
-	 * reason. Read once -- the URL a screen was entered on does not
-	 * change while it is on screen.
+	 * reason. `$derived` for the reason the Staff screen's own copy of
+	 * this gives: `page` is the seam, and a plain read would resolve
+	 * once at init and never see a drag-surface override.
 	 */
-	const hasSessionEnded = page.url.searchParams.get('sessionEnded') === 'true';
+	const hasSessionEnded = $derived(page.url.searchParams.get('sessionEnded') === 'true');
 
 	let email = $state('');
 	const submission = new FormSubmission();

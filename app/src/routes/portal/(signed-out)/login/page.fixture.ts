@@ -8,7 +8,7 @@
  */
 import { jsonResponse } from '#lib/testResponse.js';
 import type { PortalSessionInfo } from '#lib/portalLanding.js';
-import type { RouteFixture } from '../../../routeFixture.js';
+import type { RouteFixture, RouteVariant } from '../../../routeFixture.js';
 import Page from './+page.svelte';
 
 export const session: PortalSessionInfo = {
@@ -28,11 +28,24 @@ export const session: PortalSessionInfo = {
 	]
 };
 
+/*
+ * #757: the same screen after her session ended, which is a different
+ * tree -- the notice above a form the base fixture never shows, since
+ * the base answers the probe with a live session and lands her instead.
+ * Deliberately identical in shape to the Staff login's own variant.
+ */
+export const afterSessionEnded: RouteVariant = {
+	name: 'The Client-portal login screen, after a session ended',
+	url: 'https://example.test/portal/(signed-out)/login?sessionEnded=true',
+	respond: () => jsonResponse('no matching portal session', 404)
+};
+
 export const fixture: RouteFixture = {
 	name: 'The Client-portal login screen',
 	component: Page,
 	params: {},
 	url: 'https://example.test/portal/(signed-out)/login',
 	respond: () => jsonResponse(session),
-	readyText: 'Log in'
+	readyText: 'Log in',
+	variants: [afterSessionEnded]
 };

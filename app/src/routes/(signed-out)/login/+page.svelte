@@ -39,11 +39,15 @@
 	 * (#lib/api.js) and the account screen's own second-factor removal
 	 * both send her here carrying `sessionEnded=true`, and without this
 	 * she arrives at a bare login form that says nothing about the
-	 * session that ended under her. Read once rather than `$derived`:
-	 * the URL a screen was entered on does not change while it is on
-	 * screen, and a fresh sign-in navigates away rather than back.
+	 * session that ended under her.
+	 *
+	 * `$derived`, not a plain read: `page` here is the seam
+	 * (`#lib/appState.svelte.js`), whose per-property getters exist so a
+	 * rune tracks both the real page's own state and a drag-surface
+	 * override set after this component mounts. A plain read would
+	 * resolve once, at init, and never see either.
 	 */
-	const hasSessionEnded = page.url.searchParams.get('sessionEnded') === 'true';
+	const hasSessionEnded = $derived(page.url.searchParams.get('sessionEnded') === 'true');
 
 	const emailId = 'login-email';
 	const passwordId = 'login-password';

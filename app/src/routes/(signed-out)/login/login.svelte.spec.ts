@@ -4,7 +4,7 @@ import { render } from 'vitest-browser-svelte';
 import { jsonResponse } from '#lib/testResponse.js';
 import Page from './+page.svelte';
 import { toApiResponder, toPageState } from '../../routeFixture.js';
-import { fixture, session } from './page.fixture.js';
+import { afterSessionEnded, fixture, session } from './page.fixture.js';
 
 /*
  * The screen reads its own URL for #757's `sessionEnded` flag, through
@@ -12,12 +12,9 @@ import { fixture, session } from './page.fixture.js';
  * replacing it, so mocking the source here is what reaches it. Same
  * installation as `clients-list.svelte.spec.ts` and the continuum check:
  * `vi.mock` is hoisted above every import, so the object is declared
- * empty and filled from the fixture once the imports have run.
- *
- * `pageState.url` is a real `URL`, whose `searchParams` getter hands back
- * the same `URLSearchParams` instance every read (WHATWG), so a test sets
- * the flag on it before `render()` -- before, not during, since the mock
- * is not Svelte-reactive.
+ * empty and filled from the fixture once the imports have run. A test
+ * that needs the ended-session address installs the fixture's own
+ * variant over it, before `render()`.
  */
 const pageState = vi.hoisted(() => ({
 	params: {} as Record<string, string>,
@@ -99,7 +96,9 @@ beforeEach(() => {
 	])
 		mock.mockReset();
 
-	pageState.url.searchParams.delete('sessionEnded');
+	// Back to the base fixture's own address, so a test that installed
+	// #757's ended-session variant does not leave it on the next one.
+	Object.assign(pageState, toPageState(fixture));
 });
 
 afterEach(() => {
@@ -407,28 +406,32 @@ describe('Staff login -- signing in over a live portal session (#610)', () => {
  * so both directions are asserted -- a notice that rendered
  * unconditionally would tell a first-time visitor she was signed out of a
  * session she never had.
+ *
+ * The flag is the whole variable, so it is `setup`'s one parameter, and
+ * the fixture's own ended-session variant is where its URL is written
+ * rather than a second copy of that address in this file. At module scope
+ * because it closes over nothing the describe owns.
  */
+async function setupSessionEnded({ hasSessionEnded = true } = {}) {
+	// Nothing is signed in on this screen in any of these -- the probe
+	// answers the way it does for a visitor whose session just ended.
+	apiFetch.mockResolvedValue(jsonResponse('no matching staff session', 404));
+	if (hasSessionEnded) Object.assign(pageState, toPageState({ ...fixture, ...afterSessionEnded }));
+
+	await render(Page, {});
+}
+
 describe('Staff login -- the session-ended notice (#757)', () => {
 	const NOTICE = 'For your security, we signed you out. Log in again to continue.';
 
-	beforeEach(() => {
-		// Nothing is signed in on this screen in any of these -- the probe
-		// answers the way it does for a visitor whose session just ended.
-		apiFetch.mockResolvedValue(jsonResponse('no matching staff session', 404));
-	});
-
 	it('says why she is back here when the URL carries the flag', async () => {
-		pageState.url.searchParams.set('sessionEnded', 'true');
-
-		await render(Page, {});
+		await setupSessionEnded();
 
 		await expect.element(testPage.getByText(NOTICE)).toBeVisible();
 	});
 
 	it('leaves the form usable, rather than replacing it', async () => {
-		pageState.url.searchParams.set('sessionEnded', 'true');
-
-		await render(Page, {});
+		await setupSessionEnded();
 
 		await expect.element(testPage.getByLabelText('Email')).toBeVisible();
 		await expect.element(testPage.getByLabelText('Password')).toBeVisible();
@@ -436,7 +439,7 @@ describe('Staff login -- the session-ended notice (#757)', () => {
 	});
 
 	it('says nothing on an ordinary visit', async () => {
-		await render(Page, {});
+		await setupSessionEnded({ hasSessionEnded: false });
 
 		await expect.element(testPage.getByRole('button', { name: 'Log in' })).toBeVisible();
 		expect(testPage.getByText(NOTICE).elements()).toHaveLength(0);
@@ -445,11 +448,10 @@ describe('Staff login -- the session-ended notice (#757)', () => {
 	it('drops the notice once Identity Platform asks for the second factor', async () => {
 		// By the challenge step the ended session is two steps back, and
 		// the screen is asking her something else.
-		pageState.url.searchParams.set('sessionEnded', 'true');
 		signInWithEmailAndPassword.mockRejectedValue({ code: 'auth/multi-factor-auth-required' });
 		getMultiFactorResolver.mockReturnValue({ hints: [{ uid: 'enrollment-1' }] });
 
-		await render(Page, {});
+		await setupSessionEnded();
 		await testPage.getByLabelText('Email').fill('priya@example.com');
 		await testPage.getByLabelText('Password').fill('correct horse');
 		await testPage.getByRole('button', { name: 'Log in' }).click();

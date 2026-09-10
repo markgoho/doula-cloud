@@ -10,7 +10,7 @@
  */
 import { jsonResponse } from '#lib/testResponse.js';
 import type { SessionInfo } from '#lib/landing.js';
-import type { RouteFixture } from '../../routeFixture.js';
+import type { RouteFixture, RouteVariant } from '../../routeFixture.js';
 import Page from './+page.svelte';
 
 export const session: SessionInfo = {
@@ -31,11 +31,27 @@ export const session: SessionInfo = {
 	secondFactor: false
 };
 
+/*
+ * #757: the same screen, entered by someone whose session just ended.
+ * A second tree, not a second route -- the notice renders above a form
+ * the base fixture never shows, since the base answers the probe with a
+ * live session and draws the picker instead. Both halves of the
+ * continuum read this (ADR-0025): the sweep measures the notice and the
+ * form together, and the drag surface can be shown the screen a person
+ * actually lands on after a 401.
+ */
+export const afterSessionEnded: RouteVariant = {
+	name: 'The Staff login screen, after a session ended',
+	url: 'https://example.test/(signed-out)/login?sessionEnded=true',
+	respond: () => jsonResponse('no matching staff session', 404)
+};
+
 export const fixture: RouteFixture = {
 	name: 'The Staff login screen',
 	component: Page,
 	params: {},
 	url: 'https://example.test/(signed-out)/login',
 	respond: () => jsonResponse(session),
-	readyText: 'Log in'
+	readyText: 'Log in',
+	variants: [afterSessionEnded]
 };
