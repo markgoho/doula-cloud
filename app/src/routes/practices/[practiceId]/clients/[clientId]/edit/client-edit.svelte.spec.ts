@@ -153,6 +153,77 @@ describe('client edit', () => {
 		expect(goto).toHaveBeenCalledWith(detailHref);
 	});
 
+	/*
+	 * The two halves of #1082's decision. Both need an assertion
+	 * `toBeVisible()` cannot make: the dialog is a native `<dialog>` held
+	 * open by `showModal()`, so it sits in the top layer above a
+	 * `::backdrop` and the whole page behind it is inert. A refusal
+	 * rendered in the page while the dialog is open still passes
+	 * `toBeVisible()` and is unreadable, and `ErrorSummary`'s focus effect
+	 * fires against inert content and does nothing. So these read the
+	 * `<dialog>`'s own `open` -- a fact about the top layer with no
+	 * accessible signal at all, the third `querySelector` exception in
+	 * `.claude/rules/svelte-tests.md` -- alongside DOM containment and
+	 * `document.activeElement`. Each one fails under the arrangement this
+	 * ticket replaces.
+	 */
+	it('keeps a refused override that names no field readable inside the still-open dialog', async () => {
+		await setup();
+		apiFetchWithSession.mockResolvedValueOnce(
+			jsonResponse({ matches: [anotherClientMatch], substitution: true, mergeOffered: false }, 409)
+		);
+		apiFetchWithSession.mockResolvedValueOnce(
+			jsonResponse({ message: 'This Practice is not accepting changes.' }, 403)
+		);
+
+		await testPage.getByRole('button', { name: 'Save' }).click();
+		await expect.element(testPage.getByRole('dialog')).toBeVisible();
+		await testPage.getByRole('button', { name: 'Yes, a different person' }).click();
+
+		const notice = await testPage.getByText('This Practice is not accepting changes.').element();
+		const dialog = document.querySelector('dialog')!;
+		expect(dialog.open).toBe(true);
+		expect(dialog.contains(notice)).toBe(true);
+		// And nothing is left waiting in the page's own summary to appear
+		// unannounced the moment she cancels.
+		await expect.element(testPage.getByText('There is a problem')).not.toBeInTheDocument();
+		expect(goto).not.toHaveBeenCalled();
+	});
+
+	it('hands a refused override that names a field back to the form, with focus that lands', async () => {
+		await setup();
+		apiFetchWithSession.mockResolvedValueOnce(
+			jsonResponse({ matches: [anotherClientMatch], substitution: true, mergeOffered: false }, 409)
+		);
+		apiFetchWithSession.mockResolvedValueOnce(
+			jsonResponse(
+				{
+					message: 'The Client record could not be saved.',
+					details: { givenName: 'Enter a given name of 100 characters or fewer' }
+				},
+				400
+			)
+		);
+
+		await testPage.getByRole('button', { name: 'Save' }).click();
+		await expect.element(testPage.getByRole('dialog')).toBeVisible();
+		await testPage.getByRole('button', { name: 'Yes, a different person' }).click();
+
+		// The fix is on the form, so the dialog gets out of the way: the
+		// page stops being inert, its summary's own focus effect can reach
+		// it, and the entry's fragment link can follow. Under the old
+		// arrangement the dialog stayed open and `document.activeElement`
+		// was still the confirm button.
+		await expect
+			.element(testPage.getByRole('link', { name: 'Enter a given name of 100 characters or fewer' }))
+			.toBeVisible();
+		expect(document.querySelector('dialog')!.open).toBe(false);
+		await expect
+			.poll(() => document.activeElement?.textContent)
+			.toContain('Enter a given name of 100 characters or fewer');
+		expect(goto).not.toHaveBeenCalled();
+	});
+
 	it('sends a possible duplicate (gate two) to its own question page rather than a dialog', async () => {
 		await setup();
 		apiFetchWithSession.mockResolvedValueOnce(

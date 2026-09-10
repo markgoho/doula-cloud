@@ -25,7 +25,7 @@
 	 *   the ADR. `mergeOffered` there says whether "This is her" (which
 	 *   absorbs one record into the other) is even offered.
 	 */
-	import { onMount } from 'svelte';
+	import { onMount, tick } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { page } from '#lib/appState.svelte.js';
 	import { resolve } from '$app/paths';
@@ -79,6 +79,11 @@
 	const submission = new FormSubmission();
 	let matches = $state<CollisionMatch[]>([]);
 	let isConflictOpen = $state(false);
+	// The refused override that belongs to no control, rendered inside the
+	// dialog rather than in the page behind it (#1082, below). Deliberately
+	// not `submission.errors`: an entry left there would sit unread behind
+	// the backdrop and then appear unannounced the moment she cancels.
+	let overrideError = $state('');
 
 	// AC5: editing the email revokes any pending portal invite
 	// (portalinvite/outbox.go's live-read-at-send rule) -- shown here
@@ -156,6 +161,9 @@
 	async function handleSubmit(event: SubmitEvent) {
 		event.preventDefault();
 		matches = [];
+		// Escape closes the dialog without reaching onCancel, so a stale
+		// refusal is cleared here too rather than only on Cancel.
+		overrideError = '';
 
 		await submission.run(async () => {
 			const refusals = findRefusals();
@@ -193,9 +201,31 @@
 	// the same save with override: true, which the endpoint applies by
 	// skipping the match query entirely (edit.go), so a conflict here would
 	// mean something else refused the write -- surfaced rather than
-	// swallowed (AC4), and ConfirmDialog itself keeps the dialog open on a
-	// thrown error rather than closing over a failure.
+	// swallowed (AC4).
+	//
+	// Where that refusal is surfaced is decided by its own shape (#1082),
+	// and the two answers are not a preference between them. The dialog is
+	// a native <dialog> held open by showModal(), so it is in the top layer
+	// above a ::backdrop and the whole page behind it is inert:
+	//
+	// - A refusal that names no control -- a 5xx, a dropped connection, the
+	//   unexpected conflict below -- is this control's own operation
+	//   outcome (#467's distinction), so it stays in the dialog as
+	//   ConfirmDialog's `error` Notice and the rejection keeps the dialog
+	//   open over it (#804's contract).
+	// - A refusal that names one is a refused form, and the fix is on the
+	//   form behind. It cannot be shown here: ErrorSummary's entries are
+	//   fragment links, and HTML's fragment-focusing steps cannot focus an
+	//   inert element, so every entry would be the link to nowhere useful
+	//   ErrorSummary's own contract forbids -- and a second summary is
+	//   exactly what #467's split exists to prevent. So the dialog closes
+	//   first, and only once it has does `submission.errors` get set, so
+	//   ErrorSummary's focus effect runs against a page that is no longer
+	//   inert. Setting it while the dialog is still open spends that effect
+	//   on nothing and it does not fire again on close.
 	async function handleOverrideConfirm() {
+		overrideError = '';
+		let refused: FormError[] | undefined;
 		try {
 			const result = await editClient(
 				apiFetchWithSession,
@@ -204,21 +234,36 @@
 				currentFields(),
 				true
 			);
-			if (result.conflict) {
-				submission.errors = [{ message: 'The Client record could not be saved.' }];
-				throw new Error('client edit: unexpected conflict with override set');
-			}
-			await goto(detailHref());
+			// override: true skips the match query entirely, so a conflict
+			// here means something else refused the write. It belongs to no
+			// control on the form, so it reads as the dialog's own outcome.
+			if (result.conflict) refused = [{ message: 'The Client record could not be saved.' }];
 		} catch (error_) {
-			if (submission.errors.length === 0) {
-				submission.errors = errorsFromCause(error_, editFieldIds);
-			}
-			throw error_;
+			refused = errorsFromCause(error_, editFieldIds);
 		}
+
+		if (refused === undefined) {
+			await goto(detailHref());
+			return;
+		}
+
+		if (refused.some((entry) => entry.targetId !== undefined)) {
+			isConflictOpen = false;
+			matches = [];
+			await tick();
+			submission.errors = refused;
+			return;
+		}
+
+		overrideError = refused[0]!.message;
+		// Rethrown so ConfirmDialog leaves the dialog open over the failure,
+		// with the Notice it now carries readable inside it.
+		throw new Error(overrideError);
 	}
 
 	function handleConflictCancel() {
 		matches = [];
+		overrideError = '';
 	}
 </script>
 
@@ -319,6 +364,7 @@
 	title="Possible duplicate Client"
 	consequence={`This name exactly matches an existing Client at this Practice: ${matchNames()}. Saving keeps this as its own separate record -- nothing here is merged.`}
 	confirmLabel="Yes, a different person"
+	error={overrideError || undefined}
 	onConfirm={handleOverrideConfirm}
 	onCancel={handleConflictCancel}
 />
