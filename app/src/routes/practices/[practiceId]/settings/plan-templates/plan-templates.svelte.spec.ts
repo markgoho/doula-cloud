@@ -92,3 +92,51 @@ describe('plan-templates settings screen: the plan-type switcher (#866)', () => 
 		expect(document.activeElement).toBe(careTab.element());
 	});
 });
+
+/*
+ * #865: this screen used to open on a bare field editor, so a Practice met
+ * a form with no statement of what it was for and no way to know that
+ * editing it is safe. One test per fact the intro has to carry, so a later
+ * refactor that drops the `intro` prop fails here rather than quietly
+ * shipping the bare screen back.
+ *
+ * `intro` matches a substring rather than the whole paragraph: the
+ * assertion should fail when a fact goes missing, not when a comma moves.
+ */
+function intro(fact: string) {
+	return testPage.getByText(fact, { exact: false });
+}
+
+describe('plan-templates settings screen: it introduces itself (#865)', () => {
+	it('says what the questions on it are for', async () => {
+		await setup();
+
+		await expect
+			.element(
+				intro(
+					'Every Care Plan and Birth Plan this Practice fills in starts from the questions set here'
+				)
+			)
+			.toBeVisible();
+	});
+
+	it('says the seeded questions are a starting point meant to be changed', async () => {
+		await setup();
+
+		await expect
+			.element(intro('the set Doula Cloud seeded is meant to be changed'))
+			.toBeVisible();
+	});
+
+	it("says editing it never reaches a Client's completed plan (ADR-0001)", async () => {
+		await setup();
+
+		await expect
+			.element(
+				intro(
+					'keeps the questions it was filled in against, so nothing changed here reaches a plan already written'
+				)
+			)
+			.toBeVisible();
+	});
+});

@@ -36,7 +36,7 @@ function session(roles: string[]) {
 	};
 }
 
-const nonOwner: RouteVariant = {
+export const nonOwner: RouteVariant = {
 	name: 'The Contract Template editor, as a non-Owner',
 	pageData: session(['admin'])
 };
