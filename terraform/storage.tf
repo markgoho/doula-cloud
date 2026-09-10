@@ -73,3 +73,31 @@ resource "google_storage_bucket_iam_member" "attachments_runtime_object_user" {
   member = google_service_account.doula_api_runtime.member
   role   = "roles/storage.objectUser"
 }
+
+# #1091: the grant that lets the drift check see this bucket at all.
+# `roles/viewer` carries no `storage.buckets.get`, so a `plan` running as
+# `terraform-plan@` cannot refresh `google_storage_bucket.attachments`
+# without this role — a refresh failure, not a diff, so removing it by hand
+# used to take the drift check off this bucket while leaving no drift to
+# read. It is the same shape as the two bindings on the account itself in
+# iam.tf: a grant the check depends on to run, which the check could not
+# watch.
+#
+# `google_storage_bucket_iam_member` is one resource per member, so this
+# owns `terraform-plan@`'s membership of the role and nothing else. The role
+# has a second member on this bucket, `projectViewer:doula-cloud`, and that
+# one stays unowned deliberately: it is one of the `projectEditor`/
+# `projectOwner`/`projectViewer` legacy convenience bindings GCS creates
+# with every bucket, it follows the project policy rather than standing on
+# its own, and importing it would be Terraform owning a binding Google
+# maintains.
+#
+# `terraform-plan@`'s `roles/storage.objectUser` on `gs://doula-cloud-tfstate`
+# is not here and should not be: that bucket is deliberately not owned at
+# all (docs/infrastructure.md, "State"), because a configuration that owns
+# its own state bucket can propose to delete it.
+resource "google_storage_bucket_iam_member" "attachments_plan_legacy_bucket_reader" {
+  bucket = google_storage_bucket.attachments.name
+  member = google_service_account.terraform_plan.member
+  role   = "roles/storage.legacyBucketReader"
+}
