@@ -1,6 +1,12 @@
 import { page } from 'vitest/browser';
 import { render } from 'vitest-browser-svelte';
 import { describe, expect, it, vi } from 'vitest';
+/*
+ * The real cascade: the box widths asserted at the foot of this file are
+ * `calc(3ch + var(--space-6))`, which computes to nothing without the
+ * token layer, and they are measured with `border-box` from the reset.
+ */
+import '#lib/styles/app.css';
 import DateFields from './DateFields.svelte';
 import type { DateField, DateParts } from '#lib/intakeDate.js';
 
@@ -136,5 +142,29 @@ describe('DateFields', () => {
 
 		await expect.element(page.getByText('The day the pregnancy ended.')).toBeVisible();
 		await expect.element(page.getByLabelText('Year')).toHaveAttribute('aria-describedby', 'dob-hint');
+	});
+
+	/*
+	 * GOV.UK's Dates sizing, and what holds it now that the two rules
+	 * that used to (#805's `:global(input)` and a `min-inline-size: 0` on
+	 * each box) are gone. The continuum sweep cannot: three boxes that
+	 * are each too wide for their content still fit, one under the other,
+	 * which is how they went unnoticed in the first place. The figure to
+	 * beat is the browser's default input `size` -- about 193px in this
+	 * column -- so a box measured well under that is a box that was
+	 * sized rather than left alone.
+	 */
+	describe('box widths', () => {
+		it('sizes a two-digit box to two digits and a four-digit box wider, in a column that could hold a sentence', async () => {
+			const { container } = await setup();
+			container.style.inlineSize = '600px';
+
+			const month = page.getByLabelText('Month').element().getBoundingClientRect().width;
+			const year = page.getByLabelText('Year').element().getBoundingClientRect().width;
+
+			expect(month).toBeLessThan(100);
+			expect(year).toBeGreaterThan(month);
+			expect(year).toBeLessThan(150);
+		});
 	});
 });

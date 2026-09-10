@@ -70,21 +70,14 @@
 		 * `max-inline-size` rather than a width, so at 320px each box
 		 * shrinks with the column instead of overflowing it (ADR-0024).
 		 *
-		 * The `:global(input)` is what makes any of it visible.
-		 * `TextInput` sets no width of its own, so an <input> takes the
-		 * browser's default `size` -- about 208px -- whatever column it is
-		 * put in, and a 12ch wrapper around one would have been a box the
-		 * control painted straight out of. `Select` and `Textarea` both
-		 * stretch, so the three controls in one form do not agree; that is
-		 * app-wide, predates this ticket, and is #805, which takes these
-		 * three rules out when it lands.
+		 * A cap on the wrapper is all it takes, because `TextInput` fills
+		 * whatever it is given (#805). Three `:global(input)` rules stood
+		 * here until then, sizing the control past the atom because an
+		 * unsized <input> took the browser's default `size` -- about
+		 * 208px -- and painted straight out of a 12ch wrapper. The `line`
+		 * class carries no width at all now and stays only as the name
+		 * the snippet passes for a full-width row.
 		 */
-		.line :global(input),
-		.town :global(input),
-		.short :global(input) {
-			inline-size: 100%;
-		}
-
 		.town {
 			max-inline-size: 24ch;
 		}

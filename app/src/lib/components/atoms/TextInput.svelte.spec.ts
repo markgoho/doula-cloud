@@ -2,6 +2,15 @@ import type { ComponentProps } from 'svelte';
 import { page, userEvent } from 'vitest/browser';
 import { describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
+/*
+ * The real cascade, because the width assertions below are measurements
+ * rather than attribute checks: without the reset this atom's padding
+ * would sit outside its 100% (`box-sizing` is `border-box` there, not by
+ * default), and without the tokens the padding and border would compute
+ * to zero. Imported the way `styles/zoom.svelte.spec.ts` imports the
+ * tokens -- one entry point, so the layer order is the app's own.
+ */
+import '#lib/styles/app.css';
 import TextInput from './TextInput.svelte';
 
 type SetupOptions = Partial<Omit<ComponentProps<typeof TextInput>, 'onInput'>>;
@@ -10,6 +19,23 @@ async function setup({ value = '', ...rest }: SetupOptions = {}) {
 	const onInput = vi.fn();
 	await render(TextInput, { value, onInput, ...rest });
 	return { onInput };
+}
+
+/*
+ * The setup for the width cases at the foot of this file: render the atom
+ * into a wrapper styled the way a caller would style one, and report both
+ * measured widths. At module scope because
+ * `unicorn/consistent-function-scoping` refuses a helper that closes over
+ * nothing its block owns (`.claude/rules/svelte-tests.md`).
+ */
+async function measureInWrapper(wrapperStyle: Partial<CSSStyleDeclaration>) {
+	const { container } = await render(TextInput, { value: '', onInput: vi.fn() });
+	Object.assign(container.style, wrapperStyle);
+	const input = page.getByRole('textbox').element();
+	return {
+		input: input.getBoundingClientRect().width,
+		wrapper: container.getBoundingClientRect().width
+	};
 }
 
 describe('TextInput.svelte', () => {
@@ -268,6 +294,46 @@ describe('TextInput.svelte', () => {
 			await setup({ type: 'password', disabled: true });
 
 			await expect.element(page.getByRole('button')).toBeDisabled();
+		});
+	});
+
+	/*
+	 * #805. The continuum sweep cannot hold any of this: it measures
+	 * whether a subject needs more room than it is given, and a control
+	 * that is too WIDE for what it holds still fits. So the width is
+	 * asserted here, by measuring the rendered box.
+	 *
+	 * The browser default this replaces is about 208px, which is why the
+	 * cases below use containers on either side of that figure -- a wider
+	 * one the control has to grow into, and a narrower one it has to
+	 * shrink to.
+	 */
+	describe('inline size', () => {
+		it('fills the space it is given, so it agrees with Select and Textarea in one column', async () => {
+			const { input, wrapper } = await measureInWrapper({ display: 'block', inlineSize: '600px' });
+
+			expect(input).toBeCloseTo(wrapper, 1);
+		});
+
+		it('narrows to a wrapper that caps it, with no :global selector reaching past this atom', async () => {
+			const { input, wrapper } = await measureInWrapper({
+				display: 'block',
+				inlineSize: '600px',
+				maxInlineSize: '120px'
+			});
+
+			expect(input).toBeCloseTo(wrapper, 1);
+			expect(input).toBeCloseTo(120, 1);
+		});
+
+		it('takes a flex wrapper at its stated width, with no min-inline-size override to make it apply', async () => {
+			const { input, wrapper } = await measureInWrapper({
+				display: 'flex',
+				inlineSize: '80px'
+			});
+
+			expect(input).toBeCloseTo(wrapper, 1);
+			expect(input).toBeCloseTo(80, 1);
 		});
 	});
 });
