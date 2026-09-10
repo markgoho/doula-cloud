@@ -21,12 +21,15 @@ function change(overrides: Partial<MembershipChange>): MembershipChange {
 }
 
 describe('membershipChangeSentence', () => {
-	it('names what a person arrived as, both halves of it', () => {
+	// The employment type is parenthesized rather than appended to the
+	// role list, because the two are different axes (ADR-0008): a flat
+	// "Owner, Admin, Doula, Employee" reads as a fourth role.
+	it('names what a person arrived as, keeping her roles and her employment type apart', () => {
 		expect(
 			membershipChangeSentence(
 				change({ action: 'joined', roles: ['owner', 'admin', 'doula'], employmentType: 'employee' })
 			)
-		).toBe('Joined as Owner, Admin, Doula, Employee');
+		).toBe('Joined as Owner, Admin, Doula (Employee)');
 	});
 
 	it('reads a joining event missing its employment type as the half it has', () => {
@@ -75,6 +78,10 @@ describe('membershipChangeSentence', () => {
 	 * because a history is the last screen that should go down over a row
 	 * it does not recognize: the same leniency `roleLabel` applies to a
 	 * role it has no word for, applied one level up.
+	 *
+	 * What it falls back to is the action's own generic phrase, never a
+	 * sentence with a hole in it -- "Roles changed from  to " would tell
+	 * a reader two facts and both of them would be nothing.
 	 */
 	describe('a malformed entry', () => {
 		it('renders a joining event carrying no roles as the half it has', () => {
@@ -83,15 +90,13 @@ describe('membershipChangeSentence', () => {
 			);
 		});
 
-		it('renders a role change carrying neither side', () => {
-			expect(membershipChangeSentence(change({ action: 'roles_changed' }))).toBe(
-				'Roles changed from  to '
-			);
+		it('renders a role change carrying neither side as the bare action', () => {
+			expect(membershipChangeSentence(change({ action: 'roles_changed' }))).toBe('Roles changed');
 		});
 
-		it('renders an employment-type change carrying neither side', () => {
+		it('renders an employment-type change carrying neither side as the bare action', () => {
 			expect(membershipChangeSentence(change({ action: 'employment_type_changed' }))).toBe(
-				'Employment type changed from  to '
+				'Employment type changed'
 			);
 		});
 	});

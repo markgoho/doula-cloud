@@ -205,10 +205,7 @@ func listMembershipChanges(ctx context.Context, tx *sql.Tx, practiceID, staffID 
 			return nil, false, fmt.Errorf("staffauth: scan membership event: %w", err)
 		}
 		c.ActorName = membershipActorName(actorKind, actorName)
-		if err := applyMembershipDiff(&c, diff); err != nil {
-			// coverage:ignore reason: the diff column is written by RecordMembershipEvent's own json.Marshal, never by hand
-			return nil, false, err
-		}
+		applyMembershipDiff(&c, diff)
 		items = append(items, c)
 	}
 	// coverage:ignore reason: row iteration failure, not exercised by unit tests
@@ -223,16 +220,26 @@ func listMembershipChanges(ctx context.Context, tx *sql.Tx, practiceID, staffID 
 	return items, hasMore, nil
 }
 
-// membershipActorName is the actor half of a row, resolved the way
-// activityfeed.resolveActorName resolves it, with one addition this
-// subject kind needs and that one does not: a staff actor whose row the
-// LEFT JOIN could not reach is named as departed rather than left blank.
+// membershipActorName is the actor half of a row.
 //
-// The non-staff branch is ADR-0022's answer for an actor kind this
-// subject kind does not have a writer for yet -- every Membership event
-// written today carries a staff actor. It is here rather than assumed
-// away because a row's actor_kind is data: a reader that trusted it to
-// be one value would render an empty name the day it was not.
+// Deliberately not activityfeed.resolveActorName's three-way switch.
+// That function serves a feed spanning every subject kind, so it has a
+// Client branch to reach; this subject kind has no Client writer and can
+// have none -- a Membership is a person's standing at a Practice, and
+// nothing a Client does touches one. Copying the third branch here would
+// mean a LEFT JOIN on clients that never matches and a branch no test
+// can reach honestly.
+//
+// So there are two real cases and a floor. A staff actor is named; a
+// staff actor whose row the LEFT JOIN could not reach is named as
+// departed rather than left blank, which activityfeed does not do and
+// this needs, because staff_practice_visibility (00002) stops admitting
+// a person's staff row the moment her own Membership ends. Anything
+// else falls to ADR-0022's SystemActorName -- the floor, for an actor
+// kind this subject kind does not have a writer for. If one is ever
+// added, and especially if it is ever a Client, this switch is what has
+// to grow first: ADR-0022 is explicit that a Client's own act is hers
+// and must never be attributed to the product.
 func membershipActorName(actorKind string, staffName sql.NullString) string {
 	if actorKind != string(activity.ActorStaff) {
 		return activity.SystemActorName
@@ -255,11 +262,19 @@ func membershipActorName(actorKind string, staffName sql.NullString) string {
 // side of the wire, which docs/api-design.md section 2 rules out. An
 // empty side stays nil rather than becoming a one-element array holding
 // the empty string, which is what strings.Split would make of it.
-func applyMembershipDiff(c *MembershipChange, diff []byte) error {
+//
+// It reports no error. The diff column is jsonb, written only by
+// RecordMembershipEvent's own json.Marshal of this very type, so there
+// is no row a decode can fail on -- and if a decode somehow did fail,
+// the entry still carries the three facts a reader most needs (what
+// happened, who did it, when), so refusing the whole page over one
+// unreadable diff would answer a smaller question with a bigger
+// failure. The fields simply stay empty, which the DTO already treats
+// as "this fact did not move".
+func applyMembershipDiff(c *MembershipChange, diff []byte) {
 	var d membershipDiff
-	// coverage:ignore reason: the diff column is jsonb written only by RecordMembershipEvent's own json.Marshal of this exact type, so there is no row this can fail on
 	if err := json.Unmarshal(diff, &d); err != nil {
-		return fmt.Errorf("staffauth: decode membership event diff: %w", err)
+		return
 	}
 	if d.Roles.From != "" {
 		c.PreviousRoles = splitRoles(d.Roles.From)
@@ -269,5 +284,4 @@ func applyMembershipDiff(c *MembershipChange, diff []byte) error {
 	}
 	c.PreviousEmploymentType = d.EmploymentType.From
 	c.EmploymentType = d.EmploymentType.To
-	return nil
 }

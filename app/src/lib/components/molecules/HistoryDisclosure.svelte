@@ -128,13 +128,18 @@
 		computation concatenates inline children without inserting one.
 	-->
 	<summary>{label} <span class="visually-hidden">for {subjectName}</span></summary>
+	<!--
+		The failure sits above whatever is already loaded rather than
+		replacing it. A history pages, so the request that fails is
+		usually the second one -- and answering "show me older changes"
+		by taking away the changes she can already see loses the very
+		thing she opened this for. GOV.UK's error-message pattern
+		(ADR-0021) is a message beside the content, not instead of it.
+	-->
 	{#if error}
 		<Notice variant="error" message={error} />
-	{:else if !items}
-		<Text text="Loading..." />
-	{:else if items.length === 0}
-		<Text text={emptyMessage} />
-	{:else}
+	{/if}
+	{#if items && items.length > 0}
 		<ol>
 			{#each items as item (key(item))}
 				<li>{@render entry(item)}</li>
@@ -151,6 +156,16 @@
 			/>
 			<span class="visually-hidden" id={subjectNameId}>{subjectName}</span>
 		{/if}
+	{:else if items}
+		<Text text={emptyMessage} />
+	{:else if !error}
+		<!--
+			Nothing has come back yet -- but only when nothing went wrong
+			either: a first page that failed says so above, and following it
+			with "Loading..." would promise a request that is no longer in
+			flight.
+		-->
+		<Text text="Loading..." />
 	{/if}
 </details>
 

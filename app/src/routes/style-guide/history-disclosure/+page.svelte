@@ -98,7 +98,28 @@
 	</section>
 
 	<section>
-		<h2>The fetch failed</h2>
+		<h2>The first page failed</h2>
+		<HistoryDisclosure
+			label="Membership history"
+			subjectName="Anne-Marie Ochieng-Whitfield"
+			key={(change: MembershipChange) => change.eventId}
+			error="Failed to load membership history"
+			emptyMessage="Nothing recorded."
+			loadMoreLabel="Show older membership changes"
+			idPrefix="style-guide-first-page-failed"
+			onOpen={() => {}}
+			onLoadMore={() => {}}
+			entry={membershipEntry}
+		/>
+	</section>
+
+	<section>
+		<!--
+			A later page failing keeps what is already on screen: answering
+			"show me older changes" by taking away the changes she can
+			already see loses the very thing she opened this for.
+		-->
+		<h2>A later page failed</h2>
 		<HistoryDisclosure
 			label="Membership history"
 			subjectName="Anne-Marie Ochieng-Whitfield"

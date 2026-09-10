@@ -584,14 +584,11 @@
 		   (#872), since both disclosures on this row want them identical.
 		   What stays here is what belongs to one entry's own words. */
 
-		/* Quieter than the assertion it qualifies -- it is a caveat about
-		   where the row came from, not part of what she said. */
-		.elsewhere {
-			color: var(--color-on-surface-muted);
-		}
-
-		/* Who made the change, on the same footing: the entry is what
-		   happened, the actor is the attribution behind it. */
+		/* Both disclosures end an entry with something quieter than the
+		   entry itself: where the row came from, on a work state asserted
+		   before she joined, and who made the change, on a Membership
+		   event. Neither is part of what happened; both qualify it. */
+		.elsewhere,
 		.actor {
 			color: var(--color-on-surface-muted);
 		}

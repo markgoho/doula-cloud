@@ -339,6 +339,45 @@ func TestListMembershipHistory_SystemActorIsNamedDoulaCloud(t *testing.T) {
 	}
 }
 
+// TestListMembershipHistory_UnreadableDiffStillNamesTheEvent pins what
+// happens to a row whose diff is valid jsonb but not this type's shape.
+// No writer can produce one, but the whole page must not fail over it:
+// the entry still carries what happened, who did it and when, which is
+// most of what a reader came for, and only the before/after facts go
+// missing.
+func TestListMembershipHistory_UnreadableDiffStillNamesTheEvent(t *testing.T) {
+	db := testdb.New(t)
+	const ownerUID = "owner-reads-an-unreadable-diff"
+	ownerID, practiceID := seedOwnerMembership(t, db, ownerUID)
+
+	doulaID := testdb.SeedStaff(t, db, "doula-with-a-strange-row")
+	seedMembership(t, db, practiceID, doulaID)
+	seedMembershipActivityRow(t, db, practiceID, doulaID, "roles_changed",
+		[]byte(`{"roles": 5}`), "staff", ownerID, time.Date(2027, 5, 5, 10, 0, 0, 0, time.UTC))
+
+	srv, session := newMembershipHistoryServer(t, db, ownerUID)
+	defer srv.Close()
+
+	resp := getMembershipHistory(t, srv, session, practiceID, doulaID, "")
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want %d -- one unreadable diff must not fail the page", resp.StatusCode, http.StatusOK)
+	}
+
+	history := decodeMembershipHistory(t, resp)
+	if len(history.Items) != 1 {
+		t.Fatalf("items = %+v, want the row to survive", history.Items)
+	}
+	entry := history.Items[0]
+	if entry.Action != "roles_changed" || entry.ActorName != "Test Staff "+ownerUID {
+		t.Errorf("entry = %+v, want the action and actor intact", entry)
+	}
+	if entry.PreviousRoles != nil || entry.Roles != nil {
+		t.Errorf("entry roles = %v -> %v, want both absent", entry.PreviousRoles, entry.Roles)
+	}
+}
+
 // TestListMembershipHistory_OtherPracticesStaffIsNotFound is the AC
 // about who may read this, at the row rather than the role: a staff id
 // that names a real person at somebody else's Practice must be a 404,

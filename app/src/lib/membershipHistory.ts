@@ -32,17 +32,27 @@ import type { MembershipChange } from './staff.js';
 export function membershipChangeSentence(change: MembershipChange): string {
 	switch (change.action) {
 		case 'joined': {
-			// What she arrived as, both halves of it (ADR-0008) -- but
-			// joined by a filter rather than a template, so an entry
-			// missing one half reads as the half it has instead of
-			// trailing a comma into nothing.
-			return `Joined as ${[rolesLabel(change.roles ?? []), employmentTypeLabel(change.employmentType ?? '')].filter(Boolean).join(', ')}`;
+			// What she arrived as, both halves of it (ADR-0008) -- and the
+			// employment type in parentheses rather than appended to the
+			// role list, because the two are different axes: "Owner, Admin,
+			// Doula, Employee" reads as a fourth role.
+			const roles = rolesLabel(change.roles ?? []);
+			const employmentType = employmentTypeLabel(change.employmentType ?? '');
+			if (!roles) return `Joined as ${employmentType}`;
+			if (!employmentType) return `Joined as ${roles}`;
+			return `Joined as ${roles} (${employmentType})`;
 		}
 		case 'roles_changed': {
-			return `Roles changed from ${rolesLabel(change.previousRoles ?? [])} to ${rolesLabel(change.roles ?? [])}`;
+			const from = rolesLabel(change.previousRoles ?? []);
+			const to = rolesLabel(change.roles ?? []);
+			return from && to ? `Roles changed from ${from} to ${to}` : fallback(change.action);
 		}
 		case 'employment_type_changed': {
-			return `Employment type changed from ${employmentTypeLabel(change.previousEmploymentType ?? '')} to ${employmentTypeLabel(change.employmentType ?? '')}`;
+			const from = employmentTypeLabel(change.previousEmploymentType ?? '');
+			const to = employmentTypeLabel(change.employmentType ?? '');
+			return from && to
+				? `Employment type changed from ${from} to ${to}`
+				: fallback(change.action);
 		}
 		case 'removed': {
 			return 'Removed from this practice';
@@ -51,7 +61,24 @@ export function membershipChangeSentence(change: MembershipChange): string {
 			return 'Signed out of every device';
 		}
 		default: {
-			return describeActivityAction(change.action);
+			return fallback(change.action);
 		}
 	}
+}
+
+/**
+ * What an entry reads as when its own sentence cannot be built: an
+ * action this build has no words for, or one whose before/after facts
+ * did not arrive.
+ *
+ * `describeActivityAction` is the activity ledger's own generic
+ * action-to-phrase function, so "roles_changed" still reads "Roles
+ * changed" -- true, if less than the full sentence. Better than a
+ * sentence with a hole in it: printing "Roles changed from  to " would
+ * tell a reader two facts, and both of them would be nothing. The same
+ * leniency `roleLabel` applies to a role it has no word for, applied one
+ * level up.
+ */
+function fallback(action: string): string {
+	return describeActivityAction(action);
 }

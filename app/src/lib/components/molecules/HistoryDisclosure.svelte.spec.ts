@@ -130,12 +130,25 @@ describe('HistoryDisclosure.svelte', () => {
 		]);
 	});
 
-	it('shows the failure instead of the list when the fetch failed', async () => {
+	it('shows the failure on its own when the first page is what failed', async () => {
+		await setup({ error: 'Failed to load membership history' });
+		await openDisclosure();
+
+		await expect.element(page.getByText('Failed to load membership history')).toBeVisible();
+		// Not "Loading...": that request is over, and saying otherwise
+		// promises one that is no longer in flight.
+		expect(page.getByText('Loading...').elements()).toHaveLength(0);
+	});
+
+	// A history pages, so the request that fails is usually the second
+	// one. Answering "show me older changes" by taking away the changes
+	// she can already see loses the very thing she opened this for.
+	it('keeps the entries already on screen when a later page fails', async () => {
 		await setup({ items: twoEntries, error: 'Failed to load membership history' });
 		await openDisclosure();
 
 		await expect.element(page.getByText('Failed to load membership history')).toBeVisible();
-		expect(page.getByRole('listitem').elements()).toHaveLength(0);
+		expect(page.getByRole('listitem').elements()).toHaveLength(2);
 	});
 
 	it('offers the next page only when one exists, and names whose it is', async () => {

@@ -84,25 +84,45 @@ export interface WorkStateHistory extends CursorPage<WorkStateChange> {
 	memberSince: string;
 }
 
-/** Loads one page of a Member's work-state history, fetched only when
- * her disclosure is opened (never with the roster, which would otherwise
- * grow with every correction anybody has ever made). `cursor` is the
- * empty string for the first page. Throws with the response body text on
- * a non-2xx response. */
-export async function loadWorkStateHistory(
+/**
+ * One page of one Member's history of some kind, from the endpoint
+ * `segment` names under her own roster path.
+ *
+ * The two histories a roster row carries -- work state (#459) and
+ * Membership (#872) -- differ in nothing but that segment and the shape
+ * they answer with, so they read through one function rather than two
+ * that would drift. Both are fetched only when a disclosure is opened,
+ * never with the roster, which would otherwise grow with every
+ * correction and every role change anybody has ever made.
+ *
+ * `cursor` is the empty string for the first page. Throws with the
+ * response body text on a non-2xx response.
+ */
+async function loadHistoryPage<Page>(
+	fetcher: Fetcher,
+	practiceId: string,
+	staffId: string,
+	segment: string,
+	cursor: string
+): Promise<Page> {
+	const query = cursor ? `?cursor=${encodeURIComponent(cursor)}` : '';
+	const response = await fetcher(`${staffPath(practiceId)}/${staffId}/${segment}${query}`);
+	if (!response.ok) {
+		throw new Error(await apiErrorMessage(response));
+	}
+	return response.json();
+}
+
+/**
+ * Loads one page of a Member's work-state history (#459).
+ */
+export function loadWorkStateHistory(
 	fetcher: Fetcher,
 	practiceId: string,
 	staffId: string,
 	cursor = ''
 ): Promise<WorkStateHistory> {
-	const query = cursor ? `?cursor=${encodeURIComponent(cursor)}` : '';
-	const response = await fetcher(
-		`${staffPath(practiceId)}/${staffId}/work-state-history${query}`
-	);
-	if (!response.ok) {
-		throw new Error(await apiErrorMessage(response));
-	}
-	return response.json();
+	return loadHistoryPage(fetcher, practiceId, staffId, 'work-state-history', cursor);
 }
 
 /** One entry of a Member's Membership history (#872): what happened to
@@ -136,25 +156,16 @@ export interface MembershipChange {
  * this Practice, so none of them was made anywhere else. */
 export type MembershipHistory = CursorPage<MembershipChange>;
 
-/** Loads one page of a Member's Membership history, fetched only when
- * her disclosure is opened (never with the roster, which would otherwise
- * grow with every role change anybody has ever made). `cursor` is the
- * empty string for the first page. Throws with the response body text on
- * a non-2xx response. */
-export async function loadMembershipHistory(
+/**
+ * Loads one page of a Member's Membership history (#872).
+ */
+export function loadMembershipHistory(
 	fetcher: Fetcher,
 	practiceId: string,
 	staffId: string,
 	cursor = ''
 ): Promise<MembershipHistory> {
-	const query = cursor ? `?cursor=${encodeURIComponent(cursor)}` : '';
-	const response = await fetcher(
-		`${staffPath(practiceId)}/${staffId}/membership-history${query}`
-	);
-	if (!response.ok) {
-		throw new Error(await apiErrorMessage(response));
-	}
-	return response.json();
+	return loadHistoryPage(fetcher, practiceId, staffId, 'membership-history', cursor);
 }
 
 /** Saves a Membership's roles and employment type together, one change

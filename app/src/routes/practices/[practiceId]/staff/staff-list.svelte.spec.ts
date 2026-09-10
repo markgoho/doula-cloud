@@ -652,7 +652,7 @@ describe('staff screen', () => {
 			await tableView.getByText('Membership history').first().click();
 
 			await expect
-				.element(tableView.getByText('Joined as Owner, Admin, Doula, Employee'))
+				.element(tableView.getByText('Joined as Owner, Admin, Doula (Employee)'))
 				.toBeVisible();
 			await expect.element(tableView.getByText('by Renata Alvarez').first()).toBeVisible();
 		});
