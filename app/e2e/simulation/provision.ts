@@ -76,16 +76,12 @@ export async function standUpRidgeline(request: APIRequestContext): Promise<Ridg
 	// session carrying that claim.
 	const ownerHeaders = await signInEnrolled(request, owner.idToken, owner.localId);
 
-	// Unique per call, not a literal (#958). The stack -- Postgres volume
-	// and Identity Platform emulator alike -- outlives a spec's retries,
-	// so a hardcoded address means every retry re-fails at signUp with
-	// EMAIL_EXISTS on the account the *first* attempt created, and the
-	// retry budget is spent on that leftover instead of on the flake it
-	// was meant to re-try. Callers read the address off the returned
-	// RidgelineLenaAccount, which is what #823 signs her back in with, so
-	// nothing depends on the literal; the `@sim.doula.cloud` domain stays
-	// because docs/simulation/environment.md makes it how a log says at a
-	// glance that an address belongs to a simulated person.
+	// Unique per call, not a literal (#958) -- uniqueEmail's own docblock
+	// says why per *call* is the bar. Callers read the address off the
+	// returned RidgelineLenaAccount, which is what #823 signs her back in
+	// with, so nothing depended on the literal; the `@sim.doula.cloud`
+	// domain stays because docs/simulation/environment.md makes it how a
+	// log says at a glance that an address belongs to a simulated person.
 	const lenaEmail = uniqueEmail('lena-vasquez', 'sim.doula.cloud');
 	const invited = await request.post(`${API_URL}/api/practices/${owner.practiceId}/staff/invitations`, {
 		headers: ownerHeaders,

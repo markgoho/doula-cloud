@@ -8,7 +8,10 @@ const API_URL = `http://${E2E_API_HOST}:${E2E_API_PORT}`;
 const FOUNDING_OWNER_PASSWORD = 'password123';
 
 /**
- * An address no other call to this function will ever produce.
+ * An address no other call to this function is realistically going to
+ * produce: the millisecond plus six base-36 characters, which makes a
+ * collision improbable rather than impossible -- the same bar every
+ * other fixture address in this suite is held to.
  *
  * Random suffix, not just `Date.now()`: millisecond-only uniqueness
  * collides across parallel Playwright workers -- confirmed as a real,
