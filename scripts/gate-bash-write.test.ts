@@ -213,4 +213,64 @@ describe("gate-bash-write", () => {
 			expect(exitCode).toBe(2);
 		});
 	});
+
+	// #680: a relative write target used to be resolved against the hook
+	// process's own cwd, so a leading `cd` into a worktree was invisible and
+	// the write read as a main-checkout write. Every test here runs with
+	// cwd: SOURCE_ROOT -- the main checkout, which is where a Bash tool call
+	// stands before each invocation, and the exact scenario from the report.
+	// Without that, a bare `CLAUDE.md` would resolve under the worktree this
+	// suite runs from and pass for an unrelated reason.
+	describe("#680: a leading `cd` sets the directory a relative write target resolves against", () => {
+		const POOL = path.join(SOURCE_ROOT, ".claude", "worktrees");
+		const WORKTREE = path.join(POOL, "some-branch");
+
+		test("allows `sed -i` on a relative path after a `cd` into a worktree", async () => {
+			const { exitCode } = await invoke(`cd ${WORKTREE} && sed -i '' 's/x/y/' CLAUDE.md`, {
+				cwd: SOURCE_ROOT
+			});
+			expect(exitCode).toBe(0);
+		});
+
+		test("allows redirection to a relative path after a `cd` into a worktree", async () => {
+			const { exitCode } = await invoke(`cd ${WORKTREE} && echo hi > CLAUDE.md`, { cwd: SOURCE_ROOT });
+			expect(exitCode).toBe(0);
+		});
+
+		test("allows a relative path after a chain of `cd`s that lands in a worktree", async () => {
+			const { exitCode } = await invoke(`cd ${POOL} && cd some-branch && echo hi > CLAUDE.md`, {
+				cwd: SOURCE_ROOT
+			});
+			expect(exitCode).toBe(0);
+		});
+
+		test("still blocks a relative path after a `cd` into the main checkout", async () => {
+			const { exitCode } = await invoke(`cd ${SOURCE_ROOT} && sed -i '' 's/x/y/' CLAUDE.md`, {
+				cwd: SOURCE_ROOT
+			});
+			expect(exitCode).toBe(2);
+		});
+
+		test("still blocks a relative path with no `cd` at all", async () => {
+			const { exitCode } = await invoke("sed -i '' 's/x/y/' CLAUDE.md", { cwd: SOURCE_ROOT });
+			expect(exitCode).toBe(2);
+		});
+
+		test("still blocks when the `cd` argument holds an unexpanded shell variable", async () => {
+			const { exitCode } = await invoke("cd $DIR && sed -i '' 's/x/y/' CLAUDE.md", { cwd: SOURCE_ROOT });
+			expect(exitCode).toBe(2);
+		});
+
+		test("still blocks when the `cd` leaves the repository entirely", async () => {
+			const { exitCode } = await invoke("cd /tmp && sed -i '' 's/x/y/' CLAUDE.md", { cwd: SOURCE_ROOT });
+			expect(exitCode).toBe(2);
+		});
+
+		test("still blocks an absolute tracked target written after a `cd` into a worktree", async () => {
+			const { exitCode } = await invoke(`cd ${WORKTREE} && sed -i '' 's/x/y/' ${TARGET}`, {
+				cwd: SOURCE_ROOT
+			});
+			expect(exitCode).toBe(2);
+		});
+	});
 });
