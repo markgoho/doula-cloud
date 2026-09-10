@@ -159,8 +159,9 @@ test('one identity, two Practices: MFA required at one and not the other', async
 	const inviteBody = await invite.text();
 	expect(invite.ok(), `invite to Practice B failed: ${invite.status()} ${inviteBody}`).toBe(true);
 	const { invitationId } = JSON.parse(inviteBody);
-	const inviteToken = readStaffInviteToken(invitationId);
-	expect(inviteToken, `no pending invite token for ${invitationId}`).toBeTruthy();
+	// readStaffInviteToken throws, naming both places it looked, when the
+	// token is in neither -- so there is nothing left here to assert.
+	const inviteToken = await readStaffInviteToken(invitationId);
 
 	const accept = await request.post(`${API_URL}/api/staff/accept-invite`, {
 		headers: { Authorization: `Bearer ${xIdToken}` },

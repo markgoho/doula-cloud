@@ -47,11 +47,11 @@ test('A Doula invited via the Staff invite route is refused an Owner-only action
 		page.getByText(`Invited. An email with a link to join is on its way to ${doulaEmail}.`)
 	).toBeVisible();
 
-	// staffinvite.Queue never gets mailed in the e2e stack -- the token sits
-	// on the pending outbox row, which is where readStaffInviteToken reads
-	// it from (stack.ts).
-	const inviteToken = readStaffInviteToken(invitationId);
-	expect(inviteToken, `no pending staff_invite_outbox row for invitation ${invitationId}`).toBeTruthy();
+	// readStaffInviteToken (stack.ts) reads the token off the pending
+	// outbox row, or out of the sandbox mailbox if a parallel spec's drain
+	// mailed it first (#827). It throws when it is in neither, so there is
+	// nothing left here to assert.
+	const inviteToken = await readStaffInviteToken(invitationId);
 
 	// Accepting is walked through the real screen too (#437's two-step
 	// form): a brand-new person, so the signup branch and both questions on

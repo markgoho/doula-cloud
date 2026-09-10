@@ -83,11 +83,12 @@ export async function standUpRidgeline(request: APIRequestContext): Promise<Ridg
 	});
 	const { invitationId } = JSON.parse(await readBody(invited, 'standUpRidgeline: inviting Lena'));
 
-	// readStaffInviteToken reads the token straight off the pending
-	// outbox row (stack.ts). worlds/rooted-birth-collective.md's
-	// objection to that shortcut ("it skips the act") is about a
-	// *walked* invitation; Ridgeline's is explicitly not one.
-	const inviteToken = readStaffInviteToken(invitationId);
+	// readStaffInviteToken lifts the token straight out of the stack
+	// (stack.ts) rather than out of a message somebody opened.
+	// worlds/rooted-birth-collective.md's objection to that shortcut ("it
+	// skips the act") is about a *walked* invitation; Ridgeline's is
+	// explicitly not one.
+	const inviteToken = await readStaffInviteToken(invitationId);
 
 	const signedUp = await request.post(`${EMULATOR_URL}/identitytoolkit.googleapis.com/v1/accounts:signUp?key=fake-key`, {
 		data: { email: lenaEmail, password: LENA_PASSWORD, returnSecureToken: true }

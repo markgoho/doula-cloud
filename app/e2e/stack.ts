@@ -1,5 +1,5 @@
 import { execFileSync, spawn } from 'node:child_process';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { createConnection } from 'node:net';
 import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -382,14 +382,8 @@ export function seedEngagementRequest(
 	return requestId;
 }
 
-// Reads the plaintext token off the pending staff_invite_outbox row for
-// invitationId (#525). InviteResponse deliberately never carries it
-// (#316) and no mailer runs in the e2e stack to consume it, so the row
-// sits there, still in the clear, for exactly as long as this run needs
-// it -- staffinvite.Queue's own comment names that as the token's whole
-// exposure window. `-t -A` (tuples-only, unaligned) is what keeps psql's
-// output to just the value, with no header or border for a caller to
-// strip.
+// `-t -A` (tuples-only, unaligned) is what keeps psql's output to just
+// the value, with no header or border for a caller to strip.
 function querySQLValue(sql: string): string {
 	const output = execFileSync(
 		CONTAINER_ENGINE,
@@ -399,10 +393,97 @@ function querySQLValue(sql: string): string {
 	return output.toString('utf8').trim();
 }
 
-export function readStaffInviteToken(invitationId: string): string {
-	return querySQLValue(
+// The accept link staffinvite's Compose writes into the invitation mail
+// (api/internal/staffinvite/outbox.go): the token is the whole query
+// string, and the body is plain text -- ADR-0030 rules out any tracking
+// wrapper, so the link in the mail is the link that was sent.
+const ACCEPT_INVITE_LINK = /\/accept-invite\?token=(\S+)/g;
+
+// Reads one invitation's token out of the sandbox mailbox
+// (e2e/mailbox.ts), the second place it lives once the outbox row has
+// been drained.
+//
+// A mailbox is keyed on the address, and an address can hold more than
+// one live invitation -- mfa-required.e2e.ts invites one identity to two
+// Practices -- so "the newest link in this inbox" is not the same
+// question as "this invitation's link". digest settles it: it is
+// practice_invitations.token_digest, the SHA-256 hex of the token this
+// invitation was minted with (staffauth.TokenDigest), so the candidate
+// whose own digest matches is the right one and no other candidate can
+// be mistaken for it.
+async function readInviteTokenFromMailbox(address: string, digest: string): Promise<string> {
+	const inbox = await fetch(`${MAILBOX_URL}/api/messages?to=${encodeURIComponent(address)}`);
+	if (!inbox.ok) {
+		throw new Error(`stack: reading ${address}'s sandbox mailbox failed: ${inbox.status}`);
+	}
+	const messages = (await inbox.json()) as { text: string }[];
+	for (const message of messages) {
+		for (const [, candidate] of message.text.matchAll(ACCEPT_INVITE_LINK)) {
+			if (createHash('sha256').update(candidate).digest('hex') === digest) {
+				return candidate;
+			}
+		}
+	}
+	return '';
+}
+
+// Reads the plaintext token for invitationId (#525). InviteResponse
+// deliberately never carries it (#316), so a spec that walks the accept
+// flow has to read it out of the stack, and there are exactly two places
+// it is ever readable: the pending staff_invite_outbox row before the
+// invitation is mailed, and the mail itself afterwards.
+//
+// Both, not just the first (#827). The outbox row is not durable for the
+// length of a spec: `process-staff-invite-outbox` claims every due
+// pending row, whatever invitation it belongs to (staffinvite's
+// claimQuery filters on status and next_attempt_at and nothing else), and
+// mail-delivery.e2e.ts drains that outbox as the very thing it is about.
+// Playwright runs spec files in parallel against one shared stack, so
+// that drain lands mid-invite for whatever spec is running beside it,
+// sends the mail, and clears invite_token on the now-`sent` row -- which
+// left this read finding nothing, intermittently, for a reason having
+// nothing to do with the spec that failed.
+//
+// The mailbox fallback closes that hole rather than papering over it with
+// a retry, which could not help: the row is gone for good, not late.
+// outbox.MailWorker sends before it marks (mailworker.go's
+// claim-scan-compose-send-mark loop) and marks inside the drain's own
+// transaction, so a row that went terminal *because it was drained* had
+// its mail delivered first, every time.
+//
+// MailWorker does have two branches that go terminal with nothing sent --
+// staffinvite's Compose returns ErrAlreadyDone for an Invitation already
+// resolved or expired, and mail.ErrSuppressed dead-letters a blocked
+// address -- but neither can be true of an Invitation a spec is in the
+// middle of accepting: it is pending and unexpired by construction, and
+// InviteHandler refuses a suppressed address before any row exists
+// (#861). If one ever were, this throws naming both places it looked
+// rather than returning an empty string a caller pastes into a URL.
+export async function readStaffInviteToken(invitationId: string): Promise<string> {
+	const pending = querySQLValue(
 		`SELECT invite_token FROM staff_invite_outbox WHERE invitation_id = ${sqlLiteral(invitationId)} AND status = 'pending'`
 	);
+	if (pending !== '') {
+		return pending;
+	}
+
+	// psql's unaligned output separates columns with `|`, and neither an
+	// address nor a hex digest can contain one.
+	const invitation = querySQLValue(
+		`SELECT address, token_digest FROM practice_invitations WHERE id = ${sqlLiteral(invitationId)}`
+	);
+	if (invitation === '') {
+		throw new Error(`stack: no practice_invitations row for invitation ${invitationId}`);
+	}
+	const [address, digest] = invitation.split('|', 2);
+
+	const mailed = await readInviteTokenFromMailbox(address, digest);
+	if (mailed === '') {
+		throw new Error(
+			`stack: no invite token for invitation ${invitationId}: no pending staff_invite_outbox row, and no accept link matching its token digest in ${address}'s sandbox mailbox`
+		);
+	}
+	return mailed;
 }
 
 // A run's own interval literal, e.g. "1 day" or "90 minutes" -- the shape

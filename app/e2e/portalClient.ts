@@ -162,9 +162,9 @@ export interface SeededContractorDoula {
  * type, and the `joined` membership event `AcceptInviteHandler` records).
  * The one piece no API response ever carries is the invitation's
  * plaintext token (#316) -- `readStaffInviteToken` (stack.ts) reads it
- * off the pending `staff_invite_outbox` row instead, which is where it
- * sits, unmailed, for the whole run: nothing in the e2e stack runs the
- * outbox worker.
+ * out of the stack instead, off the pending `staff_invite_outbox` row or,
+ * if some parallel spec's outbox drain already mailed it, out of the
+ * sandbox mailbox (#827).
  *
  * Takes the Owner's own cookie header, the same way `seedClient` takes
  * one, so a caller that already has an Owner session does not pay for a
@@ -187,8 +187,9 @@ export async function seedContractorDoula(
 	expect(invite.ok(), `contractor invite failed: ${invite.status()} ${inviteBody}`).toBe(true);
 	const { invitationId } = JSON.parse(inviteBody);
 
-	const inviteToken = readStaffInviteToken(invitationId);
-	expect(inviteToken, `no pending staff_invite_outbox row for invitation ${invitationId}`).toBeTruthy();
+	// readStaffInviteToken throws, naming both places it looked, when the
+	// token is in neither -- so there is nothing left here to assert.
+	const inviteToken = await readStaffInviteToken(invitationId);
 
 	const signUp = await request.post(
 		`${EMULATOR_URL}/identitytoolkit.googleapis.com/v1/accounts:signUp?key=fake-key`,
