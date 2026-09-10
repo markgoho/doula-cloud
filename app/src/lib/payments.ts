@@ -188,6 +188,13 @@ export async function connect(fetcher: Fetcher, practiceId: string): Promise<str
 	return body.onboardingUrl;
 }
 
+/** What the screen offers before the ask is made (#917, ADR-0035). Here
+ * beside the two sentences below rather than inline on the screen: all
+ * three state the same weekly bound, and a bound restated in three
+ * places has to be findable from one. */
+export const CONNECT_NUDGE_OFFER_MESSAGE =
+	'Doula Cloud can email every Practice Owner about this. It sends this reminder at most once a week.';
+
 /** What the screen says once the nudge is queued (#917, ADR-0035).
  * Exported so the screen and its spec share one sentence rather than two
  * that can drift apart, the way `CONNECT_STATUS_CHECK_FAILED_MESSAGE`
@@ -198,13 +205,20 @@ export const CONNECT_NUDGE_SENT_MESSAGE =
 	'Every Practice Owner is being emailed about connecting Stripe. Doula Cloud sends this at most once a week.';
 
 /** What the screen tells a non-Owner reader in the unconnected statuses
- * that are *not* `not_connected` (#917, ADR-0035). There is no control
- * in those, because #343's payout notification has already mailed every
- * Owner once for this episode -- so the honest thing to say is that it
- * has, rather than offering a second send she cannot know is a
- * duplicate. */
+ * that are *not* `not_connected` (#917, ADR-0035). There is no control in
+ * those, because #343's payout notification mails every Owner once per
+ * episode on its own -- so the honest thing is to say that the mail is
+ * already handled, rather than offering a second send she cannot know is
+ * a duplicate.
+ *
+ * Present tense, not "has already been emailed": #343 waits out a
+ * 48-hour grace window before it sends, and skips the mail entirely if
+ * the Owner finishes inside it. A past-tense claim would be false for
+ * the first two days of every episode. This sentence is true at every
+ * instant, which is the same standard ADR-0033 held its own derived
+ * facts to. */
 export const CONNECT_OWNERS_ALREADY_EMAILED_MESSAGE =
-	'Every Practice Owner has already been emailed about what Stripe is waiting for.';
+	'Doula Cloud emails every Practice Owner when Stripe asks for something, so there is nothing to send from here.';
 
 /** Asks Doula Cloud to email every Practice Owner that Stripe still has
  * to be connected (#917, ADR-0035).

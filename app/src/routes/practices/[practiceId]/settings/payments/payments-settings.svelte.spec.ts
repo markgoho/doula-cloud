@@ -325,7 +325,7 @@ describe('telling an Owner the Practice still has to connect Stripe (#917)', () 
 	it("says why the ask was refused rather than swallowing the server's sentence", async () => {
 		// The ordinary way to meet this is a colleague having asked
 		// yesterday from her own screen, which this one cannot see.
-		const refusal = 'Every Practice Owner was emailed about this in the last week.';
+		const refusal = 'Doula Cloud was already asked to email every Practice Owner about this in the last week.';
 		mockApi({ status: 'not_connected', roles: ['admin'], nudgeRefusal: refusal });
 		await render(Page, {});
 

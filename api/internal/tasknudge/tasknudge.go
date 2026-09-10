@@ -94,12 +94,15 @@ func (NoOpEnqueuer) Enqueue(context.Context, OutboxType) error {
 
 // Fire returns a closure that enqueues a nudge for outboxType via enq,
 // logging and swallowing any error rather than propagating it -- the one
-// piece of behavior every write site in ADR-0013 needs identically. The
-// three write sites that commit their own write directly call the
-// returned closure immediately after that commit succeeds; the two that
-// run inside staffauth.Middleware's request-scoped transaction pass it to
-// Register instead, so Middleware runs it only after its own commit
-// succeeds.
+// piece of behavior every write site in ADR-0013 needs identically. A
+// write site that commits its own write calls the returned closure
+// immediately after that commit succeeds; one that runs inside
+// staffauth.Middleware's request-scoped transaction passes it to Register
+// instead, so Middleware runs it only after its own commit succeeds.
+//
+// Deliberately no count of either group: this comment carried one, it was
+// wrong by several before #917 added another Register site, and a number
+// nothing checks goes stale the next time a write site is added.
 func Fire(enq Enqueuer, outboxType OutboxType) func(context.Context) {
 	return func(ctx context.Context) {
 		if err := enq.Enqueue(ctx, outboxType); err != nil {

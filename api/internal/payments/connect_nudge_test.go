@@ -21,7 +21,7 @@ import (
 const (
 	connectNudgePath          = "/payments/connect/nudge"
 	connectNudgeSubject       = "Doula Cloud: your Practice still has to connect Stripe"
-	connectNudgeActionName    = "stripe_connect_nudge_sent"
+	connectNudgeActionName    = "stripe_connect_nudge_requested"
 	testConnectNudgeAccountID = "acct_already_connected"
 )
 
@@ -345,6 +345,35 @@ func TestConnectNudgeWorker_MailsEveryOwnerAndNamesNobody(t *testing.T) {
 			t.Fatalf("Owner %q was never mailed", to)
 		}
 	}
+
+	// #917's "to whom": the roster this attempt resolved, written onto the
+	// row so it is still answerable after the roster moves.
+	var notified int
+	if err := db.Admin.QueryRowContext(t.Context(),
+		`SELECT cardinality(notified_owner_staff_ids) FROM connect_nudge_outbox WHERE practice_id = $1`,
+		practiceID,
+	).Scan(&notified); err != nil {
+		t.Fatalf("query notified_owner_staff_ids: %v", err)
+	}
+	if notified != 2 {
+		t.Fatalf("notified_owner_staff_ids holds %d ids, want 2 (the two Owners mailed)", notified)
+	}
+	var everyIDIsAnOwner bool
+	if err := db.Admin.QueryRowContext(t.Context(),
+		`SELECT NOT EXISTS (
+			SELECT 1 FROM connect_nudge_outbox o, unnest(o.notified_owner_staff_ids) AS notified_id
+			WHERE o.practice_id = $1
+			  AND NOT EXISTS (
+				SELECT 1 FROM practice_memberships pm
+				WHERE pm.practice_id = $1 AND pm.staff_id = notified_id AND 'owner' = ANY(pm.roles)
+			  )
+		 )`, practiceID,
+	).Scan(&everyIDIsAnOwner); err != nil {
+		t.Fatalf("check notified ids are Owners: %v", err)
+	}
+	if !everyIDIsAnOwner {
+		t.Fatal("notified_owner_staff_ids names somebody who is not an Owner of this Practice")
+	}
 }
 
 // TestConnectNudgeWorker_SkipsAPracticeThatConnectedBeforeTheSend is the
@@ -407,5 +436,17 @@ func TestConnectNudgeWorker_ZeroOwnersMarksSentWithNoMail(t *testing.T) {
 	}
 	if status != testPayoutStatusSent {
 		t.Fatalf("status = %q, want %s", status, testPayoutStatusSent)
+	}
+	// An empty array rather than NULL: nobody was addressed, which is a
+	// different fact from a row no attempt has reached yet.
+	var notified int
+	if err := db.Admin.QueryRowContext(t.Context(),
+		`SELECT cardinality(notified_owner_staff_ids) FROM connect_nudge_outbox WHERE practice_id = $1`,
+		practiceID,
+	).Scan(&notified); err != nil {
+		t.Fatalf("query notified_owner_staff_ids: %v", err)
+	}
+	if notified != 0 {
+		t.Fatalf("notified_owner_staff_ids holds %d ids, want an empty array", notified)
 	}
 }

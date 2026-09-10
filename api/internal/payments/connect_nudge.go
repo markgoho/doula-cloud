@@ -49,16 +49,16 @@ const MsgConnectNudgeAlreadyConnected = "This Practice has already connected Str
 // the bound in the same breath as the refusal, so the reader learns the
 // rule from the sentence rather than having to discover it by trying
 // again tomorrow.
-const MsgConnectNudgeTooSoon = "Every Practice Owner was emailed about this in the last week. Doula Cloud sends this reminder at most once a week, so there is nothing more to send right now."
+const MsgConnectNudgeTooSoon = "Doula Cloud was already asked to email every Practice Owner about this in the last week. It sends this reminder at most once a week, so there is nothing more to send right now."
 
-// actionConnectNudgeSent records a Staff member asking every Owner to
+// actionConnectNudgeRequested records a Staff member asking every Owner to
 // connect Stripe -- Practice-scoped, plain-string, the same shape
 // actionBillingModeChanged and actionPaymentTermsChanged already use.
 // This is the audit entry #917 asks for, alongside
 // connect_nudge_outbox.requested_by_staff_id on the row itself: the
 // ledger answers "who asked, and when" where a Practice already reads
 // its own history, and the row answers it where the worker can see it.
-const actionConnectNudgeSent = "stripe_connect_nudge_sent"
+const actionConnectNudgeRequested = "stripe_connect_nudge_requested"
 
 // connectNudgeSubject and connectNudgeText are the nudge's fixed copy.
 // ADR-0009's content rule is unconditional and ADR-0011 removed its one
@@ -146,14 +146,21 @@ func PostConnectNudgeHandler(enq tasknudge.Enqueuer) http.Handler {
 // both queueing. The partial unique index on the table is the second
 // guard behind that one.
 func queueConnectNudge(ctx context.Context, tx *sql.Tx, practiceID, staffID string) error {
-	var accountID sql.NullString
-	if err := tx.QueryRowContext(ctx,
-		`SELECT stripe_connect_account_id FROM practices WHERE id = $1 FOR UPDATE`, practiceID,
-	).Scan(&accountID); err != nil {
+	// The lock is taken as its own statement rather than as a FOR UPDATE
+	// on the read below, so the one query that answers "has this Practice
+	// a Stripe account" is written once and both callers -- this one and
+	// the worker's send-time recheck -- ask it the same way.
+	if _, err := tx.ExecContext(ctx, `SELECT 1 FROM practices WHERE id = $1 FOR UPDATE`, practiceID); err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		return fmt.Errorf("payments: read connect account for nudge: %w", err)
+		return fmt.Errorf("payments: lock practice for nudge: %w", err)
 	}
-	if accountID.Valid {
+
+	missing, err := connectAccountMissing(ctx, tx, practiceID)
+	if err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		return err
+	}
+	if !missing {
 		return errConnectNudgeAlreadyConnected
 	}
 
@@ -184,7 +191,7 @@ func queueConnectNudge(ctx context.Context, tx *sql.Tx, practiceID, staffID stri
 		PracticeID:  practiceID,
 		SubjectKind: activity.SubjectPractice,
 		SubjectID:   practiceID,
-		Action:      actionConnectNudgeSent,
+		Action:      actionConnectNudgeRequested,
 		Actor:       activity.StaffActor(staffID),
 	}); err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
@@ -254,13 +261,75 @@ func (w ConnectNudgeWorker) send(ctx context.Context, tx *sql.Tx, inner outbox.W
 		return wrapOutboxErr(inner.MarkSent(ctx, tx, r.id, now))
 	}
 
-	emails, err := ownerEmails(ctx, tx, r.practiceID)
+	staffIDs, emails, err := ownerRecipients(ctx, tx, r.practiceID)
 	if err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		return err
 	}
+	// Written before the send rather than after it, because SendAll marks
+	// the row terminal itself and there is no "afterwards" left to write
+	// in. A row that then fails and retries resolves the roster again and
+	// overwrites this with what that attempt actually addressed, which is
+	// the honest answer either way.
+	if err := recordConnectNudgeRecipients(ctx, tx, r.id, staffIDs); err != nil {
+		// coverage:ignore reason: DB update failure, not exercised by unit tests
+		return err
+	}
 	link := w.AppBaseURL + "/practices/" + r.practiceID + "/settings/payments"
 	return wrapOutboxErr(inner.SendAll(ctx, tx, r.id, r.attemptCount, now, emails, connectNudgeSubject, connectNudgeText(link)))
+}
+
+// ownerRecipients is ownerEmails with the Staff ids beside the addresses
+// -- the same join, the same 00033 trusted policies, one extra column.
+// Kept here rather than widening ownerEmails: #343's worker has no use
+// for the ids, and #917 is the only send that has to say afterwards whom
+// it addressed.
+func ownerRecipients(ctx context.Context, tx *sql.Tx, practiceID string) (staffIDs, emails []string, err error) {
+	rows, err := tx.QueryContext(ctx,
+		`SELECT s.id, s.email FROM staff s
+		 JOIN practice_memberships pm ON pm.staff_id = s.id
+		 WHERE pm.practice_id = $1 AND 'owner' = ANY(pm.roles)`,
+		practiceID,
+	)
+	if err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		return nil, nil, fmt.Errorf("payments: resolve owner recipients: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	for rows.Next() {
+		var id, email string
+		if err := rows.Scan(&id, &email); err != nil {
+			// coverage:ignore reason: row scan failure, not exercised by unit tests
+			return nil, nil, fmt.Errorf("payments: scan owner recipient: %w", err)
+		}
+		staffIDs = append(staffIDs, id)
+		emails = append(emails, email)
+	}
+	if err := rows.Err(); err != nil {
+		// coverage:ignore reason: cursor failure, not exercised by unit tests
+		return nil, nil, fmt.Errorf("payments: read owner recipients: %w", err)
+	}
+	return staffIDs, emails, nil
+}
+
+// recordConnectNudgeRecipients writes whom this attempt addressed onto
+// the row, answering #917's "to whom" against a roster that will have
+// moved on by the time anyone asks.
+func recordConnectNudgeRecipients(ctx context.Context, tx *sql.Tx, id string, staffIDs []string) error {
+	// An empty array, never NULL: a Practice with no Owners left was
+	// addressed to nobody, which is a different fact from a row no
+	// attempt has reached yet, and the column has to be able to say so.
+	if staffIDs == nil {
+		staffIDs = []string{}
+	}
+	if _, err := tx.ExecContext(ctx,
+		`UPDATE connect_nudge_outbox SET notified_owner_staff_ids = $2::uuid[] WHERE id = $1`,
+		id, staffIDs,
+	); err != nil {
+		// coverage:ignore reason: DB update failure, not exercised by unit tests
+		return fmt.Errorf("payments: record connect nudge recipients: %w", err)
+	}
+	return nil
 }
 
 // connectAccountMissing reports whether practiceID still has no Stripe

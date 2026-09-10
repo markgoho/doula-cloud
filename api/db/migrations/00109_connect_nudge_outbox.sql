@@ -39,7 +39,21 @@ CREATE TABLE connect_nudge_outbox (
     next_attempt_at timestamptz NOT NULL DEFAULT now(),
     created_at timestamptz NOT NULL DEFAULT now(),
     sent_at timestamptz,
-    last_error text
+    last_error text,
+    -- Whom it went to, written by the worker at send time. #917's audit
+    -- criterion is "who sent it, to whom, and when", and the first and
+    -- last are answerable from the columns above; this is the second.
+    --
+    -- Recipients are still resolved at send time and never chosen at
+    -- queue time -- that is #343's rule, reused unchanged -- so this is a
+    -- record of what the resolution produced, not an instruction to the
+    -- worker. It matters because the resolution is against a roster that
+    -- moves: an Owner who leaves the Practice next month is nowhere in a
+    -- re-run of that query, and "every Owner at the time" would then be
+    -- unanswerable. Staff ids rather than addresses: the ledger already
+    -- resolves a staff id to a name, and an address on an append-only row
+    -- would outlive the person changing it.
+    notified_owner_staff_ids uuid[]
 );
 
 -- At most one pending row per Practice, guarding the race between two

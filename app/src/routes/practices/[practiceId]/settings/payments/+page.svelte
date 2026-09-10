@@ -32,6 +32,7 @@
 		pollConnectStatus,
 		nudgeOwnersToConnect,
 		CONNECT_STATUS_CHECK_FAILED_MESSAGE,
+		CONNECT_NUDGE_OFFER_MESSAGE,
 		CONNECT_NUDGE_SENT_MESSAGE,
 		CONNECT_OWNERS_ALREADY_EMAILED_MESSAGE,
 		type ConnectStatus,
@@ -692,9 +693,7 @@
 				{#if wasNudgeSent}
 					<Notice variant="status" message={CONNECT_NUDGE_SENT_MESSAGE} />
 				{:else}
-					<Text
-						text="Doula Cloud can email every Practice Owner about this. It sends this reminder at most once a week."
-					/>
+					<Text text={CONNECT_NUDGE_OFFER_MESSAGE} />
 					<cluster-l space="var(--space-3)">
 						<Button
 							label="Email the Practice Owners"
@@ -708,7 +707,13 @@
 					<Notice variant="error" message={nudgeError} />
 				{/if}
 			{:else}
-				<Notice variant="status" message={CONNECT_OWNERS_ALREADY_EMAILED_MESSAGE} />
+				<!-- `info`, not `status`: `status` renders a check, which
+				     belongs to something the reader just did. Nothing here is
+				     hers; this is a standing fact about how the product
+				     behaves (ADR-0021 -- GOV.UK reserves success for a
+				     completed action). The confirmation above, after she
+				     presses, is the one that earns the check. -->
+				<Notice variant="info" message={CONNECT_OWNERS_ALREADY_EMAILED_MESSAGE} />
 			{/if}
 		{:else if canStartOnboarding && !hasDeclaredWebsite}
 			<!--
