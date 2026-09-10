@@ -6,40 +6,52 @@ import (
 	"testing"
 )
 
+// The reasons that repeat across the list below, each named once rather
+// than written out five times.
+const (
+	uniqueIndexBefore = "CREATE UNIQUE INDEX; applied before the guardrail covered the class (#1139)"
+	checkBefore       = "ADD CONSTRAINT ... CHECK; applied before the guardrail covered the class (#1139)"
+	checkAndDMLBefore = "ADD CONSTRAINT ... CHECK and DML; applied before the guardrail covered the classes (#1139)"
+)
+
 // grandfathered are migrations that carry a row-dependent statement,
-// already applied against doula-cloud-pg, and cannot be rewritten:
+// have already applied against doula-cloud-pg, and cannot be rewritten:
 // goose has recorded them, so editing one makes the file and the
-// database silently disagree. Each entry says why the statement was
-// harmless when it ran. The list is closed -- TestGrandfatheredListDoesNotGrow
-// pins its exact size, so a new migration takes the safe form or writes
-// a safety note, never an exemption.
+// database silently disagree. Each entry names the class it carries and
+// says why it is on the list. The list is closed --
+// TestGrandfatheredListDoesNotGrow pins its exact size, so a new
+// migration takes the safe form or writes a safety note, never an
+// exemption.
+// nolint:gosec // G101 reads the migration names and constraint classes
+// below as a possible credential; every value here is a filename and a
+// sentence of English, and nothing in this package holds a secret.
 var grandfathered = map[string]string{
-	"00030_employment_attachment_offer.sql":            "ADD COLUMN ... NOT NULL without DEFAULT; applied 2026-06 against an empty staff_practices",
-	"00095_manual_payment_recording.sql":               "ADD COLUMN ... NOT NULL without DEFAULT; applied 2026-09-08 against an empty invoices",
 	"00002_practice_staff_tenancy.sql":                 "DO block; applied before the guardrail covered the class (#1139)",
-	"00020_contracts_recreate_after_void.sql":          "CREATE UNIQUE INDEX; applied before the guardrail covered the class (#1139)",
-	"00026_client_portal_provisioning.sql":             "CREATE UNIQUE INDEX; applied before the guardrail covered the class (#1139)",
-	"00039_membership_events.sql":                      "CREATE UNIQUE INDEX; applied before the guardrail covered the class (#1139)",
+	"00020_contracts_recreate_after_void.sql":          uniqueIndexBefore,
+	"00026_client_portal_provisioning.sql":             uniqueIndexBefore,
+	"00030_employment_attachment_offer.sql":            "ADD COLUMN ... NOT NULL without DEFAULT; applied 2026-06 against an empty staff_practices",
+	"00039_membership_events.sql":                      uniqueIndexBefore,
 	"00042_client_intake_schema.sql":                   "ALTER COLUMN ... SET NOT NULL and DML; applied before the guardrail covered the classes (#1139)",
 	"00043_staff_work_state.sql":                       "ADD CONSTRAINT ... CHECK, ALTER COLUMN ... SET NOT NULL and DML; applied before the guardrail covered the classes (#1139)",
 	"00046_practice_page_slug.sql":                     "ADD CONSTRAINT ... CHECK, CREATE UNIQUE INDEX, DML and a DO block; applied before the guardrail covered the classes (#1139)",
-	"00049_site_build_and_page_liveness.sql":           "ADD CONSTRAINT ... CHECK and DML; applied before the guardrail covered the classes (#1139)",
+	"00049_site_build_and_page_liveness.sql":           checkAndDMLBefore,
 	"00052_credit_lot_provenance.sql":                  "ADD CONSTRAINT ... CHECK, ALTER COLUMN ... TYPE and DML; applied before the guardrail covered the classes (#1139)",
 	"00054_one_refund_per_request.sql":                 "ADD CONSTRAINT ... CHECK and CREATE UNIQUE INDEX; applied before the guardrail covered the classes (#1139)",
 	"00055_founding_grant.sql":                         "ADD CONSTRAINT ... CHECK, ALTER COLUMN ... TYPE and CREATE UNIQUE INDEX; applied before the guardrail covered the classes (#1139)",
 	"00057_engagement_status_drop_postpartum.sql":      "ALTER COLUMN ... TYPE; applied before the guardrail covered the class (#1139)",
-	"00063_mfa_recovery_cleared_notice.sql":            "CREATE UNIQUE INDEX; applied before the guardrail covered the class (#1139)",
-	"00072_totp_mfa_auth_events.sql":                   "ADD CONSTRAINT ... CHECK; applied before the guardrail covered the class (#1139)",
-	"00078_session_evicted_one_pending.sql":            "CREATE UNIQUE INDEX; applied before the guardrail covered the class (#1139)",
+	"00063_mfa_recovery_cleared_notice.sql":            uniqueIndexBefore,
+	"00072_totp_mfa_auth_events.sql":                   checkBefore,
 	"00073_portal_accounts.sql":                        "ADD CONSTRAINT ... FOREIGN KEY, CREATE UNIQUE INDEX and DML; applied before the guardrail covered the classes (#1139)",
 	"00075_retire_identity_account_delete.sql":         "ALTER COLUMN ... TYPE; applied before the guardrail covered the class (#1139)",
-	"00089_credit_ledger_forfeit_shape.sql":            "ADD CONSTRAINT ... CHECK; applied before the guardrail covered the class (#1139)",
-	"00090_engagement_status_transition.sql":           "ADD CONSTRAINT ... CHECK; applied before the guardrail covered the class (#1139)",
-	"00093_engagement_birth_outcome.sql":               "ADD CONSTRAINT ... CHECK; applied before the guardrail covered the class (#1139)",
-	"00094_engagement_completion_requires_outcome.sql": "ADD CONSTRAINT ... CHECK and DML; applied before the guardrail covered the classes (#1139)",
-	"00101_staff_login_deletion_rules.sql":             "ADD CONSTRAINT ... CHECK; applied before the guardrail covered the class (#1139)",
+	"00078_session_evicted_one_pending.sql":            uniqueIndexBefore,
+	"00089_credit_ledger_forfeit_shape.sql":            checkBefore,
+	"00090_engagement_status_transition.sql":           checkBefore,
+	"00093_engagement_birth_outcome.sql":               checkBefore,
+	"00094_engagement_completion_requires_outcome.sql": checkAndDMLBefore,
+	"00095_manual_payment_recording.sql":               "ADD COLUMN ... NOT NULL without DEFAULT; applied 2026-09-08 against an empty invoices",
+	"00101_staff_login_deletion_rules.sql":             checkBefore,
 	"00103_payment_reversal.sql":                       "ADD CONSTRAINT ... CHECK and CREATE UNIQUE INDEX; applied before the guardrail covered the classes (#1139)",
-	"00112_client_merge_moves_history.sql":             "ADD CONSTRAINT ... CHECK and DML; applied before the guardrail covered the classes (#1139)",
+	"00112_client_merge_moves_history.sql":             checkAndDMLBefore,
 }
 
 // TestNoRowDependentStatementWithoutASafetyNote is the guardrail. It
@@ -105,7 +117,7 @@ func safetyNoteClasses(t *testing.T, name string) map[string]bool {
 		return nil
 	}
 	covered := map[string]bool{}
-	for _, line := range strings.Split(string(body), "\n") {
+	for line := range strings.SplitSeq(string(body), "\n") {
 		if heading, ok := strings.CutPrefix(strings.TrimSpace(line), "## "); ok {
 			covered[strings.TrimSpace(heading)] = true
 		}

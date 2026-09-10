@@ -12,14 +12,13 @@ const (
 // section can meet rows that are already there; a Down runs against
 // whatever its own Up left behind and never runs on trunk at all.
 func UpSection(body string) string {
-	start := strings.Index(body, upMarker)
-	if start < 0 {
+	// Cutting on the marker also steps past it, so the first statement
+	// does not arrive with "+goose Up" glued to its front -- a statement
+	// recognized by what it starts with would never match.
+	_, rest, found := strings.Cut(body, upMarker)
+	if !found {
 		return body
 	}
-	// Step past the annotation's own line, so the first statement does
-	// not arrive with "+goose Up" glued to its front -- a statement
-	// recognized by what it starts with would never match.
-	rest := body[start+len(upMarker):]
 	up, _, found := strings.Cut(rest, downMarker)
 	if found {
 		return up

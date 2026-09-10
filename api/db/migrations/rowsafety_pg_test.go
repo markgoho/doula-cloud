@@ -17,6 +17,7 @@ package migrations_test
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"regexp"
 	"strings"
 	"testing"
@@ -211,7 +212,7 @@ func runIn(t *testing.T, db *testdb.DB, c rowCase, row, stmt string) error {
 func execEach(ctx context.Context, conn *sql.Conn, sql string) error {
 	for _, s := range migrations.SplitStatements(sql) {
 		if _, err := conn.ExecContext(ctx, s); err != nil {
-			return err
+			return fmt.Errorf("%s: %w", strings.TrimSpace(s), err)
 		}
 	}
 	return nil
