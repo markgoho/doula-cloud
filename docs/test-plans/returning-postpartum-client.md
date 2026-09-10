@@ -2,13 +2,9 @@
 
 - **Journey**: [returning-postpartum-client.md](../journeys/returning-postpartum-client.md)
 - **Persona**: [returning-postpartum-client.md](../personas/returning-postpartum-client.md)
-- **A pass means**: two Engagements at one Practice — one closed and still
-  readable, one live and postpartum — reachable from one portal account. **All
-  three clauses fail**, in three different places for three different reasons.
+- **A pass means**: two Engagements at one Practice — one closed and still readable, one live and postpartum — reachable from one portal account. **The third clause passes.** One Portal Account reaches her Client, `engagements_identity_visibility` (`00082`) makes every Engagement it holds readable before one is chosen, the portal root lists them, and `engagementLabel` tells two at one Practice apart by when each began ([#309](https://github.com/markgoho/doula-cloud/issues/309), [#310](https://github.com/markgoho/doula-cloud/issues/310), [#312](https://github.com/markgoho/doula-cloud/issues/312)). The first two clauses have code behind them too — `engagement/transition.go` writes `engagements.status`, and `00042_client_intake_schema.sql` gave `engagements` a `kind` — and the cells that still call them missing are held at [#1241](https://github.com/markgoho/doula-cloud/issues/1241) rather than half-corrected here.
 
-Her persona file says the schema supports her, and it does: `clients` carries no
-`practice_id`. The API and the portal do not. This plan is the proof, and it is
-walkable to the end — every refusal she meets is a refusal she can observe.
+Her persona file says the schema supports her, and it does: `clients` carries no `practice_id`. This plan is walkable to the end — the one refusal still on her path is one she can observe, and it is a refusal the product means.
 
 ## Preconditions
 
@@ -21,9 +17,7 @@ walkable to the end — every refusal she meets is a refusal she can observe.
   1's finding, not a defect in the fixture.
 - **At least two Client credits.** Stage 3 spends a second one on a person the
   Practice has already paid for (**MO-G9**).
-- **Two email addresses for one person.** Stage 5.3 needs a second portal account.
-  This is not a fixture bypass — it is the workaround the product forces on her,
-  and walking it is the point of the stage.
+- **One email address, and one deliberate duplicate.** She needs only the address she already signs in with: 5.2 is her existing login, not a second account. Step 5.3 alone needs a second Client record for her at this Practice, saved on purpose by answering intake's duplicate screen with *a different person* — that branch is the only way to reach the accept-side refusal, and reaching it is the point of the step.
 
 ## Steps
 
@@ -56,22 +50,22 @@ mark; the consequences land in stages 3 and 8.
 | 4.1 | Record that this Engagement is postpartum work, not a birth | `engagements` has no type or kind column, only `status`, and the create handler names `intake` as the constant with no create-time alternative. `CONTEXT.md` calls Engagement "deliberately generic so it fits both birth-doula and postpartum-doula work"; **generic turns out to mean silent** | `missing-feature (CB-G2)` [#308](https://github.com/markgoho/doula-cloud/issues/308) |
 | 4.1-a | Approximate it by moving the status to `postpartum` | Unavailable anyway (**MO-G4**) — and it would say she has given birth under this Engagement, which she has not | `missing-feature (MO-G4)` [#253](https://github.com/markgoho/doula-cloud/issues/253) |
 
-### Stage 5 — The second invite refuses her — moment of truth
+### Stage 5 — The second invitation, and the login she already has
 
 | Step | Action | Expected result | Mark |
 | --- | --- | --- | --- |
-| 5.1 | Priya sends the portal invite on the new Engagement | `POST .../portal-invite` succeeds for a non-owner; the link goes by hand (**[RA-G1](https://github.com/markgoho/doula-cloud/issues/260)**) | `manual` |
-| 5.2 | Open the link, choose "I already have an account", sign in as herself | **409, and the page prints the string**: "a portal account already exists for this identity". `client_portal_users.identity_uid` is `UNIQUE` across the table (`00006_client_portal_users.sql`), so `UPDATE client_portal_users SET identity_uid = …` collides with her first row. She is refused for being a returning customer ([CB-G3](https://github.com/markgoho/doula-cloud/issues/309)) | `manual` |
-| 5.3 | Create a second account under a different email address | Succeeds. It is the only way forward, and it makes the duplication permanent | `manual` |
+| 5.1 | Priya sends the portal invite on the new Engagement | **`409`, and it is the right answer**: an invitation is raised per Client, not per Engagement, so `invite()` finds the accepted `client_portal_users` row Camille already holds and returns "this client already has portal access". There is nothing to send because she can already get in. Where an invitation *is* raised, the link now travels as a Practice-voice Notification email rather than by hand (**[RA-G1](https://github.com/markgoho/doula-cloud/issues/260)** closed) | `manual` |
+| 5.2 | Sign in as herself and reach the new Engagement | **She reaches it through the login she already has.** A sign-in link to her existing address lands her on the portal root list, holding both Engagements. There is no "I already have an account" fork to choose: accepting an invitation is one **Continue** button (ADR-0026 — the invitation is the first sign-in link, and a Client has no password), and the table-wide `UNIQUE` on `client_portal_users.identity_uid` that used to refuse her is gone ([CB-G3](https://github.com/markgoho/doula-cloud/issues/309) closed, [#819](https://github.com/markgoho/doula-cloud/issues/819) replaced it with `UNIQUE (identity_uid, client_id)`) | `manual` |
+| 5.3 | Down the duplicate-Client branch only: press **Continue** on an invitation raised against a second Client record for her at this Practice | **`409`, and the page prints the string**: "you already have portal access at this practice -- sign in instead of accepting a new invitation". `portal_account_reuse_for_accept` (`00081`) answers the one question ADR-0015 makes the rule — does this sign-in address's Portal Account already reach a Client at this Practice — and accept refuses rather than silently merging. This is the only refusal left on her path, and it tells her what to do instead | `manual` |
 
-### Stage 6 — Two accounts, one person
+### Stage 6 — One account, two Engagements — moment of truth
 
 | Step | Action | Expected result | Mark |
 | --- | --- | --- | --- |
-| 6.1 | Sign in as account A | Lands on her 2024 birth Engagement, still `intake` | `automated (client-portal-login.e2e.ts)` |
-| 6.2 | Sign out, sign in as account B | Her postpartum Engagement. Each account resolves to exactly one `clients` row, so each shows one Engagement and neither can see the other | `manual` |
-| 6.2-a | Move between the two without signing out | No switcher exists. The chooser appears only on the login and accept-invite screens, and the authenticated layout's entire chrome is a sign-out button | `missing-feature (CB-G4)` [#310](https://github.com/markgoho/doula-cloud/issues/310) |
-| 6.2-b | With both under one identity, tell them apart in the chooser | The chooser labels each Engagement by `practiceName` alone (`login/+page.svelte`), so two at Rooted Birth Collective would render as two identical links. Closing [CB-G1](https://github.com/markgoho/doula-cloud/issues/307) and [CB-G3](https://github.com/markgoho/doula-cloud/issues/309) without this leaves her choosing blind | `missing-feature (CB-G4)` [#310](https://github.com/markgoho/doula-cloud/issues/310) |
+| 6.1 | Sign in | **The portal root list, holding both Engagements.** `decidePortalLanding` redirects only where there is exactly one; with two it lists them. `client-portal-login.e2e.ts` and `portal-invite-accept.e2e.ts` each provision a Client who has never been seen before and assert the single-Engagement redirect, so neither drives this step the way she would | `manual` |
+| 6.2 | Open her 2024 birth Engagement, then the postpartum one | Both open, from one login. Every Engagement her Portal Account reaches is readable under `engagements_identity_visibility` (`00082`), which is the identity-tier read the root list needs before any `app.current_client_id` is set | `manual` |
+| 6.2-a | Move between the two without signing out | **The chrome carries the way back.** The authenticated portal layout's top bar holds a link to the root list, labeled with `engagementLabel` for the Engagement she is in, so the list is one press away from anywhere inside either ([CB-G4](https://github.com/markgoho/doula-cloud/issues/310) closed) | `manual` |
+| 6.2-b | Tell the two apart in the list | `engagementLabel` names each one **"{Practice}, started {date}"**, so two at Rooted Birth Collective differ by when each began — the one fact that is honest for every Client, including one whose care ended in loss | `manual` |
 
 ### Stage 7 — Offered a Birth Plan she does not need
 
@@ -92,19 +86,15 @@ mark; the consequences land in stages 3 and 8.
 
 | Mark | Steps |
 | --- | --- |
-| `automated` | 1 |
-| `manual` | 11 |
-| `missing-feature` | 7 ([MO-G4](https://github.com/markgoho/doula-cloud/issues/253) ×2, [CB-G2](https://github.com/markgoho/doula-cloud/issues/308), [CB-G4](https://github.com/markgoho/doula-cloud/issues/310) ×2, [CB-G5](https://github.com/markgoho/doula-cloud/issues/311), [CB-G6](https://github.com/markgoho/doula-cloud/issues/312)) |
+| `automated` | 0 |
+| `manual` | 14 |
+| `missing-feature` | 5 ([MO-G4](https://github.com/markgoho/doula-cloud/issues/253) ×2, [CB-G2](https://github.com/markgoho/doula-cloud/issues/308), [CB-G5](https://github.com/markgoho/doula-cloud/issues/311), [CB-G6](https://github.com/markgoho/doula-cloud/issues/312)) |
 
 No step is `blocked`. Nothing on her path touches Stripe.
 
-CB-G3, **MO-G9**, **RA-G1** and NH-G4 are observed inside walkable steps (5.2, 3.2,
-5.1, 6.1) rather than given steps of their own — CB-G3 most of all: her moment of
-truth is a step that **can** be performed, and the 409 it returns is the finding.
+CB-G3, **MO-G9**, **RA-G1** and NH-G4 are observed inside walkable steps (5.2, 3.2, 5.1, 6.1) rather than given steps of their own. CB-G3 is closed, and 5.2 is now where that shows: the step is performed, and what it produces is her existing login reaching both Engagements rather than a `409`.
 
-Her single automated step is her first login, which passes. Every spec in the suite
-provisions a Client who has never been seen before, so nothing in it can fail the
-way she does.
+**She has no automated step any more.** Every spec in the suite provisions a Client who has never been seen before, holding exactly one Engagement, so none of them drives the two-Engagement root list her whole path now ends in — which is the same reason her first login used to be her only automated step, read the other way round.
 
 ## Run log
 
@@ -134,6 +124,22 @@ A desk pass over this plan's Add Client cells, which [#318](https://github.com/m
 **`add-client-visits.e2e.ts` drives none of these.** The spec's Client is brand new and has no prior match, so it lands straight on the detail hub and never passes through the match-review screens these four steps are entirely about. The README's rule — a mark counts only where the spec exercises the step the way the Persona would — keeps all four `manual`.
 
 **Left alone on purpose.** 5.2's CB-G3 is her moment of truth and a portal-account step rather than an Add Client one; it, and every other cell on this plan, waits on the walk [#329](https://github.com/markgoho/doula-cloud/issues/329) owns.
+
+### 2026-09-10 — the portal stages, against #309 as built ([#1135](https://github.com/markgoho/doula-cloud/issues/1135))
+
+A desk pass over stages 5 and 6, which [#685](https://github.com/markgoho/doula-cloud/issues/685) left alone on purpose. Nothing was re-walked. Three steps are re-marked and one refusal moved house.
+
+| Step | Cell corrected | What settled it |
+| --- | --- | --- |
+| 5.1 | `201` and a link delivered by hand -> `409` "this client already has portal access" | `invite()` reads `client_portal_users` by `client_id` and refuses where an accepted row exists; after ADR-0017 her second Engagement hangs off the Client she already is. `queueOutboxSend` mails the link where one is raised ([RA-G1](https://github.com/markgoho/doula-cloud/issues/260) closed) |
+| 5.2 | `409` "a portal account already exists for this identity" -> her existing login reaching both Engagements | `00081_portal_account_reuse.sql` dropped `client_portal_users_identity_uid_key`; [#819](https://github.com/markgoho/doula-cloud/issues/819) put `UNIQUE (identity_uid, client_id)` in its place. The accept screen is one **Continue** button (ADR-0026), so the step's own action text was stale too |
+| 5.3 | a second account under a different email -> the one refusal that remains, down the duplicate-Client branch | `portal_account_reuse_for_accept` (`00081`) and `acceptInvite`'s use of it: "you already have portal access at this practice -- sign in instead of accepting a new invitation" |
+| 6.1 | `automated (client-portal-login.e2e.ts)` -> `manual`: the root list, holding both | `decidePortalLanding` lists rather than redirects above one Engagement. Both portal specs provision a never-seen Client with one Engagement and assert the single-Engagement redirect, so neither drives this step the way she would |
+| 6.2, 6.2-a, 6.2-b | two accounts and no switcher -> one account, a persistent way back to the list, and a label that distinguishes | `engagements_identity_visibility` (`00082`), the authenticated layout's `switcherLabel`, and `engagementLabel`'s "{Practice}, started {date}" ([CB-G4](https://github.com/markgoho/doula-cloud/issues/310) closed) |
+
+**Two refusals, and her path meets the earlier one.** The refusal this plan was written around is gone; a *different*, deliberate refusal took its place at the accept, and a second one sits at the invite. Which of them a walker meets depends on how intake's duplicate screen was answered — that is why 5.1 and 5.3 now name different strings, and why 5.3 says which branch it needs.
+
+**Left alone on purpose.** Stages 1, 4, 7 and 8 name gaps that are also closed ([#253](https://github.com/markgoho/doula-cloud/issues/253), [#308](https://github.com/markgoho/doula-cloud/issues/308), [#311](https://github.com/markgoho/doula-cloud/issues/311), [#312](https://github.com/markgoho/doula-cloud/issues/312)); correcting them means reading each gap issue rather than reading prose, and they are held at [#1241](https://github.com/markgoho/doula-cloud/issues/1241). The map's CB-G1 row is held at [#1236](https://github.com/markgoho/doula-cloud/issues/1236). The walk logs above and below are records of what was seen on the day and are untouched.
 
 ### 2026-08-23 — manual and missing-feature steps ([#241](https://github.com/markgoho/doula-cloud/issues/241))
 
