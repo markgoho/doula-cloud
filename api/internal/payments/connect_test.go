@@ -8,6 +8,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"doula-cloud/api/internal/apierr"
+	"doula-cloud/api/internal/apierrtest"
 	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/idempotency"
 	"doula-cloud/api/internal/payments"
@@ -685,15 +687,9 @@ func TestPostConnectHandler_RefusesWithoutDeclaredWebsite(t *testing.T) {
 	if resp.StatusCode != http.StatusConflict {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusConflict)
 	}
-	var out struct {
-		Code    string `json:"code"`
-		Message string `json:"message"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
-	if out.Code != "FAILED_PRECONDITION" {
-		t.Fatalf("code = %q, want %q", out.Code, "FAILED_PRECONDITION")
+	out := apierrtest.Decode(t, resp)
+	if out.Code != apierr.CodeFailedPrecondition {
+		t.Fatalf("code = %q, want %q", out.Code, apierr.CodeFailedPrecondition)
 	}
 	if out.Message != payments.MsgWebsiteRequired {
 		t.Fatalf("message = %q, want %q", out.Message, payments.MsgWebsiteRequired)
@@ -832,13 +828,7 @@ func TestPostConnectHandler_RefusesWhenHerPublishedPageDoesNotLoad(t *testing.T)
 	if resp.StatusCode != http.StatusConflict {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusConflict)
 	}
-	var out struct {
-		Code    string `json:"code"`
-		Message string `json:"message"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
+	out := apierrtest.Decode(t, resp)
 	if out.Message != payments.MsgPageNotLive {
 		t.Fatalf("message = %q, want %q", out.Message, payments.MsgPageNotLive)
 	}

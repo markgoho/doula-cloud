@@ -43,12 +43,20 @@ func transitionBody(status, endingReason, endingNote string) map[string]any {
 // is required to branch on rather than on the prose beside it
 // (docs/api-design.md section 7). One struct, the shape
 // outcomeResponseBody already uses for the sibling endpoint.
+//
+// Stays a struct of its own rather than reaching for
+// apierrtest.Decode, #811's one reader of the envelope: this package's
+// request helper decodes once and hands back whichever of the two
+// shapes arrived, so a test that asked for the envelope specifically
+// would have to read the body a second time and would lose the success
+// fields. Code is apierr.Code so the enumerated constants still compare
+// without a conversion.
 type transitionResponseBody struct {
-	EngagementID string   `json:"engagementId"`
-	Status       string   `json:"status"`
-	StatusMoves  []string `json:"statusMoves"`
-	Code         string   `json:"code"`
-	Message      string   `json:"message"`
+	EngagementID string      `json:"engagementId"`
+	Status       string      `json:"status"`
+	StatusMoves  []string    `json:"statusMoves"`
+	Code         apierr.Code `json:"code"`
+	Message      string      `json:"message"`
 }
 
 // transitionAs sends a status transition request as uid and returns its
@@ -250,7 +258,7 @@ func TestTransitionHandler_CompletingRefusesWithNoBirthOutcome(t *testing.T) {
 	if status != http.StatusConflict {
 		t.Fatalf("status = %d, want 409", status)
 	}
-	if body.Code != string(apierr.CodeBirthOutcomeRequired) {
+	if body.Code != apierr.CodeBirthOutcomeRequired {
 		t.Fatalf("code = %q, want %s", body.Code, apierr.CodeBirthOutcomeRequired)
 	}
 	if body.Message == "" {

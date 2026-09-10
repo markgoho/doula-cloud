@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"doula-cloud/api/internal/apierr"
+	"doula-cloud/api/internal/apierrtest"
 	"doula-cloud/api/internal/mailsuppress"
 	"doula-cloud/api/internal/portalinvite"
 	"doula-cloud/api/internal/testdb"
@@ -202,12 +203,9 @@ func TestInviteHandler_AlreadyAcceptedConflict(t *testing.T) {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusConflict)
 	}
 
-	var out apierr.APIError
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
-	if out.Code != "CONFLICT" {
-		t.Fatalf("code = %q, want %q", out.Code, "CONFLICT")
+	out := apierrtest.Decode(t, resp)
+	if out.Code != apierr.CodeConflict {
+		t.Fatalf("code = %q, want %q", out.Code, apierr.CodeConflict)
 	}
 }
 
@@ -234,12 +232,9 @@ func TestInviteHandler_SuppressedAddressRefused(t *testing.T) {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusConflict)
 	}
 
-	var out apierr.APIError
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
-	if out.Code != "FAILED_PRECONDITION" {
-		t.Fatalf("code = %q, want %q", out.Code, "FAILED_PRECONDITION")
+	out := apierrtest.Decode(t, resp)
+	if out.Code != apierr.CodeFailedPrecondition {
+		t.Fatalf("code = %q, want %q", out.Code, apierr.CodeFailedPrecondition)
 	}
 	if !strings.Contains(out.Message, "Blocked email addresses") {
 		t.Fatalf("message = %q, want it to name Blocked email addresses", out.Message)

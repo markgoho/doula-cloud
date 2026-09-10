@@ -1,12 +1,13 @@
 package ratelimit_test
 
 import (
-	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 	"time"
 
+	"doula-cloud/api/internal/apierr"
+	"doula-cloud/api/internal/apierrtest"
 	"doula-cloud/api/internal/ratelimit"
 	"doula-cloud/api/internal/testdb"
 )
@@ -81,15 +82,9 @@ func TestWrap_OverLimitRefuses(t *testing.T) {
 		t.Fatalf("RateLimit-Limit = %q, want 2", resp.Header.Get("RateLimit-Limit"))
 	}
 
-	var body struct {
-		Code    string `json:"code"`
-		Message string `json:"message"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
-		t.Fatalf("decode body: %v", err)
-	}
-	if body.Code != "RATE_LIMITED" {
-		t.Fatalf("code = %q, want RATE_LIMITED", body.Code)
+	body := apierrtest.Decode(t, resp)
+	if body.Code != apierr.CodeRateLimited {
+		t.Fatalf("code = %q, want %q", body.Code, apierr.CodeRateLimited)
 	}
 	if body.Message == "" {
 		t.Fatal("message empty")

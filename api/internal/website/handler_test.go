@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"doula-cloud/api/internal/apierr"
+	"doula-cloud/api/internal/apierrtest"
 	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/idempotency"
 	"doula-cloud/api/internal/staffauth"
@@ -80,15 +81,6 @@ func decodeWebsite(t *testing.T, resp *http.Response) website.Response {
 	var out website.Response
 	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
 		t.Fatalf("decode response: %v", err)
-	}
-	return out
-}
-
-func decodeError(t *testing.T, resp *http.Response) apierr.APIError {
-	t.Helper()
-	var out apierr.APIError
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
-		t.Fatalf("decode error response: %v", err)
 	}
 	return out
 }
@@ -399,8 +391,8 @@ func TestPutHandler_RefusesAMalformedBody(t *testing.T) {
 	if resp.StatusCode != http.StatusBadRequest {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
 	}
-	got := decodeError(t, resp)
-	if got.Code != "INVALID_ARGUMENT" || got.Message != website.MsgInvalidBody {
+	got := apierrtest.Decode(t, resp)
+	if got.Code != apierr.CodeInvalidArgument || got.Message != website.MsgInvalidBody {
 		t.Fatalf("error = %+v, want INVALID_ARGUMENT/%q", got, website.MsgInvalidBody)
 	}
 }
@@ -423,7 +415,7 @@ func TestPutHandler_NamesTheFieldThatFailed(t *testing.T) {
 	if resp.StatusCode != http.StatusBadRequest {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
 	}
-	got := decodeError(t, resp)
+	got := apierrtest.Decode(t, resp)
 	if got.Details["ownUrl"] != website.MsgURLMalformed {
 		t.Fatalf("details = %v, want ownUrl named", got.Details)
 	}
@@ -454,7 +446,7 @@ func TestPutHandler_RefusesPastTheBudget(t *testing.T) {
 	if resp.StatusCode != http.StatusBadRequest {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
 	}
-	if got := decodeError(t, resp); got.Details["serviceDescription"] != website.MsgTooLong {
+	if got := apierrtest.Decode(t, resp); got.Details["serviceDescription"] != website.MsgTooLong {
 		t.Fatalf("details = %v, want serviceDescription over budget", got.Details)
 	}
 }

@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/mailsuppress"
 	"doula-cloud/api/internal/offer"
 	"doula-cloud/api/internal/staffauth"
@@ -336,7 +337,7 @@ func TestCreateHandler_RefusesSuppressedStaffTarget(t *testing.T) {
 		t.Fatalf("status = %d, want %d: %s", resp.status, http.StatusConflict, resp.body)
 	}
 	refusal := decodeRefusal(t, resp)
-	if refusal.Code != "FAILED_PRECONDITION" {
+	if refusal.Code != apierr.CodeFailedPrecondition {
 		t.Fatalf("code = %q, want FAILED_PRECONDITION", refusal.Code)
 	}
 	if refusal.Details["email"] != staffauth.MsgAddressBlocked {
@@ -372,7 +373,7 @@ func TestCreateHandler_RefusesSuppressedEmailTarget(t *testing.T) {
 		t.Fatalf("status = %d, want %d: %s", resp.status, http.StatusBadRequest, resp.body)
 	}
 	refusal := decodeRefusal(t, resp)
-	if refusal.Code != "INVALID_ARGUMENT" {
+	if refusal.Code != apierr.CodeInvalidArgument {
 		t.Fatalf("code = %q, want INVALID_ARGUMENT", refusal.Code)
 	}
 	if refusal.Details["email"] != staffauth.MsgAddressBlocked {

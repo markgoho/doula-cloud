@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"doula-cloud/api/internal/apierr"
+	"doula-cloud/api/internal/apierrtest"
 	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/client"
 	"doula-cloud/api/internal/outbox"
@@ -330,8 +331,8 @@ func TestEraseHandler_RefusesWhileAnInvoiceIsUnsettled(t *testing.T) {
 			// The code, not the prose, is what tells this refusal from
 			// "already erased" -- see EraseHandler's own doc comment.
 			// The message still has to name the blocking invoice.
-			got := readAPIError(t, resp)
-			if got.Code != string(apierr.CodeFailedPrecondition) {
+			got := apierrtest.Decode(t, resp)
+			if got.Code != apierr.CodeFailedPrecondition {
 				t.Fatalf("code = %q, want %q", got.Code, apierr.CodeFailedPrecondition)
 			}
 			if !strings.Contains(got.Message, "in_cus_"+status) {

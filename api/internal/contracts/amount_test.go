@@ -10,6 +10,7 @@ import (
 
 	"doula-cloud/api/internal/activity"
 	"doula-cloud/api/internal/apierr"
+	"doula-cloud/api/internal/apierrtest"
 	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/contracts"
 	"doula-cloud/api/internal/testdb"
@@ -64,11 +65,8 @@ func TestPostContractHandler_NoRateSet(t *testing.T) {
 	if resp.StatusCode != http.StatusConflict {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusConflict)
 	}
-	var out apierr.APIError
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
-	if out.Code != string(apierr.CodeFailedPrecondition) {
+	out := apierrtest.Decode(t, resp)
+	if out.Code != apierr.CodeFailedPrecondition {
 		t.Fatalf("code = %q, want %q", out.Code, apierr.CodeFailedPrecondition)
 	}
 	if !strings.Contains(out.Message, "birth") {

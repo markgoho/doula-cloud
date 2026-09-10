@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"testing"
 
-	"doula-cloud/api/internal/apierr"
+	"doula-cloud/api/internal/apierrtest"
 	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/testdb"
@@ -149,10 +149,7 @@ func TestSignupHandler_RefusesWhenAlreadyInAPractice(t *testing.T) {
 	if second.StatusCode != http.StatusConflict {
 		t.Fatalf("second signup status = %d, want %d", second.StatusCode, http.StatusConflict)
 	}
-	var out apierr.APIError
-	if err := json.NewDecoder(second.Body).Decode(&out); err != nil {
-		t.Fatalf("decode body: %v", err)
-	}
+	out := apierrtest.Decode(t, second)
 	if out.Message != staffauth.MsgAlreadyBelongsToPractice {
 		t.Fatalf("message = %q, want %q", out.Message, staffauth.MsgAlreadyBelongsToPractice)
 	}

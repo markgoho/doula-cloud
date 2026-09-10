@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"doula-cloud/api/internal/apierr"
+	"doula-cloud/api/internal/apierrtest"
 	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/idempotency"
 	"doula-cloud/api/internal/payments"
@@ -228,14 +229,8 @@ func TestPostInvoiceHandler_NotConnectedRefuses(t *testing.T) {
 	if resp.StatusCode != http.StatusConflict {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusConflict)
 	}
-	var out struct {
-		Code    string `json:"code"`
-		Message string `json:"message"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
-	if out.Code != string(apierr.CodeFailedPrecondition) {
+	out := apierrtest.Decode(t, resp)
+	if out.Code != apierr.CodeFailedPrecondition {
 		t.Fatalf("code = %q, want %q", out.Code, apierr.CodeFailedPrecondition)
 	}
 	if out.Message != payments.MsgClientsCannotPay {

@@ -128,9 +128,15 @@ func expectStatus(t *testing.T, resp response, want int) {
 }
 
 // decodeRefusal reads a refusal's whole section 7 envelope, for a test
-// that needs Code and Details together (#488), mirroring
-// staffauth_test.decodeRefusal for this package's byte-body response
-// shape.
+// that needs Code and Details together (#488).
+//
+// Stays local rather than moving to apierrtest, which #811 made the one
+// shared reader of this envelope: apierrtest.Decode takes an
+// *http.Response, and this package's own request helper has already read
+// the body into a []byte by the time an assertion wants it. One caller
+// is not two, so a byte-body variant in apierrtest would be an extraction
+// below the bar; if a second package ever reads the envelope off bytes,
+// that is when the variant earns its place.
 func decodeRefusal(t *testing.T, resp response) apierr.APIError {
 	t.Helper()
 	var body apierr.APIError

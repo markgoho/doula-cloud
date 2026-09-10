@@ -2,14 +2,13 @@ package authn_test
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 	"time"
 
-	"doula-cloud/api/internal/apierr"
+	"doula-cloud/api/internal/apierrtest"
 	"doula-cloud/api/internal/authn"
 	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/testdb"
@@ -73,10 +72,7 @@ func assertUnauthorized(t *testing.T, rec *httptest.ResponseRecorder, message st
 	if rec.Code != http.StatusUnauthorized {
 		t.Fatalf("status = %d, want %d", rec.Code, http.StatusUnauthorized)
 	}
-	var out apierr.APIError
-	if err := json.NewDecoder(rec.Body).Decode(&out); err != nil {
-		t.Fatalf("decode body: %v", err)
-	}
+	out := apierrtest.Decode(t, rec.Result())
 	if out.Message != message {
 		t.Fatalf("message = %q, want %q", out.Message, message)
 	}

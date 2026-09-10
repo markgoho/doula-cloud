@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"doula-cloud/api/internal/apierrtest"
 	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/authtoken"
 	"doula-cloud/api/internal/idempotency"
@@ -173,7 +174,7 @@ func TestSpendResetHandler_PasswordTooShort(t *testing.T) {
 	// minPasswordLength -- TestDetailsWording can read a constant but not
 	// a fmt.Sprintf -- so this is what stops the two from drifting if the
 	// limit ever moves.
-	body := decodeRefusal(t, resp)
+	body := apierrtest.Decode(t, resp)
 	if body.Details["newPassword"] != staffauth.MsgPasswordTooShort {
 		t.Fatalf("details = %v, want newPassword entry", body.Details)
 	}

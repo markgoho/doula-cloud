@@ -10,6 +10,8 @@ import (
 	"testing"
 	"time"
 
+	"doula-cloud/api/internal/apierr"
+	"doula-cloud/api/internal/apierrtest"
 	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/idempotency"
 	"doula-cloud/api/internal/mailsuppress"
@@ -252,9 +254,9 @@ func TestInviteHandler_SuppressedAddressRefused(t *testing.T) {
 	if resp.StatusCode != http.StatusBadRequest {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
 	}
-	refusal := decodeRefusal(t, resp)
-	if refusal.Code != "INVALID_ARGUMENT" {
-		t.Fatalf("code = %q, want %q", refusal.Code, "INVALID_ARGUMENT")
+	refusal := apierrtest.Decode(t, resp)
+	if refusal.Code != apierr.CodeInvalidArgument {
+		t.Fatalf("code = %q, want %q", refusal.Code, apierr.CodeInvalidArgument)
 	}
 	if refusal.Details["email"] != staffauth.MsgAddressBlocked {
 		t.Fatalf("details = %v, want an email entry naming Blocked email addresses", refusal.Details)

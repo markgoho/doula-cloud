@@ -3,13 +3,12 @@ package sessionmint_test
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
-	"doula-cloud/api/internal/apierr"
+	"doula-cloud/api/internal/apierrtest"
 	"doula-cloud/api/internal/authn"
 	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/portalaccount"
@@ -129,11 +128,8 @@ func TestIssue_CrossPopulationUnconfirmedRefusesAndMintsNothing(t *testing.T) {
 	if rec.Code != http.StatusConflict {
 		t.Fatalf("status = %d, want %d", rec.Code, http.StatusConflict)
 	}
-	var out apierr.APIError
-	if err := json.NewDecoder(rec.Body).Decode(&out); err != nil {
-		t.Fatalf("decode body: %v", err)
-	}
-	if out.Code != string(authn.EvictionUnconfirmed) {
+	out := apierrtest.Decode(t, rec.Result())
+	if out.Code != authn.EvictionUnconfirmed {
 		t.Errorf("code = %q, want %q", out.Code, authn.EvictionUnconfirmed)
 	}
 	if got := countSessions(t, db, staffUID); got != 1 {

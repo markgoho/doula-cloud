@@ -9,7 +9,40 @@ import (
 	"testing"
 
 	"doula-cloud/api/internal/apierr"
+	"doula-cloud/api/internal/apierrtest"
 )
+
+// TestAPIError_CodeSerializesAsAPlainJSONString holds the wire format
+// still where #811 left it. Code is typed apierr.Code rather than string
+// so a call site can compare against the enumerated constants without a
+// conversion, and Code's underlying type is string, so the encoded body
+// stays byte-identical to what a plain string field produced -- a quoted
+// JSON string under the "code" key, no wrapper object and no number. An
+// accidental MarshalJSON on Code, or a change of its underlying type,
+// would move the contract every caller in app/ reads.
+func TestAPIError_CodeSerializesAsAPlainJSONString(t *testing.T) {
+	encoded, err := json.Marshal(apierr.APIError{Code: apierr.CodeConflict, Message: "already sent"})
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	const want = `{"code":"CONFLICT","message":"already sent"}`
+	if string(encoded) != want {
+		t.Fatalf("encoded = %s, want %s", encoded, want)
+	}
+
+	// And it reads back the same way, so a caller decoding the envelope
+	// gets the enumerated value rather than an empty Code. json.Unmarshal
+	// directly rather than apierrtest.Decode, which every other test in
+	// api/ now uses: this half asserts on the literal bytes above, and
+	// there is no *http.Response here to hand the shared reader.
+	var out apierr.APIError
+	if err := json.Unmarshal([]byte(want), &out); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if out.Code != apierr.CodeConflict {
+		t.Fatalf("decoded code = %q, want %q", out.Code, apierr.CodeConflict)
+	}
+}
 
 func TestCodeForStatus(t *testing.T) {
 	tests := []struct {
@@ -46,11 +79,8 @@ func TestWrite(t *testing.T) {
 		if got := rec.Header().Get("Content-Type"); got != "application/json" {
 			t.Fatalf("Content-Type = %q, want application/json", got)
 		}
-		var out apierr.APIError
-		if err := json.NewDecoder(rec.Body).Decode(&out); err != nil {
-			t.Fatalf("decode body: %v", err)
-		}
-		if out.Code != string(apierr.CodeFailedPrecondition) || out.Message != "website required" || out.Details != nil {
+		out := apierrtest.Decode(t, rec.Result())
+		if out.Code != apierr.CodeFailedPrecondition || out.Message != "website required" || out.Details != nil {
 			t.Fatalf("body = %+v, want {FAILED_PRECONDITION website required <nil>}", out)
 		}
 	})
@@ -60,10 +90,7 @@ func TestWrite(t *testing.T) {
 		apierr.Write(rec, http.StatusBadRequest, apierr.CodeInvalidArgument, "invalid request body",
 			map[string]string{"ownUrl": "Enter a web address in the correct format"})
 
-		var out apierr.APIError
-		if err := json.NewDecoder(rec.Body).Decode(&out); err != nil {
-			t.Fatalf("decode body: %v", err)
-		}
+		out := apierrtest.Decode(t, rec.Result())
 		if out.Details["ownUrl"] != "Enter a web address in the correct format" {
 			t.Fatalf("details = %+v, want ownUrl entry", out.Details)
 		}
@@ -77,11 +104,8 @@ func TestWriteError(t *testing.T) {
 	if rec.Code != http.StatusNotFound {
 		t.Fatalf("status = %d, want %d", rec.Code, http.StatusNotFound)
 	}
-	var out apierr.APIError
-	if err := json.NewDecoder(rec.Body).Decode(&out); err != nil {
-		t.Fatalf("decode body: %v", err)
-	}
-	if out.Code != string(apierr.CodeNotFound) || out.Message != "engagement not found" {
+	out := apierrtest.Decode(t, rec.Result())
+	if out.Code != apierr.CodeNotFound || out.Message != "engagement not found" {
 		t.Fatalf("body = %+v, want {NOT_FOUND engagement not found}", out)
 	}
 }
@@ -142,11 +166,8 @@ func TestDecodeJSON(t *testing.T) {
 		if rec.Code != http.StatusBadRequest {
 			t.Fatalf("status = %d, want %d", rec.Code, http.StatusBadRequest)
 		}
-		var out2 apierr.APIError
-		if err := json.NewDecoder(rec.Body).Decode(&out2); err != nil {
-			t.Fatalf("decode body: %v", err)
-		}
-		if out2.Code != string(apierr.CodeInvalidArgument) || out2.Message != "invalid request body" {
+		out2 := apierrtest.Decode(t, rec.Result())
+		if out2.Code != apierr.CodeInvalidArgument || out2.Message != "invalid request body" {
 			t.Fatalf("body = %+v, want {INVALID_ARGUMENT invalid request body}", out2)
 		}
 	})
@@ -164,11 +185,8 @@ func TestDecodeJSON(t *testing.T) {
 		if rec.Code != http.StatusRequestEntityTooLarge {
 			t.Fatalf("status = %d, want %d", rec.Code, http.StatusRequestEntityTooLarge)
 		}
-		var out2 apierr.APIError
-		if err := json.NewDecoder(rec.Body).Decode(&out2); err != nil {
-			t.Fatalf("decode body: %v", err)
-		}
-		if out2.Code != string(apierr.CodePayloadTooLarge) {
+		out2 := apierrtest.Decode(t, rec.Result())
+		if out2.Code != apierr.CodePayloadTooLarge {
 			t.Fatalf("code = %q, want %q", out2.Code, apierr.CodePayloadTooLarge)
 		}
 	})

@@ -101,8 +101,18 @@ const (
 )
 
 // APIError is docs/api-design.md section 7's structured error shape.
+//
+// Code is the enumerated Code type, not a bare string: #811 retyped it so
+// a reader compares against the constants above directly rather than
+// writing string(CodeConflict) at every assertion, and so a code that
+// travels between packages stays typed instead of decaying to a string
+// on the way. It does not stop a bare literal being compared against --
+// an untyped string constant still converts -- so the enumeration is a
+// convenience for readers, not a closed set the compiler enforces.
+// Code's underlying type is string, so the JSON is unchanged either way
+// -- see TestAPIError_CodeSerializesAsAPlainJSONString, which holds that.
 type APIError struct {
-	Code    string            `json:"code"`
+	Code    Code              `json:"code"`
 	Message string            `json:"message"`
 	Details map[string]string `json:"details,omitempty"`
 }
@@ -144,7 +154,7 @@ func WriteJSON(w http.ResponseWriter, status int, v any) {
 // everywhere, only where a caller already has field-level information on
 // hand.
 func Write(w http.ResponseWriter, status int, code Code, message string, details map[string]string) {
-	WriteJSON(w, status, APIError{Code: string(code), Message: message, Details: details})
+	WriteJSON(w, status, APIError{Code: code, Message: message, Details: details})
 }
 
 // DecodeJSON decodes r.Body into v, first wrapping it in

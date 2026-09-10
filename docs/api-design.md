@@ -183,7 +183,7 @@ Avoid ad-hoc error formats. Maintain a consistent JSON error schema across all e
 1. **Uniform Error Structure**:
 ```go
 type APIError struct {
-    Code    string            `json:"code"`              // Machine-readable code: "NOT_FOUND", "INVALID_ARGUMENT", "UNAUTHORIZED"
+    Code    Code              `json:"code"`              // Machine-readable code, from apierr's enumeration: "NOT_FOUND", "INVALID_ARGUMENT", "UNAUTHORIZED"
     Message string            `json:"message"`           // Human-readable summary
     Details map[string]string `json:"details,omitempty"` // Field-level validation errors
 }

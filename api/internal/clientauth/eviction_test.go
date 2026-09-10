@@ -1,14 +1,13 @@
 package clientauth_test
 
 import (
-	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
 
-	"doula-cloud/api/internal/apierr"
+	"doula-cloud/api/internal/apierrtest"
 	"doula-cloud/api/internal/authn"
 	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/authtoken"
@@ -75,11 +74,8 @@ func TestRedeemMagicLinkHandler_UnconfirmedStaffSessionWarnsAndSpendsNothing(t *
 	if resp.StatusCode != http.StatusConflict {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusConflict)
 	}
-	var out apierr.APIError
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
-		t.Fatalf("decode body: %v", err)
-	}
-	if out.Code != string(authn.EvictionUnconfirmed) {
+	out := apierrtest.Decode(t, resp)
+	if out.Code != authn.EvictionUnconfirmed {
 		t.Fatalf("code = %q, want %q", out.Code, authn.EvictionUnconfirmed)
 	}
 	if got := countRows(t, db, `SELECT count(*) FROM sessions WHERE identity_uid = $1`, identifier); got != 0 {
