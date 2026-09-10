@@ -65,12 +65,20 @@ func seedSessionFor(t *testing.T, db *testdb.DB, uid string) string {
 	return authntest.SeedSession(t, db.App, uid)
 }
 
-// response is one finished exchange -- status and body, with the
+// response is one finished exchange -- status, headers and body, with the
 // http.Response already closed. Tests read this rather than a live
 // *http.Response so a leaked body is not something a call site can
 // forget.
+//
+// header is kept because two different layers answer the pre-account read
+// with 429 and the same apierr Code: ratelimit.Wrap's per-Offer cap, and
+// resolveByToken's own maxAccessCodeAttempts check. Retry-After tells
+// them apart -- Wrap always sets it, the row-counter refusal never does
+// -- so a test can assert which layer refused without reading prose
+// (#692's rule, applied to a 429 rather than a 409).
 type response struct {
 	status int
+	header http.Header
 	body   []byte
 }
 
@@ -103,7 +111,7 @@ func do(t *testing.T, method, url, session string, body any) response {
 	if err != nil {
 		t.Fatalf("read body: %v", err)
 	}
-	return response{status: resp.StatusCode, body: read}
+	return response{status: resp.StatusCode, header: resp.Header.Clone(), body: read}
 }
 
 // decode unmarshals a response body into out, failing the test if the
