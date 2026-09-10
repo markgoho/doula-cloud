@@ -31,19 +31,27 @@ import { execFileSync, spawn } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 
-// How long a held lock may go unrefreshed before a waiter takes it. The
-// step this guards is ~16s on an idle 14-CPU machine (docs/testing.md),
-// and the whole reason the lock exists is that the machine is not idle
-// -- a gate queued behind two others, on a box under memory pressure,
-// can run several times that. Five minutes is roughly 15x the idle run,
-// the same "generously above the slowest plausible real run" reasoning
-// as REAP_THRESHOLD_MS in .claude/hooks/testdb-reap.ts. Erring long is
-// the cheap direction: reclaiming too early lets two gates run at once,
-// which is the exact condition this exists to prevent, while reclaiming
-// too late only delays a commit that was going to wait anyway. A killed
-// session is usually caught long before this by the liveness check
-// below, which needs no threshold at all.
+// How long a held lock may go WITHOUT A HEARTBEAT before a waiter takes
+// it -- not how long it may be held. A live holder touches the lock
+// directory every HEARTBEAT_MS for as long as its command runs, so a
+// slow gate is never mistaken for an abandoned one however long it takes.
+// Without that heartbeat this threshold would be a run-time limit, and a
+// gate queued behind two others on a memory-pressured machine would have
+// its lock taken while it was demonstrably still working -- two gates
+// running at once, the exact thing this exists to prevent.
+//
+// Five minutes is therefore 60 consecutive missed beats. It only ever
+// applies to a lock this script did not finish writing or updating: a
+// holder that was killed is caught immediately by the liveness check
+// below, which needs no threshold at all. The same "generously above
+// anything a live run could produce" reasoning as REAP_THRESHOLD_MS in
+// .claude/hooks/testdb-reap.ts; reclaiming too late only delays a commit
+// that was already waiting, and reclaiming too early runs two gates.
 export const STALE_LOCK_MS = 5 * 60 * 1000;
+
+// Test seam: a spec cannot wait 5 seconds per assertion to watch a
+// heartbeat land. Not a user-facing knob.
+const HEARTBEAT_MS = Number(process.env.GATE_LOCK_HEARTBEAT_MS) || 5 * 1000;
 
 // A commit is an interactive act, so the wait has to be legible while it
 // happens. First notice goes out as soon as we know we are queued; after
@@ -72,14 +80,15 @@ export interface LockOwner {
 export type LockVerdict = { action: 'wait' } | { action: 'reclaim'; reason: string };
 
 // The one place that decides whether another session's lock may be taken
-// away. `heldForMs` comes from the lock directory's own mtime, which
-// mkdir sets atomically at creation -- not from the owner file, which is
-// written a moment later and is therefore absent during a live holder's
-// startup. A missing or unreadable owner (`owner === null`) must never
-// be reclaim-on-sight for that reason; it falls through to the age gate,
-// which a freshly created lock cannot fail.
+// away. `sinceHeartbeatMs` comes from the lock directory's own mtime,
+// which mkdir sets atomically at creation and the holder refreshes while
+// it works -- not from the owner file, which is written a moment later
+// and is therefore absent during a live holder's startup. A missing or
+// unreadable owner (`owner === null`) must never be reclaim-on-sight for
+// that reason; it falls through to the heartbeat gate, which a freshly
+// created lock cannot fail.
 export function inspectLock(
-	heldForMs: number,
+	sinceHeartbeatMs: number,
 	owner: LockOwner | null,
 	isAlive: (pid: number) => boolean,
 	staleMs: number = STALE_LOCK_MS
@@ -87,10 +96,10 @@ export function inspectLock(
 	if (owner && !isAlive(owner.pid)) {
 		return { action: 'reclaim', reason: `owner process ${owner.pid} is gone` };
 	}
-	if (heldForMs > staleMs) {
+	if (sinceHeartbeatMs > staleMs) {
 		return {
 			action: 'reclaim',
-			reason: `held for ${Math.round(heldForMs / 1000)}s, past the ${Math.round(staleMs / 1000)}s staleness gate`
+			reason: `no heartbeat for ${Math.round(sinceHeartbeatMs / 1000)}s, past the ${Math.round(staleMs / 1000)}s staleness gate`
 		};
 	}
 	return { action: 'wait' };
@@ -115,14 +124,13 @@ export function isProcessAlive(pid: number): boolean {
 // which `git rev-parse --git-common-dir` answers identically from any
 // worktree. A per-worktree `.git` file would give each session its own
 // private lock and coordinate nothing.
+const git = (...args: string[]): string =>
+	execFileSync('git', args, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
+
 export function resolveLockDir(): string {
 	const override = process.env[LOCK_DIR_ENV_VAR];
 	if (override) return override;
-	const commonDir = execFileSync('git', ['rev-parse', '--git-common-dir'], {
-		encoding: 'utf8',
-		stdio: ['ignore', 'pipe', 'pipe']
-	}).trim();
-	return path.join(path.resolve(commonDir), LOCK_DIR_NAME);
+	return path.join(path.resolve(git('rev-parse', '--git-common-dir')), LOCK_DIR_NAME);
 }
 
 function readOwner(lockDir: string): LockOwner | null {
@@ -134,9 +142,12 @@ function readOwner(lockDir: string): LockOwner | null {
 	}
 }
 
+// What a waiting session calls the holder. The worktree directory name
+// is the one label a person can act on -- it is what `git worktree list`
+// and the terminal title both show.
 function describeSelf(): string {
 	try {
-		return path.basename(execFileSync('git', ['rev-parse', '--show-toplevel'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim());
+		return path.basename(git('rev-parse', '--show-toplevel'));
 	} catch {
 		return path.basename(process.cwd());
 	}
@@ -163,6 +174,24 @@ function tryAcquire(lockDir: string): boolean {
 	return true;
 }
 
+// Keeps the lock's mtime moving while the wrapped command runs, so the
+// staleness gate measures abandonment rather than duration. Returns the
+// stop function; failures are swallowed, because a heartbeat that cannot
+// write is a lock someone will reclaim in five minutes, not a reason to
+// fail a commit.
+function startHeartbeat(lockDir: string): () => void {
+	const timer = setInterval(() => {
+		try {
+			const now = new Date();
+			fs.utimesSync(lockDir, now, now);
+		} catch {
+			// see above
+		}
+	}, HEARTBEAT_MS);
+	timer.unref?.();
+	return () => clearInterval(timer);
+}
+
 // Reclaiming by `rm -rf` on the lock directory is a race: two waiters
 // can both judge the same lock stale, the first removes it and takes a
 // fresh one, and the second then deletes THAT and takes one too, leaving
@@ -174,14 +203,26 @@ function reclaim(lockDir: string): void {
 	fs.rmSync(parked, { recursive: true, force: true });
 }
 
+// Removes the lock only on positive proof that it is still ours: an
+// owner file naming this pid. A waiter that reclaimed our lock mid-run
+// has already created a fresh directory at the same path, and deleting
+// *that* would let a third session in alongside it. Both ways the proof
+// can fail -- a successor whose owner file names another pid, and a
+// successor that has not written one yet -- therefore mean "leave it
+// alone". Anything left behind is cleared by the staleness gate, which
+// is the cheap direction; a wrong removal is not.
+//
+// The lock directory's inode cannot stand in for this proof, which is
+// the obvious alternative and does not work: a filesystem is free to
+// hand a successor's directory the inode the removed one just gave up,
+// and APFS does.
 function release(lockDir: string): void {
 	try {
-		const owner = readOwner(lockDir);
-		if (owner && owner.pid !== process.pid) return; // already reclaimed; not ours to remove
+		if (readOwner(lockDir)?.pid !== process.pid) return;
 		fs.rmSync(lockDir, { recursive: true, force: true });
 	} catch {
-		// A lock we cannot remove is cleared by the next session's age
-		// gate. Never let cleanup fail a commit that already passed.
+		// A lock we cannot remove is cleared by the next session's
+		// staleness gate. Never let cleanup fail a commit that passed.
 	}
 }
 
@@ -194,27 +235,36 @@ async function acquire(lockDir: string, notify: (message: string) => void): Prom
 	for (;;) {
 		if (tryAcquire(lockDir)) return;
 
-		let heldForMs: number;
+		let sinceHeartbeatMs: number;
 		try {
-			heldForMs = Date.now() - fs.statSync(lockDir).mtimeMs;
+			sinceHeartbeatMs = Date.now() - fs.statSync(lockDir).mtimeMs;
 		} catch {
-			continue; // vanished between the mkdir and the stat -- try again
+			// Vanished between the mkdir and the stat. Retry, but never
+			// in a tight spin -- this runs on the machine the lock exists
+			// to relieve.
+			await sleep(POLL_INTERVAL_MS);
+			continue;
 		}
 		const owner = readOwner(lockDir);
-		const verdict = inspectLock(heldForMs, owner, isProcessAlive);
+		const verdict = inspectLock(sinceHeartbeatMs, owner, isProcessAlive);
 		if (verdict.action === 'reclaim') {
 			try {
 				reclaim(lockDir);
 				notify(`gate-lock: reclaimed a stale lock (${verdict.reason})`);
+				continue; // straight back to mkdir: the lock is free now
 			} catch {
-				// Another waiter reclaimed it first; go round again.
+				// Another waiter reclaimed it first.
 			}
+			await sleep(POLL_INTERVAL_MS);
 			continue;
 		}
 
 		const now = Date.now();
 		if (now - announcedAtMs >= WAIT_NOTICE_INTERVAL_MS) {
-			const held = Math.round(heldForMs / 1000);
+			// How long the holder has been *running*, which is what a
+			// person waiting wants to know -- the mtime now answers "when
+			// was the last heartbeat", so it cannot serve here.
+			const held = Math.round((owner ? now - owner.startedAtMs : sinceHeartbeatMs) / 1000);
 			const who = owner ? `${owner.label} (pid ${owner.pid})` : 'another session';
 			notify(`gate-lock: waiting on ${who}'s test run, running for ${held}s. Nothing is hung. Set ${SKIP_ENV_VAR}=1 to skip the lock.`);
 			announcedAtMs = now;
@@ -252,7 +302,7 @@ async function main(argv: string[]): Promise<number> {
 	}
 	if (process.env[SKIP_ENV_VAR]) return runCommand(command);
 
-	let lockDir: string | null = null;
+	let lockDir: string;
 	try {
 		lockDir = resolveLockDir();
 		fs.mkdirSync(path.dirname(lockDir), { recursive: true });
@@ -264,9 +314,11 @@ async function main(argv: string[]): Promise<number> {
 		return runCommand(command);
 	}
 
+	const stopHeartbeat = startHeartbeat(lockDir);
 	try {
 		return await runCommand(command);
 	} finally {
+		stopHeartbeat();
 		release(lockDir);
 	}
 }

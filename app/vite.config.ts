@@ -78,7 +78,8 @@ export default defineConfig({
 					// Lowering this further buys no third concurrent gate:
 					// ~3.5GB per run is fixed cost no worker count removes.
 					// scripts/gate-lock.ts is what coordinates sessions with
-					// each other -- #936.
+					// each other -- #936, and docs/testing.md's "Only one
+					// session runs this step at a time".
 					maxWorkers: BROWSER_WORKERS,
 					browser: {
 						enabled: true,

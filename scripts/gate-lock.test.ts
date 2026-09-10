@@ -215,6 +215,53 @@ describe('the wrapper', () => {
 		expect(fs.existsSync(lockDir)).toBe(true); // the other session's lock is left alone
 	}, 30000);
 
+	// The other half of the reclaim race: a run whose lock was taken away
+	// mid-flight must not delete its successor's lock on the way out, or
+	// a third session walks straight in alongside the second.
+	test('leaves a successor lock alone when its own was reclaimed mid-run', async () => {
+		const ownerFile = path.join(lockDir, 'owner.json');
+		const running = runMarker();
+		// Wait for the run to have fully taken the lock, owner file and
+		// all, so what follows is a reclaim and not a torn acquire.
+		while (!fs.existsSync(ownerFile)) await new Promise(resolve => setTimeout(resolve, 10));
+
+		fs.rmSync(lockDir, { recursive: true, force: true });
+		fs.mkdirSync(lockDir);
+		fs.writeFileSync(ownerFile, JSON.stringify({ pid: process.pid, label: 'successor', startedAtMs: Date.now() }));
+
+		expect((await running).exitCode).toBe(0);
+		expect(fs.existsSync(lockDir)).toBe(true);
+		expect(JSON.parse(fs.readFileSync(ownerFile, 'utf8')).label).toBe('successor');
+	}, 30000);
+
+	// Without this the staleness gate would be a run-time limit, and a
+	// gate that legitimately ran past it would have its lock taken while
+	// it was still working -- two gates at once, the thing this prevents.
+	test('keeps the lock fresh while the wrapped command runs', async () => {
+		const running = runMarker({ GATE_LOCK_HEARTBEAT_MS: '50' });
+		while (!fs.existsSync(lockDir)) await new Promise(resolve => setTimeout(resolve, 5));
+		const atStart = fs.statSync(lockDir).mtimeMs;
+		await new Promise(resolve => setTimeout(resolve, 150));
+		const laterMs = fs.statSync(lockDir).mtimeMs;
+
+		expect(laterMs).toBeGreaterThan(atStart);
+		expect((await running).exitCode).toBe(0);
+	}, 30000);
+
+	// A Ctrl-C during the gate must not leave a lock for the staleness
+	// gate to clear five minutes later.
+	test('releases the lock when it is interrupted', async () => {
+		const child = spawn('bun', [SCRIPT, '--', 'bun', marker, journal, '0'], {
+			stdio: ['ignore', 'ignore', 'ignore'],
+			env: { ...process.env, GATE_LOCK_DIR: lockDir }
+		});
+		while (!fs.existsSync(path.join(lockDir, 'owner.json'))) await new Promise(resolve => setTimeout(resolve, 5));
+		child.kill('SIGTERM');
+		await new Promise(resolve => child.on('close', resolve));
+
+		expect(fs.existsSync(lockDir)).toBe(false);
+	}, 30000);
+
 	test('refuses an empty command rather than silently succeeding', async () => {
 		const result = await invoke([]);
 		expect(result.exitCode).toBe(2);

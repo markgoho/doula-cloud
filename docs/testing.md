@@ -47,8 +47,8 @@ The lock is a directory created with a non-recursive `mkdir`, which is the atomi
 **Every path through it fails open**, because a gate that wedges every commit is worse than the memory pressure it prevents:
 
 - **The owner is gone.** The holder's pid is checked with signal 0 on every poll; a killed session's lock is reclaimed at once, with no waiting on any threshold. `EPERM` counts as alive — only `ESRCH` proves a process dead.
-- **The lock is old.** `STALE_LOCK_MS` is 5 minutes, against a step that takes ~16s idle: roughly 15x, the same deliberately generous reasoning as `REAP_THRESHOLD_MS` in the reaper below. Reclaiming too early runs two gates at once, which is the thing this prevents; reclaiming too late only delays a commit that was already waiting.
-- **Reclaiming is single-winner.** A stale lock is taken by `rename`, not `rm -rf`. Two waiters that both judge the same lock stale would otherwise both end up running — the first removes it and takes a fresh one, the second deletes *that* and takes one too. Only one rename can succeed; the loser gets `ENOENT` and goes round the loop.
+- **The lock has gone quiet.** A holder touches the lock directory every 5 seconds for as long as its command runs, so `STALE_LOCK_MS` (5 minutes) measures *abandonment*, not duration — 60 consecutive missed beats. Without the heartbeat this would be a run-time limit, and a gate queued behind two others on a pressured machine would have its lock taken while it was demonstrably still working. It only ever fires on a lock this script did not finish writing; a holder that was killed is caught by the liveness check above, which needs no threshold.
+- **Reclaiming is single-winner.** A stale lock is taken by `rename`, not `rm -rf`. Two waiters that both judge the same lock stale would otherwise both end up running — the first removes it and takes a fresh one, the second deletes *that* and takes one too. Only one rename can succeed; the loser gets `ENOENT` and goes round the loop. For the same reason a holder releases its lock only on positive proof that the lock is still the one it took (an owner file naming its own pid), never on the absence of proof. The directory's inode is the obvious cheaper receipt and does not work: APFS reuses the inode a removed directory just gave up.
 - **The wrapper itself is optional.** `scripts/hooks/pre-commit` resolves it from `$0` (the hook's absolute path in the main checkout, since `core.hooksPath` is absolute) rather than the committing worktree's cwd, and runs the step unwrapped if the file is not there. A worktree branched before this landed still commits.
 - **Anything unexpected.** No git directory, an unwritable parent, a lock that cannot be reasoned about: the wrapper prints `gate-lock: running without the lock (…)` and runs the command.
 
@@ -64,19 +64,19 @@ SKIP_GATE_LOCK=1 git commit -m "…"
 rm -rf "$(git rev-parse --git-common-dir)/pre-commit-gate.lock"
 ```
 
-Measured on the same 14-CPU / 24 GB machine as the table above, warm, sampling summed `ms-playwright` RSS every 500 ms:
+Measured on the same 14-CPU / 24 GB machine as the table above, warm, sampling every 500 ms. The full record, including how the run was driven, is on [#936](https://github.com/markgoho/doula-cloud/issues/936).
 
-| | Peak Chromium RSS | Peak renderer processes | Wall |
-| --- | --- | --- | --- |
-| One gate | 5.09 GB | 12 | 24s |
-| **Three concurrent gates, locked** | **5.36 GB** | **12** | 67s |
-| Three concurrent gates, unlocked | ~15 GB (projected) | 36 | — |
+| | Peak whole gate | Peak Chromium | Renderer processes | Free-memory floor |
+| --- | --- | --- | --- | --- |
+| One gate | 6.00 GB | 4.78 GB | 12 | 34% |
+| **Three concurrent gates, locked** | **7.33 GB** | **6.22 GB** | **12** | **34%** |
+| Three concurrent gates, unlocked | ~18 GB (projected) | ~14 GB | 36 | — |
 
-The locked figure is the point: three sessions committing at once cost 5% more than one, not 300%, because they run one after another — the three runs finished at +25s, +46s and +67s, and each waited on the previous one's lock. The 5% is the tail of one run's browsers exiting while the next starts.
+Three sessions committing at once cost about a fifth more than one, not three times — they run one after another, finishing at +21s, +43s and +78s, each waiting on the previous one's lock. The overshoot above a single gate is the tail of one run's browsers exiting while the next starts, and the number that matters is the free-memory floor: identical at one gate and three.
 
-The unlocked row was deliberately **not** reproduced. Doing so means intentionally exhausting memory on a machine with other live agent sessions mid-commit, and the number is already known: three gates' Chromium alone is ~15 GB against the ~10.5 GB of non-repo residents #936 measured, which is 25.1 GB on a 24 GB machine — the same arithmetic that killed a commit at two *uncapped* gates in #935.
+The unlocked row was deliberately **not** reproduced. Doing so means intentionally exhausting memory on a machine with other live agent sessions mid-commit, and the figure is already known from the per-gate one: ~18 GB against the ~10.5 GB of non-repo residents #936 measured is well past 24 GB, the same arithmetic that killed a commit at two *uncapped* gates in #935.
 
-Note that "12 renderers" is one gate's own peak, not two overlapping ones: the `maxWorkers` cap above is 6 browser *workers*, and `--type=renderer` counts more processes than that. Compare the number against the one-gate row, not against the cap.
+"12 renderers" is one gate's own peak, not two overlapping ones: the `maxWorkers` cap above is 6 browser *workers*, and each shows up as more than one `--type=renderer` process. Compare against the one-gate row, not against the cap.
 
 ### When a commit is killed for memory
 
