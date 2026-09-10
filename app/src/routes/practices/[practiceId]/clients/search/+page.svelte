@@ -29,9 +29,16 @@
 	import Button from '#lib/components/atoms/Button.svelte';
 	import Link from '#lib/components/atoms/Link.svelte';
 	import LabeledField from '#lib/components/molecules/LabeledField.svelte';
+	import DateFields from '#lib/components/molecules/DateFields.svelte';
 	import ErrorSummary from '#lib/components/molecules/ErrorSummary.svelte';
 	import DescriptionList from '#lib/components/molecules/DescriptionList.svelte';
-	import { FormSubmission, orThrownMessage } from '#lib/formSubmission.svelte.js';
+	import {
+		EMPTY_DATE_PARTS,
+		joinDate,
+		type DateField,
+		type DateParts
+	} from '#lib/intakeDate.js';
+	import { FormSubmission, orThrownMessage, type FormError } from '#lib/formSubmission.svelte.js';
 	import type { PageProps as PageProperties } from './$types';
 
 	// #501 (ADR-0017): +page.ts's load already decided, before this
@@ -49,11 +56,35 @@
 	const phoneId = 'client-search-phone';
 
 	let name = $state('');
+	/*
+	 * #807: a date of birth is a memorable date wherever it is asked, so
+	 * this screen asks the way intake does one click later -- three boxes
+	 * (GOV.UK's Dates pattern, #466), not the native picker that made
+	 * somebody navigate to 1988. `parts` holds what was typed and
+	 * `dateOfBirth` the composed "YYYY-MM-DD" `client.SearchHandler`
+	 * reads off the query string; they are separate for intake's own
+	 * reason, that `07` and `7` are the same date and rewriting one into
+	 * the other under the cursor is the defect this pattern avoids.
+	 */
+	let dateOfBirthParts = $state<DateParts>({ ...EMPTY_DATE_PARTS });
 	let dateOfBirth = $state('');
 	let email = $state('');
 	let phone = $state('');
 
 	const submission = new FormSubmission();
+
+	/*
+	 * Which box the refusal is about, read back out of the one array
+	 * `ErrorSummary` renders rather than tracked beside it -- so a refusal
+	 * the BFF names lands on a box exactly the way a locally composed one
+	 * does, and neither can go stale against the summary.
+	 */
+	const dateOfBirthRefusal = $derived(
+		submission.errors.find((entry) => entry.targetId?.startsWith(`${dateOfBirthId}-`))
+	);
+	const dateOfBirthInvalidField = $derived(
+		dateOfBirthRefusal?.targetId?.slice(dateOfBirthId.length + 1) as DateField | undefined
+	);
 	let hasSearched = $state(false);
 	let matches = $state<ClientMatch[]>([]);
 	let searchToken = $state(0);
@@ -119,9 +150,26 @@
 		return query ? `${base}?${query}` : base;
 	}
 
+	/*
+	 * Composes the three boxes into the string the query string carries,
+	 * or reports why it could not -- run before the "nothing typed" check
+	 * below, so a half-typed date is named as a date rather than read as
+	 * an empty search. The refusal targets one box, not the group, so the
+	 * summary entry lands on the box that has to change.
+	 */
+	function composeDateOfBirth(): FormError[] {
+		const result = joinDate(dateOfBirthParts);
+		if (!result.ok) return [{ message: result.message, targetId: `${dateOfBirthId}-${result.field}` }];
+		dateOfBirth = result.value;
+		return [];
+	}
+
 	async function handleSearch(event: SubmitEvent) {
 		event.preventDefault();
 		await submission.run(async () => {
+			const dateRefusals = composeDateOfBirth();
+			if (dateRefusals.length > 0) return dateRefusals;
+
 			const fields = currentFields();
 			if (!fields.name && !fields.dateOfBirth && !fields.email && !fields.phone) {
 				return [
@@ -201,18 +249,15 @@
 								/>
 							{/snippet}
 						</LabeledField>
-						<LabeledField id={dateOfBirthId} label="Date of birth">
-							{#snippet children({ id, describedBy })}
-								<TextInput
-									{id}
-									{describedBy}
-									type="date"
-									value={dateOfBirth}
-									onInput={(v) => (dateOfBirth = v)}
-									autocomplete="off"
-								/>
-							{/snippet}
-						</LabeledField>
+						<DateFields
+							name={dateOfBirthId}
+							legend="Date of birth"
+							hint="For example, 3 12 1988."
+							parts={dateOfBirthParts}
+							onChange={(next) => (dateOfBirthParts = next)}
+							error={dateOfBirthRefusal?.message}
+							invalidField={dateOfBirthInvalidField}
+						/>
 						<LabeledField id={emailId} label="Email">
 							{#snippet children({ id, describedBy })}
 								<TextInput
