@@ -32,10 +32,10 @@
 	 * push-unregister scope here, the same no-Practice case
 	 * practices-layout.svelte.spec.ts already covers for that layout.
 	 *
-	 * Known gap, filed rather than fixed here (out of scope: StaffTopBar's
-	 * visual design): under its 49.25rem floor the narrow sheet still
-	 * prints a bare "Practice" label over the empty switcher slot even
-	 * with no Practice on the route. See #673.
+	 * Under the bar's 49.25rem floor, where the nav and the switcher move
+	 * into a sheet, the sheet drops its whole Practice block rather than
+	 * printing a heading over the empty switcher slot (#673) -- so an empty
+	 * `practices` here costs nothing on a narrow screen either.
 	 *
 	 * loadAccountSession() memoizes the fetch this layout and +page.svelte
 	 * both need, so mounting together on every visit to /account costs one

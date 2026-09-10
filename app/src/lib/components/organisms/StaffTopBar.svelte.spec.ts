@@ -30,13 +30,17 @@ const PRACTICES: PracticeOption[] = [
 const WIDE = [1440, 900] as const;
 const NARROW = [390, 844] as const;
 
-async function setup({ name = 'Mark Goho' } = {}) {
+async function setup({
+	name = 'Mark Goho',
+	practices = PRACTICES,
+	currentPracticeId = 'p1'
+} = {}) {
 	await page.viewport(...WIDE);
 	const signOut = vi.fn<() => Promise<SignOutOutcome>>().mockResolvedValue({ ok: true });
 	await render(StaffTopBar, {
 		navItems: NAV_ITEMS,
-		practices: PRACTICES,
-		currentPracticeId: 'p1',
+		practices,
+		currentPracticeId,
 		name,
 		email: 'mark@example.test',
 		accountHref: '/account',
@@ -83,8 +87,8 @@ describe('StaffTopBar', () => {
  * three assertions below are the AC -- it opens, it traps, and closing it
  * puts focus back on the control that opened it.
  */
-async function setupNarrow() {
-	const result = await setup();
+async function setupNarrow(options: Parameters<typeof setup>[0] = {}) {
+	const result = await setup(options);
 	await page.viewport(...NARROW);
 	return { ...result, hamburger: page.getByRole('button', { name: 'Menu' }) };
 }
@@ -118,6 +122,54 @@ describe('the narrow sheet', () => {
 		await expect
 			.element(page.getByRole('dialog').getByText('Practice', { exact: true }))
 			.toBeVisible();
+	});
+
+	/*
+	 * #673: a route scoped to the person rather than to a Practice
+	 * (/account, #484) hands the bar no Practice at all, and the switcher
+	 * renders nothing. The heading and the divider above it go too --
+	 * otherwise the sheet announces a section with nothing in it.
+	 */
+	it('drops the whole Practice block when there is no Practice to name', async () => {
+		const { hamburger } = await setupNarrow({ practices: [], currentPracticeId: '' });
+
+		await hamburger.click();
+
+		await expect
+			.element(page.getByRole('dialog').getByText('Practice', { exact: true }))
+			.not.toBeInTheDocument();
+	});
+
+	it('still opens, and still closes, on a route with no Practice', async () => {
+		const { hamburger } = await setupNarrow({ practices: [], currentPracticeId: '' });
+
+		await hamburger.click();
+
+		const sheet = page.getByRole('dialog');
+		await expect.element(sheet).toBeVisible();
+		for (const item of NAV_ITEMS) {
+			await expect.element(sheet.getByRole('link', { name: item.label })).toBeVisible();
+		}
+		await page.getByRole('button', { name: 'Close menu' }).click();
+		expect(document.activeElement).toBe(hamburger.element());
+	});
+
+	/*
+	 * One Membership is not "nothing to name": she still sees which
+	 * Practice she is in, so the heading stays. Only the caret goes, which
+	 * is PracticeSwitcher's own rule.
+	 */
+	it('keeps the heading for a person who belongs to exactly one Practice', async () => {
+		const { hamburger } = await setupNarrow({
+			practices: [PRACTICES[0]!],
+			currentPracticeId: 'p1'
+		});
+
+		await hamburger.click();
+
+		const sheet = page.getByRole('dialog');
+		await expect.element(sheet.getByText('Practice', { exact: true })).toBeVisible();
+		await expect.element(sheet.getByText('Riverside Doula Collective')).toBeVisible();
 	});
 
 	it('traps focus while it is open', async () => {

@@ -10,6 +10,26 @@
 		roles: string[];
 		href: string;
 	}
+
+	/*
+	 * The Practice a person is looking at, or nothing at all -- a route
+	 * scoped to the person rather than to a Practice (/account, #484) hands
+	 * this an empty list and an empty id, and so does any Practice-scoped
+	 * route in the moment before the Memberships arrive.
+	 *
+	 * Exported because it is the switcher's own render condition, and a
+	 * caller that frames the switcher -- the Staff bar's sheet puts a
+	 * heading and a divider above it (#673) -- has to know whether there
+	 * will be anything inside the frame. Restating the predicate at the
+	 * caller is the same fact written twice, and the copy is what goes
+	 * stale. Same reason `initialsOf` is exported from Avatar.
+	 */
+	export function currentPracticeOf(
+		practices: PracticeOption[],
+		currentPracticeId: string
+	): PracticeOption | undefined {
+		return practices.find((practice) => practice.practiceId === currentPracticeId);
+	}
 </script>
 
 <script lang="ts">
@@ -31,7 +51,7 @@
 
 	let { practices, currentPracticeId }: Properties = $props();
 
-	const current = $derived(practices.find((practice) => practice.practiceId === currentPracticeId));
+	const current = $derived(currentPracticeOf(practices, currentPracticeId));
 	// One Membership is still worth naming -- a person should be able to see
 	// which Practice she is in -- but a control that opens a list of one is
 	// a promise the product cannot keep, so the caret and the panel appear
