@@ -2,12 +2,12 @@ package export_test
 
 import (
 	"encoding/csv"
-	"encoding/json"
 	"net/http"
 	"strings"
 	"testing"
 
 	"doula-cloud/api/internal/apierr"
+	"doula-cloud/api/internal/apierrtest"
 	"doula-cloud/api/internal/testdb"
 )
 
@@ -96,11 +96,8 @@ func TestHandler_RefusesEveryRoleButOwner(t *testing.T) {
 			if resp.StatusCode != http.StatusForbidden {
 				t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusForbidden)
 			}
-			var apiErr apierr.APIError
-			if err := json.NewDecoder(resp.Body).Decode(&apiErr); err != nil {
-				t.Fatalf("decode error body: %v", err)
-			}
-			if apiErr.Code != string(apierr.CodeForbidden) {
+			apiErr := apierrtest.Decode(t, resp)
+			if apiErr.Code != apierr.CodeForbidden {
 				t.Fatalf("code = %q, want %q", apiErr.Code, apierr.CodeForbidden)
 			}
 		})

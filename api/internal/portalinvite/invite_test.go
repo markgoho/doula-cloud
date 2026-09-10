@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"doula-cloud/api/internal/apierr"
+	"doula-cloud/api/internal/apierrtest"
 	"doula-cloud/api/internal/mailsuppress"
 	"doula-cloud/api/internal/portalinvite"
 	"doula-cloud/api/internal/testdb"
@@ -202,10 +202,7 @@ func TestInviteHandler_AlreadyAcceptedConflict(t *testing.T) {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusConflict)
 	}
 
-	var out apierr.APIError
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
+	out := apierrtest.Decode(t, resp)
 	if out.Code != "CONFLICT" {
 		t.Fatalf("code = %q, want %q", out.Code, "CONFLICT")
 	}
@@ -234,10 +231,7 @@ func TestInviteHandler_SuppressedAddressRefused(t *testing.T) {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusConflict)
 	}
 
-	var out apierr.APIError
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
+	out := apierrtest.Decode(t, resp)
 	if out.Code != "FAILED_PRECONDITION" {
 		t.Fatalf("code = %q, want %q", out.Code, "FAILED_PRECONDITION")
 	}

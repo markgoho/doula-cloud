@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"doula-cloud/api/internal/apierr"
+	"doula-cloud/api/internal/apierrtest"
 	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/contracts"
 	"doula-cloud/api/internal/testdb"
@@ -314,10 +314,7 @@ func TestAwaitingSignatureHandler_RejectsAMalformedCursor(t *testing.T) {
 
 	for _, cursor := range []string{"not!valid!base64!", "YmFkdGltZXxzb21lLWlk"} {
 		resp := getAwaiting(t, session, awaitingURL(srv, practiceID)+"?cursor="+cursor)
-		var out apierr.APIError
-		if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
-			t.Fatalf("cursor %q: decode body: %v", cursor, err)
-		}
+		out := apierrtest.Decode(t, resp)
 		_ = resp.Body.Close()
 		if resp.StatusCode != http.StatusBadRequest {
 			t.Fatalf("cursor %q: status = %d, want %d", cursor, resp.StatusCode, http.StatusBadRequest)

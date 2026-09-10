@@ -13,7 +13,7 @@ import (
 
 	"github.com/stripe/stripe-go/v86"
 
-	"doula-cloud/api/internal/apierr"
+	"doula-cloud/api/internal/apierrtest"
 	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/billing"
 	"doula-cloud/api/internal/engagementrequest"
@@ -485,10 +485,7 @@ func TestRoutes_StaffInviteSuppressedAddressRefused(t *testing.T) {
 	if resp.StatusCode != http.StatusBadRequest {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
 	}
-	var refusal apierr.APIError
-	if err := json.NewDecoder(resp.Body).Decode(&refusal); err != nil {
-		t.Fatalf("decode refusal: %v", err)
-	}
+	refusal := apierrtest.Decode(t, resp)
 	if refusal.Details["email"] != staffauth.MsgAddressBlocked {
 		t.Fatalf("details = %v, want an email entry naming Blocked email addresses", refusal.Details)
 	}

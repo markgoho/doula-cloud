@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"doula-cloud/api/internal/apierr"
+	"doula-cloud/api/internal/apierrtest"
 	"doula-cloud/api/internal/authn"
 	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/portalaccount"
@@ -27,15 +27,6 @@ import (
 // across staffauth_test files, since goconst flags a repeated literal
 // package-wide, not just within one file.
 const statusPending = "pending"
-
-func readEvictionCode(t *testing.T, resp *http.Response) string {
-	t.Helper()
-	var out apierr.APIError
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
-		t.Fatalf("decode body: %v", err)
-	}
-	return out.Code
-}
 
 func addPortalSessionCookie(req *http.Request, token string, confirmed bool) {
 	authntest.AddSessionCookie(req, token)
@@ -76,7 +67,7 @@ func TestSignupHandler_LivePortalSessionRefusesThenConfirmedRetrySucceeds(t *tes
 	if refused.StatusCode != http.StatusConflict {
 		t.Fatalf("status = %d, want %d", refused.StatusCode, http.StatusConflict)
 	}
-	if got := readEvictionCode(t, refused); got != string(authn.EvictionUnconfirmed) {
+	if got := apierrtest.Decode(t, refused).Code; got != authn.EvictionUnconfirmed {
 		t.Errorf("code = %q, want %q", got, authn.EvictionUnconfirmed)
 	}
 	var practiceCount int
@@ -145,7 +136,7 @@ func TestAcceptInviteHandler_LivePortalSessionRefusesThenConfirmedRetrySucceeds(
 	if refused.StatusCode != http.StatusConflict {
 		t.Fatalf("status = %d, want %d", refused.StatusCode, http.StatusConflict)
 	}
-	if got := readEvictionCode(t, refused); got != string(authn.EvictionUnconfirmed) {
+	if got := apierrtest.Decode(t, refused).Code; got != authn.EvictionUnconfirmed {
 		t.Errorf("code = %q, want %q", got, authn.EvictionUnconfirmed)
 	}
 	var status string
@@ -203,7 +194,7 @@ func TestFinishEnrollmentHandler_LivePortalSessionRefusesThenConfirmedRetrySucce
 	if refused.StatusCode != http.StatusConflict {
 		t.Fatalf("status = %d, want %d", refused.StatusCode, http.StatusConflict)
 	}
-	if got := readEvictionCode(t, refused); got != string(authn.EvictionUnconfirmed) {
+	if got := apierrtest.Decode(t, refused).Code; got != authn.EvictionUnconfirmed {
 		t.Errorf("code = %q, want %q", got, authn.EvictionUnconfirmed)
 	}
 	var eventCount int

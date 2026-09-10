@@ -7,7 +7,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"doula-cloud/api/internal/apierr"
+	"doula-cloud/api/internal/apierrtest"
 	"doula-cloud/api/internal/authn"
 	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/portalinvite"
@@ -66,11 +66,8 @@ func TestAcceptInviteHandler_UnconfirmedStaffSessionWarnsAndClaimsNothing(t *tes
 	if resp.StatusCode != http.StatusConflict {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusConflict)
 	}
-	var out apierr.APIError
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
-		t.Fatalf("decode body: %v", err)
-	}
-	if out.Code != string(authn.EvictionUnconfirmed) {
+	out := apierrtest.Decode(t, resp)
+	if out.Code != authn.EvictionUnconfirmed {
 		t.Fatalf("code = %q, want %q", out.Code, authn.EvictionUnconfirmed)
 	}
 	if got := countSessionsFor(t, db, "staff-uid"); got != 1 {

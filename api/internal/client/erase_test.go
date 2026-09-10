@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"doula-cloud/api/internal/apierr"
+	"doula-cloud/api/internal/apierrtest"
 	"doula-cloud/api/internal/client"
 	"doula-cloud/api/internal/testdb"
 )
@@ -363,7 +364,7 @@ func TestEraseHandler_RefusesASecondErasure(t *testing.T) {
 	}
 	// The code, not the prose, is what tells this refusal from the
 	// unsettled-invoice one -- see EraseHandler's own doc comment.
-	if got := readAPIError(t, second); got.Code != string(apierr.CodeConflict) {
+	if got := apierrtest.Decode(t, second); got.Code != apierr.CodeConflict {
 		t.Fatalf("second code = %q, want %q", got.Code, apierr.CodeConflict)
 	}
 }

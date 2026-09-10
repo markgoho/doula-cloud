@@ -37,7 +37,7 @@ func TestNoDirectHTTPError(t *testing.T) {
 		if err != nil {
 			return fmt.Errorf("rel %s: %w", path, err)
 		}
-		if strings.HasPrefix(rel, filepath.Join("internal", "apierr")+string(filepath.Separator)) {
+		if isEnvelopePackage(rel) {
 			return nil
 		}
 
@@ -73,6 +73,21 @@ func TestNoDirectHTTPError(t *testing.T) {
 		t.Fatalf("http.Error called directly instead of apierr.Write/WriteError:\n%s",
 			strings.Join(offenses, "\n"))
 	}
+}
+
+// isEnvelopePackage reports whether rel names a file in one of the two
+// packages that are allowed to touch the section 7 envelope's JSON
+// directly: apierr, which is the one writer of it, and apierrtest, which
+// #811 made the one reader of it back off the wire in a test. Both walks
+// below skip these -- a guardrail that flagged the implementation it is
+// guarding would only ever be answered by an exception entry.
+func isEnvelopePackage(rel string) bool {
+	for _, pkg := range []string{"apierr", "apierrtest"} {
+		if strings.HasPrefix(rel, filepath.Join("internal", pkg)+string(filepath.Separator)) {
+			return true
+		}
+	}
+	return false
 }
 
 // jsonUsageExceptions is #859's own audited list of production call sites
@@ -112,7 +127,7 @@ func TestNoDirectJSONUsage(t *testing.T) {
 		if err != nil {
 			return fmt.Errorf("rel %s: %w", path, err)
 		}
-		if strings.HasPrefix(rel, filepath.Join("internal", "apierr")+string(filepath.Separator)) {
+		if isEnvelopePackage(rel) {
 			return nil
 		}
 		if jsonUsageExceptions[rel] {

@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"doula-cloud/api/internal/apierr"
+	"doula-cloud/api/internal/apierrtest"
 	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/idempotency"
 	"doula-cloud/api/internal/staffauth"
@@ -348,10 +348,7 @@ func TestUpdateWorkState_RejectsSomethingThatIsNotAState(t *testing.T) {
 	if resp.StatusCode != http.StatusBadRequest {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
 	}
-	var out apierr.APIError
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
-		t.Fatalf("decode body: %v", err)
-	}
+	out := apierrtest.Decode(t, resp)
 	if out.Message != staffauth.MsgWorkStateRequired {
 		t.Fatalf("message = %q, want %q", out.Message, staffauth.MsgWorkStateRequired)
 	}

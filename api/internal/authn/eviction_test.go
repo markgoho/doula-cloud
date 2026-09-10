@@ -1,13 +1,12 @@
 package authn_test
 
 import (
-	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 	"time"
 
-	"doula-cloud/api/internal/apierr"
+	"doula-cloud/api/internal/apierrtest"
 	"doula-cloud/api/internal/authn"
 	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/portalaccount"
@@ -171,11 +170,8 @@ func TestRefuseUnconfirmed_WarnsWithItsOwnCode(t *testing.T) {
 	// Told apart by code rather than by matching English prose (#692),
 	// which is what lets the page render this as a warning with a
 	// press-through rather than as an error.
-	var out apierr.APIError
-	if err := json.NewDecoder(rec.Body).Decode(&out); err != nil {
-		t.Fatalf("decode body: %v", err)
-	}
-	if out.Code != string(authn.EvictionUnconfirmed) {
+	out := apierrtest.Decode(t, rec.Result())
+	if out.Code != authn.EvictionUnconfirmed {
 		t.Fatalf("code = %q, want %q", out.Code, authn.EvictionUnconfirmed)
 	}
 	if out.Message != authn.EvictionWarning(authn.TierStaff) {

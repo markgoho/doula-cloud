@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"doula-cloud/api/internal/apierr"
+	"doula-cloud/api/internal/apierrtest"
 	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/testdb"
@@ -342,10 +343,7 @@ func TestMiddleware_MFAGate(t *testing.T) {
 		defer resp.Body.Close()
 		assertStatus(t, resp, http.StatusForbidden)
 
-		var body apierr.APIError
-		if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
-			t.Fatalf("decode body: %v", err)
-		}
+		body := apierrtest.Decode(t, resp)
 		if body.Code != "MFA_REQUIRED" {
 			t.Fatalf("code = %q, want MFA_REQUIRED", body.Code)
 		}
@@ -489,10 +487,7 @@ func TestParseUUID(t *testing.T) {
 		if rec.Code != http.StatusBadRequest {
 			t.Fatalf("status = %d, want %d", rec.Code, http.StatusBadRequest)
 		}
-		var out apierr.APIError
-		if err := json.NewDecoder(rec.Body).Decode(&out); err != nil {
-			t.Fatalf("decode body: %v", err)
-		}
+		out := apierrtest.Decode(t, rec.Result())
 		if out.Message != "invalid practice id" {
 			t.Fatalf("message = %q, want %q", out.Message, "invalid practice id")
 		}
@@ -584,11 +579,8 @@ func TestMiddleware_PendingDeletionLockout_BlocksOrdinaryRoutes(t *testing.T) {
 	defer resp.Body.Close()
 	assertStatus(t, resp, http.StatusForbidden)
 
-	var body apierr.APIError
-	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
-		t.Fatalf("decode body: %v", err)
-	}
-	if body.Code != string(apierr.CodePracticePendingDeletion) {
+	body := apierrtest.Decode(t, resp)
+	if body.Code != apierr.CodePracticePendingDeletion {
 		t.Fatalf("code = %q, want %s", body.Code, apierr.CodePracticePendingDeletion)
 	}
 }
@@ -609,11 +601,8 @@ func TestMiddleware_PendingDeletionLockout_BlocksNonOwner(t *testing.T) {
 	defer resp.Body.Close()
 	assertStatus(t, resp, http.StatusForbidden)
 
-	var body apierr.APIError
-	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
-		t.Fatalf("decode body: %v", err)
-	}
-	if body.Code != string(apierr.CodePracticePendingDeletion) {
+	body := apierrtest.Decode(t, resp)
+	if body.Code != apierr.CodePracticePendingDeletion {
 		t.Fatalf("code = %q, want %s", body.Code, apierr.CodePracticePendingDeletion)
 	}
 }
@@ -706,11 +695,8 @@ func TestMiddleware_PendingDeletionLockout_RefusesOwnerPOSTOnDeletionRoute(t *te
 	defer resp.Body.Close()
 	assertStatus(t, resp, http.StatusForbidden)
 
-	var body apierr.APIError
-	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
-		t.Fatalf("decode body: %v", err)
-	}
-	if body.Code != string(apierr.CodePracticePendingDeletion) {
+	body := apierrtest.Decode(t, resp)
+	if body.Code != apierr.CodePracticePendingDeletion {
 		t.Fatalf("code = %q, want %s", body.Code, apierr.CodePracticePendingDeletion)
 	}
 }
@@ -735,11 +721,8 @@ func TestMiddleware_DeletedPracticeReadsAsNoMembership(t *testing.T) {
 	defer resp.Body.Close()
 	assertStatus(t, resp, http.StatusForbidden)
 
-	var body apierr.APIError
-	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
-		t.Fatalf("decode body: %v", err)
-	}
-	if body.Code == string(apierr.CodePracticePendingDeletion) {
+	body := apierrtest.Decode(t, resp)
+	if body.Code == apierr.CodePracticePendingDeletion {
 		t.Fatal("a finalized Practice must read as no membership, not as pending-deletion")
 	}
 }

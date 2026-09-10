@@ -1,12 +1,11 @@
 package session_test
 
 import (
-	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
-	"doula-cloud/api/internal/apierr"
+	"doula-cloud/api/internal/apierrtest"
 	"doula-cloud/api/internal/authn"
 	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/portalaccount"
@@ -34,18 +33,6 @@ func postCreateWithSession(t *testing.T, srv *httptest.Server, idToken, cookieTo
 	return resp
 }
 
-// readCode reads docs/api-design.md section 7's machine-readable code
-// off a refusal -- what tells this 409 apart from any other, rather than
-// matching its English (#692).
-func readCode(t *testing.T, resp *http.Response) string {
-	t.Helper()
-	var out apierr.APIError
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
-		t.Fatalf("decode body: %v", err)
-	}
-	return out.Code
-}
-
 // staffUID is the identity every test here signs in as -- one name so
 // the seeded Staff row, the verifier and the session count all agree.
 const staffUID = "staff-uid"
@@ -70,7 +57,7 @@ func TestCreateHandler_UnconfirmedPortalSessionWarnsAndMintsNothing(t *testing.T
 	if resp.StatusCode != http.StatusConflict {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusConflict)
 	}
-	if got := readCode(t, resp); got != string(authn.EvictionUnconfirmed) {
+	if got := apierrtest.Decode(t, resp).Code; got != authn.EvictionUnconfirmed {
 		t.Fatalf("code = %q, want %q", got, authn.EvictionUnconfirmed)
 	}
 	if sessionCookie(resp) != nil {

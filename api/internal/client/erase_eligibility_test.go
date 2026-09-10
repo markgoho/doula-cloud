@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"doula-cloud/api/internal/apierr"
+	"doula-cloud/api/internal/apierrtest"
 	"doula-cloud/api/internal/client"
 	"doula-cloud/api/internal/testdb"
 )
@@ -99,7 +100,7 @@ func TestEraseEligibilityHandler_NamesUnsettledInvoicesOnly(t *testing.T) {
 	if postResp.StatusCode != http.StatusConflict {
 		t.Fatalf("erasure status = %d, want %d given the precheck found an unsettled invoice", postResp.StatusCode, http.StatusConflict)
 	}
-	if code := readAPIError(t, postResp).Code; code != string(apierr.CodeFailedPrecondition) {
+	if code := apierrtest.Decode(t, postResp).Code; code != apierr.CodeFailedPrecondition {
 		t.Fatalf("erasure code = %q, want %q", code, apierr.CodeFailedPrecondition)
 	}
 }

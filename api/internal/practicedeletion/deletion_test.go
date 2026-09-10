@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"doula-cloud/api/internal/apierr"
+	"doula-cloud/api/internal/apierrtest"
 	"doula-cloud/api/internal/practicedeletion"
 	"doula-cloud/api/internal/testdb"
 )
@@ -128,9 +129,8 @@ func TestInitiateHandler_SecondCallBlockedByPendingDeletionLockout(t *testing.T)
 	if second.StatusCode != http.StatusForbidden {
 		t.Fatalf("second initiate status = %d, want %d", second.StatusCode, http.StatusForbidden)
 	}
-	var apiErr apierr.APIError
-	decodeJSON(t, second, &apiErr)
-	if apiErr.Code != string(apierr.CodePracticePendingDeletion) {
+	apiErr := apierrtest.Decode(t, second)
+	if apiErr.Code != apierr.CodePracticePendingDeletion {
 		t.Fatalf("code = %s, want %s", apiErr.Code, apierr.CodePracticePendingDeletion)
 	}
 }
@@ -148,9 +148,8 @@ func TestInitiateHandler_RefusesUnsettledInvoices(t *testing.T) {
 	if resp.StatusCode != http.StatusConflict {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusConflict)
 	}
-	var apiErr apierr.APIError
-	decodeJSON(t, resp, &apiErr)
-	if apiErr.Code != string(apierr.CodeFailedPrecondition) {
+	apiErr := apierrtest.Decode(t, resp)
+	if apiErr.Code != apierr.CodeFailedPrecondition {
 		t.Fatalf("code = %s, want %s", apiErr.Code, apierr.CodeFailedPrecondition)
 	}
 

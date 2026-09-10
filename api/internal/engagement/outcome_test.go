@@ -41,10 +41,10 @@ func outcomeBody(outcome, endedOn string, correction bool) map[string]any {
 // required to branch on rather than on the prose beside it
 // (docs/api-design.md section 7).
 type outcomeResponseBody struct {
-	EngagementID     string  `json:"engagementId"`
-	BirthOutcome     *string `json:"birthOutcome"`
-	PregnancyEndedOn *string `json:"pregnancyEndedOn,omitempty"`
-	Code             string  `json:"code"`
+	EngagementID     string      `json:"engagementId"`
+	BirthOutcome     *string     `json:"birthOutcome"`
+	PregnancyEndedOn *string     `json:"pregnancyEndedOn,omitempty"`
+	Code             apierr.Code `json:"code"`
 }
 
 // recordOutcomeAs PUTs a birth outcome as uid and returns the status
@@ -210,7 +210,7 @@ func TestRecordBirthOutcomeHandler_FrozenValueRefusesAPlainRecord(t *testing.T) 
 	// The refusal is a press-through, and #692's rule is that a caller
 	// tells it apart by its code, never by its prose -- the other 409
 	// this endpoint answers with cannot be pressed through at all.
-	if body.Code != string(apierr.CodeBirthOutcomeFrozen) {
+	if body.Code != apierr.CodeBirthOutcomeFrozen {
 		t.Fatalf("code = %q, want %s", body.Code, apierr.CodeBirthOutcomeFrozen)
 	}
 	gotOutcome, _ := readEngagementOutcome(t, db, engagementID)
@@ -358,7 +358,7 @@ func TestRecordBirthOutcomeHandler_CorrectingAnUnrecordedOutcome(t *testing.T) {
 	if status != http.StatusConflict {
 		t.Fatalf("status = %d, want 409", status)
 	}
-	if body.Code == string(apierr.CodeBirthOutcomeFrozen) {
+	if body.Code == apierr.CodeBirthOutcomeFrozen {
 		t.Fatalf("code = %s, want the plain conflict -- nothing here can be pressed through", body.Code)
 	}
 }

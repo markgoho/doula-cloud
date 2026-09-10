@@ -8,7 +8,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"doula-cloud/api/internal/apierr"
+	"doula-cloud/api/internal/apierrtest"
 	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/contracts"
 	"doula-cloud/api/internal/idempotency"
@@ -213,18 +213,7 @@ func TestSignupHandler_MissingWorkState(t *testing.T) {
 // assert which field the BFF said was at fault (#488).
 func decodeDetails(t *testing.T, resp *http.Response) map[string]string {
 	t.Helper()
-	return decodeRefusal(t, resp).Details
-}
-
-// decodeRefusal reads a refusal's whole section 7 envelope, for a test
-// that needs Message and Details together (#488).
-func decodeRefusal(t *testing.T, resp *http.Response) apierr.APIError {
-	t.Helper()
-	var body apierr.APIError
-	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
-		t.Fatalf("decode refusal: %v", err)
-	}
-	return body
+	return apierrtest.Decode(t, resp).Details
 }
 
 func TestSignupHandler_Success(t *testing.T) {
@@ -608,10 +597,7 @@ func TestSignupHandler_RefusesTokenWithNoAddress(t *testing.T) {
 	if resp.StatusCode != http.StatusForbidden {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusForbidden)
 	}
-	var out apierr.APIError
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
-		t.Fatalf("decode body: %v", err)
-	}
+	out := apierrtest.Decode(t, resp)
 	if out.Message != staffauth.MsgNoAddressToCreateAPractice {
 		t.Fatalf("message = %q, want %q", out.Message, staffauth.MsgNoAddressToCreateAPractice)
 	}
