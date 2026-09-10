@@ -71,6 +71,12 @@ const SKIP_ENV_VAR = 'SKIP_GATE_LOCK';
 // `.git`. Not documented as a user-facing knob.
 const LOCK_DIR_ENV_VAR = 'GATE_LOCK_DIR';
 
+// Test seam only: widens the window between taking the lock and spawning
+// the wrapped command, so a spec can land a signal inside it on purpose
+// rather than by luck (#1164). Zero everywhere else, including CI. Not a
+// user-facing knob.
+const PRE_SPAWN_DELAY_MS = Number(process.env.GATE_LOCK_PRE_SPAWN_DELAY_MS) || 0;
+
 export interface LockOwner {
 	pid: number;
 	label: string;
@@ -273,9 +279,12 @@ async function acquire(lockDir: string, notify: (message: string) => void): Prom
 	}
 }
 
-function runCommand(argv: string[]): Promise<number> {
+function runCommand(argv: string[], onSpawn?: () => void): Promise<number> {
 	return new Promise((resolve, reject) => {
 		const child = spawn(argv[0], argv.slice(1), { stdio: 'inherit' });
+		// Tells the caller a child now exists, so a handler armed before
+		// this point can stand aside for the forwarders below (#1164).
+		onSpawn?.();
 		// Forward the interrupt rather than dying under it, so the
 		// `finally` in main() still gets to release the lock. Without
 		// this, a Ctrl-C during the gate leaves a held lock behind for
@@ -315,9 +324,43 @@ async function main(argv: string[]): Promise<number> {
 	}
 
 	const stopHeartbeat = startHeartbeat(lockDir);
+
+	/*
+	 * The lock is held from the line above, and the signal forwarders
+	 * `runCommand` installs do not exist until it has spawned. A SIGINT or
+	 * SIGTERM landing in between takes its DEFAULT action -- the process
+	 * dies where it stands, the `finally` below never runs, and the lock
+	 * stands until the age gate clears it five minutes later. That is the
+	 * exact failure the forwarders exist to prevent, one step earlier than
+	 * they reach (#1164), and it is not theoretical: it is what made
+	 * `releases the lock when it is interrupted` fail about one run in
+	 * three, on trunk as well as on a PR.
+	 *
+	 * So the release is armed the moment the lock is held, and stands
+	 * aside once a child exists -- `runCommand`'s own forwarder kills the
+	 * child, the child's `close` resolves, and the `finally` releases the
+	 * normal way. Registering a listener at all is what suppresses the
+	 * default action, so both windows are now covered by a handler rather
+	 * than only the later one.
+	 */
+	let hasChild = false;
+	const releaseOnSignal = () => {
+		if (hasChild) return;
+		stopHeartbeat();
+		release(lockDir);
+		process.exit(1);
+	};
+	process.on('SIGINT', releaseOnSignal);
+	process.on('SIGTERM', releaseOnSignal);
+
 	try {
-		return await runCommand(command);
+		if (PRE_SPAWN_DELAY_MS > 0) {
+			await sleep(PRE_SPAWN_DELAY_MS);
+		}
+		return await runCommand(command, () => (hasChild = true));
 	} finally {
+		process.off('SIGINT', releaseOnSignal);
+		process.off('SIGTERM', releaseOnSignal);
 		stopHeartbeat();
 		release(lockDir);
 	}
