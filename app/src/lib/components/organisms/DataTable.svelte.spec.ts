@@ -2,7 +2,8 @@ import { createRawSnippet } from 'svelte';
 import { page } from 'vitest/browser';
 import { describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
-import DataTable from './DataTable.svelte';
+import DataTable, { type DataTableView } from './DataTable.svelte';
+import { findDuplicateIds } from '#lib/duplicateIds.js';
 // The record-view switch depends on the frame (a <stack-l>) actually
 // being display:block -- that default lives in primitives.css, same as
 // RecordDetail.svelte.spec.ts's own <container-l> dependency.
@@ -289,6 +290,67 @@ describe('DataTable.svelte', () => {
 		await buttons.nth(1).click();
 
 		expect(onRemove).toHaveBeenCalledExactlyOnceWith(rows[1]);
+	});
+
+	/*
+	 * #666: both trees are built at every width, so a caller's snippet runs
+	 * twice per row. The snippet below folds the view discriminator into the
+	 * id it assigns, which is the only thing that keeps the two copies
+	 * apart -- with no discriminator to fold in, every id here would exist
+	 * twice and each `aria-describedby` would resolve to the <table> copy
+	 * whichever view is on screen.
+	 */
+	it('gives a rowActions snippet what it needs to keep its ids unique across both trees', async () => {
+		const { container } = await render(DataTable<Row>, {
+			columns,
+			rows,
+			emptyMessage: 'No records yet.',
+			rowActions: {
+				label: 'Actions',
+				content: createRawSnippet<[Row, DataTableView]>((row, view) => ({
+					render: () =>
+						`<span id="${view()}-${row().name.replaceAll(' ', '-')}-name">${row().name}</span>`
+				}))
+			}
+		});
+
+		expect(findDuplicateIds(container)).toEqual([]);
+		// The querySelector exception, case 3 (.claude/rules/svelte-tests.md):
+		// an id is not in the accessible tree, and the count guards against a
+		// vacuous pass -- a snippet that assigned no id would satisfy the line
+		// above too. Two rows, one id per row per tree.
+		expect(container.querySelectorAll('[id]')).toHaveLength(rows.length * 2);
+	});
+
+	/*
+	 * The same seam on a column's own snippet. `Column.content` deliberately
+	 * carries `rowActions.content`'s exact shape, and it is rendered into
+	 * both trees by the same shared cell snippet, so it needs the same
+	 * discriminator for the same reason.
+	 */
+	it('gives a column content snippet what it needs to keep its ids unique across both trees', async () => {
+		const { container } = await render(DataTable<Row>, {
+			columns: [
+				columns[0]!,
+				{
+					label: 'Status',
+					accessor: (row: Row) => row.status,
+					content: createRawSnippet<[Row, DataTableView]>((row, view) => ({
+						render: () =>
+							`<span id="${view()}-${row().name.replaceAll(' ', '-')}-status">${row().status}</span>`
+					}))
+				}
+			],
+			rows,
+			emptyMessage: 'No records yet.'
+		});
+
+		expect(findDuplicateIds(container)).toEqual([]);
+		// The querySelector exception, case 3 (.claude/rules/svelte-tests.md):
+		// an id is not in the accessible tree, and the count guards against a
+		// vacuous pass -- a snippet that assigned no id would satisfy the line
+		// above too. Two rows, one id per row per tree.
+		expect(container.querySelectorAll('[id]')).toHaveLength(rows.length * 2);
 	});
 
 	it('spans the action column too when rowActions is provided and rows is empty', async () => {

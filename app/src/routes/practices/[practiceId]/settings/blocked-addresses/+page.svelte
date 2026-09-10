@@ -42,7 +42,7 @@
 	import Notice from '#lib/components/atoms/Notice.svelte';
 	import Text from '#lib/components/atoms/Text.svelte';
 	import ConfirmDialog from '#lib/components/molecules/ConfirmDialog.svelte';
-	import DataTable from '#lib/components/organisms/DataTable.svelte';
+	import DataTable, { type DataTableView } from '#lib/components/organisms/DataTable.svelte';
 	import ListPage from '#lib/components/templates/ListPage.svelte';
 
 	let suppressions = $state<EmailSuppression[]>([]);
@@ -126,7 +126,7 @@
 	/>
 {/snippet}
 
-{#snippet rowActions(suppression: EmailSuppression)}
+{#snippet rowActions(suppression: EmailSuppression, view: DataTableView)}
 	{#if suppression.clearable}
 		<!--
 			The button names the address it is about only to a screen
@@ -146,10 +146,10 @@
 			label="Unblock"
 			variant="secondary"
 			size="sm"
-			describedBy="{suppression.address}-unblock-name"
+			describedBy="{view}-{suppression.address}-unblock-name"
 			onClick={() => (confirmAddress = suppression.address)}
 		/>
-		<span class="visually-hidden" id="{suppression.address}-unblock-name">
+		<span class="visually-hidden" id="{view}-{suppression.address}-unblock-name">
 			{suppression.address}
 		</span>
 		<ConfirmDialog

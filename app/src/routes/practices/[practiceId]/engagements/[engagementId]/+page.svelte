@@ -97,7 +97,7 @@
 	import DescriptionList from '#lib/components/molecules/DescriptionList.svelte';
 	import RadioGroup from '#lib/components/molecules/RadioGroup.svelte';
 	import ErrorSummary from '#lib/components/molecules/ErrorSummary.svelte';
-	import DataTable from '#lib/components/organisms/DataTable.svelte';
+	import DataTable, { type DataTableView } from '#lib/components/organisms/DataTable.svelte';
 	import RecordDetail from '#lib/components/templates/RecordDetail.svelte';
 	import TextInput from '#lib/components/atoms/TextInput.svelte';
 	import Textarea from '#lib/components/atoms/Textarea.svelte';
@@ -1125,8 +1125,16 @@
 	{/if}
 {/snippet}
 
-{#snippet visitActions(visit: Visit)}
-	<span class="visually-hidden" id="visit-{visit.visitId}-name"
+{#snippet visitActions(visit: Visit, view: DataTableView)}
+	<!--
+		#666: DataTable renders this snippet into both of its trees, so
+		every id below -- the name span, and each LabeledField's own id,
+		which is what its hint and error ids are derived from -- is scoped
+		by which tree is asking. Two copies of one id would leave every
+		label and every aria reference on this row pointing at the
+		`<table>` copy, whichever view is on screen.
+	-->
+	<span class="visually-hidden" id="{view}-visit-{visit.visitId}-name"
 		>{visit.staffName}, {formatScheduledVisit(visit.scheduledAt)}</span
 	>
 	<!--
@@ -1155,7 +1163,7 @@
 		{:else}
 			<form onsubmit={(event) => handleReassign(visit.visitId, event)}>
 				<LabeledField
-					id={`reassign-staff-${visit.visitId}`}
+					id={`${view}-reassign-staff-${visit.visitId}`}
 					label="Reassign to"
 					hint={assigneeHint}
 					error={reassignBlock(visit.visitId)}
@@ -1178,7 +1186,7 @@
 					type="submit"
 					size="sm"
 					variant="secondary"
-					describedBy="visit-{visit.visitId}-name"
+					describedBy="{view}-visit-{visit.visitId}-name"
 				/>
 			</form>
 		{/if}
@@ -1193,7 +1201,7 @@
 		already offers is the plainer way to ask for the same thing.
 	-->
 	<form onsubmit={(event) => handleSchedule(visit.visitId, event)}>
-		<LabeledField id={`schedule-visit-${visit.visitId}`} label="Scheduled date and time">
+		<LabeledField id={`${view}-schedule-visit-${visit.visitId}`} label="Scheduled date and time">
 			{#snippet children({ id, describedBy, invalid })}
 				<TextInput
 					{id}
@@ -1210,7 +1218,7 @@
 			type="submit"
 			size="sm"
 			variant="secondary"
-			describedBy="visit-{visit.visitId}-name"
+			describedBy="{view}-visit-{visit.visitId}-name"
 		/>
 	</form>
 	{#if scheduleSections[visit.visitId]?.error}
@@ -1223,7 +1231,7 @@
 		reassign and schedule carry, matching the read rule.
 	-->
 	<form onsubmit={(event) => handleSaveNotes(visit.visitId, event)}>
-		<LabeledField id={`notes-visit-${visit.visitId}`} label="Notes">
+		<LabeledField id={`${view}-notes-visit-${visit.visitId}`} label="Notes">
 			{#snippet children({ id, describedBy, invalid })}
 				<Textarea
 					{id}
@@ -1239,7 +1247,7 @@
 			type="submit"
 			size="sm"
 			variant="secondary"
-			describedBy="visit-{visit.visitId}-name"
+			describedBy="{view}-visit-{visit.visitId}-name"
 		/>
 	</form>
 	{#if notesSections[visit.visitId]?.error}
