@@ -63,9 +63,10 @@ marketing site is out of scope for this map).
 
 | Step | Action | Expected result | Mark |
 | --- | --- | --- | --- |
-| 5.1 | Open `/practices/[practiceId]/clients/new` and enter a made-up name and email | Two fields; she must invent a Client to see any real screen | `manual` |
-| 5.2 | Press **Add Client** | A Client **and** an Engagement at `intake` are created — there is no way to make one without the other — and one of her three credits is silently spent | `manual` |
-| 5.2-a | Look for any warning that the trial has a size | None. The wall arrives at her fourth Client with a `402` ([MO-G9](https://github.com/markgoho/doula-cloud/issues/257)) | `manual` |
+| 5.1 | Reach intake from **Find or add a Client** on the Clients list, search, find nobody, and follow **Add a new Client** | Intake opens on its first question, `What is their name?`, with Given name, Family name and Preferred name on it. The sequence behind it asks date of birth, email, phone and address one page at a time, then one page per section the Practice put on its own Client Field Template. She must still invent a Client to see any real screen, but she is no longer asked to invent her in two boxes (ADR-0017) | `automated (add-client-visits.e2e.ts)` |
+| 5.2 | Answer the name question and press **Save and come back later** | A Client is saved and **nothing else is**: no Engagement, no `credit_ledger` row, and her balance still reads 3. She lands on that Client's own detail hub, not on an Engagement | `manual` |
+| 5.2-a | Look for any warning that the trial has a size | Nothing on any intake page mentions credits, and there is nothing to warn about — the save is free. The size of the trial is named one act later, at 5.2-b, before she spends anything | `manual` |
+| 5.2-b | Follow **Start new work with {name}** from the hub and ask for an Engagement | The form names the price before she commits: `Credit cost 1 credit` and `Balance after 2`, then **Start work with {name}**. She holds Owner, so ADR-0017's solo-Practice collapse fires and the request is created and approved in one act — this is where the Engagement is created and the Credit locks. On an empty balance the whole act fails with `402 no credits remaining, ask a practice owner or admin to buy more`, and the screen offers **Buy credits** inline | `manual` |
 | 5.3 | Open the Engagement from the Clients list | The Engagement page renders | `automated (birth-plan.e2e.ts)` |
 | 5.4 | Read the page | Visits, Care Plan, Birth Plan, Contract, Invoices and Messages. **The first moment the product looks like doula work** — four clicks past where she was deciding whether to leave | `manual` |
 
@@ -82,7 +83,7 @@ marketing site is out of scope for this map).
 | Step | Action | Expected result | Mark |
 | --- | --- | --- | --- |
 | 7.1 | Import two years of Clients from a spreadsheet | No import exists | `missing-feature (TB-G6)` [#289](https://github.com/markgoho/doula-cloud/issues/289) |
-| 7.1-a | Reproduce one spreadsheet row by hand instead | Impossible: only name and email can be typed, so the row cannot be carried across even manually ([MO-G3](https://github.com/markgoho/doula-cloud/issues/252)) | `manual` |
+| 7.1-a | Reproduce one spreadsheet row by hand instead | Possible now, one row at a time: intake asks given, family and preferred name, date of birth, email, phone and address, and a Practice adds the columns we did not think of to its own Client Field Template ([MO-G3](https://github.com/markgoho/doula-cloud/issues/252) is closed). What still cannot happen is two years of rows arriving together — that is [TB-G6](https://github.com/markgoho/doula-cloud/issues/289) at 7.1, and it is untouched | `manual` |
 
 **Abandon check**: her existing data is the reason switching is expensive, and it
 cannot come with her.

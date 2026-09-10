@@ -39,12 +39,13 @@ the `/signup` screen itself, rather than provisioning through
 
 | Step | Action | Expected result | Mark |
 | --- | --- | --- | --- |
-| 3.1 | Open `/practices/[practiceId]/clients/new` | A form of exactly two fields, Name and Email | `manual` |
-| 3.1-a | Look for due date, phone, address, hospital, or intake notes | Nothing to enter; the paper folder cannot be transcribed | `missing-feature (MO-G3)` [#252](https://github.com/markgoho/doula-cloud/issues/252) |
-| 3.2 | Enter name and email, press **Add Client** | `POST /api/practices/{id}/clients` creates a Client **and** an Engagement at `intake`; one credit is consumed | `manual` |
-| 3.2-a | Re-read the Billing balance | `Credit balance: 2` and a consumption ledger row | `manual` |
+| 3.1 | Reach intake from **Find or add a Client** on the Clients list, search, find nobody, and follow **Add a new Client** | Intake opens on its first question, `What is their name?` — Given name, Family name, Preferred name — with **Continue** and **Save and come back later** on it, as every question page has. `clients/new` is a door now, not a form: it redirects to that first question and carries whatever the search had typed (ADR-0017) | `automated (add-client-visits.e2e.ts)` |
+| 3.1-a | Look for due date, phone, address, hospital, or intake notes | Phone, address and date of birth each have a question of their own in the sequence, and the folder's remaining facts — hospital, the partner's name, the page of notes — go on the Practice's own Client Field Template, which then asks for them as its own pages of intake. The paper folder can be transcribed ([MO-G3](https://github.com/markgoho/doula-cloud/issues/252) is closed) | `manual` |
+| 3.2 | Answer the name question and press **Save and come back later** | The Client is saved and **the save is free**: no Engagement row, no `credit_ledger` row. She lands on that Client's own detail hub | `manual` |
+| 3.2-a | Re-read the Billing balance | `Credit balance: 3`, still, with the `signup_bonus` row alone. Adding a Client costs nothing | `manual` |
+| 3.2-b | Follow **Start new work with {name}** from the hub and ask for an Engagement | The form names `Credit cost 1 credit` and `Balance after 2` before she presses **Start work with {name}**. She is the Owner, so ADR-0017's solo-Practice collapse fires: the Request is written and approved in the same instant, mailing nobody, and it is *this* act that creates the Engagement and locks the Credit | `manual` |
 | 3.3 | Open the Engagement from the Clients list | The Engagement page shows Visits, Care Plan, Birth Plan, Contract, Invoices and Messages on one page | `automated (birth-plan.e2e.ts)` |
-| 3.4 | Add a second and third Client, then attempt a fourth | The fourth returns `402` with "no credits remaining, ask a Practice Owner to buy more" — to Maya, who *is* the Owner | `manual` |
+| 3.4 | Add a second and third Client, start work with all three, then attempt a fourth Engagement | Clients are free and unlimited; the wall is on Engagements. The fourth **Start work with {name}** returns `402 no credits remaining, ask a practice owner or admin to buy more` — to Maya, who *is* the Owner — and the whole act rolls back, leaving no half-written Request behind. The screen says it before the click too, offering **Buy credits** inline on an empty balance | `manual` |
 | 3.4-a | Follow that instruction and try to buy credits | Stripe Checkout opens for the chosen quantity; paying credits the ledger | `manual` |
 
 **The doula's card statement says `DOULA.CLOU`.** Found on Dee's walk
@@ -118,10 +119,16 @@ on 2026-08-22.
 | `automated` | 12 |
 | `manual` | 19 |
 | `blocked` | 0 |
-| `missing-feature` | 4 ([MO-G1](https://github.com/markgoho/doula-cloud/issues/250), [MO-G2](https://github.com/markgoho/doula-cloud/issues/251), [MO-G3](https://github.com/markgoho/doula-cloud/issues/252), [MO-G4](https://github.com/markgoho/doula-cloud/issues/253)) |
+| `missing-feature` | 3 ([MO-G1](https://github.com/markgoho/doula-cloud/issues/250), [MO-G2](https://github.com/markgoho/doula-cloud/issues/251), [MO-G4](https://github.com/markgoho/doula-cloud/issues/253)) |
+
+MO-G3 ([#252](https://github.com/markgoho/doula-cloud/issues/252)) is closed and
+3.1-a is walkable, so it no longer holds a step.
 
 MO-G5 to MO-G9 are experience-layer or infrastructure findings; they are observed
 inside the steps above (3.4, 7.1, 7.2-a) rather than given steps of their own.
+MO-G9 ([#257](https://github.com/markgoho/doula-cloud/issues/257)) is closed as
+well — 3.4 still meets a wall, but a paid one she can walk through, not the dead
+end that gap named.
 
 ## Run log
 
