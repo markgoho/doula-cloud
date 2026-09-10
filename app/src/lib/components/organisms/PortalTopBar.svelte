@@ -55,7 +55,7 @@
 <header>
 	<div class="bar">
 		<div class="brand-and-nav">
-			<Link href={resolve('/')} label={practiceName} ariaLabel={switcherLabel} variant="brand" />
+			<Link href={resolve('/(signed-out)')} label={practiceName} ariaLabel={switcherLabel} variant="brand" />
 			<nav class="wide" aria-label="Your care">
 				{#each navItems as item (item.href)}
 					<Link href={item.href} label={item.label} variant="nav" current={item.current} />

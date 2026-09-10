@@ -36,12 +36,17 @@ const WCAG_TAGS = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'];
  *   no additional archetype coverage. Every component on them is already
  *   scanned in the place a person meets it.
  * - `demo/*` -- SvelteKit's own scaffolding, not a screen in the product.
- * - `/` -- outside every route group that carries chrome, so it renders
- *   with no shell, no `<main>` and no skip link at all. #357 decided and
- *   built what `/` shows; whether it should carry a shell was never
- *   decided and is tracked separately as #678. `/account` used to share
- *   this same gap, until #484 gave it the shell every other authenticated
- *   Staff route already has.
+ * - `/`'s two picker states -- the Staff picker and the portal picker.
+ *   `/` itself is scanned, in its signed-out state, in the archetype A
+ *   batch below: #678 settled that it carries a shell and moved it into
+ *   the `(signed-out)` group to get one, closing the gap `/account` used
+ *   to share until #484. The two picker states are not separately
+ *   scanned because they render the same nodes as the state that is --
+ *   `EntryPage`, an `<h1>`, and a list of `Link`s -- while costing a
+ *   Staff member with two Memberships and a Portal Account with two
+ *   Engagements to provision. The portal picker's one extra node, a
+ *   status paragraph joined to its link by `aria-describedby`, is
+ *   `StepRail`'s own join and is scanned wherever that rail appears.
  */
 
 /**
@@ -115,6 +120,7 @@ async function scan(page: Page, route: Route) {
 // stale -- the form is the page.
 test('Archetype A -- the screens a person meets signed out', async ({ page }) => {
 	const routes: Route[] = [
+		{ key: '/', archetype: 'A', url: '/', h1: 'Sign in or set up a Practice' },
 		{ key: 'login', archetype: 'A', url: '/login', h1: 'Log in' },
 		{ key: 'signup', archetype: 'A', url: '/signup', h1: 'Sign up your Practice' },
 		{

@@ -73,7 +73,7 @@
 				// own comment on why a live portal session here rules out a
 				// Staff session surviving to be misrouted by `/`'s probe
 				// order.
-				await goto(resolve('/'));
+				await goto(resolve('/(signed-out)'));
 			}
 		}, orServiceProblem);
 	}

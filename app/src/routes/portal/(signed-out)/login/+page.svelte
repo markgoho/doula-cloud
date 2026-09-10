@@ -44,7 +44,7 @@
 				})
 			);
 		} else {
-			await goto(resolve('/'));
+			await goto(resolve('/(signed-out)'));
 		}
 	});
 

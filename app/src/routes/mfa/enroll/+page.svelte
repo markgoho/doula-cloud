@@ -107,7 +107,7 @@
 	}
 
 	async function landAfterEnrolment(): Promise<void> {
-		await goto(safeReturnTo() ?? resolve('/'));
+		await goto(safeReturnTo() ?? resolve('/(signed-out)'));
 	}
 
 	async function handlePasswordSubmit(event: SubmitEvent): Promise<void> {
