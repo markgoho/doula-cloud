@@ -1,5 +1,5 @@
 import { execFileSync, spawn } from 'node:child_process';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { createConnection } from 'node:net';
 import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -399,23 +399,32 @@ function querySQLValue(sql: string): string {
 // wrapper, so the link in the mail is the link that was sent.
 const ACCEPT_INVITE_LINK = /\/accept-invite\?token=(\S+)/g;
 
-// Reads the invitation token out of the sandbox mailbox (e2e/mailbox.ts),
-// the second place it lives once the outbox row has been drained. The
-// last matching message wins: an address invited twice in one run has
-// two, and only the newest token still opens anything.
-async function readInviteTokenFromMailbox(address: string): Promise<string> {
+// Reads one invitation's token out of the sandbox mailbox
+// (e2e/mailbox.ts), the second place it lives once the outbox row has
+// been drained.
+//
+// A mailbox is keyed on the address, and an address can hold more than
+// one live invitation -- mfa-required.e2e.ts invites one identity to two
+// Practices -- so "the newest link in this inbox" is not the same
+// question as "this invitation's link". digest settles it: it is
+// practice_invitations.token_digest, the SHA-256 hex of the token this
+// invitation was minted with (staffauth.TokenDigest), so the candidate
+// whose own digest matches is the right one and no other candidate can
+// be mistaken for it.
+async function readInviteTokenFromMailbox(address: string, digest: string): Promise<string> {
 	const inbox = await fetch(`${MAILBOX_URL}/api/messages?to=${encodeURIComponent(address)}`);
 	if (!inbox.ok) {
 		throw new Error(`stack: reading ${address}'s sandbox mailbox failed: ${inbox.status}`);
 	}
 	const messages = (await inbox.json()) as { text: string }[];
-	let token = '';
 	for (const message of messages) {
-		for (const [, matched] of message.text.matchAll(ACCEPT_INVITE_LINK)) {
-			token = matched;
+		for (const [, candidate] of message.text.matchAll(ACCEPT_INVITE_LINK)) {
+			if (createHash('sha256').update(candidate).digest('hex') === digest) {
+				return candidate;
+			}
 		}
 	}
-	return token;
+	return '';
 }
 
 // Reads the plaintext token for invitationId (#525). InviteResponse
@@ -439,9 +448,17 @@ async function readInviteTokenFromMailbox(address: string): Promise<string> {
 // a retry, which could not help: the row is gone for good, not late.
 // outbox.MailWorker sends before it marks (mailworker.go's
 // claim-scan-compose-send-mark loop) and marks inside the drain's own
-// transaction, so by the time this SELECT can see the row as anything
-// other than pending, the message is already in the mailbox. There is no
-// third state to race.
+// transaction, so a row that went terminal *because it was drained* had
+// its mail delivered first, every time.
+//
+// MailWorker does have two branches that go terminal with nothing sent --
+// staffinvite's Compose returns ErrAlreadyDone for an Invitation already
+// resolved or expired, and mail.ErrSuppressed dead-letters a blocked
+// address -- but neither can be true of an Invitation a spec is in the
+// middle of accepting: it is pending and unexpired by construction, and
+// InviteHandler refuses a suppressed address before any row exists
+// (#861). If one ever were, this throws naming both places it looked
+// rather than returning an empty string a caller pastes into a URL.
 export async function readStaffInviteToken(invitationId: string): Promise<string> {
 	const pending = querySQLValue(
 		`SELECT invite_token FROM staff_invite_outbox WHERE invitation_id = ${sqlLiteral(invitationId)} AND status = 'pending'`
@@ -450,15 +467,20 @@ export async function readStaffInviteToken(invitationId: string): Promise<string
 		return pending;
 	}
 
-	const address = querySQLValue(`SELECT address FROM practice_invitations WHERE id = ${sqlLiteral(invitationId)}`);
-	if (address === '') {
+	// psql's unaligned output separates columns with `|`, and neither an
+	// address nor a hex digest can contain one.
+	const invitation = querySQLValue(
+		`SELECT address, token_digest FROM practice_invitations WHERE id = ${sqlLiteral(invitationId)}`
+	);
+	if (invitation === '') {
 		throw new Error(`stack: no practice_invitations row for invitation ${invitationId}`);
 	}
+	const [address, digest] = invitation.split('|', 2);
 
-	const mailed = await readInviteTokenFromMailbox(address);
+	const mailed = await readInviteTokenFromMailbox(address, digest);
 	if (mailed === '') {
 		throw new Error(
-			`stack: no invite token for invitation ${invitationId}: no pending staff_invite_outbox row, and no accept link in ${address}'s sandbox mailbox`
+			`stack: no invite token for invitation ${invitationId}: no pending staff_invite_outbox row, and no accept link matching its token digest in ${address}'s sandbox mailbox`
 		);
 	}
 	return mailed;

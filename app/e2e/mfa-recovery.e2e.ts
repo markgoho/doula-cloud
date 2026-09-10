@@ -183,8 +183,9 @@ test('An Owner vouches for a locked-out doula, and the code reaches her and nobo
 		expect(inviteResponse.ok(), `invite send failed: ${inviteResponse.status()}`).toBe(true);
 		const { invitationId } = await inviteResponse.json();
 
-		const token = readStaffInviteToken(invitationId);
-		expect(token, `no pending staff_invite_outbox row for invitation ${invitationId}`).toBeTruthy();
+		// readStaffInviteToken throws, naming both places it looked, when the
+		// token is in neither -- so there is nothing left here to assert.
+		const token = await readStaffInviteToken(invitationId);
 
 		await page.goto(`/accept-invite?token=${token}`);
 		await page.getByLabel('Email').fill(doulaEmail);
