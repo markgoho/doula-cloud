@@ -21,6 +21,10 @@ A **simulation run** ([#763](https://github.com/markgoho/doula-cloud/issues/763)
 `app/.gitignore` and the repo root `.gitignore` both exclude `.env*`
 except `.env.example`. A Sandbox key is still a key.
 
+**Which identity reads the deployed row: `doula-api-runtime@doula-cloud.iam.gserviceaccount.com`.** Every Secret Manager reference on `doula-api` is resolved by this account, not by whoever deployed the revision, so a secret it cannot read is a container that will not start. It was the project's default compute account, `850855848778-compute@developer.gserviceaccount.com`, until [#1051](https://github.com/markgoho/doula-cloud/issues/1051) — an account holding project `roles/editor`. That did **not** make the per-secret bindings on this page redundant: `roles/editor` deliberately excludes `secretmanager.versions.access`, which is why #743 still hit `Permission denied on secret` on a freshly created secret. It made everything *else* redundant — the container could change any Cloud Run service, alter the Cloud SQL instance, and write to any bucket in the project.
+
+The account now holds, and holds nothing beyond: `roles/cloudsql.client` and a three-permission custom role for Identity Platform accounts (`firebaseauth.users.get/update/delete`) at the project level, because neither service has resource-level IAM; a `secretAccessor` grant on each secret it reads; `roles/cloudtasks.enqueuer` on `doula-cloud-notification-nudge`; and `roles/storage.objectUser` on `doula-cloud-attachments`. `terraform/` owns every one of them, each next to the resource it is granted on, and `ci.yml`'s `deploy-api` passes `--service-account` so a deploy cannot put the default account back. **A new secret therefore needs its binding for this account, and the binding belongs in `terraform/secrets.tf`, not only in a `gcloud` command.**
+
 ## The variables
 
 | Variable | Local | CI | Deployed |
@@ -99,7 +103,7 @@ The commands that produced the current state, so it can be rebuilt:
 ```
 gcloud secrets create doula-cloud-mailgun-api-key --replication-policy=automatic --data-file=-
 gcloud secrets add-iam-policy-binding doula-cloud-mailgun-api-key \
-  --member serviceAccount:850855848778-compute@developer.gserviceaccount.com \
+  --member serviceAccount:doula-api-runtime@doula-cloud.iam.gserviceaccount.com \
   --role roles/secretmanager.secretAccessor
 ```
 
@@ -140,7 +144,7 @@ the deployed app at all. Enabled via `PATCH
 
 #917 (the connect-nudge Platform Notification, ADR-0035) reuses `NOTIFICATION_WORKER_SECRET` for `/api/internal/notifications/process-connect-nudge-outbox` -- same secret, same header, its own outbox table (`connect_nudge_outbox`). It is the one outbox whose write site is a person pressing a control rather than a webhook or a background transition: `payments.PostConnectNudgeHandler`, offered on the Payments settings screen to a reader who may read Stripe Connect state and may not act on it, and only while the Practice has no Stripe account at all.
 
-#340 (the Mailgun bounce/complaint webhook, ADR-0010) adds a sixth variable, `MAILGUN_WEBHOOK_SIGNING_KEY` -- Mailgun's HTTP webhook signing key, a separate value from `MAILGUN_API_KEY`, verifying `POST /api/mailgun/webhook`'s HMAC-SHA256 signature rather than a shared-secret header. **Provisioned on #743**, so it is no longer unset on the deployed service. The key does not need Mailgun's dashboard: it comes back from the account-level API, `GET https://api.mailgun.net/v5/accounts/http_signing_key` with the same `api:<MAILGUN_API_KEY>` basic auth every other call uses. It was stored as Secret Manager `doula-cloud-mailgun-webhook-signing-key`, granted to `850855848778-compute@developer.gserviceaccount.com`, and attached to `doula-api` out of band the same way the Stripe and VAPID values are -- `gcloud run services update doula-api --region us-central1 --update-secrets MAILGUN_WEBHOOK_SIGNING_KEY=doula-cloud-mailgun-webhook-signing-key:latest`. That survives every later trunk deploy, because `deploy-cloudrun`'s `secrets:` input merges rather than replaces (see the comment on the deploy step in `ci.yml`).
+#340 (the Mailgun bounce/complaint webhook, ADR-0010) adds a sixth variable, `MAILGUN_WEBHOOK_SIGNING_KEY` -- Mailgun's HTTP webhook signing key, a separate value from `MAILGUN_API_KEY`, verifying `POST /api/mailgun/webhook`'s HMAC-SHA256 signature rather than a shared-secret header. **Provisioned on #743**, so it is no longer unset on the deployed service. The key does not need Mailgun's dashboard: it comes back from the account-level API, `GET https://api.mailgun.net/v5/accounts/http_signing_key` with the same `api:<MAILGUN_API_KEY>` basic auth every other call uses. It was stored as Secret Manager `doula-cloud-mailgun-webhook-signing-key`, granted to the runtime service account (`850855848778-compute@` at the time; `doula-api-runtime@` since #1051), and attached to `doula-api` out of band the same way the Stripe and VAPID values are -- `gcloud run services update doula-api --region us-central1 --update-secrets MAILGUN_WEBHOOK_SIGNING_KEY=doula-cloud-mailgun-webhook-signing-key:latest`. That survives every later trunk deploy, because `deploy-cloudrun`'s `secrets:` input merges rather than replaces (see the comment on the deploy step in `ci.yml`).
 
 Both webhooks are registered against `mg.doula.cloud` through Mailgun's API, not its dashboard, and point at the canonical Cloud Run URL rather than the Firebase Hosting rewrite -- the endpoint is signature-verified and carries no cookie, so it has no reason to depend on the `/api/**` rewrite:
 
@@ -189,7 +193,7 @@ printf %s "<the token>" | gcloud secrets create doula-cloud-github-dispatch-toke
   --project=doula-cloud --data-file=- --replication-policy=automatic
 gcloud secrets add-iam-policy-binding doula-cloud-github-dispatch-token \
   --project=doula-cloud \
-  --member=serviceAccount:850855848778-compute@developer.gserviceaccount.com \
+  --member=serviceAccount:doula-api-runtime@doula-cloud.iam.gserviceaccount.com \
   --role=roles/secretmanager.secretAccessor
 gcloud run services update doula-api --region us-central1 --project=doula-cloud \
   --update-secrets GITHUB_DISPATCH_TOKEN=doula-cloud-github-dispatch-token:latest
@@ -227,8 +231,14 @@ read back as `200 application/pdf` from the Owner-only endpoint.
 The bucket carries no public access -- every read goes through
 `GetSignedContractPDFHandler` and the equivalent attachment handler,
 never a direct bucket URL. The runtime service account holds
-`roles/storage.objectUser` on the bucket only, not a project-wide role,
-matching the per-secret grants below.
+`roles/storage.objectUser` on this bucket only, never a project-wide
+role, matching the per-secret grants below. Narrowing it further to
+`objectCreator` + `objectViewer` was tried and rejected in #1051:
+`objectstore.GCSStore` exposes only `Put` and `Get`, but `Put` is
+documented to overwrite, and overwriting an object in a bucket with no
+versioning needs `storage.objects.delete` as well as `.create`. The
+grant is a `google_storage_bucket_iam_member` in `terraform/storage.tf`,
+so a hand-widened bucket policy is a red `terraform plan`.
 
 The VAPID keypair is a real production pair, generated once with
 `webpush.GenerateVAPIDKeys()` from a throwaway `main.go` in `api/` that
@@ -254,11 +264,11 @@ gcloud storage buckets create gs://doula-cloud-attachments \
   --uniform-bucket-level-access \
   --public-access-prevention
 gcloud storage buckets add-iam-policy-binding gs://doula-cloud-attachments \
-  --member=serviceAccount:850855848778-compute@developer.gserviceaccount.com \
+  --member=serviceAccount:doula-api-runtime@doula-cloud.iam.gserviceaccount.com \
   --role=roles/storage.objectUser
 gcloud secrets create doula-cloud-vapid-private-key --replication-policy=automatic --data-file=-
 gcloud secrets add-iam-policy-binding doula-cloud-vapid-private-key \
-  --member=serviceAccount:850855848778-compute@developer.gserviceaccount.com \
+  --member=serviceAccount:doula-api-runtime@doula-cloud.iam.gserviceaccount.com \
   --role=roles/secretmanager.secretAccessor
 gcloud run services update doula-api --region us-central1 \
   --update-env-vars GCS_ATTACHMENTS_BUCKET=doula-cloud-attachments,VAPID_PUBLIC_KEY=<public key>,VAPID_SUBSCRIBER=mailto:admin@doula.cloud \
@@ -455,7 +465,7 @@ Both Connect secrets are in Secret Manager and wired to the service. Two
 things that were not obvious when setting them up:
 
 - **A new secret needs its own IAM binding.** Cloud Run's runtime service
-  account (`850855848778-compute@developer.gserviceaccount.com`) is granted
+  account (`doula-api-runtime@doula-cloud.iam.gserviceaccount.com`) is granted
   `roles/secretmanager.secretAccessor` **per secret**, not at the project
   level, so a freshly created secret is unreadable and the deploy fails with
   `Permission denied on secret`. Grant it with
@@ -491,7 +501,7 @@ The commands that produced the current state, so it can be rebuilt:
 gcloud secrets create doula-cloud-stripe-api-key --replication-policy=automatic --data-file=-
 gcloud secrets create doula-cloud-stripe-webhook-secret --replication-policy=automatic --data-file=-
 gcloud secrets add-iam-policy-binding <secret> \
-  --member serviceAccount:850855848778-compute@developer.gserviceaccount.com \
+  --member serviceAccount:doula-api-runtime@doula-cloud.iam.gserviceaccount.com \
   --role roles/secretmanager.secretAccessor
 gcloud run services update doula-api --region us-central1 \
   --update-env-vars APP_BASE_URL=…,STRIPE_CREDIT_PRICE_ID=… \

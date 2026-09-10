@@ -61,9 +61,19 @@ resource "google_cloud_run_v2_service" "doula_api" {
     }
     max_instance_request_concurrency = 80
     revision                         = null
-    service_account                  = "850855848778-compute@developer.gserviceaccount.com"
-    session_affinity                 = false
-    timeout                          = "300s"
+    # #1051. This was `850855848778-compute@developer.gserviceaccount.com`,
+    # the Google-created default compute account, which held project
+    # `roles/editor` — the container could change or delete any Cloud Run
+    # service, alter the Cloud SQL instance, and write to any bucket in the
+    # project. Not read every secret: `roles/editor` excludes
+    # `secretmanager.versions.access`, which is why the per-secret grants in
+    # secrets.tf were load-bearing even then. `deploy-api` in
+    # ci.yml passes the same address as `--service-account` on every deploy,
+    # so a deploy cannot quietly put the default account back; see iam.tf for
+    # where each of this identity's grants comes from.
+    service_account  = google_service_account.doula_api_runtime.email
+    session_affinity = false
+    timeout          = "300s"
     containers {
       args             = []
       base_image_uri   = null

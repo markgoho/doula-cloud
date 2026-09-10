@@ -96,9 +96,12 @@ resource "google_cloud_tasks_queue" "notification_nudge" {
   }
 }
 
-resource "google_cloud_tasks_queue_iam_member" "notification_nudge_enqueuer" {
+# The enqueuer is `doula-api-runtime@` since #1051. It was the default
+# compute account until then, which held the role through project
+# `roles/editor` as well as through this binding.
+resource "google_cloud_tasks_queue_iam_member" "notification_nudge_runtime_enqueuer" {
   location = "us-central1"
-  member   = "serviceAccount:850855848778-compute@developer.gserviceaccount.com"
+  member   = google_service_account.doula_api_runtime.member
   name     = google_cloud_tasks_queue.notification_nudge.id
   project  = "doula-cloud"
   role     = "roles/cloudtasks.enqueuer"
