@@ -17,9 +17,9 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 export interface WorktreeOffset {
-	/** Absolute path to the worktree directory. */
-	path: string;
-	offset: number;
+  /** Absolute path to the worktree directory. */
+  path: string;
+  offset: number;
 }
 
 // Every worktree under `worktreesRoot` that has an offset assigned. A
@@ -27,23 +27,26 @@ export interface WorktreeOffset {
 // it has not been provisioned yet -- and is left out rather than reported
 // with a made-up offset.
 export function readWorktreeOffsets(worktreesRoot: string): WorktreeOffset[] {
-	let entries: string[];
-	try {
-		entries = fs.readdirSync(worktreesRoot);
-	} catch {
-		return []; // no worktrees directory at all -- nothing claims anything
-	}
+  let entries: string[];
+  try {
+    entries = fs.readdirSync(worktreesRoot);
+  } catch {
+    return []; // no worktrees directory at all -- nothing claims anything
+  }
 
-	const found: WorktreeOffset[] = [];
-	for (const entry of entries) {
-		const worktreePath = path.join(worktreesRoot, entry);
-		let offset: number;
-		try {
-			offset = Number.parseInt(fs.readFileSync(path.join(worktreePath, '.port-offset'), 'utf8').trim(), 10);
-		} catch {
-			continue;
-		}
-		if (Number.isInteger(offset)) found.push({ path: worktreePath, offset });
-	}
-	return found;
+  const found: WorktreeOffset[] = [];
+  for (const entry of entries) {
+    const worktreePath = path.join(worktreesRoot, entry);
+    let offset: number;
+    try {
+      offset = Number.parseInt(
+        fs.readFileSync(path.join(worktreePath, '.port-offset'), 'utf8').trim(),
+        10
+      );
+    } catch {
+      continue;
+    }
+    if (Number.isInteger(offset)) found.push({ path: worktreePath, offset });
+  }
+  return found;
 }

@@ -17,62 +17,65 @@ let SOURCE_ROOT = '';
 let WORKTREES_ROOT = '';
 
 async function main(): Promise<void> {
-	SOURCE_ROOT = findMainCheckoutRoot(import.meta.dir);
-	WORKTREES_ROOT = path.join(SOURCE_ROOT, '.claude', 'worktrees');
+  SOURCE_ROOT = findMainCheckoutRoot(import.meta.dir);
+  WORKTREES_ROOT = path.join(SOURCE_ROOT, '.claude', 'worktrees');
 
-	const raw = await readStdin();
-	let payload: Record<string, unknown> = {};
+  const raw = await readStdin();
+  let payload: Record<string, unknown> = {};
 
-	if (raw.trim()) {
-		try {
-			payload = JSON.parse(raw);
-		} catch {
-			process.exit(0);
-		}
-	}
+  if (raw.trim()) {
+    try {
+      payload = JSON.parse(raw);
+    } catch {
+      process.exit(0);
+    }
+  }
 
-	const toolName = typeof payload['tool_name'] === 'string' ? payload['tool_name'] : '';
-	if (toolName !== 'Edit' && toolName !== 'Write') process.exit(0);
+  const toolName =
+    typeof payload['tool_name'] === 'string' ? payload['tool_name'] : '';
+  if (toolName !== 'Edit' && toolName !== 'Write') process.exit(0);
 
-	const toolInput = payload['tool_input'];
-	if (!toolInput || typeof toolInput !== 'object' || Array.isArray(toolInput)) process.exit(0);
+  const toolInput = payload['tool_input'];
+  if (!toolInput || typeof toolInput !== 'object' || Array.isArray(toolInput))
+    process.exit(0);
 
-	const filePath = (toolInput as Record<string, unknown>)['file_path'];
-	if (typeof filePath !== 'string') process.exit(0);
+  const filePath = (toolInput as Record<string, unknown>)['file_path'];
+  if (typeof filePath !== 'string') process.exit(0);
 
-	const resolvedFile = path.resolve(filePath);
+  const resolvedFile = path.resolve(filePath);
 
-	// Allow if already in a worktree, outside the main checkout, or
-	// gitignored -- local/private files (app/.env.local,
-	// settings.local.json, scratch files) stay editable in main.
-	if (!isTrackedInMainCheckout(resolvedFile, SOURCE_ROOT, WORKTREES_ROOT)) process.exit(0);
+  // Allow if already in a worktree, outside the main checkout, or
+  // gitignored -- local/private files (app/.env.local,
+  // settings.local.json, scratch files) stay editable in main.
+  if (!isTrackedInMainCheckout(resolvedFile, SOURCE_ROOT, WORKTREES_ROOT))
+    process.exit(0);
 
-	process.stdout.write(
-		JSON.stringify({
-			decision: 'block',
-			reason:
-				'Tracked files cannot be edited in the main checkout.\n' +
-				'Use EnterWorktree to create a worktree first, then retry.\n\n' +
-				'Branch format: <type>/<issue>-<description>\n' +
-				'Example: fix/510-labeled-field-inline-row\n\n' +
-				'See docs/agents/worktree-flow.md.'
-		})
-	);
-	process.exit(2);
+  process.stdout.write(
+    JSON.stringify({
+      decision: 'block',
+      reason:
+        'Tracked files cannot be edited in the main checkout.\n' +
+        'Use EnterWorktree to create a worktree first, then retry.\n\n' +
+        'Branch format: <type>/<issue>-<description>\n' +
+        'Example: fix/510-labeled-field-inline-row\n\n' +
+        'See docs/agents/worktree-flow.md.',
+    })
+  );
+  process.exit(2);
 }
 
 // Fail CLOSED (#569). Only exit code 2 blocks; every other non-zero code
 // is a non-blocking error and the edit proceeds. A gate that cannot run
 // has not decided the edit is safe, so it refuses rather than permits.
 main().catch((error: unknown) => {
-	process.stdout.write(
-		JSON.stringify({
-			decision: 'block',
-			reason:
-				'The worktree edit gate could not run, so it cannot say this edit is safe: ' +
-				`${error instanceof Error ? error.message : String(error)}\n` +
-				'Fix the gate, or edit inside a worktree via EnterWorktree.'
-		})
-	);
-	process.exit(2);
+  process.stdout.write(
+    JSON.stringify({
+      decision: 'block',
+      reason:
+        'The worktree edit gate could not run, so it cannot say this edit is safe: ' +
+        `${error instanceof Error ? error.message : String(error)}\n` +
+        'Fix the gate, or edit inside a worktree via EnterWorktree.',
+    })
+  );
+  process.exit(2);
 });

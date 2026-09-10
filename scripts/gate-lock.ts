@@ -75,15 +75,17 @@ const LOCK_DIR_ENV_VAR = 'GATE_LOCK_DIR';
 // the wrapped command, so a spec can land a signal inside it on purpose
 // rather than by luck (#1164). Zero everywhere else, including CI. Not a
 // user-facing knob.
-const PRE_SPAWN_DELAY_MS = Number(process.env.GATE_LOCK_PRE_SPAWN_DELAY_MS) || 0;
+const PRE_SPAWN_DELAY_MS =
+  Number(process.env.GATE_LOCK_PRE_SPAWN_DELAY_MS) || 0;
 
 export interface LockOwner {
-	pid: number;
-	label: string;
-	startedAtMs: number;
+  pid: number;
+  label: string;
+  startedAtMs: number;
 }
 
-export type LockVerdict = { action: 'wait' } | { action: 'reclaim'; reason: string };
+export type LockVerdict =
+  { action: 'wait' } | { action: 'reclaim'; reason: string };
 
 // The one place that decides whether another session's lock may be taken
 // away. `sinceHeartbeatMs` comes from the lock directory's own mtime,
@@ -94,21 +96,21 @@ export type LockVerdict = { action: 'wait' } | { action: 'reclaim'; reason: stri
 // that reason; it falls through to the heartbeat gate, which a freshly
 // created lock cannot fail.
 export function inspectLock(
-	sinceHeartbeatMs: number,
-	owner: LockOwner | null,
-	isAlive: (pid: number) => boolean,
-	staleMs: number = STALE_LOCK_MS
+  sinceHeartbeatMs: number,
+  owner: LockOwner | null,
+  isAlive: (pid: number) => boolean,
+  staleMs: number = STALE_LOCK_MS
 ): LockVerdict {
-	if (owner && !isAlive(owner.pid)) {
-		return { action: 'reclaim', reason: `owner process ${owner.pid} is gone` };
-	}
-	if (sinceHeartbeatMs > staleMs) {
-		return {
-			action: 'reclaim',
-			reason: `no heartbeat for ${Math.round(sinceHeartbeatMs / 1000)}s, past the ${Math.round(staleMs / 1000)}s staleness gate`
-		};
-	}
-	return { action: 'wait' };
+  if (owner && !isAlive(owner.pid)) {
+    return { action: 'reclaim', reason: `owner process ${owner.pid} is gone` };
+  }
+  if (sinceHeartbeatMs > staleMs) {
+    return {
+      action: 'reclaim',
+      reason: `no heartbeat for ${Math.round(sinceHeartbeatMs / 1000)}s, past the ${Math.round(staleMs / 1000)}s staleness gate`,
+    };
+  }
+  return { action: 'wait' };
 }
 
 // EPERM means the pid exists and belongs to someone else -- alive. Only
@@ -116,13 +118,13 @@ export function inspectLock(
 // file) is treated as alive, because the age gate will clear it anyway
 // and "assume alive" is the side that never runs two gates at once.
 export function isProcessAlive(pid: number): boolean {
-	if (!Number.isInteger(pid) || pid <= 0) return true;
-	try {
-		process.kill(pid, 0);
-		return true;
-	} catch (error) {
-		return (error as NodeJS.ErrnoException).code !== 'ESRCH';
-	}
+  if (!Number.isInteger(pid) || pid <= 0) return true;
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    return (error as NodeJS.ErrnoException).code !== 'ESRCH';
+  }
 }
 
 // Every worktree of this checkout has to contend for the SAME lock, so
@@ -131,32 +133,40 @@ export function isProcessAlive(pid: number): boolean {
 // worktree. A per-worktree `.git` file would give each session its own
 // private lock and coordinate nothing.
 const git = (...args: string[]): string =>
-	execFileSync('git', args, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
+  execFileSync('git', args, {
+    encoding: 'utf8',
+    stdio: ['ignore', 'pipe', 'pipe'],
+  }).trim();
 
 export function resolveLockDir(): string {
-	const override = process.env[LOCK_DIR_ENV_VAR];
-	if (override) return override;
-	return path.join(path.resolve(git('rev-parse', '--git-common-dir')), LOCK_DIR_NAME);
+  const override = process.env[LOCK_DIR_ENV_VAR];
+  if (override) return override;
+  return path.join(
+    path.resolve(git('rev-parse', '--git-common-dir')),
+    LOCK_DIR_NAME
+  );
 }
 
 function readOwner(lockDir: string): LockOwner | null {
-	try {
-		const parsed = JSON.parse(fs.readFileSync(path.join(lockDir, OWNER_FILE_NAME), 'utf8')) as LockOwner;
-		return typeof parsed?.pid === 'number' ? parsed : null;
-	} catch {
-		return null; // not written yet, or unreadable -- the age gate decides
-	}
+  try {
+    const parsed = JSON.parse(
+      fs.readFileSync(path.join(lockDir, OWNER_FILE_NAME), 'utf8')
+    ) as LockOwner;
+    return typeof parsed?.pid === 'number' ? parsed : null;
+  } catch {
+    return null; // not written yet, or unreadable -- the age gate decides
+  }
 }
 
 // What a waiting session calls the holder. The worktree directory name
 // is the one label a person can act on -- it is what `git worktree list`
 // and the terminal title both show.
 function describeSelf(): string {
-	try {
-		return path.basename(git('rev-parse', '--show-toplevel'));
-	} catch {
-		return path.basename(process.cwd());
-	}
+  try {
+    return path.basename(git('rev-parse', '--show-toplevel'));
+  } catch {
+    return path.basename(process.cwd());
+  }
 }
 
 // `mkdir` without `recursive` is the atomic test-and-set: exactly one
@@ -164,20 +174,27 @@ function describeSelf(): string {
 // no `flock` binary, which is why this is a bun script rather than a
 // shell one-liner.
 function tryAcquire(lockDir: string): boolean {
-	try {
-		fs.mkdirSync(lockDir);
-	} catch (error) {
-		if ((error as NodeJS.ErrnoException).code === 'EEXIST') return false;
-		throw error;
-	}
-	const owner: LockOwner = { pid: process.pid, label: describeSelf(), startedAtMs: Date.now() };
-	try {
-		fs.writeFileSync(path.join(lockDir, OWNER_FILE_NAME), `${JSON.stringify(owner)}\n`);
-	} catch {
-		// Held either way -- the owner file is for the waiter's message
-		// and its liveness check, not for the mutual exclusion itself.
-	}
-	return true;
+  try {
+    fs.mkdirSync(lockDir);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'EEXIST') return false;
+    throw error;
+  }
+  const owner: LockOwner = {
+    pid: process.pid,
+    label: describeSelf(),
+    startedAtMs: Date.now(),
+  };
+  try {
+    fs.writeFileSync(
+      path.join(lockDir, OWNER_FILE_NAME),
+      `${JSON.stringify(owner)}\n`
+    );
+  } catch {
+    // Held either way -- the owner file is for the waiter's message
+    // and its liveness check, not for the mutual exclusion itself.
+  }
+  return true;
 }
 
 // Keeps the lock's mtime moving while the wrapped command runs, so the
@@ -186,16 +203,16 @@ function tryAcquire(lockDir: string): boolean {
 // write is a lock someone will reclaim in five minutes, not a reason to
 // fail a commit.
 function startHeartbeat(lockDir: string): () => void {
-	const timer = setInterval(() => {
-		try {
-			const now = new Date();
-			fs.utimesSync(lockDir, now, now);
-		} catch {
-			// see above
-		}
-	}, HEARTBEAT_MS);
-	timer.unref?.();
-	return () => clearInterval(timer);
+  const timer = setInterval(() => {
+    try {
+      const now = new Date();
+      fs.utimesSync(lockDir, now, now);
+    } catch {
+      // see above
+    }
+  }, HEARTBEAT_MS);
+  timer.unref?.();
+  return () => clearInterval(timer);
 }
 
 // Reclaiming by `rm -rf` on the lock directory is a race: two waiters
@@ -204,9 +221,9 @@ function startHeartbeat(lockDir: string): () => void {
 // two gates running. Renaming is atomic and single-winner -- the loser
 // gets ENOENT and simply goes round the loop again.
 function reclaim(lockDir: string): void {
-	const parked = `${lockDir}.stale-${Date.now()}-${process.pid}`;
-	fs.renameSync(lockDir, parked);
-	fs.rmSync(parked, { recursive: true, force: true });
+  const parked = `${lockDir}.stale-${Date.now()}-${process.pid}`;
+  fs.renameSync(lockDir, parked);
+  fs.rmSync(parked, { recursive: true, force: true });
 }
 
 // Removes the lock only on positive proof that it is still ours: an
@@ -223,149 +240,163 @@ function reclaim(lockDir: string): void {
 // hand a successor's directory the inode the removed one just gave up,
 // and APFS does.
 function release(lockDir: string): void {
-	try {
-		if (readOwner(lockDir)?.pid !== process.pid) return;
-		fs.rmSync(lockDir, { recursive: true, force: true });
-	} catch {
-		// A lock we cannot remove is cleared by the next session's
-		// staleness gate. Never let cleanup fail a commit that passed.
-	}
+  try {
+    if (readOwner(lockDir)?.pid !== process.pid) return;
+    fs.rmSync(lockDir, { recursive: true, force: true });
+  } catch {
+    // A lock we cannot remove is cleared by the next session's
+    // staleness gate. Never let cleanup fail a commit that passed.
+  }
 }
 
-const sleep = (ms: number): Promise<void> => new Promise(resolve => setTimeout(resolve, ms));
+const sleep = (ms: number): Promise<void> =>
+  new Promise((resolve) => setTimeout(resolve, ms));
 
 // Blocks until the lock is ours. Throws only on something genuinely
 // unexpected, which main() turns into an unlocked run.
-async function acquire(lockDir: string, notify: (message: string) => void): Promise<void> {
-	let announcedAtMs = 0;
-	for (;;) {
-		if (tryAcquire(lockDir)) return;
+async function acquire(
+  lockDir: string,
+  notify: (message: string) => void
+): Promise<void> {
+  let announcedAtMs = 0;
+  for (;;) {
+    if (tryAcquire(lockDir)) return;
 
-		let sinceHeartbeatMs: number;
-		try {
-			sinceHeartbeatMs = Date.now() - fs.statSync(lockDir).mtimeMs;
-		} catch {
-			// Vanished between the mkdir and the stat. Retry, but never
-			// in a tight spin -- this runs on the machine the lock exists
-			// to relieve.
-			await sleep(POLL_INTERVAL_MS);
-			continue;
-		}
-		const owner = readOwner(lockDir);
-		const verdict = inspectLock(sinceHeartbeatMs, owner, isProcessAlive);
-		if (verdict.action === 'reclaim') {
-			try {
-				reclaim(lockDir);
-				notify(`gate-lock: reclaimed a stale lock (${verdict.reason})`);
-				continue; // straight back to mkdir: the lock is free now
-			} catch {
-				// Another waiter reclaimed it first.
-			}
-			await sleep(POLL_INTERVAL_MS);
-			continue;
-		}
+    let sinceHeartbeatMs: number;
+    try {
+      sinceHeartbeatMs = Date.now() - fs.statSync(lockDir).mtimeMs;
+    } catch {
+      // Vanished between the mkdir and the stat. Retry, but never
+      // in a tight spin -- this runs on the machine the lock exists
+      // to relieve.
+      await sleep(POLL_INTERVAL_MS);
+      continue;
+    }
+    const owner = readOwner(lockDir);
+    const verdict = inspectLock(sinceHeartbeatMs, owner, isProcessAlive);
+    if (verdict.action === 'reclaim') {
+      try {
+        reclaim(lockDir);
+        notify(`gate-lock: reclaimed a stale lock (${verdict.reason})`);
+        continue; // straight back to mkdir: the lock is free now
+      } catch {
+        // Another waiter reclaimed it first.
+      }
+      await sleep(POLL_INTERVAL_MS);
+      continue;
+    }
 
-		const now = Date.now();
-		if (now - announcedAtMs >= WAIT_NOTICE_INTERVAL_MS) {
-			// How long the holder has been *running*, which is what a
-			// person waiting wants to know -- the mtime now answers "when
-			// was the last heartbeat", so it cannot serve here.
-			const held = Math.round((owner ? now - owner.startedAtMs : sinceHeartbeatMs) / 1000);
-			const who = owner ? `${owner.label} (pid ${owner.pid})` : 'another session';
-			notify(`gate-lock: waiting on ${who}'s test run, running for ${held}s. Nothing is hung. Set ${SKIP_ENV_VAR}=1 to skip the lock.`);
-			announcedAtMs = now;
-		}
-		await sleep(POLL_INTERVAL_MS);
-	}
+    const now = Date.now();
+    if (now - announcedAtMs >= WAIT_NOTICE_INTERVAL_MS) {
+      // How long the holder has been *running*, which is what a
+      // person waiting wants to know -- the mtime now answers "when
+      // was the last heartbeat", so it cannot serve here.
+      const held = Math.round(
+        (owner ? now - owner.startedAtMs : sinceHeartbeatMs) / 1000
+      );
+      const who = owner
+        ? `${owner.label} (pid ${owner.pid})`
+        : 'another session';
+      notify(
+        `gate-lock: waiting on ${who}'s test run, running for ${held}s. Nothing is hung. Set ${SKIP_ENV_VAR}=1 to skip the lock.`
+      );
+      announcedAtMs = now;
+    }
+    await sleep(POLL_INTERVAL_MS);
+  }
 }
 
 function runCommand(argv: string[], onSpawn?: () => void): Promise<number> {
-	return new Promise((resolve, reject) => {
-		const child = spawn(argv[0], argv.slice(1), { stdio: 'inherit' });
-		// Tells the caller a child now exists, so a handler armed before
-		// this point can stand aside for the forwarders below (#1164).
-		onSpawn?.();
-		// Forward the interrupt rather than dying under it, so the
-		// `finally` in main() still gets to release the lock. Without
-		// this, a Ctrl-C during the gate leaves a held lock behind for
-		// the age gate to clear five minutes later.
-		const forward = (signal: NodeJS.Signals) => () => child.kill(signal);
-		const onInt = forward('SIGINT');
-		const onTerm = forward('SIGTERM');
-		process.on('SIGINT', onInt);
-		process.on('SIGTERM', onTerm);
-		child.on('error', reject);
-		child.on('close', (code, signal) => {
-			process.off('SIGINT', onInt);
-			process.off('SIGTERM', onTerm);
-			resolve(signal ? 1 : (code ?? 1));
-		});
-	});
+  return new Promise((resolve, reject) => {
+    const child = spawn(argv[0], argv.slice(1), { stdio: 'inherit' });
+    // Tells the caller a child now exists, so a handler armed before
+    // this point can stand aside for the forwarders below (#1164).
+    onSpawn?.();
+    // Forward the interrupt rather than dying under it, so the
+    // `finally` in main() still gets to release the lock. Without
+    // this, a Ctrl-C during the gate leaves a held lock behind for
+    // the age gate to clear five minutes later.
+    const forward = (signal: NodeJS.Signals) => () => child.kill(signal);
+    const onInt = forward('SIGINT');
+    const onTerm = forward('SIGTERM');
+    process.on('SIGINT', onInt);
+    process.on('SIGTERM', onTerm);
+    child.on('error', reject);
+    child.on('close', (code, signal) => {
+      process.off('SIGINT', onInt);
+      process.off('SIGTERM', onTerm);
+      resolve(signal ? 1 : (code ?? 1));
+    });
+  });
 }
 
 async function main(argv: string[]): Promise<number> {
-	const command = argv[0] === '--' ? argv.slice(1) : argv;
-	if (command.length === 0) {
-		console.error(`gate-lock: usage: bun scripts/gate-lock.ts -- <command> [args...]`);
-		return 2;
-	}
-	if (process.env[SKIP_ENV_VAR]) return runCommand(command);
+  const command = argv[0] === '--' ? argv.slice(1) : argv;
+  if (command.length === 0) {
+    console.error(
+      `gate-lock: usage: bun scripts/gate-lock.ts -- <command> [args...]`
+    );
+    return 2;
+  }
+  if (process.env[SKIP_ENV_VAR]) return runCommand(command);
 
-	let lockDir: string;
-	try {
-		lockDir = resolveLockDir();
-		fs.mkdirSync(path.dirname(lockDir), { recursive: true });
-		await acquire(lockDir, message => console.error(message));
-	} catch (error) {
-		// No git dir, an unwritable parent, a lock directory we cannot
-		// reason about -- none of it may stop a commit. Say so and run.
-		console.error(`gate-lock: running without the lock (${(error as Error).message})`);
-		return runCommand(command);
-	}
+  let lockDir: string;
+  try {
+    lockDir = resolveLockDir();
+    fs.mkdirSync(path.dirname(lockDir), { recursive: true });
+    await acquire(lockDir, (message) => console.error(message));
+  } catch (error) {
+    // No git dir, an unwritable parent, a lock directory we cannot
+    // reason about -- none of it may stop a commit. Say so and run.
+    console.error(
+      `gate-lock: running without the lock (${(error as Error).message})`
+    );
+    return runCommand(command);
+  }
 
-	const stopHeartbeat = startHeartbeat(lockDir);
+  const stopHeartbeat = startHeartbeat(lockDir);
 
-	/*
-	 * The lock is held from the line above, and the signal forwarders
-	 * `runCommand` installs do not exist until it has spawned. A SIGINT or
-	 * SIGTERM landing in between takes its DEFAULT action -- the process
-	 * dies where it stands, the `finally` below never runs, and the lock
-	 * stands until the age gate clears it five minutes later. That is the
-	 * exact failure the forwarders exist to prevent, one step earlier than
-	 * they reach (#1164), and it is not theoretical: it is what made
-	 * `releases the lock when it is interrupted` fail about one run in
-	 * three, on trunk as well as on a PR.
-	 *
-	 * So the release is armed the moment the lock is held, and stands
-	 * aside once a child exists -- `runCommand`'s own forwarder kills the
-	 * child, the child's `close` resolves, and the `finally` releases the
-	 * normal way. Registering a listener at all is what suppresses the
-	 * default action, so both windows are now covered by a handler rather
-	 * than only the later one.
-	 */
-	let hasChild = false;
-	const releaseOnSignal = () => {
-		if (hasChild) return;
-		stopHeartbeat();
-		release(lockDir);
-		process.exit(1);
-	};
-	process.on('SIGINT', releaseOnSignal);
-	process.on('SIGTERM', releaseOnSignal);
+  /*
+   * The lock is held from the line above, and the signal forwarders
+   * `runCommand` installs do not exist until it has spawned. A SIGINT or
+   * SIGTERM landing in between takes its DEFAULT action -- the process
+   * dies where it stands, the `finally` below never runs, and the lock
+   * stands until the age gate clears it five minutes later. That is the
+   * exact failure the forwarders exist to prevent, one step earlier than
+   * they reach (#1164), and it is not theoretical: it is what made
+   * `releases the lock when it is interrupted` fail about one run in
+   * three, on trunk as well as on a PR.
+   *
+   * So the release is armed the moment the lock is held, and stands
+   * aside once a child exists -- `runCommand`'s own forwarder kills the
+   * child, the child's `close` resolves, and the `finally` releases the
+   * normal way. Registering a listener at all is what suppresses the
+   * default action, so both windows are now covered by a handler rather
+   * than only the later one.
+   */
+  let hasChild = false;
+  const releaseOnSignal = () => {
+    if (hasChild) return;
+    stopHeartbeat();
+    release(lockDir);
+    process.exit(1);
+  };
+  process.on('SIGINT', releaseOnSignal);
+  process.on('SIGTERM', releaseOnSignal);
 
-	try {
-		if (PRE_SPAWN_DELAY_MS > 0) {
-			await sleep(PRE_SPAWN_DELAY_MS);
-		}
-		return await runCommand(command, () => (hasChild = true));
-	} finally {
-		process.off('SIGINT', releaseOnSignal);
-		process.off('SIGTERM', releaseOnSignal);
-		stopHeartbeat();
-		release(lockDir);
-	}
+  try {
+    if (PRE_SPAWN_DELAY_MS > 0) {
+      await sleep(PRE_SPAWN_DELAY_MS);
+    }
+    return await runCommand(command, () => (hasChild = true));
+  } finally {
+    process.off('SIGINT', releaseOnSignal);
+    process.off('SIGTERM', releaseOnSignal);
+    stopHeartbeat();
+    release(lockDir);
+  }
 }
 
 if (import.meta.main) {
-	process.exitCode = await main(process.argv.slice(2));
+  process.exitCode = await main(process.argv.slice(2));
 }

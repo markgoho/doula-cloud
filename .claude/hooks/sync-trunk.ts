@@ -20,15 +20,18 @@
 import { execFileSync } from 'node:child_process';
 
 function runGit(sourceRoot: string, args: string[]): string {
-	return execFileSync('git', ['-C', sourceRoot, ...args], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
+  return execFileSync('git', ['-C', sourceRoot, ...args], {
+    encoding: 'utf8',
+    stdio: ['ignore', 'pipe', 'pipe'],
+  }).trim();
 }
 
 function isDirty(sourceRoot: string): boolean {
-	try {
-		return runGit(sourceRoot, ['status', '--porcelain']).length > 0;
-	} catch {
-		return true; // fail closed -- treat "can't tell" as dirty
-	}
+  try {
+    return runGit(sourceRoot, ['status', '--porcelain']).length > 0;
+  } catch {
+    return true; // fail closed -- treat "can't tell" as dirty
+  }
 }
 
 /*
@@ -41,29 +44,36 @@ function isDirty(sourceRoot: string): boolean {
  * since both callers run unattended.
  */
 export function syncTrunkToOrigin(sourceRoot: string): void {
-	try {
-		execFileSync('git', ['-C', sourceRoot, 'fetch', '--quiet', 'origin', 'trunk'], { stdio: ['ignore', 'pipe', 'pipe'] });
-	} catch {
-		return; // offline -- nothing to sync against
-	}
+  try {
+    execFileSync(
+      'git',
+      ['-C', sourceRoot, 'fetch', '--quiet', 'origin', 'trunk'],
+      { stdio: ['ignore', 'pipe', 'pipe'] }
+    );
+  } catch {
+    return; // offline -- nothing to sync against
+  }
 
-	let head: string;
-	try {
-		head = runGit(sourceRoot, ['symbolic-ref', '--short', 'HEAD']);
-	} catch {
-		return; // detached HEAD, or HEAD unreadable -- leave it alone
-	}
-	if (head !== 'trunk') return; // main checkout isn't on trunk right now
-	if (isDirty(sourceRoot)) return;
+  let head: string;
+  try {
+    head = runGit(sourceRoot, ['symbolic-ref', '--short', 'HEAD']);
+  } catch {
+    return; // detached HEAD, or HEAD unreadable -- leave it alone
+  }
+  if (head !== 'trunk') return; // main checkout isn't on trunk right now
+  if (isDirty(sourceRoot)) return;
 
-	const before = runGit(sourceRoot, ['rev-parse', 'trunk']);
-	try {
-		runGit(sourceRoot, ['merge', '--ff-only', 'origin/trunk']);
-	} catch {
-		// not a fast-forward -- local trunk has commits origin/trunk lacks,
-		// an unexpected state for this flow; leave it for a human to see
-		return;
-	}
-	const after = runGit(sourceRoot, ['rev-parse', 'trunk']);
-	if (after !== before) console.log(`main checkout: trunk ${before.slice(0, 7)} -> ${after.slice(0, 7)}`);
+  const before = runGit(sourceRoot, ['rev-parse', 'trunk']);
+  try {
+    runGit(sourceRoot, ['merge', '--ff-only', 'origin/trunk']);
+  } catch {
+    // not a fast-forward -- local trunk has commits origin/trunk lacks,
+    // an unexpected state for this flow; leave it for a human to see
+    return;
+  }
+  const after = runGit(sourceRoot, ['rev-parse', 'trunk']);
+  if (after !== before)
+    console.log(
+      `main checkout: trunk ${before.slice(0, 7)} -> ${after.slice(0, 7)}`
+    );
 }

@@ -25,25 +25,25 @@ const WORKTREES_ROOT = path.join(SOURCE_ROOT, '.claude', 'worktrees');
 const MAX_PORT_OFFSET = 9;
 
 function log(message: string): void {
-	process.stderr.write(`worktree-provision: ${message}\n`);
+  process.stderr.write(`worktree-provision: ${message}\n`);
 }
 
 function runGit(args: string[], cwd = SOURCE_ROOT): string {
-	return execFileSync('git', ['-C', cwd, ...args], {
-		encoding: 'utf8',
-		stdio: ['ignore', 'pipe', 'pipe']
-	}).trim();
+  return execFileSync('git', ['-C', cwd, ...args], {
+    encoding: 'utf8',
+    stdio: ['ignore', 'pipe', 'pipe'],
+  }).trim();
 }
 
 function ensureAppEnvLocal(worktreePath: string): string | null {
-	if (!fs.existsSync(SOURCE_APP_ENV_LOCAL)) {
-		return 'app/.env.local missing from main checkout -- see docs/environment.md (scripts/stripe-setup.sh)';
-	}
-	const target = path.join(worktreePath, 'app', '.env.local');
-	if (fs.existsSync(target)) return 'left existing app/.env.local';
-	fs.mkdirSync(path.dirname(target), { recursive: true });
-	fs.copyFileSync(SOURCE_APP_ENV_LOCAL, target);
-	return 'copied app/.env.local';
+  if (!fs.existsSync(SOURCE_APP_ENV_LOCAL)) {
+    return 'app/.env.local missing from main checkout -- see docs/environment.md (scripts/stripe-setup.sh)';
+  }
+  const target = path.join(worktreePath, 'app', '.env.local');
+  if (fs.existsSync(target)) return 'left existing app/.env.local';
+  fs.mkdirSync(path.dirname(target), { recursive: true });
+  fs.copyFileSync(SOURCE_APP_ENV_LOCAL, target);
+  return 'copied app/.env.local';
 }
 
 // A symlink pointing anywhere other than the canonical source path --
@@ -52,27 +52,28 @@ function ensureAppEnvLocal(worktreePath: string): string | null {
 // breaks Vitest/Vite realpath-based module resolution. Repoint it. Safe:
 // unlinking a symlink never touches the real node_modules it pointed at.
 function ensureSymlink(target: string, source: string): string {
-	if (!fs.existsSync(source)) return `left node_modules unlinked (no ${source})`;
+  if (!fs.existsSync(source))
+    return `left node_modules unlinked (no ${source})`;
 
-	if (!fs.existsSync(target)) {
-		fs.symlinkSync(source, target, 'junction');
-		return 'symlinked node_modules';
-	}
+  if (!fs.existsSync(target)) {
+    fs.symlinkSync(source, target, 'junction');
+    return 'symlinked node_modules';
+  }
 
-	try {
-		const stat = fs.lstatSync(target);
-		if (stat.isSymbolicLink()) {
-			const current = fs.readlinkSync(target);
-			if (current === source) return 'left existing node_modules symlink';
-			fs.unlinkSync(target);
-			fs.symlinkSync(source, target, 'junction');
-			return `repaired node_modules symlink (was ${current})`;
-		}
-	} catch {
-		// fall through
-	}
+  try {
+    const stat = fs.lstatSync(target);
+    if (stat.isSymbolicLink()) {
+      const current = fs.readlinkSync(target);
+      if (current === source) return 'left existing node_modules symlink';
+      fs.unlinkSync(target);
+      fs.symlinkSync(source, target, 'junction');
+      return `repaired node_modules symlink (was ${current})`;
+    }
+  } catch {
+    // fall through
+  }
 
-	return 'left existing node_modules (real directory)';
+  return 'left existing node_modules (real directory)';
 }
 
 // If the worktree's branch touches a dependency manifest relative to
@@ -81,31 +82,47 @@ function ensureSymlink(target: string, source: string): string {
 // provision (not just create), so a branch that adds a dependency later
 // gets re-provisioned on its next `git worktree add` / EnterWorktree.
 function dependencyManifestsChanged(worktreePath: string): boolean {
-	try {
-		const diff = runGit(
-			['diff', '--name-only', 'trunk...HEAD', '--', 'package.json', 'bun.lock', 'app/package.json', 'app/bun.lock'],
-			worktreePath
-		);
-		return diff.trim().length > 0;
-	} catch {
-		return false;
-	}
+  try {
+    const diff = runGit(
+      [
+        'diff',
+        '--name-only',
+        'trunk...HEAD',
+        '--',
+        'package.json',
+        'bun.lock',
+        'app/package.json',
+        'app/bun.lock',
+      ],
+      worktreePath
+    );
+    return diff.trim().length > 0;
+  } catch {
+    return false;
+  }
 }
 
-function installReal(worktreePath: string, subdir: string, reason: string, messages: string[]): void {
-	const target = path.join(worktreePath, subdir);
-	try {
-		if (fs.lstatSync(target).isSymbolicLink()) fs.unlinkSync(target);
-	} catch {
-		// nothing to unlink
-	}
-	// Never run bun install through a live symlink -- it would mutate
-	// main's node_modules for every worktree sharing it at once.
-	execFileSync('bun', ['install'], {
-		cwd: subdir === 'app' ? path.join(worktreePath, 'app') : worktreePath,
-		stdio: 'inherit'
-	});
-	messages.push(`${subdir === 'app' ? 'app/' : ''}node_modules: real bun install (${reason})`);
+function installReal(
+  worktreePath: string,
+  subdir: string,
+  reason: string,
+  messages: string[]
+): void {
+  const target = path.join(worktreePath, subdir);
+  try {
+    if (fs.lstatSync(target).isSymbolicLink()) fs.unlinkSync(target);
+  } catch {
+    // nothing to unlink
+  }
+  // Never run bun install through a live symlink -- it would mutate
+  // main's node_modules for every worktree sharing it at once.
+  execFileSync('bun', ['install'], {
+    cwd: subdir === 'app' ? path.join(worktreePath, 'app') : worktreePath,
+    stdio: 'inherit',
+  });
+  messages.push(
+    `${subdir === 'app' ? 'app/' : ''}node_modules: real bun install (${reason})`
+  );
 }
 
 // app/node_modules is ALWAYS a real install, never symlinked -- unlike
@@ -122,34 +139,48 @@ function installReal(worktreePath: string, subdir: string, reason: string, messa
 // svelte-kit sync mutates node_modules/$app/* in place, so two worktrees
 // sharing a symlinked app/node_modules would clobber each other's
 // generated state, not just serve a stale read.
-function ensureAppNodeModulesReal(worktreePath: string, changed: boolean, messages: string[]): void {
-	const target = path.join(worktreePath, 'app', 'node_modules');
-	let isSymlink = false;
-	try {
-		isSymlink = fs.lstatSync(target).isSymbolicLink();
-	} catch {
-		// doesn't exist yet -- installReal below creates it
-	}
-	if (fs.existsSync(target) && !isSymlink && !changed) {
-		messages.push('left existing app/node_modules (real install)');
-		return;
-	}
-	installReal(worktreePath, 'app', changed ? 'dependency manifest changed' : 'always real, see comment', messages);
+function ensureAppNodeModulesReal(
+  worktreePath: string,
+  changed: boolean,
+  messages: string[]
+): void {
+  const target = path.join(worktreePath, 'app', 'node_modules');
+  let isSymlink = false;
+  try {
+    isSymlink = fs.lstatSync(target).isSymbolicLink();
+  } catch {
+    // doesn't exist yet -- installReal below creates it
+  }
+  if (fs.existsSync(target) && !isSymlink && !changed) {
+    messages.push('left existing app/node_modules (real install)');
+    return;
+  }
+  installReal(
+    worktreePath,
+    'app',
+    changed ? 'dependency manifest changed' : 'always real, see comment',
+    messages
+  );
 }
 
 function ensureNodeModules(worktreePath: string, messages: string[]): void {
-	const changed = dependencyManifestsChanged(worktreePath);
+  const changed = dependencyManifestsChanged(worktreePath);
 
-	// Root: nothing generates per-checkout state into it, so a symlink is
-	// safe and saves the disk -- unless this branch's own dependencies
-	// changed, in which case it needs its own real install.
-	if (changed) {
-		installReal(worktreePath, '.', 'dependency manifest changed', messages);
-	} else {
-		messages.push(ensureSymlink(path.join(worktreePath, 'node_modules'), SOURCE_NODE_MODULES));
-	}
+  // Root: nothing generates per-checkout state into it, so a symlink is
+  // safe and saves the disk -- unless this branch's own dependencies
+  // changed, in which case it needs its own real install.
+  if (changed) {
+    installReal(worktreePath, '.', 'dependency manifest changed', messages);
+  } else {
+    messages.push(
+      ensureSymlink(
+        path.join(worktreePath, 'node_modules'),
+        SOURCE_NODE_MODULES
+      )
+    );
+  }
 
-	ensureAppNodeModulesReal(worktreePath, changed, messages);
+  ensureAppNodeModulesReal(worktreePath, changed, messages);
 }
 
 // Every offset a worktree already holds, live or not: provisioning must
@@ -158,83 +189,90 @@ function ensureNodeModules(worktreePath: string, messages: string[]): void {
 // apply a quiet test, because it is deciding something else -- whether a
 // running container still has a session behind it.)
 function livePortOffsets(): Set<number> {
-	return new Set(readWorktreeOffsets(WORKTREES_ROOT).map(worktree => worktree.offset));
+  return new Set(
+    readWorktreeOffsets(WORKTREES_ROOT).map((worktree) => worktree.offset)
+  );
 }
 
 // Every port an offset would bind. BASE_PORTS comes from app/e2e/ports.ts,
 // the single source of truth for the local stack's ports -- a second copy
 // of the list here is exactly how the two drift apart.
 export function portsForOffset(offset: number): number[] {
-	return BASE_PORTS.map(base => base + offset * PORT_STEP);
+  return BASE_PORTS.map((base) => base + offset * PORT_STEP);
 }
 
 // True when nothing on this machine is already listening on `port`.
 // Binding it is the only honest test: lsof may not be installed, and a
 // port can be held by a process this user cannot see.
 function isPortFree(port: number): Promise<boolean> {
-	return new Promise(resolve => {
-		const server = net.createServer();
-		server.once('error', () => resolve(false));
-		server.once('listening', () => server.close(() => resolve(true)));
-		server.listen(port, '127.0.0.1');
-	});
+  return new Promise((resolve) => {
+    const server = net.createServer();
+    server.once('error', () => resolve(false));
+    server.once('listening', () => server.close(() => resolve(true)));
+    server.listen(port, '127.0.0.1');
+  });
 }
 
 export interface OffsetChoice {
-	offset: number;
-	// One `offset N (port P in use)` note per offset passed over, so the
-	// reason an offset was skipped is visible where it happened rather
-	// than surfacing later as an unexplained bind failure in startStack.
-	skipped: string[];
+  offset: number;
+  // One `offset N (port P in use)` note per offset passed over, so the
+  // reason an offset was skipped is visible where it happened rather
+  // than surfacing later as an unexplained bind failure in startStack.
+  skipped: string[];
 }
 
 // Pure but for the injected probe, so the decision is unit-testable
 // without binding real ports. Claimed offsets belong to another live
 // worktree; blocked ones are free to claim but unusable right now.
 export async function chooseOffset(
-	claimed: Set<number>,
-	probe: (port: number) => Promise<boolean>
+  claimed: Set<number>,
+  probe: (port: number) => Promise<boolean>
 ): Promise<OffsetChoice> {
-	const skipped: string[] = [];
-	for (let offset = 1; offset <= MAX_PORT_OFFSET; offset++) {
-		if (claimed.has(offset)) continue;
-		let busy: number | null = null;
-		for (const port of portsForOffset(offset)) {
-			if (!(await probe(port))) {
-				busy = port;
-				break;
-			}
-		}
-		if (busy === null) return { offset, skipped };
-		skipped.push(`offset ${offset} (port ${busy} in use)`);
-	}
-	throw new Error(
-		`no usable port offset: ${claimed.size} of ${MAX_PORT_OFFSET} claimed by live worktrees` +
-			(skipped.length ? `, and ${skipped.join(', ')}` : '') +
-			`. Prune stale worktrees (worktree-prune.ts --dry-run), or free the ports above.`
-	);
+  const skipped: string[] = [];
+  for (let offset = 1; offset <= MAX_PORT_OFFSET; offset++) {
+    if (claimed.has(offset)) continue;
+    let busy: number | null = null;
+    for (const port of portsForOffset(offset)) {
+      if (!(await probe(port))) {
+        busy = port;
+        break;
+      }
+    }
+    if (busy === null) return { offset, skipped };
+    skipped.push(`offset ${offset} (port ${busy} in use)`);
+  }
+  throw new Error(
+    `no usable port offset: ${claimed.size} of ${MAX_PORT_OFFSET} claimed by live worktrees` +
+      (skipped.length ? `, and ${skipped.join(', ')}` : '') +
+      `. Prune stale worktrees (worktree-prune.ts --dry-run), or free the ports above.`
+  );
 }
 
-async function ensurePortOffset(worktreePath: string, messages: string[]): Promise<void> {
-	const offsetFile = path.join(worktreePath, '.port-offset');
-	if (fs.existsSync(offsetFile)) {
-		messages.push(`left existing port offset (${fs.readFileSync(offsetFile, 'utf8').trim()})`);
-		return;
-	}
+async function ensurePortOffset(
+  worktreePath: string,
+  messages: string[]
+): Promise<void> {
+  const offsetFile = path.join(worktreePath, '.port-offset');
+  if (fs.existsSync(offsetFile)) {
+    messages.push(
+      `left existing port offset (${fs.readFileSync(offsetFile, 'utf8').trim()})`
+    );
+    return;
+  }
 
-	const { offset, skipped } = await chooseOffset(livePortOffsets(), isPortFree);
-	fs.writeFileSync(offsetFile, `${offset}\n`);
-	if (skipped.length) messages.push(`skipped ${skipped.join(', ')}`);
-	messages.push(`assigned port offset ${offset}`);
+  const { offset, skipped } = await chooseOffset(livePortOffsets(), isPortFree);
+  fs.writeFileSync(offsetFile, `${offset}\n`);
+  if (skipped.length) messages.push(`skipped ${skipped.join(', ')}`);
+  messages.push(`assigned port offset ${offset}`);
 }
 
 export async function provisionWorktree(worktreePath: string): Promise<void> {
-	const messages: string[] = [];
-	const envMessage = ensureAppEnvLocal(worktreePath);
-	if (envMessage) messages.push(envMessage);
-	ensureNodeModules(worktreePath, messages);
-	await ensurePortOffset(worktreePath, messages);
-	log(messages.join('; '));
+  const messages: string[] = [];
+  const envMessage = ensureAppEnvLocal(worktreePath);
+  if (envMessage) messages.push(envMessage);
+  ensureNodeModules(worktreePath, messages);
+  await ensurePortOffset(worktreePath, messages);
+  log(messages.join('; '));
 }
 
 export const WORKTREES_ROOT_PATH = WORKTREES_ROOT;
@@ -247,73 +285,81 @@ export const SOURCE_ROOT_PATH = SOURCE_ROOT;
 // (the WorktreeCreate hook) imports provisionWorktree() above instead of
 // running this entry point.
 function extractWorktreeAddPath(command: string): string | null {
-	const tokens = command.trim().split(/\s+/);
-	let i = 0;
-	while (i < tokens.length && tokens[i] !== 'worktree') i++;
-	i++; // skip 'worktree'
-	while (i < tokens.length && tokens[i] !== 'add') i++;
-	i++; // skip 'add'
+  const tokens = command.trim().split(/\s+/);
+  let i = 0;
+  while (i < tokens.length && tokens[i] !== 'worktree') i++;
+  i++; // skip 'worktree'
+  while (i < tokens.length && tokens[i] !== 'add') i++;
+  i++; // skip 'add'
 
-	const flagsWithValue = new Set(['-b', '-B', '--reason', '--lock-reason']);
-	while (i < tokens.length) {
-		const token = tokens[i];
-		if (flagsWithValue.has(token)) {
-			i += 2;
-		} else if (token.startsWith('-')) {
-			i++;
-		} else {
-			return token;
-		}
-	}
-	return null;
+  const flagsWithValue = new Set(['-b', '-B', '--reason', '--lock-reason']);
+  while (i < tokens.length) {
+    const token = tokens[i];
+    if (flagsWithValue.has(token)) {
+      i += 2;
+    } else if (token.startsWith('-')) {
+      i++;
+    } else {
+      return token;
+    }
+  }
+  return null;
 }
 
 async function readStdin(): Promise<string> {
-	return new Promise((resolve, reject) => {
-		let data = '';
-		process.stdin.setEncoding('utf8');
-		process.stdin.on('data', chunk => {
-			data += chunk;
-		});
-		process.stdin.on('end', () => resolve(data));
-		process.stdin.on('error', reject);
-	});
+  return new Promise((resolve, reject) => {
+    let data = '';
+    process.stdin.setEncoding('utf8');
+    process.stdin.on('data', (chunk) => {
+      data += chunk;
+    });
+    process.stdin.on('end', () => resolve(data));
+    process.stdin.on('error', reject);
+  });
 }
 
 async function runAsPostToolUseHook(): Promise<void> {
-	const raw = await readStdin();
-	let payload: Record<string, unknown> = {};
-	if (raw.trim()) {
-		try {
-			payload = JSON.parse(raw);
-		} catch {
-			process.exit(0);
-		}
-	}
+  const raw = await readStdin();
+  let payload: Record<string, unknown> = {};
+  if (raw.trim()) {
+    try {
+      payload = JSON.parse(raw);
+    } catch {
+      process.exit(0);
+    }
+  }
 
-	if (payload['tool_name'] !== 'Bash') process.exit(0);
-	const toolInput = payload['tool_input'];
-	if (!toolInput || typeof toolInput !== 'object') process.exit(0);
-	const command = (toolInput as Record<string, unknown>)['command'];
-	if (typeof command !== 'string' || !/\bgit\b[\s\S]*\bworktree\s+add\b/.test(command)) process.exit(0);
+  if (payload['tool_name'] !== 'Bash') process.exit(0);
+  const toolInput = payload['tool_input'];
+  if (!toolInput || typeof toolInput !== 'object') process.exit(0);
+  const command = (toolInput as Record<string, unknown>)['command'];
+  if (
+    typeof command !== 'string' ||
+    !/\bgit\b[\s\S]*\bworktree\s+add\b/.test(command)
+  )
+    process.exit(0);
 
-	const rawPath = extractWorktreeAddPath(command);
-	if (!rawPath) {
-		log('could not extract worktree path from command');
-		process.exit(0);
-	}
-	const worktreePath = path.isAbsolute(rawPath) ? rawPath : path.resolve(SOURCE_ROOT, rawPath);
-	if (!fs.existsSync(worktreePath)) {
-		log(`worktree path not found: ${worktreePath}`);
-		process.exit(0);
-	}
+  const rawPath = extractWorktreeAddPath(command);
+  if (!rawPath) {
+    log('could not extract worktree path from command');
+    process.exit(0);
+  }
+  const worktreePath = path.isAbsolute(rawPath)
+    ? rawPath
+    : path.resolve(SOURCE_ROOT, rawPath);
+  if (!fs.existsSync(worktreePath)) {
+    log(`worktree path not found: ${worktreePath}`);
+    process.exit(0);
+  }
 
-	await provisionWorktree(worktreePath);
+  await provisionWorktree(worktreePath);
 }
 
 if (import.meta.main) {
-	runAsPostToolUseHook().catch(error => {
-		log(`PostToolUse fallback failed: ${error instanceof Error ? error.message : String(error)}`);
-		process.exit(0);
-	});
+  runAsPostToolUseHook().catch((error) => {
+    log(
+      `PostToolUse fallback failed: ${error instanceof Error ? error.message : String(error)}`
+    );
+    process.exit(0);
+  });
 }

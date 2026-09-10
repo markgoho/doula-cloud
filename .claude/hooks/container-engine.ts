@@ -10,34 +10,34 @@
 // `Labels` is an object, not the comma-joined string some engines print
 // in their plain-text `--format` output.
 interface EnginePs {
-	Id: string;
-	Names?: string[];
-	Labels?: Record<string, string>;
-	Created: number;
+  Id: string;
+  Names?: string[];
+  Labels?: Record<string, string>;
+  Created: number;
 }
 
 export interface ReapCandidate {
-	id: string;
-	name: string;
-	labels: Record<string, string>;
-	createdAtMs: number;
+  id: string;
+  name: string;
+  labels: Record<string, string>;
+  createdAtMs: number;
 }
 
 export function parseContainers(json: string): ReapCandidate[] {
-	const raw = JSON.parse(json) as EnginePs[];
-	return raw.map(entry => ({
-		id: entry.Id,
-		name: entry.Names?.[0] ?? entry.Id,
-		labels: entry.Labels ?? {},
-		createdAtMs: entry.Created * 1000
-	}));
+  const raw = JSON.parse(json) as EnginePs[];
+  return raw.map((entry) => ({
+    id: entry.Id,
+    name: entry.Names?.[0] ?? entry.Id,
+    labels: entry.Labels ?? {},
+    createdAtMs: entry.Created * 1000,
+  }));
 }
 
 // Local dev defaults to Podman (docs/testing.md); CI sets
 // CONTAINER_ENGINE=docker. Same variable app/e2e/stack.ts reads, so a
 // machine configured for one is configured for both.
 export function engineBinary(): string {
-	return process.env.CONTAINER_ENGINE ?? 'podman';
+  return process.env.CONTAINER_ENGINE ?? 'podman';
 }
 
 /*
@@ -55,10 +55,13 @@ export function engineBinary(): string {
  * the honest guard is no guard at all: invoke the engine and let the
  * fail-open catch handle a machine that isn't there.
  */
-export function engineInvocation(args: string[]): { binary: string; argv: string[] } {
-	const dockerHost = process.env.DOCKER_HOST;
-	return {
-		binary: engineBinary(),
-		argv: dockerHost ? ['--url', dockerHost, ...args] : args
-	};
+export function engineInvocation(args: string[]): {
+  binary: string;
+  argv: string[];
+} {
+  const dockerHost = process.env.DOCKER_HOST;
+  return {
+    binary: engineBinary(),
+    argv: dockerHost ? ['--url', dockerHost, ...args] : args,
+  };
 }

@@ -16,19 +16,19 @@
  * command, if the committed export is stale.
  */
 
-import { readFile, writeFile } from "node:fs/promises";
-import path from "node:path";
-import { renderExport, type PenDocument } from "./design-export";
+import { readFile, writeFile } from 'node:fs/promises';
+import path from 'node:path';
+import { renderExport, type PenDocument } from './design-export';
 
-const ROOT = path.resolve(import.meta.dirname, "..");
-const PEN_PATH = path.join(ROOT, "docs/design/doula-cloud.pen");
-const EXPORT_PATH = path.join(ROOT, "docs/design/doula-cloud.export.md");
+const ROOT = path.resolve(import.meta.dirname, '..');
+const PEN_PATH = path.join(ROOT, 'docs/design/doula-cloud.pen');
+const EXPORT_PATH = path.join(ROOT, 'docs/design/doula-cloud.export.md');
 
 async function main(): Promise<void> {
-  const raw = await readFile(PEN_PATH, "utf8");
+  const raw = await readFile(PEN_PATH, 'utf8');
   const document = JSON.parse(raw) as PenDocument;
   const exported = renderExport(document);
-  await writeFile(EXPORT_PATH, exported, "utf8");
+  await writeFile(EXPORT_PATH, exported, 'utf8');
   console.log(`export-design: wrote ${EXPORT_PATH}`);
 }
 
@@ -36,7 +36,7 @@ async function main(): Promise<void> {
 // touch the filesystem.
 if (import.meta.main) {
   main().catch((error: unknown) => {
-    console.error("export-design:", error);
+    console.error('export-design:', error);
     process.exit(1);
   });
 }
