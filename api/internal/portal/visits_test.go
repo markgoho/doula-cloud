@@ -10,6 +10,7 @@ import (
 
 	"doula-cloud/api/internal/pagecursor"
 	"doula-cloud/api/internal/portal"
+	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/testdb"
 )
 
@@ -203,23 +204,52 @@ func TestVisitsHandler_RefusesAnotherEngagementsVisits(t *testing.T) {
 }
 
 // TestVisitsHandler_KeepsAVisitWhoseDoulaHasLeftThePractice is the
-// truthfulness rule pointed the other way: "she came on 18 August" must
-// still be there after that Doula leaves. Removing a Membership deletes
-// the practice_memberships row that 00009's Staff-visible-to-a-Client
-// policy reaches through, so her Staff row goes invisible to this
-// Client -- and under an inner join that took the Visit with it. The
-// LEFT JOIN keeps the row and prints staffActorDisplayName in place of
-// the name it can no longer read. Losing her name is the known gap
-// 00105's own comment records; losing the Visit was the bug.
+// truthfulness rule pointed the other way: "Maya came on 18 August" must
+// still be there, name and all, after that Doula leaves. Removing a
+// Membership deletes the practice_memberships row that 00009's
+// Staff-visible-to-a-Client policy reaches through, so her Staff row
+// went invisible to this Client -- under an inner join that took the
+// Visit with it, and under the LEFT JOIN it took only her name (#1077).
+// 00111 reaches her row through the Visit itself, so both survive.
 func TestVisitsHandler_KeepsAVisitWhoseDoulaHasLeftThePractice(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "portal-visits-departed"
 	engagementID, doulaID := seedEngagementForVisits(t, db, identityUID, "Departed Practice", "Maya Okonkwo")
 	visitID := seedPortalVisit(t, db, engagementID, doulaID, time.Now().Add(-21*24*time.Hour))
+	removeMembership(t, db, doulaID)
+
+	srv, session := newServer(t, db, identityUID)
+	defer srv.Close()
+
+	resp := authedActivityGet(t, session, srv.URL+"/api/portal/engagements/"+engagementID+"/visits")
+	defer resp.Body.Close()
+
+	out := decodeVisits(t, resp)
+	if len(out.Items) != 1 || out.Items[0].VisitID != visitID {
+		t.Fatalf("items = %+v, want the Visit %q she came to", out.Items, visitID)
+	}
+	if out.Items[0].DoulaName != "Maya Okonkwo" {
+		t.Fatalf("doulaName = %q, want the name of the Doula who came", out.Items[0].DoulaName)
+	}
+}
+
+// TestVisitsHandler_StandsInForADoulaWhoDeletedHerLogin is the one case
+// 00111 deliberately does not name. ADR-0033's redaction overwrites
+// staff.name with an internal string, so there is no name left to show
+// and the Practice stands in -- what this Client already read before
+// #1077, and the reason 00111's policy excludes a deleted row rather
+// than putting "Deleted Staff Member" in front of her.
+func TestVisitsHandler_StandsInForADoulaWhoDeletedHerLogin(t *testing.T) {
+	db := testdb.New(t)
+	const identityUID = "portal-visits-deleted-login"
+	engagementID, doulaID := seedEngagementForVisits(t, db, identityUID, "Deleted Login Practice", "Maya Okonkwo")
+	visitID := seedPortalVisit(t, db, engagementID, doulaID, time.Now().Add(-21*24*time.Hour))
+	removeMembership(t, db, doulaID)
 	if _, err := db.Admin.ExecContext(t.Context(),
-		`DELETE FROM practice_memberships WHERE staff_id = $1`, doulaID,
+		`UPDATE staff SET name = $1, deleted_at = now() WHERE id = $2`,
+		staffauth.DeletedStaffName, doulaID,
 	); err != nil {
-		t.Fatalf("remove membership: %v", err)
+		t.Fatalf("redact staff row: %v", err)
 	}
 
 	srv, session := newServer(t, db, identityUID)
@@ -233,7 +263,19 @@ func TestVisitsHandler_KeepsAVisitWhoseDoulaHasLeftThePractice(t *testing.T) {
 		t.Fatalf("items = %+v, want the Visit %q she came to", out.Items, visitID)
 	}
 	if out.Items[0].DoulaName != "Your practice" {
-		t.Fatalf("doulaName = %q, want the Practice standing in for a name this Client can no longer read", out.Items[0].DoulaName)
+		t.Fatalf("doulaName = %q, want the Practice standing in for a name that no longer exists", out.Items[0].DoulaName)
+	}
+}
+
+// removeMembership is what "she left the Practice" is in the schema: the
+// practice_memberships row goes, and with it 00009's reach to her Staff
+// row.
+func removeMembership(t *testing.T, db *testdb.DB, staffID string) {
+	t.Helper()
+	if _, err := db.Admin.ExecContext(t.Context(),
+		`DELETE FROM practice_memberships WHERE staff_id = $1`, staffID,
+	); err != nil {
+		t.Fatalf("remove membership: %v", err)
 	}
 }
 

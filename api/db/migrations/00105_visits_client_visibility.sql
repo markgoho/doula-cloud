@@ -33,25 +33,21 @@ CREATE POLICY visits_client_visibility ON visits
 
 -- A second policy, letting a Client resolve the name of a Staff member
 -- named on a Visit of her own after that person has left the Practice,
--- was written here and taken back out. It belongs to a follow-up, and
--- the reason is recorded so nobody adds it back without knowing what
--- happens.
+-- was written here and taken back out because adding it made `POST
+-- /api/practices/{id}/engagements/{id}/offers` stop returning. That is
+-- shipped now, in 00111_staff_name_survives_a_departure.sql, as a
+-- SECURITY DEFINER function rather than as the inline EXISTS tried
+-- here.
 --
--- staff_visible_to_own_client_portal_engagements (00009) reaches a Staff
--- name only through a live practice_memberships row, which removing a
--- Membership deletes -- so a departed Doula's name is not resolvable to
--- her Client, and portal/visits.go's LEFT JOIN prints "Your practice"
--- for that row rather than losing the Visit. The obvious repair is a
--- permissive `FOR SELECT` policy on `staff` reached through her own
--- Visits. Adding one makes `POST
--- /api/practices/{id}/engagements/{id}/offers` never return: reproduced
--- on `offer.e2e.ts` three runs out of three, in CI and locally, and it
--- goes green the moment the policy is dropped and red again when it is
--- restored, with every Go package test passing either way. A permissive
--- policy cannot narrow what another one already allows, so the failure
--- is something else -- and shipping a change that hangs a Practice's own
--- screen to improve a name on the Client's is the wrong trade whatever
--- the cause turns out to be.
+-- 00111's own comment is where the reason lives, and it is worth
+-- reading before adding any further policy to `staff`: an inline policy
+-- subquery is expanded into every query that reads the table, which
+-- pushed the Engagement screen's Activity ledger read past
+-- jit_above_cost and spent 6.7 seconds in LLVM, and
+-- staffauth.Middleware's per-request `UPDATE staff SET
+-- last_practice_id` then queued Send Offer behind that read's row lock.
+-- Neither half was about Offers, and neither half reproduces below the
+-- HTTP layer, which is why every Go package test passed either way.
 
 -- The portal read written as an index: `WHERE engagement_id = $1 AND
 -- scheduled_at IS NOT NULL ORDER BY scheduled_at DESC, id DESC`. The
