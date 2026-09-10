@@ -1,6 +1,7 @@
 package activitygate
 
 import (
+	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -108,10 +109,10 @@ func writtenSubjectKinds(t *testing.T) map[string]string {
 		if d.IsDir() || !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
 			return nil
 		}
-		src, err := os.ReadFile(path)
+		src, err := os.ReadFile(path) //nolint:gosec // path comes from WalkDir over this package's own parent directory, never from input
 		if err != nil {
 			// coverage:ignore reason: read error on a readable checkout, not a case under test
-			return err
+			return fmt.Errorf("read %s: %w", path, err)
 		}
 		for _, m := range subjectKindLiteral.FindAllStringSubmatch(string(src), -1) {
 			if _, already := found[m[1]]; !already {

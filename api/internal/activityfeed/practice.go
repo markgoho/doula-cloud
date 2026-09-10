@@ -113,6 +113,26 @@ func PracticeHandler() http.Handler {
 // literal, so this comment's numbers can't silently drift from the query
 // that actually ships.
 //
+// Re-measured after #1148 added the subject join below, on the same
+// fixture (2026-09-10): Limit -> Sort (top-N heapsort, 41kB) over three
+// nested-loop left joins, with the activity scan itself an Index Scan on
+// activity_subject's practice_id prefix in 0.5 ms; 8.3 ms planning, 13.1
+// ms execution, and no JIT section at all -- which is the number that
+// matters, given #1077 measured what a staff-table plan crossing
+// jit_above_cost costs (00111's own doc comment). The scan node is an
+// Index Scan here where the paragraph above recorded a Bitmap Heap Scan;
+// both are the same activity_subject prefix and the planner's choice
+// between them moves with the fixture, so the fixed shape is
+// Limit -> Sort -> a practice_id-prefixed scan of activity, not the
+// particular scan node.
+//
+// Caveat this re-measurement shares with the one above: every seeded row
+// is subject_kind = 'engagement', so the subject join's equality guard
+// excludes all 5,000 of them and it is never driven. That is the shape a
+// real Practice's feed mostly has -- Membership events are rare beside
+// Engagement ones -- but it does mean this number does not price the
+// join's own work on a feed dominated by roster rows.
+//
 // Caveat this measurement doesn't cover: all 5,000 rows sit on one
 // subject_id, which activity_subject's own index serves more cheaply than
 // a real multi-subject Practice's mixed rows would. If a Practice's
@@ -120,26 +140,47 @@ func PracticeHandler() http.Handler {
 // Heap Scan keeps fast, that is new evidence for a follow-up ticket to
 // add a (practice_id, created_at DESC, id DESC) index -- not a case this
 // one needs to solve against a fixture.
+// The subject join (subj) is #1148's own addition: a feed spanning many
+// subject kinds has to say who a roster change happened to, or "Roles
+// changed" names the actor and nobody else, and a reader cannot tell one
+// roster change from another. It is a third LEFT JOIN on a table this
+// query already joins once, guarded by an equality on a.subject_kind so
+// it does no work at all for the Engagement and Client rows that make up
+// most of the feed, and it resolves nothing a row does not already carry
+// -- subject_id is a uuid column (00051), and a membership row's is a
+// staff_id.
+//
+// It is a join and not a read of a.diff on purpose: the shared reader
+// carries no diff (#1150 is the ticket for that), and a name copied into
+// a diff at write time would be a second place a Practice's roster
+// spells a person, free to drift from the staff row.
+//
+// %[2]s is activity.SubjectMembership, interpolated for the same reason
+// %[1]d is: a package-internal constant, never request input, and naming
+// the constant rather than repeating the literal is what keeps the write
+// side and this join from drifting apart.
 const listPracticeActivityQueryTemplate = `SELECT a.id, a.subject_kind, a.subject_id, a.action, a.actor_kind::text,
-	       s.name, c.given_name, c.preferred_name, a.created_at
+	       s.name, c.given_name, c.preferred_name, subj.name, a.created_at
 	FROM activity a
 	LEFT JOIN staff s ON s.id = a.actor_staff_id
 	LEFT JOIN clients c ON c.id = a.actor_client_id
+	LEFT JOIN staff subj ON a.subject_kind = '%[2]s' AND subj.id = a.subject_id
 	WHERE a.practice_id = $1
 	ORDER BY a.created_at DESC, a.id DESC LIMIT %[1]d`
 
 const listPracticeActivityAfterQueryTemplate = `SELECT a.id, a.subject_kind, a.subject_id, a.action, a.actor_kind::text,
-	       s.name, c.given_name, c.preferred_name, a.created_at
+	       s.name, c.given_name, c.preferred_name, subj.name, a.created_at
 	FROM activity a
 	LEFT JOIN staff s ON s.id = a.actor_staff_id
 	LEFT JOIN clients c ON c.id = a.actor_client_id
+	LEFT JOIN staff subj ON a.subject_kind = '%[2]s' AND subj.id = a.subject_id
 	WHERE a.practice_id = $1
 	  AND (a.created_at, a.id) < ($2, $3)
 	ORDER BY a.created_at DESC, a.id DESC LIMIT %[1]d`
 
-var listPracticeActivityQuery = fmt.Sprintf(listPracticeActivityQueryTemplate, practiceBatchSize+1) //nolint:gosec // the interpolated value is a package-internal constant, not request input
+var listPracticeActivityQuery = fmt.Sprintf(listPracticeActivityQueryTemplate, practiceBatchSize+1, activity.SubjectMembership) //nolint:gosec // both interpolated values are package-internal constants, not request input
 
-var listPracticeActivityAfterQuery = fmt.Sprintf(listPracticeActivityAfterQueryTemplate, practiceBatchSize+1) //nolint:gosec // the interpolated value is a package-internal constant, not request input
+var listPracticeActivityAfterQuery = fmt.Sprintf(listPracticeActivityAfterQueryTemplate, practiceBatchSize+1, activity.SubjectMembership) //nolint:gosec // both interpolated values are package-internal constants, not request input
 
 // rawEntry is Entry plus the row id fetchPage needs to mint a cursor but
 // never puts in the response, the same shape engagement.activityRow
@@ -232,14 +273,15 @@ func queryBatch(ctx context.Context, tx *sql.Tx, practiceID string, after *pagec
 	for rows.Next() {
 		var row rawEntry
 		var actorKind string
-		var staffName, clientGivenName, clientPreferredName sql.NullString
+		var staffName, clientGivenName, clientPreferredName, subjectName sql.NullString
 		if err := rows.Scan(&row.cursorID, &row.SubjectKind, &row.SubjectID, &row.Action, &actorKind,
-			&staffName, &clientGivenName, &clientPreferredName, &row.CreatedAt); err != nil {
+			&staffName, &clientGivenName, &clientPreferredName, &subjectName, &row.CreatedAt); err != nil {
 			// coverage:ignore reason: row scan failure, not exercised by unit tests
 			return nil, fmt.Errorf("activityfeed: scan practice activity row: %w", err)
 		}
 		row.ActorKind = actorKind
 		row.ActorName = resolveActorName(actorKind, staffName, clientGivenName, clientPreferredName)
+		row.SubjectName = resolveSubjectName(row.SubjectKind, subjectName)
 		items = append(items, row)
 	}
 	if err := rows.Err(); err != nil {
@@ -247,6 +289,35 @@ func queryBatch(ctx context.Context, tx *sql.Tx, practiceID string, after *pagec
 		return nil, fmt.Errorf("activityfeed: iterate practice activity rows: %w", err)
 	}
 	return items, nil
+}
+
+// resolveSubjectName says who a row happened to, for the subject kinds
+// whose subject_id is a person (#1148). Only membership is one today:
+// its subject_id is a staff_id, and the roster change the row records is
+// unreadable without the name -- "Roles changed" alone names the actor
+// and leaves the reader to guess whose roles moved. An Engagement's or a
+// Client's own rows name a record the reader is looking at or can reach
+// by id, and are left empty rather than given a second, differently-
+// shaped label.
+//
+// The one case this degrades in, said plainly rather than left to be
+// discovered: a 'removed' row's subject is by construction someone whose
+// practice_memberships row is gone, and staff_practice_visibility (00002)
+// reaches a staff row only through a live one, so the join finds nothing
+// and the feed says activity.DepartedStaffName -- the same word #887
+// settled on for an actor who has left, so a Practice never meets two
+// different words for the same absence. Recovering the name would mean
+// either a fourth policy on staff, which #1077 measured the cost of, or
+// copying the name into the event's diff at write time; neither is this
+// ticket's to spend.
+func resolveSubjectName(subjectKind string, subjectName sql.NullString) string {
+	if subjectKind != activity.SubjectMembership {
+		return ""
+	}
+	if !subjectName.Valid {
+		return activity.DepartedStaffName
+	}
+	return subjectName.String
 }
 
 // resolveActorName mirrors engagement.listEngagementActivity's own

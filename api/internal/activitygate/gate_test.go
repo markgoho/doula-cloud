@@ -19,6 +19,11 @@ const (
 	contractSignedAction = "contract_signed"
 	contractPricedAction = "contract_priced"
 	invoicePaidAction    = "invoice_paid"
+
+	// ownerReachesCase is the subtest name three access tables share --
+	// an Owner reaches every registered subject kind, which is the one
+	// row every one of those tables has in common.
+	ownerReachesCase = "owner reaches"
 )
 
 // buildReader scopes a tx to practiceID (the same set_config
@@ -101,7 +106,7 @@ func TestCanAccessSubject_Engagement(t *testing.T) {
 		employmentType string
 		want           bool
 	}{
-		{"owner reaches", ownerID, []string{ownerRole}, employeeType, true},
+		{ownerReachesCase, ownerID, []string{ownerRole}, employeeType, true},
 		{"unattached contractor refused", unattachedContractorID, []string{doulaRole}, contractorType, false},
 		{"attached contractor reaches", attachedContractorID, []string{doulaRole}, contractorType, true},
 	}
@@ -220,7 +225,7 @@ func TestCanAccessSubject_Client(t *testing.T) {
 		employmentType string
 		want           bool
 	}{
-		{"owner reaches", ownerID, []string{ownerRole}, employeeType, true},
+		{ownerReachesCase, ownerID, []string{ownerRole}, employeeType, true},
 		{"unattached contractor refused", unattachedContractorID, []string{doulaRole}, contractorType, false},
 		{"attached contractor reaches", attachedContractorID, []string{doulaRole}, contractorType, true},
 	}
@@ -303,7 +308,7 @@ func TestCanAccessSubject_Membership(t *testing.T) {
 		employmentType string
 		want           bool
 	}{
-		{"owner reaches", []string{ownerRole}, employeeType, true},
+		{ownerReachesCase, []string{ownerRole}, employeeType, true},
 		{"admin reaches", []string{adminRole}, employeeType, true},
 		{"employee doula refused", []string{doulaRole}, employeeType, false},
 		{"contractor doula refused", []string{doulaRole}, contractorType, false},
