@@ -315,9 +315,11 @@ export interface OverflowMeasurement {
 /*
  * ## It looks inside a closed disclosure (#1124)
  *
- * A closed `<details>` lays out nothing but its `<summary>`, so a plain
- * `scrollWidth` read reports the width the frame was given for content that
- * may need any width at all. `sweep` (`continuum.ts`) closed that hole on
+ * A closed `<details>` contributes nothing but its `<summary>` to any
+ * ancestor's scroll size, so a plain `scrollWidth` read reports the width the
+ * frame was given for content that may need any width at all. The paragraph
+ * below says what that does and does not mean for the other criteria, which
+ * is narrower than it sounds. `sweep` (`continuum.ts`) closed that hole on
  * #710 and this measurement was deliberately left open: no condition the
  * floor check has discovered sits behind a disclosure today, so the gap was
  * latent rather than live, and #710 declined to change what a green check
