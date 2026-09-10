@@ -86,7 +86,7 @@ const trailingContentColumns = [
 function bareListSnippet() {
 	return createRawSnippet<[Row]>(() => ({
 		render: () =>
-			`<ul data-testid="column-content"><li>Birth Engagement, contract signed</li><li>Postpartum Engagement awaiting a contract</li><li>Refused: no capacity this fortnight</li></ul>`
+			`<ul data-testid="column-content"><li>Birth Engagement, contract signed</li><li>Postpartum Engagement awaiting a contract</li><li>Refused: no capacity this week</li></ul>`
 	}));
 }
 
@@ -503,12 +503,14 @@ describe('the activity ledger treatment (#486)', () => {
 /*
  * #740: the geometry of a cell a caller drew itself.
  *
- * `querySelector` throughout, under svelte-tests.md rule 1's sibling
- * case: both trees carry the same accessible content, and every fact here
- * is about the `<table>` copy's BOX -- how tall the row is, and whether
- * the snippet's own box clears the row rule above and below it. A
- * role/text query returns an element from whichever tree matches first
- * and cannot say which box was measured.
+ * `querySelector` throughout, under svelte-tests.md's THIRD sanctioned
+ * case -- a fact that is not about any one element's accessible identity.
+ * A box is that kind of fact: how tall the row is, and whether the
+ * snippet's own box clears the row rule above and below it, are geometry,
+ * and geometry is not in the accessible tree for any query to ask about.
+ * Rule 1's sibling case applies on top of it, since both trees carry the
+ * same accessible content and a role query cannot say which of the two
+ * boxes it returned.
  *
  * Measured rather than asserted against a class name on purpose. The
  * defect this closes was a class name doing the work -- `.rollup-list`,

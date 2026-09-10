@@ -157,15 +157,20 @@
 	}: Properties<T> = $props();
 
 	/*
-	 * Whether a given cell actually renders its column's snippet (#740).
-	 * The `cell` snippet's own `{#if}` chain already decides this, and a
-	 * cell that renders more than one line needs the geometry to match --
-	 * so the answer is asked once here and spent as a class on the `<td>`,
-	 * rather than restated in CSS against a class name the caller's markup
-	 * had to carry. `columnIndex === 0 && rowHref` is the documented
-	 * refusal on `Column.content`: the row link wins there and the cell is
-	 * one line of link text, so it is NOT a content cell for styling
-	 * either.
+	 * Whether a given cell actually renders its column's snippet (#740),
+	 * spent as a class on the `<td>` so the cell's geometry follows from
+	 * the COLUMN rather than from a class name the caller's markup had to
+	 * carry. `columnIndex === 0 && rowHref` is the documented refusal on
+	 * `Column.content`: the row link wins there and the cell is one line
+	 * of link text, so it is not a content cell for styling either.
+	 *
+	 * This restates a condition the `cell` snippet's own `{#if}` chain
+	 * writes inline, and that is not an oversight: the inline form is what
+	 * narrows `rowHref` and `column.content` from optional to callable for
+	 * the compiler, and a call through this function narrows neither. The
+	 * two must agree, so a spec asserts the pair together -- a linked
+	 * first column renders the link AND takes no content padding -- and
+	 * disagreement fails there rather than showing up on screen.
 	 */
 	function isContentCell(column: Column<T>, columnIndex: number): boolean {
 		return Boolean(column.content) && !(columnIndex === 0 && rowHref);
@@ -224,8 +229,8 @@
 						{#each columns as column, columnIndex (column.label)}
 							<!-- `content` has no counterpart on the record view's
 							     own `<dd>` below, and that asymmetry is deliberate:
-							     the only thing it turns on is vertical padding a
-							     `<dd>` already has for every cell. See the rule. -->
+							     all it turns on is `td.content`'s vertical padding,
+							     which a `<dd>` already carries for every cell. -->
 							<td
 								class:numeric={column.numeric}
 								class:meta={column.variant === 'meta'}
@@ -267,10 +272,13 @@
 				<dl>
 					{#each columns as column, columnIndex (column.label)}
 						<dt>{column.label}</dt>
+						<!-- Neither `variant-body` nor `content` is written here,
+						     and for one reason: each would name a rule that
+						     overrides nothing in this tree. See the mirror
+						     block in the style below. -->
 						<dd
 							class:numeric={column.numeric}
 							class:meta={column.variant === 'meta'}
-							class:variant-body={column.variant === 'body'}
 							class:muted={column.variant === 'muted'}
 						>
 							{@render cell(column, columnIndex, row, 'record')}
@@ -442,8 +450,13 @@
 		   (`box-sizing: border-box`, reset.css), so a ONE-line content
 		   cell -- the Clients list's Portal invite column is one -- must
 		   still fit that floor or every row in the table grows and
-		   Skeleton stops reserving the right space. One line of body-sm
-		   plus 2 x --space-1 does; plus 2 x --space-2 does not.
+		   Skeleton stops reserving the right space. Both tokens are
+		   container-relative clamps and so is `body-sm`, so the margin is
+		   not the same at every width: one line plus 2 x --space-1 fits
+		   the floor everywhere the table view renders, while 2 x
+		   --space-2 stops fitting as the frame widens -- measured going
+		   over at the drag surface's own full width, which is enough to
+		   disqualify it.
 
 		   No counterpart for the record view's `<dd>`: it carries
 		   `padding-block` for EVERY cell already (below) and sets no
@@ -539,17 +552,21 @@
 			font-variant-numeric: tabular-nums;
 		}
 
-		/* The record view's own mirror of td.meta/variant-body/muted above. */
+		/* The record view's own mirror of td.meta/muted above -- two of
+		   the three, not all three (#740). `variant: 'body'` asks for
+		   `--text-body-size`, which is what `th, td` has to be overridden
+		   to give and what a `<dd>` here already inherits from `.frame >
+		   *`: measured, `dd.variant-body` and its own `.record-view`
+		   ancestor both compute to 15.13px at a 390px frame. A rule
+		   restating that would have overridden nothing, so neither it nor
+		   the class that selected it is written -- the same rule this
+		   ticket applied to `td.content`'s missing `<dd>` counterpart. */
 		.record-view dd.meta {
 			font-size: var(--text-meta-size);
 			font-weight: var(--text-meta-weight);
 			line-height: var(--text-meta-leading);
 			letter-spacing: var(--text-meta-tracking);
 			font-variant-numeric: tabular-nums;
-		}
-
-		.record-view dd.variant-body {
-			font-size: var(--text-body-size);
 		}
 
 		.record-view dd.muted {
