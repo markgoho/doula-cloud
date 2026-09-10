@@ -135,7 +135,8 @@ The `PostToolUse` fallback hook provisions it the same way `EnterWorktree` would
   fail-*open* case is narrower and deliberate — a command it does not recognize as a write at
   all is let through, which is the coverage gap recorded above, not a malfunction.
 - **GitHub**: a ruleset on `trunk` requires a passing PR (checks: `scripts`, `actionlint`,
-  `api`, `app`, `api-image` — the `ci.yml` jobs only; the Firebase preview workflows are
+  `api`, `app`, `api-image`, `plan`, `format` — the `ci.yml` and `terraform-plan.yml` jobs
+  only; the Firebase preview workflows are
   `paths:`-filtered and would never satisfy a required check that always waits on them),
   blocks force-push and deletion, and requires linear history. Repository-admin is a bypass
   actor for a genuine emergency or a docs-only fix.

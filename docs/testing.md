@@ -1,6 +1,6 @@
 # Testing infrastructure
 
-## Pre-commit hook: `gofmt` and `app/` typecheck/lint (enabled repo-wide, enforced in CI)
+## Pre-commit hook: `gofmt`, `app/` typecheck/lint, and Prettier over the tooling trees (enabled repo-wide, enforced in CI)
 
 `core.hooksPath` is set to an absolute path (`scripts/hooks`) in this repo's shared `.git/config`, so the hook below is already active for the main checkout and every `.claude/worktrees/*` worktree — there is nothing to opt into per clone. Because the path is absolute, every worktree runs the *main* checkout's `scripts/hooks/pre-commit`, not its own branch's copy; a worktree mid-refactor of the hook script itself won't see its own changes take effect until they land on the branch checked out in main. Re-run `git config core.hooksPath scripts/hooks` only if setting up a fresh clone.
 
@@ -9,7 +9,25 @@
 2. **`app/` (SvelteKit)**: if any `app/*` files are staged, runs `bun run --cwd app check` (`svelte-check`) and `bun run --cwd app lint` (`eslint`), blocking commits with broken imports, type errors, or lint failures.
 3. **`app/` unit suite and coverage gate**: still only when `app/*` files are staged, runs `bun run --cwd app test:unit:coverage`. This is where the design brief's smoothness gates live (see below), and the brief's own argument is that a commitment nobody measures decays — so the cheapest place to measure is before the commit exists. Measured on an idle 14-CPU machine, this step is ~16s and peaks around 4.9 GB for 2689 tests at 100% coverage, on top of the ~7s for steps 1-2. The Playwright e2e suite deliberately stays out: it builds the app and starts Postgres, the object store, the BFF and the Auth emulator — it is costed in "What the e2e suite costs, and why its workers are capped" below, which is where to look before running it beside anything else. See "The memory this gate costs, and why the browser pool is capped" below for where that 4.9 GB goes, and "Only one session runs this step at a time" for the lock that keeps two sessions from paying it simultaneously.
 
+4. **`.claude/hooks/` and `scripts/` (the repo's own tooling)**: if any `.ts` file in either tree is staged, runs Prettier's `--check` over exactly those staged files, blocking a commit that stages one which is not formatted. See "Formatting: which trees are gated, and by what" below for what the rule is and why these two trees needed a gate of their own.
+
 The CI jobs are the actual enforcement backstop regardless of whether the local hook is enabled — required PR status checks reject a push that would have failed it (see `docs/agents/worktree-flow.md`).
+
+## Formatting: which trees are gated, and by what
+
+Formatting is gated per tree, not repo-wide, and each tree's gate is the tool that tree is written with.
+
+| Tree | Rule | Gate |
+| --- | --- | --- |
+| `api/` | `gofmt` | `gofmt -l .` as a CI step, plus step 1 of the pre-commit hook |
+| `.claude/hooks/`, `scripts/` | `.editorconfig` (2-space indent) + `.prettierrc` (single quotes) | `bun run format:check` as the CI `format` job, plus step 4 of the pre-commit hook |
+| `app/` | none declared beyond `.editorconfig`, which the tree does not follow | none — `bun run --cwd app lint` is ESLint with no stylistic rules configured |
+
+The two tooling trees are the decision #1120 asked for, so it is recorded here: **they follow `.editorconfig` and `.prettierrc` rather than being an exception to them.** They had drifted to 22 tab-indented files out of 29, and quoting was split inside a single feature, because nothing measured either rule — `gofmt` is Go-only, the pre-commit hook's `app/` steps are scoped to staged `app/*` paths, and Prettier appeared in no `package.json` and no workflow in this repository at all. Conforming rather than excepting was chosen because it needs no config change (7 of the 29 files already matched) and because `.editorconfig` is what a contributor's editor applies on save, so conforming makes the editor and the file agree instead of making the file win an argument with the editor.
+
+`bun run format` at the repo root rewrites the two trees; `bun run format:check` is the same pass as an assertion. Both are scoped to `.claude/hooks/**/*.ts` and `scripts/**/*.ts` and reach nothing else. Prettier reads `.editorconfig` for indentation by default, so a single `--check` enforces both of the configs above and there is no second copy of the indent rule to drift.
+
+`app/` is deliberately absent from that scope. It is uniformly tab-indented with no `.editorconfig` or `.prettierrc` of its own, so the root `[*] indent_style = space` is untrue for it too — a real breach of the same kind, tracked in #1232, and out of scope for the gate above.
 
 ## The memory this gate costs, and why the browser pool is capped
 

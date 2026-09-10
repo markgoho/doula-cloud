@@ -55,3 +55,39 @@ if [ -n "$staged_app_files" ]; then
         bun run --cwd app test:unit:coverage || exit 1
     fi
 fi
+
+# 4. Blocks a commit that stages an unformatted .ts file in either of the
+#    repo's own tooling trees, .claude/hooks/ and scripts/ (#1120). Same
+#    shape as step 1, and for the same reason. What the rule is and why
+#    these two trees needed a gate is in docs/testing.md's "Formatting"
+#    section; the CI `format` job is the backstop, and this is the fast
+#    local half of it, over staged files only.
+#
+#    Prettier is resolved from the repo root rather than the working
+#    directory, since a worktree's root node_modules is usually a symlink
+#    to the main checkout's. If it is missing, the commit is blocked
+#    rather than passed silently -- a formatting gate that quietly skips
+#    itself is the state this replaced -- and the message has to name the
+#    checkout to install in, which through a symlink is the main one:
+#    `bun install` inside a worktree with a live symlink would mutate the
+#    modules every other worktree is sharing (docs/agents/worktree-flow.md).
+staged_tooling_ts=$(git diff --cached --name-only --diff-filter=ACM -- '.claude/hooks/*.ts' 'scripts/*.ts')
+if [ -n "$staged_tooling_ts" ]; then
+    repo_root=$(git rev-parse --show-toplevel)
+    prettier="$repo_root/node_modules/.bin/prettier"
+    if [ ! -x "$prettier" ]; then
+        install_root="$repo_root"
+        if [ -L "$repo_root/node_modules" ]; then
+            install_root=$(dirname "$(readlink "$repo_root/node_modules")")
+        fi
+        echo "prettier: not installed, so the tooling-tree formatting gate" >&2
+        echo "cannot run. Run 'bun install' in $install_root" >&2
+        echo "and commit again." >&2
+        exit 1
+    fi
+    if ! "$prettier" --check $staged_tooling_ts >&2; then
+        echo "The staged files above are not formatted. Run 'bun run format'" >&2
+        echo "at the repo root, re-stage, and commit again." >&2
+        exit 1
+    fi
+fi

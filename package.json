@@ -7,12 +7,16 @@
     "build": "bun scripts/sync-practice-pages.ts && cd hugo && hugo --minify",
     "design:export": "bun scripts/export-design.ts",
     "dev": "bun run --cwd app dev:full",
+    "format": "prettier --write \".claude/hooks/**/*.ts\" \"scripts/**/*.ts\"",
+    "format:check": "prettier --check \".claude/hooks/**/*.ts\" \"scripts/**/*.ts\"",
     "test": "bun test scripts/"
   },
   "devDependencies": {
     "@pen.dev/cli": "^0.3.5",
     "@types/bun": "latest",
-    "firebase-tools": "^15.28.1"
+    "firebase-tools": "^15.28.1",
+    "prettier": "^3.9.6",
+    "prettier-plugin-go-template": "^0.0.15"
   },
   "peerDependencies": {
     "typescript": "6.0.3"
