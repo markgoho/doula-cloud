@@ -56,6 +56,22 @@
 	});
 </script>
 
+<!--
+	#865, the sibling of the Plan Templates intro. The reassurance is the
+	same shape but a different mechanism: `contracts/contract.go` copies
+	this prose into the Contract row at **creation**, so the freeze happens
+	when a Contract is written, earlier than sending and earlier than
+	signing. The copy says "already written" for that reason -- "already
+	sent" would under-claim what is actually safe. The seeded prose is real
+	boilerplate (`staffauth/signup.go`), so "meant to be replaced" is true
+	rather than aspirational.
+-->
+{#snippet intro()}
+	<Text
+		text="Every Contract this Practice sends starts from the terms written here, with the Client's name, dates and price filled in. Doula Cloud wrote a first set of terms to start from, and it is meant to be replaced with this Practice's own. A Contract already written for a Client keeps the terms it was written from, so nothing changed here reaches a Contract already made."
+	/>
+{/snippet}
+
 {#snippet editor()}
 	{#if error}
 		<Notice variant="error" message={error} />
@@ -75,4 +91,4 @@
 	{/if}
 {/snippet}
 
-<FormPage title="Contract Template" fieldsets={[{ content: editor }]} {actions} />
+<FormPage title="Contract Template" {intro} fieldsets={[{ content: editor }]} {actions} />

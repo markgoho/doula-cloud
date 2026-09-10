@@ -80,9 +80,23 @@
 	});
 </script>
 
+<!--
+	#865 aligned this with its two siblings, which had no intro at all until
+	that ticket. Three changes, all of them the same rule: say what is true
+	of *this* screen. "this Practice", not "your Practice", so the three
+	settings screens and the Settings hub speak with one voice. The list
+	starts empty rather than seeded -- `staffauth/signup.go` seeds Plan
+	Templates and the Contract Template and deliberately seeds no Client
+	fields, which `clientfieldtemplate/template.go` calls the designed state
+	for a new Practice -- so the "a default meant to be changed" sentence the
+	other two carry would be false here. And the reassurance is the archive
+	rule, not ADR-0001's snapshot: CONTEXT.md is explicit that a Client's
+	values are read live against the current list, so archiving is the only
+	thing standing between a removed field and a recorded fact.
+-->
 {#snippet intro()}
 	<Text
-		text="Extra facts your Practice records about every Client, beyond name, contact details and address. Every field here is staff-only -- a Client never sees it."
+		text="Extra facts this Practice records about every Client, beyond name, contact details and address. Nothing is here to start with, and every field is staff-only: a Client never sees one. Removing a field archives it, so what was already recorded about a Client stays."
 	/>
 {/snippet}
 

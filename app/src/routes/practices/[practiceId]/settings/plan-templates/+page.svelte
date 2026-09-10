@@ -104,6 +104,23 @@
 	});
 </script>
 
+<!--
+	#865: this screen used to open on a bare field editor. The three
+	sentences are the three things a Practice has to know before touching
+	it, in the order she meets them: what the questions are for, that the
+	seeded set is hers to change (`staffauth/signup.go` seeds both plan
+	types at signup), and the one fact that makes editing safe -- ADR-0001's
+	per-instance snapshot, which is why a template edit cannot reach a plan
+	already filled in. The word "template" stays out of the prose: the
+	heading already says it, and GOV.UK's rule is that an intro does not
+	restate the heading.
+-->
+{#snippet intro()}
+	<Text
+		text="Every Care Plan and Birth Plan this Practice fills in starts from the questions set here. Doula Cloud wrote a first set to start from, and it is meant to be changed: add, remove and reorder the questions so they ask what this Practice asks. A plan already filled in for a Client keeps the questions it was filled in against, so nothing changed here reaches a plan already written."
+	/>
+{/snippet}
+
 {#snippet planTypeSelector()}
 	<!--
 		GOV.UK Tabs (docs/design/govuk-alignment.md) -- a mutually exclusive
@@ -162,6 +179,7 @@
 
 <FormPage
 	title="Plan Templates"
+	{intro}
 	fieldsets={[{ content: planTypeSelector }, { content: editor }]}
 	{actions}
 />

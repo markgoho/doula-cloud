@@ -114,3 +114,58 @@ describe('client fields settings screen', () => {
 		await expect.element(testPage.getByText('questions beyond the standard ones', { exact: false })).not.toBeInTheDocument();
 	});
 });
+
+/*
+ * #865 gave all three template-editing settings screens one voice. This
+ * screen already had an intro; the ticket aligned its wording and added
+ * the archive reassurance, which is this screen's own answer to "can
+ * editing here damage work already done?" -- CONTEXT.md is explicit that a
+ * Client's values are read live, never snapshotted, so archiving is the
+ * only thing protecting a recorded fact. Asserted for every caller, not
+ * only an Owner: orientation is not a write control, and a Doula who can
+ * read the list needs to know what it is as much as the Owner who edits
+ * it.
+ */
+describe('client fields settings screen: it introduces itself (#865)', () => {
+	it('says what the fields are, for a caller who cannot edit them', async () => {
+		mockApi({ roles: ['doula'] });
+		await render(Page, {});
+
+		await expect
+			.element(
+				testPage.getByText(
+					'Extra facts this Practice records about every Client, beyond name, contact details and address',
+					{ exact: false }
+				)
+			)
+			.toBeVisible();
+	});
+
+	it('says the list starts empty and that no Client ever sees a field', async () => {
+		mockApi({ roles: ['owner'] });
+		await render(Page, {});
+
+		await expect
+			.element(
+				testPage.getByText(
+					'Nothing is here to start with, and every field is staff-only: a Client never sees one',
+					{ exact: false }
+				)
+			)
+			.toBeVisible();
+	});
+
+	it('says removing a field archives it rather than losing what was recorded', async () => {
+		mockApi({ roles: ['owner'] });
+		await render(Page, {});
+
+		await expect
+			.element(
+				testPage.getByText(
+					'Removing a field archives it, so what was already recorded about a Client stays',
+					{ exact: false }
+				)
+			)
+			.toBeVisible();
+	});
+});
