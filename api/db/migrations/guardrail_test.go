@@ -28,7 +28,9 @@ var grandfathered = map[string]string{
 	"00054_one_refund_per_request.sql":                 "ADD CONSTRAINT ... CHECK and CREATE UNIQUE INDEX; applied before the guardrail covered the classes (#1139)",
 	"00055_founding_grant.sql":                         "ADD CONSTRAINT ... CHECK, ALTER COLUMN ... TYPE and CREATE UNIQUE INDEX; applied before the guardrail covered the classes (#1139)",
 	"00057_engagement_status_drop_postpartum.sql":      "ALTER COLUMN ... TYPE; applied before the guardrail covered the class (#1139)",
+	"00063_mfa_recovery_cleared_notice.sql":            "CREATE UNIQUE INDEX; applied before the guardrail covered the class (#1139)",
 	"00072_totp_mfa_auth_events.sql":                   "ADD CONSTRAINT ... CHECK; applied before the guardrail covered the class (#1139)",
+	"00078_session_evicted_one_pending.sql":            "CREATE UNIQUE INDEX; applied before the guardrail covered the class (#1139)",
 	"00073_portal_accounts.sql":                        "ADD CONSTRAINT ... FOREIGN KEY, CREATE UNIQUE INDEX and DML; applied before the guardrail covered the classes (#1139)",
 	"00075_retire_identity_account_delete.sql":         "ALTER COLUMN ... TYPE; applied before the guardrail covered the class (#1139)",
 	"00089_credit_ledger_forfeit_shape.sql":            "ADD CONSTRAINT ... CHECK; applied before the guardrail covered the class (#1139)",
@@ -151,7 +153,7 @@ func TestSafetyNotesAreStillNeeded(t *testing.T) {
 // an offender, so a migration that gets fixed or deleted is removed from
 // the list rather than left as cover for a future one.
 func TestGrandfatheredListDoesNotGrow(t *testing.T) {
-	const want = 24
+	const want = 26
 	if len(grandfathered) != want {
 		t.Fatalf("grandfathered has %d entries, want exactly %d -- a new migration takes the safe form or writes a safety note, not an exemption", len(grandfathered), want)
 	}

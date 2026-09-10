@@ -16,7 +16,10 @@ func UpSection(body string) string {
 	if start < 0 {
 		return body
 	}
-	rest := body[start:]
+	// Step past the annotation's own line, so the first statement does
+	// not arrive with "+goose Up" glued to its front -- a statement
+	// recognized by what it starts with would never match.
+	rest := body[start+len(upMarker):]
 	up, _, found := strings.Cut(rest, downMarker)
 	if found {
 		return up
