@@ -38,9 +38,18 @@
 	import Notice from '#lib/components/atoms/Notice.svelte';
 	import TextInput from '#lib/components/atoms/TextInput.svelte';
 	import LabeledField from '#lib/components/molecules/LabeledField.svelte';
+	import DateFields from '#lib/components/molecules/DateFields.svelte';
 	import ErrorSummary from '#lib/components/molecules/ErrorSummary.svelte';
 	import ConfirmDialog from '#lib/components/molecules/ConfirmDialog.svelte';
 	import { errorsFromCause } from '#lib/formErrors.js';
+	import {
+		dateFieldId,
+		dateGroupRefusal,
+		joinDate,
+		splitDate,
+		EMPTY_DATE_PARTS,
+		type DateParts
+	} from '#lib/intakeDate.js';
 	import { FormSubmission, orThrownErrors, type FormError } from '#lib/formSubmission.svelte.js';
 	import { editMergeDraft } from '#lib/editMergeDraft.svelte.js';
 
@@ -58,7 +67,10 @@
 	// The BFF's own field names (client.Record's json tags) mapped onto
 	// this form's controls, so a refusal it names lands on the right one
 	// (#488). Only these two can be refused server-side.
-	const editFieldIds = { givenName: givenNameId, dateOfBirth: dateOfBirthId };
+	// `dateOfBirth` names the first of the group's three boxes rather than
+	// the group (#807): the summary's entries are fragment links, and a
+	// <fieldset> is not what HTML's fragment-focusing steps can focus.
+	const editFieldIds = { givenName: givenNameId, dateOfBirth: dateFieldId(dateOfBirthId, 'month') };
 
 	let detail = $state<ClientDetail | undefined>();
 	let loadError = $state('');
@@ -73,10 +85,22 @@
 	let addressLocality = $state('');
 	let addressRegion = $state('');
 	let addressPostalCode = $state('');
-	let dateOfBirth = $state('');
+	/*
+	 * #807: a birth date is a memorable date here too, so it is asked in
+	 * three boxes and composed on the way to the wire. `parts` holds what
+	 * was typed, `dateOfBirth` the "YYYY-MM-DD" `client.Record` stores.
+	 */
+	let dateOfBirthParts = $state<DateParts>({ ...EMPTY_DATE_PARTS });
+	const composedDateOfBirth = $derived(joinDate(dateOfBirthParts));
+	const dateOfBirth = $derived(composedDateOfBirth.ok ? composedDateOfBirth.value : '');
 	let fieldValues = $state<unknown>();
 
 	const submission = new FormSubmission();
+
+	// Which box the group's refusal is about, read back out of the one
+	// array `ErrorSummary` renders -- so the BFF's own `dateOfBirth`
+	// refusal marks a box exactly the way a locally composed one does.
+	const dateOfBirthRefusal = $derived(dateGroupRefusal(submission.errors, dateOfBirthId));
 	let matches = $state<CollisionMatch[]>([]);
 	let isConflictOpen = $state(false);
 	// The refused override that belongs to no control, rendered inside the
@@ -151,7 +175,7 @@
 			addressLocality = detail.addressLocality;
 			addressRegion = detail.addressRegion;
 			addressPostalCode = detail.addressPostalCode;
-			dateOfBirth = detail.dateOfBirth;
+			dateOfBirthParts = splitDate(detail.dateOfBirth);
 			fieldValues = detail.fieldValues;
 		} catch (error_) {
 			loadError = error_ instanceof Error ? error_.message : 'Failed to load Client';
@@ -167,6 +191,15 @@
 
 		await submission.run(async () => {
 			const refusals = findRefusals();
+			// Named alongside every other client-side refusal, so one
+			// summary carries them together and a refused date never
+			// reaches the wire.
+			if (!composedDateOfBirth.ok) {
+				refusals.push({
+					message: composedDateOfBirth.message,
+					targetId: dateFieldId(dateOfBirthId, composedDateOfBirth.field)
+				});
+			}
 			if (refusals.length > 0) return refusals;
 
 			const result = await editClient(
@@ -340,11 +373,15 @@
 			<TextInput {id} {describedBy} value={addressPostalCode} onInput={(v) => (addressPostalCode = v)} autocomplete="off" />
 		{/snippet}
 	</LabeledField>
-	<LabeledField id={dateOfBirthId} label="Date of birth">
-		{#snippet children({ id, describedBy })}
-			<TextInput {id} {describedBy} type="date" value={dateOfBirth} onInput={(v) => (dateOfBirth = v)} autocomplete="off" />
-		{/snippet}
-	</LabeledField>
+	<DateFields
+		name={dateOfBirthId}
+		legend="Date of birth"
+		hint="For example, 3 12 1988."
+		parts={dateOfBirthParts}
+		onChange={(next) => (dateOfBirthParts = next)}
+		error={dateOfBirthRefusal?.message}
+		invalidField={dateOfBirthRefusal?.field}
+	/>
 {/snippet}
 
 {#snippet formActions()}

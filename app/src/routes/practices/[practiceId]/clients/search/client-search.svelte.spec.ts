@@ -87,7 +87,9 @@ describe('the search that fronts intake (#498)', () => {
 		await setup();
 
 		await testPage.getByLabelText('Name').fill('Ada');
-		await testPage.getByLabelText('Date of birth').fill('1815-12-10');
+		await testPage.getByLabelText('Month').fill('12');
+		await testPage.getByLabelText('Day').fill('10');
+		await testPage.getByLabelText('Year').fill('1815');
 		await testPage.getByLabelText('Email').fill('ada@example.com');
 		await testPage.getByLabelText('Phone').fill('555-0100');
 		await testPage.getByRole('button', { name: 'Search' }).click();
@@ -151,7 +153,9 @@ describe('the search that fronts intake (#498)', () => {
 		await setup();
 
 		await testPage.getByLabelText('Name').fill('Nadia');
-		await testPage.getByLabelText('Date of birth').fill('1994-02-11');
+		await testPage.getByLabelText('Month').fill('2');
+		await testPage.getByLabelText('Day').fill('11');
+		await testPage.getByLabelText('Year').fill('1994');
 		await testPage.getByLabelText('Email').fill('nadia@example.com');
 		await testPage.getByLabelText('Phone').fill('555-0100');
 		await testPage.getByRole('button', { name: 'Search' }).click();
@@ -162,6 +166,72 @@ describe('the search that fronts intake (#498)', () => {
 				'href',
 				`/practices/${practiceId}/clients/new?name=Nadia&dateOfBirth=1994-02-11&email=nadia%40example.com&phone=555-0100`
 			);
+	});
+
+	/*
+	 * #807: the same Postel's Law tolerance intake accepts -- one or two
+	 * digits for the month and the day, two or four for the year -- so a
+	 * date typed the way it is remembered still reaches the endpoint as
+	 * the "YYYY-MM-DD" `client.SearchHandler` reads.
+	 */
+	it('accepts a one-digit month and a two-digit year, and composes both ways', async () => {
+		apiFetchWithSession.mockResolvedValue(jsonResponse({ matches: [] }));
+		await setup();
+
+		await testPage.getByLabelText('Month').fill('3');
+		await testPage.getByLabelText('Day').fill('12');
+		await testPage.getByLabelText('Year').fill('88');
+		await testPage.getByRole('button', { name: 'Search' }).click();
+
+		expect(requestUrl()).toBe(`/api/practices/${practiceId}/clients/search?dateOfBirth=1988-03-12`);
+		await expect
+			.element(testPage.getByRole('link', { name: 'Add a new Client' }))
+			.toHaveAttribute('href', `/practices/${practiceId}/clients/new?dateOfBirth=1988-03-12`);
+	});
+
+	/*
+	 * The boxes feed two readers -- the search, and the link a miss offers
+	 * into intake, which is rendered from whatever is typed right now. A
+	 * date snapshotted at submit would leave that link carrying the
+	 * previous one beside the current name.
+	 */
+	it('carries the date currently in the boxes into intake, not the one the last search ran on', async () => {
+		apiFetchWithSession.mockResolvedValue(jsonResponse({ matches: [] }));
+		await setup();
+
+		await testPage.getByLabelText('Month').fill('2');
+		await testPage.getByLabelText('Day').fill('11');
+		await testPage.getByLabelText('Year').fill('1994');
+		await testPage.getByRole('button', { name: 'Search' }).click();
+		await expect
+			.element(testPage.getByRole('link', { name: 'Add a new Client' }))
+			.toHaveAttribute('href', `/practices/${practiceId}/clients/new?dateOfBirth=1994-02-11`);
+
+		await testPage.getByLabelText('Year').fill('1995');
+
+		await expect
+			.element(testPage.getByRole('link', { name: 'Add a new Client' }))
+			.toHaveAttribute('href', `/practices/${practiceId}/clients/new?dateOfBirth=1995-02-11`);
+	});
+
+	it('refuses a date that is not one, announcing it once and linking to the box that has to change', async () => {
+		await setup();
+
+		await testPage.getByLabelText('Month').fill('13');
+		await testPage.getByLabelText('Day').fill('12');
+		await testPage.getByLabelText('Year').fill('1988');
+		await testPage.getByRole('button', { name: 'Search' }).click();
+
+		await expect
+			.element(testPage.getByRole('link', { name: 'Date of birth must be a real date' }))
+			.toHaveAttribute('href', '#client-search-date-of-birth-month');
+		// Announced once, from the group's own fieldset -- and the month is
+		// the box marked, not all three.
+		const group = testPage.getByRole('group', { name: 'Date of birth' });
+		await expect.element(group.getByRole('alert')).toHaveTextContent('Date of birth must be a real date');
+		await expect.element(testPage.getByLabelText('Month')).toHaveAttribute('aria-invalid', 'true');
+		await expect.element(testPage.getByLabelText('Day')).not.toHaveAttribute('aria-invalid', 'true');
+		expect(apiFetchWithSession).not.toHaveBeenCalled();
 	});
 
 	it('surfaces a refusal as a readable message rather than a raw crash -- e.g. a contractor\'s 403 (#501)', async () => {

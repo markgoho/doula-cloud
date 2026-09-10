@@ -49,6 +49,47 @@ export function splitDate(value: string): DateParts {
  * lands on the box that has to change rather than on the group. */
 export type DateField = 'month' | 'day' | 'year';
 
+/**
+ * The id of one box in the group named `name` -- the shape
+ * `DateFields.svelte` gives each of its three controls.
+ *
+ * It is exported because an error summary entry has to name one: its
+ * entries are fragment links, and a `<fieldset>` is not something HTML's
+ * fragment-focusing steps can focus, so a group's refusal points at the
+ * box that has to change rather than at the group. Two forms compose one
+ * (#807) and one of them also maps a BFF refusal onto a box, so the
+ * suffix is written here rather than in three places.
+ */
+export function dateFieldId(name: string, field: DateField): string {
+	return `${name}-${field}`;
+}
+
+const DATE_FIELDS: DateField[] = ['month', 'day', 'year'];
+
+/**
+ * Reads a group's refusal back out of the one `FormError` array
+ * `ErrorSummary` renders, rather than a form tracking it a second time
+ * beside that array -- so a refusal the BFF names lands on a box exactly
+ * the way a locally composed one does, and neither can drift from the
+ * summary's own wording.
+ *
+ * Structurally typed rather than importing `FormError`: what this needs
+ * is a message and an id, and a plain module has no business importing a
+ * component's type to say so. An entry naming anything else -- including
+ * the group's own `-error` id -- is not this group's refusal and is
+ * passed over.
+ */
+export function dateGroupRefusal(
+	errors: readonly { message: string; targetId?: string }[],
+	name: string
+): { message: string; field: DateField } | undefined {
+	for (const entry of errors) {
+		const field = DATE_FIELDS.find((candidate) => entry.targetId === dateFieldId(name, candidate));
+		if (field !== undefined) return { message: entry.message, field };
+	}
+	return undefined;
+}
+
 export type DateResult =
 	| { ok: true; value: string }
 	| { ok: false; message: string; field: DateField };

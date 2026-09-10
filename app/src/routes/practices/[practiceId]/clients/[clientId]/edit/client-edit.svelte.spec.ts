@@ -66,9 +66,9 @@ async function setup(overrides: Partial<ClientDetail> = {}) {
 	return { detail };
 }
 
-function requestBody(callIndex: number): { override: boolean } {
+function requestBody(callIndex: number): { override: boolean; dateOfBirth: string } {
 	const init = apiFetchWithSession.mock.calls[callIndex][1] as RequestInit;
-	return JSON.parse(init.body as string) as { override: boolean };
+	return JSON.parse(init.body as string) as { override: boolean; dateOfBirth: string };
 }
 
 describe('client edit', () => {
@@ -88,7 +88,11 @@ describe('client edit', () => {
 		await expect.element(testPage.getByLabelText('Town or city')).toHaveValue(baseDetail.addressLocality);
 		await expect.element(testPage.getByLabelText('State')).toHaveValue(baseDetail.addressRegion);
 		await expect.element(testPage.getByLabelText('Postal code')).toHaveValue(baseDetail.addressPostalCode);
-		await expect.element(testPage.getByLabelText('Date of birth')).toHaveValue(baseDetail.dateOfBirth);
+		// A memorable date, in three boxes (#807), seeded from the stored
+		// "YYYY-MM-DD" rather than shown as one.
+		await expect.element(testPage.getByLabelText('Month')).toHaveValue('03');
+		await expect.element(testPage.getByLabelText('Day')).toHaveValue('01');
+		await expect.element(testPage.getByLabelText('Year')).toHaveValue('1994');
 	});
 
 	it('shows an error notice when the Client fails to load', async () => {
@@ -118,6 +122,40 @@ describe('client edit', () => {
 		await expect
 			.element(testPage.getByRole('link', { name: "Enter the Client's given name" }))
 			.toBeVisible();
+		// The load is the only request made -- the refusal never reached the network.
+		expect(apiFetchWithSession).toHaveBeenCalledTimes(1);
+	});
+
+	/*
+	 * #807: a birth date is a memorable date here too, so it is three
+	 * boxes, composed on the way to the wire with intake's own tolerance
+	 * -- one or two digits for the month, two or four for the year.
+	 */
+	it('composes the three boxes into the stored "YYYY-MM-DD" on save', async () => {
+		await setup();
+		apiFetchWithSession.mockResolvedValueOnce(jsonResponse(baseDetail));
+
+		await testPage.getByLabelText('Month').fill('3');
+		await testPage.getByLabelText('Day').fill('12');
+		await testPage.getByLabelText('Year').fill('88');
+		await testPage.getByRole('button', { name: 'Save' }).click();
+
+		await expect.poll(() => goto.mock.calls.length).toBeGreaterThan(0);
+		expect(requestBody(1).dateOfBirth).toBe('1988-03-12');
+	});
+
+	it('refuses a date that is not one, before any request, linking to the box that has to change', async () => {
+		await setup();
+
+		await testPage.getByLabelText('Month').fill('2');
+		await testPage.getByLabelText('Day').fill('30');
+		await testPage.getByRole('button', { name: 'Save' }).click();
+
+		await expect
+			.element(testPage.getByRole('link', { name: 'Date of birth must be a real date' }))
+			.toHaveAttribute('href', '#client-edit-date-of-birth-day');
+		const group = testPage.getByRole('group', { name: 'Date of birth' });
+		await expect.element(group.getByRole('alert')).toHaveTextContent('Date of birth must be a real date');
 		// The load is the only request made -- the refusal never reached the network.
 		expect(apiFetchWithSession).toHaveBeenCalledTimes(1);
 	});
