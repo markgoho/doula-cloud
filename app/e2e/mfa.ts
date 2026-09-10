@@ -22,6 +22,23 @@ import { signIn } from './auth';
 // invocation stack.ts uses): accounts:signUp, the emailVerified update,
 // and the full mfaEnrollment:start/finalize dance below all worked with
 // no config change at all.
+//
+// The emulator's second named limitation -- **it refuses the body that
+// clears a second factor**, which is why no spec here can walk a
+// *successful* MFA-recovery spend. The clear goes through the API's
+// authn.FirebaseVerifier.ClearSecondFactors, whose Admin SDK call puts
+// `mfa.enrollments` on the wire as JSON null; the emulator's schema
+// types that field `array` and answers `400 Invalid JSON payload
+// received. /mfa/enrollments must be array`. Production Identity
+// Platform accepts the same body and clears the factor -- #1128 probed
+// it against the real project on 2026-09-10, and the fact and its whole
+// reasoning live on ClearSecondFactors' own doc comment, which is the
+// one place to correct if this is ever re-probed. The schema was read in
+// both firebase-tools 15.27.0 (what app/node_modules holds) and 15.28.1
+// (what package.json pins): apiSpec.js's
+// GoogleCloudIdentitytoolkitV1MfaInfo types `enrollments` as `array`,
+// with no null allowed, in each. The SDK side is
+// firebase.google.com/go/v4 v4.21.0, its newest release.
 const EMULATOR_URL = `http://${E2E_EMULATOR_HOST}:${E2E_EMULATOR_PORT}`;
 const API_URL = `http://${E2E_API_HOST}:${E2E_API_PORT}`;
 
