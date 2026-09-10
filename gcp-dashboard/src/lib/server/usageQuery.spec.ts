@@ -7,7 +7,6 @@ import {
 	CLOUD_STORAGE_SCOPE,
 	FIREBASE_HOSTING_SCOPE,
 	FIRESTORE_SCOPE,
-	GAUGE_LATEST,
 	GAUGE_PEAK,
 	GAUGE_TOTAL,
 	MINIMUM_ALIGNMENT_PERIOD_SECONDS,
@@ -20,7 +19,7 @@ const now = new Date('2026-09-08T04:30:24Z');
 const [billableInstanceTime] = CLOUD_RUN_SCOPE.metrics;
 const [diskQuota] = CLOUD_SQL_SCOPE.metrics;
 const [storedBytes, sentBytes] = CLOUD_STORAGE_SCOPE.metrics;
-const [monthlySentBytes] = FIREBASE_HOSTING_SCOPE.metrics;
+const [hostingSentBytes] = FIREBASE_HOSTING_SCOPE.metrics;
 
 describe('CLOUD_RUN_SCOPE', () => {
 	it('covers the four Cloud Run figures the bill is read from', () => {
@@ -107,7 +106,7 @@ describe('FIRESTORE_SCOPE', () => {
 describe('FIREBASE_HOSTING_SCOPE', () => {
 	it('reads bytes served and nothing else, because that is what Hosting charges', () => {
 		expect(FIREBASE_HOSTING_SCOPE.metrics.map((metric) => metric.type)).toEqual([
-			'firebasehosting.googleapis.com/network/monthly_sent'
+			'firebasehosting.googleapis.com/network/sent_bytes_count'
 		]);
 	});
 
@@ -119,11 +118,15 @@ describe('FIREBASE_HOSTING_SCOPE', () => {
 		expect(storage).toEqual([]);
 	});
 
-	it('takes the newest sample, because the counter resets at the month boundary', () => {
-		expect(monthlySentBytes).toMatchObject({ kind: 'GAUGE', alignment: GAUGE_LATEST });
+	it('reads a DELTA counter and overrides nothing, so no reset can land in the period', () => {
+		expect(hostingSentBytes).toEqual({
+			id: 'sentBytes',
+			type: 'firebasehosting.googleapis.com/network/sent_bytes_count',
+			kind: 'DELTA'
+		});
 	});
 
-	it('names no domain, because every domain reports the same project-wide figure', () => {
+	it('names no domain, because every domain serves bytes the Hosting bill charges for', () => {
 		expect(FIREBASE_HOSTING_SCOPE.resourceFilter).toBe('resource.type="firebase_domain"');
 	});
 });
@@ -212,11 +215,12 @@ describe('buildUsageRequest', () => {
 		);
 	});
 
-	it('takes the newest sample for a counter published as a level', () => {
+	it('sums Firebase Hosting egress per domain and across them, with no reset edge', () => {
 		expect(
-			buildUsageRequest(FIREBASE_HOSTING_SCOPE, monthlySentBytes, now).aggregation
-		).toMatchObject(GAUGE_LATEST);
+			buildUsageRequest(FIREBASE_HOSTING_SCOPE, hostingSentBytes, now).aggregation
+		).toMatchObject(ALIGNMENT_BY_KIND.DELTA);
 	});
+
 
 	it('scopes the filter to every bucket in the project', () => {
 		expect(buildUsageRequest(CLOUD_STORAGE_SCOPE, storedBytes, now).filter).toBe(

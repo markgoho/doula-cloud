@@ -36,7 +36,7 @@
 	);
 	const storedBytes = $derived(formatBytes(usage?.cloudStorage.storedBytes));
 	const sentBytes = $derived(formatBytes(usage?.cloudStorage.sentBytes));
-	const monthlySentBytes = $derived(formatBytes(usage?.firebaseHosting.monthlySentBytes));
+	const hostingSentBytes = $derived(formatBytes(usage?.firebaseHosting.sentBytes));
 	const isLoading = $derived(sync.state === 'loading');
 
 	/**
@@ -309,23 +309,22 @@
 						</p>
 
 						<!-- One stat, in the same grid the other panels use. Bytes served is
-						     the only Firebase Hosting figure that is charged, and Monitoring
-						     publishes one project-wide total rather than a figure per site.
-						     The grid is not padded to fill itself. -->
+						     the only Firebase Hosting figure that is charged, and this is
+						     every domain's share of it added together. The grid is not
+						     padded to fill itself. -->
 						<dl class="stat-grid">
 							<div class="stat">
 								<dt class="stat-label">served</dt>
 								<dd class="stat-num">
-									{monthlySentBytes.value}<span class="unit">{monthlySentBytes.unit}</span>
+									{hostingSentBytes.value}<span class="unit">{hostingSentBytes.unit}</span>
 								</dd>
 							</div>
 						</dl>
 
 						<p class="caveat">
-							Month to date, as of the newest sample Cloud Monitoring holds — read at {formatClock(
+							Bytes served this billing period, across every domain — read at {formatClock(
 								Date.parse(usage.through)
-							)} today. The counter resets at the start of each month. The cost beside it stops
-							earlier, because {EXPORT_FRESHNESS_CAVEAT}.
+							)} today. The cost beside it stops earlier, because {EXPORT_FRESHNESS_CAVEAT}.
 						</p>
 					{:else}
 						<p class="caveat">Sync to see the usage that produced the Firebase Hosting bill.</p>

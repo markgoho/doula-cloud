@@ -11,7 +11,7 @@ const data: DashboardData = {
 		cloudSql: { diskQuotaBytes: 10_464_022_528 },
 		cloudStorage: { storedBytes: 567_149 },
 		firestore: {},
-		firebaseHosting: { monthlySentBytes: 9_467_734 }
+		firebaseHosting: { sentBytes: 9_467_734 }
 	}
 };
 const syncedAt = Date.parse('2026-09-07T06:12:00Z');
