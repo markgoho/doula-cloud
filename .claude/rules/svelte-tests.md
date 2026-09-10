@@ -46,6 +46,17 @@ If a spec needs a per-test DOM lookup helper (e.g. reading a value next to
 a label), define it alongside `setup()` rather than repeating a DOM-walk
 expression (`.element().nextElementSibling`) in every test.
 
+**Where it lives is decided by lint, not by taste.**
+`unicorn/consistent-function-scoping` refuses a function nested inside a
+`describe` that closes over nothing that block owns — which is nearly
+every `setup()` this rule asks for, since a setup normally reaches only
+for the file's own mocks, the fixture, and the component. So a `setup()`
+sits at module scope unless it genuinely reads something its block
+declares. A file with more than one names each for the block it serves
+(`setupHub`, `setupActivity`, `setupVisits`) rather than shadowing one
+name; one per `describe` is the rule, one function called `setup` is not
+(#948).
+
 Don't add `setup()` to specs with no real construction to hide — a table
 of pure-function assertions (`expect(fn(x)).toBe(y)`) gains nothing from a
 setup wrapper.
