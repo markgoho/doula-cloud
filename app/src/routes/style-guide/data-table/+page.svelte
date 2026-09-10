@@ -1,5 +1,5 @@
 <script lang="ts">
-	import DataTable from '#lib/components/organisms/DataTable.svelte';
+	import DataTable, { type DataTableView } from '#lib/components/organisms/DataTable.svelte';
 	import Button from '#lib/components/atoms/Button.svelte';
 	import { formatSignedQuantity } from '#lib/billing.js';
 
@@ -179,7 +179,7 @@
 	];
 </script>
 
-{#snippet removeAction(client: Client)}
+{#snippet removeAction(client: Client, view: DataTableView)}
 	<!-- #515: a bare "Remove" reads the same on every row -- the real Staff
 	     page joins each Button to a visually-hidden sibling naming the row,
 	     which this demo mirrors along with the three button labels below. -->
@@ -187,37 +187,37 @@
 		label="Remove"
 		variant="destructive"
 		size="sm"
-		describedBy="remove-{client.name.replaceAll(' ', '-')}"
+		describedBy="{view}-remove-{client.name.replaceAll(' ', '-')}"
 		onClick={noop}
 	/>
-	<span class="visually-hidden" id="remove-{client.name.replaceAll(' ', '-')}">{client.name}</span>
+	<span class="visually-hidden" id="{view}-remove-{client.name.replaceAll(' ', '-')}">{client.name}</span>
 {/snippet}
 
-{#snippet staffActions(member: Member)}
+{#snippet staffActions(member: Member, view: DataTableView)}
 	<Button
 		label="Edit membership"
 		variant="secondary"
 		size="sm"
-		describedBy="{member.email}-edit"
+		describedBy="{view}-{member.email}-edit"
 		onClick={noop}
 	/>
-	<span class="visually-hidden" id="{member.email}-edit">{member.name}</span>
+	<span class="visually-hidden" id="{view}-{member.email}-edit">{member.name}</span>
 	<Button
 		label="End sessions everywhere"
 		variant="destructive"
 		size="sm"
-		describedBy="{member.email}-end-sessions"
+		describedBy="{view}-{member.email}-end-sessions"
 		onClick={noop}
 	/>
-	<span class="visually-hidden" id="{member.email}-end-sessions">{member.name}</span>
+	<span class="visually-hidden" id="{view}-{member.email}-end-sessions">{member.name}</span>
 	<Button
 		label="Remove from practice"
 		variant="destructive"
 		size="sm"
-		describedBy="{member.email}-remove"
+		describedBy="{view}-{member.email}-remove"
 		onClick={noop}
 	/>
-	<span class="visually-hidden" id="{member.email}-remove">{member.name}</span>
+	<span class="visually-hidden" id="{view}-{member.email}-remove">{member.name}</span>
 {/snippet}
 
 <stack-l space="var(--space-6)">

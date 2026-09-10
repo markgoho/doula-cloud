@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import { registerLayoutPrimitives } from '#lib/primitives/index.js';
 import { jsonResponse } from '#lib/testResponse.js';
+import { findDuplicateIds } from '#lib/duplicateIds.js';
 import Page from './+page.svelte';
 // Rendering `+page.svelte` directly bypasses `+layout.svelte`, the only
 // place the real app calls this -- without it a layout primitive like
@@ -157,6 +158,18 @@ async function setupWithRoster(
 		data: { ...fixtureDetail, session: sessionFor(roles, staffId) },
 		params: fixture.params
 	});
+}
+
+/*
+ * The Visits `<table>`: the first DataTable this page renders, and the
+ * tree the wide viewport above actually shows. Scoping to it is the same
+ * sanctioned querySelector exception the Staff roster's own spec takes --
+ * DataTable builds its record view alongside the table at every width, so
+ * an unscoped count of a per-Visit control counts trees as well as
+ * Visits.
+ */
+function visitsTable() {
+	return testPage.elementLocator(document.querySelector('.table-view')!);
 }
 
 describe('Staff Engagement detail summary', () => {
@@ -1027,7 +1040,14 @@ describe('choosing who a Visit is for (#268, #274)', () => {
 				.toBeVisible();
 			// visit-2 is Jordan Reyes's, and she is not on this roster, so
 			// its own picker still offers the sole Doula.
-			expect(testPage.getByLabelText('Reassign to').elements()).toHaveLength(1);
+			//
+			// Scoped to the Visits `<table>` -- the tree this spec's wide
+			// viewport actually shows. DataTable builds its record view
+			// alongside the table at every width, so an unscoped count is a
+			// count of trees as much as of pickers. It read 1 before #666
+			// only because both copies of the label pointed at one duplicated
+			// id and so resolved to the same control.
+			expect(visitsTable().getByLabelText('Reassign to').elements()).toHaveLength(1);
 		});
 	});
 
@@ -1226,5 +1246,32 @@ describe('the birth outcome section', () => {
 		await expect
 			.element(testPage.getByText('The Practice never learned what happened').first())
 			.toBeVisible();
+	});
+});
+
+/*
+ * #666: this page's Visits DataTable renders its per-Visit actions into
+ * both of the component's trees, so every id in that snippet -- the
+ * visually-hidden name span each button is described by, and the reassign,
+ * schedule and notes LabeledField ids, which the hint and error ids under
+ * them are derived from -- was emitted twice per Visit. Nothing asserted
+ * over this page with a non-empty Visits list before, which is why it
+ * survived: an id under a `display: none` ancestor is invisible to axe's
+ * own duplicate-id rules.
+ */
+describe('id uniqueness across DataTable two trees (#666)', () => {
+	beforeEach(() => {
+		apiFetchWithSession.mockReset();
+	});
+
+	it('emits no duplicate id with a non-empty Visits list on screen', async () => {
+		await setupWithRoster();
+
+		// The reassign control renders only once the assignee read has
+		// landed, and it carries three of the four ids at issue -- so
+		// waiting for it is what makes this assertion cover them.
+		await expect.element(testPage.getByLabelText('Reassign to').first()).toBeVisible();
+
+		expect(findDuplicateIds(document)).toEqual([]);
 	});
 });

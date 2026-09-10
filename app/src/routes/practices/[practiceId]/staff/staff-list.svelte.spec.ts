@@ -2,6 +2,7 @@ import { page as testPage } from 'vitest/browser';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import { jsonResponse } from '#lib/testResponse.js';
+import { findDuplicateIds } from '#lib/duplicateIds.js';
 import { registerLayoutPrimitives } from '#lib/primitives/index.js';
 // DataTable's frame needs stack-l's display:block default (primitives.css)
 // to work as a container-query context -- see DataTable.svelte.spec.ts. This
@@ -538,5 +539,29 @@ describe('staff screen', () => {
 		const revoke = testPage.getByRole('button', { name: 'Revoke' });
 		expect(describedByText(revoke.first())).toBe(liveInvitation.address);
 		expect(describedByText(revoke.nth(1))).toBe(lapsedInvitation.address);
+	});
+
+	/*
+	 * #666: every id above is emitted twice, once per DataTable tree, and
+	 * `describedByText` resolves the way the browser does -- first match in
+	 * tree order. Two rosters' worth of rows, with the work state history
+	 * disclosure opened so its own Show older changes id is in the document
+	 * too, is the whole set of ids this route can produce at once.
+	 */
+	it('emits no duplicate id, across both DataTable trees and both rosters', async () => {
+		await setup({
+			historyResponse: jsonResponse({
+				memberSince: '2026-08-01T00:00:00Z',
+				items: [{ eventId: 'event-1', workState: 'NY', createdAt: '2026-08-28T12:00:00Z' }],
+				hasMore: true,
+				nextCursor: 'cursor-1'
+			})
+		});
+		await membersTable().getByText('Work state history').first().click();
+		await expect
+			.element(membersTable().getByRole('button', { name: 'Show older changes' }))
+			.toBeVisible();
+
+		expect(findDuplicateIds(document)).toEqual([]);
 	});
 });

@@ -17,7 +17,7 @@
 		type WorkStateHistory
 	} from '#lib/staff.js';
 	import { PaginatedList } from '#lib/paginatedList.svelte.js';
-	import DataTable from '#lib/components/organisms/DataTable.svelte';
+	import DataTable, { type DataTableView } from '#lib/components/organisms/DataTable.svelte';
 	import Heading from '#lib/components/atoms/Heading.svelte';
 	import Text from '#lib/components/atoms/Text.svelte';
 	import Notice from '#lib/components/atoms/Notice.svelte';
@@ -265,7 +265,14 @@
 	}
 </script>
 
-{#snippet memberActions(member: StaffSummary)}
+{#snippet memberActions(member: StaffSummary, view: DataTableView)}
+	<!--
+		#666: DataTable renders this snippet into both of its trees, so
+		every id below is scoped by which tree is asking. Without that,
+		each `aria-describedby` here resolves to the `<table>` copy of the
+		span whether or not the table is the view on screen.
+	-->
+
 	<!--
 		The history behind the "Works from" value on this row (#459). The
 		column shows the current state and the day it was asserted, which
@@ -305,11 +312,11 @@
 					label="Show older changes"
 					variant="secondary"
 					size="sm"
-					describedBy="{member.staffId}-history-name"
+					describedBy="{view}-{member.staffId}-history-name"
 					loading={historyLoading[member.staffId]}
 					onClick={() => loadWorkStateHistory(member.staffId, history.nextCursor)}
 				/>
-				<span class="visually-hidden" id="{member.staffId}-history-name">{member.name}</span>
+				<span class="visually-hidden" id="{view}-{member.staffId}-history-name">{member.name}</span>
 			{/if}
 		{/if}
 	</details>
@@ -337,19 +344,19 @@
 			label="Edit membership"
 			variant="secondary"
 			size="sm"
-			describedBy="{member.staffId}-edit-name"
+			describedBy="{view}-{member.staffId}-edit-name"
 			onClick={() => startEditing(member)}
 		/>
-		<span class="visually-hidden" id="{member.staffId}-edit-name">{member.name}</span>
+		<span class="visually-hidden" id="{view}-{member.staffId}-edit-name">{member.name}</span>
 	{/if}
 	<Button
 		label="End sessions everywhere"
 		variant="destructive"
 		size="sm"
-		describedBy="{member.staffId}-end-sessions-name"
+		describedBy="{view}-{member.staffId}-end-sessions-name"
 		onClick={() => (confirmEndSessionsFor = member.staffId)}
 	/>
-	<span class="visually-hidden" id="{member.staffId}-end-sessions-name">{member.name}</span>
+	<span class="visually-hidden" id="{view}-{member.staffId}-end-sessions-name">{member.name}</span>
 	<ConfirmDialog
 		bind:open={
 			() => confirmEndSessionsFor === member.staffId,
@@ -370,10 +377,10 @@
 		label="Remove from practice"
 		variant="destructive"
 		size="sm"
-		describedBy="{member.staffId}-remove-name"
+		describedBy="{view}-{member.staffId}-remove-name"
 		onClick={() => (confirmRemoveStaffId = member.staffId)}
 	/>
-	<span class="visually-hidden" id="{member.staffId}-remove-name">{member.name}</span>
+	<span class="visually-hidden" id="{view}-{member.staffId}-remove-name">{member.name}</span>
 	<ConfirmDialog
 		bind:open={
 			() => confirmRemoveStaffId === member.staffId,
@@ -389,7 +396,7 @@
 	/>
 {/snippet}
 
-{#snippet invitationActions(invitation: InvitationSummary)}
+{#snippet invitationActions(invitation: InvitationSummary, view: DataTableView)}
 	{#if invitation.expired}
 		<Badge label="Expired -- invite again or revoke" variant="neutral" />
 	{/if}
@@ -400,10 +407,10 @@
 		label="Revoke"
 		variant="destructive"
 		size="sm"
-		describedBy="{invitation.invitationId}-revoke-name"
+		describedBy="{view}-{invitation.invitationId}-revoke-name"
 		onClick={() => (confirmRevokeInvitationId = invitation.invitationId)}
 	/>
-	<span class="visually-hidden" id="{invitation.invitationId}-revoke-name">{invitation.address}</span>
+	<span class="visually-hidden" id="{view}-{invitation.invitationId}-revoke-name">{invitation.address}</span>
 	<ConfirmDialog
 		bind:open={
 			() => confirmRevokeInvitationId === invitation.invitationId,

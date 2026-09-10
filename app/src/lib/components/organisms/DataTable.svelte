@@ -1,3 +1,21 @@
+<script module lang="ts">
+	/**
+	 * Which of this component's two trees is rendering a caller's snippet
+	 * (#666). Both trees exist in the DOM at every width -- the container
+	 * query below picks which one is displayed, it does not choose which
+	 * one is built -- so a caller's snippet runs twice per row, and an id
+	 * it assigns would otherwise exist twice in the document. An id has to
+	 * be unique: `aria-describedby` and every other id reference resolve
+	 * to the first match in tree order, which is always the `<table>`
+	 * copy, whether or not that is the copy on screen.
+	 *
+	 * A caller that assigns no id ignores this parameter, and a snippet
+	 * that declares fewer parameters still satisfies the type, so nothing
+	 * has to change for callers this does not concern.
+	 */
+	export type DataTableView = 'table' | 'record';
+</script>
+
 <script lang="ts" generics="T">
 	import type { Snippet } from 'svelte';
 	import Button from '../atoms/Button.svelte';
@@ -72,13 +90,24 @@
 		 * not a promise this component can keep, unlike a formatted
 		 * timestamp string, which is exactly the shape `<time>` expects.
 		 * A column that needs both puts its snippet anywhere but first.
+		 *
+		 * Its second parameter is the view discriminator `rowActions.content`
+		 * carries, for the same reason and on the same terms -- see
+		 * `DataTableView`. Keeping the two shapes identical is the point of
+		 * the paragraph above; giving one of them the discriminator and not
+		 * the other would make that paragraph false.
 		 */
-		content?: Snippet<[row: T]>;
+		content?: Snippet<[row: T, view: DataTableView]>;
 	}
 
 	interface RowActions<T> {
 		label: string;
-		content: Snippet<[row: T]>;
+		/**
+		 * Rendered once into each of the two trees, so anything it assigns
+		 * an id to folds the view discriminator into that id -- see
+		 * `DataTableView`.
+		 */
+		content: Snippet<[row: T, view: DataTableView]>;
 	}
 
 	interface Properties<T> {
@@ -140,7 +169,7 @@
 	come out identical to the bare-link branch below it. `content` on a
 	linked first column is deliberately unreachable -- see `Column.content`.
 -->
-{#snippet cell(column: Column<T>, columnIndex: number, row: T)}
+{#snippet cell(column: Column<T>, columnIndex: number, row: T, view: DataTableView)}
 	{#if columnIndex === 0 && rowHref && column.datetimeAccessor}
 		<time datetime={column.datetimeAccessor(row)}
 			><Link href={rowHref(row)} label={column.accessor(row)} /></time
@@ -148,7 +177,7 @@
 	{:else if columnIndex === 0 && rowHref}
 		<Link href={rowHref(row)} label={column.accessor(row)} />
 	{:else if column.content}
-		{@render column.content(row)}
+		{@render column.content(row, view)}
 	{:else if column.datetimeAccessor}
 		<time datetime={column.datetimeAccessor(row)}>{column.accessor(row)}</time>
 	{:else}
@@ -184,12 +213,12 @@
 								class:variant-body={column.variant === 'body'}
 								class:muted={column.variant === 'muted'}
 							>
-								{@render cell(column, columnIndex, row)}
+								{@render cell(column, columnIndex, row, 'table')}
 							</td>
 						{/each}
 						{#if rowActions}
 							<td>
-								{@render rowActions.content(row)}
+								{@render rowActions.content(row, 'table')}
 							</td>
 						{/if}
 					</tr>
@@ -224,12 +253,12 @@
 							class:variant-body={column.variant === 'body'}
 							class:muted={column.variant === 'muted'}
 						>
-							{@render cell(column, columnIndex, row)}
+							{@render cell(column, columnIndex, row, 'record')}
 						</dd>
 					{/each}
 					{#if rowActions}
 						<dt>{rowActions.label}</dt>
-						<dd>{@render rowActions.content(row)}</dd>
+						<dd>{@render rowActions.content(row, 'record')}</dd>
 					{/if}
 				</dl>
 			{/each}
