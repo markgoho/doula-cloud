@@ -27,7 +27,7 @@ The two tooling trees are the decision #1120 asked for, so it is recorded here: 
 
 `bun run format` at the repo root rewrites the two trees; `bun run format:check` is the same pass as an assertion. Both are scoped to `.claude/hooks/**/*.ts` and `scripts/**/*.ts` and reach nothing else. Prettier reads `.editorconfig` for indentation by default, so a single `--check` enforces both of the configs above and there is no second copy of the indent rule to drift.
 
-`app/` is deliberately absent from that scope. It is uniformly tab-indented with no `.editorconfig` or `.prettierrc` of its own, so the root `[*] indent_style = space` is untrue for it too — a real breach of the same kind, tracked separately, and out of scope for the gate above.
+`app/` is deliberately absent from that scope. It is uniformly tab-indented with no `.editorconfig` or `.prettierrc` of its own, so the root `[*] indent_style = space` is untrue for it too — a real breach of the same kind, tracked in #1232, and out of scope for the gate above.
 
 ## The memory this gate costs, and why the browser pool is capped
 
