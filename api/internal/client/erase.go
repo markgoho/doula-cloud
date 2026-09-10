@@ -52,7 +52,13 @@ const StripeRedactionFloor = 90 * 24 * time.Hour
 type ErasureResponse struct {
 	ErasedAt                  time.Time  `json:"erasedAt"`
 	StripeRedactionEligibleAt *time.Time `json:"stripeRedactionEligibleAt,omitempty"`
-	StripeCustomersQueued     int        `json:"stripeCustomersQueued"`
+	// StripeCustomersQueued counts every Customer of hers this erasure
+	// queued for deletion, on her surviving record and on every record
+	// merged into it (#813). Those cannot move at a merge --
+	// client_stripe_customers carries no UPDATE grant -- so an Owner who
+	// saw only the survivor's count would be told a smaller number than
+	// the act actually covered.
+	StripeCustomersQueued int `json:"stripeCustomersQueued"`
 	// PortalAccountQueued says her portal link at this Practice was
 	// removed -- deliberately not whether the Portal Account row itself
 	// was deleted (#830). The login survives when another Practice's
@@ -314,6 +320,7 @@ func Erase(ctx context.Context, tx *sql.Tx, practiceID, clientID string, actor a
 	}
 	absorbed, absorbedCustomers, absorbedEligibleAt, err := eraseAbsorbedRecords(ctx, tx, practiceID, clientID, now)
 	if err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		return ErasureResponse{}, err
 	}
 	if absorbedEligibleAt != nil && (eligibleAt == nil || absorbedEligibleAt.After(*eligibleAt)) {
@@ -349,7 +356,7 @@ func Erase(ctx context.Context, tx *sql.Tx, practiceID, clientID string, actor a
 	return ErasureResponse{
 		ErasedAt:                  now,
 		StripeRedactionEligibleAt: eligibleAt,
-		StripeCustomersQueued:     len(customers),
+		StripeCustomersQueued:     len(customers) + absorbedCustomers,
 		PortalAccountQueued:       portalQueued,
 	}, nil
 }
@@ -389,6 +396,7 @@ func eraseAbsorbedRecords(ctx context.Context, tx *sql.Tx, practiceID, survivorI
 		if _, err := tx.ExecContext(ctx,
 			`SELECT redact_absorbed_client($1, $2, $3)`, id, ErasedGivenName, now,
 		); err != nil {
+			// coverage:ignore reason: the function's own refusal needs a caller that redacts a tombstone whose destination is not erased, which Erase's ordering and absorbedRecordIDs' own ordering make unreachable
 			return 0, 0, nil, fmt.Errorf("client: redact absorbed record: %w", err)
 		}
 		absorbedCustomers, absorbedEligibleAt, err := enqueueStripeErasure(ctx, tx, practiceID, id, now)
@@ -774,40 +782,14 @@ func enqueueStripeErasure(ctx context.Context, tx *sql.Tx, practiceID, clientID 
 // login separately rather than of whichever row a single read happened
 // to return.
 func enqueuePortalErasure(ctx context.Context, tx *sql.Tx, clientID string) (queued bool, err error) {
-	rows, err := tx.QueryContext(ctx,
-		`SELECT identity_uid FROM client_portal_users WHERE client_id = $1 ORDER BY id`, clientID,
-	)
+	identityUIDs, hasPending, err := portalIdentityUIDs(ctx, tx, clientID)
 	if err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		return false, fmt.Errorf("client: read portal accounts: %w", err)
-	}
-	var identityUIDs []string
-	var pendingOnly bool
-	for rows.Next() {
-		var identityUID sql.NullString
-		if err := rows.Scan(&identityUID); err != nil {
-			// coverage:ignore reason: row scan failure, not exercised by unit tests
-			_ = rows.Close()
-			return false, fmt.Errorf("client: scan portal account: %w", err)
-		}
-		if identityUID.Valid {
-			identityUIDs = append(identityUIDs, identityUID.String)
-		} else {
-			pendingOnly = true
-		}
-	}
-	if err := rows.Err(); err != nil {
-		// coverage:ignore reason: row iteration failure, not exercised by unit tests
-		_ = rows.Close()
-		return false, fmt.Errorf("client: iterate portal accounts: %w", err)
-	}
-	if err := rows.Close(); err != nil {
-		// coverage:ignore reason: closing a fully drained rows never fails, not exercised by unit tests
-		return false, fmt.Errorf("client: close portal accounts: %w", err)
+		return false, err
 	}
 
 	if len(identityUIDs) == 0 {
-		if !pendingOnly {
+		if !hasPending {
 			return false, nil
 		}
 		// An invitation that was never accepted: there is no Identity
@@ -824,6 +806,7 @@ func enqueuePortalErasure(ctx context.Context, tx *sql.Tx, clientID string) (que
 
 	for _, identityUID := range identityUIDs {
 		if err := erasePortalAccount(ctx, tx, identityUID); err != nil {
+			// coverage:ignore reason: DB query failure, not exercised by unit tests -- every branch inside erasePortalAccount is either covered or carries its own justification
 			return false, err
 		}
 	}
@@ -840,6 +823,40 @@ func enqueuePortalErasure(ctx context.Context, tx *sql.Tx, clientID string) (que
 		return false, fmt.Errorf("client: clear portal identity: %w", err)
 	}
 	return true, nil
+}
+
+// portalIdentityUIDs reads every login clientID's portal rows name, and
+// whether any of those rows is a pending invitation instead. Its own
+// function so the result set is closed before erasePortalAccount runs a
+// second query on the same transaction -- opening one while a result set
+// is still streaming deadlocks on the connection.
+func portalIdentityUIDs(ctx context.Context, tx *sql.Tx, clientID string) (identityUIDs []string, hasPending bool, err error) {
+	rows, err := tx.QueryContext(ctx,
+		`SELECT identity_uid FROM client_portal_users WHERE client_id = $1 ORDER BY id`, clientID,
+	)
+	if err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		return nil, false, fmt.Errorf("client: read portal accounts: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	for rows.Next() {
+		var identityUID sql.NullString
+		if err := rows.Scan(&identityUID); err != nil {
+			// coverage:ignore reason: row scan failure, not exercised by unit tests
+			return nil, false, fmt.Errorf("client: scan portal account: %w", err)
+		}
+		if identityUID.Valid {
+			identityUIDs = append(identityUIDs, identityUID.String)
+		} else {
+			hasPending = true
+		}
+	}
+	if err := rows.Err(); err != nil {
+		// coverage:ignore reason: row iteration failure, not exercised by unit tests
+		return nil, false, fmt.Errorf("client: iterate portal accounts: %w", err)
+	}
+	return identityUIDs, hasPending, nil
 }
 
 // erasePortalAccount takes one of her logins: it deletes the Portal

@@ -97,9 +97,14 @@ func TestFreezeTrigger_LeavesEveryOtherColumnAlone(t *testing.T) {
 }
 
 // TestFreezeTrigger_RefusesARepointedClient covers the other half of
-// ADR-0015's freeze rule: an Engagement belongs to one Client for life,
-// so re-pointing the row is how a second baby would be served on a
-// Credit already spent.
+// ADR-0015's freeze rule: re-pointing the row is how a second baby would
+// be served on a Credit already spent.
+//
+// The rule was narrowed on #813 (ADR-0039), never dropped. A merge may
+// move an Engagement, and only a merge -- the trigger admits the change
+// solely where the old Client is already tombstoned into the new one.
+// Neither Client here has been merged into anything, so the refusal
+// stands, which is what this test is for.
 func TestFreezeTrigger_RefusesARepointedClient(t *testing.T) {
 	db := testdb.New(t)
 	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, "freeze-client", []string{ownerRole}, employeeType)
@@ -112,7 +117,7 @@ func TestFreezeTrigger_RefusesARepointedClient(t *testing.T) {
 	if err == nil {
 		t.Fatal("update succeeded, want client_id to be immutable")
 	}
-	if !strings.Contains(err.Error(), "one Client for life") {
+	if !strings.Contains(err.Error(), "moves between Clients only when the record it belongs to has been merged") {
 		t.Fatalf("error = %v, want the trigger's own refusal", err)
 	}
 }

@@ -171,6 +171,214 @@ func TestEngagementFreezeStillRefusesAnUntombstonedMove(t *testing.T) {
 	}
 }
 
+// TestDetailHandler_MergedClientShowsBothHistoriesAsTwo proves the
+// constraint #813's decision comment puts hardest: the screen may not
+// imply one history. ADR-0027 seals each Client's diffs under her own
+// key and ADR-0022's activity table is append-only, so the absorbed
+// woman's entries can never be re-sealed under the survivor's -- they
+// are read under their own key and labeled with the record they were
+// written against.
+func TestDetailHandler_MergedClientShowsBothHistoriesAsTwo(t *testing.T) {
+	db := testdb.New(t)
+	const identityUID = "staff-merged-detail"
+	practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{ownerRole}, "employee")
+	survivorID, _ := testdb.SeedEngagementInStatus(t, db, practiceID, "Nell Frost", "nell@example.com", "active")
+	absorbedID, absorbedEngagementID := testdb.SeedEngagementWithKind(t, db, practiceID, "Nell Frost", "nell2@example.com", "postpartum")
+	seedApprovedRequest(t, db, practiceID, absorbedID, absorbedEngagementID, staffID, "postpartum")
+	setCreatedAt(t, db, survivorID, "2024-01-01T00:00:00Z")
+	setCreatedAt(t, db, absorbedID, "2025-01-01T00:00:00Z")
+
+	srv, session := newServer(t, db, identityUID)
+	defer srv.Close()
+
+	merge := authedJSON(t, session, http.MethodPost, srv.URL+"/api/practices/"+practiceID+"/clients/"+absorbedID+"/merge",
+		client.MergeRequest{Record: client.Record{GivenName: "Nell Frost"}, OtherClientID: survivorID})
+	defer merge.Body.Close()
+	if merge.StatusCode != http.StatusOK {
+		t.Fatalf("merge status = %d, want %d: %s", merge.StatusCode, http.StatusOK, readBody(t, merge))
+	}
+
+	resp := authedJSON(t, session, http.MethodGet, srv.URL+"/api/practices/"+practiceID+"/clients/"+survivorID, nil)
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("detail status = %d, want %d", resp.StatusCode, http.StatusOK)
+	}
+	var out client.DetailResponse
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		t.Fatalf("decode detail: %v", err)
+	}
+
+	if len(out.MergedFrom) != 1 || out.MergedFrom[0].ClientID != absorbedID {
+		t.Fatalf("mergedFrom = %+v, want the one absorbed record %q", out.MergedFrom, absorbedID)
+	}
+	if out.MergedFrom[0].MergedByName == nil {
+		t.Fatalf("mergedFrom[0].mergedByName = nil -- who merged this must be answerable, and in plaintext")
+	}
+
+	var labeled, unlabeled int
+	for _, h := range out.History {
+		if h.ClientEvent == nil {
+			continue
+		}
+		if h.FromMergedRecord != nil {
+			if *h.FromMergedRecord != absorbedID {
+				t.Fatalf("fromMergedRecord = %q, want %q", *h.FromMergedRecord, absorbedID)
+			}
+			labeled++
+		} else {
+			unlabeled++
+		}
+	}
+	if labeled == 0 || unlabeled == 0 {
+		t.Fatalf("history has %d labeled and %d unlabeled entries, want both -- two trails shown as two", labeled, unlabeled)
+	}
+}
+
+// TestEraseHandler_ReachesTheAbsorbedRecord proves the other half of
+// that same constraint. The merge deliberately leaves the absorbed
+// record's data key standing, so it is the survivor's erasure that has
+// to shred it -- and the tombstone still holds her name until something
+// redacts it, which no ordinary write can, because clients_update
+// refuses a merged row outright.
+func TestEraseHandler_ReachesTheAbsorbedRecord(t *testing.T) {
+	db := testdb.New(t)
+	const identityUID = "staff-erase-absorbed"
+	practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{ownerRole}, "employee")
+	survivorID, _ := testdb.SeedEngagementInStatus(t, db, practiceID, "Vera Ash", "vera@example.com", "active")
+	absorbedID := seedFullClient(t, db, practiceID, staffID)
+	// A Stripe Customer allocated against the absorbed record before the
+	// merge. It cannot move -- client_stripe_customers carries no UPDATE
+	// grant (00076) -- so the survivor's erasure is the only thing that
+	// will ever delete it, and its 90-day redaction floor has to reach
+	// the date the erasure reports.
+	seedMappedCustomer(t, db, practiceID, absorbedID, "acct_absorbed", "cus_absorbed", 0)
+
+	srv, session := newServer(t, db, identityUID)
+	defer srv.Close()
+
+	merge := authedJSON(t, session, http.MethodPost, srv.URL+"/api/practices/"+practiceID+"/clients/"+absorbedID+"/merge",
+		client.MergeRequest{Record: client.Record{GivenName: "Vera Ash"}, OtherClientID: survivorID})
+	defer merge.Body.Close()
+	if merge.StatusCode != http.StatusOK {
+		t.Fatalf("merge status = %d, want %d: %s", merge.StatusCode, http.StatusOK, readBody(t, merge))
+	}
+
+	erase := postErasure(t, session, srv, practiceID, survivorID)
+	defer erase.Body.Close()
+	if erase.StatusCode != http.StatusOK {
+		t.Fatalf("erase status = %d, want %d: %s", erase.StatusCode, http.StatusOK, readBody(t, erase))
+	}
+	var erasure client.ErasureResponse
+	if err := json.NewDecoder(erase.Body).Decode(&erasure); err != nil {
+		t.Fatalf("decode erasure: %v", err)
+	}
+	if erasure.StripeCustomersQueued != 1 {
+		t.Fatalf("stripeCustomersQueued = %d, want 1 -- the absorbed record's Customer is only ever reached from here", erasure.StripeCustomersQueued)
+	}
+	if erasure.StripeRedactionEligibleAt == nil {
+		t.Fatalf("stripeRedactionEligibleAt = nil, want the absorbed record's own 90-day floor")
+	}
+
+	var givenName string
+	var email *string
+	var erasedAt *time.Time
+	var mergedInto *string
+	var mergedAt *time.Time
+	if err := db.Admin.QueryRowContext(t.Context(),
+		`SELECT given_name, email, erased_at, merged_into, merged_at FROM clients WHERE id = $1`, absorbedID,
+	).Scan(&givenName, &email, &erasedAt, &mergedInto, &mergedAt); err != nil {
+		t.Fatalf("read absorbed record: %v", err)
+	}
+	if givenName != client.ErasedGivenName || email != nil {
+		t.Fatalf("absorbed record = %q / %v, want it redacted -- an erasure that misses the tombstone leaves her name standing forever", givenName, email)
+	}
+	if erasedAt == nil {
+		t.Fatalf("absorbed erased_at = nil, want a timestamp")
+	}
+	if mergedInto == nil || *mergedInto != survivorID || mergedAt == nil {
+		t.Fatalf("merge audit was destroyed by the erasure -- it is plaintext precisely so it outlives one")
+	}
+	if hasDataKey(t, db, absorbedID) {
+		t.Fatalf("absorbed record's data key survived the erasure -- her second sealed trail is still readable")
+	}
+	if hasDataKey(t, db, survivorID) {
+		t.Fatalf("survivor's data key survived her own erasure")
+	}
+
+	// The screen's own answer afterwards. Both trails are unreadable, and
+	// the plaintext merge audit is what still explains why there are two.
+	detail := authedJSON(t, session, http.MethodGet, srv.URL+"/api/practices/"+practiceID+"/clients/"+survivorID, nil)
+	defer detail.Body.Close()
+	var out client.DetailResponse
+	if err := json.NewDecoder(detail.Body).Decode(&out); err != nil {
+		t.Fatalf("decode detail: %v", err)
+	}
+	if len(out.MergedFrom) != 1 {
+		t.Fatalf("mergedFrom = %+v, want the absorbed record still named after the erasure", out.MergedFrom)
+	}
+	if out.MergedFrom[0].ErasedAt == nil {
+		t.Fatalf("mergedFrom[0].erasedAt = nil -- the screen must not imply the absorbed record is still live")
+	}
+	if out.MergedFrom[0].MergedByName == nil {
+		t.Fatalf("mergedFrom[0].mergedByName = nil -- who merged this must outlive the shredding of both keys")
+	}
+}
+
+// TestMergeHandler_RevokesTheAbsorbedRecordsPendingInvitation proves the
+// one attachment the merge does not move. An invitation is re-sendable,
+// moving it would collide with client_portal_users_one_pending_per_client
+// (00026) whenever the survivor holds her own, and the address it was
+// sent to may not even be the address the fold kept.
+func TestMergeHandler_RevokesTheAbsorbedRecordsPendingInvitation(t *testing.T) {
+	db := testdb.New(t)
+	const identityUID = "staff-merge-revokes-invite"
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, "employee")
+	survivorID, _ := testdb.SeedEngagementInStatus(t, db, practiceID, "Della Roe", "della@example.com", "active")
+	absorbedID, _ := testdb.SeedNamedEngagement(t, db, practiceID, "Della Roe", "della2@example.com")
+	testdb.SeedPendingPortalInvite(t, db, absorbedID)
+	setCreatedAt(t, db, survivorID, "2024-01-01T00:00:00Z")
+	setCreatedAt(t, db, absorbedID, "2025-01-01T00:00:00Z")
+
+	srv, session := newServer(t, db, identityUID)
+	defer srv.Close()
+
+	resp := authedJSON(t, session, http.MethodPost, srv.URL+"/api/practices/"+practiceID+"/clients/"+absorbedID+"/merge",
+		client.MergeRequest{Record: client.Record{GivenName: "Della Roe"}, OtherClientID: survivorID})
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want %d: %s", resp.StatusCode, http.StatusOK, readBody(t, resp))
+	}
+	var out client.MergeResponse
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if out.Moved.RevokedInvitations != 1 || out.Moved.PortalAccounts != 0 {
+		t.Fatalf("moved = %+v, want one revoked invitation and no moved account", out.Moved)
+	}
+
+	var inviteToken *string
+	if err := db.Admin.QueryRowContext(t.Context(),
+		`SELECT invite_token FROM client_portal_users WHERE client_id = $1`, absorbedID,
+	).Scan(&inviteToken); err != nil {
+		t.Fatalf("read absorbed invite: %v", err)
+	}
+	if inviteToken != nil {
+		t.Fatalf("invite_token = %v, want nil -- an invitation to a record that no longer exists must not stay redeemable", *inviteToken)
+	}
+
+	var outboxStatus string
+	if err := db.Admin.QueryRowContext(t.Context(),
+		`SELECT o.status FROM portal_invite_outbox o
+		   JOIN client_portal_users pu ON pu.id = o.client_portal_user_id
+		  WHERE pu.client_id = $1`, absorbedID,
+	).Scan(&outboxStatus); err != nil {
+		t.Fatalf("read invite outbox: %v", err)
+	}
+	if outboxStatus == "pending" {
+		t.Fatalf("outbox status = pending, want the send stopped -- the email would name a record that is now a tombstone")
+	}
+}
+
 // TestMergeHandler_RefusesTwoPendingRequestsOfOneKind proves the merge
 // asks before it writes. engagement_requests_one_pending (00042) is a
 // unique index on (client_id, kind) where state = 'pending', so moving

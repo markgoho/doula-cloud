@@ -456,6 +456,7 @@ func moveAttachments(ctx context.Context, tx *sql.Tx, absorbedID, survivorID str
 	engagements, err := moveRows(ctx, tx,
 		`UPDATE engagements SET client_id = $2 WHERE client_id = $1`, absorbedID, survivorID)
 	if err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests -- the narrowed trigger's own refusal is covered by TestEngagementFreezeStillRefusesAnUntombstonedMove
 		return movedCounts{}, err
 	}
 	moved.Engagements = engagements
@@ -463,6 +464,7 @@ func moveAttachments(ctx context.Context, tx *sql.Tx, absorbedID, survivorID str
 	requests, err := moveRows(ctx, tx,
 		`UPDATE engagement_requests SET client_id = $2 WHERE client_id = $1`, absorbedID, survivorID)
 	if err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests -- the one reachable failure (two pending Requests of one kind) is refused before this runs
 		return movedCounts{}, err
 	}
 	moved.EngagementRequests = requests
@@ -478,13 +480,14 @@ func moveAttachments(ctx context.Context, tx *sql.Tx, absorbedID, survivorID str
 		  WHERE client_id = $1 AND identity_uid IS NULL AND invite_token IS NOT NULL`,
 		absorbedID)
 	if err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		return movedCounts{}, err
 	}
 	moved.RevokedInvitations = revoked
 	if revoked > 0 {
 		if err := portalinvite.RevokePending(ctx, tx, absorbedID); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			return movedCounts{}, err
+			return movedCounts{}, fmt.Errorf("client: revoke absorbed record's pending invite: %w", err)
 		}
 	}
 
@@ -495,6 +498,7 @@ func moveAttachments(ctx context.Context, tx *sql.Tx, absorbedID, survivorID str
 	if err := tx.QueryRowContext(ctx,
 		`SELECT merge_client_portal_links($1, $2)`, absorbedID, survivorID,
 	).Scan(&links); err != nil {
+		// coverage:ignore reason: the function's own refusal needs a caller that moves portal links without writing the tombstone first, which MergeHandler's ordering makes unreachable
 		return movedCounts{}, fmt.Errorf("client: move portal links: %w", err)
 	}
 	moved.PortalAccounts = links
@@ -508,6 +512,7 @@ func moveAttachments(ctx context.Context, tx *sql.Tx, absorbedID, survivorID str
 func moveRows(ctx context.Context, tx *sql.Tx, query string, args ...any) (int, error) {
 	res, err := tx.ExecContext(ctx, query, args...)
 	if err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		return 0, fmt.Errorf("client: move rows: %w", err)
 	}
 	n, err := res.RowsAffected()
