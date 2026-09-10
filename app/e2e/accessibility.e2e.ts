@@ -107,64 +107,29 @@ const KNOWN: Known[] = [];
 
 /*
  * The loading affordance, as one selector every route is held against
- * (#1152).
+ * (#1152). `Skeleton` is the only one in the app, and it is matched by
+ * what it means rather than by a test hook: `role="status"` plus
+ * `aria-busy="true"` is what `Skeleton.svelte` renders, and the pair
+ * cannot be silently dropped without a screen-reader user losing the
+ * announcement too. `Button`'s in-flight state also sets `aria-busy` but
+ * carries the button role, so it is not matched here -- and nothing on a
+ * freshly-loaded route is submitting anyway.
  *
- * ## Why the h1 alone was not a ready signal
+ * Why the h1 alone was never a ready signal for most of the inventory,
+ * what axe actually measured against a held Skeleton, and why this shape
+ * was chosen over the other two candidates -- a node named per row, or
+ * `FormPage` no longer rendering its title while loading, which it still
+ * does -- are all in docs/testing.md, per this file's own header: the
+ * argument lives there, and this file holds the assertion.
  *
- * `FormPage` and `ListPage` both render their page title in their
- * `loading` branch, beside a `Skeleton` standing where the content will
- * be -- deliberately, because those titles are static ("Your account",
- * "Clients") rather than data a fetch has to bring. `OverviewHub` and
- * `RecordDetail` suppress the title in theirs, which is why this went
- * unnoticed: the h1 wait is a true ready signal for archetypes B and D
- * and was never one for archetypes C, E, F or G. So on every FormPage
- * and ListPage row, `goto` + a visible h1 could be satisfied with the
- * Skeleton still up, and axe measured the placeholder.
- *
- * ## Why the absence of the affordance, and not one of the other two shapes
- *
- * The three candidates were: keep the signal per-route but make each row
- * name a node only its loaded state renders; wait on the loading
- * affordance being gone; or stop rendering `FormPage`'s title while
- * loading.
- *
- * Per-row nodes were rejected because they are a convention rather than a
- * guarantee: it covers the row whose author remembered, and the next row
- * added inherits the bug. This one selector covers every row already in
- * the inventory and every row anyone adds later, without a row saying
- * anything.
- *
- * Changing `FormPage` was rejected because it changes a screen a person
- * sees to suit a test: the loading-state title is a decision (#480, and
- * the prop's own doc comment), and a page that shows its name while its
- * content arrives is better than one that shows nothing. `FormPage`'s
- * loading title survives this ticket unchanged.
- *
- * ## The selector
- *
- * `Skeleton` is the only loading affordance in the app, and it is the one
- * that stands where content will be, so it is what tells a scan the
- * screen is not the screen yet. It is matched by what it means rather
- * than by a test hook: `role="status"` plus `aria-busy="true"` is what
- * `Skeleton.svelte` renders, and the pair cannot be silently dropped
- * without a screen-reader user losing the announcement too. `Button`'s
- * in-flight state also sets `aria-busy`, but carries the button role, so
- * it is not matched here -- and nothing on a freshly-loaded route is
- * submitting anyway.
- *
- * ## Why this is a retrying assertion and not #1126's `awaitSettled`
- *
- * `awaitSettled` (app/src/routes/style-guide/continuum.ts) is an in-page
- * DOM helper: it takes a `() => boolean` evaluated inside the frame, for
- * the vitest-browser continuum checks. Playwright drives from Node, so
- * reusing it would mean re-implementing it behind `page.waitForFunction`
- * -- a second settle mechanism, which is the thing to avoid. Its two
- * properties are what matter, and a retrying `expect` locator assertion
- * already has both: no fixed sleep, and a budget that expires LOUDLY
- * rather than falling through into a measurement. That is the same shape
- * the h1 wait above it already uses.
+ * It is a retrying `expect` rather than #1126's `awaitSettled` because
+ * that helper is an in-page DOM predicate written for the vitest-browser
+ * checks, and Playwright drives from Node. The two properties that matter
+ * are already a retrying locator assertion's: no fixed sleep, and a
+ * budget that expires LOUDLY rather than falling through into a
+ * measurement -- the same shape the h1 wait above it uses.
  */
-const LOADING_AFFORDANCE = '[role="status"][aria-busy="true"]';
+const LOADING_AFFORDANCE_SELECTOR = '[role="status"][aria-busy="true"]';
 
 async function scan(page: Page, route: Route) {
 	await page.goto(route.url);
@@ -173,7 +138,7 @@ async function scan(page: Page, route: Route) {
 		`${route.key} never finished loading -- axe would have scanned a skeleton`
 	).toBeVisible();
 	await expect(
-		page.locator(LOADING_AFFORDANCE),
+		page.locator(LOADING_AFFORDANCE_SELECTOR),
 		`${route.key} still had a loading affordance on screen -- axe would have scanned a Skeleton and reported the placeholder's own clean bill of health as the screen's`
 	).toHaveCount(0);
 
@@ -757,7 +722,10 @@ test('the sweep refuses a screen whose loading affordance is still up', async ({
 
 	const held: Route = {
 		key: 'practices/[practiceId]/settings/mfa (held loading)',
-		archetype: 'F',
+		// Not a row in the inventory above, and the label says so: this
+		// fixture exists to be refused, and a failure message reading a
+		// bare 'F' would imply a scanned route that does not exist.
+		archetype: 'F, as a guard fixture rather than an inventory row',
 		url: `/practices/${practiceId}/settings/mfa`,
 		h1: 'Multi-factor authentication'
 	};
