@@ -32,12 +32,14 @@
 # See docs/infrastructure.md's by-hand table for why.
 #
 # Every `*_runtime_accessor` below names `doula-api-runtime@` since #1051.
-# Each was the default compute account before that, which could read all
-# thirteen secrets anyway through project `roles/editor` — so these ten
-# grants described the service's real appetite while enforcing nothing. Ten,
-# not eleven: the live service declares ten `secret_key_ref` environment
-# variables and nine plain ones (cloud_run.tf), which is the count that
-# decides this list.
+# Each was the default compute account before that. These ten grants were
+# the real boundary even then, and still are: `roles/editor`, which that
+# account held over everything else in the project, deliberately excludes
+# `secretmanager.versions.access`, so a secret without a grant here was
+# unreadable to the container no matter what else it could do. #743 walked
+# exactly that failure. Ten, not eleven: the live service declares ten
+# `secret_key_ref` environment variables and nine plain ones (cloud_run.tf),
+# which is the count that decides this list.
 
 resource "google_secret_manager_secret" "github_dispatch_token" {
   annotations         = {}

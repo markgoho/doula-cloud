@@ -146,9 +146,13 @@ resource "google_project_iam_member" "firebase_app_hosting_compute_apphosting_co
 # (cloud_run.tf), created by #1051. Before it, `doula-api` ran as the
 # Google-created default compute service account, which held project
 # `roles/editor` — so a remote-code-execution bug in the BFF was a
-# whole-project compromise: every secret readable, every Cloud Run service
-# and the Cloud SQL instance modifiable, every bucket writable. That account
-# now holds no role in this project at all.
+# whole-project compromise: every Cloud Run service and the Cloud SQL
+# instance modifiable, every bucket writable, and every one of those
+# reachable without touching this configuration. Secret *payloads* were the
+# one thing it could not reach — `roles/editor` excludes
+# `secretmanager.versions.access` — which is why the per-secret grants in
+# secrets.tf mattered even then. That account now holds no role in this
+# project at all.
 #
 # Every grant this account holds is derived from what `api/main.go` and the
 # packages it constructs actually call. Each grant is written next to the
