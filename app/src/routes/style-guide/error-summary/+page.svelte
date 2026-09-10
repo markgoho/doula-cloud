@@ -5,6 +5,7 @@
 	import Button from '#lib/components/atoms/Button.svelte';
 	import TextInput from '#lib/components/atoms/TextInput.svelte';
 	import LabeledField from '#lib/components/molecules/LabeledField.svelte';
+	import StackedForm from '#lib/components/molecules/StackedForm.svelte';
 	import { FormSubmission, type FormError } from '#lib/formSubmission.svelte.js';
 
 	const emailId = 'style-guide-error-summary-email';
@@ -97,38 +98,36 @@
 		text="Submit this empty to see what a refused form does: the summary appears and takes focus, each entry links to its field, and the message beside the field is word-for-word the entry above."
 		tone="variant"
 	/>
-	<form onsubmit={handleSubmit} novalidate>
-		<stack-l space="var(--space-5)">
-			<ErrorSummary errors={submission.errors} />
-			<LabeledField
-				id={emailId}
-				label="Email address we send the portal invite to"
-				error={submission.errorFor(emailId)}
-			>
-				{#snippet children({ id, describedBy, invalid })}
-					<TextInput
-						{id}
-						{describedBy}
-						{invalid}
-						type="email"
-						value={email}
-						onInput={(value) => (email = value)}
-					/>
-				{/snippet}
-			</LabeledField>
-			<LabeledField id={passwordId} label="Password" error={submission.errorFor(passwordId)}>
-				{#snippet children({ id, describedBy, invalid })}
-					<TextInput
-						{id}
-						{describedBy}
-						{invalid}
-						type="password"
-						value={password}
-						onInput={(value) => (password = value)}
-					/>
-				{/snippet}
-			</LabeledField>
-			<Button type="submit" label="Continue to your Practice details" />
-		</stack-l>
-	</form>
+	<StackedForm onSubmit={handleSubmit}>
+		<ErrorSummary errors={submission.errors} />
+		<LabeledField
+			id={emailId}
+			label="Email address we send the portal invite to"
+			error={submission.errorFor(emailId)}
+		>
+			{#snippet children({ id, describedBy, invalid })}
+				<TextInput
+					{id}
+					{describedBy}
+					{invalid}
+					type="email"
+					value={email}
+					onInput={(value) => (email = value)}
+				/>
+			{/snippet}
+		</LabeledField>
+		<LabeledField id={passwordId} label="Password" error={submission.errorFor(passwordId)}>
+			{#snippet children({ id, describedBy, invalid })}
+				<TextInput
+					{id}
+					{describedBy}
+					{invalid}
+					type="password"
+					value={password}
+					onInput={(value) => (password = value)}
+				/>
+			{/snippet}
+		</LabeledField>
+		<Button type="submit" label="Continue to your Practice details" />
+	</StackedForm>
 </stack-l>

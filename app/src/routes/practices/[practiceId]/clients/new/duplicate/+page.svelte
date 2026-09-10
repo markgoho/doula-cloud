@@ -199,6 +199,7 @@
 		{/snippet}
 	</QuestionPage>
 {:else if intakeDraft.matches.length > 0}
+	<!-- stacked-form:ignore: #1108 -- this form wraps a Template. `QuestionPage` renders the controls and the actions as two separate regions of one column and stacks each itself, so the `<form>` here exists to put the submit button inside the form that owns the inputs, not to arrange anything. -->
 	<form onsubmit={handleContinue} novalidate>
 		<QuestionPage
 			journey={JOURNEY}

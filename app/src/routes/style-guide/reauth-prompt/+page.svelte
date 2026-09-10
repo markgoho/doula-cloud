@@ -49,6 +49,7 @@
 
 	<section>
 		<h2>Inside a form the page already owns</h2>
+		<!-- stacked-form:ignore: #1108 -- the point of this example is the `insideForm` branch, which exists because HTML forbids a nested form. The bare `<form>` is the page's own outer form being demonstrated; `ReauthPrompt` brings a `StackedForm` in the other branch above. -->
 		<form onsubmit={(event) => event.preventDefault()}>
 			<ReauthPrompt
 				idPrefix="style-guide-nested"

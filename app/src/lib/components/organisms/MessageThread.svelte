@@ -15,6 +15,7 @@
 	import Button from '../atoms/Button.svelte';
 	import Textarea from '../atoms/Textarea.svelte';
 	import LabeledField from '../molecules/LabeledField.svelte';
+	import StackedForm from '../molecules/StackedForm.svelte';
 	import Notice from '../atoms/Notice.svelte';
 
 	interface Properties {
@@ -113,31 +114,36 @@
 		</ul>
 	{/if}
 
-	<form onsubmit={handleSubmit}>
-		<stack-l space="var(--space-2)">
-			<LabeledField label="Message">
-				{#snippet children({ id, describedBy, invalid })}
-					<Textarea
-						{id}
-						{describedBy}
-						{invalid}
-						value={body}
-						onInput={(next) => (body = next)}
-					/>
-				{/snippet}
-			</LabeledField>
-			<label>
-				Attachment (image or PDF, up to 10MB)
-				<!-- eslint-disable-next-line svelte/no-restricted-html-elements -- no atom exists for a file input (#492) -->
-				<input
-					type="file"
-					accept="image/*,application/pdf"
-					onchange={(event) => (attachment = event.currentTarget.files?.[0])}
+	<!--
+		#1108: this compose box used to write its own `stack-l` at
+		`var(--space-2)`, a rhythm nothing on record asked for and half
+		again tighter than every other form in the product. It is a run of
+		three controls, not a row inside a table, so it takes the ordinary
+		one.
+	-->
+	<StackedForm onSubmit={handleSubmit}>
+		<LabeledField label="Message">
+			{#snippet children({ id, describedBy, invalid })}
+				<Textarea
+					{id}
+					{describedBy}
+					{invalid}
+					value={body}
+					onInput={(next) => (body = next)}
 				/>
-			</label>
-			<Button type="submit" label="Send" loading={isSending} />
-		</stack-l>
-	</form>
+			{/snippet}
+		</LabeledField>
+		<label>
+			Attachment (image or PDF, up to 10MB)
+			<!-- eslint-disable-next-line svelte/no-restricted-html-elements -- no atom exists for a file input (#492) -->
+			<input
+				type="file"
+				accept="image/*,application/pdf"
+				onchange={(event) => (attachment = event.currentTarget.files?.[0])}
+			/>
+		</label>
+		<Button type="submit" label="Send" loading={isSending} />
+	</StackedForm>
 </stack-l>
 
 <style>

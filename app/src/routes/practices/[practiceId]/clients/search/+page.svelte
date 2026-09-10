@@ -31,6 +31,7 @@
 	import LabeledField from '#lib/components/molecules/LabeledField.svelte';
 	import DateFields from '#lib/components/molecules/DateFields.svelte';
 	import ErrorSummary from '#lib/components/molecules/ErrorSummary.svelte';
+	import StackedForm from '#lib/components/molecules/StackedForm.svelte';
 	import DescriptionList from '#lib/components/molecules/DescriptionList.svelte';
 	import {
 		EMPTY_DATE_PARTS,
@@ -230,58 +231,56 @@
 					<ErrorSummary errors={submission.errors} />
 				{/if}
 
-				<form onsubmit={handleSearch} novalidate>
-					<stack-l space="var(--space-5)">
-						<LabeledField id={nameId} label="Name" error={submission.errorFor(nameId)}>
-							{#snippet children({ id, describedBy, invalid })}
-								<TextInput
-									{id}
-									{describedBy}
-									{invalid}
-									value={name}
-									onInput={(v) => (name = v)}
-									autocomplete="off"
-								/>
-							{/snippet}
-						</LabeledField>
-						<DateFields
-							name={dateOfBirthId}
-							legend="Date of birth"
-							hint="For example, 3 12 1988."
-							parts={dateOfBirthParts}
-							onChange={(next) => (dateOfBirthParts = next)}
-							error={dateOfBirthRefusal?.message}
-							invalidField={dateOfBirthRefusal?.field}
-						/>
-						<LabeledField id={emailId} label="Email">
-							{#snippet children({ id, describedBy })}
-								<TextInput
-									{id}
-									{describedBy}
-									type="email"
-									value={email}
-									onInput={(v) => (email = v)}
-									autocomplete="off"
-								/>
-							{/snippet}
-						</LabeledField>
-						<LabeledField id={phoneId} label="Phone">
-							{#snippet children({ id, describedBy })}
-								<TextInput
-									{id}
-									{describedBy}
-									type="tel"
-									value={phone}
-									onInput={(v) => (phone = v)}
-									autocomplete="off"
-								/>
-							{/snippet}
-						</LabeledField>
-						<cluster-l space="var(--space-3)" align="center">
-							<Button type="submit" label="Search" loading={submission.isSubmitting} />
-						</cluster-l>
-					</stack-l>
-				</form>
+				<StackedForm onSubmit={handleSearch}>
+					<LabeledField id={nameId} label="Name" error={submission.errorFor(nameId)}>
+						{#snippet children({ id, describedBy, invalid })}
+							<TextInput
+								{id}
+								{describedBy}
+								{invalid}
+								value={name}
+								onInput={(v) => (name = v)}
+								autocomplete="off"
+							/>
+						{/snippet}
+					</LabeledField>
+					<DateFields
+						name={dateOfBirthId}
+						legend="Date of birth"
+						hint="For example, 3 12 1988."
+						parts={dateOfBirthParts}
+						onChange={(next) => (dateOfBirthParts = next)}
+						error={dateOfBirthRefusal?.message}
+						invalidField={dateOfBirthRefusal?.field}
+					/>
+					<LabeledField id={emailId} label="Email">
+						{#snippet children({ id, describedBy })}
+							<TextInput
+								{id}
+								{describedBy}
+								type="email"
+								value={email}
+								onInput={(v) => (email = v)}
+								autocomplete="off"
+							/>
+						{/snippet}
+					</LabeledField>
+					<LabeledField id={phoneId} label="Phone">
+						{#snippet children({ id, describedBy })}
+							<TextInput
+								{id}
+								{describedBy}
+								type="tel"
+								value={phone}
+								onInput={(v) => (phone = v)}
+								autocomplete="off"
+							/>
+						{/snippet}
+					</LabeledField>
+					<cluster-l space="var(--space-3)" align="center">
+						<Button type="submit" label="Search" loading={submission.isSubmitting} />
+					</cluster-l>
+				</StackedForm>
 
 				{#if hasSearched}
 					<section aria-labelledby="client-search-results-heading"> <!-- spelling:ignore: aria-labelledby is an ARIA attribute name -->

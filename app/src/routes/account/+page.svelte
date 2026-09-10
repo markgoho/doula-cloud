@@ -589,6 +589,7 @@
 	state -- `novalidate`: this page refuses the submit, not the browser
 	(#467).
 -->
+<!-- stacked-form:ignore: #1108 -- this form wraps a Template. `FormPage` stacks each fieldset's content itself, so the `<form>` here owns the submit and arranges nothing; a `StackedForm` would put a second, empty stack around one child. -->
 <form onsubmit={handleSubmit} novalidate>
 	<FormPage
 		title="Your account"

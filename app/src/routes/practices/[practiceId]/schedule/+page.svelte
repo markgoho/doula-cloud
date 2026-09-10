@@ -142,6 +142,7 @@
 	{/snippet}
 
 	{#snippet content()}
+		<!-- stacked-form:ignore: #1108 -- a `method="get"` narrowing control, not a run of fields. Its two dates sit side by side in `.controls` and wrap to one column on their own, and `StackedForm` would both stack them and take away the GET submission this form is built on. -->
 		<form method="get" action={basePath} onsubmit={applyNarrowing}>
 			<fieldset>
 				<legend>Narrow the schedule</legend>

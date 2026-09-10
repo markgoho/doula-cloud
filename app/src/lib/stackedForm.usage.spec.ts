@@ -40,14 +40,16 @@ import { describe, expect, it } from 'vitest';
  * `var(--space-5)`, and #1108's complaint was never that they are wrong --
  * it was that nothing on the page said which they were.
  *
- * The marker is read from the `<form` line itself or from the three
- * source lines above it, which is where an HTML comment explaining a form
- * naturally sits.
+ * The marker is read from the `<form` line itself or from the line above
+ * it, which is where the HTML comment explaining a form sits. A comment
+ * that runs several lines counts as its last one, so the prose can be as
+ * long as the reason needs.
  */
 
 const appRoot = fileURLToPath(new URL('../../', import.meta.url));
 
 const SCRIPT_OR_STYLE = /<(script|style)\b[\S\s]*?<\/\1>/g;
+const HTML_COMMENT = /<!--[\S\s]*?-->/g;
 const ENTRY_TEMPLATE_IMPORT = /from '#lib\/components\/templates\/EntryPage\.svelte'/;
 const IGNORE_MARKER = /stacked-form:ignore:\s*\S/;
 
@@ -58,15 +60,31 @@ function read(file: string): string {
 }
 
 /*
- * `<script>` and `<style>` are stripped rather than HTML comments, because
- * on this side of the app the prose about a form is mostly a block comment
- * at the top of the module -- `FormPage`, `IntakeQuestion`, `IntakeActions`
- * and `ReauthPrompt` all explain in `<script>` why their `<form>` is where
- * it is. The HTML comments are kept, because that is where the marker
- * lives.
+ * Prose that says `<form>` is prose about a form, not a form, and on this
+ * side of the app there is a lot of it: `FormPage`, `IntakeQuestion`,
+ * `IntakeActions` and `ReauthPrompt` all explain in a `<script>` block
+ * comment why their form is where it is, and `account/+page.svelte` has
+ * three HTML comments that mention one. So `<script>` and `<style>` go
+ * whole, and an HTML comment goes unless it carries the marker -- which is
+ * exactly where the marker is meant to live, in a comment beside the form
+ * it explains. Line count is preserved on the way out, because the
+ * marker is read from the three lines above the form.
  */
 function markup(source: string): string {
-	return source.replaceAll(SCRIPT_OR_STYLE, '');
+	return source
+		.replaceAll(SCRIPT_OR_STYLE, (block) => blankOut(block))
+		.replaceAll(HTML_COMMENT, (comment) =>
+			IGNORE_MARKER.test(comment) ? `${blankOut(comment)}stacked-form:ignore: x` : blankOut(comment)
+		);
+}
+
+/*
+ * A comment collapses to its own last line rather than vanishing, so a
+ * marker written across several lines is still the line immediately above
+ * the form it explains.
+ */
+function blankOut(block: string): string {
+	return '\n'.repeat((block.match(/\n/g) ?? []).length);
 }
 
 function isEntryScreen(file: string): boolean {
@@ -81,7 +99,7 @@ function unmarkedForms(source: string): number[] {
 
 	for (const [index, line] of lines.entries()) {
 		if (!line.includes('<form')) continue;
-		const nearby = lines.slice(Math.max(0, index - 3), index + 1);
+		const nearby = lines.slice(Math.max(0, index - 1), index + 1);
 		if (nearby.some((candidate) => IGNORE_MARKER.test(candidate))) continue;
 		unmarked.push(index + 1);
 	}

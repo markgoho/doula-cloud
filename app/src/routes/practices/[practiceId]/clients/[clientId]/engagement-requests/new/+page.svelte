@@ -276,6 +276,7 @@
 	<Link href={detailHref()} label="Cancel" variant="secondary" />
 {/snippet}
 
+<!-- stacked-form:ignore: #1108 -- this form wraps a Template. `FormPage` stacks each fieldset's content itself, so the `<form>` here owns the submit and arranges nothing; a `StackedForm` would put a second, empty stack around one child. -->
 <form onsubmit={handleSubmit} novalidate>
 	<FormPage
 		title={submitLabel || 'Start new work'}
