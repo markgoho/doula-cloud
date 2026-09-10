@@ -20,9 +20,11 @@ describe('findDuplicateIds', () => {
 		expect(findDuplicateIds(fragment('<p id="a"></p><p id="a"></p><p id="a"></p>'))).toEqual(['a']);
 	});
 
-	it('names every repeated id, in the order each was first met', () => {
+	// By second occurrence, not first: `a` is met first here and caught
+	// repeating itself last, so it is named last.
+	it('names every repeated id, in the order each was caught repeating', () => {
 		expect(
-			findDuplicateIds(fragment('<p id="b"></p><p id="a"></p><p id="b"></p><p id="a"></p>'))
+			findDuplicateIds(fragment('<p id="a"></p><p id="b"></p><p id="b"></p><p id="a"></p>'))
 		).toEqual(['b', 'a']);
 	});
 

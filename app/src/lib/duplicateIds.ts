@@ -1,6 +1,7 @@
 /**
-Every id that appears more than once under `root`, in the order the ids
-are first met, each named once however many copies of it there are.
+Every id that appears more than once under `root`, in the order each one
+is caught repeating itself -- that is, by second occurrence, not first --
+each named once however many copies of it there are.
 
 An id has to be unique in a document -- `getElementById`, an `<label for>`
 and every `aria-*` reference resolve to the FIRST match in tree order, so a

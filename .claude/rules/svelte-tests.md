@@ -99,11 +99,20 @@ have no accessible signal:
    so it doesn't double up on a `Skeleton`'s own `role="status"` next to it.
    There is nothing for an accessible query to find, because the whole
    point is that nothing is announced there.
+3. **A fact about the document rather than about any one element** — id
+   uniqueness is the case that named this one (#666). An `id` is not in
+   the accessible tree at all: it is the plumbing an `aria-describedby`
+   or a `<label for>` resolves through, so "no id appears twice" is a
+   property of the whole rendered tree with no element for an accessible
+   query to ask about. `findDuplicateIds` (`#lib/duplicateIds.js`) is how
+   a spec asserts it — `expect(findDuplicateIds(container)).toEqual([])`
+   — usually beside a count of `[id]` elements, because an empty result
+   is also what a fixture that assigned no id at all would produce.
 
 Reach for `querySelector` only after confirming there is no accessible
 query that says the same thing — never as a shortcut past one that exists.
-When it is used, the surrounding comment should say which of the two cases
-applies, so the exception reads as deliberate rather than habitual.
+When it is used, the surrounding comment should say which of the three
+cases applies, so the exception reads as deliberate rather than habitual.
 
 ## Callback props are the contract, not implementation detail
 

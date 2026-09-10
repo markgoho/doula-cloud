@@ -315,6 +315,10 @@ describe('DataTable.svelte', () => {
 		});
 
 		expect(findDuplicateIds(container)).toEqual([]);
+		// The querySelector exception, case 3 (.claude/rules/svelte-tests.md):
+		// an id is not in the accessible tree, and the count guards against a
+		// vacuous pass -- a snippet that assigned no id would satisfy the line
+		// above too. Two rows, one id per row per tree.
 		expect(container.querySelectorAll('[id]')).toHaveLength(rows.length * 2);
 	});
 
@@ -342,6 +346,10 @@ describe('DataTable.svelte', () => {
 		});
 
 		expect(findDuplicateIds(container)).toEqual([]);
+		// The querySelector exception, case 3 (.claude/rules/svelte-tests.md):
+		// an id is not in the accessible tree, and the count guards against a
+		// vacuous pass -- a snippet that assigned no id would satisfy the line
+		// above too. Two rows, one id per row per tree.
 		expect(container.querySelectorAll('[id]')).toHaveLength(rows.length * 2);
 	});
 

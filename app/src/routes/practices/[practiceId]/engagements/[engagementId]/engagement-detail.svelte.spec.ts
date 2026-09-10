@@ -162,8 +162,11 @@ async function setupWithRoster(
 
 /*
  * The Visits `<table>`: the first DataTable this page renders, and the
- * tree the wide viewport above actually shows. Scoping to it is the same
- * sanctioned querySelector exception the Staff roster's own spec takes --
+ * tree the wide viewport above actually shows. Scoping to it is the
+ * querySelector exception's case 1 (.claude/rules/svelte-tests.md) --
+ * two elements with the identical role and name, told apart only by
+ * which one CSS hides -- and the same one the Staff roster's own spec
+ * takes.
  * DataTable builds its record view alongside the table at every width, so
  * an unscoped count of a per-Visit control counts trees as well as
  * Visits.

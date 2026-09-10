@@ -73,8 +73,8 @@
 		 * #264: a Client row's Engagement rollup is more than one line per
 		 * row -- Contract status, assigned Doula, Engagement status, each on
 		 * its own line, none of it a single string `accessor` could return.
-		 * `rowActions`'s `content: Snippet<[row: T]>` is this component's
-		 * only other row-level custom-content seam, so this reuses its exact
+		 * `rowActions`'s `content` is this component's only other row-level
+		 * custom-content seam, so this reuses its exact
 		 * shape rather than inventing a second one: a per-COLUMN snippet
 		 * alongside `rowActions`' per-ROW one. Rendered instead of
 		 * `accessor`/`datetimeAccessor` in both the `<table>` and the
@@ -399,7 +399,7 @@
 		}
 
 		/* #264: a `content` column's markup comes from the caller's own
-		   snippet (rendered via `{@render column.content(row)}`), so
+		   snippet (rendered via `{@render column.content(row, view)}`), so
 		   `.rollup-list` never appears in this file's own template --
 		   `:global()` is what tells Svelte's scoped-CSS analyzer that on
 		   purpose, the same reason PortalTopBar.svelte reaches for it on
