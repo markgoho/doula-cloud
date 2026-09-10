@@ -14,7 +14,13 @@ import '#lib/styles/app.css';
 import { revealDisclosures } from '../../../style-guide/continuum.js';
 import Page from './+page.svelte';
 import { toPageState } from '../../../routeFixture.js';
-import { fixture, membershipHistories, roster, workStateHistories } from './page.fixture.js';
+import {
+	fixture,
+	membershipHistories,
+	roster,
+	subjectOf,
+	workStateHistories
+} from './page.fixture.js';
 
 if (!customElements.get('center-l')) registerLayoutPrimitives();
 
@@ -108,15 +114,13 @@ function mockApi({
 			if (historyResponse) {
 				return Promise.resolve(historyResponse);
 			}
-			const staffId = String(path.split('/').at(-2));
-			return Promise.resolve(jsonResponse(workStateHistories[staffId]));
+			return Promise.resolve(jsonResponse(workStateHistories[subjectOf(path)]));
 		}
 		if (path.includes('/membership-history')) {
 			if (membershipHistoryResponse) {
 				return Promise.resolve(membershipHistoryResponse);
 			}
-			const staffId = String(path.split('/').at(-2));
-			return Promise.resolve(jsonResponse(membershipHistories[staffId]));
+			return Promise.resolve(jsonResponse(membershipHistories[subjectOf(path)]));
 		}
 		if (path.endsWith('/sessions') && init?.method === 'DELETE') {
 			return Promise.resolve(sessionsResponse ?? jsonResponse({}));

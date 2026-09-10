@@ -228,6 +228,27 @@ export function quiescence(sample: () => number): () => boolean {
 }
 
 /*
+ * Where a queued `toggle` has been dispatched by, for a spec asserting that
+ * a handler did NOT run (#710, #1124, #1126).
+ *
+ * Setting `open` queues an element task rather than dispatching, so
+ * "nothing happened" cannot be read in the same turn the property was
+ * written: an assertion taken there passes whatever the instrument did,
+ * which is the one shape a guard must not have. Two macrotask turns is
+ * where a handler that was going to run has run.
+ *
+ * Turns, not a duration -- `docs/testing.md`'s "a read count, never a
+ * millisecond budget", and the same reason `awaitSettled` counts them: a
+ * sleep long enough to be safe is slow on every subject that did not need
+ * it and still wrong on the one that did.
+ */
+export async function afterQueuedToggles(): Promise<void> {
+	for (let turn = 0; turn < QUIET_TURNS; turn += 1) {
+		await new Promise((resolve) => setTimeout(resolve, 0));
+	}
+}
+
+/*
  * Opens every closed disclosure under `frame` and waits for what opening
  * them brought in (#1126). It leaves them open.
  *

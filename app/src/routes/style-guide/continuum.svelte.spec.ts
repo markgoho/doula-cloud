@@ -31,6 +31,7 @@ import { registerLayoutPrimitives } from '#lib/primitives/index.js';
 import '#lib/styles/app.css';
 import { atomPages, moleculePages, organismPages, templatePages } from './components.js';
 import {
+	afterQueuedToggles,
 	frameHolding,
 	frameHoldingLoadingLedger,
 	ledgerMarkup,
@@ -189,7 +190,7 @@ describe('the sweep, over a closed disclosure (#710)', () => {
 			});
 
 			const found = sweep(frame, run.clientWidth);
-			await new Promise((resolve) => setTimeout(resolve, 50));
+			await afterQueuedToggles();
 
 			// That the sweep found the break is what says it really did open
 			// the disclosure -- without it this passes on a sweep that never
@@ -239,7 +240,7 @@ describe('the sweep, over a disclosure that loads on open (#1126)', () => {
 		const { run, frame, remove, loads } = frameHoldingLoadingLedger();
 		try {
 			const found = sweep(frame, run.clientWidth);
-			await new Promise((resolve) => setTimeout(resolve, 50));
+			await afterQueuedToggles();
 
 			// The `Loading...` the disclosure holds fits at every width, so the
 			// sweep reports a screen that fits -- and the content that does not
@@ -271,7 +272,7 @@ describe('the sweep, over a disclosure that loads on open (#1126)', () => {
 			await revealDisclosures(frame, 'The loading ledger');
 			const afterPreparing = loads();
 			sweep(frame, run.clientWidth);
-			await new Promise((resolve) => setTimeout(resolve, 50));
+			await afterQueuedToggles();
 
 			expect(afterPreparing).toBe(1);
 			expect(loads()).toBe(1);

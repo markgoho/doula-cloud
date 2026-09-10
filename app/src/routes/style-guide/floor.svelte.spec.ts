@@ -66,6 +66,7 @@ import { registerLayoutPrimitives } from '#lib/primitives/index.js';
 import '#lib/styles/app.css';
 import { atomPages, moleculePages, organismPages, templatePages, toSlug } from './components.js';
 import {
+	afterQueuedToggles,
 	CONFORMANCE_COMMITMENT,
 	frameHolding,
 	frameHoldingLoadingLedger,
@@ -628,7 +629,7 @@ describe("the floor check's overflow measurement, over a closed disclosure (#112
 
 			atWidth(frame, AT_WIDTH);
 			const measurement = measureOverflow(frame, AT_WIDTH);
-			await new Promise((resolve) => setTimeout(resolve, 50));
+			await afterQueuedToggles();
 
 			// That the measurement saw the hidden content is what says it
 			// really did open the disclosure -- without it this passes on a
@@ -715,12 +716,17 @@ describe("the floor check's overflow measurement, over a closed disclosure (#112
 describe("the floor check's overflow measurement, over a disclosure that loads on open (#1126)", () => {
 	const AT_WIDTH = CONFORMANCE_COMMITMENT;
 
-	it('measures the loading state when nothing has prepared the disclosure', () => {
+	it('measures the loading state when nothing has prepared the disclosure', async () => {
 		const { frame, remove, loads } = frameHoldingLoadingLedger();
 		try {
 			atWidth(frame, AT_WIDTH);
 
 			const measurement = measureOverflow(frame, AT_WIDTH);
+			// The load count is read after the queued toggles have had their
+			// turn, never in the same one: a `toggle` is dispatched from an
+			// element task, so a count read here would be zero whatever this
+			// measurement did to the disclosure -- a guard that cannot fail.
+			await afterQueuedToggles();
 
 			expect(measurement.needed).toBe(AT_WIDTH);
 			expect(isOverflowAcceptable(measurement)).toBe(true);

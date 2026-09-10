@@ -210,7 +210,7 @@ export const membershipHistories: Record<string, MembershipHistory> = {
  * cursor query, when a second page is asked for, rides on the last segment
  * rather than this one.
  */
-function subjectOf(path: string): string {
+export function subjectOf(path: string): string {
 	return path.split('/').at(-2) ?? '';
 }
 

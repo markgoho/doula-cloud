@@ -366,6 +366,10 @@ describe('the continuum check, over routes', () => {
 				 * new, and the bound is a guard against a route that polls
 				 * rather than a budget anything is expected to spend.
 				 */
+				// A fresh reader per wait, rather than one closure serving both:
+				// a `quiescence` carries the last count it saw, so a reused one
+				// can report quiet without ever yielding a turn, and a wait that
+				// can return without waiting is not the same wait twice.
 				const answering = quiescence(() => answered);
 				/*
 				 * A bound that ran out is a screen still arriving, and
@@ -396,7 +400,10 @@ describe('the continuum check, over routes', () => {
 				await revealDisclosures(frame, fixture.name);
 				// What the reveal asked for, drained through the same wait the
 				// cascade above used -- a history is a fetch like any other.
-				await awaitSettled(answering, `${fixture.name} was still fetching a disclosure's content`);
+				await awaitSettled(
+					quiescence(() => answered),
+					`${fixture.name} was still fetching a disclosure's content`
+				);
 				const found = sweep(frame, run.clientWidth);
 				expect(found, found && overflowReport(fixture.name, found)).toBeUndefined();
 			} finally {
