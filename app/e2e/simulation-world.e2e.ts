@@ -13,7 +13,7 @@ import { E2E_API_HOST, E2E_API_PORT, E2E_EMULATOR_HOST, E2E_EMULATOR_PORT } from
 import { provisionTail, standUpRidgeline, writeWorldRecord } from './simulation/provision';
 import { describeWorld, ROOTED_TAIL_TOTAL, type SeededClient } from './simulation/world';
 import { readStaffInviteToken } from './stack';
-import { seedFoundingOwner } from './staffSignup';
+import { seedFoundingOwner, uniqueEmail } from './staffSignup';
 
 const API_URL = `http://${E2E_API_HOST}:${E2E_API_PORT}`;
 const EMULATOR_URL = `http://${E2E_EMULATOR_HOST}:${E2E_EMULATOR_PORT}`;
@@ -77,7 +77,7 @@ test.describe.serial('The World stands up: description, Ridgeline, the tail', ()
 		// staffauth.AttachingWrite never accrues an Owner or Admin to an
 		// Engagement she writes on, so the tail's own doulas must be
 		// ordinary Staff, exactly as Rooted's Extras are.
-		const doulaEmail = `test-doula-${Date.now()}@example.com`;
+		const doulaEmail = uniqueEmail('test-doula');
 		const invited = await request.post(`${API_URL}/api/practices/${owner.practiceId}/staff/invitations`, {
 			headers: ownerHeaders,
 			data: { email: doulaEmail, roles: ['doula'], employmentType: 'employee' }
