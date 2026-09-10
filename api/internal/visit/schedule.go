@@ -36,6 +36,10 @@ type ScheduleResponse struct {
 // required) would be the wrong shape for this write. Must be mounted
 // behind staffauth.Middleware.
 //
+// Setting a scheduled instant has one effect beyond the Visit row: it can
+// move the Engagement itself from 'intake' to 'active' (#895). See the
+// activation call at the end of this handler.
+//
 // No role gate of its own (#268). Setting the date of a Visit that
 // already exists is the Admin's own job -- ADR-0006 grants her the Staff
 // roster precisely because "booking a Visit means picking a Doula" -- so
@@ -142,6 +146,14 @@ func ScheduleHandler() http.Handler {
 		}); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+			return
+		}
+
+		// Setting an instant is the move's trigger; clearing one is the
+		// opposite act and activates nothing. Both answers are
+		// activateOnScheduled's, shared with CreateHandler.
+		if !activateOnScheduled(w, r, c, engagementID, scheduledAt) {
+			// coverage:ignore reason: activateOnScheduled only reports false on a DB write failure, not exercised by unit tests
 			return
 		}
 

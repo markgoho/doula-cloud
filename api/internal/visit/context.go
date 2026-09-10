@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"doula-cloud/api/internal/apierr"
+	"doula-cloud/api/internal/engagement"
 )
 
 // requireEngagementAtPractice confirms engagementID exists and belongs to
@@ -56,4 +57,35 @@ func parseScheduledAt(w http.ResponseWriter, raw *string) (scheduledAt *time.Tim
 		return nil, false
 	}
 	return &parsed, true
+}
+
+// activateOnScheduled applies ADR-0015's one automatic status move to a
+// Visit write (#895): "`intake` -> `active` happens by itself, the first
+// time a Visit is scheduled." Shared by CreateHandler and ScheduleHandler
+// so the rule -- *a write that leaves a scheduled instant behind
+// activates; one that leaves none does not* -- is stated once rather than
+// once per endpoint, and so a third Visit write path could not quietly
+// acquire half of it.
+//
+// scheduledAt is what the write leaves on the row, so clearing an instant
+// (nil) activates nothing: that is the opposite act. The actor is the
+// caller, c.staffID, never the Visit's assignee -- see
+// engagement.ActivateFromIntake, which also decides for itself that an
+// Engagement past 'intake' is left alone.
+//
+// Runs after the caller's own row write and activity entry, so the ledger
+// reads in the order the acts happened: the Visit was scheduled, and that
+// changed the care phase. It writes the failure response itself and
+// reports whether the request may continue, the same polarity
+// requireVisitWrite uses.
+func activateOnScheduled(w http.ResponseWriter, r *http.Request, c visitWriteContext, engagementID string, scheduledAt *time.Time) bool {
+	if scheduledAt == nil {
+		return true
+	}
+	if _, err := engagement.ActivateFromIntake(r.Context(), c.tx, c.practiceID, engagementID, c.staffID); err != nil {
+		// coverage:ignore reason: DB write failure inside the activation, not exercised by unit tests
+		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+		return false
+	}
+	return true
 }

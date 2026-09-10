@@ -12,6 +12,7 @@
 		downloadAttachment,
 		endingReasons,
 		loadAttachmentPreviews,
+		loadEngagement,
 		loadEngagementOffersOrNone as loadOffers,
 		loadMessagesPage,
 		loadVisitsPage,
@@ -589,6 +590,34 @@
 		return text;
 	}
 
+	// #895: the BFF moves an Engagement from 'intake' to 'active' by
+	// itself, in the same transaction as the Visit write, the first time a
+	// Visit on it is left scheduled (ADR-0015). Neither Visit endpoint
+	// answers with the Engagement's new status, so without this the hub
+	// would keep reading "Getting started" -- and keep offering the manual
+	// "active" move -- until somebody reloaded the page.
+	//
+	// It re-reads only when this write actually left an instant behind and
+	// only while the page still believes the Engagement is at 'intake':
+	// that is the one status the automatic move can change, so every other
+	// page view pays nothing for it. A failed re-read is swallowed on
+	// purpose -- the Visit write itself succeeded and is already reported,
+	// and a stale label is not worth a second error message on top of it.
+	// Nothing breaks if it is stale, either: the manual "Mark care as
+	// active" button it leaves on screen re-requests a status the
+	// Engagement already holds, which TransitionHandler treats as a no-op
+	// and answers with the true status and moves -- so the page corrects
+	// itself on the next click rather than meeting a refusal.
+	async function refreshStatusAfterScheduling(scheduledAt: string | undefined) {
+		if (!scheduledAt || displayStatus !== 'intake') return;
+		try {
+			const refreshed = await loadEngagement(apiFetchWithSession, reference);
+			statusOverride = { status: refreshed.status, statusMoves: refreshed.statusMoves };
+		} catch {
+			// Left as it was; a reload reads the true status.
+		}
+	}
+
 	async function loadVisits() {
 		await visitsLoad.load(async () => {
 			visits.reset(await loadVisitsPage(apiFetchWithSession, reference, ''));
@@ -919,6 +948,7 @@
 			// starts on the same standing answer this one did.
 			newVisitStaffId = undefined;
 			await loadVisits();
+			await refreshStatusAfterScheduling(scheduledAt);
 		}
 	}
 
@@ -953,6 +983,7 @@
 		if (wasScheduled) {
 			delete scheduleValue[visitId];
 			await loadVisits();
+			await refreshStatusAfterScheduling(scheduledAt);
 		}
 	}
 

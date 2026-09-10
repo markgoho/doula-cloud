@@ -59,7 +59,7 @@ func Mount(g *staffauth.GatedRouter, ir *idempotency.Router) {
 		"plain UPDATE staff_id = $1 WHERE id = $2; sets the assignment to the given value, so re-sending the same body is a no-op",
 		true, ReassignHandler())
 	ir.Exempt("PATCH /api/practices/{practiceId}/engagements/{engagementId}/visits/{visitId}/schedule",
-		"plain UPDATE scheduled_at = $1 WHERE id = $2; sets the scheduled instant to the given value (or clears it), so re-sending the same body is a no-op",
+		"UPDATE scheduled_at = $1 WHERE id = $2, which sets the scheduled instant to the given value (or clears it), so re-sending the same body is a no-op; the automatic intake -> active move it can also make (#895) is itself conditional on the Engagement still being at intake, so the second send writes nothing there either",
 		true, ScheduleHandler())
 	ir.Exempt("PATCH /api/practices/{practiceId}/engagements/{engagementId}/visits/{visitId}/notes",
 		"plain UPDATE notes = $1 WHERE id = $2; sets the notes to the given value (or clears them to empty), so re-sending the same body is a no-op",

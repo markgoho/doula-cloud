@@ -49,6 +49,10 @@ type CreateResponse struct {
 // Staff member the body names or, with no name in it, to the caller
 // herself. Must be mounted behind staffauth.Middleware.
 //
+// A Visit created with a scheduledAt can move the Engagement itself from
+// 'intake' to 'active' (#895); one created without leaves it alone. See
+// the activation call at the end of this handler.
+//
 // Who may do which of those two, whether a named Staff member may be
 // named at all, and whether she is granted an attachment for it are all
 // `resolveAssignee`'s -- the one seam the reassign path uses too, so the
@@ -135,6 +139,16 @@ func CreateHandler() http.Handler {
 		// failed.
 		if !grantAssignee(w, r, c, engagementID, staffID, isEmployee) {
 			// coverage:ignore reason: grantAssignee only reports false on a DB write failure, not exercised by unit tests
+			return
+		}
+
+		// A Visit created already scheduled is "the first time a Visit is
+		// scheduled" just as much as a later PATCH .../schedule is, so
+		// both write paths run the one shared rule; a Visit created with
+		// no scheduledAt (the "log a past meeting" shape) leaves the
+		// Engagement where it is.
+		if !activateOnScheduled(w, r, c, engagementID, scheduledAt) {
+			// coverage:ignore reason: activateOnScheduled only reports false on a DB write failure, not exercised by unit tests
 			return
 		}
 

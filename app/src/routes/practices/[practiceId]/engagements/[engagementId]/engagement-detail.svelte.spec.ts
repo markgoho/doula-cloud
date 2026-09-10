@@ -414,6 +414,37 @@ describe('the Visits section Date column and schedule control (#250)', () => {
 		expect(requests[0]!.body).toEqual({ scheduledAt: new Date('2027-04-01T09:00').toISOString() });
 	});
 
+	it('shows the automatic intake -> active move after a Visit is scheduled, without a reload', async () => {
+		// #895 / ADR-0015: the BFF activates the Engagement itself in the
+		// same transaction as the scheduling write, and neither Visit
+		// endpoint answers with the new status -- so the hub re-reads the
+		// Engagement rather than leaving "Getting started" on screen.
+		await renderWithFixtureResponder(
+			(path, init) => {
+				if (init?.method === 'PATCH' && path.endsWith('/schedule')) {
+					return Promise.resolve(
+						jsonResponse({ visitId: 'visit-2', scheduledAt: '2027-04-01T09:00:00Z' })
+					);
+				}
+				if (!init && path.endsWith(`/engagements/${fixture.params.engagementId}`)) {
+					return Promise.resolve(
+						jsonResponse({ ...fixtureDetail, status: 'active', statusMoves: ['completed'] })
+					);
+				}
+				return;
+			},
+			{ ...fixtureDetail, status: 'intake', statusMoves: ['active', 'completed'] }
+		);
+
+		await expect.element(testPage.getByText('intake', { exact: true })).toBeVisible();
+
+		const field = testPage.getByLabelText('Scheduled date and time', { exact: true }).nth(1);
+		await field.fill('2027-04-01T09:00');
+		await testPage.getByRole('button', { name: 'Update schedule' }).nth(1).click();
+
+		await expect.element(testPage.getByText('active', { exact: true })).toBeVisible();
+	});
+
 	it('creates a Visit already scheduled from the Add a Visit form', async () => {
 		const requests: { path: string; body: unknown }[] = [];
 		await renderWithFixtureResponder((path, init) => {

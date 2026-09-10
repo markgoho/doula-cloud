@@ -6,14 +6,18 @@ import (
 	"fmt"
 )
 
-// statusEvent is one row TransitionHandler writes to engagement_events
+// statusEvent is one row a status move writes to engagement_events
 // (00090) -- ADR-0015's audit table, shaped on
 // practice_membership_events (00039): both sides of the fact that
 // changed, plus a nullable actor. actorStaffID is a pointer rather than
 // a bare string because a future automation this table anticipates (the
 // standing rule engagement_events' own migration names) may record no
-// human actor at all; every writer TransitionHandler drives today always
-// has one.
+// human actor at all. Nothing needs that yet, and the one automation
+// that exists deliberately does not use it: ADR-0015 rules that the
+// automatic intake -> active move a scheduled Visit makes (#895) "records
+// the person who scheduled, not a null system actor -- a doula did
+// that". So every writer today, requested or automatic, has a real Staff
+// id to pass.
 type statusEvent struct {
 	practiceID           string
 	engagementID         string
