@@ -9,7 +9,6 @@ import (
 
 	"doula-cloud/api/internal/activity"
 	"doula-cloud/api/internal/apierr"
-	"doula-cloud/api/internal/engagement"
 	"doula-cloud/api/internal/staffauth"
 )
 
@@ -150,24 +149,12 @@ func ScheduleHandler() http.Handler {
 			return
 		}
 
-		// ADR-0015's one automatic status move, in the same transaction
-		// as the write that triggers it (#895): an Engagement still at
-		// 'intake' becomes 'active' the first time a Visit on it is left
-		// scheduled. Only when this write leaves a scheduled instant
-		// behind -- clearing one (`scheduledAt: null`) is the opposite
-		// act and activates nothing -- and only ever forward: an
-		// Engagement already 'active' or 'completed' is untouched, which
-		// engagement.ActivateOnVisitScheduled decides for itself.
-		//
-		// It runs after this route's own activity entry so the ledger
-		// reads in the order the acts happened: the Visit was scheduled,
-		// and that changed the care phase.
-		if scheduledAt != nil {
-			if err := engagement.ActivateOnVisitScheduled(r.Context(), c.tx, c.practiceID, engagementID, c.staffID); err != nil {
-				// coverage:ignore reason: DB write failure inside the activation, not exercised by unit tests
-				apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
-				return
-			}
+		// Setting an instant is the move's trigger; clearing one is the
+		// opposite act and activates nothing. Both answers are
+		// activateOnScheduled's, shared with CreateHandler.
+		if !activateOnScheduled(w, r, c, engagementID, scheduledAt) {
+			// coverage:ignore reason: activateOnScheduled only reports false on a DB write failure, not exercised by unit tests
+			return
 		}
 
 		apierr.WriteJSON(w, http.StatusOK, ScheduleResponse{

@@ -161,7 +161,7 @@ func refuseUnexplainedCompletion(w http.ResponseWriter, current engagementStatus
 // two places, so this one is the whole *requested* write surface for
 // engagements.status. It is not the only writer: ADR-0015's one automatic
 // move writes the column too, when a Visit is scheduled (#895) -- but it
-// runs activateFromIntake, which is the same body this handler runs for
+// runs ActivateFromIntake, which is the same body this handler runs for
 // the manual intake -> active, so there is still one implementation of
 // the move rather than two.
 //
@@ -281,7 +281,7 @@ func TransitionHandler() http.Handler {
 			return
 		}
 
-		// The manual intake -> active move runs activateFromIntake, the
+		// The manual intake -> active move runs ActivateFromIntake, the
 		// same body the automatic move a scheduled Visit makes runs
 		// (#895), rather than a second copy of the UPDATE and the two
 		// audit writes here. moved=false means a concurrent writer took
@@ -296,7 +296,7 @@ func TransitionHandler() http.Handler {
 			// Engagement already holds; the completion cascade below
 			// still runs.
 		case isActivation:
-			moved, err := activateFromIntake(r.Context(), tx, practiceID, engagementID, actorStaffID)
+			moved, err := ActivateFromIntake(r.Context(), tx, practiceID, engagementID, actorStaffID)
 			if err != nil || !moved {
 				// coverage:ignore reason: DB write failure or a concurrent writer already moved this Engagement, neither exercised by unit tests
 				apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)

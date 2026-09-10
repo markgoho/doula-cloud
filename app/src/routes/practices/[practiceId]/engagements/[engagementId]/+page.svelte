@@ -603,6 +603,11 @@
 	// page view pays nothing for it. A failed re-read is swallowed on
 	// purpose -- the Visit write itself succeeded and is already reported,
 	// and a stale label is not worth a second error message on top of it.
+	// Nothing breaks if it is stale, either: the manual "Mark care as
+	// active" button it leaves on screen re-requests a status the
+	// Engagement already holds, which TransitionHandler treats as a no-op
+	// and answers with the true status and moves -- so the page corrects
+	// itself on the next click rather than meeting a refusal.
 	async function refreshStatusAfterScheduling(scheduledAt: string | undefined) {
 		if (!scheduledAt || displayStatus !== 'intake') return;
 		try {

@@ -3,6 +3,7 @@ package visit_test
 import (
 	"encoding/json"
 	"net/http"
+	"strings"
 	"testing"
 
 	"doula-cloud/api/internal/engagement"
@@ -309,29 +310,47 @@ func TestScheduleHandler_SecondScheduleWritesNoSecondMove(t *testing.T) {
 	}
 }
 
-// An Engagement past 'intake' is untouched. 'completed' is the case that
-// matters most: ADR-0015 keeps Visits open on a completed Engagement, so
-// scheduling one must not quietly reopen the Practice's record.
-func TestScheduleHandler_LeavesAnEngagementPastIntakeAlone(t *testing.T) {
-	for _, tc := range []struct{ name, status string }{
-		{"already active", engagement.StatusActive},
-		{"already completed", engagement.StatusCompleted},
+// An Engagement past 'intake' is untouched, by either write path.
+// 'completed' is the case that matters most: ADR-0015 keeps Visits open on
+// a completed Engagement, so booking one must not quietly reopen the
+// Practice's record.
+func TestVisitWrites_LeaveAnEngagementPastIntakeAlone(t *testing.T) {
+	for _, tc := range []struct {
+		name, status string
+		// isCreated picks which write path books the Visit: creating one
+		// already scheduled, or scheduling one that already exists. Both
+		// leave a scheduled_at behind, so both would activate an
+		// Engagement still at 'intake'.
+		isCreated bool
+	}{
+		{"scheduling on an already active Engagement", engagement.StatusActive, false},
+		{"scheduling on an already completed Engagement", engagement.StatusCompleted, false},
+		{"creating a scheduled Visit on an already active Engagement", engagement.StatusActive, true},
+		{"creating a scheduled Visit on an already completed Engagement", engagement.StatusCompleted, true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			db := testdb.New(t)
-			identityUID := "doula-scheduling-on-" + tc.status
+			identityUID := strings.ReplaceAll(tc.name, " ", "-")
 			practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, "employee")
 			_, engagementID := testdb.SeedEngagementInStatus(t, db, practiceID,
-				"Client "+tc.status, tc.status+"@example.com", tc.status)
-			visitID := seedVisit(t, db, engagementID, staffID)
+				"Client "+tc.name, identityUID+"@example.com", tc.status)
 
 			srv, session := newServer(t, db, identityUID)
 			defer srv.Close()
 
-			resp := scheduleVisit(t, session, srv.URL, practiceID, engagementID, visitID, firstScheduledAt)
+			var resp *http.Response
+			wantStatus := http.StatusOK
+			if tc.isCreated {
+				wantStatus = http.StatusCreated
+				resp = createVisit(t, session, visitsURL(srv.URL, practiceID, engagementID), "",
+					visit.CreateRequest{ScheduledAt: new(firstScheduledAt)})
+			} else {
+				visitID := seedVisit(t, db, engagementID, staffID)
+				resp = scheduleVisit(t, session, srv.URL, practiceID, engagementID, visitID, firstScheduledAt)
+			}
 			defer resp.Body.Close()
-			if resp.StatusCode != http.StatusOK {
-				t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
+			if resp.StatusCode != wantStatus {
+				t.Fatalf("status = %d, want %d", resp.StatusCode, wantStatus)
 			}
 
 			if got := engagementStatus(t, db, engagementID); got != tc.status {

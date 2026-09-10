@@ -11,7 +11,6 @@ import (
 
 	"doula-cloud/api/internal/activity"
 	"doula-cloud/api/internal/apierr"
-	"doula-cloud/api/internal/engagement"
 	"doula-cloud/api/internal/staffauth"
 )
 
@@ -143,22 +142,14 @@ func CreateHandler() http.Handler {
 			return
 		}
 
-		// ADR-0015's one automatic status move (#895). A Visit created
-		// already scheduled is "the first time a Visit is scheduled" just
-		// as much as a later PATCH .../schedule is, so both write paths
-		// call the same activation; one created with no scheduledAt (the
-		// "log a past meeting" shape) leaves the Engagement where it is.
-		//
-		// The actor is c.staffID, the caller, never staffID, the person
-		// the Visit is assigned to: ADR-0015 records "the person who
-		// scheduled", and an Admin booking a Visit for a colleague is
-		// that person.
-		if scheduledAt != nil {
-			if err := engagement.ActivateOnVisitScheduled(r.Context(), c.tx, c.practiceID, engagementID, c.staffID); err != nil {
-				// coverage:ignore reason: DB write failure inside the activation, not exercised by unit tests
-				apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
-				return
-			}
+		// A Visit created already scheduled is "the first time a Visit is
+		// scheduled" just as much as a later PATCH .../schedule is, so
+		// both write paths run the one shared rule; a Visit created with
+		// no scheduledAt (the "log a past meeting" shape) leaves the
+		// Engagement where it is.
+		if !activateOnScheduled(w, r, c, engagementID, scheduledAt) {
+			// coverage:ignore reason: activateOnScheduled only reports false on a DB write failure, not exercised by unit tests
+			return
 		}
 
 		apierr.WriteJSON(w, http.StatusCreated, CreateResponse{

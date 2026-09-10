@@ -8,12 +8,13 @@ import (
 	"doula-cloud/api/internal/testdb"
 )
 
-// ActivateOnVisitScheduled is ADR-0015's automatic intake -> active move
-// (#895). It is driven here directly against a transaction rather than
-// through an HTTP route, because it has no route of its own: the Visit
-// write paths call it, and what those two endpoints do with it is
-// package visit's own tests. What belongs here is the move's own
-// contract -- what it writes, who it names, and what it refuses to touch.
+// ActivateFromIntake is ADR-0015's intake -> active move. Its manual
+// door is transition_test.go's subject; these tests drive it directly
+// against a transaction, which is how the automatic door reaches it
+// (#895) and the only way to assert what it does when the Engagement is
+// already past 'intake' -- a state TransitionHandler answers for itself
+// before ever calling in. What the two Visit endpoints do with it is
+// package visit's own tests.
 
 // beginPracticeTx opens an app-role transaction scoped to practiceID the
 // same way staffauth.Middleware scopes a request's own, so RLS behaves
@@ -70,14 +71,18 @@ func readActivationRows(t *testing.T, tx *sql.Tx, engagementID string) activatio
 // The move itself: an Engagement at 'intake' reaches 'active' and leaves
 // both of ADR-0015's records behind, each naming the Staff member who
 // scheduled rather than a null system actor.
-func TestActivateOnVisitScheduled_MovesIntakeToActive(t *testing.T) {
+func TestActivateFromIntake_MovesIntakeToActive(t *testing.T) {
 	db := testdb.New(t)
 	practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, "auto-activating-doula", []string{doulaRole}, employeeType)
 	_, engagementID := testdb.SeedEngagementInStatus(t, db, practiceID, "Hannah Sorensen", "hannah@example.com", engagement.StatusIntake)
 
 	tx := beginPracticeTx(t, db, practiceID)
-	if err := engagement.ActivateOnVisitScheduled(t.Context(), tx, practiceID, engagementID, staffID); err != nil {
+	moved, err := engagement.ActivateFromIntake(t.Context(), tx, practiceID, engagementID, staffID)
+	if err != nil {
 		t.Fatalf("activate: %v", err)
+	}
+	if !moved {
+		t.Fatal("moved = false, want true: this call is the one that made the move")
 	}
 
 	got := readActivationRows(t, tx, engagementID)
@@ -98,7 +103,7 @@ func TestActivateOnVisitScheduled_MovesIntakeToActive(t *testing.T) {
 // One-way and one-time: an Engagement that is not at 'intake' is left
 // exactly as it is, and nothing is written -- no second status move for a
 // second scheduled Visit, and never a reopening of a completed record.
-func TestActivateOnVisitScheduled_LeavesAnEngagementPastIntakeAlone(t *testing.T) {
+func TestActivateFromIntake_LeavesAnEngagementPastIntakeAlone(t *testing.T) {
 	for _, status := range []string{engagement.StatusActive, engagement.StatusCompleted} {
 		t.Run(status, func(t *testing.T) {
 			db := testdb.New(t)
@@ -106,8 +111,12 @@ func TestActivateOnVisitScheduled_LeavesAnEngagementPastIntakeAlone(t *testing.T
 			_, engagementID := testdb.SeedEngagementInStatus(t, db, practiceID, "Client "+status, status+"-auto@example.com", status)
 
 			tx := beginPracticeTx(t, db, practiceID)
-			if err := engagement.ActivateOnVisitScheduled(t.Context(), tx, practiceID, engagementID, staffID); err != nil {
+			moved, err := engagement.ActivateFromIntake(t.Context(), tx, practiceID, engagementID, staffID)
+			if err != nil {
 				t.Fatalf("activate: %v", err)
+			}
+			if moved {
+				t.Fatalf("moved = true on a %q Engagement, want false: the move is one-way and one-time", status)
 			}
 
 			got := readActivationRows(t, tx, engagementID)
