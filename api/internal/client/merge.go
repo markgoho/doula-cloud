@@ -277,7 +277,7 @@ func MergeHandler() http.Handler {
 			return
 		}
 		if strings.TrimSpace(survivorOnFile.Email) != strings.TrimSpace(merged.Email) {
-			if err := portalinvite.RevokePending(r.Context(), tx, survivorID); err != nil {
+			if err := portalinvite.RevokePending(r.Context(), tx, survivorID, portalinvite.RevokedEmailChanged); err != nil {
 				// coverage:ignore reason: DB query failure, not exercised by unit tests
 				apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 				return
@@ -425,6 +425,27 @@ func setMergedInto(ctx context.Context, tx *sql.Tx, clientID, survivorID, staffI
 	return nil
 }
 
+// absorbedChainCTE names every record merged into $1, directly or
+// through a chain, as `absorbed(id, depth)` -- depth 1 is a record
+// absorbed into $1 itself. Nothing refuses absorbing B into C while A is
+// already merged into B, so a chain is a state the endpoint can produce
+// and every reader of the merged set has to walk it.
+//
+// Shared because the two readers must agree on what "her records" means:
+// erase.go's absorbedRecordIDs decides which tombstones an erasure
+// destroys, and detail.go's listMergedRecords decides which ones the
+// screen names. A record in one set and not the other is either a
+// history the screen hides or a name an erasure leaves standing. They
+// order the result differently -- erasure walks outward so each
+// redaction admits the next, the screen shows oldest merge first -- so
+// the ORDER BY stays at each call site.
+const absorbedChainCTE = `WITH RECURSIVE absorbed AS (
+		     SELECT id, 1 AS depth FROM clients WHERE merged_into = $1
+		     UNION ALL
+		     SELECT c.id, a.depth + 1 FROM clients c JOIN absorbed a ON c.merged_into = a.id
+		 )
+		 `
+
 // movedCounts is what a merge moved off the absorbed record, by table.
 // It is the survivor's activity diff's honest account of the act -- a
 // count, never a value -- and it is what the endpoint's own response
@@ -445,11 +466,21 @@ type movedCounts struct {
 // because the trigger and the definer function both read that tombstone
 // as their precondition.
 //
-// Every statement's row count is checked against what was there to move.
-// Under RLS a write that matches nothing succeeds and reports nothing,
-// so a silent zero is the failure mode this whole function is written
-// against -- and for client_portal_users it is not hypothetical: no
-// Staff-facing UPDATE policy admits an accepted row at all.
+// The portal move is checked against what was there to move, and the
+// merge is refused outright when the two disagree. Under RLS a write
+// that matches nothing succeeds and reports nothing, so a silent zero is
+// the failure mode this whole function is written against -- and for
+// client_portal_users it is not hypothetical: no Staff-facing UPDATE
+// policy admits an accepted row at all, so a plain UPDATE there would
+// move nothing and look exactly like a Client who had no portal account.
+//
+// The engagement and request moves are counted but not checked, and the
+// difference is not an oversight. Zero is a legal answer for both -- a
+// record whose only attachment is a portal account has neither -- so
+// there is no expected number to compare against, and their own policies
+// are plain practice_id comparisons that this transaction already
+// satisfies. What could refuse them is the narrowed trigger, and that
+// raises rather than matching zero rows.
 func moveAttachments(ctx context.Context, tx *sql.Tx, absorbedID, survivorID string) (movedCounts, error) {
 	var moved movedCounts
 
@@ -485,10 +516,24 @@ func moveAttachments(ctx context.Context, tx *sql.Tx, absorbedID, survivorID str
 	}
 	moved.RevokedInvitations = revoked
 	if revoked > 0 {
-		if err := portalinvite.RevokePending(ctx, tx, absorbedID); err != nil {
+		if err := portalinvite.RevokePending(ctx, tx, absorbedID, portalinvite.RevokedRecordMerged); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			return movedCounts{}, fmt.Errorf("client: revoke absorbed record's pending invite: %w", err)
 		}
+	}
+
+	// Counted before the move, so the move has something to be wrong
+	// about. Read through the caller's own RLS, which admits the absorbed
+	// record's rows for SELECT even though no policy admits them for
+	// UPDATE -- that asymmetry is exactly why the move needs a door and
+	// the count does not.
+	var expected int
+	if err := tx.QueryRowContext(ctx,
+		`SELECT count(*) FROM client_portal_users WHERE client_id = $1 AND identity_uid IS NOT NULL`,
+		absorbedID,
+	).Scan(&expected); err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		return movedCounts{}, fmt.Errorf("client: count portal links: %w", err)
 	}
 
 	// The accepted rows, through 00112's SECURITY DEFINER door. It
@@ -498,8 +543,12 @@ func moveAttachments(ctx context.Context, tx *sql.Tx, absorbedID, survivorID str
 	if err := tx.QueryRowContext(ctx,
 		`SELECT merge_client_portal_links($1, $2)`, absorbedID, survivorID,
 	).Scan(&links); err != nil {
-		// coverage:ignore reason: the function's own refusal needs a caller that moves portal links without writing the tombstone first, which MergeHandler's ordering makes unreachable
+		// coverage:ignore reason: the function's own refusal needs a caller that moves portal links without writing the tombstone first, which MergeHandler's ordering makes unreachable -- the refusal itself is covered directly in merge_moves_test.go
 		return movedCounts{}, fmt.Errorf("client: move portal links: %w", err)
+	}
+	if links != expected {
+		// coverage:ignore reason: needs the definer function to move a different number of rows than the caller just counted in the same transaction, which no reachable state produces -- this is the guard that would catch a future policy change silently breaking the move
+		return movedCounts{}, fmt.Errorf("client: moved %d portal links, expected %d", links, expected)
 	}
 	moved.PortalAccounts = links
 

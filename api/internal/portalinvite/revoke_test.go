@@ -37,7 +37,7 @@ func TestRevokePending_DeadLettersThePendingRow(t *testing.T) {
 		t.Fatalf("set practice id: %v", err)
 	}
 
-	if err := portalinvite.RevokePending(t.Context(), tx, clientID); err != nil {
+	if err := portalinvite.RevokePending(t.Context(), tx, clientID, portalinvite.RevokedEmailChanged); err != nil {
 		t.Fatalf("RevokePending: %v", err)
 	}
 	if err := tx.Commit(); err != nil {
@@ -69,7 +69,7 @@ func TestRevokePending_NoPendingRowIsANoop(t *testing.T) {
 	}
 	defer tx.Rollback()
 
-	if err := portalinvite.RevokePending(t.Context(), tx, clientID); err != nil {
+	if err := portalinvite.RevokePending(t.Context(), tx, clientID, portalinvite.RevokedEmailChanged); err != nil {
 		t.Fatalf("RevokePending on a Client with no outbox row: %v", err)
 	}
 }

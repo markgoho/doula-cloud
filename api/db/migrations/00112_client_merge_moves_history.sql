@@ -240,7 +240,15 @@ GRANT EXECUTE ON FUNCTION merge_client_portal_links(uuid, uuid) TO app_runtime;
 -- runs, "who merged which two records, and when" still has an answer
 -- while nothing about the woman herself does.
 -- +goose StatementBegin
-CREATE FUNCTION redact_absorbed_client(p_absorbed uuid, p_erased_given_name text, p_now timestamptz)
+-- It takes the record to redact and nothing else. An earlier shape let
+-- the caller pass the replacement name and the timestamp, which is a
+-- door onto the one write app_runtime is otherwise forbidden to make:
+-- anything holding that role could have stamped a chosen name and a
+-- chosen date onto a tombstone. There is exactly one legal end state for
+-- this function, so it owns both values. 'Erased Client' is
+-- client.ErasedGivenName, and client/merge_moves_test.go asserts the two
+-- still agree.
+CREATE FUNCTION redact_absorbed_client(p_absorbed uuid)
 RETURNS void
 LANGUAGE plpgsql
 SECURITY DEFINER
@@ -261,22 +269,22 @@ BEGIN
     END IF;
 
     UPDATE clients SET
-        given_name = p_erased_given_name, family_name = NULL, preferred_name = NULL,
+        given_name = 'Erased Client', family_name = NULL, preferred_name = NULL,
         email = NULL, phone = NULL,
         address_line1 = NULL, address_line2 = NULL, address_locality = NULL,
         address_region = NULL, address_postal_code = NULL, date_of_birth = NULL,
-        field_values = '{}'::jsonb, erased_at = p_now
+        field_values = '{}'::jsonb, erased_at = now()
      WHERE id = p_absorbed;
 END;
 $$;
 -- +goose StatementEnd
 
-REVOKE EXECUTE ON FUNCTION redact_absorbed_client(uuid, text, timestamptz) FROM PUBLIC;
-GRANT EXECUTE ON FUNCTION redact_absorbed_client(uuid, text, timestamptz) TO app_runtime;
+REVOKE EXECUTE ON FUNCTION redact_absorbed_client(uuid) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION redact_absorbed_client(uuid) TO app_runtime;
 
 -- +goose Down
-REVOKE EXECUTE ON FUNCTION redact_absorbed_client(uuid, text, timestamptz) FROM app_runtime;
-DROP FUNCTION redact_absorbed_client(uuid, text, timestamptz);
+REVOKE EXECUTE ON FUNCTION redact_absorbed_client(uuid) FROM app_runtime;
+DROP FUNCTION redact_absorbed_client(uuid);
 
 REVOKE EXECUTE ON FUNCTION merge_client_portal_links(uuid, uuid) FROM app_runtime;
 DROP FUNCTION merge_client_portal_links(uuid, uuid);

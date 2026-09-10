@@ -393,8 +393,13 @@ func eraseAbsorbedRecords(ctx context.Context, tx *sql.Tx, practiceID, survivorI
 		return 0, 0, nil, err
 	}
 	for _, id := range ids {
+		// It takes the record and nothing else. The replacement name and
+		// the timestamp are the function's own, not this caller's: it is
+		// the one door that can write a tombstone at all, so letting a
+		// caller choose either value would be a door onto a write
+		// app_runtime is otherwise forbidden to make.
 		if _, err := tx.ExecContext(ctx,
-			`SELECT redact_absorbed_client($1, $2, $3)`, id, ErasedGivenName, now,
+			`SELECT redact_absorbed_client($1)`, id,
 		); err != nil {
 			// coverage:ignore reason: the function's own refusal needs a caller that redacts a tombstone whose destination is not erased, which Erase's ordering and absorbedRecordIDs' own ordering make unreachable
 			return 0, 0, nil, fmt.Errorf("client: redact absorbed record: %w", err)
@@ -428,12 +433,7 @@ func eraseAbsorbedRecords(ctx context.Context, tx *sql.Tx, practiceID, survivorI
 // admits A.
 func absorbedRecordIDs(ctx context.Context, tx *sql.Tx, survivorID string) ([]string, error) {
 	rows, err := tx.QueryContext(ctx,
-		`WITH RECURSIVE absorbed AS (
-		     SELECT id, 1 AS depth FROM clients WHERE merged_into = $1
-		     UNION ALL
-		     SELECT c.id, a.depth + 1 FROM clients c JOIN absorbed a ON c.merged_into = a.id
-		 )
-		 SELECT id FROM absorbed ORDER BY depth, id`,
+		absorbedChainCTE+`SELECT id FROM absorbed ORDER BY depth, id`,
 		survivorID,
 	)
 	if err != nil {

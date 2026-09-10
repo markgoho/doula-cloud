@@ -304,12 +304,8 @@ func mergedHistory(ctx context.Context, tx *sql.Tx, clientID string, absorbedIDs
 // while nothing about either woman does.
 func listMergedRecords(ctx context.Context, tx *sql.Tx, clientID string) ([]MergedRecord, error) {
 	rows, err := tx.QueryContext(ctx,
-		`WITH RECURSIVE absorbed AS (
-		     SELECT id, 1 AS depth FROM clients WHERE merged_into = $1
-		     UNION ALL
-		     SELECT c.id, a.depth + 1 FROM clients c JOIN absorbed a ON c.merged_into = a.id
-		 )
-		 SELECT c.id, c.merged_at, c.merged_by_staff_id, s.name, c.erased_at
+		absorbedChainCTE+
+			`SELECT c.id, c.merged_at, c.merged_by_staff_id, s.name, c.erased_at
 		   FROM absorbed a
 		   JOIN clients c ON c.id = a.id
 		   LEFT JOIN staff s ON s.id = c.merged_by_staff_id

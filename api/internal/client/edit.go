@@ -224,7 +224,7 @@ func EditHandler() http.Handler {
 			return
 		}
 		if old.Email != req.Email {
-			if err := portalinvite.RevokePending(r.Context(), tx, clientID); err != nil {
+			if err := portalinvite.RevokePending(r.Context(), tx, clientID, portalinvite.RevokedEmailChanged); err != nil {
 				// coverage:ignore reason: DB query failure, not exercised by unit tests
 				apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 				return

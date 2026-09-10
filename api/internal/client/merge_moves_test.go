@@ -1,14 +1,36 @@
 package client_test
 
 import (
+	"database/sql"
 	"encoding/json"
 	"net/http"
+	"strings"
 	"testing"
 	"time"
 
 	"doula-cloud/api/internal/client"
 	"doula-cloud/api/internal/testdb"
 )
+
+// beginRuntimeTx opens a transaction on the low-privilege app_runtime
+// connection with practiceID's own session variables set -- the seat the
+// running application actually calls a SECURITY DEFINER function from,
+// and therefore the only seat that proves what one refuses. The
+// superuser Admin connection would prove nothing: it is not the role the
+// grants and the RLS the function relies on are written against.
+func beginRuntimeTx(t *testing.T, db *testdb.DB, practiceID string) *sql.Tx {
+	t.Helper()
+	tx, err := db.App.BeginTx(t.Context(), nil)
+	if err != nil {
+		t.Fatalf("begin: %v", err)
+	}
+	t.Cleanup(func() { _ = tx.Rollback() })
+	if _, err := tx.ExecContext(t.Context(),
+		`SELECT set_config('app.current_practice_id', $1, true)`, practiceID); err != nil {
+		t.Fatalf("set_config: %v", err)
+	}
+	return tx
+}
 
 // clientIDOfEngagement reads an Engagement's client_id off the superuser
 // connection -- the fact the whole of #813 turns on, read independently
@@ -376,6 +398,94 @@ func TestMergeHandler_RevokesTheAbsorbedRecordsPendingInvitation(t *testing.T) {
 	}
 	if outboxStatus == "pending" {
 		t.Fatalf("outbox status = pending, want the send stopped -- the email would name a record that is now a tombstone")
+	}
+}
+
+// TestDefinerFunctionsRefuseWithoutTheirPrecondition drives the two
+// SECURITY DEFINER functions directly, as app_runtime, rather than
+// through the endpoint. That is the point: they are the two doors that
+// can write what no Staff-facing policy admits -- moving an accepted
+// portal link, and writing to a tombstone at all -- so whether they
+// refuse must be asserted at the SQL surface. Anything holding
+// app_runtime can call them, and "MergeHandler's ordering makes this
+// unreachable" is a claim about one caller, not about the function.
+func TestDefinerFunctionsRefuseWithoutTheirPrecondition(t *testing.T) {
+	db := testdb.New(t)
+	const identityUID = "staff-definer-refusals"
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{ownerRole}, "employee")
+	survivorID, _ := testdb.SeedEngagementInStatus(t, db, practiceID, "Kept Record", "kept@example.com", "active")
+	otherID, _ := testdb.SeedNamedEngagement(t, db, practiceID, "Other Record", "other@example.com")
+	testdb.SeedPortalUser(t, db, "portal-definer-refusals", otherID)
+
+	// One transaction per refusal: a RAISE aborts the transaction it fires
+	// in, so a second call on the same one reports only that the block is
+	// already dead rather than what the function itself would have said.
+
+	// No tombstone: the two records are simply two records.
+	var moved int
+	err := beginRuntimeTx(t, db, practiceID).QueryRowContext(t.Context(),
+		`SELECT merge_client_portal_links($1, $2)`, otherID, survivorID).Scan(&moved)
+	if err == nil {
+		t.Fatalf("merge_client_portal_links moved %d links with no tombstone, want a refusal", moved)
+	}
+	if !strings.Contains(err.Error(), "already merged into the destination") {
+		t.Fatalf("error = %v, want the function's own refusal", err)
+	}
+	if got := clientIDOfPortalUser(t, db, "portal-definer-refusals"); got != otherID {
+		t.Fatalf("portal link moved to %q anyway", got)
+	}
+
+	// Nor may a tombstone be redacted while the record it was merged into
+	// is still live -- that is what keeps this from being a delete button
+	// on somebody else's Client.
+	_, err = beginRuntimeTx(t, db, practiceID).ExecContext(t.Context(),
+		`SELECT redact_absorbed_client($1)`, otherID)
+	if err == nil {
+		t.Fatalf("redact_absorbed_client redacted a live record, want a refusal")
+	}
+	if !strings.Contains(err.Error(), "after the record it was merged into has been erased") {
+		t.Fatalf("error = %v, want the function's own refusal", err)
+	}
+}
+
+// TestRedactAbsorbedClientWritesTheSameNameErasureDoes ties the name the
+// definer function hardcodes to the Go constant every other erasure path
+// writes. The function owns the value rather than taking it from a
+// caller -- it is the one door onto a tombstone, so a chosen name would
+// be a door onto a chosen write -- and this is what keeps the two from
+// drifting into an erased record that reads differently depending on
+// which path erased it.
+func TestRedactAbsorbedClientWritesTheSameNameErasureDoes(t *testing.T) {
+	db := testdb.New(t)
+	const identityUID = "staff-definer-name"
+	practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{ownerRole}, "employee")
+	survivorID, _ := testdb.SeedEngagementInStatus(t, db, practiceID, "Kept Record", "kept@example.com", "active")
+	absorbedID := seedFullClient(t, db, practiceID, staffID)
+
+	srv, session := newServer(t, db, identityUID)
+	defer srv.Close()
+
+	merge := authedJSON(t, session, http.MethodPost, srv.URL+"/api/practices/"+practiceID+"/clients/"+absorbedID+"/merge",
+		client.MergeRequest{Record: client.Record{GivenName: "Kept Record"}, OtherClientID: survivorID})
+	defer merge.Body.Close()
+	if merge.StatusCode != http.StatusOK {
+		t.Fatalf("merge status = %d, want %d: %s", merge.StatusCode, http.StatusOK, readBody(t, merge))
+	}
+	erase := postErasure(t, session, srv, practiceID, survivorID)
+	defer erase.Body.Close()
+	if erase.StatusCode != http.StatusOK {
+		t.Fatalf("erase status = %d, want %d", erase.StatusCode, http.StatusOK)
+	}
+
+	var absorbedName, survivorName string
+	if err := db.Admin.QueryRowContext(t.Context(),
+		`SELECT (SELECT given_name FROM clients WHERE id = $1), (SELECT given_name FROM clients WHERE id = $2)`,
+		absorbedID, survivorID,
+	).Scan(&absorbedName, &survivorName); err != nil {
+		t.Fatalf("read redacted names: %v", err)
+	}
+	if absorbedName != client.ErasedGivenName || survivorName != client.ErasedGivenName {
+		t.Fatalf("names = %q / %q, want both %q -- the definer function and Go must write the same word", absorbedName, survivorName, client.ErasedGivenName)
 	}
 }
 
