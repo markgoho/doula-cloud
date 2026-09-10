@@ -14,6 +14,16 @@ import { parseRefusal } from './formErrors.js';
  * that are nothing to do with the reader's role. The cause travels in
  * `APIError.code` instead, and `apierr.ForbiddenCodes` is the closed set
  * of reasons a 403 may carry (docs/api-design.md section 7, rule 6).
+ *
+ * Where the two new states render today: `/style-guide/error-page`, and a
+ * refusal that gets past `practices/[practiceId]/+layout.ts`. That `load`
+ * catches both of them first on the ordinary path -- `MFA_REQUIRED`
+ * redirects to enrollment, and a successful session read carrying
+ * `pendingDeletion` redirects to the delete screen -- so inside the
+ * Practice tree these are the fallback, not the usual sight. That is the
+ * point rather than a gap: #918 is about the mapping that would otherwise
+ * hand the wrong words to the *next* route to refuse, and the layout only
+ * covers the routes beneath it.
  */
 export type ErrorKind =
 	| 'notFound'

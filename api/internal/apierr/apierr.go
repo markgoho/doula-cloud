@@ -130,9 +130,9 @@ const (
 //
 // A fourth kind of 403 needs a fourth code here and a fourth state on
 // the app's error page, not a fourth shade of the role-refusal copy.
-// TestForbiddenCodesAreTheRecordedSet holds the set closed: an
-// apierr.Write that pairs a literal http.StatusForbidden with a code
-// outside it fails the build.
+// TestEveryForbiddenWriteCarriesARecordedCode holds the set closed: a
+// literal http.StatusForbidden paired with a code outside it -- in an
+// apierr.Write call or in a refusal struct literal -- fails the build.
 var ForbiddenCodes = map[Code]bool{
 	CodeForbidden:               true,
 	CodePracticePendingDeletion: true,

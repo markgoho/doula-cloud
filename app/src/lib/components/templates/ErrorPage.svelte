@@ -50,7 +50,7 @@
 		},
 		secondFactor: {
 			title: 'Set up a second sign-in factor',
-			body: 'This Practice asks for a second sign-in factor before its screens open. Set one up from your account security settings, then try this page again.'
+			body: 'This Practice asks for a second sign-in factor before its screens open. Set one up from your Account screen, then try this page again.'
 		},
 		unavailable: {
 			title: 'Doula Cloud is unavailable',

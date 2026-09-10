@@ -11,6 +11,44 @@ import (
 	"testing"
 )
 
+// walkProductionFiles parses every production Go file under root -- the
+// whole api module, package main's route wiring included -- and hands
+// each one's module-relative path and parsed syntax tree to visit. Test
+// files are excluded: the three guardrails below all police what reaches
+// a caller over HTTP, and a test file reaches nobody.
+//
+// One walk, three tests (#918). Each of the guardrails here grew its own
+// copy of the same WalkDir/skip/parse preamble, and the third copy is
+// where that stops being a coincidence: a fix to the skip rules had to be
+// made in every copy or in none.
+func walkProductionFiles(root string, visit func(rel string, fset *token.FileSet, file *ast.File)) error {
+	err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() || !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
+			return nil
+		}
+		rel, err := filepath.Rel(root, path)
+		if err != nil {
+			return fmt.Errorf("rel %s: %w", path, err)
+		}
+
+		fset := token.NewFileSet()
+		file, err := parser.ParseFile(fset, path, nil, 0)
+		if err != nil {
+			return fmt.Errorf("parse %s: %w", path, err)
+		}
+		visit(rel, fset, file)
+		return nil
+	})
+	if err != nil {
+		// coverage:ignore reason: a filesystem walk failure over the module's own source, not reachable from a test
+		return fmt.Errorf("walk %s: %w", root, err)
+	}
+	return nil
+}
+
 // TestNoDirectHTTPError is the Go-side equivalent of app/src/lib's
 // formErrors.usage.spec.ts and tokens.usage.spec.ts: it walks every
 // production source file in the api module (root-level route wiring
@@ -23,28 +61,9 @@ func TestNoDirectHTTPError(t *testing.T) {
 	root := apiModuleRoot
 
 	var offenses []string
-	err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		if d.IsDir() {
-			return nil
-		}
-		if !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
-			return nil
-		}
-		rel, err := filepath.Rel(root, path)
-		if err != nil {
-			return fmt.Errorf("rel %s: %w", path, err)
-		}
-		if strings.HasPrefix(rel, filepath.Join("internal", "apierr")+string(filepath.Separator)) {
-			return nil
-		}
-
-		fset := token.NewFileSet()
-		file, err := parser.ParseFile(fset, path, nil, 0)
-		if err != nil {
-			return fmt.Errorf("parse %s: %w", path, err)
+	err := walkProductionFiles(root, func(rel string, fset *token.FileSet, file *ast.File) {
+		if strings.HasPrefix(rel, filepath.Join("internal", apierrPackage)+string(filepath.Separator)) {
+			return
 		}
 
 		ast.Inspect(file, func(n ast.Node) bool {
@@ -63,7 +82,6 @@ func TestNoDirectHTTPError(t *testing.T) {
 			offenses = append(offenses, rel+":"+fset.Position(call.Pos()).String())
 			return true
 		})
-		return nil
 	})
 	if err != nil {
 		t.Fatalf("walk api module: %v", err)
@@ -85,7 +103,7 @@ func TestNoDirectHTTPError(t *testing.T) {
 // apierrtest calls http.Error, so exempting it there would widen a
 // guardrail #811 has no reason to widen.
 func isJSONEnvelopePackage(rel string) bool {
-	for _, pkg := range []string{apierrPackage, apierrPackage + "test"} {
+	for _, pkg := range []string{apierrPackage, apierrTestPackage} {
 		if strings.HasPrefix(rel, filepath.Join("internal", pkg)+string(filepath.Separator)) {
 			return true
 		}
@@ -116,31 +134,9 @@ func TestNoDirectJSONUsage(t *testing.T) {
 	root := apiModuleRoot
 
 	var offenses []string
-	err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		if d.IsDir() {
-			return nil
-		}
-		if !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
-			return nil
-		}
-		rel, err := filepath.Rel(root, path)
-		if err != nil {
-			return fmt.Errorf("rel %s: %w", path, err)
-		}
-		if isJSONEnvelopePackage(rel) {
-			return nil
-		}
-		if jsonUsageExceptions[rel] {
-			return nil
-		}
-
-		fset := token.NewFileSet()
-		file, err := parser.ParseFile(fset, path, nil, 0)
-		if err != nil {
-			return fmt.Errorf("parse %s: %w", path, err)
+	err := walkProductionFiles(root, func(rel string, fset *token.FileSet, file *ast.File) {
+		if isJSONEnvelopePackage(rel) || jsonUsageExceptions[rel] {
+			return
 		}
 
 		ast.Inspect(file, func(n ast.Node) bool {
@@ -179,7 +175,6 @@ func TestNoDirectJSONUsage(t *testing.T) {
 			}
 			return true
 		})
-		return nil
 	})
 	if err != nil {
 		t.Fatalf("walk api module: %v", err)

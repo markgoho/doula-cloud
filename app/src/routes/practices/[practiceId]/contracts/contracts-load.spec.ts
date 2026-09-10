@@ -45,11 +45,14 @@ describe('contracts/+page.ts load', () => {
 
 	it('throws a 403 SvelteKit error on a role refusal, for practices/+error.svelte to render', async () => {
 		const { load } = await import('./+page.js');
-		setup(403, 'not permitted to read this');
+		setup(403, { code: 'FORBIDDEN', message: 'not permitted to read this' });
 
+		// The reason rides along with the status (#918), so
+		// practices/+error.svelte renders the state matching the refusal
+		// rather than one state for every 403 alike.
 		await expect(
 			load({ params: { practiceId: 'practice-1' } } as Parameters<typeof load>[0])
-		).rejects.toMatchObject({ status: 403 });
+		).rejects.toMatchObject({ status: 403, body: { code: 'FORBIDDEN', message: 'not permitted to read this' } });
 	});
 
 	it('throws with the response status on any other failure', async () => {

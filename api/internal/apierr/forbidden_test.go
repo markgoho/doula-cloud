@@ -3,9 +3,7 @@ package apierr_test
 import (
 	"fmt"
 	"go/ast"
-	"go/parser"
 	"go/token"
-	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -19,6 +17,12 @@ import (
 // one usage_test.go's envelope-package skip already needed, so goconst
 // sees one literal rather than three.
 const apierrPackage = "apierr"
+
+// apierrTestPackage is the shared-decoder package #811 landed beside this
+// one. Its own literal rather than apierrPackage + "test", so grepping
+// the repository for the package name still finds the exemption that
+// names it.
+const apierrTestPackage = "apierrtest"
 
 // forbiddenCodeIdents names the constants apierr.ForbiddenCodes holds,
 // spelled the way a call site spells them. The AST walk below sees an
@@ -53,20 +57,22 @@ func TestForbiddenCodesAreTheRecordedSet(t *testing.T) {
 // TestNoDirectHTTPError and TestNoDirectJSONUsage: a 403 written with a
 // code outside apierr.ForbiddenCodes fails the build.
 //
-// It is the third layer of three, not the whole of the argument that
-// every 403 carries a recorded code. TestNoDirectHTTPError already
-// forces every refusal in the module through apierr, and Write's only
-// other source of a code is CodeForStatus, which answers 403 with
-// CodeForbidden. So a 403 reaches the wire either through WriteError --
-// recorded by construction -- or through an apierr.Write call site, and
-// this walk reads those.
+// It reads the two shapes a 403's code is actually chosen in. The first
+// is an apierr.Write call site naming the status literally. The second
+// is a struct literal that carries a refusal around before something
+// else writes it -- sessionmint.Refusal and offer's pre-account read
+// both do this, deciding a Status and an optional Code several frames
+// from the Write that eventually forwards them, so a walk that read only
+// call sites would miss a Code set there.
 //
-// What it does not read is a call site whose status is a variable rather
-// than the literal (offer's pre-account read, which forwards a status
-// and a code decided several frames down). Those pass a code that is
-// already CodeForStatus's own answer when the decision named none, so
-// they are covered by the same construction argument; a walk that tried
-// to follow them would be a type checker, not a guardrail.
+// It is the last layer of an argument rather than the whole of it.
+// TestNoDirectHTTPError already forces every refusal in the module
+// through apierr, and Write's only other source of a code is
+// CodeForStatus, which answers 403 with CodeForbidden. So a 403 reaches
+// the wire through WriteError (recorded by construction), through a
+// Write whose code came from CodeForStatus (the same), or through a code
+// somebody wrote down -- and every place a code is written down beside a
+// literal 403 is one of the two shapes above.
 func TestEveryForbiddenWriteCarriesARecordedCode(t *testing.T) {
 	offenses, err := forbiddenWriteOffenses(apiModuleRoot)
 	if err != nil {
@@ -92,11 +98,21 @@ import (
 	"doula-cloud/api/internal/apierr"
 )
 
+type refusal struct {
+	Status  int
+	Code    apierr.Code
+	Message string
+}
+
 func refuse(w http.ResponseWriter) {
 	apierr.Write(w, http.StatusForbidden, apierr.CodeConflict, "nope", nil)
 	apierr.Write(w, 403, apierr.CodeInternal, "nope", nil)
 	apierr.Write(w, http.StatusForbidden, apierr.CodeMFARequired, "fine", nil)
 	apierr.Write(w, http.StatusConflict, apierr.CodeConflict, "fine", nil)
+	_ = refusal{Status: http.StatusForbidden, Code: apierr.CodeOfferCodeExhausted, Message: "nope"}
+	_ = refusal{Status: http.StatusForbidden, Code: apierr.CodeForbidden, Message: "fine"}
+	_ = refusal{Status: http.StatusForbidden, Message: "fine, CodeForStatus decides"}
+	_ = refusal{Status: http.StatusConflict, Code: apierr.CodeConflict, Message: "fine"}
 }
 `
 	if err := os.WriteFile(filepath.Join(root, "sample.go"), []byte(source), 0o600); err != nil {
@@ -107,8 +123,8 @@ func refuse(w http.ResponseWriter) {
 	if err != nil {
 		t.Fatalf("walk sample: %v", err)
 	}
-	if len(offenses) != 2 {
-		t.Fatalf("offenses = %v, want the two refusals carrying an unrecorded code", offenses)
+	if len(offenses) != 3 {
+		t.Fatalf("offenses = %v, want the three refusals carrying an unrecorded code", offenses)
 	}
 	for _, offense := range offenses {
 		if !strings.Contains(offense, "sample.go") {
@@ -118,49 +134,58 @@ func refuse(w http.ResponseWriter) {
 }
 
 // forbiddenWriteOffenses walks every production Go file under root and
-// reports each apierr.Write whose status argument is literally 403 and
-// whose code argument is not one of forbiddenCodeIdents. A code that is
-// not a plain apierr.Code<Name> selector at all -- a local variable, a
-// bare string -- is an offense too: the point of the set is that a
-// reader of the call site can see which of the three reasons this is.
+// reports each place a literal 403 is paired with a code outside
+// forbiddenCodeIdents -- in an apierr.Write call, or in a struct literal
+// carrying a Status and a Code. A code that is not a plain
+// apierr.Code<Name> selector at all -- a local variable, a bare string
+// -- is an offense too: the point of the set is that a reader of the
+// call site can see which of the three reasons this is. A struct literal
+// that sets a 403 Status and no Code at all is fine, because whatever
+// writes it falls back to CodeForStatus.
 func forbiddenWriteOffenses(root string) ([]string, error) {
 	var offenses []string
-	err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		if d.IsDir() || !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
-			return nil
-		}
-		rel, err := filepath.Rel(root, path)
-		if err != nil {
-			return fmt.Errorf("rel %s: %w", path, err)
-		}
-
-		fset := token.NewFileSet()
-		file, err := parser.ParseFile(fset, path, nil, 0)
-		if err != nil {
-			return fmt.Errorf("parse %s: %w", path, err)
+	err := walkProductionFiles(root, func(rel string, fset *token.FileSet, file *ast.File) {
+		report := func(pos token.Pos) {
+			offenses = append(offenses,
+				rel+":"+fset.Position(pos).String()+": 403 with an unrecorded code")
 		}
 
 		ast.Inspect(file, func(n ast.Node) bool {
-			call, ok := n.(*ast.CallExpr)
-			if !ok || len(call.Args) < 3 || !isAPIErrWrite(call.Fun) || !isForbiddenStatus(call.Args[1]) {
-				return true
-			}
-			if recordedCodeName(call.Args[2]) == "" {
-				offenses = append(offenses,
-					rel+":"+fset.Position(call.Pos()).String()+": 403 with an unrecorded code")
+			switch node := n.(type) {
+			case *ast.CallExpr:
+				if len(node.Args) >= 3 && isAPIErrWrite(node.Fun) && isForbiddenStatus(node.Args[1]) &&
+					recordedCodeName(node.Args[2]) == "" {
+					report(node.Pos())
+				}
+			case *ast.CompositeLit:
+				status, code := keyedField(node, "Status"), keyedField(node, "Code")
+				if status != nil && code != nil && isForbiddenStatus(status) && recordedCodeName(code) == "" {
+					report(node.Pos())
+				}
 			}
 			return true
 		})
-		return nil
 	})
 	if err != nil {
 		// coverage:ignore reason: a filesystem walk failure over the module's own source, not reachable from a test
-		return nil, fmt.Errorf("walk %s: %w", root, err)
+		return nil, fmt.Errorf("collect 403 offenses: %w", err)
 	}
 	return offenses, nil
+}
+
+// keyedField returns the value a struct literal gives the named field, or
+// nil when the literal is positional or leaves that field out.
+func keyedField(lit *ast.CompositeLit, name string) ast.Expr {
+	for _, element := range lit.Elts {
+		pair, ok := element.(*ast.KeyValueExpr)
+		if !ok {
+			continue
+		}
+		if key, ok := pair.Key.(*ast.Ident); ok && key.Name == name {
+			return pair.Value
+		}
+	}
+	return nil
 }
 
 // isAPIErrWrite reports whether fun names apierr.Write. WriteError is
