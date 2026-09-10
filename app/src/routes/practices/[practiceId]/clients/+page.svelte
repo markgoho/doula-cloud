@@ -308,3 +308,34 @@
 {/snippet}
 
 <ListPage title="Clients" actions={isContractor ? undefined : actions} {content} />
+
+<style>
+	@layer components {
+		/*
+		 * The rollup's own list treatment (#264), which used to live in
+		 * `DataTable.svelte` behind `:global(.rollup-list)` and leaked from
+		 * there to every element in the app that happened to share the
+		 * name (#740). The markup is written in this file, so this file's
+		 * own scope reaches it and no `:global` is needed -- and DataTable
+		 * is left owning the CELL rather than what a caller puts in it. A
+		 * second `content` consumer inherits nothing from here, which is
+		 * the point: it writes whatever its own content needs, and its
+		 * cell sizes and pads itself either way.
+		 *
+		 * The cell's vertical room is DataTable's own (`td.content`), so
+		 * this declares none of it.
+		 */
+		.rollup-list {
+			display: grid;
+			gap: var(--space-1);
+			margin: 0;
+			padding: 0;
+			list-style: none;
+		}
+
+		.rollup-list li + li {
+			padding-block-start: var(--space-1);
+			border-block-start: var(--border-thin) solid var(--color-outline-variant);
+		}
+	}
+</style>

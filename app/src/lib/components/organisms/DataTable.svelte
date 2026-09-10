@@ -155,6 +155,21 @@
 		disclosure,
 		emptyMessage
 	}: Properties<T> = $props();
+
+	/*
+	 * Whether a given cell actually renders its column's snippet (#740).
+	 * The `cell` snippet's own `{#if}` chain already decides this, and a
+	 * cell that renders more than one line needs the geometry to match --
+	 * so the answer is asked once here and spent as a class on the `<td>`,
+	 * rather than restated in CSS against a class name the caller's markup
+	 * had to carry. `columnIndex === 0 && rowHref` is the documented
+	 * refusal on `Column.content`: the row link wins there and the cell is
+	 * one line of link text, so it is NOT a content cell for styling
+	 * either.
+	 */
+	function isContentCell(column: Column<T>, columnIndex: number): boolean {
+		return Boolean(column.content) && !(columnIndex === 0 && rowHref);
+	}
 </script>
 
 <!--
@@ -207,11 +222,16 @@
 				{#each rows as row, index (index)}
 					<tr>
 						{#each columns as column, columnIndex (column.label)}
+							<!-- `content` has no counterpart on the record view's
+							     own `<dd>` below, and that asymmetry is deliberate:
+							     the only thing it turns on is vertical padding a
+							     `<dd>` already has for every cell. See the rule. -->
 							<td
 								class:numeric={column.numeric}
 								class:meta={column.variant === 'meta'}
 								class:variant-body={column.variant === 'body'}
 								class:muted={column.variant === 'muted'}
+								class:content={isContentCell(column, columnIndex)}
 							>
 								{@render cell(column, columnIndex, row, 'table')}
 							</td>
@@ -398,32 +418,38 @@
 			color: var(--color-on-surface-muted);
 		}
 
-		/* #264: a `content` column's markup comes from the caller's own
-		   snippet (rendered via `{@render column.content(row, view)}`), so
-		   `.rollup-list` never appears in this file's own template --
-		   `:global()` is what tells Svelte's scoped-CSS analyzer that on
-		   purpose, the same reason PortalTopBar.svelte reaches for it on
-		   its own injected content. `:has()` scopes the height override to
-		   only the cell that actually holds a rollup, so th/td's own fixed
-		   2.5rem (the brief's Density section, and what Skeleton reserves
-		   before rows arrive) stays exactly as it was for every other
-		   column. */
-		td:has(:global(.rollup-list)),
-		dd:has(:global(.rollup-list)) {
-			block-size: auto;
-		}
+		/* A cell rendering a caller's snippet, which is the one cell that
+		   can be more than a single line (#264, #740). What it needs is
+		   vertical room INSIDE the cell: `th, td` above writes
+		   `padding: 0 var(--space-3)`, so a three-line rollup measured
+		   75.2px tall in a 75.2px row -- every line touching the row rule
+		   above or below it.
 
-		:global(.rollup-list) {
-			display: grid;
-			gap: var(--space-1);
-			margin: 0;
-			padding: 0;
-			list-style: none;
-		}
+		   It does NOT need a height override. A table cell's `block-size`
+		   is a MINIMUM, not a ceiling (CSS 2.1 17.5.3: the row is the
+		   greater of the specified height and the content's), so the
+		   2.5rem the brief's Density section fixes has always let a taller
+		   cell grow -- measured, not assumed. Two rules used to say
+		   otherwise here, keyed on `.rollup-list`, a class only the Clients
+		   route's own snippet carried and nothing on `Column<T>` ever
+		   mentioned; both overrode nothing, and the `:global` that reached
+		   for that class leaked its list treatment app-wide from a
+		   component that never renders it. The treatment moved to the
+		   route that writes the markup, where its own scope holds it.
 
-		:global(.rollup-list li + li) {
-			padding-block-start: var(--space-1);
-			border-block-start: var(--border-thin) solid var(--color-outline-variant);
+		   `--space-1` rather than `--space-2`, which is what the record
+		   view's `dd` spends: the padding lands inside the 2.5rem floor
+		   (`box-sizing: border-box`, reset.css), so a ONE-line content
+		   cell -- the Clients list's Portal invite column is one -- must
+		   still fit that floor or every row in the table grows and
+		   Skeleton stops reserving the right space. One line of body-sm
+		   plus 2 x --space-1 does; plus 2 x --space-2 does not.
+
+		   No counterpart for the record view's `<dd>`: it carries
+		   `padding-block` for EVERY cell already (below) and sets no
+		   height at all, so a rule there would override nothing. */
+		td.content {
+			padding-block: var(--space-1);
 		}
 
 		/* Unavoidable (#564): a <table> and one <dl> per record are
