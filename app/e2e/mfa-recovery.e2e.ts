@@ -94,7 +94,11 @@ test('An Owner vouches for a locked-out doula, and the code reaches her and nobo
 	// same button again. The token the vouch travels on is the one that
 	// step-up mints, not one this spec minted for it.
 	await page.getByLabel('Password').fill(ownerPassword);
-	await page.getByRole('button', { name: 'Send the code' }).click();
+	// "Continue" on the password step, because for anyone holding a second
+	// factor -- which is everyone this prompt is shown to -- pressing it
+	// raises the code challenge rather than sending anything. Only the
+	// code step's button says what the act is.
+	await page.getByRole('button', { name: 'Continue' }).click();
 	await page.getByLabel('Authenticator app code').fill(STUB_TOTP_CODE);
 	await page.getByRole('button', { name: 'Send the code' }).click();
 
