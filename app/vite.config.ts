@@ -74,6 +74,11 @@ export default defineConfig({
 					// Clamped rather than constant so CI is untouched: its
 					// 4-vCPU runner already resolves to 3, and a bare 6 would
 					// *raise* the parallelism there.
+					//
+					// Lowering this further buys no third concurrent gate:
+					// ~3.5GB per run is fixed cost no worker count removes.
+					// scripts/gate-lock.ts is what coordinates sessions with
+					// each other -- #936.
 					maxWorkers: BROWSER_WORKERS,
 					browser: {
 						enabled: true,

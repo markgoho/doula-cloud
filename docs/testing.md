@@ -7,7 +7,7 @@
 `scripts/hooks/pre-commit` runs:
 1. **`api/` (Go)**: blocks any commit that stages an unformatted `.go` file, prompting to run `gofmt -w <file>` on it.
 2. **`app/` (SvelteKit)**: if any `app/*` files are staged, runs `bun run --cwd app check` (`svelte-check`) and `bun run --cwd app lint` (`eslint`), blocking commits with broken imports, type errors, or lint failures.
-3. **`app/` unit suite and coverage gate**: still only when `app/*` files are staged, runs `bun run --cwd app test:unit:coverage`. This is where the design brief's smoothness gates live (see below), and the brief's own argument is that a commitment nobody measures decays — so the cheapest place to measure is before the commit exists. Measured on an idle 14-CPU machine, this step is ~16s and peaks around 4.9 GB for 2689 tests at 100% coverage, on top of the ~7s for steps 1-2. The Playwright e2e suite deliberately stays out: it builds the app and starts Postgres, the BFF and the Auth emulator. See "The memory this gate costs, and why the browser pool is capped" below for where that 4.9 GB goes.
+3. **`app/` unit suite and coverage gate**: still only when `app/*` files are staged, runs `bun run --cwd app test:unit:coverage`. This is where the design brief's smoothness gates live (see below), and the brief's own argument is that a commitment nobody measures decays — so the cheapest place to measure is before the commit exists. Measured on an idle 14-CPU machine, this step is ~16s and peaks around 4.9 GB for 2689 tests at 100% coverage, on top of the ~7s for steps 1-2. The Playwright e2e suite deliberately stays out: it builds the app and starts Postgres, the BFF and the Auth emulator. See "The memory this gate costs, and why the browser pool is capped" below for where that 4.9 GB goes, and "Only one session runs this step at a time" for the lock that keeps two sessions from paying it simultaneously.
 
 The CI jobs are the actual enforcement backstop regardless of whether the local hook is enabled — required PR status checks reject a push that would have failed it (see `docs/agents/worktree-flow.md`).
 
@@ -36,7 +36,47 @@ Two things to know before you change it:
 - **`--maxWorkers` on the command line will not override this.** The browser pool reads the project's own `maxWorkers`, not the root config's. A run with `--maxWorkers=4` still spawns 12 renderers. Edit the `client` project in `app/vite.config.ts`.
 - **The `server` project carries `sequence: { groupOrder: 1 }` because of this cap.** Vitest refuses two projects that share a `groupOrder` but disagree on `maxWorkers`. Splitting them is a second memory win, not a formality: the Node forks no longer overlap the Chromium renderers, so the run has one peak instead of two stacked together.
 
-Capping one run does not coordinate several. Two concurrent gates now fit (~10 GB of headroom used); three still would not, because roughly 3.5 GB per gate is fixed cost that no worker count removes. Cross-session admission control is tracked separately in [#936](https://github.com/markgoho/doula-cloud/issues/936).
+### Only one session runs this step at a time
+
+Capping one run does not coordinate several. Two concurrent gates fit (~10 GB of headroom used); three do not, because roughly 3.5 GB per gate is fixed cost that no worker count removes — so lowering the cap further buys no third run, and only admission control does. Up to 9 worktrees run at once (`docs/agents/worktree-flow.md`), each free to commit whenever it likes, so three at once is the ordinary case rather than the edge one. That was [#936](https://github.com/markgoho/doula-cloud/issues/936).
+
+`scripts/gate-lock.ts` wraps the `test:unit:coverage` step in a machine-wide exclusive lock: `bun scripts/gate-lock.ts -- <command>`. A second session waits and says so — one line naming the holding worktree, its pid, and how long it has been running, repeated every 15 seconds so the commit reads as queued rather than hung. `gofmt`, `check` and `lint` are cheap and stay unlocked.
+
+The lock is a directory created with a non-recursive `mkdir`, which is the atomic test-and-set; macOS ships no `flock` binary, which is why this is a bun script and not a shell one-liner. It lives in the **git common directory** (`$(git rev-parse --git-common-dir)/pre-commit-gate.lock`), which every worktree of this checkout resolves to the same path — a per-worktree `.git` would give each session a private lock and coordinate nothing.
+
+**Every path through it fails open**, because a gate that wedges every commit is worse than the memory pressure it prevents:
+
+- **The owner is gone.** The holder's pid is checked with signal 0 on every poll; a killed session's lock is reclaimed at once, with no waiting on any threshold. `EPERM` counts as alive — only `ESRCH` proves a process dead.
+- **The lock is old.** `STALE_LOCK_MS` is 5 minutes, against a step that takes ~16s idle: roughly 15x, the same deliberately generous reasoning as `REAP_THRESHOLD_MS` in the reaper below. Reclaiming too early runs two gates at once, which is the thing this prevents; reclaiming too late only delays a commit that was already waiting.
+- **Reclaiming is single-winner.** A stale lock is taken by `rename`, not `rm -rf`. Two waiters that both judge the same lock stale would otherwise both end up running — the first removes it and takes a fresh one, the second deletes *that* and takes one too. Only one rename can succeed; the loser gets `ENOENT` and goes round the loop.
+- **The wrapper itself is optional.** `scripts/hooks/pre-commit` resolves it from `$0` (the hook's absolute path in the main checkout, since `core.hooksPath` is absolute) rather than the committing worktree's cwd, and runs the step unwrapped if the file is not there. A worktree branched before this landed still commits.
+- **Anything unexpected.** No git directory, an unwritable parent, a lock that cannot be reasoned about: the wrapper prints `gate-lock: running without the lock (…)` and runs the command.
+
+Two escape hatches, for when you do not want to wait:
+
+```sh
+# Run this commit's gate with no lock at all.
+SKIP_GATE_LOCK=1 git commit -m "…"
+
+# Clear a lock by hand. Almost never needed -- a dead owner is reclaimed
+# on the next poll and a stale one after 5 minutes -- but this is the
+# command if you want it gone now.
+rm -rf "$(git rev-parse --git-common-dir)/pre-commit-gate.lock"
+```
+
+Measured on the same 14-CPU / 24 GB machine as the table above, warm, sampling summed `ms-playwright` RSS every 500 ms:
+
+| | Peak Chromium RSS | Peak renderer processes | Wall |
+| --- | --- | --- | --- |
+| One gate | 5.09 GB | 12 | 24s |
+| **Three concurrent gates, locked** | **5.36 GB** | **12** | 67s |
+| Three concurrent gates, unlocked | ~15 GB (projected) | 36 | — |
+
+The locked figure is the point: three sessions committing at once cost 5% more than one, not 300%, because they run one after another — the three runs finished at +25s, +46s and +67s, and each waited on the previous one's lock. The 5% is the tail of one run's browsers exiting while the next starts.
+
+The unlocked row was deliberately **not** reproduced. Doing so means intentionally exhausting memory on a machine with other live agent sessions mid-commit, and the number is already known: three gates' Chromium alone is ~15 GB against the ~10.5 GB of non-repo residents #936 measured, which is 25.1 GB on a 24 GB machine — the same arithmetic that killed a commit at two *uncapped* gates in #935.
+
+Note that "12 renderers" is one gate's own peak, not two overlapping ones: the `maxWorkers` cap above is 6 browser *workers*, and `--type=renderer` counts more processes than that. Compare the number against the one-gate row, not against the cap.
 
 ### When a commit is killed for memory
 
