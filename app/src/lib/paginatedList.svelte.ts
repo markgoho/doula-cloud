@@ -18,6 +18,11 @@
  * their own "Load more" button. Consolidating means every list gets the
  * careful version rather than each getting whichever half its author
  * needed that day.
+ *
+ * Those lists all arrive with a first page their route already fetched.
+ * A list a screen only asks for when a reader opens something arrives
+ * with nothing, and has one more state to tell -- see
+ * `DeferredPaginatedList` below (#1149).
  */
 
 /**
