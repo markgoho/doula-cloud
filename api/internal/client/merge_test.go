@@ -43,6 +43,9 @@ func activityActionsFor(t *testing.T, db *testdb.DB, clientID string) []string {
 		}
 		actions = append(actions, a)
 	}
+	if err := rows.Err(); err != nil {
+		t.Fatalf("iterate activity: %v", err)
+	}
 	return actions
 }
 

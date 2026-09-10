@@ -1,7 +1,9 @@
 package client_test
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -655,4 +657,131 @@ func scanOutbox[V any](t *testing.T, db *testdb.DB, clientID, columns string) ma
 		t.Fatalf("iterate erasure outbox: %v", err)
 	}
 	return out
+}
+
+// portalReach reads what a Practice's client_portal_users row still
+// names, and what is left of the login itself -- the three facts #830 is
+// about, read together so a test asserts one picture rather than three
+// unrelated counts.
+func portalReach(t *testing.T, db *testdb.DB, clientID, portalUID string) (linkedUID *string, accounts, sessions int) {
+	t.Helper()
+	if err := db.Admin.QueryRowContext(t.Context(),
+		`SELECT identity_uid FROM client_portal_users WHERE client_id = $1`, clientID,
+	).Scan(&linkedUID); err != nil {
+		t.Fatalf("read portal user: %v", err)
+	}
+	if err := db.Admin.QueryRowContext(t.Context(),
+		`SELECT count(*) FROM portal_accounts WHERE identifier = $1`, portalUID,
+	).Scan(&accounts); err != nil {
+		t.Fatalf("count portal accounts: %v", err)
+	}
+	if err := db.Admin.QueryRowContext(t.Context(),
+		`SELECT count(*) FROM sessions WHERE identity_uid = $1`, portalUID,
+	).Scan(&sessions); err != nil {
+		t.Fatalf("count portal sessions: %v", err)
+	}
+	return linkedUID, accounts, sessions
+}
+
+// erasureScopeRaw reads the plaintext 'erased' activity row's diff as it
+// was written -- what the act says it covered, in the erasing Practice's
+// own history, with nothing decoded away.
+func erasureScopeRaw(t *testing.T, db *testdb.DB, clientID string) []byte {
+	t.Helper()
+	var diff []byte
+	if err := db.Admin.QueryRowContext(t.Context(),
+		`SELECT diff FROM activity WHERE subject_kind = 'client' AND subject_id = $1 AND action = 'erased'`, clientID,
+	).Scan(&diff); err != nil {
+		t.Fatalf("query erased activity row: %v", err)
+	}
+	return diff
+}
+
+// TestEraseHandler_LeavesTheLoginAnotherPracticeStillReaches is #830's
+// scenario: one woman, one Portal Account, a Client record at two
+// Practices (the shape ADR-0015 states and 00081 made reachable). The
+// first Practice to erase her takes only its own link; the second, being
+// the last one out, takes the login and her sessions with it.
+//
+// The erasing Practice is told the same thing in both halves --
+// portalAccountQueued true, and a scope naming the portal link -- so
+// nothing in its own history or its own response says whether another
+// Practice serves her, which is the fact ADR-0015 keeps inside the
+// portal.
+func TestEraseHandler_LeavesTheLoginAnotherPracticeStillReaches(t *testing.T) {
+	db := testdb.New(t)
+	const uidA = "owner-erase-portal-shared-a"
+	const uidB = "owner-erase-portal-shared-b"
+	const portalUID = "portal-uid-two-practices"
+	practiceA, staffA := testdb.SeedStaffAtNewPractice(t, db, uidA, []string{ownerRole}, "employee")
+	practiceB, staffB := testdb.SeedStaffAtNewPractice(t, db, uidB, []string{ownerRole}, "employee")
+	clientA := seedFullClient(t, db, practiceA, staffA)
+	clientB := seedFullClient(t, db, practiceB, staffB)
+	testdb.SeedPortalAccount(t, db, portalUID, portalUID+"@example.com")
+	testdb.AttachPortalUser(t, db, portalUID, clientA)
+	testdb.AttachPortalUser(t, db, portalUID, clientB)
+	authntest.SeedSession(t, db.App, portalUID)
+
+	srvA, sessionA := newServer(t, db, uidA)
+	defer srvA.Close()
+	respA := postErasure(t, sessionA, srvA, practiceA, clientA)
+	defer respA.Body.Close()
+	if respA.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want %d", respA.StatusCode, http.StatusOK)
+	}
+
+	linkedA, accounts, sessions := portalReach(t, db, clientA, portalUID)
+	if linkedA != nil {
+		t.Fatalf("the erasing Practice's identity_uid = %q, want NULL", *linkedA)
+	}
+	if accounts != 1 {
+		t.Fatalf("portal_accounts rows = %d, want 1 -- the other Practice's Client still reaches this login", accounts)
+	}
+	if sessions != 1 {
+		t.Fatalf("portal sessions = %d, want 1 -- one Practice's erasure must not sign her out of another's portal", sessions)
+	}
+
+	linkedB, _, _ := portalReach(t, db, clientB, portalUID)
+	if linkedB == nil || *linkedB != portalUID {
+		t.Fatalf("the other Practice's identity_uid = %v, want %q untouched", linkedB, portalUID)
+	}
+
+	scopeA := erasureScopeRaw(t, db, clientA)
+
+	srvB, sessionB := newServer(t, db, uidB)
+	defer srvB.Close()
+	respB := postErasure(t, sessionB, srvB, practiceB, clientB)
+	defer respB.Body.Close()
+	if respB.StatusCode != http.StatusOK {
+		t.Fatalf("second erasure status = %d, want %d", respB.StatusCode, http.StatusOK)
+	}
+
+	linkedB, accounts, sessions = portalReach(t, db, clientB, portalUID)
+	if linkedB != nil {
+		t.Fatalf("the last Practice's identity_uid = %q, want NULL", *linkedB)
+	}
+	if accounts != 0 {
+		t.Fatal("portal_accounts row still exists -- the last un-erased Client is gone, so the login goes with her")
+	}
+	if sessions != 0 {
+		t.Fatalf("portal sessions = %d, want 0 -- she must not still be signed in", sessions)
+	}
+
+	// The two Practices' own records of the act read identically. A
+	// Practice that keeps a login alive and a Practice that takes it away
+	// are told the same thing, so no Owner can read the existence of
+	// another Practice off her own erasure's history -- the erasing
+	// Practice's half of ADR-0015's "no Client fact crosses a Practice".
+	if scopeB := erasureScopeRaw(t, db, clientB); !bytes.Equal(scopeA, scopeB) {
+		t.Fatalf("erasure scopes differ:\n  survived login: %s\n  deleted login:  %s", scopeA, scopeB)
+	}
+	var scope struct {
+		PortalAccount bool `json:"portalAccount"`
+	}
+	if err := json.Unmarshal(scopeA, &scope); err != nil {
+		t.Fatalf("decode erasure scope: %v", err)
+	}
+	if !scope.PortalAccount {
+		t.Fatal("erasureScope.portalAccount = false, want true -- her portal link at this Practice was removed")
+	}
 }
