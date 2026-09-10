@@ -155,12 +155,12 @@ describe('createMonitoringUsageSource', () => {
 		});
 	});
 
-	it('reads the bytes Firebase Hosting has served this month', async () => {
+	it('reads the bytes Firebase Hosting has served this billing period', async () => {
 		listTimeSeries.mockResolvedValue(int64('9467734'));
 
 		const usage = await createMonitoringUsageSource(now)();
 
-		expect(usage.firebaseHosting.monthlySentBytes).toBe(9_467_734);
+		expect(usage.firebaseHosting.sentBytes).toBe(9_467_734);
 	});
 
 	it('says which window the figures cover, so they do not read as the cost period', async () => {

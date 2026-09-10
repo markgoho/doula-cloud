@@ -51,10 +51,12 @@ export const FIRESTORE_RESOURCE_TYPE = 'firestore_instance';
 /**
  * The monitored resource Firebase Hosting reports under.
  *
- * No domain is named, for the opposite reason to Cloud Storage: every domain
- * reports the same project-wide figure rather than its own share, so the
- * scope takes all of them and picks one rather than adding them up. See
- * {@link GAUGE_LATEST}.
+ * No domain is named, for the same reason as Cloud Storage: every domain in
+ * the project serves bytes that produce the Hosting bill, so the scope takes
+ * all of them and the cross-series reducer adds them up. Read off the live
+ * resource on 2026-09-08: six domains reported 43,254 / 8,486,454 / 22,469 /
+ * 234,168 / 197,502 / 2,149,733 bytes over the period — distinct shares, not
+ * one figure replicated onto each domain.
  */
 export const FIREBASE_HOSTING_RESOURCE_TYPE = 'firebase_domain';
 
@@ -73,7 +75,7 @@ export const MINIMUM_ALIGNMENT_PERIOD_SECONDS = 60;
 export type MetricKind = 'DELTA' | 'GAUGE';
 
 interface Alignment {
-	readonly perSeriesAligner: 'ALIGN_SUM' | 'ALIGN_MEAN' | 'ALIGN_MAX' | 'ALIGN_NEXT_OLDER';
+	readonly perSeriesAligner: 'ALIGN_SUM' | 'ALIGN_MEAN' | 'ALIGN_MAX';
 	readonly crossSeriesReducer: 'REDUCE_SUM' | 'REDUCE_MEAN' | 'REDUCE_MAX';
 }
 
@@ -122,29 +124,6 @@ export const GAUGE_TOTAL: Alignment = {
 };
 
 /**
- * The newest sample in the period, from whichever series is freshest.
- *
- * For a counter that Monitoring publishes as a level: Firebase Hosting's
- * `network/monthly_sent` is month-to-date bytes, reset at the month boundary
- * and rising from there, so only its newest sample belongs to this period.
- * Read live on 2026-09-08, `dou.la` reported 136,227,528 at 00:50 on Sep 1
- * and 200,860 by 11:23 — the same series either side of the reset. Summing
- * or averaging the period mixes last month's total into this month's.
- *
- * `REDUCE_MAX` across series because every domain reports the same
- * project-wide figure rather than its own share, so the answer is one of
- * them, not their sum; a domain last written to days ago is stale and reads
- * low, and the maximum is the freshest.
- *
- * A sync in the first minutes of a new month reads the old month's total,
- * until Monitoring writes the first sample after the reset.
- */
-export const GAUGE_LATEST: Alignment = {
-	perSeriesAligner: 'ALIGN_NEXT_OLDER',
-	crossSeriesReducer: 'REDUCE_MAX'
-};
-
-/**
  * The four Cloud Run figures the panel shows, keyed the way the DTO carries
  * them.
  */
@@ -173,21 +152,21 @@ export type CloudStorageMetricId = 'storedBytes' | 'sentBytes';
 export type FirestoreMetricId = 'documentReads' | 'documentWrites' | 'documentDeletes';
 
 /**
- * The one Firebase Hosting figure the panel shows: bytes served so far this
- * month.
+ * The one Firebase Hosting figure the panel shows: bytes served over the
+ * billing period. Named the way Cloud Storage names the same quantity.
  */
-export type FirebaseHostingMetricId = 'monthlySentBytes';
+export type FirebaseHostingMetricId = 'sentBytes';
 
 /**
  * One metric, and how it is read.
  *
  * A union rather than one shape with an optional field, so that only a GAUGE
  * can carry an override: a DELTA counter has no legal alignment other than
- * the sum its kind gives it. The override itself is one of three named
+ * the sum its kind gives it. The override itself is one of two named
  * alignments rather than any {@link Alignment}, so a metric cannot invent a
  * combination nobody has justified against the live data.
  */
-export type GaugeOverride = typeof GAUGE_PEAK | typeof GAUGE_TOTAL | typeof GAUGE_LATEST;
+export type GaugeOverride = typeof GAUGE_PEAK | typeof GAUGE_TOTAL;
 
 export type UsageMetric<Id extends string = string> =
 	| { readonly id: Id; readonly type: string; readonly kind: 'DELTA' }
@@ -323,19 +302,29 @@ export const FIRESTORE_SCOPE: UsageScope<FirestoreMetricId> = {
 /**
  * The one Firebase Hosting metric that maps to the bill: bytes served.
  *
- * A GAUGE of INT64 bytes, read from the live `metricDescriptors` endpoint of
- * the `doula-cloud` project on 2026-09-08, and a month-to-date total rather
- * than a level — hence {@link GAUGE_LATEST}, whose comment carries the
- * evidence.
+ * A DELTA counter of INT64 bytes, read from the live `metricDescriptors`
+ * endpoint of the `doula-cloud` project on 2026-09-10, so it takes the plain
+ * {@link ALIGNMENT_BY_KIND} sum and needs no override.
+ *
+ * Hosting's other byte counter, `network/monthly_sent`, is the one this is
+ * deliberately *not*: Monitoring publishes it as a GAUGE holding a
+ * month-to-date total, and that total's month is a Pacific one. Traced live
+ * on 2026-09-10, `dou.la` read 137,092,104 at 07:07:59Z on Sep 1 and 17,720
+ * by 07:16:59Z — a reset at midnight `America/Los_Angeles`, seven hours into
+ * the UTC month {@link startOfBillingPeriod} opens. Any read of it in that
+ * window answers with the previous month's total, whatever aligner is used,
+ * because the previous month's total is the only sample there is. A DELTA
+ * summed from the start of the period has no such edge at any instant: over
+ * 2026-09-01T00:00:00Z–00:50:00Z it reported 789,214 bytes where the GAUGE
+ * reported 136,226,172. See [#963](https://github.com/markgoho/doula-cloud/issues/963).
  */
 export const FIREBASE_HOSTING_SCOPE: UsageScope<FirebaseHostingMetricId> = {
 	resourceFilter: `resource.type="${FIREBASE_HOSTING_RESOURCE_TYPE}"`,
 	metrics: [
 		{
-			id: 'monthlySentBytes',
-			type: 'firebasehosting.googleapis.com/network/monthly_sent',
-			kind: 'GAUGE',
-			alignment: GAUGE_LATEST
+			id: 'sentBytes',
+			type: 'firebasehosting.googleapis.com/network/sent_bytes_count',
+			kind: 'DELTA'
 		}
 	]
 };

@@ -9,7 +9,7 @@ const usage: UsageSnapshot = {
 	cloudSql: { diskQuotaBytes: 10_464_022_528 },
 	cloudStorage: { storedBytes: 567_149 },
 	firestore: {},
-	firebaseHosting: { monthlySentBytes: 9_467_734 }
+	firebaseHosting: { sentBytes: 9_467_734 }
 };
 
 function respond(body: unknown, isOk = true): Response {
