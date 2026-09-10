@@ -34,11 +34,12 @@
 	import DescriptionList from '#lib/components/molecules/DescriptionList.svelte';
 	import {
 		EMPTY_DATE_PARTS,
+		dateFieldId,
+		dateGroupRefusal,
 		joinDate,
-		type DateField,
 		type DateParts
 	} from '#lib/intakeDate.js';
-	import { FormSubmission, orThrownMessage, type FormError } from '#lib/formSubmission.svelte.js';
+	import { FormSubmission, orThrownMessage } from '#lib/formSubmission.svelte.js';
 	import type { PageProps as PageProperties } from './$types';
 
 	// #501 (ADR-0017): +page.ts's load already decided, before this
@@ -67,24 +68,23 @@
 	 * the other under the cursor is the defect this pattern avoids.
 	 */
 	let dateOfBirthParts = $state<DateParts>({ ...EMPTY_DATE_PARTS });
-	let dateOfBirth = $state('');
+	/*
+	 * Derived rather than written on submit, because the boxes feed two
+	 * readers: the search itself, and the "Add a new Client" link a miss
+	 * offers, which is rendered from whatever is typed right now. A
+	 * snapshot taken at submit would leave that link carrying the previous
+	 * date beside the current name.
+	 */
+	const composedDateOfBirth = $derived(joinDate(dateOfBirthParts));
+	const dateOfBirth = $derived(composedDateOfBirth.ok ? composedDateOfBirth.value : '');
 	let email = $state('');
 	let phone = $state('');
 
 	const submission = new FormSubmission();
 
-	/*
-	 * Which box the refusal is about, read back out of the one array
-	 * `ErrorSummary` renders rather than tracked beside it -- so a refusal
-	 * the BFF names lands on a box exactly the way a locally composed one
-	 * does, and neither can go stale against the summary.
-	 */
-	const dateOfBirthRefusal = $derived(
-		submission.errors.find((entry) => entry.targetId?.startsWith(`${dateOfBirthId}-`))
-	);
-	const dateOfBirthInvalidField = $derived(
-		dateOfBirthRefusal?.targetId?.slice(dateOfBirthId.length + 1) as DateField | undefined
-	);
+	// Which box the group's refusal is about, read back out of the one
+	// array `ErrorSummary` renders rather than tracked beside it.
+	const dateOfBirthRefusal = $derived(dateGroupRefusal(submission.errors, dateOfBirthId));
 	let hasSearched = $state(false);
 	let matches = $state<ClientMatch[]>([]);
 	let searchToken = $state(0);
@@ -150,25 +150,20 @@
 		return query ? `${base}?${query}` : base;
 	}
 
-	/*
-	 * Composes the three boxes into the string the query string carries,
-	 * or reports why it could not -- run before the "nothing typed" check
-	 * below, so a half-typed date is named as a date rather than read as
-	 * an empty search. The refusal targets one box, not the group, so the
-	 * summary entry lands on the box that has to change.
-	 */
-	function composeDateOfBirth(): FormError[] {
-		const result = joinDate(dateOfBirthParts);
-		if (!result.ok) return [{ message: result.message, targetId: `${dateOfBirthId}-${result.field}` }];
-		dateOfBirth = result.value;
-		return [];
-	}
-
 	async function handleSearch(event: SubmitEvent) {
 		event.preventDefault();
 		await submission.run(async () => {
-			const dateRefusals = composeDateOfBirth();
-			if (dateRefusals.length > 0) return dateRefusals;
+			// Refused before the "nothing typed" check below, so a
+			// half-typed date is named as a date rather than read as an
+			// empty search.
+			if (!composedDateOfBirth.ok) {
+				return [
+					{
+						message: composedDateOfBirth.message,
+						targetId: dateFieldId(dateOfBirthId, composedDateOfBirth.field)
+					}
+				];
+			}
 
 			const fields = currentFields();
 			if (!fields.name && !fields.dateOfBirth && !fields.email && !fields.phone) {
@@ -256,7 +251,7 @@
 							parts={dateOfBirthParts}
 							onChange={(next) => (dateOfBirthParts = next)}
 							error={dateOfBirthRefusal?.message}
-							invalidField={dateOfBirthInvalidField}
+							invalidField={dateOfBirthRefusal?.field}
 						/>
 						<LabeledField id={emailId} label="Email">
 							{#snippet children({ id, describedBy })}

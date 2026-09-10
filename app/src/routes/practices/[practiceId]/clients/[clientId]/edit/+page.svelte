@@ -43,10 +43,11 @@
 	import ConfirmDialog from '#lib/components/molecules/ConfirmDialog.svelte';
 	import { errorsFromCause } from '#lib/formErrors.js';
 	import {
+		dateFieldId,
+		dateGroupRefusal,
 		joinDate,
 		splitDate,
 		EMPTY_DATE_PARTS,
-		type DateField,
 		type DateParts
 	} from '#lib/intakeDate.js';
 	import { FormSubmission, orThrownErrors, type FormError } from '#lib/formSubmission.svelte.js';
@@ -69,7 +70,7 @@
 	// `dateOfBirth` names the first of the group's three boxes rather than
 	// the group (#807): the summary's entries are fragment links, and a
 	// <fieldset> is not what HTML's fragment-focusing steps can focus.
-	const editFieldIds = { givenName: givenNameId, dateOfBirth: `${dateOfBirthId}-month` };
+	const editFieldIds = { givenName: givenNameId, dateOfBirth: dateFieldId(dateOfBirthId, 'month') };
 
 	let detail = $state<ClientDetail | undefined>();
 	let loadError = $state('');
@@ -90,23 +91,16 @@
 	 * was typed, `dateOfBirth` the "YYYY-MM-DD" `client.Record` stores.
 	 */
 	let dateOfBirthParts = $state<DateParts>({ ...EMPTY_DATE_PARTS });
-	let dateOfBirth = $state('');
+	const composedDateOfBirth = $derived(joinDate(dateOfBirthParts));
+	const dateOfBirth = $derived(composedDateOfBirth.ok ? composedDateOfBirth.value : '');
 	let fieldValues = $state<unknown>();
 
 	const submission = new FormSubmission();
 
-	/*
-	 * Which box the refusal is about, read back out of the one array
-	 * `ErrorSummary` renders rather than tracked beside it -- so a refusal
-	 * the BFF names lands on a box exactly the way a locally composed one
-	 * does, and neither can go stale against the summary.
-	 */
-	const dateOfBirthRefusal = $derived(
-		submission.errors.find((entry) => entry.targetId?.startsWith(`${dateOfBirthId}-`))
-	);
-	const dateOfBirthInvalidField = $derived(
-		dateOfBirthRefusal?.targetId?.slice(dateOfBirthId.length + 1) as DateField | undefined
-	);
+	// Which box the group's refusal is about, read back out of the one
+	// array `ErrorSummary` renders -- so the BFF's own `dateOfBirth`
+	// refusal marks a box exactly the way a locally composed one does.
+	const dateOfBirthRefusal = $derived(dateGroupRefusal(submission.errors, dateOfBirthId));
 	let matches = $state<CollisionMatch[]>([]);
 	let isConflictOpen = $state(false);
 	// The refused override that belongs to no control, rendered inside the
@@ -158,12 +152,6 @@
 	function findRefusals(): FormError[] {
 		const found: FormError[] = [];
 		if (givenName.trim() === '') found.push({ message: "Enter the Client's given name", targetId: givenNameId });
-		// Composed here rather than at render, so a refused date is named
-		// alongside every other refusal in one summary and never reaches
-		// the wire.
-		const composed = joinDate(dateOfBirthParts);
-		if (composed.ok) dateOfBirth = composed.value;
-		else found.push({ message: composed.message, targetId: `${dateOfBirthId}-${composed.field}` });
 		return found;
 	}
 
@@ -187,7 +175,6 @@
 			addressLocality = detail.addressLocality;
 			addressRegion = detail.addressRegion;
 			addressPostalCode = detail.addressPostalCode;
-			dateOfBirth = detail.dateOfBirth;
 			dateOfBirthParts = splitDate(detail.dateOfBirth);
 			fieldValues = detail.fieldValues;
 		} catch (error_) {
@@ -204,6 +191,15 @@
 
 		await submission.run(async () => {
 			const refusals = findRefusals();
+			// Named alongside every other client-side refusal, so one
+			// summary carries them together and a refused date never
+			// reaches the wire.
+			if (!composedDateOfBirth.ok) {
+				refusals.push({
+					message: composedDateOfBirth.message,
+					targetId: dateFieldId(dateOfBirthId, composedDateOfBirth.field)
+				});
+			}
 			if (refusals.length > 0) return refusals;
 
 			const result = await editClient(
@@ -384,7 +380,7 @@
 		parts={dateOfBirthParts}
 		onChange={(next) => (dateOfBirthParts = next)}
 		error={dateOfBirthRefusal?.message}
-		invalidField={dateOfBirthInvalidField}
+		invalidField={dateOfBirthRefusal?.field}
 	/>
 {/snippet}
 

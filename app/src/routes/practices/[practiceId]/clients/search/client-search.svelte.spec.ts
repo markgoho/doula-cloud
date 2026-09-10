@@ -189,6 +189,31 @@ describe('the search that fronts intake (#498)', () => {
 			.toHaveAttribute('href', `/practices/${practiceId}/clients/new?dateOfBirth=1988-03-12`);
 	});
 
+	/*
+	 * The boxes feed two readers -- the search, and the link a miss offers
+	 * into intake, which is rendered from whatever is typed right now. A
+	 * date snapshotted at submit would leave that link carrying the
+	 * previous one beside the current name.
+	 */
+	it('carries the date currently in the boxes into intake, not the one the last search ran on', async () => {
+		apiFetchWithSession.mockResolvedValue(jsonResponse({ matches: [] }));
+		await setup();
+
+		await testPage.getByLabelText('Month').fill('2');
+		await testPage.getByLabelText('Day').fill('11');
+		await testPage.getByLabelText('Year').fill('1994');
+		await testPage.getByRole('button', { name: 'Search' }).click();
+		await expect
+			.element(testPage.getByRole('link', { name: 'Add a new Client' }))
+			.toHaveAttribute('href', `/practices/${practiceId}/clients/new?dateOfBirth=1994-02-11`);
+
+		await testPage.getByLabelText('Year').fill('1995');
+
+		await expect
+			.element(testPage.getByRole('link', { name: 'Add a new Client' }))
+			.toHaveAttribute('href', `/practices/${practiceId}/clients/new?dateOfBirth=1995-02-11`);
+	});
+
 	it('refuses a date that is not one, announcing it once and linking to the box that has to change', async () => {
 		await setup();
 

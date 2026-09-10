@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { joinDate, splitDate, type DateParts } from './intakeDate';
+import {
+	dateFieldId,
+	dateGroupRefusal,
+	joinDate,
+	splitDate,
+	type DateParts
+} from './intakeDate';
 
 const today = new Date(2026, 8, 5);
 
@@ -157,5 +163,52 @@ describe('joinDate', () => {
 		for (const message of messages) {
 			expect(message).not.toMatch(/\b(please|valid|invalid|required)\b/i);
 		}
+	});
+});
+
+/*
+ * The two halves of how a group's refusal reaches one box (#807): the id
+ * a summary entry names, and reading that entry back out of the one array
+ * `ErrorSummary` renders.
+ */
+describe('dateFieldId', () => {
+	it('names one box of the group, the way DateFields does', () => {
+		expect(dateFieldId('client-search-date-of-birth', 'month')).toBe(
+			'client-search-date-of-birth-month'
+		);
+	});
+});
+
+describe('dateGroupRefusal', () => {
+	const group = 'client-search-date-of-birth';
+
+	it('finds the group\'s refusal and which box it belongs to', () => {
+		expect(
+			dateGroupRefusal(
+				[
+					{ message: 'Enter a name', targetId: 'client-search-name' },
+					{ message: 'Date of birth must be a real date', targetId: `${group}-day` }
+				],
+				group
+			)
+		).toEqual({ message: 'Date of birth must be a real date', field: 'day' });
+	});
+
+	it('passes over an entry naming another control, and one naming nothing', () => {
+		expect(
+			dateGroupRefusal(
+				[{ message: 'Enter a name', targetId: 'client-search-name' }, { message: 'Sorry' }],
+				group
+			)
+		).toBeUndefined();
+	});
+
+	/*
+	 * The group's own error paragraph carries `<name>-error`, which shares
+	 * the prefix and is not a box. A prefix test would have read it as one
+	 * and marked no control.
+	 */
+	it('passes over the group\'s own error id, which is not a box', () => {
+		expect(dateGroupRefusal([{ message: 'Refused', targetId: `${group}-error` }], group)).toBeUndefined();
 	});
 });
