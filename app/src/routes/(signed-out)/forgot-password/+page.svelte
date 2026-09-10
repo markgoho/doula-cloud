@@ -7,6 +7,7 @@
 	import Notice from '#lib/components/atoms/Notice.svelte';
 	import Heading from '#lib/components/atoms/Heading.svelte';
 	import LabeledField from '#lib/components/molecules/LabeledField.svelte';
+	import StackedForm from '#lib/components/molecules/StackedForm.svelte';
 	import ErrorSummary from '#lib/components/molecules/ErrorSummary.svelte';
 	import PageTitle from '#lib/components/PageTitle.svelte';
 
@@ -50,7 +51,7 @@
 		message="If that email address is on an account, we've sent a link to reset your password."
 	/>
 {:else}
-	<form onsubmit={handleSubmit} novalidate>
+	<StackedForm onSubmit={handleSubmit}>
 		<LabeledField id={emailId} label="Email" error={submission.errorFor(emailId)}>
 			{#snippet children({ id, describedBy, invalid })}
 				<TextInput
@@ -66,5 +67,5 @@
 			{/snippet}
 		</LabeledField>
 		<Button type="submit" label="Send reset link" loading={submission.isSubmitting} />
-	</form>
+	</StackedForm>
 {/if}

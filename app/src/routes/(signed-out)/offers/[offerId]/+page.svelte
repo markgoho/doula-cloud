@@ -75,22 +75,35 @@
 	<Notice message="This link is missing its token. Open the offer from the email you were sent." variant="error" />
 {:else if !offer}
 	<Text text="Enter the six-digit code from the email to open this offer." tone="variant" />
+	<!--
+		#660: this is the one signed-out form that is not a `StackedForm`.
+		That molecule sets `novalidate`, because ADR-0021's Recover from
+		validation errors pattern is that the page refuses the submit and
+		says so once at the top -- and this screen has no `ErrorSummary` and
+		no refusal path to say it with, so it is still relying on the
+		browser's own bubble to stop an empty access code. Adopting the
+		molecule here would take that refusal away and put nothing in its
+		place, so the wrapper is inline until this screen gets #467's error
+		summary of its own (#1107).
+	-->
 	<form onsubmit={handleOpen}>
-		<LabeledField label="Access code">
-			{#snippet children({ id, describedBy, invalid })}
-				<TextInput
-					{id}
-					{describedBy}
-					{invalid}
-					inputmode="numeric"
-					maxlength={6}
-					value={code}
-					onInput={(value) => (code = value)}
-					required
-				/>
-			{/snippet}
-		</LabeledField>
-		<Button label="Open offer" type="submit" loading={isOpening} />
+		<stack-l space="var(--space-5)">
+			<LabeledField label="Access code">
+				{#snippet children({ id, describedBy, invalid })}
+					<TextInput
+						{id}
+						{describedBy}
+						{invalid}
+						inputmode="numeric"
+						maxlength={6}
+						value={code}
+						onInput={(value) => (code = value)}
+						required
+					/>
+				{/snippet}
+			</LabeledField>
+			<Button label="Open offer" type="submit" loading={isOpening} />
+		</stack-l>
 	</form>
 {:else}
 	<dl>

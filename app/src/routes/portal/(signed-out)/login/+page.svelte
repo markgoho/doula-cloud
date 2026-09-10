@@ -8,6 +8,7 @@
 	import Button from '#lib/components/atoms/Button.svelte';
 	import Notice from '#lib/components/atoms/Notice.svelte';
 	import LabeledField from '#lib/components/molecules/LabeledField.svelte';
+	import StackedForm from '#lib/components/molecules/StackedForm.svelte';
 	import ErrorSummary from '#lib/components/molecules/ErrorSummary.svelte';
 	import EntryPage from '#lib/components/templates/EntryPage.svelte';
 	import { FormSubmission, orServiceProblem } from '#lib/formSubmission.svelte.js';
@@ -79,7 +80,7 @@
 		/>
 	{:else}
 		<!-- `novalidate`: this page refuses the submit, not the browser. -->
-		<form onsubmit={handleSubmit} novalidate>
+		<StackedForm onSubmit={handleSubmit}>
 			<LabeledField id={emailId} label="Email" error={submission.errorFor(emailId)}>
 				{#snippet children({ id, describedBy, invalid })}
 					<TextInput
@@ -95,7 +96,7 @@
 				{/snippet}
 			</LabeledField>
 			<Button type="submit" label="Send me a sign-in link" loading={submission.isSubmitting} />
-		</form>
+		</StackedForm>
 	{/if}
 {/snippet}
 

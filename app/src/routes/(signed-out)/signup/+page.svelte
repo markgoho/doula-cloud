@@ -13,6 +13,7 @@
 	import TextInput from '#lib/components/atoms/TextInput.svelte';
 	import Button from '#lib/components/atoms/Button.svelte';
 	import LabeledField from '#lib/components/molecules/LabeledField.svelte';
+	import StackedForm from '#lib/components/molecules/StackedForm.svelte';
 	import WorkStateField from '#lib/components/molecules/WorkStateField.svelte';
 	import ErrorSummary from '#lib/components/molecules/ErrorSummary.svelte';
 	import WarningText from '#lib/components/atoms/WarningText.svelte';
@@ -274,7 +275,7 @@
 	<!-- `novalidate`: this page refuses the submit and says so once, at the
 	     top, rather than letting the browser's own bubble refuse the first
 	     empty field and say nothing about the other four (#467). -->
-	<form onsubmit={handleSubmit} novalidate>
+	<StackedForm onSubmit={handleSubmit}>
 		<LabeledField id={practiceNameId} label="Practice name" error={submission.errorFor(practiceNameId)}>
 			{#snippet children({ id, describedBy, invalid })}
 				<TextInput
@@ -346,7 +347,7 @@
 			message={`This account will hold every role — ${roleNames} — because a Practice's founder is usually its only Doula and needs to hold their own Visits. Anyone you invite later holds only the roles you choose for them. Roles are shown and changed on your Practice's staff roster.`}
 		/>
 		<Button type="submit" label="Create Practice" loading={submission.isSubmitting} />
-	</form>
+	</StackedForm>
 	{/if}
 {/snippet}
 

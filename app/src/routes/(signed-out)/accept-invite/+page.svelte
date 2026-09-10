@@ -40,6 +40,7 @@
 	import Text from '#lib/components/atoms/Text.svelte';
 	import Heading from '#lib/components/atoms/Heading.svelte';
 	import LabeledField from '#lib/components/molecules/LabeledField.svelte';
+	import StackedForm from '#lib/components/molecules/StackedForm.svelte';
 	import RadioGroup from '#lib/components/molecules/RadioGroup.svelte';
 	import WorkStateField from '#lib/components/molecules/WorkStateField.svelte';
 	import ErrorSummary from '#lib/components/molecules/ErrorSummary.svelte';
@@ -345,7 +346,7 @@
 			signing in is what settles that.
 		-->
 		<!-- `novalidate`: the page refuses the submit, not the browser (#467). -->
-		<form onsubmit={handleIdentify} novalidate>
+		<StackedForm onSubmit={handleIdentify}>
 			<Text text="First, sign in or create an account with the address your invite was sent to." />
 			<LabeledField id={emailId} label="Email" error={submission.errorFor(emailId)}>
 				{#snippet children({ id, describedBy, invalid })}
@@ -389,7 +390,7 @@
 				onChange={(value) => (mode = value)}
 			/>
 			<Button type="submit" label="Continue" loading={submission.isSubmitting} />
-		</form>
+		</StackedForm>
 	{:else if step === 'confirm-sign-out'}
 		<!--
 			#816: the warning goes on the button that acts, not on a screen
@@ -407,7 +408,7 @@
 		/>
 		<Button type="button" label="Cancel" variant="secondary" onClick={handleCancelSignOut} />
 	{:else}
-		<form onsubmit={handleAccept} novalidate>
+		<StackedForm onSubmit={handleAccept}>
 			<h2 tabindex="-1" {@attach focusOnAppearing}>
 				{existing ? 'Check your details' : 'Tell us about yourself'}
 			</h2>
@@ -454,7 +455,7 @@
 			{/if}
 
 			<Button type="submit" label="Accept invite" loading={submission.isSubmitting} />
-		</form>
+		</StackedForm>
 	{/if}
 
 	{#if picker}

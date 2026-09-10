@@ -10,6 +10,7 @@
 	import Heading from '#lib/components/atoms/Heading.svelte';
 	import Link from '#lib/components/atoms/Link.svelte';
 	import LabeledField from '#lib/components/molecules/LabeledField.svelte';
+	import StackedForm from '#lib/components/molecules/StackedForm.svelte';
 	import ErrorSummary from '#lib/components/molecules/ErrorSummary.svelte';
 	import PageTitle from '#lib/components/PageTitle.svelte';
 
@@ -56,7 +57,7 @@
 	/>
 	<Link href={resolve('/(signed-out)/login')} label="Continue to log in" />
 {:else}
-	<form onsubmit={handleSubmit} novalidate>
+	<StackedForm onSubmit={handleSubmit}>
 		<LabeledField id={passwordId} label="New password" error={submission.errorFor(passwordId)}>
 			{#snippet children({ id, describedBy, invalid })}
 				<TextInput
@@ -72,5 +73,5 @@
 			{/snippet}
 		</LabeledField>
 		<Button type="submit" label="Reset password" loading={submission.isSubmitting} />
-	</form>
+	</StackedForm>
 {/if}

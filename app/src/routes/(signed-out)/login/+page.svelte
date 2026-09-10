@@ -18,6 +18,7 @@
 	import Button from '#lib/components/atoms/Button.svelte';
 	import Link from '#lib/components/atoms/Link.svelte';
 	import LabeledField from '#lib/components/molecules/LabeledField.svelte';
+	import StackedForm from '#lib/components/molecules/StackedForm.svelte';
 	import TotpCodeField from '#lib/components/molecules/TotpCodeField.svelte';
 	import WarningText from '#lib/components/atoms/WarningText.svelte';
 	import ErrorSummary from '#lib/components/molecules/ErrorSummary.svelte';
@@ -310,7 +311,7 @@
 		it no longer does is block.
 	-->
 	{#if step === 'credentials'}
-		<form onsubmit={handleSubmit} novalidate>
+		<StackedForm onSubmit={handleSubmit}>
 			<LabeledField id={emailId} label="Email" error={submission.errorFor(emailId)}>
 				{#snippet children({ id, describedBy, invalid })}
 					<TextInput
@@ -340,7 +341,7 @@
 				{/snippet}
 			</LabeledField>
 			<Button type="submit" label="Log in" loading={submission.isSubmitting} />
-		</form>
+		</StackedForm>
 
 		<Link href={resolve('/(signed-out)/forgot-password')} label="Forgot your password?" />
 	{:else if step === 'confirm-sign-out'}
@@ -367,10 +368,10 @@
 			No email or password field here -- both are already proven, and
 			asking again would be asking a question that is already settled.
 		-->
-		<form onsubmit={handleChallengeSubmit} novalidate>
+		<StackedForm onSubmit={handleChallengeSubmit}>
 			<TotpCodeField id={codeId} value={totpCode} onInput={(value) => (totpCode = value)} error={submission.errorFor(codeId)} />
 			<Button type="submit" label="Continue" loading={submission.isSubmitting} />
-		</form>
+		</StackedForm>
 	{/if}
 
 	<!--

@@ -11,6 +11,7 @@
 	import Button from '#lib/components/atoms/Button.svelte';
 	import Link from '#lib/components/atoms/Link.svelte';
 	import LabeledField from '#lib/components/molecules/LabeledField.svelte';
+	import StackedForm from '#lib/components/molecules/StackedForm.svelte';
 	import ErrorSummary from '#lib/components/molecules/ErrorSummary.svelte';
 	import Heading from '#lib/components/atoms/Heading.svelte';
 
@@ -35,7 +36,7 @@
 {/snippet}
 
 {#snippet content()}
-	<form onsubmit={(event) => event.preventDefault()} novalidate>
+	<StackedForm onSubmit={(event) => event.preventDefault()}>
 		<LabeledField id={emailId} label="Email" error={hasError ? 'Enter your email address' : undefined}>
 			{#snippet children({ id, describedBy, invalid })}
 				<TextInput
@@ -69,7 +70,7 @@
 			{/snippet}
 		</LabeledField>
 		<Button type="submit" label="Log in" onClick={noop} />
-	</form>
+	</StackedForm>
 
 	<Link href="/style-guide/entry-page" label="Forgot your password?" />
 

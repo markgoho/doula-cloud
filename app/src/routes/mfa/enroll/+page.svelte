@@ -44,6 +44,7 @@
 	import Text from '#lib/components/atoms/Text.svelte';
 	import WarningText from '#lib/components/atoms/WarningText.svelte';
 	import LabeledField from '#lib/components/molecules/LabeledField.svelte';
+	import StackedForm from '#lib/components/molecules/StackedForm.svelte';
 	import TotpCodeField from '#lib/components/molecules/TotpCodeField.svelte';
 	import ErrorSummary from '#lib/components/molecules/ErrorSummary.svelte';
 	import EntryPage from '#lib/components/templates/EntryPage.svelte';
@@ -240,7 +241,7 @@
 {#snippet content()}
 	{#if step === 'password'}
 		<!-- `novalidate`: the page refuses the submit, not the browser (#467). -->
-		<form onsubmit={handlePasswordSubmit} novalidate>
+		<StackedForm onSubmit={handlePasswordSubmit}>
 			<Text text="Confirm your password to set up an authenticator app." />
 			<LabeledField id={passwordId} label="Password" error={submission.errorFor(passwordId)}>
 				{#snippet children({ id, describedBy, invalid })}
@@ -257,7 +258,7 @@
 				{/snippet}
 			</LabeledField>
 			<Button type="submit" label="Continue" loading={submission.isSubmitting} />
-		</form>
+		</StackedForm>
 	{:else if step === 'confirm-sign-out'}
 		<!--
 			#816: the warning goes on the button that acts, not on a screen
@@ -275,7 +276,7 @@
 		/>
 		<Button type="button" label="Cancel" variant="secondary" onClick={handleCancelSignOut} />
 	{:else}
-		<form onsubmit={handleCodeSubmit} novalidate>
+		<StackedForm onSubmit={handleCodeSubmit}>
 			<Text
 				text="Scan this QR code with an authenticator app, such as Google Authenticator or 1Password."
 			/>
@@ -294,7 +295,7 @@
 			<p><code>{secretKey}</code></p>
 			<TotpCodeField id={codeId} value={code} onInput={(value) => (code = value)} error={submission.errorFor(codeId)} />
 			<Button type="submit" label="Confirm and turn on" loading={submission.isSubmitting} />
-		</form>
+		</StackedForm>
 	{/if}
 {/snippet}
 
