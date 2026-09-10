@@ -127,12 +127,26 @@ cover-l {
 cover-l[no-pad] {
 	padding: 0;
 }
+/*
+ * Cover is the one primitive that keeps sibling margins, and the three
+ * rules below say so out loud -- ADR-0039 records it as deliberately
+ * margined rather than an oversight. Its centering IS an auto margin
+ * (`cover-l > h1` below), and `gap` cannot express "auto in the middle,
+ * `space` at the ends": a gap is uniform between items and writes nothing
+ * at the edges. The 2x-space it puts between two adjacent non-centered
+ * children is deliberate too. So Cover carries the same exposure Stack
+ * just lost -- a child's own `margin: 0` in `@layer components` cancels
+ * these -- and #1220 is where that gets its own answer.
+ */
+/* primitives:ignore: Cover's sibling margins are deliberate -- see above and ADR-0039; #1220 */
 cover-l > * {
 	margin-block: var(--space-4);
 }
+/* primitives:ignore: the end-cap for the rule above, same decision; #1220 */
 cover-l > :first-child:not(h1) {
 	margin-block-start: 0;
 }
+/* primitives:ignore: the end-cap for the rule above, same decision; #1220 */
 cover-l > :last-child:not(h1) {
 	margin-block-end: 0;
 }
