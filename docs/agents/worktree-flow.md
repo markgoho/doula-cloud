@@ -110,9 +110,12 @@ The `PostToolUse` fallback hook provisions it the same way `EnterWorktree` would
   nudge on top of it, not a substitute for it. A relative write target is measured against
   the directory a leading `cd` in the same command would put a shell in, not against the
   hook's own working directory (#680) — so `cd <worktree> && sed -i '' '…' <relative-path>`
-  is judged where the write actually lands. A `cd` that leaves the checkout, or whose
-  destination cannot be established (bare `cd`, `cd -`, `cd ~…`, an unexpanded variable),
-  falls back to resolving against the hook's own working directory rather than guessing.
+  is judged where the write actually lands. Only `&&` carries that directory into the next
+  stage, because only there does a failed `cd` short-circuit the write; past `||`, `;`, `|`,
+  `&`, a newline, or an unquoted parenthesis the write really would land in the main
+  checkout, so it is judged there. A `cd` that leaves the checkout, or whose destination
+  cannot be established (bare `cd`, `cd -`, `cd ~…`, an unexpanded variable), falls back to
+  resolving against the hook's own working directory rather than guessing.
 - **How a hook names its script**: `"$(git rev-parse --show-toplevel)/.claude/hooks/<file>"`,
   always — never a path relative to the working directory. A hook command inherits the
   session's cwd, and `app/` is where most sessions stand, so a relative path resolves against

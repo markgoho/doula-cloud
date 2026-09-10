@@ -78,9 +78,29 @@
 // established at all -- a bare `cd`, `cd -`, `cd ~...`, or an argument
 // still holding an unexpanded variable or command substitution -- falls
 // back to today's behavior rather than guessing, with only a later
-// absolute `cd` restoring tracking. What this still gives up, on purpose:
-// `pushd`/`popd` and a `cd` scoped to a subshell are not modeled. This
-// stays a textual scanner, not a shell parser.
+// absolute `cd` restoring tracking.
+//
+// The separator between two stages decides whether a base survives, and
+// only `&&` does. That is the one separator under which a shell is
+// *guaranteed* to be standing in the new directory when the next stage
+// runs: a `cd` that fails short-circuits the chain, so the write never
+// happens at all. Every other separator would hand this hook a base a real
+// shell need not be in -- `cd <worktree> || <write> <relative-path>` runs
+// the write precisely when the `cd` failed; `cd <worktree> & <write> ...`
+// and `cd <worktree> | true && <write> ...` run the `cd` in a subshell
+// whose directory dies with it; `cd <nonexistent> ; <write> ...` leaves
+// the shell exactly where it was. All of those write to the main checkout
+// for real, so none of them may resolve anywhere but the fallback. An
+// unquoted parenthesis anywhere in the command disables `cd` tracking for
+// that command outright, for the same reason and one this file cannot see
+// past: `segments` strips a leading `(`, so `(cd <worktree>) && <write>
+// <relative-path>` would otherwise read as a `cd` that outlives its
+// subshell. What this still gives up, on purpose: `pushd`/`popd` are not
+// modeled, and a command holding an unquoted parenthesis or joining its
+// stages with anything but `&&` gets no `cd` tracking even where a shell
+// would have kept the directory -- a write blocked that need not have
+// been, which is this file's safe direction to err. It stays a textual
+// scanner, not a shell parser.
 import path from 'node:path';
 import { isTrackedInMainCheckout, readStdin } from './tracked-path.ts';
 import { findMainCheckoutRoot } from './worktree-root.ts';
@@ -161,6 +181,16 @@ function maskQuotedRedirectionChars(command: string): string {
 	return out;
 }
 
+// One stage of a list or pipeline, with the separator that ends it -- `&&`,
+// `||`, `|`, `&`, `;`, a newline, or `''` at the end of the command. Only
+// `&&` carries a `cd`'s working directory into the next stage (#680), so
+// the separator has to survive the split rather than being discarded with
+// it.
+interface Stage {
+	text: string;
+	terminator: string;
+}
+
 // One list/pipeline stage per entry, so a write in one stage of
 // `A | tee file` or `A && sed -i ... file` is examined on its own --
 // command-name detection (tee/sed/cp/mv/install/rsync) keys off the first
@@ -170,11 +200,51 @@ function maskQuotedRedirectionChars(command: string): string {
 // gate-shared-index.sh's `tr '\n;|&'` -- that does tear `2>&1` into two
 // pieces, but the redirection regex below only needs a `>` with a target
 // after it, which survives the split intact either side.
-function segments(command: string): string[] {
-	return command
-		.split(/\r?\n|;|\|\||\||&&|&/)
-		.map(segment => segment.replace(/^[\s(){]*/, '').trim())
-		.filter(Boolean);
+function segments(command: string): Stage[] {
+	// The capture group keeps each separator in the split output, so the
+	// parts alternate stage, separator, stage, separator, ..., stage. An
+	// empty stage is kept rather than filtered out, so the separator that
+	// follows it is not lost with it; it contributes no write target and no
+	// `cd` either way.
+	const parts = command.split(/(\r?\n|;|\|\||\||&&|&)/);
+	const stages: Stage[] = [];
+
+	for (let index = 0; index < parts.length; index += 2) {
+		stages.push({
+			text: (parts[index] ?? '').replace(/^[\s(){]*/, '').trim(),
+			terminator: parts[index + 1] ?? ''
+		});
+	}
+
+	return stages;
+}
+
+// True when the command holds a `(` or `)` outside every quoted span, using
+// the same quote tracking as `maskQuotedRedirectionChars`. A parenthesis
+// means a subshell (or a command substitution whose text survived), and
+// `segments` cannot tell where one ends -- so no `cd` in such a command is
+// honored at all (#680).
+function hasUnquotedParenthesis(command: string): boolean {
+	let quote: '"' | "'" | null = null;
+
+	for (let index = 0; index < command.length; index++) {
+		const char = command[index] ?? '';
+
+		if (quote === '"' && char === '\\' && index + 1 < command.length) {
+			index++;
+			continue;
+		}
+
+		if (quote !== null) {
+			if (char === quote) quote = null;
+			continue;
+		}
+
+		if (char === "'" || char === '"') quote = char;
+		else if (char === '(' || char === ')') return true;
+	}
+
+	return false;
 }
 
 function tokenize(segment: string): string[] {
@@ -267,23 +337,30 @@ function cdArgument(segment: string): string | null | undefined {
 	return stripped;
 }
 
-// Walks the stages in order, carrying the working directory a real shell
-// would be standing in. A `cd` stage is scanned for write targets too
-// before it moves the base -- a redirection on a `cd` line takes effect in
-// the directory the shell is leaving, not the one it is entering.
-function collectCandidates(stages: string[]): Candidate[] {
+// Walks the stages in order, carrying the working directory a real shell is
+// guaranteed to be standing in. A `cd` stage is scanned for write targets
+// too before it moves the base -- a redirection on a `cd` line takes effect
+// in the directory the shell is leaving, not the one it is entering -- and
+// any separator but `&&` drops the base back to the fallback, because past
+// one of those the shell need not be where the `cd` aimed. See the file
+// header for why each of those cases is a real main-checkout write.
+function collectCandidates(scannable: string): Candidate[] {
+	const honorCd = !hasUnquotedParenthesis(scannable);
+	const fallback = process.cwd();
 	const candidates: Candidate[] = [];
-	let base: string | null = process.cwd();
+	let base: string | null = fallback;
 
-	for (const stage of stages) {
-		for (const target of writeTargets(stage)) candidates.push({ target, base });
+	for (const stage of segments(scannable)) {
+		for (const target of writeTargets(stage.text)) candidates.push({ target, base });
 
-		const argument = cdArgument(stage);
-		if (argument === undefined) continue;
-
+		const argument = honorCd ? cdArgument(stage.text) : undefined;
 		if (argument === null) base = null;
-		else if (path.isAbsolute(argument)) base = path.resolve(argument);
-		else if (base !== null) base = path.resolve(base, argument);
+		else if (argument !== undefined) {
+			if (path.isAbsolute(argument)) base = path.resolve(argument);
+			else if (base !== null) base = path.resolve(base, argument);
+		}
+
+		if (stage.terminator !== '&&') base = fallback;
 	}
 
 	return candidates;
@@ -330,7 +407,7 @@ async function main(): Promise<void> {
 	if (typeof command !== 'string') process.exit(0);
 
 	const scannable = maskQuotedRedirectionChars(stripHeredocBodies(command));
-	const candidates = collectCandidates(segments(scannable));
+	const candidates = collectCandidates(scannable);
 	if (candidates.length === 0) process.exit(0);
 
 	// Only pay for a git subprocess once there is something to check.
