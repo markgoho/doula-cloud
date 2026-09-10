@@ -124,6 +124,14 @@ var registry = map[string]Rule{
 // only by registry_test.go. Registering a Rule is what admits a kind to
 // #486's feed; moving it out of here is the same edit.
 //
+// A reason here is prose for whoever reads this file next, never a
+// string any response carries -- but apierr's own TestDetailsWording
+// reads every map[string]string literal in the module as if it were an
+// APIError.Details, so a reason written with one of GOV.UK's forbidden
+// error words ("please", "valid", "invalid", "required") fails that gate
+// from here. Write around the word rather than widening the gate: it is
+// checking the right thing and cannot tell these two maps apart.
+//
 // It lives beside registry rather than in that test file, though it is
 // the test's only reader, because the two maps are one statement: this is
 // the one place a subject kind's disposition toward the feed is written
@@ -131,7 +139,7 @@ var registry = map[string]Rule{
 // this reason" half would leave a reader of registry alone unable to tell
 // a considered omission from the bug this ticket fixed.
 var unregistered = map[string]string{
-	activity.SubjectPractice: "a Practice-scoped row (the MFA-required switch, a whole-Practice export) names the Practice itself rather than a record inside it, so who may read one is a separate decision from the roster's and the Client's -- tracked on #1255, not settled here.",
+	activity.SubjectPractice: "a Practice-scoped row (the switch that turns MFA on for all staff, a whole-Practice export) names the Practice itself rather than a record inside it, so who may read one is a separate decision from the roster's and the Client's -- tracked on #1255, not settled here.",
 	"client_field_template":  "written by clientfieldtemplate.Save (which spells the kind as a literal, having no constant) and read back by nothing -- no handler queries activity WHERE subject_kind = 'client_field_template'. A reader added later must register a Rule before this gate will ever return true for it (#485's AC5).",
 }
 
