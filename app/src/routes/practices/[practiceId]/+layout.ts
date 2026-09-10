@@ -2,6 +2,7 @@ import { redirect, error } from '@sveltejs/kit';
 import { resolve } from '$app/paths';
 import { apiFetch, apiErrorMessage, isMFARequired } from '#lib/api.js';
 import { decideLanding, type SessionInfo } from '#lib/landing.js';
+import { staffLoginAfterSessionEnded } from '#lib/sessionEnded.js';
 import type { LayoutLoad } from './$types';
 
 /**
@@ -78,7 +79,7 @@ export const load: LayoutLoad = async ({ params, url }): Promise<{ session: Prac
 	const response = await apiFetch(`/api/practices/${params.practiceId}/session`);
 
 	if (response.status === 401) {
-		redirect(303, `${resolve('/(signed-out)/login')}?sessionEnded=true`);
+		redirect(303, staffLoginAfterSessionEnded());
 	} else if (await isMFARequired(response)) {
 		redirect(303, `${resolve('/(signed-out)/mfa/enroll')}?returnTo=${encodeURIComponent(url.pathname)}`);
 	} else if (response.status === 403 || response.status === 404) {
@@ -120,7 +121,7 @@ async function redirectAwayFromStalePractice(): Promise<never> {
 	const staffResponse = await apiFetch('/api/staff/session');
 
 	if (staffResponse.status === 401) {
-		redirect(303, `${resolve('/(signed-out)/login')}?sessionEnded=true`);
+		redirect(303, staffLoginAfterSessionEnded());
 	}
 
 	if (staffResponse.ok) {

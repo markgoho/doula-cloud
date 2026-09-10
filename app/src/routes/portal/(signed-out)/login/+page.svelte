@@ -5,6 +5,7 @@
 	import { page } from '#lib/appState.svelte.js';
 	import { apiBaseURL, probeSession } from '#lib/api.js';
 	import { decidePortalLanding, type PortalSessionInfo } from '#lib/portalLanding.js';
+	import { didSessionEnd } from '#lib/sessionEnded.js';
 	import TextInput from '#lib/components/atoms/TextInput.svelte';
 	import Button from '#lib/components/atoms/Button.svelte';
 	import Notice from '#lib/components/atoms/Notice.svelte';
@@ -18,13 +19,15 @@
 
 	/*
 	 * #757: `handleExpiredSession` (#lib/api.js) sends an ended Client
-	 * session to this screen with `sessionEnded=true`, exactly as it does
-	 * the Staff one, so this screen says why she is here for the same
-	 * reason. `$derived` for the reason the Staff screen's own copy of
-	 * this gives: `page` is the seam, and a plain read would resolve
-	 * once at init and never see a drag-surface override.
+	 * session to this screen flagged as such, exactly as it does the Staff
+	 * one, so this screen says why she is here for the same reason. Read
+	 * through `#lib/sessionEnded.js` (#1131), the one place that flag is
+	 * spelled, so this screen and the writer cannot drift apart.
+	 * `$derived` for the reason the Staff screen's own copy of this gives:
+	 * `page` is the seam, and a plain read would resolve once at init and
+	 * never see a drag-surface override.
 	 */
-	const hasSessionEnded = $derived(page.url.searchParams.get('sessionEnded') === 'true');
+	const hasSessionEnded = $derived(didSessionEnd(page.url));
 
 	let email = $state('');
 	const submission = new FormSubmission();

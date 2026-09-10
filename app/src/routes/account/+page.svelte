@@ -29,6 +29,7 @@
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { apiBaseURL, apiFetchWithSession } from '#lib/api.js';
+	import { staffLoginAfterSessionEnded } from '#lib/sessionEnded.js';
 	import { getFirebaseAuth } from '#lib/firebase.js';
 	import { refusalErrors, refusalMessage, SERVICE_PROBLEM } from '#lib/formErrors.js';
 	import { FormSubmission, orServiceProblem, orThrownMessage } from '#lib/formSubmission.svelte.js';
@@ -240,7 +241,7 @@
 			throw new Error(await refusalMessage(response));
 		}
 
-		await goto(`${resolve('/(signed-out)/login')}?sessionEnded=true`);
+		await goto(staffLoginAfterSessionEnded());
 	}
 
 	/*

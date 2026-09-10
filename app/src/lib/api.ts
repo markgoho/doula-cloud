@@ -2,6 +2,7 @@ import { goto } from '$app/navigation';
 import { resolve } from '$app/paths';
 import { signOut } from 'firebase/auth';
 import { getFirebaseAuth } from './firebase.js';
+import { portalLoginAfterSessionEnded, staffLoginAfterSessionEnded } from './sessionEnded.js';
 
 /**
 The Go BFF's origin. Set by Playwright/dev; a real deploy serves both from the same origin.
@@ -19,8 +20,8 @@ one trip (to mint the cookie) rather than being a credential feature
 code carries around. On a 401 (no session, expired, or revoked) this
 clears the signed-in Identity Platform user, if any, and sends the
 browser to the login screen for whichever population the current route
-belongs to, carrying `sessionEnded=true` so that screen can read this as
-"your session ended" rather than an ordinary visit.
+belongs to, carrying the flag `#lib/sessionEnded.js` owns so that screen
+can read this as "your session ended" rather than an ordinary visit.
 
 A refusal carrying `{code: "MFA_REQUIRED"}` (#606) is a live, valid
 session that may not enter *this* Practice -- not an ended session -- so
@@ -100,13 +101,13 @@ export function apiFetch(path: string, init: RequestInit = {}): Promise<Response
 
 async function handleExpiredSession(): Promise<void> {
 	await signOut(getFirebaseAuth());
-	// Resolved separately per branch rather than from a union: `resolve` is
-	// overloaded per route, and a union argument stops matching any single
-	// overload.
+	// Which population's login screen, decided here; what the address says
+	// about the session that ended, decided by `#lib/sessionEnded.js`
+	// (#1131), which is the only place that flag is spelled.
 	await goto(
 		location.pathname.startsWith('/portal')
-			? `${resolve('/portal/(signed-out)/login')}?sessionEnded=true`
-			: `${resolve('/(signed-out)/login')}?sessionEnded=true`
+			? portalLoginAfterSessionEnded()
+			: staffLoginAfterSessionEnded()
 	);
 }
 
