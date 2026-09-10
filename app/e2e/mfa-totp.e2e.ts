@@ -63,7 +63,7 @@ test('An Owner sets up an authenticator app and lands on the Practice she was se
 	await page.getByLabel('Authenticator app code').fill(STUB_TOTP_CODE);
 	await page.getByRole('button', { name: 'Confirm and turn on' }).click();
 
-	await expect(page).toHaveURL(new RegExp(String.raw`/practices/${practiceId}`));
+	await expect(page).toHaveURL(new RegExp(`/practices/${practiceId}`));
 });
 
 test('An enrolled Owner answers the code challenge at sign-in and is admitted', async ({ page, request }) => {
@@ -90,5 +90,5 @@ test('An enrolled Owner answers the code challenge at sign-in and is admitted', 
 	await codeField.fill(STUB_TOTP_CODE);
 	await page.getByRole('button', { name: 'Continue' }).click();
 
-	await expect(page).toHaveURL(new RegExp(String.raw`/practices/${practiceId}`));
+	await expect(page).toHaveURL(new RegExp(`/practices/${practiceId}`));
 });
