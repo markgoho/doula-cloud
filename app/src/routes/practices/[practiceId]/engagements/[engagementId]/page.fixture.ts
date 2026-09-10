@@ -11,6 +11,27 @@
  * double-barrelled name; the Contract's merge-field values and a Visit's
  * `staffName` carry it again, since both are exactly the free-text shape
  * `DataTable`/`ContractView` were already fixed against.
+ *
+ * One session is all this screen has, and that is a finding rather than
+ * an omission (#928). This route reads four predicates -- `isOwner`,
+ * `isOwnerOrAdmin`, `isDoula` and `isAmbientContractor` -- and hands two
+ * of them down to `InvoiceSection` and `BirthOutcomeSection` as props, so
+ * the branching continues below the route. Every one of those branches is
+ * additive: not a single `{#if}` in the route or in either component
+ * renders anything on the *negative* answer, and the two reads that a
+ * narrower session is refused -- the roster and Offers -- answer
+ * `undefined` rather than throwing, so their sections are left out
+ * silently instead of drawing a refusal. The Contract and the Invoices
+ * are `staffauth.AnyStaff`, so no session meets an error Notice here
+ * either.
+ *
+ * The session below is an Owner who is also a Doula, which is therefore
+ * the union of every tree this route can draw: an Admin loses the
+ * InvoiceSection's Owner link and her own Visit default, a contractor
+ * Doula loses the Contract's PDF download, the Offers section, the Visit
+ * picker and the birth-outcome control. Each of those is the tree below
+ * with things removed, and a strict subset realizes nothing the sweep has
+ * not already measured (svelte-tests.md, ADR-0025).
  */
 import type { Contract } from '#lib/contract.js';
 import { jsonResponse } from '#lib/testResponse.js';

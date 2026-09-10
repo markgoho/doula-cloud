@@ -28,11 +28,13 @@ if (!customElements.get('center-l')) registerLayoutPrimitives();
  * installation, through the same `toPageState`, as
  * `route-continuum.svelte.spec.ts`. `pageData.session` carries the
  * Membership `practices/[practiceId]/+layout.ts` resolves (#835); the
- * fixture's own `respond` only answers what a Doula role ever fetches
- * (offers/clients/awaiting-reply/activity/push-subscriptions) -- most of this file's own
- * tests default to `roles: ['owner']`, which reaches `staff`/`billing`/
- * `payments/connect`/`engagement-requests` the fixture holds no content
- * for, so `setup()`'s own answers stay this spec's for those cases (#596).
+ * fixture's own `respond` answers the Owner's four `secondary` blocks as
+ * well as what a Doula fetches, since #928 gave this route an Owner
+ * variant and `block()` swallows an unanswered path into a "Could not
+ * load" rail. `setup()` below still installs its own answers rather than
+ * the fixture's, because most of these tests are about a *particular*
+ * one of those blocks failing or arriving empty -- content that is not
+ * the happy path, which svelte-tests.md leaves to the spec (#596).
  */
 const pageState = vi.hoisted(() => ({
 	params: {} as Record<string, string>,

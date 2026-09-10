@@ -25,7 +25,8 @@
  */
 import { jsonResponse } from '#lib/testResponse.js';
 import type { ClientDetail } from '#lib/clientDetail.js';
-import type { RouteFixture } from '../../../../routeFixture.js';
+import type { EraseEligibility } from '#lib/clientErasure.js';
+import type { RouteFixture, RouteVariant } from '../../../../routeFixture.js';
 import Page from './+page.svelte';
 
 export const detail: ClientDetail = {
@@ -85,8 +86,69 @@ export const detail: ClientDetail = {
 	]
 };
 
+/*
+ * What an Owner's own extra read answers (#691). Two invoices rather than
+ * one, and one of them four figures, because the Notice this feeds is a
+ * single generated sentence listing every one of them -- amount, status
+ * and date apiece -- so its length is the list's length and #537's rule
+ * lands on the row count here rather than on any one string.
+ */
+const eraseEligibility: EraseEligibility = {
+	unsettledInvoices: [
+		{
+			invoiceId: 'invoice-1',
+			status: 'open',
+			amountCents: 450_000,
+			currency: 'usd',
+			createdAt: '2026-08-01T00:00:00Z'
+		},
+		{
+			invoiceId: 'invoice-2',
+			status: 'draft',
+			amountCents: 92_500,
+			currency: 'usd',
+			createdAt: '2026-08-14T00:00:00Z'
+		}
+	]
+};
+
+/*
+ * The Owner's screen (#928). `isOwner` arrives through `+page.ts`'s own
+ * `load` rather than through `page.data`, so this restates `props`, not
+ * `pageData` -- a variant that set the session here would mount the base
+ * tree a second time and the sweep would stay green about it.
+ *
+ * What she reads that the base does not is #691's erasure block, and it
+ * has an extra read behind it: `loadEligibility` runs only when `isOwner`
+ * is true, so the base fixture never asks for `/erasure` and this variant
+ * needs its own `respond`. A variant's `respond` replaces rather than
+ * merges, so the session and detail answers below are restated with it.
+ *
+ * The unsettled-invoice branch, not the clear one: an Owner with nothing
+ * outstanding gets one short destructive Button whose ConfirmDialog is
+ * closed at rest and takes no box, while an Owner who is blocked reads a
+ * sentence naming every unsettled invoice on the record. The blocked
+ * branch is the one with something to measure.
+ *
+ * Not declared beside it: the ambient contractor's screen. `isContractor`
+ * withholds "Start new work with <name>" and changes nothing else -- the
+ * Edit link is unconditional (ADR-0017 gives a contractor Edit on her
+ * attached Clients) and the erasure block is already absent from the base
+ * -- so her tree is the base with one link removed, a strict subset that
+ * realizes nothing the sweep has not already measured (ADR-0025).
+ */
+export const asOwner: RouteVariant = {
+	name: 'The Client detail hub, as an Owner',
+	props: { data: { isContractor: false, isOwner: true } },
+	respond: (path) => {
+		if (path.endsWith('/api/staff/session')) return jsonResponse({ staffId: 'staff-1' });
+		if (path.endsWith('/erasure')) return jsonResponse(eraseEligibility);
+		return jsonResponse(detail);
+	}
+};
+
 export const fixture: RouteFixture = {
-	name: 'The Client detail hub',
+	name: 'The Client detail hub, as an employee Doula',
 	component: Page,
 	params: { practiceId: 'practice-1', clientId: 'client-1' },
 	url: 'https://example.test/practices/practice-1/clients/client-1',
@@ -95,5 +157,6 @@ export const fixture: RouteFixture = {
 		if (path.endsWith('/api/staff/session')) return jsonResponse({ staffId: 'staff-1' });
 		return jsonResponse(detail);
 	},
-	readyText: 'Persephone Ochieng-Whitfield'
+	readyText: 'Persephone Ochieng-Whitfield',
+	variants: [asOwner]
 };

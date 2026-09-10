@@ -9,7 +9,7 @@
  */
 import { jsonResponse } from '#lib/testResponse.js';
 import type { ClientDetail } from '#lib/clientDetail.js';
-import type { RouteFixture } from '../../../../../../routeFixture.js';
+import type { RouteFixture, RouteVariant } from '../../../../../../routeFixture.js';
 import Page from './+page.svelte';
 
 export const detail: ClientDetail = {
@@ -30,19 +30,56 @@ export const detail: ClientDetail = {
 	history: []
 };
 
-export const fixture: RouteFixture = {
-	name: 'Requesting a new Engagement',
-	component: Page,
-	params: { practiceId: 'practice-1', clientId: 'client-1' },
-	url: 'https://example.test/practices/practice-1/clients/client-1/engagement-requests/new',
-	pageData: {
+function session(roles: string[]) {
+	return {
 		session: {
 			practiceId: 'practice-1',
 			practiceName: 'Riverside Doula Collective',
-			roles: ['doula'],
+			roles,
 			isContractor: false
 		}
+	};
+}
+
+/*
+ * The approver's screen (#928), and the two things that make it a screen
+ * of its own rather than the Doula's with a word changed.
+ *
+ * `isOwnerOrAdmin` decides both the verb -- "Start work with" against
+ * "Ask to start work with", ADR-0017's solo-Practice collapse -- and
+ * whether the Credit cost and the balance after it are drawn above the
+ * form at all. That `DescriptionList` is content the base fixture has no
+ * way to reach, and it arrives through a read only an approver makes, so
+ * this variant answers the balance endpoint as well as the Client. A
+ * variant's `respond` replaces rather than merges, so the Client answer
+ * is restated with it.
+ *
+ * `readyText` moves with the verb: the heading IS `submitLabel`, so the
+ * inherited one would never appear on this branch and the mount would
+ * wait for a heading that is not coming.
+ *
+ * Owner rather than Admin because a name has to say one of them; the
+ * predicate is `isOwnerOrAdmin`, so the two draw the same screen.
+ */
+export const asApprover: RouteVariant = {
+	name: 'Requesting a new Engagement, as an Owner',
+	pageData: session(['owner']),
+	respond: (path) => {
+		if (path.includes('/billing')) {
+			return jsonResponse({ balance: 1284, ledger: { items: [], hasMore: false } });
+		}
+		return jsonResponse(detail);
 	},
+	readyText: 'Start work with Persephone Ochieng-Whitfield'
+};
+
+export const fixture: RouteFixture = {
+	name: 'Requesting a new Engagement, as a Doula',
+	component: Page,
+	params: { practiceId: 'practice-1', clientId: 'client-1' },
+	url: 'https://example.test/practices/practice-1/clients/client-1/engagement-requests/new',
+	pageData: session(['doula']),
 	respond: () => jsonResponse(detail),
-	readyText: 'Ask to start work with Persephone Ochieng-Whitfield'
+	readyText: 'Ask to start work with Persephone Ochieng-Whitfield',
+	variants: [asApprover]
 };
