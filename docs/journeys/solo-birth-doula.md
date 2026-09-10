@@ -12,8 +12,7 @@
 
 **Stage 3 — she finds out the folder does not fit.** Her stated why is "one place
 that holds the Client record, the Contract, the Birth Plan, and the messages".
-The Client record is the first of those four and it holds two fields, name and
-email. No due date, no phone number, no address, no intake notes.
+The Client record is the first of those four, and when this map was drawn it held two fields, name and email — no due date, no phone number, no address, no intake notes. **That is closed** ([MO-G3](https://github.com/markgoho/doula-cloud/issues/252), ADR-0017): the record now carries a real column set — name, date of birth, email, phone and address — asked one question at a time, and a Practice adds the facts we did not think of on its own Client Field Template.
 
 Maya is the most motivated Persona in the cast and will push through friction, so
 the question is what makes her stop. At minute five she learns she must keep the
@@ -71,19 +70,13 @@ point where she is least invested.
 ### Stage 3 — Add the first Client — moment of truth
 
 **Thinking**: "Everything in the folder goes in here."
-**Pain points**: the folder holds a due date, a phone number, an address, a
-hospital, a partner's name, and a page of intake notes. The form takes two fields.
+**Pain points**: the folder holds a due date, a phone number, an address, a hospital, a partner's name, and a page of intake notes. The form took two fields when this map was drawn; intake now asks for all of it, the fixed facts as its own questions and the rest through the Practice's Client Field Template ([MO-G3](https://github.com/markgoho/doula-cloud/issues/252) is closed).
 
-- **3.1** — Open `/practices/[practiceId]/clients/new`.
-- **3.2** — Enter name and email; press **Add Client**
-  (`POST /api/practices/{id}/clients`). A Client and an Engagement at status
-  `intake` are created together, and **one credit is consumed**
-  (`billing.ConsumeCredit`).
-- **3.3** — Open the Engagement from the Clients list.
-- **3.4** — Repeat for her second and third Clients. Signup granted three credits
-  (`signup.go:144`), so her **fourth** Client returns `402` with "no credits
-  remaining, ask a Practice Owner to buy more". She *is* the Practice Owner, and
-  no Stripe account exists to take her money.
+- **3.1** — Reach intake through **Find or add a Client** on the Clients list: a Client is found before she is created (ADR-0017). Intake is one question per page from there.
+- **3.2** — Answer the name question; press **Save and come back later**. A Client is saved and **nothing else is** — no Engagement, no credit — and she lands on that Client's own detail hub.
+- **3.2-b** — **Start new work with {name}** from the hub. As the Owner she is her own approver, so asking and approving collapse into one act, and **that** act creates the Engagement and consumes the credit (`billing.ConsumeCredit`), after naming its cost and the balance after it on the form.
+- **3.3** — Open the Engagement.
+- **3.4** — Repeat for her second and third Clients. Signup granted three credits (`api/internal/staffauth/signup.go`), so her **fourth Engagement** — not her fourth Client, which costs nothing — returns `402` with "no credits remaining, ask a practice owner or admin to buy more". She *is* the Practice Owner, and the refusal offers **Buy credits** on the same screen.
 
 ### Stage 4 — Fill the Care Plan and the Birth Plan
 

@@ -49,7 +49,7 @@ as a non-owner, which is the case that matters here.
 | Step | Action | Expected result | Mark |
 | --- | --- | --- | --- |
 | 4.1 | Open `/practices/[practiceId]/clients/new` | Intake is a sequence now, one question per page — name, date of birth, email, phone, address, then whatever sections the Practice put on its own Client Field Template — with **Save and come back later** offered on every one of them. She reaches it from **Find or add a Client** on the Clients list, because a Client is found before she is created (ADR-0017). Her page of notes from the call has somewhere to go ([MO-G3](https://github.com/markgoho/doula-cloud/issues/252) closed) | `manual` |
-| 4.2 | Press **Add Client** | `client.CreateHandler` refuses only a contractor doula, so it **passes** for Dee — and the save is **free**: a Client, no Engagement, no credit. She lands on the Client's own detail hub. Asking for paid work with her is a separate act, the Engagement Request, whose approval is what creates the Engagement and locks the Credit (ADR-0017) | `manual` |
+| 4.2 | Press **Save this Client** on the check-answers page | `client.CreateHandler` refuses only a contractor doula, so it **passes** for Dee — and the save is **free**: a Client, no Engagement, no credit. She lands on the Client's own detail hub. Asking for paid work with her is a separate act, the Engagement Request, whose approval is what creates the Engagement and locks the Credit (ADR-0017) | `manual` |
 
 ### Stage 5 — Assign a Doula
 
@@ -154,6 +154,10 @@ migration, the Go BFF and the Firebase Auth emulator, all local.
 
 This plan has **no** `automated` step, so the suite says nothing about it.
 Every step below stage 1 waits on the walk.
+
+### 2026-09-10, later — one button name ([#1121](https://github.com/markgoho/doula-cloud/issues/1121))
+
+4.2's Action read **Add Client**. There is no such button: intake ends on a check-answers page whose control is **Save this Client**. The Expected result beside it, corrected by [#685](https://github.com/markgoho/doula-cloud/issues/685), was already right. No mark moved and no count changed. Found sweeping for the same pre-ADR-0017 story on Tasha Bell's and Maya Okonkwo's plans, and corrected here rather than left because the map's own stage 4 was corrected in the same pass.
 
 ### 2026-09-10 — narrative reconciliation ([#685](https://github.com/markgoho/doula-cloud/issues/685))
 

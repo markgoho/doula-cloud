@@ -98,12 +98,9 @@ do not appear. Nothing here is about supporting a birth.
 **Thinking**: "Let me put a fake client in and see what happens."
 **Pain points**: she must invent a client to see any real screen.
 
-- **5.1** — `/practices/[practiceId]/clients/new`, enter a name and an email.
-- **5.2** — Press **Add Client** (`POST /api/practices/{id}/clients`). This creates
-  a Client **and** an Engagement at status `intake`; there is no way to create one
-  without the other. It also silently spends one of the three credits signup gave
-  her (MO-G9) — so a two-doula practice trialling the product with real Clients
-  hits a paywall on the fourth, and nothing warned her a trial had a size.
+- **5.1** — **Find or add a Client** on the Clients list, search, find nobody, follow **Add a new Client**. Intake is one question per page from there (ADR-0017): the name, then date of birth, email, phone, address, then whatever the Practice put on its own Client Field Template.
+- **5.2** — Answer the name question and press **Save and come back later**. The save is **free** and creates a Client and nothing else — no Engagement, no credit spent — and lands her on that Client's own detail hub.
+- **5.2-b** — **Start new work with {name}** from the hub. This is the act that costs, and it says so before she commits: `Credit cost 1 credit` and `Balance after 2`. She holds Owner, so asking and approving collapse into one act, and the Engagement is created and the Credit locked there. A trial still has a size — three Engagements, not three Clients — but it is now named on screen rather than discovered at a paywall.
 - **5.3** — Open the Engagement from the Clients list.
 - **5.4** — See Visits, Care Plan, Birth Plan, Contract, Invoices, and Messages on
   one page. This is the first moment the product looks like doula work — and it is

@@ -100,14 +100,10 @@ nothing and withholds nothing.
 
 **Thinking**: "She is due in March, wants a birth doula, heard about us from her
 midwife."
-**Pain points**: they take a page of notes on the call and the form accepts two
-fields. Everything else goes back into a notebook, which is the problem the
-product was meant to solve.
+**Pain points**: they take a page of notes on the call, and the form accepted two fields when this map was drawn — everything else went back into a notebook, which is the problem the product was meant to solve. **That is closed** ([MO-G3](https://github.com/markgoho/doula-cloud/issues/252), ADR-0017): the notes have somewhere to go.
 
-- **4.1** — `/practices/[practiceId]/clients/new`, enter name and email.
-- **4.2** — Press **Add Client** (`POST /api/practices/{id}/clients`). Client and
-  Engagement are created together at status `intake`. Not owner-gated, so this
-  **passes** for Dee.
+- **4.1** — **Find or add a Client** on the Clients list, search, then **Add a new Client**: intake is one question per page from there — name, date of birth, email, phone, address, then the Practice's own Client Field Template sections.
+- **4.2** — Press **Save this Client**. The save is **free** — a Client, no Engagement, no credit — and it is not owner-gated, so it **passes** for Dee. Asking for paid work with the Client is the separate act at `POST .../engagement-requests`, and its approval is what creates the Engagement and locks the Credit.
 
 ### Stage 5 — Assign a Doula
 
