@@ -57,7 +57,58 @@ export interface PaginatedListOptions<Item> {
 	failureMessage: string;
 }
 
+/**
+ * What a caller sees of a list nobody has asked for yet (#1149).
+ *
+ * The difference from the class below is `entries`, and it is the whole
+ * point: a list built around a `first` page always has rows to show, so
+ * `items: []` can only mean "the endpoint answered with nothing". A list
+ * fetched on demand is `[]` before anything has been requested too, and
+ * those two need different words on screen -- "Loading..." against
+ * "Nothing recorded.".
+ *
+ * So this view does not offer `items` at all. The only rows it can hand
+ * over are `entries`, which is `undefined` until a page has actually
+ * landed, and TypeScript refuses to read a length or an index off it
+ * until the caller has said what an absent page looks like. `reset` and
+ * `abandon` are absent for the same reason: a deferred list's first page
+ * comes from `ask`, not from a route's `load`, so there is no fresh first
+ * page for a caller to hand it.
+ */
+export interface DeferredPaginatedList<Item> {
+	/**
+	 * The entries loaded so far, or `undefined` while no page has landed
+	 * -- before `ask`, while the first one is in flight, and after a first
+	 * one that failed.
+	 */
+	readonly entries: readonly Item[] | undefined;
+	readonly hasMore: boolean;
+	readonly isLoadingMore: boolean;
+	readonly loadMoreError: string;
+	ask(): Promise<void>;
+	loadMore(): Promise<void>;
+}
+
 export class PaginatedList<Item> {
+	/**
+	 * A list that pages on demand: no first page, because nothing has
+	 * asked for one. Its rows are read through `entries`, which stays
+	 * `undefined` until `ask` lands a page -- the state the Staff roster's
+	 * two history disclosures spent four containers each hand-rolling
+	 * before this existed (#1149).
+	 *
+	 * `first` stays required on the ordinary constructor, so an eager
+	 * caller cannot reach this state by leaving something out; a deferred
+	 * list is asked for by name.
+	 */
+	static deferred<Item>(
+		options: Omit<PaginatedListOptions<Item>, 'first'>
+	): DeferredPaginatedList<Item> {
+		const list = new PaginatedList<Item>({ ...options, first: { items: [], hasMore: false } });
+		list.#landed = false;
+		return list;
+	}
+
 	#cursor = '';
 	#loadPage: PageLoader<Item>;
 	#failureMessage: string;
@@ -70,6 +121,16 @@ export class PaginatedList<Item> {
 	 * ran.
 	 */
 	#generation = 0;
+	/**
+	 * Whether a page has ever landed. True from construction for the
+	 * ordinary path, because the route's `load` already fetched the first
+	 * page; false for `deferred` until `ask` publishes one. It is what
+	 * `entries` reads, and what stops a second `ask` -- never
+	 * `loadMoreError`, which a *further* page's failure also sets, and
+	 * asking again then would re-run the first-page walk from a cursor
+	 * that has already moved.
+	 */
+	#landed = $state(true);
 
 	/**
 	Every item loaded so far, first page included.
@@ -131,9 +192,47 @@ export class PaginatedList<Item> {
 			} while (page.items.length === 0 && page.hasMore);
 			this.items = page.items;
 			this.hasMore = page.hasMore;
+			// The one place a deferred list stops being unasked: a page
+			// reached the caller, so `entries` may now say `[]` and mean it.
+			this.#landed = true;
 		} catch (error_) {
 			if (generation !== this.#generation) return;
 			this.loadMoreError = error_ instanceof Error ? error_.message : this.#failureMessage;
+		}
+	}
+
+	/**
+	 * The rows, or `undefined` while none has landed. See
+	 * `DeferredPaginatedList`, which is the only view that exposes it.
+	 */
+	get entries(): readonly Item[] | undefined {
+		return this.#landed ? this.items : undefined;
+	}
+
+	/**
+	 * Fetches the first page, once. A second ask after one has landed does
+	 * nothing, and an ask while one is in flight does nothing -- opening
+	 * the same disclosure twice is one request, the guard `loadMore`
+	 * already makes for every page after the first.
+	 *
+	 * An ask that *failed* may be asked again: nothing was published, and
+	 * the cursor only ever advanced past pages that held no items, so the
+	 * retry resumes where the walk stopped rather than repeating rows.
+	 */
+	async ask(): Promise<void> {
+		if (this.#landed || this.isLoadingMore) return;
+
+		const generation = this.#generation;
+		this.loadMoreError = '';
+		this.isLoadingMore = true;
+		try {
+			await this.#converge(generation);
+		} finally {
+			// Unguarded, unlike `loadMore`'s own `finally`: `abandon` is not
+			// part of the deferred view, so nothing can supersede a first ask
+			// and there is no later load whose flag this could clear. The
+			// rows themselves are still guarded, inside `#converge`.
+			this.isLoadingMore = false;
 		}
 	}
 
