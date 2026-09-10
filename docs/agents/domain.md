@@ -12,7 +12,9 @@ If any of these files don't exist, **proceed silently**. Don't flag their absenc
 
 ## Numbering a new ADR
 
-The next number is one past the highest already in `docs/adr/`, and a number is never reused. Take it as late as you can — two PRs that pick a number early and merge minutes apart both pick the same one, which is how ADR-0033 came to name two decisions ([#1053](https://github.com/markgoho/doula-cloud/issues/1053)). `app/src/lib/adrNumbers.usage.spec.ts` fails the build on a repeated number, so a collision is caught on the PR rather than after the merge; renumbering afterwards means finding and repointing every citation, which is the expensive half.
+The next number is one past the highest already in `docs/adr/`, and a number is never reused. **Take it as late as you can** — right before the PR lands, not when the branch is cut. Two PRs that each pick a number early and merge minutes apart both pick the same one, which is how ADR-0033 came to name two decisions ([#1053](https://github.com/markgoho/doula-cloud/issues/1053)).
+
+`app/src/lib/adrNumbers.usage.spec.ts` fails the build on a repeated number. It catches the collision on the PR when the number is already taken on trunk, and on trunk's own run when two PRs took it concurrently — the second case is what the "as late as you can" rule is for, since neither of those PRs holds a duplicate to fail on. A trunk failure opens the alarm issue through `.github/workflows/trunk-red.yml`, so either way it surfaces the same day rather than months later in a reader's head. Renumbering afterwards means finding and repointing every citation, which is the expensive half.
 
 ## File structure
 
