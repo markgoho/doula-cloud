@@ -30,6 +30,15 @@
 # in `secrets.tf`, next to the secrets they are granted on. That role no
 # longer appears in this project's IAM policy at all — the deploy identity
 # was its only project-level member.
+#
+# #1078's apply had to be staged, and a future one of the same shape does
+# too. Deleting a `google_project_iam_member` and adding the narrower grants
+# elsewhere gives Terraform no ordering to respect: the removed resource is
+# no longer in the configuration, so neither `depends_on` nor
+# `create_before_destroy` can express "grant first." A single apply that
+# happened to destroy first would leave a window in which a trunk push could
+# not read its migration DSN. It was applied as `-target` on the two
+# `*_deploy_accessor` resources, then a full apply for the destroy.
 
 # `github-action-733741680@`: the identity every deploy in `ci.yml` runs as.
 resource "google_service_account" "github_action" {

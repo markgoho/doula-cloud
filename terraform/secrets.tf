@@ -27,7 +27,7 @@
 # it grants access to — a secret imported without its grants would be exactly
 # the half-configuration this ticket exists to close. Each of #743's was read
 # from `gcloud secrets get-iam-policy` rather than assumed; the two #1078
-# added are the only ones this configuration created rather than imported.
+# added were created by an apply rather than imported from a live binding.
 #
 # `firebase-app-hosting-github-oauth-github-oauthtoken-a16322` is not here.
 # See docs/infrastructure.md's by-hand table for why.
@@ -36,8 +36,10 @@
 # which. A `*_runtime_accessor` is `doula-api-runtime@` — the identity the
 # container runs as — resolving a `secret_key_ref` at container start. A
 # `*_deploy_accessor` is `github-action-733741680@` fetching a payload inside
-# a GitHub Actions job, and there are exactly two: the migration DSN and the
-# site builder DSN. Until #1078 the deploy identity read those two through a
+# a GitHub Actions job, and there are exactly two of those: the migration DSN
+# and the site builder DSN. Nothing else in CI reads a secret payload, and a
+# secret that grows a third deploy accessor should be a question at review.
+# Until #1078 the deploy identity read those two through a
 # project-wide `roles/secretmanager.secretAccessor` that reached all thirteen
 # secrets in the project, including the Stripe key and every Mailgun key, so
 # neither secret carried a binding of its own and neither one's access
@@ -46,14 +48,15 @@
 # all (`terraform/iam.tf`).
 #
 # Every `*_runtime_accessor` below names `doula-api-runtime@` since #1051.
-# Each was the default compute account before that. These ten grants were
+# Each was the default compute account before that. These grants were
 # the real boundary even then, and still are: `roles/editor`, which that
 # account held over everything else in the project, deliberately excludes
 # `secretmanager.versions.access`, so a secret without a grant here was
 # unreadable to the container no matter what else it could do. #743 walked
-# exactly that failure. Ten, not eleven: the live service declares ten
-# `secret_key_ref` environment variables and nine plain ones (cloud_run.tf),
-# which is the count that decides this list.
+# exactly that failure. There are nine, one per `secret_key_ref` environment
+# variable the live service declares (cloud_run.tf) — that count, not the
+# number of secrets in the project, is what decides this list. Ten until
+# #1183 took `NOTIFICATION_WORKER_SECRET` off the service.
 
 resource "google_secret_manager_secret" "github_dispatch_token" {
   annotations         = {}
@@ -232,12 +235,9 @@ resource "google_secret_manager_secret" "pg_migrate_dsn" {
   }
 }
 
-# #1078. The `_deploy_accessor` suffix, rather than the `_runtime_accessor`
-# every other grant in this file carries, is the whole distinction: a runtime
-# accessor is `doula-api-runtime@` resolving a `secret_key_ref` at container
-# start, and a deploy accessor is `github-action-733741680@` fetching a
-# payload inside a GitHub Actions job. Two of the thirteen secrets in this
-# project have one; the rest must not grow one by accident.
+# #1078. `_deploy_accessor` is the suffix `notification_worker_secret` carried
+# for the same principal until #1183 removed it, so this reuses a name the file
+# has already used rather than coining one.
 resource "google_secret_manager_secret_iam_member" "pg_migrate_dsn_deploy_accessor" {
   member    = google_service_account.github_action.member
   project   = "doula-cloud"
