@@ -7,7 +7,7 @@
 	 * ordinary session, with no `returnTo` at all.
 	 *
 	 * Decision 2 (issue #606's triage brief) settles the sign-out
-	 * collision #149 and this ticket both have a claim on: enrolment
+	 * collision #149 and this ticket both have a claim on: enrollment
 	 * always re-authenticates rather than ever assuming the browser holds
 	 * a live client-side Identity Platform sign-in. That holds on both
 	 * entry points -- the BFF session cookie #149 signs out from under is
@@ -26,7 +26,7 @@
 	 *
 	 * Two steps, never rendered together, the same shape `accept-invite`
 	 * already uses for its own two-step form: step one re-authenticates
-	 * and opens an enrolment session with Identity Platform, step two
+	 * and opens an enrollment session with Identity Platform, step two
 	 * shows the QR code and secret and asks for the code it produces.
 	 */
 	import { onMount } from 'svelte';
@@ -136,7 +136,7 @@
 	}
 
 	/*
-	 * The POST every enrolment-finish attempt runs, first unconfirmed and
+	 * The POST every enrollment-finish attempt runs, first unconfirmed and
 	 * then -- if #816's cross-population check refuses it -- again with
 	 * X-Confirmed, on the same idToken.
 	 */
@@ -179,7 +179,7 @@
 
 			if (response.status === 400) {
 				/*
-				 * Decision 4: the post-enrolment token turned out not to carry
+				 * Decision 4: the post-enrollment token turned out not to carry
 				 * the claim yet. This is expected fallback plumbing, not a
 				 * form refusal -- the ordinary sign-in flow's TOTP challenge
 				 * mints a session that does show it.
@@ -204,7 +204,7 @@
 	}
 
 	/*
-	 * #816's press-through: the same enrolment finish, sent again with
+	 * #816's press-through: the same enrollment finish, sent again with
 	 * X-Confirmed, on the same freshly-minted idToken.
 	 */
 	async function handleConfirmSignOut(): Promise<void> {
@@ -226,7 +226,7 @@
 	 * step two with the same secret and QR code -- and the portal session
 	 * she chose to keep is untouched. The just-enrolled TOTP factor is
 	 * left in place: Identity Platform, not this screen, owns undoing an
-	 * enrolment, and re-submitting the same code finishes what only the
+	 * enrollment, and re-submitting the same code finishes what only the
 	 * mint was waiting on.
 	 */
 	function handleCancelSignOut(): void {
