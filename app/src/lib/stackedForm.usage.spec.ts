@@ -40,10 +40,10 @@ import { describe, expect, it } from 'vitest';
  * `var(--space-5)`, and #1108's complaint was never that they are wrong --
  * it was that nothing on the page said which they were.
  *
- * The marker is read from the `<form` line itself or from the line above
- * it, which is where the HTML comment explaining a form sits. A comment
- * that runs several lines counts as its last one, so the prose can be as
- * long as the reason needs.
+ * The marker is read from the `<form` line itself or from the three lines
+ * above it, which is where the HTML comment explaining a form sits. A
+ * comment that runs several lines counts as its last one, so the prose
+ * can be as long as the reason needs.
  */
 
 const appRoot = fileURLToPath(new URL('../../', import.meta.url));
@@ -68,7 +68,11 @@ function read(file: string): string {
  * whole, and an HTML comment goes unless it carries the marker -- which is
  * exactly where the marker is meant to live, in a comment beside the form
  * it explains. Line count is preserved on the way out, because the
- * marker is read from the three lines above the form.
+ * marker is read from the source lines just above the form, and a comment
+ * that says nothing about stacking has to leave a line behind rather than
+ * closing the gap -- `MessageThread` writes an `eslint-disable-next-line`
+ * comment inside a form, and a form could have one above it just as
+ * easily.
  */
 function markup(source: string): string {
 	return source
@@ -87,7 +91,16 @@ function blankOut(block: string): string {
 	return '\n'.repeat((block.match(/\n/g) ?? []).length);
 }
 
+/*
+ * The sibling gate's own three rules, narrowed to what it actually globs.
+ * `entryFormSpacing.usage.spec.ts` reads `src/routes/**\/+page.svelte` and
+ * nothing else, so a component that happens to live under one of the
+ * signed-out route groups is asked by neither gate unless this one asks
+ * it. Handing a file to the stricter check is only honest where the
+ * stricter check would in fact see it.
+ */
 function isEntryScreen(file: string): boolean {
+	if (!file.endsWith('/+page.svelte')) return false;
 	if (file.startsWith('src/routes/(signed-out)/')) return true;
 	if (file.startsWith('src/routes/portal/(signed-out)/')) return true;
 	return ENTRY_TEMPLATE_IMPORT.test(read(file));
@@ -99,7 +112,7 @@ function unmarkedForms(source: string): number[] {
 
 	for (const [index, line] of lines.entries()) {
 		if (!line.includes('<form')) continue;
-		const nearby = lines.slice(Math.max(0, index - 1), index + 1);
+		const nearby = lines.slice(Math.max(0, index - 3), index + 1);
 		if (nearby.some((candidate) => IGNORE_MARKER.test(candidate))) continue;
 		unmarked.push(index + 1);
 	}

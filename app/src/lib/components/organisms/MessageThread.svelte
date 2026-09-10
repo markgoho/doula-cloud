@@ -116,10 +116,10 @@
 
 	<!--
 		#1108: this compose box used to write its own `stack-l` at
-		`var(--space-2)`, a rhythm nothing on record asked for and half
-		again tighter than every other form in the product. It is a run of
-		three controls, not a row inside a table, so it takes the ordinary
-		one.
+		`var(--space-2)`, several steps tighter than every other form in
+		the product and with nothing on record asking for it. It is a run
+		of three controls, not a row inside a table, so it takes the
+		ordinary rhythm.
 	-->
 	<StackedForm onSubmit={handleSubmit}>
 		<LabeledField label="Message">
