@@ -21,11 +21,20 @@
 
 	By sizing the element it already wraps the control in: a
 	`max-inline-size` on the wrapper for a ZIP code or a state, a definite
-	`inline-size` for a two-digit day box. The control follows it, because
-	100% of a narrow wrapper is narrow. Nothing here needs a `:global`
-	selector to reach past the atom, and nothing needs `min-inline-size:
-	0` on the caller's wrapper for the control's own sake -- both of which
-	`DateFields` and the intake address route carried until this landed.
+	`inline-size` for a two-digit day box. The control follows it, and no
+	`:global` selector has to reach past this atom to make it -- which is
+	what `DateFields` and the intake address route both carried until this
+	landed, along with a `min-inline-size: 0` neither of them needs now.
+
+	**The wrapper has to have a size of its own for that to be true.** A
+	percentage resolves against the containing block, so where the
+	containing block is shrink-to-fit -- a direct `cluster-l` child, an
+	inline-block, an auto-layout table cell -- it resolves against an
+	intrinsic width this control itself contributes, and the control is
+	back on the browser's default. `LabeledField`'s `orientation="inline"`
+	is that case today, deliberately: its `auto` track sizes to the
+	control rather than the other way round. A caller that wants a stated
+	width states it on a wrapper that has one.
 
 	No named width prop is extracted. Two callers each narrowing with one
 	declaration on a wrapper they already render is below the bar for a
@@ -230,6 +239,10 @@
 			inline-size: 100%;
 		}
 
+		/* `min-inline-size: 0` is this atom's own, not the kind a caller
+		   was made to write: the field is a flex item beside the reveal
+		   toggle, and a flex item's automatic minimum would otherwise
+		   stop it shrinking far enough to leave the toggle its room. */
 		input.password-input {
 			flex: 1;
 			min-inline-size: 0;
