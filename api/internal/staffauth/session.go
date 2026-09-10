@@ -79,7 +79,7 @@ type SessionResponse struct {
 // never app.current_practice_id.
 func SessionHandler(db *sql.DB) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, uid, secondFactor, ok := authn.Begin(w, r, db)
+		tx, uid, secondFactor, ok := authn.Begin(w, r, db, authn.TierStaff)
 		if !ok {
 			return
 		}

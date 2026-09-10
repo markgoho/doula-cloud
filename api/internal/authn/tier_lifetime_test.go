@@ -1,7 +1,6 @@
 package authn_test
 
 import (
-	"net/http"
 	"testing"
 	"time"
 
@@ -75,9 +74,7 @@ func TestBegin_SessionCookie_RenewsPortalSessionAtItsOwnHalfLife(t *testing.T) {
 	portalUID := portalaccount.NewIdentifier()
 	token := authntest.SeedSessionAt(t, db.App, portalUID, time.Now().Add(-20*24*time.Hour))
 
-	rec, uid, ok := beginRequest(t, db, func(req *http.Request) {
-		authntest.AddSessionCookie(req, token)
-	})
+	rec, uid, ok := beginAs(t, db, token, authn.TierPortal)
 	if !ok {
 		t.Fatal("expected ok=true, got false")
 	}
@@ -102,9 +99,7 @@ func TestBegin_SessionCookie_NoRenewalBeforePortalHalfLife(t *testing.T) {
 	portalUID := portalaccount.NewIdentifier()
 	token := authntest.SeedSessionAt(t, db.App, portalUID, time.Now().Add(-6*24*time.Hour))
 
-	rec, _, ok := beginRequest(t, db, func(req *http.Request) {
-		authntest.AddSessionCookie(req, token)
-	})
+	rec, _, ok := beginAs(t, db, token, authn.TierPortal)
 	if !ok {
 		t.Fatal("expected ok=true, got false")
 	}

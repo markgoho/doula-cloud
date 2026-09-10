@@ -28,9 +28,19 @@ import (
 // Mounted outside the Practice-scoped middleware, like UpdateWorkStateHandler:
 // verifying an address is a fact about the person, not about a
 // Membership.
+//
+// It resolves the caller's `staff` row before minting anything (#1024).
+// Every other route in this family already did -- work state, email
+// change, saved-code rotation, login deletion all answer
+// MsgNoMatchingStaffAccount -- and this one did not, so it was the one
+// place a uid with no Staff row still queued a staff_token_mail_outbox
+// row. #892's send-time recheck then skipped that row, which made the
+// hole look closed from the outside while a token and an outbox row were
+// still being written on every call. Refusing here is the difference
+// between not writing the row and writing one nothing will send.
 func RequestVerificationHandler(db *sql.DB) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, uid, _, ok := authn.Begin(w, r, db)
+		tx, uid, _, ok := authn.Begin(w, r, db, authn.TierStaff)
 		if !ok {
 			return
 		}
@@ -41,6 +51,18 @@ func RequestVerificationHandler(db *sql.DB) http.Handler {
 				_ = tx.Rollback()
 			}
 		}()
+
+		// Sets app.current_identity_uid on the way, which is what `staff`'s
+		// own self-visibility RLS policy reads -- the same call
+		// staffauth.Middleware makes before any Practice is known.
+		if _, found, err := setIdentityAndResolveStaff(r.Context(), tx, uid); err != nil {
+			// coverage:ignore reason: DB query failure, not exercised by unit tests
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+			return
+		} else if !found {
+			apierr.WriteError(w, MsgNoMatchingStaffAccount, http.StatusNotFound)
+			return
+		}
 
 		token, err := authtoken.Mint(r.Context(), tx, uid, authtoken.PurposeStaffEmailVerification, authmail.VerificationLinkLifetime, time.Now())
 		if err != nil {

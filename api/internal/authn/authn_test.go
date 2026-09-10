@@ -58,7 +58,7 @@ func beginRequest(t *testing.T, db *testdb.DB, setup func(*http.Request)) (*http
 	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/", nil)
 	setup(req)
 
-	tx, uid, _, ok := authn.Begin(rec, req, db.App)
+	tx, uid, _, ok := authn.Begin(rec, req, db.App, authn.TierStaff)
 	if ok {
 		t.Cleanup(func() { _ = tx.Rollback() })
 	}
@@ -199,7 +199,7 @@ func TestBegin_SessionCookie_RenewalSurvivesRollback(t *testing.T) {
 	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/", nil)
 	authntest.AddSessionCookie(req, token)
 
-	tx, _, _, ok := authn.Begin(rec, req, db.App)
+	tx, _, _, ok := authn.Begin(rec, req, db.App, authn.TierStaff)
 	if !ok {
 		t.Fatal("expected ok=true, got false")
 	}
@@ -541,7 +541,7 @@ func TestBegin_ConcurrentRenewalsDoNotBlock(t *testing.T) {
 	first := authntest.SeedSessionAt(t, db.App, "first-browser", stale)
 	second := authntest.SeedSessionAt(t, db.App, "second-browser", stale)
 
-	firstTx, _, _, ok := authn.Begin(httptest.NewRecorder(), requestWithSession(t.Context(), first), db.App)
+	firstTx, _, _, ok := authn.Begin(httptest.NewRecorder(), requestWithSession(t.Context(), first), db.App, authn.TierStaff)
 	if !ok {
 		t.Fatal("first request: expected ok=true, got false")
 	}
@@ -553,7 +553,7 @@ func TestBegin_ConcurrentRenewalsDoNotBlock(t *testing.T) {
 	defer cancel()
 	rec := httptest.NewRecorder()
 
-	secondTx, _, _, ok := authn.Begin(rec, requestWithSession(ctx, second), db.App)
+	secondTx, _, _, ok := authn.Begin(rec, requestWithSession(ctx, second), db.App, authn.TierStaff)
 	if !ok {
 		t.Fatalf("second request blocked or failed behind the first request's open transaction: status %d, body %q", rec.Code, rec.Body.String())
 	}

@@ -172,6 +172,41 @@ func mountPracticeRoutes(g *GatedRouter, ir WriteRouter, verifier authn.Verifier
 // mountSessionRoutes is the pre-Practice half of Mount: sign-in, sign-up,
 // invitation acceptance, and the person-level facts (work state, email,
 // MFA) that #437 and #613 keep off any one Membership.
+//
+// # Why no Client Portal session reaches any of these (#1024)
+//
+// ADR-0026 keeps the two populations in different identifier namespaces
+// and says a Portal Account is legible only from a portal session, so a
+// /api/staff/* route is not this population's to reach. Nothing here
+// enforced that: `sessions` holds both populations' rows, and every
+// route below fell into one of three groups, none of which was checking.
+//
+//   - The seven that read a session (GET /session, PUT /work-state,
+//     PUT /email, POST /verify-email/request, POST
+//     /mfa-recovery/saved-codes/rotate, DELETE /mfa, DELETE /account)
+//     now refuse one issued in the other population at the one seam that
+//     knows the answer: authn.Begin's `want Tier` argument. That is the
+//     enforcement for this group; each handler's own `staff` lookup
+//     stays as the backstop, ADR-0026's own "the backstop is not where a
+//     saving is spent".
+//   - The three bootstrap routes (POST /signup, POST /accept-invite,
+//     POST /mfa) read no session at all -- authn.BeginBootstrap reads a
+//     Bearer ID token and verifies it against Identity Platform. A
+//     verified uid can never carry portalaccount.Prefix, which contains
+//     "_", a character outside the alphabet Identity Platform mints uids
+//     from, so the credential is a Staff one by construction. A live
+//     Portal cookie riding along on such a request is the *eviction*
+//     question, which #816 already settled at these three seams.
+//   - The four pre-account routes (POST /verify-email, POST
+//     /password-reset/request, POST /password-reset, POST
+//     /mfa-recovery/spend) read neither a session nor a Bearer token:
+//     the link's own single-purpose authtoken is the whole credential,
+//     and authtoken.Mint is reached only from Staff paths, so there is
+//     no Staff-only act a Portal caller could drive here at all.
+//
+// population_test.go walks GatedRouter.Routes() and drives every route
+// in this family with a live Portal session, so a new one added here
+// cannot quietly rejoin the group that was not checking.
 func mountSessionRoutes(g *GatedRouter, db *sql.DB, verifier authn.Verifier, accounts authn.AccountManager, enq tasknudge.Enqueuer) {
 	// Not rate limited: gated by authn.Begin's own __session cookie check
 	// -- there is no bootstrap window here for an attacker to spend.

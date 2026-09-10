@@ -79,7 +79,7 @@ func TestClientCreateHandler_NotifiesStaffPushSubscriptions(t *testing.T) {
 	testdb.SeedPushSubscription(t, db, "staff", staffAID, "https://push.example.com/staff-a")
 	testdb.SeedPushSubscription(t, db, "staff", staffBID, "https://push.example.com/staff-b")
 	clientID, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Client", "client@example.com")
-	testdb.SeedPortalUser(t, db, identityUID, clientID)
+	testdb.SeedPortalUser(t, db, testdb.PortalUID(identityUID), clientID)
 
 	pusher := push.NewFakePusher()
 	srv, session := newPortalServerWithPusher(t, db, identityUID, pusher)
@@ -178,8 +178,8 @@ func TestCreateHandler_MutedEngagementReceivesNoClientPush(t *testing.T) {
 	testdb.SeedStaffAtPractice(t, db, practiceID, identityUID, []string{doulaRole}, "employee")
 	clientID, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Client", "client@example.com")
 	testdb.SeedPushSubscription(t, db, "client", clientID, "https://push.example.com/muted-client")
-	testdb.SeedPortalUser(t, db, "client-muted-portal-account", clientID)
-	seedMutedPushPreference(t, db, "client-muted-portal-account", engagementID)
+	testdb.SeedPortalUser(t, db, testdb.PortalUID("client-muted-portal-account"), clientID)
+	seedMutedPushPreference(t, db, testdb.PortalUID("client-muted-portal-account"), engagementID)
 
 	pusher := push.NewFakePusher()
 	srv, session := newServerWithPusher(t, db, identityUID, pusher)

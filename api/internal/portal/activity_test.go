@@ -47,10 +47,11 @@ func seedEngagementForActivity(t *testing.T, db *testdb.DB, identityUID, practic
 	).Scan(&engagementID); err != nil {
 		t.Fatalf("seed engagement: %v", err)
 	}
-	testdb.SeedPortalAccount(t, db, identityUID, identityUID+"@example.com")
+	portalUID := testdb.PortalUID(identityUID)
+	testdb.SeedPortalAccount(t, db, portalUID, portalUID+"@example.com")
 	if _, err := db.Admin.ExecContext(t.Context(),
 		`INSERT INTO client_portal_users (identity_uid, client_id) VALUES ($1, $2)`,
-		identityUID, clientID,
+		portalUID, clientID,
 	); err != nil {
 		t.Fatalf("seed client_portal_users: %v", err)
 	}

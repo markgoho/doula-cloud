@@ -49,7 +49,7 @@ type SessionResponse struct {
 // one Client, which is the bug this handler exists to not have.
 func SessionHandler(db *sql.DB) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, uid, _, ok := authn.Begin(w, r, db)
+		tx, uid, _, ok := authn.Begin(w, r, db, authn.TierPortal)
 		if !ok {
 			return
 		}

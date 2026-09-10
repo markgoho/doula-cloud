@@ -69,7 +69,7 @@ func RequestAddressChangeHandler(db *sql.DB) http.Handler {
 		// Authenticate before reading a byte of the body, the order
 		// staffauth's own email-change handler keeps: an unauthenticated
 		// caller gets a 401, never a critique of the address she sent.
-		tx, uid, _, ok := authn.Begin(w, r, db)
+		tx, uid, _, ok := authn.Begin(w, r, db, authn.TierPortal)
 		if !ok {
 			return
 		}

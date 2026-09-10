@@ -21,7 +21,7 @@ func newPortalServer(t *testing.T, db *testdb.DB, uid string) (srv *httptest.Ser
 	mux := http.NewServeMux()
 	g := staffauth.NewGatedRouter(mux, db.App)
 	notificationpref.Mount(g, db.App)
-	return httptest.NewServer(mux), authntest.SeedSession(t, db.App, uid)
+	return httptest.NewServer(mux), authntest.SeedSession(t, db.App, testdb.PortalUID(uid))
 }
 
 func authedRequest(t *testing.T, session, method, url string, body []byte) *http.Response {
@@ -66,7 +66,7 @@ func TestGetHandler_NeverDecidedReportsDisabled(t *testing.T) {
 	const identityUID = "client-never-decided"
 	practiceID := testdb.SeedPractice(t, db, "Practice")
 	clientID, engagementID := testdb.SeedEngagement(t, db, practiceID)
-	testdb.SeedPortalUser(t, db, identityUID, clientID)
+	testdb.SeedPortalUser(t, db, testdb.PortalUID(identityUID), clientID)
 
 	srv, session := newPortalServer(t, db, identityUID)
 	defer srv.Close()
@@ -88,7 +88,7 @@ func TestSetHandler_TurnsOnRecordsChoiceAndActivity(t *testing.T) {
 	const identityUID = "client-turns-on"
 	practiceID := testdb.SeedPractice(t, db, "Practice")
 	clientID, engagementID := testdb.SeedEngagement(t, db, practiceID)
-	testdb.SeedPortalUser(t, db, identityUID, clientID)
+	testdb.SeedPortalUser(t, db, testdb.PortalUID(identityUID), clientID)
 
 	srv, session := newPortalServer(t, db, identityUID)
 	defer srv.Close()
@@ -102,7 +102,7 @@ func TestSetHandler_TurnsOnRecordsChoiceAndActivity(t *testing.T) {
 		t.Fatalf("Enabled = %v, want true", got.Enabled)
 	}
 
-	if muted, found := readPreferenceRow(t, db, identityUID, engagementID); !found || muted {
+	if muted, found := readPreferenceRow(t, db, testdb.PortalUID(identityUID), engagementID); !found || muted {
 		t.Fatalf("notification_preferences row = (muted=%v, found=%v), want (false, true)", muted, found)
 	}
 
@@ -119,7 +119,7 @@ func TestSetHandler_TurnsOffAfterOnRecordsChoiceAndActivity(t *testing.T) {
 	const identityUID = "client-turns-off"
 	practiceID := testdb.SeedPractice(t, db, "Practice")
 	clientID, engagementID := testdb.SeedEngagement(t, db, practiceID)
-	testdb.SeedPortalUser(t, db, identityUID, clientID)
+	testdb.SeedPortalUser(t, db, testdb.PortalUID(identityUID), clientID)
 
 	srv, session := newPortalServer(t, db, identityUID)
 	defer srv.Close()
@@ -137,7 +137,7 @@ func TestSetHandler_TurnsOffAfterOnRecordsChoiceAndActivity(t *testing.T) {
 		t.Fatalf("Enabled = %v, want false", got.Enabled)
 	}
 
-	if muted, found := readPreferenceRow(t, db, identityUID, engagementID); !found || !muted {
+	if muted, found := readPreferenceRow(t, db, testdb.PortalUID(identityUID), engagementID); !found || !muted {
 		t.Fatalf("notification_preferences row = (muted=%v, found=%v), want (true, true)", muted, found)
 	}
 
@@ -160,7 +160,7 @@ func TestSetHandler_InvalidJSONBody(t *testing.T) {
 	const identityUID = "client-bad-json"
 	practiceID := testdb.SeedPractice(t, db, "Practice")
 	clientID, engagementID := testdb.SeedEngagement(t, db, practiceID)
-	testdb.SeedPortalUser(t, db, identityUID, clientID)
+	testdb.SeedPortalUser(t, db, testdb.PortalUID(identityUID), clientID)
 
 	srv, session := newPortalServer(t, db, identityUID)
 	defer srv.Close()
@@ -189,11 +189,11 @@ func TestSetHandler_CannotWriteAnotherClientsEngagementPreference(t *testing.T) 
 	practiceID := testdb.SeedPractice(t, db, "Practice")
 	const identityA = "client-a-owns-the-engagement"
 	clientA, engagementA := testdb.SeedEngagement(t, db, practiceID)
-	testdb.SeedPortalUser(t, db, identityA, clientA)
+	testdb.SeedPortalUser(t, db, testdb.PortalUID(identityA), clientA)
 
 	const identityB = "client-b-attacker"
 	clientB, _ := testdb.SeedEngagement(t, db, practiceID)
-	testdb.SeedPortalUser(t, db, identityB, clientB)
+	testdb.SeedPortalUser(t, db, testdb.PortalUID(identityB), clientB)
 
 	srvB, sessionB := newPortalServer(t, db, identityB)
 	defer srvB.Close()
@@ -205,7 +205,7 @@ func TestSetHandler_CannotWriteAnotherClientsEngagementPreference(t *testing.T) 
 		t.Fatalf("status = %d, want %d (Client B does not own Engagement A)", resp.StatusCode, http.StatusForbidden)
 	}
 
-	if _, found := readPreferenceRow(t, db, identityA, engagementA); found {
+	if _, found := readPreferenceRow(t, db, testdb.PortalUID(identityA), engagementA); found {
 		t.Fatalf("notification_preferences row for Client A's Engagement was written by Client B's request")
 	}
 }
@@ -226,7 +226,7 @@ func TestSetHandler_MutingOneEngagementLeavesSiblingEngagementUnaffected(t *test
 	practiceID := testdb.SeedPractice(t, db, "Practice")
 	clientID, mutedEngagementID := testdb.SeedEngagement(t, db, practiceID)
 	otherEngagementID := seedSecondEngagement(t, db, practiceID, clientID)
-	testdb.SeedPortalUser(t, db, identityUID, clientID)
+	testdb.SeedPortalUser(t, db, testdb.PortalUID(identityUID), clientID)
 
 	srv, session := newPortalServer(t, db, identityUID)
 	defer srv.Close()
@@ -265,7 +265,7 @@ func TestPushSubscriptionsForMessageRecipient_CrossPracticePortalAccount(t *test
 
 	practiceA := testdb.SeedPractice(t, db, "Practice A")
 	clientA, engagementA := testdb.SeedEngagement(t, db, practiceA)
-	testdb.SeedPortalUser(t, db, identityUID, clientA)
+	testdb.SeedPortalUser(t, db, testdb.PortalUID(identityUID), clientA)
 
 	practiceB := testdb.SeedPractice(t, db, "Practice B")
 	clientB, engagementB := testdb.SeedEngagement(t, db, practiceB)
@@ -273,7 +273,7 @@ func TestPushSubscriptionsForMessageRecipient_CrossPracticePortalAccount(t *test
 	// client_portal_users row, not a second SeedPortalAccount call (the
 	// Portal Account itself already exists from clientA's seedPortalUser
 	// above).
-	testdb.AttachPortalUser(t, db, identityUID, clientB)
+	testdb.AttachPortalUser(t, db, testdb.PortalUID(identityUID), clientB)
 
 	if _, err := db.Admin.ExecContext(t.Context(),
 		`INSERT INTO push_subscriptions (owner_type, owner_id, endpoint, p256dh_key, auth_key) VALUES ('client', $1, 'https://push.example.com/a', 'p256dh-key', 'auth-key')`,

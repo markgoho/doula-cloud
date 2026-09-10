@@ -77,7 +77,7 @@ func Tx(ctx context.Context) (*sql.Tx, bool) {
 func Middleware(db *sql.DB) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			tx, uid, _, ok := authn.Begin(w, r, db)
+			tx, uid, _, ok := authn.Begin(w, r, db, authn.TierPortal)
 			if !ok {
 				return
 			}

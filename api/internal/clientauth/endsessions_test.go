@@ -135,9 +135,16 @@ func TestEndAllSessionsHandler_ClearsTheCookieEvenWhenRenewedOnTheWayIn(t *testi
 }
 
 // TestEndAllSessionsHandler_StaffSessionRefused proves a signed-in Staff
-// member's session -- perfectly valid, but naming no Portal Account --
-// is refused rather than being run through EndAllSessions for whatever
-// uid the cookie happened to carry.
+// member's session -- perfectly valid, but issued in the other
+// population -- is refused rather than being run through EndAllSessions
+// for whatever uid the cookie happened to carry.
+//
+// 401 since #1024, not the 403 below: the refusal now comes from
+// authn.Begin's own tier check, which cannot tell a caller that her
+// cookie is live but belongs to the other namespace. The handler's
+// portal_accounts check is still there and still refuses -- with a
+// portal-tier uid holding no account row, which is the only way to reach
+// it now (see the test that follows).
 func TestEndAllSessionsHandler_StaffSessionRefused(t *testing.T) {
 	db := testdb.New(t)
 	srv := newEndSessionsServer(db)
@@ -148,13 +155,38 @@ func TestEndAllSessionsHandler_StaffSessionRefused(t *testing.T) {
 
 	resp := deleteWithSession(t, srv, staffSession)
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusForbidden {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusForbidden)
+	if resp.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusUnauthorized)
 	}
 
 	// Refused, not acted on: the Staff member's own session must survive.
 	if got := authntest.CountFor(t, db.App, staffUID); got != 1 {
 		t.Fatalf("session rows for %s after refusal = %d, want 1", staffUID, got)
+	}
+}
+
+// TestEndAllSessionsHandler_PortalTierWithoutAnAccountRefused is the
+// backstop #1024 deliberately left in place: a session issued in this
+// population, holding no portal_accounts row -- an account erased while
+// its 30-day session was still live. The tier check passes it through
+// and the handler's own lookup refuses it, which is why that lookup is
+// not dead code now that the seam exists.
+func TestEndAllSessionsHandler_PortalTierWithoutAnAccountRefused(t *testing.T) {
+	db := testdb.New(t)
+	srv := newEndSessionsServer(db)
+	defer srv.Close()
+
+	orphanUID := portalaccount.NewIdentifier()
+	orphanSession := authntest.SeedSession(t, db.App, orphanUID)
+
+	resp := deleteWithSession(t, srv, orphanSession)
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusForbidden {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusForbidden)
+	}
+
+	if got := authntest.CountFor(t, db.App, orphanUID); got != 1 {
+		t.Fatalf("session rows for %s after refusal = %d, want 1", orphanUID, got)
 	}
 }
 

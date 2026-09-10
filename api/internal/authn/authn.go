@@ -112,14 +112,25 @@ func BearerToken(r *http.Request) (string, bool) {
 // invalid, ended, or expired session; 500 for a DB failure), rolls the
 // transaction back, and returns ok=false if any step fails. Callers must
 // ensure a returned transaction is rolled back or committed.
-func Begin(w http.ResponseWriter, r *http.Request, db *sql.DB) (*sql.Tx, string, bool, bool) {
+//
+// want names the population this caller serves, and a session issued in
+// the other one is refused here (#1024). Every call site has to name it
+// to compile, which is what makes the check total rather than a rule
+// each new route has to remember: `sessions` holds both populations'
+// rows and TierOf is the only thing that tells them apart. Before this
+// argument existed the only thing standing between a Client portal
+// session and a /api/staff/* route was each handler happening to look
+// its caller up in `staff` and find nothing -- fail-closed by accident,
+// and POST /api/staff/verify-email/request, which looked nothing up,
+// was the case that proved it.
+func Begin(w http.ResponseWriter, r *http.Request, db *sql.DB, want Tier) (*sql.Tx, string, bool, bool) {
 	tx, ok := beginTx(w, r, db)
 	if !ok {
 		// coverage:ignore reason: DB connection failure, not exercised by unit tests
 		return nil, "", false, false
 	}
 
-	uid, secondFactor, ok := sessionCredential(w, r, tx, db)
+	uid, secondFactor, ok := sessionCredential(w, r, tx, db, want)
 	if !ok {
 		_ = tx.Rollback()
 		return nil, "", false, false
@@ -170,14 +181,27 @@ func beginTx(w http.ResponseWriter, r *http.Request, db *sql.DB) (*sql.Tx, bool)
 	return tx, true
 }
 
+// MsgInvalidSession is the one thing a caller is told when the __session
+// cookie it presented is not a credential for the route it presented it
+// to: it names no live session, or it names one issued in the other
+// population. The two are deliberately indistinguishable, the same
+// argument errNoSession's own comment makes about its three causes, and
+// #1024 adds the fourth: telling a caller that her cookie is live but
+// belongs to the other namespace discloses something she did not already
+// prove by holding it, which is the rule eviction.go's header states.
+const MsgInvalidSession = "invalid session"
+
 // sessionCredential resolves the caller's identity from the __session
-// cookie. It writes a 401 and returns ok=false if the cookie is absent
-// or names no live session -- but a session the database could not be
-// asked about is a 500, not a 401: an unreachable database must not read
-// as "you are signed out". A verified session past half its life is
-// renewed before this returns (see renewIfStale); a rejected one never
-// is.
-func sessionCredential(w http.ResponseWriter, r *http.Request, tx *sql.Tx, db *sql.DB) (string, bool, bool) {
+// cookie, for the population want names. It writes a 401 and returns
+// ok=false if the cookie is absent, names no live session, or names a
+// session in the other population -- but a session the database could
+// not be asked about is a 500, not a 401: an unreachable database must
+// not read as "you are signed out". A verified session past half its
+// life is renewed before this returns (see renewIfStale); a rejected one
+// never is, which is why the tier check sits above renewIfStale rather
+// than after Begin returns: a refused request must not walk away with a
+// freshly extended cookie.
+func sessionCredential(w http.ResponseWriter, r *http.Request, tx *sql.Tx, db *sql.DB, want Tier) (string, bool, bool) {
 	cookie, err := r.Cookie(SessionCookieName)
 	if err != nil {
 		apierr.WriteError(w, "missing credential", http.StatusUnauthorized)
@@ -187,11 +211,15 @@ func sessionCredential(w http.ResponseWriter, r *http.Request, tx *sql.Tx, db *s
 	now := time.Now()
 	uid, expiresAt, secondFactor, err := lookupSession(r.Context(), tx, cookie.Value, now)
 	if errors.Is(err, errNoSession) {
-		apierr.WriteError(w, "invalid session", http.StatusUnauthorized)
+		apierr.WriteError(w, MsgInvalidSession, http.StatusUnauthorized)
 		return "", false, false
 	}
 	if err != nil {
 		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+		return "", false, false
+	}
+	if TierOf(uid) != want {
+		apierr.WriteError(w, MsgInvalidSession, http.StatusUnauthorized)
 		return "", false, false
 	}
 

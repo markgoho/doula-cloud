@@ -23,7 +23,7 @@ import (
 // recovery paths.
 func RemoveSecondFactorHandler(verifier authn.Verifier, accounts authn.AccountManager, db *sql.DB) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, uid, _, ok := authn.Begin(w, r, db)
+		tx, uid, _, ok := authn.Begin(w, r, db, authn.TierStaff)
 		if !ok {
 			return
 		}
