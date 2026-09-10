@@ -25,6 +25,17 @@
 
 <style>
 	@layer components {
+		/*
+		 * The same intrinsic-width rule `Button` and `Link` carry: a badge
+		 * is a pill around one short status word, and a column flex parent
+		 * (`stack-l`, ADR-0039) would stretch that pill across the whole
+		 * row. Scoped to `stack-l`, since `align-self` is the block axis in
+		 * a row-direction parent.
+		 */
+		:global(stack-l) > span {
+			align-self: start;
+		}
+
 		span {
 			display: inline-flex;
 			align-items: center;

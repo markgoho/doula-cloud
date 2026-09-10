@@ -94,6 +94,20 @@
 
 <style>
 	@layer components {
+		/*
+		 * `stack-l` is a column flex container (ADR-0039), and a flex item
+		 * is stretched across the inline axis -- so a button, which is
+		 * inline-level and sized by its own words everywhere else, would
+		 * run the full width of any stack it is dropped into. `start` hands
+		 * it back its intrinsic width. Scoped to `stack-l` rather than
+		 * written bare, because `align-self` is the BLOCK axis inside a
+		 * row-direction parent (`grid-l`, `sidebar-l`, `switcher-l`) and
+		 * this decision is only about the column one.
+		 */
+		:global(stack-l) > button {
+			align-self: start;
+		}
+
 		button {
 			display: inline-flex;
 			align-items: center;

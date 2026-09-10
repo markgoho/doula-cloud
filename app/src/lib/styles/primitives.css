@@ -34,9 +34,14 @@
  *
  * The other side of blockification: a column flex container stretches its
  * items across the inline axis, where block layout let an inline-level
- * child (a <table>, a <button>, an <img>) shrink-wrap. A child that must
- * keep its own intrinsic width says so with `align-self: start` at the
- * call site -- see `.table-view` in DataTable.svelte, the worked example.
+ * child shrink-wrap. A child that must keep its own intrinsic width says
+ * so with `align-self: start` at the call site. Four do, found by probing
+ * every direct stack child in a real browser rather than by reading:
+ * `.table-view` in DataTable.svelte, and `Button`, `Link` and `Badge`,
+ * whose rule is scoped to `stack-l` because `align-self` is the BLOCK axis
+ * inside a row-direction parent. `TextInput`, `Textarea` and `Select` are
+ * inline-level too and needed nothing -- each already declares its own
+ * full width.
  */
 stack-l {
 	display: flex;
