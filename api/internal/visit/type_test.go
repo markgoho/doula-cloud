@@ -33,56 +33,56 @@ func TestDeriveType(t *testing.T) {
 		name             string
 		at               time.Time
 		pregnancyEndedOn *string
-		in               *time.Location
+		zone             *time.Location
 		want             string
 	}{
 		{
 			name:             "no pivot recorded yet",
 			at:               time.Date(2099, 1, 1, 0, 0, 0, 0, time.UTC),
 			pregnancyEndedOn: nil,
-			in:               time.UTC,
+			zone:             time.UTC,
 			want:             visit.TypePrenatal,
 		},
 		{
 			name:             "empty pivot string treated the same as nil",
 			at:               time.Date(2026, 3, 15, 12, 0, 0, 0, time.UTC),
 			pregnancyEndedOn: new(string), // zero-value "": the empty pivot case
-			in:               time.UTC,
+			zone:             time.UTC,
 			want:             visit.TypePrenatal,
 		},
 		{
 			name:             "before the pivot",
 			at:               time.Date(2026, 3, 14, 23, 59, 0, 0, time.UTC),
 			pregnancyEndedOn: &pivot,
-			in:               time.UTC,
+			zone:             time.UTC,
 			want:             visit.TypePrenatal,
 		},
 		{
 			name:             "on the pivot",
 			at:               time.Date(2026, 3, 15, 8, 0, 0, 0, time.UTC),
 			pregnancyEndedOn: &pivot,
-			in:               time.UTC,
+			zone:             time.UTC,
 			want:             visit.TypeBirth,
 		},
 		{
 			name:             "late in the day on the pivot is still birth",
 			at:               time.Date(2026, 3, 15, 23, 59, 59, 0, time.UTC),
 			pregnancyEndedOn: &pivot,
-			in:               time.UTC,
+			zone:             time.UTC,
 			want:             visit.TypeBirth,
 		},
 		{
 			name:             "after the pivot",
 			at:               time.Date(2026, 3, 16, 0, 0, 1, 0, time.UTC),
 			pregnancyEndedOn: &pivot,
-			in:               time.UTC,
+			zone:             time.UTC,
 			want:             visit.TypePostpartum,
 		},
 		{
 			name:             "weeks after the pivot",
 			at:               time.Date(2026, 4, 5, 9, 0, 0, 0, time.UTC),
 			pregnancyEndedOn: &pivot,
-			in:               time.UTC,
+			zone:             time.UTC,
 			want:             visit.TypePostpartum,
 		},
 		{
@@ -93,14 +93,14 @@ func TestDeriveType(t *testing.T) {
 			name:             "9pm Eastern on the pivot is birth, not postpartum",
 			at:               time.Date(2026, 3, 16, 1, 0, 0, 0, time.UTC),
 			pregnancyEndedOn: &pivot,
-			in:               eastern,
+			zone:             eastern,
 			want:             visit.TypeBirth,
 		},
 		{
 			name:             "11:30pm Eastern on the pivot is still birth",
 			at:               time.Date(2026, 3, 16, 3, 30, 0, 0, time.UTC),
 			pregnancyEndedOn: &pivot,
-			in:               eastern,
+			zone:             eastern,
 			want:             visit.TypeBirth,
 		},
 		{
@@ -109,7 +109,7 @@ func TestDeriveType(t *testing.T) {
 			name:             "12:30am Eastern the day after the pivot is postpartum",
 			at:               time.Date(2026, 3, 16, 4, 30, 0, 0, time.UTC),
 			pregnancyEndedOn: &pivot,
-			in:               eastern,
+			zone:             eastern,
 			want:             visit.TypePostpartum,
 		},
 		{
@@ -118,22 +118,15 @@ func TestDeriveType(t *testing.T) {
 			name:             "early morning in Tokyo on the pivot is birth, not prenatal",
 			at:               time.Date(2026, 3, 14, 21, 0, 0, 0, time.UTC),
 			pregnancyEndedOn: &pivot,
-			in:               tokyo,
-			want:             visit.TypeBirth,
-		},
-		{
-			name:             "no location falls back to UTC",
-			at:               time.Date(2026, 3, 15, 8, 0, 0, 0, time.UTC),
-			pregnancyEndedOn: &pivot,
-			in:               nil,
+			zone:             tokyo,
 			want:             visit.TypeBirth,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := visit.DeriveType(tt.at, tt.pregnancyEndedOn, tt.in); got != tt.want {
-				t.Errorf("DeriveType(%v, %v, %v) = %q, want %q", tt.at, deref(tt.pregnancyEndedOn), tt.in, got, tt.want)
+			if got := visit.DeriveType(tt.at, tt.pregnancyEndedOn, tt.zone); got != tt.want {
+				t.Errorf("DeriveType(%v, %v, %v) = %q, want %q", tt.at, deref(tt.pregnancyEndedOn), tt.zone, got, tt.want)
 			}
 		})
 	}

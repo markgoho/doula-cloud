@@ -17,9 +17,11 @@
 -- text, not an enum and not a CHECK against pg_timezone_names: the IANA
 -- database is revised several times a year, an enum would need a
 -- migration per revision, and pg_timezone_names is not immutable so a
--- CHECK cannot call it. The write side validates instead -- today by
--- time.LoadLocation in the BFF, and at the moment an Owner can first
--- state one, on the settings surface #1166 adds.
+-- CHECK cannot call it. Validation is Go's: the read loads the zone
+-- with time.LoadLocation and refuses rather than answering when it will
+-- not load, and the write gets the same check the moment an Owner can
+-- first state a zone, on the settings surface #1166 adds. Nothing
+-- writes this column until then.
 --
 -- The DEFAULT stays rather than taking guardrail_test.go's usual
 -- DEFAULT-then-DROP form, and that is the point rather than an

@@ -112,13 +112,13 @@ func ListHandler() http.Handler {
 
 		// Read once for the whole page, before the rows: every Visit on
 		// it types against the same Practice's day (#953).
-		in, err := practiceLocation(r.Context(), tx, practiceID)
+		zone, err := practiceLocation(r.Context(), tx, practiceID)
 		if err != nil {
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
-		list, err := listVisits(r.Context(), tx, engagementID, after, in)
+		list, err := listVisits(r.Context(), tx, engagementID, after, zone)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
@@ -150,10 +150,11 @@ func ListHandler() http.Handler {
 // one per Visit. Read as ::text, matching outcome.go's own convention,
 // so DeriveType compares two YYYY-MM-DD strings rather than a
 // time.Time whose zone would have to be guessed.
-// in is the Practice's own timezone, loaded once by the caller (#953):
+//
+// zone is the Practice's own timezone, loaded once by the caller (#953):
 // it decides which calendar day each row's instant falls on, and every
 // row on the page uses the same one.
-func listVisits(ctx context.Context, tx *sql.Tx, engagementID string, after *pagecursor.Cursor, in *time.Location) ([]Visit, error) {
+func listVisits(ctx context.Context, tx *sql.Tx, engagementID string, after *pagecursor.Cursor, zone *time.Location) ([]Visit, error) {
 	query := `SELECT v.id, s.id, s.name, v.created_at, v.scheduled_at, v.notes, e.pregnancy_ended_on::text
 		 FROM visits v
 		 JOIN staff s ON s.id = v.staff_id
@@ -202,7 +203,7 @@ func listVisits(ctx context.Context, tx *sql.Tx, engagementID string, after *pag
 		if pregnancyEndedOn.Valid {
 			endedOn = &pregnancyEndedOn.String
 		}
-		v.Type = DeriveType(at, endedOn, in)
+		v.Type = DeriveType(at, endedOn, zone)
 		list = append(list, v)
 	}
 	if err := rows.Err(); err != nil {

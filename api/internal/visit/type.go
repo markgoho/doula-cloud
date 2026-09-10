@@ -42,7 +42,7 @@ const dateLayout = "2006-01-02"
 // reason any other Visit after the pivot does, with no branch on how the
 // birth went.
 //
-// in is the Practice's own timezone (#953, practices.timezone), and it
+// zone is the Practice's own timezone (#953, practices.timezone), and it
 // is what makes "the same day" mean anything here: pregnancyEndedOn
 // comes off a `date` column, which carries no zone at all, so the two
 // sides of the comparison are only commensurable once somebody says
@@ -58,17 +58,15 @@ const dateLayout = "2006-01-02"
 // Staff in two zones would read two types for one Visit. A per-Visit
 // zone belongs to the richer time model parked on #330.
 //
-// A nil location is treated as UTC rather than panicking, matching what
-// time.Time's own In would refuse: callers get the previous behavior
-// instead of a crash on a zone the Practice row could not supply.
-func DeriveType(at time.Time, pregnancyEndedOn *string, in *time.Location) string {
+// zone is required, and a nil one panics at In rather than quietly
+// standing in UTC for it. Standing in UTC is the exact answer ADR-0036
+// forbids -- the wrong day, with nothing said about it -- so a caller
+// that has no zone is a programming error and should read as one.
+func DeriveType(at time.Time, pregnancyEndedOn *string, zone *time.Location) string {
 	if pregnancyEndedOn == nil || *pregnancyEndedOn == "" {
 		return TypePrenatal
 	}
-	if in == nil {
-		in = time.UTC
-	}
-	atDate := at.In(in).Format(dateLayout)
+	atDate := at.In(zone).Format(dateLayout)
 	switch {
 	case atDate < *pregnancyEndedOn:
 		return TypePrenatal

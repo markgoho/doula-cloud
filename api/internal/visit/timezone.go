@@ -6,12 +6,15 @@ import (
 	"fmt"
 	"time"
 
-	// The API image is gcr.io/distroless/static-debian12, which ships no
-	// /usr/share/zoneinfo, so time.LoadLocation below would fail for
-	// every zone name on Cloud Run while succeeding on any developer's
-	// machine. This blank import embeds the IANA database in the binary.
-	// It lives beside the one call that needs it rather than in main, so
-	// the dependency travels with the code that has it.
+	// Embeds the IANA database in the binary, as the fallback
+	// time.LoadLocation reaches for when the host has no zoneinfo of its
+	// own. gcr.io/distroless/static-debian12 does ship
+	// /usr/share/zoneinfo today (checked by exporting the image and
+	// listing it), so this is not repairing a broken image -- it is
+	// refusing to depend on a base image's contents for an answer the
+	// product gets wrong silently. The zone data then travels with the
+	// code that reads it, which is also why the import sits here rather
+	// than in main.
 	_ "time/tzdata"
 )
 
