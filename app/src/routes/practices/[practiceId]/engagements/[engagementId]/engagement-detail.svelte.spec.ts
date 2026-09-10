@@ -12,7 +12,13 @@ import Page from './+page.svelte';
 // DataTable assertions below need the real table-view/record-view switch.
 import '#lib/styles/app.css';
 import { toApiResponder, toPageState } from '../../../../routeFixture.js';
-import { detail as fixtureDetail, fixture } from './page.fixture.js';
+import {
+	contract as fixtureContract,
+	detail as fixtureDetail,
+	fixture,
+	session
+} from './page.fixture.js';
+import type { Contract } from '#lib/contract.js';
 if (!customElements.get('center-l')) registerLayoutPrimitives();
 
 /*
@@ -74,14 +80,11 @@ interface Detail {
 // `['owner', 'doula']` in the fixture -- the Doula-Owner this ticket is
 // about, and the reader the picker opens on. A test about somebody the
 // roster does not contain passes an id of its own.
+// #885: a departure from the fixture's own session rather than a second
+// description of one -- the Practice it names and the Practice the
+// `respond` paths match on cannot drift apart if only one of them says it.
 function sessionFor(roles: string[] = [], staffId = 'staff-1', isContractor = false) {
-	return {
-		practiceId: fixture.params.practiceId,
-		staffId,
-		practiceName: 'Riverside Doula Collective',
-		roles,
-		isContractor
-	};
+	return { ...session, staffId, roles, isContractor };
 }
 
 async function setup(detail: Detail, activityResponse?: Response) {
@@ -121,16 +124,7 @@ async function renderWithFixtureResponder(
 		return respond(path);
 	});
 	await render(Page, {
-		data: {
-			...detail,
-			session: {
-				practiceId: fixture.params.practiceId,
-				staffId: 'staff-1',
-				practiceName: 'Riverside Doula Collective',
-				roles: [],
-				isContractor: false
-			}
-		},
+		data: { ...detail, session: sessionFor() },
 		params: fixture.params
 	});
 }
@@ -546,25 +540,33 @@ function pdfBlobResponse(): Response {
 // #255: the Client's portal-invite state, shown as standing information
 // on the summary, and the Contract section's own block while she has
 // never been invited.
+/*
+ * The fixture's Contract, back in draft (#885). A draft is not this
+ * route's happy path -- the fixture ships the signed Contract, the one
+ * status that renders the section's own controls -- so it is written as a
+ * departure from the fixture rather than as a second Contract of its own
+ * (`.claude/rules/svelte-tests.md`). The two fields only a signed
+ * Contract can carry are dropped rather than overwritten: a draft has no
+ * price change to report and no void to have been asked for.
+ */
+function draftOf(overrides: Partial<Contract> = {}): Contract {
+	const draft: Contract = { ...fixtureContract, status: 'draft' };
+	delete draft.amountChangedAt;
+	delete draft.voidRequests;
+	return { ...draft, ...overrides };
+}
+
 describe("the Client's portal-invite state and the Contract section's block (#255)", () => {
 	beforeEach(() => {
 		apiFetchWithSession.mockReset();
 	});
 
-	const draftContract = {
-		engagementId: 'engagement-1',
-		status: 'draft',
-		prose: 'This Contract is between {{practice_name}} and {{client_name}}.',
-		mergeFields: [],
-		values: {}
-	};
+	// Every merge field already filled, so #258's own completeness block
+	// never engages here -- this block is only about #255's precondition.
+	const draftContract = draftOf();
 
 	function mockDraftContract() {
-		const respond = toApiResponder(fixture);
-		apiFetchWithSession.mockImplementation((path: string) => {
-			if (path.endsWith('/contract')) return Promise.resolve(jsonResponse(draftContract));
-			return respond(path);
-		});
+		mockContract(draftContract);
 	}
 
 	it('reads "Never invited" on the summary when the Client has never been invited', async () => {
@@ -658,15 +660,25 @@ describe("the Client's portal-invite state and the Contract section's block (#25
 	});
 });
 
-// Mocks the Practice-side GET .../contract response to contract, letting
+/*
+ * The fixture answering every path it knows, with one path answered
+ * differently (#885). `toApiResponder` beside its own
+ * `mockImplementation` had been written out four times in this file by
+ * the time the fixture grew a Contract of its own -- four chances for one
+ * of them to consult the fixture first and shadow its own override.
+ */
+function respondFromFixture(override?: (path: string) => Response | undefined) {
+	const respond = toApiResponder(fixture);
+	apiFetchWithSession.mockImplementation((path: string) =>
+		Promise.resolve(override?.(path) ?? respond(path))
+	);
+}
+
+// Answers the Practice-side GET .../contract with `contract`, letting
 // every other section respond from the fixture as normal -- shared by
 // the #258 describe block below.
-function mockContract(contract: Record<string, unknown>) {
-	const respond = toApiResponder(fixture);
-	apiFetchWithSession.mockImplementation((path: string) => {
-		if (path.endsWith('/contract')) return Promise.resolve(jsonResponse(contract));
-		return respond(path);
-	});
+function mockContract(contract: Contract) {
+	respondFromFixture((path) => (path.endsWith('/contract') ? jsonResponse(contract) : undefined));
 }
 
 describe("the Contract's merge-field completeness block and filled-text render (#258)", () => {
@@ -677,31 +689,28 @@ describe("the Contract's merge-field completeness block and filled-text render (
 	// clientPortalInviteStatus: 'accepted' throughout, so #255's own block
 	// never engages here -- this block is only about #258's own precondition.
 	it('renders the Contract prose with merge values substituted, on the Staff side', async () => {
-		mockContract({
-			engagementId: 'engagement-1',
-			status: 'draft',
-			prose: 'This Contract is between {{practice_name}} and {{client_name}}.',
-			mergeFields: ['practice_name', 'client_name'],
-			values: { practice_name: 'Riverside Doulas', client_name: 'Jamie Rivera' }
-		});
+		mockContract(draftOf());
 		await render(Page, {
 			data: { ...fixtureDetail, clientPortalInviteStatus: 'accepted', session: sessionFor() },
 			params: fixture.params
 		});
 
+		// The substitution is what is asserted, so the expected text is
+		// built from the fixture's own values rather than restated: the
+		// two placeholders either side of "between … and …" have to have
+		// been replaced by the Practice's name and the Client's.
 		await expect
-			.element(testPage.getByText('This Contract is between Riverside Doulas and Jamie Rivera.'))
+			.element(
+				testPage.getByText(
+					`between ${fixtureContract.values.practice_name} and ${fixtureContract.values.client_name}`,
+					{ exact: false }
+				)
+			)
 			.toBeVisible();
 	});
 
 	it('disables Send Contract and names the blank fields while any merge field is unfilled', async () => {
-		mockContract({
-			engagementId: 'engagement-1',
-			status: 'draft',
-			prose: 'This Contract is between {{practice_name}} and {{client_name}}.',
-			mergeFields: ['practice_name', 'client_name'],
-			values: { client_name: 'Jamie Rivera' }
-		});
+		mockContract(draftOf({ values: { ...fixtureContract.values, practice_name: '' } }));
 		await render(Page, {
 			data: { ...fixtureDetail, clientPortalInviteStatus: 'accepted', session: sessionFor() },
 			params: fixture.params
@@ -716,13 +725,7 @@ describe("the Contract's merge-field completeness block and filled-text render (
 	});
 
 	it('enables Send Contract once every merge field has a value', async () => {
-		mockContract({
-			engagementId: 'engagement-1',
-			status: 'draft',
-			prose: 'This Contract is between {{practice_name}} and {{client_name}}.',
-			mergeFields: ['practice_name', 'client_name'],
-			values: { practice_name: 'Riverside Doulas', client_name: 'Jamie Rivera' }
-		});
+		mockContract(draftOf());
 		await render(Page, {
 			data: { ...fixtureDetail, clientPortalInviteStatus: 'accepted', session: sessionFor() },
 			params: fixture.params
@@ -732,33 +735,60 @@ describe("the Contract's merge-field completeness block and filled-text render (
 	});
 });
 
+/*
+ * #885: the fixture's own Contract section, mounted the way the continuum
+ * sweep mounts it -- the fixture's `respond` and the fixture's own
+ * session, nothing overridden. The sweep asserts only that nothing needs
+ * more room than it is given, so it stays green on a section that drew no
+ * controls at all, which is what this route's fixture did while its
+ * `/contract` answered a 404. This is the assertion that the subject the
+ * sweep measures really does carry the section's controls.
+ */
+// At the conformance commitment itself (ADR-0024), not at a desk width:
+// the criterion asks that these controls be there at 320px, and a screen
+// that draws them only when it has room would satisfy a wider mount.
+async function mountFixture() {
+	await testPage.viewport(320, 900);
+	respondFromFixture();
+	await render(Page, { data: { ...fixtureDetail, session }, params: fixture.params });
+}
+
+describe("the fixture's own Contract section, as the sweep mounts it (#885)", () => {
+	it("offers the section's Void and signed-PDF download controls", async () => {
+		await mountFixture();
+
+		await expect
+			.element(testPage.getByRole('button', { name: 'Download signed Contract (PDF)' }))
+			.toBeVisible();
+		await expect.element(testPage.getByRole('button', { name: 'Void Contract' })).toBeVisible();
+	});
+
+	it("reads back the Contract's price change and both of its void requests", async () => {
+		await mountFixture();
+
+		await expect.element(testPage.getByText(/^Price changed on/)).toBeVisible();
+		await expect.element(testPage.getByText(/^Void request declined:/)).toBeVisible();
+		await expect.element(testPage.getByRole('button', { name: 'Decline' })).toBeVisible();
+	});
+});
+
+// The signed Contract is the fixture's own now (#885), so nothing here
+// describes one: only the PDF path, which the fixture cannot answer
+// because each test needs a different response from it.
+function mockSignedContract(pdfResponse: Response) {
+	respondFromFixture((path) => (path.endsWith('/contract/pdf') ? pdfResponse : undefined));
+}
+
+async function setupWithRoles(roles: string[], pdfResponse: Response, isContractor = false) {
+	await testPage.viewport(1440, 900);
+	mockSignedContract(pdfResponse);
+	await render(Page, {
+		data: { ...fixtureDetail, session: sessionFor(roles, 'staff-1', isContractor) },
+		params: fixture.params
+	});
+}
+
 describe('the Contract PDF download is gated on the page (#302, amended by #969)', () => {
-	const signedContract = {
-		engagementId: 'engagement-1',
-		status: 'signed',
-		prose: 'This Contract is between {{practice_name}} and {{client_name}}.',
-		mergeFields: [],
-		values: {}
-	};
-
-	function mockSignedContract(pdfResponse: Response) {
-		const respond = toApiResponder(fixture);
-		apiFetchWithSession.mockImplementation((path: string) => {
-			if (path.endsWith('/contract/pdf')) return Promise.resolve(pdfResponse);
-			if (path.endsWith('/contract')) return Promise.resolve(jsonResponse(signedContract));
-			return respond(path);
-		});
-	}
-
-	async function setupWithRoles(roles: string[], pdfResponse: Response, isContractor = false) {
-		await testPage.viewport(1440, 900);
-		mockSignedContract(pdfResponse);
-		await render(Page, {
-			data: { ...fixtureDetail, session: sessionFor(roles, 'staff-1', isContractor) },
-			params: fixture.params
-		});
-	}
-
 	it('offers the download to an Owner', async () => {
 		await setupWithRoles(['owner'], pdfBlobResponse());
 

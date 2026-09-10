@@ -56,6 +56,20 @@
  * sweep opens and closes again inside one task and a `toggle` handler
  * never sees it open; the Staff roster is that case, and #1126 holds it.
  *
+ * ## It waits for the screen, not for its title
+ *
+ * The fixture names the screen's own `<h1>` and the mount below waits for
+ * it, so a route drawing a Skeleton is not reported as a screen that fits.
+ * That is a weaker wait than it reads: a route whose `+page.ts` already
+ * handed it the record has its heading up on the first paint, so the wait
+ * is over before the sections behind it have asked for anything. #885
+ * found it -- the Staff Engagement hub's `onMount` awaits eight reads in
+ * order, and the sweep was being taken after the first, on a screen whose
+ * Contract section had not been drawn. So the mount also waits for the
+ * fixture's answering to go quiet, which ADR-0025 records beside #710's
+ * disclosures: a hole in what the instrument can see is the instrument's
+ * to close, never a fixture's.
+ *
  * ## How a route joins: discovery, never opt-in
  *
  * The route list is a glob, and a route is swept if it has a
@@ -130,6 +144,15 @@ vi.mock('$app/state', () => ({ page: pageState }));
  * navigates -- the sweep measures, it does not interact -- so these exist
  * to be importable, not to be asserted on.
  */
+/*
+ * How many macrotask turns a route's own load cascade may take before the
+ * sweep gives up waiting for it (#885). A guard against a route that
+ * polls, never a budget: a fixture answers synchronously, so one turn
+ * drains a whole section and the deepest cascade this app has is eight
+ * reads long.
+ */
+const SETTLE_TURNS = 50;
+
 vi.mock('$app/navigation', () => ({
 	goto: vi.fn(),
 	invalidate: vi.fn(),
@@ -282,10 +305,15 @@ describe('the continuum check, over routes', () => {
 			// to say, for the same reason: since #596 every route spec that
 			// fetches installs the same implementation, so unwrapping
 			// `respond` here as well would be the third copy.
+			let answered = 0;
 			if (fixture.respond) {
 				const respond = toApiResponder(fixture);
-				apiFetchWithSession.mockImplementation(respond);
-				apiFetch.mockImplementation(respond);
+				const counted = (path: string) => {
+					answered += 1;
+					return respond(path);
+				};
+				apiFetchWithSession.mockImplementation(counted);
+				apiFetch.mockImplementation(counted);
 			}
 
 			/*
@@ -316,6 +344,42 @@ describe('the continuum check, over routes', () => {
 				await expect
 					.element(testPage.getByRole('heading', { name: fixture.readyText, level: 1 }))
 					.toBeVisible();
+				/*
+				 * And then for the rest of the screen (#885). The heading
+				 * above is on the page from the first paint on a route whose
+				 * `load` already handed it one, so waiting for it says nothing
+				 * about the sections that fill in behind it: this route's
+				 * `onMount` awaits eight reads in order, and the sweep was
+				 * taken after the first of them, measuring a screen whose
+				 * Contract section had not been drawn at all. A fixture cannot
+				 * close that -- the order is the route's -- so the instrument
+				 * waits instead, the same reasoning #710 used for a closed
+				 * disclosure: a hole in what the sweep can see belongs to the
+				 * sweep.
+				 *
+				 * The wait is the fixture's own answering going quiet, not a
+				 * duration: every response is served synchronously from
+				 * `respond`, so one macrotask drains however many `await`s a
+				 * section chains, and a cascade advances by at least one read
+				 * per turn. The loop ends the first turn that asks for nothing
+				 * new, and the bound is a guard against a route that polls
+				 * rather than a budget anything is expected to spend.
+				 */
+				let quiet = -1;
+				for (let turn = 0; quiet !== answered && turn < SETTLE_TURNS; turn += 1) {
+					quiet = answered;
+					await new Promise((resolve) => setTimeout(resolve, 0));
+				}
+				/*
+				 * A bound that ran out is a screen still arriving, and
+				 * measuring it anyway would reopen the hole this wait exists
+				 * to close -- silently, which is the one way this file must
+				 * not fail. So it says so instead.
+				 */
+				expect(
+					answered,
+					`${fixture.name} was still fetching after ${SETTLE_TURNS} turns`
+				).toBe(quiet);
 				const found = sweep(frame, run.clientWidth);
 				expect(found, found && overflowReport(fixture.name, found)).toBeUndefined();
 			} finally {
