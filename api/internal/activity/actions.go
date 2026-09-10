@@ -72,6 +72,67 @@ const SubjectPractice = "practice"
 // from drifting out of a reader's sight.
 const SubjectMembership = "membership"
 
+// MembershipAction is one of the fixed action strings a write site
+// records against SubjectMembership. It exists for the same reason
+// EngagementAction does, and #1148 is the reason it exists now: the five
+// write sites each passed a bare literal, so "every Membership event"
+// was a sentence no test could evaluate and every reader that wanted the
+// set hand-copied it. One vocabulary, named once, is what lets a reader
+// assert against the write side instead of against a copy of it.
+type MembershipAction string
+
+// The whole Membership vocabulary -- every state change one person's
+// standing at one Practice can undergo, plus the one act performed
+// against it.
+const (
+	// ActionMembershipJoined records a person coming to hold a
+	// Membership: the founding Owner at signup, and anyone accepting an
+	// Invitation afterward. Diff carries the roles and employment type
+	// she arrives with, and no previous of either.
+	ActionMembershipJoined MembershipAction = "joined"
+
+	// ActionRolesChanged and ActionEmploymentTypeChanged are the two
+	// facts about a Membership that can move, and they are separate
+	// actions rather than one "membership_edited" because an edit that
+	// moves both records both -- the history then reads as what changed
+	// rather than as a list of times somebody opened the form.
+	ActionRolesChanged          MembershipAction = "roles_changed"
+	ActionEmploymentTypeChanged MembershipAction = "employment_type_changed"
+
+	// ActionMembershipRemoved records a Membership ending: an Owner or
+	// Admin removing somebody, and a person deleting her own login, which
+	// ends every Membership she holds. Diff carries the roles and
+	// employment type the Membership held, since the row that held them
+	// is deleted in the same transaction.
+	ActionMembershipRemoved MembershipAction = "removed"
+
+	// ActionSessionsEnded records Staff ending a person's sessions
+	// everywhere (#473). It names the same relationship the other four do
+	// and changes nothing about what the Membership is, which is why its
+	// diff is bare "{}" -- there is nothing to say but who did it and
+	// when. On the practice-wide feed with the rest (#1148): holding it
+	// back would leave the one Membership event with no reader at all,
+	// and an Owner performed it against a named person on a date.
+	ActionSessionsEnded MembershipAction = "sessions_ended"
+)
+
+// MembershipActions returns every action a write site records against
+// SubjectMembership, sorted -- the same shape MoneyActions and
+// StaffingActions already give a caller, so a reader asserting "every
+// Membership event reaches the feed" enumerates the write side's own
+// vocabulary rather than a hand-copied list of it (#1148).
+func MembershipActions() []MembershipAction {
+	out := []MembershipAction{
+		ActionMembershipJoined,
+		ActionRolesChanged,
+		ActionEmploymentTypeChanged,
+		ActionMembershipRemoved,
+		ActionSessionsEnded,
+	}
+	slices.Sort(out)
+	return out
+}
+
 // SystemActorName is what ActorSystem renders as -- ADR-0022: "Doula
 // Cloud", never "System". Every reader that resolves an activity row's
 // actor to a display name falls back to this constant for actor_kind =

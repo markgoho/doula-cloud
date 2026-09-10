@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"doula-cloud/api/internal/activity"
 	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/authn"
 	"doula-cloud/api/internal/sessionmint"
@@ -233,7 +234,7 @@ func acceptInvite(ctx context.Context, tx *sql.Tx, verified authn.VerifiedToken,
 	if err := RecordMembershipEvent(ctx, tx, MembershipEvent{
 		PracticeID:     inv.practiceID,
 		StaffID:        staffID,
-		Type:           "joined",
+		Type:           activity.ActionMembershipJoined,
 		Roles:          "{" + inv.roles + "}",
 		EmploymentType: inv.employmentType,
 		ActorStaffID:   staffID,

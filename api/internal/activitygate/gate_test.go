@@ -12,12 +12,18 @@ import (
 
 const (
 	ownerRole            = "owner"
+	adminRole            = "admin"
 	doulaRole            = "doula"
 	employeeType         = "employee"
 	contractorType       = "contractor"
 	contractSignedAction = "contract_signed"
 	contractPricedAction = "contract_priced"
 	invoicePaidAction    = "invoice_paid"
+
+	// ownerReachesCase is the subtest name three access tables share --
+	// an Owner reaches every registered subject kind, which is the one
+	// row every one of those tables has in common.
+	ownerReachesCase = "owner reaches"
 )
 
 // buildReader scopes a tx to practiceID (the same set_config
@@ -100,7 +106,7 @@ func TestCanAccessSubject_Engagement(t *testing.T) {
 		employmentType string
 		want           bool
 	}{
-		{"owner reaches", ownerID, []string{ownerRole}, employeeType, true},
+		{ownerReachesCase, ownerID, []string{ownerRole}, employeeType, true},
 		{"unattached contractor refused", unattachedContractorID, []string{doulaRole}, contractorType, false},
 		{"attached contractor reaches", attachedContractorID, []string{doulaRole}, contractorType, true},
 	}
@@ -219,7 +225,7 @@ func TestCanAccessSubject_Client(t *testing.T) {
 		employmentType string
 		want           bool
 	}{
-		{"owner reaches", ownerID, []string{ownerRole}, employeeType, true},
+		{ownerReachesCase, ownerID, []string{ownerRole}, employeeType, true},
 		{"unattached contractor refused", unattachedContractorID, []string{doulaRole}, contractorType, false},
 		{"attached contractor reaches", attachedContractorID, []string{doulaRole}, contractorType, true},
 	}
@@ -281,5 +287,61 @@ func TestBypasses(t *testing.T) {
 	contractorReader, _ := buildReader(t, db, practiceID, contractorID, []string{doulaRole}, contractorType)
 	if activitygate.Bypasses(contractorReader) {
 		t.Fatal("Bypasses(contractor doula) = true, want false")
+	}
+}
+
+// TestCanAccessSubject_Membership pins the membership Rule to the roster
+// it describes (#1148): staffauth's ListStaffHandler and
+// ListMembershipHistoryHandler are both mounted OwnerAndAdmin, so an
+// Owner and an Admin reach a Membership row in the feed and nobody else
+// does -- including an employed Doula, who holds ambient reach over every
+// Engagement and Client at the Practice and still does not read the
+// roster's history.
+func TestCanAccessSubject_Membership(t *testing.T) {
+	db := testdb.New(t)
+	practiceID := testdb.SeedPractice(t, db, "Gate Membership Access Practice")
+	subjectID := testdb.SeedStaffAtPractice(t, db, practiceID, "gate-membership-subject", []string{doulaRole}, employeeType)
+
+	cases := []struct {
+		name           string
+		roles          []string
+		employmentType string
+		want           bool
+	}{
+		{ownerReachesCase, []string{ownerRole}, employeeType, true},
+		{"admin reaches", []string{adminRole}, employeeType, true},
+		{"employee doula refused", []string{doulaRole}, employeeType, false},
+		{"contractor doula refused", []string{doulaRole}, contractorType, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			reader, tx := buildReader(t, db, practiceID, subjectID, tc.roles, tc.employmentType)
+			got, err := activitygate.CanAccessSubject(t.Context(), tx, reader, activity.SubjectMembership, subjectID)
+			if err != nil {
+				t.Fatalf("CanAccessSubject: %v", err)
+			}
+			if got != tc.want {
+				t.Fatalf("CanAccessSubject(membership) = %v, want %v", got, tc.want)
+			}
+		})
+	}
+}
+
+// TestCanSeeAction_MembershipRestrictsNothing pins the other half of the
+// membership Rule: RestrictedActions is nil, so no Membership action is
+// held back from a reader who reaches the subject at all. Every reader
+// who reaches one is already inside ADR-0008's money tier, and no
+// Membership action carries what the Practice charges.
+func TestCanSeeAction_MembershipRestrictsNothing(t *testing.T) {
+	if got := activitygate.RestrictedActions(activity.SubjectMembership); got != nil {
+		t.Fatalf("RestrictedActions(membership) = %v, want nil", got)
+	}
+	owner := staffauth.NewReader("owner-id", []string{ownerRole}, employeeType)
+	// The write side's own vocabulary, not a copy of it: a sixth
+	// Membership action is one this test covers the moment it is named.
+	for _, action := range activity.MembershipActions() {
+		if !activitygate.CanSeeAction(owner, activity.SubjectMembership, string(action)) {
+			t.Errorf("CanSeeAction(owner, membership, %q) = false, want true", action)
+		}
 	}
 }

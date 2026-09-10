@@ -52,11 +52,12 @@ func bypassesRestriction(reader staffauth.Reader) bool {
 // A subject kind absent here is refused by CanAccessSubject/CanSeeAction,
 // never silently allowed.
 //
-// client_field_template is deliberately absent: clientfieldtemplate.Save
-// writes it (template.go), but nothing reads it back today -- no handler
-// queries activity WHERE subject_kind = 'client_field_template'. A reader
-// added later must register a Rule here before this gate will ever
-// return true for it (#485's AC5).
+// A kind deliberately left out belongs in unregistered below, with the
+// reason -- never merely absent. registry_test.go's own class guard
+// reads the write side's subject kinds and fails unless each one appears
+// in exactly one of the two maps, which is what stops the next event
+// family being dropped from #486's feed as quietly as membership was
+// (#1148).
 var registry = map[string]Rule{
 	activity.SubjectEngagement: {
 		CanAccessSubject: func(ctx context.Context, tx *sql.Tx, reader staffauth.Reader, subjectID string) (bool, error) {
@@ -78,6 +79,68 @@ var registry = map[string]Rule{
 			return reader.CanAccessClient(ctx, tx, subjectID)
 		},
 	},
+	activity.SubjectMembership: {
+		// A Membership row's subject_id is a staff_id, and the row says
+		// how that person's standing at this Practice came to be what it
+		// is: joined, roles_changed, employment_type_changed, removed,
+		// and the sessions_ended an Owner performs against the same
+		// relationship. Who may read it is who may read the roster it
+		// describes -- staffauth.ListStaffHandler and
+		// ListMembershipHistoryHandler are both mounted OwnerAndAdmin,
+		// ADR-0008's read table -- so the same predicate is stated here
+		// rather than left inline in the feed (#1148).
+		//
+		// Not reader.CanAccessClient's shape: there is no per-subject
+		// database question to ask, because the roster is not something a
+		// Doula reaches part of. An employed Doula holds ambient reach
+		// over every Engagement and Client at the Practice and still does
+		// not read the roster's history, so the check is the reader's own
+		// role and nothing about subjectID. It takes tx anyway because
+		// Rule's signature is one shape for every kind; a kind that needs
+		// no query simply asks none. It ignores subjectID for the same
+		// reason, so this Rule alone never says a staff id belongs to the
+		// current Practice -- every reader that calls it scopes its own
+		// query by practice_id, and activity's RLS policy scopes it
+		// again, which is where that question is answered.
+		//
+		// RestrictedActions stays nil: no Membership action carries what
+		// the Practice charges, which is the whole of what ADR-0008's
+		// money tier holds back. Employment type is on this feed and is
+		// meant to be -- an Owner and an Admin are the only readers who
+		// reach it at all, and both sit inside that tier already.
+		CanAccessSubject: func(_ context.Context, _ *sql.Tx, reader staffauth.Reader, _ string) (bool, error) {
+			return reader.IsOwnerOrAdmin(), nil
+		},
+	},
+}
+
+// unregistered names every subject kind a write site records that
+// registry deliberately states no Rule for, mapped to the reason. It is
+// the other half of the class guard registry's own comment describes:
+// absent-with-a-reason is a decision, plain absence is the bug #1148 was.
+//
+// A kind here is refused by CanAccessSubject/CanSeeAction exactly as any
+// unknown string is -- this map changes no behavior at all, and is read
+// only by registry_test.go. Registering a Rule is what admits a kind to
+// #486's feed; moving it out of here is the same edit.
+//
+// A reason here is prose for whoever reads this file next, never a
+// string any response carries -- but apierr's own TestDetailsWording
+// reads every map[string]string literal in the module as if it were an
+// APIError.Details, so a reason written with one of GOV.UK's forbidden
+// error words ("please", "valid", "invalid", "required") fails that gate
+// from here. Write around the word rather than widening the gate: it is
+// checking the right thing and cannot tell these two maps apart.
+//
+// It lives beside registry rather than in that test file, though it is
+// the test's only reader, because the two maps are one statement: this is
+// the one place a subject kind's disposition toward the feed is written
+// down, and splitting the "yes, on these terms" half from the "no, for
+// this reason" half would leave a reader of registry alone unable to tell
+// a considered omission from the bug this ticket fixed.
+var unregistered = map[string]string{
+	activity.SubjectPractice: "a Practice-scoped row (the switch that turns MFA on for all staff, a whole-Practice export) names the Practice itself rather than a record inside it, so who may read one is a separate decision from the roster's and the Client's -- tracked on #1255, not settled here.",
+	"client_field_template":  "written by clientfieldtemplate.Save (which spells the kind as a literal, having no constant) and read back by nothing -- no handler queries activity WHERE subject_kind = 'client_field_template'. A reader added later must register a Rule before this gate will ever return true for it (#485's AC5).",
 }
 
 // engagementRestrictedActions adapts activity.MoneyActions() (the write

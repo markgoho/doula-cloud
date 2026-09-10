@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"doula-cloud/api/internal/activity"
 	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/authmail"
 	"doula-cloud/api/internal/authn"
@@ -260,7 +261,7 @@ func signup(r *http.Request, tx *sql.Tx, verified authn.VerifiedToken, req Signu
 	// these roles?" has an answer for her too, not only for people
 	// invited later. She is her own actor.
 	if err := RecordMembershipEvent(ctx, tx, MembershipEvent{
-		PracticeID: practiceID, StaffID: staffID, Type: "joined",
+		PracticeID: practiceID, StaffID: staffID, Type: activity.ActionMembershipJoined,
 		Roles: "{owner,admin,doula}", EmploymentType: "employee", ActorStaffID: staffID,
 	}); err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests

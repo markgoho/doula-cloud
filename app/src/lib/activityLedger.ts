@@ -32,6 +32,17 @@ import type { EngagementReference } from './engagementDetail.js';
 export interface ActivityEntry {
 	subjectKind?: string;
 	subjectId?: string;
+	/**
+	 * The person this entry happened to, already resolved server-side --
+	 * "Renata Alvarez", or the server's own word for someone who has left
+	 * (#1148). Optional because only a subject kind whose subject is a
+	 * person carries one: a Membership row does, and an Engagement's or a
+	 * Client's own rows name a record rather than a person and send
+	 * nothing. `staffEventText` appends it to the What column, so a reader
+	 * of the practice-wide feed can tell one roster change from the next;
+	 * an entry without one renders exactly as it does today.
+	 */
+	subjectName?: string;
 	action: string;
 	actorKind: string;
 	actorName: string;
@@ -72,9 +83,24 @@ export function describeActivityAction(action: string): string {
  * when the entry carries one (#887), and the generic description
  * otherwise. `activityLedgerColumns`'s default, and the whole of what
  * #708 left unchanged for them.
+ *
+ * `subjectName` is appended when the entry carries one (#1148), because
+ * on a feed spanning every subject kind the action alone does not say who
+ * it happened to -- "Roles changed" names the actor in the Who column and
+ * leaves whose roles moved unanswered. An em dash rather than a second
+ * column: the ledger's three columns (When, What, Who) are the design
+ * brief's own, they are shared with two surfaces that send no subject at
+ * all, and a fourth column empty on two of three surfaces would be a
+ * worse table at 320px than a slightly longer sentence.
+ *
+ * A `detail` sentence wins outright and does not get the name appended:
+ * it is the server's own finished prose about the row, and it already
+ * names the people in it.
  */
 function staffEventText(row: ActivityEntry): string {
-	return row.detail ?? describeActivityAction(row.action);
+	if (row.detail) return row.detail;
+	const described = describeActivityAction(row.action);
+	return row.subjectName ? `${described} — ${row.subjectName}` : described;
 }
 
 /**

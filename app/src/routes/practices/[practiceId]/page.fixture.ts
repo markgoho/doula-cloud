@@ -110,6 +110,20 @@ export const fixture: RouteFixture = {
 		// exercise the ledger's own overflow handling (ADR-0024/0025) --
 		// #530's own URL again, this time as the diff a Practice's own
 		// edit produced.
+		//
+		// The second row is #1148's own state of the What column: a
+		// Membership row, whose text is the action plus the person it
+		// happened to, where every other subject kind's is the action
+		// alone. Two rows because the column renders two ways, per this
+		// repo's fixture rule -- and this one's name is long on purpose,
+		// so the sweep measures a roster change against a real Practice's
+		// longest member rather than a polite one.
+		//
+		// Said plainly, since this `respond` is shared with the Doula
+		// variant below: a Doula never receives a Membership row in
+		// production -- activitygate's membership Rule admits an Owner
+		// and an Admin only -- so under that variant this row is a
+		// layout subject rather than a screen she would meet.
 		if (path.includes('/activity')) {
 			return jsonResponse({
 				items: [
@@ -120,6 +134,15 @@ export const fixture: RouteFixture = {
 						actorKind: 'staff',
 						actorName: 'https://portal.highland-midwifery-group.example.org/referrals/2027/persephone?source=intake',
 						createdAt: '2026-08-01T00:00:00Z'
+					},
+					{
+						subjectKind: 'membership',
+						subjectId: 'staff-2',
+						subjectName: 'Persephone Abernathy-Okonkwo',
+						action: 'employment_type_changed',
+						actorKind: 'staff',
+						actorName: 'Marguerite Vandenberg-Whitfield',
+						createdAt: '2026-07-30T00:00:00Z'
 					}
 				],
 				hasMore: false

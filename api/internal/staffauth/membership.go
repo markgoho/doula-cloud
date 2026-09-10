@@ -19,9 +19,14 @@ import (
 // are the state after the change; Previous* are the state before, empty
 // on a 'joined' event, which has no before.
 type MembershipEvent struct {
-	PracticeID             string
-	StaffID                string
-	Type                   string // 'joined' | 'roles_changed' | 'employment_type_changed' | 'removed'
+	PracticeID string
+	StaffID    string
+	// Type is one of activity's own MembershipAction constants, not a
+	// string a caller spells for itself (#1148): the five write sites
+	// each passed a bare literal, which made "every Membership event" a
+	// claim no reader could check and left every reader of the set
+	// hand-copying it.
+	Type                   activity.MembershipAction
 	PreviousRoles          string // Postgres array literal, e.g. "{owner,doula}"
 	Roles                  string
 	PreviousEmploymentType string
@@ -87,7 +92,7 @@ func RecordMembershipEvent(ctx context.Context, tx *sql.Tx, e MembershipEvent) e
 		PracticeID:  e.PracticeID,
 		SubjectKind: activity.SubjectMembership,
 		SubjectID:   e.StaffID,
-		Action:      e.Type,
+		Action:      string(e.Type),
 		Diff:        diff,
 		Actor:       activity.StaffActor(e.ActorStaffID),
 	}); err != nil {
@@ -242,7 +247,7 @@ func UpdateMembershipHandler() http.Handler {
 		// form. A no-op edit records nothing.
 		if !sameRoles(splitRoles(previousRoles), next.roles) {
 			if err := RecordMembershipEvent(r.Context(), tx, MembershipEvent{
-				PracticeID: practiceID, StaffID: targetStaffID, Type: "roles_changed",
+				PracticeID: practiceID, StaffID: targetStaffID, Type: activity.ActionRolesChanged,
 				PreviousRoles: "{" + previousRoles + "}", Roles: next.rolesLiteral,
 				ActorStaffID: actorStaffID,
 			}); err != nil {
@@ -253,7 +258,7 @@ func UpdateMembershipHandler() http.Handler {
 		}
 		if previousEmploymentType != next.employmentType {
 			if err := RecordMembershipEvent(r.Context(), tx, MembershipEvent{
-				PracticeID: practiceID, StaffID: targetStaffID, Type: "employment_type_changed",
+				PracticeID: practiceID, StaffID: targetStaffID, Type: activity.ActionEmploymentTypeChanged,
 				PreviousEmploymentType: previousEmploymentType, EmploymentType: next.employmentType,
 				ActorStaffID: actorStaffID,
 			}); err != nil {
@@ -361,7 +366,7 @@ func RemoveMembershipHandler() http.Handler {
 		// The event goes first: it names the roles and employment type the
 		// Membership held, which the next statement destroys.
 		if err := RecordMembershipEvent(r.Context(), tx, MembershipEvent{
-			PracticeID: practiceID, StaffID: targetStaffID, Type: "removed",
+			PracticeID: practiceID, StaffID: targetStaffID, Type: activity.ActionMembershipRemoved,
 			PreviousRoles: "{" + roles + "}", PreviousEmploymentType: employmentType,
 			ActorStaffID: actorStaffID,
 		}); err != nil {

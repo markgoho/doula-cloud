@@ -68,7 +68,7 @@ func EndSessionsHandler(enq tasknudge.Enqueuer) http.Handler {
 			PracticeID:  practiceID,
 			SubjectKind: activity.SubjectMembership,
 			SubjectID:   targetStaffID,
-			Action:      "sessions_ended",
+			Action:      string(activity.ActionSessionsEnded),
 			Diff:        json.RawMessage("{}"),
 			Actor:       activity.StaffActor(actorStaffID),
 		}); err != nil {
