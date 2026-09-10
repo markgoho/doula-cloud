@@ -46,6 +46,13 @@
  * answers `fetch` itself, since every API call this app makes funnels
  * through one line in `#lib/api.js`.
  *
+ * It sees inside a closed disclosure too, since #710: `sweep` opens every
+ * closed `<details>` under the frame before measuring and closes it again
+ * after, so a route that keeps content behind one -- the Client portal's
+ * Activity ledger, the Staff roster's work-state history -- is measured on
+ * what is actually in it. That lives in `continuum.ts` with the sweep, not
+ * here and not in a fixture, for the reason the next section gives.
+ *
  * ## How a route joins: discovery, never opt-in
  *
  * The route list is a glob, and a route is swept if it has a

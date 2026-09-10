@@ -27,6 +27,16 @@ Two things this leaves standing rather than closes. `floor.svelte.spec.ts` measu
 
 `max-content` was measured as a candidate ceiling and rejected: `DataTable`'s is 713px, below its own 780px content floor, so a sweep stopping there would never reach the configuration that floor selects.
 
+## The sweep opens what a screen keeps closed
+
+A closed `<details>` renders nothing but its `<summary>`. Its content takes no box, so `scrollWidth` cannot see it at any width, and a disclosure was therefore a hole in the instrument rather than a screen that fits: [#486](https://github.com/markgoho/doula-cloud/issues/486) put the Client portal's Activity ledger behind one, and what actually measured the ledger was a second, hand-written overflow test beside that one route. Every later disclosure would have owed its own copy, which is [#570](https://github.com/markgoho/doula-cloud/issues/570)'s "one artifact is enforced by there being one function" running backwards.
+
+**The sweep opens every closed disclosure under the frame before it measures, and closes them again afterwards** ([#710](https://github.com/markgoho/doula-cloud/issues/710)). It does that itself rather than offering a fixture a `beforeSweep` hook to do it with — which was the shape the ticket proposed, and is an opt-in with a longer name. Every other coverage rule here is discovery (`UNSWEPT`, `UNDERIVABLE`, a component with no fixture fails the build) for the reason [#521](https://github.com/markgoho/doula-cloud/issues/521) recorded: a carrier a session can walk past gets walked past. A hook would have been one more.
+
+Measuring the open state loses nothing the closed state held, because a `<summary>` renders in both and an open disclosure's content is a superset of a closed one's — one sweep covers the pair, and there is no second, closed-state sweep to write. A disclosure a subject ships already open is left as its markup declared it. **The drag surface is deliberately unchanged**: a person standing in front of it opens the disclosure by clicking it, which is the screen behaving rather than the instrument reaching in, so the two halves still show and measure the same screen.
+
+The floor check (`floor.svelte.spec.ts`) still measures whatever a closed disclosure hides, and no condition it has discovered sits behind one today — [#1124](https://github.com/markgoho/doula-cloud/issues/1124) holds that gap rather than this document implying it is closed.
+
 ## Fixtures
 
 Both fixture rules were attached to the matrix. Both survive, re-attached to the continuum check.

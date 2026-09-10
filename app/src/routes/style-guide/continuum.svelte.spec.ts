@@ -90,3 +90,90 @@ describe('the continuum check', () => {
 		}
 	}
 });
+
+/*
+ * What the sweep does to a disclosure before it measures one (#710).
+ *
+ * This is the instrument under test rather than a subject swept by it, so
+ * the frame is built by hand instead of through `mountInFrame`: what it
+ * needs is a `<details>` whose content is wider than any space the sweep
+ * will offer it, and no component this repo ships is allowed to be that.
+ * It needs no webfont wait either -- the overflow here is a declared
+ * inline size, not a measured glyph.
+ *
+ * The first assertion is the blind spot itself, kept rather than deleted:
+ * a plain `scrollWidth` read is exactly what the sweep was before #710,
+ * and this is the line that says why it could not stay that. It is also
+ * the guard on the claim the rest of this rests on -- that a closed
+ * disclosure's content is not laid out at all.
+ */
+// Wider than the ~414px window this file runs in, so what breaks is the
+// disclosure's own content rather than anything the frame could absorb.
+const OVERFLOWING = 900;
+
+function frameHolding(markup: string) {
+	const run = document.createElement('div');
+	const frame = document.createElement('div');
+	frame.style.containerType = 'inline-size';
+	frame.innerHTML = markup;
+	run.append(frame);
+	document.body.append(run);
+	return { run, frame, remove: () => run.remove() };
+}
+
+// The Client portal's Activity ledger in miniature (#486): a summary a
+// Client clicks, and behind it content that has to fit at 320px.
+function ledger(isOpen = false): string {
+	return (
+		`<details${isOpen ? ' open' : ''}><summary>Show what has happened</summary>` +
+		`<div style="inline-size: ${OVERFLOWING}px">Everything that has happened</div></details>`
+	);
+}
+
+describe('the sweep, over a closed disclosure (#710)', () => {
+	it('measures nothing at all while the disclosure stays closed', () => {
+		const { frame, remove } = frameHolding(ledger());
+		try {
+			frame.style.inlineSize = '320px';
+			void frame.offsetWidth;
+
+			expect(frame.scrollWidth).toBe(320);
+		} finally {
+			remove();
+		}
+	});
+
+	it('finds the overflow a closed disclosure was hiding', () => {
+		const { run, frame, remove } = frameHolding(ledger());
+		try {
+			const found = sweep(frame, run.clientWidth);
+
+			expect(found?.width).toBe(320);
+			expect(found?.needed).toBeGreaterThanOrEqual(OVERFLOWING);
+		} finally {
+			remove();
+		}
+	});
+
+	it('leaves the disclosure closed again afterwards', () => {
+		const { run, frame, remove } = frameHolding(ledger());
+		try {
+			sweep(frame, run.clientWidth);
+
+			expect(frame.querySelector('details')?.open).toBe(false);
+		} finally {
+			remove();
+		}
+	});
+
+	it('leaves a disclosure the subject ships open alone', () => {
+		const { run, frame, remove } = frameHolding(ledger(true));
+		try {
+			sweep(frame, run.clientWidth);
+
+			expect(frame.querySelector('details')?.open).toBe(true);
+		} finally {
+			remove();
+		}
+	});
+});

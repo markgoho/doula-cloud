@@ -64,15 +64,14 @@ export const visits = [
  * and once the What column started carrying a whole sentence rather than
  * an action string, an empty ledger stopped standing in for the real one.
  *
- * These rows are not what checks the ledger's layout today, and this
- * comment should not be read as claiming they are: `route-continuum`'s
- * sweep never opens the disclosure, and a closed `<details>` renders
- * nothing at all to measure. The open-state sweep that does measure these
- * phrases lives in `engagement-hub.svelte.spec.ts`, which mounts a row of
- * its own for exactly that reason. What this fixture gives is a route
- * description that matches the route -- so a sweep that does open the
- * disclosure finds real rows waiting, rather than a table the fixture
- * emptied.
+ * These rows are what checks the ledger's layout, and since #710 they do
+ * it through the shared sweep rather than beside it. This comment used to
+ * say the opposite -- `route-continuum`'s sweep never opened the
+ * disclosure, a closed `<details>` renders nothing at all to measure, and
+ * the open-state sweep lived in `engagement-hub.svelte.spec.ts` on a row
+ * of its own. The sweep now opens every closed disclosure under the frame
+ * before it measures, so these rows are the ones it lays out at 320px and
+ * the private copy is gone.
  *
  * Two rows, because two things about this column can be worst-case: the
  * longest phrase the Client register holds (`payment_reversed`,

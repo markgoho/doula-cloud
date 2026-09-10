@@ -78,17 +78,73 @@ export interface Break {
  * unconstrained (#542). `floor.svelte.spec.ts` owns that case: it forces
  * each discovered condition live and measures at its own floor, above
  * this ceiling.
+ *
+ * ## It looks inside a closed disclosure (#710)
+ *
+ * A closed `<details>` renders nothing but its `<summary>`: its content
+ * takes no box at all, so `scrollWidth` cannot see it at any width. Until
+ * #710 that made every disclosure a hole in this instrument -- #486 put
+ * the Client portal's Activity ledger behind one, and the only thing that
+ * measured what is actually in it was a second, hand-written overflow test
+ * beside that one route. The next disclosure would have needed its own,
+ * and a check a screen can be added to without joining is the shape #521
+ * already proved gets walked past.
+ *
+ * So the sweep opens every closed disclosure under the frame before it
+ * measures, and closes again after. It does that itself rather than
+ * offering a fixture a hook to do it with: this repo's checks discover
+ * their subjects and never wait to be opted into (`route-continuum`'s
+ * `UNSWEPT`, `floor.svelte.spec.ts`'s `UNDERIVABLE`), and a hook a fixture
+ * may decline is an opt-in with a longer name.
+ *
+ * Measuring the open state loses nothing the closed state held: a
+ * `<summary>` renders in both, so an open disclosure's content is a
+ * superset of a closed one's, and one sweep covers the pair. The drag
+ * surface is untouched by this and needs to be -- a person standing in
+ * front of it opens the disclosure by clicking it, which is the screen
+ * behaving rather than the instrument reaching in.
  */
 export function sweep(frame: HTMLElement, availableSpace: number): Break | undefined {
-	const widestSpace = Math.max(availableSpace, CONFORMANCE_COMMITMENT);
-	for (let width = CONFORMANCE_COMMITMENT; width <= widestSpace; width += RESOLUTION) {
-		frame.style.inlineSize = `${width}px`;
-		void frame.offsetWidth;
-		if (frame.scrollWidth - width > TOLERANCE) {
-			return { width, needed: frame.scrollWidth };
+	const close = openDisclosures(frame);
+	try {
+		const widestSpace = Math.max(availableSpace, CONFORMANCE_COMMITMENT);
+		for (let width = CONFORMANCE_COMMITMENT; width <= widestSpace; width += RESOLUTION) {
+			frame.style.inlineSize = `${width}px`;
+			void frame.offsetWidth;
+			if (frame.scrollWidth - width > TOLERANCE) {
+				return { width, needed: frame.scrollWidth };
+			}
 		}
+		return undefined;
+	} finally {
+		close();
 	}
-	return undefined;
+}
+
+/*
+ * Opens every closed `<details>` under `frame` and hands back the undo
+ * (#710). Exported so what the sweep does to a subject before measuring it
+ * can be asserted on directly, and so a second measuring instrument can
+ * take the same look without copying the query -- one artifact is enforced
+ * by there being one function (#570).
+ *
+ * Only the disclosures that were CLOSED are reopened -- a subject that
+ * ships one already open (`StepRail`'s completed steps at its own widths)
+ * is left as its own markup declared it, since closing that would leave
+ * the frame in a state the screen never has.
+ *
+ * The undo matters because a sweep is not the last thing a caller does:
+ * `layout-exercise` sweeps the same mounted frame more than once, and a
+ * spec that reads the DOM after a sweep should see the screen it mounted
+ * rather than the one the instrument left behind.
+ */
+export function openDisclosures(frame: HTMLElement): () => void {
+	const closed = [...frame.querySelectorAll('details:not([open])')] as HTMLDetailsElement[];
+	for (const disclosure of closed) disclosure.open = true;
+	void frame.offsetWidth;
+	return () => {
+		for (const disclosure of closed) disclosure.open = false;
+	};
 }
 
 /*
