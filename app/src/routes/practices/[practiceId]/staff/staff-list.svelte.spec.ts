@@ -189,6 +189,16 @@ function membersTable() {
 	return testPage.elementLocator(document.querySelector('.table-view')!);
 }
 
+/**
+ * Every work state history request made so far -- what "asked for once"
+ * is counted in.
+ */
+function historyRequests(): unknown[][] {
+	return apiFetchWithSession.mock.calls.filter((call: unknown[]) =>
+		String(call[0]).includes('/work-state-history')
+	);
+}
+
 function invitationsTable() {
 	return testPage.elementLocator(document.querySelectorAll('.table-view')[1]!);
 }
@@ -525,6 +535,28 @@ describe('staff screen', () => {
 				.toBeVisible();
 		});
 
+		// #1149: closing and reopening finds the entries already loaded. An
+		// append-only trail that was correct a second ago is still correct,
+		// and the list is what remembers it was asked -- this screen keeps
+		// no record of its own.
+		it('asks for the history once, however many times it is opened', async () => {
+			await setup();
+			const tableView = membersTable();
+			const disclosure = tableView.getByText('Work state history').first();
+
+			await disclosure.click();
+			await expect
+				.element(tableView.getByText('Changed from District of Columbia to New York'))
+				.toBeVisible();
+			await disclosure.click();
+			await disclosure.click();
+
+			await expect
+				.element(tableView.getByText('Changed from District of Columbia to New York'))
+				.toBeVisible();
+			expect(historyRequests()).toHaveLength(1);
+		});
+
 		it('shows a per-row error notice when the history fails to load', async () => {
 			await setup({ historyResponse: textResponse('Failed to load work state history') });
 			const tableView = membersTable();
@@ -532,6 +564,23 @@ describe('staff screen', () => {
 			await tableView.getByText('Work state history').first().click();
 
 			await expect.element(tableView.getByText('Failed to load work state history')).toBeVisible();
+		});
+
+		// #1149: a first page that failed published nothing, so reopening
+		// asks again rather than leaving the row on an error it can never
+		// get past -- the one thing the old asked-for-already set could not
+		// tell apart from a page that landed.
+		it('asks again after a first page that failed', async () => {
+			await setup({ historyResponse: textResponse('Failed to load work state history') });
+			const tableView = membersTable();
+			const disclosure = tableView.getByText('Work state history').first();
+
+			await disclosure.click();
+			await expect.element(tableView.getByText('Failed to load work state history')).toBeVisible();
+			await disclosure.click();
+			await disclosure.click();
+
+			await vi.waitFor(() => expect(historyRequests()).toHaveLength(2));
 		});
 
 		it('names the Show older changes button by its member when there is more history', async () => {

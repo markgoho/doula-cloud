@@ -1,6 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { PaginatedList, type CursorPage } from './paginatedList.svelte.js';
+import {
+	PaginatedList,
+	type CursorPage,
+	type DeferredPaginatedList
+} from './paginatedList.svelte.js';
 
 function page(items: string[], nextCursor?: string): CursorPage<string> {
 	return { items, nextCursor, hasMore: nextCursor !== undefined };
@@ -391,5 +395,146 @@ describe('PaginatedList', () => {
 				expect(loadPage).toHaveBeenCalledTimes(2);
 			});
 		});
+	});
+});
+
+/*
+ * A list nobody has asked for yet (#1149). Every test here turns on one
+ * distinction the eager list cannot make: `entries` is `undefined` until
+ * a page has actually landed, and `[]` only once one has landed empty.
+ */
+function deferredOf(
+	loadPage: (cursor: string) => Promise<CursorPage<string>>
+): DeferredPaginatedList<string> {
+	return PaginatedList.deferred<string>({ loadPage, failureMessage: 'Failed to load more' });
+}
+
+describe('PaginatedList.deferred', () => {
+	it('has no rows to read before anything asks for them', () => {
+		const loadPage = vi.fn();
+		const list = deferredOf(loadPage);
+
+		expect(list.entries).toBeUndefined();
+		expect(list.hasMore).toBe(false);
+		expect(list.isLoadingMore).toBe(false);
+		expect(list.loadMoreError).toBe('');
+		expect(loadPage).not.toHaveBeenCalled();
+	});
+
+	it('publishes the first page once it is asked', async () => {
+		const loadPage = vi.fn().mockResolvedValue(page(['a'], 'cursor-1'));
+		const list = deferredOf(loadPage);
+
+		await list.ask();
+
+		expect(loadPage).toHaveBeenCalledWith('');
+		expect(list.entries).toEqual(['a']);
+		expect(list.hasMore).toBe(true);
+		expect(list.isLoadingMore).toBe(false);
+	});
+
+	it('tells a history that came back empty from one nobody has asked for', async () => {
+		const list = deferredOf(vi.fn().mockResolvedValue(page([])));
+
+		await list.ask();
+
+		expect(list.entries).toEqual([]);
+		expect(list.hasMore).toBe(false);
+	});
+
+	it('asks once, however many times it is asked', async () => {
+		const loadPage = vi.fn().mockResolvedValue(page(['a']));
+		const list = deferredOf(loadPage);
+
+		await list.ask();
+		await list.ask();
+
+		expect(loadPage).toHaveBeenCalledTimes(1);
+	});
+
+	it('ignores a second ask while the first is still in flight', async () => {
+		const held = Promise.withResolvers<CursorPage<string>>();
+		const loadPage = vi.fn().mockReturnValue(held.promise);
+		const list = deferredOf(loadPage);
+
+		const first = list.ask();
+		await list.ask();
+
+		expect(loadPage).toHaveBeenCalledTimes(1);
+		expect(list.isLoadingMore).toBe(true);
+
+		held.resolve(page(['a']));
+		await first;
+
+		expect(list.isLoadingMore).toBe(false);
+	});
+
+	it('keeps its rows unreadable when the first page fails, and says why', async () => {
+		const list = deferredOf(vi.fn().mockRejectedValue(new Error('The member was not found')));
+
+		await list.ask();
+
+		expect(list.entries).toBeUndefined();
+		expect(list.loadMoreError).toBe('The member was not found');
+		expect(list.isLoadingMore).toBe(false);
+	});
+
+	it('asks again after a first page that failed', async () => {
+		const loadPage = vi
+			.fn()
+			.mockRejectedValueOnce(new Error('The network went away'))
+			.mockResolvedValueOnce(page(['a']));
+		const list = deferredOf(loadPage);
+
+		await list.ask();
+		await list.ask();
+
+		expect(loadPage).toHaveBeenCalledTimes(2);
+		expect(list.entries).toEqual(['a']);
+		expect(list.loadMoreError).toBe('');
+	});
+
+	it('pages past a zero-item page with more to come (#709) on the first ask', async () => {
+		const loadPage = vi
+			.fn()
+			.mockResolvedValueOnce(page([], 'cursor-2'))
+			.mockResolvedValueOnce(page(['a']));
+		const list = deferredOf(loadPage);
+
+		await list.ask();
+
+		expect(loadPage).toHaveBeenCalledTimes(2);
+		expect(list.entries).toEqual(['a']);
+	});
+
+	it('appends the next page on top of the first, from the first page own cursor', async () => {
+		const loadPage = vi
+			.fn()
+			.mockResolvedValueOnce(page(['a'], 'cursor-1'))
+			.mockResolvedValueOnce(page(['b']));
+		const list = deferredOf(loadPage);
+
+		await list.ask();
+		await list.loadMore();
+
+		expect(loadPage).toHaveBeenNthCalledWith(2, 'cursor-1');
+		expect(list.entries).toEqual(['a', 'b']);
+		expect(list.hasMore).toBe(false);
+	});
+
+	it('does not ask again after a further page failed', async () => {
+		const loadPage = vi
+			.fn()
+			.mockResolvedValueOnce(page(['a'], 'cursor-1'))
+			.mockRejectedValueOnce(new Error('The network went away'));
+		const list = deferredOf(loadPage);
+
+		await list.ask();
+		await list.loadMore();
+		await list.ask();
+
+		expect(loadPage).toHaveBeenCalledTimes(2);
+		expect(list.entries).toEqual(['a']);
+		expect(list.loadMoreError).toBe('The network went away');
 	});
 });
