@@ -15,6 +15,7 @@ import fs from 'node:fs';
 import net from 'node:net';
 import path from 'node:path';
 import { BASE_PORTS, PORT_STEP } from '../../app/e2e/ports.ts';
+import { readWorktreeOffsets } from './worktree-offsets.ts';
 import { findMainCheckoutRoot } from './worktree-root.ts';
 
 const SOURCE_ROOT = findMainCheckoutRoot(import.meta.dir);
@@ -151,24 +152,13 @@ function ensureNodeModules(worktreePath: string, messages: string[]): void {
 	ensureAppNodeModulesReal(worktreePath, changed, messages);
 }
 
+// Every offset a worktree already holds, live or not: provisioning must
+// never hand out an offset another directory carries, however quiet that
+// directory has gone. (e2e-stack-reap.ts reads the same scan and does
+// apply a quiet test, because it is deciding something else -- whether a
+// running container still has a session behind it.)
 function livePortOffsets(): Set<number> {
-	const claimed = new Set<number>();
-	let entries: string[] = [];
-	try {
-		entries = fs.readdirSync(WORKTREES_ROOT);
-	} catch {
-		return claimed;
-	}
-	for (const entry of entries) {
-		const offsetFile = path.join(WORKTREES_ROOT, entry, '.port-offset');
-		try {
-			const value = Number.parseInt(fs.readFileSync(offsetFile, 'utf8').trim(), 10);
-			if (Number.isInteger(value)) claimed.add(value);
-		} catch {
-			// no offset assigned yet -- doesn't claim anything
-		}
-	}
-	return claimed;
+	return new Set(readWorktreeOffsets(WORKTREES_ROOT).map(worktree => worktree.offset));
 }
 
 // Every port an offset would bind. BASE_PORTS comes from app/e2e/ports.ts,

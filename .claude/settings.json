@@ -82,6 +82,13 @@
           },
           {
             "type": "command",
+            "command": "bun \"$(git rev-parse --show-toplevel)/.claude/hooks/e2e-stack-reap.ts\"",
+            "statusMessage": "Reaping orphaned e2e compose stacks",
+            "timeout": 60,
+            "async": true
+          },
+          {
+            "type": "command",
             "command": "bun \"$(git rev-parse --show-toplevel)/.claude/hooks/announce-trunk-red.ts\"",
             "statusMessage": "Checking whether trunk is red",
             "timeout": 30

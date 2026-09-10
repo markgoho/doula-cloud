@@ -4,15 +4,17 @@
  * leaves behind (#889). See that file's header and docs/testing.md's
  * "Reaping orphaned testcontainers" section for the full story.
  *
- * The reap decision (parseContainers/pickReapCandidates) is pure, so it's
- * imported and unit tested directly. main()'s fail-open behavior --
- * DOCKER_HOST unset, engine unreachable -- is exercised as a subprocess,
- * the same way scripts/gate-bash-write.test.ts covers gate-bash-write.ts.
+ * The reap decision (pickReapCandidates) is pure, so it's imported and
+ * unit tested directly; how the engine is reached at all now lives in
+ * .claude/hooks/container-engine.ts, covered by its own test file.
+ * main()'s fail-open behavior is exercised as a subprocess, the same way
+ * scripts/gate-bash-write.test.ts covers gate-bash-write.ts.
  */
 import { describe, expect, test } from "bun:test";
 import { spawn } from "node:child_process";
 import path from "node:path";
-import { parseContainers, pickReapCandidates, REAP_THRESHOLD_MS, type ReapCandidate } from "../.claude/hooks/testdb-reap.ts";
+import { pickReapCandidates, REAP_THRESHOLD_MS } from "../.claude/hooks/testdb-reap.ts";
+import type { ReapCandidate } from "../.claude/hooks/container-engine.ts";
 
 const REPO_ROOT = path.resolve(import.meta.dir, "..");
 const HOOK = path.join(REPO_ROOT, ".claude", "hooks", "testdb-reap.ts");
@@ -75,30 +77,22 @@ describe("pickReapCandidates", () => {
 	});
 });
 
-describe("parseContainers", () => {
-	test("maps an engine ps --format json array into ReapCandidates", () => {
-		const json = JSON.stringify([
-			{
-				Id: "deadbeef",
-				Names: ["clever_name"],
-				Labels: { "org.testcontainers": "true" },
-				Created: 1000
-			}
-		]);
-		expect(parseContainers(json)).toEqual([
-			{ id: "deadbeef", name: "clever_name", labels: { "org.testcontainers": "true" }, createdAtMs: 1_000_000 }
-		]);
-	});
-
-	test("falls back to the id when Names is absent, and to an empty label set when Labels is absent", () => {
-		const json = JSON.stringify([{ Id: "deadbeef", Created: 0 }]);
-		expect(parseContainers(json)).toEqual([{ id: "deadbeef", name: "deadbeef", labels: {}, createdAtMs: 0 }]);
-	});
-});
-
 describe("testdb-reap hook (subprocess, fail-open behavior)", () => {
-	test("does nothing when DOCKER_HOST is unset", async () => {
-		const env = { ...process.env };
+	/*
+	 * DOCKER_HOST unset used to end this hook's run before it started, and
+	 * that is exactly the environment a SessionStart hook inherits --
+	 * docs/testing.md exports the variable by hand into the shell that
+	 * runs the tests, never from a login profile, so the reaper had never
+	 * once run (38-hour-old containers, observed live). It must now reach
+	 * the engine anyway, through its default connection, and still fail
+	 * open when there is no engine to reach. See
+	 * scripts/container-engine.test.ts for the flag-level assertion.
+	 */
+	test("fails open with no DOCKER_HOST rather than giving up on the engine", async () => {
+		const env: Record<string, string | undefined> = {
+			...process.env,
+			CONTAINER_ENGINE: "/nonexistent-binary-testdb-reap-test"
+		};
 		delete env.DOCKER_HOST;
 		const { exitCode, stdout } = await invoke(env);
 		expect(exitCode).toBe(0);

@@ -356,16 +356,7 @@ the leak -- without ever mistaking a live run for an orphan. The
 reasoning lives as a comment on `REAP_THRESHOLD_MS` in the hook itself,
 not only here.
 
-The hook reads `DOCKER_HOST` the same way `testdb.go` does (previous
-section); if it's unset, or the container engine at that socket isn't
-reachable, it does nothing and exits 0. It **fails open on every error
-path** -- unlike `gate-worktree-edit.ts`/`gate-bash-write.ts`, which fail
-closed because they're `PreToolUse` gates deciding whether to allow a
-tool call. This hook runs on `SessionStart`, makes no such decision, and
-exists purely to tidy up; a reaper that errors must never block or slow a
-session from starting. `gate-shared-index.sh` is the existing fail-open
-precedent, for the same class of reason. It's quiet when there's nothing
-to reap; when it does reap, it logs the count and the reason.
+The hook points the engine at `DOCKER_HOST` when the variable is set, the same way `testdb.go` does (previous section) — but **an unset `DOCKER_HOST` is not a reason to skip the run**, and treating it as one made this hook inert for months. The variable is exported by hand into the shell that runs the tests, as the block above shows; it is never set from a login profile, and a `SessionStart` hook inherits the login environment rather than that shell's. So the hook never saw it and always returned early: 55 containers, the oldest 38 hours old, on a machine that had started dozens of sessions since ([#1066](https://github.com/markgoho/doula-cloud/issues/1066)). `podman ps` with no `--url` reaches the same engine through its default `podman machine` connection, so `.claude/hooks/container-engine.ts` — the seam both reapers share — adds `--url` only when there is a socket to name, and otherwise just invokes the engine. If the engine isn't reachable at all, the hook does nothing and exits 0. It **fails open on every error path** -- unlike `gate-worktree-edit.ts`/`gate-bash-write.ts`, which fail closed because they're `PreToolUse` gates deciding whether to allow a tool call. This hook runs on `SessionStart`, makes no such decision, and exists purely to tidy up; a reaper that errors must never block or slow a session from starting. `gate-shared-index.sh` is the existing fail-open precedent, for the same class of reason. It's quiet when there's nothing to reap; when it does reap, it logs the count and the reason.
 
 If containers pile up faster than a session boundary clears them, the
 same manual command #889 was diagnosed with still works as an escape
@@ -373,6 +364,25 @@ hatch:
 
 ```sh
 podman rm -f -t 2 $(podman ps -aq --filter 'label=org.testcontainers=true')
+```
+
+## Reaping orphaned e2e stacks
+
+The reaper above only knows about containers labeled `org.testcontainers=true`, which is the one thing a compose stack is not. `app/e2e/stack.ts` brings `app/compose.e2e.yaml` up under a per-worktree compose project name — `doula-cloud-e2e-<PORT_OFFSET>` — and takes it down again in `stopStack`. A killed worktree session never reaches that teardown, so its `db` and `gcs` containers, the project's `<project>_default` network and its named `<project>_db-data` volume sit on the same shared Podman machine indefinitely, feeding exactly the starvation the previous section describes ([#1066](https://github.com/markgoho/doula-cloud/issues/1066), and most likely the cause behind [#782](https://github.com/markgoho/doula-cloud/issues/782)).
+
+`.claude/hooks/e2e-stack-reap.ts` is the second `SessionStart` hook (registered beside `testdb-reap.ts` in `.claude/settings.json`). It reads every container's `com.docker.compose.project` label — the key podman-compose 1.6.0 and Docker Compose v2 both write — groups them into projects, and runs `compose -p <project> down -v` on each one it judges orphaned. `down -v` rather than `rm -f` is the point: containers are the smaller half of what a stack leaves behind, and only a project-scoped `down -v` also collects the network and the volume.
+
+**A stack is orphaned when both clocks say so, never one.** Unlike a testcontainers Postgres, an e2e stack legitimately outlives any fixed budget — `bun run dev:full` shares it and runs for as long as somebody is working — so age alone must never authorize a reap:
+
+- **The worktree behind it has gone quiet.** This is the real signal. Each worktree's `.port-offset` file says which project name it owns — the same scan `worktree-provision.ts` runs to refuse an offset another worktree holds — so an offset that no `.claude/worktrees/*` directory claims, or whose directory has not been touched in **30 minutes**, has nothing live behind it. Thirty minutes, read the same three ways (worktree directory, its git dir, that dir's index), is `worktree-prune.ts`'s own measure of "nobody is standing here", written because a session that has just landed its PR sits in a finished worktree for as long as it takes to write a summary. Only the quiet test is borrowed, not the bar: prune removes a directory only when it is quiet *and* clean *and* merged, because deleting a worktree can destroy unlanded work. Nothing here can — a reaped stack is a database the next `up -d` rebuilds, holding fixtures — which is why quiet plus the age check below is the whole bar. Both readers fail closed: a worktree that is there but whose timestamps cannot be read counts as touched, and only a directory that is *gone* answers "nothing live".
+- **The stack itself is older than 15 minutes.** The weaker of the two, and there only to cover a stack brought up seconds ago inside a worktree whose files happen not to have been touched since — comfortably longer than `compose up -d` plus the migrate (≤90s) and `go build` (≤120s) steps that follow it.
+
+Two things it deliberately does not do. It never touches the main checkout's own unsuffixed `doula-cloud-e2e` project: offset 0 has no `.port-offset` file to go quiet, it is where a long interactive `dev:full` runs, and it is the one place a person is standing when they would notice their own database vanish. And it does not treat the stack's host BFF being up as proof of life — `startAPI` spawns it `detached` and `unref`s it, so an orphaned stack's BFF is still listening on its port, which would make every orphan look alive and this hook a no-op.
+
+It fails open on every error path, for the same reason `testdb-reap.ts` does, and one project's teardown failing never stops the others. The manual escape hatch, for a project name `podman ps` shows:
+
+```sh
+podman compose -p doula-cloud-e2e-<offset> -f app/compose.e2e.yaml down -v
 ```
 
 ## `api/`: migrations via goose
