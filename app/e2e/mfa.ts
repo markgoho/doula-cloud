@@ -13,6 +13,25 @@ import { signIn } from './auth';
 // gate in api/internal/staffauth/middleware.go reads exactly that claim,
 // off the session row, and does not care which provider produced it.
 //
+// #1132 re-ran that check rather than inheriting it, across
+// firebase-tools 15.27.0 (vendored here), 15.28.1 (pinned at the repo
+// root) and 15.30.0 (the newest published release as of 2026-09-10):
+// `totp` appears in exactly one file under lib/emulator/auth/ in all
+// three -- apiSpec.js, the generated OpenAPI schema -- and in none of
+// operations.js, state.js, handlers.js, server.js or errors.js. The
+// emulator's own words, so nobody has to derive them again:
+// mfaEnrollment:start with `totpEnrollmentInfo` answers
+// `400 INVALID_ARGUMENT : ((Missing phoneEnrollmentInfo.))`, and
+// accounts:update with `mfa.enrollments[].totpInfo` answers
+// `400 INVALID_MFA_PHONE_NUMBER : Invalid format.`
+//
+// A spec that needs a *screen* to meet TOTP -- the sign-in challenge,
+// enrollment, or the step-up in front of an Owner vouch -- uses
+// totpStub.ts instead of this file, which relabels the emulator's own
+// second factor at the browser's network boundary. Its header says what
+// stays faked. This file remains the way to get a session carrying the
+// claim without a browser at all.
+//
 // MFA itself needs no enabling here: AgentProjectState.mfaConfig in
 // firebase-tools' emulator/auth/state.js is hardcoded to
 // `{state: "ENABLED", enabledProviders: ["PHONE_SMS"]}` for the default

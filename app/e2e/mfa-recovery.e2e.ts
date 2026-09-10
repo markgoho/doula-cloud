@@ -4,6 +4,7 @@ import { MAILBOX_URL, WORKER_SECRET, readStaffInviteToken } from './stack';
 import { signIn } from './auth';
 import { enrollSecondFactor, enterPracticeAsEnrolled, verifyEmail } from './mfa';
 import { seedFoundingOwner } from './staffSignup';
+import { STUB_TOTP_CODE, stubTotpFactor } from './totpStub';
 
 const API_URL = `http://${E2E_API_HOST}:${E2E_API_PORT}`;
 
@@ -12,25 +13,19 @@ const API_URL = `http://${E2E_API_HOST}:${E2E_API_PORT}`;
  * (#694): an Owner vouching for a doula whose phone is gone, and that
  * doula spending the code the Owner reads out to her.
  *
- * ## The two steps this spec cannot walk in the browser, and why
+ * ## The one step this spec cannot walk in the browser, and why
  *
- * Both are emulator gaps, named here rather than quietly worked around.
- *
- * **The step-up re-authentication is TOTP.** The Firebase Auth emulator
- * implements MFA for PHONE_SMS only -- e2e/mfa.ts's own header comment
- * records this at length -- so an Owner signing in through any of this
- * product's screens against the emulator is challenged for a factor the
- * product's TOTP-only UI cannot resolve. That is why every spec in this
- * suite injects the Owner's session cookie rather than walking /login,
- * and it is why the vouch POST here is sent with a freshly minted
- * emulator token instead of by pressing "Send the code" -- with the same
- * two credentials that button sends, so the request shape is still what
- * is under test.
- * [#1132](https://github.com/markgoho/doula-cloud/issues/1132) is the
- * ticket for closing this one.
- *
- * **A successful spend cannot complete.** See the second block comment
+ * **A successful spend cannot complete.** It is an emulator gap, named
+ * here rather than quietly worked around -- see the second block comment
  * below, and [#1128](https://github.com/markgoho/doula-cloud/issues/1128).
+ *
+ * The Owner's step-up re-authentication used to be a second such gap:
+ * the emulator implements MFA for PHONE_SMS only, so the vouch POST was
+ * sent by hand with a freshly minted emulator token rather than by
+ * pressing "Send the code". #1132 closed that. e2e/totpStub.ts relabels
+ * the emulator's own second factor at the browser's network boundary, so
+ * the button is pressed here and the whole step-up -- password, code
+ * field, and the token it hands the vouch -- is the product's own.
  *
  * What is walked in the browser is everything the screens themselves own:
  * the Owner reaching the vouch screen from the roster and being told
@@ -52,6 +47,7 @@ test('An Owner vouches for a locked-out doula, and the code reaches her and nobo
 	// Fixture setup, not the seam under test (#207).
 	const {
 		email: ownerEmail,
+		password: ownerPassword,
 		idToken: ownerIdToken,
 		localId: ownerUID,
 		practiceId
@@ -62,6 +58,11 @@ test('An Owner vouches for a locked-out doula, and the code reaches her and nobo
 
 	await verifyEmail(request, ownerUID);
 	const ownerHeaders = await signIn(request, API_URL, await enrollSecondFactor(request, ownerIdToken));
+
+	// #1132: what lets the step-up below be pressed through rather than
+	// posted by hand. Installed before the first navigation, since the
+	// screens it stands behind can be reached from any of them.
+	await stubTotpFactor(page, request);
 	await enterPracticeAsEnrolled(context, page, ownerHeaders, practiceId);
 
 	// A second Staff member to vouch *for*: the roster action does not
@@ -88,19 +89,16 @@ test('An Owner vouches for a locked-out doula, and the code reaches her and nobo
 
 	await page.getByRole('button', { name: 'Send a recovery code' }).click();
 	await expect(page.getByText(`The code comes to you, at ${ownerEmail}.`)).toBeVisible();
-	// The step-up itself is a real screen, which is the AC. Pressing
-	// through it is what the emulator cannot do -- see the header comment.
-	await expect(page.getByLabel('Password')).toBeVisible();
+	// The step-up is a real screen and is now pressed through as such:
+	// her password, then the code her authenticator app shows, then the
+	// same button again. The token the vouch travels on is the one that
+	// step-up mints, not one this spec minted for it.
+	await page.getByLabel('Password').fill(ownerPassword);
+	await page.getByRole('button', { name: 'Send the code' }).click();
+	await page.getByLabel('Authenticator app code').fill(STUB_TOTP_CODE);
+	await page.getByRole('button', { name: 'Send the code' }).click();
 
-	// The same request that button sends, with the same two credentials
-	// the endpoint refuses without: a step-up token minted seconds ago,
-	// and the confirmation header.
-	const stepUpToken = await enrollSecondFactor(request, ownerIdToken);
-	const vouch = await request.post(
-		`${API_URL}/api/practices/${practiceId}/staff/${doulaStaffId}/mfa-recovery/vouch`,
-		{ headers: { ...ownerHeaders, Authorization: `Bearer ${stepUpToken}`, 'X-Confirmed': 'true' } }
-	);
-	expect(vouch.ok(), `vouch failed: ${vouch.status()} ${await vouch.text()}`).toBe(true);
+	await expect(page.getByText(`We've sent a recovery code to ${ownerEmail}.`)).toBeVisible();
 
 	// Nothing fires by itself locally (#762): deployed this is reached by
 	// ADR-0013's nudge and by process-outbox-drain (#481).
