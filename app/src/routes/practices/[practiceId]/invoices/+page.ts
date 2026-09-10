@@ -1,6 +1,7 @@
 import { error, redirect } from '@sveltejs/kit';
 import { resolve } from '$app/paths';
 import { apiFetch, apiErrorMessage } from '#lib/api.js';
+import { refuseRead } from '#lib/errorPage.js';
 import { practiceInvoicesPath, type PracticeInvoiceListData } from '#lib/invoice.js';
 import type { PageLoad } from './$types';
 
@@ -29,7 +30,7 @@ export const load: PageLoad = async ({
 	if (response.status === 401) {
 		redirect(303, `${resolve('/(signed-out)/login')}?sessionEnded=true`);
 	} else if (response.status === 403) {
-		error(403, 'not permitted to read this');
+		await refuseRead(response);
 	} else if (!response.ok) {
 		error(response.status, await apiErrorMessage(response));
 	}

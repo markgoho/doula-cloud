@@ -30,6 +30,27 @@ describe('ErrorPage.svelte', () => {
 		await expect.element(page.getByText('Trying again will not change that.')).toBeVisible();
 	});
 
+	it('renders distinct copy for a locked Practice, naming who can undo it rather than blaming a role', async () => {
+		await setup({ kind: 'practiceLocked' });
+
+		await expect.element(page.getByRole('heading', { name: 'This Practice is locked' })).toBeVisible();
+		await expect.element(page.getByText('A Practice Owner can restore it')).toBeVisible();
+	});
+
+	// The one refusal state whose reader can act, so it is the one that
+	// must not end by saying trying again is pointless (#918).
+	it('renders distinct copy for a second-factor refusal, and names the step instead of saying trying again will not help', async () => {
+		await setup({ kind: 'secondFactor' });
+
+		await expect
+			.element(page.getByRole('heading', { name: 'Set up a second sign-in factor' }))
+			.toBeVisible();
+		await expect.element(page.getByText('then try this page again')).toBeVisible();
+		await expect
+			.element(page.getByText('Trying again will not change that.'))
+			.not.toBeInTheDocument();
+	});
+
 	it('renders distinct copy for an unavailable page, and says trying again will help', async () => {
 		await setup({ kind: 'unavailable' });
 

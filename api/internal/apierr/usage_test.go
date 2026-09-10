@@ -85,7 +85,7 @@ func TestNoDirectHTTPError(t *testing.T) {
 // apierrtest calls http.Error, so exempting it there would widen a
 // guardrail #811 has no reason to widen.
 func isJSONEnvelopePackage(rel string) bool {
-	for _, pkg := range []string{"apierr", "apierrtest"} {
+	for _, pkg := range []string{apierrPackage, apierrPackage + "test"} {
 		if strings.HasPrefix(rel, filepath.Join("internal", pkg)+string(filepath.Separator)) {
 			return true
 		}

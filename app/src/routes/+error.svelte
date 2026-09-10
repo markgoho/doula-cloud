@@ -22,7 +22,7 @@
 <SignedOutTopBar />
 <main id="main" tabindex="-1">
 	<ErrorPage
-		kind={errorKindForStatus(page.status)}
+		kind={errorKindForStatus(page.status, page.error?.code)}
 		wayOutHref={resolve('/(signed-out)/login')}
 		wayOutLabel="Log in"
 	/>

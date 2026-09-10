@@ -14,7 +14,7 @@
 </script>
 
 <ErrorPage
-	kind={errorKindForStatus(page.status)}
+	kind={errorKindForStatus(page.status, page.error?.code)}
 	wayOutHref={resolve('/practices/[practiceId]', { practiceId })}
 	wayOutLabel="Go to your Practice overview"
 />
