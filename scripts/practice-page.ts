@@ -44,12 +44,12 @@ export interface PracticePage {
  * and a Practice asked to write her own would be asked to write ours.
  */
 export const PRIVACY_STATEMENT = [
-  "This page is published by Doula Cloud on behalf of the practice named above.",
+  'This page is published by Doula Cloud on behalf of the practice named above.',
   "Doula Cloud provides the software the practice uses to run its business, and stores the practice's records on its behalf.",
-  "If you are a client of this practice, the practice decides what it records about you and how long it keeps it; write to the practice at the address above to ask what it holds or to ask it to correct something.",
-  "Doula Cloud does not sell any of it, and does not use it to advertise to you.",
-  "Payments are processed by Stripe, which handles your card details directly; Doula Cloud never sees or stores a card number.",
-].join(" ");
+  'If you are a client of this practice, the practice decides what it records about you and how long it keeps it; write to the practice at the address above to ask what it holds or to ask it to correct something.',
+  'Doula Cloud does not sell any of it, and does not use it to advertise to you.',
+  'Payments are processed by Stripe, which handles your card details directly; Doula Cloud never sees or stores a card number.',
+].join(' ');
 
 /**
  * The directory a page is written to, relative to the Hugo content root.
@@ -83,7 +83,7 @@ export function renderPage(page: PracticePage): string {
   const frontMatter = {
     title: page.name,
     // The layout selects on this; nothing else in the site is type "p".
-    type: "p",
+    type: 'p',
     url: `/p/${page.slug}/`,
     // Hugo's `date` drives the sitemap's lastmod, which is the honest
     // thing for a page that changes when she republishes it.
@@ -114,5 +114,5 @@ export function renderPage(page: PracticePage): string {
  * sitemap entries.
  */
 export function renderSectionIndex(): string {
-  return `${JSON.stringify({ title: "Practices", build: { render: "never", list: "never" } }, null, 2)}\n`;
+  return `${JSON.stringify({ title: 'Practices', build: { render: 'never', list: 'never' } }, null, 2)}\n`;
 }

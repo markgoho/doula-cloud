@@ -26,35 +26,40 @@
  * whose own committed copy is the one that should run.
  */
 
-import { describe, expect, test } from "bun:test";
-import { execFile } from "node:child_process";
-import { readFile, stat } from "node:fs/promises";
-import path from "node:path";
-import { promisify } from "node:util";
+import { describe, expect, test } from 'bun:test';
+import { execFile } from 'node:child_process';
+import { readFile, stat } from 'node:fs/promises';
+import path from 'node:path';
+import { promisify } from 'node:util';
 
 const run = promisify(execFile);
 
 interface HookEntry {
-	type?: string;
-	command?: string;
+  type?: string;
+  command?: string;
 }
 interface HookMatcher {
-	hooks?: HookEntry[];
+  hooks?: HookEntry[];
 }
 
-const REPO_ROOT = path.resolve(import.meta.dir, "..");
+const REPO_ROOT = path.resolve(import.meta.dir, '..');
 
-async function registeredCommands(): Promise<{ event: string; command: string }[]> {
-	const raw = await readFile(path.join(REPO_ROOT, ".claude", "settings.json"), "utf8");
-	const settings = JSON.parse(raw) as { hooks?: Record<string, HookMatcher[]> };
-	return Object.entries(settings.hooks ?? {}).flatMap(([event, matchers]) =>
-		matchers.flatMap((matcher) =>
-			(matcher.hooks ?? [])
-				.map((hook) => hook.command)
-				.filter((command): command is string => typeof command === "string")
-				.map((command) => ({ event, command }))
-		)
-	);
+async function registeredCommands(): Promise<
+  { event: string; command: string }[]
+> {
+  const raw = await readFile(
+    path.join(REPO_ROOT, '.claude', 'settings.json'),
+    'utf8'
+  );
+  const settings = JSON.parse(raw) as { hooks?: Record<string, HookMatcher[]> };
+  return Object.entries(settings.hooks ?? {}).flatMap(([event, matchers]) =>
+    matchers.flatMap((matcher) =>
+      (matcher.hooks ?? [])
+        .map((hook) => hook.command)
+        .filter((command): command is string => typeof command === 'string')
+        .map((command) => ({ event, command }))
+    )
+  );
 }
 
 /**
@@ -62,75 +67,77 @@ async function registeredCommands(): Promise<{ event: string; command: string }[
  * resolve to a file. Everything else is the runner and its flags.
  */
 function scriptExpression(command: string): string | undefined {
-	return /"([^"]*\.claude\/hooks\/[^"]*)"/.exec(command)?.[1];
+  return /"([^"]*\.claude\/hooks\/[^"]*)"/.exec(command)?.[1];
 }
 
-describe("hook registration", () => {
-	test("at least one hook is registered", async () => {
-		expect((await registeredCommands()).length).toBeGreaterThan(0);
-	});
+describe('hook registration', () => {
+  test('at least one hook is registered', async () => {
+    expect((await registeredCommands()).length).toBeGreaterThan(0);
+  });
 
-	test("every hook command names its script inside .claude/hooks", async () => {
-		const missing = (await registeredCommands())
-			.filter(({ command }) => scriptExpression(command) === undefined)
-			.map(({ event, command }) => `${event}: ${command}`);
-		expect(missing).toEqual([]);
-	});
+  test('every hook command names its script inside .claude/hooks', async () => {
+    const missing = (await registeredCommands())
+      .filter(({ command }) => scriptExpression(command) === undefined)
+      .map(({ event, command }) => `${event}: ${command}`);
+    expect(missing).toEqual([]);
+  });
 
-	test("no hook command uses a path relative to the working directory", async () => {
-		const relative = (await registeredCommands())
-			.filter(({ command }) => /(^|\s)(bun|bash|sh|node)\s+\.claude\//.test(command))
-			.map(({ event, command }) => `${event}: ${command}`);
-		expect(relative).toEqual([]);
-	});
+  test('no hook command uses a path relative to the working directory', async () => {
+    const relative = (await registeredCommands())
+      .filter(({ command }) =>
+        /(^|\s)(bun|bash|sh|node)\s+\.claude\//.test(command)
+      )
+      .map(({ event, command }) => `${event}: ${command}`);
+    expect(relative).toEqual([]);
+  });
 
-	/*
-	 * The real assertion, and the one that would have caught this: resolve
-	 * each command's path expression in a shell whose cwd is `app/` -- the
-	 * directory the failure was recorded in -- and require a file there.
-	 * `sh -c` is what the runtime itself spawns for a command with no
-	 * `args` key, so the expansion under test is the one that ships.
-	 */
-	test("every hook script resolves from app/, not just from the repo root", async () => {
-		const commands = await registeredCommands();
-		const unresolved: string[] = [];
+  /*
+   * The real assertion, and the one that would have caught this: resolve
+   * each command's path expression in a shell whose cwd is `app/` -- the
+   * directory the failure was recorded in -- and require a file there.
+   * `sh -c` is what the runtime itself spawns for a command with no
+   * `args` key, so the expansion under test is the one that ships.
+   */
+  test('every hook script resolves from app/, not just from the repo root', async () => {
+    const commands = await registeredCommands();
+    const unresolved: string[] = [];
 
-		for (const { event, command } of commands) {
-			const expression = scriptExpression(command);
-			if (expression === undefined) continue;
-			const { stdout } = await run("sh", ["-c", `printf %s "${expression}"`], {
-				cwd: path.join(REPO_ROOT, "app")
-			});
-			const resolved = stdout.trim();
-			if (!path.isAbsolute(resolved)) {
-				unresolved.push(`${event}: resolved to a relative path -- ${resolved}`);
-				continue;
-			}
-			const found = await stat(resolved).then(
-				(entry) => entry.isFile(),
-				() => false
-			);
-			if (!found) unresolved.push(`${event}: no file at ${resolved}`);
-		}
+    for (const { event, command } of commands) {
+      const expression = scriptExpression(command);
+      if (expression === undefined) continue;
+      const { stdout } = await run('sh', ['-c', `printf %s "${expression}"`], {
+        cwd: path.join(REPO_ROOT, 'app'),
+      });
+      const resolved = stdout.trim();
+      if (!path.isAbsolute(resolved)) {
+        unresolved.push(`${event}: resolved to a relative path -- ${resolved}`);
+        continue;
+      }
+      const found = await stat(resolved).then(
+        (entry) => entry.isFile(),
+        () => false
+      );
+      if (!found) unresolved.push(`${event}: no file at ${resolved}`);
+    }
 
-		expect(unresolved).toEqual([]);
-	});
+    expect(unresolved).toEqual([]);
+  });
 
-	/*
-	 * Resolution has to name THIS checkout. Every worktree carries its own
-	 * committed copy of every hook file, so a hook that resolved to the
-	 * main checkout would run main's code against a worktree session --
-	 * the inversion #555 recorded, where the edit gate blocked edits
-	 * inside worktrees and allowed them in main.
-	 */
-	test("resolution follows the checkout the command runs in", async () => {
-		const commands = await registeredCommands();
-		const expression = scriptExpression(commands[0]!.command);
-		expect(expression).toBeDefined();
+  /*
+   * Resolution has to name THIS checkout. Every worktree carries its own
+   * committed copy of every hook file, so a hook that resolved to the
+   * main checkout would run main's code against a worktree session --
+   * the inversion #555 recorded, where the edit gate blocked edits
+   * inside worktrees and allowed them in main.
+   */
+  test('resolution follows the checkout the command runs in', async () => {
+    const commands = await registeredCommands();
+    const expression = scriptExpression(commands[0]!.command);
+    expect(expression).toBeDefined();
 
-		const { stdout } = await run("sh", ["-c", `printf %s "${expression}"`], {
-			cwd: path.join(REPO_ROOT, "app")
-		});
-		expect(stdout.trim().startsWith(REPO_ROOT + path.sep)).toBe(true);
-	});
+    const { stdout } = await run('sh', ['-c', `printf %s "${expression}"`], {
+      cwd: path.join(REPO_ROOT, 'app'),
+    });
+    expect(stdout.trim().startsWith(REPO_ROOT + path.sep)).toBe(true);
+  });
 });

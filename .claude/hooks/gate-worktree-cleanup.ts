@@ -23,14 +23,16 @@ import os from 'node:os';
 import path from 'node:path';
 
 function git(args: string[], cwd: string): string {
-	return execFileSync('git', ['-C', cwd, ...args], {
-		encoding: 'utf8',
-		stdio: ['ignore', 'pipe', 'ignore']
-	}).trim();
+  return execFileSync('git', ['-C', cwd, ...args], {
+    encoding: 'utf8',
+    stdio: ['ignore', 'pipe', 'ignore'],
+  }).trim();
 }
 
 function inWorktree(cwd: string): boolean {
-	return path.resolve(cwd).includes(`${path.sep}.claude${path.sep}worktrees${path.sep}`);
+  return path
+    .resolve(cwd)
+    .includes(`${path.sep}.claude${path.sep}worktrees${path.sep}`);
 }
 
 /*
@@ -45,81 +47,86 @@ function inWorktree(cwd: string): boolean {
  * `SessionStart` pruner cleans up afterwards anyway.
  */
 function alreadyNudged(sessionId: string, branch: string): boolean {
-	const sentinel = path.join(
-		os.tmpdir(),
-		`claude-worktree-cleanup-${sessionId.replaceAll(/[^\w-]/g, '')}-${branch.replaceAll(/[^\w-]/g, '')}`
-	);
-	if (fs.existsSync(sentinel)) return true;
-	try {
-		fs.writeFileSync(sentinel, '');
-	} catch {
-		// cannot write a sentinel -- better to stay silent than to loop
-		return true;
-	}
-	return false;
+  const sentinel = path.join(
+    os.tmpdir(),
+    `claude-worktree-cleanup-${sessionId.replaceAll(/[^\w-]/g, '')}-${branch.replaceAll(/[^\w-]/g, '')}`
+  );
+  if (fs.existsSync(sentinel)) return true;
+  try {
+    fs.writeFileSync(sentinel, '');
+  } catch {
+    // cannot write a sentinel -- better to stay silent than to loop
+    return true;
+  }
+  return false;
 }
 
 function main(): void {
-	const cwd = process.cwd();
-	if (!inWorktree(cwd)) return;
+  const cwd = process.cwd();
+  if (!inWorktree(cwd)) return;
 
-	let sessionId = 'unknown';
-	try {
-		const input = fs.readFileSync(0, 'utf8');
-		sessionId = (JSON.parse(input) as { session_id?: string }).session_id ?? 'unknown';
-	} catch {
-		// no stdin payload -- the sentinel still bounds this to one nudge
-	}
+  let sessionId = 'unknown';
+  try {
+    const input = fs.readFileSync(0, 'utf8');
+    sessionId =
+      (JSON.parse(input) as { session_id?: string }).session_id ?? 'unknown';
+  } catch {
+    // no stdin payload -- the sentinel still bounds this to one nudge
+  }
 
-	let branch: string;
-	try {
-		if (git(['status', '--porcelain'], cwd).length > 0) return;
-		branch = git(['rev-parse', '--abbrev-ref', 'HEAD'], cwd);
-	} catch {
-		return; // not a worktree we can read -- say nothing
-	}
-	if (!branch || branch === 'HEAD' || branch === 'trunk') return;
+  let branch: string;
+  try {
+    if (git(['status', '--porcelain'], cwd).length > 0) return;
+    branch = git(['rev-parse', '--abbrev-ref', 'HEAD'], cwd);
+  } catch {
+    return; // not a worktree we can read -- say nothing
+  }
+  if (!branch || branch === 'HEAD' || branch === 'trunk') return;
 
-	/*
-	 * `gh pr view <branch>` resolves by branch NAME, and a name outlives
-	 * the branch that carried it. Reuse one -- start fresh work on
-	 * `fix/545-...` after that PR merged -- and the old, merged PR answers
-	 * for the new branch. Requiring the PR's head commit to be the one
-	 * checked out here settles it: the same name on a different commit is
-	 * different work, and a follow-up commit pushed on top of a merged
-	 * branch means this worktree has not finished either.
-	 */
-	let merged: { state: string; headRefOid: string };
-	try {
-		const raw = execFileSync('gh', ['pr', 'view', branch, '--json', 'state,headRefOid'], {
-			cwd,
-			encoding: 'utf8',
-			stdio: ['ignore', 'pipe', 'ignore']
-		});
-		merged = JSON.parse(raw) as { state: string; headRefOid: string };
-	} catch {
-		return; // no PR, or gh unreachable -- not this hook's business
-	}
-	if (merged.state !== 'MERGED') return;
-	try {
-		if (git(['rev-parse', 'HEAD'], cwd) !== merged.headRefOid) return;
-	} catch {
-		return;
-	}
-	if (alreadyNudged(sessionId, branch)) return;
+  /*
+   * `gh pr view <branch>` resolves by branch NAME, and a name outlives
+   * the branch that carried it. Reuse one -- start fresh work on
+   * `fix/545-...` after that PR merged -- and the old, merged PR answers
+   * for the new branch. Requiring the PR's head commit to be the one
+   * checked out here settles it: the same name on a different commit is
+   * different work, and a follow-up commit pushed on top of a merged
+   * branch means this worktree has not finished either.
+   */
+  let merged: { state: string; headRefOid: string };
+  try {
+    const raw = execFileSync(
+      'gh',
+      ['pr', 'view', branch, '--json', 'state,headRefOid'],
+      {
+        cwd,
+        encoding: 'utf8',
+        stdio: ['ignore', 'pipe', 'ignore'],
+      }
+    );
+    merged = JSON.parse(raw) as { state: string; headRefOid: string };
+  } catch {
+    return; // no PR, or gh unreachable -- not this hook's business
+  }
+  if (merged.state !== 'MERGED') return;
+  try {
+    if (git(['rev-parse', 'HEAD'], cwd) !== merged.headRefOid) return;
+  } catch {
+    return;
+  }
+  if (alreadyNudged(sessionId, branch)) return;
 
-	console.log(
-		JSON.stringify({
-			decision: 'block',
-			reason:
-				`The PR for \`${branch}\` is MERGED and this worktree is clean, but the session is still ` +
-				`standing in it. Call ExitWorktree with action "remove" to delete the worktree and its ` +
-				`branch and return to the main checkout. Use action "keep" instead -- and say why -- if ` +
-				`the worktree still has a job: a follow-up commit on this same branch, or a stack whose ` +
-				`upper layer is still open while this merged layer is checked out. This is said once ` +
-				`per session; ignoring it is safe, the SessionStart pruner clears it later.`
-		})
-	);
+  console.log(
+    JSON.stringify({
+      decision: 'block',
+      reason:
+        `The PR for \`${branch}\` is MERGED and this worktree is clean, but the session is still ` +
+        `standing in it. Call ExitWorktree with action "remove" to delete the worktree and its ` +
+        `branch and return to the main checkout. Use action "keep" instead -- and say why -- if ` +
+        `the worktree still has a job: a follow-up commit on this same branch, or a stack whose ` +
+        `upper layer is still open while this merged layer is checked out. This is said once ` +
+        `per session; ignoring it is safe, the SessionStart pruner clears it later.`,
+    })
+  );
 }
 
 main();

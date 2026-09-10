@@ -33,23 +33,20 @@
  * which should silently publish a stale or empty set of pages.
  */
 
-import { mkdir, rm, writeFile } from "node:fs/promises";
-import path from "node:path";
-import { SQL } from "bun";
+import { mkdir, rm, writeFile } from 'node:fs/promises';
+import path from 'node:path';
+import { SQL } from 'bun';
 import {
   type PracticePage,
   pageDirectory,
   renderPage,
   renderSectionIndex,
-} from "./practice-page";
+} from './practice-page';
 
-const CONTENT_ROOT = path.resolve(
-  import.meta.dirname,
-  "../hugo/content",
-);
+const CONTENT_ROOT = path.resolve(import.meta.dirname, '../hugo/content');
 
 /** The whole generated tree. Rebuilt from the database on every run. */
-const PAGES_ROOT = path.join(CONTENT_ROOT, "p");
+const PAGES_ROOT = path.join(CONTENT_ROOT, 'p');
 
 /**
  * The published pages, and the Owner each one names as its contact.
@@ -119,11 +116,17 @@ interface PublishedRow {
  * a page missing one is a page that fails the review it exists to pass.
  */
 export function toPage(row: PublishedRow): PracticePage {
-  const missing = (["service_description", "cancellation_policy", "support_name", "support_email"] as const)
-    .filter((field) => !row[field]);
+  const missing = (
+    [
+      'service_description',
+      'cancellation_policy',
+      'support_name',
+      'support_email',
+    ] as const
+  ).filter((field) => !row[field]);
   if (missing.length > 0) {
     throw new Error(
-      `practice page ${row.slug} is missing ${missing.join(", ")}; refusing to publish an incomplete page`,
+      `practice page ${row.slug} is missing ${missing.join(', ')}; refusing to publish an incomplete page`
     );
   }
   return {
@@ -138,7 +141,9 @@ export function toPage(row: PublishedRow): PracticePage {
 }
 
 /** Reads every published page, as the site_builder role and nothing more. */
-async function readPublishedPages(databaseUrl: string): Promise<PracticePage[]> {
+async function readPublishedPages(
+  databaseUrl: string
+): Promise<PracticePage[]> {
   const sql = new SQL({ url: databaseUrl, max: 1 });
   try {
     // SET ROLE inside a transaction, which pins one connection, so the
@@ -165,21 +170,24 @@ async function readPublishedPages(databaseUrl: string): Promise<PracticePage[]> 
  * has been patched toward it. The directory is generated output and is
  * gitignored, so there is nothing here for the removal to lose.
  */
-export async function writePages(pages: PracticePage[], root = PAGES_ROOT): Promise<void> {
+export async function writePages(
+  pages: PracticePage[],
+  root = PAGES_ROOT
+): Promise<void> {
   await rm(root, { recursive: true, force: true });
   await mkdir(root, { recursive: true });
-  await writeFile(path.join(root, "_index.md"), renderSectionIndex(), "utf8");
+  await writeFile(path.join(root, '_index.md'), renderSectionIndex(), 'utf8');
   for (const page of pages) {
     const dir = path.join(path.dirname(root), pageDirectory(page.slug));
     await mkdir(dir, { recursive: true });
-    await writeFile(path.join(dir, "index.md"), renderPage(page), "utf8");
+    await writeFile(path.join(dir, 'index.md'), renderPage(page), 'utf8');
   }
 }
 
 async function main(): Promise<void> {
-  if (process.env.SYNC_PRACTICE_PAGES !== "required") {
+  if (process.env.SYNC_PRACTICE_PAGES !== 'required') {
     console.log(
-      "sync-practice-pages: SYNC_PRACTICE_PAGES is not 'required'; leaving hugo/content/p alone.",
+      "sync-practice-pages: SYNC_PRACTICE_PAGES is not 'required'; leaving hugo/content/p alone."
     );
     return;
   }
@@ -187,20 +195,22 @@ async function main(): Promise<void> {
   const databaseUrl = process.env.DATABASE_URL;
   if (!databaseUrl) {
     throw new Error(
-      "SYNC_PRACTICE_PAGES=required but DATABASE_URL is unset; refusing to build a site with no Practice pages in it",
+      'SYNC_PRACTICE_PAGES=required but DATABASE_URL is unset; refusing to build a site with no Practice pages in it'
     );
   }
 
   const pages = await readPublishedPages(databaseUrl);
   await writePages(pages);
-  console.log(`sync-practice-pages: wrote ${pages.length} published Practice page(s).`);
+  console.log(
+    `sync-practice-pages: wrote ${pages.length} published Practice page(s).`
+  );
 }
 
 // Only when run as a program. Importing this file from a test must not
 // open a database connection.
 if (import.meta.main) {
   main().catch((error: unknown) => {
-    console.error("sync-practice-pages:", error);
+    console.error('sync-practice-pages:', error);
     process.exit(1);
   });
 }

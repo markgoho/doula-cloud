@@ -33,7 +33,7 @@ export type PenDocument = {
 };
 
 /** The command that regenerates this file, named in every failure that finds it stale. */
-export const EXPORT_COMMAND = "bun run design:export";
+export const EXPORT_COMMAND = 'bun run design:export';
 
 /**
  * Properties that describe a node's own identity or structure rather
@@ -42,16 +42,16 @@ export const EXPORT_COMMAND = "bun run design:export";
  * also a bare string.
  */
 const STRUCTURAL_KEYS = new Set([
-  "type",
-  "id",
-  "name",
-  "reusable",
-  "children",
-  "ref",
-  "descendants",
-  "theme",
-  "icon",
-  "library",
+  'type',
+  'id',
+  'name',
+  'reusable',
+  'children',
+  'ref',
+  'descendants',
+  'theme',
+  'icon',
+  'library',
 ]);
 
 /** Every id in the document, mapped to its own node, regardless of nesting depth. */
@@ -68,8 +68,8 @@ function buildIndex(document: PenDocument): Map<string, PenNode> {
 /** A node's own name, or its type plus id when it has none to diff against. */
 function label(node: PenNode): string {
   if (node.name) return node.name;
-  if (node.id) return `${node.type ?? "node"} (${node.id})`;
-  return node.type ?? "node";
+  if (node.id) return `${node.type ?? 'node'} (${node.id})`;
+  return node.type ?? 'node';
 }
 
 /**
@@ -85,11 +85,11 @@ function tokenRefs(node: PenNode): [string, string][] {
   const refs: [string, string][] = [];
   for (const [key, value] of Object.entries(node)) {
     if (STRUCTURAL_KEYS.has(key)) continue;
-    if (typeof value === "string" && value.startsWith("$")) {
+    if (typeof value === 'string' && value.startsWith('$')) {
       refs.push([key, value]);
-    } else if (value && typeof value === "object" && !Array.isArray(value)) {
+    } else if (value && typeof value === 'object' && !Array.isArray(value)) {
       for (const [subKey, subValue] of Object.entries(value)) {
-        if (typeof subValue === "string" && subValue.startsWith("$")) {
+        if (typeof subValue === 'string' && subValue.startsWith('$')) {
           refs.push([`${key}.${subKey}`, subValue]);
         }
       }
@@ -100,7 +100,10 @@ function tokenRefs(node: PenNode): [string, string][] {
 
 /** An override's value, safe against an object value that would otherwise print `[object Object]`. */
 function formatOverrideValue(value: unknown): string {
-  if (typeof value === "string" || (value !== null && typeof value === "object")) {
+  if (
+    typeof value === 'string' ||
+    (value !== null && typeof value === 'object')
+  ) {
     return JSON.stringify(value);
   }
   return String(value);
@@ -110,18 +113,24 @@ function formatOverrideValue(value: unknown): string {
 function formatTheme(theme: Record<string, string>): string {
   return Object.entries(theme)
     .map(([axis, value]) => `${axis}=${value}`)
-    .join(", ");
+    .join(', ');
 }
 
 /** One line per descendant override, the target resolved to its own name and type. */
-function renderDescendants(node: PenNode, index: Map<string, PenNode>, indent: string): string[] {
+function renderDescendants(
+  node: PenNode,
+  index: Map<string, PenNode>,
+  indent: string
+): string[] {
   const lines: string[] = [];
   for (const [targetId, overrides] of Object.entries(node.descendants ?? {})) {
     const target = index.get(targetId);
-    const targetLabel = target ? `${label(target)} (${target.type ?? "node"})` : targetId;
+    const targetLabel = target
+      ? `${label(target)} (${target.type ?? 'node'})`
+      : targetId;
     const overrideText = Object.entries(overrides)
       .map(([prop, value]) => `${prop}: ${formatOverrideValue(value)}`)
-      .join("; ");
+      .join('; ');
     lines.push(`${indent}- override ${targetLabel}: ${overrideText}`);
   }
   return lines;
@@ -129,57 +138,62 @@ function renderDescendants(node: PenNode, index: Map<string, PenNode>, indent: s
 
 function renderTokenSuffix(node: PenNode): string {
   const refs = tokenRefs(node);
-  if (refs.length === 0) return "";
-  return ` [${refs.map(([key, value]) => `${key}: ${value}`).join("; ")}]`;
+  if (refs.length === 0) return '';
+  return ` [${refs.map(([key, value]) => `${key}: ${value}`).join('; ')}]`;
 }
 
 /** " (hidden)" for a node disabled by default -- present in the tree, absent on screen. */
 function renderHiddenSuffix(node: PenNode): string {
-  return node.enabled === false ? " (hidden)" : "";
+  return node.enabled === false ? ' (hidden)' : '';
 }
 
 /** " (theme: size=sm)" for an instance or a component master pinned to a theme axis. */
 function renderThemeSuffix(node: PenNode): string {
-  return node.theme ? ` (theme: ${formatTheme(node.theme)})` : "";
+  return node.theme ? ` (theme: ${formatTheme(node.theme)})` : '';
 }
 
 /** One node, and (except across a `ref`) its children, as an indented bullet list. */
-function renderNode(node: PenNode, index: Map<string, PenNode>, depth: number): string[] {
-  const indent = "  ".repeat(depth);
+function renderNode(
+  node: PenNode,
+  index: Map<string, PenNode>,
+  depth: number
+): string[] {
+  const indent = '  '.repeat(depth);
   const lines: string[] = [];
 
   switch (node.type) {
-    case "text": {
+    case 'text': {
       lines.push(
-        `${indent}- text: ${JSON.stringify(node.content ?? "")}${renderHiddenSuffix(node)}${renderTokenSuffix(node)}`,
+        `${indent}- text: ${JSON.stringify(node.content ?? '')}${renderHiddenSuffix(node)}${renderTokenSuffix(node)}`
       );
       break;
     }
-    case "icon": {
+    case 'icon': {
       lines.push(
-        `${indent}- icon "${node.icon ?? "?"}" (${node.library ?? "?"})${renderHiddenSuffix(node)}${renderTokenSuffix(node)}`,
+        `${indent}- icon "${node.icon ?? '?'}" (${node.library ?? '?'})${renderHiddenSuffix(node)}${renderTokenSuffix(node)}`
       );
       break;
     }
-    case "ref": {
+    case 'ref': {
       const target = node.ref ? index.get(node.ref) : undefined;
-      const targetName = target ? label(target) : (node.ref ?? "?");
+      const targetName = target ? label(target) : (node.ref ?? '?');
       lines.push(
-        `${indent}- ref "${label(node)}" -> component "${targetName}"${renderThemeSuffix(node)}`,
+        `${indent}- ref "${label(node)}" -> component "${targetName}"${renderThemeSuffix(node)}`
       );
       lines.push(...renderDescendants(node, index, `${indent}  `));
       break;
     }
-    case "path": {
+    case 'path': {
       lines.push(`${indent}- path "${label(node)}"${renderTokenSuffix(node)}`);
       break;
     }
     default: {
       // frame, or anything else with children: a structural node.
       lines.push(
-        `${indent}- frame "${label(node)}"${renderHiddenSuffix(node)}${renderThemeSuffix(node)}${renderTokenSuffix(node)}`,
+        `${indent}- frame "${label(node)}"${renderHiddenSuffix(node)}${renderThemeSuffix(node)}${renderTokenSuffix(node)}`
       );
-      for (const child of node.children ?? []) lines.push(...renderNode(child, index, depth + 1));
+      for (const child of node.children ?? [])
+        lines.push(...renderNode(child, index, depth + 1));
     }
   }
 
@@ -187,11 +201,16 @@ function renderNode(node: PenNode, index: Map<string, PenNode>, depth: number): 
 }
 
 /** One `## Name` section: an artboard header plus its region tree. */
-function renderArtboard(artboard: PenNode, index: Map<string, PenNode>): string {
-  const reusableSuffix = artboard.reusable ? " (reusable)" : "";
+function renderArtboard(
+  artboard: PenNode,
+  index: Map<string, PenNode>
+): string {
+  const reusableSuffix = artboard.reusable ? ' (reusable)' : '';
   const heading = `${label(artboard)}${reusableSuffix}${renderThemeSuffix(artboard)}`;
-  const body = (artboard.children ?? []).flatMap((child) => renderNode(child, index, 0));
-  return [`## ${heading}`, "", ...body].join("\n");
+  const body = (artboard.children ?? []).flatMap((child) =>
+    renderNode(child, index, 0)
+  );
+  return [`## ${heading}`, '', ...body].join('\n');
 }
 
 /**
@@ -211,17 +230,19 @@ function renderArtboard(artboard: PenNode, index: Map<string, PenNode>): string 
  */
 export function renderExport(document: PenDocument): string {
   const index = buildIndex(document);
-  const sections = document.children.map((artboard) => renderArtboard(artboard, index));
+  const sections = document.children.map((artboard) =>
+    renderArtboard(artboard, index)
+  );
 
   const header = [
-    "# Design export",
-    "",
-    "Generated from `docs/design/doula-cloud.pen`. Do not hand-edit this file:",
+    '# Design export',
+    '',
+    'Generated from `docs/design/doula-cloud.pen`. Do not hand-edit this file:',
     `run \`${EXPORT_COMMAND}\` to regenerate it, and commit the result alongside`,
-    "the `.pen` change it was generated from. See docs/design/workflow.md for",
-    "what this export is for, and what it is not.",
-    "",
-  ].join("\n");
+    'the `.pen` change it was generated from. See docs/design/workflow.md for',
+    'what this export is for, and what it is not.',
+    '',
+  ].join('\n');
 
-  return [header, ...sections, ""].join("\n\n");
+  return [header, ...sections, ''].join('\n\n');
 }

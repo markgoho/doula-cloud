@@ -22,7 +22,11 @@
 // container-engine.ts, shared with e2e-stack-reap.ts.
 
 import { execFileSync } from 'node:child_process';
-import { engineInvocation, parseContainers, type ReapCandidate } from './container-engine.ts';
+import {
+  engineInvocation,
+  parseContainers,
+  type ReapCandidate,
+} from './container-engine.ts';
 
 // A container backs one `go test` process for one package, so it lives
 // minutes at most -- anything materially older is an orphan, not a slow
@@ -46,14 +50,15 @@ const TESTCONTAINERS_LABEL_VALUE = 'true';
 // done it -- a destructive command should not depend solely on a filter
 // string built elsewhere staying correct.
 export function pickReapCandidates(
-	containers: ReapCandidate[],
-	nowMs: number,
-	thresholdMs: number = REAP_THRESHOLD_MS
+  containers: ReapCandidate[],
+  nowMs: number,
+  thresholdMs: number = REAP_THRESHOLD_MS
 ): ReapCandidate[] {
-	return containers.filter(
-		container =>
-			container.labels[TESTCONTAINERS_LABEL] === TESTCONTAINERS_LABEL_VALUE && nowMs - container.createdAtMs > thresholdMs
-	);
+  return containers.filter(
+    (container) =>
+      container.labels[TESTCONTAINERS_LABEL] === TESTCONTAINERS_LABEL_VALUE &&
+      nowMs - container.createdAtMs > thresholdMs
+  );
 }
 
 /*
@@ -70,30 +75,44 @@ export function pickReapCandidates(
  * rather than halt all shell work.
  */
 function main(): void {
-	try {
-		const ps = engineInvocation([
-			'ps',
-			'-a',
-			'--filter',
-			`label=${TESTCONTAINERS_LABEL}=${TESTCONTAINERS_LABEL_VALUE}`,
-			'--format',
-			'json'
-		]);
-		const psOutput = execFileSync(ps.binary, ps.argv, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
-		const candidates = pickReapCandidates(parseContainers(psOutput), Date.now());
-		if (candidates.length === 0) return;
+  try {
+    const ps = engineInvocation([
+      'ps',
+      '-a',
+      '--filter',
+      `label=${TESTCONTAINERS_LABEL}=${TESTCONTAINERS_LABEL_VALUE}`,
+      '--format',
+      'json',
+    ]);
+    const psOutput = execFileSync(ps.binary, ps.argv, {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    const candidates = pickReapCandidates(
+      parseContainers(psOutput),
+      Date.now()
+    );
+    if (candidates.length === 0) return;
 
-		const remove = engineInvocation(['rm', '-f', '-t', '2', ...candidates.map(c => c.id)]);
-		execFileSync(remove.binary, remove.argv, { stdio: ['ignore', 'pipe', 'pipe'] });
-		const minutes = Math.round(REAP_THRESHOLD_MS / 60000);
-		console.log(
-			`testdb-reap: removed ${candidates.length} orphaned testcontainers Postgres container(s) older than ${minutes}m (org.testcontainers=true, no process attached)`
-		);
-	} catch {
-		// Engine unreachable, binary missing, malformed output, rm failed --
-		// none of it may ever surface as a blocked or slowed SessionStart.
-		return;
-	}
+    const remove = engineInvocation([
+      'rm',
+      '-f',
+      '-t',
+      '2',
+      ...candidates.map((c) => c.id),
+    ]);
+    execFileSync(remove.binary, remove.argv, {
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    const minutes = Math.round(REAP_THRESHOLD_MS / 60000);
+    console.log(
+      `testdb-reap: removed ${candidates.length} orphaned testcontainers Postgres container(s) older than ${minutes}m (org.testcontainers=true, no process attached)`
+    );
+  } catch {
+    // Engine unreachable, binary missing, malformed output, rm failed --
+    // none of it may ever surface as a blocked or slowed SessionStart.
+    return;
+  }
 }
 
 if (import.meta.main) main();

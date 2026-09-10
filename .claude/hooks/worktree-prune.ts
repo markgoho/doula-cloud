@@ -33,15 +33,15 @@ const SOURCE_ROOT = findMainCheckoutRoot(import.meta.dir);
 const WORKTREES_ROOT = path.join(SOURCE_ROOT, '.claude', 'worktrees');
 
 type WorktreeInfo = {
-	path: string;
-	branch: string | null;
-	locked: boolean;
-	/* Registered with `git worktree list`, but the directory itself is
-	   gone -- e.g. `rm -rf` instead of `git worktree remove`. Running git
-	   against a path like that always fails with "cannot change to
-	   '<path>': No such file or directory" (#1058), so this is checked
-	   before any git command ever targets it. */
-	stale: boolean;
+  path: string;
+  branch: string | null;
+  locked: boolean;
+  /* Registered with `git worktree list`, but the directory itself is
+     gone -- e.g. `rm -rf` instead of `git worktree remove`. Running git
+     against a path like that always fails with "cannot change to
+     '<path>': No such file or directory" (#1058), so this is checked
+     before any git command ever targets it. */
+  stale: boolean;
 };
 
 /*
@@ -54,12 +54,20 @@ type WorktreeInfo = {
  * object's giant default report (#1058).
  */
 function runGit(args: string[], cwd = SOURCE_ROOT): string {
-	try {
-		return execFileSync('git', ['-C', cwd, ...args], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
-	} catch (error) {
-		const stderr = error && typeof error === 'object' && 'stderr' in error ? String((error as { stderr?: unknown }).stderr ?? '').trim() : '';
-		throw new Error(`git ${args.join(' ')} (cwd ${cwd}) failed${stderr ? `: ${stderr}` : ''}`);
-	}
+  try {
+    return execFileSync('git', ['-C', cwd, ...args], {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'pipe'],
+    }).trim();
+  } catch (error) {
+    const stderr =
+      error && typeof error === 'object' && 'stderr' in error
+        ? String((error as { stderr?: unknown }).stderr ?? '').trim()
+        : '';
+    throw new Error(
+      `git ${args.join(' ')} (cwd ${cwd}) failed${stderr ? `: ${stderr}` : ''}`
+    );
+  }
 }
 
 /*
@@ -68,39 +76,54 @@ function runGit(args: string[], cwd = SOURCE_ROOT): string {
  * checked out anywhere is somebody's, wherever that anywhere is.
  */
 function listWorktrees(onlyManaged = true): WorktreeInfo[] {
-	const raw = runGit(['worktree', 'list', '--porcelain']);
-	const entries: WorktreeInfo[] = [];
-	let current: Partial<WorktreeInfo> | null = null;
+  const raw = runGit(['worktree', 'list', '--porcelain']);
+  const entries: WorktreeInfo[] = [];
+  let current: Partial<WorktreeInfo> | null = null;
 
-	const finish = (partial: Partial<WorktreeInfo> & { path: string }): WorktreeInfo => ({
-		path: partial.path,
-		branch: partial.branch ?? null,
-		locked: partial.locked ?? false,
-		stale: !fs.existsSync(partial.path)
-	});
+  const finish = (
+    partial: Partial<WorktreeInfo> & { path: string }
+  ): WorktreeInfo => ({
+    path: partial.path,
+    branch: partial.branch ?? null,
+    locked: partial.locked ?? false,
+    stale: !fs.existsSync(partial.path),
+  });
 
-	for (const line of raw.split('\n')) {
-		if (line.startsWith('worktree ')) {
-			if (current?.path) entries.push(finish(current as Partial<WorktreeInfo> & { path: string }));
-			current = { path: line.slice('worktree '.length), branch: null, locked: false };
-		} else if (line.startsWith('branch ')) {
-			if (current) current.branch = line.slice('branch '.length).replace('refs/heads/', '');
-		} else if (line === 'locked' || line.startsWith('locked ')) {
-			if (current) current.locked = true;
-		}
-	}
-	if (current?.path) entries.push(finish(current as Partial<WorktreeInfo> & { path: string }));
+  for (const line of raw.split('\n')) {
+    if (line.startsWith('worktree ')) {
+      if (current?.path)
+        entries.push(
+          finish(current as Partial<WorktreeInfo> & { path: string })
+        );
+      current = {
+        path: line.slice('worktree '.length),
+        branch: null,
+        locked: false,
+      };
+    } else if (line.startsWith('branch ')) {
+      if (current)
+        current.branch = line
+          .slice('branch '.length)
+          .replace('refs/heads/', '');
+    } else if (line === 'locked' || line.startsWith('locked ')) {
+      if (current) current.locked = true;
+    }
+  }
+  if (current?.path)
+    entries.push(finish(current as Partial<WorktreeInfo> & { path: string }));
 
-	if (!onlyManaged) return entries;
-	return entries.filter(entry => path.resolve(entry.path).startsWith(`${WORKTREES_ROOT}${path.sep}`));
+  if (!onlyManaged) return entries;
+  return entries.filter((entry) =>
+    path.resolve(entry.path).startsWith(`${WORKTREES_ROOT}${path.sep}`)
+  );
 }
 
 function isDirty(worktreePath: string): boolean {
-	try {
-		return runGit(['status', '--porcelain'], worktreePath).length > 0;
-	} catch {
-		return true; // fail closed -- treat "can't tell" as dirty
-	}
+  try {
+    return runGit(['status', '--porcelain'], worktreePath).length > 0;
+  } catch {
+    return true; // fail closed -- treat "can't tell" as dirty
+  }
 }
 
 /*
@@ -115,13 +138,18 @@ function isDirty(worktreePath: string): boolean {
  * costs nothing when `gh` is unreachable.
  */
 function isMergedIntoTrunk(branch: string, pr: string): boolean {
-	if (isLanded(pr)) return true;
-	try {
-		const merged = runGit(['branch', '--merged', 'origin/trunk', '--format=%(refname:short)']);
-		return merged.split('\n').includes(branch);
-	} catch {
-		return false;
-	}
+  if (isLanded(pr)) return true;
+  try {
+    const merged = runGit([
+      'branch',
+      '--merged',
+      'origin/trunk',
+      '--format=%(refname:short)',
+    ]);
+    return merged.split('\n').includes(branch);
+  } catch {
+    return false;
+  }
 }
 
 /*
@@ -134,28 +162,36 @@ function isMergedIntoTrunk(branch: string, pr: string): boolean {
  * worktree has not finished either.
  */
 function prState(branch: string, tip: string): string {
-	try {
-		const raw = execFileSync('gh', ['pr', 'view', branch, '--json', 'state,url,headRefOid'], {
-			cwd: SOURCE_ROOT,
-			encoding: 'utf8',
-			stdio: ['ignore', 'pipe', 'ignore']
-		});
-		const parsed = JSON.parse(raw) as { state: string; url: string; headRefOid: string };
-		if (parsed.state === 'MERGED' && tip !== parsed.headRefOid) {
-			return `MERGED-ELSEWHERE ${parsed.url}`;
-		}
-		return `${parsed.state} ${parsed.url}`;
-	} catch {
-		return 'no PR';
-	}
+  try {
+    const raw = execFileSync(
+      'gh',
+      ['pr', 'view', branch, '--json', 'state,url,headRefOid'],
+      {
+        cwd: SOURCE_ROOT,
+        encoding: 'utf8',
+        stdio: ['ignore', 'pipe', 'ignore'],
+      }
+    );
+    const parsed = JSON.parse(raw) as {
+      state: string;
+      url: string;
+      headRefOid: string;
+    };
+    if (parsed.state === 'MERGED' && tip !== parsed.headRefOid) {
+      return `MERGED-ELSEWHERE ${parsed.url}`;
+    }
+    return `${parsed.state} ${parsed.url}`;
+  } catch {
+    return 'no PR';
+  }
 }
 
 function isLanded(pr: string): boolean {
-	return pr.split(' ')[0] === 'MERGED';
+  return pr.split(' ')[0] === 'MERGED';
 }
 
 function tipOf(ref: string, cwd = SOURCE_ROOT): string {
-	return runGit(['rev-parse', ref], cwd);
+  return runGit(['rev-parse', ref], cwd);
 }
 
 /*
@@ -172,30 +208,34 @@ function tipOf(ref: string, cwd = SOURCE_ROOT): string {
 const QUIET_MS = 30 * 60 * 1000;
 
 function recentlyTouched(worktreePath: string): boolean {
-	const candidates = [worktreePath];
-	try {
-		const gitDir = runGit(['rev-parse', '--absolute-git-dir'], worktreePath);
-		candidates.push(gitDir, path.join(gitDir, 'index'));
-	} catch {
-		return true; // cannot tell -- fail closed and leave it alone
-	}
-	const now = Date.now();
-	for (const candidate of candidates) {
-		try {
-			if (now - fs.statSync(candidate).mtimeMs < QUIET_MS) return true;
-		} catch {
-			// missing path tells us nothing -- keep checking the others
-		}
-	}
-	return false;
+  const candidates = [worktreePath];
+  try {
+    const gitDir = runGit(['rev-parse', '--absolute-git-dir'], worktreePath);
+    candidates.push(gitDir, path.join(gitDir, 'index'));
+  } catch {
+    return true; // cannot tell -- fail closed and leave it alone
+  }
+  const now = Date.now();
+  for (const candidate of candidates) {
+    try {
+      if (now - fs.statSync(candidate).mtimeMs < QUIET_MS) return true;
+    } catch {
+      // missing path tells us nothing -- keep checking the others
+    }
+  }
+  return false;
 }
 
 function dirSize(worktreePath: string): string {
-	try {
-		return execFileSync('du', ['-sh', worktreePath], { encoding: 'utf8' }).split('\t')[0]?.trim() ?? '?';
-	} catch {
-		return '?';
-	}
+  try {
+    return (
+      execFileSync('du', ['-sh', worktreePath], { encoding: 'utf8' })
+        .split('\t')[0]
+        ?.trim() ?? '?'
+    );
+  } catch {
+    return '?';
+  }
 }
 
 /*
@@ -222,140 +262,151 @@ function dirSize(worktreePath: string): string {
  * rule here can reach them.
  */
 function sweepOrphanBranches(remove: boolean): void {
-	const held = new Set(
-		listWorktrees(false)
-			.map(wt => wt.branch)
-			.filter((branch): branch is string => branch !== null)
-	);
-	const ancestors = new Set(
-		runGit(['branch', '--merged', 'origin/trunk', '--format=%(refname:short)']).split('\n')
-	);
-	const branches = runGit(['branch', '--format=%(refname:short)']).split('\n').filter(Boolean);
+  const held = new Set(
+    listWorktrees(false)
+      .map((wt) => wt.branch)
+      .filter((branch): branch is string => branch !== null)
+  );
+  const ancestors = new Set(
+    runGit([
+      'branch',
+      '--merged',
+      'origin/trunk',
+      '--format=%(refname:short)',
+    ]).split('\n')
+  );
+  const branches = runGit(['branch', '--format=%(refname:short)'])
+    .split('\n')
+    .filter(Boolean);
 
-	for (const branch of branches) {
-		if (branch === 'trunk' || held.has(branch)) continue;
+  for (const branch of branches) {
+    if (branch === 'trunk' || held.has(branch)) continue;
 
-		let why: string;
-		if (ancestors.has(branch)) {
-			why = 'no commits of its own';
-		} else {
-			/* Only branches that are NOT already on trunk need the network,
-			   which keeps this to the squash-merged handful rather than one
-			   `gh` call per local branch. */
-			const pr = prState(branch, tipOf(branch));
-			if (!isLanded(pr)) continue;
-			why = pr;
-		}
+    let why: string;
+    if (ancestors.has(branch)) {
+      why = 'no commits of its own';
+    } else {
+      /* Only branches that are NOT already on trunk need the network,
+         which keeps this to the squash-merged handful rather than one
+         `gh` call per local branch. */
+      const pr = prState(branch, tipOf(branch));
+      if (!isLanded(pr)) continue;
+      why = pr;
+    }
 
-		if (!remove) {
-			console.log(`orphan branch (would remove): ${branch}  ${why}`);
-			continue;
-		}
-		try {
-			runGit(['branch', '-D', branch]);
-			console.log(`removed branch: ${branch} (${why})`);
-		} catch {
-			console.log(`skip (could not delete): ${branch}`);
-		}
-	}
+    if (!remove) {
+      console.log(`orphan branch (would remove): ${branch}  ${why}`);
+      continue;
+    }
+    try {
+      runGit(['branch', '-D', branch]);
+      console.log(`removed branch: ${branch} (${why})`);
+    } catch {
+      console.log(`skip (could not delete): ${branch}`);
+    }
+  }
 }
 
 function main(): void {
-	const merged = process.argv.includes('--merged');
-	if (merged) {
-		// syncTrunkToOrigin does its own `fetch origin trunk` internally
-		// (see sync-trunk.ts), which is also what the rest of this run
-		// needs fresh for isMergedIntoTrunk/sweepOrphanBranches below.
-		syncTrunkToOrigin(SOURCE_ROOT);
-	}
-	const worktrees = listWorktrees();
+  const merged = process.argv.includes('--merged');
+  if (merged) {
+    // syncTrunkToOrigin does its own `fetch origin trunk` internally
+    // (see sync-trunk.ts), which is also what the rest of this run
+    // needs fresh for isMergedIntoTrunk/sweepOrphanBranches below.
+    syncTrunkToOrigin(SOURCE_ROOT);
+  }
+  const worktrees = listWorktrees();
 
-	if (worktrees.length === 0) {
-		console.log('no worktrees under .claude/worktrees');
-	}
+  if (worktrees.length === 0) {
+    console.log('no worktrees under .claude/worktrees');
+  }
 
-	for (const wt of worktrees) {
-		const branch = wt.branch ?? '(detached)';
+  for (const wt of worktrees) {
+    const branch = wt.branch ?? '(detached)';
 
-		if (wt.stale) {
-			console.log(`${wt.path}  branch=${branch}  STALE (directory missing -- cleared by this run's closing 'git worktree prune')`);
-			continue;
-		}
+    if (wt.stale) {
+      console.log(
+        `${wt.path}  branch=${branch}  STALE (directory missing -- cleared by this run's closing 'git worktree prune')`
+      );
+      continue;
+    }
 
-		let touched: boolean;
-		let dirty: boolean;
-		let size: string;
-		let pr: string;
-		let mergedFlag: boolean;
-		try {
-			/* First, before anything else touches this worktree: `git status`
-			   rewrites the index it is being measured by, so asking after the
-			   dirty check makes every worktree look freshly touched forever. */
-			touched = recentlyTouched(wt.path);
-			dirty = isDirty(wt.path);
-			size = dirSize(wt.path);
-			pr = wt.branch ? prState(wt.branch, tipOf('HEAD', wt.path)) : 'no branch';
-			mergedFlag = wt.branch ? isMergedIntoTrunk(wt.branch, pr) : false;
-		} catch (error) {
-			// Defense in depth: `stale` already covers the known case (the
-			// directory disappearing before the check above), but nothing
-			// here should be able to take the whole report down (#1058).
-			console.log(`${wt.path}  ERROR (skipped): ${error instanceof Error ? error.message : String(error)}`);
-			continue;
-		}
+    let touched: boolean;
+    let dirty: boolean;
+    let size: string;
+    let pr: string;
+    let mergedFlag: boolean;
+    try {
+      /* First, before anything else touches this worktree: `git status`
+         rewrites the index it is being measured by, so asking after the
+         dirty check makes every worktree look freshly touched forever. */
+      touched = recentlyTouched(wt.path);
+      dirty = isDirty(wt.path);
+      size = dirSize(wt.path);
+      pr = wt.branch ? prState(wt.branch, tipOf('HEAD', wt.path)) : 'no branch';
+      mergedFlag = wt.branch ? isMergedIntoTrunk(wt.branch, pr) : false;
+    } catch (error) {
+      // Defense in depth: `stale` already covers the known case (the
+      // directory disappearing before the check above), but nothing
+      // here should be able to take the whole report down (#1058).
+      console.log(
+        `${wt.path}  ERROR (skipped): ${error instanceof Error ? error.message : String(error)}`
+      );
+      continue;
+    }
 
-		if (!merged) {
-			console.log(
-				`${wt.path}  branch=${branch}  locked=${wt.locked}  dirty=${dirty}  merged=${mergedFlag}  pr=${pr}  size=${size}`
-			);
-			continue;
-		}
+    if (!merged) {
+      console.log(
+        `${wt.path}  branch=${branch}  locked=${wt.locked}  dirty=${dirty}  merged=${mergedFlag}  pr=${pr}  size=${size}`
+      );
+      continue;
+    }
 
-		if (wt.locked) {
-			console.log(`skip (locked): ${wt.path}`);
-			continue;
-		}
-		if (dirty) {
-			console.log(`skip (dirty): ${wt.path}`);
-			continue;
-		}
-		if (!wt.branch || !mergedFlag) {
-			console.log(`skip (not merged into trunk): ${wt.path}`);
-			continue;
-		}
-		if (path.resolve(process.cwd()).startsWith(path.resolve(wt.path))) {
-			console.log(`skip (this session is standing in it): ${wt.path}`);
-			continue;
-		}
-		if (touched) {
-			console.log(`skip (touched in the last 30 minutes): ${wt.path}`);
-			continue;
-		}
+    if (wt.locked) {
+      console.log(`skip (locked): ${wt.path}`);
+      continue;
+    }
+    if (dirty) {
+      console.log(`skip (dirty): ${wt.path}`);
+      continue;
+    }
+    if (!wt.branch || !mergedFlag) {
+      console.log(`skip (not merged into trunk): ${wt.path}`);
+      continue;
+    }
+    if (path.resolve(process.cwd()).startsWith(path.resolve(wt.path))) {
+      console.log(`skip (this session is standing in it): ${wt.path}`);
+      continue;
+    }
+    if (touched) {
+      console.log(`skip (touched in the last 30 minutes): ${wt.path}`);
+      continue;
+    }
 
-		try {
-			runGit(['worktree', 'remove', wt.path]);
-		} catch {
-			runGit(['worktree', 'remove', '--force', wt.path]);
-		}
-		try {
-			runGit(['branch', '-d', wt.branch]);
-		} catch {
-			/* `-d` refuses a squash-merged branch for the same reason
-			   `--merged` never listed it: its commits are not on trunk. The
-			   PR says the work landed, so force it -- and only then. */
-			if (isLanded(pr)) {
-				try {
-					runGit(['branch', '-D', wt.branch]);
-				} catch {
-					// already gone, or checked out elsewhere -- not fatal
-				}
-			}
-		}
-		console.log(`removed: ${wt.path} (branch ${wt.branch})`);
-	}
+    try {
+      runGit(['worktree', 'remove', wt.path]);
+    } catch {
+      runGit(['worktree', 'remove', '--force', wt.path]);
+    }
+    try {
+      runGit(['branch', '-d', wt.branch]);
+    } catch {
+      /* `-d` refuses a squash-merged branch for the same reason
+         `--merged` never listed it: its commits are not on trunk. The
+         PR says the work landed, so force it -- and only then. */
+      if (isLanded(pr)) {
+        try {
+          runGit(['branch', '-D', wt.branch]);
+        } catch {
+          // already gone, or checked out elsewhere -- not fatal
+        }
+      }
+    }
+    console.log(`removed: ${wt.path} (branch ${wt.branch})`);
+  }
 
-	runGit(['worktree', 'prune']);
-	sweepOrphanBranches(merged);
+  runGit(['worktree', 'prune']);
+  sweepOrphanBranches(merged);
 }
 
 main();

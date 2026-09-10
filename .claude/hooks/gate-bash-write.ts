@@ -116,36 +116,39 @@ import { findMainCheckoutRoot } from './worktree-root.ts';
 // hook fails closed elsewhere, not here: no candidates surviving just means
 // nothing blocks, the same "not caught" gap already accepted in the header.
 function stripHeredocBodies(command: string): string {
-	const introducer = /<<-?\s*(['"]?)([A-Za-z_][A-Za-z0-9_]*)\1/g;
-	let result = '';
-	let cursor = 0;
-	let match: RegExpExecArray | null;
+  const introducer = /<<-?\s*(['"]?)([A-Za-z_][A-Za-z0-9_]*)\1/g;
+  let result = '';
+  let cursor = 0;
+  let match: RegExpExecArray | null;
 
-	while ((match = introducer.exec(command))) {
-		const delimiter = match[2] ?? '';
-		const introEnd = introducer.lastIndex;
-		result += command.slice(cursor, introEnd);
+  while ((match = introducer.exec(command))) {
+    const delimiter = match[2] ?? '';
+    const introEnd = introducer.lastIndex;
+    result += command.slice(cursor, introEnd);
 
-		const bodyStart = command.indexOf('\n', introEnd);
-		if (bodyStart === -1) {
-			cursor = introEnd;
-			break;
-		}
+    const bodyStart = command.indexOf('\n', introEnd);
+    if (bodyStart === -1) {
+      cursor = introEnd;
+      break;
+    }
 
-		const closing = new RegExp(`^\\t*${delimiter.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*$`, 'm');
-		const rest = command.slice(bodyStart + 1);
-		const closeMatch = closing.exec(rest);
-		if (!closeMatch) {
-			cursor = bodyStart + 1;
-			break;
-		}
+    const closing = new RegExp(
+      `^\\t*${delimiter.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*$`,
+      'm'
+    );
+    const rest = command.slice(bodyStart + 1);
+    const closeMatch = closing.exec(rest);
+    if (!closeMatch) {
+      cursor = bodyStart + 1;
+      break;
+    }
 
-		result += '\n';
-		cursor = bodyStart + 1 + closeMatch.index + closeMatch[0].length;
-		introducer.lastIndex = cursor;
-	}
+    result += '\n';
+    cursor = bodyStart + 1 + closeMatch.index + closeMatch[0].length;
+    introducer.lastIndex = cursor;
+  }
 
-	return result + command.slice(cursor);
+  return result + command.slice(cursor);
 }
 
 // Blanks a `>` that sits inside a single- or double-quoted span, so the
@@ -156,29 +159,29 @@ function stripHeredocBodies(command: string): string {
 // to find the real closing quote; single quotes have no escape mechanism in
 // shell, so none is needed there.
 function maskQuotedRedirectionChars(command: string): string {
-	let out = '';
-	let quote: '"' | "'" | null = null;
+  let out = '';
+  let quote: '"' | "'" | null = null;
 
-	for (let i = 0; i < command.length; i++) {
-		const char = command[i] ?? '';
+  for (let i = 0; i < command.length; i++) {
+    const char = command[i] ?? '';
 
-		if (quote === '"' && char === '\\' && i + 1 < command.length) {
-			out += char + command[i + 1];
-			i++;
-			continue;
-		}
+    if (quote === '"' && char === '\\' && i + 1 < command.length) {
+      out += char + command[i + 1];
+      i++;
+      continue;
+    }
 
-		if (quote !== null) {
-			if (char === quote) quote = null;
-			out += char === '>' ? '_' : char;
-			continue;
-		}
+    if (quote !== null) {
+      if (char === quote) quote = null;
+      out += char === '>' ? '_' : char;
+      continue;
+    }
 
-		if (char === "'" || char === '"') quote = char;
-		out += char;
-	}
+    if (char === "'" || char === '"') quote = char;
+    out += char;
+  }
 
-	return out;
+  return out;
 }
 
 // One stage of a list or pipeline, with the separator that ends it -- `&&`,
@@ -187,8 +190,8 @@ function maskQuotedRedirectionChars(command: string): string {
 // the separator has to survive the split rather than being discarded with
 // it.
 interface Stage {
-	text: string;
-	terminator: string;
+  text: string;
+  terminator: string;
 }
 
 // One list/pipeline stage per entry, so a write in one stage of
@@ -201,22 +204,22 @@ interface Stage {
 // pieces, but the redirection regex below only needs a `>` with a target
 // after it, which survives the split intact either side.
 function segments(command: string): Stage[] {
-	// The capture group keeps each separator in the split output, so the
-	// parts alternate stage, separator, stage, separator, ..., stage. An
-	// empty stage is kept rather than filtered out, so the separator that
-	// follows it is not lost with it; it contributes no write target and no
-	// `cd` either way.
-	const parts = command.split(/(\r?\n|;|\|\||\||&&|&)/);
-	const stages: Stage[] = [];
+  // The capture group keeps each separator in the split output, so the
+  // parts alternate stage, separator, stage, separator, ..., stage. An
+  // empty stage is kept rather than filtered out, so the separator that
+  // follows it is not lost with it; it contributes no write target and no
+  // `cd` either way.
+  const parts = command.split(/(\r?\n|;|\|\||\||&&|&)/);
+  const stages: Stage[] = [];
 
-	for (let index = 0; index < parts.length; index += 2) {
-		stages.push({
-			text: (parts[index] ?? '').replace(/^[\s(){]*/, '').trim(),
-			terminator: parts[index + 1] ?? ''
-		});
-	}
+  for (let index = 0; index < parts.length; index += 2) {
+    stages.push({
+      text: (parts[index] ?? '').replace(/^[\s(){]*/, '').trim(),
+      terminator: parts[index + 1] ?? '',
+    });
+  }
 
-	return stages;
+  return stages;
 }
 
 // True when the command holds a `(` or `)` outside every quoted span, using
@@ -225,46 +228,46 @@ function segments(command: string): Stage[] {
 // `segments` cannot tell where one ends -- so no `cd` in such a command is
 // honored at all (#680).
 function hasUnquotedParenthesis(command: string): boolean {
-	let quote: '"' | "'" | null = null;
+  let quote: '"' | "'" | null = null;
 
-	for (let index = 0; index < command.length; index++) {
-		const char = command[index] ?? '';
+  for (let index = 0; index < command.length; index++) {
+    const char = command[index] ?? '';
 
-		if (quote === '"' && char === '\\' && index + 1 < command.length) {
-			index++;
-			continue;
-		}
+    if (quote === '"' && char === '\\' && index + 1 < command.length) {
+      index++;
+      continue;
+    }
 
-		if (quote !== null) {
-			if (char === quote) quote = null;
-			continue;
-		}
+    if (quote !== null) {
+      if (char === quote) quote = null;
+      continue;
+    }
 
-		if (char === "'" || char === '"') quote = char;
-		else if (char === '(' || char === ')') return true;
-	}
+    if (char === "'" || char === '"') quote = char;
+    else if (char === '(' || char === ')') return true;
+  }
 
-	return false;
+  return false;
 }
 
 function tokenize(segment: string): string[] {
-	// A plain whitespace split -- quoting is not unwound, so a quoted path
-	// containing whitespace is missed. Accepted gap, see the file header.
-	return segment.match(/\S+/g) ?? [];
+  // A plain whitespace split -- quoting is not unwound, so a quoted path
+  // containing whitespace is missed. Accepted gap, see the file header.
+  return segment.match(/\S+/g) ?? [];
 }
 
 function isSkippableTarget(target: string): boolean {
-	return (
-		target.startsWith('&') ||
-		/^\d+$/.test(target) ||
-		target === '/dev/null' ||
-		target === '/dev/stdout' ||
-		target === '/dev/stderr'
-	);
+  return (
+    target.startsWith('&') ||
+    /^\d+$/.test(target) ||
+    target === '/dev/null' ||
+    target === '/dev/stdout' ||
+    target === '/dev/stderr'
+  );
 }
 
 function stripQuotes(target: string): string {
-	return target.replace(/^(['"])(.*)\1$/, '$2');
+  return target.replace(/^(['"])(.*)\1$/, '$2');
 }
 
 // True for a target that still holds a shell variable or command
@@ -272,51 +275,60 @@ function stripQuotes(target: string): string {
 // command before the shell expands any of these, so the text is not the
 // real path (#702). See the decision note in the file header.
 function hasUnexpandedVariable(target: string): boolean {
-	return /\$\{|\$\(|\$[A-Za-z_]|`/.test(target);
+  return /\$\{|\$\(|\$[A-Za-z_]|`/.test(target);
 }
 
 // Candidate write targets for one pipeline/list stage. Over-collecting is
 // fine -- every candidate still has to resolve inside the main checkout
 // and outside gitignore to actually block anything.
 function writeTargets(segment: string): string[] {
-	const targets: string[] = [];
+  const targets: string[] = [];
 
-	for (const match of segment.matchAll(/\d*(>>?)(?!&)\s*([^\s|;&]+)/g)) {
-		const target = match[2] ?? '';
-		if (target && !isSkippableTarget(target)) targets.push(target);
-	}
+  for (const match of segment.matchAll(/\d*(>>?)(?!&)\s*([^\s|;&]+)/g)) {
+    const target = match[2] ?? '';
+    if (target && !isSkippableTarget(target)) targets.push(target);
+  }
 
-	for (const match of segment.matchAll(/(?:^|\s)of=(\S+)/g)) {
-		if (match[1]) targets.push(match[1]);
-	}
+  for (const match of segment.matchAll(/(?:^|\s)of=(\S+)/g)) {
+    if (match[1]) targets.push(match[1]);
+  }
 
-	const tokens = tokenize(segment);
-	const command = tokens[0];
+  const tokens = tokenize(segment);
+  const command = tokens[0];
 
-	if (command === 'tee') {
-		targets.push(...tokens.slice(1).filter(token => !token.startsWith('-')));
-	}
+  if (command === 'tee') {
+    targets.push(...tokens.slice(1).filter((token) => !token.startsWith('-')));
+  }
 
-	if (command === 'sed' && tokens.some(token => token.startsWith('-i'))) {
-		const last = tokens[tokens.length - 1];
-		if (last && !last.startsWith('-')) targets.push(last);
-	}
+  if (command === 'sed' && tokens.some((token) => token.startsWith('-i'))) {
+    const last = tokens[tokens.length - 1];
+    if (last && !last.startsWith('-')) targets.push(last);
+  }
 
-	if (command === 'cp' || command === 'mv' || command === 'install' || command === 'rsync') {
-		const positional = tokens.slice(1).filter(token => !token.startsWith('-'));
-		const destination = positional[positional.length - 1];
-		if (positional.length > 1 && destination) targets.push(destination);
-	}
+  if (
+    command === 'cp' ||
+    command === 'mv' ||
+    command === 'install' ||
+    command === 'rsync'
+  ) {
+    const positional = tokens
+      .slice(1)
+      .filter((token) => !token.startsWith('-'));
+    const destination = positional[positional.length - 1];
+    if (positional.length > 1 && destination) targets.push(destination);
+  }
 
-	return targets.map(stripQuotes).filter(target => !hasUnexpandedVariable(target));
+  return targets
+    .map(stripQuotes)
+    .filter((target) => !hasUnexpandedVariable(target));
 }
 
 // A write target together with the directory it should resolve against
 // (#680). `base` is `null` when a `cd` in the command made the working
 // directory unknowable; see `resolveCandidate` for what that falls back to.
 interface Candidate {
-	target: string;
-	base: string | null;
+  target: string;
+  base: string | null;
 }
 
 // The argument of a `cd` stage: the path string when it can be trusted,
@@ -325,16 +337,16 @@ interface Candidate {
 // variable or command substitution), and `undefined` when the stage is not
 // a `cd` at all.
 function cdArgument(segment: string): string | null | undefined {
-	const tokens = tokenize(segment);
-	if (tokens[0] !== 'cd') return undefined;
+  const tokens = tokenize(segment);
+  if (tokens[0] !== 'cd') return undefined;
 
-	const argument = tokens.slice(1).find(token => !token.startsWith('-'));
-	if (!argument) return null;
+  const argument = tokens.slice(1).find((token) => !token.startsWith('-'));
+  if (!argument) return null;
 
-	const stripped = stripQuotes(argument);
-	if (stripped.startsWith('~') || hasUnexpandedVariable(stripped)) return null;
+  const stripped = stripQuotes(argument);
+  if (stripped.startsWith('~') || hasUnexpandedVariable(stripped)) return null;
 
-	return stripped;
+  return stripped;
 }
 
 // Walks the stages in order, carrying the working directory a real shell is
@@ -345,25 +357,26 @@ function cdArgument(segment: string): string | null | undefined {
 // one of those the shell need not be where the `cd` aimed. See the file
 // header for why each of those cases is a real main-checkout write.
 function collectCandidates(scannable: string): Candidate[] {
-	const honorCd = !hasUnquotedParenthesis(scannable);
-	const fallback = process.cwd();
-	const candidates: Candidate[] = [];
-	let base: string | null = fallback;
+  const honorCd = !hasUnquotedParenthesis(scannable);
+  const fallback = process.cwd();
+  const candidates: Candidate[] = [];
+  let base: string | null = fallback;
 
-	for (const stage of segments(scannable)) {
-		for (const target of writeTargets(stage.text)) candidates.push({ target, base });
+  for (const stage of segments(scannable)) {
+    for (const target of writeTargets(stage.text))
+      candidates.push({ target, base });
 
-		const argument = honorCd ? cdArgument(stage.text) : undefined;
-		if (argument === null) base = null;
-		else if (argument !== undefined) {
-			if (path.isAbsolute(argument)) base = path.resolve(argument);
-			else if (base !== null) base = path.resolve(base, argument);
-		}
+    const argument = honorCd ? cdArgument(stage.text) : undefined;
+    if (argument === null) base = null;
+    else if (argument !== undefined) {
+      if (path.isAbsolute(argument)) base = path.resolve(argument);
+      else if (base !== null) base = path.resolve(base, argument);
+    }
 
-		if (stage.terminator !== '&&') base = fallback;
-	}
+    if (stage.terminator !== '&&') base = fallback;
+  }
 
-	return candidates;
+  return candidates;
 }
 
 // Where a candidate actually lands. An absolute target ignores the base
@@ -372,72 +385,79 @@ function collectCandidates(scannable: string): Candidate[] {
 // against the hook process's own cwd, which is what this file did before
 // #680.
 function resolveCandidate(candidate: Candidate, sourceRoot: string): string {
-	if (path.isAbsolute(candidate.target)) return path.resolve(candidate.target);
+  if (path.isAbsolute(candidate.target)) return path.resolve(candidate.target);
 
-	const base = candidate.base;
-	const insideCheckout = base !== null && (base === sourceRoot || base.startsWith(sourceRoot + path.sep));
+  const base = candidate.base;
+  const insideCheckout =
+    base !== null &&
+    (base === sourceRoot || base.startsWith(sourceRoot + path.sep));
 
-	return insideCheckout ? path.resolve(base, candidate.target) : path.resolve(candidate.target);
+  return insideCheckout
+    ? path.resolve(base, candidate.target)
+    : path.resolve(candidate.target);
 }
 
 function block(reason: string): never {
-	process.stdout.write(JSON.stringify({ decision: 'block', reason }));
-	process.exit(2);
+  process.stdout.write(JSON.stringify({ decision: 'block', reason }));
+  process.exit(2);
 }
 
 async function main(): Promise<void> {
-	const raw = await readStdin();
-	let payload: Record<string, unknown> = {};
+  const raw = await readStdin();
+  let payload: Record<string, unknown> = {};
 
-	if (raw.trim()) {
-		try {
-			payload = JSON.parse(raw);
-		} catch {
-			process.exit(0);
-		}
-	}
+  if (raw.trim()) {
+    try {
+      payload = JSON.parse(raw);
+    } catch {
+      process.exit(0);
+    }
+  }
 
-	const toolName = typeof payload['tool_name'] === 'string' ? payload['tool_name'] : '';
-	if (toolName !== 'Bash') process.exit(0);
+  const toolName =
+    typeof payload['tool_name'] === 'string' ? payload['tool_name'] : '';
+  if (toolName !== 'Bash') process.exit(0);
 
-	const toolInput = payload['tool_input'];
-	if (!toolInput || typeof toolInput !== 'object' || Array.isArray(toolInput)) process.exit(0);
+  const toolInput = payload['tool_input'];
+  if (!toolInput || typeof toolInput !== 'object' || Array.isArray(toolInput))
+    process.exit(0);
 
-	const command = (toolInput as Record<string, unknown>)['command'];
-	if (typeof command !== 'string') process.exit(0);
+  const command = (toolInput as Record<string, unknown>)['command'];
+  if (typeof command !== 'string') process.exit(0);
 
-	const scannable = maskQuotedRedirectionChars(stripHeredocBodies(command));
-	const candidates = collectCandidates(scannable);
-	if (candidates.length === 0) process.exit(0);
+  const scannable = maskQuotedRedirectionChars(stripHeredocBodies(command));
+  const candidates = collectCandidates(scannable);
+  if (candidates.length === 0) process.exit(0);
 
-	// Only pay for a git subprocess once there is something to check.
-	const sourceRoot = findMainCheckoutRoot(import.meta.dir);
-	const worktreesRoot = path.join(sourceRoot, '.claude', 'worktrees');
+  // Only pay for a git subprocess once there is something to check.
+  const sourceRoot = findMainCheckoutRoot(import.meta.dir);
+  const worktreesRoot = path.join(sourceRoot, '.claude', 'worktrees');
 
-	for (const candidate of candidates) {
-		const resolvedFile = resolveCandidate(candidate, sourceRoot);
+  for (const candidate of candidates) {
+    const resolvedFile = resolveCandidate(candidate, sourceRoot);
 
-		if (!isTrackedInMainCheckout(resolvedFile, sourceRoot, worktreesRoot)) continue;
+    if (!isTrackedInMainCheckout(resolvedFile, sourceRoot, worktreesRoot))
+      continue;
 
-		block(
-			`This Bash command would write to ${path.relative(sourceRoot, resolvedFile)}, a tracked path in the main checkout.\n` +
-				'Use EnterWorktree to create a worktree first, then retry.\n\n' +
-				'Branch format: <type>/<issue>-<description>\n' +
-				'Example: fix/510-labeled-field-inline-row\n\n' +
-				'See docs/agents/worktree-flow.md.'
-		);
-	}
+    block(
+      `This Bash command would write to ${path.relative(sourceRoot, resolvedFile)}, a tracked path in the main checkout.\n` +
+        'Use EnterWorktree to create a worktree first, then retry.\n\n' +
+        'Branch format: <type>/<issue>-<description>\n' +
+        'Example: fix/510-labeled-field-inline-row\n\n' +
+        'See docs/agents/worktree-flow.md.'
+    );
+  }
 
-	process.exit(0);
+  process.exit(0);
 }
 
 // Fail CLOSED, same as gate-worktree-edit.ts (#569): a gate that could not
 // run has not decided the command is safe, so it refuses rather than
 // permits.
 main().catch((error: unknown) => {
-	block(
-		'The worktree Bash-write gate could not run, so it cannot say this command is safe: ' +
-			`${error instanceof Error ? error.message : String(error)}\n` +
-			'Fix the gate, or run this command inside a worktree via EnterWorktree.'
-	);
+  block(
+    'The worktree Bash-write gate could not run, so it cannot say this command is safe: ' +
+      `${error instanceof Error ? error.message : String(error)}\n` +
+      'Fix the gate, or run this command inside a worktree via EnterWorktree.'
+  );
 });

@@ -18,13 +18,21 @@
 import { execFileSync } from 'node:child_process';
 
 export function findMainCheckoutRoot(cwd: string): string {
-	const output = execFileSync('git', ['-C', cwd, 'worktree', 'list', '--porcelain'], {
-		encoding: 'utf8',
-		stdio: ['ignore', 'pipe', 'pipe']
-	});
-	const firstLine = output.split('\n').find(line => line.startsWith('worktree '));
-	if (!firstLine) {
-		throw new Error('could not determine the main checkout root from `git worktree list`');
-	}
-	return firstLine.slice('worktree '.length).trim();
+  const output = execFileSync(
+    'git',
+    ['-C', cwd, 'worktree', 'list', '--porcelain'],
+    {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'pipe'],
+    }
+  );
+  const firstLine = output
+    .split('\n')
+    .find((line) => line.startsWith('worktree '));
+  if (!firstLine) {
+    throw new Error(
+      'could not determine the main checkout root from `git worktree list`'
+    );
+  }
+  return firstLine.slice('worktree '.length).trim();
 }
