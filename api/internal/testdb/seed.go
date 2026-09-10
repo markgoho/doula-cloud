@@ -10,11 +10,18 @@ import (
 )
 
 // SeedPractice inserts a bare Practice row using the superuser Admin
-// connection.
+// connection, in the zone every fixture Practice keeps its calendar days
+// in.
+//
+// The zone is stated here rather than left to the column, because #1166
+// dropped 00110_practice_timezone.sql's DEFAULT once a person could
+// state one: an INSERT that names no zone now fails against the NOT
+// NULL. 'America/New_York' is the value that default held, so every test
+// written before this keeps typing its Visits against the same day.
 func SeedPractice(t *testing.T, db *DB, name string) (practiceID string) {
 	t.Helper()
 	if err := db.Admin.QueryRowContext(t.Context(),
-		`INSERT INTO practices (name) VALUES ($1) RETURNING id`, name,
+		`INSERT INTO practices (name, timezone) VALUES ($1, 'America/New_York') RETURNING id`, name,
 	).Scan(&practiceID); err != nil {
 		// coverage:ignore reason: fixture insert failure, not exercised by the happy-path test
 		t.Fatalf("testdb: seed practice %q: %v", name, err)

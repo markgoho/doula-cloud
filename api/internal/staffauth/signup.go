@@ -11,6 +11,7 @@ import (
 	"doula-cloud/api/internal/authmail"
 	"doula-cloud/api/internal/authn"
 	"doula-cloud/api/internal/authtoken"
+	"doula-cloud/api/internal/ianazone"
 	"doula-cloud/api/internal/pgerr"
 	"doula-cloud/api/internal/sessionmint"
 	"doula-cloud/api/internal/tasknudge"
@@ -43,6 +44,18 @@ const MsgAlreadyBelongsToPractice = "This account already belongs to a Practice.
 // it later.
 const MsgNoAddressToCreateAPractice = "your account has no verified email address, so it cannot create a Practice"
 
+// MsgTimezoneRequired is what a caller who omitted a timezone, or sent
+// one the IANA database does not name, reads in APIError.Message. It
+// names the JSON field and the format, for a caller reading the API;
+// MsgTimezoneNeeded is the sentence beside the control for the person
+// filling the form in.
+//
+// The two names time.LoadLocation answers without consulting the
+// database -- "" and "Local" -- are refused with everything else, which
+// is what stops an omitted field being read as a deliberate choice of
+// UTC. See ianazone.Parse.
+const MsgTimezoneRequired = "timezone is needed, and must be an IANA zone name such as America/New_York"
+
 // SignupRequest is the body of a Practice-signup request: a new Practice,
 // created together with the Staff row for the person creating it.
 //
@@ -60,6 +73,12 @@ type SignupRequest struct {
 	// people work and a Practice with an unknown member cannot be
 	// apportioned at all.
 	WorkState string `json:"workState"`
+	// Timezone is the IANA zone name this Practice keeps its calendar
+	// days in (#1166, ADR-0036). Stated here rather than inherited from a
+	// column default: it decides which day a Visit falls on, and a
+	// Practice outside Eastern time that was never asked would have its
+	// evening Visits typed against the wrong day from its first one.
+	Timezone string `json:"timezone"`
 }
 
 // SignupResponse identifies the Practice and Staff row signup created.
@@ -115,6 +134,11 @@ func SignupHandler(verifier authn.Verifier, db *sql.DB, enq tasknudge.Enqueuer) 
 			return
 		}
 		req.WorkState = workState
+		if _, err := ianazone.Parse(req.Timezone); err != nil {
+			apierr.Write(w, http.StatusBadRequest, apierr.CodeInvalidArgument, MsgTimezoneRequired,
+				map[string]string{fieldTimezone: MsgTimezoneNeeded})
+			return
+		}
 
 		step := func(_ context.Context, tx *sql.Tx) (sessionmint.Result, error) {
 			resp, status, msg := signup(r, tx, verified, req)
@@ -177,7 +201,10 @@ func signup(r *http.Request, tx *sql.Tx, verified authn.VerifiedToken, req Signu
 	}
 
 	var practiceID string
-	if err := tx.QueryRowContext(ctx, `INSERT INTO practices (name) VALUES ($1) RETURNING id`, req.PracticeName).Scan(&practiceID); err != nil {
+	if err := tx.QueryRowContext(ctx,
+		`INSERT INTO practices (name, timezone) VALUES ($1, $2) RETURNING id`,
+		req.PracticeName, req.Timezone,
+	).Scan(&practiceID); err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		return SignupResponse{}, http.StatusInternalServerError, apierr.MsgInternalError
 	}

@@ -68,8 +68,23 @@ func newSignupServer(verifier authntest.Verifier, db *testdb.DB) *httptest.Serve
 	return httptest.NewServer(mux)
 }
 
+// signupZone is the zone every signup test that is not about zones sends
+// (#1166) -- the value 00110_practice_timezone.sql carried as its column
+// default before that ticket dropped it.
+const signupZone = "America/New_York"
+
+// postSignup posts a signup body. A staffauth.SignupRequest that names no
+// zone is given one first (#1166): every one of this package's signup
+// tests predates the field and is about something else, and the endpoint
+// now refuses a body with no zone on it. A test that is about the zone
+// itself passes a map instead of the struct, so it can send a zone the
+// IANA database does not name, or none at all.
 func postSignup(t *testing.T, srv *httptest.Server, token string, body any) *http.Response {
 	t.Helper()
+	if req, ok := body.(staffauth.SignupRequest); ok && req.Timezone == "" {
+		req.Timezone = signupZone
+		body = req
+	}
 	payload, err := json.Marshal(body)
 	if err != nil {
 		t.Fatalf("marshal body: %v", err)

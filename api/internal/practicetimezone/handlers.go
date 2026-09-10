@@ -9,6 +9,7 @@ import (
 
 	"doula-cloud/api/internal/activity"
 	"doula-cloud/api/internal/apierr"
+	"doula-cloud/api/internal/ianazone"
 	"doula-cloud/api/internal/staffauth"
 )
 
@@ -94,10 +95,10 @@ func PutHandler() http.Handler {
 		if !apierr.DecodeJSON(w, r, &req) {
 			return
 		}
-		if _, err := Parse(req.Timezone); err != nil {
+		if _, err := ianazone.Parse(req.Timezone); err != nil {
 			apierr.Write(w, http.StatusBadRequest, apierr.CodeInvalidArgument,
 				fmt.Sprintf("timezone %q is not an IANA zone name", req.Timezone),
-				map[string]string{"timezone": MsgZoneNotRecognized})
+				map[string]string{"timezone": ianazone.MsgNotRecognized})
 			return
 		}
 

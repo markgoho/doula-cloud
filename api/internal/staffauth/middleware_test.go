@@ -177,7 +177,7 @@ func TestMiddleware_NoPracticeMembership(t *testing.T) {
 	// but not of this Practice.
 	var otherPracticeID string
 	if err := db.Admin.QueryRowContext(t.Context(),
-		`INSERT INTO practices (name) VALUES ('Other Practice') RETURNING id`,
+		`INSERT INTO practices (name, timezone) VALUES ('Other Practice', 'America/New_York') RETURNING id`,
 	).Scan(&otherPracticeID); err != nil {
 		t.Fatalf("seed other practice: %v", err)
 	}

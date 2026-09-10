@@ -114,7 +114,7 @@ func TestVerify_IgnoresAPracticeOnHerOwnWebsite(t *testing.T) {
 	db := testdb.New(t)
 	var practiceID string
 	if err := db.Admin.QueryRowContext(t.Context(),
-		`INSERT INTO practices (name) VALUES ('Own Site Doula') RETURNING id`,
+		`INSERT INTO practices (name, timezone) VALUES ('Own Site Doula', 'America/New_York') RETURNING id`,
 	).Scan(&practiceID); err != nil {
 		t.Fatalf("seed practice: %v", err)
 	}

@@ -43,7 +43,7 @@ func TestSignupHandler_LivePortalSessionRefusesThenConfirmedRetrySucceeds(t *tes
 	srv := newSignupServer(authntest.Verifier{UID: identityUID, Email: "signup-evicts@example.com"}, db)
 	defer srv.Close()
 
-	body, err := json.Marshal(staffauth.SignupRequest{PracticeName: "Evicting Practice", StaffName: "Jamie", WorkState: "NY"})
+	body, err := json.Marshal(staffauth.SignupRequest{PracticeName: "Evicting Practice", StaffName: "Jamie", WorkState: "NY", Timezone: signupZone})
 	if err != nil {
 		t.Fatalf("marshal body: %v", err)
 	}

@@ -187,7 +187,7 @@ func seedPracticeAndClient(t *testing.T, db *sql.DB) (practiceID, clientID strin
 	ctx := t.Context()
 	const name, email = "Rooted", "ada@example.com"
 	if err := db.QueryRowContext(ctx,
-		`INSERT INTO practices (name, stripe_connect_account_id) VALUES ($1, $2) RETURNING id`,
+		`INSERT INTO practices (name, stripe_connect_account_id, timezone) VALUES ($1, $2, 'America/New_York') RETURNING id`,
 		name, testAccount,
 	).Scan(&practiceID); err != nil {
 		t.Fatalf("seed practice: %v", err)

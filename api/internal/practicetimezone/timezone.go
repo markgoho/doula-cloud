@@ -13,57 +13,11 @@ package practicetimezone
 import (
 	"context"
 	"database/sql"
-	"errors"
 	"fmt"
 	"time"
 
-	// Embeds the IANA database in the binary, as the fallback
-	// time.LoadLocation reaches for when the host has no zoneinfo of its
-	// own. gcr.io/distroless/static-debian12 does ship
-	// /usr/share/zoneinfo today (checked by exporting the image and
-	// listing it), so this is not repairing a broken image -- it is
-	// refusing to depend on a base image's contents for an answer the
-	// product gets wrong silently. The zone data then travels with the
-	// code that reads it, which is why the import sits beside the read
-	// rather than in main.
-	_ "time/tzdata"
+	"doula-cloud/api/internal/ianazone"
 )
-
-// MsgZoneNotRecognized is what a person reads when the zone she sent is
-// not one the IANA database names -- docs/api-design.md section 7 rule 4:
-// it starts with the field's own noun, says what to do, and avoids the
-// four words apierr's TestDetailsWording gates on. The settings screen
-// and the signup form both offer a list, so the only way to reach this
-// is a hand-built request or a browser reporting a zone the database
-// does not carry.
-const MsgZoneNotRecognized = "Timezone must be a zone name from the IANA database, such as America/New_York"
-
-// ErrZoneNotRecognized is what Parse reports for a name the IANA database
-// does not carry, or for one of the two names time.LoadLocation answers
-// without consulting it at all.
-var ErrZoneNotRecognized = errors.New("practicetimezone: not an IANA zone name")
-
-// Parse turns a submitted zone name into the location it names, refusing
-// anything that is not a real IANA zone.
-//
-// time.LoadLocation answers two names out of thin air rather than out of
-// the database, and both are refused here. "" is UTC, so an omitted field
-// would otherwise be accepted as a deliberate choice of UTC -- and a
-// Practice that meant to say nothing would silently get a zone no US
-// Practice works in. "Local" is whichever zone the process happens to
-// run in, which is the server's fact, not the Practice's: the same stored
-// string would mean a different day depending on where the binary was
-// deployed, which is precisely what ADR-0036 exists to stop.
-func Parse(name string) (*time.Location, error) {
-	if name == "" || name == "Local" {
-		return nil, fmt.Errorf("%w: %q", ErrZoneNotRecognized, name)
-	}
-	loc, err := time.LoadLocation(name)
-	if err != nil {
-		return nil, fmt.Errorf("%w: %q: %w", ErrZoneNotRecognized, name, err)
-	}
-	return loc, nil
-}
 
 // Load reads practiceID's own zone and loads it. One read per request
 // rather than one per row: time.LoadLocation reparses zoneinfo on every
@@ -84,7 +38,7 @@ func Load(ctx context.Context, tx *sql.Tx, practiceID string) (*time.Location, e
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		return nil, err
 	}
-	loc, err := Parse(name)
+	loc, err := ianazone.Parse(name)
 	if err != nil {
 		return nil, fmt.Errorf("practicetimezone: load practice timezone: %w", err)
 	}

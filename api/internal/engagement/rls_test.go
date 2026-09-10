@@ -166,7 +166,7 @@ func TestRLS_ClientsInsertAllowedForOwnerWithContractorEmploymentType(t *testing
 	db := testdb.New(t)
 	var practiceID string
 	if err := db.Admin.QueryRowContext(t.Context(),
-		`INSERT INTO practices (name) VALUES ('Owner Contractor Practice') RETURNING id`,
+		`INSERT INTO practices (name, timezone) VALUES ('Owner Contractor Practice', 'America/New_York') RETURNING id`,
 	).Scan(&practiceID); err != nil {
 		t.Fatalf("seed practice: %v", err)
 	}

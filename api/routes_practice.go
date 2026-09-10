@@ -18,6 +18,7 @@ import (
 	"doula-cloud/api/internal/portalinvite"
 	"doula-cloud/api/internal/practicedeletion"
 	"doula-cloud/api/internal/practicerate"
+	"doula-cloud/api/internal/practicetimezone"
 	"doula-cloud/api/internal/pushsub"
 	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/visit"
@@ -53,6 +54,7 @@ func registerPracticeRoutes(g *staffauth.GatedRouter, ir *idempotency.Router, d 
 	clientfieldtemplate.Mount(g, ir)
 	contracts.Mount(g, ir, d.DB, d.Store, d.Pusher)
 	practicerate.Mount(g, ir)
+	practicetimezone.Mount(g, ir)
 	offer.Mount(g, ir, d.DB, d.NudgeEnqueuer)
 	pushsub.Mount(g, ir, d.DB)
 	portalinvite.Mount(g, ir, d.DB, d.NudgeEnqueuer)
