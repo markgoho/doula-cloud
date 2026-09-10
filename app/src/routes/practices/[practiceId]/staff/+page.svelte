@@ -281,7 +281,18 @@
 	-->
 	{@const history = histories[member.staffId]}
 	<details ontoggle={(event) => handleHistoryToggle(member.staffId, event.currentTarget.open)}>
-		<summary>Work state history</summary>
+		<!--
+			Every row carries this disclosure, so the bare words name all of
+			them alike and a rotor's list of controls tells none of them apart
+			(#667, the sibling of #515's Buttons). A summary computes its
+			accessible name from its own content, so GOV.UK's visually-hidden
+			child applies literally here -- no id and no aria-describedby,
+			which is also why this never meets #666's duplicate ids across
+			DataTable's two trees. The space belongs to the summary's own text
+			node rather than the span: accessible-name computation
+			concatenates inline children without inserting one.
+		-->
+		<summary>Work state history <span class="visually-hidden">for {member.name}</span></summary>
 		{#if historyError[member.staffId]}
 			<Notice variant="error" message={historyError[member.staffId]} />
 		{:else if !history}

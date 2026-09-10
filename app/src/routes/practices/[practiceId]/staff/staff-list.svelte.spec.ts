@@ -210,6 +210,22 @@ function describedByText(button: ReturnType<typeof testPage.getByRole>): string 
 	return document.querySelector(`#${describedBy}`)?.textContent ?? '';
 }
 
+/*
+ * A <summary>'s accessible name is computed from its own content
+ * (HTML-AAM name-from-content), so the summary's text is exactly what a
+ * screen reader announces -- which is why #667's fix needs no id and no
+ * aria-describedby, and so never meets #666's duplicate ids. No accessible
+ * query can say this here: no implicit-role table in this stack maps
+ * `summary` to a role at all, so getByRole cannot find the element and a
+ * name matcher computes nothing from it. Reading the element's own text
+ * through the same sanctioned .table-view querySelector exception the two
+ * table helpers use is the honest form of the assertion.
+ */
+function disclosureName(index: number): string {
+	const summaries = document.querySelector('.table-view')!.querySelectorAll('summary');
+	return summaries[index]!.textContent!.trim();
+}
+
 describe('staff screen', () => {
 	// #508: the actual regression this ticket fixes, checked on the real
 	// route rather than only on the style-guide demo that mirrors its
@@ -511,6 +527,18 @@ describe('staff screen', () => {
 			expect(
 				describedByText(testPage.getByRole('button', { name: 'Show older changes' }))
 			).toBe(ownerMember.name);
+		});
+
+		// #667: the sibling of #515's Buttons. Without this every row's
+		// disclosure announces the same three words, so a screen-reader user
+		// tabbing the roster -- or reading the rotor's list of controls --
+		// hears "Work state history" once per Member with nothing telling the
+		// rows apart.
+		it('names each row disclosure by the member it belongs to', async () => {
+			await setup();
+
+			expect(disclosureName(0)).toBe(`Work state history for ${ownerMember.name}`);
+			expect(disclosureName(1)).toBe(`Work state history for ${contractorMember.name}`);
 		});
 	});
 
