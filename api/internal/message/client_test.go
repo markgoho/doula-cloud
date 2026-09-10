@@ -439,16 +439,15 @@ func TestClientListHandler_NamesASenderWhoHasLeftThePractice(t *testing.T) {
 		t.Fatalf("staff create status = %d, want %d", created.StatusCode, http.StatusCreated)
 	}
 
-	if _, err := db.Admin.ExecContext(t.Context(),
-		`DELETE FROM practice_memberships WHERE staff_id = $1`, staffID,
-	); err != nil {
-		t.Fatalf("remove membership: %v", err)
-	}
+	testdb.RemoveMembership(t, db, staffID)
 
 	portalSrv, portalSession := newPortalServer(t, db, identityUIDClient)
 	defer portalSrv.Close()
 	resp := authedGet(t, portalSession, portalSrv.URL+"/api/portal/engagements/"+engagementID+"/messages")
 	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
+	}
 
 	var thread message.ListResponse
 	if err := json.NewDecoder(resp.Body).Decode(&thread); err != nil {

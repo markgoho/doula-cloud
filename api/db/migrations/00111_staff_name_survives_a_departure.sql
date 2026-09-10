@@ -80,6 +80,19 @@
 -- so a Staff session never calls it at all: current_setting costs 1 and
 -- a SQL function costs 100, so Postgres evaluates the guard first.
 --
+-- No REVOKE EXECUTE ... FROM PUBLIC here, said out loud the way 00093
+-- says it for its own function rather than left to be noticed. A
+-- function a policy calls has to be executable by every role the policy
+-- applies to, so revoking the default from PUBLIC only to grant it
+-- straight back to app_runtime -- the only role that reads staff at all
+-- -- narrows nothing. What bounds this function is its own shape: one
+-- boolean about one Staff id, gated on a session variable only
+-- clientauth.Middleware sets. 00010's revoke is for a function a
+-- *handler* calls with arguments of its choosing, which is the case
+-- where the grant is the boundary. current_staff_id() (00003), the
+-- other policy-called function here, takes the same course this one
+-- does.
+--
 -- Each EXISTS is driven from engagements (engagements_client_idx, on
 -- client_id) and joined outward, never from visits.staff_id or
 -- messages.sender_id, neither of which is indexed; the two joins land on

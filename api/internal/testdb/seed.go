@@ -430,6 +430,22 @@ func PortalUID(name string) string {
 	return portalaccount.Prefix + name
 }
 
+// RemoveMembership is what "she left the Practice" is in the schema: the
+// practice_memberships row goes, and every policy that reaches a Staff
+// row through a live Membership stops reaching hers. Every test that
+// needs a departed Staff member wants exactly this one DELETE, so it
+// lives here beside the seeds it undoes rather than being re-declared
+// per package.
+func RemoveMembership(t *testing.T, db *DB, staffID string) {
+	t.Helper()
+	if _, err := db.Admin.ExecContext(t.Context(),
+		`DELETE FROM practice_memberships WHERE staff_id = $1`, staffID,
+	); err != nil {
+		// coverage:ignore reason: fixture delete failure, not exercised by the happy-path test
+		t.Fatalf("testdb: remove membership for staff %q: %v", staffID, err)
+	}
+}
+
 // SeedPortalUser mints a fresh Portal Account for identityUID and
 // attaches it to clientID -- the "a Client has an accepted portal user"
 // shape a half-dozen package tests each declared their own copy of.

@@ -104,18 +104,36 @@ func TestRLS_StaffVisibleToOwnClientPortalHistory(t *testing.T) {
 	messaged := testdb.SeedNamedStaffAtPractice(t, db, practiceID, "history-messaged", "Priya Raman", []string{doulaRole}, "employee")
 	stranger := testdb.SeedNamedStaffAtPractice(t, db, practiceID, "history-stranger", "Never Met", []string{doulaRole}, "employee")
 
-	if _, err := db.Admin.ExecContext(t.Context(),
-		`INSERT INTO visits (engagement_id, staff_id, scheduled_at) VALUES ($1, $2, now() - interval '3 days')`,
-		engagementID, visited,
-	); err != nil {
-		t.Fatalf("seed visit: %v", err)
+	// The case the reach has to refuse and a Practice-wide one would not:
+	// a Doula who did the same work, at the same Practice, for somebody
+	// else. Both halves of the reach get one, so neither EXISTS can be
+	// widened to the Practice without this failing.
+	_, othersEngagement := testdb.SeedNamedEngagement(t, db, practiceID, "Another Client", "another@example.com")
+	visitedOther := testdb.SeedNamedStaffAtPractice(t, db, practiceID, "history-visited-other", "Somebody Else's Doula", []string{doulaRole}, "employee")
+	messagedOther := testdb.SeedNamedStaffAtPractice(t, db, practiceID, "history-messaged-other", "Somebody Else's Admin", []string{doulaRole}, "employee")
+
+	seedVisit := func(engagement, staffID string) {
+		t.Helper()
+		if _, err := db.Admin.ExecContext(t.Context(),
+			`INSERT INTO visits (engagement_id, staff_id, scheduled_at) VALUES ($1, $2, now() - interval '3 days')`,
+			engagement, staffID,
+		); err != nil {
+			t.Fatalf("seed visit: %v", err)
+		}
 	}
-	if _, err := db.Admin.ExecContext(t.Context(),
-		`INSERT INTO messages (engagement_id, sender_type, sender_id, body) VALUES ($1, 'staff', $2, 'Checking in.')`,
-		engagementID, messaged,
-	); err != nil {
-		t.Fatalf("seed message: %v", err)
+	seedStaffMessage := func(engagement, staffID string) {
+		t.Helper()
+		if _, err := db.Admin.ExecContext(t.Context(),
+			`INSERT INTO messages (engagement_id, sender_type, sender_id, body) VALUES ($1, 'staff', $2, 'Checking in.')`,
+			engagement, staffID,
+		); err != nil {
+			t.Fatalf("seed message: %v", err)
+		}
 	}
+	seedVisit(engagementID, visited)
+	seedStaffMessage(engagementID, messaged)
+	seedVisit(othersEngagement, visitedOther)
+	seedStaffMessage(othersEngagement, messagedOther)
 	// Every one of them leaves, so nothing below is answered by 00009.
 	if _, err := db.Admin.ExecContext(t.Context(),
 		`DELETE FROM practice_memberships WHERE practice_id = $1`, practiceID,
@@ -146,12 +164,21 @@ func TestRLS_StaffVisibleToOwnClientPortalHistory(t *testing.T) {
 		}
 	}
 
-	var count int
-	if err := tx.QueryRowContext(t.Context(), `SELECT count(*) FROM staff WHERE id = $1`, stranger).Scan(&count); err != nil {
-		t.Fatalf("query staff as the Client: %v", err)
-	}
-	if count != 0 {
-		t.Fatalf("expected zero rows for a departed Staff member who never worked with this Client, got count = %d", count)
+	for _, refused := range []struct {
+		staffID string
+		why     string
+	}{
+		{stranger, "never worked with anyone"},
+		{visitedOther, "worked another Client's Visit at the same Practice"},
+		{messagedOther, "sent a Message on another Client's Engagement at the same Practice"},
+	} {
+		var count int
+		if err := tx.QueryRowContext(t.Context(), `SELECT count(*) FROM staff WHERE id = $1`, refused.staffID).Scan(&count); err != nil {
+			t.Fatalf("query staff as the Client: %v", err)
+		}
+		if count != 0 {
+			t.Fatalf("expected zero rows for a departed Staff member who %s, got count = %d", refused.why, count)
+		}
 	}
 }
 
@@ -173,11 +200,7 @@ func TestRLS_StaffPortalHistoryGrantsAStaffSessionNothing(t *testing.T) {
 	); err != nil {
 		t.Fatalf("seed visit: %v", err)
 	}
-	if _, err := db.Admin.ExecContext(t.Context(),
-		`DELETE FROM practice_memberships WHERE staff_id = $1`, departed,
-	); err != nil {
-		t.Fatalf("remove membership: %v", err)
-	}
+	testdb.RemoveMembership(t, db, departed)
 
 	tx, err := db.App.BeginTx(t.Context(), nil)
 	if err != nil {

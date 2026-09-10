@@ -216,7 +216,7 @@ func TestVisitsHandler_KeepsAVisitWhoseDoulaHasLeftThePractice(t *testing.T) {
 	const identityUID = "portal-visits-departed"
 	engagementID, doulaID := seedEngagementForVisits(t, db, identityUID, "Departed Practice", "Maya Okonkwo")
 	visitID := seedPortalVisit(t, db, engagementID, doulaID, time.Now().Add(-21*24*time.Hour))
-	removeMembership(t, db, doulaID)
+	testdb.RemoveMembership(t, db, doulaID)
 
 	srv, session := newServer(t, db, identityUID)
 	defer srv.Close()
@@ -244,7 +244,7 @@ func TestVisitsHandler_StandsInForADoulaWhoDeletedHerLogin(t *testing.T) {
 	const identityUID = "portal-visits-deleted-login"
 	engagementID, doulaID := seedEngagementForVisits(t, db, identityUID, "Deleted Login Practice", "Maya Okonkwo")
 	visitID := seedPortalVisit(t, db, engagementID, doulaID, time.Now().Add(-21*24*time.Hour))
-	removeMembership(t, db, doulaID)
+	testdb.RemoveMembership(t, db, doulaID)
 	if _, err := db.Admin.ExecContext(t.Context(),
 		`UPDATE staff SET name = $1, deleted_at = now() WHERE id = $2`,
 		staffauth.DeletedStaffName, doulaID,
@@ -264,18 +264,6 @@ func TestVisitsHandler_StandsInForADoulaWhoDeletedHerLogin(t *testing.T) {
 	}
 	if out.Items[0].DoulaName != "Your practice" {
 		t.Fatalf("doulaName = %q, want the Practice standing in for a name that no longer exists", out.Items[0].DoulaName)
-	}
-}
-
-// removeMembership is what "she left the Practice" is in the schema: the
-// practice_memberships row goes, and with it 00009's reach to her Staff
-// row.
-func removeMembership(t *testing.T, db *testdb.DB, staffID string) {
-	t.Helper()
-	if _, err := db.Admin.ExecContext(t.Context(),
-		`DELETE FROM practice_memberships WHERE staff_id = $1`, staffID,
-	); err != nil {
-		t.Fatalf("remove membership: %v", err)
 	}
 }
 
