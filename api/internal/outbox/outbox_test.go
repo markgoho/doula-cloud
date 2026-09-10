@@ -48,12 +48,23 @@ func createTestTable(t *testing.T, db *testdb.DB) {
 	}
 }
 
-func insertTestRow(t *testing.T, db *testdb.DB, id string, attemptCount int, nextAttemptAt time.Time) {
+// insertTestRow seeds one row whose due-time is an offset from the
+// *database's* clock: dueIn of 0 means "due now", a negative value
+// "overdue", a positive one "not yet due". Rounded to whole microseconds,
+// which is Postgres timestamp resolution anyway.
+//
+// It deliberately takes no host-side time.Time. testClaimQuery decides
+// dueness against Postgres's own now(), so a due-time written from the
+// host's clock is a comparison of two clocks nothing keeps in step, and
+// under a VM-backed container engine it decided these tests by the sign
+// of the drift -- see #987, and "A due-time fixture must not compare two
+// clocks" in docs/testing.md for the rule this follows.
+func insertTestRow(t *testing.T, db *testdb.DB, id string, attemptCount int, dueIn time.Duration) {
 	t.Helper()
 	if _, err := db.Admin.ExecContext(t.Context(),
 		`INSERT INTO outbox_test_rows (id, attempt_count, next_attempt_at, secret_a, secret_b)
-		 VALUES ($1, $2, $3, 'a-secret', 'b-secret')`,
-		id, attemptCount, nextAttemptAt,
+		 VALUES ($1, $2, now() + $3 * interval '1 microsecond', 'a-secret', 'b-secret')`,
+		id, attemptCount, dueIn.Microseconds(),
 	); err != nil {
 		t.Fatalf("insert test row: %v", err)
 	}
@@ -108,7 +119,7 @@ func (s *countingSender) Send(_ context.Context, msg mail.Message) error {
 func TestMarkSent_NoClearOnTerminal(t *testing.T) {
 	db := testdb.New(t)
 	createTestTable(t, db)
-	insertTestRow(t, db, "row-1", 0, time.Now())
+	insertTestRow(t, db, "row-1", 0, 0)
 	w := newTestWorker(&mail.FakeSender{})
 
 	tx, err := db.Admin.BeginTx(t.Context(), nil)
@@ -135,7 +146,7 @@ func TestMarkSent_NoClearOnTerminal(t *testing.T) {
 func TestMarkSent_ClearsConfiguredColumns(t *testing.T) {
 	db := testdb.New(t)
 	createTestTable(t, db)
-	insertTestRow(t, db, "row-1", 0, time.Now())
+	insertTestRow(t, db, "row-1", 0, 0)
 	w := newTestWorker(&mail.FakeSender{}, "secret_a", "secret_b")
 
 	tx, err := db.Admin.BeginTx(t.Context(), nil)
@@ -159,7 +170,7 @@ func TestMarkSent_ClearsConfiguredColumns(t *testing.T) {
 func TestMarkFailed_SchedulesRetryBeforeScheduleExhausted(t *testing.T) {
 	db := testdb.New(t)
 	createTestTable(t, db)
-	insertTestRow(t, db, "row-1", 0, time.Now())
+	insertTestRow(t, db, "row-1", 0, 0)
 	w := newTestWorker(&mail.FakeSender{})
 
 	tx, err := db.Admin.BeginTx(t.Context(), nil)
@@ -189,7 +200,7 @@ func TestMarkFailed_SchedulesRetryBeforeScheduleExhausted(t *testing.T) {
 func TestMarkFailed_DeadLettersAfterScheduleExhausted(t *testing.T) {
 	db := testdb.New(t)
 	createTestTable(t, db)
-	insertTestRow(t, db, "row-1", len(outbox.BackoffSchedule)-1, time.Now())
+	insertTestRow(t, db, "row-1", len(outbox.BackoffSchedule)-1, 0)
 	w := newTestWorker(&mail.FakeSender{}, "secret_a")
 
 	tx, err := db.Admin.BeginTx(t.Context(), nil)
@@ -216,7 +227,7 @@ func TestMarkFailed_DeadLettersAfterScheduleExhausted(t *testing.T) {
 func TestMarkDeadLetteredNow(t *testing.T) {
 	db := testdb.New(t)
 	createTestTable(t, db)
-	insertTestRow(t, db, "row-1", 0, time.Now())
+	insertTestRow(t, db, "row-1", 0, 0)
 	w := newTestWorker(&mail.FakeSender{})
 
 	tx, err := db.Admin.BeginTx(t.Context(), nil)
@@ -246,7 +257,7 @@ func TestMarkDeadLetteredNow(t *testing.T) {
 func TestSendAll_EmptyAddressesMarksSentWithNothingToMail(t *testing.T) {
 	db := testdb.New(t)
 	createTestTable(t, db)
-	insertTestRow(t, db, "row-1", 0, time.Now())
+	insertTestRow(t, db, "row-1", 0, 0)
 	sender := &countingSender{}
 	w := newTestWorker(sender)
 
@@ -274,7 +285,7 @@ func TestSendAll_EmptyAddressesMarksSentWithNothingToMail(t *testing.T) {
 func TestSendAll_MailsEveryAddressAndMarksSent(t *testing.T) {
 	db := testdb.New(t)
 	createTestTable(t, db)
-	insertTestRow(t, db, "row-1", 0, time.Now())
+	insertTestRow(t, db, "row-1", 0, 0)
 	sender := &countingSender{}
 	w := newTestWorker(sender)
 
@@ -303,7 +314,7 @@ func TestSendAll_MailsEveryAddressAndMarksSent(t *testing.T) {
 func TestSendAll_StopsAtFirstFailureAndMarksFailed(t *testing.T) {
 	db := testdb.New(t)
 	createTestTable(t, db)
-	insertTestRow(t, db, "row-1", 0, time.Now())
+	insertTestRow(t, db, "row-1", 0, 0)
 	sender := &countingSender{failAt: 2}
 	w := newTestWorker(sender)
 
@@ -354,8 +365,8 @@ func scanTestRow(rows *sql.Rows) (testRow, error) {
 func TestProcessPending_ClaimsDueRowsInOrderAndSkipsNotYetDue(t *testing.T) {
 	db := testdb.New(t)
 	createTestTable(t, db)
-	insertTestRow(t, db, "due-1", 0, time.Now().Add(-time.Minute))
-	insertTestRow(t, db, "not-due", 0, time.Now().Add(time.Hour))
+	insertTestRow(t, db, "due-1", 0, -time.Minute)
+	insertTestRow(t, db, "not-due", 0, time.Hour)
 	sender := &mail.FakeSender{}
 	w := newTestWorker(sender)
 
@@ -388,7 +399,7 @@ func TestProcessPending_ClaimsDueRowsInOrderAndSkipsNotYetDue(t *testing.T) {
 func TestProcessPending_HandleErrorStopsAndPropagates(t *testing.T) {
 	db := testdb.New(t)
 	createTestTable(t, db)
-	insertTestRow(t, db, "row-1", 0, time.Now())
+	insertTestRow(t, db, "row-1", 0, 0)
 	w := newTestWorker(&mail.FakeSender{})
 
 	tx, err := db.Admin.BeginTx(t.Context(), nil)
@@ -409,7 +420,7 @@ func TestProcessPending_HandleErrorStopsAndPropagates(t *testing.T) {
 func TestProcessPending_ScanErrorPropagates(t *testing.T) {
 	db := testdb.New(t)
 	createTestTable(t, db)
-	insertTestRow(t, db, "row-1", 0, time.Now())
+	insertTestRow(t, db, "row-1", 0, 0)
 	w := newTestWorker(&mail.FakeSender{})
 
 	tx, err := db.Admin.BeginTx(t.Context(), nil)
