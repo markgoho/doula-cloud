@@ -262,6 +262,35 @@ describe('the wrapper', () => {
 		expect(fs.existsSync(lockDir)).toBe(false);
 	}, 30000);
 
+	/*
+	 * The same claim as the test above, made where it used to be luck
+	 * (#1164). That one sends its signal the instant `owner.json` appears,
+	 * which is the first moment of the window between taking the lock and
+	 * spawning the wrapped command -- and until this ticket that window had
+	 * no signal handler in it at all, so the wrapper died under the default
+	 * action and left the lock standing. It failed about one run in three.
+	 *
+	 * `GATE_LOCK_PRE_SPAWN_DELAY_MS` widens that window to a second so the
+	 * signal lands inside it every time rather than sometimes. Against the
+	 * old script this fails on every run; against this one it passes on
+	 * every run, which is the difference the ticket is about.
+	 */
+	test('releases the lock when it is interrupted before the command is even spawned', async () => {
+		const child = spawn('bun', [SCRIPT, '--', 'bun', marker, journal, '0'], {
+			stdio: ['ignore', 'ignore', 'ignore'],
+			env: { ...process.env, GATE_LOCK_DIR: lockDir, GATE_LOCK_PRE_SPAWN_DELAY_MS: '1000' }
+		});
+		while (!fs.existsSync(path.join(lockDir, 'owner.json'))) await new Promise(resolve => setTimeout(resolve, 5));
+		child.kill('SIGTERM');
+		await new Promise(resolve => child.on('close', resolve));
+
+		expect(fs.existsSync(lockDir)).toBe(false);
+		// And the wrapped command never ran: the journal a completed run
+		// would have written is not there, so the release above happened in
+		// the window this test is about rather than after a normal run.
+		expect(fs.existsSync(journal)).toBe(false);
+	}, 30000);
+
 	test('refuses an empty command rather than silently succeeding', async () => {
 		const result = await invoke([]);
 		expect(result.exitCode).toBe(2);
