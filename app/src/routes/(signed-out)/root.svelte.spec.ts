@@ -1,9 +1,26 @@
 import { page as testPage } from 'vitest/browser';
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
+import { SIGN_OUT_FAILED_MESSAGE } from '#lib/signOut.js';
 import type { RootLanding } from './+page.js';
 import Page from './+page.svelte';
 import { data as staffPickerData, fixture } from './page.fixture.js';
+
+const goto = vi.hoisted(() => vi.fn());
+const invalidateAll = vi.hoisted(() => vi.fn());
+vi.mock('$app/navigation', () => ({ goto, invalidateAll }));
+
+const signOutOfSession = vi.hoisted(() => vi.fn());
+vi.mock('#lib/signOut.js', async (importOriginal) => ({
+	...(await importOriginal<typeof import('#lib/signOut.js')>()),
+	signOutOfSession
+}));
+
+const NO_ENGAGEMENT: RootLanding = { type: 'portal-picker', engagements: [] };
+
+beforeEach(() => {
+	for (const mock of [goto, invalidateAll, signOutOfSession]) mock.mockReset();
+});
 
 describe('/+page.svelte', () => {
 	it('offers a signed-out visitor the three real entry points, none implied as the main one', async () => {
@@ -90,12 +107,53 @@ describe('/+page.svelte', () => {
 		await expect.element(testPage.getByText('Care ended')).toBeVisible();
 	});
 
-	it('tells a Client-portal visitor with no Engagement yet to ask her Practice, rather than showing an empty list', async () => {
-		const data: RootLanding = { type: 'portal-picker', engagements: [] };
-		await render(Page, { params: fixture.params, data });
+	// #1116: the one state of `/` that offers no destination. Two people
+	// reach it -- one whose Practice has not set her care up yet, and one
+	// who signed in with an address her Practice does not have -- so the
+	// screen names the state, gives what to do about each cause, and
+	// carries the door out of the session it says leads nowhere.
+	it('names the state for a Client-portal visitor with no care set up, rather than showing an empty list', async () => {
+		await render(Page, { params: fixture.params, data: NO_ENGAGEMENT });
 
 		await expect
-			.element(testPage.getByText("You don't have care set up yet. Ask your Practice to set it up."))
+			.element(testPage.getByRole('heading', { level: 1, name: "You don't have care set up yet" }))
 			.toBeVisible();
+		await expect.element(testPage.getByText('Ask your Practice to set it up', { exact: false })).toBeVisible();
+		await expect
+			.element(testPage.getByText('signed in with a different email address', { exact: false }))
+			.toBeVisible();
+	});
+
+	it('lets a Client-portal visitor with no care set up end the session she is holding', async () => {
+		signOutOfSession.mockResolvedValue({ ok: true });
+		await render(Page, { params: fixture.params, data: NO_ENGAGEMENT });
+
+		await testPage.getByRole('button', { name: 'Sign out' }).click();
+
+		// The portal's own login screen, not the Staff one (#153), and no
+		// push scope to unregister: she has no Engagement to be subscribed
+		// under.
+		await vi.waitFor(() => expect(goto).toHaveBeenCalledWith('/portal/login'));
+		expect(signOutOfSession).toHaveBeenCalledWith(expect.objectContaining({ unsubscribeURL: undefined }));
+		expect(invalidateAll).toHaveBeenCalled();
+	});
+
+	it('keeps her here, told she is still signed in, when sign-out does not go through', async () => {
+		signOutOfSession.mockResolvedValue({ ok: false, message: SIGN_OUT_FAILED_MESSAGE });
+		await render(Page, { params: fixture.params, data: NO_ENGAGEMENT });
+
+		await testPage.getByRole('button', { name: 'Sign out' }).click();
+
+		await expect.element(testPage.getByText(SIGN_OUT_FAILED_MESSAGE)).toBeVisible();
+		expect(goto).not.toHaveBeenCalled();
+	});
+
+	// The three other states of `/` each offer a destination that lands in
+	// a fully dressed shell carrying its own sign-out, so the reduced bar
+	// above them stays as `+layout.svelte` describes it.
+	it('leaves the states that do offer a destination without a sign-out of their own', async () => {
+		await render(Page, { params: fixture.params, data: staffPickerData });
+
+		await expect.element(testPage.getByRole('button', { name: 'Sign out' })).not.toBeInTheDocument();
 	});
 });

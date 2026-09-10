@@ -8,6 +8,7 @@
  * invention, since a Practice's registered name is exactly the value
  * that broke a grid track there.
  */
+import { NO_CARE_HEADING } from '#lib/clientRegister.js';
 import type { RootLanding } from './+page.js';
 import type { RouteFixture } from '../routeFixture.js';
 import Page from './+page.svelte';
@@ -33,5 +34,17 @@ export const fixture: RouteFixture = {
 	params: {},
 	url: 'https://example.test/',
 	props: { data },
-	readyText: 'Choose a Practice'
+	readyText: 'Choose a Practice',
+	// #1116: the fourth shape `data` takes is not a picker with nothing in
+	// it but a state of its own -- its own heading, two paragraphs and a
+	// button, none of which the staff picker above renders. A tree the
+	// continuum check never mounts is a tree measured at no width, so it
+	// is declared here rather than left to the unit spec alone.
+	variants: [
+		{
+			name: 'The root landing screen (a Portal Account with no care set up)',
+			props: { data: { type: 'portal-picker', engagements: [] } satisfies RootLanding },
+			readyText: NO_CARE_HEADING
+		}
+	]
 };
