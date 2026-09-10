@@ -113,7 +113,7 @@ func BearerToken(r *http.Request) (string, bool) {
 // transaction back, and returns ok=false if any step fails. Callers must
 // ensure a returned transaction is rolled back or committed.
 //
-// want names the population this caller serves, and a session issued in
+// population names the one this caller serves, and a session issued in
 // the other one is refused here (#1024). Every call site has to name it
 // to compile, which is what makes the check total rather than a rule
 // each new route has to remember: `sessions` holds both populations'
@@ -123,14 +123,14 @@ func BearerToken(r *http.Request) (string, bool) {
 // its caller up in `staff` and find nothing -- fail-closed by accident,
 // and POST /api/staff/verify-email/request, which looked nothing up,
 // was the case that proved it.
-func Begin(w http.ResponseWriter, r *http.Request, db *sql.DB, want Tier) (*sql.Tx, string, bool, bool) {
+func Begin(w http.ResponseWriter, r *http.Request, db *sql.DB, population Tier) (*sql.Tx, string, bool, bool) {
 	tx, ok := beginTx(w, r, db)
 	if !ok {
 		// coverage:ignore reason: DB connection failure, not exercised by unit tests
 		return nil, "", false, false
 	}
 
-	uid, secondFactor, ok := sessionCredential(w, r, tx, db, want)
+	uid, secondFactor, ok := sessionCredential(w, r, tx, db, population)
 	if !ok {
 		_ = tx.Rollback()
 		return nil, "", false, false
@@ -192,7 +192,7 @@ func beginTx(w http.ResponseWriter, r *http.Request, db *sql.DB) (*sql.Tx, bool)
 const MsgInvalidSession = "invalid session"
 
 // sessionCredential resolves the caller's identity from the __session
-// cookie, for the population want names. It writes a 401 and returns
+// cookie, for the population named. It writes a 401 and returns
 // ok=false if the cookie is absent, names no live session, or names a
 // session in the other population -- but a session the database could
 // not be asked about is a 500, not a 401: an unreachable database must
@@ -201,7 +201,7 @@ const MsgInvalidSession = "invalid session"
 // never is, which is why the tier check sits above renewIfStale rather
 // than after Begin returns: a refused request must not walk away with a
 // freshly extended cookie.
-func sessionCredential(w http.ResponseWriter, r *http.Request, tx *sql.Tx, db *sql.DB, want Tier) (string, bool, bool) {
+func sessionCredential(w http.ResponseWriter, r *http.Request, tx *sql.Tx, db *sql.DB, population Tier) (string, bool, bool) {
 	cookie, err := r.Cookie(SessionCookieName)
 	if err != nil {
 		apierr.WriteError(w, "missing credential", http.StatusUnauthorized)
@@ -218,7 +218,7 @@ func sessionCredential(w http.ResponseWriter, r *http.Request, tx *sql.Tx, db *s
 		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 		return "", false, false
 	}
-	if TierOf(uid) != want {
+	if TierOf(uid) != population {
 		apierr.WriteError(w, MsgInvalidSession, http.StatusUnauthorized)
 		return "", false, false
 	}

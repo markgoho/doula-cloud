@@ -209,9 +209,9 @@ func TestSessionHandler_MultipleClients_Isolation(t *testing.T) {
 	practiceB := testdb.SeedPractice(t, db, "Practice B")
 	clientA, engagementA := testdb.SeedEngagementInStatus(t, db, practiceA, "Camille at A", "camille-a@example.com", "active")
 	_, engagementB := testdb.SeedEngagementInStatus(t, db, practiceB, "Someone Else", "someone-else@example.com", "active")
-	testdb.SeedPortalUser(t, db, portalaccount.Prefix+"isolated-portal-account", clientA)
+	testdb.SeedPortalUser(t, db, testdb.PortalUID("isolated-portal-account"), clientA)
 
-	srv, session := newSessionServer(t, db, portalaccount.Prefix+"isolated-portal-account")
+	srv, session := newSessionServer(t, db, testdb.PortalUID("isolated-portal-account"))
 	defer srv.Close()
 
 	resp := getSession(t, srv, session)

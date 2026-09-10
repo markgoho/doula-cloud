@@ -69,17 +69,56 @@ var staffFamilyGroups = map[string]routeGroup{
 	"POST /api/staff/mfa-recovery/spend":              groupPreAccount,
 }
 
+// refusal is the answer one group owes a live Client Portal session, and
+// why that answer is the discriminating one for that group.
+type refusal struct {
+	status  int
+	message string // "" where the group's own credential check owns the wording
+	why     string
+}
+
+// groupRefusals is the assertion table TestStaffFamilyRefusesAPortalSession
+// walks. Written per group rather than per route: what a route owes this
+// caller follows entirely from which credential it reads, and a per-route
+// table would be fourteen copies of three answers.
+var groupRefusals = map[routeGroup]refusal{
+	groupSession: {
+		status:  http.StatusUnauthorized,
+		message: authn.MsgInvalidSession,
+		why:     "a session-reading route must meet authn.Begin's own refusal, worded so a caller cannot tell it from a cookie naming no session at all",
+	},
+	groupBootstrap: {
+		status:  http.StatusUnauthorized,
+		message: "missing credential",
+		why:     "a bootstrap route reads a Bearer ID token and never the cookie, so a Portal session must be as invisible to it as no session at all",
+	},
+	groupPreAccount: {
+		status: http.StatusBadRequest,
+		why:    "a pre-account route refuses on the link token this body does not carry, having never consulted the cookie",
+	},
+}
+
 // TestStaffFamilyRefusesAPortalSession is #1024's guardrail, and it is
 // enumerated from GatedRouter's own registry rather than from a list
 // somebody keeps by hand: a route mounted in mountSessionRoutes is in
 // this walk the moment it is mounted.
 //
-// Every route in the family answers a live Client Portal session with a
-// refusal. The seven that read the cookie answer authn.Begin's own 401,
-// with no Set-Cookie -- a refused request must not walk away with a
-// renewed session. The other seven read no session at all, so what they
-// answer is whatever their own credential check says about a request
-// that carries none; the assertion there is that it is never a success.
+// Each group is asserted on the thing that is actually true of it,
+// rather than all fourteen on a shared "not a 2xx" that would pass with
+// the tier check reverted:
+//
+//   - groupSession answers authn.Begin's own 401 carrying
+//     MsgInvalidSession, with no Set-Cookie -- a refused request must not
+//     walk away with a renewed session.
+//   - groupBootstrap answers 401 "missing credential", the same thing it
+//     answers an anonymous caller. That is the assertion, not a
+//     weaker one: the claim for this group is precisely that the cookie
+//     plays no part here, so a Portal session must be as invisible to it
+//     as no session at all.
+//   - groupPreAccount answers 400. It refused on the link token the body
+//     does not carry, having never consulted the cookie -- the same
+//     claim, met one status further along because the credential is in
+//     the body rather than a header.
 func TestStaffFamilyRefusesAPortalSession(t *testing.T) {
 	db := testdb.New(t)
 	mux := http.NewServeMux()
@@ -112,19 +151,15 @@ func TestStaffFamilyRefusesAPortalSession(t *testing.T) {
 			resp := callWithPortalSession(t, srv, route.Method, route.Pattern, token)
 			defer func() { _ = resp.Body.Close() }()
 
-			if resp.StatusCode < http.StatusBadRequest {
-				t.Fatalf("status = %d, want a refusal -- a Client Portal session reached %s", resp.StatusCode, name)
+			wantStatus, wantMessage := groupRefusals[group].status, groupRefusals[group].message
+			if resp.StatusCode != wantStatus {
+				t.Fatalf("status = %d, want %d -- %s", resp.StatusCode, wantStatus, groupRefusals[group].why)
 			}
-			if group != groupSession {
-				return
+			if got := apierrtest.Decode(t, resp).Message; wantMessage != "" && got != wantMessage {
+				t.Errorf("message = %q, want %q -- %s", got, wantMessage, groupRefusals[group].why)
 			}
-			if resp.StatusCode != http.StatusUnauthorized {
-				t.Fatalf("status = %d, want %d -- a session-reading route must meet authn.Begin's own refusal",
-					resp.StatusCode, http.StatusUnauthorized)
-			}
-			if got := apierrtest.Decode(t, resp).Message; got != authn.MsgInvalidSession {
-				t.Errorf("message = %q, want %q -- the refusal must be indistinguishable from a cookie naming no session at all", got, authn.MsgInvalidSession)
-			}
+			// No route in this family may renew the session it just
+			// refused, whichever credential it refused it on.
 			if cookies := resp.Cookies(); len(cookies) != 0 {
 				t.Errorf("Set-Cookie = %v, want none -- a refused request renewed the session it was refused for", cookies)
 			}

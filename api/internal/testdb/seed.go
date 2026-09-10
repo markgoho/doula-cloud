@@ -421,8 +421,8 @@ func PracticeOfClient(t *testing.T, db *DB, clientID string) string {
 // Deliberately not applied inside SeedPortalUser: the shared-identity RLS
 // fixtures (clientauth, message) seed one identity_uid into both `staff`
 // and `client_portal_users` on purpose, to hold migration 00006's
-// belt-and-braces guards honest, and normalizing one half of that pair
-// would quietly make those tests assert nothing.
+// backstop guards honest, and normalizing one half of that pair would
+// quietly make those tests assert nothing.
 func PortalUID(name string) string {
 	if strings.HasPrefix(name, portalaccount.Prefix) {
 		return name
