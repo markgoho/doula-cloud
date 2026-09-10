@@ -255,7 +255,11 @@
 			return;
 		}
 
-		overrideError = refused[0]!.message;
+		// Every message, not the first: a `details` map whose keys this form
+		// maps none of arrives as several untargeted entries, and showing
+		// one of them would show less than the server said -- the same
+		// reason `refusalMessage` gives for not picking one itself.
+		overrideError = refused.map((entry) => entry.message).join(' ');
 		// Rethrown so ConfirmDialog leaves the dialog open over the failure,
 		// with the Notice it now carries readable inside it.
 		throw new Error(overrideError);
@@ -364,7 +368,7 @@
 	title="Possible duplicate Client"
 	consequence={`This name exactly matches an existing Client at this Practice: ${matchNames()}. Saving keeps this as its own separate record -- nothing here is merged.`}
 	confirmLabel="Yes, a different person"
-	error={overrideError || undefined}
+	error={overrideError}
 	onConfirm={handleOverrideConfirm}
 	onCancel={handleConflictCancel}
 />

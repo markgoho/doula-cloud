@@ -160,12 +160,11 @@ describe('client edit', () => {
 	 * `::backdrop` and the whole page behind it is inert. A refusal
 	 * rendered in the page while the dialog is open still passes
 	 * `toBeVisible()` and is unreadable, and `ErrorSummary`'s focus effect
-	 * fires against inert content and does nothing. So these read the
-	 * `<dialog>`'s own `open` -- a fact about the top layer with no
-	 * accessible signal at all, the third `querySelector` exception in
-	 * `.claude/rules/svelte-tests.md` -- alongside DOM containment and
-	 * `document.activeElement`. Each one fails under the arrangement this
-	 * ticket replaces.
+	 * fires against inert content and does nothing. So the refusal is
+	 * queried *through* the dialog rather than through the page, which is
+	 * the assertion #804 used for the same defect, and the focus half is
+	 * read off `document.activeElement`. Each one fails under the
+	 * arrangement this ticket replaces.
 	 */
 	it('keeps a refused override that names no field readable inside the still-open dialog', async () => {
 		await setup();
@@ -180,10 +179,14 @@ describe('client edit', () => {
 		await expect.element(testPage.getByRole('dialog')).toBeVisible();
 		await testPage.getByRole('button', { name: 'Yes, a different person' }).click();
 
-		const notice = await testPage.getByText('This Practice is not accepting changes.').element();
-		const dialog = document.querySelector('dialog')!;
-		expect(dialog.open).toBe(true);
-		expect(dialog.contains(notice)).toBe(true);
+		// Scoped to the dialog, so this passes only while the refusal is in
+		// the top layer with it -- the same query that would have failed
+		// with the refusal rendered in the page behind the backdrop.
+		const dialog = testPage.getByRole('dialog');
+		await expect.element(dialog).toBeVisible();
+		await expect
+			.element(dialog.getByText('This Practice is not accepting changes.'))
+			.toBeVisible();
 		// And nothing is left waiting in the page's own summary to appear
 		// unannounced the moment she cancels.
 		await expect.element(testPage.getByText('There is a problem')).not.toBeInTheDocument();
@@ -217,7 +220,13 @@ describe('client edit', () => {
 		await expect
 			.element(testPage.getByRole('link', { name: 'Enter a given name of 100 characters or fewer' }))
 			.toBeVisible();
-		expect(document.querySelector('dialog')!.open).toBe(false);
+		await expect.element(testPage.getByRole('dialog')).not.toBeInTheDocument();
+		// `document.activeElement` rather than a locator's `toHaveFocus()`:
+		// what takes focus is `ErrorSummary`'s own `tabindex="-1"` wrapper,
+		// which carries no role on purpose so it does not double up on the
+		// `role="alert"` inside it -- the second `querySelector` exception
+		// in `.claude/rules/svelte-tests.md`, a deliberately non-accessible
+		// element with nothing for an accessible query to find.
 		await expect
 			.poll(() => document.activeElement?.textContent)
 			.toContain('Enter a given name of 100 characters or fewer');

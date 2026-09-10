@@ -29,7 +29,7 @@
 	 * reach. A caller whose refusal names a control on the form behind
 	 * closes this dialog and hands the refusal to that form's own summary
 	 * instead -- see the Client-edit override confirm, and the modal
-	 * `Dialog` section of docs/design/govuk-alignment.md.
+	 * `Dialog` paragraph of docs/design/govuk-alignment.md.
 	 */
 	interface Properties {
 		open?: boolean;
