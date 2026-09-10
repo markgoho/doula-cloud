@@ -37,11 +37,18 @@ type SuppressionChecker func(ctx context.Context, tx *sql.Tx, address string) (b
 // event; IPRule bounds the address minting fresh credentials to keep
 // retrying it. Values are generous rather than tight: nothing has ever
 // limited this endpoint before, so any finite cap is a real improvement.
-// Sized above the Playwright e2e suite's own signup/accept-invite volume,
-// which runs every test against one shared BFF and one IP within a
-// single run, and above a 14-doula agency's pilot-sized onboarding burst
-// (#602 sizing note): several people fumbling an invite from the same
+// Sized above the Playwright e2e suite's own signup/accept-invite volume
+// for a single pass, which runs every test against one shared BFF and one
+// IP, and above a 14-doula agency's pilot-sized onboarding burst (#602
+// sizing note): several people fumbling an invite from the same
 // birth-center connection in one hour must not lock each other out.
+//
+// A single pass is the whole of that claim. A *repeated* batch -- the way
+// a flake gets confirmed fixed -- spends this budget several times over
+// from that one address, which is #1138: the harness clears these
+// counters out of its own database when it trips them, and
+// docs/testing.md is where that is written down. Nothing about this
+// endpoint's own sizing changed for it.
 var bootstrapRules = []ratelimit.Rule{
 	ratelimit.BearerTokenRule(5, time.Hour),
 	ratelimit.IPRule(50, time.Hour),

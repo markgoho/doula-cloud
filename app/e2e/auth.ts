@@ -22,10 +22,8 @@ export async function signIn(
 	apiURL: string,
 	idToken: string
 ): Promise<{ Cookie: string }> {
-	// retryPastRateLimit (rateLimit.ts): POST /api/session allows one
-	// address 100 sign-ins an hour (`loginRules`, api/internal/session), and
-	// the whole suite arrives from one address -- a repeated batch reaches
-	// that ceiling a repeat or two after it reaches signup's (#1138).
+	// retryPastRateLimit (rateLimit.ts) for why a repeated batch needs it
+	// here too, a repeat or two after it needs it at signup (#1138).
 	const created = await retryPastRateLimit(() =>
 		request.post(`${apiURL}/api/session`, {
 			headers: { Authorization: `Bearer ${idToken}` }

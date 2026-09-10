@@ -10,7 +10,7 @@ import {
 	MAILBOX_URL,
 	WORKER_SECRET
 } from './stack';
-import { seedFoundingOwner } from './staffSignup';
+import { acceptStaffInvite, seedFoundingOwner } from './staffSignup';
 
 // The Firebase Auth emulator and the Go BFF -- both host processes -- see
 // e2e/global-setup.ts and e2e/stack.ts for how these get started.
@@ -204,10 +204,7 @@ export async function seedContractorDoula(
 	// AcceptInviteHandler runs before any session exists (a bootstrap
 	// Bearer token, not the __session cookie) and mints the session on
 	// its own response -- the same shape staff/signup uses.
-	const accept = await request.post(`${API_URL}/api/staff/accept-invite`, {
-		headers: { Authorization: `Bearer ${idToken}` },
-		data: { inviteToken, name: 'Casey Contractor', workState: 'NY' }
-	});
+	const accept = await acceptStaffInvite(request, idToken, { inviteToken, name: 'Casey Contractor' });
 	const acceptBody = await accept.text();
 	expect(accept.ok(), `contractor accept-invite failed: ${accept.status()} ${acceptBody}`).toBe(true);
 	const { staffId } = JSON.parse(acceptBody);

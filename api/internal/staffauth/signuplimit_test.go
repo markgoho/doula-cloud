@@ -2,6 +2,7 @@ package staffauth_test
 
 import (
 	"net/http"
+	"strconv"
 	"testing"
 
 	"doula-cloud/api/internal/apierr"
@@ -20,8 +21,12 @@ const signupIPBudget = 50
 
 // burstSignupBody is a well-formed signup request. Its contents never
 // matter: every request below is refused before the handler reads it,
-// either by the missing Bearer token or by the limiter in front of it.
-var burstSignupBody = staffauth.SignupRequest{PracticeName: "Riverside Doulas", StaffName: jamieOwnerName, WorkState: "NY"}
+// either by the missing Bearer token or by the limiter in front of it. A
+// function rather than a package-level var so nothing else in
+// staffauth_test can mutate the value this test sends.
+func burstSignupBody() staffauth.SignupRequest {
+	return staffauth.SignupRequest{PracticeName: "Riverside Doulas", StaffName: jamieOwnerName, WorkState: "NY"}
+}
 
 // TestSignupRefusesAGenuineBurst is the measurement behind #1138 and the
 // guardrail over its fix. It drives the real mounted route -- not
@@ -52,16 +57,20 @@ func TestSignupRefusesAGenuineBurst(t *testing.T) {
 	t.Cleanup(srv.Close)
 
 	for i := 1; i <= signupIPBudget; i++ {
-		resp := postSignup(t, srv, "", burstSignupBody)
+		resp := postSignup(t, srv, "", burstSignupBody())
 		status := resp.StatusCode
 		_ = resp.Body.Close()
-		if status == http.StatusTooManyRequests {
-			t.Fatalf("request %d of %d was rate limited -- the budget one address gets is smaller than %d",
-				i, signupIPBudget, signupIPBudget)
+		// 401, not merely "not 429": a mount that had stopped reaching this
+		// handler at all would answer 404 or 500 for fifty requests and
+		// then fail below with a message about the ceiling, which is the
+		// wrong story about the wrong bug.
+		if status != http.StatusUnauthorized {
+			t.Fatalf("request %d of %d: status = %d, want 401 -- the limiter let it through to a handler that refuses a missing credential",
+				i, signupIPBudget, status)
 		}
 	}
 
-	resp := postSignup(t, srv, "", burstSignupBody)
+	resp := postSignup(t, srv, "", burstSignupBody())
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusTooManyRequests {
 		t.Fatalf("request %d: status = %d, want 429 -- a genuine burst past %d in an hour must still be refused",
@@ -69,6 +78,15 @@ func TestSignupRefusesAGenuineBurst(t *testing.T) {
 	}
 	if got := apierrtest.Decode(t, resp).Code; got != apierr.CodeRateLimited {
 		t.Errorf("code = %q, want %q", got, apierr.CodeRateLimited)
+	}
+	// docs/api-design.md section 6 names all three of these on a refusal.
+	for header, want := range map[string]string{
+		"RateLimit-Limit":     strconv.Itoa(signupIPBudget),
+		"RateLimit-Remaining": "0",
+	} {
+		if got := resp.Header.Get(header); got != want {
+			t.Errorf("%s = %q, want %q", header, got, want)
+		}
 	}
 	if resp.Header.Get("Retry-After") == "" {
 		t.Error("Retry-After header missing -- a refused caller cannot tell when to come back")

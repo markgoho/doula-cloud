@@ -66,10 +66,8 @@ export async function seedFoundingOwner(
 	expect(signUp.ok(), `owner signUp failed: ${signUp.status()} ${await signUp.text()}`).toBe(true);
 	const { idToken, localId } = await signUp.json();
 
-	// retryPastRateLimit (rateLimit.ts): the whole suite reaches the BFF
-	// from one address, and a repeated batch spends this endpoint's hourly
-	// budget for that address well before it has repeated enough times to
-	// confirm a flake (#1138).
+	// retryPastRateLimit (rateLimit.ts) for why a repeated batch needs it
+	// here at all (#1138).
 	const signup = await retryPastRateLimit(() =>
 		request.post(`${API_URL}/api/staff/signup`, {
 			headers: { Authorization: `Bearer ${idToken}` },
@@ -81,6 +79,30 @@ export async function seedFoundingOwner(
 	const { practiceId, staffId } = JSON.parse(signupBody);
 
 	return { email, password: FOUNDING_OWNER_PASSWORD, idToken, localId, practiceId, staffId };
+}
+
+/**
+ * POSTs an invited person's acceptance and hands the raw response back --
+ * the caller reads the body, the session cookie, or both, since the three
+ * fixtures that accept an invitation through the API each want a
+ * different part of it.
+ *
+ * A helper at all so the retryPastRateLimit wrapping lives in one place:
+ * this route is fronted by the same rules as signup, so a batch repeated
+ * often enough reaches its ceiling too (#1138).
+ */
+export function acceptStaffInvite(
+	request: APIRequestContext,
+	idToken: string,
+	fields: { inviteToken: string; name: string; workState?: string }
+) {
+	const { inviteToken, name, workState = 'NY' } = fields;
+	return retryPastRateLimit(() =>
+		request.post(`${API_URL}/api/staff/accept-invite`, {
+			headers: { Authorization: `Bearer ${idToken}` },
+			data: { inviteToken, name, workState }
+		})
+	);
 }
 
 export interface SeededNoPracticeAccount {
