@@ -162,68 +162,71 @@
 		<Notice message="Credit purchase canceled." variant="status" />
 	{/if}
 
+	<!-- stacked-form:ignore: #1108 -- the Quantity box is `required` with a `min`, and that is the only thing standing between an empty or zero quantity and a Stripe checkout. `StackedForm` sets `novalidate` (ADR-0021), so adopting it here would take that refusal away and put nothing in its place; #1226 is where this form gets a refusal of its own and then adopts the molecule. The stack below is `StackedForm`'s own arrangement, written inline meanwhile. -->
 	<form onsubmit={handlePurchase}>
-		<!--
-			Through LabeledField and TextInput rather than a raw <label> around a
-			raw <input>: reaching around the atoms put the word "Quantity" on the
-			same line as its box, which is the defect #425 found and #475 walked
-			the pages to catch the rest of.
-		-->
-		<LabeledField id={quantityId} label="Quantity">
-			{#snippet children({ id, describedBy, invalid })}
-				<TextInput
-					{id}
-					{describedBy}
-					{invalid}
-					type="number"
-					inputmode="numeric"
-					min={1}
-					required
-					value={String(quantity)}
-					onInput={(entered) => (quantity = Number(entered))}
+		<stack-l space="var(--space-5)">
+			<!--
+				Through LabeledField and TextInput rather than a raw <label> around a
+				raw <input>: reaching around the atoms put the word "Quantity" on the
+				same line as its box, which is the defect #425 found and #475 walked
+				the pages to catch the rest of.
+			-->
+			<LabeledField id={quantityId} label="Quantity">
+				{#snippet children({ id, describedBy, invalid })}
+					<TextInput
+						{id}
+						{describedBy}
+						{invalid}
+						type="number"
+						inputmode="numeric"
+						min={1}
+						required
+						value={String(quantity)}
+						onInput={(entered) => (quantity = Number(entered))}
+					/>
+				{/snippet}
+			</LabeledField>
+
+			{#if data.price}
+				<DescriptionList items={priceItems} />
+				<Text
+					text="New York sales tax is added at checkout where it applies."
+					step="body-sm"
+					tone="variant"
 				/>
-			{/snippet}
-		</LabeledField>
+			{:else}
+				<!--
+					#256's intro above now states the ordinary $20.00 price as a
+					fixed fact, so this sentence is scoped to what is actually
+					missing -- today's checkout total from Stripe -- rather than
+					repeating "price" and reading as a contradiction of it.
+				-->
+				<Text text="This purchase's exact price could not be confirmed with Stripe right now." step="body-sm" tone="variant" />
+			{/if}
 
-		{#if data.price}
-			<DescriptionList items={priceItems} />
-			<Text
-				text="New York sales tax is added at checkout where it applies."
-				step="body-sm"
-				tone="variant"
+			<Button
+				label="Buy credits"
+				type="submit"
+				disabled={!canBuyCredits}
+				loading={isPurchasing}
+				describedBy={canBuyCredits ? undefined : buyCreditsHelpId}
 			/>
-		{:else}
-			<!--
-				#256's intro above now states the ordinary $20.00 price as a
-				fixed fact, so this sentence is scoped to what is actually
-				missing -- today's checkout total from Stripe -- rather than
-				repeating "price" and reading as a contradiction of it.
-			-->
-			<Text text="This purchase's exact price could not be confirmed with Stripe right now." step="body-sm" tone="variant" />
-		{/if}
-
-		<Button
-			label="Buy credits"
-			type="submit"
-			disabled={!canBuyCredits}
-			loading={isPurchasing}
-			describedBy={canBuyCredits ? undefined : buyCreditsHelpId}
-		/>
-		{#if !canBuyCredits}
-			<!--
-				Names the same roles the out-of-credits refusal at the wall
-				does (engagementrequest/approve.go's "ask a practice owner or
-				admin to buy more") -- a #257 fix: this control used to be
-				silently inert for an Admin sent here by exactly that
-				message. Visible text, not only aria-describedby, so a
-				sighted Admin also learns why rather than guessing at a
-				grayed-out button.
-			-->
-			<Text id={buyCreditsHelpId} text="Buying Credits is for a practice Owner or Admin." step="body-sm" tone="variant" />
-		{/if}
-		{#if purchaseError}
-			<Notice message={purchaseError} variant="error" />
-		{/if}
+			{#if !canBuyCredits}
+				<!--
+					Names the same roles the out-of-credits refusal at the wall
+					does (engagementrequest/approve.go's "ask a practice owner or
+					admin to buy more") -- a #257 fix: this control used to be
+					silently inert for an Admin sent here by exactly that
+					message. Visible text, not only aria-describedby, so a
+					sighted Admin also learns why rather than guessing at a
+					grayed-out button.
+				-->
+				<Text id={buyCreditsHelpId} text="Buying Credits is for a practice Owner or Admin." step="body-sm" tone="variant" />
+			{/if}
+			{#if purchaseError}
+				<Notice message={purchaseError} variant="error" />
+			{/if}
+		</stack-l>
 	</form>
 {/snippet}
 

@@ -152,95 +152,98 @@
 	<Notice message={withdrawError} variant="error" />
 {/if}
 
+<!-- stacked-form:ignore: #1108 -- five of this form's controls are `required`, and that is the only thing standing between an incomplete offer and the endpoint. `StackedForm` sets `novalidate` (ADR-0021), so adopting it here would take that refusal away and put nothing in its place; #1226 is where this form gets a refusal of its own and then adopts the molecule. The stack below is `StackedForm`'s own arrangement, written inline meanwhile. -->
 <form onsubmit={handleCreate}>
-	<RadioGroup
-		legend="Offer this work to"
-		options={[
-			{ value: 'staff', label: 'Someone already at this practice' },
-			{ value: 'email', label: 'Someone new, by email' }
-		]}
-		value={target}
-		onChange={(value) => (target = value)}
-	/>
-
-	{#if target === 'staff'}
+	<stack-l space="var(--space-5)">
 		<RadioGroup
-			legend="Doula"
-			options={doulas.map((doula) => ({ value: doula.staffId, label: doula.name }))}
-			value={staffId}
-			onChange={(value) => (staffId = value)}
+			legend="Offer this work to"
+			options={[
+				{ value: 'staff', label: 'Someone already at this practice' },
+				{ value: 'email', label: 'Someone new, by email' }
+			]}
+			value={target}
+			onChange={(value) => (target = value)}
 		/>
-	{:else}
-		<LabeledField label="Email address">
+
+		{#if target === 'staff'}
+			<RadioGroup
+				legend="Doula"
+				options={doulas.map((doula) => ({ value: doula.staffId, label: doula.name }))}
+				value={staffId}
+				onChange={(value) => (staffId = value)}
+			/>
+		{:else}
+			<LabeledField label="Email address">
+				{#snippet children({ id, describedBy, invalid })}
+					<TextInput
+						{id}
+						{describedBy}
+						{invalid}
+						type="email"
+						value={email}
+						onInput={(value) => (email = value)}
+						required
+					/>
+				{/snippet}
+			</LabeledField>
+			<p>A doula invited by email joins the practice as a contractor, so this offer carries a fee.</p>
+		{/if}
+
+		{#if isFeeRequired}
+			<LabeledField label="Fee (USD)">
+				{#snippet children({ id, describedBy, invalid })}
+					<TextInput
+						{id}
+						{describedBy}
+						{invalid}
+						type="number"
+						step={0.01}
+						value={feeDollars}
+						onInput={(value) => (feeDollars = value)}
+						required
+					/>
+				{/snippet}
+			</LabeledField>
+		{/if}
+
+		<LabeledField label="Client's first initial">
 			{#snippet children({ id, describedBy, invalid })}
 				<TextInput
 					{id}
 					{describedBy}
 					{invalid}
-					type="email"
-					value={email}
-					onInput={(value) => (email = value)}
+					maxlength={1}
+					value={initial}
+					onInput={(value) => (initial = value)}
 					required
 				/>
 			{/snippet}
 		</LabeledField>
-		<p>A doula invited by email joins the practice as a contractor, so this offer carries a fee.</p>
-	{/if}
-
-	{#if isFeeRequired}
-		<LabeledField label="Fee (USD)">
+		<LabeledField label="General area">
 			{#snippet children({ id, describedBy, invalid })}
 				<TextInput
 					{id}
 					{describedBy}
 					{invalid}
-					type="number"
-					step={0.01}
-					value={feeDollars}
-					onInput={(value) => (feeDollars = value)}
+					value={clientArea}
+					onInput={(value) => (clientArea = value)}
 					required
 				/>
 			{/snippet}
 		</LabeledField>
-	{/if}
+		<LabeledField label="Due date">
+			{#snippet children({ id, describedBy, invalid })}
+				<TextInput {id} {describedBy} {invalid} type="date" value={dueDate} onInput={(value) => (dueDate = value)} required />
+			{/snippet}
+		</LabeledField>
+		<LabeledField label="Terms">
+			{#snippet children({ id, describedBy, invalid })}
+				<Textarea {id} {describedBy} {invalid} value={terms} onInput={(next) => (terms = next)} />
+			{/snippet}
+		</LabeledField>
 
-	<LabeledField label="Client's first initial">
-		{#snippet children({ id, describedBy, invalid })}
-			<TextInput
-				{id}
-				{describedBy}
-				{invalid}
-				maxlength={1}
-				value={initial}
-				onInput={(value) => (initial = value)}
-				required
-			/>
-		{/snippet}
-	</LabeledField>
-	<LabeledField label="General area">
-		{#snippet children({ id, describedBy, invalid })}
-			<TextInput
-				{id}
-				{describedBy}
-				{invalid}
-				value={clientArea}
-				onInput={(value) => (clientArea = value)}
-				required
-			/>
-		{/snippet}
-	</LabeledField>
-	<LabeledField label="Due date">
-		{#snippet children({ id, describedBy, invalid })}
-			<TextInput {id} {describedBy} {invalid} type="date" value={dueDate} onInput={(value) => (dueDate = value)} required />
-		{/snippet}
-	</LabeledField>
-	<LabeledField label="Terms">
-		{#snippet children({ id, describedBy, invalid })}
-			<Textarea {id} {describedBy} {invalid} value={terms} onInput={(next) => (terms = next)} />
-		{/snippet}
-	</LabeledField>
-
-	<Button label="Send Offer" type="submit" loading={isSending} />
+		<Button label="Send Offer" type="submit" loading={isSending} />
+	</stack-l>
 </form>
 
 {#if createError}

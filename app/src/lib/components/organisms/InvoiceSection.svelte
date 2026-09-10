@@ -50,6 +50,7 @@
 	import Textarea from '#lib/components/atoms/Textarea.svelte';
 	import LabeledField from '#lib/components/molecules/LabeledField.svelte';
 	import RadioGroup from '#lib/components/molecules/RadioGroup.svelte';
+	import StackedForm from '#lib/components/molecules/StackedForm.svelte';
 	import DescriptionList from '#lib/components/molecules/DescriptionList.svelte';
 
 	let {
@@ -434,34 +435,37 @@
 		<section aria-label="Record a payment">
 			<h3>Record a payment of {formatAmount(invoice.amountCents)}</h3>
 			{#if paymentStep === 'form'}
+				<!-- stacked-form:ignore: #1108 -- the "Date received" box is `required`, and the comment on `reviewPayment` above says so in as many words: it covers emptiness so that function only has to cover the semantic checks. `StackedForm` sets `novalidate` (ADR-0021), so adopting it here would take that refusal away and put nothing in its place; #1226 is where this form gets a refusal of its own and then adopts the molecule. The stack below is `StackedForm`'s own arrangement, written inline meanwhile. -->
 				<form onsubmit={reviewPayment}>
-					<RadioGroup
-						legend="Method"
-						options={paymentMethodOptions}
-						value={paymentMethod}
-						onChange={(value) => (paymentMethod = value)}
-						error={paymentMethodError || undefined}
-					/>
-					<LabeledField label="Note (optional)" error={paymentNoteError || undefined}>
-						{#snippet children({ id, describedBy, invalid })}
-							<Textarea {id} {describedBy} {invalid} value={paymentNote} onInput={(value) => (paymentNote = value)} />
-						{/snippet}
-					</LabeledField>
-					<LabeledField label="Date received" error={paymentDateError || undefined}>
-						{#snippet children({ id, describedBy, invalid })}
-							<TextInput
-								{id}
-								{describedBy}
-								{invalid}
-								type="date"
-								value={paymentDate}
-								onInput={(value) => (paymentDate = value)}
-								required
-							/>
-						{/snippet}
-					</LabeledField>
-					<Button label="Continue" type="submit" />
-					<Button label="Cancel" variant="secondary" onClick={cancelRecordingPayment} />
+					<stack-l space="var(--space-5)">
+						<RadioGroup
+							legend="Method"
+							options={paymentMethodOptions}
+							value={paymentMethod}
+							onChange={(value) => (paymentMethod = value)}
+							error={paymentMethodError || undefined}
+						/>
+						<LabeledField label="Note (optional)" error={paymentNoteError || undefined}>
+							{#snippet children({ id, describedBy, invalid })}
+								<Textarea {id} {describedBy} {invalid} value={paymentNote} onInput={(value) => (paymentNote = value)} />
+							{/snippet}
+						</LabeledField>
+						<LabeledField label="Date received" error={paymentDateError || undefined}>
+							{#snippet children({ id, describedBy, invalid })}
+								<TextInput
+									{id}
+									{describedBy}
+									{invalid}
+									type="date"
+									value={paymentDate}
+									onInput={(value) => (paymentDate = value)}
+									required
+								/>
+							{/snippet}
+						</LabeledField>
+						<Button label="Continue" type="submit" />
+						<Button label="Cancel" variant="secondary" onClick={cancelRecordingPayment} />
+					</stack-l>
 				</form>
 			{:else}
 				<DescriptionList
@@ -501,7 +505,7 @@
 		<section aria-label="Reverse this payment">
 			<h3>Reverse a payment of {formatAmount(invoice.amountCents)}</h3>
 			{#if reversalStep === 'form'}
-				<form onsubmit={reviewReversal}>
+				<StackedForm onSubmit={reviewReversal}>
 					<LabeledField label="Reason" error={reversalReasonError || undefined}>
 						{#snippet children({ id, describedBy, invalid })}
 							<Textarea {id} {describedBy} {invalid} value={reversalReason} onInput={(value) => (reversalReason = value)} />
@@ -509,7 +513,7 @@
 					</LabeledField>
 					<Button label="Continue" type="submit" />
 					<Button label="Cancel" variant="secondary" onClick={cancelReversingPayment} />
-				</form>
+				</StackedForm>
 			{:else}
 				<DescriptionList
 					items={[
@@ -531,7 +535,7 @@
 {#if !isBillable}
 	<Notice variant="info" message={unbillableContractMessage(contractStatus)} />
 {:else if billingMode === undefined}
-	<form onsubmit={handleCreate}>
+	<StackedForm onSubmit={handleCreate}>
 		<RadioGroup
 			legend="How does this Practice bill Clients?"
 			options={billingModeOptions}
@@ -539,7 +543,7 @@
 			onChange={(value) => (chosenBillingMode = value)}
 		/>
 		<Button label="Create Invoice" type="submit" loading={isCreating} />
-	</form>
+	</StackedForm>
 	{#if createError}
 		<p role="alert">{createError}</p>
 	{/if}
@@ -551,6 +555,7 @@
 {:else if billingMode === 'stripe' && !hasClientEmail}
 	<Notice variant="info" message={clientHasNoEmailMessage} />
 {:else}
+	<!-- stacked-form:ignore: #1108 -- one button and nothing else. There is no run of fields for a stack to space, and the `<form>` is here so the raise is a submit rather than a click. -->
 	<form onsubmit={handleCreate}>
 		<Button label="Create Invoice" type="submit" loading={isCreating} />
 	</form>
