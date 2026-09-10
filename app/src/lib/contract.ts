@@ -32,6 +32,14 @@ export interface Contract {
 	 * ADR-0008's contractor redaction. Absent for a Contract nobody has
 	 * ever asked to void, the common case. */
 	voidRequests?: VoidRequestSummary[];
+	/** Whether a signed PDF exists for this Engagement (#1119) -- the one
+	 * fact a screen gates its download control on, and the same fact the
+	 * signed-PDF endpoints key on, so the control and the route behind it
+	 * cannot disagree. Not a reading of `status`: a voided Contract whose
+	 * PDF was deliberately preserved (#299) reports `true`, and a Draft
+	 * or an unsigned Sent Contract reports `false`. Always present -- the
+	 * Go BFF sends it on every Contract-shaped response. */
+	hasSignedPdf: boolean;
 }
 
 /** One void request against a Contract (#971): who asked, when, why, and

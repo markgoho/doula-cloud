@@ -84,7 +84,7 @@ Walked as Maya. Nadia is not in the app.
 | --- | --- | --- | --- |
 | 6.1 | Open the Contract link | The full signed prose renders. A `voided` Contract is not withheld; only the **Sign** form is, and only because it keys on `status === 'sent'` | `manual` |
 | 6.2 | Read the status | **No longer active**, then "Rooted Birth Collective ended this Contract." The portal stopped reusing the Staff component's raw enum: the label and the notice both come from the Client register (`app/src/lib/clientRegister.ts`), which is the one place either wording is decided, and the notice names the Practice rather than leaving her with the ledger's word ([NH-G5](https://github.com/markgoho/doula-cloud/issues/212) closed) | `manual` |
-| 6.2-a | Keep a copy of what she signed | **The endpoint answers her now, and the screen still will not ask it.** `serveSignedPDF` compares no status at all — it keys on `signed_pdf_object_path IS NOT NULL`, which only the sent -> signed transition ever writes, so a Contract that *has ever been* signed serves its PDF whatever it says today ([NH-G8](https://github.com/markgoho/doula-cloud/issues/299) closed). The **Download signed Contract (PDF)** control HS-G3 asked for exists ([#302](https://github.com/markgoho/doula-cloud/issues/302) closed) but the portal's Contract page renders it only while `status === 'signed'`, so a Client whose Contract was voided still meets no way to her own copy. What is left of this step is [#1119](https://github.com/markgoho/doula-cloud/issues/1119) | `missing-feature (HS-G3, NH-G8)` [#302](https://github.com/markgoho/doula-cloud/issues/302) [#299](https://github.com/markgoho/doula-cloud/issues/299) |
+| 6.2-a | Keep a copy of what she signed | **Download signed Contract (PDF)** is offered on her voided Contract, and pressing it fetches the signed-PDF route, which serves what she signed ([#299](https://github.com/markgoho/doula-cloud/issues/299)). Whether the downloaded file reads correctly is what the walk is for; the mark is about the step being performable at all. The control is gated on the Contract read's own `hasSignedPdf`, which the Go BFF fills from the same lookup the signed-PDF route streams from ([#1119](https://github.com/markgoho/doula-cloud/issues/1119) closed) — so the screen asks the endpoint's own question rather than a second reading of `status` that drifted away from it. A Contract that was never signed still offers nothing, and the endpoint still 404s for it ([HS-G3](https://github.com/markgoho/doula-cloud/issues/302), [NH-G8](https://github.com/markgoho/doula-cloud/issues/299) closed) | `manual` |
 | 6.2-b | Find what she still owes, or what was refunded | The portal has no Invoice, balance or payment surface at all. The question she is most likely to have cannot be asked on screen | `missing-feature (NH-G6)` [#297](https://github.com/markgoho/doula-cloud/issues/297) |
 
 ### Stage 7 — Postpartum support continues anyway
@@ -111,8 +111,8 @@ the same absence is hit twice by two different people.
 | Mark | Steps |
 | --- | --- |
 | `automated` | 5 |
-| `manual` | 13 |
-| `missing-feature` | 9 ([MO-G3](https://github.com/markgoho/doula-cloud/issues/252), [NH-G3](https://github.com/markgoho/doula-cloud/issues/295), [NH-G1](https://github.com/markgoho/doula-cloud/issues/293) ×2, [MO-G4](https://github.com/markgoho/doula-cloud/issues/253), [NH-G2](https://github.com/markgoho/doula-cloud/issues/294), [HS-G3](https://github.com/markgoho/doula-cloud/issues/302) + [NH-G8](https://github.com/markgoho/doula-cloud/issues/299), [NH-G6](https://github.com/markgoho/doula-cloud/issues/297), [NH-G7](https://github.com/markgoho/doula-cloud/issues/298)) |
+| `manual` | 14 |
+| `missing-feature` | 8 ([MO-G3](https://github.com/markgoho/doula-cloud/issues/252), [NH-G3](https://github.com/markgoho/doula-cloud/issues/295), [NH-G1](https://github.com/markgoho/doula-cloud/issues/293) ×2, [MO-G4](https://github.com/markgoho/doula-cloud/issues/253), [NH-G2](https://github.com/markgoho/doula-cloud/issues/294), [NH-G6](https://github.com/markgoho/doula-cloud/issues/297), [NH-G7](https://github.com/markgoho/doula-cloud/issues/298)) |
 
 No step is `blocked`. Stripe never reaches the Client portal, so nothing here waits
 on an account nobody has opened — **NH-G6** is a hole in the product, not a bill.
@@ -128,6 +128,15 @@ greets her, `push-notification` reaches her, `birth-plan` shows her the document
 The suite cannot tell her journey from Hannah's.
 
 ## Run log
+
+### 2026-09-10 — 6.2-a re-marked ([#1119](https://github.com/markgoho/doula-cloud/issues/1119))
+
+**6.2-a moves from `missing-feature (HS-G3, NH-G8)` to `manual`.** The step is performable: the portal's Contract page offers **Download signed Contract (PDF)** on a voided Contract, and the Staff Engagement page offers the Practice's own copy of it in the same case. What settled it is the gate itself rather than a walk — the Contract read now carries `hasSignedPdf`, filled by the Go BFF from `signedPDFObjectPath`, the one lookup the signed-PDF routes stream from, and both screens gate on that field. Two screen-level specs cover the voided case on each surface (the portal Contract route's own spec and the Staff Engagement page's), beside the Go tests that hold the field to what the route serves. Both gap IDs the step cited are closed and stay cited; no new gap ID is minted, because the finding arrived as a ticket and leaves as a fix rather than as a hole in [the journey map](../journeys/loss-client.md).
+
+The Marks table is recounted with it: `manual` 13 -> 14, `missing-feature` 9 -> 8. The [README's run-status table](README.md#the-run-and-the-gap-issues) moves the same way.
+
+**No other step is re-marked.** 6.1 and 6.2 are unchanged, and 6.2-b — the Client-facing money surface that does not exist — is untouched by this.
+
 
 ### 2026-08-22 — automated steps ([#209](https://github.com/markgoho/doula-cloud/issues/209))
 

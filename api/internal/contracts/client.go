@@ -48,6 +48,6 @@ func ClientGetContractHandler() http.Handler {
 			Values:          withResolvedPrice(mergeFields, values.nonEmpty(), amountCents),
 			AmountChangedAt: amountChangedAt,
 		}
-		apierr.WriteJSON(w, http.StatusOK, out)
+		writeContract(w, r, tx, http.StatusOK, out)
 	})
 }

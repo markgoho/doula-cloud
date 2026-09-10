@@ -578,10 +578,13 @@ function pdfBlobResponse(): Response {
  * departure from the fixture rather than as a second Contract of its own
  * (`.claude/rules/svelte-tests.md`). The two fields only a signed
  * Contract can carry are dropped rather than overwritten: a draft has no
- * price change to report and no void to have been asked for.
+ * price change to report and no void to have been asked for. hasSignedPdf
+ * goes back to false with them: an Engagement whose only Contract is this
+ * Draft has no signed PDF anywhere, and leaving the fixture's true would
+ * put a download control into every test below that means a plain Draft.
  */
 function draftOf(overrides: Partial<Contract> = {}): Contract {
-	const draft: Contract = { ...fixtureContract, status: 'draft' };
+	const draft: Contract = { ...fixtureContract, status: 'draft', hasSignedPdf: false };
 	delete draft.amountChangedAt;
 	delete draft.voidRequests;
 	return { ...draft, ...overrides };
@@ -855,6 +858,36 @@ describe('the Contract PDF download is gated on the page (#302, amended by #969)
 		await testPage.getByRole('button', { name: 'Download signed Contract (PDF)' }).click();
 
 		await expect.element(testPage.getByRole('alert')).toHaveTextContent('signed PDF not found');
+	});
+});
+
+// #1119: the page passes the Contract's own hasSignedPdf through to
+// ContractStatus, so the control follows the PDF rather than the status.
+// Voiding a Contract used to take the Practice's copy of it off the
+// screen, while the endpoint went on serving it (#299).
+describe('the Contract PDF download survives a void (#1119)', () => {
+	beforeEach(() => {
+		apiFetchWithSession.mockReset();
+	});
+
+	it('offers the download on a voided Contract whose signed PDF still exists', async () => {
+		await testPage.viewport(1440, 900);
+		mockContract({ ...fixtureContract, status: 'voided', hasSignedPdf: true });
+		await render(Page, { data: { ...fixtureDetail, session }, params: fixture.params });
+
+		await expect.element(testPage.getByText('Status: voided')).toBeVisible();
+		await expect
+			.element(testPage.getByRole('button', { name: 'Download signed Contract (PDF)' }))
+			.toBeVisible();
+	});
+
+	it('offers no download on a voided Contract that was never signed', async () => {
+		await testPage.viewport(1440, 900);
+		mockContract({ ...fixtureContract, status: 'voided', hasSignedPdf: false });
+		await render(Page, { data: { ...fixtureDetail, session }, params: fixture.params });
+
+		await expect.element(testPage.getByText('Status: voided')).toBeVisible();
+		expect(testPage.getByRole('button', { name: 'Download signed Contract (PDF)' }).elements()).toHaveLength(0);
 	});
 });
 

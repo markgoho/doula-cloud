@@ -52,6 +52,17 @@ type ContractResponse struct {
 	// handler's own response; omitted (not merely empty) for a Contract
 	// nobody has ever asked to void, which is the common case.
 	VoidRequests []VoidRequestSummary `json:"voidRequests,omitempty"`
+	// HasSignedPDF reports that a Signed PDF exists for this Engagement
+	// -- the one fact a screen needs to decide whether to offer the
+	// download control, and the same fact the Signed-PDF routes key on
+	// (signedPDFObjectPath). Never omitempty: a screen reading this
+	// field has to be able to tell false from absent, and false is the
+	// answer that hides a control. Not a status read: a voided Contract
+	// whose PDF was preserved (#299) reports true, and a Draft or an
+	// unsigned Sent Contract reports false. Filled by writeContract, not
+	// by any handler for itself, so a route added later cannot forget it
+	// and quietly hide a Client's own copy of what she signed (#1119).
+	HasSignedPDF bool `json:"hasSignedPdf"`
 }
 
 // PutContractRequest is the body of a PUT Contract request: a full
@@ -62,6 +73,31 @@ type ContractResponse struct {
 // key that has nowhere to bind.
 type PutContractRequest struct {
 	Values MergeFieldValues `json:"values"`
+}
+
+// writeContract is how every Contract-shaped response leaves this
+// package. It fills the one ContractResponse field no construction site
+// computes for itself -- HasSignedPDF, read through signedPDFObjectPath,
+// the same lookup the Signed-PDF routes stream from -- and then writes
+// out under status.
+//
+// It exists so the fact a screen gates its download control on and the
+// fact the route enforces are one fact rather than two that agree today
+// (#1119). A handler builds the rest of the response and hands it over;
+// forgetting to ask about the PDF is not a thing a caller can do,
+// because asking is not a caller's job.
+//
+// out.EngagementID is the Engagement asked about: every construction
+// site sets it, and it is the same id the caller's own tx is scoped to.
+func writeContract(w http.ResponseWriter, r *http.Request, tx *sql.Tx, status int, out ContractResponse) {
+	_, hasSignedPDF, err := signedPDFObjectPath(r.Context(), tx, out.EngagementID)
+	// coverage:ignore reason: DB query failure, not exercised by unit tests
+	if err != nil {
+		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+		return
+	}
+	out.HasSignedPDF = hasSignedPDF
+	apierr.WriteJSON(w, status, out)
 }
 
 // mergeFieldPattern matches a {{merge_field_key}} placeholder in Contract
@@ -218,7 +254,7 @@ func PostContractHandler() http.Handler {
 			MergeFields:  mergeFields,
 			Values:       withResolvedPrice(mergeFields, values, amountCents),
 		}
-		apierr.WriteJSON(w, http.StatusCreated, out)
+		writeContract(w, r, tx, http.StatusCreated, out)
 	})
 }
 
@@ -301,7 +337,7 @@ func GetContractHandler() http.Handler {
 			VoidRequests:    voidRequests,
 		}
 
-		apierr.WriteJSON(w, http.StatusOK, full)
+		writeContract(w, r, tx, http.StatusOK, full)
 	})
 }
 
@@ -378,7 +414,7 @@ func PutContractHandler() http.Handler {
 			Values:          withResolvedPrice(mergeFields, req.Values, amountCents),
 			AmountChangedAt: amountChangedAt,
 		}
-		apierr.WriteJSON(w, http.StatusOK, out)
+		writeContract(w, r, tx, http.StatusOK, out)
 	})
 }
 

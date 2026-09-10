@@ -1420,6 +1420,7 @@
 		{#if contract}
 			<ContractStatus
 				status={contract.status}
+				hasSignedPdf={contract.hasSignedPdf}
 				amountChangedAt={contract.amountChangedAt}
 				voidRequests={contract.voidRequests}
 				onVoid={isPracticeOwnerOrAdmin ? handleVoidContract : undefined}

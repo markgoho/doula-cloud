@@ -109,6 +109,6 @@ func PostVoidContractHandler() http.Handler {
 			AmountChangedAt: amountChangedAt,
 			VoidRequests:    voidRequests,
 		}
-		apierr.WriteJSON(w, http.StatusOK, out)
+		writeContract(w, r, tx, http.StatusOK, out)
 	})
 }

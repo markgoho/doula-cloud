@@ -13,21 +13,21 @@
 
 	<section>
 		<h2>Draft</h2>
-		<ContractStatus status="draft" />
+		<ContractStatus status="draft" hasSignedPdf={false} />
 	</section>
 
 	<section>
 		<h2>Signed, seen by an Owner or Admin &mdash; download and Void are both offered</h2>
-		<ContractStatus status="signed" onVoid={async () => {}} onDownloadPdf={async () => {}} />
+		<ContractStatus status="signed" hasSignedPdf onVoid={async () => {}} onDownloadPdf={async () => {}} />
 	</section>
 
 	<section>
 		<h2>Signed, seen by a Doula &mdash; the PDF endpoint refuses the Doula, so no download button</h2>
-		<ContractStatus status="signed" onVoid={async () => {}} />
+		<ContractStatus status="signed" hasSignedPdf onVoid={async () => {}} />
 	</section>
 
 	<section>
-		<h2>Voided, the terminal state</h2>
-		<ContractStatus status="voided" onVoid={async () => {}} />
+		<h2>Voided, the terminal state &mdash; the agreement is over, the copy of it is not</h2>
+		<ContractStatus status="voided" hasSignedPdf onDownloadPdf={async () => {}} />
 	</section>
 </stack-l>
