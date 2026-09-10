@@ -28,7 +28,7 @@ import { describe, expect, it } from 'vitest';
  * since a spelling rule that only watched half the repo was gating nothing
  * for the other half.
  *
- * #1154 was a third wave -- "double-barrelled" -- and the reason there was
+ * #1154 was a third wave -- "double-barrel\u{6C}ed" -- and the reason there was
  * a third is the shape of RULES rather than any word missing from it. RULES
  * is a denylist of exact spellings, so, as the `ageing` note below puts it,
  * "a spelling absent from it is unenforced, not allowed": it can only ever
@@ -140,8 +140,8 @@ const RULES: readonly Rule[] = [
 ];
 
 // One word of the `-alled`/`-elled`/`-alling`/`-elling` family, matched
-// whole rather than as a substring: "modelled" and "compelling" differ by
-// name, not by any substring one of them holds and the other does not.
+// whole rather than as a substring: "mode\u{6C}led" and "compelling" differ
+// by name, not by any substring one of them holds and the other does not.
 const FAMILY = /\b[a-z]+[ae]l\u{6C}(?:ed|ing)\b/gu;
 
 // Every word that reaches this family the American way. Two groups: a base
@@ -204,10 +204,21 @@ const KEEPS_ITS_DOUBLE_L: ReadonlySet<string> = new Set([
 	'forestalling',
 	'galled',
 	'galling',
+	'footballed',
+	'footballing',
+	'handballed',
+	'handballing',
 	'installed',
 	'installing',
+	'malled',
+	'malling',
 	'miscalled',
+	'miscalling',
+	'overselling',
+	'palled',
+	'palling',
 	'preinstalled',
+	'preinstalling',
 	'recalled',
 	'recalling',
 	'reinstalled',
@@ -238,6 +249,8 @@ const KEEPS_ITS_DOUBLE_L: ReadonlySet<string> = new Set([
 	'impelling',
 	'propelled',
 	'propelling',
+	'rappelled',
+	'rappelling',
 	'rebelled',
 	'rebelling',
 	'repelled',
@@ -245,9 +258,13 @@ const KEEPS_ITS_DOUBLE_L: ReadonlySet<string> = new Set([
 ]);
 
 // A word of this family hides inside an identifier as often as it sits in
-// prose, and `\b` does not fall between `is` and `Cancelled` or either side
-// of the `_` in a Go tag. Split those seams before the match so
-// `isCancelledFlag` and `total_cancelled` read as words.
+// prose, and `\b` does not fall between `is` and `Cance\u{6C}led` or either
+// side of the `_` in a Go tag. Split those seams before the match so
+// `isCance\u{6C}ledFlag` and `total_cance\u{6C}led` read as words. A run of
+// capitals with no lowercase to break it, or a British word run together
+// with the next one, still has no boundary to find and is a hit only if a
+// RULES substring sees it -- which is why RULES stays: `aria-labelledby`
+// is exactly that shape, and no member of FAMILY can match it.
 function asWords(line: string): string {
 	return line
 		.replaceAll(/([a-z0-9])([A-Z])/gu, '$1 $2')
@@ -287,6 +304,11 @@ function findOffensesInLines(file: string, source: string): Offense[] {
 				found: word,
 				american: word.replace(/l(l(?:ed|ing))$/u, '$1')
 			}))
+			// RULES and FAMILY overlap on the words RULES already named --
+			// `cance\u{6C}led` is both a listed substring and a member of
+			// the family -- and a line reported twice reads as two
+			// problems. One report per correction the line needs.
+			.filter((offense) => named.every((rule) => rule.american !== offense.american))
 			.toArray();
 		return [...named, ...family];
 	});
@@ -320,7 +342,13 @@ describe('app/src and api/ spell every word the American way', () => {
 	// day the tree happens to hold none of these words the guarantee is
 	// still checked.
 	it('reads a doubled L as British only when American English keeps one', () => {
-		const american = 'const spelling = compelling ? storytelling : dwelling; // installed, recalled';
+		const american = [
+			'const spelling = compelling ? storytelling : dwelling; // installed, recalled',
+			// The `-ed`/`-ing` partner of an allowlisted word is the shape
+			// most likely to be half-listed, so the ones this file was
+			// least sure of are asserted rather than assumed.
+			'preinstalling, miscalling, overselling, rappelling, palled, footballing'
+		].join('\n');
 		expect(findOffensesInLines('fixture.ts', american)).toEqual([]);
 
 		const british = [
@@ -335,8 +363,8 @@ describe('app/src and api/ spell every word the American way', () => {
 			'modeled',
 			'traveled',
 			// The named `cance\u{6C}led` rule and the family both see this
-			// one; the family is the half that reads it inside camelCase.
-			'canceled',
+			// one -- the family is the half that reads it inside camelCase
+			// -- and the line is reported once for the one correction.
 			'canceled',
 			'signaled'
 		]);
