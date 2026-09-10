@@ -16,7 +16,24 @@ import (
 	"doula-cloud/api/internal/testdb"
 )
 
+// newVerifyRequestServer mounts the real route table and seeds uid a
+// live session. It seeds the `staff` row too (#1024): the handler now
+// resolves the caller against `staff` before minting anything, so a
+// fixture that skipped the row would be testing the refusal rather than
+// the re-request. Signup and invitation acceptance both insert that row
+// in the same transaction that mints the session, so a session with no
+// staff row behind it is not a state this endpoint can meet in the
+// product -- see TestRequestVerificationHandler_NoStaffRowQueuesNothing
+// for the one that can.
 func newVerifyRequestServer(t *testing.T, db *testdb.DB, uid string) (*httptest.Server, string) {
+	t.Helper()
+	testdb.SeedStaff(t, db, uid)
+	return newVerifyRequestServerWithoutStaff(t, db, uid)
+}
+
+// newVerifyRequestServerWithoutStaff is the same wiring with no `staff`
+// row, for the tests whose whole subject is a caller who has none.
+func newVerifyRequestServerWithoutStaff(t *testing.T, db *testdb.DB, uid string) (*httptest.Server, string) {
 	t.Helper()
 	mux := http.NewServeMux()
 	g := staffauth.NewGatedRouter(mux, db.App)
@@ -96,6 +113,33 @@ func TestRequestVerificationHandler_MissingCookieUnauthorized(t *testing.T) {
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusUnauthorized {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusUnauthorized)
+	}
+}
+
+// TestRequestVerificationHandler_NoStaffRowQueuesNothing is #1024's own
+// AC: this endpoint used to mint a token and queue a
+// staff_token_mail_outbox row for any uid a live session named, whether
+// or not a `staff` row stood behind it. #892's send-time recheck then
+// skipped that row, so nothing was ever mailed -- but the write had
+// already happened, and "we write it and refuse to send it" is not the
+// same thing as not writing it. The assertion is on the store, because
+// the response alone cannot tell the two apart.
+func TestRequestVerificationHandler_NoStaffRowQueuesNothing(t *testing.T) {
+	db := testdb.New(t)
+	const uid = "verify-request-no-staff-row"
+	srv, session := newVerifyRequestServerWithoutStaff(t, db, uid)
+	defer srv.Close()
+
+	resp := postVerifyRequest(t, srv, session)
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusNotFound {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusNotFound)
+	}
+	if got := countLiveAuthTokens(t, db, uid, authtoken.PurposeStaffEmailVerification); got != 0 {
+		t.Errorf("live verification tokens = %d, want 0 -- a token was minted for a uid with no staff row", got)
+	}
+	if got := countPendingTokenMail(t, db, uid, "email_verification"); got != 0 {
+		t.Errorf("pending outbox rows = %d, want 0 -- the row #892 skips at send time is still being written", got)
 	}
 }
 

@@ -20,7 +20,7 @@ func newServer(t *testing.T, db *testdb.DB, uid string) (srv *httptest.Server, s
 	mux := http.NewServeMux()
 	g := staffauth.NewGatedRouter(mux, db.App)
 	portal.Mount(g, db.App)
-	return httptest.NewServer(mux), authntest.SeedSession(t, db.App, uid)
+	return httptest.NewServer(mux), authntest.SeedSession(t, db.App, testdb.PortalUID(uid))
 }
 
 // seedClientAtPracticeWithDueDate inserts a Practice, a Client with an
@@ -66,10 +66,11 @@ func seedClientAtPracticeWithDueDateAndKind(t *testing.T, db *testdb.DB, identit
 		t.Fatalf("seed engagement: %v", err)
 	}
 
-	testdb.SeedPortalAccount(t, db, identityUID, identityUID+"@example.com")
+	portalUID := testdb.PortalUID(identityUID)
+	testdb.SeedPortalAccount(t, db, portalUID, portalUID+"@example.com")
 	if _, err := db.Admin.ExecContext(t.Context(),
 		`INSERT INTO client_portal_users (identity_uid, client_id) VALUES ($1, $2)`,
-		identityUID, clientID,
+		portalUID, clientID,
 	); err != nil {
 		t.Fatalf("seed client_portal_users: %v", err)
 	}

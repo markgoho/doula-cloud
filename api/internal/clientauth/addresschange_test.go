@@ -276,6 +276,10 @@ func TestRequestAddressChangeHandler_Refusals(t *testing.T) {
 // TestRequestAddressChangeHandler_StaffSessionRefused covers the one
 // cookie, two populations trap (ADR-0026): a Staff session is a real
 // session naming no Portal Account, and it must not reach this door.
+//
+// 401 since #1024: authn.Begin's tier check refuses it before the
+// handler runs, and answers the same thing it answers a cookie naming no
+// session at all.
 func TestRequestAddressChangeHandler_StaffSessionRefused(t *testing.T) {
 	db := testdb.New(t)
 	srv := newAddressChangeServer(db)
@@ -284,6 +288,26 @@ func TestRequestAddressChangeHandler_StaffSessionRefused(t *testing.T) {
 	staffSession := authntest.SeedSession(t, db.App, "identity-platform-uid")
 
 	resp := postAddressJSON(t, srv, "/api/portal/sign-in-address/request", staffSession, `{"email":"new@example.com"}`)
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusUnauthorized)
+	}
+}
+
+// TestRequestAddressChangeHandler_PortalTierWithoutAnAccountRefused is
+// the backstop the tier check does not replace: a session in this
+// population whose portal_accounts row is gone. Minting a token against
+// it would surface the missing row as a 500 through
+// portal_sign_in_address_changes' foreign key, which is what this
+// handler's own lookup exists to prevent.
+func TestRequestAddressChangeHandler_PortalTierWithoutAnAccountRefused(t *testing.T) {
+	db := testdb.New(t)
+	srv := newAddressChangeServer(db)
+	defer srv.Close()
+
+	orphanSession := authntest.SeedSession(t, db.App, portalaccount.NewIdentifier())
+
+	resp := postAddressJSON(t, srv, "/api/portal/sign-in-address/request", orphanSession, `{"email":"new@example.com"}`)
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusForbidden {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusForbidden)

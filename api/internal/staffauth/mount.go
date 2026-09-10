@@ -172,6 +172,39 @@ func mountPracticeRoutes(g *GatedRouter, ir WriteRouter, verifier authn.Verifier
 // mountSessionRoutes is the pre-Practice half of Mount: sign-in, sign-up,
 // invitation acceptance, and the person-level facts (work state, email,
 // MFA) that #437 and #613 keep off any one Membership.
+//
+// # Why no Client Portal session reaches any of these (#1024)
+//
+// ADR-0026 keeps the two populations in different identifier namespaces
+// and says a Portal Account is legible only from a portal session, so a
+// /api/staff/* route is not this population's to reach. Nothing here
+// enforced that: `sessions` holds both populations' rows, and every
+// route below fell into one of three groups, none of which was checking.
+//
+//   - A route that reads a session now refuses one issued in the other
+//     population at the one seam that knows the answer: authn.Begin's
+//     `population Tier` argument. That is the enforcement for this
+//     group; each handler's own `staff` lookup stays as the backstop,
+//     ADR-0026's own "the backstop is not where a saving is spent".
+//   - A bootstrap route reads no session at all -- authn.BeginBootstrap
+//     reads a Bearer ID token and verifies it against Identity Platform.
+//     A verified uid can never carry portalaccount.Prefix, which
+//     contains "_", a character outside the alphabet Identity Platform
+//     mints uids from, so the credential is a Staff one by construction.
+//     A live Portal cookie riding along on such a request is the
+//     *eviction* question, which #816 already settled at these seams.
+//   - A pre-account route reads neither a session nor a Bearer token:
+//     the link's own single-purpose authtoken is the whole credential,
+//     and authtoken.Mint is reached only from Staff paths, so there is
+//     no Staff-only act a Portal caller could drive here at all.
+//
+// Which route is in which group is population_test.go's staffFamilyGroups
+// table, deliberately not restated here -- a prose list of fourteen route
+// names beside an enforced one would only drift from it. That test walks
+// GatedRouter.Routes() and drives every route in this family with a live
+// Portal session, and fails on a route mounted here that the table does
+// not classify, so a new one cannot quietly rejoin the group that was not
+// checking.
 func mountSessionRoutes(g *GatedRouter, db *sql.DB, verifier authn.Verifier, accounts authn.AccountManager, enq tasknudge.Enqueuer) {
 	// Not rate limited: gated by authn.Begin's own __session cookie check
 	// -- there is no bootstrap window here for an attacker to spend.

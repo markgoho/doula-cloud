@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"doula-cloud/api/internal/authntest"
+	"doula-cloud/api/internal/portalaccount"
 	"doula-cloud/api/internal/testdb"
 )
 
@@ -58,7 +59,7 @@ func TestMiddleware_MissingCredential(t *testing.T) {
 // so a 401 can only mean the header was never read.
 func TestMiddleware_BearerTokenAloneIsRejected(t *testing.T) {
 	db := testdb.New(t)
-	const identityUID = "client-holding-only-a-bearer-token"
+	const identityUID = portalaccount.Prefix + "client-holding-only-a-bearer-token"
 	_, engagementID := seedClientWithEngagement(t, db, identityUID)
 
 	srv, _ := newServer(t, db, identityUID)
@@ -87,7 +88,7 @@ func TestMiddleware_UnknownSession(t *testing.T) {
 
 func TestMiddleware_InvalidEngagementID(t *testing.T) {
 	db := testdb.New(t)
-	srv, session := newServer(t, db, "some-uid")
+	srv, session := newServer(t, db, portalaccount.Prefix+"some-uid")
 	defer srv.Close()
 
 	resp := get(t, pingURL(srv, "not-a-uuid"), func(req *http.Request) {
@@ -101,7 +102,7 @@ func TestMiddleware_PopulationResolutionFailure(t *testing.T) {
 	db := testdb.New(t)
 	// A verified uid with no matching client_portal_users row: population
 	// resolution fails even though the token itself is valid.
-	srv, session := newServer(t, db, "unknown-uid")
+	srv, session := newServer(t, db, portalaccount.Prefix+"unknown-uid")
 	defer srv.Close()
 
 	resp := get(t, pingURL(srv, emptyUUID), func(req *http.Request) {
@@ -116,7 +117,7 @@ func TestMiddleware_PopulationResolutionFailure(t *testing.T) {
 
 func TestMiddleware_EngagementNotLinkedToClient(t *testing.T) {
 	db := testdb.New(t)
-	const identityUID = "client-without-this-engagement"
+	const identityUID = portalaccount.Prefix + "client-without-this-engagement"
 	_, _ = seedClientWithEngagement(t, db, identityUID)
 
 	// A different, unrelated Client's Engagement: the caller is a known
@@ -139,7 +140,7 @@ func TestMiddleware_EngagementNotLinkedToClient(t *testing.T) {
 
 func TestMiddleware_Success(t *testing.T) {
 	db := testdb.New(t)
-	const identityUID = "client-with-engagement"
+	const identityUID = portalaccount.Prefix + "client-with-engagement"
 	clientID, engagementID := seedClientWithEngagement(t, db, identityUID)
 
 	srv, session := newServer(t, db, identityUID)
@@ -174,7 +175,7 @@ func TestMiddleware_Success(t *testing.T) {
 // whichever row Postgres happens to return first.
 func TestMiddleware_ResolvesTheClientThatOwnsTheEngagementAcrossPractices(t *testing.T) {
 	db := testdb.New(t)
-	const identityUID = "client-at-two-practices"
+	const identityUID = portalaccount.Prefix + "client-at-two-practices"
 
 	practiceA := testdb.SeedPractice(t, db, "Practice A")
 	clientA, _ := testdb.SeedEngagementInStatus(t, db, practiceA, "Client A", "a@example.com", "intake")
@@ -210,7 +211,7 @@ func TestMiddleware_ResolvesTheClientThatOwnsTheEngagementAcrossPractices(t *tes
 // restore.
 func TestMiddleware_PendingDeletionLockout(t *testing.T) {
 	db := testdb.New(t)
-	const identityUID = "client-pending-deletion"
+	const identityUID = portalaccount.Prefix + "client-pending-deletion"
 	_, engagementID := seedClientWithEngagement(t, db, identityUID)
 
 	var practiceID string

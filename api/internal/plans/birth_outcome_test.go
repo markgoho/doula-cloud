@@ -42,7 +42,7 @@ func seedBirthPlanClient(t *testing.T, db *testdb.DB, identityUID string) string
 	t.Helper()
 	practiceID := testdb.SeedPractice(t, db, "Practice")
 	clientID, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Nadia Haddad", "nadia@example.com")
-	testdb.SeedPortalUser(t, db, identityUID, clientID)
+	testdb.SeedPortalUser(t, db, testdb.PortalUID(identityUID), clientID)
 	seedInstance(t, db, engagementID, birthPlanType,
 		`[{"id":"location","type":"single_select","label":"Planned birth location","options":["Home","Hospital"],"order":0}]`,
 		`{"location":"Hospital"}`,
@@ -143,7 +143,7 @@ func TestClientAcknowledgeBirthPlan_PostpartumEngagementRefused(t *testing.T) {
 	const identityUID = "client-acknowledge-postpartum-only"
 	practiceID := testdb.SeedPractice(t, db, "Practice")
 	clientID, engagementID := testdb.SeedEngagementWithKind(t, db, practiceID, "Jordan Client", "jordan@example.com", "postpartum")
-	testdb.SeedPortalUser(t, db, identityUID, clientID)
+	testdb.SeedPortalUser(t, db, testdb.PortalUID(identityUID), clientID)
 	seedInstance(t, db, engagementID, birthPlanType,
 		`[{"id":"location","type":"single_select","label":"Planned birth location","options":["Home","Hospital"],"order":0}]`,
 		`{"location":"Hospital"}`,

@@ -185,7 +185,7 @@ func TestClientGetBirthPlanPDFHandler_Success(t *testing.T) {
 	const identityUID = "client-birth-plan-pdf-success"
 	practiceID := testdb.SeedPractice(t, db, "Practice")
 	clientID, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jordan Client", "jordan@example.com")
-	testdb.SeedPortalUser(t, db, identityUID, clientID)
+	testdb.SeedPortalUser(t, db, testdb.PortalUID(identityUID), clientID)
 	seedInstance(t, db, engagementID, birthPlanType,
 		`[{"id":"location","type":"single_select","label":"Planned birth location","options":["Home","Hospital"],"order":0}]`,
 		`{"location":"Hospital"}`,
@@ -210,7 +210,7 @@ func TestClientGetBirthPlanPDFHandler_NoInstance(t *testing.T) {
 	const identityUID = "client-birth-plan-pdf-no-instance"
 	practiceID := testdb.SeedPractice(t, db, "Practice")
 	clientID, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jordan Client", "jordan@example.com")
-	testdb.SeedPortalUser(t, db, identityUID, clientID)
+	testdb.SeedPortalUser(t, db, testdb.PortalUID(identityUID), clientID)
 
 	srv, session := newPortalServer(t, db, identityUID)
 	defer srv.Close()
@@ -232,7 +232,7 @@ func TestClientGetBirthPlanPDFHandler_PostpartumEngagementRefused(t *testing.T) 
 	const identityUID = "client-birth-plan-pdf-postpartum-only"
 	practiceID := testdb.SeedPractice(t, db, "Practice")
 	clientID, engagementID := testdb.SeedEngagementWithKind(t, db, practiceID, "Jordan Client", "jordan@example.com", "postpartum")
-	testdb.SeedPortalUser(t, db, identityUID, clientID)
+	testdb.SeedPortalUser(t, db, testdb.PortalUID(identityUID), clientID)
 
 	srv, session := newPortalServer(t, db, identityUID)
 	defer srv.Close()
@@ -255,7 +255,7 @@ func TestClientGetBirthPlanPDFHandler_OtherClientsEngagementRejected(t *testing.
 	practiceID := testdb.SeedPractice(t, db, "Practice")
 	_, otherEngagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Other Client", "other@example.com")
 	clientID, _ := testdb.SeedNamedEngagement(t, db, practiceID, "Jordan Client", "jordan@example.com")
-	testdb.SeedPortalUser(t, db, identityUID, clientID)
+	testdb.SeedPortalUser(t, db, testdb.PortalUID(identityUID), clientID)
 	seedInstance(t, db, otherEngagementID, birthPlanType,
 		`[{"id":"location","type":"single_select","label":"Planned birth location","order":0}]`, `{}`)
 

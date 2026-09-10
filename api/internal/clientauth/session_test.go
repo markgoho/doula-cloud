@@ -9,6 +9,7 @@ import (
 
 	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/clientauth"
+	"doula-cloud/api/internal/portalaccount"
 	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/tasknudge"
 	"doula-cloud/api/internal/testdb"
@@ -71,7 +72,7 @@ func TestSessionHandler_UnknownSession(t *testing.T) {
 
 func TestSessionHandler_UnknownClient(t *testing.T) {
 	db := testdb.New(t)
-	srv, session := newSessionServer(t, db, "no-such-client")
+	srv, session := newSessionServer(t, db, portalaccount.Prefix+"no-such-client")
 	defer srv.Close()
 
 	resp := getSession(t, srv, session)
@@ -84,7 +85,7 @@ func TestSessionHandler_UnknownClient(t *testing.T) {
 
 func TestSessionHandler_SingleEngagement(t *testing.T) {
 	db := testdb.New(t)
-	const identityUID = "single-engagement-client"
+	const identityUID = portalaccount.Prefix + "single-engagement-client"
 	_, engagementID := seedClientWithEngagement(t, db, identityUID)
 
 	srv, session := newSessionServer(t, db, identityUID)
@@ -117,7 +118,7 @@ func TestSessionHandler_SingleEngagement(t *testing.T) {
 
 func TestSessionHandler_MultipleEngagements(t *testing.T) {
 	db := testdb.New(t)
-	const identityUID = "multi-engagement-client"
+	const identityUID = portalaccount.Prefix + "multi-engagement-client"
 	practiceA := testdb.SeedPractice(t, db, "Practice A")
 	practiceB := testdb.SeedPractice(t, db, "Practice B")
 	clientID, engagementA := testdb.SeedEngagementInStatus(t, db, practiceA, "Shared Client", "shared@example.com", "intake")
@@ -157,7 +158,7 @@ func TestSessionHandler_MultipleEngagements(t *testing.T) {
 // Engagement was invisible.
 func TestSessionHandler_MultipleClients(t *testing.T) {
 	db := testdb.New(t)
-	const identityUID = "multi-client-portal-account"
+	const identityUID = portalaccount.Prefix + "multi-client-portal-account"
 	practiceA := testdb.SeedPractice(t, db, "Practice A")
 	practiceB := testdb.SeedPractice(t, db, "Practice B")
 	clientA, engagementA := testdb.SeedEngagementInStatus(t, db, practiceA, "Camille at A", "camille-a@example.com", "completed")
@@ -208,9 +209,9 @@ func TestSessionHandler_MultipleClients_Isolation(t *testing.T) {
 	practiceB := testdb.SeedPractice(t, db, "Practice B")
 	clientA, engagementA := testdb.SeedEngagementInStatus(t, db, practiceA, "Camille at A", "camille-a@example.com", "active")
 	_, engagementB := testdb.SeedEngagementInStatus(t, db, practiceB, "Someone Else", "someone-else@example.com", "active")
-	testdb.SeedPortalUser(t, db, "isolated-portal-account", clientA)
+	testdb.SeedPortalUser(t, db, testdb.PortalUID("isolated-portal-account"), clientA)
 
-	srv, session := newSessionServer(t, db, "isolated-portal-account")
+	srv, session := newSessionServer(t, db, testdb.PortalUID("isolated-portal-account"))
 	defer srv.Close()
 
 	resp := getSession(t, srv, session)
@@ -238,7 +239,7 @@ func TestSessionHandler_MultipleClients_Isolation(t *testing.T) {
 // reach this DTO.
 func TestSessionHandler_NoStaffOnlyFact(t *testing.T) {
 	db := testdb.New(t)
-	const identityUID = "no-staff-fact-client"
+	const identityUID = portalaccount.Prefix + "no-staff-fact-client"
 	_, engagementID := seedClientWithEngagement(t, db, identityUID)
 
 	srv, session := newSessionServer(t, db, identityUID)

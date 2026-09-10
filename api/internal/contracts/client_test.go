@@ -39,7 +39,7 @@ func newPortalServerWithStore(t *testing.T, db *testdb.DB, uid string, store obj
 	g := staffauth.NewGatedRouter(mux, db.App)
 	ir := idempotency.NewRouter(g, db.App)
 	contracts.Mount(g, ir, db.App, store, push.NewFakePusher())
-	return httptest.NewServer(mux), authntest.SeedSession(t, db.App, uid)
+	return httptest.NewServer(mux), authntest.SeedSession(t, db.App, testdb.PortalUID(uid))
 }
 
 func getClientContract(t *testing.T, srv *httptest.Server, session string, engagementID string) *http.Response {
@@ -84,7 +84,7 @@ func TestClientGetContractHandler_Success(t *testing.T) {
 	const identityUID = "client-viewing-sent-contract"
 	practiceID := testdb.SeedPractice(t, db, "Practice")
 	clientID, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jordan Client", "jordan@example.com")
-	testdb.SeedPortalUser(t, db, identityUID, clientID)
+	testdb.SeedPortalUser(t, db, testdb.PortalUID(identityUID), clientID)
 	seedContract(t, db, engagementID, "sent", mergeFieldProse)
 
 	srv, session := newPortalServer(t, db, identityUID)
@@ -114,7 +114,7 @@ func TestClientGetContractHandler_SignedAndVoidedAllowed(t *testing.T) {
 			identityUID := "client-viewing-" + status
 			practiceID := testdb.SeedPractice(t, db, "Practice")
 			clientID, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jordan Client", "jordan@example.com")
-			testdb.SeedPortalUser(t, db, identityUID, clientID)
+			testdb.SeedPortalUser(t, db, testdb.PortalUID(identityUID), clientID)
 			seedContract(t, db, engagementID, status, mergeFieldProse)
 
 			srv, session := newPortalServer(t, db, identityUID)
@@ -139,7 +139,7 @@ func TestClientGetContractHandler_DraftNeverReturned404s(t *testing.T) {
 	const identityUID = "client-draft-hidden"
 	practiceID := testdb.SeedPractice(t, db, "Practice")
 	clientID, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jordan Client", "jordan@example.com")
-	testdb.SeedPortalUser(t, db, identityUID, clientID)
+	testdb.SeedPortalUser(t, db, testdb.PortalUID(identityUID), clientID)
 	seedContract(t, db, engagementID, statusDraft, mergeFieldProse)
 
 	srv, session := newPortalServer(t, db, identityUID)
@@ -160,7 +160,7 @@ func TestClientGetContractHandler_NoContractYet404(t *testing.T) {
 	const identityUID = "client-no-contract-yet"
 	practiceID := testdb.SeedPractice(t, db, "Practice")
 	clientID, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jordan Client", "jordan@example.com")
-	testdb.SeedPortalUser(t, db, identityUID, clientID)
+	testdb.SeedPortalUser(t, db, testdb.PortalUID(identityUID), clientID)
 
 	srv, session := newPortalServer(t, db, identityUID)
 	defer srv.Close()
@@ -183,7 +183,7 @@ func TestClientGetContractHandler_OtherClientsEngagementRejected(t *testing.T) {
 	_, otherEngagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Other Client", "other@example.com")
 	seedContract(t, db, otherEngagementID, "sent", mergeFieldProse)
 	clientID, _ := testdb.SeedNamedEngagement(t, db, practiceID, "Jordan Client", "jordan@example.com")
-	testdb.SeedPortalUser(t, db, identityUID, clientID)
+	testdb.SeedPortalUser(t, db, testdb.PortalUID(identityUID), clientID)
 
 	srv, session := newPortalServer(t, db, identityUID)
 	defer srv.Close()

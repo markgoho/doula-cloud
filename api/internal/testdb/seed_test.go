@@ -12,6 +12,25 @@ import (
 // three independent "doula" literals across this file's tests.
 const doulaRole = "doula"
 
+// namespacedCamille is the Portal Account identifier TestPortalUID
+// expects both ways round, named once for the same goconst reason.
+const namespacedCamille = "portal_camille"
+
+// TestPortalUID proves the fixture normalizer is idempotent: it puts the
+// Portal Account namespace in front of a bare name, and leaves an
+// identifier that already carries it alone. Both halves matter -- a
+// caller passing portalaccount.NewIdentifier()'s own output must not end
+// up wearing the prefix twice, and #1024's tier check reads that prefix
+// and nothing else.
+func TestPortalUID(t *testing.T) {
+	if got := testdb.PortalUID("camille"); got != namespacedCamille {
+		t.Errorf("PortalUID(%q) = %q, want %q", "camille", got, namespacedCamille)
+	}
+	if got := testdb.PortalUID(namespacedCamille); got != namespacedCamille {
+		t.Errorf("PortalUID(%q) = %q, want it unchanged", namespacedCamille, got)
+	}
+}
+
 // TestSeedPractice proves the Practice row lands with the name passed
 // in -- the fixture every other seed helper in this file builds on.
 func TestSeedPractice(t *testing.T) {

@@ -25,7 +25,7 @@ func newPortalServer(t *testing.T, db *testdb.DB, uid string) (srv *httptest.Ser
 	g := staffauth.NewGatedRouter(mux, db.App)
 	ir := idempotency.NewRouter(g, db.App)
 	plans.Mount(g, ir, db.App)
-	return httptest.NewServer(mux), authntest.SeedSession(t, db.App, uid)
+	return httptest.NewServer(mux), authntest.SeedSession(t, db.App, testdb.PortalUID(uid))
 }
 
 func getClientBirthPlan(t *testing.T, srv *httptest.Server, session string, engagementID string) *http.Response {
@@ -61,7 +61,7 @@ func TestClientGetBirthPlanHandler_Success(t *testing.T) {
 	const identityUID = "client-viewing-birth-plan"
 	practiceID := testdb.SeedPractice(t, db, "Practice")
 	clientID, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jordan Client", "jordan@example.com")
-	testdb.SeedPortalUser(t, db, identityUID, clientID)
+	testdb.SeedPortalUser(t, db, testdb.PortalUID(identityUID), clientID)
 	seedInstance(t, db, engagementID, birthPlanType,
 		`[{"id":"location","type":"single_select","label":"Planned birth location","options":["Home","Hospital"],"order":0}]`,
 		`{"location":"Hospital"}`,
@@ -90,7 +90,7 @@ func TestClientGetBirthPlanHandler_NoInstanceYet404(t *testing.T) {
 	const identityUID = "client-no-birth-plan-yet"
 	practiceID := testdb.SeedPractice(t, db, "Practice")
 	clientID, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jordan Client", "jordan@example.com")
-	testdb.SeedPortalUser(t, db, identityUID, clientID)
+	testdb.SeedPortalUser(t, db, testdb.PortalUID(identityUID), clientID)
 
 	srv, session := newPortalServer(t, db, identityUID)
 	defer srv.Close()
@@ -113,7 +113,7 @@ func TestClientGetBirthPlanHandler_CarePlanNeverReturned(t *testing.T) {
 	const identityUID = "client-only-care-plan"
 	practiceID := testdb.SeedPractice(t, db, "Practice")
 	clientID, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jordan Client", "jordan@example.com")
-	testdb.SeedPortalUser(t, db, identityUID, clientID)
+	testdb.SeedPortalUser(t, db, testdb.PortalUID(identityUID), clientID)
 	seedInstance(t, db, engagementID, carePlanType,
 		`[{"id":"f1","type":"short_text","label":"Name","order":0}]`, `{"f1":"secret"}`,
 	)
@@ -138,7 +138,7 @@ func TestClientGetBirthPlanHandler_PostpartumEngagementRefused(t *testing.T) {
 	const identityUID = "client-postpartum-only"
 	practiceID := testdb.SeedPractice(t, db, "Practice")
 	clientID, engagementID := testdb.SeedEngagementWithKind(t, db, practiceID, "Jordan Client", "jordan@example.com", "postpartum")
-	testdb.SeedPortalUser(t, db, identityUID, clientID)
+	testdb.SeedPortalUser(t, db, testdb.PortalUID(identityUID), clientID)
 
 	srv, session := newPortalServer(t, db, identityUID)
 	defer srv.Close()
@@ -157,7 +157,7 @@ func TestClientGetBirthPlanHandler_OtherClientsEngagementRejected(t *testing.T) 
 	practiceID := testdb.SeedPractice(t, db, "Practice")
 	_, otherEngagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Other Client", "other@example.com")
 	clientID, _ := testdb.SeedNamedEngagement(t, db, practiceID, "Jordan Client", "jordan@example.com")
-	testdb.SeedPortalUser(t, db, identityUID, clientID)
+	testdb.SeedPortalUser(t, db, testdb.PortalUID(identityUID), clientID)
 
 	srv, session := newPortalServer(t, db, identityUID)
 	defer srv.Close()
@@ -178,7 +178,7 @@ func TestClientAcknowledgeBirthPlanHandler_Success(t *testing.T) {
 	const identityUID = "client-acknowledging-birth-plan"
 	practiceID := testdb.SeedPractice(t, db, "Practice")
 	clientID, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jordan Client", "jordan@example.com")
-	testdb.SeedPortalUser(t, db, identityUID, clientID)
+	testdb.SeedPortalUser(t, db, testdb.PortalUID(identityUID), clientID)
 	seedInstance(t, db, engagementID, birthPlanType,
 		`[{"id":"location","type":"single_select","label":"Planned birth location","options":["Home","Hospital"],"order":0}]`,
 		`{"location":"Hospital"}`,
@@ -229,7 +229,7 @@ func TestClientAcknowledgeBirthPlanHandler_NoInstanceYet404(t *testing.T) {
 	const identityUID = "client-acknowledging-no-birth-plan"
 	practiceID := testdb.SeedPractice(t, db, "Practice")
 	clientID, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jordan Client", "jordan@example.com")
-	testdb.SeedPortalUser(t, db, identityUID, clientID)
+	testdb.SeedPortalUser(t, db, testdb.PortalUID(identityUID), clientID)
 
 	srv, session := newPortalServer(t, db, identityUID)
 	defer srv.Close()
@@ -248,7 +248,7 @@ func TestClientAcknowledgeBirthPlanHandler_OtherClientsEngagementRejected(t *tes
 	practiceID := testdb.SeedPractice(t, db, "Practice")
 	_, otherEngagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Other Client", "other@example.com")
 	clientID, _ := testdb.SeedNamedEngagement(t, db, practiceID, "Jordan Client", "jordan@example.com")
-	testdb.SeedPortalUser(t, db, identityUID, clientID)
+	testdb.SeedPortalUser(t, db, testdb.PortalUID(identityUID), clientID)
 
 	srv, session := newPortalServer(t, db, identityUID)
 	defer srv.Close()

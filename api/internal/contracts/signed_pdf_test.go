@@ -174,7 +174,7 @@ func TestClientGetSignedContractPDFHandler_Success(t *testing.T) {
 	const identityUID = "client-get-pdf-success"
 	practiceID := testdb.SeedPractice(t, db, "Practice")
 	clientID, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jordan Client", "jordan@example.com")
-	testdb.SeedPortalUser(t, db, identityUID, clientID)
+	testdb.SeedPortalUser(t, db, testdb.PortalUID(identityUID), clientID)
 	_, objectPath := seedSignedContract(t, db, engagementID)
 
 	store := objectstore.NewMemoryStore()
@@ -203,7 +203,7 @@ func TestClientGetSignedContractPDFHandler_Unauthenticated(t *testing.T) {
 	const identityUID = "client-get-pdf-unauthenticated"
 	practiceID := testdb.SeedPractice(t, db, "Practice")
 	clientID, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jordan Client", "jordan@example.com")
-	testdb.SeedPortalUser(t, db, identityUID, clientID)
+	testdb.SeedPortalUser(t, db, testdb.PortalUID(identityUID), clientID)
 
 	srv, _ := newPortalServer(t, db, identityUID)
 	defer srv.Close()
@@ -227,7 +227,7 @@ func TestClientGetSignedContractPDFHandler_OtherClientsEngagementRejected(t *tes
 	_, otherEngagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Other Client", "other@example.com")
 	seedSignedContract(t, db, otherEngagementID)
 	clientID, _ := testdb.SeedNamedEngagement(t, db, practiceID, "Jordan Client", "jordan@example.com")
-	testdb.SeedPortalUser(t, db, identityUID, clientID)
+	testdb.SeedPortalUser(t, db, testdb.PortalUID(identityUID), clientID)
 
 	srv, session := newPortalServer(t, db, identityUID)
 	defer srv.Close()
@@ -247,7 +247,7 @@ func TestClientGetSignedContractPDFHandler_NotYetSigned(t *testing.T) {
 	const identityUID = "client-get-pdf-not-signed"
 	practiceID := testdb.SeedPractice(t, db, "Practice")
 	clientID, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jordan Client", "jordan@example.com")
-	testdb.SeedPortalUser(t, db, identityUID, clientID)
+	testdb.SeedPortalUser(t, db, testdb.PortalUID(identityUID), clientID)
 	seedContract(t, db, engagementID, "sent", mergeFieldProse)
 
 	srv, session := newPortalServer(t, db, identityUID)
@@ -270,7 +270,7 @@ func TestClientGetSignedContractPDFHandler_MissingObjectReturnsNotFound(t *testi
 	const identityUID = "client-get-pdf-missing-object"
 	practiceID := testdb.SeedPractice(t, db, "Practice")
 	clientID, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jordan Client", "jordan@example.com")
-	testdb.SeedPortalUser(t, db, identityUID, clientID)
+	testdb.SeedPortalUser(t, db, testdb.PortalUID(identityUID), clientID)
 	seedSignedContract(t, db, engagementID)
 
 	srv, session := newPortalServer(t, db, identityUID)
@@ -467,7 +467,7 @@ func TestClientGetSignedContractPDFHandler_VoidedContractStillServes(t *testing.
 	const identityUID = "client-get-pdf-voided"
 	practiceID := testdb.SeedPractice(t, db, "Practice")
 	clientID, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jordan Client", "jordan@example.com")
-	testdb.SeedPortalUser(t, db, identityUID, clientID)
+	testdb.SeedPortalUser(t, db, testdb.PortalUID(identityUID), clientID)
 	contractID, objectPath := seedSignedContract(t, db, engagementID)
 
 	store := objectstore.NewMemoryStore()
@@ -505,7 +505,7 @@ func TestClientGetSignedContractPDFHandler_VoidedStaysThisClientsOnly(t *testing
 	otherContractID, _ := seedSignedContract(t, db, otherEngagementID)
 	voidContractRow(t, db, otherContractID)
 	clientID, _ := testdb.SeedNamedEngagement(t, db, practiceID, "Jordan Client", "jordan@example.com")
-	testdb.SeedPortalUser(t, db, identityUID, clientID)
+	testdb.SeedPortalUser(t, db, testdb.PortalUID(identityUID), clientID)
 
 	srv, session := newPortalServer(t, db, identityUID)
 	defer srv.Close()
@@ -530,7 +530,7 @@ func TestSignedContractPDFHandlers_DraftNotFound(t *testing.T) {
 	const identityUID = "client-get-pdf-draft"
 	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
 	clientID, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jordan Client", "jordan@example.com")
-	testdb.SeedPortalUser(t, db, identityUID, clientID)
+	testdb.SeedPortalUser(t, db, testdb.PortalUID(identityUID), clientID)
 	seedContract(t, db, engagementID, "draft", mergeFieldProse)
 
 	srv, session := newContractServer(t, db, uid)

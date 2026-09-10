@@ -92,7 +92,7 @@ type ownMembership struct {
 // per-Practice writes below set and unset it around themselves.
 func DeleteLoginHandler(accounts authn.AccountManager, db *sql.DB) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, uid, _, ok := authn.Begin(w, r, db)
+		tx, uid, _, ok := authn.Begin(w, r, db, authn.TierStaff)
 		if !ok {
 			return
 		}

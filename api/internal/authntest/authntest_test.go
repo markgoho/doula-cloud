@@ -111,7 +111,7 @@ func TestAddSessionCookie_SignsTheRequestIn(t *testing.T) {
 
 	authntest.AddSessionCookie(req, authntest.SeedSession(t, db.App, testUID))
 
-	tx, uid, _, ok := authn.Begin(httptest.NewRecorder(), req, db.App)
+	tx, uid, _, ok := authn.Begin(httptest.NewRecorder(), req, db.App, authn.TierStaff)
 	if !ok {
 		t.Fatal("Begin rejected a request carrying a seeded session cookie")
 	}

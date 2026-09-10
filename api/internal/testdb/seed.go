@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"doula-cloud/api/internal/activity"
+	"doula-cloud/api/internal/portalaccount"
 )
 
 // SeedPractice inserts a bare Practice row using the superuser Admin
@@ -404,6 +405,29 @@ func PracticeOfClient(t *testing.T, db *DB, clientID string) string {
 		t.Fatalf("testdb: read practice for client %q: %v", clientID, err)
 	}
 	return practiceID
+}
+
+// PortalUID turns a readable fixture name into an identifier a real
+// Portal Account could actually carry: portalaccount.Prefix in front of
+// it, which is the namespace ADR-0026 says every Client identifier is
+// minted in. Since #1024 that prefix is what authn.Begin reads to refuse
+// a session at the other population's routes, so a fixture minting a
+// portal session for a bare name is testing a caller the product cannot
+// produce -- and would meet a 401 rather than the behavior under test.
+//
+// Idempotent, so wrapping an identifier that already carries the prefix
+// (portalaccount.NewIdentifier's own output, say) is safe.
+//
+// Deliberately not applied inside SeedPortalUser: the shared-identity RLS
+// fixtures (clientauth, message) seed one identity_uid into both `staff`
+// and `client_portal_users` on purpose, to hold migration 00006's
+// backstop guards honest, and normalizing one half of that pair would
+// quietly make those tests assert nothing.
+func PortalUID(name string) string {
+	if strings.HasPrefix(name, portalaccount.Prefix) {
+		return name
+	}
+	return portalaccount.Prefix + name
 }
 
 // SeedPortalUser mints a fresh Portal Account for identityUID and

@@ -33,7 +33,7 @@ func newStaffServer(t *testing.T, db *testdb.DB, uid string) (srv *httptest.Serv
 
 func newPortalServer(t *testing.T, db *testdb.DB, uid string) (srv *httptest.Server, session string) {
 	t.Helper()
-	return newStaffServer(t, db, uid)
+	return newStaffServer(t, db, testdb.PortalUID(uid))
 }
 
 func authedRequest(t *testing.T, session, method, url string, body []byte) *http.Response {
@@ -226,7 +226,7 @@ func TestClientRegisterHandler_Success(t *testing.T) {
 	const identityUID = "client-registers"
 	practiceID := testdb.SeedPractice(t, db, "Practice")
 	clientID, engagementID := testdb.SeedEngagement(t, db, practiceID)
-	testdb.SeedPortalUser(t, db, identityUID, clientID)
+	testdb.SeedPortalUser(t, db, testdb.PortalUID(identityUID), clientID)
 
 	srv, session := newPortalServer(t, db, identityUID)
 	defer srv.Close()
@@ -247,7 +247,7 @@ func TestClientRegisterHandler_InvalidJSONBody(t *testing.T) {
 	const identityUID = "client-bad-json"
 	practiceID := testdb.SeedPractice(t, db, "Practice")
 	clientID, engagementID := testdb.SeedEngagement(t, db, practiceID)
-	testdb.SeedPortalUser(t, db, identityUID, clientID)
+	testdb.SeedPortalUser(t, db, testdb.PortalUID(identityUID), clientID)
 
 	srv, session := newPortalServer(t, db, identityUID)
 	defer srv.Close()
@@ -264,7 +264,7 @@ func TestClientUnregisterHandler_Success(t *testing.T) {
 	const identityUID = "client-unregisters"
 	practiceID := testdb.SeedPractice(t, db, "Practice")
 	clientID, engagementID := testdb.SeedEngagement(t, db, practiceID)
-	testdb.SeedPortalUser(t, db, identityUID, clientID)
+	testdb.SeedPortalUser(t, db, testdb.PortalUID(identityUID), clientID)
 
 	srv, session := newPortalServer(t, db, identityUID)
 	defer srv.Close()
@@ -288,7 +288,7 @@ func TestClientUnregisterHandler_MissingEndpointRejected(t *testing.T) {
 	const identityUID = "client-missing-endpoint"
 	practiceID := testdb.SeedPractice(t, db, "Practice")
 	clientID, engagementID := testdb.SeedEngagement(t, db, practiceID)
-	testdb.SeedPortalUser(t, db, identityUID, clientID)
+	testdb.SeedPortalUser(t, db, testdb.PortalUID(identityUID), clientID)
 
 	srv, session := newPortalServer(t, db, identityUID)
 	defer srv.Close()
