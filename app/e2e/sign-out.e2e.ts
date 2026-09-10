@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test';
 import { signInEnrolled, enterPracticeAsEnrolled } from './mfa';
+import { staffLandingSettled } from './mountSettled';
 import { seedFoundingOwner } from './staffSignup';
 
 test('a Staff member signs out and can no longer reach an authenticated screen', async ({
@@ -15,7 +16,14 @@ test('a Staff member signs out and can no longer reach an authenticated screen',
 	// #606: an Owner is gated behind a second factor at every Practice-scoped
 	// route (see mfa.ts's signInEnrolled doc comment).
 	const staffHeaders = await signInEnrolled(request, idToken, localId);
-	await enterPracticeAsEnrolled(context, page, staffHeaders, practiceId);
+	// #854: paired with the navigation, so the wait is in place before the
+	// page can answer -- a tab still inside the landing screen's mount chain
+	// when a session ends is taken to `?sessionEnded=true` by the refusal,
+	// whichever tab ended it. See mountSettled.ts.
+	await Promise.all([
+		staffLandingSettled(page, practiceId),
+		enterPracticeAsEnrolled(context, page, staffHeaders, practiceId)
+	]);
 	await expect(page).toHaveURL(new RegExp(`/practices/${practiceId}$`));
 
 	// The control is in the Staff authenticated layout, so it is on this
@@ -65,13 +73,23 @@ test('a second tab signing out after the first shows no error', async ({ page, r
 	// #606: an Owner is gated behind a second factor at every Practice-scoped
 	// route (see mfa.ts's signInEnrolled doc comment).
 	const staffHeaders = await signInEnrolled(request, idToken, localId);
-	await enterPracticeAsEnrolled(context, page, staffHeaders, practiceId);
+	// #854: the wait mountSettled.ts explains, paired with the navigation.
+	await Promise.all([
+		staffLandingSettled(page, practiceId),
+		enterPracticeAsEnrolled(context, page, staffHeaders, practiceId)
+	]);
 	await expect(page).toHaveURL(new RegExp(`/practices/${practiceId}$`));
 
 	// A second tab on the same browser context, so it carries the same
 	// __session cookie -- and holds it after the first tab signs out.
 	const staleTab = await page.context().newPage();
-	await staleTab.goto(`/practices/${practiceId}`);
+	// #854: the same wait the first tab gets above -- this is the tab whose
+	// sign-out the test is about, so it is the one a late refusal would
+	// steer off the plain /login it is heading for.
+	await Promise.all([
+		staffLandingSettled(staleTab, practiceId),
+		staleTab.goto(`/practices/${practiceId}`)
+	]);
 	await staleTab.getByRole('button', { name: /Your account/ }).first().click();
 	await expect(staleTab.getByRole('button', { name: 'Sign out' }).first()).toBeVisible();
 
@@ -104,7 +122,11 @@ test('a second tab loses access once the first tab signs out, without itself sig
 	// #606: an Owner is gated behind a second factor at every Practice-scoped
 	// route (see mfa.ts's signInEnrolled doc comment).
 	const staffHeaders = await signInEnrolled(request, idToken, localId);
-	await enterPracticeAsEnrolled(context, page, staffHeaders, practiceId);
+	// #854: the wait mountSettled.ts explains, paired with the navigation.
+	await Promise.all([
+		staffLandingSettled(page, practiceId),
+		enterPracticeAsEnrolled(context, page, staffHeaders, practiceId)
+	]);
 	await expect(page).toHaveURL(new RegExp(`/practices/${practiceId}$`));
 
 	const secondTab = await page.context().newPage();

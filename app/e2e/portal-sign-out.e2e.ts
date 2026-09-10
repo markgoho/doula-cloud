@@ -1,11 +1,20 @@
 import { expect, test } from '@playwright/test';
+import { portalEngagementSettled } from './mountSettled';
 import { seedPortalClient, signInPortalClient } from './portalClient';
 
 test('a Client signs out and can no longer reach their Engagement', async ({ page, request }) => {
 	const practiceName = 'Meadowbrook Doulas';
 	const { clientEmail, engagementId } = await seedPortalClient(request, practiceName);
 
-	await signInPortalClient(page, request, clientEmail);
+	// #854: paired with the sign-in walk, so the wait is in place before the
+	// hub can answer -- a tab still inside the Engagement hub's mount chain
+	// when a session ends is taken to `?sessionEnded=true` by the refusal,
+	// which would overwrite the plain login screen this sign-out is heading
+	// for. See mountSettled.ts.
+	await Promise.all([
+		portalEngagementSettled(page, engagementId),
+		signInPortalClient(page, request, clientEmail)
+	]);
 	await expect(page).toHaveURL(new RegExp(`/portal/engagements/${engagementId}$`));
 	await expect(page.getByRole('heading', { name: 'Your care' })).toBeVisible();
 
@@ -54,13 +63,23 @@ test('a Client signs out and can no longer reach their Engagement', async ({ pag
 test('a Client second tab signing out after the first shows no error', async ({ page, request }) => {
 	const { clientEmail, engagementId } = await seedPortalClient(request, 'Fernwood Doulas');
 
-	await signInPortalClient(page, request, clientEmail);
+	// #854: see mountSettled.ts, and the first test's own note above.
+	await Promise.all([
+		portalEngagementSettled(page, engagementId),
+		signInPortalClient(page, request, clientEmail)
+	]);
 	await expect(page).toHaveURL(new RegExp(`/portal/engagements/${engagementId}$`));
 
 	// A second tab on the same browser context, so it carries the same
 	// __session cookie -- and holds it after the first tab signs out.
 	const staleTab = await page.context().newPage();
-	await staleTab.goto(`/portal/engagements/${engagementId}`);
+	// #854: the same wait the first tab gets -- this is the tab whose
+	// sign-out the test is about, so it is the one a late refusal would
+	// steer off the plain login screen it is heading for.
+	await Promise.all([
+		portalEngagementSettled(staleTab, engagementId),
+		staleTab.goto(`/portal/engagements/${engagementId}`)
+	]);
 	await staleTab.getByRole('button', { name: /Your account/ }).first().click();
 	await expect(staleTab.getByRole('button', { name: 'Sign out' }).first()).toBeVisible();
 
