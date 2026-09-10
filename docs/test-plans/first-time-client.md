@@ -55,11 +55,11 @@ Nadia Haddad's, Nadia's plan was written first
 
 | Step | Action | Expected result | Mark |
 | --- | --- | --- | --- |
-| 4.1 | Open the Contract link once Maya has sent it | The prose renders with merge-field values filled, and `Status: sent` | `manual` |
-| 4.1-a | Open it while the Contract is still `draft` | "No Contract has been sent for this Engagement yet" — RLS gives her no row, and that is the right message | `manual` |
-| 4.1-b | As Maya, take a signature before sending the portal invite | The Contract can be sent, and no Client can reach it. The ordering is real and nothing on the Staff side states it | `missing-feature (MO-G6)` [#255](https://github.com/markgoho/doula-cloud/issues/255) |
-| 4.2 | Type her full legal name, tick the attestation, submit | `POST .../contract/sign` succeeds and the page re-renders at `signed`. **The strongest screen in the portal** — and no spec covers it | `manual` |
-| 4.3 | Keep a copy of what she signed | `GET /api/portal/engagements/{id}/contract/pdf` is routed (`main.go:226`) and nothing in the portal's contract page links it | `missing-feature (HS-G3, HS-G6)` [#302](https://github.com/markgoho/doula-cloud/issues/302) [#305](https://github.com/markgoho/doula-cloud/issues/305) |
+| 4.1 | Open the Contract link once Maya has sent it | The Contract link opens the sent Contract under **Ready for your signature** — the Client register's own words for `sent`, never the Staff component's raw enum ([#212](https://github.com/markgoho/doula-cloud/issues/212)). The prose renders below it; the spec asserts the link and the label here, and asserts the merge-field values on the Practice side before sending | `automated (contract-lifecycle.e2e.ts)` |
+| 4.1-a | Open it while the Contract is still `draft` | "No Contract has been sent for your care yet." — RLS gives her no row, and that is the right message, now said in her own register's word for the Engagement | `manual` |
+| 4.1-b | As Maya, take a signature before sending the portal invite | **She is stopped before she can.** On a Client who has never been invited, a notice names the ordering and the way out of it — sending the portal invite, an action on the same page — and **Send Contract** renders disabled beneath it, rather than reporting a refusal after the click. The BFF enforces the same precondition itself ([MO-G6](https://github.com/markgoho/doula-cloud/issues/255) closed) | `manual` |
+| 4.2 | Type her full legal name, tick the attestation, submit | `POST .../contract/sign` succeeds and the page re-renders at **Signed**. **The strongest screen in the portal**, and a spec covers it now: `contract-lifecycle.e2e.ts` agrees to sign electronically, fills the full legal name, ticks the attestation and presses **Sign**, as the Client, in her own browser context | `automated (contract-lifecycle.e2e.ts)` |
+| 4.3 | Keep a copy of what she signed | **Download signed Contract (PDF)** sits under the signed prose and hands her the file ([HS-G3](https://github.com/markgoho/doula-cloud/issues/302) closed), and the BFF can read the object back out of the store to serve it ([HS-G6](https://github.com/markgoho/doula-cloud/issues/305) closed). The control is gated on `status === 'signed'`, which is where hers sits — a Contract later voided is [#1119](https://github.com/markgoho/doula-cloud/issues/1119), and Nadia's plan, not this one | `manual` |
 
 ### Stage 5 — Reading the Birth Plan
 
@@ -105,9 +105,9 @@ Nadia Haddad's, Nadia's plan was written first
 
 | Mark | Steps |
 | --- | --- |
-| `automated` | 6 |
+| `automated` | 8 |
 | `manual` | 18 |
-| `missing-feature` | 8 ([HS-G4](https://github.com/markgoho/doula-cloud/issues/303) ×2, [MO-G6](https://github.com/markgoho/doula-cloud/issues/255), [HS-G3](https://github.com/markgoho/doula-cloud/issues/302)+[HS-G6](https://github.com/markgoho/doula-cloud/issues/305), [HS-G2](https://github.com/markgoho/doula-cloud/issues/301), [PR-G5](https://github.com/markgoho/doula-cloud/issues/280), [MO-G4](https://github.com/markgoho/doula-cloud/issues/253), [HS-G5](https://github.com/markgoho/doula-cloud/issues/304)) |
+| `missing-feature` | 6 ([HS-G4](https://github.com/markgoho/doula-cloud/issues/303) ×2, [HS-G2](https://github.com/markgoho/doula-cloud/issues/301), [PR-G5](https://github.com/markgoho/doula-cloud/issues/280), [MO-G4](https://github.com/markgoho/doula-cloud/issues/253), [HS-G5](https://github.com/markgoho/doula-cloud/issues/304)) |
 
 No step is `blocked`. She never reaches a Stripe surface — the portal has none —
 so the one thing she cannot see about money (**NH-G6**: no Invoice, balance or
@@ -119,9 +119,7 @@ walkable steps (2.2-a, 3.1, 1.2, 3.1-a) rather than given steps of their own.
 
 The Birth Plan's absent export is now [her map](../journeys/first-time-client.md)'s
 **HS-G7**, and 4.3's absent Contract copy sharpened into **HS-G6** — both minted at
-the run ([#240](https://github.com/markgoho/doula-cloud/issues/240)). One fact
-still only handed forward, not a gap: **stage 4 is the strongest screen in the
-portal with no spec on it** — 4.2 signs a Contract and the suite never does.
+the run ([#240](https://github.com/markgoho/doula-cloud/issues/240)). The one fact this plan used to hand forward — **stage 4 is the strongest screen in the portal with no spec on it** — is answered: `contract-lifecycle.e2e.ts` signs the Contract as the Client, and 4.1 and 4.2 are `automated` on the strength of it.
 
 ## Run log
 
@@ -141,6 +139,28 @@ migration, the Go BFF and the Firebase Auth emulator, all local.
 | 7.2 | `push-notification.e2e.ts` | pass |
 
 **6 automated steps: all pass.**
+
+### 2026-09-10 — narrative reconciliation and two newly automated steps ([#685](https://github.com/markgoho/doula-cloud/issues/685))
+
+`bun run test:e2e` in `app/`, whole suite, one run, as the reporter printed it: **1 failed, 1 did not run, 65 passed** (56.1s). The failure is `simulation-world.e2e.ts`, the known flake [#958](https://github.com/markgoho/doula-cloud/issues/958) tracks, and it takes its own dependent case down with it; neither touches a step on this plan. The two specs that do were then re-run on their own: **2 passed** (24.2s).
+
+| Step | Spec | Result |
+| --- | --- | --- |
+| 4.1 | `contract-lifecycle.e2e.ts` | pass |
+| 4.2 | `contract-lifecycle.e2e.ts` | pass |
+
+**2 newly automated steps: both pass**, bringing the plan's total to 8. This is the fact the first run handed forward rather than filing — *stage 4 is the strongest screen in the portal and no spec is on it* — and it is answered: the spec signs the Contract as the Client, in her own browser context, through the same disclosure, name field and attestation Hannah walks.
+
+Two more cells are re-marked, both `missing-feature` -> `manual`, because the gap each named is closed and the step can now be performed:
+
+| Step | Was | Now | What settled it |
+| --- | --- | --- | --- |
+| 4.1-b | `missing-feature (MO-G6)` | `manual` | A notice names the ordering and the way out of it, **Send Contract** renders disabled beneath it, and the BFF enforces the same precondition. [#255](https://github.com/markgoho/doula-cloud/issues/255) is closed |
+| 4.3 | `missing-feature (HS-G3, HS-G6)` | `manual` | **Download signed Contract (PDF)** sits under the signed prose, and the BFF reads the object back to serve it. [#302](https://github.com/markgoho/doula-cloud/issues/302) and [#305](https://github.com/markgoho/doula-cloud/issues/305) are both closed |
+
+And two cells are corrected without moving: 4.1's `Status: sent` and 4.1-a's "for this Engagement" are both the team's words, and the portal speaks the Client register's now (`app/src/lib/clientRegister.ts`, [#212](https://github.com/markgoho/doula-cloud/issues/212)).
+
+The 2026-08-23 walk below is unchanged as a historical record; it walked 4.2 by hand before any spec did.
 
 ### 2026-08-23 — manual and missing-feature steps ([#240](https://github.com/markgoho/doula-cloud/issues/240))
 

@@ -48,31 +48,31 @@ as a non-owner, which is the case that matters here.
 
 | Step | Action | Expected result | Mark |
 | --- | --- | --- | --- |
-| 4.1 | Open `/practices/[practiceId]/clients/new` | Two fields, Name and Email — against a page of notes from the call ([MO-G3](https://github.com/markgoho/doula-cloud/issues/252)) | `manual` |
-| 4.2 | Press **Add Client** | `POST .../clients` is not owner-gated, so it **passes** for Dee; Client and Engagement are created at `intake` | `manual` |
+| 4.1 | Open `/practices/[practiceId]/clients/new` | Intake is a sequence now, one question per page — name, date of birth, email, phone, address, then whatever sections the Practice put on its own Client Field Template — with **Save and come back later** offered on every one of them. She reaches it from **Find or add a Client** on the Clients list, because a Client is found before she is created (ADR-0017). Her page of notes from the call has somewhere to go ([MO-G3](https://github.com/markgoho/doula-cloud/issues/252) closed) | `manual` |
+| 4.2 | Press **Add Client** | `client.CreateHandler` refuses only a contractor doula, so it **passes** for Dee — and the save is **free**: a Client, no Engagement, no credit. She lands on the Client's own detail hub. Asking for paid work with her is a separate act, the Engagement Request, whose approval is what creates the Engagement and locks the Credit (ADR-0017) | `manual` |
 
 ### Stage 5 — Assign a Doula
 
 | Step | Action | Expected result | Mark |
 | --- | --- | --- | --- |
 | 5.1 | Open the Engagement and look for an assignment control | None exists | `missing-feature (RA-G4)` [#225](https://github.com/markgoho/doula-cloud/issues/225) |
-| 5.2 | Create a Visit naming the Doula instead | **Refused.** `POST .../visits` requires the Doula role (`api/internal/visit/roles.go:41`); **Add a Visit** renders for Dee and answers `403 only a Staff member with the Doula role can do that` ([DW-G6](https://github.com/markgoho/doula-cloud/issues/274)) | `manual` |
+| 5.2 | Create a Visit naming the Doula instead | **It works, and it is her act.** The form asks **Who is this Visit for?** and `resolveAssignee` (`api/internal/visit/roles.go`) puts naming a colleague with the Owner and the Admin — a plain Doula cannot read the roster, so she has nobody to pick from. What Dee cannot do is log a Visit for *herself*, holding no Doula role, and the screen offers her no control for that rather than a button that 403s ([DW-G6](https://github.com/markgoho/doula-cloud/issues/274) closed) | `manual` |
 
 ### Stage 6 — Send the Contract
 
 | Step | Action | Expected result | Mark |
 | --- | --- | --- | --- |
 | 6.1 | Send the portal invite | `POST .../portal-invite` succeeds for a non-owner | `manual` |
-| 6.2 | Build the Contract | `POST .../contract` creates it at `draft` — not owner-gated | `manual` |
-| 6.3 | Send it | Status `sent` | `manual` |
-| 6.3-a | Try to edit the Practice's **Contract Template** | Refused: `contracts/template.go:75` requires Owner. The page still renders and shows the real template first ([PR-G4](https://github.com/markgoho/doula-cloud/issues/279)) | `manual` |
+| 6.2 | Build the Contract | `POST .../contract` creates it at `draft`, declared `AnyStaff` at the mount, so an Admin passes. The Client's name, the Practice's name and the price are resolved from data the product already holds rather than typed, and `price` is reserved outright — the form renders no input for it at all, and the other two arrive already filled | `manual` |
+| 6.3 | Send it | Status `sent` — but **Send Contract** is withheld until every remaining merge field is filled, and again until the Client has been sent a portal invite, each with the reason on screen rather than a refusal after the click | `manual` |
+| 6.3-a | Try to edit the Practice's **Contract Template** | Refused: the template write is declared Owner-only at the mount now, rather than checked inside the handler. The page still renders and shows the real template first ([PR-G4](https://github.com/markgoho/doula-cloud/issues/279)) | `manual` |
 
 ### Stage 7 — Track the signature
 
 | Step | Action | Expected result | Mark |
 | --- | --- | --- | --- |
-| 7.1 | Open the Engagement and read the Contract status | One of `draft` / `sent` / `signed` / `voided` | `manual` |
-| 7.1-a | Void a **signed** Contract from the Engagement page | The **Void** button renders only on a `signed` Contract (`ContractStatus.svelte`) and `POST .../contract/void` succeeds for a non-owner — `contracts/void.go:30` has no role check, only `staffauth.Middleware`. `signed` is the only status it accepts; anything else 409s. The Contract becomes `voided`, terminal, and still renders in full | `manual` |
+| 7.1 | Open the Engagement and read the Contract status | One of `draft` / `sent` / `signed` / `voided`, and any open or declined void request standing against it | `manual` |
+| 7.1-a | Void a **signed** Contract from the Engagement page | The **Void** button renders only on a `signed` Contract, and `POST .../contract/void` still succeeds for Dee — it is declared **Owner and Admin** at the mount now, rather than carrying no role check at all, and she is the Admin. A Doula in her place gets **Request a void** instead, which an Owner or Admin then grants or declines. `signed` is the only status the transition accepts; anything else 409s. The Contract becomes `voided`, terminal, and still renders in full | `manual` |
 | 7.2 | Find every Engagement whose Contract is unsigned | No such list; every Engagement must be opened in turn | `missing-feature (DW-G5)` [#273](https://github.com/markgoho/doula-cloud/issues/273) |
 | 7.2-a | Raise an Invoice against the Contract just voided | **It is not refused.** `POST .../contract/invoices` does not read the Contract's status and goes straight to the Connect gate, while **Create Invoice** keeps rendering on a `voided` Contract ([DW-G7](https://github.com/markgoho/doula-cloud/issues/275)) | `manual` |
 
@@ -133,7 +133,7 @@ gap; the missing capability is manual Payment recording.
 | `automated` | 0 |
 | `manual` | 21 |
 | `blocked` | 0 (8.1 cleared on the walk — Connect completed) |
-| `missing-feature` | 4 ([RA-G2](https://github.com/markgoho/doula-cloud/issues/261), [RA-G4](https://github.com/markgoho/doula-cloud/issues/225), [DW-G3](https://github.com/markgoho/doula-cloud/issues/271), [DW-G5](https://github.com/markgoho/doula-cloud/issues/273)) |
+| `missing-feature` | 3 ([RA-G4](https://github.com/markgoho/doula-cloud/issues/225), [DW-G3](https://github.com/markgoho/doula-cloud/issues/271), [DW-G5](https://github.com/markgoho/doula-cloud/issues/273)) |
 
 Stages 8 and 9 sat either side of the `blocked` / `missing-feature` line, and the
 walk proved the line was drawn in the right place: connecting a live Stripe account
@@ -154,6 +154,27 @@ migration, the Go BFF and the Firebase Auth emulator, all local.
 
 This plan has **no** `automated` step, so the suite says nothing about it.
 Every step below stage 1 waits on the walk.
+
+### 2026-09-10 — narrative reconciliation ([#685](https://github.com/markgoho/doula-cloud/issues/685))
+
+A desk pass, not a walk. [#318](https://github.com/markgoho/doula-cloud/issues/318) left this plan's Add Client, Visits and Contract wording alone because it had already gone stale independently of the specs #318 added. Corrected here against the code as it stands; nothing was re-walked and no mark moved.
+
+| Step | Cell corrected | What settled it |
+| --- | --- | --- |
+| 4.1 | Two fields, Name and Email -> a one-question-per-page intake sequence reached through **Find or add a Client** | ADR-0017, and the intake routes under `clients/new`. [MO-G3](https://github.com/markgoho/doula-cloud/issues/252) is closed |
+| 4.2 | "Client and Engagement are created at `intake`" -> the save is free, creates no Engagement and locks no Credit; the Engagement Request is the separate ask | ADR-0017, and `api/internal/client/create.go`'s `CreateHandler` doc comment |
+| 5.2 | Refused with a `403` -> naming a colleague on a Visit is exactly the Admin's act; what she cannot do is log one for herself | `resolveAssignee` in `api/internal/visit/roles.go`, and the Engagement page's `canAssignVisits` / `canLogOwnVisit` split. [DW-G6](https://github.com/markgoho/doula-cloud/issues/274) is closed |
+| 6.2 | "not owner-gated" and "six blank merge-field inputs" -> declared `AnyStaff` at the mount, and three of the fields are resolved rather than typed, `price` having no input at all | `api/internal/contracts/mount.go`, `editableMergeFields` in `app/src/lib/contract.ts`, and `resolveMergeFieldValues` in `api/internal/contracts/contract.go` |
+| 6.3 | "Status `sent`" -> **Send Contract** is withheld until the merge fields are filled and the Client has portal access | The Engagement page's two `Notice` blocks on the draft Contract |
+| 7.1 | Added the void requests standing against the Contract to what the status line carries | `ContractStatus.svelte`'s `voidRequests` |
+| 6.3-a | "`contracts/template.go:75` requires Owner" -> the Owner gate is declared at the mount now | `api/internal/contracts/mount.go` |
+| 7.1-a | "no role check, only `staffauth.Middleware`" -> declared Owner-and-Admin at the mount; a Doula gets **Request a void** instead | `api/internal/contracts/mount.go`, and `TransitionVoid` in `lifecycle.go` for the `signed`-only rule, which is unchanged |
+
+**No step is re-marked.** Both new specs run as the founding Owner. Every cell above is a claim about what an Admin gets, which is the thing neither spec exercises — the README's rule is that a mark counts only where the spec drives the step the way the Persona would.
+
+**The Marks summary above is also recounted**, from 4 `missing-feature` to 3: step 2.1 stopped being `missing-feature (RA-G2)` when **Edit membership** landed, and the summary kept counting it. Arithmetic, not a re-mark.
+
+**Left alone on purpose.** 7.2-a's [DW-G7](https://github.com/markgoho/doula-cloud/issues/275) and 5.1's [RA-G4](https://github.com/markgoho/doula-cloud/issues/225) both cite closed issues. Neither is an Add Client, Visits or Contract-signing step, and re-marking either needs the walk [#329](https://github.com/markgoho/doula-cloud/issues/329) owns.
 
 ### 2026-08-22 — manual walk ([#236](https://github.com/markgoho/doula-cloud/issues/236))
 

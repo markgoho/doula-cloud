@@ -44,10 +44,10 @@ mark; the consequences land in stages 3 and 8.
 
 | Step | Action | Expected result | Mark |
 | --- | --- | --- | --- |
-| 3.1 | Open `/practices/[practiceId]/clients` and find Camille's existing record | The row is there. **It is a dead end** — the list is a read surface and nothing on it opens a second Engagement | `manual` |
-| 3.1-a | Look her up by email, or add an Engagement to the Client she already is | `POST /api/practices/{id}/clients` **always inserts a new `clients` row** (`engagement/create.go`). No lookup, no client search, no add-an-Engagement-to-this-Client endpoint. Client and Engagement are created in one indivisible request, by design | `missing-feature (CB-G1)` [#307](https://github.com/markgoho/doula-cloud/issues/307) |
-| 3.2 | Create a new Client with the same name and email | Succeeds. Two `clients` rows now exist for one person, and a second Client credit is consumed for someone the Practice already paid for (**[MO-G9](https://github.com/markgoho/doula-cloud/issues/257)**) | `manual` |
-| 3.2-a | Carry anything from her first Engagement across by hand | The form takes name and email only (**MO-G3**). There is nothing to carry it into | `missing-feature (MO-G3)` [#252](https://github.com/markgoho/doula-cloud/issues/252) |
+| 3.1 | Open `/practices/[practiceId]/clients` and find Camille's existing record | The row is there, and it is no longer a dead end: it opens her Client detail hub, which carries **Start new work with Camille** — the ask for a second Engagement, raised against the record she already is | `manual` |
+| 3.1-a | Look her up by email, or add an Engagement to the Client she already is | **Both, and the first is the only door to the second.** Intake begins at **Find or add a Client**, a search; `CreateHandler` runs lookup-before-insert and refuses with the matches rather than inserting blind; and asking for new work with an existing Client is its own act, the Engagement Request, whose approval creates the Engagement and locks the Credit. A Client and an Engagement are no longer one indivisible request (ADR-0017) ([CB-G1](https://github.com/markgoho/doula-cloud/issues/307) closed) | `manual` |
+| 3.2 | Create a new Client with the same name and email | **It is stopped and asked about.** `FindCollisions` answers the save with `409` and the matching records, and intake's own duplicate screen puts the question ADR-0017 wrote it for: this is her, or a different person. Choosing *this is her* means editing the Client who already exists rather than saving a second one. No credit rides on the answer either way, because saving a Client is free now (**[MO-G9](https://github.com/markgoho/doula-cloud/issues/257)** closed) | `manual` |
+| 3.2-a | Carry anything from her first Engagement across by hand | **There is nothing to carry, which is the point.** She is one Client record — twelve structural columns plus whatever the Practice added to its own Client Field Template — and the second Engagement hangs off that same record rather than off a retyped copy of her. Her Practice-defined values are read live, so what the Practice knows about her today is what the new work sees ([MO-G3](https://github.com/markgoho/doula-cloud/issues/252) closed) | `manual` |
 
 ### Stage 4 — Declaring it postpartum-only
 
@@ -93,8 +93,8 @@ mark; the consequences land in stages 3 and 8.
 | Mark | Steps |
 | --- | --- |
 | `automated` | 1 |
-| `manual` | 9 |
-| `missing-feature` | 9 ([MO-G4](https://github.com/markgoho/doula-cloud/issues/253) ×2, [CB-G1](https://github.com/markgoho/doula-cloud/issues/307), [MO-G3](https://github.com/markgoho/doula-cloud/issues/252), [CB-G2](https://github.com/markgoho/doula-cloud/issues/308), [CB-G4](https://github.com/markgoho/doula-cloud/issues/310) ×2, [CB-G5](https://github.com/markgoho/doula-cloud/issues/311), [CB-G6](https://github.com/markgoho/doula-cloud/issues/312)) |
+| `manual` | 11 |
+| `missing-feature` | 7 ([MO-G4](https://github.com/markgoho/doula-cloud/issues/253) ×2, [CB-G2](https://github.com/markgoho/doula-cloud/issues/308), [CB-G4](https://github.com/markgoho/doula-cloud/issues/310) ×2, [CB-G5](https://github.com/markgoho/doula-cloud/issues/311), [CB-G6](https://github.com/markgoho/doula-cloud/issues/312)) |
 
 No step is `blocked`. Nothing on her path touches Stripe.
 
@@ -119,6 +119,21 @@ migration, the Go BFF and the Firebase Auth emulator, all local.
 | 6.1 | `client-portal-login.e2e.ts` | pass |
 
 **1 automated steps: all pass.**
+
+### 2026-09-10 — narrative reconciliation ([#685](https://github.com/markgoho/doula-cloud/issues/685))
+
+A desk pass over this plan's Add Client cells, which [#318](https://github.com/markgoho/doula-cloud/issues/318) left alone. Nothing was re-walked. Two steps are re-marked, both from `missing-feature` to `manual`, because the capability their gap named now exists and the step can be performed.
+
+| Step | Cell corrected | What settled it |
+| --- | --- | --- |
+| 3.1 | "a dead end" -> her row opens a Client detail hub carrying **Start new work with Camille** | The Client detail page's own `Start new work with {name}` link into the Engagement Request route |
+| 3.1-a | `missing-feature (CB-G1)` -> `manual`: a search, a lookup-before-insert create, and an Engagement Request against the Client she already is | ADR-0017, `api/internal/client/create.go`, and the intake routes under `clients/new` and `clients/search`. [CB-G1](https://github.com/markgoho/doula-cloud/issues/307) is closed |
+| 3.2 | "Succeeds... a second credit is consumed" -> a `409` carrying the matches, and intake's duplicate screen asking whether this is her | `FindCollisions` in `CreateHandler`, and ADR-0017 on when a Credit locks. [MO-G9](https://github.com/markgoho/doula-cloud/issues/257) is closed |
+| 3.2-a | `missing-feature (MO-G3)` -> `manual`: there is nothing to carry, because she is one record and the second Engagement hangs off it | ADR-0017's twelve structural columns and its Practice-defined layer, read live. [MO-G3](https://github.com/markgoho/doula-cloud/issues/252) is closed |
+
+**`add-client-visits.e2e.ts` drives none of these.** The spec's Client is brand new and has no prior match, so it lands straight on the detail hub and never passes through the match-review screens these four steps are entirely about. The README's rule — a mark counts only where the spec exercises the step the way the Persona would — keeps all four `manual`.
+
+**Left alone on purpose.** 5.2's CB-G3 is her moment of truth and a portal-account step rather than an Add Client one; it, and every other cell on this plan, waits on the walk [#329](https://github.com/markgoho/doula-cloud/issues/329) owns.
 
 ### 2026-08-23 — manual and missing-feature steps ([#241](https://github.com/markgoho/doula-cloud/issues/241))
 

@@ -54,20 +54,20 @@ is Lena's normal case.
 | --- | --- | --- | --- |
 | 4.1 | Open an Engagement from the Clients list | The single-page Engagement view renders | `automated (birth-plan.e2e.ts)` |
 | 4.2 | Look for an assignment control | No field, no endpoint, no screen. An Engagement carries no Doula | `missing-feature (RA-G4)` [#225](https://github.com/markgoho/doula-cloud/issues/225) |
-| 4.3 | Add a Visit naming the new Doula as `staffId` | **The Visit cannot name anyone.** `POST .../visits` takes no body and assigns the *caller* (`api/internal/visit/create.go:32,47`); handing it to a colleague is a second act, the **Reassign to Staff id** free-text box, which wants a UUID no screen prints ([RA-G10](https://github.com/markgoho/doula-cloud/issues/268)). Assignment exists at Visit level only, on a record with no date | `manual` |
+| 4.3 | Add a Visit naming the new Doula as `staffId` | **The Visit names her.** Create carries its own assignee now, and the Engagement page asks **Who is this Visit for?** as a picker of the Doulas this Engagement can admit — no UUID, no free-text box ([RA-G10](https://github.com/markgoho/doula-cloud/issues/268) closed). `resolveAssignee` (`api/internal/visit/roles.go`) keeps naming a colleague with the Owner and the Admin, and logging your own Visit with the Doula, so Renata reaches it from either seat. The row she writes carries a scheduled date and time, a type and notes. Assignment still exists at Visit level; whether an Engagement itself names a Doula is 4.2's question, not this one | `manual` |
 
 ### Stage 5 — Reassign when someone is sick
 
 | Step | Action | Expected result | Mark |
 | --- | --- | --- | --- |
-| 5.1 | `PATCH .../visits/{visitId}` with a new `staffId` | The Visit's Staff member changes; nothing dated moves, because nothing is dated | `manual` |
+| 5.1 | `PATCH .../visits/{visitId}` with a new `staffId` | The Visit's Staff member changes, chosen from the row's own **Reassign to** picker rather than pasted as an id, and it is refused unless the person named is a Doula this Engagement can admit. Something dated does move now: a Visit carries a scheduled instant, rescheduled from **Update schedule** on the same row | `manual` |
 
 ### Stage 6 — See the whole Practice
 
 | Step | Action | Expected result | Mark |
 | --- | --- | --- | --- |
 | 6.1 | Open `/practices/[practiceId]/clients` | The list renders and each Client links to their Engagement | `automated (birth-plan.e2e.ts)` |
-| 6.1-a | Create a Client as a *second* Staff member, then reload as Renata | It appears: the handler returns every Client with an Engagement at the Practice "regardless of which Staff member created it". **This half of her requirement passes** | `manual` |
+| 6.1-a | Create a Client as a *second* Staff member, then reload as Renata | She appears: the list is one row per Client at the Practice, whoever saved her, and no longer one row per Client-and-Engagement pair (ADR-0017 — a Client needs no Engagement to exist at all). **This half of her requirement passes** | `manual` |
 | 6.1-b | Read the columns | Name and Status only — and Status is `intake` on every row forever ([MO-G4](https://github.com/markgoho/doula-cloud/issues/253)) | `manual` |
 | 6.2 | Learn each Engagement's Contract and Invoice state | Reachable only by opening every Engagement in turn | `manual` |
 | 6.2-a | Look for a roll-up of Contract state, Invoice state, or covering Doula | There is none at any level above one Engagement | `missing-feature (RA-G6)` [#264](https://github.com/markgoho/doula-cloud/issues/264) |
@@ -98,13 +98,10 @@ is Lena's normal case.
 | Mark | Steps |
 | --- | --- |
 | `automated` | 5 |
-| `manual` | 16 |
-| `missing-feature` | 7 ([RA-G1](https://github.com/markgoho/doula-cloud/issues/260), [RA-G2](https://github.com/markgoho/doula-cloud/issues/261), [RA-G4](https://github.com/markgoho/doula-cloud/issues/225), [RA-G5](https://github.com/markgoho/doula-cloud/issues/263), [RA-G6](https://github.com/markgoho/doula-cloud/issues/264), [RA-G7](https://github.com/markgoho/doula-cloud/issues/265), [RA-G8](https://github.com/markgoho/doula-cloud/issues/266)) |
+| `manual` | 17 |
+| `missing-feature` | 6 ([RA-G1](https://github.com/markgoho/doula-cloud/issues/260), [RA-G4](https://github.com/markgoho/doula-cloud/issues/225), [RA-G5](https://github.com/markgoho/doula-cloud/issues/263), [RA-G6](https://github.com/markgoho/doula-cloud/issues/264), [RA-G7](https://github.com/markgoho/doula-cloud/issues/265), [RA-G8](https://github.com/markgoho/doula-cloud/issues/266)) |
 
-RA-G3 is observed at 3.2 rather than given a step: the screen renders, so the step
-is walkable — what fails is the word it prints. **RA-G9** and **RA-G10** were minted
-by the walk and are observed the same way, inside 1.3 and 4.3: both steps can be
-performed, and what the product does when they are is the finding.
+RA-G2 and RA-G3 are observed at 3.3 and 3.2 rather than given steps of their own: both screens render, so both steps are walkable. RA-G3's failure is the word the screen prints, and 3.3's **Edit membership** has since answered RA-G2's own question, which is why that step reads `manual` and RA-G2 is no longer counted above. **RA-G9** and **RA-G10** were minted by the walk and are observed the same way, inside 1.3 and 4.3: both steps can be performed, and what the product does when they are is the finding.
 
 ## Run log
 
@@ -123,6 +120,22 @@ migration, the Go BFF and the Firebase Auth emulator, all local.
 | 9.1 | `plan-templates.e2e.ts` | pass |
 
 **5 automated steps: all pass.**
+
+### 2026-09-10 — narrative reconciliation ([#685](https://github.com/markgoho/doula-cloud/issues/685))
+
+A desk pass, not a walk. [#318](https://github.com/markgoho/doula-cloud/issues/318) added `contract-lifecycle.e2e.ts` and `add-client-visits.e2e.ts` and deliberately left this plan's own Add Client and Visits wording alone, because that wording had already gone stale for reasons of its own. This corrects the wording against the code as it stands; nothing here was re-walked and no mark moved.
+
+| Step | Cell corrected | What settled it |
+| --- | --- | --- |
+| 4.3 | The Visit could not name anybody -> it names her, from a picker of the Doulas this Engagement can admit | `api/internal/visit/roles.go`'s `resolveAssignee`, and the Engagement page's **Who is this Visit for?** field. [RA-G10](https://github.com/markgoho/doula-cloud/issues/268) is closed |
+| 5.1 | "nothing dated moves, because nothing is dated" -> a Visit carries a scheduled instant, and the reassign is a picker rather than a pasted id | The Visits table's own Type / Date / Notes columns and its **Update schedule** control. [MO-G1](https://github.com/markgoho/doula-cloud/issues/250), [MO-G2](https://github.com/markgoho/doula-cloud/issues/251) and [PR-G6](https://github.com/markgoho/doula-cloud/issues/281) are all closed |
+| 6.1-a | "every Client with an Engagement" -> one row per Client, whoever saved her, and a Client needs no Engagement to exist | ADR-0017, and `api/internal/client/list.go`'s `ListItem` doc comment |
+
+**The Marks summary above is also recounted.** It read 16 `manual` and 7 `missing-feature` against a Steps table holding 17 and 6: step 3.3 stopped being `missing-feature (RA-G2)` when **Edit membership** landed, and the summary was never brought along. The count is arithmetic rather than a re-mark, and the same drift is corrected on three other plans and in the README's run-status table under this ticket.
+
+**No step is re-marked.** Neither new spec drives a step on this plan the way Renata would: `add-client-visits.e2e.ts` logs a Visit for the Owner herself, which is not 4.3's act of naming a colleague, and this plan has no Contract-signing step at all.
+
+**Left alone on purpose.** 4.2 still reads `missing-feature (RA-G4)` against a closed [#225](https://github.com/markgoho/doula-cloud/issues/225). It is an Engagement-assignment step, not one of the three this ticket reviewed, and re-marking it needs the walk [#329](https://github.com/markgoho/doula-cloud/issues/329) owns.
 
 ### 2026-08-22 — manual walk ([#235](https://github.com/markgoho/doula-cloud/issues/235))
 

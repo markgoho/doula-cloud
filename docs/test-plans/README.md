@@ -126,11 +126,7 @@ Every step carries exactly one mark.
 - **`automated (<spec>)`** — an existing Playwright spec drives this step and
   asserts its result. It counts only when the spec exercises the step the way the
   Persona would, through the UI, or asserts that behavior directly.
-  **Fixture setup does not count.** `birth-plan.e2e.ts` creates its Client with
-  `POST /api/practices/{id}/clients`; that automates nothing about the **Add
-  Client** form, which stays `manual`. Every spec in the suite provisions its
-  Practice through `POST /api/staff/signup`, so **no spec covers the `/signup`
-  form** either.
+  **Fixture setup does not count.** `birth-plan.e2e.ts` creates its Client with `POST /api/practices/{id}/clients`; that automates nothing about the intake sequence, which `add-client-visits.e2e.ts` walks separately and on purpose. The `/signup` form was the same shape of hole until [#318](https://github.com/markgoho/doula-cloud/issues/318) wrote `signup-form.e2e.ts` for it: every other spec still provisions its Practice through `POST /api/staff/signup` directly, and that provisioning is still fixture setup rather than coverage.
 - **`manual`** — a person can walk the step today against the running stack. The
   expected result is what the product does **as built**, which includes a refusal
   or an error where that is the honest answer (`connectRequired`, `402 no credits
@@ -265,32 +261,25 @@ Every plan has been executed once ([#209](https://github.com/markgoho/doula-clou
 | Plan | Persona | `automated` | `manual` | `blocked` | `missing-feature` |
 | --- | --- | --- | --- | --- | --- |
 | [evaluator-doula.md](evaluator-doula.md) | Tasha Bell | 4 | 10 | 0 | 5 |
-| [solo-birth-doula.md](solo-birth-doula.md) | Maya Okonkwo | 12 | 16 | 0 | 4 |
-| [practice-owner.md](practice-owner.md) | Renata Alvarez | 5 | 16 | 0 | 7 |
-| [non-doula-admin.md](non-doula-admin.md) | Dee Whitlock | 0 | 21 | 0 | 4 |
-| [employed-doula.md](employed-doula.md) | Priya Raman | 3 | 21 | 0 | 6 |
+| [solo-birth-doula.md](solo-birth-doula.md) | Maya Okonkwo | 12 | 19 | 0 | 4 |
+| [practice-owner.md](practice-owner.md) | Renata Alvarez | 5 | 17 | 0 | 6 |
+| [non-doula-admin.md](non-doula-admin.md) | Dee Whitlock | 0 | 21 | 0 | 3 |
+| [employed-doula.md](employed-doula.md) | Priya Raman | 3 | 21 | 0 | 5 |
 | [contractor-doula.md](contractor-doula.md) | Lena Vasquez | 1 | 17 | 0 | 9 |
 | [loss-client.md](loss-client.md) | Nadia Haddad | 5 | 13 | 0 | 9 |
-| [first-time-client.md](first-time-client.md) | Hannah Sorensen | 6 | 18 | 0 | 8 |
-| [returning-postpartum-client.md](returning-postpartum-client.md) | Camille Boyd | 1 | 9 | 0 | 9 |
-| **Total** | | **37** | **141** | **0** | **61** |
+| [first-time-client.md](first-time-client.md) | Hannah Sorensen | 8 | 18 | 0 | 6 |
+| [returning-postpartum-client.md](returning-postpartum-client.md) | Camille Boyd | 1 | 11 | 0 | 7 |
+| **Total** | | **39** | **147** | **0** | **54** |
 
 Every `automated` step passed. **No plan carries a `blocked` step any more** — Stripe was the last holdout and [#242](https://github.com/markgoho/doula-cloud/issues/242) opened the Sandbox, after which Connect, Checkout and Invoices were all walked for real.
 
-**#318 added four specs** (`signup-form.e2e.ts`, `staff-invite-role.e2e.ts`,
-`contract-lifecycle.e2e.ts`, `add-client-visits.e2e.ts`) closing the seams the
-first journey run's [Spec inventory](#spec-inventory) named. The `automated`
-counts above move for evaluator-doula.md, solo-birth-doula.md and
-employed-doula.md, whose Steps tables named an exact step
-(`/signup`'s three steps; PR-B2's role refusal) that a new spec now drives
-identically. `contract-lifecycle.e2e.ts` and `add-client-visits.e2e.ts` cover
-real steps on several other plans too, but this pass did not re-mark them:
-those plans describe the Add Client form and the Contract lifecycle in
-shapes ADR-0017 and #234 have already moved past (a combined
-Client-and-Engagement create with an immediate credit spend; Contract
-signing as untestable), so flipping their marks without rewriting their own
-stale narrative would trade one inaccuracy for another. That reconciliation
-is left for whoever next walks those plans.
+**#318 added four specs** (`signup-form.e2e.ts`, `staff-invite-role.e2e.ts`, `contract-lifecycle.e2e.ts`, `add-client-visits.e2e.ts`) closing the seams the first journey run's [Spec inventory](#spec-inventory) named. It re-marked only evaluator-doula.md, solo-birth-doula.md and employed-doula.md, whose Steps tables named an exact step (`/signup`'s three steps; PR-B2's role refusal) that a new spec drives identically. The last two specs cover real steps on several other plans too, and #318 left those alone rather than flip a mark on top of prose that ADR-0017 and [#234](https://github.com/markgoho/doula-cloud/issues/234) had already moved past — a combined Client-and-Engagement create with an immediate credit spend, Contract signing as untestable — because that would have traded one inaccuracy for another.
+
+**[#685](https://github.com/markgoho/doula-cloud/issues/685) did that reconciliation**, as a desk pass rather than a walk: practice-owner.md, non-doula-admin.md, contractor-doula.md, loss-client.md, first-time-client.md and returning-postpartum-client.md each had their Add Client, Visits and Contract-signing cells read against the code and corrected, and each carries a dated Run-log section naming every cell it moved and what settled it. Six steps are re-marked and the counts above move with them: Hannah Sorensen's 4.1 and 4.2 become `automated (contract-lifecycle.e2e.ts)` — the spec signs the Contract as the Client, which is the fact the first run handed forward as *the strongest screen in the portal with no spec on it* — and her 4.1-b and 4.3, and Camille Boyd's 3.1-a and 3.2-a, move from `missing-feature` to `manual` because the gap each named is closed and the step can be performed.
+
+**The run-status table above is recounted at the same time, and four of its rows moved for a second reason.** solo-birth-doula.md, practice-owner.md, non-doula-admin.md and employed-doula.md each carried a Marks summary that no longer agreed with its own Steps table — a step re-marked by some later ticket without the summary being brought along, three times over RA-G2 alone, which **Edit membership** answered. Every plan's marks were recounted from its Steps table for this pass, the four summaries corrected, and the Total row with them. That is arithmetic and not a re-mark: no step's own mark changed for this reason, and solo-birth-doula.md and employed-doula.md are otherwise untouched here.
+
+**What the pass declined to re-mark is the more useful half.** Both new specs run as the founding Owner, so a step whose whole claim is *what an Admin gets*, or *what a contractor gets*, is not driven by them however closely the clicks match — the [four marks](#the-four-marks)' own rule is that a spec counts only when it exercises the step the way the Persona would. That is why Dee Whitlock's Contract cells, Lena Vasquez's Add Client cell and Renata Alvarez's Visits cells are all corrected in place and all still `manual`. Two things it found are filed rather than left as prose: [#1119](https://github.com/markgoho/doula-cloud/issues/1119), where a voided Contract's signed PDF is served by the API and hidden by the portal screen, and [#1121](https://github.com/markgoho/doula-cloud/issues/1121), which holds the same stale Add Client story on Tasha Bell's and Maya Okonkwo's plans — outside #685's six, and not half-correctable without a re-mark of its own.
 
 ### Gap issues
 
