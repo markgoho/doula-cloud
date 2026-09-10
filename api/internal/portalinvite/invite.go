@@ -155,11 +155,22 @@ func resolveEngagementClient(ctx context.Context, tx *sql.Tx, engagementID, prac
 // invite creates a pending client_portal_users row for clientID, or
 // rotates the existing pending row's invite_token if one already exists.
 // An already-accepted row (identity_uid set) is a 409 Conflict.
+//
+// Since #813 a Client merged from two records can be reached by more
+// than one Portal Account, so this reads one row deliberately rather
+// than assuming there is only one. The ORDER BY prefers an accepted row:
+// a woman who can already sign in is refused a second invitation
+// whichever of her logins the query happened to see first, which is the
+// answer that cannot be wrong. Without it the same request would 409 or
+// send an invite depending on physical row order.
 func invite(ctx context.Context, tx *sql.Tx, clientID string) (resp InviteResponse, status int, code apierr.Code, msg string) {
 	var existingID string
 	var identityUID sql.NullString
 	err := tx.QueryRowContext(ctx,
-		`SELECT id, identity_uid FROM client_portal_users WHERE client_id = $1`,
+		`SELECT id, identity_uid FROM client_portal_users
+		  WHERE client_id = $1
+		  ORDER BY (identity_uid IS NOT NULL) DESC, id
+		  LIMIT 1`,
 		clientID,
 	).Scan(&existingID, &identityUID)
 	expiresAt := time.Now().Add(inviteTokenLifetime)

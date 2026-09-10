@@ -233,8 +233,7 @@ const pendingRequestKindsExpr = `(
 func listClients(ctx context.Context, tx *sql.Tx, practiceID string, withWorkOnly bool, after *pagecursor.Cursor) ([]ListItem, error) {
 	query := `SELECT c.id, c.given_name, c.preferred_name, COALESCE(c.email, ''), ` + hasWorkExpr + `,
 		        pu.id IS NOT NULL, pu.identity_uid IS NOT NULL, latest.status, ` + emailSuppressedExpr + `, ` + pendingRequestKindsExpr + `, c.created_at
-		 FROM clients c
-		 LEFT JOIN client_portal_users pu ON pu.client_id = c.id
+		 FROM clients c` + portalUserForClient + `
 		 LEFT JOIN LATERAL (
 		     SELECT o.status FROM portal_invite_outbox o
 		     WHERE o.client_portal_user_id = pu.id
@@ -278,7 +277,7 @@ func listAttachedClients(ctx context.Context, tx *sql.Tx, practiceID, staffID st
 		     FROM clients c
 		     JOIN engagements e ON e.client_id = c.id
 		     JOIN engagement_attachments ea ON ea.engagement_id = e.id
-		     LEFT JOIN client_portal_users pu ON pu.client_id = c.id
+		     ` + portalUserForClient + `
 		     LEFT JOIN LATERAL (
 		         SELECT o.status FROM portal_invite_outbox o
 		         WHERE o.client_portal_user_id = pu.id
