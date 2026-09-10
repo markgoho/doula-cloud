@@ -193,6 +193,41 @@ describe('client edit', () => {
 		expect(goto).not.toHaveBeenCalled();
 	});
 
+	it('shows every reason when a refused override names fields this form does not map', async () => {
+		await setup();
+		apiFetchWithSession.mockResolvedValueOnce(
+			jsonResponse({ matches: [anotherClientMatch], substitution: true, mergeOffered: false }, 409)
+		);
+		// `details` keyed on two columns this form has no control for, which
+		// is what a BFF refusal naming a field the form has not caught up
+		// with looks like. Both entries come back untargeted, and neither
+		// may be the one that disappears.
+		apiFetchWithSession.mockResolvedValueOnce(
+			jsonResponse(
+				{
+					message: 'The Client record could not be saved.',
+					details: {
+						pronouns: 'Enter pronouns of 50 characters or fewer',
+						dueDate: 'The due date must be a real date'
+					}
+				},
+				400
+			)
+		);
+
+		await testPage.getByRole('button', { name: 'Save' }).click();
+		await expect.element(testPage.getByRole('dialog')).toBeVisible();
+		await testPage.getByRole('button', { name: 'Yes, a different person' }).click();
+
+		const dialog = testPage.getByRole('dialog');
+		await expect
+			.element(dialog.getByText('Enter pronouns of 50 characters or fewer', { exact: false }))
+			.toBeVisible();
+		await expect
+			.element(dialog.getByText('The due date must be a real date', { exact: false }))
+			.toBeVisible();
+	});
+
 	it('hands a refused override that names a field back to the form, with focus that lands', async () => {
 		await setup();
 		apiFetchWithSession.mockResolvedValueOnce(
