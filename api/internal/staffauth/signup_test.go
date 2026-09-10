@@ -224,6 +224,67 @@ func TestSignupHandler_MissingWorkState(t *testing.T) {
 	}
 }
 
+// TestSignupHandler_ZoneIsStatedNotInherited is #1166's own criterion at
+// the signup end: a Practice's zone comes off the body the founder sent,
+// not off a column default, and the row proves it by holding a zone
+// nobody would have picked for her.
+func TestSignupHandler_ZoneIsStatedNotInherited(t *testing.T) {
+	db := testdb.New(t)
+	const uid = "signup-states-a-zone"
+	srv := newSignupServer(authntest.Verifier{UID: uid, Email: "denver@example.com"}, db)
+	defer srv.Close()
+
+	resp := postSignup(t, srv, "tok", staffauth.SignupRequest{
+		PracticeName: "Mile High Doulas", StaffName: "Robin", WorkState: "CO",
+		Timezone: "America/Denver",
+	})
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusCreated {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusCreated)
+	}
+	var out staffauth.SignupResponse
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	var stored string
+	if err := db.Admin.QueryRowContext(t.Context(),
+		`SELECT timezone FROM practices WHERE id = $1`, out.PracticeID,
+	).Scan(&stored); err != nil {
+		t.Fatalf("read the new Practice's zone: %v", err)
+	}
+	if stored != "America/Denver" {
+		t.Fatalf("stored zone = %q, want the one she stated", stored)
+	}
+}
+
+// TestSignupHandler_RefusesAZoneTheDatabaseDoesNotName proves the zone is
+// held to the IANA database at signup too, not only on the settings
+// write -- and that an omitted field is a refusal rather than a silent
+// UTC. The body is a map rather than a SignupRequest so postSignup's own
+// default does not fill the field in.
+func TestSignupHandler_RefusesAZoneTheDatabaseDoesNotName(t *testing.T) {
+	for _, zone := range []string{"Nowhere/Atlantis", ""} {
+		t.Run("zone "+zone, func(t *testing.T) {
+			db := testdb.New(t)
+			srv := newSignupServer(authntest.Verifier{UID: newOwnerUID, Email: jamieEmail}, db)
+			defer srv.Close()
+
+			resp := postSignup(t, srv, "tok", map[string]string{
+				"practiceName": "P", "staffName": "S", "workState": "NY", "timezone": zone,
+			})
+			defer resp.Body.Close()
+
+			if resp.StatusCode != http.StatusBadRequest {
+				t.Fatalf("status = %d, want %d for zone %q", resp.StatusCode, http.StatusBadRequest, zone)
+			}
+			if details := decodeDetails(t, resp); details["timezone"] != staffauth.MsgTimezoneNeeded {
+				t.Fatalf("details = %v, want a timezone entry", details)
+			}
+		})
+	}
+}
+
 // decodeDetails reads APIError.Details off a refusal, so a test can
 // assert which field the BFF said was at fault (#488).
 func decodeDetails(t *testing.T, resp *http.Response) map[string]string {
