@@ -36,14 +36,31 @@ const session = {
 	memberships: [{ practiceId: 'practice-1', practiceName: 'Rochester Doulas', roles: ['doula'] }]
 };
 
-async function renderLayout(sessionResponse = jsonResponse(session), viewport = [1440, 900]) {
+/*
+ * The two sides of StaffTopBar's 49.25rem content floor, named the way
+ * StaffTopBar's own spec names them. Which one is pinned decides which of
+ * the bar's two trees is the visible one, so it is never left to the
+ * runner's default.
+ */
+const WIDE = [1440, 900] as const;
+const NARROW = [390, 844] as const;
+
+interface RenderOptions {
+	sessionResponse?: Response;
+	viewport?: readonly [number, number];
+}
+
+async function renderLayout({
+	sessionResponse = jsonResponse(session),
+	viewport = WIDE
+}: RenderOptions = {}) {
 	// Pinned wide by default, same as practices-layout.svelte.spec.ts:
 	// StaffTopBar keeps both its wide and narrow trees in the document with
 	// one display:none, so which one is visible -- and so which holds the
 	// accessible avatar button this spec queries by role -- is a fact about
 	// the viewport. One test below pins it narrow on purpose, to reach the
 	// sheet that only exists under the bar's content floor.
-	await testPage.viewport(viewport[0]!, viewport[1]!);
+	await testPage.viewport(...viewport);
 	apiFetchWithSession.mockReset();
 	apiFetchWithSession.mockImplementation(() => Promise.resolve(sessionResponse));
 	apiFetch.mockReset();
@@ -95,7 +112,7 @@ describe('the account route layout', () => {
 	 * heading here, not print it over an empty slot.
 	 */
 	it('shows no bare Practice heading in the narrow sheet', async () => {
-		await renderLayout(jsonResponse(session), [390, 844]);
+		await renderLayout({ viewport: NARROW });
 
 		await testPage.getByRole('button', { name: 'Menu' }).click();
 
@@ -112,15 +129,15 @@ describe('the account route layout', () => {
 	});
 
 	it('lists one link per Practice when she works at several', async () => {
-		await renderLayout(
-			jsonResponse({
+		await renderLayout({
+			sessionResponse: jsonResponse({
 				...session,
 				memberships: [
 					...session.memberships,
 					{ practiceId: 'practice-2', practiceName: 'Finger Lakes Birth', roles: ['doula'] }
 				]
 			})
-		);
+		});
 
 		const back = testPage.getByRole('navigation', { name: 'Your practices' });
 		await expect.element(back.getByRole('link', { name: 'Finger Lakes Birth' })).toBeVisible();
@@ -128,7 +145,7 @@ describe('the account route layout', () => {
 	});
 
 	it('shows no nav when the session read fails', async () => {
-		await renderLayout(jsonResponse('no matching staff account', 404));
+		await renderLayout({ sessionResponse: jsonResponse('no matching staff account', 404) });
 
 		expect(testPage.getByRole('navigation', { name: 'Your practices' }).elements()).toHaveLength(
 			0
