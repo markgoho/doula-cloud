@@ -362,6 +362,13 @@
 		.table-view {
 			display: none;
 			border-collapse: collapse;
+			/* The frame is a column flex container now (ADR-0039), which
+			   stretches its items across the inline axis -- and stretching
+			   is exactly the `inline-size: 100%` the paragraph above says
+			   #542 deleted, arriving by another route. `start` hands the
+			   table back its own shrink-to-fit width, so it still stops
+			   where its columns are satisfied. */
+			align-self: start;
 		}
 
 		/* "Compact rows, airy forms": the brief's Density section fixes a
@@ -506,15 +513,7 @@
 		}
 
 		/* One <dl> per record (#508, ADR-0024) rather than a mangled
-		   <table>, which strips table semantics in Safari and Firefox.
-		   margin-block-start: 0 overrides the frame's own stack-l spacing
-		   (primitives.css) -- record-view is the first VISIBLE child
-		   whenever it renders at all, since the hidden .table-view before
-		   it still counts as "a preceding sibling" to that selector. */
-		.record-view {
-			margin-block-start: 0;
-		}
-
+		   <table>, which strips table semantics in Safari and Firefox. */
 		.record-view dl {
 			display: grid;
 			grid-template-columns: auto 1fr;

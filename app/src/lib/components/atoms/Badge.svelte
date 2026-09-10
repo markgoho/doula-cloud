@@ -25,6 +25,13 @@
 
 <style>
 	@layer components {
+		/* The intrinsic-width rule `Button.svelte` explains in full, for the
+		   same reason: a badge is a pill around one short status word, and a
+		   pill stretched across a whole row is not a pill. */
+		:global(stack-l) > span {
+			align-self: start;
+		}
+
 		span {
 			display: inline-flex;
 			align-items: center;

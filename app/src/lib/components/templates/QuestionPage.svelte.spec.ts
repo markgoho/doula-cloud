@@ -116,9 +116,17 @@ describe('QuestionPage.svelte', () => {
 		const { container } = await setup();
 
 		expect(container.textContent).not.toContain('There is a problem');
-		// Back link, journey, question, control, actions -- the journey
-		// joined the column on #585, where it used to sit beside it.
-		expect(container.querySelectorAll(':scope .column > stack-l > *')).toHaveLength(5);
+		// A fact about the document rather than about any one element -- the
+		// third `querySelector` case in `.claude/rules/svelte-tests.md`:
+		// "how many things does the column hold" has no element for an
+		// accessible query to ask about.
+		//
+		// Back link, journey, the question-and-control stack, actions -- the
+		// journey joined the column on #585, where it used to sit beside it,
+		// and the question and its control moved into a nested stack of
+		// their own on #1105, which is what pairs them at --space-7 while
+		// the column keeps --space-6 (ADR-0039).
+		expect(container.querySelectorAll(':scope .column > stack-l > *')).toHaveLength(4);
 	});
 
 	// The hint is announced from the <fieldset> for a group, because a group

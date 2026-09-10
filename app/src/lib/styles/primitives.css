@@ -12,25 +12,41 @@
  * Rule of Least Power.
  */
 
-/* Stack */
-stack-l {
-	display: block;
-}
 /*
- * This rule assumes every child is a block box. A sibling top-margin does
- * nothing to two boxes that already share a line, so an inline child (a
- * <label>, by default) or an inline-block child (a text input, by default)
- * placed next to another such child gets no visible gap at all -- the
- * children read as sitting beside each other, not stacked. This is exactly
- * what #451/#425 found: LabeledField's stacked orientation put a <label>
- * next to its control inside stack-l and the spacing silently did nothing.
- * The fix was not here -- it was giving the label `display: block` at the
- * call site (see the `label` rule in LabeledField.svelte's <style>, the
- * worked example). A caller whose children are inline or inline-block by
- * default must blockify them itself; stack-l does not do it for them.
+ * Stack -- the spacing lives on the CONTAINER, as `gap`, and never on the
+ * children (ADR-0039, #1105).
+ *
+ * The predecessor was `stack-l > * + * { margin-block-start }`, injected
+ * into `@layer utilities`. Component styles live in `@layer components`,
+ * declared after it, so any component whose root element carried the
+ * ordinary `margin: 0` reset -- `Notice`, `Text`, `Heading`,
+ * `WarningText` and roughly twenty others -- won the cascade outright and
+ * silently canceled the gap the stack was giving it. A `gap` is the
+ * container's own geometry: a child has no declaration that can cancel
+ * it, whatever layer it is written in.
+ *
+ * Flex also blockifies every child, which retires the caveat this rule
+ * used to carry: an inline child (a bare <label>) or an inline-block one
+ * (a text input) shared a line with its neighbor and got no visible gap
+ * at all, which is what #451/#425 found in LabeledField. As a flex item
+ * each child is a block box already, so a caller no longer has to
+ * blockify its own children for the stack to space them.
+ *
+ * The other side of blockification: a column flex container stretches its
+ * items across the inline axis, where block layout let an inline-level
+ * child shrink-wrap. A child that must keep its own intrinsic width says
+ * so with `align-self: start` at the call site. Four do, found by probing
+ * every direct stack child in a real browser rather than by reading:
+ * `.table-view` in DataTable.svelte, and `Button`, `Link` and `Badge`,
+ * whose rule is scoped to `stack-l` because `align-self` is the BLOCK axis
+ * inside a row-direction parent. `TextInput`, `Textarea` and `Select` are
+ * inline-level too and needed nothing -- each already declares its own
+ * full width.
  */
-stack-l > * + * {
-	margin-block-start: var(--space-4);
+stack-l {
+	display: flex;
+	flex-direction: column;
+	gap: var(--space-4);
 }
 
 /* Box */
@@ -116,12 +132,26 @@ cover-l {
 cover-l[no-pad] {
 	padding: 0;
 }
+/*
+ * Cover is the one primitive that keeps sibling margins, and the three
+ * rules below say so out loud -- ADR-0039 records it as deliberately
+ * margined rather than an oversight. Its centering IS an auto margin
+ * (`cover-l > h1` below), and `gap` cannot express "auto in the middle,
+ * `space` at the ends": a gap is uniform between items and writes nothing
+ * at the edges. The 2x-space it puts between two adjacent non-centered
+ * children is deliberate too. So Cover carries the same exposure Stack
+ * just lost -- a child's own `margin: 0` in `@layer components` cancels
+ * these -- and #1220 is where that gets its own answer.
+ */
+/* primitives:ignore: Cover's sibling margins are deliberate -- see above and ADR-0039; #1220 */
 cover-l > * {
 	margin-block: var(--space-4);
 }
+/* primitives:ignore: the end-cap for the rule above, same decision; #1220 */
 cover-l > :first-child:not(h1) {
 	margin-block-start: 0;
 }
+/* primitives:ignore: the end-cap for the rule above, same decision; #1220 */
 cover-l > :last-child:not(h1) {
 	margin-block-end: 0;
 }
@@ -151,18 +181,20 @@ frame-l > video {
 	object-fit: cover;
 }
 
-/* Reel */
+/*
+ * Reel -- `gap` for the same reason Stack uses it (ADR-0039): a child's
+ * own margin reset, written in the later `components` layer, cannot
+ * cancel the container's own geometry.
+ */
 reel-l {
 	display: flex;
+	gap: var(--space-2);
 	block-size: auto;
 	overflow-x: auto;
 	overflow-y: hidden;
 }
 reel-l > * {
 	flex: 0 0 auto;
-}
-reel-l > * + * {
-	margin-inline-start: var(--space-2);
 }
 reel-l[no-bar] {
 	scrollbar-width: none;

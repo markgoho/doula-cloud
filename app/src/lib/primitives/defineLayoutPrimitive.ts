@@ -53,7 +53,9 @@ function injectStyle(tagName: string, id: string, cssText: string): void {
  * is this instance's `tagName[data-i="..."]` attribute selector -- `css`
  * returns full rule text (host rule, child-combinator rules, whatever the
  * primitive needs), not just a declaration block, since primitives like
- * Stack target children rather than the host element itself. `defaults`
+ * Sidebar and Switcher size their children rather than the host element
+ * itself. (Stack no longer does: its spacing is the container's own `gap`
+ * -- ADR-0039, #1105.) `defaults`
  * lists only the *string*-valued props (arbitrary CSS values); boolean
  * toggles are handled by plain `[attr]` CSS selectors in `primitives.css`
  * and never reach this module.

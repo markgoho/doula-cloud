@@ -16,7 +16,10 @@ export const primitiveSpecs: PrimitiveSpec<PropertyDefaults>[] = [
 	{
 		tagName: 'stack-l',
 		defaults: { space: 'var(--space-4)' },
-		css: (v, s) => `${s} > * + * { margin-block-start: ${v.space}; }`
+		// On the container, never on the children -- ADR-0039, #1105. A
+		// child's own `margin: 0`, written in the later `components` layer,
+		// used to cancel this outright; a `gap` it has no declaration for.
+		css: (v, s) => `${s} { gap: ${v.space}; }`
 	},
 	{
 		tagName: 'box-l',
@@ -99,10 +102,10 @@ export const primitiveSpecs: PrimitiveSpec<PropertyDefaults>[] = [
 	{
 		tagName: 'reel-l',
 		defaults: { space: 'var(--space-2)', 'item-width': 'auto', height: 'auto' },
+		// `gap` on the container for the same reason Stack uses it (ADR-0039).
 		css: (v, s) =>
-			`${s} { block-size: ${v.height}; }\n` +
-			`${s} > * { flex-basis: ${v['item-width']}; }\n` +
-			`${s} > * + * { margin-inline-start: ${v.space}; }`
+			`${s} { block-size: ${v.height}; gap: ${v.space}; }\n` +
+			`${s} > * { flex-basis: ${v['item-width']}; }`
 	},
 	{
 		tagName: 'imposter-l',

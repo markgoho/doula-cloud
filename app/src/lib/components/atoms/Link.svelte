@@ -79,6 +79,13 @@
 
 <style>
 	@layer components {
+		/* The intrinsic-width rule `Button.svelte` explains in full, for the
+		   same reason: a link's hit area running the width of the page is an
+		   affordance pointing at nothing. */
+		:global(stack-l) > a {
+			align-self: start;
+		}
+
 		a {
 			display: inline-flex;
 			align-items: center;
