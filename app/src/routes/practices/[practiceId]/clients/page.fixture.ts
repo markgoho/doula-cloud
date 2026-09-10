@@ -9,7 +9,7 @@
  */
 import { jsonResponse } from '#lib/testResponse.js';
 import type { ClientListItem } from '#lib/client.js';
-import type { RouteFixture } from '../../../routeFixture.js';
+import type { RouteFixture, RouteVariant } from '../../../routeFixture.js';
 import Page from './+page.svelte';
 
 export const clients: ClientListItem[] = [
@@ -94,6 +94,33 @@ export const clients: ClientListItem[] = [
 	}
 ];
 
+/*
+ * The second axis, and the one no row set can reach (#928): who is
+ * looking, not what the data holds. `isAmbientContractor` arrives through
+ * `+page.ts`'s own `load` as `data.isContractor`, so this restates
+ * `props` -- setting a session in `pageData` here would mount the base
+ * tree a second time and the sweep would stay green about it.
+ *
+ * Her list is empty on purpose, and that is the whole reason this variant
+ * exists. A contractor Doula holding attached Clients reads the base's
+ * table with the "Find or add a Client" action taken away -- a strict
+ * subset, realizing nothing the sweep has not measured. A contractor
+ * Doula holding none reads two sentences no other session can reach:
+ * ADR-0017's "Work reaches you as an Offer, so there are no Clients here
+ * yet." in place of "No Clients yet.", and the search door put back
+ * underneath as "How to add Clients of your own" -- the link #539 had to
+ * restore after taking the header action away from her.
+ *
+ * Both of those are this repo's own copy and neither holds a
+ * Practice-typed value, so there is no hostile content to choose for this
+ * branch: what it renders that the base does not is two fixed strings.
+ */
+export const asContractorWithNoClients: RouteVariant = {
+	name: 'The Clients list, as a contractor Doula with nobody attached',
+	props: { data: { isContractor: true } },
+	respond: () => jsonResponse({ items: [], hasMore: false })
+};
+
 export const fixture: RouteFixture = {
 	name: 'The Clients list',
 	component: Page,
@@ -101,5 +128,6 @@ export const fixture: RouteFixture = {
 	url: 'https://example.test/practices/practice-1/clients',
 	props: { data: { isContractor: false } },
 	respond: () => jsonResponse({ items: clients, hasMore: false }),
-	readyText: 'Clients'
+	readyText: 'Clients',
+	variants: [asContractorWithNoClients]
 };

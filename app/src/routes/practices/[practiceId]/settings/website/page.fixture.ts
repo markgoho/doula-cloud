@@ -6,10 +6,16 @@
  * screen collects: what she offers and her cancellation policy each
  * carry #530's own URL, since a Practice could paste a referral link
  * into either.
+ *
+ * Two sessions (#928). `isOwner` decides three things here, and one of
+ * them is additive: anybody else reads a Notice above the whole screen
+ * saying the setting is not hers to change, which no Owner branch draws.
+ * The other two only withhold -- the Change button and the Publish
+ * button's enabled state.
  */
 import { jsonResponse } from '#lib/testResponse.js';
 import type { PracticeWebsite } from '#lib/website.js';
-import type { RouteFixture } from '../../../../routeFixture.js';
+import type { RouteFixture, RouteVariant } from '../../../../routeFixture.js';
 import Page from './+page.svelte';
 
 export const website: PracticeWebsite = {
@@ -25,19 +31,36 @@ export const website: PracticeWebsite = {
 	pageUrl: 'https://doula.cloud/p/riverside-doula-collective'
 };
 
-export const fixture: RouteFixture = {
-	name: 'The Website settings screen',
-	component: Page,
-	params: { practiceId: 'practice-1' },
-	url: 'https://example.test/practices/practice-1/settings/website',
-	pageData: {
+function session(roles: string[]) {
+	return {
 		session: {
 			practiceId: 'practice-1',
 			practiceName: 'Riverside Doula Collective',
-			roles: ['owner'],
+			roles,
 			isContractor: false
 		}
-	},
+	};
+}
+
+/*
+ * Everyone who is not an Owner, Admin included. She reads the same saved
+ * answers -- the two pasted URLs above are hers to read as much as the
+ * Owner's -- with the Change button gone and a Notice added above them,
+ * so this branch inherits `respond` deliberately rather than by omission.
+ * Its own new line is that Notice, which is this repo's copy.
+ */
+export const nonOwner: RouteVariant = {
+	name: 'The Website settings screen, as a non-Owner',
+	pageData: session(['admin'])
+};
+
+export const fixture: RouteFixture = {
+	name: 'The Website settings screen, as an Owner',
+	component: Page,
+	params: { practiceId: 'practice-1' },
+	url: 'https://example.test/practices/practice-1/settings/website',
+	pageData: session(['owner']),
 	respond: () => jsonResponse(website),
-	readyText: 'Your website'
+	readyText: 'Your website',
+	variants: [nonOwner]
 };

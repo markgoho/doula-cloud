@@ -82,6 +82,12 @@ export const fixture: RouteFixture = {
 	 * an Admin's tree is that tree with one link removed. A variant for
 	 * her is deliberately not declared -- a strict subset realizes nothing
 	 * the sweep has not already measured (svelte-tests.md).
+	 *
+	 * Re-read against the whole `{#if}` chain on #928 and left as it
+	 * stands. `isOwner` is the only session predicate this route reads,
+	 * and the roster endpoint is Owner-and-Admin, so an Owner and an Admin
+	 * are the only two sessions that reach the screen at all -- there is
+	 * no third tree here for a variant to name.
 	 */
 	pageData: {
 		session: {

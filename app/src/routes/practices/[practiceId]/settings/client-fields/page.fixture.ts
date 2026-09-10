@@ -17,10 +17,17 @@
  * "Archived fields" section only once one exists (line 172's own
  * `{#if archivedFields.length > 0}`), which a fixture with no archived
  * Field never shows at all.
+ *
+ * Two sessions (#928), and they are two different components rather than
+ * one component with controls withheld: `isOwnerOrAdmin` chooses between
+ * `ClientFieldTemplateEditor` and a plain read-only `<ul>` of the same
+ * Fields, each label followed by "(archived)" where it applies, with a
+ * sentence under it naming who to ask. Neither tree is a subset of the
+ * other.
  */
 import { jsonResponse } from '#lib/testResponse.js';
 import type { Template } from '#lib/clientFieldTemplate.js';
-import type { RouteFixture } from '../../../../routeFixture.js';
+import type { RouteFixture, RouteVariant } from '../../../../routeFixture.js';
 import Page from './+page.svelte';
 
 export const template: Template = {
@@ -50,19 +57,38 @@ export const template: Template = {
 	]
 };
 
-export const fixture: RouteFixture = {
-	name: 'The Client Field Template editor',
-	component: Page,
-	params: { practiceId: 'practice-1' },
-	url: 'https://example.test/practices/practice-1/settings/client-fields',
-	pageData: {
+function session(roles: string[]) {
+	return {
 		session: {
 			practiceId: 'practice-1',
 			practiceName: 'Riverside Doula Collective',
-			roles: ['owner'],
+			roles,
 			isContractor: false
 		}
-	},
+	};
+}
+
+/*
+ * The Doula's reading of the same Template. She is asked for it and
+ * shown it -- the read is not gated, only the editing is -- so this
+ * inherits `respond` deliberately: the three Fields above are exactly
+ * what her list has to lay out, and the first of them is the pasted URL
+ * that broke a grid track. What she reads instead of the editor is a
+ * bare `<ul>` whose one Practice-typed value per row is the same label,
+ * plus a sentence of this repo's own copy.
+ */
+export const asDoula: RouteVariant = {
+	name: 'The Client Field Template editor, as a Doula',
+	pageData: session(['doula'])
+};
+
+export const fixture: RouteFixture = {
+	name: 'The Client Field Template editor, as an Owner',
+	component: Page,
+	params: { practiceId: 'practice-1' },
+	url: 'https://example.test/practices/practice-1/settings/client-fields',
+	pageData: session(['owner']),
 	respond: () => jsonResponse(template),
-	readyText: 'Client Fields'
+	readyText: 'Client Fields',
+	variants: [asDoula]
 };
