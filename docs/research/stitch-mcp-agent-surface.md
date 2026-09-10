@@ -435,7 +435,7 @@ Characteristics that decide the Svelte question:
 - **Semantics are thin but present** — one each of `header`, `nav`, `main`,
   `aside`, three `section`, one `h1`, one `h2`, four `h3`, eight `button`.
   Structure is usable; it is not a div soup, but it is not carefully
-  levelled either.
+  leveled either.
 - **The color tokens are Material 3 names** — `surface`, `surface-container`,
   `on-surface`, `on-surface-variant`, `primary`, `primary-container`,
   `on-primary-container`, `outline`, `outline-variant`, and the whole `-fixed`

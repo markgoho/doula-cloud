@@ -4,7 +4,7 @@
 	/*
 	 * The longest realistic value, not a representative one (ADR-0025): a
 	 * Practice's registered name is long, a Client's name is hyphenated and
-	 * double-barrelled, and a birth package is a four-figure amount.
+	 * double-barreled, and a birth package is a four-figure amount.
 	 */
 	let values = $state<Record<string, string>>({
 		'{{practice_name}}': 'Highland Midwifery & Birth Support Collective of Western New York'

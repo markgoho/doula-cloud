@@ -10,7 +10,7 @@ import Page from './+page.svelte';
 import { clientId, fields, fixture, matches, practiceId, seedEditMergeDraft } from './page.fixture.js';
 
 /*
- * Gate two's question, on the edit path (#814). Modelled on
+ * Gate two's question, on the edit path (#814). Modeled on
  * `intake-sequence.svelte.spec.ts`'s own "the duplicate check" block --
  * this route has no multi-step sequence around it, so it gets a spec of
  * its own rather than a shared one.

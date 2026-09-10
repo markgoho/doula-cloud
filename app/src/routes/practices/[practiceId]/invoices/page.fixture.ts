@@ -20,7 +20,7 @@ import Page from './+page.svelte';
 
 /*
  * A Client's name is the one free-text column a Practice types itself, so
- * it carries #537's vocabulary: the hyphenated double-barrelled name, and
+ * it carries #537's vocabulary: the hyphenated double-barreled name, and
  * the URL that has no break opportunity a browser will take.
  */
 export const data: PracticeInvoiceListData = {

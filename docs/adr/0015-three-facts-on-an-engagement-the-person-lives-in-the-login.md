@@ -369,7 +369,7 @@ Engagement. Two consequences follow that nobody had filed:
 The due date belongs on the **Engagement**, **nullable** — Camille's Engagement has no due date and
 never will. The Offer copies it rather than asking for it, and `engagement_offers.due_date` loses
 `NOT NULL`. This does not settle **MO-G3**, which asks the larger question of whether and how a due
-date is modelled; it says only where the due date the product *already collects* should live.
+date is modeled; it says only where the due date the product *already collects* should live.
 
 ### An Offer says which kind of work it is
 

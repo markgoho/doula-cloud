@@ -5,7 +5,7 @@
  * The `<h1>` only renders once the Contract has loaded (see the route's
  * own `{#if contract === null}`/`{:else}` branches), so `readyText`
  * genuinely gates on the fetch. `values.client_name` carries #537's own
- * hyphenated double-barrelled name, since a merge field's value is typed
+ * hyphenated double-barreled name, since a merge field's value is typed
  * by Staff about the Client, the same shape the two existing fixtures
  * already measure.
  */

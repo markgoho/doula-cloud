@@ -4,7 +4,7 @@
  * `isContractor: false` from `+page.ts`'s own load keeps the "Find or
  * add a Client" action and the search-door paragraph both on screen.
  * `name` and `email` are the table's two free-text columns -- #530's URL
- * and #537's hyphenated double-barrelled name, `DataTable`'s own #542
+ * and #537's hyphenated double-barreled name, `DataTable`'s own #542
  * fix measured again on a different screen.
  */
 import { jsonResponse } from '#lib/testResponse.js';

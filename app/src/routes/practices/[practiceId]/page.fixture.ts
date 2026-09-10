@@ -8,7 +8,7 @@
  * `respond` below answers the Owner's four blocks as well, for the reason
  * written beside them. The hub's title still carries #530's own URL as
  * the Practice's registered name, and an Offer's `terms` carries #537's
- * hyphenated double-barrelled name where a Practice writes free text
+ * hyphenated double-barreled name where a Practice writes free text
  * about who it is offering the work to.
  *
  * That is one of the two trees this route draws, and it is the smaller
@@ -85,7 +85,7 @@ export const fixture: RouteFixture = {
 			return jsonResponse({ items: offers });
 		}
 		// #455: the roll-up of Engagements whose thread's latest Message
-		// came from the Client. One row long enough (the same double-barrelled
+		// came from the Client. One row long enough (the same double-barreled
 		// name #537 already fixtures elsewhere) to exercise the block's own
 		// overflow handling down to 320px (ADR-0024/0025).
 		if (path.includes('/messages/awaiting-reply')) {

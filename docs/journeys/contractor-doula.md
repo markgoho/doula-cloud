@@ -39,7 +39,7 @@ durable-record half of the same need. Both are design findings, not priority sig
 | Practice | "the agency", "Renata's" | She belongs to none of them |
 | Staff | — she rejects the word | "I'm not staff, I just work with them." `CONTEXT.md` calls every member Staff, and the roster screen will show her among the employees. The divergence is the finding, not the wording: the model has no way to say what she is |
 | Employment type | "I'm a contractor", "I'm 1099" | A term she uses about herself daily and the schema cannot hold at all |
-| Contract | "the terms", "my rate" | The Contract is between the Practice and the Client. Lena reads it as the description of *her* job — a second, unmodelled reading of the same row |
+| Contract | "the terms", "my rate" | The Contract is between the Practice and the Client. Lena reads it as the description of *her* job — a second, unmodeled reading of the same row |
 | Visit | "a prenatal", "the birth" | Same three kinds Priya names; the model still has one and it carries no type (MO-G1, MO-G2) |
 | Client | "her", "the mom" | As Priya. `CONTEXT.md` avoids "mom" deliberately |
 
@@ -181,7 +181,7 @@ Credit even buys is unsettled in code (TB-G3).
 
 **Thinking**: "That one's done. Next."
 **Pain points**: nothing expresses an attachment ending. Whatever eventually grants
-her a read of "the Engagements she is attached to" has no modelled way to stop
+her a read of "the Engagements she is attached to" has no modeled way to stop
 granting it, so a contractor who worked one birth in February still reads that Client
 in December — including, once the money split exists, the money. Removing her
 membership entirely is the only conceivable lever, it is wrong — it erases her from the
@@ -210,7 +210,7 @@ The reason is what she is. She is outside the business, and a person outside the
 business is not someone work happens to — the difference between a contractor and an
 employee is precisely that she may refuse. A record that shows her carrying a job she
 never agreed to is not a record of a contract; it is the agency writing down its own
-version of an agreement it has not yet got. Assignment would have modelled her as a
+version of an agreement it has not yet got. Assignment would have modeled her as a
 smaller Priya Raman, and she is not one.
 
 Assignment was the cheaper option and it was argued for: the negotiation happens on

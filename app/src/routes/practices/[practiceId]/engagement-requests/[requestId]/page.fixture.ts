@@ -19,7 +19,7 @@ import Page from './+page.svelte';
 
 /*
  * #537's vocabulary, not this file's own invention: the hyphenated
- * double-barrelled name and the URL are the same values every style-guide
+ * double-barreled name and the URL are the same values every style-guide
  * page carries, so the sweep is measuring one Practice's content rather
  * than 34 fixtures each guessing at what "long" means.
  */

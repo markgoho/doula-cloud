@@ -654,7 +654,7 @@ async function startAPI(appOrigin: string) {
 			// api/internal/payments), so it has to be the origin the
 			// browser walking this stack is actually on, not a fixed
 			// value. Same string as EXPECTED_ORIGINS by default; a
-			// tunnelled walk (see docs/environment.md) overrides it via
+			// tunneled walk (see docs/environment.md) overrides it via
 			// app/.env.local, which bun loads before this file runs.
 			APP_BASE_URL: process.env.APP_BASE_URL ?? appOrigin,
 			MAILGUN_API_BASE: MAILBOX_URL,

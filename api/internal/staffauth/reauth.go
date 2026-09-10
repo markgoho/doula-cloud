@@ -19,7 +19,7 @@ const recentAuthWindow = 5 * time.Minute
 
 // RequireRecentAuth guards a sensitive action (#615's Owner-vouch AC)
 // with a genuine step-up check, distinct from RequireConfirmed's
-// client-signalled confirmation. The caller must present a *fresh*
+// client-signaled confirmation. The caller must present a *fresh*
 // Bearer ID token -- obtained by the client calling Identity Platform's
 // own reauthenticateWithCredential() immediately before this request --
 // alongside the session cookie Middleware already verified.

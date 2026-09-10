@@ -3,7 +3,7 @@
 
 	/*
 	 * The longest realistic value, not a representative one (ADR-0025): a
-	 * hyphenated double-barrelled surname beside a three-word name, because
+	 * hyphenated double-barreled surname beside a three-word name, because
 	 * the name renders next to the circle here and it is the name, not the
 	 * circle, that decides how wide this row gets.
 	 */

@@ -3,7 +3,7 @@
  *
  * The fieldset legend echoes the signed-in Staff member's own name, so
  * this carries #537's vocabulary the same way the two existing fixtures
- * do -- a hyphenated double-barrelled name, since that is what a person
+ * do -- a hyphenated double-barreled name, since that is what a person
  * actually types into a name field, unlike the URL vocabulary that fits
  * a Practice's own free-text fields.
  */
