@@ -24,12 +24,23 @@ import "time"
 // engagement.ActivityEntry's own reasoning. Relative-versus-absolute date
 // rendering is left to the UI, per the same Key interfaces bullet.
 type Entry struct {
-	SubjectKind string    `json:"subjectKind"`
-	SubjectID   string    `json:"subjectId"`
-	Action      string    `json:"action"`
-	ActorKind   string    `json:"actorKind"`
-	ActorName   string    `json:"actorName"`
-	CreatedAt   time.Time `json:"createdAt"`
+	SubjectKind string `json:"subjectKind"`
+	SubjectID   string `json:"subjectId"`
+
+	// SubjectName is the person the row happened to, already resolved --
+	// #1148: a feed spanning many subject kinds has to say whose roster
+	// change this was, or "Roles changed" names the actor and nobody
+	// else. Populated for the subject kinds whose subject_id is a person
+	// the reader can be shown (membership, whose subject_id is a
+	// staff_id); empty for a subject kind that names a record rather than
+	// a person, and for a person no longer reachable -- see
+	// practice.go's own subject-name join for both cases.
+	SubjectName string `json:"subjectName,omitempty"`
+
+	Action    string    `json:"action"`
+	ActorKind string    `json:"actorKind"`
+	ActorName string    `json:"actorName"`
+	CreatedAt time.Time `json:"createdAt"`
 }
 
 // ListResponse is docs/api-design.md section 4's envelope, the same shape
