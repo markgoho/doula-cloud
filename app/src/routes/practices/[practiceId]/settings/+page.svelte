@@ -90,6 +90,20 @@
 		...(isPracticeOwnerOrAdmin
 			? [
 					{
+						// #1166: the one zone this Practice's calendar-day math
+						// happens in (ADR-0036). Gated the same notch as Rates
+						// and Getting paid, and for the same reason -- both the
+						// read and the write are Owner-or-Admin, so a Doula who
+						// followed the link would meet only a 403.
+						label: 'Timezone',
+						description: 'The timezone this Practice works in, which decides what day a Visit falls on.',
+						href: resolve('/practices/[practiceId]/settings/timezone', { practiceId })
+					}
+				]
+			: []),
+		...(isPracticeOwnerOrAdmin
+			? [
+					{
 						label: 'Blocked email addresses',
 						description:
 							'The addresses Doula Cloud has stopped writing to, and why each one stopped.',

@@ -45,6 +45,11 @@ async function fillForm() {
 	await testPage
 		.getByRole('combobox', { name: 'Which state do you work from?' })
 		.selectOptions('New Jersey');
+	// Chosen rather than left on whatever zone the test browser reports,
+	// so what goes up is the same on every machine (#1166).
+	await testPage
+		.getByRole('combobox', { name: 'What timezone does this Practice work in?' })
+		.selectOptions('Central time (Chicago)');
 	await testPage.getByLabelText('Email').fill('priya@example.com');
 	await testPage.getByLabelText('Password').fill('correct horse');
 }
@@ -132,7 +137,8 @@ describe('the address the Practice is created with (#614)', () => {
 		expect(JSON.parse(init.body)).toEqual({
 			practiceName: 'Riverside Doulas',
 			staffName: 'Priya Sharma',
-			workState: 'NJ'
+			workState: 'NJ',
+			timezone: 'America/Chicago'
 		});
 		expect(init.headers.Authorization).toBe('Bearer id-token');
 	});
