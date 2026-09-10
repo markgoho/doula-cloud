@@ -578,10 +578,13 @@ function pdfBlobResponse(): Response {
  * departure from the fixture rather than as a second Contract of its own
  * (`.claude/rules/svelte-tests.md`). The two fields only a signed
  * Contract can carry are dropped rather than overwritten: a draft has no
- * price change to report and no void to have been asked for.
+ * price change to report and no void to have been asked for. hasSignedPdf
+ * goes back to false with them: an Engagement whose only Contract is this
+ * Draft has no signed PDF anywhere, and leaving the fixture's true would
+ * put a download control into every test below that means a plain Draft.
  */
 function draftOf(overrides: Partial<Contract> = {}): Contract {
-	const draft: Contract = { ...fixtureContract, status: 'draft' };
+	const draft: Contract = { ...fixtureContract, status: 'draft', hasSignedPdf: false };
 	delete draft.amountChangedAt;
 	delete draft.voidRequests;
 	return { ...draft, ...overrides };

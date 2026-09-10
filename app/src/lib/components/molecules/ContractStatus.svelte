@@ -44,7 +44,7 @@
 	 */
 	let {
 		status,
-		hasSignedPdf = false,
+		hasSignedPdf,
 		amountChangedAt,
 		voidRequests = [],
 		onVoid,
@@ -53,7 +53,7 @@
 		onDeclineVoidRequest
 	}: {
 		status: string;
-		hasSignedPdf?: boolean;
+		hasSignedPdf: boolean;
 		amountChangedAt?: string;
 		voidRequests?: VoidRequestSummary[];
 		onVoid?: () => Promise<void>;

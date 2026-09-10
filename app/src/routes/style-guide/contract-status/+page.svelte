@@ -13,7 +13,7 @@
 
 	<section>
 		<h2>Draft</h2>
-		<ContractStatus status="draft" />
+		<ContractStatus status="draft" hasSignedPdf={false} />
 	</section>
 
 	<section>
