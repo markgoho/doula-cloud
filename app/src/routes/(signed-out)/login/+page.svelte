@@ -11,6 +11,7 @@
 	} from 'firebase/auth';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
+	import { page } from '#lib/appState.svelte.js';
 	import { getFirebaseAuth } from '#lib/firebase.js';
 	import { apiBaseURL, apiFetchWithSession, probeSession } from '#lib/api.js';
 	import { decideLanding, type Membership, type SessionInfo } from '#lib/landing.js';
@@ -20,6 +21,7 @@
 	import LabeledField from '#lib/components/molecules/LabeledField.svelte';
 	import StackedForm from '#lib/components/molecules/StackedForm.svelte';
 	import TotpCodeField from '#lib/components/molecules/TotpCodeField.svelte';
+	import Notice from '#lib/components/atoms/Notice.svelte';
 	import WarningText from '#lib/components/atoms/WarningText.svelte';
 	import ErrorSummary from '#lib/components/molecules/ErrorSummary.svelte';
 	import EntryPage from '#lib/components/templates/EntryPage.svelte';
@@ -31,6 +33,17 @@
 		totpCodeRefusal
 	} from '#lib/formErrors.js';
 	import { FormSubmission, orServiceProblem, type FormError } from '#lib/formSubmission.svelte.js';
+
+	/*
+	 * #757: why she is looking at this form again. `handleExpiredSession`
+	 * (#lib/api.js) and the account screen's own second-factor removal
+	 * both send her here carrying `sessionEnded=true`, and without this
+	 * she arrives at a bare login form that says nothing about the
+	 * session that ended under her. Read once rather than `$derived`:
+	 * the URL a screen was entered on does not change while it is on
+	 * screen, and a fresh sign-in navigates away rather than back.
+	 */
+	const hasSessionEnded = page.url.searchParams.get('sessionEnded') === 'true';
 
 	const emailId = 'login-email';
 	const passwordId = 'login-password';
@@ -311,6 +324,21 @@
 		it no longer does is block.
 	-->
 	{#if step === 'credentials'}
+		<!--
+			#757: the notice sits above the form and never in place of it --
+			signing in again is the whole answer to it, so the fields she
+			needs are on screen already. Only on this step: once Identity
+			Platform has accepted her password, "you were signed out" is
+			about a session two steps ago and the screen is asking her
+			something else.
+		-->
+		{#if hasSessionEnded}
+			<Notice
+				variant="info"
+				message="For your security, we signed you out. Log in again to continue."
+			/>
+		{/if}
+
 		<StackedForm onSubmit={handleSubmit}>
 			<LabeledField id={emailId} label="Email" error={submission.errorFor(emailId)}>
 				{#snippet children({ id, describedBy, invalid })}

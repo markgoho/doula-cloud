@@ -44,6 +44,12 @@ test('a Staff member signs out and can no longer reach an authenticated screen',
 	await page.goto(`/practices/${practiceId}`);
 	await expect(page).toHaveURL(/\/login\?sessionEnded=true$/);
 	await expect(page.getByRole('heading', { name: 'Log in' })).toBeVisible();
+
+	// #757: the flag in that URL is the whole reason it is carried -- the
+	// screen says what happened rather than leaving her at a bare form.
+	await expect(
+		page.getByText('For your security, we signed you out. Log in again to continue.')
+	).toBeVisible();
 });
 
 // The stale-tab case from #152: two tabs share one cookie, so the second
