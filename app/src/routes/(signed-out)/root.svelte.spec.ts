@@ -10,6 +10,12 @@ describe('/+page.svelte', () => {
 		const data: RootLanding = { type: 'signed-out' };
 		await render(Page, { params: fixture.params, data });
 
+		// #678: the heading names what the page is for rather than
+		// repeating the brand, which the signed-out bar above it now
+		// carries.
+		await expect
+			.element(testPage.getByRole('heading', { level: 1, name: 'Sign in or set up a Practice' }))
+			.toBeVisible();
 		await expect.element(testPage.getByRole('link', { name: 'Staff log in' })).toBeVisible();
 		await expect.element(testPage.getByRole('link', { name: 'Set up a Practice' })).toBeVisible();
 		await expect.element(testPage.getByRole('link', { name: 'Client portal log in' })).toBeVisible();

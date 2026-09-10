@@ -131,7 +131,7 @@ async function redirectAwayFromStalePractice(): Promise<never> {
 		} else if (landing.type === 'picker') {
 			// `/` re-probes and renders the picker itself (#357) -- reusing
 			// its own load rather than a second copy of the same list here.
-			redirect(303, resolve('/'));
+			redirect(303, resolve('/(signed-out)'));
 		}
 	}
 

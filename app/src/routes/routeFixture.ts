@@ -40,7 +40,11 @@ It lives here rather than in either caller because it was about to be
 written twice, and the second copy had already drifted before anyone
 compared them -- the drag surface's version required a separator the
 check's version made optional, which loses the root route, whose fixture
-is `page.fixture.ts` with no directory in front of it. That is the same
+was then `page.fixture.ts` with no directory in front of it. (#678 moved
+`/` into the `(signed-out)` group for its shell, so every fixture in the
+repo now sits under a directory; the separator stays optional, because
+what it guards against is a rule that only holds while that is true.)
+That is the same
 finding [#570](https://github.com/markgoho/doula-cloud/issues/570)
 recorded when it moved `mountInFrame` into `continuum.ts`: one artifact
 is enforced by there being one function, not by two files agreeing.

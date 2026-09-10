@@ -76,7 +76,7 @@
 				// list -- see the login screen's own comment on why a live
 				// portal session here rules out a Staff session surviving to
 				// be misrouted by `/`'s own probe order.
-				await goto(resolve('/'));
+				await goto(resolve('/(signed-out)'));
 			}
 		}, orServiceProblem);
 	}

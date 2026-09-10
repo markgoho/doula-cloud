@@ -9,7 +9,7 @@
  * that broke a grid track there.
  */
 import type { RootLanding } from './+page.js';
-import type { RouteFixture } from './routeFixture.js';
+import type { RouteFixture } from '../routeFixture.js';
 import Page from './+page.svelte';
 
 // Narrowed to the one shape this fixture describes, rather than the full

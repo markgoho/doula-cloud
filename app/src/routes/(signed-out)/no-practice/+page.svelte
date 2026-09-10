@@ -57,7 +57,7 @@
 		// after an invitation was accepted. Asked through `decideLanding`,
 		// which owns this question for every screen that asks it, and
 		// answered by `/`, which owns where a person with one goes.
-		if (decideLanding(session).type !== 'no-practice') await goto(resolve('/'));
+		if (decideLanding(session).type !== 'no-practice') await goto(resolve('/(signed-out)'));
 	});
 
 	async function handleSignOut(): Promise<SignOutOutcome> {
