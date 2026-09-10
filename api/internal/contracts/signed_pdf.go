@@ -1,6 +1,7 @@
 package contracts
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 	"fmt"
@@ -95,12 +96,16 @@ func ClientGetSignedContractPDFHandler(store objectstore.ObjectStore) http.Handl
 	})
 }
 
-// serveSignedPDF looks up a stored Signed PDF for engagementID and
-// streams it from store. Shared by GetSignedContractPDFHandler and
-// ClientGetSignedContractPDFHandler; Postgres RLS on the contracts row
-// -- practice-tier or client-tier, depending on which handler's tx set
-// the session variable -- is what actually gates which engagementID a
-// caller can reach here at all.
+// signedPDFObjectPath resolves engagementID's stored Signed PDF: the
+// object-store key it lives under, and whether one exists at all. It is
+// the single place "this Engagement has a signed Contract PDF" is read.
+// Both readers of that fact go through it -- serveSignedPDF, which
+// streams what it returns, and ContractResponse.HasSignedPDF, which
+// reports whether it found anything -- so a screen's download control and
+// the route behind that control cannot drift apart the way they had
+// (#1119: both screens gated on status === 'signed' while the route
+// keyed on the stored path, and a voided Contract's PDF went unreachable
+// from every screen a person has).
 //
 // The lookup deliberately does not compare status. signed_pdf_object_path
 // is written only by the sent -> signed transition (sign.go), so
@@ -119,21 +124,48 @@ func ClientGetSignedContractPDFHandler(store objectstore.ObjectStore) http.Handl
 // fetchContract uses, so every read in this package resolves an
 // Engagement to the same Contract. id breaks a tie that two rows created
 // in the same instant would otherwise leave to row order.
-func serveSignedPDF(w http.ResponseWriter, r *http.Request, tx *sql.Tx, store objectstore.ObjectStore, engagementID, internalErrorMsg string) {
-	var objectPath string
-	err := tx.QueryRowContext(r.Context(),
+//
+// It is scoped to the Engagement rather than to one Contract row on
+// purpose: an Engagement whose signed Contract was voided can hold a
+// fresh Draft beside it, and the PDF of what was signed is still served
+// then. Reading the fetched row's own column instead would report "no
+// PDF" for exactly that Engagement while the route happily streamed one.
+func signedPDFObjectPath(ctx context.Context, tx *sql.Tx, engagementID string) (objectPath string, found bool, err error) {
+	err = tx.QueryRowContext(ctx,
 		`SELECT signed_pdf_object_path FROM contracts
 		 WHERE engagement_id = $1 AND signed_pdf_object_path IS NOT NULL
 		 ORDER BY created_at DESC, id DESC LIMIT 1`,
 		engagementID,
 	).Scan(&objectPath)
 	if errors.Is(err, sql.ErrNoRows) {
-		apierr.WriteError(w, MsgNoSignedContract, http.StatusNotFound)
-		return
+		return "", false, nil
 	}
 	// coverage:ignore reason: DB query failure, not exercised by unit tests
 	if err != nil {
+		return "", false, fmt.Errorf("contracts: fetch signed pdf object path: %w", err)
+	}
+	return objectPath, true, nil
+}
+
+// serveSignedPDF looks up a stored Signed PDF for engagementID and
+// streams it from store. Shared by GetSignedContractPDFHandler and
+// ClientGetSignedContractPDFHandler; Postgres RLS on the contracts row
+// -- practice-tier or client-tier, depending on which handler's tx set
+// the session variable -- is what actually gates which engagementID a
+// caller can reach here at all.
+//
+// signedPDFObjectPath decides which PDF, and whether there is one at
+// all; this function only turns "no" into the 404 and "yes" into a
+// stream.
+func serveSignedPDF(w http.ResponseWriter, r *http.Request, tx *sql.Tx, store objectstore.ObjectStore, engagementID, internalErrorMsg string) {
+	objectPath, found, err := signedPDFObjectPath(r.Context(), tx, engagementID)
+	// coverage:ignore reason: DB query failure, not exercised by unit tests
+	if err != nil {
 		apierr.WriteError(w, internalErrorMsg, http.StatusInternalServerError)
+		return
+	}
+	if !found {
+		apierr.WriteError(w, MsgNoSignedContract, http.StatusNotFound)
 		return
 	}
 

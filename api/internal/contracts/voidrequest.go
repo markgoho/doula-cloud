@@ -132,7 +132,7 @@ func respondWithContract(w http.ResponseWriter, r *http.Request, tx *sql.Tx, eng
 	if reader.IsAmbientContractor() {
 		amountChangedAt = nil
 	}
-	apierr.WriteJSON(w, status, ContractResponse{
+	writeContract(w, r, tx, status, ContractResponse{
 		EngagementID:    engagementID,
 		Status:          contractStatus,
 		Prose:           prose,

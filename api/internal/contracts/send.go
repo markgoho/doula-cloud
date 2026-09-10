@@ -142,7 +142,7 @@ func PostSendContractHandler(pusher push.Pusher) http.Handler {
 			Values:          values.nonEmpty(),
 			AmountChangedAt: amountChangedAt,
 		}
-		apierr.WriteJSON(w, http.StatusOK, out)
+		writeContract(w, r, tx, http.StatusOK, out)
 	})
 }
 
