@@ -8,24 +8,17 @@
 - **Done looks like**: two Engagements at one Practice — one closed and still
   readable, one live and postpartum — reachable from one portal account
 
-Her persona file calls `clients` having no `practice_id` a sign the schema supports
-her. It does. **The API and the portal do not**, and they fail in three different
-places for three different reasons.
+Her persona file calls `clients` having no `practice_id` a sign the schema supports her. It does, and since [#309](https://github.com/markgoho/doula-cloud/issues/309) so does the login: one Portal Account reaches many Clients, at most one per Practice (ADR-0015), and every Engagement it reaches is listed together. Stages 5 and 6 below are written against that. The stages either side of them still tell the story their own gaps told before those gaps closed, and are held at [#1241](https://github.com/markgoho/doula-cloud/issues/1241).
 
 ## Moment of truth
 
-**Stage 5 — "a portal account already exists for this identity."** The exact
-string the accept-invite endpoint returns (`portalinvite/accept.go`, HTTP 409) when
-she tries to claim her second invite with the account she already has. She is being
-refused for the crime of being a returning customer. The root is Stage 3, where the
-Practice had no way to reach her existing record; this is where it becomes
-irrecoverable.
+**Stage 6 — both of her Engagements, in one list, under the login she already has.** The portal root lists every Engagement her Portal Account reaches, and names each one **"{Practice}, started {date}"** (`engagementLabel`) — so her 2024 birth and this postpartum work sit side by side at Rooted Birth Collective and are told apart by the one fact that is true for every Client. What used to be her moment of truth was the opposite of this: a `409` at the accept, refusing her for being a returning customer. Stage 5 is where that refusal used to land, and it is now the stage where the product recognizes her instead.
 
 ## Words
 
 | Domain term | What Camille says | Note |
 | --- | --- | --- |
-| Engagement | "this time", "last time" | The register says **my care** / "Your care". She is the one Client who needs the word in the plural, and the portal has no plural |
+| Engagement | "this time", "last time" | The register says **my care** / "Your care". She is the one Client who needs the word in the plural, and the portal root list is where it has one: one line per Engagement, each labeled by Practice and start date |
 | Engagement status | "we're done" / "we're going" | She needs `completed` on the old one and something postpartum-shaped on the new one. Neither can be set (**MO-G4**) |
 | Client | "you have all this already" | Two `clients` rows, one person (CB-G1) |
 | Postpartum | "just the nights" | The product has a `postpartum` **status**, not a kind of work. Her whole Engagement is that word, and there is nowhere to put it (CB-G2) |
@@ -82,38 +75,22 @@ under this Engagement, which she has not.
 
 - **4.1** — No step. There is nothing to click.
 
-### Stage 5 — The second invite refuses her — moment of truth
+### Stage 5 — The second invitation, and the login she already has
 
 **Thinking**: "I already have a login for this."
-**Pain points**: `client_portal_users.identity_uid` is `UNIQUE` across the table
-(`00006_client_portal_users.sql`), and her second `clients` row gets its own
-pending portal row. Accepting that invite with her existing account runs
-`UPDATE client_portal_users SET identity_uid = …` against a value already held by
-her first row, so the endpoint returns **409 "a portal account already exists for
-this identity"** and the page prints exactly that (CB-G3). The only way forward is
-a second account under a different email address.
+**Pain points**: none she meets. The refusal this stage was named for is gone: [#309](https://github.com/markgoho/doula-cloud/issues/309) dropped the table-wide `UNIQUE` on `client_portal_users.identity_uid` that `00006` gave it, and [#819](https://github.com/markgoho/doula-cloud/issues/819) put ADR-0015's own narrower rule in its place — one row per Portal Account per Practice. What she meets instead is that **Priya is stopped first, and correctly**: an invitation is raised per Client, not per Engagement (`invite()` reads `client_portal_users` by `client_id`), and after ADR-0017 Camille is one Client with a second Engagement, so `POST .../portal-invite` answers **409 "this client already has portal access"**. There is nothing to accept because she can already get in. The accept-side refusal that remains — **"you already have portal access at this practice -- sign in instead of accepting a new invitation"**, raised when the sign-in address's Portal Account already reaches a Client at this Practice — is reachable only down the branch where the Practice answered ADR-0017's duplicate screen with *a different person* and saved a second Client record for her (CB-G3, closed).
 
-- **5.1** — Priya calls `POST .../portal-invite` on the new Engagement and sends
-  the link by hand (**RA-G1**).
-- **5.2** — Camille opens `/portal/accept-invite?token=…`, chooses "I already have
-  an account", signs in — and is refused.
-- **5.3** — She creates a second account with a different email.
+- **5.1** — Priya calls `POST .../portal-invite` on the new Engagement and is told Camille already has portal access. The Notification email carrying the link is the product's own now, not a hand-delivered copy (**RA-G1**, closed).
+- **5.2** — Camille signs in the way she always does — a sign-in link to the address she already uses — and reaches both Engagements. Accepting an invitation is one **Continue** button on `/portal/accept-invite?token=…` (ADR-0026: the invitation is the first sign-in link, and a Client has no password), so there is no "I already have an account" fork to choose any more.
+- **5.3** — Down the duplicate-Client branch only: she presses **Continue** on the second invitation and is refused with the one refusal left, told to sign in rather than accept.
 
-### Stage 6 — Two accounts, one person
+### Stage 6 — One account, two Engagements — moment of truth
 
 **Thinking**: "Which one has the new thing in it?"
-**Pain points**: each account resolves to exactly one `clients` row, so each shows
-one Engagement, and neither can see the other. Even if CB-G1 and CB-G3 were closed
-and both Engagements sat under one identity, the portal still could not carry her:
-the Engagement chooser exists **only on the login and accept-invite screens**, and
-the authenticated layout's entire chrome is a sign-out button. And the chooser
-labels each Engagement by `practiceName` alone
-(`login/+page.svelte`), so two Engagements at Rooted Birth Collective render as two
-identical links (CB-G4).
+**Pain points**: none. Her Portal Account reaches her Client, `engagements_identity_visibility` (`00082`) makes every Engagement that Client holds readable before any one of them is chosen, and `decidePortalLanding` sends a person with more than one to the portal root list rather than into one of them. The list, and the persistent way back to it in the authenticated chrome, both read `engagementLabel` — **"{Practice}, started {date}"** — so two Engagements at Rooted Birth Collective are two distinguishable lines rather than two identical ones (CB-G4, closed with [#310](https://github.com/markgoho/doula-cloud/issues/310)).
 
-- **6.1** — Sign in as account A → her 2024 birth Engagement, still `intake`.
-- **6.2** — Sign out. Sign in as account B → her postpartum Engagement. There is no
-  other route between them.
+- **6.1** — Sign in → the root list, holding her 2024 birth Engagement and her postpartum one.
+- **6.2** — Open one, then use the chrome's way back to the list and open the other. No sign-out, and no second account.
 
 ### Stage 7 — Offered a Birth Plan she does not need
 
@@ -145,8 +122,8 @@ There is no view — for her or for Priya — of a person's Engagements over tim
 | --- | --- | --- | --- | --- |
 | CB-G1 | 3 | Interaction | A returning Client cannot be re-used. `POST /api/practices/{id}/clients` always inserts a new `clients` row — no lookup by email, no client search, no add-an-Engagement-to-this-Client endpoint — so one person becomes two Client records and consumes two credits. | [#307](https://github.com/markgoho/doula-cloud/issues/307) |
 | CB-G2 | 4, 7 | Both | An Engagement cannot declare what kind of work it is. No type or kind column; every Engagement is created at `intake` with no create-time alternative. `CONTEXT.md`'s claim that Engagement "fits both birth-doula and postpartum-doula work" holds only if nobody needs to know which it is. | [#308](https://github.com/markgoho/doula-cloud/issues/308) |
-| CB-G3 | 5 | Interaction | A person who already has a portal account cannot accept a second invite. `client_portal_users.identity_uid` is `UNIQUE`, so the second claim 409s with "a portal account already exists for this identity" and the only workaround is a second account under a different email. | [#309](https://github.com/markgoho/doula-cloud/issues/309) |
-| CB-G4 | 6 | Interaction | There is no Engagement switcher inside the portal. The chooser appears only on the login and accept-invite screens, the authenticated layout offers only sign-out, and the chooser labels an Engagement by `practiceName` alone — so two at one Practice would be indistinguishable. | [#310](https://github.com/markgoho/doula-cloud/issues/310) |
+| CB-G3 | 5 | Interaction | **Closed.** A person who already holds a Portal Account now accepts a further invitation through it: `00081_portal_account_reuse.sql` dropped the table-wide `UNIQUE` on `client_portal_users.identity_uid`, and [#819](https://github.com/markgoho/doula-cloud/issues/819) replaced it with ADR-0015's own rule, `UNIQUE (identity_uid, client_id)`. What is left is not a gap but a deliberate refusal, in a different place and different words: a second Client record for her at the *same* Practice is refused at the accept with "you already have portal access at this practice -- sign in instead of accepting a new invitation", and a second invitation on her existing Client is refused at the invite with "this client already has portal access". | [#309](https://github.com/markgoho/doula-cloud/issues/309) |
+| CB-G4 | 6 | Interaction | **Closed.** The portal root lists every Engagement a Portal Account reaches, the authenticated chrome carries a persistent way back to that list, and both label an Engagement with `engagementLabel` — "{Practice}, started {date}" — so two at one Practice are told apart by when each began. | [#310](https://github.com/markgoho/doula-cloud/issues/310) |
 | CB-G5 | 7 | Both | The Birth Plan link is unconditional. An Engagement with no birth in it still shows it, and the empty state ("No Birth Plan has been created for this Engagement yet") reads as a promise rather than as *not applicable*. | [#311](https://github.com/markgoho/doula-cloud/issues/311) |
 | CB-G6 | 8 | Both | Nothing shows a person's Engagements over time. Messages and Plan Instances are correctly Engagement-scoped, and nothing sits above them — so neither Camille nor her Practice can see that this is the second time. | [#312](https://github.com/markgoho/doula-cloud/issues/312) |
 
@@ -168,8 +145,4 @@ this effort and are parked on
   Practice's own service list?** CB-G2 says the fact cannot be recorded. It does
   not say where the fact belongs, and the answer changes CB-G5 (which links the
   portal shows) and the shape of the Plan Template model (ADR-0001).
-- **Does one identity hold many Clients, or does one Client hold many
-  Engagements?** CB-G1 and CB-G3 are the same problem seen from two tables. Fixing
-  the API to reuse a `clients` row makes CB-G3 disappear; fixing
-  `client_portal_users` to allow many rows per identity leaves the duplicate
-  records in place. They should be decided together, not separately.
+- **Does one identity hold many Clients, or does one Client hold many Engagements?** ~~CB-G1 and CB-G3 are the same problem seen from two tables.~~ **Settled: both.** ADR-0015 answers the first — a Portal Account reaches many Clients, at most one per Practice, which is what [#309](https://github.com/markgoho/doula-cloud/issues/309) built and [#819](https://github.com/markgoho/doula-cloud/issues/819) made the table's own rule. ADR-0017 answers the second — a Client is found before one is added, and a further Engagement is asked for against the record she already is. They were decided together, as this said they should be.
