@@ -58,7 +58,9 @@ function refusal(message: string, status = 400): Response {
 
 interface SetupOptions {
 	url?: string;
-	/** What each call answers, in order; the last one repeats. */
+	/**
+	What each call answers, in order; the last one repeats.
+	*/
 	responses?: Response[];
 }
 
