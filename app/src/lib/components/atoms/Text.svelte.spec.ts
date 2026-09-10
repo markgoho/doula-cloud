@@ -58,10 +58,15 @@ describe('Text.svelte', () => {
 		expect(container.querySelector('p.measure')).toBeVisible();
 	});
 
-	it('carries an id when one is given, for a control to reference via aria-describedby (#257)', async () => {
-		const { container } = await setup({ id: 'buy-credits-help' });
+	// The id exists so a control can point at this sentence through
+	// aria-describedby. The example used to be the Billing screen's own
+	// 'buy-credits-help', removed with the unreachable branch that owned it
+	// (#1162) -- this atom's behavior is unchanged, so the test keeps a
+	// neutral id rather than following that one screen around.
+	it('carries an id when one is given, for a control to reference via aria-describedby', async () => {
+		const { container } = await setup({ id: 'field-help' });
 
-		expect(container.querySelector('p#buy-credits-help')).toBeVisible();
+		expect(container.querySelector('p#field-help')).toBeVisible();
 	});
 
 	it('carries no id when none is given', async () => {
