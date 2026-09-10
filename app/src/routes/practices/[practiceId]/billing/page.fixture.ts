@@ -9,19 +9,16 @@
  * large realistic balance and the widest origin label rather than any
  * hostile string.
  *
- * One session is all this screen has (#928), and it takes a moment to
- * see why. The route reads `isOwnerOrAdmin` to decide whether the Buy
- * credits button is usable, which reads like two trees -- but the only
- * session that would answer `false` never reaches the screen: the balance
- * arrives through `+page.ts`'s own `load`, the endpoint behind it is
- * `staffauth.OwnerAndAdmin` (`billing/mount.go`), and a Doula meets
- * `refuseRead` and `practices/+error.svelte` instead of this component.
- * An Owner and an Admin both answer `true` and draw the identical screen.
- * So the disabled button and the sentence under it are a tree no session
- * can reach, and declaring a variant for it would measure a screen nobody
- * ever sees -- the same argument #537 makes about polite content.
- * [#1162](https://github.com/markgoho/doula-cloud/issues/1162) holds the
- * unreachable branch itself.
+ * One session is all this screen has (#928), and now the route says so
+ * itself. It reads no role at all: who may be here is ADR-0008's Credit
+ * row, the balance read and the purchase both declare
+ * `staffauth.OwnerAndAdmin` (`billing/mount.go`), and the balance arrives
+ * through `+page.ts`'s own `load` -- so a Doula meets `refuseRead` and
+ * `practices/+error.svelte` instead of this component, and an Owner and
+ * an Admin draw the identical screen with the Buy credits button plainly
+ * enabled.
+ * [#1162](https://github.com/markgoho/doula-cloud/issues/1162) removed the
+ * disabled second tree this comment used to have to explain away.
  */
 import type { Balance } from '#lib/billing.js';
 import type { RouteFixture } from '../../../routeFixture.js';

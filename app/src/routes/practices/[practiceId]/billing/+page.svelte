@@ -2,7 +2,6 @@
 	import { onMount, untrack } from 'svelte';
 	import { page } from '#lib/appState.svelte.js';
 	import { apiFetchWithSession } from '#lib/api.js';
-	import { isOwnerOrAdmin } from '#lib/roles.js';
 	import { PaginatedList } from '#lib/paginatedList.svelte.js';
 	import {
 		formatSignedQuantity,
@@ -13,7 +12,6 @@
 	} from '#lib/billing.js';
 	import { formatMoney } from '#lib/money.js';
 	import { readApprovalReturn } from '#lib/engagementRequest.js';
-	import type { PracticeSession } from '../+layout.js';
 	import DataTable from '#lib/components/organisms/DataTable.svelte';
 	import Link from '#lib/components/atoms/Link.svelte';
 	import Notice from '#lib/components/atoms/Notice.svelte';
@@ -26,7 +24,6 @@
 	import type { PageProps as PageProperties } from './$types';
 
 	const quantityId = 'buy-credits-quantity';
-	const buyCreditsHelpId = 'buy-credits-help';
 
 	// Balance and the ledger's first page come from +page.ts's load now,
 	// not an onMount fetch (#471) -- a role refusal has to reach
@@ -43,16 +40,16 @@
 		failureMessage: 'Failed to load more ledger entries'
 	});
 
-	// Resolved once by practices/[practiceId]/+layout.ts (#835), not a
-	// second /session fetch here -- the buy-credits button's enabled state
-	// mirrors the endpoint's own guard, staffauth.RequireOwnerOrAdmin
-	// (billing/purchase.go), not an Owner-only reading (#257): an Admin
-	// who may approve an Engagement Request, and is told at that wall to
-	// buy more, must find the control here actually usable. Server-side
-	// enforcement is still what actually matters; this only decides what
-	// to show.
-	const session = $derived((page.data as { session: PracticeSession }).session);
-	let canBuyCredits = $derived(isOwnerOrAdmin(session));
+	// This screen reads no role of its own (#1162). Who may be here at all
+	// is ADR-0008's Credit row -- Owner and Admin, Doula ✗ -- and both the
+	// balance read and the purchase declare that same seat,
+	// staffauth.OwnerAndAdmin in billing/mount.go. The balance arrives
+	// through +page.ts's own load, so a session outside that seat meets its
+	// refuseRead and practices/+error.svelte and never mounts this
+	// component; every session that does mount it may buy. The button is
+	// therefore unconditional, rather than drawn disabled for a caller who
+	// cannot reach the page (#257's fix, which #272 and #910 between them
+	// left with no session to fire for).
 	let checkoutStatus = $derived(page.url.searchParams.get('checkout'));
 
 	const columns = [
@@ -204,25 +201,7 @@
 				<Text text="This purchase's exact price could not be confirmed with Stripe right now." step="body-sm" tone="variant" />
 			{/if}
 
-			<Button
-				label="Buy credits"
-				type="submit"
-				disabled={!canBuyCredits}
-				loading={isPurchasing}
-				describedBy={canBuyCredits ? undefined : buyCreditsHelpId}
-			/>
-			{#if !canBuyCredits}
-				<!--
-					Names the same roles the out-of-credits refusal at the wall
-					does (engagementrequest/approve.go's "ask a practice owner or
-					admin to buy more") -- a #257 fix: this control used to be
-					silently inert for an Admin sent here by exactly that
-					message. Visible text, not only aria-describedby, so a
-					sighted Admin also learns why rather than guessing at a
-					grayed-out button.
-				-->
-				<Text id={buyCreditsHelpId} text="Buying Credits is for a practice Owner or Admin." step="body-sm" tone="variant" />
-			{/if}
+			<Button label="Buy credits" type="submit" loading={isPurchasing} />
 			{#if purchaseError}
 				<Notice message={purchaseError} variant="error" />
 			{/if}
