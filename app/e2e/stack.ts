@@ -16,7 +16,9 @@ import {
 	GCS_PORT,
 	MAILBOX_HOST,
 	MAILBOX_PORT,
-	PORT_OFFSET
+	PORT_OFFSET,
+	E2E_COMPOSE_FILE,
+	e2eComposeProject
 } from './ports';
 
 // The fake-gcs-server in compose.e2e.yaml, and the one bucket the BFF is
@@ -28,11 +30,12 @@ const GCS_BUCKET = 'doula-cloud-e2e-attachments';
 // Every compose invocation below is scoped to this project name so two
 // worktrees' stacks don't collide on container names -- compose defaults
 // the project name to the compose dir's basename ("app" everywhere), which
-// would otherwise be shared. Suffix only kicks in for a real worktree
-// (PORT_OFFSET > 0); at offset 0 (main checkout, CI) this is exactly
-// today's implicit "app" project name.
-const COMPOSE_PROJECT = `doula-cloud-e2e${PORT_OFFSET ? `-${PORT_OFFSET}` : ''}`;
-const COMPOSE_ARGS = ['compose', '-p', COMPOSE_PROJECT, '-f', 'compose.e2e.yaml'];
+// would otherwise be shared. The name is built in e2e/ports.ts, beside the
+// PORT_OFFSET it is derived from, because `.claude/hooks/e2e-stack-reap.ts`
+// has to recognize these names to find the stack a killed session left
+// running and would go silently inert if the two ever drifted.
+const COMPOSE_PROJECT = e2eComposeProject(PORT_OFFSET);
+const COMPOSE_ARGS = ['compose', '-p', COMPOSE_PROJECT, '-f', E2E_COMPOSE_FILE];
 // compose.e2e.yaml reads these for its host port bindings and the gcs
 // service's -external-url; unset (offset 0) falls back to the compose
 // file's own defaults, so CI and the main checkout are unaffected.

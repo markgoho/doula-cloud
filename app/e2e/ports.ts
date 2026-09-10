@@ -87,6 +87,24 @@ export const PREVIEW_SERVER_ORIGIN = `http://localhost:${PREVIEW_SERVER_PORT}`;
 // machine before assigning it: "not claimed by another worktree" is not
 // the same as "available" when an unrelated local process holds one of
 // them (#927).
+// The compose project every `podman compose`/`docker compose` call for
+// this stack is scoped to (see e2e/stack.ts): one per worktree, so two
+// worktrees' stacks never collide on container names. It lives here, next
+// to the ports, because a worktree's PORT_OFFSET is the whole of its
+// identity on this machine, and because a second consumer already needs
+// it -- `.claude/hooks/e2e-stack-reap.ts` matches these names to find the
+// stack a killed session left running, and would go silently inert if a
+// rename happened here and not there.
+export const E2E_COMPOSE_PROJECT_PREFIX = 'doula-cloud-e2e';
+// Suffix only for a real worktree (offset > 0); at offset 0 (the main
+// checkout, and CI) this is the bare prefix, exactly the implicit project
+// name this stack has always used.
+export function e2eComposeProject(offset: number): string {
+	return `${E2E_COMPOSE_PROJECT_PREFIX}${offset ? `-${offset}` : ''}`;
+}
+// The compose file itself, named once for the same reason.
+export const E2E_COMPOSE_FILE = 'compose.e2e.yaml';
+
 export const BASE_PORTS: readonly number[] = [
 	E2E_API_PORT,
 	E2E_EMULATOR_PORT,

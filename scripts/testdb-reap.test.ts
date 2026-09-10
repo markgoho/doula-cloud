@@ -13,7 +13,8 @@
 import { describe, expect, test } from "bun:test";
 import { spawn } from "node:child_process";
 import path from "node:path";
-import { pickReapCandidates, REAP_THRESHOLD_MS, type ReapCandidate } from "../.claude/hooks/testdb-reap.ts";
+import { pickReapCandidates, REAP_THRESHOLD_MS } from "../.claude/hooks/testdb-reap.ts";
+import type { ReapCandidate } from "../.claude/hooks/container-engine.ts";
 
 const REPO_ROOT = path.resolve(import.meta.dir, "..");
 const HOOK = path.join(REPO_ROOT, ".claude", "hooks", "testdb-reap.ts");

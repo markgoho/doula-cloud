@@ -191,6 +191,13 @@ describe("recentlyTouched", () => {
 		expect(recentlyTouched(worktree, now)).toBe(true);
 	});
 
+	/*
+	 * The only "no" this reader will give without reading a timestamp.
+	 * Everything else fails closed, the way worktree-prune.ts's own copy
+	 * does: a worktree that is there but cannot be measured counts as
+	 * touched. A directory that is gone is not a guess — it is the
+	 * session's own directory having been removed.
+	 */
 	test("a directory that is not there is not touched", () => {
 		expect(recentlyTouched(path.join(temporaryWorktreesRoot(), "gone"), now)).toBe(false);
 	});

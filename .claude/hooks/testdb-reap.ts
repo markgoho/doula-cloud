@@ -38,8 +38,6 @@ import { engineInvocation, parseContainers, type ReapCandidate } from './contain
 // idle-machine time) without ever mistaking a live run for an orphan.
 export const REAP_THRESHOLD_MS = 15 * 60 * 1000;
 
-export { parseContainers, type ReapCandidate };
-
 const TESTCONTAINERS_LABEL = 'org.testcontainers';
 const TESTCONTAINERS_LABEL_VALUE = 'true';
 

@@ -20,7 +20,9 @@
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
+import { E2E_COMPOSE_FILE, E2E_COMPOSE_PROJECT_PREFIX } from '../../app/e2e/ports.ts';
 import { engineInvocation, parseContainers, type ReapCandidate } from './container-engine.ts';
+import { readWorktreeOffsets } from './worktree-offsets.ts';
 import { findMainCheckoutRoot } from './worktree-root.ts';
 
 // podman-compose 1.6.0 and Docker Compose v2 both stamp this key on every
@@ -33,16 +35,18 @@ const COMPOSE_PROJECT_LABEL = 'com.docker.compose.project';
 /*
  * Only a worktree's stack, never the main checkout's.
  *
- * app/e2e/stack.ts suffixes the compose project name with PORT_OFFSET,
- * and only when that offset is non-zero -- offset 0 is the main checkout
- * and CI, whose project name is the bare `doula-cloud-e2e`. This pattern
- * therefore matches worktree stacks and nothing else, deliberately: the
- * main checkout has no `.port-offset` file to go quiet, it is where a
- * long interactive `bun run dev:full` runs, and it is the one place a
- * person is standing when they would notice their own database vanish.
- * Its stack is left alone.
+ * Built from `E2E_COMPOSE_PROJECT_PREFIX` rather than spelled out, so a
+ * rename in app/e2e/ports.ts -- the file that names these projects in the
+ * first place -- cannot leave this hook silently matching nothing.
+ *
+ * The `-<digits>` is required, and that is the exclusion: e2eComposeProject
+ * suffixes the name only for a non-zero offset, so the bare prefix is the
+ * main checkout's and CI's. The main checkout has no `.port-offset` file
+ * to go quiet, it is where a long interactive `bun run dev:full` runs, and
+ * it is the one place a person is standing when they would notice their
+ * own database vanish. Its stack is left alone.
  */
-const WORKTREE_PROJECT_PATTERN = /^doula-cloud-e2e-(\d+)$/;
+const WORKTREE_PROJECT_PATTERN = new RegExp(`^${E2E_COMPOSE_PROJECT_PREFIX}-(\\d+)$`);
 
 /*
  * Two clocks decide, and neither on its own.
@@ -59,10 +63,17 @@ const WORKTREE_PROJECT_PATTERN = /^doula-cloud-e2e-(\d+)$/;
  * that follow it.
  *
  * QUIET_MS is the real signal: has anything touched the worktree that
- * claims this stack's port offset lately. It is the same 30 minutes, and
- * the same reasoning, that worktree-prune.ts already trusts to delete a
- * whole worktree directory -- if that is enough to justify removing the
- * work, it is enough to justify removing the containers beside it.
+ * claims this stack's port offset lately. It is the same 30 minutes, for
+ * the same reason, that worktree-prune.ts waits before it will touch a
+ * worktree at all -- half an hour of silence is that file's own measure
+ * of "nobody is standing here", written because a session that has just
+ * landed its PR sits in a finished worktree for as long as it takes to
+ * write a summary. Be clear about what is NOT being borrowed: prune
+ * removes a directory only when it is quiet AND clean AND merged,
+ * because deleting a worktree can destroy unlanded work. Nothing here
+ * can: a reaped stack is a database that is rebuilt by the next `up -d`,
+ * and its contents are fixtures. Quiet plus the age check below is the
+ * whole bar precisely because the stakes are lower.
  *
  * Deliberately NOT used as a liveness signal: whether the stack's host
  * BFF is up. app/e2e/stack.ts spawns it `detached` and `unref`s it, so it
@@ -121,11 +132,23 @@ export function pickReapProjects(
 	return projects.filter(project => !liveOffsets.has(project.offset) && nowMs - project.newestCreatedAtMs > thresholdMs);
 }
 
-// Has anything touched this worktree lately? The worktree's own directory,
-// the git dir its `.git` file points at, and that dir's index -- the same
-// three worktree-prune.ts checks, read here without shelling out to git so
-// a reaper never pays for a subprocess per worktree.
+/*
+ * Has anything touched this worktree lately?
+ *
+ * Three timestamps: the worktree's own directory, the git dir its `.git`
+ * file points at, and that dir's index. worktree-prune.ts's own
+ * recentlyTouched reads the same three, and asks git for the middle one;
+ * this reads the pointer file instead, so a hook that must fail open never
+ * depends on a subprocess it would have to catch around.
+ *
+ * Fails closed, exactly as prune's does: a worktree that is there but
+ * whose timestamps cannot be read at all counts as touched and is left
+ * alone. Only a directory that is not there answers "no" -- and that one
+ * is not a guess, it is the session's directory being gone.
+ */
 export function recentlyTouched(worktreePath: string, nowMs: number, quietMs: number = QUIET_MS): boolean {
+	if (!fs.existsSync(worktreePath)) return false;
+
 	const candidates = [worktreePath];
 	try {
 		const pointer = fs.readFileSync(path.join(worktreePath, '.git'), 'utf8').trim();
@@ -134,14 +157,18 @@ export function recentlyTouched(worktreePath: string, nowMs: number, quietMs: nu
 	} catch {
 		// No readable `.git` -- the directory itself still answers below.
 	}
+
+	let readAny = false;
 	for (const candidate of candidates) {
 		try {
-			if (nowMs - fs.statSync(candidate).mtimeMs < quietMs) return true;
+			const mtimeMs = fs.statSync(candidate).mtimeMs;
+			readAny = true;
+			if (nowMs - mtimeMs < quietMs) return true;
 		} catch {
 			// A missing path tells us nothing -- keep checking the others.
 		}
 	}
-	return false;
+	return !readAny;
 }
 
 /*
@@ -150,29 +177,18 @@ export function recentlyTouched(worktreePath: string, nowMs: number, quietMs: nu
  * An offset missing from this set is one no live session can be using:
  * either no worktree carries that `.port-offset` at all (the session's
  * directory is gone), or the one that does has been quiet for QUIET_MS.
- * Mirrors worktree-provision.ts's own livePortOffsets, which reads the
- * same files to decide which offset a new worktree may claim.
+ * The scan itself is shared with worktree-provision.ts
+ * (worktree-offsets.ts); only the quiet test is this hook's, because
+ * provisioning must refuse an offset any directory holds however quiet,
+ * while this is asking the narrower question of whether a running
+ * container still has a session behind it.
  */
 export function liveWorktreeOffsets(worktreesRoot: string, nowMs: number, quietMs: number = QUIET_MS): Set<number> {
-	const live = new Set<number>();
-	let entries: string[] = [];
-	try {
-		entries = fs.readdirSync(worktreesRoot);
-	} catch {
-		return live; // no worktrees directory -- nothing claims any offset
-	}
-	for (const entry of entries) {
-		const worktreePath = path.join(worktreesRoot, entry);
-		let offset: number;
-		try {
-			offset = Number.parseInt(fs.readFileSync(path.join(worktreePath, '.port-offset'), 'utf8').trim(), 10);
-		} catch {
-			continue; // no offset assigned yet -- claims nothing
-		}
-		if (!Number.isInteger(offset)) continue;
-		if (recentlyTouched(worktreePath, nowMs, quietMs)) live.add(offset);
-	}
-	return live;
+	return new Set(
+		readWorktreeOffsets(worktreesRoot)
+			.filter(worktree => recentlyTouched(worktree.path, nowMs, quietMs))
+			.map(worktree => worktree.offset)
+	);
 }
 
 /*
@@ -201,7 +217,7 @@ function main(): void {
 		   against podman-compose 1.6.0 by starting the stack and reading
 		   `network ls`/`volume ls` back on either side of it. The compose
 		   file only names the services; the project name selects what goes. */
-		const composeFile = path.join(mainCheckout, 'app', 'compose.e2e.yaml');
+		const composeFile = path.join(mainCheckout, 'app', E2E_COMPOSE_FILE);
 		const removed: string[] = [];
 		for (const project of doomed) {
 			try {
