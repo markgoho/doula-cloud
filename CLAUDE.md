@@ -67,6 +67,10 @@ Triage state lives on the Status field of the [Doula Cloud Project](https://gith
 
 Single-context — `CONTEXT.md` + `docs/adr/` at the repo root. See `docs/agents/domain.md`.
 
+### Manifesto
+
+Before deciding what to build or refuse, a price, a marketing channel or its copy, or a metric, read `docs/manifesto.md`: the product and business principles, ranked below recorded decisions.
+
 ### Service patterns
 
 The GOV.UK Design System is the default reference for any screen that asks a person for
