@@ -191,6 +191,36 @@ func TestActivityHandler_HidesStaffingEntries(t *testing.T) {
 	}
 }
 
+// TestActivityHandler_HidesVoidDeliberation proves #1096 at the reader
+// rather than only at the set -- the SQL clause staffingActionsNotIn
+// builds, for the two actions CONTEXT.md's Activity entry now names as
+// the Practice deliberating with itself. contract_voided is seeded beside
+// them because it is the half that does not change: it is the outcome she
+// reads, so a granted ask still reaches her and her record stays complete.
+func TestActivityHandler_HidesVoidDeliberation(t *testing.T) {
+	db := testdb.New(t)
+	const identityUID = "portal-activity-void-deliberation"
+	practiceID, engagementID := seedEngagementForActivity(t, db, identityUID, "Activity Void Deliberation Practice")
+	staffID := testdb.SeedStaffAtPractice(t, db, practiceID, "portal-activity-void-staff", []string{ownerRole}, "employee")
+
+	testdb.SeedActivity(t, db, practiceID, activity.SubjectEngagement, engagementID, string(activity.ActionContractVoidRequested), activity.StaffActor(staffID))
+	testdb.SeedActivity(t, db, practiceID, activity.SubjectEngagement, engagementID, string(activity.ActionContractVoidDeclined), activity.StaffActor(staffID))
+	testdb.SeedActivity(t, db, practiceID, activity.SubjectEngagement, engagementID, string(activity.ActionContractVoided), activity.StaffActor(staffID))
+
+	srv, session := activityServer(t, db, identityUID)
+	defer srv.Close()
+
+	resp := authedActivityGet(t, session, srv.URL+"/api/portal/engagements/"+engagementID+"/activity")
+	defer resp.Body.Close()
+	var got activityfeed.ListResponse
+	if err := json.NewDecoder(resp.Body).Decode(&got); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if len(got.Items) != 1 || got.Items[0].Action != string(activity.ActionContractVoided) {
+		t.Fatalf("Items = %+v, want only the contract_voided row (the deliberation hidden)", got.Items)
+	}
+}
+
 // TestActivityHandler_PaginatesNewestFirst mirrors
 // engagement.TestListActivityHandler_PaginatesNewestFirst.
 func TestActivityHandler_PaginatesNewestFirst(t *testing.T) {

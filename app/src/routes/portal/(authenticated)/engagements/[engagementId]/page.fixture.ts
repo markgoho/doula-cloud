@@ -75,7 +75,7 @@ export const visits = [
  * emptied.
  *
  * Two rows, because two things about this column can be worst-case: the
- * longest phrase the Client register holds (`contract_void_requested`,
+ * longest phrase the Client register holds (`payment_reversed`,
  * pinned in `activityPhrases.usage.spec.ts`), and the longest single
  * unbreakable word among them, which is what a 320px track actually
  * cannot split -- "notifications", on a row whose actor is her own name
@@ -86,7 +86,7 @@ export const activity = [
 	{
 		subjectKind: 'engagement',
 		subjectId: detail.engagementId,
-		action: 'contract_void_requested',
+		action: 'payment_reversed',
 		actorKind: 'staff',
 		actorName: 'Your practice',
 		createdAt: '2026-08-30T15:00:00Z'
