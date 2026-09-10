@@ -273,7 +273,7 @@
 	/*
 	 * #917 (ADR-0035). The one status where nothing else reaches an Owner
 	 * at all: with no Stripe account there is no webhook, so #343's
-	 * payout notification can never fire, and ADR-0033 rules out a
+	 * payout notification can never fire, and ADR-0038 rules out a
 	 * sweep. So a reader who can see the gap and cannot close it gets one
 	 * control, and pressing it queues a Notification to every Owner.
 	 *
@@ -680,7 +680,7 @@
 
 				`not_connected` is the one status that produces no Stripe
 				webhook, so #343's payout Notification can never fire for it
-				and ADR-0033 rules out a sweep that would notice it. Nobody
+				and ADR-0038 rules out a sweep that would notice it. Nobody
 				has been told, and nobody will be, so she is offered the ask.
 
 				Every other status on this branch has an account behind it,

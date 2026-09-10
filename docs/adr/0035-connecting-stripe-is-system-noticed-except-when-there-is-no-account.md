@@ -14,7 +14,7 @@ It covers `onboarding_incomplete`, `pending`, and `payouts_restricted` — every
 
 `not_connected` is the one status the webhook can never reach. There is no Stripe account, so no `capability_status_updated` event is ever delivered for that Practice, and `payout_outbox` has nothing to fire on. The one act that touches the condition is raising a Stripe-rail Invoice, which `createStripeInvoice` refuses with `errClientsCannotPay` — and that refusal reaches the Doula who tried, never an Owner.
 
-The obvious repair is a scheduled sweep that looks for Practices sitting unconnected and mails their Owners. [ADR-0033](0033-overdue-is-derived-and-notifies-nobody.md) already refused exactly this shape and its reasoning carries here unchanged: *"every outbox is nudged by an act through `tasknudge`, and a due date passing is not an act"*. A Practice not having connected Stripe is not an act either. Building the first time-based sweep in the product for this would also make the product the author of a chase nobody asked for, which is the half of ADR-0033 that is about judgment rather than mechanism.
+The obvious repair is a scheduled sweep that looks for Practices sitting unconnected and mails their Owners. [ADR-0038](0038-overdue-is-derived-and-notifies-nobody.md) already refused exactly this shape and its reasoning carries here unchanged: *"every outbox is nudged by an act through `tasknudge`, and a due date passing is not an act"*. A Practice not having connected Stripe is not an act either. Building the first time-based sweep in the product for this would also make the product the author of a chase nobody asked for, which is the half of ADR-0038 that is about judgment rather than mechanism.
 
 ## The decision
 
@@ -23,7 +23,7 @@ The obvious repair is a scheduled sweep that looks for Practices sitting unconne
 - In `not_connected`, a reader who may read Connect status and may not act on it is offered one control. Pressing it queues a Platform Notification to every current Owner through ADR-0010's outbox, nudged by ADR-0013.
 - In every other unconnected status, there is no control, and the screen says the Owners have already been emailed.
 
-This is not a departure from [ADR-0028](0028-the-shell-has-no-notification-bell.md) or ADR-0033. Both refuse **the product chasing on its own initiative** — a bell, a badge that follows a person around, a timer nobody can see. A single bounded email that a colleague deliberately chose to send is a Staff act with a name attached to it, and #343 already established that a Practice's Owners receive Stripe reminders in Platform voice. Nothing durable and per-recipient is created, so ADR-0028's "there is no feed to read" still holds and no read scope is opened.
+This is not a departure from [ADR-0028](0028-the-shell-has-no-notification-bell.md) or ADR-0038. Both refuse **the product chasing on its own initiative** — a bell, a badge that follows a person around, a timer nobody can see. A single bounded email that a colleague deliberately chose to send is a Staff act with a name attached to it, and #343 already established that a Practice's Owners receive Stripe reminders in Platform voice. Nothing durable and per-recipient is created, so ADR-0028's "there is no feed to read" still holds and no read scope is opened.
 
 ### Recipients are not re-decided
 
@@ -53,6 +53,6 @@ A retry after a Mailgun failure can be up to a day later (ADR-0010's backoff). `
 
 - **Copy naming the Owners, and no send at all.** The Payments screen could name each Owner and her email address — the staff roster is behind the same `OwnerAndAdmin` gate as Connect status, so nothing new would be exposed. It is the cheapest thing that could work and the Rule of Least Power favors it. Rejected because it makes the bottleneck legible without removing it: Dee still has to leave the product, compose the message herself, and remember to. #917 calls that the defect, not the fix.
 - **A control in every unconnected status.** Rejected: #343 owns the states a webhook can reach, and a second sender there is duplicate mail an Admin has no way to know she is sending.
-- **A scheduled sweep over unconnected Practices.** Rejected on ADR-0033's own reasoning, quoted above.
+- **A scheduled sweep over unconnected Practices.** Rejected on ADR-0038's own reasoning, quoted above.
 - **Naming the sender in the email.** Rejected: ADR-0009's content rule carries no exception for a colleague's name, and the audit trail is a better home for the fact.
 - **Refusing an Owner at the boundary.** Rejected as a gate shape that earns nothing. An Owner nudging herself is a pointless errand, not a permission violation; the screen never offers her the control, and the boundary already enforces the two things that matter — that the Practice really is unconnected, and that nobody asked this week.

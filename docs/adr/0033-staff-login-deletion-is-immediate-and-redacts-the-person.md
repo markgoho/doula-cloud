@@ -113,3 +113,7 @@ That a held-open Admin SDK round trip is acceptable at a once-per-person seam is
 - **A `staff_data_keys` crypto-shredding analog.** Rejected: nothing about a Staff person is sealed, so there is nothing to shred.
 - **An outbox for the Identity Platform delete.** Rejected: it would put the account's destruction after the commit and reintroduce the half-state the ordering above exists to prevent.
 - **Data export for a Staff person before she goes.** Out of scope. [#288](https://github.com/markgoho/doula-cloud/issues/288) built export for a Practice; whether a person gets her own is a separate question nobody has asked yet.
+
+## If you arrived here from a citation about clocks or sweeps
+
+A second ADR briefly carried this number, and it is the one that says nothing in this repo fires on a clock. It is now [ADR-0038](0038-overdue-is-derived-and-notifies-nobody.md), renumbered on [#1053](https://github.com/markgoho/doula-cloud/issues/1053). One citation still points the old way and cannot be corrected: `api/db/migrations/00109_connect_nudge_outbox.sql` has already run, and `api/db/migrations/guardrail_test.go` records why an applied migration must not change.
