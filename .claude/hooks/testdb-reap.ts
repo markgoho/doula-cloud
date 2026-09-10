@@ -14,13 +14,15 @@
 // on one machine, these accumulate without bound -- 116 containers, 4GB
 // Podman machine down to 133MB free, observed live (#889).
 //
-// The reap decision (parseContainers/pickReapCandidates below) is pure
-// and exported for direct unit testing. main() itself -- the DOCKER_HOST
-// check, the engine invocation, the fail-open catch -- is exercised as a
-// subprocess instead, the same way scripts/gate-bash-write.test.ts covers
-// gate-bash-write.ts; see scripts/testdb-reap.test.ts.
+// The reap decision (pickReapCandidates below) is pure and exported for
+// direct unit testing. main() itself -- the engine invocation and the
+// fail-open catch -- is exercised as a subprocess instead, the same way
+// scripts/gate-bash-write.test.ts covers gate-bash-write.ts; see
+// scripts/testdb-reap.test.ts. How the engine is reached at all lives in
+// container-engine.ts, shared with e2e-stack-reap.ts.
 
 import { execFileSync } from 'node:child_process';
+import { engineInvocation, parseContainers, type ReapCandidate } from './container-engine.ts';
 
 // A container backs one `go test` process for one package, so it lives
 // minutes at most -- anything materially older is an orphan, not a slow
@@ -36,37 +38,10 @@ import { execFileSync } from 'node:child_process';
 // idle-machine time) without ever mistaking a live run for an orphan.
 export const REAP_THRESHOLD_MS = 15 * 60 * 1000;
 
+export { parseContainers, type ReapCandidate };
+
 const TESTCONTAINERS_LABEL = 'org.testcontainers';
 const TESTCONTAINERS_LABEL_VALUE = 'true';
-
-export interface ReapCandidate {
-	id: string;
-	name: string;
-	labels: Record<string, string>;
-	createdAtMs: number;
-}
-
-// The subset of `podman ps --format json` / `docker ps --format json`'s
-// per-container object this hook reads. `Created` is a Unix timestamp in
-// seconds (confirmed against a live podman-machine-default container);
-// `Labels` is an object, not the comma-joined string some engines print
-// in their plain-text `--format` output.
-interface EnginePs {
-	Id: string;
-	Names?: string[];
-	Labels?: Record<string, string>;
-	Created: number;
-}
-
-export function parseContainers(json: string): ReapCandidate[] {
-	const raw = JSON.parse(json) as EnginePs[];
-	return raw.map(entry => ({
-		id: entry.Id,
-		name: entry.Names?.[0] ?? entry.Id,
-		labels: entry.Labels ?? {},
-		createdAtMs: entry.Created * 1000
-	}));
-}
 
 // The one place that decides what gets `rm -f`'d. Filters on the label
 // itself rather than trusting the engine's own `--filter` flag to have
@@ -97,22 +72,21 @@ export function pickReapCandidates(
  * rather than halt all shell work.
  */
 function main(): void {
-	const dockerHost = process.env.DOCKER_HOST;
-	if (!dockerHost) return; // no local container engine configured -- nothing to reap
-
 	try {
-		const engine = process.env.CONTAINER_ENGINE ?? 'podman';
-		const psOutput = execFileSync(
-			engine,
-			['--url', dockerHost, 'ps', '-a', '--filter', `label=${TESTCONTAINERS_LABEL}=${TESTCONTAINERS_LABEL_VALUE}`, '--format', 'json'],
-			{ encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }
-		);
+		const ps = engineInvocation([
+			'ps',
+			'-a',
+			'--filter',
+			`label=${TESTCONTAINERS_LABEL}=${TESTCONTAINERS_LABEL_VALUE}`,
+			'--format',
+			'json'
+		]);
+		const psOutput = execFileSync(ps.binary, ps.argv, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
 		const candidates = pickReapCandidates(parseContainers(psOutput), Date.now());
 		if (candidates.length === 0) return;
 
-		execFileSync(engine, ['--url', dockerHost, 'rm', '-f', '-t', '2', ...candidates.map(c => c.id)], {
-			stdio: ['ignore', 'pipe', 'pipe']
-		});
+		const remove = engineInvocation(['rm', '-f', '-t', '2', ...candidates.map(c => c.id)]);
+		execFileSync(remove.binary, remove.argv, { stdio: ['ignore', 'pipe', 'pipe'] });
 		const minutes = Math.round(REAP_THRESHOLD_MS / 60000);
 		console.log(
 			`testdb-reap: removed ${candidates.length} orphaned testcontainers Postgres container(s) older than ${minutes}m (org.testcontainers=true, no process attached)`
