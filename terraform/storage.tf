@@ -47,3 +47,27 @@ resource "google_storage_bucket" "attachments" {
     prevent_destroy = true
   }
 }
+
+# #1051: the attachments half of `doula-api-runtime@`'s grants. Two narrow
+# roles rather than one broad `roles/storage.objectUser`, because
+# `objectstore.GCSStore` exposes exactly two operations — `Put`, which needs
+# `storage.objects.create`, and `Get`, which needs `storage.objects.get`.
+# `objectUser` would add `storage.objects.delete` and `storage.objects.update`
+# on top, and nothing in `api/` deletes or overwrites an attachment. Before
+# this the bucket had no per-principal grant at all: the container reached it
+# through project `roles/editor` on the default compute account.
+#
+# Bucket IAM is the enforcement point here, not object ACLs — the bucket has
+# uniform bucket-level access on, so an object-level ACL would be ignored
+# even if something tried to set one.
+resource "google_storage_bucket_iam_member" "attachments_runtime_object_creator" {
+  bucket = google_storage_bucket.attachments.name
+  member = google_service_account.doula_api_runtime.member
+  role   = "roles/storage.objectCreator"
+}
+
+resource "google_storage_bucket_iam_member" "attachments_runtime_object_viewer" {
+  bucket = google_storage_bucket.attachments.name
+  member = google_service_account.doula_api_runtime.member
+  role   = "roles/storage.objectViewer"
+}

@@ -30,6 +30,14 @@
 #
 # `firebase-app-hosting-github-oauth-github-oauthtoken-a16322` is not here.
 # See docs/infrastructure.md's by-hand table for why.
+#
+# Every `*_runtime_accessor` below names `doula-api-runtime@` since #1051.
+# Each was the default compute account before that, which could read all
+# thirteen secrets anyway through project `roles/editor` — so these ten
+# grants described the service's real appetite while enforcing nothing. Ten,
+# not eleven: the live service declares ten `secret_key_ref` environment
+# variables and nine plain ones (cloud_run.tf), which is the count that
+# decides this list.
 
 resource "google_secret_manager_secret" "github_dispatch_token" {
   annotations         = {}
@@ -52,8 +60,8 @@ resource "google_secret_manager_secret" "github_dispatch_token" {
   }
 }
 
-resource "google_secret_manager_secret_iam_member" "github_dispatch_token_accessor" {
-  member    = "serviceAccount:850855848778-compute@developer.gserviceaccount.com"
+resource "google_secret_manager_secret_iam_member" "github_dispatch_token_runtime_accessor" {
+  member    = google_service_account.doula_api_runtime.member
   project   = "doula-cloud"
   role      = "roles/secretmanager.secretAccessor"
   secret_id = google_secret_manager_secret.github_dispatch_token.id
@@ -80,8 +88,8 @@ resource "google_secret_manager_secret" "mailgun_api_key" {
   }
 }
 
-resource "google_secret_manager_secret_iam_member" "mailgun_api_key_accessor" {
-  member    = "serviceAccount:850855848778-compute@developer.gserviceaccount.com"
+resource "google_secret_manager_secret_iam_member" "mailgun_api_key_runtime_accessor" {
+  member    = google_service_account.doula_api_runtime.member
   project   = "doula-cloud"
   role      = "roles/secretmanager.secretAccessor"
   secret_id = google_secret_manager_secret.mailgun_api_key.id
@@ -108,8 +116,8 @@ resource "google_secret_manager_secret" "mailgun_webhook_signing_key" {
   }
 }
 
-resource "google_secret_manager_secret_iam_member" "mailgun_webhook_signing_key_accessor" {
-  member    = "serviceAccount:850855848778-compute@developer.gserviceaccount.com"
+resource "google_secret_manager_secret_iam_member" "mailgun_webhook_signing_key_runtime_accessor" {
+  member    = google_service_account.doula_api_runtime.member
   project   = "doula-cloud"
   role      = "roles/secretmanager.secretAccessor"
   secret_id = google_secret_manager_secret.mailgun_webhook_signing_key.id
@@ -140,8 +148,8 @@ resource "google_secret_manager_secret" "notification_worker_secret" {
 # writes the header value onto the Scheduler jobs at deploy time — see
 # docs/environment.md), and `terraform-plan@`, added in #1044 so the `data`
 # source in `scheduler.tf` can read this secret during `plan`.
-resource "google_secret_manager_secret_iam_member" "notification_worker_secret_compute_accessor" {
-  member    = "serviceAccount:850855848778-compute@developer.gserviceaccount.com"
+resource "google_secret_manager_secret_iam_member" "notification_worker_secret_runtime_accessor" {
+  member    = google_service_account.doula_api_runtime.member
   project   = "doula-cloud"
   role      = "roles/secretmanager.secretAccessor"
   secret_id = google_secret_manager_secret.notification_worker_secret.id
@@ -186,8 +194,8 @@ resource "google_secret_manager_secret" "pg_app_runtime_dsn" {
   }
 }
 
-resource "google_secret_manager_secret_iam_member" "pg_app_runtime_dsn_accessor" {
-  member    = "serviceAccount:850855848778-compute@developer.gserviceaccount.com"
+resource "google_secret_manager_secret_iam_member" "pg_app_runtime_dsn_runtime_accessor" {
+  member    = google_service_account.doula_api_runtime.member
   project   = "doula-cloud"
   role      = "roles/secretmanager.secretAccessor"
   secret_id = google_secret_manager_secret.pg_app_runtime_dsn.id
@@ -265,8 +273,8 @@ resource "google_secret_manager_secret" "stripe_account_webhook_secret" {
   }
 }
 
-resource "google_secret_manager_secret_iam_member" "stripe_account_webhook_secret_accessor" {
-  member    = "serviceAccount:850855848778-compute@developer.gserviceaccount.com"
+resource "google_secret_manager_secret_iam_member" "stripe_account_webhook_secret_runtime_accessor" {
+  member    = google_service_account.doula_api_runtime.member
   project   = "doula-cloud"
   role      = "roles/secretmanager.secretAccessor"
   secret_id = google_secret_manager_secret.stripe_account_webhook_secret.id
@@ -293,8 +301,8 @@ resource "google_secret_manager_secret" "stripe_api_key" {
   }
 }
 
-resource "google_secret_manager_secret_iam_member" "stripe_api_key_accessor" {
-  member    = "serviceAccount:850855848778-compute@developer.gserviceaccount.com"
+resource "google_secret_manager_secret_iam_member" "stripe_api_key_runtime_accessor" {
+  member    = google_service_account.doula_api_runtime.member
   project   = "doula-cloud"
   role      = "roles/secretmanager.secretAccessor"
   secret_id = google_secret_manager_secret.stripe_api_key.id
@@ -321,8 +329,8 @@ resource "google_secret_manager_secret" "stripe_connect_webhook_secret" {
   }
 }
 
-resource "google_secret_manager_secret_iam_member" "stripe_connect_webhook_secret_accessor" {
-  member    = "serviceAccount:850855848778-compute@developer.gserviceaccount.com"
+resource "google_secret_manager_secret_iam_member" "stripe_connect_webhook_secret_runtime_accessor" {
+  member    = google_service_account.doula_api_runtime.member
   project   = "doula-cloud"
   role      = "roles/secretmanager.secretAccessor"
   secret_id = google_secret_manager_secret.stripe_connect_webhook_secret.id
@@ -349,8 +357,8 @@ resource "google_secret_manager_secret" "stripe_webhook_secret" {
   }
 }
 
-resource "google_secret_manager_secret_iam_member" "stripe_webhook_secret_accessor" {
-  member    = "serviceAccount:850855848778-compute@developer.gserviceaccount.com"
+resource "google_secret_manager_secret_iam_member" "stripe_webhook_secret_runtime_accessor" {
+  member    = google_service_account.doula_api_runtime.member
   project   = "doula-cloud"
   role      = "roles/secretmanager.secretAccessor"
   secret_id = google_secret_manager_secret.stripe_webhook_secret.id
@@ -377,8 +385,8 @@ resource "google_secret_manager_secret" "vapid_private_key" {
   }
 }
 
-resource "google_secret_manager_secret_iam_member" "vapid_private_key_accessor" {
-  member    = "serviceAccount:850855848778-compute@developer.gserviceaccount.com"
+resource "google_secret_manager_secret_iam_member" "vapid_private_key_runtime_accessor" {
+  member    = google_service_account.doula_api_runtime.member
   project   = "doula-cloud"
   role      = "roles/secretmanager.secretAccessor"
   secret_id = google_secret_manager_secret.vapid_private_key.id

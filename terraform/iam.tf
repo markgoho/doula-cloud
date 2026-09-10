@@ -18,12 +18,15 @@
 # is one resource per principal-role pair, so each pair below is owned or
 # excluded on its own, and Google's bindings are simply never mentioned.
 #
-# Two of the grants below are over-broad and imported exactly as they stand,
-# per this ticket's own scope: `default_compute_editor` is #1051 (the
-# runtime container holds project `roles/editor` instead of four narrow
-# grants), and `github_action_secretmanager_secret_accessor` is #1078 (the
+# The import pass (#1047) brought in two grants that were over-broad and
+# declared them exactly as they stood, on the argument that making a grant
+# reviewable is not the same act as narrowing it. One of the two is gone:
+# #1051 removed project `roles/editor` from the default compute account and
+# gave `doula-api` the dedicated runtime identity below, so the account that
+# used to run the container now holds no role in this project at all. The
+# other, `github_action_secretmanager_secret_accessor`, is still here — the
 # deploy identity can read all thirteen secrets instead of the one `ci.yml`
-# uses). Making them reviewable is this ticket's job; narrowing them is not.
+# reads, which is #1078.
 
 # `github-action-733741680@`: the identity every deploy in `ci.yml` runs as.
 resource "google_service_account" "github_action" {
@@ -139,14 +142,67 @@ resource "google_project_iam_member" "firebase_app_hosting_compute_apphosting_co
   role    = "roles/firebaseapphosting.computeRunner"
 }
 
-# `850855848778-compute@`: the Google-created default compute service
-# account that `doula-api` runs as (cloud_run.tf). #1051: this should be a
-# dedicated runtime service account with four narrow grants instead of
-# project `roles/editor`. Imported as it stands; narrowing it is #1051's job.
-resource "google_project_iam_member" "default_compute_editor" {
-  member  = "serviceAccount:850855848778-compute@developer.gserviceaccount.com"
+# `doula-api-runtime@`: the identity the `doula-api` container runs as
+# (cloud_run.tf), created by #1051. Before it, `doula-api` ran as the
+# Google-created default compute service account, which holds project
+# `roles/editor` — so a remote-code-execution bug in the BFF was a
+# whole-project compromise: every secret readable, every Cloud Run service
+# and the Cloud SQL instance modifiable, every bucket writable.
+#
+# Every grant this account holds is derived from what `api/main.go` and the
+# service's own configuration actually do, and each one is written next to
+# the resource it is granted on rather than gathered here:
+#
+#   - `roles/cloudsql.client`, below — the only one that has to be project
+#     level, because Cloud SQL exposes no instance-level IAM. It carries
+#     `cloudsql.instances.connect` and nothing that can change the instance.
+#   - `roles/secretmanager.secretAccessor` on the ten secrets the service
+#     declares as `value_source.secret_key_ref` (secrets.tf), one grant per
+#     secret. The Cloud Run runtime resolves those references as this
+#     account, so a missing grant is a container that will not start.
+#   - `roles/cloudtasks.enqueuer` on `doula-cloud-notification-nudge`
+#     (scheduler.tf) — ADR-0013's nudge path.
+#   - `roles/storage.objectCreator` and `roles/storage.objectViewer` on
+#     `doula-cloud-attachments` (storage.tf). Not `roles/storage.objectUser`:
+#     the store exposes exactly `Put` and `Get`, so nothing here deletes an
+#     object and nothing should be able to.
+#
+# Nothing for logging or monitoring: Cloud Run collects a container's
+# stdout/stderr and its request logs at the platform level, not as the
+# runtime identity, and `api/` constructs no logging or monitoring client.
+# Nothing for Identity Platform either — the Firebase verifier only calls
+# `VerifyIDToken`, which fetches Google's public signing certificates over
+# plain HTTPS and makes no authenticated GCP call.
+resource "google_service_account" "doula_api_runtime" {
+  account_id                   = "doula-api-runtime"
+  create_ignore_already_exists = null
+  deletion_policy              = "DELETE"
+  description                  = "Runtime identity for the doula-api Cloud Run service (#1051). Holds only what api/main.go uses; never roles/editor."
+  disabled                     = false
+  display_name                 = "doula-api runtime"
+  project                      = "doula-cloud"
+
+  lifecycle {
+    prevent_destroy = true
+  }
+}
+
+resource "google_project_iam_member" "doula_api_runtime_cloudsql_client" {
+  member  = google_service_account.doula_api_runtime.member
   project = "doula-cloud"
-  role    = "roles/editor"
+  role    = "roles/cloudsql.client"
+}
+
+# `deploy-api` in ci.yml passes `--service-account` on every deploy, and
+# Cloud Run refuses a deploy whose caller cannot act as the runtime identity
+# it names. The equivalent binding for the default compute account was made
+# by hand and was never a Terraform resource at all — the same unowned-shell
+# gap #1091 closes for `terraform-plan@` — which is why this one is declared
+# here rather than left to a console.
+resource "google_service_account_iam_member" "doula_api_runtime_deploy_actor" {
+  member             = google_service_account.github_action.member
+  role               = "roles/iam.serviceAccountUser"
+  service_account_id = google_service_account.doula_api_runtime.name
 }
 
 # The one human principal in the project.
