@@ -50,6 +50,14 @@ func TestSchema_OnePortalAccountLinkPerClient(t *testing.T) {
 // carries no identity_uid, Postgres treats NULLs as distinct, and
 // client_portal_users_one_pending_per_client (00026) is what governs
 // there instead.
+//
+// Built by direct insert on purpose. portalinvite.invite refuses to
+// produce this state -- a Client whose row already carries an
+// identity_uid is a 409, "this client already has portal access" -- so
+// the only way to ask the database what it thinks of a NULL alongside a
+// value is to write the pair itself. The question is worth asking
+// because the answer is what keeps an invitation reachable after this
+// constraint exists.
 func TestSchema_PendingInviteRowsAreNotPairConstrained(t *testing.T) {
 	db := testdb.New(t)
 	identifier := portalaccount.NewIdentifier()

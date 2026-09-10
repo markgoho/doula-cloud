@@ -388,6 +388,24 @@ func AttachPortalUser(t *testing.T, db *DB, identifier, clientID string) {
 	}
 }
 
+// PracticeOfClient reads which Practice owns clientID, using the
+// superuser Admin connection. The fixture builders hand back the Client
+// and not the Practice behind it, so a test that needs both -- either
+// because it seeds a second Client at the same Practice, or because it
+// asserts on a Practice-scoped row written for this one -- reads it back
+// here rather than declaring its own copy of the query.
+func PracticeOfClient(t *testing.T, db *DB, clientID string) string {
+	t.Helper()
+	var practiceID string
+	if err := db.Admin.QueryRowContext(t.Context(),
+		`SELECT practice_id FROM clients WHERE id = $1`, clientID,
+	).Scan(&practiceID); err != nil {
+		// coverage:ignore reason: fixture read failure, not exercised by the happy-path test
+		t.Fatalf("testdb: read practice for client %q: %v", clientID, err)
+	}
+	return practiceID
+}
+
 // SeedPortalUser mints a fresh Portal Account for identityUID and
 // attaches it to clientID -- the "a Client has an accepted portal user"
 // shape a half-dozen package tests each declared their own copy of.

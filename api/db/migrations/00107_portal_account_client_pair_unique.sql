@@ -24,18 +24,25 @@
 -- and client_portal_users_one_pending_per_client (00026) keeps its own
 -- job unchanged.
 
--- Guarded against a database that already holds rows: the migrate job
--- runs on trunk against doula-cloud-pg, where a PR's empty database
--- proves nothing (see this package's guardrail_test.go and #1021).
--- Pre-launch there is no production data, and a duplicate pair is a
--- redundant second link to the same Client from the same Portal Account
--- either way, so the earliest row survives and the rest go.
-DELETE FROM client_portal_users a
- USING client_portal_users b
- WHERE a.identity_uid IS NOT NULL
-   AND a.identity_uid = b.identity_uid
-   AND a.client_id = b.client_id
-   AND (b.created_at, b.id) < (a.created_at, a.id);
+-- No existing row can violate this, which is the question the migrate
+-- job on trunk asks and a PR's empty database cannot answer (see this
+-- package's guardrail_test.go and #1021). The proof is in two halves.
+-- Before 00081 the table-wide UNIQUE on identity_uid alone refused every
+-- duplicate, the pair included, so nothing older than that migration can
+-- be one. Since 00081 the only writer that sets identity_uid is
+-- portalinvite.acceptInvite, and it asks portal_account_reuse_for_accept
+-- first: a Portal Account that already reaches a Client at the
+-- invitation's Practice is refused with a 409. A duplicate pair is the
+-- same Client twice, and a Client belongs to one Practice, so that
+-- refusal covers it.
+--
+-- Deleting duplicates instead of proving their absence is what this
+-- deliberately does not do: portal_invite_outbox.client_portal_user_id
+-- (00032) references this table with no ON DELETE clause, and the outbox
+-- row outlives acceptance, so a DELETE here would trade an unreachable
+-- constraint violation for a reachable foreign-key one -- green on the
+-- PR and red on trunk, the exact failure this comment exists to rule
+-- out.
 
 ALTER TABLE client_portal_users
     ADD CONSTRAINT client_portal_users_identity_client_key UNIQUE (identity_uid, client_id);

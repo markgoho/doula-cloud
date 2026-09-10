@@ -290,10 +290,7 @@ func TestAcceptInviteHandler_SignInAddressReusedSamePracticeConflict(t *testing.
 	testdb.SeedPortalAccount(t, db, "portal_existing-account", "invited@example.com")
 	clientID, inviteToken := seedPendingPortalInvite(t, db) // invites "invited@example.com"
 
-	var practiceID string
-	if err := db.Admin.QueryRowContext(t.Context(), `SELECT practice_id FROM clients WHERE id = $1`, clientID).Scan(&practiceID); err != nil {
-		t.Fatalf("query practice: %v", err)
-	}
+	practiceID := testdb.PracticeOfClient(t, db, clientID)
 	// The same Portal Account already reaches a different Client at this
 	// same Practice -- e.g. a second, mistaken invite for the same person.
 	otherClientID, _ := testdb.SeedNamedEngagement(t, db, practiceID, "Other Client Record", "other@example.com")

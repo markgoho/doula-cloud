@@ -354,7 +354,7 @@ func TestSpendAddressChangeHandler_RecordsOnceAtEachPractice(t *testing.T) {
 	defer srv.Close()
 
 	identifier, clientA, session := seedSignedInClient(t, db, oldSignInAddress)
-	practiceA := practiceOf(t, db, clientA)
+	practiceA := testdb.PracticeOfClient(t, db, clientA)
 	practiceB := testdb.SeedPractice(t, db, "Second Practice")
 	clientB, _ := testdb.SeedEngagementInStatus(t, db, practiceB, "Camille at B", "camille-b@example.com", "active")
 	testdb.AttachPortalUser(t, db, identifier, clientB)
@@ -378,6 +378,10 @@ func TestSpendAddressChangeHandler_RecordsOnceAtEachPractice(t *testing.T) {
 	defer func() { _ = rows.Close() }()
 
 	recorded := map[string]string{}
+	// Counted as well as collected: a map keyed on the subject cannot
+	// tell one row at a Practice from two, and "once at each" is half of
+	// what this test is for.
+	total := 0
 	for rows.Next() {
 		var subject, practice, actor string
 		if err := rows.Scan(&subject, &practice, &actor); err != nil {
@@ -387,11 +391,15 @@ func TestSpendAddressChangeHandler_RecordsOnceAtEachPractice(t *testing.T) {
 			t.Fatalf("actor_client_id = %q on the row for Client %q; each Practice's row names its own Client as the actor", actor, subject)
 		}
 		recorded[subject] = practice
+		total++
 	}
 	if err := rows.Err(); err != nil {
 		t.Fatalf("iterate activity rows: %v", err)
 	}
 
+	if total != 2 {
+		t.Fatalf("%d rows recorded, want exactly one at each of the two Practices holding this Portal Account", total)
+	}
 	if len(recorded) != 2 {
 		t.Fatalf("recorded = %v, want one row at each of the two Practices holding this Portal Account", recorded)
 	}
@@ -401,20 +409,6 @@ func TestSpendAddressChangeHandler_RecordsOnceAtEachPractice(t *testing.T) {
 	if recorded[clientB] != practiceB {
 		t.Fatalf("Client B's row sits at Practice %q, want %q", recorded[clientB], practiceB)
 	}
-}
-
-// practiceOf reads which Practice owns a Client -- the fixture builders
-// return the Client but not the Practice behind it, and the ledger rows
-// this file asserts on are scoped by Practice.
-func practiceOf(t *testing.T, db *testdb.DB, clientID string) string {
-	t.Helper()
-	var practiceID string
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`SELECT practice_id FROM clients WHERE id = $1`, clientID,
-	).Scan(&practiceID); err != nil {
-		t.Fatalf("read practice for client %q: %v", clientID, err)
-	}
-	return practiceID
 }
 
 // TestSpendAddressChangeHandler_OldAddressStopsSigningIn is the other
