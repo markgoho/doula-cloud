@@ -175,14 +175,24 @@
 							label, so it is part of the page's title and not part of
 							the control's name.
 						-->
-						<div>
-							<h1>
-								{@render questionCaption()}
-								<label for={question.for}>{question.text}</label>
-							</h1>
-							{@render questionHint()}
-						</div>
-						<div class="thing">{@render content({ describedBy: hintId })}</div>
+						<!--
+							A nested stack, not a margin on `.thing`: the question
+							and the thing it asks for sit --space-7 apart, wider
+							than the --space-6 the column keeps between its own
+							items. Under the outer stack's `gap` (ADR-0039) a
+							child's own margin ADDS to that gap instead of
+							replacing it, so the wider step is a stack of its own.
+						-->
+						<stack-l space="var(--space-7)">
+							<div>
+								<h1>
+									{@render questionCaption()}
+									<label for={question.for}>{question.text}</label>
+								</h1>
+								{@render questionHint()}
+							</div>
+							{@render content({ describedBy: hintId })}
+						</stack-l>
 					{/if}
 
 					<cluster-l space="var(--space-4)" align="center">{@render actions()}</cluster-l>
@@ -280,8 +290,14 @@
 		}
 
 		/* 28px from the question to the thing it asks for -- the brief's gap
-		   between a labeled group and the next, which is what this is. */
-		.thing {
+		   between a labeled group and the next, which is what this is.
+		   Scoped to the fieldset branch: there `.thing` is a child of the
+		   <fieldset>, which stacks nothing, so a margin is the only thing
+		   that can space it. The label-as-h1 branch puts the same step on a
+		   nested `stack-l` instead, because there it IS a stack child and a
+		   margin would add to the stack's gap rather than replace it
+		   (ADR-0039). */
+		fieldset .thing {
 			margin-block-start: var(--space-7);
 		}
 
