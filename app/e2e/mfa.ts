@@ -22,6 +22,23 @@ import { signIn } from './auth';
 // invocation stack.ts uses): accounts:signUp, the emailVerified update,
 // and the full mfaEnrollment:start/finalize dance below all worked with
 // no config change at all.
+//
+// The emulator's second named limitation, and the reason no spec here
+// can walk a *successful* MFA-recovery spend: it refuses the body the
+// Admin SDK sends to clear a second factor. Every clear goes through
+// authn.FirebaseVerifier.ClearSecondFactors, whose UpdateUser call puts
+// `{"localId":"...","mfa":{"enrollments":null}}` on the wire -- the
+// SDK's own validateAndFormatMfaSettings leaves its slice nil however
+// the caller writes the call, so no caller can make it an array. The
+// emulator answers `400 Invalid JSON payload received.
+// /mfa/enrollments must be array`. Production Identity Platform does
+// not: probed against the real doula-cloud project on 2026-09-10 with a
+// throwaway account holding a real TOTP enrollment, that exact body
+// returned `200 SetAccountInfoResponse` and the read-back afterwards
+// showed the factor gone (#1128 records the full wire transcript). So
+// this is emulator strictness over a proto3-JSON null, not a product
+// defect, and ClearSecondFactors is deliberately left as it is rather
+// than rewritten to please the emulator.
 const EMULATOR_URL = `http://${E2E_EMULATOR_HOST}:${E2E_EMULATOR_PORT}`;
 const API_URL = `http://${E2E_API_HOST}:${E2E_API_PORT}`;
 

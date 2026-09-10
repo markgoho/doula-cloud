@@ -239,6 +239,19 @@ func (v *FirebaseVerifier) countChunkWithoutSecondFactor(ctx context.Context, ui
 // factor at once (#605's mechanism note), and it is the only admin route
 // there is: accounts.mfaEnrollment:withdraw needs the end user's own ID
 // token.
+//
+// The body this puts on the wire is
+// `{"localId":"...","mfa":{"enrollments":null}}` -- the SDK's
+// validateAndFormatMfaSettings leaves its slice nil however the call is
+// written, so no caller can turn that null into an array. #1128 probed
+// it against the real doula-cloud Identity Platform project on
+// 2026-09-10, on a throwaway account holding a real TOTP enrollment:
+// 200, and the enrollment was gone on the read-back. Production reads
+// the null as an empty repeated field, which is proto3-JSON's rule. The
+// Firebase Auth emulator does not (`400 ... /mfa/enrollments must be
+// array`), which is why no e2e spec walks a successful recovery spend --
+// see app/e2e/mfa.ts. Do not rewrite this to send an array for the
+// emulator's sake.
 func (v *FirebaseVerifier) ClearSecondFactors(ctx context.Context, uid string) error {
 	// coverage:ignore reason: requires a real GCP Identity Platform project, not exercised by unit tests
 	if _, err := v.client.UpdateUser(ctx, uid, (&auth.UserToUpdate{}).MFASettings(auth.MultiFactorSettings{})); err != nil {
