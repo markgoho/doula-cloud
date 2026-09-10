@@ -12,26 +12,23 @@ const playwrightDefaultWorkers = Math.max(Math.floor(cpus().length / 2), 1);
 // Four, because each Playwright worker gets its **own** browser -- unlike
 // Vitest's browser pool, where many renderers share one. Nothing in the
 // '50%' default asks what memory is free, which is the same blindness
-// #935 capped in the unit gate. Measured warm on a 14-CPU / 24GB machine,
-// where the default resolves to 7 (#937):
+// #935 capped in the unit gate. Measured warm on a 14-CPU / 24 GB
+// machine, where the default resolves to 7 (#937): memory falls roughly
+// linearly with the count -- 4.6 GB peak at seven, 2.9 GB at four -- while
+// wall time is flat from 7 down to 4 and only starts rising at 3. Four is
+// the lowest count that costs nothing in speed, which is the same rule
+// #935 picked six by. The table, the method and the caveats live in
+// docs/testing.md, "What the e2e suite costs, and why its workers are
+// capped" -- one copy, so re-measuring cannot leave two that disagree.
 //
-//   7 (the default here) | 4.58 / 4.63 GB peak | 40.9s / 41.8s
-//   4 (what we pin)      | 2.88 / 3.03 GB peak | 42.2s / 40.3s
-//   3                    | 2.42 GB peak        | 47.0s
-//
-// Memory falls roughly linearly with the count -- about 0.55 GB a worker
-// -- while wall time is flat from 7 down to 4 and only starts rising at
-// 3. So four is the lowest count that costs nothing in speed, which is
-// the same rule #935 picked six by. See docs/testing.md, "What the e2e
-// suite costs, and why its workers are capped".
-//
-// Clamped rather than constant so CI is untouched: its 4-vCPU
-// ubuntu-latest runner already resolves to 2, and a bare 4 would *raise*
-// the parallelism there.
-const WORKERS = Math.min(4, playwrightDefaultWorkers);
+// Clamped rather than constant so CI is untouched: Playwright's own '50%'
+// already resolves to 2 on the 4-vCPU ubuntu-latest runner, and a bare 4
+// would *raise* the parallelism there. (Vitest reads a different formula
+// and resolves to 3 on the same runner -- see app/vite.config.ts.)
+const E2E_WORKERS = Math.min(4, playwrightDefaultWorkers);
 
 export default defineConfig({
-	workers: WORKERS,
+	workers: E2E_WORKERS,
 	globalSetup: './e2e/global-setup.ts',
 	globalTeardown: './e2e/global-teardown.ts',
 	// CI runs everything (Postgres, Firebase emulator, the Go BFF, and the

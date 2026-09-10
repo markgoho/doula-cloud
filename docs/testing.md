@@ -7,7 +7,7 @@
 `scripts/hooks/pre-commit` runs:
 1. **`api/` (Go)**: blocks any commit that stages an unformatted `.go` file, prompting to run `gofmt -w <file>` on it.
 2. **`app/` (SvelteKit)**: if any `app/*` files are staged, runs `bun run --cwd app check` (`svelte-check`) and `bun run --cwd app lint` (`eslint`), blocking commits with broken imports, type errors, or lint failures.
-3. **`app/` unit suite and coverage gate**: still only when `app/*` files are staged, runs `bun run --cwd app test:unit:coverage`. This is where the design brief's smoothness gates live (see below), and the brief's own argument is that a commitment nobody measures decays — so the cheapest place to measure is before the commit exists. Measured on an idle 14-CPU machine, this step is ~16s and peaks around 4.9 GB for 2689 tests at 100% coverage, on top of the ~7s for steps 1-2. The Playwright e2e suite deliberately stays out: it builds the app and starts Postgres, the BFF and the Auth emulator — it is costed in "What the e2e suite costs, and why its workers are capped" below, which is where to look before running it beside anything else. See "The memory this gate costs, and why the browser pool is capped" below for where that 4.9 GB goes, and "Only one session runs this step at a time" for the lock that keeps two sessions from paying it simultaneously.
+3. **`app/` unit suite and coverage gate**: still only when `app/*` files are staged, runs `bun run --cwd app test:unit:coverage`. This is where the design brief's smoothness gates live (see below), and the brief's own argument is that a commitment nobody measures decays — so the cheapest place to measure is before the commit exists. Measured on an idle 14-CPU machine, this step is ~16s and peaks around 4.9 GB for 2689 tests at 100% coverage, on top of the ~7s for steps 1-2. The Playwright e2e suite deliberately stays out: it builds the app and starts Postgres, the object store, the BFF and the Auth emulator — it is costed in "What the e2e suite costs, and why its workers are capped" below, which is where to look before running it beside anything else. See "The memory this gate costs, and why the browser pool is capped" below for where that 4.9 GB goes, and "Only one session runs this step at a time" for the lock that keeps two sessions from paying it simultaneously.
 
 The CI jobs are the actual enforcement backstop regardless of whether the local hook is enabled — required PR status checks reject a push that would have failed it (see `docs/agents/worktree-flow.md`).
 
@@ -84,7 +84,7 @@ The unlocked row was deliberately **not** reproduced. Doing so means intentional
 
 The e2e suite is not in the pre-commit gate — it builds the app and starts Postgres, the object store, the Go BFF and the Auth emulator — so it costs nothing until someone runs `bun run --cwd app test:e2e`. It is costed here anyway, so both heavy local runs are in one place, because it had the same shape of memory-blind default the gate did. That was [#937](https://github.com/markgoho/doula-cloud/issues/937).
 
-Playwright's `workers` defaults to the string `"50%"`, which `resolveWorkers` turns into `Math.max(1, Math.floor(os.cpus().length / 2))` — 7 on the 14-CPU machine this repo is developed on. Each Playwright worker gets its **own browser**, unlike Vitest's browser pool where many renderers share one, so the arrangement is more expensive per worker than the gate's. So `app/playwright.config.ts` pins `workers` to `Math.min(4, Math.floor(cpus().length / 2))`.
+Playwright's `workers` defaults to the string `"50%"`, which `resolveWorkers` turns into `Math.max(1, Math.floor(os.cpus().length / 2))` — 7 on the 14-CPU machine this repo is developed on. Each Playwright worker gets its **own browser**, unlike Vitest's browser pool where many renderers share one, so the arrangement is more expensive per worker than the gate's. So `app/playwright.config.ts` pins `workers` to `Math.min(4, Math.max(Math.floor(cpus().length / 2), 1))` — the `Math.max(…, 1)` is Playwright's own guard for a single-core box, kept so the clamp is the default with a ceiling on it rather than a second formula.
 
 Measured on the same 14-CPU / 24 GB machine, warm, sampling every 500 ms, with 68 tests across 30 files. The first two rows are two runs each and the third is one; the starting conditions were a 65-73% free-memory reading and zero live `ms-playwright` processes, not an idle machine — other agent sessions were live on the box, as they were for #936.
 
@@ -378,6 +378,8 @@ provisioned in the `doula-cloud` GCP project); see the script's header for
 the required env vars.
 
 ## `app/`: e2e stack — Postgres and the object store in compose, migrate/BFF/emulator as host processes
+
+What a run of this stack costs in memory, and why `workers` is pinned rather than left at Playwright's CPU-derived default, is in "What the e2e suite costs, and why its workers are capped" above.
 
 `app/compose.e2e.yaml` defines two backing services: a pinned
 `postgres:16-alpine`, and a pinned `fsouza/fake-gcs-server` on
