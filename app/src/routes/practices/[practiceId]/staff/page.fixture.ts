@@ -2,7 +2,7 @@
  * The Staff roster, as the continuum check sees it (#595).
  *
  * `name` and `email` are the table's two free-text columns -- #537's
- * hyphenated double-barrelled name and #530's own URL, the shape
+ * hyphenated double-barreled name and #530's own URL, the shape
  * `DataTable`'s #542 fix was written against, now measured on the one
  * screen that lists every Staff member at once.
  *

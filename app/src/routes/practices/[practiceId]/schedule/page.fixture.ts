@@ -2,7 +2,7 @@
  * The Practice-wide schedule, as the continuum check sees it (#263).
  * Mirrors contracts/page.fixture.ts's shape and its hostile-content rule
  * (#537/#596): the widest thing a Practice types is a person's name, so
- * one row carries a double-barrelled Client name beside a Doula with a
+ * one row carries a double-barreled Client name beside a Doula with a
  * full professional suffix, and one carries a pasted URL where a name
  * should be. Both rows are scheduled -- an unscheduled Visit cannot
  * appear on this screen at all, which is what the endpoint's own

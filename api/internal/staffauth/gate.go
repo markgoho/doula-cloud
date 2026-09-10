@@ -74,7 +74,7 @@ var OwnerOnly = []string{roleOwner}
 // convention someone has to remember.
 //
 // That claim used to hold only for what came *through* this type. The raw
-// *http.ServeMux travelled beside it into the route files, so a route
+// *http.ServeMux traveled beside it into the route files, so a route
 // could skip the seam entirely by calling mux.Handle -- and the only thing
 // standing in the way was a test that regexed this repository's own Go
 // source for direct registrations. The router now carries a verb for every

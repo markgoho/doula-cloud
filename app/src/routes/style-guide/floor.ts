@@ -295,7 +295,7 @@ export function scopeClasses(root: Element): string[] {
 }
 
 /*
- * Measurements and their report strings, one pair per criterion, modelled
+ * Measurements and their report strings, one pair per criterion, modeled
  * on `continuum.ts`'s own `Break`/`overflowReport` pair: a plain data
  * object carries the numbers a verdict was reached from, and a report
  * function turns it into a sentence a CI log can be read from directly.

@@ -8,7 +8,7 @@
 
 	/*
 	 * The longest realistic value, not a representative one (ADR-0025): a
-	 * hyphenated double-barrelled family name and an address on the
+	 * hyphenated double-barreled family name and an address on the
 	 * Practice's own domain, which is what a real intake form holds.
 	 */
 	let firstName = $state('Anne-Marie');

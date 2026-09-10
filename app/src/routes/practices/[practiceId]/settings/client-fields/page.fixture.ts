@@ -11,7 +11,7 @@
  * widening: `isSelectType()` is the only thing an active row itself
  * branches on -- an Options textarea renders only for
  * `single_select`/`multi_select` -- so the second Field is
- * `single_select`, with #537's hyphenated double-barrelled name as one
+ * `single_select`, with #537's hyphenated double-barreled name as one
  * of its options, since an option is a Practice's free text too. A third
  * Field is archived: `ClientFieldTemplateEditor` renders a whole
  * "Archived fields" section only once one exists (line 172's own

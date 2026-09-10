@@ -10,7 +10,7 @@ import (
 // These tests exercise the client_stripe_customers_practice_visibility
 // policy from 00076_client_stripe_customers.sql directly via db.App and
 // set_config, the same way invoice_rls_test.go does for the invoices
-// policy it is modelled on. The mapping names a Client and a Stripe
+// policy it is modeled on. The mapping names a Client and a Stripe
 // Customer, so a Practice reading another Practice's row would be reading
 // which of its Clients it bills.
 

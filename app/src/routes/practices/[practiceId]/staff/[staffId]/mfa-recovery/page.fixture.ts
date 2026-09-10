@@ -9,7 +9,7 @@
  *
  * The content is hostile on the two axes that decide this screen's width
  * (#537): the Staff member's name is the repo's hyphenated
- * double-barrelled one, and the Owner's own address is a long one, since
+ * double-barreled one, and the Owner's own address is a long one, since
  * every sentence here embeds one or the other and the warning embeds
  * both.
  */

@@ -3,7 +3,7 @@
  * (#595).
  *
  * `clientName` and `requestedByName` are the table's two free-text
- * columns -- #530's URL and #537's hyphenated double-barrelled name,
+ * columns -- #530's URL and #537's hyphenated double-barreled name,
  * the same values `DataTable`'s own `max-inline-size`/`overflow-wrap`
  * fix (#542) was written against.
  *

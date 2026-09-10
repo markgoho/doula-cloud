@@ -1,6 +1,6 @@
 <script lang="ts">
 	/*
-	 * Modelled on `(signed-out)/login`, the plainest of the five real
+	 * Modeled on `(signed-out)/login`, the plainest of the five real
 	 * consumers: a product name already on the bar above, one short
 	 * question, two credentials, one button. `picker` demonstrates the
 	 * region `content` also has to carry -- the "choose a Practice" list

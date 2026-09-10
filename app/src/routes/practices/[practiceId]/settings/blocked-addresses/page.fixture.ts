@@ -8,7 +8,7 @@
  *
  * The content is hostile, not polite (ADR-0025, #537). An address is a
  * Client's or a Staff member's own typing, and the first row carries the
- * longest real one this repo has: a hyphenated double-barrelled local
+ * longest real one this repo has: a hyphenated double-barreled local
  * part with a plus-tag on a long subdomain. That is the widest a cell
  * here ever gets, and it sits beside the row's own Unblock button.
  */

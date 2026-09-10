@@ -441,7 +441,7 @@ func TestRefund_ARetriedRefundIsTheSameRefund(t *testing.T) {
 		t.Fatalf("count refund rows: %v", err)
 	}
 	if rows != 1 || balance != -1 {
-		t.Fatalf("refund rows = %d totalling %d, want one row of -1", rows, balance)
+		t.Fatalf("refund rows = %d totaling %d, want one row of -1", rows, balance)
 	}
 }
 

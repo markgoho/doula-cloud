@@ -250,7 +250,7 @@ const KEEPS_ITS_DOUBLE_L: ReadonlySet<string> = new Set([
 // `isCancelledFlag` and `total_cancelled` read as words.
 function asWords(line: string): string {
 	return line
-		.replace(/([a-z0-9])([A-Z])/gu, '$1 $2')
+		.replaceAll(/([a-z0-9])([A-Z])/gu, '$1 $2')
 		.replaceAll('_', ' ')
 		.toLowerCase();
 }
@@ -272,7 +272,13 @@ function findOffensesInLines(file: string, source: string): Offense[] {
 			found: rule.british,
 			american: rule.american
 		}));
-		const family = [...asWords(line).matchAll(FAMILY)]
+		// Every word FAMILY can match holds a double L, and almost no line
+		// in the tree does. The cheap `includes` keeps the split-and-match
+		// off the other lines: this spec reads every source file in two
+		// trees on every run, and #1211 has it timing out already.
+		if (!lower.includes('ll')) return named;
+		const family = asWords(line)
+			.matchAll(FAMILY)
 			.map(([word]) => word)
 			.filter((word) => !KEEPS_ITS_DOUBLE_L.has(word))
 			.map((word) => ({
@@ -280,7 +286,8 @@ function findOffensesInLines(file: string, source: string): Offense[] {
 				line: index + 1,
 				found: word,
 				american: word.replace(/l(l(?:ed|ing))$/u, '$1')
-			}));
+			}))
+			.toArray();
 		return [...named, ...family];
 	});
 }

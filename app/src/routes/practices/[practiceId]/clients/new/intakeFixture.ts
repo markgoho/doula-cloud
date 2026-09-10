@@ -17,7 +17,7 @@
  * ## Hostile, never polite (#537)
  *
  * Every value here is the longest, busiest one a Practice could
- * plausibly produce: a hyphenated double-barrelled name, a section a
+ * plausibly produce: a hyphenated double-barreled name, a section a
  * Practice named in a sentence, a multi-select with five options. The
  * fixture's job is to find the width at which the screen breaks, and a
  * representative value never will.

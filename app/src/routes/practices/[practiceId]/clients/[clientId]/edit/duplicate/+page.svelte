@@ -4,7 +4,7 @@
 	 *
 	 * `edit.go` answers 409 with `substitution: false` when the collision
 	 * predicate hits and it is not an exact name substitution -- a
-	 * possible duplicate, asked rather than blocked. Modelled closely on
+	 * possible duplicate, asked rather than blocked. Modeled closely on
 	 * `clients/new/duplicate/+page.svelte`'s two-state shape (a bare
 	 * question, and a `?match=` reviewing state), with two differences
 	 * that shape belongs to intake and not to editing an existing record:

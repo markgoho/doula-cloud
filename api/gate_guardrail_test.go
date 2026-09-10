@@ -51,7 +51,7 @@ func TestRoutes_EveryDeclaredGETHasRoleDeclaration(t *testing.T) {
 // this package's own source.
 //
 // This regex used to be the load-bearing part of this file: the raw mux
-// travelled into every route file beside GatedRouter, so a route could
+// traveled into every route file beside GatedRouter, so a route could
 // skip the gate entirely and the only thing that would notice was a scan
 // of the source text. routes() now hands the mux to GatedRouter and names
 // it nowhere else, so a bypass does not compile -- and what remains here

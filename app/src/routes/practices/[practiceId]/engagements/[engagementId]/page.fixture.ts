@@ -8,7 +8,7 @@
  * one of them so the cascade completes rather than stalling partway
  * through. `detail.clientName` is the title, gated on load exactly like
  * the existing approval-screen fixture, and carries #537's hyphenated
- * double-barrelled name; the Contract's merge-field values and a Visit's
+ * double-barreled name; the Contract's merge-field values and a Visit's
  * `staffName` carry it again, since both are exactly the free-text shape
  * `DataTable`/`ContractView` were already fixed against.
  *
@@ -47,7 +47,7 @@ const clientName = 'Anne-Marie Ochieng-Whitfield';
 /*
  * A roster the size of the pilot's own agency -- fourteen Doulas, plus a
  * bookkeeper who holds no Doula role and so never belongs in a Visit
- * picker. The names are long and double-barrelled on purpose: the two
+ * picker. The names are long and double-barreled on purpose: the two
  * Visit pickers (#268) are `<select>`s inside a `DataTable` row-actions
  * cell, and the continuum sweep renders this fixture from 320px up
  * (ADR-0024, ADR-0025), so the widest realistic name is what the check

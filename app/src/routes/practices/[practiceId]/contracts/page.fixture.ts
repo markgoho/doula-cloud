@@ -3,7 +3,7 @@
  * waiting" lists, as the continuum check sees it (#273, #971). Mirrors
  * invoices/page.fixture.ts's shape and its two-row rule (#537/#596): the
  * Contracts table's two rows realize Draft with a hostile,
- * double-barrelled Client name and Sent with a URL as the Client's name
+ * double-barreled Client name and Sent with a URL as the Client's name
  * -- the two states its Status column ever renders. The Void requests
  * table has no such second render branch (every row shows the same three
  * plain-text fields the same way), so one hostile row -- an unbroken URL

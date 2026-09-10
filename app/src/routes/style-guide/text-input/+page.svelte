@@ -17,7 +17,7 @@
 		<h2>Default</h2>
 		<!--
 			The longest realistic value, not a representative one (ADR-0025): a
-			full legal name with a hyphenated double-barrelled surname, which is
+			full legal name with a hyphenated double-barreled surname, which is
 			what a Client types into this field, and the longest email a Practice
 			hands out. Neither overflows on its own -- a browser breaks on "-"
 			and "@" (#521) -- so what they test is the field's own width, not the

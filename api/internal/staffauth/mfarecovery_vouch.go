@@ -19,7 +19,7 @@ import (
 // *Owner's own* address, never the target's -- she is a recovery
 // contact, not someone clearing the factor herself. Owner-only (not
 // Admin, matching #167's "the Owner throws the switch"), requires both
-// RequireConfirmed's client-signalled confirmation and
+// RequireConfirmed's client-signaled confirmation and
 // RequireRecentAuth's genuine step-up re-authentication, since this is
 // the one recovery path an already-signed-in person can trigger for
 // someone else. Must be mounted behind staffauth.Middleware.

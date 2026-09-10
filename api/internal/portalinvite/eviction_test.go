@@ -23,7 +23,7 @@ func postAcceptWithSession(t *testing.T, srv *httptest.Server, inviteToken, cook
 	t.Helper()
 	payload, err := json.Marshal(portalinvite.AcceptInviteRequest{InviteToken: inviteToken})
 	if err != nil {
-		// coverage:ignore reason: marshalling a two-field struct cannot fail
+		// coverage:ignore reason: marshaling a two-field struct cannot fail
 		t.Fatalf("marshal body: %v", err)
 	}
 	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, srv.URL+"/api/portal/accept-invite", bytes.NewReader(payload))
