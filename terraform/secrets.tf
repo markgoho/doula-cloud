@@ -22,14 +22,28 @@
 #
 # The accessor grant is the point of #743: a secret that exists but is not
 # granted to the identity reading it fails at container start, silently,
-# until that moment. Every grant below is its own real, imported
-# `google_secret_manager_secret_iam_member` resource, read from `gcloud
-# secrets get-iam-policy` rather than assumed, and kept next to the secret it
-# grants access to — a secret imported without its grants would be exactly
-# the half-configuration this ticket exists to close.
+# until that moment. Every grant below is its own real
+# `google_secret_manager_secret_iam_member` resource, kept next to the secret
+# it grants access to — a secret imported without its grants would be exactly
+# the half-configuration this ticket exists to close. Each of #743's was read
+# from `gcloud secrets get-iam-policy` rather than assumed; the two #1078
+# added are the only ones this configuration created rather than imported.
 #
 # `firebase-app-hosting-github-oauth-github-oauthtoken-a16322` is not here.
 # See docs/infrastructure.md's by-hand table for why.
+#
+# There are two kinds of accessor grant below, and the resource name says
+# which. A `*_runtime_accessor` is `doula-api-runtime@` — the identity the
+# container runs as — resolving a `secret_key_ref` at container start. A
+# `*_deploy_accessor` is `github-action-733741680@` fetching a payload inside
+# a GitHub Actions job, and there are exactly two: the migration DSN and the
+# site builder DSN. Until #1078 the deploy identity read those two through a
+# project-wide `roles/secretmanager.secretAccessor` that reached all thirteen
+# secrets in the project, including the Stripe key and every Mailgun key, so
+# neither secret carried a binding of its own and neither one's access
+# boundary could be read off the resource. It holds no project-level
+# secret role now, and that role is no longer in the project's IAM policy at
+# all (`terraform/iam.tf`).
 #
 # Every `*_runtime_accessor` below names `doula-api-runtime@` since #1051.
 # Each was the default compute account before that. These ten grants were
@@ -187,9 +201,12 @@ resource "google_secret_manager_secret_iam_member" "pg_app_runtime_dsn_runtime_a
   secret_id = google_secret_manager_secret.pg_app_runtime_dsn.id
 }
 
-# No accessor grant: `gcloud secrets get-iam-policy doula-cloud-pg-migrate-dsn`
-# returns an empty binding set. This DSN is not read by `doula-api`'s own
-# container, so there is nothing to import here beyond the shell.
+# This DSN is not read by `doula-api`'s own container. It is read by CI: the
+# `migrate` job in `ci.yml` fetches it on every trunk push and hands it to
+# `migrate.sh`. Until #1078 that read worked without any binding on the
+# secret at all, because the deploy identity held project-wide
+# `secretAccessor` — which is what made this secret's own IAM policy an empty
+# set and its access boundary impossible to read off the resource.
 resource "google_secret_manager_secret" "pg_migrate_dsn" {
   annotations         = {}
   deletion_policy     = "DELETE"
@@ -215,8 +232,24 @@ resource "google_secret_manager_secret" "pg_migrate_dsn" {
   }
 }
 
-# No accessor grant: same as `pg_migrate_dsn` above, `gcloud secrets
-# get-iam-policy doula-cloud-pg-site-builder-dsn` returns an empty binding set.
+# #1078. The `_deploy_accessor` suffix, rather than the `_runtime_accessor`
+# every other grant in this file carries, is the whole distinction: a runtime
+# accessor is `doula-api-runtime@` resolving a `secret_key_ref` at container
+# start, and a deploy accessor is `github-action-733741680@` fetching a
+# payload inside a GitHub Actions job. Two of the thirteen secrets in this
+# project have one; the rest must not grow one by accident.
+resource "google_secret_manager_secret_iam_member" "pg_migrate_dsn_deploy_accessor" {
+  member    = google_service_account.github_action.member
+  project   = "doula-cloud"
+  role      = "roles/secretmanager.secretAccessor"
+  secret_id = google_secret_manager_secret.pg_migrate_dsn.id
+}
+
+# Read by CI, like `pg_migrate_dsn` above and by the same identity: the
+# `build` job in `firebase-hosting-merge.yml` fetches it so #441's per-Practice
+# page generator can reach the database through the Cloud SQL Auth Proxy. That
+# job runs `SYNC_PRACTICE_PAGES=required`, so losing this grant is a failed
+# site build rather than a site quietly published with no Practice pages in it.
 resource "google_secret_manager_secret" "pg_site_builder_dsn" {
   annotations         = {}
   deletion_policy     = "DELETE"
@@ -236,6 +269,13 @@ resource "google_secret_manager_secret" "pg_site_builder_dsn" {
   lifecycle {
     prevent_destroy = true
   }
+}
+
+resource "google_secret_manager_secret_iam_member" "pg_site_builder_dsn_deploy_accessor" {
+  member    = google_service_account.github_action.member
+  project   = "doula-cloud"
+  role      = "roles/secretmanager.secretAccessor"
+  secret_id = google_secret_manager_secret.pg_site_builder_dsn.id
 }
 
 resource "google_secret_manager_secret" "stripe_account_webhook_secret" {

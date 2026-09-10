@@ -73,6 +73,14 @@ jobs:
           done
           exit 1
 
+      # One of the two secret payloads any CI job reads as
+      # github-action-733741680@ (the other is ci.yml's migration DSN).
+      # Since #1078 that account holds no project-wide secretAccessor: it
+      # has roles/secretmanager.secretAccessor on this secret alone, as a
+      # google_secret_manager_secret_iam_member in terraform/secrets.tf.
+      # So adding a get-secretmanager-secrets step to a workflow is no
+      # longer enough on its own -- a new secret needs its own grant
+      # beside it, or the step 403s.
       - name: Fetch the site builder DSN
         id: secrets
         uses: google-github-actions/get-secretmanager-secrets@v3

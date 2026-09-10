@@ -20,13 +20,16 @@
 #
 # The import pass (#1047) brought in two grants that were over-broad and
 # declared them exactly as they stood, on the argument that making a grant
-# reviewable is not the same act as narrowing it. One of the two is gone:
-# #1051 removed project `roles/editor` from the default compute account and
-# gave `doula-api` the dedicated runtime identity below, so the account that
-# used to run the container now holds no role in this project at all. The
-# other, `github_action_secretmanager_secret_accessor`, is still here — the
-# deploy identity can read all thirteen secrets instead of the one `ci.yml`
-# reads, which is #1078.
+# reviewable is not the same act as narrowing it. Both are now gone. #1051
+# removed project `roles/editor` from the default compute account and gave
+# `doula-api` the dedicated runtime identity below, so the account that used
+# to run the container now holds no role in this project at all. #1078
+# removed project `roles/secretmanager.secretAccessor` from the deploy
+# identity: it reached all thirteen secrets in the project, and CI reads two
+# of them, so the two became `google_secret_manager_secret_iam_member` grants
+# in `secrets.tf`, next to the secrets they are granted on. That role no
+# longer appears in this project's IAM policy at all — the deploy identity
+# was its only project-level member.
 
 # `github-action-733741680@`: the identity every deploy in `ci.yml` runs as.
 resource "google_service_account" "github_action" {
@@ -43,8 +46,12 @@ resource "google_service_account" "github_action" {
   }
 }
 
-# `github-action-733741680@`'s nine project roles (ten until #1043 removed
-# `roles/cloudfunctions.developer`).
+# `github-action-733741680@`'s eight project roles (ten until #1043 removed
+# `roles/cloudfunctions.developer`, nine until #1078 removed
+# `roles/secretmanager.secretAccessor`). Whether any of the eight is itself
+# wider than a deploy needs is a question #1078 deliberately did not open;
+# it answered only the one role that had a per-resource scope to move to and
+# a knowable, two-item list of resources to move to it.
 resource "google_project_iam_member" "github_action_artifactregistry_writer" {
   member  = google_service_account.github_action.member
   project = "doula-cloud"
@@ -79,14 +86,6 @@ resource "google_project_iam_member" "github_action_run_viewer" {
   member  = google_service_account.github_action.member
   project = "doula-cloud"
   role    = "roles/run.viewer"
-}
-
-# #1078: project-wide read access to all thirteen secrets, not the one
-# `ci.yml` reads. Imported as it stands; narrowing it is #1078's job.
-resource "google_project_iam_member" "github_action_secretmanager_secret_accessor" {
-  member  = google_service_account.github_action.member
-  project = "doula-cloud"
-  role    = "roles/secretmanager.secretAccessor"
 }
 
 resource "google_project_iam_member" "github_action_serviceusage_api_keys_viewer" {
