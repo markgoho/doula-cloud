@@ -119,6 +119,17 @@ func querySelf(ctx context.Context, tx *sql.Tx, identityUID string, forUpdate bo
 // function nor is excused in writing fails the build.
 func requireSelf(w http.ResponseWriter, r *http.Request, tx *sql.Tx, identityUID string) (selfStaff, bool) {
 	self, found, err := resolveSelf(r.Context(), tx, identityUID)
+	return refuseUnlessSelf(w, self, found, err)
+}
+
+// refuseUnlessSelf is the refusal half on its own, taking a resolution's
+// three return values straight through. It exists because
+// lockOwnStaffRow needs the same refusal over lockSelfRow's result, and
+// the status and the message belong in one place even more than the
+// lookup does -- that pair is what the whole family is agreeing on.
+// Splitting it this way rather than threading a forUpdate bool through
+// requireSelf keeps the lock out of the name every ordinary route reads.
+func refuseUnlessSelf(w http.ResponseWriter, self selfStaff, found bool, err error) (selfStaff, bool) {
 	if err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
