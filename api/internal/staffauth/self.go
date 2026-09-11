@@ -49,9 +49,11 @@ type selfStaff struct {
 //
 // found=false is not an error: it is the family's own refusal
 // condition, which requireSelf below turns into the one answer every
-// pre-Practice route gives. Middleware is the single caller that reads
-// it directly, because a Practice-scoped route answers it differently --
-// see the comment there.
+// pre-Practice route gives. Two callers read it directly instead, for
+// different reasons: Middleware, because a Practice-scoped route answers
+// this condition differently (see the comment there), and
+// FinishEnrollmentHandler, because it runs inside sessionmint's step and
+// has no http.ResponseWriter to refuse through.
 func resolveSelf(ctx context.Context, tx *sql.Tx, identityUID string) (selfStaff, bool, error) {
 	return querySelf(ctx, tx, identityUID, false)
 }
