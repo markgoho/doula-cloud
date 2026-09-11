@@ -208,7 +208,7 @@ func TestPutHandler_ResendingTheSameZoneRecordsNothingNew(t *testing.T) {
 		if resp.StatusCode != http.StatusOK {
 			t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
 		}
-		resp.Body.Close()
+		_ = resp.Body.Close()
 	}
 
 	var rows int
@@ -255,6 +255,86 @@ func TestPutHandler_RefusesAZoneTheDatabaseDoesNotName(t *testing.T) {
 	}
 }
 
+// TestPutHandler_RefusesABodyItCannotRead covers the shape a hand-built
+// caller can send that is not a zone at all: the decode refuses before
+// the zone is ever looked at, so nothing is written.
+func TestPutHandler_RefusesABodyItCannotRead(t *testing.T) {
+	db := testdb.New(t)
+	const uid = "timezone-bad-body"
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, employeeType)
+
+	srv, session := newServer(t, db, uid)
+	defer srv.Close()
+
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodPut,
+		srv.URL+"/api/practices/"+practiceID+"/timezone", bytes.NewReader([]byte("{not json")))
+	if err != nil {
+		t.Fatalf("build request: %v", err)
+	}
+	authntest.AddSessionCookie(req, session)
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
+	}
+	if got := storedZone(t, db, practiceID); got != seededZone {
+		t.Fatalf("stored zone = %q, want the refusal to have written nothing", got)
+	}
+}
+
+// TestLoad_IsTheSeamEveryCalendarDayComparisonReads covers the reader
+// itself rather than the handlers: visit.DeriveType calls it today and
+// the manual Payment future-date guard (#1167) is meant to, so it is
+// tested as the shared thing it is.
+func TestLoad_IsTheSeamEveryCalendarDayComparisonReads(t *testing.T) {
+	db := testdb.New(t)
+	practiceID := testdb.SeedPractice(t, db, "Zone Reading Practice")
+
+	tx, err := db.Admin.BeginTx(t.Context(), nil)
+	if err != nil {
+		t.Fatalf("begin: %v", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	loc, err := practicetimezone.Load(t.Context(), tx, practiceID)
+	if err != nil {
+		t.Fatalf("Load = %v, want the Practice's zone", err)
+	}
+	if loc.String() != seededZone {
+		t.Fatalf("zone = %q, want %q", loc.String(), seededZone)
+	}
+}
+
+// TestLoad_RefusesRatherThanAnsweringInTheWrongZone is the rule ADR-0036
+// states and the reason Load returns an error at all: a stored name that
+// will not load takes the read down rather than quietly standing UTC in
+// for it, which would put the derivation back on the wrong day and say
+// nothing about it.
+func TestLoad_RefusesRatherThanAnsweringInTheWrongZone(t *testing.T) {
+	db := testdb.New(t)
+	practiceID := testdb.SeedPractice(t, db, "Unloadable Zone Practice")
+	if _, err := db.Admin.ExecContext(t.Context(),
+		`UPDATE practices SET timezone = 'Nowhere/Atlantis' WHERE id = $1`, practiceID,
+	); err != nil {
+		t.Fatalf("seed an unloadable zone: %v", err)
+	}
+
+	tx, err := db.Admin.BeginTx(t.Context(), nil)
+	if err != nil {
+		t.Fatalf("begin: %v", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	if _, err := practicetimezone.Load(t.Context(), tx, practiceID); err == nil {
+		t.Fatal("Load = nil error, want a refusal for a zone that will not load")
+	}
+}
+
 // TestTimezone_OnlyAnOwnerOrAdminReachesIt is the role boundary #1166
 // asks for, enforced at the mount rather than on the screen: a Doula is
 // refused both the read and the write.
@@ -276,13 +356,13 @@ func TestTimezone_OnlyAnOwnerOrAdminReachesIt(t *testing.T) {
 			defer srv.Close()
 
 			read := getTimezone(t, srv, session, practiceID)
-			read.Body.Close()
+			_ = read.Body.Close()
 			if read.StatusCode != tc.wantStatus {
 				t.Fatalf("GET status for %s = %d, want %d", tc.role, read.StatusCode, tc.wantStatus)
 			}
 
 			write := putTimezone(t, srv, session, practiceID, denverZone)
-			write.Body.Close()
+			_ = write.Body.Close()
 			if write.StatusCode != tc.wantStatus {
 				t.Fatalf("PUT status for %s = %d, want %d", tc.role, write.StatusCode, tc.wantStatus)
 			}

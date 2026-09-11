@@ -102,6 +102,7 @@ func PutHandler() http.Handler {
 			return
 		}
 
+		after := req.Timezone
 		before, err := readName(r.Context(), tx, practiceID)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
@@ -109,15 +110,15 @@ func PutHandler() http.Handler {
 			return
 		}
 
-		if before != req.Timezone {
-			if err := write(r.Context(), tx, practiceID, req.Timezone, before); err != nil {
+		if before != after {
+			if err := write(r.Context(), tx, practiceID, after, before); err != nil {
 				// coverage:ignore reason: DB query failure, not exercised by unit tests
 				apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 				return
 			}
 		}
 
-		apierr.WriteJSON(w, http.StatusOK, Response{Timezone: req.Timezone})
+		apierr.WriteJSON(w, http.StatusOK, Response{Timezone: after})
 	})
 }
 

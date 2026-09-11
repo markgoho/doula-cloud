@@ -3,6 +3,7 @@ package visit
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"time"
 
 	"doula-cloud/api/internal/practicetimezone"
@@ -20,5 +21,9 @@ import (
 // derivation calls, so nothing about how a Visit is typed reads as
 // though it owns the zone.
 func practiceLocation(ctx context.Context, tx *sql.Tx, practiceID string) (*time.Location, error) {
-	return practicetimezone.Load(ctx, tx, practiceID)
+	loc, err := practicetimezone.Load(ctx, tx, practiceID)
+	if err != nil {
+		return nil, fmt.Errorf("visit: %w", err)
+	}
+	return loc, nil
 }
