@@ -53,16 +53,26 @@ func FinishEnrollmentHandler(verifier authn.Verifier, db *sql.DB, enq tasknudge.
 		}
 
 		step := func(ctx context.Context, tx *sql.Tx) (sessionmint.Result, error) {
-			staffID, found, err := setIdentityAndResolveStaff(ctx, tx, verified.UID)
+			// The one route in the family that cannot call requireSelf:
+			// it runs inside sessionmint's step, which owns the
+			// response and takes a Refusal value rather than an
+			// http.ResponseWriter. It reaches resolveSelf -- the same
+			// owner requireSelf itself reaches -- and restates that
+			// function's recorded status, 404, which this route
+			// answered as 403 until #1182. selfResolvingRoutes drives
+			// this route with a stranded credential like every other,
+			// so the restatement cannot drift back.
+			self, found, err := resolveSelf(ctx, tx, verified.UID)
 			if err != nil {
 				// coverage:ignore reason: DB query failure, not exercised by unit tests
 				return sessionmint.Result{}, err
 			}
 			if !found {
 				return sessionmint.Result{Refusal: &sessionmint.Refusal{
-					Status: http.StatusForbidden, Message: MsgNoMatchingStaffAccount,
+					Status: http.StatusNotFound, Message: MsgNoMatchingStaffAccount,
 				}}, nil
 			}
+			staffID := self.ID
 			if err := recordAuthEvent(ctx, tx, staffID, AuthEventEnrolled, staffID, ""); err != nil {
 				// coverage:ignore reason: DB query failure, not exercised by unit tests
 				return sessionmint.Result{}, err

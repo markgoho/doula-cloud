@@ -3,7 +3,6 @@ package staffauth
 import (
 	"context"
 	"database/sql"
-	"errors"
 	"fmt"
 	"net/http"
 	"strings"
@@ -165,9 +164,15 @@ func UpdateWorkStateHandler(db *sql.DB) http.Handler {
 			return
 		}
 
-		resp, status, msg := updateWorkState(r.Context(), tx, uid, normalized)
-		if status != http.StatusOK {
-			apierr.WriteError(w, msg, status)
+		self, ok := requireSelf(w, r, tx, uid)
+		if !ok {
+			return
+		}
+
+		resp, err := updateWorkState(r.Context(), tx, self, normalized)
+		if err != nil {
+			// coverage:ignore reason: DB query failure, not exercised by unit tests
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
@@ -187,29 +192,15 @@ func UpdateWorkStateHandler(db *sql.DB) http.Handler {
 // halfway leaves neither a changed value with no event nor an event
 // describing a change that did not happen.
 //
-// The read of the previous value is what makes the event row a change
-// rather than an assertion, and it must happen before the UPDATE for the
-// obvious reason.
+// The previous value is read from the row requireSelf already resolved,
+// which is what makes the event row a change rather than an assertion.
+// It is necessarily the value as of before the UPDATE below, because it
+// was read before it, inside the same transaction.
 //
 // No short-circuit when the value is unchanged: see RecordWorkStateChange
 // for why a re-assertion is a real act.
-func updateWorkState(ctx context.Context, tx *sql.Tx, identityUID, workState string) (WorkStateResponse, int, string) {
-	// coverage:ignore reason: DB query failure, not exercised by unit tests
-	if _, err := tx.ExecContext(ctx, `SELECT set_config('app.current_identity_uid', $1, true)`, identityUID); err != nil {
-		return WorkStateResponse{}, http.StatusInternalServerError, apierr.MsgInternalError
-	}
-
-	var staffID, previous string
-	err := tx.QueryRowContext(ctx,
-		`SELECT id, work_state FROM staff WHERE identity_uid = $1`, identityUID,
-	).Scan(&staffID, &previous)
-	if errors.Is(err, sql.ErrNoRows) {
-		return WorkStateResponse{}, http.StatusNotFound, MsgNoMatchingStaffAccount
-	}
-	if err != nil {
-		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		return WorkStateResponse{}, http.StatusInternalServerError, apierr.MsgInternalError
-	}
+func updateWorkState(ctx context.Context, tx *sql.Tx, self selfStaff, workState string) (WorkStateResponse, error) {
+	staffID, previous := self.ID, self.WorkState
 
 	// work_state_reported_at moves in the same statement as the value, so
 	// the two can never disagree about when the current answer was given.
@@ -221,13 +212,13 @@ func updateWorkState(ctx context.Context, tx *sql.Tx, identityUID, workState str
 		workState, staffID,
 	).Scan(&reportedAt); err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		return WorkStateResponse{}, http.StatusInternalServerError, apierr.MsgInternalError
+		return WorkStateResponse{}, fmt.Errorf("staffauth: update work state: %w", err)
 	}
 
 	if err := RecordWorkStateChange(ctx, tx, staffID, previous, workState, staffID); err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		return WorkStateResponse{}, http.StatusInternalServerError, apierr.MsgInternalError
+		return WorkStateResponse{}, err
 	}
 
-	return WorkStateResponse{WorkState: workState, WorkStateReportedAt: reportedAt}, http.StatusOK, ""
+	return WorkStateResponse{WorkState: workState, WorkStateReportedAt: reportedAt}, nil
 }

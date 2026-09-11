@@ -3,7 +3,6 @@ package staffauth
 import (
 	"context"
 	"database/sql"
-	"errors"
 	"fmt"
 	"net/http"
 	"strings"
@@ -108,14 +107,6 @@ func DeleteLoginHandler(accounts authn.AccountManager, db *sql.DB) http.Handler 
 			return
 		}
 
-		// Two session variables, for two different reads.
-		//
-		// app.current_identity_uid is what 00044's and 00101's policies
-		// key on, and authn.Begin does not set it (#151 moved session
-		// ownership off Identity Platform entirely) -- UpdateWorkStateHandler
-		// sets it for its own UPDATE the same way, and this is the same
-		// pre-Practice self-edit window.
-		//
 		// app.notification_worker_trusted is the same reuse of 00033's
 		// trust flag RotateSavedCodesHandler makes, and for the same
 		// reason: this act reads across every Practice she belongs to,
@@ -131,9 +122,16 @@ func DeleteLoginHandler(accounts authn.AccountManager, db *sql.DB) http.Handler 
 		// the reads" and every deletion 500s at the redaction.
 		// rls_test.go's own TestRLS_LoginDeletionNeedsTheTrustedFlagToSeeItsOwnNewRow
 		// fails first, which is the point of it.
+		//
+		// The other variable this handler used to set here,
+		// app.current_identity_uid, moved into lockOwnStaffRow's own
+		// resolution (#1182): it was set in this function and the row it
+		// admits was read in another, which is exactly the split no type
+		// can catch. 00044's and 00101's policies still key on it and it
+		// is still set before either runs -- one call further down, and
+		// inseparable from the read it is for.
 		if _, err := tx.ExecContext(r.Context(),
-			`SELECT set_config('app.current_identity_uid', $1, true),
-			        set_config('app.notification_worker_trusted', 'true', true)`, uid); err != nil {
+			`SELECT set_config('app.notification_worker_trusted', 'true', true)`); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
@@ -221,23 +219,24 @@ func DeleteLoginHandler(accounts authn.AccountManager, db *sql.DB) http.Handler 
 // response itself on every refusal -- the ok-bool idiom RequireOwner and
 // client.lookupErasedAt both use.
 //
-// The lock is what makes the already-deleted check a gate rather than a
-// guess: two concurrent deletions serialize on this row, and the second
-// reads the first's deleted_at.
+// It is this family's pre-Practice preamble with one addition: the lock,
+// which is what makes the already-deleted check a gate rather than a
+// guess -- two concurrent deletions serialize on this row, and the
+// second reads the first's deleted_at. Everything else about it is
+// requireSelf, which is why the resolution and the refusal come from
+// there rather than being written again here.
 func lockOwnStaffRow(w http.ResponseWriter, r *http.Request, tx *sql.Tx, uid string) (staffID string, ok bool) {
-	var deletedAt sql.NullTime
-	err := tx.QueryRowContext(r.Context(),
-		`SELECT id, deleted_at FROM staff WHERE identity_uid = $1 FOR UPDATE`, uid,
-	).Scan(&staffID, &deletedAt)
-	if errors.Is(err, sql.ErrNoRows) {
-		apierr.WriteError(w, MsgNoMatchingStaffAccount, http.StatusNotFound)
-		return "", false
-	}
+	self, found, err := lockSelfRow(r.Context(), tx, uid)
 	if err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 		return "", false
 	}
+	if !found {
+		apierr.WriteError(w, MsgNoMatchingStaffAccount, http.StatusNotFound)
+		return "", false
+	}
+	staffID, deletedAt := self.ID, self.DeletedAt
 	if deletedAt.Valid {
 		// coverage:ignore reason: reachable only by two genuinely concurrent deletions racing this row's FOR UPDATE lock -- a sequential second call finds the sentinel identity_uid instead and 404s above, and holds no live session to reach here with anyway
 		apierr.Write(w, http.StatusConflict, apierr.CodeConflict,

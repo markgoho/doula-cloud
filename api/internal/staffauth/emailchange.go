@@ -75,7 +75,20 @@ func ChangeEmailHandler(accounts authn.AccountManager, db *sql.DB) http.Handler 
 			return
 		}
 
-		status, msg := changeEmail(r.Context(), tx, accounts, uid, newAddress)
+		// #1182: this route used to reach Identity Platform first and
+		// discover only afterwards, from a zero rows-affected on its own
+		// UPDATE, that the caller had no `staff` row. That left her
+		// login holding a changed, now-unverified address while the
+		// Postgres side rolled back -- the Staff-only act performed for
+		// a caller who is not a Staff member that #1024 is about, in a
+		// second copy. The guard runs first now, so nothing outside this
+		// transaction has moved when it refuses.
+		self, ok := requireSelf(w, r, tx, uid)
+		if !ok {
+			return
+		}
+
+		status, msg := changeEmail(r.Context(), tx, accounts, self, uid, newAddress)
 		if status != http.StatusNoContent {
 			apierr.WriteError(w, msg, status)
 			return
@@ -96,7 +109,7 @@ func ChangeEmailHandler(accounts authn.AccountManager, db *sql.DB) http.Handler 
 // Admin SDK, updates staff.email to match, and queues the old-address
 // notice -- in that order, so a rejected Admin SDK write leaves neither
 // Postgres row touched.
-func changeEmail(ctx context.Context, tx *sql.Tx, accounts authn.AccountManager, uid, newAddress string) (int, string) {
+func changeEmail(ctx context.Context, tx *sql.Tx, accounts authn.AccountManager, self selfStaff, uid, newAddress string) (int, string) {
 	current, err := accounts.GetAccount(ctx, uid)
 	if err != nil {
 		return http.StatusInternalServerError, apierr.MsgInternalError
@@ -112,25 +125,17 @@ func changeEmail(ctx context.Context, tx *sql.Tx, accounts authn.AccountManager,
 		return http.StatusInternalServerError, apierr.MsgInternalError
 	}
 
-	// coverage:ignore reason: DB query failure, not exercised by unit tests
-	if _, err := tx.ExecContext(ctx, `SELECT set_config('app.current_identity_uid', $1, true)`, uid); err != nil {
-		return http.StatusInternalServerError, apierr.MsgInternalError
-	}
-
 	// staff_self_update (00044) is the same self-only, pre-Practice
-	// window UpdateWorkStateHandler writes through.
-	res, err := tx.ExecContext(ctx, `UPDATE staff SET email = $1 WHERE identity_uid = $2`, newAddress, uid)
-	if err != nil {
+	// window UpdateWorkStateHandler writes through, and
+	// app.current_identity_uid -- the variable that policy reads -- was
+	// set by requireSelf before this function was reached. The row is
+	// named by the id that resolution returned rather than by
+	// identity_uid again: there is no second lookup left to disagree
+	// with the first, and no rows-affected branch standing in for a
+	// guard that has already run.
+	if _, err := tx.ExecContext(ctx, `UPDATE staff SET email = $1 WHERE id = $2`, newAddress, self.ID); err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		return http.StatusInternalServerError, apierr.MsgInternalError
-	}
-	rows, err := res.RowsAffected()
-	if err != nil {
-		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		return http.StatusInternalServerError, apierr.MsgInternalError
-	}
-	if rows == 0 {
-		return http.StatusNotFound, MsgNoMatchingStaffAccount
 	}
 
 	if err := authmail.QueueEmailChangeNotice(ctx, tx, uid, oldAddress); err != nil {

@@ -144,7 +144,23 @@ func Middleware(db *sql.DB) func(http.Handler) http.Handler {
 				return
 			}
 
-			staffID, found, err := setIdentityAndResolveStaff(r.Context(), tx, uid)
+			// The one caller that reads resolveSelf directly rather than
+			// through requireSelf, and the one that answers this
+			// condition with something other than requireSelf's 404.
+			//
+			// The difference is the {practiceId} in the path above. A
+			// pre-Practice route's caller asked about her own Staff
+			// account, and 404 says it does not exist. This caller asked
+			// about a Practice, and what she is owed is the refusal
+			// sitting three lines below -- she has no standing at this
+			// Practice -- worded the same way whether the reason is that
+			// she holds no Membership here or that she is not a Staff
+			// person at all. Answering 404 here would instead say the
+			// Practice does not exist, which is both untrue and a fact
+			// about somebody else's Practice that this caller has not
+			// earned. So it stays 403, carrying apierr's default
+			// FORBIDDEN code like the membership refusal it pairs with.
+			self, found, err := resolveSelf(r.Context(), tx, uid)
 			if err != nil {
 				// coverage:ignore reason: DB query failure, not exercised by unit tests
 				apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
@@ -154,6 +170,7 @@ func Middleware(db *sql.DB) func(http.Handler) http.Handler {
 				apierr.WriteError(w, MsgNoMatchingStaffAccount, http.StatusForbidden)
 				return
 			}
+			staffID := self.ID
 
 			isMember, roles, employmentType, requireMFA, pendingDeletion, err := setPracticeAndCheckMembership(r.Context(), tx, staffID, practiceID)
 			if err != nil {
@@ -258,28 +275,6 @@ func Middleware(db *sql.DB) func(http.Handler) http.Handler {
 			}
 		})
 	}
-}
-
-// setIdentityAndResolveStaff sets app.current_identity_uid -- the session
-// variable staff's self-visibility RLS policy reads, since
-// app.current_practice_id isn't known yet -- then looks up identityUID in
-// staff.
-func setIdentityAndResolveStaff(ctx context.Context, tx *sql.Tx, identityUID string) (string, bool, error) {
-	// coverage:ignore reason: DB query failure, not exercised by unit tests
-	if _, err := tx.ExecContext(ctx, `SELECT set_config('app.current_identity_uid', $1, true)`, identityUID); err != nil {
-		return "", false, fmt.Errorf("staffauth: set current identity uid: %w", err)
-	}
-
-	var staffID string
-	err := tx.QueryRowContext(ctx, `SELECT id FROM staff WHERE identity_uid = $1`, identityUID).Scan(&staffID)
-	if errors.Is(err, sql.ErrNoRows) {
-		return "", false, nil
-	}
-	// coverage:ignore reason: DB query failure, not exercised by unit tests
-	if err != nil {
-		return "", false, fmt.Errorf("staffauth: resolve staff: %w", err)
-	}
-	return staffID, true, nil
 }
 
 // setPracticeAndCheckMembership sets app.current_practice_id and
