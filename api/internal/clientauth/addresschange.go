@@ -107,13 +107,11 @@ func RequestAddressChangeHandler(db *sql.DB) http.Handler {
 		// the message above the input and give the error summary an entry
 		// that focuses it -- a bare message would leave both adrift.
 		if address == "" {
-			apierr.Write(w, http.StatusBadRequest, apierr.CodeInvalidArgument, MsgAddressRequired,
-				map[string]string{fieldEmail: MsgAddressRequired})
+			apierr.WriteFieldError(w, http.StatusBadRequest, apierr.CodeInvalidArgument, fieldEmail, MsgAddressRequired)
 			return
 		}
 		if !looksLikeAddress(address) {
-			apierr.Write(w, http.StatusBadRequest, apierr.CodeInvalidArgument, MsgAddressMalformed,
-				map[string]string{fieldEmail: MsgAddressMalformed})
+			apierr.WriteFieldError(w, http.StatusBadRequest, apierr.CodeInvalidArgument, fieldEmail, MsgAddressMalformed)
 			return
 		}
 

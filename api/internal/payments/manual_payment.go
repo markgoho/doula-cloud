@@ -187,9 +187,8 @@ func PostManualPaymentHandler(client Client) http.Handler {
 			return
 		}
 		if !validPaymentMethods[req.Method] {
-			apierr.Write(w, http.StatusBadRequest, apierr.CodeInvalidArgument,
-				`method must be "check", "bank_transfer", "cash", or "other"`,
-				map[string]string{"method": `method must be "check", "bank_transfer", "cash", or "other"`})
+			apierr.WriteFieldError(w, http.StatusBadRequest, apierr.CodeInvalidArgument, "method",
+				`method must be "check", "bank_transfer", "cash", or "other"`)
 			return
 		}
 		if req.Method == PaymentMethodOther && req.Note == "" {
@@ -205,9 +204,8 @@ func PostManualPaymentHandler(client Client) http.Handler {
 		}
 		paidOn, err := time.Parse(paidOnLayout, req.PaidOn)
 		if err != nil {
-			apierr.Write(w, http.StatusBadRequest, apierr.CodeInvalidArgument,
-				"paidOn must be a date in YYYY-MM-DD form",
-				map[string]string{"paidOn": "paidOn must be a date in YYYY-MM-DD form"})
+			apierr.WriteFieldError(w, http.StatusBadRequest, apierr.CodeInvalidArgument, "paidOn",
+				"paidOn must be a date in YYYY-MM-DD form")
 			return
 		}
 		// The zone comes from practicetimezone, which owns it for every
@@ -224,9 +222,8 @@ func PostManualPaymentHandler(client Client) http.Handler {
 			// across #1167's own change of comparison: it named no day when
 			// the comparison ran against UTC's, and still names none now
 			// that it runs against the Practice's own.
-			apierr.Write(w, http.StatusBadRequest, apierr.CodeInvalidArgument,
-				"paidOn cannot be in the future",
-				map[string]string{"paidOn": "paidOn cannot be in the future"})
+			apierr.WriteFieldError(w, http.StatusBadRequest, apierr.CodeInvalidArgument, "paidOn",
+				"paidOn cannot be in the future")
 			return
 		}
 
@@ -500,7 +497,7 @@ func PostReversePaymentHandler() http.Handler {
 			return
 		}
 		if req.Reason == "" {
-			apierr.Write(w, http.StatusBadRequest, apierr.CodeInvalidArgument, "reason cannot be blank", map[string]string{"reason": "reason cannot be blank"})
+			apierr.WriteFieldError(w, http.StatusBadRequest, apierr.CodeInvalidArgument, "reason", "reason cannot be blank")
 			return
 		}
 
