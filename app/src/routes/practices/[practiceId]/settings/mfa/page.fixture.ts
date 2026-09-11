@@ -12,8 +12,7 @@
  * Neither tree is a subset of the other.
  */
 import { jsonResponse } from '#lib/testResponse.js';
-import type { RouteFixture, RouteVariant } from '../../../../routeFixture.js';
-import { practiceSession } from '../../../../routeFixture.js';
+import { practiceSession, type RouteFixture, type RouteVariant } from '../../../../routeFixture.js';
 import Page from './+page.svelte';
 
 export const impact = { required: false, withoutSecondFactor: 6 };

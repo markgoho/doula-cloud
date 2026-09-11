@@ -27,8 +27,7 @@
  */
 import { jsonResponse } from '#lib/testResponse.js';
 import type { Template } from '#lib/clientFieldTemplate.js';
-import type { RouteFixture, RouteVariant } from '../../../../routeFixture.js';
-import { practiceSession } from '../../../../routeFixture.js';
+import { practiceSession, type RouteFixture, type RouteVariant } from '../../../../routeFixture.js';
 import Page from './+page.svelte';
 
 export const template: Template = {

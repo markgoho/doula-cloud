@@ -17,12 +17,9 @@
 import { jsonResponse } from '#lib/testResponse.js';
 import type { ConnectStatusResult } from '#lib/payments.js';
 import type { PracticeWebsite } from '#lib/website.js';
-import type { RouteFixture, RouteVariant } from '../../../../routeFixture.js';
-import { practiceSession } from '../../../../routeFixture.js';
+import { practiceSession, type RouteFixture, type RouteVariant } from '../../../../routeFixture.js';
 import Page from './+page.svelte';
 
-// `isContractor` is not read on this screen, so a contractor Doula and an
-// employee Doula meet the same Notice.
 const status: ConnectStatusResult = {
 	status: 'payouts_restricted',
 	cardPaymentsStatus: 'active',
@@ -90,6 +87,8 @@ function respondWith(connectStatus: ConnectStatusResult): (path: string) => Resp
 	};
 }
 
+// `isContractor` is not read on this screen, so a contractor Doula and an
+// employee Doula meet the same Notice.
 export const asDoula: RouteVariant = {
 	name: 'The Stripe Connect settings screen, as a Doula',
 	pageData: practiceSession(['doula'])

@@ -15,8 +15,7 @@
  */
 import { jsonResponse } from '#lib/testResponse.js';
 import type { ContractTemplate } from '#lib/contractTemplate.js';
-import type { RouteFixture, RouteVariant } from '../../../../routeFixture.js';
-import { practiceSession } from '../../../../routeFixture.js';
+import { practiceSession, type RouteFixture, type RouteVariant } from '../../../../routeFixture.js';
 import Page from './+page.svelte';
 
 const template: ContractTemplate = {
