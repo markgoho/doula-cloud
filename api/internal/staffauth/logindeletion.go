@@ -223,17 +223,12 @@ func DeleteLoginHandler(accounts authn.AccountManager, db *sql.DB) http.Handler 
 // which is what makes the already-deleted check a gate rather than a
 // guess -- two concurrent deletions serialize on this row, and the
 // second reads the first's deleted_at. Everything else about it is
-// requireSelf, which is why the resolution and the refusal come from
-// there rather than being written again here.
+// requireSelf's two halves, reached rather than rewritten: lockSelfRow
+// for the resolution, refuseUnlessSelf for the status and the message.
 func lockOwnStaffRow(w http.ResponseWriter, r *http.Request, tx *sql.Tx, uid string) (staffID string, ok bool) {
-	self, found, err := lockSelfRow(r.Context(), tx, uid)
-	if err != nil {
-		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
-		return "", false
-	}
-	if !found {
-		apierr.WriteError(w, MsgNoMatchingStaffAccount, http.StatusNotFound)
+	locked, found, err := lockSelfRow(r.Context(), tx, uid)
+	self, ok := refuseUnlessSelf(w, locked, found, err)
+	if !ok {
 		return "", false
 	}
 	staffID, deletedAt := self.ID, self.DeletedAt

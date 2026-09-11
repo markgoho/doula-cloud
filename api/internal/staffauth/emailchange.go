@@ -133,6 +133,13 @@ func changeEmail(ctx context.Context, tx *sql.Tx, accounts authn.AccountManager,
 	// identity_uid again: there is no second lookup left to disagree
 	// with the first, and no rows-affected branch standing in for a
 	// guard that has already run.
+	//
+	// Naming the row by id rather than re-stating the identity_uid
+	// predicate leans on staff_self_update (00044) admitting exactly the
+	// row staff_self_visibility (00006) resolved -- both are scoped to
+	// app.current_identity_uid in the window where no Practice is set,
+	// so the id this UPDATE holds is by construction one 00044's own
+	// USING clause admits. rls_test.go is where that stays true.
 	if _, err := tx.ExecContext(ctx, `UPDATE staff SET email = $1 WHERE id = $2`, newAddress, self.ID); err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		return http.StatusInternalServerError, apierr.MsgInternalError

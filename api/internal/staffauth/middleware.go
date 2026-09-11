@@ -153,9 +153,12 @@ func Middleware(db *sql.DB) func(http.Handler) http.Handler {
 			// account, and 404 says it does not exist. This caller asked
 			// about a Practice, and what she is owed is the refusal
 			// sitting three lines below -- she has no standing at this
-			// Practice -- worded the same way whether the reason is that
-			// she holds no Membership here or that she is not a Staff
-			// person at all. Answering 404 here would instead say the
+			// Practice -- at the same status and the same FORBIDDEN code
+			// whether the reason is that she holds no Membership here or
+			// that she is not a Staff person at all. The two sentences
+			// still differ, and deliberately: a person who is not Staff
+			// at all is told that rather than told to ask for a
+			// Membership. Answering 404 here would instead say the
 			// Practice does not exist, which is both untrue and a fact
 			// about somebody else's Practice that this caller has not
 			// earned. So it stays 403, carrying apierr's default
