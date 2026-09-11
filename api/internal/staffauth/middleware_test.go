@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -245,6 +246,181 @@ func TestMiddleware_Success(t *testing.T) {
 	if lastPracticeID != practiceID {
 		t.Fatalf("last_practice_id = %q, want %q", lastPracticeID, practiceID)
 	}
+}
+
+// TestMiddleware_ActivityStampSkipsNoOpWrite is #1197's third acceptance
+// criterion: once last_active_at is already set today and
+// last_practice_id already names this Practice, the request writes
+// nothing to the staff row at all. xmin is Postgres's own row-version
+// counter -- it changes on every UPDATE, HOT or not, even one that
+// leaves every column holding the value it already had -- so an
+// unchanged xmin is direct proof no write happened, not just that the
+// visible columns look the same.
+func TestMiddleware_ActivityStampSkipsNoOpWrite(t *testing.T) {
+	db := testdb.New(t)
+	const identityUID = "staff-already-stamped-today"
+	practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, employeeType)
+
+	if _, err := db.Admin.ExecContext(t.Context(),
+		`UPDATE staff SET last_practice_id = $1, last_active_at = now() WHERE id = $2`,
+		practiceID, staffID); err != nil {
+		t.Fatalf("seed prior stamp: %v", err)
+	}
+
+	var xminBefore string
+	if err := db.Admin.QueryRowContext(t.Context(),
+		`SELECT xmin::text FROM staff WHERE id = $1`, staffID).Scan(&xminBefore); err != nil {
+		t.Fatalf("read xmin before: %v", err)
+	}
+
+	srv, session := newServer(t, db, identityUID)
+	defer srv.Close()
+
+	resp := get(t, pingURL(srv, practiceID), func(req *http.Request) {
+		authntest.AddSessionCookie(req, session)
+	})
+	defer resp.Body.Close()
+	assertStatus(t, resp, http.StatusOK)
+
+	var xminAfter string
+	if err := db.Admin.QueryRowContext(t.Context(),
+		`SELECT xmin::text FROM staff WHERE id = $1`, staffID).Scan(&xminAfter); err != nil {
+		t.Fatalf("read xmin after: %v", err)
+	}
+	if xminAfter != xminBefore {
+		t.Fatalf("staff row was written (xmin %s -> %s), want no write for the already-current case", xminBefore, xminAfter)
+	}
+}
+
+// TestMiddleware_ActivityStampRefreshesPracticeAcrossDays is #1197's
+// fourth acceptance criterion, the two halves it asks to keep: a
+// same-day Staff member who switches Practice still gets the new
+// last_practice_id (not the once-a-day skip TestMiddleware_ActivityStampSkipsNoOpWrite
+// covers), and a stale last_active_at still gets refreshed rather than
+// left at yesterday's stamp.
+func TestMiddleware_ActivityStampRefreshesPracticeAcrossDays(t *testing.T) {
+	db := testdb.New(t)
+	const identityUID = "staff-switches-practice"
+	firstPracticeID, staffID := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, employeeType)
+	secondPracticeID := testdb.SeedPractice(t, db, "Second Practice")
+	if _, err := db.Admin.ExecContext(t.Context(),
+		`INSERT INTO practice_memberships (practice_id, staff_id, roles, employment_type) VALUES ($1, $2, '{doula}'::practice_role[], $3)`,
+		secondPracticeID, staffID, employeeType); err != nil {
+		t.Fatalf("seed second membership: %v", err)
+	}
+
+	yesterday := time.Now().Add(-25 * time.Hour)
+	if _, err := db.Admin.ExecContext(t.Context(),
+		`UPDATE staff SET last_practice_id = $1, last_active_at = $2 WHERE id = $3`,
+		firstPracticeID, yesterday, staffID); err != nil {
+		t.Fatalf("seed prior stamp: %v", err)
+	}
+
+	srv, session := newServer(t, db, identityUID)
+	defer srv.Close()
+
+	resp := get(t, pingURL(srv, secondPracticeID), func(req *http.Request) {
+		authntest.AddSessionCookie(req, session)
+	})
+	defer resp.Body.Close()
+	assertStatus(t, resp, http.StatusOK)
+
+	var lastPracticeID string
+	var lastActiveAt time.Time
+	if err := db.Admin.QueryRowContext(t.Context(),
+		`SELECT last_practice_id, last_active_at FROM staff WHERE id = $1`, staffID,
+	).Scan(&lastPracticeID, &lastActiveAt); err != nil {
+		t.Fatalf("read stamp: %v", err)
+	}
+	if lastPracticeID != secondPracticeID {
+		t.Fatalf("last_practice_id = %q, want %q", lastPracticeID, secondPracticeID)
+	}
+	if !lastActiveAt.After(yesterday.Add(time.Hour)) {
+		t.Fatalf("last_active_at = %v, want refreshed to roughly now, not left at yesterday's stamp", lastActiveAt)
+	}
+}
+
+// TestMiddleware_ActivityStampDoesNotSerializeConcurrentRequests is
+// #1197's second acceptance criterion: it holds one request's Middleware
+// transaction open (standing in for #1077's slow RLS-scoped read, a slow
+// read that has nothing to do with staffauth) and shows a second
+// request from the same Staff member completes anyway, rather than
+// blocking on the first request's staff row lock for however long the
+// first request takes.
+func TestMiddleware_ActivityStampDoesNotSerializeConcurrentRequests(t *testing.T) {
+	db := testdb.New(t)
+	const identityUID = "staff-concurrent-requests"
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, employeeType)
+
+	entered := make(chan struct{})
+	release := make(chan struct{})
+
+	mux := http.NewServeMux()
+	mux.Handle("/practices/{practiceId}/ping", staffauth.Middleware(db.App)(
+		http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.Header.Get("X-Test-Slow") == "1" {
+				entered <- struct{}{}
+				<-release
+			}
+			w.WriteHeader(http.StatusOK)
+		}),
+	))
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+	session := authntest.SeedSession(t, db.App, identityUID)
+
+	type result struct {
+		resp *http.Response
+		err  error
+	}
+	ping := func(slow bool) (*http.Response, error) {
+		req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, pingURL(srv, practiceID), nil)
+		if err != nil {
+			return nil, fmt.Errorf("build request: %w", err)
+		}
+		authntest.AddSessionCookie(req, session)
+		if slow {
+			req.Header.Set("X-Test-Slow", "1")
+		}
+		return http.DefaultClient.Do(req) //nolint:bodyclose // the body is closed by whichever select branch below receives this result
+	}
+
+	firstDone := make(chan result, 1)
+	go func() {
+		resp, err := ping(true) //nolint:bodyclose // closed after close(release) below
+		firstDone <- result{resp, err}
+	}()
+
+	select {
+	case <-entered:
+	case <-time.After(5 * time.Second):
+		t.Fatal("first request never reached its handler")
+	}
+
+	secondDone := make(chan result, 1)
+	go func() {
+		resp, err := ping(false) //nolint:bodyclose // closed in the select branch below
+		secondDone <- result{resp, err}
+	}()
+
+	select {
+	case r := <-secondDone:
+		if r.err != nil {
+			t.Fatalf("second request: %v", r.err)
+		}
+		defer r.resp.Body.Close()
+		assertStatus(t, r.resp, http.StatusOK)
+	case <-time.After(3 * time.Second):
+		t.Fatal("second request serialized behind the first request's still-open transaction")
+	}
+
+	close(release)
+	r := <-firstDone
+	if r.err != nil {
+		t.Fatalf("first request: %v", r.err)
+	}
+	defer r.resp.Body.Close()
+	assertStatus(t, r.resp, http.StatusOK)
 }
 
 // TestMiddleware_FailClosedWithoutSessionVar proves the RLS backstop
