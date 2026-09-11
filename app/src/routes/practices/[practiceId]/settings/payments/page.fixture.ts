@@ -17,24 +17,8 @@
 import { jsonResponse } from '#lib/testResponse.js';
 import type { ConnectStatusResult } from '#lib/payments.js';
 import type { PracticeWebsite } from '#lib/website.js';
-import type { RouteFixture, RouteVariant } from '../../../../routeFixture.js';
+import { practiceSession, type RouteFixture, type RouteVariant } from '../../../../routeFixture.js';
 import Page from './+page.svelte';
-
-/*
- * The three sessions this screen branches on, written once. Only `roles`
- * varies: `isContractor` is not read here, and a contractor Doula and an
- * employee Doula meet the same Notice.
- */
-function session(roles: string[]) {
-	return {
-		session: {
-			practiceId: 'practice-1',
-			practiceName: 'Riverside Doula Collective',
-			roles,
-			isContractor: false
-		}
-	};
-}
 
 const status: ConnectStatusResult = {
 	status: 'payouts_restricted',
@@ -73,7 +57,7 @@ const website: PracticeWebsite = {
  */
 export const asAdmin: RouteVariant = {
 	name: 'The Stripe Connect settings screen, as an Admin',
-	pageData: session(['admin'])
+	pageData: practiceSession(['admin'])
 };
 
 /*
@@ -103,9 +87,11 @@ function respondWith(connectStatus: ConnectStatusResult): (path: string) => Resp
 	};
 }
 
+// `isContractor` is not read on this screen, so a contractor Doula and an
+// employee Doula meet the same Notice.
 export const asDoula: RouteVariant = {
 	name: 'The Stripe Connect settings screen, as a Doula',
-	pageData: session(['doula'])
+	pageData: practiceSession(['doula'])
 };
 
 /*
@@ -131,7 +117,7 @@ export const asDoula: RouteVariant = {
  */
 export const asAdminWithNoAccount: RouteVariant = {
 	name: 'The Stripe Connect settings screen, as an Admin with no Stripe account',
-	pageData: session(['admin']),
+	pageData: practiceSession(['admin']),
 	respond: respondWith({
 		status: 'not_connected',
 		cardPaymentsStatus: 'unsupported',
@@ -145,7 +131,7 @@ export const fixture: RouteFixture = {
 	component: Page,
 	params: { practiceId: 'practice-1' },
 	url: 'https://example.test/practices/practice-1/settings/payments',
-	pageData: session(['owner']),
+	pageData: practiceSession(['owner']),
 	respond: respondWith(status),
 	readyText: 'Getting paid',
 	variants: [asAdmin, asAdminWithNoAccount, asDoula]

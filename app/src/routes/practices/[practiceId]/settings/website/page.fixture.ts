@@ -15,7 +15,7 @@
  */
 import { jsonResponse } from '#lib/testResponse.js';
 import type { PracticeWebsite } from '#lib/website.js';
-import type { RouteFixture, RouteVariant } from '../../../../routeFixture.js';
+import { practiceSession, type RouteFixture, type RouteVariant } from '../../../../routeFixture.js';
 import Page from './+page.svelte';
 
 export const website: PracticeWebsite = {
@@ -31,17 +31,6 @@ export const website: PracticeWebsite = {
 	pageUrl: 'https://doula.cloud/p/riverside-doula-collective'
 };
 
-function session(roles: string[]) {
-	return {
-		session: {
-			practiceId: 'practice-1',
-			practiceName: 'Riverside Doula Collective',
-			roles,
-			isContractor: false
-		}
-	};
-}
-
 /*
  * Everyone who is not an Owner, Admin included. She reads the same saved
  * answers -- the two pasted URLs above are hers to read as much as the
@@ -51,7 +40,7 @@ function session(roles: string[]) {
  */
 export const nonOwner: RouteVariant = {
 	name: 'The Website settings screen, as a non-Owner',
-	pageData: session(['admin'])
+	pageData: practiceSession(['admin'])
 };
 
 export const fixture: RouteFixture = {
@@ -59,7 +48,7 @@ export const fixture: RouteFixture = {
 	component: Page,
 	params: { practiceId: 'practice-1' },
 	url: 'https://example.test/practices/practice-1/settings/website',
-	pageData: session(['owner']),
+	pageData: practiceSession(['owner']),
 	respond: () => jsonResponse(website),
 	readyText: 'Your website',
 	variants: [nonOwner]

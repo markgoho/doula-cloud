@@ -15,7 +15,7 @@
  */
 import { jsonResponse } from '#lib/testResponse.js';
 import type { ContractTemplate } from '#lib/contractTemplate.js';
-import type { RouteFixture, RouteVariant } from '../../../../routeFixture.js';
+import { practiceSession, type RouteFixture, type RouteVariant } from '../../../../routeFixture.js';
 import Page from './+page.svelte';
 
 const template: ContractTemplate = {
@@ -25,20 +25,9 @@ const template: ContractTemplate = {
 		'See https://portal.highland-midwifery-group.example.org/referrals/2027/persephone?source=intake for the full engagement letter.'
 };
 
-function session(roles: string[]) {
-	return {
-		session: {
-			practiceId: 'practice-1',
-			practiceName: 'Riverside Doula Collective',
-			roles,
-			isContractor: false
-		}
-	};
-}
-
 export const nonOwner: RouteVariant = {
 	name: 'The Contract Template editor, as a non-Owner',
-	pageData: session(['admin'])
+	pageData: practiceSession(['admin'])
 };
 
 export const fixture: RouteFixture = {
@@ -47,7 +36,7 @@ export const fixture: RouteFixture = {
 	params: { practiceId: 'practice-1' },
 	url: 'https://example.test/practices/practice-1/settings/contract-template',
 	respond: () => jsonResponse(template),
-	pageData: session(['owner']),
+	pageData: practiceSession(['owner']),
 	readyText: 'Contract Template',
 	variants: [nonOwner]
 };

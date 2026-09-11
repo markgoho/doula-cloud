@@ -21,7 +21,7 @@
  */
 import { jsonResponse } from '#lib/testResponse.js';
 import type { Offer } from '#lib/offer.js';
-import type { RouteFixture, RouteVariant } from '../../routeFixture.js';
+import { practiceSession, type RouteFixture, type RouteVariant } from '../../routeFixture.js';
 import Page from './+page.svelte';
 
 export const practiceName =
@@ -44,17 +44,6 @@ export const offers: Offer[] = [
 ];
 
 /*
- * The two sessions this hub branches on, written once. Only `roles`
- * varies: `isContractor` is not read here at all, so a contractor Doula
- * and an employee Doula meet the same hub.
- */
-function session(roles: string[]) {
-	return {
-		session: { practiceId: 'practice-1', practiceName, roles, isContractor: false }
-	};
-}
-
-/*
  * The hub with its `secondary` rail drawn -- Requests, Your people,
  * Credits and Getting paid, none of which a Doula is asked about and none
  * of which had ever been mounted at any width (#928). What it renders
@@ -71,7 +60,10 @@ function session(roles: string[]) {
  */
 export const asOwner: RouteVariant = {
 	name: 'The Practice landing hub, as an Owner',
-	pageData: session(['owner'])
+	// `isContractor` is not read here at all, so a contractor Doula and an
+	// employee Doula meet the same hub -- the shared helper's own default
+	// (`false`) is never overridden by either branch.
+	pageData: practiceSession(['owner'], { practiceName })
 };
 
 export const fixture: RouteFixture = {
@@ -79,7 +71,7 @@ export const fixture: RouteFixture = {
 	component: Page,
 	params: { practiceId: 'practice-1' },
 	url: 'https://example.test/practices/practice-1',
-	pageData: session(['doula']),
+	pageData: practiceSession(['doula'], { practiceName }),
 	respond: (path) => {
 		if (path.includes('/offers')) {
 			return jsonResponse({ items: offers });

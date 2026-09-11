@@ -27,7 +27,7 @@
  */
 import { jsonResponse } from '#lib/testResponse.js';
 import type { Template } from '#lib/clientFieldTemplate.js';
-import type { RouteFixture, RouteVariant } from '../../../../routeFixture.js';
+import { practiceSession, type RouteFixture, type RouteVariant } from '../../../../routeFixture.js';
 import Page from './+page.svelte';
 
 export const template: Template = {
@@ -57,17 +57,6 @@ export const template: Template = {
 	]
 };
 
-function session(roles: string[]) {
-	return {
-		session: {
-			practiceId: 'practice-1',
-			practiceName: 'Riverside Doula Collective',
-			roles,
-			isContractor: false
-		}
-	};
-}
-
 /*
  * The Doula's reading of the same Template. She is asked for it and
  * shown it -- the read is not gated, only the editing is -- so this
@@ -79,7 +68,7 @@ function session(roles: string[]) {
  */
 export const asDoula: RouteVariant = {
 	name: 'The Client Field Template editor, as a Doula',
-	pageData: session(['doula'])
+	pageData: practiceSession(['doula'])
 };
 
 export const fixture: RouteFixture = {
@@ -87,7 +76,7 @@ export const fixture: RouteFixture = {
 	component: Page,
 	params: { practiceId: 'practice-1' },
 	url: 'https://example.test/practices/practice-1/settings/client-fields',
-	pageData: session(['owner']),
+	pageData: practiceSession(['owner']),
 	respond: () => jsonResponse(template),
 	readyText: 'Client Fields',
 	variants: [asDoula]

@@ -9,7 +9,7 @@
  */
 import { jsonResponse } from '#lib/testResponse.js';
 import type { ClientDetail } from '#lib/clientDetail.js';
-import type { RouteFixture, RouteVariant } from '../../../../../../routeFixture.js';
+import { practiceSession, type RouteFixture, type RouteVariant } from '../../../../../../routeFixture.js';
 import Page from './+page.svelte';
 
 export const detail: ClientDetail = {
@@ -29,17 +29,6 @@ export const detail: ClientDetail = {
 	engagements: [],
 	history: []
 };
-
-function session(roles: string[]) {
-	return {
-		session: {
-			practiceId: 'practice-1',
-			practiceName: 'Riverside Doula Collective',
-			roles,
-			isContractor: false
-		}
-	};
-}
 
 /*
  * The approver's screen (#928), and the two things that make it a screen
@@ -63,7 +52,7 @@ function session(roles: string[]) {
  */
 export const asApprover: RouteVariant = {
 	name: 'Requesting a new Engagement, as an Owner',
-	pageData: session(['owner']),
+	pageData: practiceSession(['owner']),
 	respond: (path) => {
 		if (path.includes('/billing')) {
 			return jsonResponse({ balance: 1284, ledger: { items: [], hasMore: false } });
@@ -78,7 +67,7 @@ export const fixture: RouteFixture = {
 	component: Page,
 	params: { practiceId: 'practice-1', clientId: 'client-1' },
 	url: 'https://example.test/practices/practice-1/clients/client-1/engagement-requests/new',
-	pageData: session(['doula']),
+	pageData: practiceSession(['doula']),
 	respond: () => jsonResponse(detail),
 	readyText: 'Ask to start work with Persephone Ochieng-Whitfield',
 	variants: [asApprover]

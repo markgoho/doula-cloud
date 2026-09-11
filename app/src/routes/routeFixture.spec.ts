@@ -8,7 +8,7 @@
  * made optional, which silently loses the root route.
  */
 import { describe, expect, it } from 'vitest';
-import { toRoutePath, toSweptFixtures, type RouteFixture } from './routeFixture.js';
+import { practiceSession, toRoutePath, toSweptFixtures, type RouteFixture } from './routeFixture.js';
 
 describe('toRoutePath', () => {
 	it.each([
@@ -131,5 +131,52 @@ describe('toSweptFixtures', () => {
 		);
 
 		expect(swept.map((fixture) => fixture.variants)).toEqual([undefined, undefined]);
+	});
+});
+
+/*
+ * `practiceSession` replaces the ten -- really nine (#1165) -- copies of a
+ * local `function session(roles)` each Practice route fixture used to
+ * declare for itself. `roles` is the one thing every one of those callers
+ * varied; `practiceName` and `staffId` are asserted here because only one
+ * caller (the Practice landing hub, overriding `practiceName` for #530's
+ * pasted-URL name) ever exercised a default's override, and nothing yet
+ * exercises `staffId`'s.
+ */
+describe('practiceSession', () => {
+	it('defaults practiceName and staffId, and carries the roles given', () => {
+		expect(practiceSession(['owner', 'doula'])).toEqual({
+			session: {
+				practiceId: 'practice-1',
+				staffId: 'staff-1',
+				practiceName: 'Riverside Doula Collective',
+				roles: ['owner', 'doula'],
+				isContractor: false
+			}
+		});
+	});
+
+	it('lets a caller override the Practice name', () => {
+		expect(practiceSession(['owner'], { practiceName: 'Hilltop Doulas' })).toEqual({
+			session: {
+				practiceId: 'practice-1',
+				staffId: 'staff-1',
+				practiceName: 'Hilltop Doulas',
+				roles: ['owner'],
+				isContractor: false
+			}
+		});
+	});
+
+	it('lets a caller override the staffId', () => {
+		expect(practiceSession(['doula'], { staffId: 'staff-2' })).toEqual({
+			session: {
+				practiceId: 'practice-1',
+				staffId: 'staff-2',
+				practiceName: 'Riverside Doula Collective',
+				roles: ['doula'],
+				isContractor: false
+			}
+		});
 	});
 });

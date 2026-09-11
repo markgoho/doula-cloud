@@ -15,19 +15,8 @@
  * it realizes no entry the two branches below do not already measure,
  * and it is left undeclared rather than swept as a third copy.
  */
-import type { RouteFixture, RouteVariant } from '../../../routeFixture.js';
+import { practiceSession, type RouteFixture, type RouteVariant } from '../../../routeFixture.js';
 import Page from './+page.svelte';
-
-function session(roles: string[]) {
-	return {
-		session: {
-			practiceId: 'practice-1',
-			practiceName: 'Riverside Doula Collective',
-			roles,
-			isContractor: false
-		}
-	};
-}
 
 /*
  * The hub with the Getting paid entry withheld -- four entries rather
@@ -38,7 +27,7 @@ function session(roles: string[]) {
  */
 export const asDoula: RouteVariant = {
 	name: 'The Settings hub, as a Doula',
-	pageData: session(['doula'])
+	pageData: practiceSession(['doula'])
 };
 
 export const fixture: RouteFixture = {
@@ -46,7 +35,7 @@ export const fixture: RouteFixture = {
 	component: Page,
 	params: { practiceId: 'practice-1' },
 	url: 'https://example.test/practices/practice-1/settings',
-	pageData: session(['owner']),
+	pageData: practiceSession(['owner']),
 	readyText: 'Settings',
 	variants: [asDoula]
 };
