@@ -8,8 +8,8 @@ import (
 
 	"doula-cloud/api/internal/activity"
 	"doula-cloud/api/internal/activitygate"
+	"doula-cloud/api/internal/activitypage"
 	"doula-cloud/api/internal/apierr"
-	"doula-cloud/api/internal/client"
 	"doula-cloud/api/internal/pagecursor"
 	"doula-cloud/api/internal/staffauth"
 )
@@ -292,7 +292,7 @@ func queryBatch(ctx context.Context, tx *sql.Tx, practiceID string, after *pagec
 			return nil, fmt.Errorf("activityfeed: scan practice activity row: %w", err)
 		}
 		row.ActorKind = actorKind
-		row.ActorName = resolveActorName(actorKind, staffName, clientGivenName, clientPreferredName)
+		row.ActorName = activitypage.ActorName(actorKind, staffName, clientGivenName, clientPreferredName)
 		row.SubjectName = resolveSubjectName(row.SubjectKind, subjectName)
 		items = append(items, row)
 	}
@@ -333,31 +333,4 @@ func resolveSubjectName(subjectKind string, subjectName sql.NullString) string {
 		return activity.DepartedStaffName
 	}
 	return subjectName.String
-}
-
-// resolveActorName mirrors engagement.listEngagementActivity's own
-// switch: a staff actor's name, a client actor's PreferredName, or
-// activity.SystemActorName for a system actor -- every row this package
-// returns already carries a name a reader never has to look up itself.
-func resolveActorName(actorKind string, staffName, clientGivenName, clientPreferredName sql.NullString) string {
-	switch actorKind {
-	case "staff":
-		// A Staff actor whose Membership has ended is unreachable through
-		// staff_practice_visibility (00002), so the join finds nothing and
-		// the Who column would render blank. #1148 makes that a certainty
-		// rather than an edge: a 'removed' row written by a person
-		// deleting her own login has actor and subject as the same
-		// departed person, so both halves of the sentence resolve to
-		// nothing at once. Say the same word the subject side and #872's
-		// own membership history already say -- a Practice must not meet
-		// two different words, or an empty cell, for one absence.
-		if !staffName.Valid {
-			return activity.DepartedStaffName
-		}
-		return staffName.String
-	case "client":
-		return client.PreferredName(clientGivenName.String, clientPreferredName.String)
-	default:
-		return activity.SystemActorName
-	}
 }

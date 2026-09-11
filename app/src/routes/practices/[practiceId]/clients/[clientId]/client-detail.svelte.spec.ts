@@ -312,14 +312,19 @@ describe('client detail hub', () => {
 		await expect.element(testPage.getByRole('cell', { name: 'Record updated' })).toBeVisible();
 	});
 
-	it('names a system-authored event "Doula Cloud", never "System" (ADR-0022)', async () => {
+	// The name itself is the BFF's since #1150 -- ADR-0022's word for the
+	// product is spelled in one place, and this screen no longer maps an
+	// actor kind to a word of its own. What is still this screen's to get
+	// right is that the Who column renders the name it was given, for the
+	// actor kind that used to arrive without one.
+	it('renders a system-authored event\'s actor name, never the word "System" (ADR-0022)', async () => {
 		await setup({
 			overrides: {
 				history: [
 					{
 						type: 'client_event',
 						at: '2026-01-01T00:00:00Z',
-						clientEvent: { eventType: 'updated', diff: {}, actorKind: 'system', createdAt: '2026-01-01T00:00:00Z' }
+						clientEvent: { eventType: 'updated', diff: {}, actorKind: 'system', actorName: 'Doula Cloud', createdAt: '2026-01-01T00:00:00Z' }
 					}
 				]
 			}

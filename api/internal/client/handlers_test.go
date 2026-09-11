@@ -1053,7 +1053,7 @@ func TestDetailHandler_MergesEventsAndRequestsIntoHistory(t *testing.T) {
 		switch h.Type {
 		case "client_event":
 			events++
-			if h.ClientEvent.ActorName == nil || *h.ClientEvent.ActorName == "" {
+			if h.ClientEvent.ActorName == "" {
 				t.Fatalf("client event missing actorName: %+v", h.ClientEvent)
 			}
 		case "engagement_request":
