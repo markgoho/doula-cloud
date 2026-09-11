@@ -231,7 +231,7 @@ func List[T any](ctx context.Context, tx *sql.Tx, q Query, p Projection[T]) (Pag
 			// coverage:ignore reason: row scan failure on a well-typed query, not exercised by unit tests
 			return Page[T]{}, fmt.Errorf("activitypage: scan %s activity row: %w", q.SubjectKind, err)
 		}
-		row.ActorName = actorName(row.ActorKind, staffName, clientGivenName, clientPreferredName)
+		row.ActorName = ActorName(row.ActorKind, staffName, clientGivenName, clientPreferredName)
 		keys = append(keys, rowKey{id: row.ID, at: row.CreatedAt})
 		items = append(items, build(row))
 	}
@@ -261,7 +261,7 @@ type rowKey struct {
 	at time.Time
 }
 
-// actorName says who did it, once, for every subject-scoped reader.
+// ActorName says who did it, once, for every subject-scoped reader.
 //
 // The three branches are ADR-0022's three actor kinds, and the fourth
 // case -- a Staff actor whose staff row the join could not reach -- is
@@ -278,7 +278,7 @@ type rowKey struct {
 // history's own reader used to avoid by hand; #1150 traded that join for
 // one spelling of the actor rule, because the hand-written avoidance is
 // what let the departed-actor word drift in the first place.
-func actorName(actorKind string, staffName, clientGivenName, clientPreferredName sql.NullString) string {
+func ActorName(actorKind string, staffName, clientGivenName, clientPreferredName sql.NullString) string {
 	switch activity.ActorKind(actorKind) {
 	case activity.ActorStaff:
 		if !staffName.Valid {

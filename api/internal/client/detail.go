@@ -10,6 +10,8 @@ import (
 	"sort"
 	"time"
 
+	"doula-cloud/api/internal/activity"
+	"doula-cloud/api/internal/activitypage"
 	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/clientkey"
 	"doula-cloud/api/internal/staffauth"
@@ -21,15 +23,22 @@ import (
 // actor's display name, joined in for the history screen -- the
 // cross-cutting audit expectation ("who did this") needs a name, not a
 // bare id a Doula has no way to resolve herself (/staff is
-// Owner/Admin-only). Nil when ActorKind is "system" -- ADR-0022's third
-// actor kind displays as "Doula Cloud", a client-side rendering rule
-// rather than a name this DTO carries.
+// Owner/Admin-only).
+//
+// It is always present, and #1150 is why. It used to be nil for a system
+// actor and nil again for a Staff member who had since left, and the
+// screen filled both in itself -- "Doula Cloud" for the first, "Unknown
+// staff" for the second. The first put ADR-0022's own word for the
+// product in a second place; the second gave one Practice two words for
+// one absence, since every other surface calls her "a former colleague"
+// (activity.DepartedStaffName, #887). Both are now resolved once, in the
+// one reader every subject-scoped history goes through.
 type Event struct {
 	EventType    string          `json:"eventType"`
 	Diff         json.RawMessage `json:"diff"`
 	ActorKind    string          `json:"actorKind"`
 	ActorStaffID *string         `json:"actorStaffId,omitempty"`
-	ActorName    *string         `json:"actorName,omitempty"`
+	ActorName    string          `json:"actorName"`
 	CreatedAt    time.Time       `json:"createdAt"`
 }
 
@@ -206,7 +215,7 @@ func DetailHandler() http.Handler {
 			absorbedIDs[i] = m.ClientID
 		}
 
-		history, err := mergedHistory(r.Context(), tx, clientID, absorbedIDs)
+		history, err := mergedHistory(r.Context(), tx, practiceID, clientID, absorbedIDs)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
@@ -255,8 +264,8 @@ func DetailHandler() http.Handler {
 //
 // The Engagement Requests need no such treatment: the merge re-pointed
 // their client_id at the survivor, so they are already hers to read.
-func mergedHistory(ctx context.Context, tx *sql.Tx, clientID string, absorbedIDs []string) ([]HistoryEntry, error) {
-	events, err := listClientEvents(ctx, tx, clientID)
+func mergedHistory(ctx context.Context, tx *sql.Tx, practiceID, clientID string, absorbedIDs []string) ([]HistoryEntry, error) {
+	events, err := listClientEvents(ctx, tx, practiceID, clientID)
 	if err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		return nil, err
@@ -272,7 +281,7 @@ func mergedHistory(ctx context.Context, tx *sql.Tx, clientID string, absorbedIDs
 		history = append(history, HistoryEntry{Type: "client_event", At: events[i].CreatedAt, ClientEvent: &events[i]})
 	}
 	for _, absorbedID := range absorbedIDs {
-		absorbedEvents, err := listClientEvents(ctx, tx, absorbedID)
+		absorbedEvents, err := listClientEvents(ctx, tx, practiceID, absorbedID)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			return nil, err
@@ -345,62 +354,70 @@ func listMergedRecords(ctx context.Context, tx *sql.Tx, clientID string) ([]Merg
 	return merged, nil
 }
 
-func listClientEvents(ctx context.Context, tx *sql.Tx, clientID string) ([]Event, error) {
-	rows, err := tx.QueryContext(ctx,
-		`SELECT a.action, a.diff, a.actor_kind::text, a.actor_staff_id, s.name,
-		        ac.given_name, ac.preferred_name, a.created_at
-		 FROM activity a
-		 LEFT JOIN staff s ON s.id = a.actor_staff_id
-		 LEFT JOIN clients ac ON ac.id = a.actor_client_id
-		 WHERE a.subject_kind = 'client' AND a.subject_id = $1 ORDER BY a.created_at`,
-		clientID,
-	)
+// eventProjection is this package's own half of a subject-scoped
+// activity row (#1150): the sealed diff, and the acting Staff member's
+// id, which this screen links by. Everything else -- the Practice and
+// subject scoping, the ordering, and the actor's resolved name -- is
+// activitypage's.
+//
+// The builder does nothing but copy. Unsealing a diff reads her key,
+// which is a second query on the same transaction, and a builder runs
+// while the result set is still open; listClientEvents unseals after the
+// reader has returned, for exactly that reason.
+var eventProjection = activitypage.Projection[Event]{
+	Columns: []string{"a.diff", "a.actor_staff_id"},
+	Row: func() ([]any, func(activitypage.Row) Event) {
+		var diff []byte
+		var actorStaffID sql.NullString
+		return []any{&diff, &actorStaffID}, func(r activitypage.Row) Event {
+			e := Event{
+				EventType: r.Action,
+				Diff:      diff,
+				ActorKind: r.ActorKind,
+				ActorName: r.ActorName,
+				CreatedAt: r.CreatedAt,
+			}
+			if actorStaffID.Valid {
+				e.ActorStaffID = &actorStaffID.String
+			}
+			return e
+		}
+	},
+}
+
+// listClientEvents reads every one of clientID's own activity rows.
+//
+// It is the one reader in the codebase that asks activitypage for an
+// unpaginated page, and that is the behavior it has always had: a
+// Client's detail screen shows her whole record at once, interleaved
+// with her Engagement Requests, and there is no cursor on that screen to
+// resume from. #1150 left it that way rather than quietly paginating a
+// history a Practice reads end to end.
+//
+// Two things it did not do before #1150 and does now: it filters
+// practice_id in the app layer as well as relying on
+// activity_practice_visibility (00051), the way every other subject
+// reader already did, so a bug in either alone cannot reach another
+// Practice's rows; and a departed Staff actor reads as
+// activity.DepartedStaffName rather than as a null the screen printed as
+// "Unknown staff" -- a second word for an absence the rest of the
+// product calls "a former colleague".
+func listClientEvents(ctx context.Context, tx *sql.Tx, practiceID, clientID string) ([]Event, error) {
+	page, err := activitypage.List(ctx, tx, activitypage.Query{
+		PracticeID:  practiceID,
+		SubjectKind: activity.SubjectClient,
+		SubjectID:   clientID,
+	}, eventProjection)
 	if err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		return nil, fmt.Errorf("client: list client events: %w", err)
-	}
-	defer func() { _ = rows.Close() }()
-
-	events := []Event{}
-	for rows.Next() {
-		var e Event
-		var actorStaffID, actorName, actorClientGivenName, actorClientPreferredName sql.NullString
-		var diff []byte
-		if err := rows.Scan(&e.EventType, &diff, &e.ActorKind, &actorStaffID, &actorName,
-			&actorClientGivenName, &actorClientPreferredName, &e.CreatedAt); err != nil {
-			// coverage:ignore reason: row scan failure, not exercised by unit tests
-			return nil, fmt.Errorf("client: scan client event: %w", err)
-		}
-		e.Diff = diff
-		if actorStaffID.Valid {
-			e.ActorStaffID = &actorStaffID.String
-		}
-		if actorName.Valid {
-			e.ActorName = &actorName.String
-		}
-		// The Client-authored case ADR-0022's actor_kind='client' names:
-		// #619's sign-in-address change is written by
-		// clientauth.recordAddressChange with a ClientActor, so this row
-		// carries her own name rather than a Staff member's.
-		if actorClientGivenName.Valid {
-			name := PreferredName(actorClientGivenName.String, actorClientPreferredName.String)
-			e.ActorName = &name
-		}
-		events = append(events, e)
-	}
-	if err := rows.Err(); err != nil {
-		// coverage:ignore reason: row iteration failure, not exercised by unit tests
-		return nil, fmt.Errorf("client: iterate client events: %w", err)
-	}
-	if err := rows.Close(); err != nil {
-		// coverage:ignore reason: row close failure, not exercised by unit tests
-		return nil, fmt.Errorf("client: close client events: %w", err)
+		return nil, err
 	}
 
-	// Unsealing runs after the rows are closed, never inside the loop:
-	// opening a diff reads her key, and a second query on the same
-	// transaction while a result set is still open deadlocks on the
+	// Unsealing runs after the reader has closed its rows, never inside
+	// the loop: opening a diff reads her key, and a second query on the
+	// same transaction while a result set is still open deadlocks on the
 	// connection.
+	events := page.Items
 	for i := range events {
 		events[i].Diff = openDiff(ctx, tx, clientID, events[i].Diff)
 	}

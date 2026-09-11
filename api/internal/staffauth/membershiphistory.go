@@ -5,11 +5,11 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"net/http"
 	"time"
 
 	"doula-cloud/api/internal/activity"
+	"doula-cloud/api/internal/activitypage"
 	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/pagecursor"
 )
@@ -122,27 +122,26 @@ func ListMembershipHistoryHandler() http.Handler {
 			after = &c
 		}
 
-		items, hasMore, err := listMembershipChanges(r.Context(), tx, practiceID, staffID, after)
+		page, err := listMembershipChanges(r.Context(), tx, practiceID, staffID, after)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
-		resp := MembershipHistory{Items: items, HasMore: hasMore}
-		if hasMore {
-			next := pagecursor.Encode(items[len(items)-1].CreatedAt, items[len(items)-1].EventID)
-			resp.NextCursor = &next
-		}
-
-		apierr.WriteJSON(w, http.StatusOK, resp)
+		apierr.WriteJSON(w, http.StatusOK, MembershipHistory{
+			Items:      page.Items,
+			NextCursor: page.NextCursor,
+			HasMore:    page.HasMore,
+		})
 	})
 }
 
-// listMembershipChangesQuery and listMembershipChangesAfterQuery differ
-// only in the cursor's WHERE clause and the LIMIT placeholder, so two
-// static queries are simpler and safer than one built at runtime -- the
-// shape listWorkStateChanges and message.listMessages already use.
+// membershipProjection is this package's own half of a subject-scoped
+// activity row (#1150): the diff, and nothing else. activitypage owns
+// the Practice and subject scoping, the newest-first (created_at, id)
+// cursor, the sentinel row that answers "is there more?" without a
+// second query, the page trim, and the actor's resolved name.
 //
 // There is no changes-only filter, which the work state history needs
 // and this one does not. A Membership event is only ever written when
@@ -151,103 +150,46 @@ func ListMembershipHistoryHandler() http.Handler {
 // other four actions each name an act that happened once. Every row is
 // already a change, so a filter could only ever drop a real one.
 //
-// The LEFT JOIN resolves the actor's name here rather than leaving the
-// caller to look it up, the same way engagement.listEngagementActivity
-// and activityfeed.queryBatch both do it. It is a LEFT JOIN and not an
-// inner one because staff_practice_visibility (00002) stops admitting a
-// person's staff row the moment her Membership ends -- so the Owner who
-// changed a colleague's roles, and has since left herself, is a NULL
-// name on a row that still has to render.
-const listMembershipChangesQuery = `SELECT a.id, a.action, a.diff, a.actor_kind, s.name, a.created_at
-	FROM activity a
-	LEFT JOIN staff s ON s.id = a.actor_staff_id
-	WHERE a.practice_id = $1 AND a.subject_kind = $2 AND a.subject_id = $3
-	ORDER BY a.created_at DESC, a.id DESC
-	LIMIT $4`
-
-const listMembershipChangesAfterQuery = `SELECT a.id, a.action, a.diff, a.actor_kind, s.name, a.created_at
-	FROM activity a
-	LEFT JOIN staff s ON s.id = a.actor_staff_id
-	WHERE a.practice_id = $1 AND a.subject_kind = $2 AND a.subject_id = $3
-	  AND (a.created_at, a.id) < ($4, $5)
-	ORDER BY a.created_at DESC, a.id DESC
-	LIMIT $6`
-
-// listMembershipChanges reads one page, newest first, and reports whether
-// another follows. It asks for one row more than the page holds and drops
-// it, so "is there more?" costs no second query.
-func listMembershipChanges(ctx context.Context, tx *sql.Tx, practiceID, staffID string, after *pagecursor.Cursor) ([]MembershipChange, bool, error) {
-	limit := membershipHistoryPageSize + 1
-
-	var rows *sql.Rows
-	var err error
-	if after == nil {
-		rows, err = tx.QueryContext(ctx, listMembershipChangesQuery,
-			practiceID, activity.SubjectMembership, staffID, limit)
-	} else {
-		rows, err = tx.QueryContext(ctx, listMembershipChangesAfterQuery,
-			practiceID, activity.SubjectMembership, staffID, after.At, after.ID, limit)
-	}
-	// coverage:ignore reason: DB query failure, not exercised by unit tests
-	if err != nil {
-		return nil, false, fmt.Errorf("staffauth: query membership history: %w", err)
-	}
-	defer func() { _ = rows.Close() }()
-
-	items := []MembershipChange{}
-	for rows.Next() {
-		var c MembershipChange
+// EventID is the activity row's own id, which is why the shared builder
+// is handed the row rather than only the fields a generic feed would
+// show: this DTO names the event a reader can come back to.
+//
+// What this gives up, said rather than left to be discovered: the shared
+// reader always joins clients for the actor's name, and a Membership has
+// no Client writer and can have none -- a Membership is a person's
+// standing at a Practice, and nothing a Client does touches one. So this
+// read now carries one LEFT JOIN that never matches. That is the trade
+// #1150 made deliberately: this package used to avoid the join by
+// writing its own two-branch actor rule, and a second spelling of that
+// rule is exactly how the Engagement ledger came to render a departed
+// colleague as an empty cell while this one named her.
+var membershipProjection = activitypage.Projection[MembershipChange]{
+	Columns: []string{"a.diff"},
+	Row: func() ([]any, func(activitypage.Row) MembershipChange) {
 		var diff []byte
-		var actorKind string
-		var actorName sql.NullString
-		if err := rows.Scan(&c.EventID, &c.Action, &diff, &actorKind, &actorName, &c.CreatedAt); err != nil {
-			// coverage:ignore reason: scan failure on a well-typed query, not exercised by unit tests
-			return nil, false, fmt.Errorf("staffauth: scan membership event: %w", err)
+		return []any{&diff}, func(r activitypage.Row) MembershipChange {
+			c := MembershipChange{
+				EventID:   r.ID,
+				Action:    r.Action,
+				ActorName: r.ActorName,
+				CreatedAt: r.CreatedAt,
+			}
+			applyMembershipDiff(&c, diff)
+			return c
 		}
-		c.ActorName = membershipActorName(actorKind, actorName)
-		applyMembershipDiff(&c, diff)
-		items = append(items, c)
-	}
-	// coverage:ignore reason: row iteration failure, not exercised by unit tests
-	if err := rows.Err(); err != nil {
-		return nil, false, fmt.Errorf("staffauth: iterate membership history: %w", err)
-	}
-
-	hasMore := len(items) > membershipHistoryPageSize
-	if hasMore {
-		items = items[:membershipHistoryPageSize]
-	}
-	return items, hasMore, nil
+	},
 }
 
-// membershipActorName is the actor half of a row.
-//
-// Deliberately not activityfeed.resolveActorName's three-way switch.
-// That function serves a feed spanning every subject kind, so it has a
-// Client branch to reach; this subject kind has no Client writer and can
-// have none -- a Membership is a person's standing at a Practice, and
-// nothing a Client does touches one. Copying the third branch here would
-// mean a LEFT JOIN on clients that never matches and a branch no test
-// can reach honestly.
-//
-// So there are two real cases and a floor. A staff actor is named; a
-// staff actor whose row the LEFT JOIN could not reach is named as
-// departed rather than left blank, which activityfeed does not do and
-// this needs, because staff_practice_visibility (00002) stops admitting
-// a person's staff row the moment her own Membership ends. Anything
-// else falls to ADR-0022's SystemActorName -- the floor, for an actor
-// kind this subject kind does not have a writer for. If one is ever
-// added, and especially if it is ever a Client, this switch is what has
-// to grow first: ADR-0022 is explicit that a Client's own act is hers
-// and must never be attributed to the product.
-func membershipActorName(actorKind string, staffName sql.NullString) string {
-	if actorKind != string(activity.ActorStaff) {
-		return activity.SystemActorName
-	}
-	if !staffName.Valid {
-		return activity.DepartedStaffName
-	}
-	return staffName.String
+// listMembershipChanges reads one page, newest first, and reports
+// whether another follows.
+func listMembershipChanges(ctx context.Context, tx *sql.Tx, practiceID, staffID string, after *pagecursor.Cursor) (activitypage.Page[MembershipChange], error) {
+	return activitypage.List(ctx, tx, activitypage.Query{
+		PracticeID:  practiceID,
+		SubjectKind: activity.SubjectMembership,
+		SubjectID:   staffID,
+		After:       after,
+		PageSize:    membershipHistoryPageSize,
+	}, membershipProjection)
 }
 
 // applyMembershipDiff unpacks the diff column into the entry's four

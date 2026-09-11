@@ -5,6 +5,7 @@ import (
 	"strconv"
 	"testing"
 
+	"doula-cloud/api/internal/activitypage"
 	"doula-cloud/api/internal/testdb"
 )
 
@@ -64,11 +65,16 @@ func TestListEngagementActivityQuery_StaysOffTheJITCliff(t *testing.T) {
 		t.Skipf("jit_above_cost = %s, so this server never JITs and there is no cliff to guard", threshold)
 	}
 
+	// The statement is asked of activitypage rather than written out
+	// again here (#1150): a guard that EXPLAINs a hand-copied literal
+	// stops guarding the shipped query the moment either one moves.
+	// moneyGate false is deliberate -- that is the contractor's read,
+	// the only one that carries the action-exclusion predicate, and so
+	// the heavier of the two plans this reader issues.
+	query, args := activitypage.Statement(activityQuery(practiceID, engagementID, false, nil), activityProjection)
+
 	var raw []byte
-	if err := tx.QueryRowContext(t.Context(),
-		"EXPLAIN (FORMAT JSON) "+listEngagementActivityQuery,
-		practiceID, engagementID, true, activityPageSize+1,
-	).Scan(&raw); err != nil {
+	if err := tx.QueryRowContext(t.Context(), "EXPLAIN (FORMAT JSON) "+query, args...).Scan(&raw); err != nil {
 		t.Fatalf("explain activity query: %v", err)
 	}
 
