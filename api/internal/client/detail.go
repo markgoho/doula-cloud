@@ -407,6 +407,7 @@ func listClientEvents(ctx context.Context, tx *sql.Tx, practiceID, clientID stri
 		PracticeID:  practiceID,
 		SubjectKind: activity.SubjectClient,
 		SubjectID:   clientID,
+		PageSize:    activitypage.Unbounded,
 	}, eventProjection)
 	if err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests

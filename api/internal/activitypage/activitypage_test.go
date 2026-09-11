@@ -211,8 +211,11 @@ func TestList_PagesNewestFirstPastAnExclusionAndAnExtraJoin(t *testing.T) {
 	ownerID := testdb.SeedNamedStaffAtPractice(t, db, practiceID, "activitypage-paging-owner", "Renata Alvarez", []string{ownerRole}, employeeType)
 	_, engagementID := testdb.SeedEngagementInStatus(t, db, practiceID, "Client", "activitypage-paging@example.com", "active")
 
-	// One row the exclusion drops, then five it keeps.
+	// Two rows the exclusion drops -- two rather than one, so the list is
+	// really a list and a second excluded action cannot be dropped from
+	// the predicate unnoticed -- then five it keeps.
 	testdb.SeedActivity(t, db, practiceID, activity.SubjectEngagement, engagementID, "contract_priced", activity.StaffActor(ownerID))
+	testdb.SeedActivity(t, db, practiceID, activity.SubjectEngagement, engagementID, "invoice_sent", activity.StaffActor(ownerID))
 	const kept = 5
 	for i := range kept {
 		testdb.SeedActivity(t, db, practiceID, activity.SubjectEngagement, engagementID, fmt.Sprintf("visit_%d", i), activity.StaffActor(ownerID))
@@ -233,7 +236,7 @@ func TestList_PagesNewestFirstPastAnExclusionAndAnExtraJoin(t *testing.T) {
 		PracticeID:      practiceID,
 		SubjectKind:     activity.SubjectEngagement,
 		SubjectID:       engagementID,
-		ExcludedActions: "'contract_priced'",
+		ExcludedActions: []string{"contract_priced", "invoice_sent"},
 		PageSize:        3,
 	}
 

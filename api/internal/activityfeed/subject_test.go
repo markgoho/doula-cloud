@@ -44,7 +44,7 @@ func TestListForSubject_ScopesToOneSubjectOnly(t *testing.T) {
 	testdb.SeedActivity(t, db, practiceID, activity.SubjectEngagement, otherEngagementID, "visit_logged", activity.StaffActor(ownerID))
 
 	tx := beginScopedTx(t, db, practiceID)
-	got, err := activityfeed.ListForSubject(t.Context(), tx, practiceID, activity.SubjectEngagement, engagementID, "", nil, 30)
+	got, err := activityfeed.ListForSubject(t.Context(), tx, practiceID, activity.SubjectEngagement, engagementID, nil, nil, 30)
 	if err != nil {
 		t.Fatalf("ListForSubject: %v", err)
 	}
@@ -68,7 +68,7 @@ func TestListForSubject_ExcludedActionsNotInHidesThoseRows(t *testing.T) {
 	testdb.SeedActivity(t, db, practiceID, activity.SubjectEngagement, engagementID, "offer_sent", activity.StaffActor(ownerID))
 
 	tx := beginScopedTx(t, db, practiceID)
-	got, err := activityfeed.ListForSubject(t.Context(), tx, practiceID, activity.SubjectEngagement, engagementID, "'offer_sent'", nil, 30)
+	got, err := activityfeed.ListForSubject(t.Context(), tx, practiceID, activity.SubjectEngagement, engagementID, []string{"offer_sent"}, nil, 30)
 	if err != nil {
 		t.Fatalf("ListForSubject: %v", err)
 	}
@@ -92,7 +92,7 @@ func TestListForSubject_PaginatesNewestFirst(t *testing.T) {
 	}
 
 	tx := beginScopedTx(t, db, practiceID)
-	first, err := activityfeed.ListForSubject(t.Context(), tx, practiceID, activity.SubjectEngagement, engagementID, "", nil, 30)
+	first, err := activityfeed.ListForSubject(t.Context(), tx, practiceID, activity.SubjectEngagement, engagementID, nil, nil, 30)
 	if err != nil {
 		t.Fatalf("ListForSubject first page: %v", err)
 	}
@@ -105,7 +105,7 @@ func TestListForSubject_PaginatesNewestFirst(t *testing.T) {
 	if err != nil {
 		t.Fatalf("decode cursor: %v", err)
 	}
-	second, err := activityfeed.ListForSubject(t.Context(), tx, practiceID, activity.SubjectEngagement, engagementID, "", &cursor, 30)
+	second, err := activityfeed.ListForSubject(t.Context(), tx, practiceID, activity.SubjectEngagement, engagementID, nil, &cursor, 30)
 	if err != nil {
 		t.Fatalf("ListForSubject second page: %v", err)
 	}

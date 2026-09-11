@@ -47,20 +47,21 @@ var entryProjection = activitypage.Projection[Entry]{
 // the one a Client-portal caller reads. The gate reasoning and the
 // exclusion contract are activitypage's own doc comments now, stated
 // once for every caller rather than here for one: this applies no access
-// check of its own, and excludedActionsNotIn is a SQL fragment of the
-// caller's own action constants, never request input.
+// check of its own, and excludedActions is the list of actions the read
+// must not return, bound as parameters rather than written into the
+// query.
 //
 // It applies no ADR-0008 money filter either: that tier is a Staff-role
 // concept activitygate.CanSeeAction/RestrictedActions already model, and
 // does not apply to every caller of this function
 // (portal.ActivityHandler's Client reads her own money in full, per
 // CONTEXT.md's Activity entry).
-func ListForSubject(ctx context.Context, tx *sql.Tx, practiceID, subjectKind, subjectID, excludedActionsNotIn string, after *pagecursor.Cursor, pageSize int) (ListResponse, error) {
+func ListForSubject(ctx context.Context, tx *sql.Tx, practiceID, subjectKind, subjectID string, excludedActions []string, after *pagecursor.Cursor, pageSize int) (ListResponse, error) {
 	page, err := activitypage.List(ctx, tx, activitypage.Query{
 		PracticeID:      practiceID,
 		SubjectKind:     subjectKind,
 		SubjectID:       subjectID,
-		ExcludedActions: excludedActionsNotIn,
+		ExcludedActions: excludedActions,
 		After:           after,
 		PageSize:        pageSize,
 	}, entryProjection)

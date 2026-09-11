@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"fmt"
 	"net/http"
-	"strings"
 
 	"doula-cloud/api/internal/activity"
 	"doula-cloud/api/internal/activityfeed"
@@ -18,31 +17,31 @@ import (
 // there is nothing portal-specific about how many rows one page carries.
 const activityPageSize = 30
 
-// staffingActionsNotIn is the SQL-literal exclusion clause built once
-// from activity.StaffingActions() -- CONTEXT.md's Activity entry: a
+// staffingActions is the exclusion list built once from
+// activity.StaffingActions() -- CONTEXT.md's Activity entry: a
 // Client reads her own Activity, "never who inside the Practice did
 // what." An Offer names which Doula was asked, accepted or bumped, and a
 // Visit reassignment names which Doula covers it; both are Practice
 // roster facts, not facts about her. A void request and its refusal are
 // the same sentence in its other framing -- the Practice deliberating
 // with itself about her Contract, nothing of hers changed either way
-// (#1096); the void itself is not in the set and still reaches her. Every
-// value here is a compile-time constant this package itself wrote, never
-// request input, matching engagement.moneyActionsNotIn's own reasoning.
-var staffingActionsNotIn = buildStaffingActionsNotIn()
+// (#1096); the void itself is not in the set and still reaches her. It
+// reaches the query as bound parameters (activitypage.Query's own doc
+// comment), so it is a list of names here and never a fragment of SQL.
+var staffingActions = buildStaffingActions()
 
-func buildStaffingActionsNotIn() string {
+func buildStaffingActions() []string {
 	actions := activity.StaffingActions()
-	quoted := make([]string, len(actions))
+	names := make([]string, len(actions))
 	for i, a := range actions {
-		quoted[i] = "'" + string(a) + "'"
+		names[i] = string(a)
 	}
-	return strings.Join(quoted, ", ")
+	return names
 }
 
 // staffActorDisplayName is what a Staff actor's row renders as on a
 // Client's own ledger -- CONTEXT.md's Activity entry, the second half of
-// the same sentence staffingActionsNotIn answers: "she reads her own
+// the same sentence staffingActions answers: "she reads her own
 // Activity ... never who inside the Practice did what." Excluding
 // staffing-shaped actions (offer_*, visit_reassigned) is not enough on
 // its own: every remaining Staff-authored row (a Contract sent, an
@@ -74,7 +73,7 @@ func redactStaffActorNames(items []activityfeed.Entry) {
 // the whole of the access decision -- there is no role hierarchy to
 // filter further, and CONTEXT.md's Activity entry says she reads "her
 // money" in full, unlike an employed Doula under ADR-0008's money tier.
-// staffingActionsNotIn excludes Practice-roster actions outright, and
+// staffingActions excludes Practice-roster actions outright, and
 // redactStaffActorNames replaces every surviving Staff actor's own name --
 // together the two halves of that same CONTEXT.md sentence. Must be
 // mounted behind clientauth.Middleware.
@@ -129,7 +128,7 @@ func ActivityHandler() http.Handler {
 			after = &c
 		}
 
-		resp, err := activityfeed.ListForSubject(r.Context(), tx, practiceID, activity.SubjectEngagement, engagementID, staffingActionsNotIn, after, activityPageSize)
+		resp, err := activityfeed.ListForSubject(r.Context(), tx, practiceID, activity.SubjectEngagement, engagementID, staffingActions, after, activityPageSize)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)

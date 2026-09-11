@@ -55,25 +55,29 @@ import (
 	"doula-cloud/api/internal/personname"
 )
 
+// Unbounded is the PageSize that reads every row: no LIMIT, no
+// sentinel, no cursor minted, HasMore false.
+//
+// Only the Client's own history reads that way, because it always has --
+// it renders one screen of a woman's whole record, interleaved with her
+// Engagement Requests, and there is no cursor on that screen to resume
+// from. It is named rather than left as a bare zero so an unbounded read
+// cannot be what a forgotten struct field looks like. A reader that
+// grows a cursor should stop asking for this rather than page around it.
+const Unbounded = 0
+
 // Query names one page of one subject's activity.
 //
-// ExcludedActions is an optional SQL fragment of quoted action literals
-// (e.g. "'offer_sent', 'offer_accepted'"), built once by the caller from
-// its own internal action constants -- never request input, the same
-// shape engagement's own money exclusion and portal's staffing exclusion
-// already are -- or the empty string to exclude nothing.
-//
-// PageSize of zero means every row: no LIMIT, no sentinel, no cursor
-// minted, HasMore false. Only the Client's own history reads that way,
-// because it always has (it renders one screen of a woman's whole
-// record); it is not a default anything else should reach for, and a
-// reader that grows a cursor should stop passing zero rather than page
-// around an unbounded read.
+// ExcludedActions is the actions this read must not return -- ADR-0008's
+// money tier for a contractor, CONTEXT.md's Practice-roster actions for a
+// Client -- or empty to exclude nothing. They are bound as parameters,
+// so this is a list of action names and never a fragment of SQL: a
+// caller has no way to put anything but a value here.
 type Query struct {
 	PracticeID      string
 	SubjectKind     string
 	SubjectID       string
-	ExcludedActions string
+	ExcludedActions []string
 	After           *pagecursor.Cursor
 	PageSize        int
 }
@@ -87,11 +91,18 @@ type Query struct {
 // whose own DTO names the event (the Membership history's eventId) needs
 // -- and what this package itself mints the cursor from.
 //
-// ActorName is always populated, never a bare id a reader has to resolve
-// itself: the acting Staff member's name, activity.DepartedStaffName
-// once her Membership has ended and staff_practice_visibility (00002)
-// stops admitting her staff row, the acting Client's preferred name, or
-// activity.SystemActorName ("Doula Cloud", never "System" -- ADR-0022).
+// ActorName is populated for each of ADR-0022's three actor kinds, never
+// a bare id a reader has to resolve itself: the acting Staff member's
+// name, activity.DepartedStaffName once her Membership has ended and
+// staff_practice_visibility (00002) stops admitting her staff row, the
+// acting Client's preferred name, or activity.SystemActorName ("Doula
+// Cloud", never "System" -- ADR-0022).
+//
+// The Staff case is the one with a name to lose, and losing it is
+// answered above. A Client actor's own row is always reachable by the
+// same Practice reading this row -- a Client is never deleted, only
+// erased in place (ADR-0027), which redacts her name rather than
+// removing the row -- so her branch has no equivalent absence to name.
 type Row struct {
 	ID          string
 	SubjectKind string
@@ -119,11 +130,14 @@ type Row struct {
 // row) and c (the actor's clients row). Columns are appended after the
 // shared SELECT list.
 //
-// Neither is request input: both are built from the caller's own
-// compile-time constants, so the query text this package assembles from
-// them carries no injection risk. That is the same reasoning the
-// exclusion fragments already carried, stated once here instead of at
-// each caller.
+// Joins and Columns are the only two things a caller contributes to the
+// query text rather than to its parameters, and neither is request
+// input: both are built from the caller's own compile-time constants.
+// Everything a request can influence -- the Practice, the subject, the
+// excluded actions, the cursor, the page size -- is bound, so the text
+// assembled here carries no injection risk. A caller reaching for a
+// value it wants filtered on should extend Query, never smuggle it
+// through a column.
 type Projection[T any] struct {
 	Joins   []string
 	Columns []string
@@ -180,9 +194,14 @@ func Statement[T any](q Query, p Projection[T]) (string, []any) {
 		sb.WriteString(join)
 	}
 	sb.WriteString("\n	WHERE a.practice_id = $1 AND a.subject_kind = $2 AND a.subject_id = $3")
-	if q.ExcludedActions != "" {
+	if len(q.ExcludedActions) > 0 {
 		sb.WriteString("\n	  AND a.action NOT IN (")
-		sb.WriteString(q.ExcludedActions)
+		for i, action := range q.ExcludedActions {
+			if i > 0 {
+				sb.WriteString(", ")
+			}
+			sb.WriteString(placeholder(action))
+		}
 		sb.WriteString(")")
 	}
 	if q.After != nil {
@@ -205,7 +224,7 @@ func Statement[T any](q Query, p Projection[T]) (string, []any) {
 // dropping it, so "is there more?" costs no second query.
 func List[T any](ctx context.Context, tx *sql.Tx, q Query, p Projection[T]) (Page[T], error) {
 	query, args := Statement(q, p)
-	rows, err := tx.QueryContext(ctx, query, args...) //nolint:gosec // every interpolated fragment is a caller's own compile-time constant, never request input -- see Projection's own doc comment
+	rows, err := tx.QueryContext(ctx, query, args...) //nolint:gosec // the only interpolated text is a Projection's own joins and columns, built from the caller's compile-time constants -- every request-influenced value is bound, see Projection's own doc comment
 	// coverage:ignore reason: DB query failure, not exercised by unit tests
 	if err != nil {
 		return Page[T]{}, fmt.Errorf("activitypage: query %s activity: %w", q.SubjectKind, err)

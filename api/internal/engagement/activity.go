@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"strings"
 	"time"
 
 	"doula-cloud/api/internal/activity"
@@ -47,23 +46,12 @@ type ActivityListResponse struct {
 	HasMore    bool            `json:"hasMore"`
 }
 
-// moneyActionsNotIn is the SQL-literal form of
-// activitygate.RestrictedActions(activity.SubjectEngagement), built once
+// moneyActions is activitygate.RestrictedActions(SubjectEngagement) read
 // from that single source of truth rather than hand-copied, so the write
-// side's action names and this read filter can't drift apart. Every
-// value is a compile-time constant this package itself wrote (never
-// request input), so building it into the query text carries no
-// injection risk.
-var moneyActionsNotIn = buildMoneyActionsNotIn()
-
-func buildMoneyActionsNotIn() string {
-	actions := activitygate.RestrictedActions(activity.SubjectEngagement)
-	quoted := make([]string, len(actions))
-	for i, a := range actions {
-		quoted[i] = "'" + a + "'"
-	}
-	return strings.Join(quoted, ", ")
-}
+// side's action names and this read filter can't drift apart. It reaches
+// the query as bound parameters (activitypage.Query's own doc comment),
+// so it is a list of names here and never a fragment of SQL.
+var moneyActions = activitygate.RestrictedActions(activity.SubjectEngagement)
 
 // ListActivityHandler lists an Engagement's activity entries, most recent
 // first, cursor-paginated -- ADR-0022's ledger, read through the shared
@@ -193,7 +181,7 @@ func activityQuery(practiceID, engagementID string, moneyGate bool, after *pagec
 		PageSize:    activityPageSize,
 	}
 	if !moneyGate {
-		q.ExcludedActions = moneyActionsNotIn
+		q.ExcludedActions = moneyActions
 	}
 	return q
 }
