@@ -264,12 +264,7 @@ func TestEraseHandler_RedactionStateSurvivesRetriesAndDeadLettering(t *testing.T
 	stripe := &fakeStripeEraser{redactErr: errors.New("Unrecognized request URL")}
 	worker := client.ErasureWorker{Stripe: stripe, Now: time.Now}
 	for range len(outbox.BackoffSchedule) + 1 {
-		if _, err := db.Admin.ExecContext(t.Context(),
-			`UPDATE client_erasure_outbox SET next_attempt_at = now() - interval '1 hour'
-			  WHERE client_id = $1 AND status = 'pending'`, clientID,
-		); err != nil {
-			t.Fatalf("make rows due: %v", err)
-		}
+		forceOutboxDueNow(t, db, clientID)
 		runWorker(t, db, worker)
 	}
 
@@ -304,6 +299,7 @@ func TestErasureWorker_ClearsTheRedactionStateOnSuccess(t *testing.T) {
 		t.Fatalf("erase status = %d, want %d", resp.StatusCode, http.StatusOK)
 	}
 
+	forceOutboxDueNow(t, db, clientID)
 	runWorker(t, db, client.ErasureWorker{Stripe: &fakeStripeEraser{}, Now: time.Now})
 
 	if got := readDetail(t, session, srv, practiceID, clientID).StripeRedactionEligibleAt; got != nil {
@@ -472,6 +468,7 @@ func TestErasureWorker_PerformsEveryQueuedAct(t *testing.T) {
 	}
 
 	stripe := &fakeStripeEraser{}
+	forceOutboxDueNow(t, db, clientID)
 	runWorker(t, db, client.ErasureWorker{Stripe: stripe, Now: time.Now})
 
 	if len(stripe.deleted) != 1 || stripe.deleted[0] != [2]string{testConnectAccount, "cus_worker"} {
@@ -503,6 +500,7 @@ func TestErasureWorker_RetriesAFailedAct(t *testing.T) {
 	defer resp.Body.Close()
 
 	stripe := &fakeStripeEraser{deleteErr: errors.New("stripe is down"), redactErr: errors.New("stripe is down")}
+	forceOutboxDueNow(t, db, clientID)
 	runWorker(t, db, client.ErasureWorker{Stripe: stripe, Now: time.Now})
 
 	for act, status := range readOutboxStatus(t, db, clientID) {
@@ -533,6 +531,7 @@ func TestErasureWorker_DeadLettersWhenThePracticeHasNoConnectedAccount(t *testin
 	defer resp.Body.Close()
 
 	stripe := &fakeStripeEraser{}
+	forceOutboxDueNow(t, db, clientID)
 	runWorker(t, db, client.ErasureWorker{Stripe: stripe, Now: time.Now})
 
 	for act, status := range readOutboxStatus(t, db, clientID) {
@@ -581,6 +580,7 @@ func TestProcessErasureOutboxHandler_RunsDueActsBehindTheWorkerSecret(t *testing
 		t.Fatalf("customer deletes = %v, want none behind a rejected secret", stripe.deleted)
 	}
 
+	forceOutboxDueNow(t, db, clientID)
 	right := postProcessErasure(t, workerSrv, "correct-secret")
 	defer right.Body.Close()
 	if right.StatusCode != http.StatusOK {
@@ -603,6 +603,30 @@ func postProcessErasure(t *testing.T, srv *httptest.Server, secret string) *http
 		t.Fatalf("request: %v", err)
 	}
 	return resp
+}
+
+// forceOutboxDueNow backdates every pending client_erasure_outbox row for
+// clientID via Postgres's own clock, so a runWorker call right after it
+// claims them regardless of host-vs-container clock skew.
+//
+// enqueue seeds the stripe_customer_delete act's next_attempt_at from
+// the request handler's own time.Now() -- host time, not Postgres's --
+// with no margin, because "due immediately" is correct business
+// behavior for that act, not a fixture choice this file can adjust. The
+// claim query below reads next_attempt_at against Postgres's now(), so
+// a test that seeds through the real Erase handler and claims in the
+// same breath is exactly #987's shape (host clock ahead of a VM-backed
+// container's Postgres clock reads the row as not yet due) unless
+// something moves the row onto Postgres's own clock first. See "A
+// due-time fixture must not compare two clocks" in docs/testing.md.
+func forceOutboxDueNow(t *testing.T, db *testdb.DB, clientID string) {
+	t.Helper()
+	if _, err := db.Admin.ExecContext(t.Context(),
+		`UPDATE client_erasure_outbox SET next_attempt_at = now() - interval '1 minute'
+		  WHERE client_id = $1 AND status = 'pending'`, clientID,
+	); err != nil {
+		t.Fatalf("make rows due: %v", err)
+	}
 }
 
 // runWorker runs one pass of the erasure worker in its own transaction,
