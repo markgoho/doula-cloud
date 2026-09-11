@@ -16,6 +16,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -236,24 +237,40 @@ func Middleware(db *sql.DB) func(http.Handler) http.Handler {
 			// verifiable login by the owner" as what stops that clock --
 			// so the evidence has to outlive a rotated request log and a
 			// swept sessions row, both long gone before three years
-			// (#420). It is written here, and not at sign-in, because
-			// this is the first point in a request where
-			// app.current_practice_id is set, and that is the variable
-			// staff_practice_visibility reads -- the only policy
-			// admitting an UPDATE of a staff row.
+			// (#420).
 			//
-			// Stamped at most once a day: the question it answers is
-			// three years wide, so a fresher timestamp buys nothing.
-			if _, err := tx.ExecContext(r.Context(),
-				`UPDATE staff
-				 SET last_practice_id = $1,
-				     last_active_at = CASE
-				         WHEN last_active_at IS NULL OR last_active_at < now() - interval '1 day'
-				         THEN now() ELSE last_active_at END
-				 WHERE id = $2`, practiceID, staffID); err != nil {
-				// coverage:ignore reason: DB query failure, not exercised by unit tests
-				apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
-				return
+			// #1197: it does not, however, belong in *this* transaction.
+			// This tx stays open for the life of the request -- it
+			// commits only after next.ServeHTTP returns below -- so a
+			// write against staff.id here holds that row's lock for as
+			// long as the handler takes, and every other request from
+			// the same Staff person serializes behind it (the failure
+			// mode #1077 hit: a slow RLS-scoped read on an unrelated
+			// table stalled an unrelated POST). What the stamp needs
+			// from a transaction is only app.current_practice_id and
+			// app.current_staff_id set locally -- staff_practice_visibility
+			// is the only policy admitting the UPDATE, and it reads
+			// nothing else about the request. Nothing requires it to be
+			// *this* transaction, or to share this request's fate: the
+			// fact it records ("she was here") is true whether or not
+			// the request that observed it goes on to succeed. So it
+			// runs in its own transaction, opened and committed here,
+			// which releases the row lock in milliseconds rather than
+			// holding it for the request's duration -- see
+			// stampActivity below.
+			//
+			// Stamped at most once a day, and skipped entirely once
+			// today's stamp and this Practice are already on the row:
+			// the question it answers is three years wide, so a fresher
+			// timestamp buys nothing, and a write that would set the row
+			// to the values it already holds is a lock and a dead tuple
+			// for nothing.
+			if needsActivityStamp(self, practiceID) {
+				if err := stampActivity(r.Context(), db, staffID, practiceID); err != nil {
+					// coverage:ignore reason: DB query failure, not exercised by unit tests
+					apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+					return
+				}
 			}
 
 			ctx := context.WithValue(r.Context(), staffIDKey, staffID)
@@ -278,6 +295,67 @@ func Middleware(db *sql.DB) func(http.Handler) http.Handler {
 			}
 		})
 	}
+}
+
+// needsActivityStamp reports whether stampActivity has anything to do:
+// self already carries the same last_active_at CASE (below) would leave
+// it holding, and last_practice_id already reads practiceID. self comes
+// from the same resolveSelf query the identity check already ran, so
+// this decision costs nothing beyond it -- no extra round trip to ask.
+func needsActivityStamp(self selfStaff, practiceID string) bool {
+	if !self.LastPracticeID.Valid || self.LastPracticeID.String != practiceID {
+		return true
+	}
+	return !self.LastActiveAt.Valid || self.LastActiveAt.Time.Before(time.Now().Add(-24*time.Hour))
+}
+
+// stampActivity records last_practice_id and (at most once a day)
+// last_active_at for staffID, in its own transaction rather than the
+// request's -- see #1197's comment at Middleware's call site for why.
+// db must be the same low-privilege app_runtime connection Middleware
+// was built with: staff_practice_visibility is the only RLS policy that
+// admits this UPDATE, and it reads the app.current_practice_id and
+// app.current_staff_id this sets, scoped locally to this transaction.
+func stampActivity(ctx context.Context, db *sql.DB, staffID, practiceID string) error {
+	tx, err := db.BeginTx(ctx, nil)
+	// coverage:ignore reason: DB connection failure, not exercised by unit tests
+	if err != nil {
+		return fmt.Errorf("staffauth: begin activity stamp: %w", err)
+	}
+	committed := false
+	defer func() {
+		// coverage:ignore reason: only reached on an error path below, not exercised by unit tests
+		if !committed {
+			_ = tx.Rollback()
+		}
+	}()
+
+	// coverage:ignore reason: DB query failure, not exercised by unit tests
+	if _, err := tx.ExecContext(ctx, `SELECT set_config('app.current_practice_id', $1, true)`, practiceID); err != nil {
+		return fmt.Errorf("staffauth: set current practice id for activity stamp: %w", err)
+	}
+	// coverage:ignore reason: DB query failure, not exercised by unit tests
+	if _, err := tx.ExecContext(ctx, `SELECT set_config('app.current_staff_id', $1, true)`, staffID); err != nil {
+		return fmt.Errorf("staffauth: set current staff id for activity stamp: %w", err)
+	}
+
+	if _, err := tx.ExecContext(ctx,
+		`UPDATE staff
+		 SET last_practice_id = $1,
+		     last_active_at = CASE
+		         WHEN last_active_at IS NULL OR last_active_at < now() - interval '1 day'
+		         THEN now() ELSE last_active_at END
+		 WHERE id = $2`, practiceID, staffID); err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		return fmt.Errorf("staffauth: stamp activity: %w", err)
+	}
+
+	if err := tx.Commit(); err != nil {
+		// coverage:ignore reason: DB commit failure, not exercised by unit tests
+		return fmt.Errorf("staffauth: commit activity stamp: %w", err)
+	}
+	committed = true
+	return nil
 }
 
 // setPracticeAndCheckMembership sets app.current_practice_id and
