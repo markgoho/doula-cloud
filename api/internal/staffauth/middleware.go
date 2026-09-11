@@ -16,7 +16,6 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"time"
 
 	"github.com/google/uuid"
 
@@ -298,15 +297,17 @@ func Middleware(db *sql.DB) func(http.Handler) http.Handler {
 }
 
 // needsActivityStamp reports whether stampActivity has anything to do:
-// self already carries the same last_active_at CASE (below) would leave
-// it holding, and last_practice_id already reads practiceID. self comes
+// self already carries the same last_practice_id comparison and the
+// same once-a-day staleness check (as ActivityStampStale, computed by
+// resolveSelf's own query with the database's now() -- see that field's
+// comment) that stampActivity's CASE would otherwise redo. self comes
 // from the same resolveSelf query the identity check already ran, so
 // this decision costs nothing beyond it -- no extra round trip to ask.
 func needsActivityStamp(self selfStaff, practiceID string) bool {
 	if !self.LastPracticeID.Valid || self.LastPracticeID.String != practiceID {
 		return true
 	}
-	return !self.LastActiveAt.Valid || self.LastActiveAt.Time.Before(time.Now().Add(-24*time.Hour))
+	return self.ActivityStampStale
 }
 
 // stampActivity records last_practice_id and (at most once a day)

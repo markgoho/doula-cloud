@@ -28,8 +28,15 @@ type selfStaff struct {
 	WorkState           string
 	WorkStateReportedAt time.Time
 	LastPracticeID      sql.NullString
-	LastActiveAt        sql.NullTime
-	DeletedAt           sql.NullTime
+	// ActivityStampStale answers Middleware's #1197 question ("does
+	// last_active_at need refreshing?") with the database's own now(),
+	// not Go's: this repo's dormancy tests fast-forward Postgres's clock
+	// through internal/simclock's sim.now() shim (a role's search_path
+	// resolves an unqualified now() to it ahead of pg_catalog.now()), so
+	// staleness decided by time.Now() in Go would drift from whatever
+	// day billing/dormancy.go's own now()-based reads believe it is.
+	ActivityStampStale bool
+	DeletedAt          sql.NullTime
 }
 
 // resolveSelf is this package's one owner of the pre-Practice
@@ -73,7 +80,9 @@ func querySelf(ctx context.Context, tx *sql.Tx, identityUID string, forUpdate bo
 		return selfStaff{}, false, fmt.Errorf("staffauth: set current identity uid: %w", err)
 	}
 
-	query := `SELECT id, name, email, work_state, work_state_reported_at, last_practice_id, last_active_at, deleted_at
+	query := `SELECT id, name, email, work_state, work_state_reported_at, last_practice_id,
+	                 last_active_at IS NULL OR last_active_at < now() - interval '1 day',
+	                 deleted_at
 	            FROM staff WHERE identity_uid = $1`
 	if forUpdate {
 		query += ` FOR UPDATE`
@@ -82,7 +91,7 @@ func querySelf(ctx context.Context, tx *sql.Tx, identityUID string, forUpdate bo
 	var self selfStaff
 	err := tx.QueryRowContext(ctx, query, identityUID).Scan(
 		&self.ID, &self.Name, &self.Email, &self.WorkState,
-		&self.WorkStateReportedAt, &self.LastPracticeID, &self.LastActiveAt, &self.DeletedAt,
+		&self.WorkStateReportedAt, &self.LastPracticeID, &self.ActivityStampStale, &self.DeletedAt,
 	)
 	if errors.Is(err, sql.ErrNoRows) {
 		return selfStaff{}, false, nil
