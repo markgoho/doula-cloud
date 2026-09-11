@@ -14,7 +14,7 @@ Stage is one of: **shelf** (no read-back yet), **read-back** (on trunk in `docs/
 
 | Book | Author, year | Drive file | Stage |
 |---|---|---|---|
-| The SaaS Playbook | Rob Walling, 2023 | `The-SaaS-Playbook-ebook.pdf` | shelf |
+| The SaaS Playbook | Rob Walling, 2023 | `The-SaaS-Playbook-ebook.pdf` | read-back |
 | Start Marketing the Day You Start Coding | Rob Walling, 2023 ed. | `Start_Marketing_the_Day_You_Start_Coding-eBook.pdf` | shelf |
 | Make: The Bootstrapper's Handbook | Pieter Levels | `make-bootstrapper-handbook.pdf` | shelf |
 | Jobs To Be Done | see the read-back for the edition | `JTBD-Book.pdf` | shelf |
