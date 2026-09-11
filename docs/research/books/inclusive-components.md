@@ -168,7 +168,3 @@ Each browser fact, tool, figure or company the book leans on, checked in Septemb
 - **Performance claims without measurement.** "153 bytes uncompressed" for the dark theme (A Theme Switcher, p. 118), "about 100 bytes of JavaScript" (A Content Slider, p. 194), "less than 2KB minified" against a plugin at "41.9KB" (A Content Slider, p. 213), and the claim that a bloated DOM slows many users' experience (A Todo List, p. 57) are asserted; no page load, task time or assistive-technology latency is measured anywhere in the book.
 - **Framework churn as evidence.** React Router 4, Reach Router (Tabbed Interfaces, p. 150), Vue's attribute removal (Toggle buttons, p. 16), Modernizr (A Theme Switcher, p. 125) and the "React-like Web Components" debate (Collapsible Sections, p. 167) are treated as the state of play; each has moved, and the chapters that rest on them (A Theme Switcher, Collapsible Sections, Data Tables) are the ones whose code is least reusable as written.
 - **The card chapter's central tension is left to the reader.** Two clickable-card techniques are given with a trade on text selection and context menus (Cards, pp. 288–291), and the author's recommendation is conditional on "If it's not seemingly important" (p. 291), with no user evidence on either side.
-
-## 8. Where the book is weakest
-
-SECTION_8
