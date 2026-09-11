@@ -83,16 +83,39 @@ describe('the Timezone screen', () => {
 		expect(JSON.parse(init.body)).toEqual({ timezone: 'America/Denver' });
 	});
 
-	it("reports the BFF's own refusal against the control", async () => {
+	it("shows the BFF's field-level sentence, not its caller-facing summary", async () => {
+		// docs/api-design.md section 7 rule 4: `details` is the sentence
+		// written for the person and `message` is the one written for the
+		// caller. Reading `message` here would put `timezone "X" is not an
+		// IANA zone name` beside her control.
 		apiFetchWithSession.mockResolvedValueOnce(jsonResponse({ timezone: 'America/New_York' }));
 		await render(Page, {});
 		await expect.element(control()).toHaveValue('America/New_York');
 
-		apiFetchWithSession.mockResolvedValueOnce(jsonResponse('not an IANA zone name', 400));
+		apiFetchWithSession.mockResolvedValueOnce(
+			jsonResponse(
+				{
+					code: 'INVALID_ARGUMENT',
+					message: 'timezone "Nowhere/Atlantis" is not an IANA zone name',
+					details: { timezone: 'Timezone must be a zone name from the IANA database, such as America/New_York' }
+				},
+				400
+			)
+		);
 		await control().selectOptions('Mountain time (Denver)');
 		await save();
 
-		await expect.element(testPage.getByText('not an IANA zone name')).toBeVisible();
+		// In the summary at the top, as a link to the control it is about.
+		await expect
+			.element(
+				testPage.getByRole('link', {
+					name: 'Timezone must be a zone name from the IANA database, such as America/New_York'
+				})
+			)
+			.toBeVisible();
+		await expect
+			.element(testPage.getByText('timezone "Nowhere/Atlantis" is not an IANA zone name'))
+			.not.toBeInTheDocument();
 	});
 
 	it('refuses a save with nothing chosen, and sends nothing', async () => {
@@ -103,7 +126,7 @@ describe('the Timezone screen', () => {
 		await save();
 
 		await expect
-			.element(testPage.getByText('Choose the timezone this Practice works in'))
+			.element(testPage.getByRole('link', { name: 'Choose the timezone this Practice works in' }))
 			.toBeVisible();
 		expect(apiFetchWithSession).toHaveBeenCalledTimes(1);
 	});

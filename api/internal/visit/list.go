@@ -10,6 +10,7 @@ import (
 
 	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/pagecursor"
+	"doula-cloud/api/internal/practicetimezone"
 	"doula-cloud/api/internal/staffauth"
 )
 
@@ -111,8 +112,10 @@ func ListHandler() http.Handler {
 		}
 
 		// Read once for the whole page, before the rows: every Visit on
-		// it types against the same Practice's day (#953).
-		zone, err := practiceLocation(r.Context(), tx, practiceID)
+		// it types against the same Practice's day (#953). The zone comes
+		// from practicetimezone, which owns it for every calendar-day
+		// comparison in the BFF rather than only for this one (#1166).
+		zone, err := practicetimezone.Load(r.Context(), tx, practiceID)
 		if err != nil {
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return

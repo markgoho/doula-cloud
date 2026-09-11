@@ -135,8 +135,18 @@ func SignupHandler(verifier authn.Verifier, db *sql.DB, enq tasknudge.Enqueuer) 
 		}
 		req.WorkState = workState
 		if _, err := ianazone.Parse(req.Timezone); err != nil {
+			// Two refusals, not one. "Choose a timezone" is the right
+			// sentence for a founder who chose nothing, and the wrong one
+			// for a founder whose browser reported a name the IANA
+			// database does not carry -- she would read "choose one"
+			// beside a control that already has something in it. The
+			// second case says what is actually wrong with the name.
+			detail := MsgTimezoneNeeded
+			if req.Timezone != "" {
+				detail = ianazone.MsgNotRecognized
+			}
 			apierr.Write(w, http.StatusBadRequest, apierr.CodeInvalidArgument, MsgTimezoneRequired,
-				map[string]string{fieldTimezone: MsgTimezoneNeeded})
+				map[string]string{fieldTimezone: detail})
 			return
 		}
 

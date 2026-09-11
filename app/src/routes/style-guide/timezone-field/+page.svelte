@@ -1,5 +1,6 @@
 <script lang="ts">
 	import TimezoneField from '#lib/components/molecules/TimezoneField.svelte';
+	import { TIMEZONE_HINT, TIMEZONE_NEEDED } from '#lib/timezones.js';
 
 	/*
 	 * The longest realistic value, not a representative one (ADR-0025).
@@ -17,18 +18,11 @@
 
 	<section>
 		<h2>Default</h2>
-		<TimezoneField
-			bind:value
-			hint="Doula Cloud works out which day a Visit falls on in this timezone — which is what decides whether a Visit counts as birth or postpartum work."
-		/>
+		<TimezoneField bind:value hint={TIMEZONE_HINT} />
 	</section>
 
 	<section>
 		<h2>With an error</h2>
-		<TimezoneField
-			value=""
-			hint="Doula Cloud works out which day a Visit falls on in this timezone."
-			error="Choose the timezone this Practice works in"
-		/>
+		<TimezoneField value="" hint={TIMEZONE_HINT} error={TIMEZONE_NEEDED} />
 	</section>
 </stack-l>

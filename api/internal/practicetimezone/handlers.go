@@ -18,6 +18,12 @@ import (
 // actionPaymentTermsChanged uses for the sibling Practice-level setting.
 const actionTimezoneChanged = "practice_timezone_changed"
 
+// fieldTimezone is PutRequest's own json tag, and so the Details key its
+// refusal is written under -- docs/api-design.md section 7 rule 4 keys
+// Details by the DTO's field name, so a client maps it onto a control
+// with no translation table.
+const fieldTimezone = "timezone"
+
 // Response is what both handlers return: the zone the Practice is
 // currently reading its calendar days in.
 type Response struct {
@@ -98,7 +104,7 @@ func PutHandler() http.Handler {
 		if _, err := ianazone.Parse(req.Timezone); err != nil {
 			apierr.Write(w, http.StatusBadRequest, apierr.CodeInvalidArgument,
 				fmt.Sprintf("timezone %q is not an IANA zone name", req.Timezone),
-				map[string]string{"timezone": ianazone.MsgNotRecognized})
+				map[string]string{fieldTimezone: ianazone.MsgNotRecognized})
 			return
 		}
 
@@ -111,7 +117,7 @@ func PutHandler() http.Handler {
 		}
 
 		if before != after {
-			if err := write(r.Context(), tx, practiceID, after, before); err != nil {
+			if err := write(r.Context(), tx, practiceID, before, after); err != nil {
 				// coverage:ignore reason: DB query failure, not exercised by unit tests
 				apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 				return
@@ -125,7 +131,7 @@ func PutHandler() http.Handler {
 // write persists the zone and records who changed it and when -- one
 // write path, so the row and its Activity entry can never disagree about
 // what happened.
-func write(ctx context.Context, tx *sql.Tx, practiceID, after, before string) error {
+func write(ctx context.Context, tx *sql.Tx, practiceID, before, after string) error {
 	if _, err := tx.ExecContext(ctx,
 		`UPDATE practices SET timezone = $1 WHERE id = $2`, after, practiceID,
 	); err != nil {

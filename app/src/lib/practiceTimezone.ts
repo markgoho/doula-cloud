@@ -11,7 +11,7 @@
 
 import type { Fetcher } from './fetcher.js';
 
-import { apiErrorMessage } from './apiErrorMessage.js';
+import { refusalError } from './formErrors.js';
 
 export interface PracticeTimezone {
 	timezone: string;
@@ -21,15 +21,16 @@ function timezonePath(practiceId: string): string {
 	return `/api/practices/${practiceId}/timezone`;
 }
 
-/** Reads the zone the Practice keeps its calendar days in. Throws with
- * the response body's own message on a non-2xx response. */
+/** Reads the zone the Practice keeps its calendar days in. Throws a
+ * RefusalError on a non-2xx response, so the screen can read the field
+ * the BFF named rather than only its caller-facing summary. */
 export async function loadPracticeTimezone(
 	fetcher: Fetcher,
 	practiceId: string
 ): Promise<PracticeTimezone> {
 	const response = await fetcher(timezonePath(practiceId));
 	if (!response.ok) {
-		throw new Error(await apiErrorMessage(response));
+		throw await refusalError(response);
 	}
 	return response.json();
 }
@@ -49,7 +50,12 @@ export async function savePracticeTimezone(
 		body: JSON.stringify({ timezone })
 	});
 	if (!response.ok) {
-		throw new Error(await apiErrorMessage(response));
+		// A RefusalError rather than a plain Error: the BFF keys its
+		// refusal to the `timezone` field (docs/api-design.md section 7
+		// rule 4), and a plain Error would drop that sentence -- the one
+		// written for the person -- in favor of the summary written for
+		// the caller.
+		throw await refusalError(response);
 	}
 	return response.json();
 }

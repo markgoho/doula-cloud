@@ -11,6 +11,7 @@ import (
 	"doula-cloud/api/internal/apierrtest"
 	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/contracts"
+	"doula-cloud/api/internal/ianazone"
 	"doula-cloud/api/internal/idempotency"
 	"doula-cloud/api/internal/objectstore"
 	"doula-cloud/api/internal/plans"
@@ -278,8 +279,17 @@ func TestSignupHandler_RefusesAZoneTheDatabaseDoesNotName(t *testing.T) {
 			if resp.StatusCode != http.StatusBadRequest {
 				t.Fatalf("status = %d, want %d for zone %q", resp.StatusCode, http.StatusBadRequest, zone)
 			}
-			if details := decodeDetails(t, resp); details["timezone"] != staffauth.MsgTimezoneNeeded {
-				t.Fatalf("details = %v, want a timezone entry", details)
+			// Two sentences for two different mistakes: nothing chosen
+			// reads "choose one", and a name the database does not carry
+			// says what is wrong with the name -- "choose one" beside an
+			// already-filled control would tell her off for the wrong
+			// thing.
+			want := staffauth.MsgTimezoneNeeded
+			if zone != "" {
+				want = ianazone.MsgNotRecognized
+			}
+			if details := decodeDetails(t, resp); details["timezone"] != want {
+				t.Fatalf("details = %v, want %q for zone %q", details, want, zone)
 			}
 		})
 	}

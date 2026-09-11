@@ -3,39 +3,51 @@
 	import { page } from '#lib/appState.svelte.js';
 	import { apiFetchWithSession } from '#lib/api.js';
 	import { loadPracticeTimezone, savePracticeTimezone } from '#lib/practiceTimezone.js';
+	import { TIMEZONE_HINT, TIMEZONE_NEEDED } from '#lib/timezones.js';
 	import TimezoneField from '#lib/components/molecules/TimezoneField.svelte';
+	import ErrorSummary from '#lib/components/molecules/ErrorSummary.svelte';
 	import Text from '#lib/components/atoms/Text.svelte';
 	import Button from '#lib/components/atoms/Button.svelte';
-	import Notice from '#lib/components/atoms/Notice.svelte';
 	import WarningText from '#lib/components/atoms/WarningText.svelte';
 	import FormPage from '#lib/components/templates/FormPage.svelte';
+	import { errorsFromCause } from '#lib/formErrors.js';
+	import { FormSubmission, type FormError } from '#lib/formSubmission.svelte.js';
 
 	const timezoneId = 'practice-timezone';
 
+	// docs/api-design.md section 7's Details is keyed by the DTO's own
+	// JSON field name -- PUT /api/practices/{practiceId}/timezone's body
+	// has exactly one -- so a refusal the BFF wrote for this field lands
+	// on this control and in the summary's link to it.
+	const timezoneFieldIds = { timezone: timezoneId };
+
 	let timezone = $state('');
-	let fieldError = $state('');
-	let loadError = $state('');
 	let isSaved = $state(false);
+	const submission = new FormSubmission();
+
+	/* The screen's own refusal is already the list `ErrorSummary` wants,
+	   so it passes straight through; anything thrown is a refusal the BFF
+	   wrote, read for the field it named. Same split the signup page's
+	   `mapSignupRefusal` makes. */
+	function mapRefusal(refusal: unknown): FormError[] {
+		return Array.isArray(refusal) ? refusal : errorsFromCause(refusal, timezoneFieldIds);
+	}
 
 	async function load() {
-		loadError = '';
-		isSaved = false;
 		try {
 			const current = await loadPracticeTimezone(apiFetchWithSession, page.params.practiceId!);
 			timezone = current.timezone;
 		} catch (error) {
-			loadError = error instanceof Error ? error.message : 'Failed to load the timezone';
+			submission.errors = errorsFromCause(error);
 		}
 	}
 
 	async function save() {
 		isSaved = false;
-		fieldError = '';
-		if (timezone === '') {
-			fieldError = 'Choose the timezone this Practice works in';
-			return;
-		}
-		try {
+		await submission.run(async () => {
+			if (timezone === '') {
+				return [{ message: TIMEZONE_NEEDED, targetId: timezoneId }];
+			}
 			const saved = await savePracticeTimezone(
 				apiFetchWithSession,
 				page.params.practiceId!,
@@ -43,9 +55,7 @@
 			);
 			timezone = saved.timezone;
 			isSaved = true;
-		} catch (error) {
-			fieldError = error instanceof Error ? error.message : 'Failed to save';
-		}
+		}, mapRefusal);
 	}
 
 	onMount(() => {
@@ -53,18 +63,19 @@
 	});
 </script>
 
+{#snippet errorSummary()}
+	<ErrorSummary errors={submission.errors} />
+{/snippet}
+
 {#snippet fields()}
-	{#if loadError}
-		<Notice variant="error" message={loadError} />
-	{/if}
 	{#if isSaved}
 		<Text text="Saved." />
 	{/if}
 	<TimezoneField
 		id={timezoneId}
 		bind:value={timezone}
-		error={fieldError}
-		hint="Doula Cloud works out which day a Visit falls on in this timezone — which is what decides whether a Visit counts as birth or postpartum work."
+		error={submission.errorFor(timezoneId)}
+		hint={TIMEZONE_HINT}
 	/>
 	<!--
 		GOV.UK's rule for a consequence a person can still act on: it is
@@ -81,7 +92,12 @@
 {/snippet}
 
 {#snippet actions()}
-	<Button label="Save" onClick={save} />
+	<Button label="Save" loading={submission.isSubmitting} onClick={save} />
 {/snippet}
 
-<FormPage title="Timezone" fieldsets={[{ content: fields }]} {actions} />
+<FormPage
+	title="Timezone"
+	fieldsets={[{ content: fields }]}
+	{actions}
+	errorSummary={submission.errors.length > 0 ? errorSummary : undefined}
+/>

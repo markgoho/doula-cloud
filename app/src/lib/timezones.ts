@@ -24,6 +24,31 @@
 import type { LabeledValue } from './roles.js';
 
 /**
+ * The sentence beneath the timezone question, on both screens that ask
+ * it. Named once because the same question asked in two places has to
+ * read the same way -- and because what it says is load-bearing rather
+ * than decorative: the zone is not a display preference, it is what
+ * decides which calendar day a Visit falls on and therefore whether the
+ * Visit counts as birth or postpartum work.
+ */
+export const TIMEZONE_HINT =
+	'Doula Cloud works out which day a Visit falls on in this timezone — which is what decides whether a Visit counts as birth or postpartum work.';
+
+/**
+ * What a person reads when she has chosen no zone at all. GOV.UK's rule
+ * for an error message -- start with the field's own noun and say what
+ * to do -- and the same sentence `staffauth.MsgTimezoneNeeded` sends
+ * from the BFF, so the refusal she meets before the request and the one
+ * she meets after it are one sentence.
+ *
+ * A zone she *did* choose that the IANA database does not name is a
+ * different refusal and reads differently (`ianazone.MsgNotRecognized`);
+ * only the BFF can tell her that, because only the BFF holds the
+ * database.
+ */
+export const TIMEZONE_NEEDED = 'Choose the timezone this Practice works in';
+
+/**
  * The seven zones the United States keeps. Arizona is its own entry
  * rather than a footnote on Mountain: it does not observe daylight
  * saving, so for eight months of the year a Practice in Phoenix and one
