@@ -69,6 +69,10 @@ Triage state lives on the Status field of the [Doula Cloud Project](https://gith
 
 Single-context — `CONTEXT.md` + `docs/adr/` at the repo root. See `docs/agents/domain.md`.
 
+### Literature
+
+A book is evidence, and only the founder's recorded decision turns it into a rule. Until a book's read-back is on trunk, nothing cites it; until a value ADR or an adopt-or-not ADR names it, no book is the reason for anything. See `docs/adr/0041-a-book-enters-the-repo-as-evidence-and-becomes-a-rule-only-through-a-decision.md` for the decision and `docs/agents/literature.md` for the book table, the read-back template, and the review.
+
 ### Service patterns
 
 The GOV.UK Design System is the default reference for any screen that asks a person for
