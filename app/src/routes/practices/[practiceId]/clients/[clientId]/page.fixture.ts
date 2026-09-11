@@ -81,7 +81,7 @@ export const detail: ClientDetail = {
 		{
 			type: 'client_event',
 			at: '2026-07-01T00:00:00Z',
-			clientEvent: { eventType: 'created', diff: undefined, actorKind: 'system', createdAt: '2026-07-01T00:00:00Z' }
+			clientEvent: { eventType: 'created', diff: undefined, actorKind: 'system', actorName: 'Doula Cloud', createdAt: '2026-07-01T00:00:00Z' }
 		},
 		// An entry from a record absorbed into this one (#813). The
 		// history renders it differently -- the What column carries the
@@ -108,7 +108,7 @@ export const detail: ClientDetail = {
 			type: 'client_event',
 			at: '2026-06-01T00:00:00Z',
 			fromMergedRecord: 'client-absorbed-1',
-			clientEvent: { eventType: 'created', diff: undefined, actorKind: 'system', createdAt: '2026-06-01T00:00:00Z' }
+			clientEvent: { eventType: 'created', diff: undefined, actorKind: 'system', actorName: 'Doula Cloud', createdAt: '2026-06-01T00:00:00Z' }
 		}
 	],
 	// The record that history came from, with the plaintext audit of the

@@ -205,7 +205,12 @@ func activityQuery(practiceID, engagementID string, moneyGate bool, after *pagec
 // subject_kind = 'engagement'. Every row comes back with the actor's
 // name already resolved, never a bare id a reader has to look up itself.
 func listEngagementActivity(ctx context.Context, tx *sql.Tx, practiceID, engagementID string, moneyGate bool, after *pagecursor.Cursor) (activitypage.Page[ActivityEntry], error) {
-	return activitypage.List(ctx, tx, activityQuery(practiceID, engagementID, moneyGate, after), activityProjection)
+	page, err := activitypage.List(ctx, tx, activityQuery(practiceID, engagementID, moneyGate, after), activityProjection)
+	if err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		return activitypage.Page[ActivityEntry]{}, fmt.Errorf("engagement: list activity: %w", err)
+	}
+	return page, nil
 }
 
 // reassignmentDetail renders a visit_reassigned entry as the move it

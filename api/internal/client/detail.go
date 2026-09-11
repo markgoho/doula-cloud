@@ -410,7 +410,7 @@ func listClientEvents(ctx context.Context, tx *sql.Tx, practiceID, clientID stri
 	}, eventProjection)
 	if err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		return nil, err
+		return nil, fmt.Errorf("client: list client events: %w", err)
 	}
 
 	// Unsealing runs after the reader has closed its rows, never inside

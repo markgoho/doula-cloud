@@ -3,6 +3,7 @@ package activityfeed
 import (
 	"context"
 	"database/sql"
+	"fmt"
 
 	"doula-cloud/api/internal/activitypage"
 	"doula-cloud/api/internal/pagecursor"
@@ -65,7 +66,7 @@ func ListForSubject(ctx context.Context, tx *sql.Tx, practiceID, subjectKind, su
 	}, entryProjection)
 	if err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		return ListResponse{}, err
+		return ListResponse{}, fmt.Errorf("activityfeed: list subject activity: %w", err)
 	}
 	return ListResponse{Items: page.Items, NextCursor: page.NextCursor, HasMore: page.HasMore}, nil
 }

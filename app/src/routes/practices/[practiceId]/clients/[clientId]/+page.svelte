@@ -88,10 +88,12 @@
 	// merged timeline, not two lists.
 	function historyWho(entry: HistoryEntry): string {
 		if (entry.type === 'client_event') {
-			// ADR-0022: the third actor kind displays as "Doula Cloud", never
-			// the engineering word "System" -- and only that kind lacks a
-			// name, since Staff and Client actors are both joined in.
-			return entry.clientEvent.actorKind === 'system' ? 'Doula Cloud' : (entry.clientEvent.actorName ?? 'Unknown staff');
+			// Every actor kind arrives named (#1150). This screen used to
+			// spell two of those names itself -- "Doula Cloud" for a system
+			// actor, "Unknown staff" for a Staff member the join could no
+			// longer reach -- which put ADR-0022's word for the product in a
+			// second place and gave one Practice two words for one absence.
+			return entry.clientEvent.actorName;
 		}
 		return entry.engagementRequest.requestedByName;
 	}

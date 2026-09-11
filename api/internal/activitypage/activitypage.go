@@ -287,7 +287,9 @@ func ActorName(actorKind string, staffName, clientGivenName, clientPreferredName
 		return staffName.String
 	case activity.ActorClient:
 		return personname.Preferred(clientGivenName.String, clientPreferredName.String)
-	default:
+	case activity.ActorSystem:
 		return activity.SystemActorName
 	}
+	// coverage:ignore reason: actor_kind is a three-value Postgres enum (00051) and the switch above names all three, so this is the compiler's floor rather than a reachable case
+	return activity.SystemActorName
 }

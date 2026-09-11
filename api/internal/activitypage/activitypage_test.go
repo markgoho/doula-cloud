@@ -10,6 +10,7 @@ import (
 
 	"doula-cloud/api/internal/activity"
 	"doula-cloud/api/internal/activitypage"
+	"doula-cloud/api/internal/pagecursor"
 	"doula-cloud/api/internal/testdb"
 )
 
@@ -196,6 +197,71 @@ func TestList_PageSizeZeroReadsEveryRow(t *testing.T) {
 	}
 	if page.HasMore || page.NextCursor != nil {
 		t.Errorf("hasMore=%v cursor=%v, want an unpaginated read to claim neither", page.HasMore, page.NextCursor)
+	}
+}
+
+// TestList_PagesNewestFirstPastAnExclusionAndAnExtraJoin walks the four
+// parts of the shape a caller never writes again: an extra join, an
+// action exclusion built from the caller's own constants, the sentinel
+// row that reports more without a second query, and the cursor the next
+// page resumes from.
+func TestList_PagesNewestFirstPastAnExclusionAndAnExtraJoin(t *testing.T) {
+	db := testdb.New(t)
+	practiceID := testdb.SeedPractice(t, db, "Paging Practice")
+	ownerID := testdb.SeedNamedStaffAtPractice(t, db, practiceID, "activitypage-paging-owner", "Renata Alvarez", []string{ownerRole}, employeeType)
+	_, engagementID := testdb.SeedEngagementInStatus(t, db, practiceID, "Client", "activitypage-paging@example.com", "active")
+
+	// One row the exclusion drops, then five it keeps.
+	testdb.SeedActivity(t, db, practiceID, activity.SubjectEngagement, engagementID, "contract_priced", activity.StaffActor(ownerID))
+	const kept = 5
+	for i := range kept {
+		testdb.SeedActivity(t, db, practiceID, activity.SubjectEngagement, engagementID, fmt.Sprintf("visit_%d", i), activity.StaffActor(ownerID))
+	}
+
+	// An extra join on staff keyed by the actor, standing in for the two
+	// engagement's own projection makes off the diff.
+	joined := activitypage.Projection[string]{
+		Joins:   []string{"LEFT JOIN staff actor_again ON actor_again.id = a.actor_staff_id"},
+		Columns: []string{"actor_again.name"},
+		Row: func() ([]any, func(activitypage.Row) string) {
+			var name sql.NullString
+			return []any{&name}, func(r activitypage.Row) string { return r.Action + "/" + name.String }
+		},
+	}
+
+	q := activitypage.Query{
+		PracticeID:      practiceID,
+		SubjectKind:     activity.SubjectEngagement,
+		SubjectID:       engagementID,
+		ExcludedActions: "'contract_priced'",
+		PageSize:        3,
+	}
+
+	tx := beginScopedTx(t, db, practiceID)
+	first, err := activitypage.List(t.Context(), tx, q, joined)
+	if err != nil {
+		t.Fatalf("List first page: %v", err)
+	}
+	if len(first.Items) != 3 || !first.HasMore || first.NextCursor == nil {
+		t.Fatalf("first page = %d items, hasMore=%v, cursor=%v; want 3/true/non-nil",
+			len(first.Items), first.HasMore, first.NextCursor)
+	}
+	if first.Items[0] != "visit_4/Renata Alvarez" {
+		t.Errorf("newest row = %q, want the last-written row with its joined name", first.Items[0])
+	}
+
+	cursor, err := pagecursor.Decode(*first.NextCursor)
+	if err != nil {
+		t.Fatalf("decode cursor: %v", err)
+	}
+	q.After = &cursor
+	second, err := activitypage.List(t.Context(), tx, q, joined)
+	if err != nil {
+		t.Fatalf("List second page: %v", err)
+	}
+	if len(second.Items) != 2 || second.HasMore || second.NextCursor != nil {
+		t.Fatalf("second page = %d items, hasMore=%v, cursor=%v; want 2/false/nil -- the excluded row must not reappear",
+			len(second.Items), second.HasMore, second.NextCursor)
 	}
 }
 

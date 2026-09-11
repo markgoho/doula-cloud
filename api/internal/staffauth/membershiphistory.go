@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"time"
 
@@ -183,13 +184,18 @@ var membershipProjection = activitypage.Projection[MembershipChange]{
 // listMembershipChanges reads one page, newest first, and reports
 // whether another follows.
 func listMembershipChanges(ctx context.Context, tx *sql.Tx, practiceID, staffID string, after *pagecursor.Cursor) (activitypage.Page[MembershipChange], error) {
-	return activitypage.List(ctx, tx, activitypage.Query{
+	page, err := activitypage.List(ctx, tx, activitypage.Query{
 		PracticeID:  practiceID,
 		SubjectKind: activity.SubjectMembership,
 		SubjectID:   staffID,
 		After:       after,
 		PageSize:    membershipHistoryPageSize,
 	}, membershipProjection)
+	if err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		return activitypage.Page[MembershipChange]{}, fmt.Errorf("staffauth: list membership history: %w", err)
+	}
+	return page, nil
 }
 
 // applyMembershipDiff unpacks the diff column into the entry's four

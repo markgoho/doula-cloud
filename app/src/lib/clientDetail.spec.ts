@@ -115,7 +115,7 @@ describe('pendingRequests', () => {
 			{
 				type: 'client_event',
 				at: '2026-01-01T00:00:00Z',
-				clientEvent: { eventType: 'created', diff: {}, actorKind: 'staff', createdAt: '2026-01-01T00:00:00Z' }
+				clientEvent: { eventType: 'created', diff: {}, actorKind: 'staff', actorName: 'Sam Owner', createdAt: '2026-01-01T00:00:00Z' }
 			}
 		];
 
