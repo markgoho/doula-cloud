@@ -148,14 +148,32 @@ jobs:
       # a real instance CI doesn't have).
       #
       # go-test-action runs `go test -json` itself and renders the result
-      # as a per-package job summary with failing tests called out --
-      # mirroring the Vitest job summary the app job already gets for
-      # free from Vitest's built-in GitHub Actions reporter. -coverprofile
-      # is passed through testArguments so coverage.out is produced
-      # exactly as before for the covcheck gate below; `cover: true` just
-      # tells the action to render the coverage column (it detects the
-      # -coverprofile flag already in testArguments and skips appending
-      # its own -cover, per the action's docs).
+      # as a per-package job summary -- mirroring the Vitest job summary
+      # the app job already gets for free from Vitest's built-in GitHub
+      # Actions reporter. -coverprofile is passed through testArguments
+      # so coverage.out is produced exactly as before for the covcheck
+      # gate below; `cover: true` just tells the action to render the
+      # coverage column (it detects the -coverprofile flag already in
+      # testArguments and skips appending its own -cover, per the
+      # action's docs).
+      #
+      # omit: 'successful pkg-output' (#1186) -- a passing package's own
+      # test list and full `go test` output are dropped from the
+      # summary, leaving only the header/counts, the pie chart, and one
+      # row per failing/skipped package with its failing test names
+      # still listed (pkg-tests is kept). Before this, every package's
+      # full output rendered regardless of outcome, and at ~60 packages
+      # that alone put an all-green run over GitHub's 1MB step-summary
+      # cap -- the upload silently aborts past the cap rather than
+      # failing the job, so nothing was red and nobody saw it drop.
+      # Dropping successful output bounds an all-green run; pkg-output
+      # has to go too, or a run where most packages fail (e.g. testdb
+      # can't start) still renders every one's full output and can cross
+      # 1MB again. The tradeoff: a failing package's raw `go test`
+      # output now lives only in the job's raw log, not the summary --
+      # the summary still names the package and the failing test.
+      # `@v1` already resolves to v1.1.0, which shipped the `omit`
+      # input, so no version bump was needed to pick this up.
       #
       # Caveat: -json still lets go test cache successful results (a
       # cache hit for a package now shows up as a lookup with no "save"
@@ -174,6 +192,7 @@ jobs:
           moduleDirectory: api
           testArguments: '-coverprofile=coverage.out ./...'
           cover: true
+          omit: 'successful pkg-output'
 
       - name: Enforce 100% line coverage
         working-directory: api
