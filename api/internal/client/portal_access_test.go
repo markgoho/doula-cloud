@@ -106,7 +106,7 @@ func TestDetailHandler_ShowsHerOwnSignInAddressChange(t *testing.T) {
 		if entry.ClientEvent.ActorKind != "client" {
 			t.Fatalf("actorKind = %q, want client", entry.ClientEvent.ActorKind)
 		}
-		if entry.ClientEvent.ActorName == nil || *entry.ClientEvent.ActorName != "Margaretha" {
+		if entry.ClientEvent.ActorName != "Margaretha" {
 			t.Fatalf("actorName = %v, want her own name", entry.ClientEvent.ActorName)
 		}
 		if string(entry.ClientEvent.Diff) != "{}" {
