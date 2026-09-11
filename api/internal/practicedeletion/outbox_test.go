@@ -23,6 +23,14 @@ func newTestWorker(sender mail.Sender) practicedeletion.Worker {
 
 // seedOutboxRow inserts a practice_deletion_outbox row directly, the
 // same shape billing's own seedLowCreditOutboxRow uses for that table.
+//
+// runWorker's claim query reads next_attempt_at against Postgres's own
+// now(), so a caller that means "due" must pass a margin far larger than
+// any plausible host-vs-container clock skew -- time.Now().Add(-time.Minute)
+// throughout this file -- rather than a bare time.Now(), which a VM-backed
+// container engine (Podman/Docker Desktop on macOS) can read as not yet
+// due. See "A due-time fixture must not compare two clocks" in
+// docs/testing.md.
 func seedOutboxRow(t *testing.T, db *testdb.DB, practiceID, act string, nextAttemptAt time.Time) string {
 	t.Helper()
 	var id string
@@ -88,7 +96,7 @@ func TestWorker_ReminderMailsCurrentOwners(t *testing.T) {
 	seedOwnerEmail(t, db, staffID, "owner@example.test")
 	finalizeAt := time.Now().Add(7 * 24 * time.Hour)
 	markPendingDeletion(t, db, practiceID, finalizeAt)
-	rowID := seedOutboxRow(t, db, practiceID, "reminder", time.Now())
+	rowID := seedOutboxRow(t, db, practiceID, "reminder", time.Now().Add(-time.Minute))
 
 	sender := &mail.FakeSender{}
 	runWorker(t, db, newTestWorker(sender))
@@ -112,7 +120,7 @@ func TestWorker_ReminderSkipsWhenNoLongerPending(t *testing.T) {
 	// No markPendingDeletion call: the Practice was restored (or never
 	// pending), so deletion_requested_at is null -- the skip-at-send
 	// recheck's own condition.
-	rowID := seedOutboxRow(t, db, practiceID, "reminder", time.Now())
+	rowID := seedOutboxRow(t, db, practiceID, "reminder", time.Now().Add(-time.Minute))
 
 	sender := &mail.FakeSender{}
 	runWorker(t, db, newTestWorker(sender))
@@ -143,7 +151,7 @@ func TestWorker_FinalizeErasesClientsForfeitsCreditsAndStampsDeletedAt(t *testin
 		t.Fatalf("seed ledger: %v", err)
 	}
 
-	rowID := seedOutboxRow(t, db, practiceID, "finalize", time.Now())
+	rowID := seedOutboxRow(t, db, practiceID, "finalize", time.Now().Add(-time.Minute))
 	runWorker(t, db, newTestWorker(&mail.FakeSender{}))
 
 	if status := outboxRowStatus(t, db, rowID); status != statusSent {
@@ -194,7 +202,7 @@ func TestWorker_FinalizeSkipsWhenNoLongerPending(t *testing.T) {
 	db := testdb.New(t)
 	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, "owner-finalize-restored", []string{ownerRole}, "employee")
 	// No markPendingDeletion call: restored before finalization ran.
-	rowID := seedOutboxRow(t, db, practiceID, "finalize", time.Now())
+	rowID := seedOutboxRow(t, db, practiceID, "finalize", time.Now().Add(-time.Minute))
 
 	runWorker(t, db, newTestWorker(&mail.FakeSender{}))
 
@@ -223,7 +231,7 @@ func TestWorker_FinalizeDoesNotDoubleEraseAnAlreadyErasedClient(t *testing.T) {
 		t.Fatalf("seed already-erased client: %v", err)
 	}
 
-	rowID := seedOutboxRow(t, db, practiceID, "finalize", time.Now())
+	rowID := seedOutboxRow(t, db, practiceID, "finalize", time.Now().Add(-time.Minute))
 	runWorker(t, db, newTestWorker(&mail.FakeSender{}))
 
 	if status := outboxRowStatus(t, db, rowID); status != statusSent {
