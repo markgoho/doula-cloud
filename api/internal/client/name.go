@@ -7,24 +7,26 @@
 // Request, built elsewhere.
 package client
 
+import "doula-cloud/api/internal/personname"
+
+// LegalName and PreferredName are where every caller reaches the two
+// naming rules, and both now delegate to personname, which holds the
+// rules themselves. The rules moved down a layer in #1150: activitypage
+// resolves a Client actor's own name on every subject-scoped read of the
+// activity table, this package reads its own history through
+// activitypage, and a package cannot import the package that imports it.
+// The alternative was a second spelling of "preferred_name, else
+// given_name" one import away from this one, which is the drift #1150
+// exists to remove.
+
 // LegalName is the document name ADR-0017's read table gives Stripe
-// invoicing and the Contract Template's client_name merge field:
-// given_name plus family_name when she has one, given_name alone when she
-// doesn't -- family_name is the only optional half, so there's never a
-// trailing separator to trim.
+// invoicing and the Contract Template's client_name merge field.
 func LegalName(givenName, familyName string) string {
-	if familyName == "" {
-		return givenName
-	}
-	return givenName + " " + familyName
+	return personname.Legal(givenName, familyName)
 }
 
 // PreferredName is the conversation name every screen, the Clients sort,
-// and the Message thread read: preferred_name when she has one, falling
-// back to given_name -- the one column that's never empty.
+// and the Message thread read.
 func PreferredName(givenName, preferredName string) string {
-	if preferredName == "" {
-		return givenName
-	}
-	return preferredName
+	return personname.Preferred(givenName, preferredName)
 }
