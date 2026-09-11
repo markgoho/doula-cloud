@@ -22,10 +22,6 @@ const (
 	// notAUUID is the malformed id every "reject a bad path segment or
 	// field" case sends, named here for the same goconst reason.
 	notAUUID = "not-a-uuid"
-	// seededPracticeZoneName is the zone testdb.SeedPractice states for
-	// every fixture Practice -- the value 00110_practice_timezone.sql
-	// carried as its column default before #1166 dropped it.
-	seededPracticeZoneName = "America/New_York"
 )
 
 // newServer mounts this package's whole surface through visit.Mount, the
@@ -142,22 +138,9 @@ func setPregnancyEnded(t *testing.T, db *testdb.DB, engagementID, outcome, ended
 func seededPracticeZone(t *testing.T) *time.Location {
 	t.Helper()
 
-	loc, err := time.LoadLocation(seededPracticeZoneName)
+	loc, err := time.LoadLocation(testdb.SeededPracticeZoneName)
 	if err != nil {
-		t.Fatalf("load the seeded Practice's zone %q: %v", seededPracticeZoneName, err)
+		t.Fatalf("load the seeded Practice's zone %q: %v", testdb.SeededPracticeZoneName, err)
 	}
 	return loc
-}
-
-// setPracticeTimezone writes a Practice's zone directly on the Admin
-// connection. practicetimezone.PutHandler is the real write (#1166);
-// these tests need the fixture, not that handler's own behavior.
-func setPracticeTimezone(t *testing.T, db *testdb.DB, practiceID, zone string) {
-	t.Helper()
-
-	if _, err := db.Admin.ExecContext(t.Context(),
-		`UPDATE practices SET timezone = $1 WHERE id = $2`, zone, practiceID,
-	); err != nil {
-		t.Fatalf("set practice timezone: %v", err)
-	}
 }

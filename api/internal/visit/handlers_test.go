@@ -2066,7 +2066,7 @@ func TestListHandler_UnloadablePracticeZoneIsAnError(t *testing.T) {
 	practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, "employee")
 	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
 	seedScheduledVisit(t, db, engagementID, staffID, time.Date(2026, 3, 15, 20, 0, 0, 0, time.UTC))
-	setPracticeTimezone(t, db, practiceID, "Nowhere/Atlantis")
+	testdb.SetPracticeTimezone(t, db, practiceID, "Nowhere/Atlantis")
 
 	srv, session := newServer(t, db, identityUID)
 	defer srv.Close()
