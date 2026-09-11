@@ -21,6 +21,10 @@ import (
 // no staff row gets back -- shared across every route that reads or
 // writes staff by identity_uid, so the sentence stays one spelling
 // rather than drifting per call site.
+//
+// The status beside it is 404 on every pre-Practice route and 403 behind
+// a {practiceId}; requireSelf records why, and is the one place the
+// pre-Practice pair is written at all (#1182).
 const MsgNoMatchingStaffAccount = "no matching staff account"
 
 // MsgAlreadyBelongsToPractice is what signup answers a caller whose

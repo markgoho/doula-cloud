@@ -53,6 +53,8 @@ func TestOnlyOneOwnerWritesTheSelfLookup(t *testing.T) {
 		if entry.IsDir() || filepath.Ext(name) != ".go" || strings.HasSuffix(name, "_test.go") {
 			continue
 		}
+		// #nosec G304 -- name comes from ReadDir on this package's own
+		// source directory, not from anything a caller supplies
 		source, err := os.ReadFile(name)
 		if err != nil {
 			// coverage:ignore reason: reading a file os.ReadDir has just listed

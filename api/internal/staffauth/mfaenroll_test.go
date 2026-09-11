@@ -117,6 +117,11 @@ func TestFinishEnrollmentHandler_TokenWithoutSecondFactorRejected(t *testing.T) 
 	}
 }
 
+// TestFinishEnrollmentHandler_UnknownStaff pins the family's answer,
+// which this route did not give until #1182: it refused a caller with no
+// staff row with 403, alone with DELETE /api/staff/mfa, where the other
+// six pre-Practice routes answered 404. See requireSelf for why 404 is
+// the right one.
 func TestFinishEnrollmentHandler_UnknownStaff(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "unknown-enroller"
@@ -126,8 +131,8 @@ func TestFinishEnrollmentHandler_UnknownStaff(t *testing.T) {
 
 	resp := postFinishEnrollment(t, srv)
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusForbidden {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusForbidden)
+	if resp.StatusCode != http.StatusNotFound {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusNotFound)
 	}
 }
 

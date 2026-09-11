@@ -133,7 +133,11 @@ func TestRemoveSecondFactorHandler_ReauthUIDMismatchUnauthorized(t *testing.T) {
 	}
 }
 
-func TestRemoveSecondFactorHandler_UnknownStaffForbidden(t *testing.T) {
+// TestRemoveSecondFactorHandler_UnknownStaffNotFound pins the family's
+// answer, which this route did not give until #1182: it refused a caller
+// with no staff row with 403, alone with POST /api/staff/mfa, where the
+// other six pre-Practice routes answered 404. See requireSelf.
+func TestRemoveSecondFactorHandler_UnknownStaffNotFound(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "unknown-remover"
 	session := authntest.SeedSession(t, db.App, identityUID)
@@ -143,8 +147,8 @@ func TestRemoveSecondFactorHandler_UnknownStaffForbidden(t *testing.T) {
 
 	resp := deleteSecondFactor(t, srv, session, "tok")
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusForbidden {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusForbidden)
+	if resp.StatusCode != http.StatusNotFound {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusNotFound)
 	}
 }
 
