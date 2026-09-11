@@ -37,7 +37,7 @@ func postReversal(t *testing.T, srv *httptest.Server, session, practiceID, invoi
 // its id, failing the test on anything but 201.
 func recordPayment(t *testing.T, srv *httptest.Server, session, practiceID, invoiceID string) (paymentID string) {
 	t.Helper()
-	resp := postPayment(t, srv, session, practiceID, invoiceID, payments.PaymentMethodCheck, "check #1", isoDate(time.Now()))
+	resp := postPayment(t, srv, session, practiceID, invoiceID, payments.PaymentMethodCheck, "check #1", todayInSeededZone(t))
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusCreated {
 		t.Fatalf("record payment: status = %d, want %d", resp.StatusCode, http.StatusCreated)

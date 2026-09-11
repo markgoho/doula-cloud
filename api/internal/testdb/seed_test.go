@@ -48,6 +48,27 @@ func TestSeedPractice(t *testing.T) {
 	}
 }
 
+// TestSetPracticeTimezone proves the write lands directly, bypassing
+// practicetimezone.PutHandler -- the fixture visit and payments both call
+// to seed a Practice a particular zone (including one that will not
+// load) rather than the default SeedPractice states (#1167).
+func TestSetPracticeTimezone(t *testing.T) {
+	db := testdb.New(t)
+	practiceID := testdb.SeedPractice(t, db, "Set Practice Timezone Test")
+
+	testdb.SetPracticeTimezone(t, db, practiceID, "America/Los_Angeles")
+
+	var zone string
+	if err := db.Admin.QueryRowContext(t.Context(),
+		`SELECT timezone FROM practices WHERE id = $1`, practiceID,
+	).Scan(&zone); err != nil {
+		t.Fatalf("read practice timezone: %v", err)
+	}
+	if zone != "America/Los_Angeles" {
+		t.Fatalf("timezone = %q, want America/Los_Angeles", zone)
+	}
+}
+
 // TestSeedClientsCanPay proves the practices row flips to
 // stripe_connect_card_payments_status = 'active', the one column
 // payments.ClientsCanPay reads -- no stripe_connect_account_id, since

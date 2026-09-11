@@ -29,6 +29,29 @@ func SeedPractice(t *testing.T, db *DB, name string) (practiceID string) {
 	return practiceID
 }
 
+// SeededPracticeZoneName is the zone SeedPractice states above, named
+// once so a caller building its own "today, in the Practice's zone"
+// fixture reads the same value SeedPractice writes rather than a second
+// copy of the string. Two independent packages needed this -- visit
+// (#953/#1166) and payments (#1167) -- which is this repo's own bar for
+// pulling a fixture out of one package's own test helpers.
+const SeededPracticeZoneName = "America/New_York"
+
+// SetPracticeTimezone writes a Practice's zone directly on the Admin
+// connection, bypassing practicetimezone.PutHandler's own write: a test
+// that needs a Practice already holding a particular zone (including one
+// that will not load, e.g. "Nowhere/Atlantis", to prove the refusal
+// ADR-0036 requires) wants the fixture, not that handler's own behavior.
+func SetPracticeTimezone(t *testing.T, db *DB, practiceID, zone string) {
+	t.Helper()
+	if _, err := db.Admin.ExecContext(t.Context(),
+		`UPDATE practices SET timezone = $1 WHERE id = $2`, zone, practiceID,
+	); err != nil {
+		// coverage:ignore reason: fixture update failure, not exercised by the happy-path test
+		t.Fatalf("testdb: set practice timezone: %v", err)
+	}
+}
+
 // SeedClientsCanPay flips practiceID's stripe_connect_card_payments_status
 // straight to 'active' -- the shared fixture for payments.ClientsCanPay's
 // three readers (the Engagement read, the Practice-wide Invoice totals,

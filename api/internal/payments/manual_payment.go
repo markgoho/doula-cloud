@@ -12,6 +12,7 @@ import (
 
 	"doula-cloud/api/internal/activity"
 	"doula-cloud/api/internal/apierr"
+	"doula-cloud/api/internal/practicetimezone"
 	"doula-cloud/api/internal/staffauth"
 )
 
@@ -143,6 +144,18 @@ func resolveInvoiceForPractice(ctx context.Context, tx *sql.Tx, practiceID, invo
 	return status, amountCents, stripeInvoiceID, engagementID, nil
 }
 
+// paidOnAfterPracticeToday reports whether paidOn is later than the
+// Practice's own calendar day at instant at, in loc -- the Practice's
+// stated zone (ADR-0036, #1167). paidOn is always parsed in paidOnLayout
+// form, so it carries no time of day and its Location is always UTC;
+// practiceToday is built the same way, from at's date in loc, so the two
+// compare as plain calendar dates rather than instants.
+func paidOnAfterPracticeToday(paidOn, at time.Time, loc *time.Location) bool {
+	year, month, day := at.In(loc).Date()
+	practiceToday := time.Date(year, month, day, 0, 0, 0, 0, time.UTC)
+	return paidOn.After(practiceToday)
+}
+
 // PostManualPaymentHandler records a Payment that did not come through
 // Stripe (#271) -- Owner and Admin only, matching ADR-0008's
 // Contract-money read row. Accepted only against an 'open' Invoice, for
@@ -197,13 +210,20 @@ func PostManualPaymentHandler(client Client) http.Handler {
 				map[string]string{"paidOn": "paidOn must be a date in YYYY-MM-DD form"})
 			return
 		}
-		if paidOn.After(time.Now().UTC().Truncate(24 * time.Hour)) {
+		// The zone comes from practicetimezone, which owns it for every
+		// calendar-day comparison in the BFF (#1166): visit.DeriveType was
+		// the first reader, this guard is the second (#1167, ADR-0036).
+		zone, err := practicetimezone.Load(r.Context(), tx, practiceID)
+		if err != nil {
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+			return
+		}
+		if paidOnAfterPracticeToday(paidOn, time.Now(), zone) {
 			// The details value names no calendar day -- not "today", not a
-			// date (#1062). The comparison above still runs against UTC's
-			// day rather than the Practice's own (#1167, ADR-0036), so a
-			// wording that named a day would name the wrong one for the
-			// last hours of every Eastern day, and would have to be
-			// rewritten once that comparison moves.
+			// date (#1062). That choice is what keeps this wording correct
+			// across #1167's own change of comparison: it named no day when
+			// the comparison ran against UTC's, and still names none now
+			// that it runs against the Practice's own.
 			apierr.Write(w, http.StatusBadRequest, apierr.CodeInvalidArgument,
 				"paidOn cannot be in the future",
 				map[string]string{"paidOn": "paidOn cannot be in the future"})

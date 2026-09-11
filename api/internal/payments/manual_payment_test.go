@@ -77,6 +77,21 @@ func seedByHandInvoice(t *testing.T, db *testdb.DB, practiceID, contractID strin
 
 func isoDate(t time.Time) string { return t.Format("2006-01-02") }
 
+// todayInSeededZone is the paidOn fixture value every "accepted, not in
+// the future" test in this file wants: today in the fixture Practice's
+// own zone (testdb.SeededPracticeZoneName), not UTC's. Building it in
+// UTC would flake for exactly the reason #1167 exists -- UTC's day runs
+// ahead of Eastern's for several hours of every day, so a UTC "today" is
+// sometimes the Practice's tomorrow.
+func todayInSeededZone(t *testing.T) string {
+	t.Helper()
+	zone, err := time.LoadLocation(testdb.SeededPracticeZoneName)
+	if err != nil {
+		t.Fatalf("load %s: %v", testdb.SeededPracticeZoneName, err)
+	}
+	return isoDate(time.Now().In(zone))
+}
+
 // TestPostManualPaymentHandler_ByHandCheckHappyPath proves the core path:
 // an Owner records a check against an open by-hand Invoice for its full
 // amount, the Invoice flips to paid, and the Activity log carries who and
@@ -91,7 +106,7 @@ func TestPostManualPaymentHandler_ByHandCheckHappyPath(t *testing.T) {
 	srv, session := newInvoiceServer(t, db, uid, payments.NewFakeClient())
 	defer srv.Close()
 
-	resp := postPayment(t, srv, session, practiceID, invoiceID, payments.PaymentMethodCheck, "check #204", isoDate(time.Now().UTC()))
+	resp := postPayment(t, srv, session, practiceID, invoiceID, payments.PaymentMethodCheck, "check #204", todayInSeededZone(t))
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusCreated {
@@ -171,7 +186,7 @@ func TestPostManualPaymentHandler_OtherMethodWithNoteSucceeds(t *testing.T) {
 	srv, session := newInvoiceServer(t, db, uid, payments.NewFakeClient())
 	defer srv.Close()
 
-	resp := postPayment(t, srv, session, practiceID, invoiceID, payments.PaymentMethodOther, "Venmo, screenshot on file", isoDate(time.Now().UTC()))
+	resp := postPayment(t, srv, session, practiceID, invoiceID, payments.PaymentMethodOther, "Venmo, screenshot on file", todayInSeededZone(t))
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusCreated {
@@ -243,6 +258,31 @@ func TestPostManualPaymentHandler_FutureDateRefused(t *testing.T) {
 	}
 }
 
+// TestPostManualPaymentHandler_UnloadablePracticeZoneIsAnError proves the
+// future-date guard refuses rather than answering with the wrong day when
+// the Practice's zone will not load (#1167, following
+// visit.TestListHandler_UnloadablePracticeZoneIsAnError's own case):
+// falling back to UTC would reintroduce exactly the misplacement #953 and
+// #1166 exist to end, and say nothing about it.
+func TestPostManualPaymentHandler_UnloadablePracticeZoneIsAnError(t *testing.T) {
+	db := testdb.New(t)
+	const uid = "manual-payment-bad-zone"
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
+	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jane Client", "jane@example.com")
+	contractID := seedSignedContract(t, db, engagementID)
+	invoiceID := seedByHandInvoice(t, db, practiceID, contractID)
+	testdb.SetPracticeTimezone(t, db, practiceID, "Nowhere/Atlantis")
+	srv, session := newInvoiceServer(t, db, uid, payments.NewFakeClient())
+	defer srv.Close()
+
+	resp := postPayment(t, srv, session, practiceID, invoiceID, payments.PaymentMethodCash, "", isoDate(time.Now().UTC()))
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusInternalServerError {
+		t.Fatalf("status = %d, want %d for a Practice zone that will not load", resp.StatusCode, http.StatusInternalServerError)
+	}
+}
+
 // TestPostManualPaymentHandler_MalformedDateRefused proves a paidOn that
 // does not parse as YYYY-MM-DD 400s.
 func TestPostManualPaymentHandler_MalformedDateRefused(t *testing.T) {
@@ -306,7 +346,7 @@ func TestPostManualPaymentHandler_NotOpenInvoiceRefused(t *testing.T) {
 
 	for _, status := range []string{invoiceStatusDraft, invoiceStatusVoid, invoiceStatusUncollectible, invoiceStatusPaid} {
 		invoiceID := seedInvoice(t, db, practiceID, contractID, "in_not_open_"+status, status, 15000, time.Now())
-		resp := postPayment(t, srv, session, practiceID, invoiceID, payments.PaymentMethodCash, "", isoDate(time.Now().UTC()))
+		resp := postPayment(t, srv, session, practiceID, invoiceID, payments.PaymentMethodCash, "", todayInSeededZone(t))
 		if resp.StatusCode != http.StatusConflict {
 			t.Fatalf("status=%q: status = %d, want %d", status, resp.StatusCode, http.StatusConflict)
 		}
@@ -343,7 +383,7 @@ func TestPostManualPaymentHandler_InvoiceNotFound(t *testing.T) {
 	srv, session := newInvoiceServer(t, db, uid, payments.NewFakeClient())
 	defer srv.Close()
 
-	resp := postPayment(t, srv, session, practiceID, "00000000-0000-0000-0000-000000000000", payments.PaymentMethodCash, "", isoDate(time.Now().UTC()))
+	resp := postPayment(t, srv, session, practiceID, "00000000-0000-0000-0000-000000000000", payments.PaymentMethodCash, "", todayInSeededZone(t))
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusNotFound {
@@ -366,7 +406,7 @@ func TestPostManualPaymentHandler_StripeBackedCallsPayOutOfBandThenRecords(t *te
 	srv, session := newInvoiceServer(t, db, uid, client)
 	defer srv.Close()
 
-	resp := postPayment(t, srv, session, practiceID, invoiceID, payments.PaymentMethodBankTransfer, "", isoDate(time.Now().UTC()))
+	resp := postPayment(t, srv, session, practiceID, invoiceID, payments.PaymentMethodBankTransfer, "", todayInSeededZone(t))
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusCreated {
@@ -399,7 +439,7 @@ func TestPostManualPaymentHandler_StripePayOutOfBandFailureRecordsNothing(t *tes
 	srv, session := newInvoiceServer(t, db, uid, client)
 	defer srv.Close()
 
-	resp := postPayment(t, srv, session, practiceID, invoiceID, payments.PaymentMethodCheck, "", isoDate(time.Now().UTC()))
+	resp := postPayment(t, srv, session, practiceID, invoiceID, payments.PaymentMethodCheck, "", todayInSeededZone(t))
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusBadGateway {
