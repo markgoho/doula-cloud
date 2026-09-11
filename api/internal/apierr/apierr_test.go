@@ -110,6 +110,22 @@ func TestWriteError(t *testing.T) {
 	}
 }
 
+func TestWriteFieldError(t *testing.T) {
+	rec := httptest.NewRecorder()
+	apierr.WriteFieldError(rec, http.StatusBadRequest, apierr.CodeInvalidArgument, "reason", "reason cannot be blank")
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusBadRequest)
+	}
+	out := apierrtest.Decode(t, rec.Result())
+	if out.Code != apierr.CodeInvalidArgument || out.Message != "reason cannot be blank" {
+		t.Fatalf("body = %+v, want {INVALID_ARGUMENT reason cannot be blank ...}", out)
+	}
+	if len(out.Details) != 1 || out.Details["reason"] != "reason cannot be blank" {
+		t.Fatalf("details = %+v, want a single reason entry matching message", out.Details)
+	}
+}
+
 // testPayloadName is the name value TestWriteJSON and TestDecodeJSON's
 // round-trip bodies carry -- one literal shared across both so goconst
 // does not flag it as three independent copies.

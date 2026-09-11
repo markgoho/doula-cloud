@@ -196,6 +196,28 @@ func Write(w http.ResponseWriter, status int, code Code, message string, details
 	WriteJSON(w, status, APIError{Code: code, Message: message, Details: details})
 }
 
+// WriteFieldError is Write for a refusal about exactly one field: field is
+// the request DTO's own JSON name (docs/api-design.md section 7 rule 4),
+// and message is written once -- it becomes both the summary Message and
+// the single entry of Details, rather than a caller spelling the same
+// string out twice for Write's own message and details arguments. #1188
+// collapses the ten call sites across api/internal that had drifted into
+// that duplication (payments/manual_payment.go's four, plus one each in
+// contracts/voidrequest.go x2, portalinvite/invite.go, staffauth/invite.go
+// and clientauth/addresschange.go x2) onto this.
+//
+// A site whose summary sentence and field-level sentence genuinely
+// differ -- manual_payment.go's own "note is required" vs "note is
+// needed" is one -- stays on Write directly; WriteFieldError only ever
+// has the one string to give both jobs.
+//
+// detailswording_test.go's TestDetailsWording reads message here the
+// same way it reads a details map's value elsewhere: a call site that
+// moves onto WriteFieldError does not go dark to that gate.
+func WriteFieldError(w http.ResponseWriter, status int, code Code, field, message string) {
+	Write(w, status, code, message, map[string]string{field: message})
+}
+
 // DecodeJSON decodes r.Body into v, first wrapping it in
 // http.MaxBytesReader(w, r.Body, MaxRequestBodyBytes) so an oversized
 // body can't be read at all. A body over the cap gets its own refusal

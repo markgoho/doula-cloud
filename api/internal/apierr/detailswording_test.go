@@ -123,8 +123,12 @@ func collectStringConsts(file *ast.File, into map[string]string) {
 }
 
 // detailOffenses reports every banned word in a Details value written in
-// file: the values of a map[string]string composite literal, and the
-// right-hand side of an assignment into one built up key by key.
+// file: the values of a map[string]string composite literal, the
+// right-hand side of an assignment into one built up key by key, and the
+// message argument of an apierr.WriteFieldError call -- WriteFieldError
+// turns that one string into the single Details entry itself (#1188), so
+// a call site that moves onto it carries no map[string]string literal of
+// its own for this gate to read the old way.
 func detailOffenses(file *ast.File, fset *token.FileSet, rel string, consts map[string]string) []string {
 	var offenses []string
 	check := func(expr ast.Expr) {
@@ -158,10 +162,24 @@ func detailOffenses(file *ast.File, fset *token.FileSet, rel string, consts map[
 				}
 				check(node.Rhs[i])
 			}
+		case *ast.CallExpr:
+			if isWriteFieldErrorCall(node) && len(node.Args) >= 5 {
+				check(node.Args[4])
+			}
 		}
 		return true
 	})
 	return offenses
+}
+
+// isWriteFieldErrorCall reports whether call is apierr.WriteFieldError(...).
+func isWriteFieldErrorCall(call *ast.CallExpr) bool {
+	sel, ok := call.Fun.(*ast.SelectorExpr)
+	if !ok || sel.Sel.Name != "WriteFieldError" {
+		return false
+	}
+	pkg, ok := sel.X.(*ast.Ident)
+	return ok && pkg.Name == "apierr"
 }
 
 // isStringMapType reports whether expr is the type `map[string]string` --
@@ -240,6 +258,7 @@ func f(w W) {
 	details["roles"] = "Please select a role"
 	other := map[string]int{"n": 1}
 	_ = other
+	apierr.WriteFieldError(w, 400, CodeInvalidArgument, "netDays", "Enter a valid number of days")
 }
 `
 	fset := token.NewFileSet()
@@ -257,6 +276,7 @@ func f(w W) {
 	sort.Strings(got)
 	want := []string{
 		`p.go:10: "Please select a role" contains "please"`,
+		`p.go:13: "Enter a valid number of days" contains "valid"`,
 		`p.go:6: "Enter a valid address" contains "valid"`,
 		`p.go:7: "Password is required" contains "required"`,
 	}

@@ -193,8 +193,7 @@ func PostVoidRequestHandler() http.Handler {
 		}
 		reason := strings.TrimSpace(body.Reason)
 		if reason == "" {
-			apierr.Write(w, http.StatusBadRequest, apierr.CodeInvalidArgument, msgVoidRequestReasonNeeded,
-				map[string]string{"reason": msgVoidRequestReasonNeeded})
+			apierr.WriteFieldError(w, http.StatusBadRequest, apierr.CodeInvalidArgument, "reason", msgVoidRequestReasonNeeded)
 			return
 		}
 
@@ -276,8 +275,7 @@ func PostVoidRequestDeclineHandler() http.Handler {
 		}
 		reason := strings.TrimSpace(body.Reason)
 		if reason == "" {
-			apierr.Write(w, http.StatusBadRequest, apierr.CodeInvalidArgument, msgVoidDeclineReasonNeeded,
-				map[string]string{"reason": msgVoidDeclineReasonNeeded})
+			apierr.WriteFieldError(w, http.StatusBadRequest, apierr.CodeInvalidArgument, "reason", msgVoidDeclineReasonNeeded)
 			return
 		}
 

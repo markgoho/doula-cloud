@@ -101,8 +101,7 @@ func InviteHandler(enq tasknudge.Enqueuer) http.Handler {
 				return
 			}
 			if suppressed {
-				apierr.Write(w, http.StatusConflict, apierr.CodeFailedPrecondition, msgAddressBlocked,
-					map[string]string{"email": msgAddressBlocked})
+				apierr.WriteFieldError(w, http.StatusConflict, apierr.CodeFailedPrecondition, "email", msgAddressBlocked)
 				return
 			}
 		}
