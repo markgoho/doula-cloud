@@ -21,6 +21,11 @@ test('Signing up through the /signup form drives the new Owner into MFA enrolmen
 	await page.getByLabel('Practice name').fill('Riverside Doulas');
 	await page.getByLabel('Your name').fill('Jamie Owner');
 	await page.getByLabel('Which state do you work from?').selectOption('New York');
+	// #1166: chosen rather than left on whatever zone the runner reports,
+	// so what the form sends is the same on a laptop and in CI.
+	await page
+		.getByLabel('What timezone does this Practice work in?')
+		.selectOption('America/New_York');
 	await page.getByLabel('Email').fill(email);
 	await page.getByLabel('Password').fill(password);
 	await page.getByRole('button', { name: 'Create Practice' }).click();

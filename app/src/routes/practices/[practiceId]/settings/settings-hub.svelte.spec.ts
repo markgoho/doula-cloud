@@ -33,6 +33,9 @@ describe('the Settings hub', () => {
 		// #966: gated the same notch as Getting paid -- a Doula's session
 		// reads no Owner-or-Admin endpoint the Rates screen depends on.
 		await expect.element(testPage.getByRole('link', { name: 'Rates' })).not.toBeInTheDocument();
+		// #1166: gated the same notch again -- both the read and the write
+		// behind the Timezone screen are Owner-or-Admin.
+		await expect.element(testPage.getByRole('link', { name: 'Timezone' })).not.toBeInTheDocument();
 		await expect.element(testPage.getByRole('link', { name: 'Website' })).toBeVisible();
 		await expect.element(testPage.getByRole('link', { name: 'Client Fields' })).toBeVisible();
 		await expect.element(testPage.getByRole('link', { name: 'Plan Templates' })).toBeVisible();
@@ -64,6 +67,11 @@ describe('the Settings hub', () => {
 		const ratesLink = testPage.getByRole('link', { name: 'Rates' });
 		await expect.element(ratesLink).toBeVisible();
 		await expect.element(ratesLink).toHaveAttribute('href', '/practices/practice-1/settings/rates');
+		const timezoneLink = testPage.getByRole('link', { name: 'Timezone' });
+		await expect.element(timezoneLink).toBeVisible();
+		await expect
+			.element(timezoneLink)
+			.toHaveAttribute('href', '/practices/practice-1/settings/timezone');
 		const link = testPage.getByRole('link', { name: 'Blocked email addresses' });
 		await expect.element(link).toBeVisible();
 		await expect

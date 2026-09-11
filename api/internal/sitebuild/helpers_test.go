@@ -101,7 +101,7 @@ func seedHostedPage(t *testing.T, db *testdb.DB, name, slug string) string {
 	t.Helper()
 	var id string
 	if err := db.Admin.QueryRowContext(t.Context(),
-		`INSERT INTO practices (name) VALUES ($1) RETURNING id`, name,
+		`INSERT INTO practices (name, timezone) VALUES ($1, 'America/New_York') RETURNING id`, name,
 	).Scan(&id); err != nil {
 		t.Fatalf("seed practice %q: %v", name, err)
 	}

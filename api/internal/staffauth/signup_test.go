@@ -11,6 +11,7 @@ import (
 	"doula-cloud/api/internal/apierrtest"
 	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/contracts"
+	"doula-cloud/api/internal/ianazone"
 	"doula-cloud/api/internal/idempotency"
 	"doula-cloud/api/internal/objectstore"
 	"doula-cloud/api/internal/plans"
@@ -68,8 +69,23 @@ func newSignupServer(verifier authntest.Verifier, db *testdb.DB) *httptest.Serve
 	return httptest.NewServer(mux)
 }
 
+// signupZone is the zone every signup test that is not about zones sends
+// (#1166) -- the value 00110_practice_timezone.sql carried as its column
+// default before that ticket dropped it.
+const signupZone = "America/New_York"
+
+// postSignup posts a signup body. A staffauth.SignupRequest that names no
+// zone is given one first (#1166): every one of this package's signup
+// tests predates the field and is about something else, and the endpoint
+// now refuses a body with no zone on it. A test that is about the zone
+// itself passes a map instead of the struct, so it can send a zone the
+// IANA database does not name, or none at all.
 func postSignup(t *testing.T, srv *httptest.Server, token string, body any) *http.Response {
 	t.Helper()
+	if req, ok := body.(staffauth.SignupRequest); ok && req.Timezone == "" {
+		req.Timezone = signupZone
+		body = req
+	}
 	payload, err := json.Marshal(body)
 	if err != nil {
 		t.Fatalf("marshal body: %v", err)
@@ -206,6 +222,76 @@ func TestSignupHandler_MissingWorkState(t *testing.T) {
 	}
 	if details := decodeDetails(t, resp); details["workState"] != staffauth.MsgWorkStateNeeded {
 		t.Fatalf("details = %v, want workState entry", details)
+	}
+}
+
+// TestSignupHandler_ZoneIsStatedNotInherited is #1166's own criterion at
+// the signup end: a Practice's zone comes off the body the founder sent,
+// not off a column default, and the row proves it by holding a zone
+// nobody would have picked for her.
+func TestSignupHandler_ZoneIsStatedNotInherited(t *testing.T) {
+	db := testdb.New(t)
+	const uid = "signup-states-a-zone"
+	srv := newSignupServer(authntest.Verifier{UID: uid, Email: "denver@example.com"}, db)
+	defer srv.Close()
+
+	resp := postSignup(t, srv, "tok", staffauth.SignupRequest{
+		PracticeName: "Mile High Doulas", StaffName: "Robin", WorkState: "CO",
+		Timezone: "America/Denver",
+	})
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusCreated {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusCreated)
+	}
+	var out staffauth.SignupResponse
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	var stored string
+	if err := db.Admin.QueryRowContext(t.Context(),
+		`SELECT timezone FROM practices WHERE id = $1`, out.PracticeID,
+	).Scan(&stored); err != nil {
+		t.Fatalf("read the new Practice's zone: %v", err)
+	}
+	if stored != "America/Denver" {
+		t.Fatalf("stored zone = %q, want the one she stated", stored)
+	}
+}
+
+// TestSignupHandler_RefusesAZoneTheDatabaseDoesNotName proves the zone is
+// held to the IANA database at signup too, not only on the settings
+// write -- and that an omitted field is a refusal rather than a silent
+// UTC. The body is a map rather than a SignupRequest so postSignup's own
+// default does not fill the field in.
+func TestSignupHandler_RefusesAZoneTheDatabaseDoesNotName(t *testing.T) {
+	for _, zone := range []string{"Nowhere/Atlantis", ""} {
+		t.Run("zone "+zone, func(t *testing.T) {
+			db := testdb.New(t)
+			srv := newSignupServer(authntest.Verifier{UID: newOwnerUID, Email: jamieEmail}, db)
+			defer srv.Close()
+
+			resp := postSignup(t, srv, "tok", map[string]string{
+				"practiceName": "P", "staffName": "S", "workState": "NY", "timezone": zone,
+			})
+			defer resp.Body.Close()
+
+			if resp.StatusCode != http.StatusBadRequest {
+				t.Fatalf("status = %d, want %d for zone %q", resp.StatusCode, http.StatusBadRequest, zone)
+			}
+			// Two sentences for two different mistakes: nothing chosen
+			// reads "choose one", and a name the database does not carry
+			// says what is wrong with the name -- "choose one" beside an
+			// already-filled control would tell her off for the wrong
+			// thing.
+			want := staffauth.MsgTimezoneNeeded
+			if zone != "" {
+				want = ianazone.MsgNotRecognized
+			}
+			if details := decodeDetails(t, resp); details["timezone"] != want {
+				t.Fatalf("details = %v, want %q for zone %q", details, want, zone)
+			}
+		})
 	}
 }
 

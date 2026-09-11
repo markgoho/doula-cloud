@@ -166,7 +166,7 @@ func TestCreateHandler_OwnerWithContractorEmploymentTypeMayCreate(t *testing.T) 
 	db := testdb.New(t)
 	var practiceID string
 	if err := db.Admin.QueryRowContext(t.Context(),
-		`INSERT INTO practices (name) VALUES ('Solo Practice') RETURNING id`,
+		`INSERT INTO practices (name, timezone) VALUES ('Solo Practice', 'America/New_York') RETURNING id`,
 	).Scan(&practiceID); err != nil {
 		t.Fatalf("seed practice: %v", err)
 	}

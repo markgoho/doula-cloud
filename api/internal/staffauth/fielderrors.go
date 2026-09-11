@@ -26,6 +26,10 @@ const fieldEmail = "email"
 // page's own correction, and invitation acceptance.
 const fieldWorkState = "workState"
 
+// fieldTimezone is the timezone json tag signup's own zone refusal keys
+// its Details under (#1166).
+const fieldTimezone = "timezone"
+
 const (
 	// MsgPracticeNameNeeded is signup's practiceName field.
 	MsgPracticeNameNeeded = "Enter the name of your Practice"
@@ -43,6 +47,13 @@ const (
 	// field and the format for a caller reading the API, this one is for
 	// the person looking at the control.
 	MsgWorkStateNeeded = "Choose the state you work from"
+	// MsgTimezoneNeeded is signup's timezone field (#1166): the zone this
+	// Practice keeps its calendar days in, which decides which day a
+	// Visit falls on. The pair of MsgTimezoneRequired, on the same split
+	// MsgWorkStateNeeded and MsgWorkStateRequired make -- this sentence
+	// is for the person looking at the control, that one for a caller
+	// reading the API.
+	MsgTimezoneNeeded = "Choose the timezone this Practice works in"
 	// MsgOwnAddressNeeded is the email field where the address is the
 	// caller's own -- the password-reset request screen.
 	MsgOwnAddressNeeded = "Enter your email address"

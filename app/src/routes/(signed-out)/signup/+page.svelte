@@ -15,6 +15,7 @@
 	import LabeledField from '#lib/components/molecules/LabeledField.svelte';
 	import StackedForm from '#lib/components/molecules/StackedForm.svelte';
 	import WorkStateField from '#lib/components/molecules/WorkStateField.svelte';
+	import TimezoneField from '#lib/components/molecules/TimezoneField.svelte';
 	import ErrorSummary from '#lib/components/molecules/ErrorSummary.svelte';
 	import WarningText from '#lib/components/atoms/WarningText.svelte';
 	import Notice from '#lib/components/atoms/Notice.svelte';
@@ -22,11 +23,13 @@
 	import { authRefusal, isEmailAlreadyInUse, refusalErrors, refusalOrConfirmable } from '#lib/formErrors.js';
 	import { FormSubmission, orServiceProblem, type FormError } from '#lib/formSubmission.svelte.js';
 	import { workStateCode } from '#lib/workStates.js';
+	import { TIMEZONE_HINT, TIMEZONE_NEEDED, detectTimezone } from '#lib/timezones.js';
 	import { ROLE_LABELS } from '#lib/roles.js';
 
 	const practiceNameId = 'signup-practice-name';
 	const staffNameId = 'signup-staff-name';
 	const workStateId = 'signup-work-state';
+	const timezoneId = 'signup-timezone';
 	const emailId = 'signup-email';
 	const passwordId = 'signup-password';
 
@@ -45,12 +48,20 @@
 	const signupFieldIds = {
 		practiceName: practiceNameId,
 		staffName: staffNameId,
-		workState: workStateId
+		workState: workStateId,
+		timezone: timezoneId
 	};
 
 	let practiceName = $state('');
 	let staffName = $state('');
 	let workStateName = $state('');
+	// #1166: opened on the zone the browser reports, which GOV.UK's Select
+	// guidance allows for something the service already knows -- she is
+	// confirming a reported answer rather than being nudged toward a
+	// guess. A browser that reports a zone outside the seven still shows
+	// it, rather than rendering a select whose value matches no option
+	// (timezoneOptions).
+	let timezone = $state(detectTimezone());
 	let email = $state('');
 	let password = $state('');
 	const submission = new FormSubmission();
@@ -81,6 +92,7 @@
 		if (staffName.trim() === '') found.push({ message: 'Enter your name', targetId: staffNameId });
 		if (workStateName === '')
 			found.push({ message: 'Choose the state you work from', targetId: workStateId });
+		if (timezone === '') found.push({ message: TIMEZONE_NEEDED, targetId: timezoneId });
 		if (email.trim() === '') found.push({ message: 'Enter your email address', targetId: emailId });
 		if (password === '') {
 			found.push({ message: 'Enter a password', targetId: passwordId });
@@ -150,7 +162,8 @@
 			body: JSON.stringify({
 				practiceName,
 				staffName,
-				workState: workStateCode(workStateName)
+				workState: workStateCode(workStateName),
+				timezone
 			})
 		});
 	}
@@ -303,6 +316,12 @@
 			{/snippet}
 		</LabeledField>
 		<WorkStateField id={workStateId} bind:value={workStateName} error={submission.errorFor(workStateId)} />
+		<TimezoneField
+			id={timezoneId}
+			bind:value={timezone}
+			error={submission.errorFor(timezoneId)}
+			hint={TIMEZONE_HINT}
+		/>
 		<LabeledField id={emailId} label="Email" error={submission.errorFor(emailId)}>
 			{#snippet children({ id, describedBy, invalid })}
 				<TextInput

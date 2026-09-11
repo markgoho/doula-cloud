@@ -22,9 +22,9 @@ const (
 	// notAUUID is the malformed id every "reject a bad path segment or
 	// field" case sends, named here for the same goconst reason.
 	notAUUID = "not-a-uuid"
-	// seededPracticeZoneName is 00110_practice_timezone.sql's column
-	// default: the zone every Practice holds until #1166 lets an Owner
-	// state one.
+	// seededPracticeZoneName is the zone testdb.SeedPractice states for
+	// every fixture Practice -- the value 00110_practice_timezone.sql
+	// carried as its column default before #1166 dropped it.
 	seededPracticeZoneName = "America/New_York"
 )
 
@@ -136,10 +136,9 @@ func setPregnancyEnded(t *testing.T, db *testdb.DB, engagementID, outcome, ended
 }
 
 // seededPracticeZone loads the zone a freshly seeded Practice holds --
-// 00110_practice_timezone.sql's column default, which is the only zone
-// any Practice can hold until #1166 lets an Owner state one. Named here
-// rather than repeated as a literal so the day these tests type Visits
-// against follows the schema rather than a copy of it.
+// the one testdb.SeedPractice states. Named here rather than repeated as
+// a literal so the day these tests type Visits against follows the
+// fixture rather than a copy of it.
 func seededPracticeZone(t *testing.T) *time.Location {
 	t.Helper()
 
@@ -151,8 +150,8 @@ func seededPracticeZone(t *testing.T) *time.Location {
 }
 
 // setPracticeTimezone writes a Practice's zone directly on the Admin
-// connection: there is no handler that writes one yet (#1166), and these
-// tests need the fixture rather than that handler's own behavior.
+// connection. practicetimezone.PutHandler is the real write (#1166);
+// these tests need the fixture, not that handler's own behavior.
 func setPracticeTimezone(t *testing.T, db *testdb.DB, practiceID, zone string) {
 	t.Helper()
 

@@ -34,6 +34,10 @@ export interface FoundingOwnerFields {
 	practiceName?: string;
 	staffName?: string;
 	workState?: string;
+	/** The zone this Practice's calendar days are worked out in (#1166).
+	 * Every spec that does not care states Eastern, which is what the
+	 * column defaulted to before a person could state one. */
+	timezone?: string;
 }
 
 export interface SeededFoundingOwner {
@@ -56,7 +60,12 @@ export async function seedFoundingOwner(
 	request: APIRequestContext,
 	fields: FoundingOwnerFields = {}
 ): Promise<SeededFoundingOwner> {
-	const { practiceName = 'Riverside Doulas', staffName = 'Jamie Owner', workState = 'NY' } = fields;
+	const {
+		practiceName = 'Riverside Doulas',
+		staffName = 'Jamie Owner',
+		workState = 'NY',
+		timezone = 'America/New_York'
+	} = fields;
 	const email = uniqueEmail('staff');
 
 	const signUp = await request.post(
@@ -71,7 +80,7 @@ export async function seedFoundingOwner(
 	const signup = await retryPastRateLimit(() =>
 		request.post(`${API_URL}/api/staff/signup`, {
 			headers: { Authorization: `Bearer ${idToken}` },
-			data: { practiceName, staffName, workState }
+			data: { practiceName, staffName, workState, timezone }
 		})
 	);
 	const signupBody = await signup.text();

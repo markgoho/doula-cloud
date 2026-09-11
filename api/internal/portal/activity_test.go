@@ -31,7 +31,7 @@ func seedEngagementForActivity(t *testing.T, db *testdb.DB, identityUID, practic
 
 	var clientID string
 	if err := db.Admin.QueryRowContext(t.Context(),
-		`INSERT INTO practices (name) VALUES ($1) RETURNING id`, practiceName,
+		`INSERT INTO practices (name, timezone) VALUES ($1, 'America/New_York') RETURNING id`, practiceName,
 	).Scan(&practiceID); err != nil {
 		t.Fatalf("seed practice: %v", err)
 	}
