@@ -28,6 +28,7 @@
  * 93px past its edge on one pasted URL.
  */
 import type { Component } from 'svelte';
+import type { PracticeSession } from './practices/[practiceId]/+layout.js';
 
 /**
 The route a module path belongs to, for both halves of the check
@@ -82,6 +83,32 @@ export function toPageState(fixture: RouteFixture): {
 		params: { ...fixture.params },
 		url: new URL(fixture.url),
 		data: { ...fixture.pageData }
+	};
+}
+
+/**
+The `page.data.session` a Practice route reads -- `PracticeSession`
+(`practices/[practiceId]/+layout.ts`) -- built once for a fixture rather
+than declared as a local copy in each one (#1165). `roles` is the one
+thing every caller varies. `practiceName` defaults to this repo's own
+Practice and is overridable for the caller that needs something else --
+the Practice landing hub's own pasted-URL name (#530). `staffId` defaults
+to `'staff-1'`, the roster's Owner-Doula used everywhere else in these
+fixtures; `PracticeSession.staffId` is required, so this is the first
+time these fixtures actually conform to that type rather than relying on
+`pageData`'s untyped `Record<string, unknown>` to let the field go
+missing. Overridable for a route that reads `staffId` off the session
+rather than merely carrying it. `isContractor` is not exposed: every
+current caller reads `false`, and a route branching on it declares a
+`variants` session of its own rather than asking this helper for a
+fourth axis.
+*/
+export function practiceSession(
+	roles: string[],
+	{ practiceName = 'Riverside Doula Collective', staffId = 'staff-1' }: { practiceName?: string; staffId?: string } = {}
+): { session: PracticeSession } {
+	return {
+		session: { practiceId: 'practice-1', staffId, practiceName, roles, isContractor: false }
 	};
 }
 

@@ -13,20 +13,10 @@
  */
 import { jsonResponse } from '#lib/testResponse.js';
 import type { RouteFixture, RouteVariant } from '../../../../routeFixture.js';
+import { practiceSession } from '../../../../routeFixture.js';
 import Page from './+page.svelte';
 
 export const impact = { required: false, withoutSecondFactor: 6 };
-
-function session(roles: string[]) {
-	return {
-		session: {
-			practiceId: 'practice-1',
-			practiceName: 'Riverside Doula Collective',
-			roles,
-			isContractor: false
-		}
-	};
-}
 
 /*
  * Everyone who is not an Owner, Admin included. She is not asked for the
@@ -36,7 +26,7 @@ function session(roles: string[]) {
  */
 export const nonOwner: RouteVariant = {
 	name: 'The MFA settings screen, as a non-Owner',
-	pageData: session(['admin'])
+	pageData: practiceSession(['admin'])
 };
 
 export const fixture: RouteFixture = {
@@ -44,7 +34,7 @@ export const fixture: RouteFixture = {
 	component: Page,
 	params: { practiceId: 'practice-1' },
 	url: 'https://example.test/practices/practice-1/settings/mfa',
-	pageData: session(['owner']),
+	pageData: practiceSession(['owner']),
 	respond: () => jsonResponse(impact),
 	readyText: 'Multi-factor authentication',
 	variants: [nonOwner]

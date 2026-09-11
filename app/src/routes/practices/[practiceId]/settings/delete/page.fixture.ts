@@ -10,20 +10,10 @@
  */
 import { jsonResponse } from '#lib/testResponse.js';
 import type { RouteFixture, RouteVariant } from '../../../../routeFixture.js';
+import { practiceSession } from '../../../../routeFixture.js';
 import Page from './+page.svelte';
 
 export const status = { pending: false, hasUnsettledInvoices: false };
-
-function session(roles: string[]) {
-	return {
-		session: {
-			practiceId: 'practice-1',
-			practiceName: 'Riverside Doula Collective',
-			roles,
-			isContractor: false
-		}
-	};
-}
 
 /*
  * Everyone who is not an Owner, Admin included -- one Notice, no Badge,
@@ -39,7 +29,7 @@ function session(roles: string[]) {
  */
 export const nonOwner: RouteVariant = {
 	name: 'The Delete-this-Practice settings screen, as a non-Owner',
-	pageData: session(['admin'])
+	pageData: practiceSession(['admin'])
 };
 
 export const fixture: RouteFixture = {
@@ -47,7 +37,7 @@ export const fixture: RouteFixture = {
 	component: Page,
 	params: { practiceId: 'practice-1' },
 	url: 'https://example.test/practices/practice-1/settings/delete',
-	pageData: session(['owner']),
+	pageData: practiceSession(['owner']),
 	respond: () => jsonResponse(status),
 	readyText: 'Delete this Practice',
 	variants: [nonOwner]
