@@ -2,7 +2,6 @@ import { execFileSync, spawn } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
 import { createConnection } from 'node:net';
 import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
@@ -20,8 +19,10 @@ import {
 	PORT_OFFSET_ROOT,
 	E2E_COMPOSE_FILE,
 	E2E_HEARTBEAT_INTERVAL_MS,
+	e2eApiBinaryPath,
 	e2eComposeProject,
-	e2eHeartbeatPath
+	e2eHeartbeatPath,
+	e2ePidfilePath
 } from './ports';
 
 // The fake-gcs-server in compose.e2e.yaml, and the one bucket the BFF is
@@ -46,12 +47,6 @@ const COMPOSE_ENV = {
 	...process.env,
 	...(PORT_OFFSET && { DB_HOST_PORT: String(DB_PORT), GCS_HOST_PORT: String(GCS_PORT) })
 };
-// Distinguishes this worktree's host-process pidfiles/binary from every
-// other worktree's -- see e2e/ports.ts for why PORT_OFFSET is the stable
-// per-worktree key. Suffix omitted at offset 0 so the main checkout and CI
-// keep today's exact filenames.
-const PIDFILE_SUFFIX = PORT_OFFSET ? `-${PORT_OFFSET}` : '';
-
 // firebase.json has no CLI flag for the auth emulator's port -- only
 // --config <path>. At offset 0 (main checkout, CI) startEmulator passes no
 // --config at all, so firebase-tools resolves the committed firebase.json
@@ -100,10 +95,10 @@ const CONTAINER_ENGINE = process.env.CONTAINER_ENGINE ?? 'podman';
 // pidfile pattern for both, so `bun run dev:full` (scripts/dev-full.ts)
 // gets the same clean-teardown behavior as the Playwright e2e run
 // (global-setup.ts/global-teardown.ts).
-const EMULATOR_PIDFILE = path.join(tmpdir(), `doula-cloud-e2e-firebase-emulator${PIDFILE_SUFFIX}.pid`);
-const API_PIDFILE = path.join(tmpdir(), `doula-cloud-e2e-api${PIDFILE_SUFFIX}.pid`);
-const API_BINARY_PATH = path.join(tmpdir(), `doula-cloud-e2e-api${PIDFILE_SUFFIX}`);
-const MAILBOX_PIDFILE = path.join(tmpdir(), `doula-cloud-e2e-mailbox${PIDFILE_SUFFIX}.pid`);
+const EMULATOR_PIDFILE = e2ePidfilePath('firebase-emulator', PORT_OFFSET);
+const API_PIDFILE = e2ePidfilePath('api', PORT_OFFSET);
+const API_BINARY_PATH = e2eApiBinaryPath(PORT_OFFSET);
+const MAILBOX_PIDFILE = e2ePidfilePath('mailbox', PORT_OFFSET);
 const MAILBOX_SCRIPT = path.join(path.dirname(fileURLToPath(import.meta.url)), 'mailbox.ts');
 
 // Where the liveness heartbeat lives (#1193, e2e/ports.ts). `undefined`

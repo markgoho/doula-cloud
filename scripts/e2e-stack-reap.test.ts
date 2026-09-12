@@ -1,15 +1,17 @@
 /**
  * `.claude/hooks/e2e-stack-reap.ts` -- the SessionStart hook that tears
- * down the podman-compose e2e stack a killed worktree session leaves
- * running (#1066). See that file's header and docs/testing.md's "Reaping
- * orphaned e2e stacks" section for the full story.
+ * down the podman-compose e2e stack, and the host-process pidfiles beside
+ * it, that a killed worktree session leaves running (#1066, #1194). See
+ * that file's header and docs/testing.md's "Reaping orphaned e2e stacks"
+ * section for the full story.
  *
- * The reap decision (groupStackProjects/pickReapProjects) and the
- * filesystem readers behind it (recentlyTouched/liveWorktreeOffsets,
- * plus isHeartbeatFresh/heartbeatLiveOffsets/liveOffsets, #1193) are
- * imported and tested directly. main()'s fail-open behavior is exercised
- * as a subprocess, the same way scripts/testdb-reap.test.ts covers
- * testdb-reap.ts.
+ * The reap decisions (groupStackProjects/pickReapProjects for the
+ * compose stack, discoverPidfiles/pickReapPidfiles/looksLikeOurProcess
+ * for host-process pidfiles) and the filesystem readers behind them
+ * (recentlyTouched/liveWorktreeOffsets, plus isHeartbeatFresh/
+ * heartbeatLiveOffsets/liveOffsets, #1193) are imported and tested
+ * directly. main()'s fail-open behavior is exercised as a subprocess, the
+ * same way scripts/testdb-reap.test.ts covers testdb-reap.ts.
  *
  * The container fixtures below are the labels podman-compose 1.6.0
  * actually writes, read back off this machine after starting
@@ -20,16 +22,20 @@ import { spawn } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { e2eHeartbeatPath } from '../app/e2e/ports.ts';
+import { e2eApiBinaryPath, e2eHeartbeatPath } from '../app/e2e/ports.ts';
 import {
   HEARTBEAT_STALE_MS,
   QUIET_MS,
   REAP_THRESHOLD_MS,
+  discoverPidfiles,
   groupStackProjects,
   heartbeatLiveOffsets,
   isHeartbeatFresh,
+  isProcessAlive,
   liveOffsets,
   liveWorktreeOffsets,
+  looksLikeOurProcess,
+  pickReapPidfiles,
   pickReapProjects,
   recentlyTouched,
   type StackProject,
@@ -93,6 +99,34 @@ function temporaryWorktreesRoot(): string {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'e2e-stack-reap-test-'));
   temporaryRoots.push(root);
   return root;
+}
+
+// discoverPidfiles/pickReapPidfiles/main()'s own pidfile sweep never run
+// against the real os.tmpdir() from a test -- other agents' real
+// worktrees hold real pidfiles there right now. This is the fixture
+// directory their own tests point discoverPidfiles at instead.
+function temporaryPidfileDir(): string {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'e2e-pidfile-reap-test-'));
+  temporaryRoots.push(root);
+  return root;
+}
+
+// Writes a fixture pidfile named exactly the way app/e2e/ports.ts's
+// e2ePidfilePath would, backdated by ageMs so pickReapPidfiles' age check
+// has something to compare against.
+function writePidfile(
+  dir: string,
+  kind: string,
+  offset: number,
+  pid: number,
+  ageMs: number,
+  now: number
+): string {
+  const filePath = path.join(dir, `doula-cloud-e2e-${kind}-${offset}.pid`);
+  fs.writeFileSync(filePath, String(pid));
+  const stamp = new Date(now - ageMs);
+  fs.utimesSync(filePath, stamp, stamp);
+  return filePath;
 }
 
 // Shared by liveWorktreeOffsets's and heartbeatLiveOffsets's own describe
@@ -452,12 +486,169 @@ describe('liveOffsets', () => {
   });
 });
 
+describe('discoverPidfiles', () => {
+  test('finds all three kinds, offset parsed out of the filename', () => {
+    const dir = temporaryPidfileDir();
+    writePidfile(dir, 'api', 4, 111, 0, Date.now());
+    writePidfile(dir, 'firebase-emulator', 4, 222, 0, Date.now());
+    writePidfile(dir, 'mailbox', 4, 333, 0, Date.now());
+    const found = discoverPidfiles(dir).sort((a, b) =>
+      a.kind.localeCompare(b.kind)
+    );
+    expect(
+      found.map((entry) => ({ kind: entry.kind, offset: entry.offset }))
+    ).toEqual([
+      { kind: 'api', offset: 4 },
+      { kind: 'firebase-emulator', offset: 4 },
+      { kind: 'mailbox', offset: 4 },
+    ]);
+  });
+
+  test("ignores the main checkout's own unsuffixed pidfile", () => {
+    const dir = temporaryPidfileDir();
+    fs.writeFileSync(path.join(dir, 'doula-cloud-e2e-api.pid'), '111');
+    expect(discoverPidfiles(dir)).toEqual([]);
+  });
+
+  test('ignores a file that only starts like ours', () => {
+    const dir = temporaryPidfileDir();
+    fs.writeFileSync(
+      path.join(dir, 'doula-cloud-e2e-attachments-api-4.pid'),
+      '111'
+    );
+    expect(discoverPidfiles(dir)).toEqual([]);
+  });
+
+  test('ignores an unrelated file in the same directory', () => {
+    const dir = temporaryPidfileDir();
+    fs.writeFileSync(path.join(dir, 'some-other-thing.pid'), '111');
+    expect(discoverPidfiles(dir)).toEqual([]);
+  });
+
+  test('a directory that cannot be read yields nothing rather than throwing', () => {
+    expect(
+      discoverPidfiles(path.join(temporaryPidfileDir(), 'does-not-exist'))
+    ).toEqual([]);
+  });
+});
+
+describe('pickReapPidfiles', () => {
+  const now = Date.now();
+  const none = new Set<number>();
+
+  test('reaps a pidfile older than the threshold whose offset no live worktree claims', () => {
+    const dir = temporaryPidfileDir();
+    const filePath = writePidfile(
+      dir,
+      'api',
+      4,
+      111,
+      REAP_THRESHOLD_MS + 1000,
+      now
+    );
+    expect(pickReapPidfiles(discoverPidfiles(dir), none, now)).toEqual([
+      { kind: 'api', offset: 4, path: filePath, mtimeMs: expect.any(Number) },
+    ]);
+  });
+
+  test('never reaps a pidfile whose offset a live worktree claims, however old', () => {
+    const dir = temporaryPidfileDir();
+    writePidfile(dir, 'api', 4, 111, REAP_THRESHOLD_MS * 100, now);
+    expect(pickReapPidfiles(discoverPidfiles(dir), new Set([4]), now)).toEqual(
+      []
+    );
+  });
+
+  test('does not reap a pidfile younger than the threshold', () => {
+    const dir = temporaryPidfileDir();
+    writePidfile(dir, 'api', 4, 111, REAP_THRESHOLD_MS - 1000, now);
+    expect(pickReapPidfiles(discoverPidfiles(dir), none, now)).toEqual([]);
+  });
+
+  test('accepts a custom threshold', () => {
+    const dir = temporaryPidfileDir();
+    writePidfile(dir, 'api', 4, 111, 5000, now);
+    expect(
+      pickReapPidfiles(discoverPidfiles(dir), none, now, 1000)
+    ).toHaveLength(1);
+  });
+});
+
+describe('isProcessAlive', () => {
+  test('true for a process this machine actually has running, false once it has exited', async () => {
+    // A process the test itself spawns and owns -- never a real agent's.
+    const child = spawn('sleep', ['5'], { stdio: 'ignore' });
+    await new Promise<void>((resolve, reject) => {
+      child.once('spawn', () => resolve());
+      child.once('error', reject);
+    });
+    expect(isProcessAlive(child.pid!)).toBe(true);
+    child.kill();
+    await new Promise((resolve) => child.once('exit', resolve));
+    expect(isProcessAlive(child.pid!)).toBe(false);
+  });
+
+  test('false for a pid nothing on this machine plausibly holds', () => {
+    expect(isProcessAlive(999_999)).toBe(false);
+  });
+});
+
+describe('looksLikeOurProcess', () => {
+  test("api: matches only its own offset's exact binary path", () => {
+    const commandLine = e2eApiBinaryPath(4);
+    expect(looksLikeOurProcess('api', 4, commandLine)).toBe(true);
+    expect(looksLikeOurProcess('api', 5, commandLine)).toBe(false); // a different worktree's binary
+  });
+
+  test("mailbox: matches a bun invocation of any worktree's mailbox.ts", () => {
+    expect(
+      looksLikeOurProcess('mailbox', 4, 'bun /some/worktree/app/e2e/mailbox.ts')
+    ).toBe(true);
+    expect(
+      looksLikeOurProcess('mailbox', 4, 'bun /some/worktree/app/e2e/stack.ts')
+    ).toBe(false);
+  });
+
+  test('firebase-emulator: matches the firebase-tools emulator invocation', () => {
+    expect(
+      looksLikeOurProcess(
+        'firebase-emulator',
+        4,
+        'node bunx firebase-tools emulators:start --only auth --project doula-cloud'
+      )
+    ).toBe(true);
+    expect(
+      looksLikeOurProcess(
+        'firebase-emulator',
+        4,
+        'node some-unrelated-server.js'
+      )
+    ).toBe(false);
+  });
+
+  test('never matches an unreadable command line -- a pid ps could not identify', () => {
+    expect(looksLikeOurProcess('api', 4, undefined)).toBe(false);
+  });
+});
+
 describe('e2e-stack-reap hook (subprocess, fail-open behavior)', () => {
+  /*
+   * TMPDIR pointed at an empty fixture dir, not neutered like
+   * CONTAINER_ENGINE below: reapPidfiles needs no container engine at
+   * all, so nothing else here stops it from scanning os.tmpdir() for
+   * real. Without this override these tests would run the real pidfile
+   * sweep against whatever this machine's actual os.tmpdir() holds --
+   * possibly another live agent's own pidfiles -- on every `bun test
+   * scripts/`, making `expect(stdout).toBe('')` nondeterministic and,
+   * far worse, capable of actually killing something. Node/Bun's
+   * os.tmpdir() reads TMPDIR on POSIX before falling back to `/tmp`.
+   */
   test('fails open when the container engine is unreachable', async () => {
     const { exitCode, stdout } = await invoke({
       ...process.env,
       DOCKER_HOST: 'unix:///nonexistent/e2e-stack-reap-test.sock',
       CONTAINER_ENGINE: '/nonexistent-binary-e2e-stack-reap-test',
+      TMPDIR: temporaryPidfileDir(),
     });
     expect(exitCode).toBe(0);
     expect(stdout).toBe('');
@@ -475,6 +666,7 @@ describe('e2e-stack-reap hook (subprocess, fail-open behavior)', () => {
     const env: Record<string, string | undefined> = {
       ...process.env,
       CONTAINER_ENGINE: '/nonexistent-binary-e2e-stack-reap-test',
+      TMPDIR: temporaryPidfileDir(),
     };
     delete env.DOCKER_HOST;
     const { exitCode, stdout } = await invoke(env);

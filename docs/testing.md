@@ -408,6 +408,14 @@ It fails open on every error path, for the same reason `testdb-reap.ts` does, an
 podman compose -p doula-cloud-e2e-<offset> -f app/compose.e2e.yaml down -v
 ```
 
+**The same hook run also sweeps orphaned host-process pidfiles ([#1194](https://github.com/markgoho/doula-cloud/issues/1194)).** `app/e2e/stack.ts` spawns the Firebase Auth emulator, the Go BFF and the sandbox mailbox `detached` and `unref()`'d, tracked by pidfile in `os.tmpdir()` rather than by compose. Unlike the containers above, an orphaned one is still bound to the offset's actual TCP ports — which is exactly what makes `worktree-provision.ts`'s `isPortFree` refuse to hand that offset to a new worktree at all, even once the worktree that used to claim it is gone. With only 9 offsets on the machine, that is how "no usable port offset" happens. `reapPidfiles`, in the same hook file, applies the identical two-clock rule above (`liveOffsets`, and `REAP_THRESHOLD_MS` against the pidfile's own mtime) to every `doula-cloud-e2e-*` pidfile it finds in `os.tmpdir()`, and runs in its own try/catch independent of the compose sweep, so a Podman outage never blocks it — pidfiles need no container engine at all.
+
+Killing the pid a pidfile names is the one irreversible step here, so it happens only once two more checks both pass: `isProcessAlive` confirms the pid is still running at all (`ESRCH` means it's already gone, and only the stale pidfile is removed), and `looksLikeOurProcess` confirms the running process's own command line — read fresh via `ps -p <pid> -o command= -ww`, never trusted from the pidfile alone — still looks like the process that pidfile was written for: the exact offset-suffixed binary path for the BFF, and a narrower but still telling marker (`mailbox.ts`, `emulators:start`) for the mailbox and emulator, whose own argv carries no offset to pin against. A pid that fails either check is left alone, process and pidfile both. This is what stands between a genuinely orphaned BFF and a `kill` aimed at whatever the OS has since recycled that pid onto — "cannot confirm" resolves to "do nothing", never to a guess (see [#1212](https://github.com/markgoho/doula-cloud/issues/1212) on what a wrong reclaim costs). The manual escape hatch, for a pidfile `ls $TMPDIR/doula-cloud-e2e-*.pid` shows:
+
+```sh
+kill "$(cat "$TMPDIR/doula-cloud-e2e-api-<offset>.pid")" && rm "$TMPDIR/doula-cloud-e2e-api-<offset>.pid"
+```
+
 ## `api/`: migrations via goose
 
 Migrations live in `api/db/migrations`. In dev/CI, `internal/testdb`

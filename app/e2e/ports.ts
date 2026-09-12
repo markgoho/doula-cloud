@@ -11,6 +11,7 @@
 // - scripts/development-full.ts's dev-server env (same, for `bun run dev:full`)
 // - staff-login.e2e.ts, to talk to the emulator and BFF directly
 import { existsSync, readFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -138,6 +139,35 @@ export function e2eHeartbeatPath(worktreeRoot: string): string {
 // this) so neither can set a staleness threshold shorter than the beat
 // itself by accident.
 export const E2E_HEARTBEAT_INTERVAL_MS = 60_000;
+
+// The three host processes e2e/stack.ts tracks by pidfile -- the Firebase
+// Auth emulator, the Go BFF and the sandbox mailbox (#1194). Named once
+// here, the same reason E2E_COMPOSE_PROJECT_PREFIX is: `e2ePidfilePath`
+// below is how both the writer (e2e/stack.ts, always at its own
+// PORT_OFFSET) and the reader (.claude/hooks/e2e-stack-reap.ts, sweeping
+// every offset on the machine) name the same file without either side
+// spelling out os.tmpdir() naming twice.
+export const E2E_PIDFILE_KINDS = ['firebase-emulator', 'api', 'mailbox'] as const;
+export type E2EPidfileKind = (typeof E2E_PIDFILE_KINDS)[number];
+
+// Where kind's pidfile lives for a given offset. Suffix omitted at
+// offset 0, matching e2eComposeProject above -- the main checkout and CI
+// keep today's exact filenames, and (just as important for the reaper)
+// an offset-0 pidfile can never be *produced* by this function, so
+// nothing built from it can ever name the main checkout's own process.
+export function e2ePidfilePath(kind: E2EPidfileKind, offset: number): string {
+	return path.join(tmpdir(), `${E2E_COMPOSE_PROJECT_PREFIX}-${kind}${offset ? `-${offset}` : ''}.pid`);
+}
+
+// The Go BFF binary startAPI builds and execs, offset-suffixed the same
+// way its pidfile is (see API_BINARY_PATH, e2e/stack.ts). Exported so the
+// pidfile reaper can reconstruct *any* offset's expected binary path --
+// not just its own -- and use it as the one identifying fact that a pid
+// naming an `api` pidfile is actually still running this repo's BFF and
+// not some unrelated process the OS recycled that pid onto.
+export function e2eApiBinaryPath(offset: number): string {
+	return path.join(tmpdir(), `${E2E_COMPOSE_PROJECT_PREFIX}-api${offset ? `-${offset}` : ''}`);
+}
 
 export const BASE_PORTS: readonly number[] = [
 	E2E_API_PORT,
