@@ -2,7 +2,7 @@ import { expect, test } from '@playwright/test';
 import { E2E_API_HOST, E2E_API_PORT } from './ports';
 import { seedEngagement } from './stack';
 import { signInEnrolled } from './mfa';
-import { seedFoundingOwner } from './staffSignup';
+import { seedFoundingOwner, uniqueEmail } from './staffSignup';
 
 const API_URL = `http://${E2E_API_HOST}:${E2E_API_PORT}`;
 
@@ -17,9 +17,7 @@ test('Client-portal invite -> accept -> login lands on their engagement-scoped U
 	page,
 	request
 }) => {
-	// Random suffix, not just Date.now(): see staffSignup.ts for why
-	// millisecond-only uniqueness collides across parallel workers.
-	const clientEmail = `client-${Date.now()}-${Math.random().toString(36).slice(2, 8)}@example.com`;
+	const clientEmail = uniqueEmail('client');
 
 	const { idToken: staffIdToken, localId: staffUID, practiceId } = await seedFoundingOwner(request);
 

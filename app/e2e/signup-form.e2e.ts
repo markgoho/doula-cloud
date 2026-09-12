@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { uniqueEmail } from './staffSignup';
 
 // Every other spec in this suite provisions its Practice with
 // POST /api/staff/signup directly (fixture setup is not automation, #207) --
@@ -12,9 +13,7 @@ import { expect, test } from '@playwright/test';
 // created. The IndexedDB/cookie checks below are about the signup
 // exchange itself, not about which screen she lands on afterward.
 test('Signing up through the /signup form drives the new Owner into MFA enrolment', async ({ page }) => {
-	// Random suffix, not just Date.now(): see staffSignup.ts for why
-	// millisecond-only uniqueness collides across parallel workers.
-	const email = `signup-form-${Date.now()}-${Math.random().toString(36).slice(2, 8)}@example.com`;
+	const email = uniqueEmail('signup-form');
 	const password = 'password123';
 
 	await page.goto('/signup');

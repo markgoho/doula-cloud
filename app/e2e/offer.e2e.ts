@@ -2,7 +2,7 @@ import { expect, test } from '@playwright/test';
 import { E2E_API_HOST, E2E_API_PORT } from './ports';
 import { seedEngagement } from './stack';
 import { signInEnrolled, enterPracticeAsEnrolled } from './mfa';
-import { seedFoundingOwner } from './staffSignup';
+import { seedFoundingOwner, uniqueEmail } from './staffSignup';
 
 const API_URL = `http://${E2E_API_HOST}:${E2E_API_PORT}`;
 
@@ -44,7 +44,7 @@ test('Owner offers an Engagement to a Doula, who accepts it from her own inbox',
 
 	const createClient = await request.post(`${API_URL}/api/practices/${practiceId}/clients`, {
 		headers,
-		data: { givenName: 'Rosa', familyName: 'Martinez', email: `client-${Date.now()}@example.com` }
+		data: { givenName: 'Rosa', familyName: 'Martinez', email: uniqueEmail('client') }
 	});
 	const createClientBody = await createClient.text();
 	expect(createClient.ok(), `create client failed: ${createClient.status()} ${createClientBody}`).toBe(true);

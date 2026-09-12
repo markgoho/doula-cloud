@@ -4,7 +4,7 @@ import { readStaffInviteToken } from './stack';
 import { drainUntilMailArrives, readMailbox } from './outboxMail';
 import { signIn } from './auth';
 import { enrollSecondFactor, enterPracticeAsEnrolled, verifyEmail } from './mfa';
-import { seedFoundingOwner } from './staffSignup';
+import { seedFoundingOwner, uniqueEmail } from './staffSignup';
 import { STUB_TOTP_CODE, stubTotpFactor } from './totpStub';
 
 const API_URL = `http://${E2E_API_HOST}:${E2E_API_PORT}`;
@@ -45,8 +45,7 @@ test('An Owner vouches for a locked-out doula, and the code reaches her and nobo
 	request,
 	context
 }) => {
-	const unique = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-	const doulaEmail = `doula-${unique}@example.com`;
+	const doulaEmail = uniqueEmail('doula');
 	const doulaName = 'Robin Doula';
 	const password = 'password123';
 
@@ -181,7 +180,7 @@ test('An Owner vouches for a locked-out doula, and the code reaches her and nobo
 	// The same sentence for an address the service has never heard of --
 	// #168's whole point, and the one thing a screen can get wrong by
 	// being helpful.
-	await page.getByLabel('Email').fill(`nobody-${unique}@example.com`);
+	await page.getByLabel('Email').fill(uniqueEmail('nobody'));
 	await page.getByLabel('Recovery code').fill(code!);
 	await page.getByRole('button', { name: 'Continue' }).click();
 	await expect(page.getByText('this code is invalid or has expired').first()).toBeVisible();
