@@ -4,8 +4,9 @@
  * running (#1066). See that file's header and docs/testing.md's "Reaping
  * orphaned e2e stacks" section for the full story.
  *
- * The reap decision (groupStackProjects/pickReapProjects) and the two
- * filesystem readers behind it (recentlyTouched/liveWorktreeOffsets) are
+ * The reap decision (groupStackProjects/pickReapProjects) and the
+ * filesystem readers behind it (recentlyTouched/liveWorktreeOffsets,
+ * plus isHeartbeatFresh/heartbeatLiveOffsets/liveOffsets, #1193) are
  * imported and tested directly. main()'s fail-open behavior is exercised
  * as a subprocess, the same way scripts/testdb-reap.test.ts covers
  * testdb-reap.ts.
@@ -19,10 +20,15 @@ import { spawn } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { e2eHeartbeatPath } from '../app/e2e/ports.ts';
 import {
+  HEARTBEAT_STALE_MS,
   QUIET_MS,
   REAP_THRESHOLD_MS,
   groupStackProjects,
+  heartbeatLiveOffsets,
+  isHeartbeatFresh,
+  liveOffsets,
   liveWorktreeOffsets,
   pickReapProjects,
   recentlyTouched,
@@ -87,6 +93,35 @@ function temporaryWorktreesRoot(): string {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'e2e-stack-reap-test-'));
   temporaryRoots.push(root);
   return root;
+}
+
+// Shared by liveWorktreeOffsets's and heartbeatLiveOffsets's own describe
+// blocks below -- both need a worktree directory carrying a `.port-offset`
+// to scan with readWorktreeOffsets.
+function worktreeWithOffset(
+  root: string,
+  name: string,
+  offset: string,
+  ageMs: number,
+  now: number
+): string {
+  const worktree = path.join(root, name);
+  fs.mkdirSync(worktree);
+  fs.writeFileSync(path.join(worktree, '.port-offset'), `${offset}\n`);
+  const stamp = new Date(now - ageMs);
+  fs.utimesSync(worktree, stamp, stamp);
+  return worktree;
+}
+
+// Writing the heartbeat file bumps its parent directory's own mtime, on
+// every POSIX filesystem, as any new directory entry does -- which would
+// make recentlyTouched see the worktree as freshly touched no matter
+// what age worktreeWithOffset gave it. Call this after writing or
+// re-stamping a heartbeat file whenever a test needs the worktree
+// directory itself to still read as quiet.
+function restampWorktreeQuiet(worktree: string, now: number): void {
+  const stamp = new Date(now - QUIET_MS - 60_000);
+  fs.utimesSync(worktree, stamp, stamp);
 }
 
 afterEach(() => {
@@ -250,29 +285,15 @@ describe('recentlyTouched', () => {
 describe('liveWorktreeOffsets', () => {
   const now = Date.now();
 
-  function worktreeWithOffset(
-    root: string,
-    name: string,
-    offset: string,
-    ageMs: number
-  ): string {
-    const worktree = path.join(root, name);
-    fs.mkdirSync(worktree);
-    fs.writeFileSync(path.join(worktree, '.port-offset'), `${offset}\n`);
-    const stamp = new Date(now - ageMs);
-    fs.utimesSync(worktree, stamp, stamp);
-    return worktree;
-  }
-
   test('claims the offset of a worktree that has been touched', () => {
     const root = temporaryWorktreesRoot();
-    worktreeWithOffset(root, 'agent-live', '5', 0);
+    worktreeWithOffset(root, 'agent-live', '5', 0, now);
     expect(liveWorktreeOffsets(root, now)).toEqual(new Set([5]));
   });
 
   test('claims nothing for a worktree that has gone quiet', () => {
     const root = temporaryWorktreesRoot();
-    worktreeWithOffset(root, 'agent-quiet', '5', QUIET_MS + 60_000);
+    worktreeWithOffset(root, 'agent-quiet', '5', QUIET_MS + 60_000, now);
     expect(liveWorktreeOffsets(root, now)).toEqual(new Set());
   });
 
@@ -288,7 +309,8 @@ describe('liveWorktreeOffsets', () => {
       root,
       'agent-garbled',
       'not-a-number',
-      0
+      0,
+      now
     );
     expect(fs.existsSync(path.join(worktree, '.port-offset'))).toBe(true);
     expect(liveWorktreeOffsets(root, now)).toEqual(new Set());
@@ -302,10 +324,131 @@ describe('liveWorktreeOffsets', () => {
 
   test("collects every live worktree's offset at once", () => {
     const root = temporaryWorktreesRoot();
-    worktreeWithOffset(root, 'agent-one', '1', 0);
-    worktreeWithOffset(root, 'agent-two', '2', 0);
-    worktreeWithOffset(root, 'agent-three', '3', QUIET_MS + 60_000);
+    worktreeWithOffset(root, 'agent-one', '1', 0, now);
+    worktreeWithOffset(root, 'agent-two', '2', 0, now);
+    worktreeWithOffset(root, 'agent-three', '3', QUIET_MS + 60_000, now);
     expect(liveWorktreeOffsets(root, now)).toEqual(new Set([1, 2]));
+  });
+});
+
+describe('isHeartbeatFresh', () => {
+  const now = Date.now();
+
+  test('fresh when the heartbeat file was just touched', () => {
+    const root = temporaryWorktreesRoot();
+    const heartbeat = e2eHeartbeatPath(root);
+    fs.writeFileSync(heartbeat, String(now));
+    expect(isHeartbeatFresh(heartbeat, now)).toBe(true);
+  });
+
+  test('not fresh once the heartbeat has gone stale', () => {
+    const root = temporaryWorktreesRoot();
+    const heartbeat = e2eHeartbeatPath(root);
+    fs.writeFileSync(heartbeat, String(now));
+    const stale = new Date(now - HEARTBEAT_STALE_MS - 1000);
+    fs.utimesSync(heartbeat, stale, stale);
+    expect(isHeartbeatFresh(heartbeat, now)).toBe(false);
+  });
+
+  test('not fresh exactly at the staleness threshold', () => {
+    const root = temporaryWorktreesRoot();
+    const heartbeat = e2eHeartbeatPath(root);
+    fs.writeFileSync(heartbeat, String(now));
+    const stale = new Date(now - HEARTBEAT_STALE_MS);
+    fs.utimesSync(heartbeat, stale, stale);
+    expect(isHeartbeatFresh(heartbeat, now)).toBe(false);
+  });
+
+  // The deliberate asymmetry with recentlyTouched: a missing file means
+  // this offset isn't using the signal, not "can't tell, so protect it".
+  test('not fresh -- not an error -- when no heartbeat file exists', () => {
+    const root = temporaryWorktreesRoot();
+    expect(isHeartbeatFresh(e2eHeartbeatPath(root), now)).toBe(false);
+  });
+
+  test('accepts a custom staleness threshold', () => {
+    const root = temporaryWorktreesRoot();
+    const heartbeat = e2eHeartbeatPath(root);
+    fs.writeFileSync(heartbeat, String(now));
+    const stamp = new Date(now - 5000);
+    fs.utimesSync(heartbeat, stamp, stamp);
+    expect(isHeartbeatFresh(heartbeat, now, 1000)).toBe(false);
+  });
+});
+
+describe('heartbeatLiveOffsets', () => {
+  const now = Date.now();
+
+  test("claims a worktree's offset when its heartbeat is fresh, however quiet the worktree itself is", () => {
+    const root = temporaryWorktreesRoot();
+    const worktree = worktreeWithOffset(
+      root,
+      'agent-quiet-but-live',
+      '7',
+      QUIET_MS + 60_000,
+      now
+    );
+    fs.writeFileSync(e2eHeartbeatPath(worktree), String(now));
+    expect(heartbeatLiveOffsets(root, now)).toEqual(new Set([7]));
+  });
+
+  test('claims nothing for a worktree with no heartbeat file', () => {
+    const root = temporaryWorktreesRoot();
+    worktreeWithOffset(root, 'agent-no-heartbeat', '7', 0, now);
+    expect(heartbeatLiveOffsets(root, now)).toEqual(new Set());
+  });
+
+  test('claims nothing once the heartbeat has gone stale', () => {
+    const root = temporaryWorktreesRoot();
+    const worktree = worktreeWithOffset(root, 'agent-stale', '7', 0, now);
+    const heartbeat = e2eHeartbeatPath(worktree);
+    fs.writeFileSync(heartbeat, String(now));
+    const stale = new Date(now - HEARTBEAT_STALE_MS - 1000);
+    fs.utimesSync(heartbeat, stale, stale);
+    expect(heartbeatLiveOffsets(root, now)).toEqual(new Set());
+  });
+});
+
+describe('liveOffsets', () => {
+  const now = Date.now();
+
+  test('live: worktree touched, no heartbeat at all', () => {
+    const root = temporaryWorktreesRoot();
+    worktreeWithOffset(root, 'agent-touched', '1', 0, now);
+    expect(liveOffsets(root, now)).toEqual(new Set([1]));
+  });
+
+  test('live: worktree quiet, but heartbeat fresh -- the case #1193 is about', () => {
+    const root = temporaryWorktreesRoot();
+    const worktree = worktreeWithOffset(
+      root,
+      'agent-quiet-but-live',
+      '2',
+      QUIET_MS + 60_000,
+      now
+    );
+    fs.writeFileSync(e2eHeartbeatPath(worktree), String(now));
+    restampWorktreeQuiet(worktree, now);
+    expect(recentlyTouched(worktree, now)).toBe(false); // the worktree itself really is quiet
+    expect(liveOffsets(root, now)).toEqual(new Set([2]));
+  });
+
+  test('not live: worktree quiet and heartbeat stale -- augments the quiet check, never replaces it', () => {
+    const root = temporaryWorktreesRoot();
+    const worktree = worktreeWithOffset(
+      root,
+      'agent-orphaned',
+      '3',
+      QUIET_MS + 60_000,
+      now
+    );
+    const heartbeat = e2eHeartbeatPath(worktree);
+    fs.writeFileSync(heartbeat, String(now));
+    const stale = new Date(now - HEARTBEAT_STALE_MS - 1000);
+    fs.utimesSync(heartbeat, stale, stale);
+    restampWorktreeQuiet(worktree, now);
+    expect(recentlyTouched(worktree, now)).toBe(false); // the worktree itself really is quiet
+    expect(liveOffsets(root, now)).toEqual(new Set());
   });
 });
 

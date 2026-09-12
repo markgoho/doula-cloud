@@ -23,6 +23,8 @@ import path from 'node:path';
 import {
   E2E_COMPOSE_FILE,
   E2E_COMPOSE_PROJECT_PREFIX,
+  E2E_HEARTBEAT_INTERVAL_MS,
+  e2eHeartbeatPath,
 } from '../../app/e2e/ports.ts';
 import {
   engineInvocation,
@@ -71,18 +73,35 @@ const WORKTREE_PROJECT_PATTERN = new RegExp(
  * `compose up -d` plus the migrate (<=90s) and `go build` (<=120s) steps
  * that follow it.
  *
- * QUIET_MS is the real signal: has anything touched the worktree that
- * claims this stack's port offset lately. It is the same 30 minutes, for
- * the same reason, that worktree-prune.ts waits before it will touch a
- * worktree at all -- half an hour of silence is that file's own measure
- * of "nobody is standing here", written because a session that has just
- * landed its PR sits in a finished worktree for as long as it takes to
- * write a summary. Be clear about what is NOT being borrowed: prune
- * removes a directory only when it is quiet AND clean AND merged,
- * because deleting a worktree can destroy unlanded work. Nothing here
- * can: a reaped stack is a database that is rebuilt by the next `up -d`,
- * and its contents are fixtures. Quiet plus the age check below is the
- * whole bar precisely because the stakes are lower.
+ * QUIET_MS is one of two liveness signals: has anything touched the
+ * worktree that claims this stack's port offset lately. It is the same
+ * 30 minutes, for the same reason, that worktree-prune.ts waits before
+ * it will touch a worktree at all -- half an hour of silence is that
+ * file's own measure of "nobody is standing here", written because a
+ * session that has just landed its PR sits in a finished worktree for as
+ * long as it takes to write a summary. Be clear about what is NOT being
+ * borrowed: prune removes a directory only when it is quiet AND clean
+ * AND merged, because deleting a worktree can destroy unlanded work.
+ * Nothing here can: a reaped stack is a database that is rebuilt by the
+ * next `up -d`, and its contents are fixtures. Quiet plus the age check
+ * below is the whole bar precisely because the stakes are lower.
+ *
+ * But QUIET_MS alone misses a real case (#1193): a `bun run test:e2e` or
+ * `bun run dev:full` run in progress touches none of the three things
+ * QUIET_MS reads -- the worktree directory, its git dir, that dir's
+ * index -- for as long as it runs. A session's own hooks rewrite the
+ * git index on nearly every Bash command, which is what keeps this
+ * narrow, but a long Playwright run or a quiet stretch of `dev:full`
+ * can still outrun 30 minutes with the stack very much in use.
+ * HEARTBEAT_STALE_MS/isHeartbeatFresh below is the second signal that
+ * closes that gap: `e2e/stack.ts`'s startStack/stopStack keep a file
+ * beside the worktree's `.port-offset` fresh for exactly as long as the
+ * stack is actually being used, the same heartbeat shape
+ * `scripts/gate-lock.ts` already uses for its own lock. It only ever
+ * ADDS liveness on top of the quiet check, never replaces it: an offset
+ * is live if either signal says so, and a killed session simply stops
+ * writing the heartbeat, so an orphaned stack still ages into
+ * reapability once both clocks below run out.
  *
  * Deliberately NOT used as a liveness signal: whether the stack's host
  * BFF is up. app/e2e/stack.ts spawns it `detached` and `unref`s it, so it
@@ -92,6 +111,12 @@ const WORKTREE_PROJECT_PATTERN = new RegExp(
  */
 export const REAP_THRESHOLD_MS = 15 * 60 * 1000;
 export const QUIET_MS = 30 * 60 * 1000;
+// Five heartbeats' worth of silence -- comfortably past a slow tick from
+// event-loop pressure, the same "generously above anything a live run
+// could produce" reasoning REAP_THRESHOLD_MS above and gate-lock.ts's own
+// STALE_LOCK_MS both use. Derived from the writer's own interval so this
+// can never be set shorter than the beat that is supposed to satisfy it.
+export const HEARTBEAT_STALE_MS = E2E_HEARTBEAT_INTERVAL_MS * 5;
 
 export interface StackProject {
   project: string;
@@ -222,6 +247,64 @@ export function liveWorktreeOffsets(
 }
 
 /*
+ * Is a heartbeat file (e2e/ports.ts's e2eHeartbeatPath) still being
+ * written to? Takes the path directly rather than an offset, so a spec
+ * can point this at a fixture file without touching a real worktree.
+ *
+ * Deliberately asymmetric with recentlyTouched's fail-CLOSED (unreadable
+ * counts as touched, to protect against deleting live work): a missing
+ * or unreadable heartbeat here just means this offset isn't using the
+ * signal, and falls back to the worktree quiet check like it always
+ * did. This function can only ever ADD liveness on top of that check
+ * (see the block above QUIET_MS/HEARTBEAT_STALE_MS), so failing closed
+ * here would buy nothing -- the worktree check already covers the
+ * "can't tell" case on its own.
+ */
+export function isHeartbeatFresh(
+  heartbeatPath: string,
+  nowMs: number,
+  staleMs: number = HEARTBEAT_STALE_MS
+): boolean {
+  try {
+    return nowMs - fs.statSync(heartbeatPath).mtimeMs < staleMs;
+  } catch {
+    return false; // no heartbeat file -- defer entirely to the other check
+  }
+}
+
+// Offsets whose worktree holds a heartbeat file that is still fresh --
+// the second half of liveOffsets below.
+export function heartbeatLiveOffsets(
+  worktreesRoot: string,
+  nowMs: number,
+  staleMs: number = HEARTBEAT_STALE_MS
+): Set<number> {
+  return new Set(
+    readWorktreeOffsets(worktreesRoot)
+      .filter((worktree) =>
+        isHeartbeatFresh(e2eHeartbeatPath(worktree.path), nowMs, staleMs)
+      )
+      .map((worktree) => worktree.offset)
+  );
+}
+
+// The one place both signals are combined: an offset is live if EITHER
+// its worktree has been touched recently OR its heartbeat is still
+// fresh (#1193) -- in addition to the quiet check, never in place of
+// it. This is what main() passes to pickReapProjects as `liveOffsets`.
+export function liveOffsets(
+  worktreesRoot: string,
+  nowMs: number,
+  quietMs: number = QUIET_MS,
+  staleMs: number = HEARTBEAT_STALE_MS
+): Set<number> {
+  return new Set([
+    ...liveWorktreeOffsets(worktreesRoot, nowMs, quietMs),
+    ...heartbeatLiveOffsets(worktreesRoot, nowMs, staleMs),
+  ]);
+}
+
+/*
  * Fails open, always -- the same rule, for the same reason, as
  * testdb-reap.ts's own main(): this runs on SessionStart, decides nothing
  * about the tool call that follows, and exists purely to tidy up. A
@@ -245,7 +328,7 @@ function main(): void {
 
     const mainCheckout = findMainCheckoutRoot(import.meta.dir);
     const now = Date.now();
-    const live = liveWorktreeOffsets(
+    const live = liveOffsets(
       path.join(mainCheckout, '.claude', 'worktrees'),
       now
     );
@@ -291,7 +374,7 @@ function main(): void {
 
     const minutes = Math.round(QUIET_MS / 60000);
     console.log(
-      `e2e-stack-reap: tore down ${removed.length} orphaned e2e stack(s) -- ${removed.join(', ')} -- containers, network and volume (no worktree touched in the last ${minutes}m claims their port offset)`
+      `e2e-stack-reap: tore down ${removed.length} orphaned e2e stack(s) -- ${removed.join(', ')} -- containers, network and volume (no worktree touched, and no fresh heartbeat, in the last ${minutes}m claims their port offset)`
     );
   } catch {
     // Engine unreachable, binary missing, malformed output, git absent --
