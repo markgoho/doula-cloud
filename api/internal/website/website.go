@@ -54,9 +54,14 @@ const MaxURLLength = 2048
 // The response bodies for a failure the caller can act on. Named
 // constants because the screen renders them verbatim and the tests
 // assert them.
+//
+// MsgInvalidMode matches the settings screen's own client-side check for
+// an empty choice (`errors.mode = 'Choose how Clients will find you
+// online'`) rather than opening with "mode", the wire's own name for the
+// field (#1189).
 const (
 	MsgInvalidBody       = "invalid request body"
-	MsgInvalidMode       = `mode must be "own" or "hosted"`
+	MsgInvalidMode       = "Choose how Clients will find you online"
 	MsgURLRequired       = "Enter the web address of your website or social profile"
 	MsgURLMalformed      = "Enter a web address in the correct format, like https://example.com/your-practice"
 	MsgDescriptionNeeded = "Enter a description of what your Practice offers"

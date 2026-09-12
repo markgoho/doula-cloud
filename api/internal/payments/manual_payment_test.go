@@ -166,7 +166,7 @@ func TestPostManualPaymentHandler_OtherMethodRequiresNote(t *testing.T) {
 	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
-	if want := `note is needed when method is "other"`; out.Details["note"] != want {
+	if want := `Enter a note for "Other"`; out.Details["note"] != want {
 		t.Fatalf("details[note] = %q, want %q", out.Details["note"], want)
 	}
 	if status := invoiceStatusFor(t, db, invoiceID); status != invoiceStatusOpen {
@@ -218,7 +218,7 @@ func TestPostManualPaymentHandler_InvalidMethodRefused(t *testing.T) {
 	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
-	if want := `method must be "check", "bank_transfer", "cash", or "other"`; out.Details["method"] != want {
+	if want := "Select a method from the list"; out.Details["method"] != want {
 		t.Fatalf("details[method] = %q, want %q", out.Details["method"], want)
 	}
 }
@@ -227,8 +227,10 @@ func TestPostManualPaymentHandler_InvalidMethodRefused(t *testing.T) {
 // in the future, and that the refusal names the field it is about
 // (#1062): a client puts a details entry beside the control it is keyed
 // by, and this one used to arrive with nothing but a summary. The
-// summary message itself is asserted unchanged -- #1062 adds a details
-// map and rewords nothing.
+// summary message is asserted unchanged at its own #1037 wording; the
+// details entry is asserted at its own, separate, #1189 wording -- the
+// two read differently now that the details value opens with "The date"
+// rather than "paidOn", the wire's own name for the field.
 func TestPostManualPaymentHandler_FutureDateRefused(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "manual-payment-future-date"
@@ -246,12 +248,13 @@ func TestPostManualPaymentHandler_FutureDateRefused(t *testing.T) {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
 	}
 	out := apierrtest.Decode(t, resp)
-	const want = "paidOn cannot be in the future"
-	if out.Details["paidOn"] != want {
-		t.Fatalf("details[paidOn] = %q, want %q", out.Details["paidOn"], want)
+	const wantMessage = "paidOn cannot be in the future"
+	const wantDetail = "The date cannot be in the future"
+	if out.Details["paidOn"] != wantDetail {
+		t.Fatalf("details[paidOn] = %q, want %q", out.Details["paidOn"], wantDetail)
 	}
-	if out.Message != want {
-		t.Fatalf("message = %q, want it unchanged at %q", out.Message, want)
+	if out.Message != wantMessage {
+		t.Fatalf("message = %q, want it unchanged at %q", out.Message, wantMessage)
 	}
 	if out.Code != apierr.CodeInvalidArgument {
 		t.Fatalf("code = %q, want %q", out.Code, apierr.CodeInvalidArgument)
@@ -307,7 +310,7 @@ func TestPostManualPaymentHandler_MalformedDateRefused(t *testing.T) {
 	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
-	if want := "paidOn must be a date in YYYY-MM-DD form"; out.Details["paidOn"] != want {
+	if want := "Enter the date received as a real date, like 2027-04-23"; out.Details["paidOn"] != want {
 		t.Fatalf("details[paidOn] = %q, want %q", out.Details["paidOn"], want)
 	}
 }

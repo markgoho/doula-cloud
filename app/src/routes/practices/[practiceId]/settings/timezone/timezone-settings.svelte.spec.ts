@@ -95,7 +95,7 @@ describe('the Timezone screen', () => {
 				{
 					code: 'INVALID_ARGUMENT',
 					message: 'timezone "Nowhere/Atlantis" is not an IANA zone name',
-					details: { timezone: 'Timezone must be a zone name from the IANA database, such as America/New_York' }
+					details: { timezone: 'Enter a timezone from the IANA database, such as America/New_York' }
 				},
 				400
 			)
@@ -107,7 +107,7 @@ describe('the Timezone screen', () => {
 		await expect
 			.element(
 				testPage.getByRole('link', {
-					name: 'Timezone must be a zone name from the IANA database, such as America/New_York'
+					name: 'Enter a timezone from the IANA database, such as America/New_York'
 				})
 			)
 			.toBeVisible();

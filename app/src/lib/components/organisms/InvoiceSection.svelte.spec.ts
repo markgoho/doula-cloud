@@ -411,7 +411,7 @@ describe('InvoiceSection.svelte', () => {
 				.fn()
 				.mockRejectedValue(
 					new RefusalError('note is required when method is "other"', {
-						note: 'note is needed when method is "other"'
+						note: 'Enter a note for "Other"'
 					})
 				);
 			await setup({ invoices: [invoiceOpen], isOwnerOrAdmin: true, onRecordPayment });
@@ -421,7 +421,7 @@ describe('InvoiceSection.svelte', () => {
 			await page.getByRole('button', { name: 'Continue' }).click();
 			await page.getByRole('button', { name: 'Confirm and record' }).click();
 
-			await expect.element(page.getByText('note is needed when method is "other"')).toBeVisible();
+			await expect.element(page.getByText('Enter a note for "Other"')).toBeVisible();
 			await expect.element(page.getByLabelText('Note (optional)')).toHaveAttribute('aria-invalid', 'true');
 		});
 
@@ -430,7 +430,7 @@ describe('InvoiceSection.svelte', () => {
 				.fn()
 				.mockRejectedValue(
 					new RefusalError('paidOn must be a date in YYYY-MM-DD form', {
-						paidOn: 'paidOn must be a date in YYYY-MM-DD form'
+						paidOn: 'Enter the date received as a real date, like 2027-04-23'
 					})
 				);
 			await setup({ invoices: [invoiceOpen], isOwnerOrAdmin: true, onRecordPayment });
@@ -440,14 +440,16 @@ describe('InvoiceSection.svelte', () => {
 			await page.getByRole('button', { name: 'Continue' }).click();
 			await page.getByRole('button', { name: 'Confirm and record' }).click();
 
-			await expect.element(page.getByText('paidOn must be a date in YYYY-MM-DD form')).toBeVisible();
+			await expect
+				.element(page.getByText('Enter the date received as a real date, like 2027-04-23'))
+				.toBeVisible();
 			await expect.element(page.getByLabelText('Date received')).toHaveAttribute('aria-invalid', 'true');
 		});
 
 		it('wires a method refusal from the BFF onto the Method group', async () => {
 			const onRecordPayment = vi.fn().mockRejectedValue(
 				new RefusalError('method must be "check", "bank_transfer", "cash", or "other"', {
-					method: 'method must be "check", "bank_transfer", "cash", or "other"'
+					method: 'Select a method from the list'
 				})
 			);
 			await setup({ invoices: [invoiceOpen], isOwnerOrAdmin: true, onRecordPayment });
@@ -457,9 +459,7 @@ describe('InvoiceSection.svelte', () => {
 			await page.getByRole('button', { name: 'Continue' }).click();
 			await page.getByRole('button', { name: 'Confirm and record' }).click();
 
-			await expect
-				.element(page.getByText('method must be "check", "bank_transfer", "cash", or "other"'))
-				.toBeVisible();
+			await expect.element(page.getByText('Select a method from the list')).toBeVisible();
 		});
 
 		// #1038's second shape: a refusal naming no field of this form --
@@ -647,7 +647,11 @@ describe('InvoiceSection.svelte', () => {
 		it('wires a reason refusal from the BFF onto the Reason field', async () => {
 			const onReversePayment = vi
 				.fn()
-				.mockRejectedValue(new RefusalError('reason cannot be blank', { reason: 'reason cannot be blank' }));
+				.mockRejectedValue(
+					new RefusalError('reason cannot be blank', {
+						reason: 'Enter a reason for reversing this payment'
+					})
+				);
 			await setup({ invoices: [invoicePaidByHand], isOwnerOrAdmin: true, onReversePayment });
 
 			await page.getByRole('button', { name: 'Reverse payment' }).click();
@@ -655,7 +659,7 @@ describe('InvoiceSection.svelte', () => {
 			await page.getByRole('button', { name: 'Continue' }).click();
 			await page.getByRole('button', { name: 'Confirm and reverse' }).click();
 
-			await expect.element(page.getByText('reason cannot be blank')).toBeVisible();
+			await expect.element(page.getByText('Enter a reason for reversing this payment')).toBeVisible();
 			await expect.element(page.getByLabelText('Reason')).toHaveAttribute('aria-invalid', 'true');
 		});
 

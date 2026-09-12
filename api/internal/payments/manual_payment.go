@@ -187,25 +187,37 @@ func PostManualPaymentHandler(client Client) http.Handler {
 			return
 		}
 		if !validPaymentMethods[req.Method] {
-			apierr.WriteFieldError(w, http.StatusBadRequest, apierr.CodeInvalidArgument, "method",
-				`method must be "check", "bank_transfer", "cash", or "other"`)
+			// Write, not WriteFieldError: the details value opens with
+			// "Select", not "method" -- the wire's own name for the field
+			// -- so it genuinely differs from the summary Message, which
+			// stays exactly as it was (#1037, #1189).
+			apierr.Write(w, http.StatusBadRequest, apierr.CodeInvalidArgument,
+				`method must be "check", "bank_transfer", "cash", or "other"`,
+				map[string]string{"method": "Select a method from the list"})
 			return
 		}
 		if req.Method == PaymentMethodOther && req.Note == "" {
-			// The details value swaps "required" for "needed" -- apierr's
-			// TestDetailsWording bans "required" from Details (#488's
-			// GOV.UK wording gate), the same reason MsgWorkStateNeeded
-			// exists beside MsgWorkStateRequired in staffauth. The summary
-			// Message a caller reads is left exactly as it was (#1037).
+			// The details value matches InvoiceSection.svelte's own
+			// client-side check for this exact condition (reviewPayment's
+			// `paymentNoteError = 'Enter a note for "Other"'`) rather than
+			// opening with "note", the wire's own name for the field
+			// (#1189). The summary Message a caller reads is left exactly
+			// as it was (#1037).
 			apierr.Write(w, http.StatusBadRequest, apierr.CodeInvalidArgument,
 				`note is required when method is "other"`,
-				map[string]string{"note": `note is needed when method is "other"`})
+				map[string]string{"note": `Enter a note for "Other"`})
 			return
 		}
 		paidOn, err := time.Parse(paidOnLayout, req.PaidOn)
 		if err != nil {
-			apierr.WriteFieldError(w, http.StatusBadRequest, apierr.CodeInvalidArgument, "paidOn",
-				"paidOn must be a date in YYYY-MM-DD form")
+			// Write, not WriteFieldError: the details value opens with
+			// "Enter the date received", the noun on the "Date received"
+			// control, not "paidOn" -- so it genuinely differs from the
+			// summary Message, which stays exactly as it was (#1037,
+			// #1189).
+			apierr.Write(w, http.StatusBadRequest, apierr.CodeInvalidArgument,
+				"paidOn must be a date in YYYY-MM-DD form",
+				map[string]string{"paidOn": "Enter the date received as a real date, like 2027-04-23"})
 			return
 		}
 		// The zone comes from practicetimezone, which owns it for every
@@ -221,9 +233,15 @@ func PostManualPaymentHandler(client Client) http.Handler {
 			// date (#1062). That choice is what keeps this wording correct
 			// across #1167's own change of comparison: it named no day when
 			// the comparison ran against UTC's, and still names none now
-			// that it runs against the Practice's own.
-			apierr.WriteFieldError(w, http.StatusBadRequest, apierr.CodeInvalidArgument, "paidOn",
-				"paidOn cannot be in the future")
+			// that it runs against the Practice's own. Write, not
+			// WriteFieldError: the details value opens with "The date",
+			// matching InvoiceSection.svelte's own client-side check for
+			// this exact condition, rather than "paidOn", the wire's own
+			// name for the field -- so it genuinely differs from the
+			// summary Message, which stays exactly as it was (#1189).
+			apierr.Write(w, http.StatusBadRequest, apierr.CodeInvalidArgument,
+				"paidOn cannot be in the future",
+				map[string]string{"paidOn": "The date cannot be in the future"})
 			return
 		}
 
@@ -497,7 +515,14 @@ func PostReversePaymentHandler() http.Handler {
 			return
 		}
 		if req.Reason == "" {
-			apierr.WriteFieldError(w, http.StatusBadRequest, apierr.CodeInvalidArgument, "reason", "reason cannot be blank")
+			// Write, not WriteFieldError: the details value matches
+			// InvoiceSection.svelte's own client-side check for this exact
+			// condition rather than opening with "reason", the wire's own
+			// name for the field -- so it genuinely differs from the
+			// summary Message, which stays exactly as it was (#1189).
+			apierr.Write(w, http.StatusBadRequest, apierr.CodeInvalidArgument,
+				"reason cannot be blank",
+				map[string]string{"reason": "Enter a reason for reversing this payment"})
 			return
 		}
 
