@@ -57,7 +57,13 @@ jobs:
       contents: read
       id-token: write
     steps:
+      # fetch-depth: 0 (full history, all refs) is what the staleness check in
+      # the "Terraform plan" step below needs: `git merge-base` against
+      # `origin/trunk` requires trunk's history to be present locally, and the
+      # default shallow, single-ref checkout does not fetch it (#1203).
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
 
       - name: Authenticate to Google Cloud
         uses: ./.github/actions/gcp-auth
@@ -104,10 +110,31 @@ jobs:
       # data source refreshing under `read` can never masquerade as drift on
       # an otherwise-clean project, which is exactly the permanently-red
       # failure ADR-0034 refuses.
+      # A non-empty plan on a pull request is not always drift (#1203). A
+      # pull_request run's default checkout is GitHub's `refs/pull/<n>/merge`
+      # -- a merge commit combining this branch with trunk *as of the last
+      # push to this branch*, not live at job-run time. Trunk moving on its
+      # own (another PR merging a Terraform change, already applied from a
+      # laptop per ADR-0034) does not recompute that ref, so this branch's
+      # checkout keeps comparing an old trunk against the live project until
+      # something pushes to the branch again. Observed on #1200: cut from
+      # `5e968ec9`, #1196 merged and applied afterwards, and every plan on
+      # that branch reported drift -- re-running the same job did not help,
+      # because it re-fetched the same stale merge ref; rebasing did, because
+      # that is a new push. The distinguishing signal doesn't need any data
+      # this job doesn't already have: whether trunk's own `terraform/`
+      # gained a commit since this branch's last common ancestor with it. If
+      # it did, and trunk is what the live project already matches, then this
+      # plan's non-emptiness is explained by that alone -- so say so, instead
+      # of handing over a drift report and leaving "rebase" for the reader to
+      # guess. This does not soften the check: it still fails, because the
+      # fix (rebase) is still something only a push accomplishes, but it now
+      # says the fix rather than naming resources as if they had drifted.
       - name: Terraform plan
         working-directory: terraform
         env:
           TF_IN_AUTOMATION: 'true'
+          EVENT_NAME: ${{ github.event_name }}
         run: |
           set +e
           terraform plan -detailed-exitcode -input=false -no-color -lock-timeout=120s -out=tfplan > plan-raw.log 2>&1
@@ -127,7 +154,7 @@ jobs:
 
           terraform show -json tfplan > plan.json
 
-          jq -r '
+          drift_table=$(jq -r '
             def changed_keys(b; a):
               (b // {}) as $b | (a // {}) as $a |
               (($b | keys) + ($a | keys) | unique) as $allkeys |
@@ -139,7 +166,41 @@ jobs:
               ( [ $drifted[]
                   | "| `" + .address + "` | " + (.change.actions | join(",")) + " | " + (changed_keys(.change.before; .change.after) | join(", ")) + " |"
                 ] | join("\n") )
-          ' plan.json >> "$GITHUB_STEP_SUMMARY"
+          ' plan.json)
+
+          # Only a pull_request checkout can be behind trunk in the way
+          # described above -- a push or the daily schedule plans trunk
+          # itself, where this comparison is always empty and would only add
+          # noise. `working-directory: terraform` scopes the pathspec below
+          # to this directory with `-- .`; it is the same check as `--
+          # terraform/` from the repo root.
+          stale=""
+          if [ "$EVENT_NAME" = "pull_request" ]; then
+            git fetch --quiet origin trunk || true
+            merge_base=$(git merge-base HEAD origin/trunk 2>/dev/null || true)
+            if [ -n "$merge_base" ] && [ -n "$(git diff --name-only "$merge_base" origin/trunk -- .)" ]; then
+              stale=1
+            fi
+          fi
+
+          if [ -n "$stale" ]; then
+            {
+              echo "This branch is behind \`trunk\` on a Terraform change -- not drift."
+              echo
+              echo "\`trunk\` merged a change under \`terraform/\` after this branch's last common ancestor with it, and that change is already applied to the live project (a laptop \`apply\`, never CI -- see docs/infrastructure.md, \"Who may apply, and what CI may read\"). This plan compares this branch's older configuration against a live project that has already moved on:"
+              echo
+              git log --oneline "$merge_base"..origin/trunk -- .
+              echo
+              echo "**Rebase onto \`trunk\` and push.** A rerun alone will not do it -- this checkout is GitHub's \`refs/pull/<n>/merge\`, which only gets recomputed on a new push to this branch. If the plan is still non-empty after the rebase, that is real drift, not staleness."
+              echo
+              echo "$drift_table"
+            } >> "$GITHUB_STEP_SUMMARY"
+
+            echo "This branch is behind trunk on a Terraform change -- rebase onto trunk and push. See the job summary."
+            exit 1
+          fi
+
+          echo "$drift_table" >> "$GITHUB_STEP_SUMMARY"
 
           echo "Terraform plan is non-empty -- see the job summary for which resources and attributes drifted."
           exit 1
