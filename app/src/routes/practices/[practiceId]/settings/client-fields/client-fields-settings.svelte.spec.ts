@@ -54,26 +54,28 @@ beforeEach(() => {
 	apiFetchWithSession.mockReset();
 });
 
+async function setup(options: MockOptions = {}) {
+	mockApi(options);
+	await render(Page, {});
+}
+
 describe('client fields settings screen', () => {
 	it('shows the editor and a Save button for an Owner', async () => {
-		mockApi({ roles: ['owner'] });
-		await render(Page, {});
+		await setup({ roles: ['owner'] });
 
 		await expect.element(testPage.getByLabelText('Field label').first()).toHaveValue(firstField.label);
 		await expect.element(testPage.getByRole('button', { name: 'Save' })).toBeVisible();
 	});
 
 	it('shows the editor and a Save button for an Admin', async () => {
-		mockApi({ roles: ['admin'] });
-		await render(Page, {});
+		await setup({ roles: ['admin'] });
 
 		await expect.element(testPage.getByLabelText('Field label').first()).toHaveValue(firstField.label);
 		await expect.element(testPage.getByRole('button', { name: 'Save' })).toBeVisible();
 	});
 
 	it('shows a read-only list and no Save button for a Doula', async () => {
-		mockApi({ roles: ['doula'] });
-		await render(Page, {});
+		await setup({ roles: ['doula'] });
 
 		await expect.element(testPage.getByText(firstField.label)).toBeVisible();
 		await expect.element(testPage.getByLabelText('Field label')).not.toBeInTheDocument();
@@ -84,11 +86,10 @@ describe('client fields settings screen', () => {
 	});
 
 	it('marks an archived field in the read-only list', async () => {
-		mockApi({
+		await setup({
 			roles: ['doula'],
 			fields: [{ id: 'a', type: 'short_text', label: 'Old note', order: 0, archived: true }]
 		});
-		await render(Page, {});
 
 		await expect.element(testPage.getByText('Old note (archived)')).toBeVisible();
 	});
@@ -101,15 +102,13 @@ describe('client fields settings screen', () => {
 			order: index,
 			archived: false
 		}));
-		mockApi({ roles: ['owner'], fields: manyFields });
-		await render(Page, {});
+		await setup({ roles: ['owner'], fields: manyFields });
 
 		await expect.element(testPage.getByText('21 questions', { exact: false })).toBeVisible();
 	});
 
 	it('shows no count warning at 20 questions or fewer', async () => {
-		mockApi({ roles: ['owner'] });
-		await render(Page, {});
+		await setup({ roles: ['owner'] });
 
 		await expect.element(testPage.getByText('questions beyond the standard ones', { exact: false })).not.toBeInTheDocument();
 	});
@@ -126,11 +125,6 @@ describe('client fields settings screen', () => {
  * read the list needs to know what it is as much as the Owner who edits
  * it.
  */
-async function setup({ roles = ['owner'] }: MockOptions = {}) {
-	mockApi({ roles });
-	await render(Page, {});
-}
-
 /*
  * `intro` matches a substring rather than the whole paragraph: the
  * assertion should fail when a fact goes missing, not when a comma moves.

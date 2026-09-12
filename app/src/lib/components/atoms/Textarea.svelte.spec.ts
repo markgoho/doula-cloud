@@ -211,13 +211,25 @@ describe('Textarea.svelte count announcement', () => {
 	});
 });
 
+interface LabeledSetupOptions {
+	label?: string;
+	hint?: string;
+	error?: string;
+	maxLength?: number;
+}
+
+async function setupInLabeledField({
+	label = 'What your Practice offers',
+	hint = 'Say what kind of support you provide.',
+	error,
+	maxLength
+}: LabeledSetupOptions = {}) {
+	await render(LabeledTextarea, { label, hint, error, maxLength });
+}
+
 describe('Textarea.svelte inside LabeledField', () => {
 	it('gets the label, the hint and the error unchanged', async () => {
-		await render(LabeledTextarea, {
-			label: 'What your Practice offers',
-			hint: 'Say what kind of support you provide.',
-			error: 'Enter a description of what your Practice offers'
-		});
+		await setupInLabeledField({ error: 'Enter a description of what your Practice offers' });
 		const textbox = page.getByLabelText('What your Practice offers');
 
 		await expect.element(textbox).toBeVisible();
@@ -239,11 +251,7 @@ describe('Textarea.svelte inside LabeledField', () => {
 	});
 
 	it('appends its own budget to the ids LabeledField built', async () => {
-		await render(LabeledTextarea, {
-			label: 'What your Practice offers',
-			hint: 'Say what kind of support you provide.',
-			maxLength: 40
-		});
+		await setupInLabeledField({ maxLength: 40 });
 
 		const textbox = page.getByLabelText('What your Practice offers');
 		const describedBy = textbox.element().getAttribute('aria-describedby') ?? '';

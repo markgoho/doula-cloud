@@ -66,6 +66,19 @@ function mockApi({ loadResponse = jsonResponse({ enabled: false }), putResponse 
 	});
 }
 
+interface SetupOptions extends MockOptions {
+	// The fixture's own path-matching respond, for the happy path this
+	// screen shares with the continuum check -- `mockApi` above answers
+	// every path alike, which only coincidentally matches it.
+	respond?: (path: string, init?: RequestInit) => Promise<Response>;
+}
+
+async function setup({ respond, ...options }: SetupOptions = {}) {
+	if (respond) apiFetchWithSession.mockImplementation(respond);
+	else mockApi(options);
+	await render(Page, {});
+}
+
 const toggleButton = (label: string) => page.getByRole('button', { name: label });
 
 const DEVICE_BLOCKED_CAVEAT =
@@ -86,8 +99,7 @@ describe('the Client portal Notifications settings screen', () => {
 	it('explains what a notification is and is not, before any action', async () => {
 		// This screen's happy path (GET only, no toggle clicked) is exactly
 		// the fixture's own response.
-		apiFetchWithSession.mockImplementation(toApiResponder(fixture));
-		await render(Page, {});
+		await setup({ respond: toApiResponder(fixture) });
 
 		await expect
 			.element(page.getByText(/never shows who sent it or what the message says/))
@@ -96,16 +108,14 @@ describe('the Client portal Notifications settings screen', () => {
 	});
 
 	it('reports notifications as off when the Client has never decided', async () => {
-		apiFetchWithSession.mockImplementation(toApiResponder(fixture));
-		await render(Page, {});
+		await setup({ respond: toApiResponder(fixture) });
 
 		await expect.element(page.getByText('Notifications are currently off.')).toBeVisible();
 		await expect.element(toggleButton('Turn on notifications')).toBeVisible();
 	});
 
 	it('reports notifications as on when she has already turned them on', async () => {
-		mockApi({ loadResponse: jsonResponse({ enabled: true }) });
-		await render(Page, {});
+		await setup({ loadResponse: jsonResponse({ enabled: true }) });
 
 		await expect
 			.element(page.getByText('Notifications are currently on for this device.'))
@@ -119,8 +129,7 @@ describe('the Client portal Notifications settings screen', () => {
 	// not only right after a toggle.
 	it('shows a device-level caveat when the preference is on but this device cannot receive pushes', async () => {
 		isPushPermissionGranted.mockReturnValue(false);
-		mockApi({ loadResponse: jsonResponse({ enabled: true }) });
-		await render(Page, {});
+		await setup({ loadResponse: jsonResponse({ enabled: true }) });
 
 		await expect.element(page.getByText(DEVICE_BLOCKED_CAVEAT)).toBeVisible();
 		await expect
@@ -132,8 +141,7 @@ describe('the Client portal Notifications settings screen', () => {
 	// registers) and only then asks the browser to subscribe -- the
 	// explanation above has already been read by the time this fires.
 	it('turns notifications on: persists the choice, then registers this device', async () => {
-		mockApi({ loadResponse: jsonResponse({ enabled: false }), putResponse: jsonResponse({ enabled: true }) });
-		await render(Page, {});
+		await setup({ loadResponse: jsonResponse({ enabled: false }), putResponse: jsonResponse({ enabled: true }) });
 
 		await toggleButton('Turn on notifications').click();
 
@@ -156,9 +164,8 @@ describe('the Client portal Notifications settings screen', () => {
 	// notice -- the persistent status area's caveat is the only thing she
 	// sees, not a false "on for this device."
 	it('turns notifications on but the subscribe attempt fails: shows the caveat, not the success notice', async () => {
-		mockApi({ loadResponse: jsonResponse({ enabled: false }), putResponse: jsonResponse({ enabled: true }) });
 		registerPushSubscription.mockResolvedValue(false);
-		await render(Page, {});
+		await setup({ loadResponse: jsonResponse({ enabled: false }), putResponse: jsonResponse({ enabled: true }) });
 
 		await toggleButton('Turn on notifications').click();
 
@@ -172,8 +179,7 @@ describe('the Client portal Notifications settings screen', () => {
 	// filter reads that row regardless of any subscription's fate), then
 	// takes this device off push.
 	it('turns notifications off: persists the choice, then unregisters this device', async () => {
-		mockApi({ loadResponse: jsonResponse({ enabled: true }), putResponse: jsonResponse({ enabled: false }) });
-		await render(Page, {});
+		await setup({ loadResponse: jsonResponse({ enabled: true }), putResponse: jsonResponse({ enabled: false }) });
 
 		await toggleButton('Turn off notifications').click();
 
@@ -191,8 +197,10 @@ describe('the Client portal Notifications settings screen', () => {
 	});
 
 	it("shows the server's own words when the toggle is refused", async () => {
-		mockApi({ loadResponse: jsonResponse({ enabled: false }), putResponse: refusal(429, 'too many requests -- try again later') });
-		await render(Page, {});
+		await setup({
+			loadResponse: jsonResponse({ enabled: false }),
+			putResponse: refusal(429, 'too many requests -- try again later')
+		});
 
 		await toggleButton('Turn on notifications').click();
 

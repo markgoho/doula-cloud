@@ -30,20 +30,22 @@ function jsonResponse(body: unknown) {
 	return { ok: true, json: () => Promise.resolve(body) } as Response;
 }
 
+async function setup(respond: (path: string) => Promise<Response> | Response = toApiResponder(fixture)) {
+	apiFetchWithSession.mockReset();
+	apiFetchWithSession.mockImplementation(respond);
+	await render(Page);
+}
+
 describe('Client-portal Contract status (#212, NH-G5)', () => {
 	it('shows the register label for a sent Contract, not the raw enum', async () => {
-		apiFetchWithSession.mockImplementation(toApiResponder(fixture));
-
-		await render(Page);
+		await setup();
 
 		await expect.element(page.getByText('Ready for your signature')).toBeVisible();
 		expect(page.getByText('sent', { exact: true }).elements()).toHaveLength(0);
 	});
 
 	it('shows the register label and a Client-worded terminal notice for a voided Contract', async () => {
-		apiFetchWithSession.mockResolvedValue(jsonResponse({ ...contract, status: 'voided' }));
-
-		await render(Page);
+		await setup(() => jsonResponse({ ...contract, status: 'voided' }));
 
 		await expect.element(page.getByText('No longer active')).toBeVisible();
 		await expect.element(page.getByText('Riverside Doula Collective ended this Contract.')).toBeVisible();
@@ -52,9 +54,7 @@ describe('Client-portal Contract status (#212, NH-G5)', () => {
 	});
 
 	it('offers no signature step once voided', async () => {
-		apiFetchWithSession.mockResolvedValue(jsonResponse({ ...contract, status: 'voided' }));
-
-		await render(Page);
+		await setup(() => jsonResponse({ ...contract, status: 'voided' }));
 
 		await expect.element(page.getByText('No longer active')).toBeVisible();
 		expect(page.getByRole('button', { name: /sign/i }).elements()).toHaveLength(0);
@@ -68,24 +68,18 @@ describe('Client-portal Contract status (#212, NH-G5)', () => {
 // button is clicked.
 describe('Client-portal signed Contract download (#302)', () => {
 	it('offers no download before the Contract has been signed', async () => {
-		apiFetchWithSession.mockImplementation(toApiResponder(fixture));
-
-		await render(Page);
+		await setup();
 
 		await expect.element(page.getByText('Ready for your signature')).toBeVisible();
 		expect(page.getByRole('button', { name: 'Download signed Contract (PDF)' }).elements()).toHaveLength(0);
 	});
 
 	it('offers a download of the signed Contract once signed, reachable by keyboard and naming the PDF', async () => {
-		apiFetchWithSession.mockImplementation((path: string) =>
-			Promise.resolve(
-				path.endsWith('/pdf')
-					? new Response(new Blob(['%PDF-1.4'], { type: 'application/pdf' }), { status: 200 })
-					: jsonResponse({ ...contract, status: 'signed', hasSignedPdf: true })
-			)
+		await setup((path) =>
+			path.endsWith('/pdf')
+				? new Response(new Blob(['%PDF-1.4'], { type: 'application/pdf' }), { status: 200 })
+				: jsonResponse({ ...contract, status: 'signed', hasSignedPdf: true })
 		);
-
-		await render(Page);
 		const download = page.getByRole('button', { name: 'Download signed Contract (PDF)' });
 		await expect.element(download).toBeVisible();
 
@@ -100,9 +94,7 @@ describe('Client-portal signed Contract download (#302)', () => {
 	// The gate is the PDF's existence now, the same fact the endpoint
 	// keys on, so a void cannot take her copy away.
 	it('offers the download on a voided Contract she signed', async () => {
-		apiFetchWithSession.mockResolvedValue(jsonResponse({ ...contract, status: 'voided', hasSignedPdf: true }));
-
-		await render(Page);
+		await setup(() => jsonResponse({ ...contract, status: 'voided', hasSignedPdf: true }));
 
 		await expect.element(page.getByText('No longer active')).toBeVisible();
 		await expect
@@ -111,24 +103,18 @@ describe('Client-portal signed Contract download (#302)', () => {
 	});
 
 	it('offers no download on a voided Contract that was never signed', async () => {
-		apiFetchWithSession.mockResolvedValue(jsonResponse({ ...contract, status: 'voided', hasSignedPdf: false }));
-
-		await render(Page);
+		await setup(() => jsonResponse({ ...contract, status: 'voided', hasSignedPdf: false }));
 
 		await expect.element(page.getByText('No longer active')).toBeVisible();
 		expect(page.getByRole('button', { name: 'Download signed Contract (PDF)' }).elements()).toHaveLength(0);
 	});
 
 	it('reports a failed PDF fetch in words rather than swallowing it (#305 is what fails this locally/in CI)', async () => {
-		apiFetchWithSession.mockImplementation((path: string) =>
-			Promise.resolve(
-				path.endsWith('/pdf')
-					? new Response('signed PDF not found', { status: 500 })
-					: jsonResponse({ ...contract, status: 'signed', hasSignedPdf: true })
-			)
+		await setup((path) =>
+			path.endsWith('/pdf')
+				? new Response('signed PDF not found', { status: 500 })
+				: jsonResponse({ ...contract, status: 'signed', hasSignedPdf: true })
 		);
-
-		await render(Page);
 		await page.getByRole('button', { name: 'Download signed Contract (PDF)' }).click();
 
 		await expect.element(page.getByRole('alert')).toHaveTextContent('signed PDF not found');

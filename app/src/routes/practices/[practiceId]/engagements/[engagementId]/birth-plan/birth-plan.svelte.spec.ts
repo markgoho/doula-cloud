@@ -28,11 +28,15 @@ vi.mock('#lib/api.js', () => ({
 	apiErrorMessage: (response: Response) => response.text()
 }));
 
+async function setup(respond: (path: string) => Promise<Response> | Response = toApiResponder(fixture)) {
+	apiFetchWithSession.mockReset();
+	apiFetchWithSession.mockImplementation(respond);
+	await render(Page, { data: fixtureData, params: fixture.params });
+}
+
 describe('The Practice-side Birth Plan (#280)', () => {
 	it('names the Client, links back to the Engagement, and shows the plan', async () => {
-		apiFetchWithSession.mockImplementation(toApiResponder(fixture));
-
-		await render(Page, { data: fixtureData, params: fixture.params });
+		await setup();
 
 		await expect
 			.element(page.getByRole('heading', { name: "Anne-Marie Ochieng-Whitfield's Birth Plan" }))
@@ -44,9 +48,7 @@ describe('The Practice-side Birth Plan (#280)', () => {
 	});
 
 	it('offers a Print control once the plan has loaded', async () => {
-		apiFetchWithSession.mockImplementation(toApiResponder(fixture));
-
-		await render(Page, { data: fixtureData, params: fixture.params });
+		await setup();
 
 		await expect.element(page.getByRole('button', { name: 'Print' })).toBeVisible();
 	});
@@ -55,9 +57,7 @@ describe('The Practice-side Birth Plan (#280)', () => {
 	// endpoint (loadInstance's own "not created yet" branch) reads
 	// plainly, never as an empty document.
 	it('says plainly that no Birth Plan has been created yet, rather than rendering an empty document', async () => {
-		apiFetchWithSession.mockResolvedValue({ status: 404, ok: false, text: () => Promise.resolve('none') } as Response);
-
-		await render(Page, { data: fixtureData, params: fixture.params });
+		await setup(() => ({ status: 404, ok: false, text: () => Promise.resolve('none') }) as Response);
 
 		await expect
 			.element(page.getByText('No Birth Plan has been created for this Engagement yet.'))
@@ -66,13 +66,14 @@ describe('The Practice-side Birth Plan (#280)', () => {
 	});
 
 	it('reports a failed load in words, announced as an alert', async () => {
-		apiFetchWithSession.mockResolvedValue({
-			status: 500,
-			ok: false,
-			text: () => Promise.resolve('plan read failed')
-		} as Response);
-
-		await render(Page, { data: fixtureData, params: fixture.params });
+		await setup(
+			() =>
+				({
+					status: 500,
+					ok: false,
+					text: () => Promise.resolve('plan read failed')
+				}) as Response
+		);
 
 		await expect.element(page.getByRole('alert')).toHaveTextContent('plan read failed');
 	});
@@ -82,15 +83,13 @@ describe('The Practice-side Birth Plan (#280)', () => {
 // same rendering -- mirrors birth-plan.svelte.spec.ts's own describe
 // block on the portal side, and moved here from the Engagement hub's
 // spec, which no longer offers this control at all (#280).
+async function setupDownload(pdfResponse: Response) {
+	await setup((path) => (path.endsWith('/pdf') ? pdfResponse : toApiResponder(fixture)(path)));
+}
+
 describe('the Birth Plan PDF download (#306), on its own Practice-side page', () => {
 	it('offers a download of the Birth Plan, reachable by keyboard and naming the PDF', async () => {
-		apiFetchWithSession.mockImplementation((path: string) =>
-			path.endsWith('/pdf')
-				? Promise.resolve(new Response(new Blob(['%PDF-1.4'], { type: 'application/pdf' }), { status: 200 }))
-				: toApiResponder(fixture)(path)
-		);
-
-		await render(Page, { data: fixtureData, params: fixture.params });
+		await setupDownload(new Response(new Blob(['%PDF-1.4'], { type: 'application/pdf' }), { status: 200 }));
 		const download = page.getByRole('button', { name: 'Download Birth Plan (PDF)' });
 		await expect.element(download).toBeVisible();
 
@@ -102,13 +101,9 @@ describe('the Birth Plan PDF download (#306), on its own Practice-side page', ()
 	});
 
 	it('reports a failed PDF fetch in words rather than swallowing it', async () => {
-		apiFetchWithSession.mockImplementation((path: string) =>
-			path.endsWith('/pdf')
-				? Promise.resolve(new Response('no plan instance found for this engagement and plan type', { status: 500 }))
-				: toApiResponder(fixture)(path)
+		await setupDownload(
+			new Response('no plan instance found for this engagement and plan type', { status: 500 })
 		);
-
-		await render(Page, { data: fixtureData, params: fixture.params });
 		await page.getByRole('button', { name: 'Download Birth Plan (PDF)' }).click();
 
 		await expect

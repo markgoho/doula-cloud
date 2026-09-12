@@ -22,10 +22,17 @@ beforeEach(() => {
 	for (const mock of [goto, invalidateAll, signOutOfSession]) mock.mockReset();
 });
 
+interface SetupOptions {
+	data?: RootLanding;
+}
+
+async function setup({ data = staffPickerData }: SetupOptions = {}) {
+	await render(Page, { params: fixture.params, data });
+}
+
 describe('/+page.svelte', () => {
 	it('offers a signed-out visitor the three real entry points, none implied as the main one', async () => {
-		const data: RootLanding = { type: 'signed-out' };
-		await render(Page, { params: fixture.params, data });
+		await setup({ data: { type: 'signed-out' } });
 
 		// #678: the heading names what the page is for rather than
 		// repeating the brand, which the signed-out bar above it now
@@ -43,14 +50,15 @@ describe('/+page.svelte', () => {
 		// The fixture's own Membership carries #530's URL; a second one is
 		// added here rather than invented from scratch, since "several" is
 		// content the fixture -- one Membership -- does not itself hold.
-		const data: RootLanding = {
-			...staffPickerData,
-			memberships: [
-				...staffPickerData.memberships,
-				{ practiceId: 'practice-2', practiceName: 'Hilltop Doulas', roles: ['doula'] }
-			]
-		};
-		await render(Page, { params: fixture.params, data });
+		await setup({
+			data: {
+				...staffPickerData,
+				memberships: [
+					...staffPickerData.memberships,
+					{ practiceId: 'practice-2', practiceName: 'Hilltop Doulas', roles: ['doula'] }
+				]
+			}
+		});
 
 		const [firstMembership] = staffPickerData.memberships;
 		const link = testPage.getByRole('link', { name: firstMembership.practiceName });
@@ -69,24 +77,25 @@ describe('/+page.svelte', () => {
 	// Practice from the `active` one, rather than two Engagements in the
 	// same status.
 	it("lists a signed-in Client-portal visitor's several Engagements, across Practices and statuses", async () => {
-		const data: RootLanding = {
-			type: 'portal-picker',
-			engagements: [
-				{
-					engagementId: 'engagement-1',
-					practiceName: 'Riverside Doulas',
-					status: 'active',
-					createdAt: '2026-01-15T20:00:00Z'
-				},
-				{
-					engagementId: 'engagement-2',
-					practiceName: 'Hilltop Doulas',
-					status: 'completed',
-					createdAt: '2026-03-12T20:00:00Z'
-				}
-			]
-		};
-		await render(Page, { params: fixture.params, data });
+		await setup({
+			data: {
+				type: 'portal-picker',
+				engagements: [
+					{
+						engagementId: 'engagement-1',
+						practiceName: 'Riverside Doulas',
+						status: 'active',
+						createdAt: '2026-01-15T20:00:00Z'
+					},
+					{
+						engagementId: 'engagement-2',
+						practiceName: 'Hilltop Doulas',
+						status: 'completed',
+						createdAt: '2026-03-12T20:00:00Z'
+					}
+				]
+			}
+		});
 
 		// engagementLabel (#310): the Practice name plus when the Engagement
 		// began, which is also what tells two Engagements at one Practice
@@ -113,7 +122,7 @@ describe('/+page.svelte', () => {
 	// screen names the state, gives what to do about each cause, and
 	// carries the door out of the session it says leads nowhere.
 	it('names the state for a Client-portal visitor with no care set up, rather than showing an empty list', async () => {
-		await render(Page, { params: fixture.params, data: NO_ENGAGEMENT });
+		await setup({ data: NO_ENGAGEMENT });
 
 		await expect
 			.element(testPage.getByRole('heading', { level: 1, name: "You don't have care set up yet" }))
@@ -126,7 +135,7 @@ describe('/+page.svelte', () => {
 
 	it('lets a Client-portal visitor with no care set up end the session she is holding', async () => {
 		signOutOfSession.mockResolvedValue({ ok: true });
-		await render(Page, { params: fixture.params, data: NO_ENGAGEMENT });
+		await setup({ data: NO_ENGAGEMENT });
 
 		await testPage.getByRole('button', { name: 'Sign out' }).click();
 
@@ -140,7 +149,7 @@ describe('/+page.svelte', () => {
 
 	it('keeps her here, told she is still signed in, when sign-out does not go through', async () => {
 		signOutOfSession.mockResolvedValue({ ok: false, message: SIGN_OUT_FAILED_MESSAGE });
-		await render(Page, { params: fixture.params, data: NO_ENGAGEMENT });
+		await setup({ data: NO_ENGAGEMENT });
 
 		await testPage.getByRole('button', { name: 'Sign out' }).click();
 
@@ -152,7 +161,7 @@ describe('/+page.svelte', () => {
 	// a fully dressed shell carrying its own sign-out, so the reduced bar
 	// above them stays as `+layout.svelte` describes it.
 	it('leaves the states that do offer a destination without a sign-out of their own', async () => {
-		await render(Page, { params: fixture.params, data: staffPickerData });
+		await setup();
 
 		await expect.element(testPage.getByRole('button', { name: 'Sign out' })).not.toBeInTheDocument();
 	});

@@ -9,17 +9,20 @@ const pageState = vi.hoisted(() => ({
 }));
 vi.mock('$app/state', () => ({ page: pageState }));
 
+async function setup(status = 404) {
+	pageState.status = status;
+	await render(ErrorBoundary, {});
+}
+
 describe('practices/+error.svelte', () => {
 	it('renders the state matching page.status, inside the Staff chrome the layout above it still provides', async () => {
-		pageState.status = 403;
-		await render(ErrorBoundary, {});
+		await setup(403);
 
 		await expect.element(page.getByRole('heading', { name: 'You cannot view this' })).toBeVisible();
 	});
 
 	it('offers the way out to this Practice overview', async () => {
-		pageState.status = 404;
-		await render(ErrorBoundary, {});
+		await setup(404);
 
 		const link = page.getByRole('link', { name: 'Go to your Practice overview' });
 		await expect.element(link).toBeVisible();

@@ -26,11 +26,21 @@ vi.mock('#lib/api.js', () => ({
 	apiErrorMessage: (response: Response) => response.text()
 }));
 
+interface SetupOptions {
+	offersBirthPlan?: boolean;
+	respond?: (path: string) => Promise<Response> | Response;
+}
+
+async function setup({ offersBirthPlan = true, respond = toApiResponder(fixture) }: SetupOptions = {}) {
+	pageState.data = { ...pageState.data, offersBirthPlan };
+	apiFetchWithSession.mockReset();
+	apiFetchWithSession.mockImplementation(respond);
+	await render(Page);
+}
+
 describe('Client-portal Birth Plan (#311)', () => {
 	it('shows the Birth Plan on an Engagement that calls for one', async () => {
-		apiFetchWithSession.mockImplementation(toApiResponder(fixture));
-
-		await render(Page);
+		await setup();
 
 		await expect.element(page.getByRole('heading', { name: 'Birth Plan' })).toBeVisible();
 	});
@@ -39,9 +49,10 @@ describe('Client-portal Birth Plan (#311)', () => {
 	// endpoint (loadClientBirthPlan's own null branch) still reads as "not
 	// yet", never as "not applicable" -- the two are different absences.
 	it('reads "not yet" for an applicable Engagement with no plan created', async () => {
-		apiFetchWithSession.mockResolvedValue({ status: 404, ok: false, text: () => Promise.resolve('none') } as Response);
-
-		await render(Page);
+		await setup({
+			respond: () =>
+				Promise.resolve({ status: 404, ok: false, text: () => Promise.resolve('none') } as Response)
+		});
 
 		await expect
 			.element(page.getByText('No Birth Plan has been created for your care yet.'))
@@ -52,11 +63,7 @@ describe('Client-portal Birth Plan (#311)', () => {
 	// test above) -- so this is a departure from it, spread rather than a
 	// fresh pageData object that re-states the fields it shares.
 	it('shows the portal not-found state, and mentions no Birth Plan at all, on an Engagement it does not apply to', async () => {
-		pageState.data = { ...pageState.data, offersBirthPlan: false };
-		apiFetchWithSession.mockClear();
-		apiFetchWithSession.mockImplementation(toApiResponder(fixture));
-
-		await render(Page);
+		await setup({ offersBirthPlan: false });
 
 		await expect.element(page.getByRole('heading', { name: 'Page not found' })).toBeVisible();
 		expect(page.getByText(/birth plan/i).elements()).toHaveLength(0);
@@ -64,19 +71,12 @@ describe('Client-portal Birth Plan (#311)', () => {
 		// what draws this state, only the resolved answer already on
 		// page.data.
 		expect(apiFetchWithSession).not.toHaveBeenCalled();
-
-		pageState.data = { ...pageState.data, offersBirthPlan: true };
 	});
 
 	it("never reads 'not yet' when the Engagement does not apply", async () => {
-		pageState.data = { ...pageState.data, offersBirthPlan: false };
-		apiFetchWithSession.mockImplementation(toApiResponder(fixture));
-
-		await render(Page);
+		await setup({ offersBirthPlan: false });
 
 		expect(page.getByText(/not yet/i).elements()).toHaveLength(0);
-
-		pageState.data = { ...pageState.data, offersBirthPlan: true };
 	});
 });
 
@@ -86,15 +86,18 @@ describe('Client-portal Birth Plan (#311)', () => {
 // own download describe block: `fixture`'s own `respond` answers the
 // initial load, and the pdf path is a second fetch this route's own
 // handler makes only once the download button is clicked.
+async function setupDownload(pdfResponse: Response) {
+	pageState.data = { ...pageState.data, offersBirthPlan: true };
+	apiFetchWithSession.mockReset();
+	apiFetchWithSession.mockImplementation((path: string) =>
+		path.endsWith('/pdf') ? Promise.resolve(pdfResponse) : toApiResponder(fixture)(path)
+	);
+	await render(Page);
+}
+
 describe('Client-portal Birth Plan PDF download (#306)', () => {
 	it('offers a download of the Birth Plan, reachable by keyboard and naming the PDF', async () => {
-		apiFetchWithSession.mockImplementation((path: string) =>
-			path.endsWith('/pdf')
-				? Promise.resolve(new Response(new Blob(['%PDF-1.4'], { type: 'application/pdf' }), { status: 200 }))
-				: toApiResponder(fixture)(path)
-		);
-
-		await render(Page);
+		await setupDownload(new Response(new Blob(['%PDF-1.4'], { type: 'application/pdf' }), { status: 200 }));
 		const download = page.getByRole('button', { name: 'Download Birth Plan (PDF)' });
 		await expect.element(download).toBeVisible();
 
@@ -104,13 +107,7 @@ describe('Client-portal Birth Plan PDF download (#306)', () => {
 	});
 
 	it('reports a failed PDF fetch in words rather than swallowing it', async () => {
-		apiFetchWithSession.mockImplementation((path: string) =>
-			path.endsWith('/pdf')
-				? Promise.resolve(new Response('no birth plan found for this engagement', { status: 500 }))
-				: toApiResponder(fixture)(path)
-		);
-
-		await render(Page);
+		await setupDownload(new Response('no birth plan found for this engagement', { status: 500 }));
 		await page.getByRole('button', { name: 'Download Birth Plan (PDF)' }).click();
 
 		await expect.element(page.getByRole('alert')).toHaveTextContent('no birth plan found for this engagement');

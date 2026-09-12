@@ -56,9 +56,13 @@ async function fillForm() {
 
 const submit = () => testPage.getByRole('button', { name: 'Create Practice' }).click();
 
+async function setup() {
+	await render(Page, {});
+}
+
 describe('signing up when the account half-landed (#745)', () => {
 	it('finishes the Practice on a second attempt, against the account the first attempt created', async () => {
-		await render(Page, {});
+		await setup();
 		await fillForm();
 
 		// First attempt: the account is created, and the BFF half is refused
@@ -82,7 +86,7 @@ describe('signing up when the account half-landed (#745)', () => {
 	});
 
 	it('still tells someone whose address belongs to another account to log in instead', async () => {
-		await render(Page, {});
+		await setup();
 		await fillForm();
 
 		createUserWithEmailAndPassword.mockRejectedValueOnce(emailTaken);
