@@ -385,8 +385,15 @@ async function main(argv: string[]): Promise<number> {
     if (lockDir) release(lockDir);
     process.exit(1);
   };
-  process.on('SIGINT', releaseOnSignal);
-  process.on('SIGTERM', releaseOnSignal);
+  const arm = () => {
+    process.on('SIGINT', releaseOnSignal);
+    process.on('SIGTERM', releaseOnSignal);
+  };
+  const unarm = () => {
+    process.off('SIGINT', releaseOnSignal);
+    process.off('SIGTERM', releaseOnSignal);
+  };
+  arm();
 
   try {
     lockDir = resolveLockDir();
@@ -397,8 +404,7 @@ async function main(argv: string[]): Promise<number> {
     // reason about -- none of it may stop a commit. Say so and run,
     // and hand the signal back to `runCommand`'s own forwarders rather
     // than double-handling it.
-    process.off('SIGINT', releaseOnSignal);
-    process.off('SIGTERM', releaseOnSignal);
+    unarm();
     console.error(
       `gate-lock: running without the lock (${(error as Error).message})`
     );
@@ -413,8 +419,7 @@ async function main(argv: string[]): Promise<number> {
     }
     return await runCommand(command, () => (hasChild = true));
   } finally {
-    process.off('SIGINT', releaseOnSignal);
-    process.off('SIGTERM', releaseOnSignal);
+    unarm();
     stopHeartbeat();
     release(lockDir);
   }
