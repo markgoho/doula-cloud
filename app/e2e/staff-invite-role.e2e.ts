@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test';
 import { signInEnrolled, enterPracticeAsEnrolled } from './mfa';
 import { readStaffInviteToken } from './stack';
-import { seedFoundingOwner } from './staffSignup';
+import { seedFoundingOwner, uniqueEmail } from './staffSignup';
 
 // Every other spec that signs in does so as the Owner signup itself creates,
 // who holds owner + office_manager + doula at once. This is the one spec
@@ -14,10 +14,7 @@ test('A Doula invited via the Staff invite route is refused an Owner-only action
 	request,
 	context
 }) => {
-	// Random suffix, not just Date.now(): see staffSignup.ts for why
-	// millisecond-only uniqueness collides across parallel workers.
-	const unique = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-	const doulaEmail = `doula-${unique}@example.com`;
+	const doulaEmail = uniqueEmail('doula');
 	const password = 'password123';
 
 	// Fixture setup, not the seam under test (#207): the Owner side of this
@@ -73,7 +70,7 @@ test('A Doula invited via the Staff invite route is refused an Owner-only action
 	// worked for Jamie refuses Robin outright -- RequireOwner's 403, the
 	// role rule PR-B2 names in employed-doula.md's permission boundary.
 	await page.goto(`/practices/${practiceId}/invite`);
-	await page.getByLabel('Their email').fill(`someone-else-${unique}@example.com`);
+	await page.getByLabel('Their email').fill(uniqueEmail('someone-else'));
 	await page.getByRole('button', { name: 'Send invite' }).click();
 	await expect(page.getByText('only a Practice Owner can do that')).toBeVisible();
 });

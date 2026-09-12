@@ -3,7 +3,7 @@ import { E2E_API_HOST, E2E_API_PORT } from './ports';
 import { seedClientPortalUser, seedEngagement } from './stack';
 import { signInEnrolled } from './mfa';
 import { signInPortalClient } from './portalClient';
-import { seedFoundingOwner } from './staffSignup';
+import { seedFoundingOwner, uniqueEmail } from './staffSignup';
 
 const API_URL = `http://${E2E_API_HOST}:${E2E_API_PORT}`;
 
@@ -25,9 +25,7 @@ test('a synthetic push event wakes the open thread tab and it refetches', async 
 	request,
 	context
 }) => {
-	// Random suffix, not just Date.now(): see staffSignup.ts for why
-	// millisecond-only uniqueness collides across parallel workers.
-	const clientEmail = `client-${Date.now()}-${Math.random().toString(36).slice(2, 8)}@example.com`;
+	const clientEmail = uniqueEmail('client');
 
 	// Provision a Practice + Staff (owner), a Client + Engagement at that
 	// Practice, and a Client-portal login -- the same setup

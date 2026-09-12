@@ -6,6 +6,7 @@ import {
 	PORTAL_CLIENT_PASSWORD
 } from './portalClient';
 import { seedEngagementRequest } from './stack';
+import { uniqueEmail } from './staffSignup';
 import { enterPracticeAsEnrolled } from './mfa';
 
 /**
@@ -110,7 +111,7 @@ test('Renata signs in and invites a Doula, with no pointer at any step', async (
 	// region rather than its empty state.
 	const seeded = await seedPortalClient(request, 'Riverside Doulas');
 	const { practiceId } = seeded;
-	const invited = `doula-${Date.now()}-${Math.random().toString(36).slice(2, 8)}@example.com`;
+	const invited = uniqueEmail('doula');
 
 	// Stage 1 -- sign in. #606: seedPortalClient's Owner is enrolled
 	// (portalClient.ts), and an enrolled account can no longer complete

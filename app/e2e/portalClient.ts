@@ -10,7 +10,7 @@ import {
 	MAILBOX_URL
 } from './stack';
 import { drainUntilMailArrives } from './outboxMail';
-import { acceptStaffInvite, seedFoundingOwner } from './staffSignup';
+import { acceptStaffInvite, seedFoundingOwner, uniqueEmail } from './staffSignup';
 
 // The subject portalauth's magic-link Compose gives the sign-in mail --
 // the wait below and the click that follows it are about one message, so
@@ -142,10 +142,9 @@ export async function seedClient(
 	staffHeaders: { Cookie: string },
 	fields: NewClientFields
 ): Promise<string> {
-	const unique = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 	const created = await request.post(`${API_URL}/api/practices/${practiceId}/clients`, {
 		headers: staffHeaders,
-		data: { ...fields, email: `client-${unique}@example.com` }
+		data: { ...fields, email: uniqueEmail('client') }
 	});
 	const body = await created.text();
 	expect(created.ok(), `seedClient failed: ${created.status()} ${body}`).toBe(true);
@@ -189,8 +188,7 @@ export async function seedContractorDoula(
 	practiceId: string,
 	ownerHeaders: { Cookie: string }
 ): Promise<SeededContractorDoula> {
-	const unique = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-	const email = `contractor-${unique}@example.com`;
+	const email = uniqueEmail('contractor');
 
 	const invite = await request.post(`${API_URL}/api/practices/${practiceId}/staff/invitations`, {
 		headers: ownerHeaders,
@@ -245,11 +243,7 @@ export async function seedPortalClient(
 	request: APIRequestContext,
 	practiceName: string
 ): Promise<SeededPortalClient> {
-	// The random suffix (not just Date.now(), millisecond-resolution)
-	// avoids EMAIL_EXISTS collisions with other *.e2e.ts files' emails when
-	// Playwright's parallel workers start within the same millisecond.
-	const unique = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-	const clientEmail = `client-${unique}@example.com`;
+	const clientEmail = uniqueEmail('client');
 
 	const { email: staffEmail, idToken, localId, practiceId, staffId } = await seedFoundingOwner(request, {
 		practiceName,

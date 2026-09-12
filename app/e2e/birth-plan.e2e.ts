@@ -3,7 +3,7 @@ import { E2E_API_HOST, E2E_API_PORT } from './ports';
 import { seedClientPortalUser, seedEngagement } from './stack';
 import { signInEnrolled, enterPracticeAsEnrolled } from './mfa';
 import { signInPortalClient } from './portalClient';
-import { seedFoundingOwner } from './staffSignup';
+import { seedFoundingOwner, uniqueEmail } from './staffSignup';
 
 // Exercises #65's critical path: Staff fills out a Birth Plan for an
 // Engagement (through the real staff-side UI from #64), then the Client
@@ -18,9 +18,7 @@ test('Staff fills a Birth Plan, and the Client portal shows the matching read-on
 	request,
 	context
 }) => {
-	// Random suffix, not just Date.now(): see staffSignup.ts for why
-	// millisecond-only uniqueness collides across parallel workers.
-	const clientEmail = `client-${Date.now()}-${Math.random().toString(36).slice(2, 8)}@example.com`;
+	const clientEmail = uniqueEmail('client');
 
 	const { idToken: staffIdToken, localId: staffUID, practiceId } = await seedFoundingOwner(request);
 

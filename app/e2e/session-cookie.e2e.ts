@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test';
 import { E2E_API_HOST, E2E_API_PORT, E2E_EMULATOR_HOST, E2E_EMULATOR_PORT } from './ports';
+import { uniqueEmail } from './staffSignup';
 
 // The Firebase Auth emulator and the Go BFF -- both host processes -- see
 // e2e/global-setup.ts and e2e/stack.ts for how these get started.
@@ -12,7 +13,7 @@ const API_URL = `http://${E2E_API_HOST}:${E2E_API_PORT}`;
 // via page.request (which shares it with page's BrowserContext, unlike
 // the standalone `request` fixture other e2e specs use for setup calls).
 test('a browser accepts and clears the __session cookie', async ({ page }) => {
-	const email = `session-cookie-${Date.now()}-${Math.random().toString(36).slice(2, 8)}@example.com`;
+	const email = uniqueEmail('session-cookie');
 	const password = 'password123';
 
 	const signUp = await page.request.post(
