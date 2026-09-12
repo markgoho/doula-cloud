@@ -11,7 +11,6 @@ import {
 	GAUGE_TOTAL,
 	MINIMUM_ALIGNMENT_PERIOD_SECONDS,
 	MONITORING_PROJECT_ID,
-	startOfBillingPeriod,
 	type UsageMetric
 } from './usageQuery.ts';
 
@@ -141,12 +140,6 @@ describe('ALIGNMENT_BY_KIND', () => {
 	});
 });
 
-describe('startOfBillingPeriod', () => {
-	it('is the first instant of the calendar month in UTC, matching invoice.month', () => {
-		expect(startOfBillingPeriod(now).toISOString()).toBe('2026-09-01T00:00:00.000Z');
-	});
-});
-
 describe('buildUsageRequest', () => {
 	it('asks the project Application Default Credentials do not name on their own', () => {
 		expect(buildUsageRequest(CLOUD_RUN_SCOPE, billableInstanceTime, now).name).toBe(
@@ -166,27 +159,36 @@ describe('buildUsageRequest', () => {
 		);
 	});
 
-	it('covers the billing period so far', () => {
+	it('covers the billing period so far, from midnight Pacific rather than midnight UTC', () => {
 		expect(buildUsageRequest(CLOUD_RUN_SCOPE, billableInstanceTime, now).interval).toEqual({
-			startTime: { seconds: Date.parse('2026-09-01T00:00:00Z') / 1000 },
+			startTime: { seconds: Date.parse('2026-09-01T07:00:00Z') / 1000 },
 			endTime: { seconds: Date.parse('2026-09-08T04:30:24Z') / 1000 }
 		});
 	});
 
 	it('aligns over the whole period, so one metric collapses to one scalar', () => {
 		expect(buildUsageRequest(CLOUD_RUN_SCOPE, billableInstanceTime, now).aggregation).toEqual({
-			alignmentPeriod: { seconds: 621_024 },
+			alignmentPeriod: { seconds: 595_824 },
 			perSeriesAligner: 'ALIGN_SUM',
 			crossSeriesReducer: 'REDUCE_SUM'
 		});
 	});
 
-	it('never asks for an alignment period Monitoring would reject as too short', () => {
-		const firstSecondOfTheMonth = new Date('2026-09-01T00:00:01Z');
+	it('reads the window as August for an instant seven hours into the UTC month, since Pacific is still August then', () => {
+		const stillAugustInPacific = new Date('2026-09-01T03:00:00Z');
 
 		expect(
-			buildUsageRequest(CLOUD_RUN_SCOPE, billableInstanceTime, firstSecondOfTheMonth).aggregation
-				.alignmentPeriod
+			buildUsageRequest(CLOUD_RUN_SCOPE, billableInstanceTime, stillAugustInPacific).interval
+				.startTime
+		).toEqual({ seconds: Date.parse('2026-08-01T07:00:00Z') / 1000 });
+	});
+
+	it('never asks for an alignment period Monitoring would reject as too short', () => {
+		const firstSecondOfTheBillingPeriod = new Date('2026-09-01T07:00:01Z');
+
+		expect(
+			buildUsageRequest(CLOUD_RUN_SCOPE, billableInstanceTime, firstSecondOfTheBillingPeriod)
+				.aggregation.alignmentPeriod
 		).toEqual({ seconds: MINIMUM_ALIGNMENT_PERIOD_SECONDS });
 	});
 

@@ -6,6 +6,8 @@
  * so a stat sits beside the cost it produced rather than beside a chart.
  */
 
+import { startOfBillingPeriod } from './billingPeriod.ts';
+
 /**
  * The GCP project Cloud Monitoring is queried under. Application Default
  * Credentials carry no project of their own, so the request names it.
@@ -319,16 +321,16 @@ export const FIRESTORE_SCOPE: UsageScope<FirestoreMetricId> = {
  * month-to-date total, and that total's month is a Pacific one. Traced live
  * on 2026-09-10, `dou.la` read 137,092,104 at 07:07:59Z on Sep 1 and 17,720
  * by 07:16:59Z — a reset at midnight `America/Los_Angeles`, seven hours into
- * the UTC month {@link startOfBillingPeriod} opens. Any read of it in that
- * window answers with the previous month's total, whatever aligner is used,
- * because the previous month's total is the only sample there is. A DELTA
- * summed from the start of the period has no such edge at any instant: over
- * 2026-09-01T00:00:00Z–00:50:00Z it reported 789,214 bytes where the GAUGE
- * reported 136,226,172. See [#963](https://github.com/markgoho/doula-cloud/issues/963).
+ * the UTC calendar day. Any read of it in that window answers with the
+ * previous month's total, whatever aligner is used, because the previous
+ * month's total is the only sample there is. A DELTA summed from the start
+ * of the period has no such edge at any instant: over 2026-09-01T00:00:00Z–
+ * 00:50:00Z it reported 789,214 bytes where the GAUGE reported 136,226,172.
+ * See [#963](https://github.com/markgoho/doula-cloud/issues/963).
  *
- * That the period itself is a UTC month while GCP invoices a Pacific one is
- * a separate defect, in {@link startOfBillingPeriod} rather than here, and it
- * moves every panel: [#1174](https://github.com/markgoho/doula-cloud/issues/1174).
+ * {@link startOfBillingPeriod} now opens the period at the same midnight
+ * Pacific this reset happens at, rather than at UTC midnight seven hours
+ * earlier: [#1174](https://github.com/markgoho/doula-cloud/issues/1174).
  */
 export const FIREBASE_HOSTING_SCOPE: UsageScope<FirebaseHostingMetricId> = {
 	resourceFilter: `resource.type="${FIREBASE_HOSTING_RESOURCE_TYPE}"`,
@@ -376,16 +378,6 @@ export interface UsageRequest {
 	readonly aggregation: Alignment & {
 		readonly alignmentPeriod: { readonly seconds: number };
 	};
-}
-
-/**
- * First instant of the billing period `now` falls in, in UTC.
- *
- * The period is the calendar month, matching the `invoice.month` the cost
- * query groups by, so a usage figure and a cost figure cover the same window.
- */
-export function startOfBillingPeriod(now: Date): Date {
-	return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
 }
 
 function toEpochSeconds(at: Date): number {

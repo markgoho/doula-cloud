@@ -1,4 +1,5 @@
 import { MetricServiceClient } from '@google-cloud/monitoring';
+import { startOfBillingPeriod } from './billingPeriod.ts';
 import {
 	buildUsageRequest,
 	CLOUD_RUN_SCOPE,
@@ -6,7 +7,6 @@ import {
 	CLOUD_STORAGE_SCOPE,
 	FIREBASE_HOSTING_SCOPE,
 	FIRESTORE_SCOPE,
-	startOfBillingPeriod,
 	type UsageScope,
 	type UsageSnapshot
 } from './usageQuery.ts';
