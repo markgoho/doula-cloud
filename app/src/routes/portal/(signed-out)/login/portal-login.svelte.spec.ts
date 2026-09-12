@@ -69,6 +69,10 @@ afterEach(() => {
 
 const [firstEngagement, secondEngagement] = session.engagements;
 
+async function setup() {
+	await render(Page, {});
+}
+
 describe('Client-portal login -- on-load session probe (#283)', () => {
 	it('redirects a signed-in visitor to her only Engagement, without showing the form', async () => {
 		// One Engagement rather than the fixture's two, so this is a
@@ -76,7 +80,7 @@ describe('Client-portal login -- on-load session probe (#283)', () => {
 		// object that re-states the Engagement fields it shares.
 		apiFetch.mockResolvedValue(jsonResponse({ ...session, engagements: [firstEngagement] }));
 
-		await render(Page, {});
+		await setup();
 
 		await vi.waitFor(() =>
 			expect(goto).toHaveBeenCalledWith(`/portal/engagements/${firstEngagement.engagementId}`)
@@ -93,7 +97,7 @@ describe('Client-portal login -- on-load session probe (#283)', () => {
 		// this test's happy path, not a reason to invent a second one.
 		apiFetch.mockImplementation(toApiResponder(fixture));
 
-		await render(Page, {});
+		await setup();
 
 		await vi.waitFor(() => expect(goto).toHaveBeenCalledWith('/'));
 		expect(testPage.getByRole('link', { name: secondEngagement.practiceName }).elements()).toHaveLength(0);
@@ -102,7 +106,7 @@ describe('Client-portal login -- on-load session probe (#283)', () => {
 	it('renders the ordinary login form for a signed-out visitor, with no session-ended messaging', async () => {
 		apiFetch.mockResolvedValue(jsonResponse('no matching portal session', 404));
 
-		await render(Page, {});
+		await setup();
 
 		await expect.element(testPage.getByLabelText('Email')).toBeVisible();
 		expect(testPage.getByText(/session/i).elements()).toHaveLength(0);
@@ -115,7 +119,7 @@ describe('Client-portal login -- on-load session probe (#283)', () => {
 		// side, that failure is indistinguishable from "not signed in".
 		apiFetch.mockResolvedValue(jsonResponse('no matching portal session', 404));
 
-		await render(Page, {});
+		await setup();
 
 		await expect
 			.element(testPage.getByRole('button', { name: 'Send me a sign-in link' }))
@@ -125,7 +129,7 @@ describe('Client-portal login -- on-load session probe (#283)', () => {
 	it('never probes the Staff session', async () => {
 		apiFetch.mockResolvedValue(jsonResponse('no matching portal session', 404));
 
-		await render(Page, {});
+		await setup();
 
 		await vi.waitFor(() => expect(apiFetch).toHaveBeenCalledTimes(1));
 		expect(apiFetch).not.toHaveBeenCalledWith('/api/staff/session');

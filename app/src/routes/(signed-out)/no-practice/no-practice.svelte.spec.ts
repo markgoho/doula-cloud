@@ -28,9 +28,13 @@ beforeEach(() => {
 	apiFetch.mockImplementation(toApiResponder(fixture));
 });
 
+async function setup() {
+	await render(Page, {});
+}
+
 describe('the no-Practice landing screen', () => {
 	it('names the state and offers both ways on from it', async () => {
-		await render(Page, {});
+		await setup();
 
 		await expect
 			.element(testPage.getByRole('heading', { name: 'Your account is not part of a Practice' }))
@@ -45,7 +49,7 @@ describe('the no-Practice landing screen', () => {
 	// has to be on the screen that says so.
 	it('lets her sign out from here', async () => {
 		signOutOfSession.mockResolvedValue({ ok: true });
-		await render(Page, {});
+		await setup();
 
 		await testPage.getByRole('button', { name: 'Sign out' }).click();
 
@@ -55,7 +59,7 @@ describe('the no-Practice landing screen', () => {
 	it('sends a visitor with no session at all to the login screen instead', async () => {
 		apiFetch.mockResolvedValue(jsonResponse('missing credential', 401));
 
-		await render(Page, {});
+		await setup();
 
 		await vi.waitFor(() => expect(goto).toHaveBeenCalledWith('/login'));
 	});
@@ -70,7 +74,7 @@ describe('the no-Practice landing screen', () => {
 			})
 		);
 
-		await render(Page, {});
+		await setup();
 
 		await vi.waitFor(() => expect(goto).toHaveBeenCalledWith('/'));
 	});
@@ -78,7 +82,7 @@ describe('the no-Practice landing screen', () => {
 	it('stays put when the probe cannot be made at all', async () => {
 		apiFetch.mockRejectedValue(new Error('offline'));
 
-		await render(Page, {});
+		await setup();
 
 		await expect
 			.element(testPage.getByRole('heading', { name: 'Your account is not part of a Practice' }))

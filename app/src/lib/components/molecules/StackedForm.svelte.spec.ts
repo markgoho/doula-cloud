@@ -13,12 +13,18 @@ function submitButton() {
 	return createRawSnippet(() => ({ render: () => '<button type="submit">Continue</button>' }));
 }
 
+interface SetupOptions {
+	onSubmit?: (event: SubmitEvent) => void;
+}
+
+async function setup({ onSubmit = vi.fn() }: SetupOptions = {}) {
+	const { container } = await render(StackedForm, { onSubmit, children: submitButton() });
+	return { container, onSubmit };
+}
+
 describe('StackedForm', () => {
 	it('renders what it is given, inside a form', async () => {
-		const { container } = await render(StackedForm, {
-			onSubmit: vi.fn(),
-			children: submitButton()
-		});
+		const { container } = await setup();
 
 		await expect.element(page.getByRole('button', { name: 'Continue' })).toBeVisible();
 		expect(container.querySelector('form')).not.toBeNull();
@@ -31,10 +37,7 @@ describe('StackedForm', () => {
 	 * `getByRole` to find, because nothing about it is announced.
 	 */
 	it('stacks its children at the token FormPage spends on a fieldset', async () => {
-		const { container } = await render(StackedForm, {
-			onSubmit: vi.fn(),
-			children: submitButton()
-		});
+		const { container } = await setup();
 
 		const stack = container.querySelector(':scope form > stack-l');
 		expect(stack?.getAttribute('space')).toBe('var(--space-5)');
@@ -44,17 +47,14 @@ describe('StackedForm', () => {
 	// ADR-0021: the page refuses the submit and says so once, at the top --
 	// never the browser's own bubble.
 	it('lets the page do the refusing, not the browser', async () => {
-		const { container } = await render(StackedForm, {
-			onSubmit: vi.fn(),
-			children: submitButton()
-		});
+		const { container } = await setup();
 
 		expect(container.querySelector('form')?.hasAttribute('novalidate')).toBe(true);
 	});
 
 	it('hands the submit to its caller', async () => {
 		const onSubmit = vi.fn((event: SubmitEvent) => event.preventDefault());
-		await render(StackedForm, { onSubmit, children: submitButton() });
+		await setup({ onSubmit });
 
 		await page.getByRole('button', { name: 'Continue' }).click();
 

@@ -3,10 +3,21 @@ import { describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import TotpCodeField from './TotpCodeField.svelte';
 
+interface SetupOptions {
+	id?: string;
+	value?: string;
+	onInput?: (value: string) => void;
+	error?: string;
+}
+
+async function setup({ id = 'code', value = '', onInput = vi.fn(), error }: SetupOptions = {}) {
+	await render(TotpCodeField, { id, value, onInput, error });
+	return { onInput };
+}
+
 describe('TotpCodeField', () => {
 	it('asks for the 6-digit authenticator code, as a single numeric field', async () => {
-		const onInput = vi.fn();
-		await render(TotpCodeField, { id: 'code', value: '', onInput });
+		await setup();
 
 		const field = page.getByLabelText('Authenticator app code');
 		await expect.element(field).toBeVisible();
@@ -17,8 +28,7 @@ describe('TotpCodeField', () => {
 	});
 
 	it('reports what is typed', async () => {
-		const onInput = vi.fn();
-		await render(TotpCodeField, { id: 'code', value: '', onInput });
+		const { onInput } = await setup();
 
 		await page.getByLabelText('Authenticator app code').fill('123456');
 
@@ -26,7 +36,7 @@ describe('TotpCodeField', () => {
 	});
 
 	it('shows the value it is given', async () => {
-		await render(TotpCodeField, { id: 'code', value: '654321', onInput: vi.fn() });
+		await setup({ value: '654321' });
 
 		const control = (await page
 			.getByLabelText('Authenticator app code')
@@ -35,10 +45,7 @@ describe('TotpCodeField', () => {
 	});
 
 	it('links a refusal to the field, GOV.UK error-message position', async () => {
-		await render(TotpCodeField, {
-			id: 'code',
-			value: '',
-			onInput: vi.fn(),
+		await setup({
 			error: 'The code is not correct. Enter the 6-digit code from your authenticator app.'
 		});
 

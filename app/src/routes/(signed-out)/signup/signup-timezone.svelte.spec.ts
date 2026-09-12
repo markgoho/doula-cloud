@@ -54,9 +54,13 @@ async function fillEverythingButTheZone() {
 
 const submit = () => testPage.getByRole('button', { name: 'Create Practice' }).click();
 
+async function setup() {
+	await render(Page, {});
+}
+
 describe("the zone a Practice is created in (#1166)", () => {
 	it('refuses a signup with no zone chosen, and sends nothing', async () => {
-		await render(Page, {});
+		await setup();
 		await fillEverythingButTheZone();
 		await submit();
 
@@ -74,7 +78,7 @@ describe("the zone a Practice is created in (#1166)", () => {
 	});
 
 	it('offers the seven US zones by the name a person would say', async () => {
-		await render(Page, {});
+		await setup();
 
 		const control = testPage.getByRole('combobox', {
 			name: 'What timezone does this Practice work in?'

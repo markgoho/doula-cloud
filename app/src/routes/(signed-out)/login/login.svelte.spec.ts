@@ -113,10 +113,17 @@ afterEach(() => {
  * what just happened -- the spend mints no session, so without a word
  * here she lands on an unchanged log-in form with nothing to show for it.
  */
+// Shared by both blocks below: each test's own construction is the
+// `apiFetch`/`pageState` staging done before this call, not any argument
+// this render would take.
+async function setup() {
+	await render(Page, {});
+}
+
 describe('Staff login -- the way back from a lost authenticator app (#694)', () => {
 	it('offers the recovery-code screen from the credentials step', async () => {
 		apiFetch.mockResolvedValue(jsonResponse('no session', 401));
-		await render(Page, {});
+		await setup();
 
 		await expect
 			.element(testPage.getByRole('link', { name: 'Use a recovery code' }))
@@ -127,7 +134,7 @@ describe('Staff login -- the way back from a lost authenticator app (#694)', () 
 		apiFetch.mockResolvedValue(jsonResponse('no session', 401));
 		signInWithEmailAndPassword.mockRejectedValue({ code: 'auth/multi-factor-auth-required' });
 		getMultiFactorResolver.mockReturnValue({ hints: [{ uid: 'enrollment-1' }] });
-		await render(Page, {});
+		await setup();
 
 		await testPage.getByLabelText('Email').fill('anne-marie@example.test');
 		await testPage.getByLabelText('Password').fill('correct horse');
@@ -142,7 +149,7 @@ describe('Staff login -- the way back from a lost authenticator app (#694)', () 
 	it('says what a spent code did, since spending one mints no session', async () => {
 		apiFetch.mockResolvedValue(jsonResponse('no session', 401));
 		pageState.url = new URL('https://example.test/login?codeSpent=true');
-		await render(Page, {});
+		await setup();
 
 		await expect
 			.element(testPage.getByText('Your recovery code worked.', { exact: false }))
@@ -159,7 +166,7 @@ describe('Staff login -- on-load session probe (#283)', () => {
 		// object that re-states the Membership fields it shares.
 		apiFetch.mockResolvedValue(jsonResponse({ ...session, memberships: [firstMembership] }));
 
-		await render(Page, {});
+		await setup();
 
 		await vi.waitFor(() =>
 			expect(goto).toHaveBeenCalledWith(`/practices/${firstMembership.practiceId}`)
@@ -173,7 +180,7 @@ describe('Staff login -- on-load session probe (#283)', () => {
 		// invent a second one.
 		apiFetch.mockImplementation(toApiResponder(fixture));
 
-		await render(Page, {});
+		await setup();
 
 		await expect.element(testPage.getByRole('heading', { name: 'Choose a Practice' })).toBeVisible();
 		await expect
@@ -185,7 +192,7 @@ describe('Staff login -- on-load session probe (#283)', () => {
 	it('renders the ordinary login form for a signed-out visitor, with no session-ended messaging', async () => {
 		apiFetch.mockResolvedValue(jsonResponse('no matching staff session', 404));
 
-		await render(Page, {});
+		await setup();
 
 		await expect.element(testPage.getByLabelText('Email')).toBeVisible();
 		expect(testPage.getByText(/session/i).elements()).toHaveLength(0);
@@ -198,7 +205,7 @@ describe('Staff login -- on-load session probe (#283)', () => {
 		// side, that failure is indistinguishable from "not signed in".
 		apiFetch.mockResolvedValue(jsonResponse('no matching staff session', 404));
 
-		await render(Page, {});
+		await setup();
 
 		await expect.element(testPage.getByRole('button', { name: 'Log in' })).toBeVisible();
 	});
@@ -206,7 +213,7 @@ describe('Staff login -- on-load session probe (#283)', () => {
 	it('never probes the Client-portal session', async () => {
 		apiFetch.mockResolvedValue(jsonResponse('no matching staff session', 404));
 
-		await render(Page, {});
+		await setup();
 
 		await vi.waitFor(() => expect(apiFetch).toHaveBeenCalledTimes(1));
 		expect(apiFetch).not.toHaveBeenCalledWith('/api/portal/session');

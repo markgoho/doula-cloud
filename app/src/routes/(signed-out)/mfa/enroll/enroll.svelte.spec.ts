@@ -147,9 +147,13 @@ async function confirmCode() {
 	await testPage.getByRole('button', { name: 'Confirm and turn on' }).click();
 }
 
+async function setup() {
+	await render(Page, {});
+}
+
 describe('TOTP enrollment -- step one, re-authenticating', () => {
 	it('asks for the password again rather than assuming a live sign-in', async () => {
-		await render(Page, {});
+		await setup();
 
 		await expect.element(testPage.getByLabelText('Password')).toBeVisible();
 	});
@@ -157,13 +161,13 @@ describe('TOTP enrollment -- step one, re-authenticating', () => {
 	it('sends a visitor with no session at all to the login screen', async () => {
 		apiFetch.mockResolvedValue(jsonResponse('no matching staff session', 404));
 
-		await render(Page, {});
+		await setup();
 
 		await vi.waitFor(() => expect(goto).toHaveBeenCalledWith('/login'));
 	});
 
 	it('refuses an empty submission without calling Identity Platform', async () => {
-		await render(Page, {});
+		await setup();
 
 		await testPage.getByRole('button', { name: 'Continue' }).click();
 
@@ -172,7 +176,7 @@ describe('TOTP enrollment -- step one, re-authenticating', () => {
 	});
 
 	it('reads the email from the session probe, not from a form field', async () => {
-		await render(Page, {});
+		await setup();
 		await testPage.getByLabelText('Password').fill('correct horse');
 
 		await testPage.getByRole('button', { name: 'Continue' }).click();
@@ -184,7 +188,7 @@ describe('TOTP enrollment -- step one, re-authenticating', () => {
 
 	it('shows a wrong password as a step-up refusal', async () => {
 		signInWithEmailAndPassword.mockRejectedValue({ code: 'auth/wrong-password' });
-		await render(Page, {});
+		await setup();
 		await testPage.getByLabelText('Password').fill('wrong');
 
 		await testPage.getByRole('button', { name: 'Continue' }).click();

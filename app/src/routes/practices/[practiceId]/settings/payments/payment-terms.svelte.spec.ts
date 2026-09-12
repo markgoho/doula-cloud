@@ -84,24 +84,26 @@ beforeEach(() => {
 	pageState.url = new URL(fixture.url);
 });
 
+async function setup(terms: { netDays: number; isDefault: boolean }, roles = ['owner']) {
+	mockApi(terms, roles);
+	await render(Page, {});
+}
+
 describe('payments settings screen: payment terms (#768)', () => {
 	it('names the default as a default, rather than as a number the Practice chose', async () => {
-		mockApi({ netDays: 30, isDefault: true });
-		await render(Page, {});
+		await setup({ netDays: 30, isDefault: true });
 
 		await expect.element(testPage.getByText(/That is the default/)).toBeVisible();
 	});
 
 	it("states a Practice's own terms plainly once it has set them", async () => {
-		mockApi({ netDays: 45, isDefault: false });
-		await render(Page, {});
+		await setup({ netDays: 45, isDefault: false });
 
 		await expect.element(testPage.getByText('Invoices are due 45 days after they are raised.')).toBeVisible();
 	});
 
 	it('lets an Owner change the terms, and says the change reaches the next invoice only', async () => {
-		mockApi({ netDays: 30, isDefault: true });
-		await render(Page, {});
+		await setup({ netDays: 30, isDefault: true });
 
 		await expect.element(testPage.getByText(/That is the default/)).toBeVisible();
 		await expect.element(testPage.getByText(/keeps the terms it was billed under/)).toBeVisible();
@@ -120,8 +122,7 @@ describe('payments settings screen: payment terms (#768)', () => {
 	});
 
 	it('refuses an impossible term in the words of the field, before the request is made', async () => {
-		mockApi({ netDays: 30, isDefault: true });
-		await render(Page, {});
+		await setup({ netDays: 30, isDefault: true });
 
 		await expect.element(testPage.getByText(/That is the default/)).toBeVisible();
 		await testPage.getByLabelText('Days to pay').fill('0');
@@ -144,8 +145,7 @@ describe('payments settings screen: payment terms (#768)', () => {
 	});
 
 	it('shows a Doula the terms without a control to change them', async () => {
-		mockApi({ netDays: 45, isDefault: false }, ['doula']);
-		await render(Page, {});
+		await setup({ netDays: 45, isDefault: false }, ['doula']);
 
 		await expect.element(testPage.getByText('Invoices are due 45 days after they are raised.')).toBeVisible();
 		await expect

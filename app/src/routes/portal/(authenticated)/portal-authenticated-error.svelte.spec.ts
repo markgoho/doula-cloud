@@ -9,17 +9,20 @@ const pageState = vi.hoisted(() => ({
 }));
 vi.mock('$app/state', () => ({ page: pageState }));
 
+async function setup(status = 404) {
+	pageState.status = status;
+	await render(ErrorBoundary, {});
+}
+
 describe('portal/(authenticated)/+error.svelte', () => {
 	it('renders the state matching page.status, inside the Portal chrome the layout above it still provides', async () => {
-		pageState.status = 500;
-		await render(ErrorBoundary, {});
+		await setup(500);
 
 		await expect.element(page.getByRole('heading', { name: 'Sorry, there is a problem' })).toBeVisible();
 	});
 
 	it('offers the way out to this Engagement hub', async () => {
-		pageState.status = 404;
-		await render(ErrorBoundary, {});
+		await setup(404);
 
 		const link = page.getByRole('link', { name: 'Go to your care' });
 		await expect.element(link).toBeVisible();

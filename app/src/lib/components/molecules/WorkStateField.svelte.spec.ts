@@ -3,9 +3,13 @@ import { describe, expect, it } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import WorkStateField from './WorkStateField.svelte';
 
+async function setup({ value = '' }: { value?: string } = {}) {
+	await render(WorkStateField, { value });
+}
+
 describe('WorkStateField', () => {
 	it('asks which state the person works from', async () => {
-		await render(WorkStateField, { value: '' });
+		await setup();
 		await expect.element(page.getByLabelText('Which state do you work from?')).toBeVisible();
 	});
 
@@ -13,7 +17,7 @@ describe('WorkStateField', () => {
 	// is not obvious, and it is wired to the control with aria-describedby
 	// rather than merely sitting near it (#415).
 	it('states why it is asked, and describes the control', async () => {
-		await render(WorkStateField, { value: '' });
+		await setup();
 		const select = page.getByLabelText('Which state do you work from?');
 		await expect.element(select).toBeVisible();
 		const control = await select.element();
@@ -24,7 +28,7 @@ describe('WorkStateField', () => {
 	});
 
 	it('offers every state, and starts on none of them', async () => {
-		await render(WorkStateField, { value: '' });
+		await setup();
 		const select = (await page
 			.getByLabelText('Which state do you work from?')
 			.element()) as HTMLSelectElement;
@@ -34,7 +38,7 @@ describe('WorkStateField', () => {
 	});
 
 	it('shows the state it was given', async () => {
-		await render(WorkStateField, { value: 'New York' });
+		await setup({ value: 'New York' });
 		const select = (await page
 			.getByLabelText('Which state do you work from?')
 			.element()) as HTMLSelectElement;

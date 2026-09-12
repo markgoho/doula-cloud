@@ -444,6 +444,16 @@ describe('the Work column (#458)', () => {
 	});
 });
 
+// Bare `render(Page, {})`, not the module's own `setup()`: these two tests
+// drive the exact sequence of `apiFetchWithSession` responses across two
+// fetches (initial load, then "Load more"), which `setup()`'s single
+// `response` parameter answers every call with alike -- there is nothing
+// this block could hand it that would still let the second call differ
+// from the first.
+async function setupLoadMoreRace() {
+	await render(Page, {});
+}
+
 describe('a "Load more" already in flight when the filter changes', () => {
 	/*
 	 * "Load more" is the only fetch that merges into what is on screen, so
@@ -455,7 +465,7 @@ describe('a "Load more" already in flight when the filter changes', () => {
 		apiFetchWithSession.mockResolvedValueOnce(
 			jsonResponse({ items: [clients[0]], hasMore: true, nextCursor: 'cursor-1' })
 		);
-		await render(Page, {});
+		await setupLoadMoreRace();
 		await expect.element(testPage.getByRole('cell', { name: clients[0].name })).toBeVisible();
 
 		// Page two never settles until the test says so.
@@ -487,7 +497,7 @@ describe('a "Load more" already in flight when the filter changes', () => {
 		apiFetchWithSession.mockResolvedValueOnce(
 			jsonResponse({ items: [clients[0]], hasMore: true, nextCursor: 'cursor-1' })
 		);
-		await render(Page, {});
+		await setupLoadMoreRace();
 		await expect.element(testPage.getByRole('cell', { name: clients[0].name })).toBeVisible();
 
 		apiFetchWithSession.mockResolvedValueOnce(textResponse('the practice is gone'));
@@ -504,7 +514,7 @@ describe('a "Load more" already in flight when the filter changes', () => {
 		apiFetchWithSession.mockResolvedValueOnce(
 			jsonResponse({ items: [clients[0]], hasMore: true, nextCursor: 'cursor-1' })
 		);
-		await render(Page, {});
+		await setupLoadMoreRace();
 		await expect.element(testPage.getByRole('cell', { name: clients[0].name })).toBeVisible();
 
 		const pageTwo = Promise.withResolvers<Response>();
