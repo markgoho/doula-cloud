@@ -12,8 +12,11 @@
 -- 00093's own comment says "Nothing in the product updates client_id
 -- today -- a Client with Engagements cannot even be merged away
 -- (client/merge.go)". That sentence is now false. It is not edited
--- there: goose checksums an applied file by content, so the correction
--- lives here instead.
+-- there: goose never re-runs a migration once it is recorded as
+-- applied, so editing 00093's SQL would leave the file and the
+-- database silently disagreeing -- but a comment-only edit carries no
+-- such risk. The correction lives here anyway, next to the change that
+-- caused it, rather than scattered back across migration history.
 --
 -- ---------------------------------------------------------------------
 -- Every foreign key into clients, and what the merge does with it.
