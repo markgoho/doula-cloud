@@ -33,9 +33,12 @@
 // because a stale pidfile still names it.
 //
 // The reap decisions (groupStackProjects/pickReapProjects,
-// discoverPidfiles/pickReapPidfiles) are pure and exported for direct
-// unit testing. main() -- the engine invocation, the compose teardown,
-// the pidfile kills, the fail-open catch -- is exercised as a subprocess
+// discoverPidfiles/pickReapPidfiles) and the filesystem reader behind the
+// latter are exported for direct unit testing -- pickReapProjects/
+// pickReapPidfiles are pure, discoverPidfiles reads the filesystem the
+// same way recentlyTouched/liveWorktreeOffsets already do below. main()
+// -- the engine invocation, the compose teardown, the pidfile kills, the
+// fail-open catch -- is exercised as a subprocess
 // instead; see scripts/e2e-stack-reap.test.ts.
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
@@ -471,6 +474,24 @@ function processCommandLine(pid: number): string | undefined {
   }
 }
 
+// Both reapComposeStacks and reapPidfiles end the same way: name what
+// they removed, and how long nothing live could have claimed it for.
+// Shared so that sentence can't drift between the two. `detail` is the
+// one thing that differs -- what a compose teardown also collects
+// (containers, network, volume) that a pidfile kill has nothing
+// equivalent to say.
+function logReaped(
+  action: string,
+  noun: string,
+  names: string[],
+  detail?: string
+): void {
+  const minutes = Math.round(QUIET_MS / 60000);
+  console.log(
+    `e2e-stack-reap: ${action} ${names.length} orphaned e2e ${noun}(s) -- ${names.join(', ')}${detail ? ` -- ${detail}` : ''} (no worktree touched, and no fresh heartbeat, in the last ${minutes}m claims their port offset)`
+  );
+}
+
 // Tears down every orphaned compose stack in `doomed`. Its own try/catch,
 // separate from reapPidfiles' below, so a container engine that is down
 // or unreachable -- which has nothing to do with whether a host-process
@@ -534,10 +555,7 @@ function reapComposeStacks(
     }
     if (removed.length === 0) return;
 
-    const minutes = Math.round(QUIET_MS / 60000);
-    console.log(
-      `e2e-stack-reap: tore down ${removed.length} orphaned e2e stack(s) -- ${removed.join(', ')} -- containers, network and volume (no worktree touched, and no fresh heartbeat, in the last ${minutes}m claims their port offset)`
-    );
+    logReaped('tore down', 'stack', removed, 'containers, network and volume');
   } catch {
     // Engine unreachable, binary missing, malformed output --
     // none of it may ever surface as a blocked or slowed SessionStart.
@@ -590,10 +608,7 @@ function reapPidfiles(live: ReadonlySet<number>, now: number): void {
     }
     if (killed.length === 0) return;
 
-    const minutes = Math.round(QUIET_MS / 60000);
-    console.log(
-      `e2e-stack-reap: killed ${killed.length} orphaned e2e host process(es) -- ${killed.join(', ')} -- no worktree touched, and no fresh heartbeat, in the last ${minutes}m claims their port offset`
-    );
+    logReaped('killed', 'host process', killed);
   } catch {
     // Anything unexpected here (a tmpdir that can't be read, and so on)
     // -- never surfaced as a blocked or slowed SessionStart.
