@@ -72,6 +72,10 @@ hugo/content/p/
 # on every provision.
 .port-offset
 .firebase.e2e.json
+# The e2e stack's liveness heartbeat (app/e2e/ports.ts's e2eHeartbeatPath,
+# #1193) -- written beside .port-offset while a `test:e2e`/`dev:full` run
+# is actually using the stack, and removed when it stops.
+.e2e-heartbeat
 # golangci-lint's own results cache, scoped per worktree via GOLANGCI_LINT_CACHE
 # (docs/testing.md) so a pruned worktree's stale results can never leak into
 # another worktree's `golangci-lint run` (#587).
