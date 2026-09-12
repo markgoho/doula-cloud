@@ -343,13 +343,13 @@ resource "google_cloud_run_v2_service" "doula_api" {
 # `allUsers` → `roles/run.invoker`: the one binding that makes this service
 # reachable from the internet at all. Firebase Hosting's `/api/**` rewrite
 # forwards an anonymous request, so anything less than `allUsers` turns
-# every API call into a `403` -- that includes `/api/internal/**`, since
+# every API call into a `403` — that includes `/api/internal/**`, since
 # Cloud Run's IAM is per-service rather than per-path and no invoker binding
 # can admit one path and refuse another. ADR-0037 is the boundary that
 # actually refuses an unauthenticated caller there, not this grant: a
 # Google-signed OIDC token, checked in the process against an allowlist of
 # calling service accounts (api/routes_internal_guardrail_test.go).
-# `allUsers` is deliberately correct here, not a gap -- see #1052 for the
+# `allUsers` is deliberately correct here, not a gap — see #1052 for the
 # decision and docs/infrastructure.md's "What this specification found and
 # did not fix" for the full argument.
 #
@@ -361,7 +361,7 @@ resource "google_cloud_run_v2_service" "doula_api" {
 resource "google_cloud_run_v2_service_iam_member" "doula_api_allusers_invoker" {
   location = google_cloud_run_v2_service.doula_api.location
   member   = "allUsers"
-  name     = google_cloud_run_v2_service.doula_api.name
+  name     = google_cloud_run_v2_service.doula_api.id
   project  = google_cloud_run_v2_service.doula_api.project
   role     = "roles/run.invoker"
 }
