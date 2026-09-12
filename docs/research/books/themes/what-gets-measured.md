@@ -24,13 +24,13 @@ What does the product count, what does it refuse to count, and what number stand
 
 **Jobs To Be Done** (Ulwick, 2016). The outcome survey measures importance and satisfaction per desired outcome, on 180 to 3,000 respondents (ch. 4 §IV, p. 98; ch. 6, pp. 170–172). No position on product analytics.
 
-**Landing Page Hot Tips.** No position on measurement. Its usage-figures tip (Tip #83, PDF pp. 154–155) is about what a page displays, carried by the persuasion theme.
+**Landing Page Hot Tips.** Track marketing channels with platform-specific coupon codes (Tip #15, PDF p. 42). Its usage-figures tip (Tip #83, PDF pp. 154–155) is about what a page displays, carried by the persuasion theme.
 
 **Copyhackers: Uplift.** No position on measurement beyond reporting each page's test result.
 
 ## Where the books agree
 
-- Attribution by asking beats attribution by pixel: Walling's "ask how they found you" and Thomas's "clicks may say nothing" point the same way from marketing and from ethics.
+- Attribution by asking beats attribution by pixel: Walling's "ask how they found you", Hot Tips's per-channel coupon codes, and Thomas's "clicks may say nothing" point the same way from marketing and from ethics.
 - A number made a target stops being a number: Thomas states Goodhart's Law; Naval's "systems, not goals" is the same claim in another register.
 - Measure sources, not people: Walling measures channels; nothing in Levels, Walling, or Thomas measures an individual user's behavior except Levels's session streaming, which he himself flags.
 

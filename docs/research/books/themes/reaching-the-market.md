@@ -24,7 +24,7 @@ Where does the founder go, what does the money buy, and does the January site ha
 
 **Landing Page Hot Tips.** Social proof, founding year, usage figures, and the best testimonial above the fold (Tips #52, #82, #83; PDF pp. 100, 153, 154–155). A free teaser and no obstacles to a demo (Tips #40, #46; PDF pp. 83, 91). The first question a SaaS visitor asks is the price (Tip #85, PDF p. 157).
 
-**Design for Cognitive Bias** (Thomas, 2020). No position on channels or spend. Its claims about what a page may do to a reader sit in the persuasion theme.
+**Design for Cognitive Bias** (Thomas, 2020). Online advertising is the rat king of poor incentives: a market of something like $280 billion that loses advertisers sixty-three cents on the dollar; eBay believed its brand-keyword ads returned $245.6 million and was losing $20 million, shown when the ads were paused for three months and search traffic held; Bing's ad spend fell 10 percent for a while and then the market grew, which the author reads as sunk cost plus poor incentives (ch. 3, pp. 45–47). Its claims about what a page may do to a reader sit in the persuasion theme.
 
 **The Best Interface Is No Interface** (Krishna, 2015). No position.
 
@@ -32,7 +32,7 @@ Where does the founder go, what does the money buy, and does the January site ha
 
 - Words before channels: Copyhackers, Hot Tips, and Ulwick all put the reader's own words and stage of awareness ahead of any channel choice; Walling's changelog and Levels's press list both start from a message that already exists.
 - Measure every source and drop what does not convert: Walling in both books; Levels names the analytics tools.
-- Organic before paid: Levels's 100,000-user threshold and Walling's funnel arithmetic both keep paid traffic out at this price and this stage.
+- Organic before paid: Levels's 100,000-user threshold and Walling's funnel arithmetic both keep paid traffic out at this price and this stage; Thomas's eBay and Bing figures say paid search under-delivers even at scale.
 - The founder is the voice: Levels's build-in-public, Naval's permissionless media, Walling's sell-and-build.
 
 ## Where the books conflict
