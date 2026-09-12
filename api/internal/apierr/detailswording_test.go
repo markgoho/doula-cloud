@@ -46,6 +46,46 @@ const apiModuleRoot = "../.."
 // rather than guessed at, so the gate only ever reports a string it
 // actually read.
 func TestDetailsWording(t *testing.T) {
+	offenses := runDetailGate(t, detailOffenses)
+	if len(offenses) > 0 {
+		sort.Strings(offenses)
+		t.Fatalf("APIError.Details message uses a word GOV.UK's error-message rules forbid:\n%s",
+			strings.Join(offenses, "\n"))
+	}
+}
+
+// TestDetailsOpenWithThePersonsNoun is #1189's own gate: a Details value
+// is read beside a control on someone's screen, and the noun that
+// belongs there is the one printed on that control, not the request
+// DTO's own JSON identifier -- "paidOn cannot be in the future" opens
+// with the wire's name for the field; "The date cannot be in the future"
+// opens with the person's. TestDetailsWording's banned-word list catches
+// a wrong register; this catches the narrower, mechanical case #1189
+// found repeated across api/internal -- a value that opens with its own
+// key verbatim, case aside, because it was written by echoing the key
+// rather than reading the screen.
+func TestDetailsOpenWithThePersonsNoun(t *testing.T) {
+	offenses := runDetailGate(t, identifierOffenses)
+	if len(offenses) > 0 {
+		sort.Strings(offenses)
+		t.Fatalf("APIError.Details value opens with the wire's own name for the field, not the person's:\n%s",
+			strings.Join(offenses, "\n"))
+	}
+}
+
+// runDetailGate walks every non-test .go file under apiModuleRoot,
+// grouped by directory so each package's own top-level string constants
+// resolve within it, and hands every file to collect -- the one piece
+// that differs between TestDetailsWording and
+// TestDetailsOpenWithThePersonsNoun.
+//
+// dirImportsApierr is decided per directory, not per file: a package can
+// spread apierr.Write's own inputs across files the way website does --
+// website.go builds the Details map, and only handler.go, a different
+// file in the same package, imports apierr to send it -- so asking a
+// single file whether it imports apierr would miss that site.
+func runDetailGate(t *testing.T, collect func(file *ast.File, fset *token.FileSet, rel string, consts map[string]string, dirImportsApierr bool) []string) []string {
+	t.Helper()
 	root := apiModuleRoot
 
 	byDir := map[string][]string{}
@@ -77,8 +117,12 @@ func TestDetailsWording(t *testing.T) {
 		}
 
 		consts := map[string]string{}
+		dirImportsApierr := false
 		for _, file := range files {
 			collectStringConsts(file, consts)
+			if importsApierr(file) {
+				dirImportsApierr = true
+			}
 		}
 
 		for i, file := range files {
@@ -86,15 +130,10 @@ func TestDetailsWording(t *testing.T) {
 			if err != nil {
 				t.Fatalf("rel %s: %v", paths[i], err)
 			}
-			offenses = append(offenses, detailOffenses(file, fset, rel, consts)...)
+			offenses = append(offenses, collect(file, fset, rel, consts, dirImportsApierr)...)
 		}
 	}
-
-	if len(offenses) > 0 {
-		sort.Strings(offenses)
-		t.Fatalf("APIError.Details message uses a word GOV.UK's error-message rules forbid:\n%s",
-			strings.Join(offenses, "\n"))
-	}
+	return offenses
 }
 
 // collectStringConsts records every top-level `const name = "literal"` in
@@ -129,7 +168,7 @@ func collectStringConsts(file *ast.File, into map[string]string) {
 // turns that one string into the single Details entry itself (#1188), so
 // a call site that moves onto it carries no map[string]string literal of
 // its own for this gate to read the old way.
-func detailOffenses(file *ast.File, fset *token.FileSet, rel string, consts map[string]string) []string {
+func detailOffenses(file *ast.File, fset *token.FileSet, rel string, consts map[string]string, _ bool) []string {
 	var offenses []string
 	check := func(expr ast.Expr) {
 		text, ok := stringValue(expr, consts)
@@ -170,6 +209,118 @@ func detailOffenses(file *ast.File, fset *token.FileSet, rel string, consts map[
 		return true
 	})
 	return offenses
+}
+
+// identifierOffenses reports every Details value in file that opens with
+// its own key as a bare identifier -- the wire's own name for the field,
+// which docs/api-design.md section 7 rule 4 reserves for Message, not
+// Details (#1189). Reads the same three shapes detailOffenses does, this
+// time keeping the key beside the value: the values of a
+// map[string]string composite literal, an assignment into one built up
+// key by key, and the field/message pair of an apierr.WriteFieldError
+// call. A key this cannot resolve -- contracts/send.go's per-merge-field
+// key, built from a loop variable rather than a literal -- is skipped
+// rather than guessed at, the same restraint stringValue already applies
+// to a value it cannot read.
+//
+// The composite-literal and keyed-assignment shapes are read from
+// function bodies only, gated on dirImportsApierr (decided per package
+// directory by runDetailGate, not per file, since a package can spread
+// apierr.Write's own inputs across files the way website does), and
+// never from a package-level var: clientfieldtemplate/validate.go's own
+// structuralFieldNames is a map[string]string too, matching a Practice's
+// typed label back to the ADR-0017 structural fact it shadows, and nine
+// of its entries read back their own key by construction ("given name"
+// maps to structuralGivenName, itself "given name") -- but it is a
+// package-level lookup table declared once, not a per-request Details
+// map a handler builds, and every real Details map in api/internal is
+// the latter: a local variable inside a function body, or a literal
+// passed inline as a call argument. Restricting the walk to function
+// bodies reads structuralFieldNames as what it is, a var declaration
+// nothing here inspects, rather than nine Details entries that happen to
+// name their own field. The WriteFieldError call shape needs no such
+// restriction: it can only ever appear inside a function body already.
+func identifierOffenses(file *ast.File, fset *token.FileSet, rel string, consts map[string]string, dirImportsApierr bool) []string {
+	var offenses []string
+	check := func(keyExpr, valueExpr ast.Expr) {
+		key, ok := stringValue(keyExpr, consts)
+		if !ok {
+			return
+		}
+		text, ok := stringValue(valueExpr, consts)
+		if !ok {
+			return
+		}
+		if opensWithIdentifier(text, key) {
+			offenses = append(offenses,
+				fmt.Sprintf("%s:%d: %q opens with %q, its own key", rel, fset.Position(valueExpr.Pos()).Line, text, key))
+		}
+	}
+
+	visit := func(n ast.Node) bool {
+		switch node := n.(type) {
+		case *ast.CompositeLit:
+			if !dirImportsApierr || !isStringMapType(node.Type) {
+				return true
+			}
+			for _, elt := range node.Elts {
+				if kv, ok := elt.(*ast.KeyValueExpr); ok {
+					check(kv.Key, kv.Value)
+				}
+			}
+		case *ast.AssignStmt:
+			if !dirImportsApierr {
+				return true
+			}
+			for i, lhs := range node.Lhs {
+				index, ok := lhs.(*ast.IndexExpr)
+				if !ok || i >= len(node.Rhs) {
+					continue
+				}
+				check(index.Index, node.Rhs[i])
+			}
+		case *ast.CallExpr:
+			if isWriteFieldErrorCall(node) && len(node.Args) >= 5 {
+				check(node.Args[3], node.Args[4])
+			}
+		}
+		return true
+	}
+
+	for _, decl := range file.Decls {
+		fn, ok := decl.(*ast.FuncDecl)
+		if !ok || fn.Body == nil {
+			continue
+		}
+		ast.Inspect(fn.Body, visit)
+	}
+	return offenses
+}
+
+// importsApierr reports whether file imports apierr, by import path
+// rather than its local name, so an aliased import still counts.
+func importsApierr(file *ast.File) bool {
+	const apierrPath = `"doula-cloud/api/internal/apierr"`
+	for _, imp := range file.Imports {
+		if imp.Path.Value == apierrPath {
+			return true
+		}
+	}
+	return false
+}
+
+// opensWithIdentifier reports whether text opens with key as a bare
+// word, case aside -- "paidOn cannot be in the future" opens with
+// "paidOn"; "Enter the date received..." does not, and neither does
+// "Timezone must be..." open with "time" (a prefix of "timezone" is not
+// the whole key, so it is not a match; "timezone" itself would be).
+func opensWithIdentifier(text, key string) bool {
+	lower := strings.ToLower(strings.TrimSpace(text))
+	lowerKey := strings.ToLower(key)
+	if lowerKey == "" || !strings.HasPrefix(lower, lowerKey) {
+		return false
+	}
+	return len(lower) == len(lowerKey) || !isWordByte(lower[len(lowerKey)])
 }
 
 // isWriteFieldErrorCall reports whether call is apierr.WriteFieldError(...).
@@ -272,7 +423,7 @@ func f(w W) {
 		t.Fatalf("consts = %v, want MsgBad resolved", consts)
 	}
 
-	got := detailOffenses(file, fset, "p.go", consts)
+	got := detailOffenses(file, fset, "p.go", consts, true)
 	sort.Strings(got)
 	want := []string{
 		`p.go:10: "Please select a role" contains "please"`,
@@ -288,5 +439,75 @@ func f(w W) {
 		if got[i] != want[i] {
 			t.Fatalf("offenses = %v, want %v", got, want)
 		}
+	}
+}
+
+// TestIdentifierOffensesCatchesABareIdentifierOpener is
+// TestDetailsOpenWithThePersonsNoun's own gate proof, the counterpart to
+// TestDetailOffensesCatchesABannedWord above. It covers all three shapes
+// identifierOffenses reads, a same-package const resolved through
+// consts, a key it cannot resolve (skipped rather than guessed at), and
+// a near-miss that must not report: a value that merely contains its key
+// after the first word, and one whose opening word only shares a prefix
+// with the key ("time" is not "timezone").
+func TestIdentifierOffensesCatchesABareIdentifierOpener(t *testing.T) {
+	const src = `package p
+
+import "doula-cloud/api/internal/apierr"
+
+const MsgBad = "netDays is out of range"
+
+func f(w W) {
+	Write(w, map[string]string{"paidOn": "paidOn cannot be in the future"})
+	Write(w, map[string]string{"netDays": MsgBad})
+	Write(w, map[string]string{"timezone": "time to choose a real one"})
+	Write(w, map[string]string{"note": "Enter a note for the record, note it well"})
+	details := map[string]string{}
+	details["mode"] = "mode must be \"own\" or \"hosted\""
+	details[dynamicKey] = "reason cannot be blank"
+	apierr.WriteFieldError(w, 400, CodeInvalidArgument, "reason", "reason cannot be blank")
+	apierr.WriteFieldError(w, 400, CodeInvalidArgument, "reason", "Enter a reason for reversing this payment")
+}
+`
+	fset := token.NewFileSet()
+	file, err := parser.ParseFile(fset, "p.go", src, 0)
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	consts := map[string]string{}
+	collectStringConsts(file, consts)
+
+	got := identifierOffenses(file, fset, "p.go", consts, true)
+	sort.Strings(got)
+	want := []string{
+		`p.go:13: "mode must be \"own\" or \"hosted\"" opens with "mode", its own key`,
+		`p.go:15: "reason cannot be blank" opens with "reason", its own key`,
+		`p.go:8: "paidOn cannot be in the future" opens with "paidOn", its own key`,
+		`p.go:9: "netDays is out of range" opens with "netDays", its own key`,
+	}
+	sort.Strings(want)
+	if len(got) != len(want) {
+		t.Fatalf("offenses = %v, want %v", got, want)
+	}
+	for i := range got {
+		if got[i] != want[i] {
+			t.Fatalf("offenses = %v, want %v", got, want)
+		}
+	}
+
+	// dirImportsApierr=false is website.go's own shape: a directory
+	// where some other file, not this one, imports apierr and sends what
+	// this one builds. The map/assignment offenses go dark -- there is
+	// nothing here to tell this map from clientfieldtemplate's
+	// structuralFieldNames -- but a WriteFieldError call still can't
+	// exist in a file that doesn't import apierr, so that shape is
+	// unaffected either way.
+	gotUnimported := identifierOffenses(file, fset, "p.go", consts, false)
+	sort.Strings(gotUnimported)
+	wantUnimported := []string{
+		`p.go:15: "reason cannot be blank" opens with "reason", its own key`,
+	}
+	if len(gotUnimported) != len(wantUnimported) || gotUnimported[0] != wantUnimported[0] {
+		t.Fatalf("offenses with dirImportsApierr=false = %v, want %v", gotUnimported, wantUnimported)
 	}
 }

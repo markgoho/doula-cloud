@@ -30,12 +30,12 @@ import (
 
 // MsgNotRecognized is what a person reads when the zone she sent is not
 // one the IANA database names -- docs/api-design.md section 7 rule 4: it
-// starts with the field's own noun, says what to do, and avoids the four
-// words apierr's TestDetailsWording gates on. The settings screen and the
-// signup form both offer a list, so the only way to reach this is a
-// hand-built request, or a browser reporting a zone this database does
-// not carry.
-const MsgNotRecognized = "Timezone must be a zone name from the IANA database, such as America/New_York"
+// says what to do, and opens with "Enter", not "timezone", the wire's own
+// name for the field (#1189). apierr's TestDetailsWording still bans the
+// four words it always has. The settings screen and the signup form both
+// offer a list, so the only way to reach this is a hand-built request, or
+// a browser reporting a zone this database does not carry.
+const MsgNotRecognized = "Enter a timezone from the IANA database, such as America/New_York"
 
 // ErrNotRecognized is what Parse reports for a name the IANA database
 // does not carry, and for the two names time.LoadLocation answers

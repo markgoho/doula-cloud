@@ -218,7 +218,7 @@ describe('recordPayment', () => {
 				{
 					code: 'INVALID_ARGUMENT',
 					message: 'note is required when method is "other"',
-					details: { note: 'note is needed when method is "other"' }
+					details: { note: 'Enter a note for "Other"' }
 				},
 				400
 			)
@@ -227,7 +227,7 @@ describe('recordPayment', () => {
 		const rejection = recordPayment(fetcher, 'practice-1', 'inv-1', { method: 'other', paidOn: '2026-01-01' });
 
 		await expect(rejection).rejects.toBeInstanceOf(RefusalError);
-		await expect(rejection).rejects.toMatchObject({ details: { note: 'note is needed when method is "other"' } });
+		await expect(rejection).rejects.toMatchObject({ details: { note: 'Enter a note for "Other"' } });
 	});
 });
 
@@ -277,7 +277,11 @@ describe('reversePayment', () => {
 	it('throws a RefusalError carrying the refused field, per PostReversePaymentHandler\'s details map', async () => {
 		const fetcher = vi.fn().mockResolvedValue(
 			jsonResponse(
-				{ code: 'INVALID_ARGUMENT', message: 'reason cannot be blank', details: { reason: 'reason cannot be blank' } },
+				{
+					code: 'INVALID_ARGUMENT',
+					message: 'reason cannot be blank',
+					details: { reason: 'Enter a reason for reversing this payment' }
+				},
 				400
 			)
 		);
@@ -285,7 +289,9 @@ describe('reversePayment', () => {
 		const rejection = reversePayment(fetcher, 'practice-1', 'inv-1', 'pay-1', '');
 
 		await expect(rejection).rejects.toBeInstanceOf(RefusalError);
-		await expect(rejection).rejects.toMatchObject({ details: { reason: 'reason cannot be blank' } });
+		await expect(rejection).rejects.toMatchObject({
+			details: { reason: 'Enter a reason for reversing this payment' }
+		});
 	});
 });
 
