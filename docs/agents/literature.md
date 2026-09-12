@@ -50,7 +50,7 @@ A read-back is one file, `docs/research/books/<slug>.md`, written in American En
 1. **Source line.** Title, author, publisher, year, ISBN where the book has one, and the date the agent read it. Then the page rule for this file: whether page numbers are the printed page or the PDF index, and the offset between them, found once by opening a page that carries both.
 2. **What this file is for.** Two sentences: this is the evidence, it records no Doula Cloud decision. Where the book touches something the repo already decided, the ADR or ticket is named and the decision belongs to that record.
 3. **The claim.** The book's thesis in the author's own frame, and what the author says the claim is not.
-4. **The argument, chapter by chapter.** What each chapter claims, what evidence it offers, and the examples it rests on. Every claim carries its chapter and, where the source has one, its page. Quotations are short phrases only; the book is under copyright.
+4. **The argument, chapter by chapter.** What each chapter claims, what evidence it offers, and the examples it rests on. Every claim carries its chapter and, where the source has one, its page. Quotations of the book are short phrases only, a few words and never a sentence, because the book is under copyright; a quotation of a repo record (an ADR, a ticket, a source comment) or of an outside source cited in section 7 may run longer, since the rule is about the book.
 5. **The book's own exceptions.** Where the author limits the claim, admits a counter-case, or says a rule does not apply. These are the parts a later reader most needs and the parts a summary most often drops.
 6. **Where the book touches this repo.** Each place a claim meets a recorded decision, a ticket, or a screen that exists. The format is: the claim and its page, then the record that decided the matter, then nothing else. No ruling. No "so the product should".
 7. **What has changed since publication.** For each example, tool, or figure the book leans on: is it still true, and what is the later evidence. A book applied without this check was one of the named failures of the first attempt.
@@ -69,6 +69,10 @@ The test for every sentence in sections 3 through 8 is: does it report what the 
 - **The read-back is landed by PR** through the worktree flow, one book per PR, `Closes #N` in the body where a ticket asked for it.
 - **The book table above is updated in the same PR**, moving the row to **read-back**.
 
+## Theme syntheses
+
+A synthesis lives at `docs/research/books/themes/<slug>.md`, one file per theme, written once every read-back on the track is on trunk. It has five parts: what the file is for, the question the theme asks, what each book on the track claims with page citations, where the books agree and where they conflict, and what the repo already decided with the record named. It contains no ruling.
+
 ## The review before merge
 
 A second agent, not the author, reviews every read-back and every theme synthesis before it merges. Two checks, both recorded as a PR comment:
@@ -76,4 +80,6 @@ A second agent, not the author, reviews every read-back and every theme synthesi
 1. **No ruling.** Every sentence in sections 3 through 8 is read for a statement of what Doula Cloud should, must, or ought to do. One such sentence fails the review. The fix is to name the record that decided the matter, or to cut the sentence.
 2. **Citations.** Ten claims are chosen across the file, weighted toward section 6, and each is opened at the cited page in the PDF. A claim the page does not support, or a wrong page, fails the review. The reviewer applies the file's own page rule from the source line.
 
-A synthesis has a third check: **every book on the track is present.** A theme synthesis that omits a book's position on the theme, where the book has one, is incomplete.
+A synthesis has a third check: **every book on the track is present.** A theme synthesis that omits a book's position on the theme, where the book has one, is incomplete. A synthesis names a book with no position on the theme as having none, so the reviewer can tell an omission from an absence, and checks a sample of those calls against the read-back's sections 4 and 6.
+
+The template check that the reviewer also runs, recorded in the same comment: the eight sections in order and no others, the page rule stated in the source line, every paragraph one unbroken line, American spelling with `spelling:ignore` on any verbatim non-American line, book quotations at phrase length, and the book table in this file untouched by the PR.
