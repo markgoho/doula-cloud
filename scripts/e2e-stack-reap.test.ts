@@ -632,11 +632,23 @@ describe('looksLikeOurProcess', () => {
 });
 
 describe('e2e-stack-reap hook (subprocess, fail-open behavior)', () => {
+  /*
+   * TMPDIR pointed at an empty fixture dir, not neutered like
+   * CONTAINER_ENGINE below: reapPidfiles needs no container engine at
+   * all, so nothing else here stops it from scanning os.tmpdir() for
+   * real. Without this override these tests would run the real pidfile
+   * sweep against whatever this machine's actual os.tmpdir() holds --
+   * possibly another live agent's own pidfiles -- on every `bun test
+   * scripts/`, making `expect(stdout).toBe('')` nondeterministic and,
+   * far worse, capable of actually killing something. Node/Bun's
+   * os.tmpdir() reads TMPDIR on POSIX before falling back to `/tmp`.
+   */
   test('fails open when the container engine is unreachable', async () => {
     const { exitCode, stdout } = await invoke({
       ...process.env,
       DOCKER_HOST: 'unix:///nonexistent/e2e-stack-reap-test.sock',
       CONTAINER_ENGINE: '/nonexistent-binary-e2e-stack-reap-test',
+      TMPDIR: temporaryPidfileDir(),
     });
     expect(exitCode).toBe(0);
     expect(stdout).toBe('');
@@ -654,6 +666,7 @@ describe('e2e-stack-reap hook (subprocess, fail-open behavior)', () => {
     const env: Record<string, string | undefined> = {
       ...process.env,
       CONTAINER_ENGINE: '/nonexistent-binary-e2e-stack-reap-test',
+      TMPDIR: temporaryPidfileDir(),
     };
     delete env.DOCKER_HOST;
     const { exitCode, stdout } = await invoke(env);
