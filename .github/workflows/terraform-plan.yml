@@ -29,13 +29,51 @@ on:
     - cron: '41 9 * * *'
   workflow_dispatch: {}
 
-# Matches ci.yml's own top-level pattern: scoped per ref, not global, so an
-# unrelated PR's plan is never queued behind this one. Genuine cross-ref
-# contention on the GCS state lock is rare (one person, one project) and is
-# already handled by `-lock-timeout` below, which waits instead of erroring.
+# Still scoped per ref, like ci.yml. #1202 checked this against the run
+# history and the old comment here had it right, as far as it went:
+# genuine cross-ref (two different PRs) contention on the GCS state lock
+# has not actually happened -- the one real "Error acquiring the state
+# lock" failure found (run 34486076955, on #1200) was CI waiting on a
+# *laptop* `apply` (`Who: mgoho@MGOHO-M-VT9F`, `Operation:
+# OperationTypeApply`), not another CI run. What the old comment got
+# wrong was believing `-lock-timeout` already handled that case -- 120s
+# did not: the lock had been held over six minutes by the time CI gave
+# up. Laptop applies are a case the old comment never considered, not one
+# it got backwards.
+#
+# The actual gap this ticket fixes was
+# `cancel-in-progress: ${{ github.event_name == 'pull_request' }}`: a new
+# push to the same PR was canceling that PR's own in-progress plan, and a
+# run canceled *while it holds the GCS lock* (mid `terraform plan`) can
+# strand that lock for the next run to inherit -- a worse failure than
+# waiting. `cancel-in-progress` is `false` unconditionally now, for every
+# trigger, so nothing this workflow runs is ever canceled once it may be
+# holding the lock.
+#
+# Cross-ref CI-vs-CI contention not having happened yet doesn't make it
+# safe to leave unhandled -- up to nine agent worktrees can land PRs
+# close together, and this project doesn't rank fixes by whether the
+# failure has been observed (pre-launch, no users; see CLAUDE.md). A
+# global `concurrency` group was the first design, so that any two
+# refs' plans would queue against each other the same way pushes to one
+# ref already do. `actionlint` 1.7.12 -- pinned in ci.yml, and a required
+# check -- refuses that: GitHub's `queue: max` (more than one pending run
+# per group, documented at
+# https://docs.github.com/en/actions/using-jobs/using-concurrency) is
+# real but newer than what this repo's toolchain recognizes, so it is not
+# usable yet. Absent that, the group only ever holds one pending run
+# regardless of scope, and cancels it outright when a third run arrives
+# behind the second -- exactly the cancel-a-non-runner-but-still-stuck
+# failure this fix is trying to get away from.
+#
+# So the group stays per-ref, and what serializes CI-vs-CI overlap, for
+# however many refs land at once, is the state lock's own wait, below: a
+# much longer `-lock-timeout` than 120s. GCS's lock has no queue-depth
+# cap the way GitHub Actions' pending queue does, so this is the one
+# mechanism here that actually scales past two overlapping runs.
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  cancel-in-progress: false
 
 jobs:
   plan:
@@ -52,7 +90,11 @@ jobs:
     # Verified against #1023, an open Dependabot PR, before relying on it.
     if: github.actor != 'dependabot[bot]'
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    # 10 -> 15: room for the 480s `-lock-timeout` in the "Terraform plan"
+    # step below, plus setup, on top of the plan itself. `timeout-minutes`
+    # only counts once a job starts running, never time spent queued
+    # behind `concurrency`, so this is not shared with any other run.
+    timeout-minutes: 15
     permissions:
       contents: read
       id-token: write
@@ -136,13 +178,34 @@ jobs:
           TF_IN_AUTOMATION: 'true'
           EVENT_NAME: ${{ github.event_name }}
         run: |
+          # 120s -> 480s (#1202). The `concurrency` group above stays
+          # per-ref, so it does not serialize two *different* PRs' plans
+          # against each other -- this wait is what does, for however many
+          # of them land at once, because GCS's lock has no queue-depth
+          # cap the way GitHub Actions' own pending queue does. Plans here
+          # run in well under a minute once they have the lock (the
+          # earlier 120s failures were startup + a two-minute wait, not a
+          # slow plan), so 480s covers several overlapping runs waiting
+          # their turn, and also gives more room than before for the case
+          # that isn't CI-vs-CI at all: a laptop `apply` (ADR-0034)
+          # holding the lock, which no `concurrency` group can ever see.
+          # It is a longer wait, not a guarantee -- a lock held past 480s
+          # still fails, legibly, below.
           set +e
-          terraform plan -detailed-exitcode -input=false -no-color -lock-timeout=120s -out=tfplan > plan-raw.log 2>&1
+          terraform plan -detailed-exitcode -input=false -no-color -lock-timeout=480s -out=tfplan > plan-raw.log 2>&1
           plan_exit=$?
           set -e
 
           if [ "$plan_exit" -eq 1 ]; then
-            echo "terraform plan failed to run (not a drift finding):"
+            if grep -q "Error acquiring the state lock" plan-raw.log; then
+              echo "terraform plan could not get the state lock -- someone else is using it right now, not a drift finding:"
+              grep -A6 "^Lock Info:" plan-raw.log || true
+              echo
+              echo "If Who: above names a laptop (an interactive 'apply', per ADR-0034), this is self-resolving: rerun this check once that apply finishes."
+              echo "If Who: names a GitHub Actions runner from a run that is no longer running, or Created: is old with nothing left holding it, the lock may be stranded -- see docs/infrastructure.md, the State section, for how to clear it with terraform force-unlock."
+            else
+              echo "terraform plan failed to run (not a drift finding):"
+            fi
             cat plan-raw.log
             exit 1
           fi
