@@ -991,3 +991,65 @@ func TestCreateHandler_JSONRequestStillTextOnly(t *testing.T) {
 		t.Fatalf("unexpected attachment on JSON-only create: %+v", created)
 	}
 }
+
+// TestListHandler_UnchangedForASenderWhoDeletedHerLogin is #1198 AC2: the
+// Staff-side thread passes "" into listMessages' unresolvedStaffSenderName
+// parameter, the same value the code produced before that parameter
+// existed, so this locks in that the fix left this side alone. It also
+// documents the actual (not the ticket's assumed) Staff-side behavior:
+// staff_practice_visibility (00002) reaches a staff row only through a
+// live practice_memberships row, same as the gap #887/#1150 named
+// activity.DepartedStaffName ("a former colleague") for the Activity
+// ledger -- a Staff reader here does not see "Deleted Staff Member",
+// because RemoveMembership (run by both a plain departure and ADR-0033's
+// login deletion) makes the row unreachable before deleted_at is ever
+// checked. That gap is real and pre-existing, filed separately as #1198
+// found it rather than fixed it, since fixing it means changing what the
+// Staff-side thread shows -- exactly what this ticket's AC2 forbids.
+func TestListHandler_UnchangedForASenderWhoDeletedHerLogin(t *testing.T) {
+	const identityUIDSender = "staff-side-deleted-login-sender"
+	const identityUIDReader = "staff-side-deleted-login-reader"
+	const body = "See you Thursday."
+
+	db := testdb.New(t)
+	practiceID := testdb.SeedPractice(t, db, "Staff Side Deleted Login Practice")
+	senderID := testdb.SeedNamedStaffAtPractice(t, db, practiceID, identityUIDSender, "Maya Okonkwo", []string{doulaRole}, "employee")
+	testdb.SeedStaffAtPractice(t, db, practiceID, identityUIDReader, []string{"owner"}, "employee")
+	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Nadia Client", "nadia-staff-side@example.com")
+
+	senderSrv, senderSession := newServer(t, db, identityUIDSender)
+	defer senderSrv.Close()
+	b, _ := json.Marshal(message.CreateRequest{Body: body})
+	created := authedPost(t, senderSession, senderSrv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/messages", b)
+	defer created.Body.Close()
+	if created.StatusCode != http.StatusCreated {
+		t.Fatalf("create status = %d, want %d", created.StatusCode, http.StatusCreated)
+	}
+
+	testdb.RemoveMembership(t, db, senderID)
+	if _, err := db.Admin.ExecContext(t.Context(),
+		`UPDATE staff SET name = $1, deleted_at = now() WHERE id = $2`,
+		staffauth.DeletedStaffName, senderID,
+	); err != nil {
+		t.Fatalf("redact staff row: %v", err)
+	}
+
+	readerSrv, readerSession := newServer(t, db, identityUIDReader)
+	defer readerSrv.Close()
+	resp := authedGet(t, readerSession, readerSrv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/messages")
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
+	}
+
+	var thread message.ListResponse
+	if err := json.NewDecoder(resp.Body).Decode(&thread); err != nil {
+		t.Fatalf("decode thread: %v", err)
+	}
+	if len(thread.Items) != 1 {
+		t.Fatalf("thread = %+v, want the one Message she sent", thread.Items)
+	}
+	if thread.Items[0].SenderName != "" {
+		t.Fatalf("senderName = %q, want the Staff side's unchanged empty name", thread.Items[0].SenderName)
+	}
+}

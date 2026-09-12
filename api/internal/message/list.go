@@ -103,7 +103,10 @@ func ListHandler() http.Handler {
 			after = &c
 		}
 
-		items, hasMore, err := listMessages(r.Context(), tx, engagementID, after)
+		// "" is the Staff-side reader: unchanged from before
+		// unresolvedStaffSenderName existed (see listMessages' own doc
+		// comment).
+		items, hasMore, err := listMessages(r.Context(), tx, engagementID, after, "")
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
@@ -151,7 +154,19 @@ const listMessagesAfterQuery = `SELECT m.id, m.sender_type, m.sender_id,
 // can't leak rows. sender_id has no FK (it's polymorphic across staff and
 // clients), so sender name resolution needs two LEFT JOINs gated on
 // sender_type rather than visit.listVisits' single JOIN.
-func listMessages(ctx context.Context, tx *sql.Tx, engagementID string, after *messageCursor) ([]Message, bool, error) {
+//
+// unresolvedStaffSenderName is what a Staff sender's row renders as when
+// the LEFT JOIN above finds no row -- 00111's client_portal_sees_staff
+// policy refuses a Doula who deleted her own login (ADR-0033) rather
+// than reaching her redacted row, so a Client-facing caller has no name
+// to read for exactly that sender. ListHandler (Staff-facing) passes ""
+// -- a Staff reader is entitled to the redacted row itself and reaches
+// it through a different, unfiltered policy, so this branch is not
+// reachable from that side today; empty is what it showed before this
+// parameter existed, unchanged. ClientListHandler (#1198) passes
+// portal.StaffActorDisplayName, the same word listPortalVisits already
+// stands in with for the identical gap.
+func listMessages(ctx context.Context, tx *sql.Tx, engagementID string, after *messageCursor, unresolvedStaffSenderName string) ([]Message, bool, error) {
 	var rows *sql.Rows
 	var err error
 	if after != nil {
@@ -176,9 +191,12 @@ func listMessages(ctx context.Context, tx *sql.Tx, engagementID string, after *m
 			// coverage:ignore reason: row scan failure, not exercised by unit tests
 			return nil, false, fmt.Errorf("message: scan message row: %w", err)
 		}
-		if staffName.Valid {
+		switch {
+		case staffName.Valid:
 			it.SenderName = staffName.String
-		} else {
+		case it.SenderType == senderTypeStaff:
+			it.SenderName = unresolvedStaffSenderName
+		default:
 			it.SenderName = client.PreferredName(clientGivenName.String, clientPreferredName.String)
 		}
 		items = append(items, it)

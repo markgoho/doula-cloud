@@ -41,7 +41,7 @@ type Visit struct {
 	// DoulaName is the name of the Doula who is coming -- CONTEXT.md's
 	// own settled word for this surface ("a Client sees the visits on her
 	// own Engagement, past and scheduled, with who is coming").
-	// Deliberately NOT the Activity ledger's staffActorDisplayName
+	// Deliberately NOT the Activity ledger's StaffActorDisplayName
 	// redaction: that rule answers "never who inside the Practice did
 	// what" about a Practice's own roster acts, and who is coming to her
 	// home is a fact about her care, not about the roster.
@@ -142,7 +142,7 @@ func listPortalVisits(ctx context.Context, tx *sql.Tx, engagementID string, afte
 		 FROM visits v
 		 LEFT JOIN staff s ON s.id = v.staff_id
 		 WHERE v.engagement_id = $1 AND v.scheduled_at IS NOT NULL`
-	args := []any{engagementID, staffActorDisplayName}
+	args := []any{engagementID, StaffActorDisplayName}
 	if after != nil {
 		query += ` AND (v.scheduled_at, v.id) < ($3, $4) ORDER BY v.scheduled_at DESC, v.id DESC LIMIT $5`
 		args = append(args, after.At, after.ID, visitPageSize+1)

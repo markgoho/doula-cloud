@@ -460,3 +460,60 @@ func TestClientListHandler_NamesASenderWhoHasLeftThePractice(t *testing.T) {
 		t.Fatalf("senderName = %q, want the name of the Doula who wrote it", thread.Items[0].SenderName)
 	}
 }
+
+// TestClientListHandler_StandsInForASenderWhoDeletedHerLogin is #1198.
+// 00111's client_portal_sees_staff policy deliberately refuses a Staff
+// row once ADR-0033 has redacted it (deleted_at IS NOT NULL), so the
+// portal thread's LEFT JOIN finds no row for that sender at all -- unlike
+// TestClientListHandler_NamesASenderWhoHasLeftThePractice above, where
+// the row is still reachable through the Message itself. The Visits
+// screen already stands in with "Your practice" for this same gap
+// (TestVisitsHandler_StandsInForADoulaWhoDeletedHerLogin); the Message
+// thread must not disagree by showing an empty name instead.
+func TestClientListHandler_StandsInForASenderWhoDeletedHerLogin(t *testing.T) {
+	const identityUIDStaff = "deleted-login-sender-staff"
+	const identityUIDClient = "deleted-login-sender-client"
+	const body = "See you Thursday."
+
+	db := testdb.New(t)
+	practiceID := testdb.SeedPractice(t, db, "Deleted Login Sender Practice")
+	staffID := testdb.SeedNamedStaffAtPractice(t, db, practiceID, identityUIDStaff, "Maya Okonkwo", []string{doulaRole}, "employee")
+	clientID, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Nadia Client", "nadia-deleted-sender@example.com")
+	testdb.SeedPortalUser(t, db, testdb.PortalUID(identityUIDClient), clientID)
+
+	staffSrv, staffSession := newServer(t, db, identityUIDStaff)
+	defer staffSrv.Close()
+	staffBody, _ := json.Marshal(message.CreateRequest{Body: body})
+	created := authedPost(t, staffSession, staffSrv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/messages", staffBody)
+	defer created.Body.Close()
+	if created.StatusCode != http.StatusCreated {
+		t.Fatalf("staff create status = %d, want %d", created.StatusCode, http.StatusCreated)
+	}
+
+	testdb.RemoveMembership(t, db, staffID)
+	if _, err := db.Admin.ExecContext(t.Context(),
+		`UPDATE staff SET name = $1, deleted_at = now() WHERE id = $2`,
+		staffauth.DeletedStaffName, staffID,
+	); err != nil {
+		t.Fatalf("redact staff row: %v", err)
+	}
+
+	portalSrv, portalSession := newPortalServer(t, db, identityUIDClient)
+	defer portalSrv.Close()
+	resp := authedGet(t, portalSession, portalSrv.URL+"/api/portal/engagements/"+engagementID+"/messages")
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
+	}
+
+	var thread message.ListResponse
+	if err := json.NewDecoder(resp.Body).Decode(&thread); err != nil {
+		t.Fatalf("decode thread: %v", err)
+	}
+	if len(thread.Items) != 1 {
+		t.Fatalf("thread = %+v, want the one Message she was sent", thread.Items)
+	}
+	if thread.Items[0].SenderName != "Your practice" {
+		t.Fatalf("senderName = %q, want the Practice standing in for a name that no longer exists", thread.Items[0].SenderName)
+	}
+}
