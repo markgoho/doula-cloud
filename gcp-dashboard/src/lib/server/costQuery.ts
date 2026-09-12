@@ -5,6 +5,8 @@
  * dashboard shows, so a newly-enabled service appears with no code change.
  */
 
+import { billingPeriodMonth } from './billingPeriod.ts';
+
 /**
  * The GCP project that owns the billing-export dataset, and the project
  * BigQuery bills the query itself to. Application Default Credentials carry
@@ -48,15 +50,23 @@ export interface CostQueryRow {
 }
 
 /**
- * Cost per service/SKU for the current billing period.
+ * Cost per service/SKU for the billing period `now` falls in.
  *
  * `invoice.month` (a `YYYYMM` string) is the billing period itself, rather
  * than a date range over `usage_start_time`: it is what the invoice will be
  * cut from, and it keeps a late-arriving line item in the period it belongs
  * to. `project.number` is a STRING column in the Standard export schema, so
  * the comparison value is quoted.
+ *
+ * `invoice.month` is read off `now` through {@link billingPeriodMonth} rather
+ * than asked of BigQuery's own `CURRENT_DATE()`, which defaults to UTC and
+ * would name the wrong month for the first several hours of every UTC month
+ * — GCP assigns `invoice.month` in `America/Los_Angeles`, not UTC. This is
+ * the same conversion `startOfBillingPeriod` (in `usageQuery.ts`) opens the
+ * usage window with, so the two figures cannot drift apart. See
+ * [#1174](https://github.com/markgoho/doula-cloud/issues/1174).
  */
-export function buildCostQuery(): string {
+export function buildCostQuery(now: Date): string {
 	return `SELECT
   service.description AS service,
   sku.description AS sku,
@@ -64,7 +74,7 @@ export function buildCostQuery(): string {
   MAX(usage_end_time) AS latestUsage
 FROM \`${BILLING_EXPORT_TABLE}\`
 WHERE project.number = '${BILLING_PROJECT_NUMBER}'
-  AND invoice.month = FORMAT_DATE('%Y%m', CURRENT_DATE())
+  AND invoice.month = '${billingPeriodMonth(now)}'
 GROUP BY service, sku
 ORDER BY cost DESC`;
 }

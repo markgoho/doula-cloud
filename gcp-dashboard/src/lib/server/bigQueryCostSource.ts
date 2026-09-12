@@ -18,13 +18,15 @@ export type CostSource = () => Promise<readonly CostQueryRow[]>;
  * credentials block, because it discovers Application Default Credentials on
  * its own, which is the only auth this tool has. There is no service account
  * and no key file — see README.md.
+ *
+ * `now` is a parameter so a spec can pin the billing period it asks for.
  */
-export function createBigQueryCostSource(): CostSource {
+export function createBigQueryCostSource(now: () => Date = () => new Date()): CostSource {
 	const bigQuery = new BigQuery({ projectId: BILLING_PROJECT_ID });
 
 	return async () => {
 		const [rows] = await bigQuery.query({
-			query: buildCostQuery(),
+			query: buildCostQuery(now()),
 			location: BILLING_EXPORT_LOCATION
 		});
 

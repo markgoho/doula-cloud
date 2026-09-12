@@ -167,7 +167,7 @@ describe('createMonitoringUsageSource', () => {
 		const usage = await createMonitoringUsageSource(now)();
 
 		expect(usage).toMatchObject({
-			since: '2026-09-01T00:00:00.000Z',
+			since: '2026-09-01T07:00:00.000Z',
 			through: '2026-09-08T04:30:24.000Z'
 		});
 	});
