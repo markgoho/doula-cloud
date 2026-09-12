@@ -39,8 +39,12 @@ func buildStaffingActions() []string {
 	return names
 }
 
-// staffActorDisplayName is what a Staff actor's row renders as on a
-// Client's own ledger -- CONTEXT.md's Activity entry, the second half of
+// redactStaffActorNames applies activity.StaffActorDisplayName to every
+// Staff-actor row, once, in the one reader a Client-portal caller ever
+// reaches -- rather than trusting every future caller of
+// activityfeed.ListForSubject (a Staff-side one included, where the real
+// name is exactly what ADR-0022 asks the ledger to carry) to remember
+// this redaction itself. CONTEXT.md's Activity entry, the second half of
 // the same sentence staffingActions answers: "she reads her own
 // Activity ... never who inside the Practice did what." Excluding
 // staffing-shaped actions (offer_*, visit_reassigned) is not enough on
@@ -49,17 +53,10 @@ func buildStaffingActions() []string {
 // name is replaced here. A Client actor's own name and
 // activity.SystemActorName ("Doula Cloud") are untouched -- the first is
 // her own act, the second already reads as the product, not a person.
-const staffActorDisplayName = "Your practice"
-
-// redactStaffActorNames applies staffActorDisplayName to every Staff-actor
-// row, once, in the one reader a Client-portal caller ever reaches --
-// rather than trusting every future caller of activityfeed.ListForSubject
-// (a Staff-side one included, where the real name is exactly what ADR-0022
-// asks the ledger to carry) to remember this redaction itself.
 func redactStaffActorNames(items []activityfeed.Entry) {
 	for i := range items {
 		if items[i].ActorKind == "staff" {
-			items[i].ActorName = staffActorDisplayName
+			items[i].ActorName = activity.StaffActorDisplayName
 		}
 	}
 }

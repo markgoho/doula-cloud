@@ -154,6 +154,27 @@ const SystemActorName = "Doula Cloud"
 // different words for the same absence.
 const DepartedStaffName = "a former colleague"
 
+// StaffActorDisplayName is DepartedStaffName's Client-facing sibling:
+// the word a Client-portal surface uses in the same "this row's Staff
+// person cannot be named" situation. It is a different word on purpose
+// -- portal/activity.go's own redaction reasoning is CONTEXT.md's rule
+// that a Client never learns which individual inside the Practice acted,
+// which is not what DepartedStaffName answers (Staff readers are
+// entitled to know a colleague acted, just not who once she is gone).
+// The two situations collide on the Client-portal Visits screen and
+// Message thread: 00111/00105's SELECT policies admit a departed-but-not-
+// redacted Doula's row to a Client who worked with her (#1077), so this
+// word is reached there only for the one case that policy still
+// excludes on purpose -- a Doula who deleted her own login under
+// ADR-0033.
+//
+// Here, next to DepartedStaffName, for the same reason that one is here:
+// three Client-facing readers now need it -- portal/activity.go's
+// blanket redaction, portal/visits.go's listPortalVisits, and
+// message.ClientListHandler (#1198) -- and a Client must not meet a
+// second word for it.
+const StaffActorDisplayName = "Your practice"
+
 // EngagementAction is one of the fixed action strings a write site
 // records against SubjectEngagement. Named in one place so a write site
 // can't typo a string the read side's money filter (see IsMoney) has to

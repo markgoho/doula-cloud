@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"time"
 
+	"doula-cloud/api/internal/activity"
 	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/clientauth"
 	"doula-cloud/api/internal/pagecursor"
@@ -41,10 +42,15 @@ type Visit struct {
 	// DoulaName is the name of the Doula who is coming -- CONTEXT.md's
 	// own settled word for this surface ("a Client sees the visits on her
 	// own Engagement, past and scheduled, with who is coming").
-	// Deliberately NOT the Activity ledger's staffActorDisplayName
-	// redaction: that rule answers "never who inside the Practice did
-	// what" about a Practice's own roster acts, and who is coming to her
-	// home is a fact about her care, not about the roster.
+	// Deliberately NOT the Activity ledger's redactStaffActorNames
+	// redaction, even though both land on activity.StaffActorDisplayName:
+	// that rule answers "never who inside the Practice did what" about a
+	// Practice's own roster acts, and who is coming to her home is a fact
+	// about her care, not about the roster. Here the same word is reached
+	// for a different reason -- an unreadable row, not a redaction
+	// policy -- which is why listPortalVisits still names the Doula by
+	// her real name in the ordinary case, where redactStaffActorNames
+	// never does.
 	//
 	// A Doula who has left the Practice is still named here (#1077):
 	// 00111's client_portal_sees_staff reaches her staff row through the
@@ -142,7 +148,7 @@ func listPortalVisits(ctx context.Context, tx *sql.Tx, engagementID string, afte
 		 FROM visits v
 		 LEFT JOIN staff s ON s.id = v.staff_id
 		 WHERE v.engagement_id = $1 AND v.scheduled_at IS NOT NULL`
-	args := []any{engagementID, staffActorDisplayName}
+	args := []any{engagementID, activity.StaffActorDisplayName}
 	if after != nil {
 		query += ` AND (v.scheduled_at, v.id) < ($3, $4) ORDER BY v.scheduled_at DESC, v.id DESC LIMIT $5`
 		args = append(args, after.At, after.ID, visitPageSize+1)

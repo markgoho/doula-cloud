@@ -5,6 +5,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"doula-cloud/api/internal/activity"
 	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/clientauth"
 	"doula-cloud/api/internal/objectstore"
@@ -17,6 +18,15 @@ import (
 // Staff practice-tier check -- clientauth.Middleware has already 403'd
 // any Engagement the caller doesn't own, so no extra ownership check is
 // needed here. Must be mounted behind clientauth.Middleware.
+//
+// Passes activity.StaffActorDisplayName into listMessages so a thread
+// whose sender is a Doula who deleted her own login (#1198) reads "Your
+// practice" rather than a blank name: 00111's client_portal_sees_staff
+// policy refuses that redacted row to a Client population on purpose
+// (ADR-0033), the same gap listPortalVisits already fills for the
+// Visits screen. ListHandler, the Staff-side sibling, passes "" and is
+// unchanged -- see listMessages' own doc comment for what that side
+// actually shows today, which is not what this ticket assumed.
 func ClientListHandler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		tx, has := clientauth.Tx(r.Context())
@@ -37,7 +47,7 @@ func ClientListHandler() http.Handler {
 			after = &c
 		}
 
-		items, hasMore, err := listMessages(r.Context(), tx, engagementID, after)
+		items, hasMore, err := listMessages(r.Context(), tx, engagementID, after, activity.StaffActorDisplayName)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
