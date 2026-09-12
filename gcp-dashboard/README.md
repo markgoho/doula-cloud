@@ -24,6 +24,8 @@ Firebase Hosting is `network/sent_bytes_count`, the bytes served, over every dom
 
 The billing period itself is the calendar month in `America/Los_Angeles`, not UTC — that is the zone GCP assigns `invoice.month` in, verified against the project's own billing export. Both `/api/cost` and `/api/usage` derive their window from the same conversion, so a usage figure and a cost figure always cover the same month.
 
+Cloud Monitoring rejects an alignment period under a minute, so `/api/usage` cannot ask for one in the first minute of a billing period — the shortest period it could ask for would reach back into the previous one. Rather than send that request and answer wrong, every usage figure is absent for that first minute, the same dash Firestore already shows when Monitoring has nothing to report.
+
 Sync is stateless: one read pulls both routes at once and replaces what is on screen. Either half failing fails the sync, and each names its own upstream, so the banner says which half broke. The page reads once as it mounts, so opening it shows figures rather than an empty screen; every read after that is a press of the button. Nothing polls, nothing refreshes on a timer, and no history is kept. The billing export is written about once a day, so the total is always about 24 hours behind actual usage — the sidebar says so, and never implies a same-day figure.
 
 Future work, deliberately not built: a history or trend view over past syncs.
