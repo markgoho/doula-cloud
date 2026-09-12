@@ -154,6 +154,25 @@ async function setupWithRoster(
 	});
 }
 
+// Shared by the #255, #258 and #1119 blocks below: each needs the
+// Contract section actually enabled, which `setup()`'s own "everything
+// refuses" default cannot give it, and each installs that differently
+// (`prepareApi`, called after the viewport and before the render) --
+// `mockContract`/`respondFromFixture`, defined further down this file,
+// are what most callers reach for there.
+async function setupWithContract(
+	prepareApi: () => void,
+	detail: Detail = fixtureDetail,
+	contractSession: typeof session = sessionFor()
+) {
+	await testPage.viewport(1440, 900);
+	prepareApi();
+	await render(Page, {
+		data: { ...detail, session: contractSession },
+		params: fixture.params
+	});
+}
+
 /*
  * The Visits `<table>`: the first DataTable this page renders, and the
  * tree the wide viewport above actually shows. Scoping to it is the
@@ -599,10 +618,6 @@ describe("the Client's portal-invite state and the Contract section's block (#25
 	// never engages here -- this block is only about #255's precondition.
 	const draftContract = draftOf();
 
-	function mockDraftContract() {
-		mockContract(draftContract);
-	}
-
 	it('reads "Never invited" on the summary when the Client has never been invited', async () => {
 		await setup(fixtureDetail);
 
@@ -629,11 +644,7 @@ describe("the Client's portal-invite state and the Contract section's block (#25
 	});
 
 	it('disables Send Contract and names the ordering while the Client has never been invited', async () => {
-		mockDraftContract();
-		await render(Page, {
-			data: { ...fixtureDetail, session: sessionFor() },
-			params: fixture.params
-		});
+		await setupWithContract(() => mockContract(draftContract));
 
 		await expect.element(testPage.getByRole('button', { name: 'Send Contract' })).toBeDisabled();
 		await expect
@@ -642,11 +653,10 @@ describe("the Client's portal-invite state and the Contract section's block (#25
 	});
 
 	it('enables Send Contract once the Client has a pending or accepted invite', async () => {
-		mockDraftContract();
-		await render(Page, {
-			data: { ...fixtureDetail, clientPortalInviteStatus: 'pending', session: sessionFor() },
-			params: fixture.params
-		});
+		await setupWithContract(
+			() => mockContract(draftContract),
+			{ ...fixtureDetail, clientPortalInviteStatus: 'pending' }
+		);
 
 		await expect.element(testPage.getByRole('button', { name: 'Send Contract' })).toBeEnabled();
 		expect(
@@ -673,17 +683,15 @@ describe("the Client's portal-invite state and the Contract section's block (#25
 	});
 
 	it('lifts the Contract section\'s block in one click once a portal invite is sent, without a reload', async () => {
-		const respond = toApiResponder(fixture);
-		apiFetchWithSession.mockImplementation((path: string, init?: RequestInit) => {
-			if (path.endsWith('/contract')) return Promise.resolve(jsonResponse(draftContract));
-			if (path.endsWith('/portal-invite') && init?.method === 'POST') {
-				return Promise.resolve(jsonResponse({ inviteToken: 'a-fresh-token' }));
-			}
-			return respond(path);
-		});
-		await render(Page, {
-			data: { ...fixtureDetail, session: sessionFor() },
-			params: fixture.params
+		await setupWithContract(() => {
+			const respond = toApiResponder(fixture);
+			apiFetchWithSession.mockImplementation((path: string, init?: RequestInit) => {
+				if (path.endsWith('/contract')) return Promise.resolve(jsonResponse(draftContract));
+				if (path.endsWith('/portal-invite') && init?.method === 'POST') {
+					return Promise.resolve(jsonResponse({ inviteToken: 'a-fresh-token' }));
+				}
+				return respond(path);
+			});
 		});
 		await expect.element(testPage.getByRole('button', { name: 'Send Contract' })).toBeDisabled();
 
@@ -710,7 +718,7 @@ function respondFromFixture(override?: (path: string) => Response | undefined) {
 
 // Answers the Practice-side GET .../contract with `contract`, letting
 // every other section respond from the fixture as normal -- shared by
-// the #258 describe block below.
+// the #255, #258 and #1119 describe blocks, each through `setupWithContract`.
 function mockContract(contract: Contract) {
 	respondFromFixture((path) => (path.endsWith('/contract') ? jsonResponse(contract) : undefined));
 }
@@ -723,11 +731,10 @@ describe("the Contract's merge-field completeness block and filled-text render (
 	// clientPortalInviteStatus: 'accepted' throughout, so #255's own block
 	// never engages here -- this block is only about #258's own precondition.
 	it('renders the Contract prose with merge values substituted, on the Staff side', async () => {
-		mockContract(draftOf());
-		await render(Page, {
-			data: { ...fixtureDetail, clientPortalInviteStatus: 'accepted', session: sessionFor() },
-			params: fixture.params
-		});
+		await setupWithContract(
+			() => mockContract(draftOf()),
+			{ ...fixtureDetail, clientPortalInviteStatus: 'accepted' }
+		);
 
 		// The substitution is what is asserted, so the expected text is
 		// built from the fixture's own values rather than restated: the
@@ -744,11 +751,10 @@ describe("the Contract's merge-field completeness block and filled-text render (
 	});
 
 	it('disables Send Contract and names the blank fields while any merge field is unfilled', async () => {
-		mockContract(draftOf({ values: { ...fixtureContract.values, practice_name: '' } }));
-		await render(Page, {
-			data: { ...fixtureDetail, clientPortalInviteStatus: 'accepted', session: sessionFor() },
-			params: fixture.params
-		});
+		await setupWithContract(
+			() => mockContract(draftOf({ values: { ...fixtureContract.values, practice_name: '' } })),
+			{ ...fixtureDetail, clientPortalInviteStatus: 'accepted' }
+		);
 
 		await expect.element(testPage.getByRole('button', { name: 'Send Contract' })).toBeDisabled();
 		await expect
@@ -759,11 +765,10 @@ describe("the Contract's merge-field completeness block and filled-text render (
 	});
 
 	it('enables Send Contract once every merge field has a value', async () => {
-		mockContract(draftOf());
-		await render(Page, {
-			data: { ...fixtureDetail, clientPortalInviteStatus: 'accepted', session: sessionFor() },
-			params: fixture.params
-		});
+		await setupWithContract(
+			() => mockContract(draftOf()),
+			{ ...fixtureDetail, clientPortalInviteStatus: 'accepted' }
+		);
 
 		await expect.element(testPage.getByRole('button', { name: 'Send Contract' })).toBeEnabled();
 	});
@@ -871,9 +876,11 @@ describe('the Contract PDF download survives a void (#1119)', () => {
 	});
 
 	it('offers the download on a voided Contract whose signed PDF still exists', async () => {
-		await testPage.viewport(1440, 900);
-		mockContract({ ...fixtureContract, status: 'voided', hasSignedPdf: true });
-		await render(Page, { data: { ...fixtureDetail, session }, params: fixture.params });
+		await setupWithContract(
+			() => mockContract({ ...fixtureContract, status: 'voided', hasSignedPdf: true }),
+			fixtureDetail,
+			session
+		);
 
 		await expect.element(testPage.getByText('Status: voided')).toBeVisible();
 		await expect
@@ -882,9 +889,11 @@ describe('the Contract PDF download survives a void (#1119)', () => {
 	});
 
 	it('offers no download on a voided Contract that was never signed', async () => {
-		await testPage.viewport(1440, 900);
-		mockContract({ ...fixtureContract, status: 'voided', hasSignedPdf: false });
-		await render(Page, { data: { ...fixtureDetail, session }, params: fixture.params });
+		await setupWithContract(
+			() => mockContract({ ...fixtureContract, status: 'voided', hasSignedPdf: false }),
+			fixtureDetail,
+			session
+		);
 
 		await expect.element(testPage.getByText('Status: voided')).toBeVisible();
 		expect(testPage.getByRole('button', { name: 'Download signed Contract (PDF)' }).elements()).toHaveLength(0);
@@ -896,10 +905,25 @@ describe('the Contract PDF download survives a void (#1119)', () => {
 // download this file used to own before the move), and this page keeps
 // only the link to it, unconditional on whether a plan exists yet (its
 // own address is what says so).
+// The first test below installs no `apiFetchWithSession` mock of its own
+// on purpose, matching what it always did: this block carries no
+// `beforeEach` reset, so it renders against whatever the previous block
+// (#1119, directly above) left behind -- harmless here, since neither
+// test's assertion depends on the Contract at all.
+async function setupBirthPlanLink(
+	respondOverride?: (path: string) => Promise<Response> | undefined
+) {
+	await testPage.viewport(1440, 900);
+	if (respondOverride) {
+		const respond = toApiResponder(fixture);
+		apiFetchWithSession.mockImplementation((path: string) => respondOverride(path) ?? respond(path));
+	}
+	await render(Page, { data: { ...fixtureDetail, session: sessionFor() }, params: fixture.params });
+}
+
 describe("the Birth Plan section's link to its own page (#280)", () => {
 	it('links to the Birth Plan page for this Engagement, regardless of whether a plan exists yet', async () => {
-		await testPage.viewport(1440, 900);
-		await render(Page, { data: { ...fixtureDetail, session: sessionFor() }, params: fixture.params });
+		await setupBirthPlanLink();
 
 		await expect
 			.element(testPage.getByRole('link', { name: 'View printable Birth Plan' }))
@@ -910,9 +934,7 @@ describe("the Birth Plan section's link to its own page (#280)", () => {
 	});
 
 	it('offers no PDF download control on this page any more', async () => {
-		await testPage.viewport(1440, 900);
-		const respond = toApiResponder(fixture);
-		apiFetchWithSession.mockImplementation((path: string) =>
+		await setupBirthPlanLink((path) =>
 			path.endsWith('/plans/birth_plan')
 				? Promise.resolve(
 						jsonResponse({
@@ -922,9 +944,8 @@ describe("the Birth Plan section's link to its own page (#280)", () => {
 							answers: {}
 						})
 					)
-				: respond(path)
+				: undefined
 		);
-		await render(Page, { data: { ...fixtureDetail, session: sessionFor() }, params: fixture.params });
 
 		expect(testPage.getByRole('button', { name: 'Download Birth Plan (PDF)' }).elements()).toHaveLength(0);
 	});
