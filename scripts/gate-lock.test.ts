@@ -353,6 +353,38 @@ describe('the wrapper', () => {
     expect(fs.existsSync(journal)).toBe(false);
   }, 30000);
 
+  /*
+   * A third window, narrower than the other two (#1195). `acquire()` is
+   * `async`: even the synchronous path through `tryAcquire` still
+   * resolves through a microtask, so `owner.json` can be on disk one
+   * tick before `main()` gets to arm `releaseOnSignal`. #1164 armed the
+   * handler after `await acquire(...)` returned rather than before it
+   * was called, so that tick -- plus the handful of synchronous
+   * statements up to `process.on()` -- was still unarmed. It reproduced
+   * with a 50ms delay inserted there; `GATE_LOCK_POST_ACQUIRE_DELAY_MS`
+   * makes that window a second wide on purpose. Against the #1164
+   * script this fails on every run; against this one it passes on every
+   * run, because the handler is now armed before `acquire()` is even
+   * called.
+   */
+  test('releases the lock when it is interrupted before the acquiring session is even done acquiring', async () => {
+    const child = spawn('bun', [SCRIPT, '--', 'bun', marker, journal, '0'], {
+      stdio: ['ignore', 'ignore', 'ignore'],
+      env: {
+        ...process.env,
+        GATE_LOCK_DIR: lockDir,
+        GATE_LOCK_POST_ACQUIRE_DELAY_MS: '1000',
+      },
+    });
+    while (!fs.existsSync(path.join(lockDir, 'owner.json')))
+      await new Promise((resolve) => setTimeout(resolve, 5));
+    child.kill('SIGTERM');
+    await new Promise((resolve) => child.on('close', resolve));
+
+    expect(fs.existsSync(lockDir)).toBe(false);
+    expect(fs.existsSync(journal)).toBe(false);
+  }, 30000);
+
   test('refuses an empty command rather than silently succeeding', async () => {
     const result = await invoke([]);
     expect(result.exitCode).toBe(2);
