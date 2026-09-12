@@ -14,32 +14,32 @@ Stage is one of: **shelf** (no read-back yet), **read-back** (on trunk in `docs/
 
 | Book | Author, year | Drive file | Stage |
 |---|---|---|---|
-| The SaaS Playbook | Rob Walling, 2023 | `The-SaaS-Playbook-ebook.pdf` | read-back |
-| Start Marketing the Day You Start Coding | Rob Walling, 2023 ed. | `Start_Marketing_the_Day_You_Start_Coding-eBook.pdf` | shelf |
-| Make: The Bootstrapper's Handbook | Pieter Levels | `make-bootstrapper-handbook.pdf` | shelf |
-| Jobs To Be Done | see the read-back for the edition | `JTBD-Book.pdf` | shelf |
-| The Almanack of Naval Ravikant | Eric Jorgenson, 2020 | `Eric-Jorgenson_The-Almanack-of-Naval-Ravikant_Final.pdf` | shelf |
-| The Best Interface Is No Interface | Golden Krishna, 2015 | `no-interface.pdf` | shelf |
-| Design for Cognitive Bias | David Dylan Thomas, 2020 | `design-for-cognitive-bias.pdf` | shelf |
-| Landing Page Hot Tips | Rob Hope | `Landing-Page-Hot-Tips-Ebook-v1-1.pdf` | shelf |
-| Copyhackers: Uplift | Copyhackers | `Copyhackers_Uplift_eBook_USLetter-V03.pdf` | shelf |
+| The SaaS Playbook | Rob Walling, 2023 | `The-SaaS-Playbook-ebook.pdf` | synthesized |
+| Start Marketing the Day You Start Coding | Rob Walling, 2023 ed. | `Start_Marketing_the_Day_You_Start_Coding-eBook.pdf` | synthesized |
+| Make: The Bootstrapper's Handbook | Pieter Levels | `make-bootstrapper-handbook.pdf` | synthesized |
+| Jobs To Be Done | Anthony W. Ulwick, 2016 | `JTBD-Book.pdf` | synthesized |
+| The Almanack of Naval Ravikant | Eric Jorgenson, 2020 | `Eric-Jorgenson_The-Almanack-of-Naval-Ravikant_Final.pdf` | synthesized |
+| The Best Interface Is No Interface | Golden Krishna, 2015 | `no-interface.pdf` | synthesized |
+| Design for Cognitive Bias | David Dylan Thomas, 2020 | `design-for-cognitive-bias.pdf` | synthesized |
+| Landing Page Hot Tips | Rob Hope | `Landing-Page-Hot-Tips-Ebook-v1-1.pdf` | synthesized |
+| Copyhackers: Uplift | Copyhackers | `Copyhackers_Uplift_eBook_USLetter-V03.pdf` | synthesized |
 
 ### Reference track
 
 | Book | Author, year | Drive file | Stage |
 |---|---|---|---|
-| Form Design Patterns | Adam Silver, 2018 | `form-design-patterns.pdf` | shelf |
-| Inclusive Design Patterns | Heydon Pickering, 2016 | `inclusive-design-patterns.pdf` | shelf |
-| Inclusive Components | Heydon Pickering, 2019 | `Inclusive_Components_-_Heydon_Pickering.pdf` | shelf |
-| Design Systems | Alla Kholmatova, 2017 | `design-systems.pdf` | shelf |
-| Expressive Design Systems | Yesenia Perez-Cruz, 2019 | `expressive-design-systems.pdf` | shelf |
-| Laying the Foundations | Andrew Couldwell, 2019 | `laying-the-foundations-pdf.pdf` | shelf |
-| Atomic Design | Brad Frost, 2016 | `atomic-design.pdf` | shelf |
-| Refactoring UI | Adam Wathan and Steve Schoger, 2018 | `Refactoring UI v1.0.2.pdf` | shelf |
-| Flexible Typesetting | Tim Brown, 2018 | `flexible-typesetting.pdf` | shelf |
-| Giving a Damn About Accessibility | Sheri Byrne-Haber, 2021 | `Giving-a-damn-about-accessibility.pdf` | shelf |
-| Going Offline | Jeremy Keith, 2018 | `going-offline.pdf` | shelf |
-| Designing User Interfaces | Michal Malewicz and Diana Malewicz, 2020 | `DESIGNING_USER_INTERFACES_Eng_1.pdf` | shelf |
+| Form Design Patterns | Adam Silver, 2018 | `form-design-patterns.pdf` | read-back |
+| Inclusive Design Patterns | Heydon Pickering, 2016 | `inclusive-design-patterns.pdf` | read-back |
+| Inclusive Components | Heydon Pickering, 2019 | `Inclusive_Components_-_Heydon_Pickering.pdf` | read-back |
+| Design Systems | Alla Kholmatova, 2017 | `design-systems.pdf` | read-back |
+| Expressive Design Systems | Yesenia Perez-Cruz, 2019 | `expressive-design-systems.pdf` | read-back |
+| Laying the Foundations | Andrew Couldwell, 2019 | `laying-the-foundations-pdf.pdf` | read-back |
+| Atomic Design | Brad Frost, 2016 | `atomic-design.pdf` | read-back |
+| Refactoring UI | Adam Wathan and Steve Schoger, 2018 | `Refactoring UI v1.0.2.pdf` | read-back |
+| Flexible Typesetting | Tim Brown, 2018 | `flexible-typesetting.pdf` | read-back |
+| Giving a Damn About Accessibility | Sheri Byrne-Haber, 2021 | `Giving-a-damn-about-accessibility.pdf` | read-back |
+| Going Offline | Jeremy Keith, 2018 | `going-offline.pdf` | read-back |
+| Designing User Interfaces | Michal Malewicz and Diana Malewicz, 2020 | `DESIGNING_USER_INTERFACES_Eng_1.pdf` | read-back |
 
 Books in the folder that are on neither track, by the founder's decision of 2026-09-10: the engineering-craft titles (Accelerate, Clean Code, 97 Things, Infrastructure as Code, the database and Angular books) and the unrelated ones. They may join later; a book joins by a row in a table above.
 
