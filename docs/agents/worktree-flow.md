@@ -27,6 +27,46 @@ Trunk-based development still applies: short-lived branches, squash merge, linea
 trunk, not slower — `gh pr merge --squash --auto` returns immediately and the merge lands on
 its own once required checks pass.
 
+## What a green PR does not prove
+
+`migrate`, `deploy-api` and `deploy-app` run only on a push to `trunk` — never on a pull
+request — so a green PR proves nothing about them (#1022). What's easy to miss is that even
+a *push to trunk* often doesn't prove them either: `ci.yml`'s concurrency group holds one
+in-progress run and one queued run per push; a third push arriving while a second is still
+queued cancels that second run outright, with zero jobs ever started (#1207). This is routine
+under a burst of back-to-back merges, not a failure — `.github/workflows/trunk-red.yml` does
+not open a `trunk-red` issue for it, because the jobs never ran to fail. It instead comments
+on the merge's own PR naming the gap.
+
+**What to check instead:** the next trunk `CI` push run whose head has your merge as an
+ancestor —
+
+```sh
+git merge-base --is-ancestor <your-merge-sha> <later-run-head-sha>
+```
+
+— read by that later run's `conclusion` field, never by the exit status of a watch command.
+**`gh run watch --exit-status` exits 0 on a canceled run.** Anything that trusts that exit
+code reports a cancellation as a pass. Read `conclusion` directly:
+
+```sh
+gh run list --branch trunk --limit 5 --json databaseId,conclusion,status,headSha
+gh api repos/markgoho/doula-cloud/actions/runs/<id> --jq '.conclusion'
+```
+
+`migrate` applies every goose migration up to `HEAD` and `deploy-api`/`deploy-app` ship
+`HEAD`, so a later run's success *is* evidence for every commit it contains — cancellation
+only ever costs attribution (which commit's run gets credited), never verification (whether
+the migration and deploys actually happened).
+
+**Worked example.** PR #1310/#1316's merge, commit `0a136a83`, pushed a trunk `CI` run
+(`34699091787`) that was canceled while still queued — `gh api
+repos/markgoho/doula-cloud/actions/runs/34699091787/jobs` returns an empty job list, so
+`migrate`/`deploy-api`/`deploy-app` never ran for that commit specifically. The next trunk
+`CI` push run, `34699163504` (head `67169e9f`, PR #1317), contains `0a136a83` as an ancestor
+and ran all three jobs to `success` — that run, not `34699091787`, is the real evidence
+`0a136a83`'s migration and deploys happened.
+
 ## What's provisioned automatically
 
 `EnterWorktree` (and, as a fallback, a manually run `git worktree add`) runs

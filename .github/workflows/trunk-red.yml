@@ -76,6 +76,45 @@ jobs:
               --body-file body.md
           fi
 
+      - name: Flag the commit a canceled run never verified
+        # A run queued behind two others in the same push concurrency
+        # group is canceled outright, before any job starts -- see
+        # ci.yml's concurrency comment (#1207). That is expected under a
+        # burst of trunk merges, not a failure, so it does not open or
+        # touch the trunk-red issue; the migration/deploy risk is real
+        # but the *next* trunk run that does complete is evidence for
+        # this commit too, so nothing is actually unverified forever --
+        # only unverified under this commit's own name until then. This
+        # step is what stops that gap from being silent.
+        if: github.event.workflow_run.conclusion == 'cancelled'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          RUN_URL: ${{ github.event.workflow_run.html_url }}
+          SHA: ${{ github.event.workflow_run.head_sha }}
+          TITLE: ${{ github.event.workflow_run.head_commit.message }}
+        run: |
+          set -euo pipefail
+          short=$(printf '%s' "$SHA" | cut -c1-8)
+          subject=$(printf '%s' "$TITLE" | head -1)
+
+          {
+            printf 'Trunk CI on **%s** was canceled before any job ran, so **migrate, deploy-api and deploy-app have no evidence for this commit.**\n\n' "$short"
+            printf 'This is expected under a burst of trunk merges (see the concurrency comment in ci.yml), not a failure -- it does not open a trunk-red issue.\n\n'
+            printf 'What to check instead: the next trunk CI push run whose head has this commit as an ancestor (git merge-base --is-ancestor %s <later-sha>), read by its conclusion field. "gh run watch --exit-status" exits 0 on a canceled run, so it cannot tell a canceled run from a passing one -- only conclusion can.\n\n' "$SHA"
+            printf '**Commit:** %s\n\n' "$subject"
+            printf '**Canceled run:** %s\n' "$RUN_URL"
+          } > body.md
+
+          pr=$(printf '%s' "$subject" | grep -oE '\(#[0-9]+\)' | tail -1 | tr -d '(#)')
+
+          if [ -n "$pr" ]; then
+            gh issue comment "$pr" --repo "$REPO" --body-file body.md
+            echo "commented on #${pr}"
+          else
+            echo "::warning::Canceled trunk run ${RUN_URL} for ${short} has no (#NNNN) in its commit subject to comment on: ${subject}"
+          fi
+
       - name: Close the trunk-red issue
         if: github.event.workflow_run.conclusion == 'success'
         env:

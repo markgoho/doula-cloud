@@ -17,6 +17,23 @@ on:
 # workflow-level cancellation; they only serialize against each other.
 # So trunk must never set cancel-in-progress here, or a quick second
 # trunk push can cancel an in-flight migration or live deploy mid-run.
+#
+# cancel-in-progress: false does NOT make every trunk push get its own
+# run, though (#1207). GitHub only ever lets one run per group be
+# in-progress and one be queued; when a third push arrives while a
+# second is still queued behind an in-progress first, the second is
+# canceled outright -- with zero jobs ever started -- in favor of the
+# third. Confirmed live: eight trunk `CI` runs canceled in one 24-hour
+# window (2026-09-12), each with an empty jobs list. That is accepted,
+# not fought: `migrate` applies every goose migration up to HEAD and
+# `deploy-api`/`deploy-app` ship HEAD, so the next trunk run that does
+# execute is evidence for every commit it contains, canceled ones
+# included -- a per-commit group here would only move the same collision
+# to the `migrate-*`/`deploy-*` groups below at three times the CI cost,
+# with no coverage gained. What cancellation costs is attribution, not
+# verification, and `.github/workflows/trunk-red.yml` and
+# `docs/agents/worktree-flow.md` cover that: which commit a canceled
+# run belonged to, and what to check instead.
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
