@@ -72,9 +72,9 @@ const sessionStub = {
 };
 const dataWithSession = { ...data, session: sessionStub };
 
-// SIFERS setup() for the price describe block below (#285) -- the rest of
-// this file's describe blocks predate that convention and repeat the same
-// render() call inline; left as-is rather than retrofitted here.
+// SIFERS setup() shared by every describe below: `overrides` is the one
+// thing any of these tests varies from the fixture's own happy path
+// (#285), spread over `dataWithSession` per the fixture-departure rule.
 async function renderBilling(overrides: Partial<typeof dataWithSession> = {}) {
 	await render(Page, { params: fixture.params, data: { ...dataWithSession, ...overrides } });
 }
@@ -83,7 +83,7 @@ describe('the way back to an approval an empty balance interrupted (#502)', () =
 	it('offers the remembered approval screen', async () => {
 		sessionStorage.setItem('engagement-request-approval-return', approvalReturnPath);
 
-		await render(Page, { params: fixture.params, data: dataWithSession });
+		await renderBilling();
 
 		await expect
 			.element(testPage.getByRole('link', { name: 'Back to the engagement request you were deciding' }))
@@ -95,7 +95,7 @@ describe('the way back to an approval an empty balance interrupted (#502)', () =
 			throw new Error('site data blocked');
 		});
 
-		await render(Page, { params: fixture.params, data: dataWithSession });
+		await renderBilling();
 
 		await expect
 			.element(testPage.getByRole('link', { name: 'Back to the engagement request you were deciding' }))
@@ -104,7 +104,7 @@ describe('the way back to an approval an empty balance interrupted (#502)', () =
 	});
 
 	it('offers nothing to somebody who came here on her own', async () => {
-		await render(Page, { params: fixture.params, data: dataWithSession });
+		await renderBilling();
 
 		await expect
 			.element(testPage.getByRole('link', { name: 'Back to the engagement request you were deciding' }))
@@ -114,7 +114,7 @@ describe('the way back to an approval an empty balance interrupted (#502)', () =
 
 describe('what a Credit buys (#286)', () => {
 	it('states the settled sentence above the balance, matching CONTEXT.md and pilot-terms.md', async () => {
-		await render(Page, { params: fixture.params, data: dataWithSession });
+		await renderBilling();
 
 		await expect
 			.element(
@@ -126,7 +126,7 @@ describe('what a Credit buys (#286)', () => {
 	});
 
 	it('defaults the purchase form Quantity to 5, not 1', async () => {
-		await render(Page, { params: fixture.params, data: dataWithSession });
+		await renderBilling();
 
 		await expect.element(testPage.getByLabelText('Quantity')).toHaveValue(5);
 	});
@@ -134,20 +134,20 @@ describe('what a Credit buys (#286)', () => {
 
 describe('what Credits is, who it is between, and how it differs from Getting paid (#256)', () => {
 	it('is titled Credits, not Billing', async () => {
-		await render(Page, { params: fixture.params, data: dataWithSession });
+		await renderBilling();
 
 		await expect.element(testPage.getByRole('heading', { level: 1, name: 'Credits' })).toBeVisible();
 	});
 
 	it('names Doula Cloud as the counterparty and states the fixed price', async () => {
-		await render(Page, { params: fixture.params, data: dataWithSession });
+		await renderBilling();
 
 		await expect.element(testPage.getByText('Practices buy Credits from Doula Cloud.')).toBeVisible();
 		await expect.element(testPage.getByText('One Credit costs $20.00.')).toBeVisible();
 	});
 
 	it('names Getting paid as the other money screen, and what it is for', async () => {
-		await render(Page, { params: fixture.params, data: dataWithSession });
+		await renderBilling();
 
 		await expect
 			.element(
@@ -218,7 +218,7 @@ describe('billing ledger', () => {
 		// DataTable's own content floor (#508) stacks it into a <dl> below
 		// 46rem, and this checks the <table> cells specifically.
 		await testPage.viewport(1440, 900);
-		await render(Page, { params: fixture.params, data: dataWithSession });
+		await renderBilling();
 
 		const header = testPage.getByRole('columnheader', { name: 'Quantity' });
 		const cell = testPage.getByRole('cell', { name: '+20' });
@@ -231,11 +231,7 @@ describe('billing ledger', () => {
 	// response, leaving "Load more" clickable again with no feedback --
 	// it must surface the failure instead, next to the existing rows.
 	it('surfaces a "Load more" failure instead of swallowing it', async () => {
-		const pagedData = {
-			...dataWithSession,
-			ledger: { ...data.ledger, hasMore: true, nextCursor: 'cursor-1' }
-		};
-		await render(Page, { params: fixture.params, data: pagedData });
+		await renderBilling({ ledger: { ...data.ledger, hasMore: true, nextCursor: 'cursor-1' } });
 		await expect.element(testPage.getByRole('cell', { name: '+20' })).toBeVisible();
 
 		apiFetchWithSession.mockResolvedValueOnce(jsonResponse('the practice is gone', 403));
