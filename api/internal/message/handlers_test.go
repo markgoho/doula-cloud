@@ -1003,8 +1003,8 @@ func TestCreateHandler_JSONRequestStillTextOnly(t *testing.T) {
 // ledger -- a Staff reader here does not see "Deleted Staff Member",
 // because RemoveMembership (run by both a plain departure and ADR-0033's
 // login deletion) makes the row unreachable before deleted_at is ever
-// checked. That gap is real and pre-existing, filed separately as #1198
-// found it rather than fixed it, since fixing it means changing what the
+// checked. That gap is real and pre-existing, filed separately as #1322
+// rather than fixed here, since fixing it means changing what the
 // Staff-side thread shows -- exactly what this ticket's AC2 forbids.
 func TestListHandler_UnchangedForASenderWhoDeletedHerLogin(t *testing.T) {
 	const identityUIDSender = "staff-side-deleted-login-sender"

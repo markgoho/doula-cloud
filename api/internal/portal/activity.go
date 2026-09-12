@@ -39,8 +39,12 @@ func buildStaffingActions() []string {
 	return names
 }
 
-// StaffActorDisplayName is what a Staff actor's row renders as on a
-// Client's own ledger -- CONTEXT.md's Activity entry, the second half of
+// redactStaffActorNames applies activity.StaffActorDisplayName to every
+// Staff-actor row, once, in the one reader a Client-portal caller ever
+// reaches -- rather than trusting every future caller of
+// activityfeed.ListForSubject (a Staff-side one included, where the real
+// name is exactly what ADR-0022 asks the ledger to carry) to remember
+// this redaction itself. CONTEXT.md's Activity entry, the second half of
 // the same sentence staffingActions answers: "she reads her own
 // Activity ... never who inside the Practice did what." Excluding
 // staffing-shaped actions (offer_*, visit_reassigned) is not enough on
@@ -49,24 +53,10 @@ func buildStaffingActions() []string {
 // name is replaced here. A Client actor's own name and
 // activity.SystemActorName ("Doula Cloud") are untouched -- the first is
 // her own act, the second already reads as the product, not a person.
-//
-// Exported: visits.go's listPortalVisits coalesces an unreadable Doula
-// row to this same word rather than inventing a second one, and
-// message.ClientListHandler (#1198) does the same for a thread whose
-// sender row 00111 refuses -- one settled word for "this Client-facing
-// surface cannot name the individual", read by the same person about
-// the same people across all three surfaces.
-const StaffActorDisplayName = "Your practice"
-
-// redactStaffActorNames applies StaffActorDisplayName to every Staff-actor
-// row, once, in the one reader a Client-portal caller ever reaches --
-// rather than trusting every future caller of activityfeed.ListForSubject
-// (a Staff-side one included, where the real name is exactly what ADR-0022
-// asks the ledger to carry) to remember this redaction itself.
 func redactStaffActorNames(items []activityfeed.Entry) {
 	for i := range items {
 		if items[i].ActorKind == "staff" {
-			items[i].ActorName = StaffActorDisplayName
+			items[i].ActorName = activity.StaffActorDisplayName
 		}
 	}
 }
