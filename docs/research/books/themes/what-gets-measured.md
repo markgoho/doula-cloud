@@ -26,7 +26,7 @@ What does the product count, what does it refuse to count, and what number stand
 
 **Landing Page Hot Tips.** Track marketing channels with platform-specific coupon codes (Tip #15, PDF p. 42). Its usage-figures tip (Tip #83, PDF pp. 154–155) is about what a page displays, carried by the persuasion theme.
 
-**Copyhackers: Uplift.** No position on measurement beyond reporting each page's test result.
+**Copyhackers: Uplift.** An A/B test yields data for the hypothesis; failing that, user testing with five to ten people like the target audience (Section 5, pp. 49–50). No other position on measurement beyond reporting each page's test result.
 
 ## Where the books agree
 

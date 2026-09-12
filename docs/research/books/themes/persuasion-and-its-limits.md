@@ -22,9 +22,9 @@ Which ways of moving a person are open to the product and to the site that sells
 
 **The SaaS Playbook** (Walling, 2023). Grandfathering: never promise it for life; announce a price increase two to four months ahead (Pricing, pp. 83–85). A founder email within ten minutes of a cancellation (80/20 SaaS Metrics, p. 161).
 
-**Start Marketing the Day You Start Coding** (Walling, 2023 ed.). No position on the ethics of persuasion; its funnel advice assumes the techniques work.
+**Start Marketing the Day You Start Coding** (Walling, 2023 ed.). The hook: a five-to-seven-word home-page headline saying what the product does and for whom ("How to Find Your 4-Second Startup Pitch", pp. 73–75). No position on the ethics of persuasion; its funnel advice assumes the techniques work.
 
-**Jobs To Be Done** (Ulwick, 2016). No position on persuasion. Its claim that buyers search by outcome rather than product name (ch. 4 §IX, pp. 115–116) is about being found, not moved.
+**Jobs To Be Done** (Ulwick, 2016). A winning value proposition is tied to unmet outcomes, as in Coloplast's claim to prevent complications and Arm & Hammer's move to talking about outcomes (ch. 4 §V, pp. 100–102; §IX, p. 115; ch. 5, p. 138). Its claim that buyers search by outcome rather than product name (ch. 4 §IX, pp. 115–116) is about being found, not moved.
 
 **The Almanack of Naval Ravikant** (Jorgenson, 2020). No direct position. Its nearest claim is that a person escapes competition through authenticity (Building Wealth, pp. 41, 44).
 
