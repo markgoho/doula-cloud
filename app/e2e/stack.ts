@@ -17,8 +17,11 @@ import {
 	MAILBOX_HOST,
 	MAILBOX_PORT,
 	PORT_OFFSET,
+	PORT_OFFSET_ROOT,
 	E2E_COMPOSE_FILE,
-	e2eComposeProject
+	E2E_HEARTBEAT_INTERVAL_MS,
+	e2eComposeProject,
+	e2eHeartbeatPath
 } from './ports';
 
 // The fake-gcs-server in compose.e2e.yaml, and the one bucket the BFF is
@@ -103,6 +106,62 @@ const API_BINARY_PATH = path.join(tmpdir(), `doula-cloud-e2e-api${PIDFILE_SUFFIX
 const MAILBOX_PIDFILE = path.join(tmpdir(), `doula-cloud-e2e-mailbox${PIDFILE_SUFFIX}.pid`);
 const MAILBOX_SCRIPT = path.join(path.dirname(fileURLToPath(import.meta.url)), 'mailbox.ts');
 
+// Where the liveness heartbeat lives (#1193, e2e/ports.ts). `undefined`
+// for the main checkout and CI, which have no worktree root to write
+// beside -- and no need to, since e2e-stack-reap.ts never reaps the
+// unsuffixed `doula-cloud-e2e` project their `.port-offset`-less stack
+// runs under.
+const HEARTBEAT_PATH = PORT_OFFSET_ROOT ? e2eHeartbeatPath(PORT_OFFSET_ROOT) : undefined;
+let heartbeatTimer: ReturnType<typeof setInterval> | undefined;
+
+// Touches the heartbeat file's mtime forward. Best-effort: a write that
+// fails here just loses this one signal, the same way a heartbeat write
+// failing in scripts/gate-lock.ts loses only its own lock's protection --
+// neither may ever throw out of a stack bring-up or teardown.
+function touchHeartbeat(): void {
+	if (!HEARTBEAT_PATH) return;
+	try {
+		writeFileSync(HEARTBEAT_PATH, String(Date.now()));
+	} catch {
+		// best effort -- see above
+	}
+}
+
+// Started once the stack is fully up, so a heartbeat is only ever live
+// proof of a stack a caller can actually use. `global-setup.ts` and
+// `development-full.ts` are both long-lived processes for the whole
+// run -- Playwright's own runner process executes globalSetup and
+// globalTeardown itself and stays up for every worker in between, and
+// `dev:full` is the interactive process a person leaves running -- so
+// the same module instance that starts this timer is still resident to
+// stop it. No `*.e2e.ts` spec calls startStack/stopStack itself (see
+// simulation-harness.e2e.ts's own comment on why not), so there is
+// never a second, short-lived module instance racing this one.
+// `.unref()`'d so the timer itself can never be the reason a process
+// stays alive past its own work.
+function startHeartbeat(): void {
+	if (!HEARTBEAT_PATH) return;
+	touchHeartbeat();
+	// eslint-disable-next-line unicorn/no-top-level-assignment-in-function -- module-level handle so stopHeartbeat can clear the same timer startHeartbeat armed
+	heartbeatTimer = setInterval(touchHeartbeat, E2E_HEARTBEAT_INTERVAL_MS);
+	heartbeatTimer.unref?.();
+}
+
+// Stops the timer and removes the file, rather than just letting it go
+// stale: a clean stopStack has nothing left to claim liveness for, and a
+// stale-but-present file is a needless thing for anyone reading it by
+// hand to puzzle over. Either way -- timer cleared or file removed --
+// the signal simply stops being written, which is what lets an
+// orphaned stack still age into reapability the normal way (#1193).
+function stopHeartbeat(): void {
+	if (heartbeatTimer) {
+		clearInterval(heartbeatTimer);
+		// eslint-disable-next-line unicorn/no-top-level-assignment-in-function -- see startHeartbeat's own disable comment
+		heartbeatTimer = undefined;
+	}
+	if (HEARTBEAT_PATH) rmSync(HEARTBEAT_PATH, { force: true });
+}
+
 // The sandbox mail settings (#764). These are set explicitly rather than
 // inherited, and that is the point: `app/.env.local` carries a real
 // Mailgun key and the account's sandbox domain for interactive dev, bun
@@ -147,6 +206,7 @@ export async function startStack(appOrigin: string) {
 	await seedGCSBucket();
 	await startMailbox();
 	await startAPI(appOrigin);
+	startHeartbeat();
 }
 
 // The sandbox mailbox (e2e/mailbox.ts), started before the BFF for the
@@ -556,6 +616,7 @@ export function readSimulatedNow(): string {
 // and only the host processes, which hold no state of their own, are
 // killed and restarted by a later startStack.
 export function stopStack({ keepVolume = false }: { keepVolume?: boolean } = {}) {
+	stopHeartbeat();
 	killPidfile(API_PIDFILE);
 	rmSync(API_BINARY_PATH, { force: true });
 	killPidfile(MAILBOX_PIDFILE);

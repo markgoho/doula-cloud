@@ -27,7 +27,13 @@ import { fileURLToPath } from 'node:url';
 // concurrent worktrees (offsets 0-9) is ample.
 export const PORT_STEP = 100;
 
-function findPortOffset(): number {
+// Finds `.port-offset` the same walk-up-from-here way for both the offset
+// itself and the directory that holds it -- the latter is where
+// e2eHeartbeatPath below writes the stack's liveness marker (#1193), so a
+// worktree's `.port-offset` and its `.e2e-heartbeat` always sit side by
+// side. `root` is undefined for the main checkout and every CI run, which
+// have no `.port-offset` file to walk up to.
+function findPortOffset(): { offset: number; root: string | undefined } {
 	// import.meta.dir is Bun-only; vite.config.ts loads this file under
 	// Node (Vite's own config loader), where it's undefined. import.meta.url
 	// -> fileURLToPath is the portable way to get this file's own directory
@@ -37,15 +43,18 @@ function findPortOffset(): number {
 		const candidate = path.join(directory, '.port-offset');
 		if (existsSync(candidate)) {
 			const value = Number(readFileSync(candidate, 'utf8').trim());
-			return Number.isSafeInteger(value) && value >= 0 ? value : 0;
+			const offset = Number.isSafeInteger(value) && value >= 0 ? value : 0;
+			return { offset, root: directory };
 		}
 		const parent = path.dirname(directory);
-		if (parent === directory) return 0;
+		if (parent === directory) return { offset: 0, root: undefined };
 		directory = parent;
 	}
 }
 
-export const PORT_OFFSET = findPortOffset();
+const portOffset = findPortOffset();
+export const PORT_OFFSET = portOffset.offset;
+export const PORT_OFFSET_ROOT = portOffset.root;
 
 function shift(port: number): number {
 	return port + PORT_OFFSET * PORT_STEP;
@@ -104,6 +113,31 @@ export function e2eComposeProject(offset: number): string {
 }
 // The compose file itself, named once for the same reason.
 export const E2E_COMPOSE_FILE = 'compose.e2e.yaml';
+
+// The liveness marker a `bun run test:e2e` or `bun run dev:full` run
+// keeps fresh for as long as it is actually using the stack (#1193).
+// `startStack`/`stopStack` (e2e/stack.ts) touch it on a timer at the
+// worktree root, beside `.port-offset` -- not in `os.tmpdir()`, because
+// that file is read by a *different* process than the one that writes
+// it (`.claude/hooks/e2e-stack-reap.ts`, on a later SessionStart), and
+// `$TMPDIR` is not guaranteed to agree between a hook's shell and the
+// one a stack was started from. The worktree root is: it is the one
+// path both sides can name without asking the environment, and it is
+// gitignored next to `.port-offset` for the same reason that file is.
+//
+// Named once here, like E2E_COMPOSE_PROJECT_PREFIX above, so the writer
+// and the reader cannot drift onto different filenames.
+export function e2eHeartbeatPath(worktreeRoot: string): string {
+	return path.join(worktreeRoot, '.e2e-heartbeat');
+}
+// How often a live stack must touch its heartbeat file to keep
+// e2e-stack-reap.ts from treating it as orphaned once its worktree goes
+// quiet by the ordinary (file-mtime) check. Read by both the writer
+// (e2e/stack.ts's startHeartbeat) and the reader
+// (.claude/hooks/e2e-stack-reap.ts's HEARTBEAT_STALE_MS, a multiple of
+// this) so neither can set a staleness threshold shorter than the beat
+// itself by accident.
+export const E2E_HEARTBEAT_INTERVAL_MS = 60_000;
 
 export const BASE_PORTS: readonly number[] = [
 	E2E_API_PORT,
