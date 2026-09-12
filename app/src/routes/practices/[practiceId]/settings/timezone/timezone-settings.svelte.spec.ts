@@ -37,10 +37,14 @@ beforeEach(() => {
 	apiFetchWithSession.mockReset();
 });
 
+async function setup(loadResponse: Response) {
+	apiFetchWithSession.mockResolvedValueOnce(loadResponse);
+	await render(Page, {});
+}
+
 describe('the Timezone screen', () => {
 	it('opens on the zone the Practice holds', async () => {
-		apiFetchWithSession.mockResolvedValue(jsonResponse({ timezone: 'America/Denver' }));
-		await render(Page, {});
+		await setup(jsonResponse({ timezone: 'America/Denver' }));
 
 		await expect.element(control()).toHaveValue('America/Denver');
 		expect(apiFetchWithSession).toHaveBeenCalledWith(timezonePath);
@@ -50,17 +54,13 @@ describe('the Timezone screen', () => {
 		// The failure this prevents is silent: a select whose value matches
 		// no option renders empty, and the next save rewrites her zone to
 		// whatever happened to be first.
-		apiFetchWithSession.mockResolvedValue(
-			jsonResponse({ timezone: 'America/Indiana/Indianapolis' })
-		);
-		await render(Page, {});
+		await setup(jsonResponse({ timezone: 'America/Indiana/Indianapolis' }));
 
 		await expect.element(control()).toHaveValue('America/Indiana/Indianapolis');
 	});
 
 	it('says what changing the zone does to Visits already recorded, before the press', async () => {
-		apiFetchWithSession.mockResolvedValue(jsonResponse({ timezone: 'America/New_York' }));
-		await render(Page, {});
+		await setup(jsonResponse({ timezone: 'America/New_York' }));
 
 		await expect
 			.element(testPage.getByText(/changes how Visits already recorded are typed/))
@@ -68,8 +68,7 @@ describe('the Timezone screen', () => {
 	});
 
 	it('sends the chosen zone and confirms it saved', async () => {
-		apiFetchWithSession.mockResolvedValueOnce(jsonResponse({ timezone: 'America/New_York' }));
-		await render(Page, {});
+		await setup(jsonResponse({ timezone: 'America/New_York' }));
 		await expect.element(control()).toHaveValue('America/New_York');
 
 		apiFetchWithSession.mockResolvedValueOnce(jsonResponse({ timezone: 'America/Denver' }));
@@ -88,8 +87,7 @@ describe('the Timezone screen', () => {
 		// written for the person and `message` is the one written for the
 		// caller. Reading `message` here would put `timezone "X" is not an
 		// IANA zone name` beside her control.
-		apiFetchWithSession.mockResolvedValueOnce(jsonResponse({ timezone: 'America/New_York' }));
-		await render(Page, {});
+		await setup(jsonResponse({ timezone: 'America/New_York' }));
 		await expect.element(control()).toHaveValue('America/New_York');
 
 		apiFetchWithSession.mockResolvedValueOnce(
@@ -119,8 +117,7 @@ describe('the Timezone screen', () => {
 	});
 
 	it('refuses a save with nothing chosen, and sends nothing', async () => {
-		apiFetchWithSession.mockResolvedValueOnce(jsonResponse({ timezone: '' }));
-		await render(Page, {});
+		await setup(jsonResponse({ timezone: '' }));
 		await expect.element(control()).toBeVisible();
 
 		await save();
@@ -132,8 +129,7 @@ describe('the Timezone screen', () => {
 	});
 
 	it('reports a read that failed rather than showing an empty control with no explanation', async () => {
-		apiFetchWithSession.mockResolvedValue(jsonResponse('internal error', 500));
-		await render(Page, {});
+		await setup(jsonResponse('internal error', 500));
 
 		await expect.element(testPage.getByText('internal error')).toBeVisible();
 	});
