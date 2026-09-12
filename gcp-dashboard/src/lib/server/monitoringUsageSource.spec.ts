@@ -46,6 +46,9 @@ vi.mock('@google-cloud/monitoring', () => ({
 const readAt = new Date('2026-09-08T04:30:24Z');
 const now = () => readAt;
 
+const fewSecondsIntoTheBillingPeriod = new Date('2026-09-01T07:00:03Z');
+const withinTheFirstMinute = () => fewSecondsIntoTheBillingPeriod;
+
 function noSeries() {
 	return [[]];
 }
@@ -178,5 +181,23 @@ describe('createMonitoringUsageSource', () => {
 		const usage = await createMonitoringUsageSource()();
 
 		expect(Date.parse(usage.through)).toBeGreaterThanOrEqual(before);
+	});
+
+	it('never asks Monitoring in the first minute of a billing period, reporting every metric absent instead of a figure that could reach behind the period', async () => {
+		listTimeSeries.mockResolvedValue(int64('4785')); // would answer requestCount, a DELTA metric, if asked
+
+		const usage = await createMonitoringUsageSource(withinTheFirstMinute)();
+
+		expect(listTimeSeries).not.toHaveBeenCalled();
+		expect(usage).toMatchObject(EMPTY_SNAPSHOT);
+	});
+
+	it('still says which billing period the absent figures belong to, in that first minute', async () => {
+		const usage = await createMonitoringUsageSource(withinTheFirstMinute)();
+
+		expect(usage).toMatchObject({
+			since: '2026-09-01T07:00:00.000Z',
+			through: '2026-09-01T07:00:03.000Z'
+		});
 	});
 });

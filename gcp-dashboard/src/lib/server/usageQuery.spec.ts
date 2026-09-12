@@ -11,6 +11,7 @@ import {
 	GAUGE_TOTAL,
 	MINIMUM_ALIGNMENT_PERIOD_SECONDS,
 	MONITORING_PROJECT_ID,
+	isWithinMinimumAlignmentWindow,
 	type UsageMetric
 } from './usageQuery.ts';
 
@@ -236,5 +237,29 @@ describe('buildUsageRequest', () => {
 		expect(buildUsageRequest(FIRESTORE_SCOPE, documentReads, now).filter).toBe(
 			'metric.type="firestore.googleapis.com/document/read_count" AND resource.type="firestore_instance"'
 		);
+	});
+});
+
+describe('isWithinMinimumAlignmentWindow', () => {
+	it('is true a few seconds into a billing period, before a minute has elapsed', () => {
+		const fewSecondsIn = new Date('2026-09-01T07:00:03Z');
+
+		expect(isWithinMinimumAlignmentWindow(fewSecondsIn)).toBe(true);
+	});
+
+	it('is true for the very first second of a billing period', () => {
+		const firstSecondOfTheBillingPeriod = new Date('2026-09-01T07:00:01Z');
+
+		expect(isWithinMinimumAlignmentWindow(firstSecondOfTheBillingPeriod)).toBe(true);
+	});
+
+	it('is false once a full minute of the period has elapsed', () => {
+		const exactlyOneMinuteIn = new Date('2026-09-01T07:01:00Z');
+
+		expect(isWithinMinimumAlignmentWindow(exactlyOneMinuteIn)).toBe(false);
+	});
+
+	it('is false well into the period', () => {
+		expect(isWithinMinimumAlignmentWindow(now)).toBe(false);
 	});
 });

@@ -71,8 +71,11 @@ export const FIREBASE_HOSTING_RESOURCE_TYPE = 'firebase_domain';
  * before the period started and a DELTA sum counts the tail of the previous
  * one. Read live on 2026-09-10: the interval 2026-09-09T13:46:00Z–13:46:01Z
  * came back as the point 13:45:01Z–13:46:01Z. There is no shorter period to
- * ask for, so the answer is what the panel does in that window rather than
- * what it asks: [#1176](https://github.com/markgoho/doula-cloud/issues/1176).
+ * ask for, so a request is never built for this window at all —
+ * {@link isWithinMinimumAlignmentWindow} says so before
+ * {@link buildUsageRequest} is called, and the metric is reported absent
+ * instead, the same way an unreported metric already is. Decided in
+ * [#1176](https://github.com/markgoho/doula-cloud/issues/1176).
  */
 export const MINIMUM_ALIGNMENT_PERIOD_SECONDS = 60;
 
@@ -390,13 +393,31 @@ function alignmentOf(metric: UsageMetric): Alignment {
 		: ALIGNMENT_BY_KIND[metric.kind];
 }
 
+function elapsedSecondsInPeriod(now: Date): number {
+	return toEpochSeconds(now) - toEpochSeconds(startOfBillingPeriod(now));
+}
+
+/**
+ * Whether `now` falls in the first {@link MINIMUM_ALIGNMENT_PERIOD_SECONDS}
+ * of a billing period — the window where the clamp in
+ * {@link buildUsageRequest} would pad the alignment period back past the
+ * period's own start. A caller checks this before building or sending a
+ * request; see `MINIMUM_ALIGNMENT_PERIOD_SECONDS`'s own comment for why no
+ * request can answer truthfully in that window.
+ */
+export function isWithinMinimumAlignmentWindow(now: Date): boolean {
+	return elapsedSecondsInPeriod(now) < MINIMUM_ALIGNMENT_PERIOD_SECONDS;
+}
+
 /**
  * The request that collapses one metric to a single scalar for the billing
  * period.
  *
  * The alignment period is the whole period, which is what makes Monitoring
  * return one point rather than a series; the cross-series reducer folds every
- * series of the resource into that one point.
+ * series of the resource into that one point. Callers only reach this for a
+ * `now` where {@link isWithinMinimumAlignmentWindow} is false — the clamp below
+ * is defense in depth, not the guard itself.
  */
 export function buildUsageRequest(
 	scope: UsageScope,
@@ -404,7 +425,7 @@ export function buildUsageRequest(
 	now: Date
 ): UsageRequest {
 	const since = startOfBillingPeriod(now);
-	const elapsed = toEpochSeconds(now) - toEpochSeconds(since);
+	const elapsed = elapsedSecondsInPeriod(now);
 
 	return {
 		name: `projects/${MONITORING_PROJECT_ID}`,

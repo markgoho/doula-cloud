@@ -7,6 +7,7 @@ import {
 	CLOUD_STORAGE_SCOPE,
 	FIREBASE_HOSTING_SCOPE,
 	FIRESTORE_SCOPE,
+	isWithinMinimumAlignmentWindow,
 	type UsageScope,
 	type UsageSnapshot
 } from './usageQuery.ts';
@@ -85,6 +86,23 @@ export function createMonitoringUsageSource(now: () => Date = () => new Date()):
 
 	return async () => {
 		const readAt = now();
+		const since = startOfBillingPeriod(readAt).toISOString();
+		const through = readAt.toISOString();
+
+		// In the first minute of a billing period, no request can answer
+		// truthfully (see MINIMUM_ALIGNMENT_PERIOD_SECONDS): every metric is
+		// reported absent rather than asked for and answered wrong.
+		if (isWithinMinimumAlignmentWindow(readAt)) {
+			return {
+				since,
+				through,
+				cloudRun: {},
+				cloudSql: {},
+				cloudStorage: {},
+				firestore: {},
+				firebaseHosting: {}
+			};
+		}
 
 		// One sync, every service: the panels are read together so they cover
 		// the same window as each other and as the cost beside them.
@@ -96,14 +114,6 @@ export function createMonitoringUsageSource(now: () => Date = () => new Date()):
 			readScope(monitoring, FIREBASE_HOSTING_SCOPE, readAt)
 		]);
 
-		return {
-			since: startOfBillingPeriod(readAt).toISOString(),
-			through: readAt.toISOString(),
-			cloudRun,
-			cloudSql,
-			cloudStorage,
-			firestore,
-			firebaseHosting
-		};
+		return { since, through, cloudRun, cloudSql, cloudStorage, firestore, firebaseHosting };
 	};
 }
