@@ -1,7 +1,8 @@
 #!/usr/bin/env bun
-// SessionStart hook: reaps the podman-compose e2e stack a killed worktree
-// session leaves running. See docs/testing.md's "Reaping orphaned e2e
-// stacks" section for the full story; the short version is below.
+// SessionStart hook: reaps the podman-compose e2e stack, and the
+// host-process pidfiles beside it, that a killed worktree session leaves
+// running. See docs/testing.md's "Reaping orphaned e2e stacks" section
+// for the full story; the short version is below.
 //
 // app/e2e/stack.ts brings up app/compose.e2e.yaml under a per-worktree
 // compose project name -- `doula-cloud-e2e-<PORT_OFFSET>` -- and tears it
@@ -13,18 +14,41 @@
 // testdb-reap.ts does nothing about it: it only looks at containers
 // labeled `org.testcontainers=true`, which a compose stack is not.
 //
-// The reap decision (groupStackProjects/pickReapProjects below) is pure
-// and exported for direct unit testing. main() -- the engine invocation,
-// the compose teardown, the fail-open catch -- is exercised as a
-// subprocess instead; see scripts/e2e-stack-reap.test.ts.
+// The same file spawns three host processes -- the Firebase Auth
+// emulator, the Go BFF and the sandbox mailbox -- `detached` and
+// `unref()`'d, tracked by pidfile in os.tmpdir() rather than by compose
+// (#1194). A killed session leaves those running too, and unlike the
+// containers above they hold the offset's actual TCP ports: a killed
+// session's orphaned BFF answering on its port is what makes
+// worktree-provision.ts's `isPortFree` refuse to hand that offset to a
+// new worktree at all, even after the worktree that used to claim it is
+// gone -- with only 9 offsets on the machine, that is how "no usable
+// port offset" happens. groupStackProjects/pickReapProjects below decide
+// which compose stacks are orphaned; discoverPidfiles/pickReapPidfiles
+// answer the same question for pidfiles, under the same two-clock rule
+// (liveOffsets, REAP_THRESHOLD_MS) so a live worktree or a fresh
+// heartbeat protects both the same way. Killing a pidfile's pid is the
+// one step that is not just cleanup: looksLikeOurProcess below is what
+// keeps a dead-and-recycled pid from ever being handed to `kill` just
+// because a stale pidfile still names it.
+//
+// The reap decisions (groupStackProjects/pickReapProjects,
+// discoverPidfiles/pickReapPidfiles) are pure and exported for direct
+// unit testing. main() -- the engine invocation, the compose teardown,
+// the pidfile kills, the fail-open catch -- is exercised as a subprocess
+// instead; see scripts/e2e-stack-reap.test.ts.
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
+import { tmpdir } from 'node:os';
 import path from 'node:path';
 import {
   E2E_COMPOSE_FILE,
   E2E_COMPOSE_PROJECT_PREFIX,
   E2E_HEARTBEAT_INTERVAL_MS,
+  E2E_PIDFILE_KINDS,
+  e2eApiBinaryPath,
   e2eHeartbeatPath,
+  type E2EPidfileKind,
 } from '../../app/e2e/ports.ts';
 import {
   engineInvocation,
@@ -305,13 +329,157 @@ export function liveOffsets(
 }
 
 /*
- * Fails open, always -- the same rule, for the same reason, as
- * testdb-reap.ts's own main(): this runs on SessionStart, decides nothing
- * about the tool call that follows, and exists purely to tidy up. A
- * reaper that errors must never block or slow a session from starting.
- * Do not "fix" this into failing closed.
+ * Matches a pidfile app/e2e/ports.ts's e2ePidfilePath could have
+ * produced for a worktree -- never the main checkout's or CI's. The
+ * offset group is mandatory, not optional: e2ePidfilePath omits the
+ * suffix only at offset 0, so requiring `-(\d+)` here is what keeps an
+ * unsuffixed `doula-cloud-e2e-api.pid` (the main checkout's own, or a
+ * plain `bun run dev:full` outside any worktree) from ever matching --
+ * the same exclusion WORKTREE_PROJECT_PATTERN above makes for compose
+ * projects, and for the same reason: that pidfile's offset (0) is never
+ * in liveOffsets' output (main checkout has no `.port-offset` to find),
+ * so without this exclusion a long-lived interactive session would read
+ * as orphaned the moment it went quiet for REAP_THRESHOLD_MS.
  */
-function main(): void {
+const PIDFILE_PATTERN = new RegExp(
+  `^${E2E_COMPOSE_PROJECT_PREFIX}-(${E2E_PIDFILE_KINDS.join('|')})-(\\d+)\\.pid$`
+);
+
+export interface PidfileEntry {
+  kind: E2EPidfileKind;
+  offset: number;
+  path: string;
+  mtimeMs: number;
+}
+
+// Every worktree-suffixed doula-cloud-e2e-* pidfile os.tmpdir() is
+// currently holding. A file that vanishes between the directory listing
+// and the stat (a session's own teardown racing this scan) is simply
+// left out -- there is nothing left to reap.
+export function discoverPidfiles(tmpDir: string): PidfileEntry[] {
+  let names: string[];
+  try {
+    names = fs.readdirSync(tmpDir);
+  } catch {
+    return [];
+  }
+
+  const found: PidfileEntry[] = [];
+  for (const name of names) {
+    const match = PIDFILE_PATTERN.exec(name);
+    if (match === null) continue;
+    const filePath = path.join(tmpDir, name);
+    try {
+      found.push({
+        kind: match[1] as E2EPidfileKind,
+        offset: Number(match[2]),
+        path: filePath,
+        mtimeMs: fs.statSync(filePath).mtimeMs,
+      });
+    } catch {
+      continue;
+    }
+  }
+  return found;
+}
+
+// The same conjunction pickReapProjects applies to a compose stack,
+// applied to a pidfile instead: not live by liveOffsets, AND older than
+// thresholdMs. Age is read from the pidfile's own mtime -- killPidfile
+// (e2e/stack.ts) removes and rewrites it fresh on every startAPI/
+// startEmulator/startMailbox, so its mtime is that process's own start
+// time, the direct pidfile equivalent of a container's `Created`.
+export function pickReapPidfiles(
+  entries: PidfileEntry[],
+  liveOffsets: ReadonlySet<number>,
+  nowMs: number,
+  thresholdMs: number = REAP_THRESHOLD_MS
+): PidfileEntry[] {
+  return entries.filter(
+    (entry) =>
+      !liveOffsets.has(entry.offset) && nowMs - entry.mtimeMs > thresholdMs
+  );
+}
+
+// True unless the pid is definitely gone (ESRCH). EPERM -- a pid that
+// exists but this user cannot signal -- reads as alive: on this machine
+// every one of these processes is spawned by, and owned by, the same
+// user running this hook, so a pid this hook cannot signal is already a
+// sign that whatever now holds it is not one of ours.
+export function isProcessAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    return (error as NodeJS.ErrnoException).code !== 'ESRCH';
+  }
+}
+
+/*
+ * The one fact that lets this hook kill a pid at all: not just that a
+ * pidfile names it, but that the pid's own command line still looks like
+ * the process that pidfile was written for. This is what stands between
+ * a genuinely orphaned BFF and a `kill` aimed at whatever the OS has
+ * since recycled that pid onto -- another worktree's live process, or
+ * anything else on the machine (see #1212, on what a wrong reclaim here
+ * costs).
+ *
+ * `api`'s marker is the exact binary path startAPI built and exec'd
+ * (e2eApiBinaryPath) -- offset-suffixed, so it is unique to this
+ * pidfile's own offset and never matches a different worktree's BFF.
+ * `mailbox` and `firebase-emulator` can't be pinned to an offset the
+ * same way -- mailbox.ts's own path is the *worktree's* (its source
+ * tree may no longer exist to check), and firebase-tools' invocation
+ * carries no offset at all in its argv -- so their markers only confirm
+ * "this is one of ours", the same bar killPidfile itself has always
+ * applied to its own pidfile. That is weaker for those two kinds, and
+ * deliberately so: it can still produce a false negative (skip a
+ * genuine orphan) but never a false positive strong enough to kill an
+ * unrelated process apart from another worktree's own mailbox/emulator,
+ * which the offset-scoped liveOffsets check above already excludes from
+ * ever reaching this function while that worktree is live.
+ */
+const IDENTITY_MARKER: Record<E2EPidfileKind, (offset: number) => string> = {
+  api: (offset) => e2eApiBinaryPath(offset),
+  mailbox: () => `${path.sep}app${path.sep}e2e${path.sep}mailbox.ts`,
+  'firebase-emulator': () => 'emulators:start',
+};
+
+export function looksLikeOurProcess(
+  kind: E2EPidfileKind,
+  offset: number,
+  commandLine: string | undefined
+): boolean {
+  if (!commandLine) return false;
+  return commandLine.includes(IDENTITY_MARKER[kind](offset));
+}
+
+// `ps`'s own view of what a pid is actually running, not what the
+// pidfile claims. `-ww` asks for the untruncated line -- os.tmpdir()
+// paths on macOS routinely run past a terminal-width default. Returns
+// undefined on any failure (pid gone between isProcessAlive and this
+// call, `ps` missing, anything else): looksLikeOurProcess treats that
+// the same as "does not match" and this hook fails open around it.
+function processCommandLine(pid: number): string | undefined {
+  try {
+    return execFileSync('ps', ['-p', String(pid), '-o', 'command=', '-ww'], {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+    }).trim();
+  } catch {
+    return undefined;
+  }
+}
+
+// Tears down every orphaned compose stack in `doomed`. Its own try/catch,
+// separate from reapPidfiles' below, so a container engine that is down
+// or unreachable -- which has nothing to do with whether a host-process
+// pidfile is orphaned -- can never stop the pidfile sweep from running.
+function reapComposeStacks(
+  mainCheckout: string,
+  live: ReadonlySet<number>,
+  now: number
+): void {
   try {
     const ps = engineInvocation([
       'ps',
@@ -326,12 +494,6 @@ function main(): void {
       stdio: ['ignore', 'pipe', 'pipe'],
     });
 
-    const mainCheckout = findMainCheckoutRoot(import.meta.dir);
-    const now = Date.now();
-    const live = liveOffsets(
-      path.join(mainCheckout, '.claude', 'worktrees'),
-      now
-    );
     const doomed = pickReapProjects(
       groupStackProjects(parseContainers(psOutput)),
       live,
@@ -377,10 +539,90 @@ function main(): void {
       `e2e-stack-reap: tore down ${removed.length} orphaned e2e stack(s) -- ${removed.join(', ')} -- containers, network and volume (no worktree touched, and no fresh heartbeat, in the last ${minutes}m claims their port offset)`
     );
   } catch {
-    // Engine unreachable, binary missing, malformed output, git absent --
+    // Engine unreachable, binary missing, malformed output --
     // none of it may ever surface as a blocked or slowed SessionStart.
     return;
   }
+}
+
+// Kills every orphaned host-process pidfile in os.tmpdir() (#1194). Needs
+// no container engine at all, so it runs and fails open independently of
+// reapComposeStacks above.
+function reapPidfiles(live: ReadonlySet<number>, now: number): void {
+  try {
+    const doomed = pickReapPidfiles(discoverPidfiles(tmpdir()), live, now);
+    if (doomed.length === 0) return;
+
+    const killed: string[] = [];
+    for (const entry of doomed) {
+      try {
+        const pidText = fs.readFileSync(entry.path, 'utf8').trim();
+        const pid = Number(pidText);
+        if (!Number.isInteger(pid) || pid <= 0) {
+          fs.rmSync(entry.path, { force: true }); // unreadable pidfile -- nothing it could name
+          continue;
+        }
+        if (!isProcessAlive(pid)) {
+          fs.rmSync(entry.path, { force: true }); // already gone -- just stale bookkeeping
+          continue;
+        }
+        if (
+          !looksLikeOurProcess(
+            entry.kind,
+            entry.offset,
+            processCommandLine(pid)
+          )
+        ) {
+          // Alive, but not running what this pidfile claims -- almost
+          // certainly a pid the OS has recycled onto something
+          // unrelated since. Leave both the process and its stale
+          // pidfile alone: killing the pid is the one irreversible step
+          // here, and "cannot confirm" must resolve to "do nothing" (see
+          // #1212 on what a wrong reclaim costs).
+          continue;
+        }
+        process.kill(pid);
+        fs.rmSync(entry.path, { force: true });
+        killed.push(`${entry.kind}-${entry.offset}`);
+      } catch {
+        // One pidfile's teardown failing must not stop the others.
+      }
+    }
+    if (killed.length === 0) return;
+
+    const minutes = Math.round(QUIET_MS / 60000);
+    console.log(
+      `e2e-stack-reap: killed ${killed.length} orphaned e2e host process(es) -- ${killed.join(', ')} -- no worktree touched, and no fresh heartbeat, in the last ${minutes}m claims their port offset`
+    );
+  } catch {
+    // Anything unexpected here (a tmpdir that can't be read, and so on)
+    // -- never surfaced as a blocked or slowed SessionStart.
+    return;
+  }
+}
+
+/*
+ * Fails open, always -- the same rule, for the same reason, as
+ * testdb-reap.ts's own main(): this runs on SessionStart, decides nothing
+ * about the tool call that follows, and exists purely to tidy up. A
+ * reaper that errors must never block or slow a session from starting.
+ * Do not "fix" this into failing closed.
+ */
+function main(): void {
+  let mainCheckout: string;
+  let now: number;
+  let live: Set<number>;
+  try {
+    mainCheckout = findMainCheckoutRoot(import.meta.dir);
+    now = Date.now();
+    live = liveOffsets(path.join(mainCheckout, '.claude', 'worktrees'), now);
+  } catch {
+    // git absent, or anything else -- nothing safe to decide without this.
+    return;
+  }
+
+  reapComposeStacks(mainCheckout, live, now);
+  reapPidfiles(live, now);
 }
 
 if (import.meta.main) main();
