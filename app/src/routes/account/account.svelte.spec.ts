@@ -107,10 +107,14 @@ async function fieldError(id: string, message: string) {
 	});
 }
 
+async function setup(options: MockOptions = {}) {
+	mockApi(options);
+	await render(Page, {});
+}
+
 describe('the account screen', () => {
 	it('shows the work state she has already asserted, and the day she asserted it', async () => {
-		mockApi();
-		await render(Page, {});
+		await setup();
 
 		await expect.element(testPage.getByRole('heading', { name: 'Your account' })).toBeVisible();
 		await expect.element(stateSelect()).toHaveValue('New York');
@@ -123,8 +127,7 @@ describe('the account screen', () => {
 	// -- and the answer to the question it invites, which is whether a
 	// correction reaches backwards. It does not (#420).
 	it('states the sales tax consequence and that past purchases are not re-priced', async () => {
-		mockApi();
-		await render(Page, {});
+		await setup();
 
 		await expect
 			.element(testPage.getByText(/sets how much sales tax your practice pays/))
@@ -133,8 +136,7 @@ describe('the account screen', () => {
 	});
 
 	it('sends the USPS code for the state she picked, with no staff id of its own', async () => {
-		mockApi();
-		await render(Page, {});
+		await setup();
 
 		await stateSelect().selectOptions('New Jersey');
 		await saveButton().click();
@@ -147,8 +149,7 @@ describe('the account screen', () => {
 	});
 
 	it('confirms the save and moves the last-confirmed day to the one the server returned', async () => {
-		mockApi();
-		await render(Page, {});
+		await setup();
 
 		await stateSelect().selectOptions('New Jersey');
 		await saveButton().click();
@@ -165,8 +166,7 @@ describe('the account screen', () => {
 	// disabled on an unchanged value: "yes, still New York, as of today"
 	// is the only staleness signal the design has.
 	it('sends the same state again rather than treating it as a no-op', async () => {
-		mockApi({ saveResponse: jsonResponse({ workState: 'NY', workStateReportedAt: SAVED_AT }) });
-		await render(Page, {});
+		await setup({ saveResponse: jsonResponse({ workState: 'NY', workStateReportedAt: SAVED_AT }) });
 
 		await expect.element(saveButton()).toBeEnabled();
 		await saveButton().click();
@@ -187,8 +187,7 @@ describe('the account screen', () => {
 	// verification link without knowing whether her address is already
 	// verified.
 	it('sends a fresh verification link on request', async () => {
-		mockApi();
-		await render(Page, {});
+		await setup();
 
 		await testPage.getByRole('button', { name: 'Send a new verification link' }).click();
 
@@ -201,8 +200,7 @@ describe('the account screen', () => {
 	});
 
 	it("shows the server's own words when a resend is refused", async () => {
-		mockApi({ resendResponse: refusal(429, 'too many requests -- try again later') });
-		await render(Page, {});
+		await setup({ resendResponse: refusal(429, 'too many requests -- try again later') });
 
 		await testPage.getByRole('button', { name: 'Send a new verification link' }).click();
 
@@ -212,8 +210,7 @@ describe('the account screen', () => {
 	});
 
 	it('owns a resend that never reached the server at all', async () => {
-		mockApi({ resendThrows: true });
-		await render(Page, {});
+		await setup({ resendThrows: true });
 
 		await testPage.getByRole('button', { name: 'Send a new verification link' }).click();
 
@@ -227,8 +224,7 @@ describe('when the account screen cannot do its job', () => {
 	// A verified identity with no staff row behind it. Signed in, but
 	// nobody here yet -- so there is nothing to edit and no form to offer.
 	it('says so, and offers no form, when there is no Staff account', async () => {
-		mockApi({ sessionResponse: refusal(404, 'no matching staff account') });
-		await render(Page, {});
+		await setup({ sessionResponse: refusal(404, 'no matching staff account') });
 
 		await expect
 			.element(testPage.getByRole('alert'))
@@ -237,13 +233,12 @@ describe('when the account screen cannot do its job', () => {
 	});
 
 	it("shows the server's own words when a save is refused", async () => {
-		mockApi({
+		await setup({
 			saveResponse: refusal(
 				400,
 				'workState is required, and must be a two-letter US state abbreviation'
 			)
 		});
-		await render(Page, {});
 
 		await saveButton().click();
 
@@ -258,8 +253,7 @@ describe('when the account screen cannot do its job', () => {
 	 * and reports it in the error summary above the title.
 	 */
 	it('owns a save that never reached the server at all', async () => {
-		mockApi({ saveThrows: true });
-		await render(Page, {});
+		await setup({ saveThrows: true });
 
 		await saveButton().click();
 
@@ -279,16 +273,14 @@ describe('when the account screen cannot do its job', () => {
  */
 describe('two-factor authentication status (#606)', () => {
 	it('shows it is turned on and offers to remove it', async () => {
-		mockApi({ sessionResponse: jsonResponse({ ...session, secondFactor: true }) });
-		await render(Page, {});
+		await setup({ sessionResponse: jsonResponse({ ...session, secondFactor: true }) });
 
 		await expect.element(testPage.getByText('Turned on.')).toBeVisible();
 		await expect.element(testPage.getByRole('button', { name: 'Remove' })).toBeVisible();
 	});
 
 	it('offers to set it up voluntarily when it is off, returning here afterward', async () => {
-		mockApi({ sessionResponse: jsonResponse({ ...session, secondFactor: false }) });
-		await render(Page, {});
+		await setup({ sessionResponse: jsonResponse({ ...session, secondFactor: false }) });
 
 		await expect.element(testPage.getByText('Not turned on.')).toBeVisible();
 		await expect
@@ -456,10 +448,14 @@ function mockDeleteLogin(deleteResponse: Response | Error) {
 // one that commits.
 const deleteButton = () => testPage.getByRole('button', { name: 'Delete your login' });
 
+async function setupDeleteLogin(deleteResponse: Response | Error) {
+	mockDeleteLogin(deleteResponse);
+	await render(Page, {});
+}
+
 describe('deleting your own login', () => {
 	it('names what deletion destroys and what it keeps, before she presses anything', async () => {
-		mockDeleteLogin(new Response(undefined, { status: 204 }));
-		await render(Page, {});
+		await setupDeleteLogin(new Response(undefined, { status: 204 }));
 
 		await expect.element(testPage.getByText(/ends your access to Doula Cloud everywhere/)).toBeVisible();
 		await expect.element(testPage.getByText(/membership of every practice you work at/).first()).toBeVisible();
@@ -467,8 +463,7 @@ describe('deleting your own login', () => {
 	});
 
 	it('sends the delete only after the confirmation, and lands her on the sign-in screen', async () => {
-		mockDeleteLogin(new Response(undefined, { status: 204 }));
-		await render(Page, {});
+		await setupDeleteLogin(new Response(undefined, { status: 204 }));
 
 		await deleteButton().first().click();
 		// The dialog's own confirm button carries the same label, so the act
@@ -489,13 +484,12 @@ describe('deleting your own login', () => {
 	});
 
 	it('shows the last-Owner refusal with the practices in the way named, and stays put', async () => {
-		mockDeleteLogin(
+		await setupDeleteLogin(
 			refusal(
 				409,
 				'cannot delete your login while you are the only Owner of Riverside Doula Collective: hand ownership to someone else, or delete the practice first'
 			)
 		);
-		await render(Page, {});
 
 		await deleteButton().first().click();
 		await deleteButton().last().click();
@@ -510,8 +504,7 @@ describe('deleting your own login', () => {
 	});
 
 	it('shows a service problem when the request never lands', async () => {
-		mockDeleteLogin(new Error('The network dropped'));
-		await render(Page, {});
+		await setupDeleteLogin(new Error('The network dropped'));
 
 		await deleteButton().first().click();
 		await deleteButton().last().click();
