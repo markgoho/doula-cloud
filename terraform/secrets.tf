@@ -142,36 +142,6 @@ resource "google_secret_manager_secret_iam_member" "mailgun_webhook_signing_key_
   secret_id = google_secret_manager_secret.mailgun_webhook_signing_key.id
 }
 
-resource "google_secret_manager_secret" "notification_worker_secret" {
-  annotations         = {}
-  deletion_policy     = "DELETE"
-  deletion_protection = false
-  labels              = {}
-  project             = "doula-cloud"
-  secret_id           = "doula-cloud-notification-worker-secret"
-  tags                = null
-  ttl                 = null
-  version_aliases     = {}
-  version_destroy_ttl = null
-
-  replication {
-    auto {}
-  }
-
-  lifecycle {
-    prevent_destroy = true
-  }
-}
-
-# This secret had three accessors until #1183 and now has none. The runtime
-# container no longer references it (ADR-0037 made the deployed boundary a
-# caller identity, and `cloud_run.tf` sets no `NOTIFICATION_WORKER_SECRET`);
-# `firebase-hosting-merge.yml` no longer reads it, because its `verify-pages`
-# step presents an ID token; and `terraform-plan@`'s grant existed only so
-# `scheduler.tf`'s `data` source could read the header value during `plan`,
-# which is gone with the header. The shell itself stays — deleting it is a
-# separate act, and nothing reads it in the meantime.
-
 resource "google_secret_manager_secret" "pg_app_runtime_dsn" {
   annotations         = {}
   deletion_policy     = "DELETE"
