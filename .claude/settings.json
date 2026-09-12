@@ -44,6 +44,12 @@
           },
           {
             "type": "command",
+            "if": "Bash(gh run watch*)",
+            "command": "bash \"$(git rev-parse --show-toplevel)/.claude/hooks/gate-gh-run-watch.sh\"",
+            "statusMessage": "Checking this reads conclusion instead of trusting gh run watch's exit code"
+          },
+          {
+            "type": "command",
             "command": "bun \"$(git rev-parse --show-toplevel)/.claude/hooks/gate-bash-write.ts\"",
             "statusMessage": "Checking this command doesn't write to a tracked path in the main checkout",
             "timeout": 10
