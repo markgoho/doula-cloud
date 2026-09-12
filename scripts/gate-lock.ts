@@ -78,6 +78,13 @@ const LOCK_DIR_ENV_VAR = 'GATE_LOCK_DIR';
 const PRE_SPAWN_DELAY_MS =
   Number(process.env.GATE_LOCK_PRE_SPAWN_DELAY_MS) || 0;
 
+// Test seam only: widens the window between `owner.json` becoming
+// visible and `acquire()` returning control to `main()`, so a spec can
+// land a signal inside it on purpose rather than by luck (#1195). Zero
+// everywhere else, including CI. Not a user-facing knob.
+const POST_ACQUIRE_DELAY_MS =
+  Number(process.env.GATE_LOCK_POST_ACQUIRE_DELAY_MS) || 0;
+
 export interface LockOwner {
   pid: number;
   label: string;
@@ -260,7 +267,10 @@ async function acquire(
 ): Promise<void> {
   let announcedAtMs = 0;
   for (;;) {
-    if (tryAcquire(lockDir)) return;
+    if (tryAcquire(lockDir)) {
+      if (POST_ACQUIRE_DELAY_MS > 0) await sleep(POST_ACQUIRE_DELAY_MS);
+      return;
+    }
 
     let sinceHeartbeatMs: number;
     try {
@@ -340,49 +350,62 @@ async function main(argv: string[]): Promise<number> {
   }
   if (process.env[SKIP_ENV_VAR]) return runCommand(command);
 
-  let lockDir: string;
+  /*
+   * #1164 armed this handler after `acquire()` returned, reasoning that
+   * the lock was "held from the line above". It was not: `acquire()` is
+   * `async`, and even a synchronous `tryAcquire` still resolves through
+   * a microtask, so control returns to `main()` one tick after
+   * `owner.json` is visible on disk -- and a SIGINT/SIGTERM delivered in
+   * that tick, or in the handful of synchronous statements between the
+   * `await` and `process.on()`, still takes its DEFAULT action: the
+   * process dies where it stands, the `finally` below never runs, and
+   * the lock stands until the age gate clears it five minutes later
+   * (#1195). `releaseOnSignal` therefore has to be armed BEFORE
+   * `acquire()` is even called, not after it returns.
+   *
+   * Arming this early means the handler can fire while we are still
+   * WAITING on someone else's lock (not holding one at all). That is
+   * safe by construction: `release()` only removes a lock directory
+   * whose owner file names our own pid, so on any lock we do not
+   * actually hold it is a no-op.
+   *
+   * Once we do hold the lock, the release stands aside as soon as a
+   * child exists -- `runCommand`'s own forwarder kills the child, the
+   * child's `close` resolves, and the `finally` releases the normal way.
+   * Registering a listener at all is what suppresses the default action,
+   * so the window is covered from the moment we start trying to acquire,
+   * not only once we succeed.
+   */
+  let lockDir = '';
+  let stopHeartbeat: () => void = () => {};
+  let hasChild = false;
+  const releaseOnSignal = () => {
+    if (hasChild) return;
+    stopHeartbeat();
+    if (lockDir) release(lockDir);
+    process.exit(1);
+  };
+  process.on('SIGINT', releaseOnSignal);
+  process.on('SIGTERM', releaseOnSignal);
+
   try {
     lockDir = resolveLockDir();
     fs.mkdirSync(path.dirname(lockDir), { recursive: true });
     await acquire(lockDir, (message) => console.error(message));
   } catch (error) {
     // No git dir, an unwritable parent, a lock directory we cannot
-    // reason about -- none of it may stop a commit. Say so and run.
+    // reason about -- none of it may stop a commit. Say so and run,
+    // and hand the signal back to `runCommand`'s own forwarders rather
+    // than double-handling it.
+    process.off('SIGINT', releaseOnSignal);
+    process.off('SIGTERM', releaseOnSignal);
     console.error(
       `gate-lock: running without the lock (${(error as Error).message})`
     );
     return runCommand(command);
   }
 
-  const stopHeartbeat = startHeartbeat(lockDir);
-
-  /*
-   * The lock is held from the line above, and the signal forwarders
-   * `runCommand` installs do not exist until it has spawned. A SIGINT or
-   * SIGTERM landing in between takes its DEFAULT action -- the process
-   * dies where it stands, the `finally` below never runs, and the lock
-   * stands until the age gate clears it five minutes later. That is the
-   * exact failure the forwarders exist to prevent, one step earlier than
-   * they reach (#1164), and it is not theoretical: it is what made
-   * `releases the lock when it is interrupted` fail about one run in
-   * three, on trunk as well as on a PR.
-   *
-   * So the release is armed the moment the lock is held, and stands
-   * aside once a child exists -- `runCommand`'s own forwarder kills the
-   * child, the child's `close` resolves, and the `finally` releases the
-   * normal way. Registering a listener at all is what suppresses the
-   * default action, so both windows are now covered by a handler rather
-   * than only the later one.
-   */
-  let hasChild = false;
-  const releaseOnSignal = () => {
-    if (hasChild) return;
-    stopHeartbeat();
-    release(lockDir);
-    process.exit(1);
-  };
-  process.on('SIGINT', releaseOnSignal);
-  process.on('SIGTERM', releaseOnSignal);
+  stopHeartbeat = startHeartbeat(lockDir);
 
   try {
     if (PRE_SPAWN_DELAY_MS > 0) {
