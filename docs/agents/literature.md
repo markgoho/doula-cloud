@@ -23,6 +23,25 @@ Stage is one of: **shelf** (no read-back yet), **read-back** (on trunk in `docs/
 | Design for Cognitive Bias | David Dylan Thomas, 2020 | `design-for-cognitive-bias.pdf` | synthesized |
 | Landing Page Hot Tips | Rob Hope | `Landing-Page-Hot-Tips-Ebook-v1-1.pdf` | synthesized |
 | Copyhackers: Uplift | Copyhackers | `Copyhackers_Uplift_eBook_USLetter-V03.pdf` | synthesized |
+| Obviously Awesome | April Dunford, 2019 | `Obviously Awesome.pdf` | shelf |
+| Building a StoryBrand 2.0 | Donald Miller, 2025 updated edition | `Building a StoryBrand 2.pdf` | shelf |
+| Lean Marketing | Allan Dib, 2024 | `Lean Marketing.pdf` | shelf |
+| The Mom Test | Rob Fitzpatrick, 2013 | `The Mom Test.pdf` | shelf |
+| Competing Against Luck | Clayton M. Christensen, Taddy Hall, Karen Dillon, David S. Duncan, 2016 | `Competing Against Luck.pdf` | shelf |
+| Forget the Funnel | Georgiana Laudi and Claire Suellentrop, 2023 | `Forget the Funnel.pdf` | shelf |
+| Marketing Made Simple | Donald Miller and J.J. Peterson, 2020 | `Marketing Made Simple.pdf` | shelf |
+| This Is Marketing | Seth Godin, 2018 | `This Is Marketing.pdf` | shelf |
+| Start Small, Stay Small | Rob Walling, 2010 | `Start small, stay small.pdf` | shelf |
+| Software as a Science | Dan Martell, Matt Verlaque, Johnny Page, Marcel Petitpas, 2024 | `Software as a Science.pdf` | shelf |
+| The Lean Startup | Eric Ries, 2011 | `The Lean Startup.pdf` | shelf |
+| The Four Steps to the Epiphany | Steve Blank, 2013 second edition | `The four steps to the epiphany.pdf` | shelf |
+| The Startup Owner's Manual | Steve Blank and Bob Dorf, 2012 | `The startup owner's manual.pdf` | shelf |
+| Zero to One | Peter Thiel with Blake Masters, 2014 | `Zero to One.pdf` | shelf |
+| Company of One | Paul Jarvis, 2019 | `Company of One.pdf` | shelf |
+| Buy Back Your Time | Dan Martell, 2023 | `Buy Back Your Time.pdf` | shelf |
+| Entrepreneur Revolution | Daniel Priestley, 2024 third edition | `Entrepreneur Revolution.pdf` | shelf |
+| The Voltage Effect | John A. List, 2022 | `The voltage effect.pdf` | shelf |
+| Thinking in Bets | Annie Duke, 2018 | `Thinking in Bets.pdf` | shelf |
 
 ### Reference track
 
