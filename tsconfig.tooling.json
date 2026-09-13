@@ -1,0 +1,15 @@
+{
+  // Typecheck scope for the repo's own tooling trees, `.claude/hooks/` and
+  // `scripts/` (#1335). The root tsconfig.json has no "include", so
+  // `tsc -p tsconfig.json` walks the whole repo -- catching app/ and
+  // gcp-dashboard/ files that already have their own tsconfig and their
+  // own gate (svelte-check), plus app/e2e/*.ts files with unrelated
+  // Playwright/DOM-lib type errors that are out of scope here. This
+  // project extends the same strict settings (including
+  // noUncheckedIndexedAccess) but only ever starts from the two trees that
+  // have no typecheck gate of their own -- tsc still follows their imports,
+  // so a shared helper outside either tree (e.g. app/e2e/ports.ts) enters
+  // the program too, though it is not itself in scope for the gate.
+  "extends": "./tsconfig.json",
+  "include": [".claude/hooks/**/*.ts", "scripts/**/*.ts"]
+}

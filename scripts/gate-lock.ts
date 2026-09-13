@@ -317,8 +317,14 @@ async function acquire(
 }
 
 function runCommand(argv: string[], onSpawn?: () => void): Promise<number> {
+  const [cmd, ...args] = argv;
+  if (cmd === undefined) {
+    // main() already refuses an empty command before calling here; this
+    // guard exists only so spawn() below sees a definite string.
+    throw new Error('runCommand: argv must have at least one element');
+  }
   return new Promise((resolve, reject) => {
-    const child = spawn(argv[0], argv.slice(1), { stdio: 'inherit' });
+    const child = spawn(cmd, args, { stdio: 'inherit' });
     // Tells the caller a child now exists, so a handler armed before
     // this point can stand aside for the forwarders below (#1164).
     onSpawn?.();
