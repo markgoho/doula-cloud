@@ -76,12 +76,62 @@ function ensureSymlink(target: string, source: string): string {
   return 'left existing node_modules (real directory)';
 }
 
+// Every top-level sibling package that declares @sveltejs/kit as a
+// dependency -- the packages that need the same "always a real install,
+// never a symlink" treatment app/ gets (see ensureNodeModulesReal below).
+// Detected by scanning rather than a hand-maintained list, so a third
+// SvelteKit package (or a renamed one) needs no update here (#950).
+export function sveltekitPackages(root: string): string[] {
+  return fs
+    .readdirSync(root, { withFileTypes: true })
+    .filter(
+      (entry) =>
+        entry.isDirectory() &&
+        !entry.name.startsWith('.') &&
+        entry.name !== 'node_modules'
+    )
+    .map((entry) => entry.name)
+    .filter((name) => declaresSveltekit(path.join(root, name, 'package.json')))
+    .sort();
+}
+
+function declaresSveltekit(packageJsonPath: string): boolean {
+  if (!fs.existsSync(packageJsonPath)) return false;
+  try {
+    const pkg = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8')) as {
+      dependencies?: Record<string, string>;
+      devDependencies?: Record<string, string>;
+    };
+    return Boolean(
+      pkg.dependencies?.['@sveltejs/kit'] ||
+      pkg.devDependencies?.['@sveltejs/kit']
+    );
+  } catch {
+    return false;
+  }
+}
+
+// The trunk-diff pathspec that decides whether any sibling package's own
+// dependencies changed -- root's manifest pair plus each SvelteKit
+// package's own. One shared list keeps root and every sibling on one
+// diff, so "changed" means the same thing everywhere it's used.
+export function dependencyManifestPaths(packages: string[]): string[] {
+  return [
+    'package.json',
+    'bun.lock',
+    ...packages.flatMap((name) => [`${name}/package.json`, `${name}/bun.lock`]),
+  ];
+}
+
 // If the worktree's branch touches a dependency manifest relative to
 // trunk, a live symlink into main's node_modules would be wrong for it --
 // remove the symlink and do a real install instead. Re-checked on every
 // provision (not just create), so a branch that adds a dependency later
 // gets re-provisioned on its next `git worktree add` / EnterWorktree.
-function dependencyManifestsChanged(worktreePath: string): boolean {
+export function dependencyManifestsChanged(
+  worktreePath: string,
+  packages: string[]
+): boolean {
   try {
     const diff = runGit(
       [
@@ -89,10 +139,7 @@ function dependencyManifestsChanged(worktreePath: string): boolean {
         '--name-only',
         'trunk...HEAD',
         '--',
-        'package.json',
-        'bun.lock',
-        'app/package.json',
-        'app/bun.lock',
+        ...dependencyManifestPaths(packages),
       ],
       worktreePath
     );
@@ -102,69 +149,82 @@ function dependencyManifestsChanged(worktreePath: string): boolean {
   }
 }
 
+// Removes `target` if it's a symlink, so a real install never writes
+// through it into whatever it points at. No-op if `target` doesn't exist
+// or isn't a symlink.
+export function unlinkIfSymlink(target: string): void {
+  try {
+    if (fs.lstatSync(target).isSymbolicLink()) fs.unlinkSync(target);
+  } catch {
+    // nothing to unlink
+  }
+}
+
 function installReal(
   worktreePath: string,
   subdir: string,
   reason: string,
   messages: string[]
 ): void {
-  const target = path.join(worktreePath, subdir);
-  try {
-    if (fs.lstatSync(target).isSymbolicLink()) fs.unlinkSync(target);
-  } catch {
-    // nothing to unlink
-  }
+  const cwd = subdir === '.' ? worktreePath : path.join(worktreePath, subdir);
   // Never run bun install through a live symlink -- it would mutate
   // main's node_modules for every worktree sharing it at once.
-  execFileSync('bun', ['install'], {
-    cwd: subdir === 'app' ? path.join(worktreePath, 'app') : worktreePath,
-    stdio: 'inherit',
-  });
-  messages.push(
-    `${subdir === 'app' ? 'app/' : ''}node_modules: real bun install (${reason})`
-  );
+  unlinkIfSymlink(path.join(cwd, 'node_modules'));
+  execFileSync('bun', ['install'], { cwd, stdio: 'inherit' });
+  const label = subdir === '.' ? '' : `${subdir}/`;
+  messages.push(`${label}node_modules: real bun install (${reason})`);
 }
 
-// app/node_modules is ALWAYS a real install, never symlinked -- unlike
-// root. SvelteKit 3 writes generated per-checkout state into it
-// (node_modules/$app/tsconfig.json, node_modules/$app/types; Vite's
-// .vite-temp/ too), and TypeScript resolves that tsconfig's own location
-// via its REAL path before applying its `rootDirs` entries. Through a
-// symlink, every worktree's rootDirs collapses onto whichever checkout
-// app/node_modules physically lives in, breaking `./$types` imports
-// worktree-wide -- confirmed empirically: reproduces on a bare trunk
-// checkout with zero other changes, in every symlinked worktree, absent
-// under a real install (which is what CI already does, and CI is green).
-// A live symlink here is also a write hazard independent of that bug:
+// Every sibling SvelteKit package's node_modules is ALWAYS a real install,
+// never symlinked -- unlike root. SvelteKit 3 writes generated
+// per-checkout state into it (node_modules/$app/tsconfig.json,
+// node_modules/$app/types; Vite's .vite-temp/ too), and TypeScript
+// resolves that tsconfig's own location via its REAL path before applying
+// its `rootDirs` entries. Through a symlink, every worktree's rootDirs
+// collapses onto whichever checkout that package's node_modules physically
+// lives in, breaking `./$types` imports project-wide -- confirmed
+// empirically for app/: reproduces on a bare trunk checkout with zero
+// other changes, in every symlinked worktree, absent under a real install
+// (which is what CI already does, and CI is green). gcp-dashboard/ is on
+// the same @sveltejs/kit "next" line, so it gets the same treatment
+// (#950), and so does any future sibling sveltekitPackages() finds. A
+// live symlink here is also a write hazard independent of that bug:
 // svelte-kit sync mutates node_modules/$app/* in place, so two worktrees
-// sharing a symlinked app/node_modules would clobber each other's
-// generated state, not just serve a stale read.
-function ensureAppNodeModulesReal(
+// sharing a symlinked node_modules would clobber each other's generated
+// state, not just serve a stale read.
+// `install` defaults to the real installReal (which shells out to `bun
+// install`) but is a parameter -- like chooseOffset's injected port
+// probe above -- so this function's branching (leave-alone vs. reinstall)
+// is unit-testable without actually running an install.
+export function ensureNodeModulesReal(
   worktreePath: string,
+  subdir: string,
   changed: boolean,
-  messages: string[]
+  messages: string[],
+  install: typeof installReal = installReal
 ): void {
-  const target = path.join(worktreePath, 'app', 'node_modules');
+  const target = path.join(worktreePath, subdir, 'node_modules');
   let isSymlink = false;
   try {
     isSymlink = fs.lstatSync(target).isSymbolicLink();
   } catch {
-    // doesn't exist yet -- installReal below creates it
+    // doesn't exist yet -- install below creates it
   }
   if (fs.existsSync(target) && !isSymlink && !changed) {
-    messages.push('left existing app/node_modules (real install)');
+    messages.push(`left existing ${subdir}/node_modules (real install)`);
     return;
   }
-  installReal(
+  install(
     worktreePath,
-    'app',
+    subdir,
     changed ? 'dependency manifest changed' : 'always real, see comment',
     messages
   );
 }
 
 function ensureNodeModules(worktreePath: string, messages: string[]): void {
-  const changed = dependencyManifestsChanged(worktreePath);
+  const packages = sveltekitPackages(worktreePath);
+  const changed = dependencyManifestsChanged(worktreePath, packages);
 
   // Root: nothing generates per-checkout state into it, so a symlink is
   // safe and saves the disk -- unless this branch's own dependencies
@@ -180,7 +240,9 @@ function ensureNodeModules(worktreePath: string, messages: string[]): void {
     );
   }
 
-  ensureAppNodeModulesReal(worktreePath, changed, messages);
+  for (const pkg of packages) {
+    ensureNodeModulesReal(worktreePath, pkg, changed, messages);
+  }
 }
 
 // Every offset a worktree already holds, live or not: provisioning must
