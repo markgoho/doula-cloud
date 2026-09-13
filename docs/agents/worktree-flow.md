@@ -79,18 +79,22 @@ and ran all three jobs to `success` — that run, not `34699091787`, is the real
   `package.json`/`bun.lock` differ from `trunk`, in which case it removes the symlink and
   runs a real `bun install` at the worktree root instead. Re-checked on every provision, so
   adding a root dependency later and re-entering the worktree switches it to a real install.
-- **`app/node_modules` always gets a real `bun install`, never a symlink.** SvelteKit 3
-  writes generated per-checkout state into it (`node_modules/$app/tsconfig.json`,
+- **Every sibling SvelteKit package's `node_modules` always gets a real `bun install`, never
+  a symlink.** A sibling package is any top-level directory whose own `package.json`
+  declares `@sveltejs/kit` — today `app/` and `gcp-dashboard/`, detected by scanning rather
+  than a hardcoded list, so a third one needs no change here (#950). SvelteKit 3 writes
+  generated per-checkout state into it (`node_modules/$app/tsconfig.json`,
   `node_modules/$app/types`) that TypeScript resolves via that file's real path before
   applying its `rootDirs` entries — through a symlink, every worktree's `rootDirs` collapses
-  onto whichever checkout `app/node_modules` physically lives in, breaking every `./$types`
-  import project-wide. Confirmed empirically: reproduces on a bare `trunk` checkout with no
-  other changes, in every symlinked worktree, and is absent under a real install (which is
-  what CI already does). A live symlink here is also a write hazard on its own: `svelte-kit
-  sync` mutates `node_modules/$app/*` in place, so two worktrees sharing a symlinked
-  `app/node_modules` would clobber each other's generated state even without the `rootDirs`
-  bug. The dependency-manifest check above still governs whether this is a *fresh* install or
-  a left-alone existing one — it just never chooses a symlink for `app/`.
+  onto whichever checkout that package's `node_modules` physically lives in, breaking every
+  `./$types` import project-wide. Confirmed empirically for `app/`: reproduces on a bare
+  `trunk` checkout with no other changes, in every symlinked worktree, and is absent under a
+  real install (which is what CI already does). A live symlink here is also a write hazard on
+  its own: `svelte-kit sync` mutates `node_modules/$app/*` in place, so two worktrees sharing
+  a symlinked `node_modules` would clobber each other's generated state even without the
+  `rootDirs` bug. The dependency-manifest check above still governs whether this is a *fresh*
+  install or a left-alone existing one for each such package — it just never chooses a
+  symlink for any of them.
 - Assigns a port offset (`.port-offset`, gitignored) — the lowest value 1–9 that is neither
   claimed by another live worktree nor blocked by a port already bound on this machine.
   `app/e2e/ports.ts` shifts every port by `offset * 100`, so two worktrees can run
