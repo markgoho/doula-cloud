@@ -164,8 +164,13 @@ describe('the wrapper', () => {
     const lines = journalLines();
     expect(lines).toHaveLength(6);
     for (let i = 0; i < lines.length; i += 2) {
-      const [startWord, startPid] = lines[i].split(' ');
-      const [endWord, endPid] = lines[i + 1].split(' ');
+      const startLine = lines[i];
+      const endLine = lines[i + 1];
+      if (startLine === undefined || endLine === undefined) {
+        throw new Error(`journal is missing a line at index ${i}`);
+      }
+      const [startWord, startPid] = startLine.split(' ');
+      const [endWord, endPid] = endLine.split(' ');
       expect(startWord).toBe('start');
       expect(endWord).toBe('end');
       expect(endPid).toBe(startPid);

@@ -357,6 +357,7 @@ function extractWorktreeAddPath(command: string): string | null {
   const flagsWithValue = new Set(['-b', '-B', '--reason', '--lock-reason']);
   while (i < tokens.length) {
     const token = tokens[i];
+    if (token === undefined) break; // i has walked off the end of tokens
     if (flagsWithValue.has(token)) {
       i += 2;
     } else if (token.startsWith('-')) {

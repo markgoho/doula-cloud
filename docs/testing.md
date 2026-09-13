@@ -1,6 +1,6 @@
 # Testing infrastructure
 
-## Pre-commit hook: `gofmt`, `app/` typecheck/lint, and Prettier over the tooling trees (enabled repo-wide, enforced in CI)
+## Pre-commit hook: `gofmt`, `app/` typecheck/lint, and Prettier plus `tsc` over the tooling trees (enabled repo-wide, enforced in CI)
 
 `core.hooksPath` is set to an absolute path (`scripts/hooks`) in this repo's shared `.git/config`, so the hook below is already active for the main checkout and every `.claude/worktrees/*` worktree — there is nothing to opt into per clone. Because the path is absolute, every worktree runs the *main* checkout's `scripts/hooks/pre-commit`, not its own branch's copy; a worktree mid-refactor of the hook script itself won't see its own changes take effect until they land on the branch checked out in main. Re-run `git config core.hooksPath scripts/hooks` only if setting up a fresh clone.
 
@@ -9,7 +9,8 @@
 2. **`app/` (SvelteKit)**: if any `app/*` files are staged, runs `bun run --cwd app check` (`svelte-check`) and `bun run --cwd app lint` (`eslint`), blocking commits with broken imports, type errors, or lint failures.
 3. **`app/` unit suite and coverage gate**: still only when `app/*` files are staged, runs `bun run --cwd app test:unit:coverage`. This is where the design brief's smoothness gates live (see below), and the brief's own argument is that a commitment nobody measures decays — so the cheapest place to measure is before the commit exists. Measured on an idle 14-CPU machine, this step is ~16s and peaks around 4.9 GB for 2689 tests at 100% coverage, on top of the ~7s for steps 1-2. The Playwright e2e suite deliberately stays out: it builds the app and starts Postgres, the object store, the BFF and the Auth emulator — it is costed in "What the e2e suite costs, and why its workers are capped" below, which is where to look before running it beside anything else. See "The memory this gate costs, and why the browser pool is capped" below for where that 4.9 GB goes, and "Only one session runs this step at a time" for the lock that keeps two sessions from paying it simultaneously.
 
-4. **`.claude/hooks/` and `scripts/` (the repo's own tooling)**: if any `.ts` file in either tree is staged, runs Prettier's `--check` over exactly those staged files, blocking a commit that stages one which is not formatted. See "Formatting: which trees are gated, and by what" below for what the rule is and why these two trees needed a gate of their own.
+4. **`.claude/hooks/` and `scripts/` (the repo's own tooling), formatting**: if any `.ts` file in either tree is staged, runs Prettier's `--check` over exactly those staged files, blocking a commit that stages one which is not formatted. See "Formatting: which trees are gated, and by what" below for what the rule is and why these two trees needed a gate of their own.
+5. **`.claude/hooks/` and `scripts/`, typecheck**: still only when a `.ts` file in either tree is staged, runs `tsc --noEmit -p tsconfig.tooling.json` over the whole tooling program, blocking a commit that leaves a type error anywhere in either tree. Unlike step 4, this cannot be scoped to the staged files alone — a type error can live in a file the staged one only imports — so it always typechecks both trees in full rather than a per-file diff. See "Typecheck: which trees are gated, and by what" below for the gate itself and why it is scoped narrower than the repo.
 
 The CI jobs are the actual enforcement backstop regardless of whether the local hook is enabled — required PR status checks reject a push that would have failed it (see `docs/agents/worktree-flow.md`).
 
@@ -28,6 +29,12 @@ The two tooling trees are the decision #1120 asked for, so it is recorded here: 
 `bun run format` at the repo root rewrites the two trees; `bun run format:check` is the same pass as an assertion. Both are scoped to `.claude/hooks/**/*.ts` and `scripts/**/*.ts` and reach nothing else. Prettier reads `.editorconfig` for indentation by default, so a single `--check` enforces both of the configs above and there is no second copy of the indent rule to drift.
 
 `app/` is deliberately absent from that scope. It is uniformly tab-indented with no `.editorconfig` or `.prettierrc` of its own, so the root `[*] indent_style = space` is untrue for it too — a real breach of the same kind, tracked in #1232, and out of scope for the gate above.
+
+## Typecheck: which trees are gated, and by what
+
+`.claude/hooks/` and `scripts/` had no typecheck gate at all until #1335 — `app/`'s `svelte-check` and `api/`'s `go build`/`go vet` each typecheck their own tree, but nothing ran `tsc` over these two. The root `tsconfig.json` has no `include`, so `tsc -p tsconfig.json` walks the whole repo: it typechecks `app/` and `gcp-dashboard/` a second time under settings neither tree's own `tsconfig.json` uses, and it fails on unrelated `app/e2e/*.ts` Playwright/DOM-lib errors that are someone else's tree's problem. `tsconfig.tooling.json` at the repo root extends the root config's strict settings (including `noUncheckedIndexedAccess`, which is what caught #1335's type errors — sixteen of them across four files once the scope was narrowed and actually run, not only the three the issue named) but replaces `include` with exactly `.claude/hooks/**/*.ts` and `scripts/**/*.ts` — the two trees with no gate of their own, plus whatever files they import (`tsc` follows imports, so a shared helper like `app/e2e/ports.ts` enters the program too).
+
+`bun run typecheck` runs it (`tsc --noEmit -p tsconfig.tooling.json`); the CI `format` job runs the same command as its `Typecheck` step, and step 5 of the pre-commit hook above runs it locally whenever a file in either tree is staged.
 
 ## The memory this gate costs, and why the browser pool is capped
 

@@ -74,12 +74,12 @@ fi
 staged_tooling_ts=$(git diff --cached --name-only --diff-filter=ACM -- '.claude/hooks/*.ts' 'scripts/*.ts')
 if [ -n "$staged_tooling_ts" ]; then
     repo_root=$(git rev-parse --show-toplevel)
+    install_root="$repo_root"
+    if [ -L "$repo_root/node_modules" ]; then
+        install_root=$(dirname "$(readlink "$repo_root/node_modules")")
+    fi
     prettier="$repo_root/node_modules/.bin/prettier"
     if [ ! -x "$prettier" ]; then
-        install_root="$repo_root"
-        if [ -L "$repo_root/node_modules" ]; then
-            install_root=$(dirname "$(readlink "$repo_root/node_modules")")
-        fi
         echo "prettier: not installed, so the tooling-tree formatting gate" >&2
         echo "cannot run. Run 'bun install' in $install_root" >&2
         echo "and commit again." >&2
@@ -88,6 +88,24 @@ if [ -n "$staged_tooling_ts" ]; then
     if ! "$prettier" --check $staged_tooling_ts >&2; then
         echo "The staged files above are not formatted. Run 'bun run format'" >&2
         echo "at the repo root, re-stage, and commit again." >&2
+        exit 1
+    fi
+
+    # 5. Blocks a commit that leaves a type error in either tooling tree
+    #    (#1335). Runs tsconfig.tooling.json's whole program rather than just the
+    #    staged files -- unlike Prettier's per-file check above, a type
+    #    error can come from a file the staged one imports, so a
+    #    staged-files-only check would miss it. Same shape as the app/
+    #    typecheck step (2) above: block, don't just report.
+    tsc="$repo_root/node_modules/.bin/tsc"
+    if [ ! -x "$tsc" ]; then
+        echo "tsc: not installed, so the tooling-tree typecheck gate cannot" >&2
+        echo "run. Run 'bun install' in $install_root and commit again." >&2
+        exit 1
+    fi
+    echo "Running tsc on .claude/hooks/ and scripts/..." >&2
+    if ! "$tsc" --noEmit -p "$repo_root/tsconfig.tooling.json"; then
+        echo "The tooling trees have a type error. Fix it and commit again." >&2
         exit 1
     fi
 fi

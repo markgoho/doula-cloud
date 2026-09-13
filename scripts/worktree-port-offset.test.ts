@@ -23,6 +23,18 @@ import {
 const MAX_PORT_OFFSET = 9;
 const allFree = async () => true;
 
+// BASE_PORTS is typed `readonly number[]`, so indexing it under
+// noUncheckedIndexedAccess is `number | undefined`. Every index used below
+// is within the fixed, known-populated list; this guards that explicitly
+// rather than asserting it away.
+function basePort(index: number): number {
+  const port = BASE_PORTS[index];
+  if (port === undefined) {
+    throw new Error(`BASE_PORTS has no entry at index ${index}`);
+  }
+  return port;
+}
+
 function busyExcept(busyPorts: number[]) {
   return async (port: number) => !busyPorts.includes(port);
 }
@@ -63,7 +75,7 @@ describe('chooseOffset', () => {
   });
 
   test('skips an offset whose port is already bound, and says which port', async () => {
-    const emulatorAt9 = BASE_PORTS[1] + 9 * PORT_STEP;
+    const emulatorAt9 = basePort(1) + 9 * PORT_STEP;
     const claimed = new Set([1, 2, 3, 4, 5, 6, 7, 8]);
     await expect(
       chooseOffset(claimed, busyExcept([emulatorAt9]))
@@ -71,7 +83,7 @@ describe('chooseOffset', () => {
   });
 
   test('passes over a blocked offset and reports it alongside the one it took', async () => {
-    const blocked = BASE_PORTS[0] + 1 * PORT_STEP;
+    const blocked = basePort(0) + 1 * PORT_STEP;
     const result = await chooseOffset(new Set(), busyExcept([blocked]));
     expect(result.offset).toBe(2);
     expect(result.skipped).toEqual([`offset 1 (port ${blocked} in use)`]);
@@ -83,19 +95,19 @@ describe('chooseOffset', () => {
       probed.push(port);
       return true;
     });
-    expect(probed).not.toContain(BASE_PORTS[0] + 1 * PORT_STEP);
-    expect(probed).toContain(BASE_PORTS[0] + 2 * PORT_STEP);
+    expect(probed).not.toContain(basePort(0) + 1 * PORT_STEP);
+    expect(probed).toContain(basePort(0) + 2 * PORT_STEP);
   });
 
   test('stops probing an offset at its first busy port', async () => {
     const probed: number[] = [];
     await chooseOffset(new Set(), async (port) => {
       probed.push(port);
-      return port !== BASE_PORTS[0] + PORT_STEP;
+      return port !== basePort(0) + PORT_STEP;
     });
     // The first base port at offset 1 is busy, so the rest of offset 1
     // is never probed.
-    expect(probed).not.toContain(BASE_PORTS[1] + PORT_STEP);
+    expect(probed).not.toContain(basePort(1) + PORT_STEP);
   });
 
   test('refuses rather than assigning an unusable offset when every one is blocked', async () => {

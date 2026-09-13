@@ -9,6 +9,7 @@
     "dev": "bun run --cwd app dev:full",
     "format": "prettier --write \".claude/hooks/**/*.ts\" \"scripts/**/*.ts\"",
     "format:check": "prettier --check \".claude/hooks/**/*.ts\" \"scripts/**/*.ts\"",
+    "typecheck": "tsc --noEmit -p tsconfig.tooling.json",
     "test": "bun test scripts/"
   },
   "devDependencies": {

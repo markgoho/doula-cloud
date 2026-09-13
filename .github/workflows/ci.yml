@@ -56,17 +56,20 @@ jobs:
       - name: Test
         run: bun test scripts/
 
-  # The formatting gate for the repo's own tooling trees, `.claude/hooks/`
-  # and `scripts/` (#1120). Which tree is gated by what, and why these two
-  # needed a gate of their own, is in docs/testing.md's "Formatting" section
-  # -- this comment covers only the shape of the job.
+  # The formatting AND typecheck gates for the repo's own tooling trees,
+  # `.claude/hooks/` and `scripts/` (#1120, #1335). Which tree is gated by
+  # what, and why these two needed a gate of their own, is in
+  # docs/testing.md's "Formatting" and "Typecheck" sections -- this comment
+  # covers only the shape of the job.
   #
   # A separate job from `scripts` above rather than another step in it. That
   # job deliberately installs nothing, because `bun test scripts/` needs no
   # dependency and finishes in seconds; this one cannot avoid a root
-  # install, since Prettier and the plugin `.prettierrc` declares both have
-  # to be present. Keeping them apart is what stops the fast job from
-  # inheriting the slow one's install on every run.
+  # install, since Prettier and TypeScript both have to be present. Keeping
+  # them apart is what stops the fast job from inheriting the slow one's
+  # install on every run. Typecheck rides along here rather than in its own
+  # job for the same reason: it needs the same root install this job
+  # already pays for, and gates the same two trees.
   #
   # It is a required status check on `trunk` (see docs/agents/worktree-flow.md).
   # It has to be: this repo lands work with `gh pr merge --squash --auto`,
@@ -85,6 +88,9 @@ jobs:
 
       - name: Check formatting
         run: bun run format:check
+
+      - name: Typecheck
+        run: bun run typecheck
 
   actionlint:
     runs-on: ubuntu-latest
