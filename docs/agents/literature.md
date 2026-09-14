@@ -87,7 +87,7 @@ The test for every sentence in sections 3 through 8 is: does it report what the 
 - **The pilot goes first.** One book's read-back lands and is read by the founder before the next is started, so the template is corrected on one file rather than twenty.
 - **Order after the pilot** is by dependency: a book that touches an open ticket goes before one that does not, and the values track goes before the reference track because its syntheses gate the grilling sessions.
 - **The read-back is landed by PR** through the worktree flow, one book per PR, `Closes #N` in the body where a ticket asked for it.
-- **The book table above is updated in the same PR**, moving the row to **read-back**.
+- **The book table above is not touched by the read-back PR.** The rows of a batch move to **read-back** in one sweep PR after the last of them merges, and to **synthesized** in a second sweep after the syntheses that carry them merge, so the review can check that a read-back PR changed only its own file.
 
 ## Theme syntheses
 
