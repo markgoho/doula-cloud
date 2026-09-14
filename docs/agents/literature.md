@@ -26,6 +26,7 @@ Stage is one of: **shelf** (no read-back yet), **read-back** (on trunk in `docs/
 | Obviously Awesome | April Dunford, 2019 | `Obviously Awesome.pdf` | shelf |
 | Building a StoryBrand 2.0 | Donald Miller, 2025 updated edition | `Building a StoryBrand 2.pdf` | shelf |
 | Lean Marketing | Allan Dib, 2024 | `Lean Marketing.pdf` | shelf |
+| The 1-Page Marketing Plan | Allan Dib, 2018 edition | `The 1-Page Marketing Plan.pdf` | shelf |
 | The Mom Test | Rob Fitzpatrick, 2013 | `The Mom Test.pdf` | shelf |
 | Competing Against Luck | Clayton M. Christensen, Taddy Hall, Karen Dillon, David S. Duncan, 2016 | `Competing Against Luck.pdf` | shelf |
 | Forget the Funnel | Georgiana Laudi and Claire Suellentrop, 2023 | `Forget the Funnel.pdf` | shelf |
