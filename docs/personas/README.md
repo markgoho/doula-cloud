@@ -8,8 +8,8 @@ file slug, because journey and test-plan files correspond to it one-to-one.
 
 ## These are proto-personas
 
-They are built from the founder's own knowledge of the work and from what the schema and
-handlers actually do — **not** from interviews, surveys, or analytics — which is not research. That is a legitimate and named practice,
+They are built from the founder's own knowledge of the work, which is not research, and
+from what the schema and handlers actually do — **not** from interviews, surveys, or analytics. That is a legitimate and named practice,
 but it carries an obligation: treat every one of them as a hypothesis to be falsified,
 never as evidence of what users do. Do not cite them as user research.
 
