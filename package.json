@@ -17,9 +17,7 @@
     "@types/bun": "latest",
     "firebase-tools": "^15.28.1",
     "prettier": "^3.9.6",
-    "prettier-plugin-go-template": "^0.0.15"
-  },
-  "peerDependencies": {
-    "typescript": "6.0.3"
+    "prettier-plugin-go-template": "^0.0.15",
+    "typescript": "^6.0.3"
   }
 }
