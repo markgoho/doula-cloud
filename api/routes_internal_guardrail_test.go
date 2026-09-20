@@ -20,6 +20,7 @@ var wantInternalRoutes = []string{
 	"GET /api/internal/billing/dormant-practices",
 	"POST /api/internal/clients/process-erasure-outbox",
 	"POST /api/internal/notifications/process-connect-nudge-outbox",
+	"POST /api/internal/notifications/process-coverage-gap-outbox",
 	"POST /api/internal/notifications/process-engagement-request-outbox",
 	"POST /api/internal/notifications/process-low-credit-outbox",
 	"POST /api/internal/notifications/process-mfa-recovery-outbox",

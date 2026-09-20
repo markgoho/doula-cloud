@@ -13,6 +13,7 @@ import (
 	"doula-cloud/api/internal/mailsuppress"
 	"doula-cloud/api/internal/message"
 	"doula-cloud/api/internal/offer"
+	"doula-cloud/api/internal/oncall"
 	"doula-cloud/api/internal/payments"
 	"doula-cloud/api/internal/plans"
 	"doula-cloud/api/internal/portalinvite"
@@ -49,6 +50,7 @@ func registerPracticeRoutes(g *staffauth.GatedRouter, ir *idempotency.Router, d 
 	engagementrequest.Mount(g, ir, d.DB, d.NudgeEnqueuer)
 	engagement.Mount(g, ir)
 	visit.Mount(g, ir)
+	oncall.Mount(g, ir, d.NudgeEnqueuer)
 	message.Mount(g, ir, d.DB, d.Store, d.Pusher)
 	plans.Mount(g, ir, d.DB)
 	clientfieldtemplate.Mount(g, ir)
