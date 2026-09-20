@@ -16,6 +16,7 @@ import net from 'node:net';
 import path from 'node:path';
 import { BASE_PORTS, PORT_STEP } from '../../app/e2e/ports.ts';
 import { readWorktreeOffsets } from './worktree-offsets.ts';
+import { claimWorktree } from './worktree-owner.ts';
 import { findMainCheckoutRoot } from './worktree-root.ts';
 
 const SOURCE_ROOT = findMainCheckoutRoot(import.meta.dir);
@@ -334,6 +335,8 @@ export async function provisionWorktree(worktreePath: string): Promise<void> {
   if (envMessage) messages.push(envMessage);
   ensureNodeModules(worktreePath, messages);
   await ensurePortOffset(worktreePath, messages);
+  // Who is working in here, so nothing removes it while they are (#1212).
+  messages.push(claimWorktree(worktreePath));
   log(messages.join('; '));
 }
 

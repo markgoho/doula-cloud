@@ -125,7 +125,7 @@ having no `.port-offset` file. A worktree never gets assigned 0.
 
 **The pool is capped at 9 concurrent worktrees** (offsets 1–9). If provisioning fails because
 the pool is full, prune stale worktrees first (`bun .claude/hooks/worktree-prune.ts
---dry-run`, then `--merged`) rather than working around the cap.
+--dry-run`, then `--merged`) rather than working around the cap. Never remove a worktree by hand to free an offset without reading its owner first — see "A live worktree is never removed" below.
 
 ## Resuming an existing branch
 
@@ -190,12 +190,42 @@ active. Its threat model — several sessions racing one index — still holds *
 worktree whenever more than one session enters the same one; worktrees narrow the blast
 radius, they don't remove the need for it.
 
+## A live worktree is never removed
+
+On 2026-09-10 two agents lost all their uncommitted work in one hour (#1212). In one case, a session that needed a free port offset removed a worktree by hand. It looked like an abandoned spawn by every signal git gives: a bare `agent-<id>` branch, no commits past trunk, a clean `git status`, a `HEAD` at an old trunk. But that is also the state of a live agent twenty minutes into its task that has not made its first commit yet. Branch and tree state cannot tell the two apart. So "a clean tree with no commits of its own is abandoned" is not a rule here.
+
+**The liveness signal.** At provision time, `.claude/hooks/worktree-owner.ts` writes `.worktree-owner.json` into the worktree root. It is gitignored, like `.port-offset`, and it is also added to the checkout's shared `.git/info/exclude`, so a branch cut before the ignore line existed does not see it as a change. The file records the Claude Code process that created the worktree: its pid, the start time `ps` reports for that pid, and the session id. A subagent with `isolation: "worktree"` runs inside its session's own process, so the session's process is the right owner for the subagent too. The owner is:
+
+- **alive**: the pid exists and `ps -o lstart= -p <pid>` still prints the recorded start time. Nothing removes the worktree.
+- **gone**: the pid does not exist, or it now belongs to a process with a different start time (the OS gave the pid to a new process).
+- **unknown**: no file (a worktree made before #1212, or with `git worktree add` in a terminal outside Claude Code), or a file that cannot be read. This is not proof of life and not proof of death.
+
+There is no heartbeat, and that is deliberate. An agent that spends ten minutes on a review or a CI watch touches no file, so mtime is exactly the signal that failed. The OS answers "is this pid running" directly.
+
+**Read it from the shell before you remove anything:**
+
+```sh
+bun .claude/hooks/worktree-prune.ts --dry-run    # owner=alive(pid …, session …) | gone(pid …) | unknown, per worktree
+cat .claude/worktrees/<slug>/.worktree-owner.json
+ps -o lstart= -p <pid>                           # alive only if this prints the recorded processStartedAt
+```
+
+**What enforces it:**
+
+- `worktree-prune.ts --merged` never removes a worktree whose owner is alive. It also never uses the "no commits of its own" test (tip is an ancestor of trunk) unless the owner is provably gone. With the owner alive or unknown, only a PR that is `MERGED` at the worktree's exact tip counts as landed. It never falls back to `git worktree remove --force`: if plain removal fails, it reports `skip (remove refused)` and moves on.
+- `.claude/hooks/gate-worktree-remove.ts` is a `PreToolUse` gate on any Bash command that contains `worktree remove`. It refuses a removal when the worktree's owner is alive and is not the session that runs the command. `--force` does not get past it, because the 2026-09-10 removal used `--force`. It also refuses `--force` on a worktree with uncommitted changes, whoever owns it. Without `--force`, git itself refuses a dirty tree. The deliberate override is to put `ALLOW_LIVE_WORKTREE_REMOVE=1` before the command. Use it only after you have read the owner and seen that the process is not working in that worktree.
+- `e2e-stack-reap.ts` and `testdb-reap.ts`, the other `SessionStart` reapers, remove containers, stacks and pidfiles. They never remove a worktree.
+
+A session that is short of port offsets must not use a manual removal to get one. Run `--dry-run`, and remove only worktrees whose owner is `gone` or `unknown` and whose work has landed. If every slot has a live owner, wait for a session to finish. Reclaiming worktrees that hold offsets for days without a merge (`research/*`, `prototype/*`) is #1340's work, and it must use this same check.
+
+**If your own worktree is gone.** Every tool call then fails with "the isolation worktree appears to have been removed". Nothing on disk can be recovered: uncommitted work went with the directory, and the branch never had it. Stop editing. Write what you found and what you changed as a comment on the ticket immediately, while you can still reach the tracker. Then end the task and say that the worktree was removed while you worked in it. Do not recreate the worktree and continue from memory. The guards do not cover every path (a plain `rm -rf` is out of their reach), so the standing mitigation is to commit as soon as you have anything worth keeping, not at the end of the task.
+
 ## Cleanup
 
 `.claude/hooks/worktree-prune.ts`:
 
 ```sh
-bun .claude/hooks/worktree-prune.ts --dry-run   # list every worktree: branch, PR state, dirty flag, size
+bun .claude/hooks/worktree-prune.ts --dry-run   # list every worktree: branch, owner, PR state, dirty flag, size
 bun .claude/hooks/worktree-prune.ts --merged    # remove only a worktree whose branch is
                                                  # merged into trunk AND whose tree is clean
 ```
@@ -210,7 +240,7 @@ what protects `research/baseline-521-harness` and the unpushed `prototype/*` bra
 has a merged PR and none is an ancestor of trunk, so no rule can reach them. `--dry-run` lists
 what would go without touching anything.
 
-`--merged` never touches a dirty worktree, a locked one, or one whose branch hasn't landed —
+`--merged` never touches a dirty worktree, a locked one, one whose owner is alive, or one whose branch hasn't landed —
 including a branch with unpushed, unmerged commits. `ExitWorktree` (or `git worktree remove`)
 once a PR shows `MERGED` is the normal path; the pruner is the backstop for whatever a dead
 session left behind.

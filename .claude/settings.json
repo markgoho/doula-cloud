@@ -44,6 +44,13 @@
           },
           {
             "type": "command",
+            "if": "Bash(*worktree remove*)",
+            "command": "bun \"$(git rev-parse --show-toplevel)/.claude/hooks/gate-worktree-remove.ts\"",
+            "statusMessage": "Checking no live session is still working in this worktree",
+            "timeout": 10
+          },
+          {
+            "type": "command",
             "if": "Bash(gh run watch*)",
             "command": "bash \"$(git rev-parse --show-toplevel)/.claude/hooks/gate-gh-run-watch.sh\"",
             "statusMessage": "Checking this reads conclusion instead of trusting gh run watch's exit code"
