@@ -18,6 +18,17 @@
             "timeout": 30
           }
         ]
+      },
+      {
+        "matcher": "EnterWorktree",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bun \"$(git rev-parse --show-toplevel)/.claude/hooks/worktree-claim.ts\"",
+            "statusMessage": "Recording this session as the worktree's owner",
+            "timeout": 10
+          }
+        ]
       }
     ],
     "PreToolUse": [
@@ -118,6 +129,12 @@
             "command": "bun \"$(git rev-parse --show-toplevel)/.claude/hooks/gate-worktree-cleanup.ts\"",
             "statusMessage": "Checking whether this worktree has landed",
             "timeout": 15
+          },
+          {
+            "type": "command",
+            "command": "bun \"$(git rev-parse --show-toplevel)/.claude/hooks/worktree-claim.ts\"",
+            "statusMessage": "Recording this session as the worktree's owner",
+            "timeout": 10
           }
         ]
       }
