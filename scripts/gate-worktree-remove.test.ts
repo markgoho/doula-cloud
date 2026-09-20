@@ -134,6 +134,37 @@ describe('gate-worktree-remove', () => {
     }
   });
 
+  test('finds the removal inside a subshell, in quotes, or under git -C', async () => {
+    const { root, worktree, cleanup } = makeFixture();
+    try {
+      writeOwner(worktree, otherPid(), startedAt(otherPid()));
+      for (const command of [
+        `(cd ${root} && git worktree remove --force .claude/worktrees/agent-x)`,
+        `git worktree remove "${worktree}"`,
+        `git -C ${root} worktree remove .claude/worktrees/agent-x`,
+      ]) {
+        const { exitCode } = await invoke(command, path.dirname(root));
+        expect(exitCode).toBe(2);
+      }
+    } finally {
+      cleanup();
+    }
+  });
+
+  test('the override counts only on the removing command itself', async () => {
+    const { root, worktree, cleanup } = makeFixture();
+    try {
+      writeOwner(worktree, otherPid(), startedAt(otherPid()));
+      const { exitCode } = await invoke(
+        `echo ALLOW_LIVE_WORKTREE_REMOVE=1; git worktree remove ${worktree}`,
+        root
+      );
+      expect(exitCode).toBe(2);
+    } finally {
+      cleanup();
+    }
+  });
+
   test('allows this session to remove a worktree it owns', async () => {
     const { root, worktree, cleanup } = makeFixture();
     try {

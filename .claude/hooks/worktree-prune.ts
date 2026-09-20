@@ -393,10 +393,7 @@ function main(): void {
        be mid-run in here, and no branch or tree state can say otherwise
        (#1212). */
     if (owner.state === 'alive') {
-      const who = owner.owner.sessionId
-        ? `pid ${owner.owner.pid}, session ${owner.owner.sessionId}`
-        : `pid ${owner.owner.pid}`;
-      console.log(`skip (owner alive: ${who}): ${wt.path}`);
+      console.log(`skip (owner ${describeOwner(owner)}): ${wt.path}`);
       continue;
     }
     if (!wt.branch || !mergedFlag) {

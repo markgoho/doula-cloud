@@ -251,7 +251,7 @@ describe('worktree-prune (a live agent with no commits yet, #1212)', () => {
       expect(exitCode).toBe(0);
       expect(isRegistered(root, agent)).toBe(true);
       expect(stdout).toContain(
-        `skip (owner alive: pid ${process.pid}, session test-session): ${agent}`
+        `skip (owner alive(pid ${process.pid}, session test-session)): ${agent}`
       );
     } finally {
       cleanup();
