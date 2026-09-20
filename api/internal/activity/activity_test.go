@@ -200,6 +200,11 @@ func TestStaffingActions_ContainsExactlyTheRosterSet(t *testing.T) {
 		activity.ActionVisitReassigned,
 		activity.ActionContractVoidRequested,
 		activity.ActionContractVoidDeclined,
+		activity.ActionCoverageGapCreated,
+		activity.ActionCoverageGapUpdated,
+		activity.ActionCoverageGapCleared,
+		activity.ActionOnCallNarrowingChanged,
+		activity.ActionOnCallRuleChanged,
 	}
 	if len(got) != len(want) {
 		t.Fatalf("StaffingActions() = %v, want exactly %v", activity.StaffingActions(), want)

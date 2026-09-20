@@ -11,6 +11,7 @@ import (
 	"doula-cloud/api/internal/idempotency"
 	"doula-cloud/api/internal/oncall"
 	"doula-cloud/api/internal/staffauth"
+	"doula-cloud/api/internal/tasknudge"
 	"doula-cloud/api/internal/testdb"
 )
 
@@ -28,11 +29,20 @@ const (
 // same call main.go makes, and seeds a live session for uid.
 func newServer(t *testing.T, db *testdb.DB, uid string) (srv *httptest.Server, session string) {
 	t.Helper()
+	srv, session, _ = newServerWithNudge(t, db, uid)
+	return srv, session
+}
+
+// newServerWithNudge is newServer plus the fake enqueuer the gap writes
+// nudge, so a test can say whether the worker was nudged.
+func newServerWithNudge(t *testing.T, db *testdb.DB, uid string) (srv *httptest.Server, session string, enq *tasknudge.FakeEnqueuer) {
+	t.Helper()
+	enq = &tasknudge.FakeEnqueuer{}
 	mux := http.NewServeMux()
 	g := staffauth.NewGatedRouter(mux, db.App)
 	ir := idempotency.NewRouter(g, db.App)
-	oncall.Mount(g, ir)
-	return httptest.NewServer(mux), authntest.SeedSession(t, db.App, uid)
+	oncall.Mount(g, ir, enq)
+	return httptest.NewServer(mux), authntest.SeedSession(t, db.App, uid), enq
 }
 
 func authedGet(t *testing.T, session, url string) *http.Response {
