@@ -91,6 +91,7 @@
 		type PaymentMethod,
 		type RefundPaymentInput
 	} from '#lib/invoice.js';
+	import { loadPracticeTimezone } from '#lib/practiceTimezone.js';
 	import OfferSection from '#lib/components/organisms/OfferSection.svelte';
 	import { createOffer, loadEngagementOffers, withdrawOffer, type NewOffer, type Offer } from '#lib/offer.js';
 	import { resolve } from '$app/paths';
@@ -498,6 +499,16 @@
 	const billingModeState = new SectionState<BillingMode | undefined>(undefined);
 	const billingMode = $derived(billingModeState.value);
 
+	// #1280: the Practice's own zone (ADR-0036) InvoiceSection reads
+	// "today" in for the payment-date field's default and its
+	// future-date ceiling, matching PostManualPaymentHandler's own
+	// guard (#1167). Loaded once at mount (loadPracticeTimezoneSection
+	// below) -- '' means "not loaded yet", which gates the Invoices
+	// section out below rather than handing InvoiceSection a zone that
+	// would fall back to UTC's own day.
+	const practiceTimezoneState = new SectionState('');
+	const practiceTimezone = $derived(practiceTimezoneState.value);
+
 	// Offers on this Engagement (#317). Owner/Admin only at the BFF, so a
 	// Doula's load simply fails and the section stays hidden -- the read
 	// table keeps who-was-asked away from her, and an error banner about
@@ -875,6 +886,18 @@
 		);
 	}
 
+	// #1280: a Practice's zone (ADR-0036) does not move when a Payment is
+	// recorded, voided, reversed, or refunded, so this is loaded once at
+	// mount rather than inside loadInvoicesSection above -- which those
+	// four writes re-run -- to avoid re-reading a fact none of them
+	// changes.
+	async function loadPracticeTimezoneSection() {
+		await practiceTimezoneState.load(async () => {
+			const timezone = await loadPracticeTimezone(apiFetchWithSession, page.params.practiceId!);
+			return timezone.timezone;
+		}, 'Failed to load Practice timezone');
+	}
+
 	// Reported by InvoiceSection's onCreate prop. No catch here, same as
 	// the original: a refused create is left to the component the same way
 	// Void Contract is (see above). #270 removed the old connectRequired
@@ -1084,6 +1107,7 @@
 		await Promise.all(planSections.map((section) => loadPlan(section.type)));
 		await loadContractSection();
 		await loadInvoicesSection();
+		await loadPracticeTimezoneSection();
 		await loadRoster();
 		await loadOnCall();
 		await loadOffersSection();
@@ -1727,23 +1751,35 @@
 	{#if billingModeState.error}
 		<Notice variant="error" message={billingModeState.error} />
 	{/if}
+	{#if practiceTimezoneState.error}
+		<Notice variant="error" message={practiceTimezoneState.error} />
+	{/if}
 
-	<InvoiceSection
-		{invoices}
-		contractStatus={contract!.status}
-		{billingMode}
-		clientsCanPay={canClientsPay}
-		hasClientEmail={hasClientEmailOnFile}
-		isOwner={isPracticeOwner}
-		isOwnerOrAdmin={isPracticeOwnerOrAdmin}
-		{paymentsSettingsHref}
-		onCreate={handleCreateInvoice}
-		onRecordPayment={handleRecordPayment}
-		onReversePayment={handleReversePayment}
-		onRefundPayment={handleRefundPayment}
-		onVoidInvoice={handleVoidInvoice}
-		onWriteOffInvoice={handleWriteOffInvoice}
-	/>
+	<!-- #1280: InvoiceSection's own todayIsoDate reads "today" in
+	     practiceTimezone with no UTC fallback (ADR-0036's own rule for a
+	     zone that will not load), so it waits here for a real zone name
+	     rather than mounting with '' and throwing on its own first date
+	     computation. A still-loading or failed read leaves this gap
+	     blank; the Notice above already says why. -->
+	{#if practiceTimezone}
+		<InvoiceSection
+			{invoices}
+			contractStatus={contract!.status}
+			{billingMode}
+			clientsCanPay={canClientsPay}
+			hasClientEmail={hasClientEmailOnFile}
+			isOwner={isPracticeOwner}
+			isOwnerOrAdmin={isPracticeOwnerOrAdmin}
+			{practiceTimezone}
+			{paymentsSettingsHref}
+			onCreate={handleCreateInvoice}
+			onRecordPayment={handleRecordPayment}
+			onReversePayment={handleReversePayment}
+			onRefundPayment={handleRefundPayment}
+			onVoidInvoice={handleVoidInvoice}
+			onWriteOffInvoice={handleWriteOffInvoice}
+		/>
+	{/if}
 {/snippet}
 
 {#snippet offersSection()}

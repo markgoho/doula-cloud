@@ -409,6 +409,9 @@ export const fixture: RouteFixture<RouteParameters> = {
 		// #271: read alongside the Invoice list on every mount, whether or
 		// not this Engagement currently has a Contract to bill against.
 		if (path.endsWith('/payments/billing-mode')) return jsonResponse({ billingMode: 'stripe' });
+		// #1280: read the same way, so InvoiceSection's own todayIsoDate has
+		// a real zone rather than mounting behind the "still loading" gap.
+		if (path.endsWith('/timezone')) return jsonResponse({ timezone: 'America/New_York' });
 		if (path.endsWith('/contract')) return jsonResponse(contract);
 		if (path.endsWith('/offers')) return jsonResponse({ items: [] });
 		if (path.endsWith('/staff')) return jsonResponse({ members: roster, invitations: { items: [] } });

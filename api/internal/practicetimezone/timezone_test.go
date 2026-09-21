@@ -335,10 +335,34 @@ func TestLoad_RefusesRatherThanAnsweringInTheWrongZone(t *testing.T) {
 	}
 }
 
-// TestTimezone_OnlyAnOwnerOrAdminReachesIt is the role boundary #1166
-// asks for, enforced at the mount rather than on the screen: a Doula is
-// refused both the read and the write.
-func TestTimezone_OnlyAnOwnerOrAdminReachesIt(t *testing.T) {
+// TestGetHandler_AnyStaffReachesIt is the read boundary #1280 widened to:
+// a Doula reads the zone the same as an Owner or Admin, because
+// InvoiceSection's own future-date ceiling reads it too, and
+// InvoiceSection renders for any Staff (matching payments' Invoices and
+// billing-mode reads, both AnyStaff).
+func TestGetHandler_AnyStaffReachesIt(t *testing.T) {
+	for _, role := range []string{ownerRole, adminRole, doulaRole} {
+		t.Run(role, func(t *testing.T) {
+			db := testdb.New(t)
+			uid := "timezone-get-role-" + role
+			practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{role}, employeeType)
+
+			srv, session := newServer(t, db, uid)
+			defer srv.Close()
+
+			read := getTimezone(t, srv, session, practiceID)
+			_ = read.Body.Close()
+			if read.StatusCode != http.StatusOK {
+				t.Fatalf("GET status for %s = %d, want %d", role, read.StatusCode, http.StatusOK)
+			}
+		})
+	}
+}
+
+// TestPutHandler_OnlyAnOwnerOrAdminReachesIt is the write boundary #1166
+// asks for, enforced at the mount rather than on the screen: a Doula may
+// read the zone (#1280) but may not state it.
+func TestPutHandler_OnlyAnOwnerOrAdminReachesIt(t *testing.T) {
 	for _, tc := range []struct {
 		role       string
 		wantStatus int
@@ -349,17 +373,11 @@ func TestTimezone_OnlyAnOwnerOrAdminReachesIt(t *testing.T) {
 	} {
 		t.Run(tc.role, func(t *testing.T) {
 			db := testdb.New(t)
-			uid := "timezone-role-" + tc.role
+			uid := "timezone-put-role-" + tc.role
 			practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{tc.role}, employeeType)
 
 			srv, session := newServer(t, db, uid)
 			defer srv.Close()
-
-			read := getTimezone(t, srv, session, practiceID)
-			_ = read.Body.Close()
-			if read.StatusCode != tc.wantStatus {
-				t.Fatalf("GET status for %s = %d, want %d", tc.role, read.StatusCode, tc.wantStatus)
-			}
 
 			write := putTimezone(t, srv, session, practiceID, denverZone)
 			_ = write.Body.Close()
@@ -372,7 +390,8 @@ func TestTimezone_OnlyAnOwnerOrAdminReachesIt(t *testing.T) {
 
 // TestTimezone_AnotherPracticesZoneIsOutOfReach proves the practice id in
 // the path is not what decides whose row is read or written: an Owner at
-// one Practice reaching for another's meets the session's own scope.
+// one Practice reaching for another's meets the session's own scope, on
+// both the read (#1280 widened to AnyStaff) and the write.
 func TestTimezone_AnotherPracticesZoneIsOutOfReach(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "timezone-cross-practice"
@@ -382,11 +401,17 @@ func TestTimezone_AnotherPracticesZoneIsOutOfReach(t *testing.T) {
 	srv, session := newServer(t, db, uid)
 	defer srv.Close()
 
+	read := getTimezone(t, srv, session, otherPracticeID)
+	defer read.Body.Close()
+	if read.StatusCode == http.StatusOK {
+		t.Fatalf("GET status = %d, want a refusal for another Practice's zone", read.StatusCode)
+	}
+
 	resp := putTimezone(t, srv, session, otherPracticeID, denverZone)
 	defer resp.Body.Close()
 
 	if resp.StatusCode == http.StatusOK {
-		t.Fatalf("status = %d, want a refusal for another Practice's zone", resp.StatusCode)
+		t.Fatalf("PUT status = %d, want a refusal for another Practice's zone", resp.StatusCode)
 	}
 	if got := storedZone(t, db, otherPracticeID); got != seededZone {
 		t.Fatalf("other Practice's zone = %q, want it untouched", got)

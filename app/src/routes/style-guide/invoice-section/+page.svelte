@@ -56,6 +56,9 @@
 	];
 
 	const paymentsSettingsHref = 'https://example.test/practices/practice-1/settings/payments';
+	// #1280: any real IANA zone does -- this page's own todayIsoDate calls
+	// don't depend on which one, only that a real name is there.
+	const practiceTimezone = 'America/New_York';
 </script>
 
 <stack-l space="var(--space-6)">
@@ -72,6 +75,7 @@
 			isOwnerOrAdmin={false}
 			billingMode="stripe"
 			{paymentsSettingsHref}
+			{practiceTimezone}
 			onCreate={async () => {}}
 			onRecordPayment={async () => {}}
 			onVoidInvoice={async () => {}}
@@ -92,6 +96,7 @@
 			isOwnerOrAdmin={true}
 			billingMode="stripe"
 			{paymentsSettingsHref}
+			{practiceTimezone}
 			onCreate={async () => {}}
 			onRecordPayment={async () => {}}
 			onVoidInvoice={async () => {}}
@@ -112,6 +117,7 @@
 			isOwnerOrAdmin={false}
 			billingMode="stripe"
 			{paymentsSettingsHref}
+			{practiceTimezone}
 			onCreate={async () => {}}
 			onRecordPayment={async () => {}}
 			onVoidInvoice={async () => {}}
@@ -136,6 +142,7 @@
 			isOwnerOrAdmin={true}
 			billingMode="stripe"
 			{paymentsSettingsHref}
+			{practiceTimezone}
 			onCreate={async () => {}}
 			onRecordPayment={async () => {}}
 			onVoidInvoice={async () => {}}
@@ -156,6 +163,7 @@
 			isOwnerOrAdmin={false}
 			billingMode="stripe"
 			{paymentsSettingsHref}
+			{practiceTimezone}
 			onCreate={async () => {}}
 			onRecordPayment={async () => {}}
 			onVoidInvoice={async () => {}}
@@ -176,6 +184,7 @@
 			isOwnerOrAdmin={false}
 			billingMode="stripe"
 			{paymentsSettingsHref}
+			{practiceTimezone}
 			onCreate={async () => {}}
 			onRecordPayment={async () => {}}
 			onVoidInvoice={async () => {}}
@@ -198,6 +207,7 @@
 			isOwnerOrAdmin={false}
 			billingMode="stripe"
 			{paymentsSettingsHref}
+			{practiceTimezone}
 			onCreate={async () => {}}
 			onRecordPayment={async () => {}}
 			onVoidInvoice={async () => {}}
@@ -218,6 +228,7 @@
 			isOwnerOrAdmin={false}
 			billingMode="stripe"
 			{paymentsSettingsHref}
+			{practiceTimezone}
 			onCreate={async () => {}}
 			onRecordPayment={async () => {}}
 			onVoidInvoice={async () => {}}
@@ -241,6 +252,7 @@
 			isOwnerOrAdmin={false}
 			billingMode={undefined}
 			{paymentsSettingsHref}
+			{practiceTimezone}
 			onCreate={async () => {}}
 			onRecordPayment={async () => {}}
 			onVoidInvoice={async () => {}}
@@ -264,6 +276,7 @@
 			isOwnerOrAdmin={true}
 			billingMode="by_hand"
 			{paymentsSettingsHref}
+			{practiceTimezone}
 			onCreate={async () => {}}
 			onRecordPayment={async () => {}}
 			onVoidInvoice={async () => {}}

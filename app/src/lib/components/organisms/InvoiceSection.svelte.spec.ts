@@ -1,5 +1,5 @@
 import { page } from 'vitest/browser';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import InvoiceSection from './InvoiceSection.svelte';
 import type { BillingMode, Invoice, PaymentMethod, RefundPaymentInput } from '#lib/invoice.js';
@@ -18,6 +18,7 @@ interface SetupOptions {
 	hasClientEmail?: boolean;
 	isOwner?: boolean;
 	isOwnerOrAdmin?: boolean;
+	practiceTimezone?: string;
 	onCreate?: (billingMode?: BillingMode) => Promise<void>;
 	onRecordPayment?: (
 		invoiceId: string,
@@ -95,6 +96,10 @@ async function setup({
 	hasClientEmail = true,
 	isOwner = false,
 	isOwnerOrAdmin = false,
+	// America/New_York, the same fixture zone the repo's other timezone
+	// tests use (ADR-0036) -- a zone behind UTC, which is the case the
+	// future-date boundary tests below exercise.
+	practiceTimezone = 'America/New_York',
 	onCreate = vi.fn().mockResolvedValue(undefined),
 	onRecordPayment = vi.fn().mockResolvedValue(undefined),
 	onVoidInvoice = vi.fn().mockResolvedValue(undefined),
@@ -110,6 +115,7 @@ async function setup({
 		hasClientEmail,
 		isOwner,
 		isOwnerOrAdmin,
+		practiceTimezone,
 		paymentsSettingsHref,
 		onCreate,
 		onRecordPayment,
@@ -120,6 +126,10 @@ async function setup({
 	});
 	return { onCreate, onRecordPayment, onVoidInvoice, onWriteOffInvoice, onReversePayment, onRefundPayment };
 }
+
+afterEach(() => {
+	vi.useRealTimers();
+});
 
 describe('InvoiceSection.svelte', () => {
 	it('shows "No Invoices yet." when the list is empty', async () => {
@@ -392,6 +402,38 @@ describe('InvoiceSection.svelte', () => {
 
 			await expect.element(page.getByText('The date cannot be in the future').first()).toBeVisible();
 			await expect.element(page.getByLabelText('Date received')).toHaveAttribute('aria-invalid', 'true');
+		});
+
+		// #1280: the same boundary #1167 already fixed server-side. 02:30
+		// UTC on the 16th is 22:30 on the 15th in America/New_York -- a
+		// zone behind UTC -- so the Practice's own "today" is the 15th,
+		// not the 16th `toISOString().slice(0, 10)` used to read. June,
+		// not the real run date, and past DST's spring-forward edge (no
+		// ambiguity from the clock change itself) -- a date matching
+		// whatever day this suite happens to run on would pass whether or
+		// not `vi.setSystemTime` actually reaches the component's own
+		// `new Date()` in the browser realm, which is exactly the thing
+		// this test has to prove.
+		it("reads today in the Practice's own zone, not UTC's, for both the default date and the future-date ceiling", async () => {
+			vi.useFakeTimers();
+			vi.setSystemTime(new Date('2026-06-16T02:30:00Z'));
+			await setup({ invoices: [invoiceOpen], isOwnerOrAdmin: true, practiceTimezone: 'America/New_York' });
+
+			await page.getByRole('button', { name: 'Record payment' }).click();
+			// The default -- todayIsoDate() feeds paymentDate's own initial
+			// value (startRecordingPayment).
+			await expect.element(page.getByLabelText('Date received')).toHaveValue('2026-06-15');
+
+			// UTC's own "today" is the zone's tomorrow, still refused.
+			await page.getByLabelText('Date received').fill('2026-06-16');
+			await page.getByRole('button', { name: 'Continue' }).click();
+			await expect.element(page.getByText('The date cannot be in the future').first()).toBeVisible();
+
+			// The zone's own "today" clears the same ceiling.
+			await page.getByLabelText('Date received').fill('2026-06-15');
+			await page.getByRole('button', { name: 'Continue' }).click();
+			await expect.element(page.getByRole('button', { name: 'Confirm and record' })).toBeVisible();
+			await expect.element(page.getByText('The date cannot be in the future')).not.toBeInTheDocument();
 		});
 
 		// #1228: `Date received`'s own `required` was the only refusal this

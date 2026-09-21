@@ -44,13 +44,17 @@ type timezoneDiff struct {
 	TimezoneAfter  string `json:"timezoneAfter"`
 }
 
-// GetHandler reads the Practice's own timezone. Owner and Admin only,
-// declared at the mount, which departs from the AnyStaff read that
-// payments' payment terms and billing mode carry: a Doula never meets
-// the zone name on a screen, she meets the Visit type derived from it,
-// and #1166 scopes the whole setting to the pair that may state it. A
-// later ticket that wants to show a Doula which zone her list was typed
-// in widens this, with its own reason.
+// GetHandler reads the Practice's own timezone. AnyStaff, declared at the
+// mount -- the same read boundary payments' payment terms and billing
+// mode already carry, and the "later ticket" this doc comment used to
+// name before it existed: #1166 started this Owner-and-Admin-only, on the
+// premise that a Doula never meets the zone name on a screen, only the
+// Visit type derived from it. #1280 widened it, because InvoiceSection's
+// own future-date ceiling now reads the zone too, and InvoiceSection
+// renders (with its Invoice list) for any Staff -- payments' Invoices and
+// billing-mode reads are AnyStaff for the same reason. A Doula still
+// cannot state the zone; only read the one already stated (PutHandler
+// stays Owner-and-Admin).
 //
 // Must be mounted behind staffauth.Middleware.
 func GetHandler() http.Handler {
