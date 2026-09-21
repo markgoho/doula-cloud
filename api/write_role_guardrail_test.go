@@ -22,7 +22,7 @@ const (
 //
 // One entry is none of those and says so: PUT /plan-templates/{planType}
 // is a flat Owner-only rule still checked in-handler. It is outside
-// #1028's named ten, so moving it is its own work under #282 rather than
+// #1028's named ten, so moving it is its own work (#1407) rather than
 // this ticket's to widen into.
 var roleFreeWriteRoutes = map[string]string{
 	"POST /api/practices/{practiceId}/offers/{offerId}/accept":  reasonOwnOffer,
@@ -57,8 +57,8 @@ var roleFreeWriteRoutes = map[string]string{
 	// Not a reach, identity or state rule: a flat Owner-only check
 	// (plans.PutTemplateHandler's own hasOwnerRole) that belongs at the
 	// mount exactly the way #1028's ten now declare theirs. It is not one
-	// of the ten, so it is listed rather than moved here; see #282.
-	"PUT /api/practices/{practiceId}/plan-templates/{planType}": "Owner-only, still checked in-handler rather than declared at the mount -- outside #1028's named ten, so its move is its own work under #282",
+	// of the ten, so it is listed rather than moved here; see #1407.
+	"PUT /api/practices/{practiceId}/plan-templates/{planType}": "Owner-only, still checked in-handler rather than declared at the mount -- outside #1028's named ten, so its move is its own work, #1407",
 }
 
 // TestRoutes_EveryMutatingWriteDeclaresRolesOrIsExempt inverts what
