@@ -105,6 +105,17 @@
 	import LabeledField from '#lib/components/molecules/LabeledField.svelte';
 	import StackedForm from '#lib/components/molecules/StackedForm.svelte';
 	import Select from '#lib/components/atoms/Select.svelte';
+	import Badge from '#lib/components/atoms/Badge.svelte';
+	import Heading from '#lib/components/atoms/Heading.svelte';
+	import Skeleton from '#lib/components/atoms/Skeleton.svelte';
+	import {
+		clearGap,
+		describeNoWindow,
+		loadEngagementOnCall,
+		saveGap,
+		saveNarrowing,
+		type EngagementOnCall
+	} from '#lib/onCall.js';
 
 	type Detail = {
 		engagementId: string;
@@ -868,6 +879,98 @@
 	// rethrows, and rosterState.error carries it to the Notice above the
 	// Visits table, because the alternative is an Owner watching every
 	// assign-shaped control on this page vanish with no reason given.
+	/*
+	 * Who is on call for this birth (#1093), and the two things a person
+	 * changes from here: one Doula's own days, and a coverage gap.
+	 *
+	 * Inline rather than an organism of its own, for the reason
+	 * ADR-0018's tier rule gives: this screen is its only consumer today.
+	 * The moment a second surface needs it -- the roster growing an
+	 * inline editor is the obvious candidate -- it becomes a component,
+	 * with its own style-guide page.
+	 */
+	let onCall = $state<EngagementOnCall | undefined>();
+	let onCallError = $state('');
+	let gapStaffId = $state('');
+	let gapStartsAt = $state('');
+	let gapEndsAt = $state('');
+	let gapReason = $state('');
+	let gapCoveringStaffId = $state('');
+	let gapError = $state('');
+	let narrowFrom = $state<Record<string, string>>({});
+	let narrowTo = $state<Record<string, string>>({});
+
+	async function loadOnCall() {
+		try {
+			const panel = await loadEngagementOnCall(
+				apiFetchWithSession,
+				reference.practiceId,
+				reference.engagementId
+			);
+			onCall = panel;
+			narrowFrom = Object.fromEntries(panel.doulas.map((d) => [d.staffId, d.from ?? '']));
+			narrowTo = Object.fromEntries(panel.doulas.map((d) => [d.staffId, d.to ?? '']));
+			gapStaffId = panel.doulas[0]?.staffId ?? '';
+		} catch (error) {
+			onCallError = error instanceof Error ? error.message : 'We could not load who is on call.';
+		}
+	}
+
+	/* An instant the BFF takes, from what `<input type="datetime-local">`
+	   holds -- which is a local wall-clock time with no zone on it, so it
+	   is read in the reader's own zone rather than parsed as UTC. */
+	function toInstant(local: string): string {
+		return new Date(local).toISOString();
+	}
+
+	function submitCoverageGap(event: SubmitEvent) {
+		event.preventDefault();
+		void saveCoverageGap();
+	}
+
+	async function saveCoverageGap() {
+		gapError = '';
+		try {
+			await saveGap(apiFetchWithSession, reference.practiceId, reference.engagementId, {
+				staffId: gapStaffId,
+				startsAt: toInstant(gapStartsAt),
+				endsAt: toInstant(gapEndsAt),
+				reason: gapReason === '' ? undefined : gapReason,
+				coveringStaffId: gapCoveringStaffId === '' ? undefined : gapCoveringStaffId
+			});
+			gapStartsAt = '';
+			gapEndsAt = '';
+			gapReason = '';
+			gapCoveringStaffId = '';
+			await loadOnCall();
+		} catch (error) {
+			gapError = error instanceof Error ? error.message : 'We could not save the coverage gap.';
+		}
+	}
+
+	async function clearCoverageGap(gapId: string) {
+		gapError = '';
+		try {
+			await clearGap(apiFetchWithSession, reference.practiceId, reference.engagementId, gapId);
+			await loadOnCall();
+		} catch (error) {
+			gapError = error instanceof Error ? error.message : 'We could not clear the coverage gap.';
+		}
+	}
+
+	async function saveOnCallDays(staffId: string) {
+		gapError = '';
+		try {
+			await saveNarrowing(apiFetchWithSession, reference.practiceId, reference.engagementId, staffId, {
+				from: narrowFrom[staffId] === '' ? undefined : narrowFrom[staffId],
+				to: narrowTo[staffId] === '' ? undefined : narrowTo[staffId]
+			});
+			await loadOnCall();
+		} catch (error) {
+			gapError = error instanceof Error ? error.message : 'We could not save the on-call days.';
+		}
+	}
+
 	async function loadRoster() {
 		await rosterState.load(
 			() => loadVisitAssigneesOrNone(apiFetchWithSession, reference.practiceId, reference.engagementId),
@@ -903,6 +1006,7 @@
 		await loadContractSection();
 		await loadInvoicesSection();
 		await loadRoster();
+		await loadOnCall();
 		await loadOffersSection();
 		await loadActivity();
 
@@ -1546,6 +1650,168 @@
 	in body text, the actor muted. Last in `sections` (below), matching the
 	design brief's #433 amendment: it sits low on every page it appears on.
 -->
+{#snippet onCallSection()}
+	{#if onCallError}
+		<Notice variant="error" message={onCallError} />
+	{:else if onCall}
+		{#if onCall.window}
+			<Text
+				text={`On call from ${formatCalendarDay(onCall.window.start)} to ${formatCalendarDay(onCall.window.end)}.`}
+			/>
+		{:else}
+			<Text text={describeNoWindow(onCall.noWindowReason ?? '')} tone="muted" />
+		{/if}
+
+		<ul class="on-call-doulas">
+			{#each onCall.doulas as doula (doula.staffId)}
+				<li>
+					<span class="on-call-name">{doula.name}</span>
+					<Text
+						text={doula.onCallFrom && doula.onCallTo
+							? `On call ${formatCalendarDay(doula.onCallFrom)} to ${formatCalendarDay(doula.onCallTo)}`
+							: 'Not on call for any of this window'}
+						step="body-sm"
+						tone="variant"
+					/>
+					{#if isPracticeOwnerOrAdmin && onCall.window}
+						<div class="on-call-days">
+							<LabeledField label={`First day for ${doula.name}`}>
+								{#snippet children({ id, describedBy, invalid })}
+									<TextInput
+										{id}
+										{describedBy}
+										{invalid}
+										type="date"
+										value={narrowFrom[doula.staffId] ?? ''}
+										onInput={(value) => (narrowFrom[doula.staffId] = value)}
+									/>
+								{/snippet}
+							</LabeledField>
+							<LabeledField label={`Last day for ${doula.name}`}>
+								{#snippet children({ id, describedBy, invalid })}
+									<TextInput
+										{id}
+										{describedBy}
+										{invalid}
+										type="date"
+										value={narrowTo[doula.staffId] ?? ''}
+										onInput={(value) => (narrowTo[doula.staffId] = value)}
+									/>
+								{/snippet}
+							</LabeledField>
+							<Button
+								label={`Save on-call days for ${doula.name}`}
+								onClick={() => saveOnCallDays(doula.staffId)}
+							/>
+						</div>
+					{/if}
+				</li>
+			{/each}
+		</ul>
+
+		{#if gapError}
+			<Notice variant="error" message={gapError} />
+		{/if}
+
+		<Heading level={3} text="When a doula cannot be reached" />
+		{#if onCall.gaps.length === 0}
+			<Text text="Nobody has recorded a time they cannot be reached." tone="muted" />
+		{:else}
+			<ul class="on-call-gaps">
+				{#each onCall.gaps as gap (gap.id)}
+					<li>
+						<Text
+							text={`${gap.staffName}: ${formatInstant(gap.startsAt)} to ${formatInstant(gap.endsAt)}`}
+						/>
+						<Badge
+							label={gap.coveringStaffName ? `${gap.coveringStaffName} covering` : 'Nobody covering'}
+							variant={gap.coveringStaffName ? 'success' : 'warning'}
+						/>
+						{#if gap.reason}
+							<Text text={gap.reason} step="body-sm" tone="variant" />
+						{/if}
+						<Button label={`Clear the gap for ${gap.staffName}`} onClick={() => clearCoverageGap(gap.id)} />
+					</li>
+				{/each}
+			</ul>
+		{/if}
+
+		{#if onCall.window && onCall.doulas.length > 0}
+			{@const panel = onCall}
+			<StackedForm onSubmit={submitCoverageGap}>
+				<LabeledField label="Doula who cannot be reached">
+					{#snippet children({ id, describedBy, invalid })}
+						<Select
+							{id}
+							{describedBy}
+							{invalid}
+							options={panel.doulas.map((doula) => ({ value: doula.staffId, label: doula.name }))}
+							bind:value={gapStaffId}
+						/>
+					{/snippet}
+				</LabeledField>
+				<LabeledField label="From">
+					{#snippet children({ id, describedBy, invalid })}
+						<TextInput
+							{id}
+							{describedBy}
+							{invalid}
+							type="datetime-local"
+							value={gapStartsAt}
+							onInput={(value) => (gapStartsAt = value)}
+						/>
+					{/snippet}
+				</LabeledField>
+				<LabeledField label="Until">
+					{#snippet children({ id, describedBy, invalid })}
+						<TextInput
+							{id}
+							{describedBy}
+							{invalid}
+							type="datetime-local"
+							value={gapEndsAt}
+							onInput={(value) => (gapEndsAt = value)}
+						/>
+					{/snippet}
+				</LabeledField>
+				<LabeledField
+					label="Who is covering"
+					hint="Leave this unanswered where nobody is covering yet. Every owner and admin is told so they can arrange it."
+				>
+					{#snippet children({ id, describedBy, invalid })}
+						<Select
+							{id}
+							{describedBy}
+							{invalid}
+							options={[
+								{ value: '', label: 'Nobody yet' },
+								...panel.doulas
+									.filter((doula) => doula.staffId !== gapStaffId)
+									.map((doula) => ({ value: doula.staffId, label: doula.name }))
+							]}
+							bind:value={gapCoveringStaffId}
+						/>
+					{/snippet}
+				</LabeledField>
+				<LabeledField label="Reason" hint="Optional, and read only by this practice.">
+					{#snippet children({ id, describedBy, invalid })}
+						<TextInput
+							{id}
+							{describedBy}
+							{invalid}
+							value={gapReason}
+							onInput={(value) => (gapReason = value)}
+						/>
+					{/snippet}
+				</LabeledField>
+				<Button type="submit" label="Record the gap" />
+			</StackedForm>
+		{/if}
+	{:else}
+		<Skeleton label="Loading who is on call" />
+	{/if}
+{/snippet}
+
 {#snippet birthOutcomeSection()}
 	<BirthOutcomeSection
 		outcome={birthOutcome.birthOutcome}
@@ -1588,6 +1854,7 @@
 	{actions}
 	isContentsShown
 	sections={[
+		{ heading: 'On call', content: onCallSection },
 		{ heading: 'Birth outcome', content: birthOutcomeSection },
 		{ heading: 'Visits', content: visitsSection },
 		{ heading: 'Care Plan', content: carePlanSection },

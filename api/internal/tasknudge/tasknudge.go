@@ -47,6 +47,11 @@ const (
 	// minutes of Cloud Scheduler cadence is exactly the latency ADR-0013
 	// exists to remove.
 	ConnectNudge OutboxType = "connect-nudge"
+	// CoverageGap is #1093's "a birth needs on-call cover" mail to every
+	// Owner and Admin, queued by a person saving a coverage gap with
+	// nobody covering it. Nudged: a hole in tonight's cover is exactly
+	// the latency ADR-0013 exists to remove.
+	CoverageGap OutboxType = "coverage-gap"
 )
 
 // delay is how long a nudge waits before it fires, per outbox type.

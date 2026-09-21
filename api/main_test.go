@@ -22,6 +22,7 @@ import (
 	"doula-cloud/api/internal/mailsuppress"
 	"doula-cloud/api/internal/objectstore"
 	"doula-cloud/api/internal/offer"
+	"doula-cloud/api/internal/oncall"
 	"doula-cloud/api/internal/outbox"
 	"doula-cloud/api/internal/payments"
 	"doula-cloud/api/internal/portalinvite"
@@ -68,6 +69,10 @@ var testPayoutOutboxWorker = payments.Worker{Mailer: outbox.Mailer{Sender: &mail
 // connect-nudge outbox worker (#917), the payments package's third
 // outbox worker beside the two either side of it here.
 var testConnectNudgeOutboxWorker = payments.ConnectNudgeWorker{Mailer: outbox.Mailer{Sender: &mail.FakeSender{}, Now: time.Now, AppBaseURL: testExpectedOrigin, From: testWorkerFrom, ReplyTo: testWorkerReplyTo}}
+
+// testGapNoticeOutboxWorker is every routes() test's stand-in for the
+// coverage-gap outbox worker (#1093).
+var testGapNoticeOutboxWorker = oncall.GapNoticeWorker{Mailer: outbox.Mailer{Sender: &mail.FakeSender{}, Now: time.Now, AppBaseURL: testExpectedOrigin, From: testWorkerFrom, ReplyTo: testWorkerReplyTo}}
 
 // testPaymentOutboxWorker is every routes() test's stand-in for the
 // payment-received outbox worker (#344), the payments package's
@@ -143,6 +148,7 @@ func testDeps() Deps {
 		LowCreditWorker:         testLowCreditWorker,
 		PayoutWorker:            testPayoutOutboxWorker,
 		ConnectNudgeWorker:      testConnectNudgeOutboxWorker,
+		GapNoticeWorker:         testGapNoticeOutboxWorker,
 		PaymentReceivedWorker:   testPaymentOutboxWorker,
 		SessionNoticeWorker:     testSessionNoticeOutboxWorker,
 		StaffInviteWorker:       testStaffInviteOutboxWorker,

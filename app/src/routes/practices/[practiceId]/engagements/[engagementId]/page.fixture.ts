@@ -38,6 +38,7 @@
  */
 import type { Contract } from '#lib/contract.js';
 import { jsonResponse } from '#lib/testResponse.js';
+import type { EngagementOnCall } from '#lib/onCall.js';
 import type { RouteFixture, RouteVariant } from '../../../../routeFixture.js';
 import type { RouteParams as RouteParameters } from './$types';
 import Page from './+page.svelte';
@@ -113,6 +114,60 @@ export const visitAssignees = roster
 			...(!canBeNamed && { reason: 'contractor_without_accepted_offer' })
 		};
 	});
+
+/*
+ * #1093's on-call panel for this birth: a window, a primary on call for
+ * all of it, a backup narrowed to the last fortnight, and two gaps --
+ * one nobody is covering and one somebody is. The two gap states are
+ * both here because the section renders them differently, which is the
+ * fixture rule #720 states.
+ */
+export const onCallPanel: EngagementOnCall = {
+	window: { start: '2026-10-09', end: '2026-11-13' },
+	rule: {
+		startRule: 'gestational_week',
+		startWeek: 37,
+		graceDays: 14,
+		overridden: false
+	},
+	doulas: [
+		{
+			staffId: 'staff-1',
+			name: 'Persephone Vandermeulen-Achterberg, CD(DONA)',
+			onCallFrom: '2026-10-09',
+			onCallTo: '2026-11-13'
+		},
+		{
+			staffId: 'staff-2',
+			name: 'Bo Ng',
+			from: '2026-10-31',
+			onCallFrom: '2026-10-31',
+			onCallTo: '2026-11-13'
+		}
+	],
+	gaps: [
+		{
+			id: 'gap-1',
+			engagementId: 'engagement-1',
+			staffId: 'staff-1',
+			staffName: 'Persephone Vandermeulen-Achterberg, CD(DONA)',
+			startsAt: '2026-10-17T22:00:00Z',
+			endsAt: '2026-10-18T10:00:00Z',
+			reason:
+				'At a wedding four hours away with no reliable signal, and back the following morning'
+		},
+		{
+			id: 'gap-2',
+			engagementId: 'engagement-1',
+			staffId: 'staff-2',
+			staffName: 'Bo Ng',
+			startsAt: '2026-11-01T02:00:00Z',
+			endsAt: '2026-11-01T14:00:00Z',
+			coveringStaffId: 'staff-1',
+			coveringStaffName: 'Persephone Vandermeulen-Achterberg, CD(DONA)'
+		}
+	]
+};
 
 export const detail = {
 	engagementId: 'engagement-1',
@@ -310,6 +365,12 @@ export const fixture: RouteFixture<RouteParameters> = {
 	respond: (path) => {
 		if (/\/engagements\/engagement-1$/.test(path)) return jsonResponse(detail);
 		if (path.endsWith('/visit-assignees')) return jsonResponse({ items: visitAssignees });
+		// #1093's panel: a live window with a primary and a narrowed
+		// backup, one gap nobody is covering and one somebody is. Both
+		// gap states are here on purpose -- the section renders them
+		// differently, and a fixture holding only the covered one would
+		// measure a screen with no hole in it.
+		if (path.endsWith('/on-call')) return jsonResponse(onCallPanel);
 		if (path.includes('/visits')) {
 			return jsonResponse({
 				items: [

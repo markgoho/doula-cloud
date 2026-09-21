@@ -72,6 +72,16 @@ func outboxRegistrations(d Deps) []outbox.Registration {
 			Worker: d.ConnectNudgeWorker,
 		},
 		{
+			// #1093's coverage-gap outbox, whose write sites are
+			// oncall.CreateGapHandler and UpdateGapHandler: a person saving
+			// a gap nobody is covering. Nudged, because the hole may be
+			// tonight.
+			Path:   "/api/internal/notifications/process-coverage-gap-outbox",
+			Door:   outbox.NotificationDoor,
+			Nudge:  tasknudge.CoverageGap,
+			Worker: d.GapNoticeWorker,
+		},
+		{
 			// #344's payment-received outbox.
 			Path:   "/api/internal/notifications/process-payment-outbox",
 			Door:   outbox.NotificationDoor,

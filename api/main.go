@@ -28,6 +28,7 @@ import (
 	"doula-cloud/api/internal/mfarecoverymail"
 	"doula-cloud/api/internal/objectstore"
 	"doula-cloud/api/internal/offer"
+	"doula-cloud/api/internal/oncall"
 	"doula-cloud/api/internal/outbox"
 	"doula-cloud/api/internal/payments"
 	"doula-cloud/api/internal/portalinvite"
@@ -206,6 +207,7 @@ func main() {
 	lowCreditOutboxWorker := billing.Worker{Mailer: platformMailer}
 	payoutOutboxWorker := payments.Worker{Mailer: platformMailer}
 	connectNudgeOutboxWorker := payments.ConnectNudgeWorker{Mailer: platformMailer}
+	gapNoticeOutboxWorker := oncall.GapNoticeWorker{Mailer: platformMailer}
 	paymentOutboxWorker := payments.PaymentReceivedWorker{Mailer: platformMailer}
 	sessionNoticeOutboxWorker := sessionnotice.NewWorker(platformMailer)
 	staffInviteOutboxWorker := staffinvite.NewWorker(platformMailer)
@@ -287,6 +289,7 @@ func main() {
 		LowCreditWorker:         lowCreditOutboxWorker,
 		PayoutWorker:            payoutOutboxWorker,
 		ConnectNudgeWorker:      connectNudgeOutboxWorker,
+		GapNoticeWorker:         gapNoticeOutboxWorker,
 		PaymentReceivedWorker:   paymentOutboxWorker,
 		SessionNoticeWorker:     sessionNoticeOutboxWorker,
 		StaffInviteWorker:       staffInviteOutboxWorker,

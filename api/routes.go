@@ -17,6 +17,7 @@ import (
 	"doula-cloud/api/internal/mfarecoverymail"
 	"doula-cloud/api/internal/objectstore"
 	"doula-cloud/api/internal/offer"
+	"doula-cloud/api/internal/oncall"
 	"doula-cloud/api/internal/payments"
 	"doula-cloud/api/internal/portalinvite"
 	"doula-cloud/api/internal/practicedeletion"
@@ -94,6 +95,7 @@ type Deps struct {
 	LowCreditWorker         billing.Worker
 	PayoutWorker            payments.Worker
 	ConnectNudgeWorker      payments.ConnectNudgeWorker
+	GapNoticeWorker         oncall.GapNoticeWorker
 	PaymentReceivedWorker   payments.PaymentReceivedWorker
 	SessionNoticeWorker     sessionnotice.Worker
 	StaffInviteWorker       staffinvite.Worker

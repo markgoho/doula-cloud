@@ -352,6 +352,20 @@ const (
 	// unfiltered.
 	ActionPushNotificationsEnabled  EngagementAction = "push_notifications_enabled"
 	ActionPushNotificationsDisabled EngagementAction = "push_notifications_disabled"
+
+	// #1093's on-call acts. A coverage gap is a stated time one attached
+	// Doula cannot be reached, and each of its three writes is its own
+	// action, so "when was cover arranged, and by whom" reads straight off
+	// the ledger. A narrowing is the part of the window one Doula is on
+	// call for; the rule is how this Engagement's window starts, where it
+	// departs from the Practice's. All five are in staffingActions below:
+	// who is on call, and who cannot be reached, are the Practice's roster,
+	// not something of hers that changed.
+	ActionCoverageGapCreated     EngagementAction = "coverage_gap_created"
+	ActionCoverageGapUpdated     EngagementAction = "coverage_gap_updated"
+	ActionCoverageGapCleared     EngagementAction = "coverage_gap_cleared"
+	ActionOnCallNarrowingChanged EngagementAction = "on_call_narrowing_changed"
+	ActionOnCallRuleChanged      EngagementAction = "on_call_rule_changed"
 )
 
 // moneyActions is what ADR-0008's read table keeps off a contractor's
@@ -422,6 +436,12 @@ var staffingActions = map[EngagementAction]bool{
 	ActionVisitReassigned:       true,
 	ActionContractVoidRequested: true,
 	ActionContractVoidDeclined:  true,
+	// #1093: who is on call and who cannot be reached is the roster.
+	ActionCoverageGapCreated:     true,
+	ActionCoverageGapUpdated:     true,
+	ActionCoverageGapCleared:     true,
+	ActionOnCallNarrowingChanged: true,
+	ActionOnCallRuleChanged:      true,
 }
 
 // StaffingActions returns every action CONTEXT.md's Activity entry keeps

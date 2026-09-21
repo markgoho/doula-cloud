@@ -104,6 +104,22 @@
 		...(isPracticeOwnerOrAdmin
 			? [
 					{
+						// #1093: when on call starts for a birth, and how long it
+						// runs past the due date. Gated the same notch as
+						// Timezone and Rates -- both the read and the write are
+						// Owner-or-Admin, so a Doula who followed the link would
+						// meet only a 403. The rule's effect is met everywhere
+						// else: on the roster, and on a birth's own page.
+						label: 'On call',
+						description:
+							'When a doula goes on call for a birth, and how long on call runs past the due date.',
+						href: resolve('/practices/[practiceId]/settings/on-call', { practiceId })
+					}
+				]
+			: []),
+		...(isPracticeOwnerOrAdmin
+			? [
+					{
 						label: 'Blocked email addresses',
 						description:
 							'The addresses Doula Cloud has stopped writing to, and why each one stopped.',
