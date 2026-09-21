@@ -10,7 +10,7 @@
 	 * undefined here and is not passed on.
 	 */
 	import DateFields from '#lib/components/molecules/DateFields.svelte';
-	import { joinDate, splitDate, type DateField, type DateParts } from '#lib/intakeDate.js';
+	import { dateFieldId, dateGroupRefusal, joinDate, splitDate, type DateParts } from '#lib/intakeDate.js';
 	import { intakeDraft } from '#lib/intakeDraft.svelte.js';
 	import type { FormError } from '#lib/formErrors.js';
 	import IntakeQuestion from '../IntakeQuestion.svelte';
@@ -28,17 +28,16 @@
 	 * defect this pattern exists to avoid.
 	 */
 	let parts = $state<DateParts>(splitDate(intakeDraft.answers.dateOfBirth));
-	let invalidField = $state<DateField | undefined>();
 
 	// Composes into the draft, or reports why it could not -- run before
 	// Continue and before a save, so a refused date never reaches the wire.
+	// Which box is wrong is read back out of the returned refusal by
+	// `dateGroupRefusal` below, not tracked here a second time.
 	function compose(): FormError[] {
 		const result = joinDate(parts);
 		if (!result.ok) {
-			invalidField = result.field;
-			return [{ message: result.message, targetId: `${GROUP}-${result.field}` }];
+			return [{ message: result.message, targetId: dateFieldId(GROUP, result.field) }];
 		}
-		invalidField = undefined;
 		intakeDraft.update({ dateOfBirth: result.value });
 		return [];
 	}
@@ -51,12 +50,13 @@
 	validate={compose}
 >
 	{#snippet controls({ errors })}
+		{@const refusal = dateGroupRefusal(errors, GROUP)}
 		<DateFields
 			name={GROUP}
 			{parts}
 			onChange={(next) => (parts = next)}
-			error={errors[0]?.message}
-			{invalidField}
+			error={refusal?.message}
+			invalidField={refusal?.field}
 		/>
 	{/snippet}
 </IntakeQuestion>

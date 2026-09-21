@@ -12,6 +12,7 @@ import { resolve } from '$app/paths';
 import { apiFetchWithSession } from '#lib/api.js';
 import { createClient } from '#lib/client.js';
 import { errorsFromCause, type FormError } from '#lib/formErrors.js';
+import { dateFieldId } from '#lib/intakeDate.js';
 import { intakeDraft } from '#lib/intakeDraft.svelte.js';
 import { CHANGE_PARAMETER, CHANGE_VALUE } from '#lib/intakeJourney.js';
 
@@ -76,7 +77,7 @@ export function intakeFieldIds(stepId: string): Record<string, string> {
 			return { givenName: GIVEN_NAME_ID };
 		}
 		case 'date-of-birth': {
-			return { dateOfBirth: `${DATE_OF_BIRTH_GROUP}-day` };
+			return { dateOfBirth: dateFieldId(DATE_OF_BIRTH_GROUP, 'day') };
 		}
 		default: {
 			return {};
