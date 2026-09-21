@@ -123,7 +123,7 @@ describe('practices/[practiceId]/+layout.ts load', () => {
 		await expect(load(loadArguments)).rejects.toMatchObject({ status: 303, location: '/' });
 	});
 
-	it("sends her to /no-practice when her Staff row itself is gone -- there is no session left to decide from", async () => {
+	it('sends her to /no-practice when her Staff row itself is gone -- there is no session left to decide from', async () => {
 		const { load } = await import('./+layout.js');
 		setup({
 			'/api/practices/practice-1/session': { status: 404, body: 'no matching staff account' },

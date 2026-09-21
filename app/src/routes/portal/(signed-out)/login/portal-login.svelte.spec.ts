@@ -92,7 +92,7 @@ describe('Client-portal login -- on-load session probe (#283)', () => {
 	// not an address she could return to. It now lives at the app root,
 	// which already probes both populations and renders the same list, so
 	// a signed-in visitor with several Engagements is sent there instead.
-	it("sends a signed-in visitor with several Engagements to the portal root, without rendering a picker of its own", async () => {
+	it('sends a signed-in visitor with several Engagements to the portal root, without rendering a picker of its own', async () => {
 		// The fixture's own session already has two Engagements -- it is
 		// this test's happy path, not a reason to invent a second one.
 		apiFetch.mockImplementation(toApiResponder(fixture));

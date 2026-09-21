@@ -281,7 +281,7 @@
 			credentials: 'include',
 			headers: {
 				Authorization: `Bearer ${idToken}`,
-				...(isConfirmed && { "X-Confirmed": "true" })
+				...(isConfirmed && { 'X-Confirmed': 'true' })
 			}
 		});
 		if (!exchangeResponse.ok) {

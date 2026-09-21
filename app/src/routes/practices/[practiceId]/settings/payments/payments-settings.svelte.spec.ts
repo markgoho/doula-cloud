@@ -570,7 +570,7 @@ describe('payments settings screen: what #442 refuses and what it warns about', 
 });
 
 describe('payments settings screen: the one question the two website answers do not share', () => {
-	it("warns a Practice on her own site that Stripe wants a description she has not written", async () => {
+	it('warns a Practice on her own site that Stripe wants a description she has not written', async () => {
 		await setup({ status: 'not_connected', roles: ['owner'], websiteMode: 'own' });
 
 		await expect

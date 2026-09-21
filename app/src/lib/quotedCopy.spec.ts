@@ -18,7 +18,7 @@ describe('withoutComments', () => {
 	});
 
 	it('drops a same-line HTML comment and keeps the rest', () => {
-		expect(withoutComments("<!-- note --> <p>kept</p>")).toEqual([' <p>kept</p>']);
+		expect(withoutComments('<!-- note --> <p>kept</p>')).toEqual([' <p>kept</p>']);
 	});
 
 	it('carries a block comment across lines until it closes', () => {

@@ -245,7 +245,7 @@ describe('a contractor Doula without the owner or admin role', () => {
 		await setup(jsonResponse({ items: [], hasMore: false }), true);
 
 		await expect
-			.element(testPage.getByRole('link', { name: "How to add Clients of your own" }))
+			.element(testPage.getByRole('link', { name: 'How to add Clients of your own' }))
 			.toHaveAttribute('href', `/practices/${practiceId}/clients/search`);
 	});
 
@@ -253,7 +253,7 @@ describe('a contractor Doula without the owner or admin role', () => {
 		await setup(undefined, true);
 
 		await expect
-			.element(testPage.getByRole('link', { name: "How to add Clients of your own" }))
+			.element(testPage.getByRole('link', { name: 'How to add Clients of your own' }))
 			.not.toBeInTheDocument();
 	});
 });
@@ -266,7 +266,7 @@ describe('a non-contractor with an empty list', () => {
 		// message in a hidden <p>, and only a role query excludes it.
 		await expect.element(testPage.getByRole('cell', { name: 'No Clients yet.' })).toBeVisible();
 		await expect
-			.element(testPage.getByRole('link', { name: "How to add Clients of your own" }))
+			.element(testPage.getByRole('link', { name: 'How to add Clients of your own' }))
 			.not.toBeInTheDocument();
 	});
 });

@@ -112,7 +112,7 @@ describe('client edit', () => {
 		expect(goto).toHaveBeenCalledWith(`/practices/${practiceId}/clients/client-9`);
 	});
 
-	it("refuses to save with a blank given name, client-side, before any request", async () => {
+	it('refuses to save with a blank given name, client-side, before any request', async () => {
 		await setup();
 
 		await testPage.getByLabelText('Given name').fill('');

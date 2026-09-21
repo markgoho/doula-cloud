@@ -58,7 +58,7 @@ async function setup() {
 	await render(Page, {});
 }
 
-describe("the zone a Practice is created in (#1166)", () => {
+describe('the zone a Practice is created in (#1166)', () => {
 	it('refuses a signup with no zone chosen, and sends nothing', async () => {
 		await setup();
 		await fillEverythingButTheZone();

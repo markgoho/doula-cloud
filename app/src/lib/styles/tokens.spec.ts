@@ -89,7 +89,7 @@ function contrast(a: string, b: string): number {
 function colorNamesIn(declarations: Map<string, string>): string[] {
 	return declarations
 		.keys()
-		.filter((name) => name.startsWith("--color-"))
+		.filter((name) => name.startsWith('--color-'))
 		.toArray()
 		.toSorted((a, b) => a.localeCompare(b));
 }

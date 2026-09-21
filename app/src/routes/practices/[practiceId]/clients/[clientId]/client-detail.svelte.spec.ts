@@ -647,7 +647,7 @@ describe('erasing a Client (#691, ADR-0027)', () => {
 		await expect.element(testPage.getByText(baseDetail.email)).not.toBeInTheDocument();
 	});
 
-	it("renders a 409 (a race on an unsettled invoice, or already erased) through the existing error notice, never raw response text", async () => {
+	it('renders a 409 (a race on an unsettled invoice, or already erased) through the existing error notice, never raw response text', async () => {
 		await setup({
 			isOwner: true,
 			eraseResponse: "this client's data has already been erased",

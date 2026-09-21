@@ -110,7 +110,7 @@ function clientReachableActions(): string[] {
 		.toSorted((a, b) => a.localeCompare(b));
 }
 
-describe("the Client register holds every action a Client can reach (#708)", () => {
+describe('the Client register holds every action a Client can reach (#708)', () => {
 	it('reads a real action vocabulary from the Go source', () => {
 		// A regex that silently matched nothing would make every assertion
 		// below pass while comparing two empty sets.

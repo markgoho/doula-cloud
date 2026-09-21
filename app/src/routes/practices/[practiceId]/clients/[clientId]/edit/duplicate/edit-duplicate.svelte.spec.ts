@@ -72,7 +72,7 @@ describe('a direct load with nothing in the draft', () => {
 	});
 });
 
-describe("when gate two names a possible duplicate", () => {
+describe('when gate two names a possible duplicate', () => {
 	it('offers every match plus a different person, and says nothing has been saved yet', async () => {
 		await setup();
 
@@ -145,7 +145,7 @@ describe("when gate two names a possible duplicate", () => {
 		expect(goto).toHaveBeenCalledWith(detailHref(noChangeMatch.id));
 	});
 
-	it("names the record being edited as the survivor when it is the older, unattached row (wouldSurvive: false)", async () => {
+	it('names the record being edited as the survivor when it is the older, unattached row (wouldSurvive: false)', async () => {
 		const survivorFields = { ...fields, familyName: 'Okafor', phone: '' };
 		const absorbed: CollisionMatch = {
 			...matches[1]!,

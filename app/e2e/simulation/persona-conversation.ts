@@ -127,7 +127,7 @@ function describeResult(result: PersonaTurnResult): string {
 // Fixed for the whole run -- part of the system prompt (see the
 // constructor), not resent per act.
 const OUTCOME_RUBRIC = [
-	"You are asked, after each act you perform, to judge its Outcome from your own read of what happened. Use exactly one of these four values:",
+	'You are asked, after each act you perform, to judge its Outcome from your own read of what happened. Use exactly one of these four values:',
 	'- "completed": you did the thing you were trying to do, and nothing cost you.',
 	'- "completed with friction": you did it, but it cost you -- a retry, a guess, a back-navigation, a wait, a second screen you had to visit to find out whether the first one worked.',
 	'- "refused": the product deliberately said no.',
