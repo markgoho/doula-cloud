@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"time"
 
+	"doula-cloud/api/internal/activity"
 	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/client"
 	"doula-cloud/api/internal/pagecursor"
@@ -103,10 +104,13 @@ func ListHandler() http.Handler {
 			after = &c
 		}
 
-		// "" is the Staff-side reader: unchanged from before
-		// unresolvedStaffSenderName existed (see listMessages' own doc
-		// comment).
-		items, hasMore, err := listMessages(r.Context(), tx, engagementID, after, "")
+		// activity.DepartedStaffName is the Staff-side reader's own
+		// fallback (#1322): a Staff reader who sees "a former colleague"
+		// elsewhere (activitypage, oncall, the Engagement's own Activity
+		// ledger) now sees the same word here, instead of an empty
+		// senderName, for a sender whose Membership has ended (see
+		// listMessages' own doc comment).
+		items, hasMore, err := listMessages(r.Context(), tx, engagementID, after, activity.DepartedStaffName)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
@@ -153,24 +157,24 @@ const listMessagesAfterQuery = `SELECT m.id, m.sender_type, m.sender_id,
 // up on tx -- the app layer's own filter, so a bug in either one alone
 // can't leak rows. sender_id has no FK (it's polymorphic across staff and
 // clients), so sender name resolution needs two LEFT JOINs gated on
-// sender_type rather than visit.listVisits' single JOIN.
+// sender_type rather than visit.listVisits' own single LEFT JOIN.
 //
 // unresolvedStaffSenderName is what a Staff sender's row renders as when
-// the LEFT JOIN above finds no row. For a Client-facing caller this is
-// 00111's client_portal_sees_staff policy refusing a Doula who deleted
-// her own login (ADR-0033) rather than reaching her redacted row.
-// ListHandler (Staff-facing) passes "" -- unchanged from what the code
-// produced before this parameter existed (#1198 AC2), and, confirmed by
-// TestListHandler_UnchangedForASenderWhoDeletedHerLogin
-// (handlers_test.go), the branch is very much reachable from that side
-// too: staff_practice_visibility (00002) reaches a staff row only
-// through a live practice_memberships row, and RemoveMembership deletes
-// that row for a plain departure exactly as ADR-0033's login deletion
-// does, so a Staff reader gets an empty name here as well -- not the
-// redacted "Deleted Staff Member" this ticket assumed. That gap is real
-// and is filed separately (#1322) rather than fixed here, since fixing
-// it means changing what the Staff side shows, which AC2 forbids.
-// ClientListHandler (#1198) passes activity.StaffActorDisplayName, the
+// the LEFT JOIN above finds no row. staff_practice_visibility (00002)
+// reaches a staff row only through a live practice_memberships row, and
+// RemoveMembership deletes that row for a plain departure exactly as
+// ADR-0033's login deletion does -- so this branch is reachable from
+// both a Client-facing and a Staff-facing caller, for the same reason,
+// with no ADR-0033 redaction required. For a Client-facing caller
+// 00111's client_portal_sees_staff policy separately refuses a Doula who
+// deleted her own login rather than reaching her redacted row.
+// ListHandler (Staff-facing) passes activity.DepartedStaffName (#1322),
+// confirmed reachable both with and without ADR-0033's login deletion by
+// TestListHandler_SenderWhoDeletedHerLoginShowsAFormerColleague and
+// TestListHandler_SenderWhoPlainlyLeftShowsAFormerColleague
+// (handlers_test.go) -- before this fix the same branch produced "", not
+// the redacted "Deleted Staff Member" #1198 assumed. ClientListHandler
+// (#1198) passes activity.StaffActorDisplayName, the
 // same word listPortalVisits already stands in with for the identical
 // gap on the Client-portal side.
 func listMessages(ctx context.Context, tx *sql.Tx, engagementID string, after *messageCursor, unresolvedStaffSenderName string) ([]Message, bool, error) {

@@ -192,7 +192,7 @@ func TestRLS_StaffPortalHistoryGrantsAStaffSessionNothing(t *testing.T) {
 	practiceID := testdb.SeedPractice(t, db, "Staff Session Practice")
 	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Nadia Client", "nadia2@example.com")
 	departed := testdb.SeedNamedStaffAtPractice(t, db, practiceID, "session-departed", "Maya Okonkwo", []string{doulaRole}, "employee")
-	reader := testdb.SeedNamedStaffAtPractice(t, db, practiceID, "session-reader", "Renata Owner", []string{"owner"}, "employee")
+	reader := testdb.SeedNamedStaffAtPractice(t, db, practiceID, "session-reader", "Renata Owner", []string{ownerRole}, "employee")
 
 	if _, err := db.Admin.ExecContext(t.Context(),
 		`INSERT INTO visits (engagement_id, staff_id, scheduled_at) VALUES ($1, $2, now() - interval '3 days')`,
