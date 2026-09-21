@@ -13,7 +13,7 @@ names its **abandon point**: what makes her close the tab there.
 
 ## Moment of truth
 
-**Stage 4 — the first screen after she creates a Practice.** She has spent her fifteen minutes to get here. This screen is the product's one chance to say "doula" and "birth plan" back to her. It now does (TB-G4, closed): the seven links moved to the shell's top bar, and this screen names the birth plan, the visits and the contract a first Client will bring.
+**Stage 4 — the first screen after she creates a Practice.** She has spent her fifteen minutes to get here. This screen is the product's one chance to say "doula" and "birth plan" back to her. It now does (TB-G4, closed): the old seven-link menu is gone, replaced by a role-scoped top bar and a **Settings** hub, and this screen names the birth plan, the visits and the contract a first Client will bring.
 
 ## Words
 
@@ -77,7 +77,7 @@ of as one. Low risk, worth watching.
 ### Stage 4 — The first screen — moment of truth
 
 **Thinking**: "Show me the thing I came for."
-**Pain points**: none remaining. The seven links moved into the shell's persistent top bar ([#452](https://github.com/markgoho/doula-cloud/issues/452)), and this screen is now `OverviewHub`'s zero-Client state, which names the work rather than the filing cabinet and offers one action.
+**Pain points**: none remaining. The old seven-link menu is gone ([#452](https://github.com/markgoho/doula-cloud/issues/452), closed): Clients, Billing and Staff moved into the shell's persistent, role-scoped top bar, Plan Templates, Contract Template and Payments moved under **Settings**, and this screen is now `OverviewHub`'s zero-Client state, which names the work rather than the filing cabinet and offers one action.
 
 - **4.1** — Land on `/practices/[practiceId]`.
 - **4.2** — Read "Nothing is here yet, because no Client is. Add one and this becomes the Client's birth plan, your visits to the Client, and the contract and invoices between you." and follow **Add your first Client**.
@@ -100,8 +100,7 @@ of as one. Low risk, worth watching.
 ### Stage 6 — Judge the exit
 
 **Thinking**: "If I hate this in six months, do I get my clients back?"
-**Pain points**: this is half of her stated question and the product does not
-answer it anywhere.
+**Pain points**: none remaining. Both halves of her stated question are now answered from **Settings**.
 
 - **6.1** — Look for an export.
 
@@ -124,7 +123,7 @@ cannot be reproduced even manually.
 | ID | Stage | Layer | Gap | Issue |
 | --- | --- | --- | --- | --- |
 | TB-G1 | 1 | Both | No marketing site exists. Her journey starts on a page that has not been built. | [#284](https://github.com/markgoho/doula-cloud/issues/284) |
-| TB-G2 | 2 | Experience | **Narrowed; the in-product half is closed** ([#285](https://github.com/markgoho/doula-cloud/issues/285)): **Billing** now states `One Credit costs $20.00` before purchase. No price is published on the marketing site — that remainder moved to [#868](https://github.com/markgoho/doula-cloud/issues/868) (what the site says) and [#284](https://github.com/markgoho/doula-cloud/issues/284) (building it). | [#868](https://github.com/markgoho/doula-cloud/issues/868), [#284](https://github.com/markgoho/doula-cloud/issues/284) |
+| TB-G2 | 2 | Experience | **Narrowed; the in-product half is closed** ([#285](https://github.com/markgoho/doula-cloud/issues/285)): **Billing** now states `One Credit costs $20.00` before purchase. No price is published on the marketing site — that remainder moved to [#868](https://github.com/markgoho/doula-cloud/issues/868) (what the site says) and [#284](https://github.com/markgoho/doula-cloud/issues/284) (building it). | [#285](https://github.com/markgoho/doula-cloud/issues/285) (in-product, closed), [#868](https://github.com/markgoho/doula-cloud/issues/868), [#284](https://github.com/markgoho/doula-cloud/issues/284) (marketing site) |
 | TB-G3 | 2 | Interaction | **Closed.** The Billing screen now states what a Credit buys ("One Credit covers one Engagement") and its origin column runs every value through a label instead of printing the raw enum. | [#286](https://github.com/markgoho/doula-cloud/issues/286) |
 | TB-G4 | 4 | Experience | **Closed.** The first screen is now `OverviewHub`'s zero-Client state: it names the birth plan, the visits, the contract and the invoices a first Client will bring, and offers one action, not a menu. | [#287](https://github.com/markgoho/doula-cloud/issues/287) |
 | TB-G5 | 6 | Interaction | **Closed, split in two.** **Settings** offers a whole-Practice data export and **Delete this Practice**, a 30-day countdown before erasure. | [#288](https://github.com/markgoho/doula-cloud/issues/288) (export), [#871](https://github.com/markgoho/doula-cloud/issues/871) (deletion) |
