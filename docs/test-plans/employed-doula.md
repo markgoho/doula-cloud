@@ -58,7 +58,6 @@ than anything Priya would do.
 | --- | --- | --- | --- |
 | 5.1 | Open an Engagement that is **not** hers | It opens. No read path is role-checked | `manual` |
 | 5.2 | Read the Contract and Invoices sections | The merge values **including the amount** and the Invoice history render; the **prose does not** — the staff Engagement page shows `Status:` and the six filled merge-field inputs only, and the prose lives on the Contract Template screen and the Client's portal view. Per [ADR-0006](../adr/0006-read-follows-the-role.md) an employed Doula reads a Contract's scope but **not** its money ([PR-G2](https://github.com/markgoho/doula-cloud/issues/277)) | `manual` |
-
 | 5.2-a | Set the Price on a draft Contract, send it, and raise an Invoice | **All three succeed.** Only Contract *status* refuses (`409` on a non-draft), never the role; the Invoice reaches the Stripe gate (`connectRequired`), not a refusal ([PR-G8](https://github.com/markgoho/doula-cloud/issues/282)) | `manual` |
 
 ### Stage 6 — Read the Birth Plan (moment of truth)
