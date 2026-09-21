@@ -408,3 +408,33 @@ routing it through `loading`/`loadError` — those four already show controls (a
 link) that stay on screen through a reload, which `ListPage`'s page-level `loading`/`loadError` would
 hide along with everything else; keeping the branching local preserves that instead of trading it away
 for a frame that was reachable without the trade.
+
+## Amendment, 2026-09-20 — the last three archetype-A routes join `EntryPage`
+
+Filed as [#1222](https://github.com/markgoho/doula-cloud/issues/1222), found the same way #490 found
+archetype A's original gap: `forgot-password`, `reset-password` and the pre-account Offer read
+(`offers/[offerId]`) never adopted `EntryPage` when the 2026-09-02 amendment above shipped it, so all
+three still wrote `PageTitle`, `ErrorSummary` and a bare `Heading` straight into `(signed-out)/
++layout.svelte`, which supplies no gutters or max-width of its own. At 1440px the `<h1>` sat at the
+viewport edge, and once a submit was refused, `ErrorSummary`'s bordered box ran edge to edge.
+
+`forgot-password` and `reset-password` are a mechanical fit — one field, one form, the same shape as the
+two plain logins — and needed no decision. `offers/[offerId]` did: its access-code step followed by a
+read-only record summary with decision controls (Join and accept, Decline) is a two-phase shape no other
+archetype-A route had when the *Two named exits* section above was written, and this document said the
+choice — adopt `EntryPage`, adopt a different Template, or opt out with a reason recorded — was the
+implementing agent's to make and argue against that section.
+
+**It adopted `EntryPage`, and the extraction bar did not apply.** The bar above governs building a *new*
+Template or variant for a shape that does not already fit one; it does not govern reusing an existing
+Template whose region is already generic enough. `content` was never named or shaped around "a form" —
+it is one Snippet standing in for whatever a route's own steps are — and `accept-invite`'s
+already-shipped `existing` branch (a credential step, then a read-only summary of a name and a work
+state, with a link out) already proved that shape fits inside it. The Offer read's access-code step
+followed by a `dl` summary and decision controls is one more branch of the same kind, not a shape
+`EntryPage` had never met. Hand-rolling `container-l`/`center-l max="var(--form-max)"`/`stack-l` beside
+a Template that already encapsulates exactly those three lines would have been the near-duplicate the
+extraction bar exists to catch, not the raw exception it licenses for a genuine one-off.
+
+All three routes now import `EntryPage` and pass `title`, `errorSummary` and `content`; none renders a
+bare `<h1>` and `<form>` (or `<dl>`) any more. Eight routes share the archetype now, not five.

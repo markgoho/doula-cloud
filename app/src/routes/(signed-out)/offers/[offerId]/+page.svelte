@@ -22,7 +22,6 @@
 		type PreAccountOffer
 	} from '#lib/offer.js';
 	import { FormSubmission, orThrownMessage, type FormError } from '#lib/formSubmission.svelte.js';
-	import Heading from '#lib/components/atoms/Heading.svelte';
 	import Text from '#lib/components/atoms/Text.svelte';
 	import Notice from '#lib/components/atoms/Notice.svelte';
 	import Button from '#lib/components/atoms/Button.svelte';
@@ -32,7 +31,7 @@
 	import LabeledField from '#lib/components/molecules/LabeledField.svelte';
 	import StackedForm from '#lib/components/molecules/StackedForm.svelte';
 	import ConfirmDialog from '#lib/components/molecules/ConfirmDialog.svelte';
-	import PageTitle from '#lib/components/PageTitle.svelte';
+	import EntryPage from '#lib/components/templates/EntryPage.svelte';
 
 	const codeId = 'offer-access-code';
 	const CODE_PATTERN = /^\d{6}$/;
@@ -108,73 +107,90 @@
 	}
 </script>
 
-<PageTitle page="An offer of work" isError={submission.errors.length > 0} />
+{#snippet errorSummary()}
+	<!--
+		Above the `<h1>`, which is GOV.UK's own position and the same one
+		`EntryPage` already puts every other archetype-A error summary in
+		(#1222). This route joins `login`, `signup` and `accept-invite` on
+		`EntryPage` rather than staying a raw exception: the "open a code,
+		then read a record with decision controls" shape is not new here --
+		`accept-invite`'s existing-Staff branch already puts a read-only
+		summary (name, work state) and a link out inside `EntryPage`'s one
+		`content` region, so a second consumer of that shape already existed
+		before this route adopted it. ADR-0018's "two named exits" section
+		governs building a NEW Template or variant for a shape that does not
+		fit; reusing this one is not that -- `content` is already a single
+		generic region built to hold whichever of a route's own steps is
+		current, and this route's three (missing token, access-code form,
+		record summary) are one more branch of the same kind accept-invite
+		already proved fits.
+	-->
+	<ErrorSummary errors={submission.errors} />
+{/snippet}
 
-<!--
-	Above the `<h1>`, which is GOV.UK's own markup for the summary and the
-	position every other signed-out screen puts it in (`forgot-password`
-	and `reset-password` render it inline the same way, having no
-	`EntryPage` to position it for them).
--->
-<ErrorSummary errors={submission.errors} />
+{#snippet content()}
+	{#if !token}
+		<Notice message="This link is missing its token. Open the offer from the email you were sent." variant="error" />
+	{:else if !offer}
+		<Text text="Enter the six-digit code from the email to open this offer." tone="variant" />
+		<StackedForm onSubmit={handleOpen}>
+			<LabeledField id={codeId} label="Access code" error={submission.errorFor(codeId)}>
+				{#snippet children({ id, describedBy, invalid })}
+					<TextInput
+						{id}
+						{describedBy}
+						{invalid}
+						inputmode="numeric"
+						maxlength={6}
+						value={code}
+						onInput={(value) => (code = value)}
+						required
+					/>
+				{/snippet}
+			</LabeledField>
+			<Button label="Open offer" type="submit" loading={submission.isSubmitting} />
+		</StackedForm>
+	{:else}
+		<dl>
+			<!-- #230: she opens the link in March and gets a closed offer, not
+			     the Client's due date. The BFF stops serving these once the
+			     Offer is terminal; the page stops asking for their row. -->
+			{#if offer.state === 'offered'}
+				<dt>Client</dt>
+				<dd>{offer.clientFirstInitial}</dd>
+				<dt>Area</dt>
+				<dd>{offer.clientArea}</dd>
+				<dt>Due date</dt>
+				<dd>{offer.dueDate}</dd>
+			{/if}
+			<dt>Fee</dt>
+			<dd>{formatFee(offer.amountCents)}</dd>
+			{#if offer.terms}
+				<dt>Terms</dt>
+				<dd>{offer.terms}</dd>
+			{/if}
+			<dt>Status</dt>
+			<dd>{offerStateLabels[offer.state]}</dd>
+		</dl>
 
-<Heading level={1} text="An offer of work" />
-
-{#if !token}
-	<Notice message="This link is missing its token. Open the offer from the email you were sent." variant="error" />
-{:else if !offer}
-	<Text text="Enter the six-digit code from the email to open this offer." tone="variant" />
-	<StackedForm onSubmit={handleOpen}>
-		<LabeledField id={codeId} label="Access code" error={submission.errorFor(codeId)}>
-			{#snippet children({ id, describedBy, invalid })}
-				<TextInput
-					{id}
-					{describedBy}
-					{invalid}
-					inputmode="numeric"
-					maxlength={6}
-					value={code}
-					onInput={(value) => (code = value)}
-					required
-				/>
-			{/snippet}
-		</LabeledField>
-		<Button label="Open offer" type="submit" loading={submission.isSubmitting} />
-	</StackedForm>
-{:else}
-	<dl>
-		<!-- #230: she opens the link in March and gets a closed offer, not
-		     the Client's due date. The BFF stops serving these once the
-		     Offer is terminal; the page stops asking for their row. -->
 		{#if offer.state === 'offered'}
-			<dt>Client</dt>
-			<dd>{offer.clientFirstInitial}</dd>
-			<dt>Area</dt>
-			<dd>{offer.clientArea}</dd>
-			<dt>Due date</dt>
-			<dd>{offer.dueDate}</dd>
+			<Text text="Accepting this work means joining the practice, so that the offer can be recorded in your name." tone="variant" />
+			<Link href={`${resolve('/(signed-out)/accept-invite')}?token=${encodeURIComponent(token)}`} label="Join and accept" />
+			<Button label="Decline" variant="destructive" onClick={() => (isDeclineDialogOpen = true)} />
+			<ConfirmDialog
+				bind:open={isDeclineDialogOpen}
+				title="Decline this offer"
+				consequence="Declining this offer cannot be undone."
+				confirmLabel="Decline this offer"
+				error={declineError}
+				onConfirm={handleDecline}
+			/>
 		{/if}
-		<dt>Fee</dt>
-		<dd>{formatFee(offer.amountCents)}</dd>
-		{#if offer.terms}
-			<dt>Terms</dt>
-			<dd>{offer.terms}</dd>
-		{/if}
-		<dt>Status</dt>
-		<dd>{offerStateLabels[offer.state]}</dd>
-	</dl>
-
-	{#if offer.state === 'offered'}
-		<Text text="Accepting this work means joining the practice, so that the offer can be recorded in your name." tone="variant" />
-		<Link href={`${resolve('/(signed-out)/accept-invite')}?token=${encodeURIComponent(token)}`} label="Join and accept" />
-		<Button label="Decline" variant="destructive" onClick={() => (isDeclineDialogOpen = true)} />
-		<ConfirmDialog
-			bind:open={isDeclineDialogOpen}
-			title="Decline this offer"
-			consequence="Declining this offer cannot be undone."
-			confirmLabel="Decline this offer"
-			error={declineError}
-			onConfirm={handleDecline}
-		/>
 	{/if}
-{/if}
+{/snippet}
+
+<EntryPage
+	title="An offer of work"
+	errorSummary={submission.errors.length > 0 ? errorSummary : undefined}
+	{content}
+/>
