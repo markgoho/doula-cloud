@@ -1,7 +1,7 @@
 import { page } from 'vitest/browser';
 import { describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
-import ContractStatus from './ContractStatus.svelte';
+import ContractStatus, { PREVIOUS_CONTRACT_PDF_NOTICE } from './ContractStatus.svelte';
 import type { VoidRequestSummary } from '#lib/contract.js';
 
 interface SetupOptions {
@@ -175,7 +175,7 @@ describe('ContractStatus.svelte', () => {
 		await setup({ status: 'draft', hasSignedPdf: true, onDownloadPdf: vi.fn() });
 
 		await expect
-			.element(page.getByText('This PDF is from an earlier Contract on this Engagement that was signed and later voided.'))
+			.element(page.getByText(PREVIOUS_CONTRACT_PDF_NOTICE))
 			.toBeVisible();
 	});
 
@@ -183,7 +183,7 @@ describe('ContractStatus.svelte', () => {
 		await setup({ status: 'sent', hasSignedPdf: true, onDownloadPdf: vi.fn() });
 
 		await expect
-			.element(page.getByText('This PDF is from an earlier Contract on this Engagement that was signed and later voided.'))
+			.element(page.getByText(PREVIOUS_CONTRACT_PDF_NOTICE))
 			.toBeVisible();
 	});
 
@@ -191,7 +191,7 @@ describe('ContractStatus.svelte', () => {
 		await setup({ status: 'signed', hasSignedPdf: true, onDownloadPdf: vi.fn() });
 
 		await expect
-			.element(page.getByText('This PDF is from an earlier Contract on this Engagement that was signed and later voided.'))
+			.element(page.getByText(PREVIOUS_CONTRACT_PDF_NOTICE))
 			.not.toBeInTheDocument();
 	});
 
@@ -199,7 +199,7 @@ describe('ContractStatus.svelte', () => {
 		await setup({ status: 'voided', hasSignedPdf: true, onDownloadPdf: vi.fn() });
 
 		await expect
-			.element(page.getByText('This PDF is from an earlier Contract on this Engagement that was signed and later voided.'))
+			.element(page.getByText(PREVIOUS_CONTRACT_PDF_NOTICE))
 			.not.toBeInTheDocument();
 	});
 

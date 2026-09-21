@@ -7,8 +7,12 @@
 
 	<!--
 		No hostile value exists for this component (ADR-0025): it takes a
-		status and nothing else, so its longest realistic value is the longest
-		of the four states below.
+		status and a hasSignedPdf flag, not free text, so its longest
+		realistic value is the longest of the five sections below. #1229
+		added the second one -- not a fourth status (there are still only
+		three: draft, signed, voided) but the other value hasSignedPdf can
+		take on a Draft, which is what the notice's presence or absence
+		demonstrates.
 	-->
 
 	<section>

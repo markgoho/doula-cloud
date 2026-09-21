@@ -1,3 +1,12 @@
+<script module lang="ts">
+	/** #1229's own-Contract-vs-earlier-Contract notice, exported so this
+	 * component's spec and the Staff Engagement route's spec assert
+	 * against one string rather than three copies of the same wording
+	 * that could drift apart. */
+	export const PREVIOUS_CONTRACT_PDF_NOTICE =
+		'This PDF is from an earlier Contract on this Engagement that was signed and later voided.';
+</script>
+
 <script lang="ts">
 	import Button from '#lib/components/atoms/Button.svelte';
 	import Textarea from '#lib/components/atoms/Textarea.svelte';
@@ -214,7 +223,7 @@
 
 {#if hasSignedPdf && onDownloadPdf}
 	{#if isPreviousContractPdf}
-		<p role="status">This PDF is from an earlier Contract on this Engagement that was signed and later voided.</p>
+		<p role="status">{PREVIOUS_CONTRACT_PDF_NOTICE}</p>
 	{/if}
 	<Button
 		label="Download signed Contract (PDF)"

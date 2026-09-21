@@ -19,6 +19,7 @@ import {
 	session
 } from './page.fixture.js';
 import type { Contract } from '#lib/contract.js';
+import { PREVIOUS_CONTRACT_PDF_NOTICE } from '#lib/components/molecules/ContractStatus.svelte';
 if (!customElements.get('center-l')) registerLayoutPrimitives();
 
 /*
@@ -920,7 +921,7 @@ describe('a recreated Draft names the PDF as a previous Contract\'s (#1229)', ()
 
 		await expect.element(testPage.getByText('Status: draft')).toBeVisible();
 		await expect
-			.element(testPage.getByText('This PDF is from an earlier Contract on this Engagement that was signed and later voided.'))
+			.element(testPage.getByText(PREVIOUS_CONTRACT_PDF_NOTICE))
 			.toBeVisible();
 		await expect
 			.element(testPage.getByRole('button', { name: 'Download signed Contract (PDF)' }))
@@ -932,7 +933,7 @@ describe('a recreated Draft names the PDF as a previous Contract\'s (#1229)', ()
 
 		await expect.element(testPage.getByText('Status: draft')).toBeVisible();
 		await expect
-			.element(testPage.getByText('This PDF is from an earlier Contract on this Engagement that was signed and later voided.'))
+			.element(testPage.getByText(PREVIOUS_CONTRACT_PDF_NOTICE))
 			.not.toBeInTheDocument();
 	});
 });
