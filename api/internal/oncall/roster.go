@@ -91,6 +91,17 @@ type RosterDoula struct {
 // because a bare name and an availability state carry no Client fact;
 // that is the whole of what she reads about anyone else.
 //
+// Not paginated, which is a departure from docs/api-design.md section 4
+// and a deliberate one. That rule is for "any unbounded or growing
+// dataset"; this is neither. What comes back is every live window in a
+// range the endpoint itself caps at 92 days, drawn only from Engagements
+// that are active births with somebody granted on them -- a Practice's
+// live book, not its history. And the answer is a whole: the per-Doula
+// concurrent-window count and the unstaffed days are totals over the
+// range, so a page of it would be a different, wrong answer rather than
+// a slower one. A Practice that outgrows this outgrows the range, and
+// the fix is a narrower range rather than a cursor.
+//
 // A read only. Nothing here changes state.
 func RosterHandler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
