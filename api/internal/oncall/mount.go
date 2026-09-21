@@ -23,10 +23,10 @@ func Mount(g *staffauth.GatedRouter, ir *idempotency.Router, enq tasknudge.Enque
 		false, staffauth.OwnerAndAdmin, PutSettingsHandler())
 	ir.ExemptGated("PUT /api/practices/{practiceId}/engagements/{engagementId}/on-call-rule",
 		"full-replace UPDATE of one Engagement's start-rule override; re-sending the same body writes and records nothing",
-		false, staffauth.OwnerAndAdmin, PutRuleHandler())
+		true, staffauth.OwnerAndAdmin, PutRuleHandler())
 	ir.ExemptGated("PUT /api/practices/{practiceId}/engagements/{engagementId}/attachments/{staffId}/on-call",
 		"full-replace UPDATE of one Doula's narrowing; re-sending the same body writes and records nothing",
-		false, staffauth.OwnerAndAdmin, PutNarrowingHandler())
+		true, staffauth.OwnerAndAdmin, PutNarrowingHandler())
 
 	ir.Replayable("POST /api/practices/{practiceId}/engagements/{engagementId}/coverage-gaps", true, CreateGapHandler(enq))
 	ir.Exempt("PUT /api/practices/{practiceId}/engagements/{engagementId}/coverage-gaps/{gapId}",
