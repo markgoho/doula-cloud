@@ -168,7 +168,7 @@ func TestAcceptInviteHandler_LivePortalSessionRefusesThenConfirmedRetrySucceeds(
 
 func TestFinishEnrollmentHandler_LivePortalSessionRefusesThenConfirmedRetrySucceeds(t *testing.T) {
 	db := testdb.New(t)
-	const identityUID = "enrol-with-portal-session"
+	const identityUID = "enroll-with-portal-session"
 	staffID := testdb.SeedStaff(t, db, identityUID)
 	portalUID := portalaccount.NewIdentifier()
 	portalToken := authntest.SeedSession(t, db.App, portalUID)
@@ -202,7 +202,7 @@ func TestFinishEnrollmentHandler_LivePortalSessionRefusesThenConfirmedRetrySucce
 		t.Fatalf("count staff_auth_events: %v", err)
 	}
 	if eventCount != 0 {
-		t.Errorf("staff_auth_events rows = %d, want 0 -- a refused mint records no enrolment", eventCount)
+		t.Errorf("staff_auth_events rows = %d, want 0 -- a refused mint records no enrollment", eventCount)
 	}
 	if got := authntest.CountFor(t, db.App, portalUID); got != 1 {
 		t.Errorf("portal session rows = %d, want 1 -- a refusal leaves it alone", got)

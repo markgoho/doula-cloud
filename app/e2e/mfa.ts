@@ -3,12 +3,12 @@ import { E2E_API_HOST, E2E_API_PORT, E2E_EMULATOR_HOST, E2E_EMULATOR_PORT, PREVI
 import { signIn } from './auth';
 
 // The Firebase Auth emulator (firebase-tools 15.27, vendored in
-// app/node_modules) implements MFA enrolment for PHONE_SMS only --
+// app/node_modules) implements MFA enrollment for PHONE_SMS only --
 // mfaEnrollmentStart/Finalize assert phoneEnrollmentInfo and stamp every
 // issued factor with the `phone` provider, and there is no TOTP path to
 // drive against it. #606 ships TOTP as the product's only second factor
 // (SMS is never reachable anywhere in the real flow -- see the product's
-// own login/enrol screens), so this file exists purely to get a session
+// own login/enroll screens), so this file exists purely to get a session
 // carrying `firebase.sign_in_second_factor` for a fixture identity: the
 // gate in api/internal/staffauth/middleware.go reads exactly that claim,
 // off the session row, and does not care which provider produced it.
@@ -75,7 +75,7 @@ const PROJECT_ID = 'doula-cloud';
  * caller (the same thing a real Admin SDK call presents, minus real
  * Google credentials), which is what unlocks setting emailVerified
  * directly rather than through an email link nothing here can click.
- * mfaEnrollmentStart refuses to enrol an unverified email
+ * mfaEnrollmentStart refuses to enroll an unverified email
  * (UNVERIFIED_EMAIL) exactly as the live service does, so this has to
  * run before enrollSecondFactor for a freshly signed-up fixture.
  */
@@ -160,7 +160,7 @@ export async function enrollSecondFactor(
 }
 
 /**
- * Reads the code a pending phone verification (enrolment or sign-in)
+ * Reads the code a pending phone verification (enrollment or sign-in)
  * would otherwise only reveal by SMS -- the emulator instead logs it to
  * its own stdout and exposes it on this debug listing, keyed by the same
  * sessionInfo the start call returned. Shared by enrollPhoneFactor

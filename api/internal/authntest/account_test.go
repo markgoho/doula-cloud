@@ -224,7 +224,7 @@ func TestFakeAccountManager_ClearSecondFactors_UnknownUIDNotFound(t *testing.T) 
 // mirrors TestFakeAccountManager_SetEmailErr_TakesPrecedenceOverErr: an
 // isolated failure of ClearSecondFactors specifically, without disturbing
 // GetAccountByEmail -- what #615's spend-handler tests need to prove
-// clearEnrolmentAndRecord's own failure branch.
+// clearEnrollmentAndRecord's own failure branch.
 func TestFakeAccountManager_ClearSecondFactorsErr_TakesPrecedenceOverErr(t *testing.T) {
 	f := authntest.NewFakeAccountManager()
 	f.Seed("uid-9", "person@example.com", true)

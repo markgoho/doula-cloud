@@ -113,7 +113,7 @@
 		return target && target.startsWith('/') && !target.startsWith('//') ? target : undefined;
 	}
 
-	async function landAfterEnrolment(): Promise<void> {
+	async function landAfterEnrollment(): Promise<void> {
 		await goto(safeReturnTo() ?? resolve('/(signed-out)'));
 	}
 
@@ -173,7 +173,7 @@
 
 			if (response.ok) {
 				await signOut(getFirebaseAuth());
-				await landAfterEnrolment();
+				await landAfterEnrollment();
 				return;
 			}
 
@@ -212,7 +212,7 @@
 			const response = await postFinishEnrollment(pendingIdToken, true);
 			if (response.ok) {
 				await signOut(getFirebaseAuth());
-				await landAfterEnrolment();
+				await landAfterEnrollment();
 				return;
 			}
 			const message = await refusalMessage(response);

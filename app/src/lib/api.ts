@@ -25,8 +25,8 @@ can read this as "your session ended" rather than an ordinary visit.
 
 A refusal carrying `{code: "MFA_REQUIRED"}` (#606) is a live, valid
 session that may not enter *this* Practice -- not an ended session -- so
-it routes to the enrolment screen instead, carrying `returnTo` so
-enrolment can send her back to the Practice she was trying to reach. The
+it routes to the enrollment screen instead, carrying `returnTo` so
+enrollment can send her back to the Practice she was trying to reach. The
 response body is cloned before this peeks at it, so a caller that goes
 on to read the same response (`apiErrorMessage`, say) still can.
 */

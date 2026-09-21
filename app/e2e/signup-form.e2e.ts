@@ -9,10 +9,10 @@ import { uniqueEmail } from './staffSignup';
 // #606: the Practice this creates has a brand-new Owner with no second
 // factor enrolled at all, and an Owner is gated behind one at every
 // Practice-scoped route (staffauth.Middleware) -- so signup drives her
-// into MFA enrolment rather than landing her on the Practice it just
+// into MFA enrollment rather than landing her on the Practice it just
 // created. The IndexedDB/cookie checks below are about the signup
 // exchange itself, not about which screen she lands on afterward.
-test('Signing up through the /signup form drives the new Owner into MFA enrolment', async ({ page }) => {
+test('Signing up through the /signup form drives the new Owner into MFA enrollment', async ({ page }) => {
 	const email = uniqueEmail('signup-form');
 	const password = 'password123';
 

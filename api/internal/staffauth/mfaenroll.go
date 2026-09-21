@@ -13,21 +13,21 @@ import (
 
 // FinishEnrollmentHandler lets a signed-in Staff member exchange a
 // just-enrolled ID token for a session that shows her new second factor,
-// and records the enrolment in #615's audit table (staff_auth_events).
+// and records the enrollment in #615's audit table (staff_auth_events).
 //
 // #606 decision 4: firebase.sign_in_second_factor describes the
 // sign-in event, so the session she is already holding keeps saying "no
-// second factor" for its whole 12 hours no matter what she enrols
+// second factor" for its whole 12 hours no matter what she enrolls
 // mid-session -- only replacing the session fixes that. This is
 // deliberately a separate endpoint from POST /api/session (an ordinary
 // sign-in that happens to carry the claim), so enrolling is its own
 // auditable act rather than indistinguishable from any other re-sign-in.
 //
 // Reachable from both entry points the AC requires: a refusal driving
-// her into enrolment, and voluntary enrolment from account settings --
+// her into enrollment, and voluntary enrollment from account settings --
 // both end here once the client-side TOTP enroll() call succeeds and the
 // SDK hands back a fresh ID token. Self-only, same "no {practiceId}, no
-// staff id" shape as UpdateWorkStateHandler: enrolment is per person
+// staff id" shape as UpdateWorkStateHandler: enrollment is per person
 // (#606's brief), not per Practice.
 func FinishEnrollmentHandler(verifier authn.Verifier, db *sql.DB, enq tasknudge.Enqueuer) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -83,7 +83,7 @@ func FinishEnrollmentHandler(verifier authn.Verifier, db *sql.DB, enq tasknudge.
 		}
 
 		// #816's own AC: this seam used to mint over its own
-		// pre-enrolment session with an unconditional EndSession,
+		// pre-enrollment session with an unconditional EndSession,
 		// regardless of tier -- so a live *portal* session in this
 		// browser was silently deleted outright. ReplaceSameTier keeps
 		// the silent replacement for this seam's own same-tier cookie

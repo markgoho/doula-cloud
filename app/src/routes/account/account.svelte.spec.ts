@@ -266,10 +266,10 @@ describe('when the account screen cannot do its job', () => {
 
 /*
  * #606: whether a second factor is enrolled, and the two ways off this
- * screen -- voluntary enrolment when it is off, removal when it is on.
+ * screen -- voluntary enrollment when it is off, removal when it is on.
  * `secondFactor` is read as the session-carried fact it is (see
  * SessionInfo's own doc comment), so these tests set it on the session
- * response rather than modeling a fresh enrolment check.
+ * response rather than modeling a fresh enrollment check.
  */
 describe('two-factor authentication status (#606)', () => {
 	it('shows it is turned on and offers to remove it', async () => {

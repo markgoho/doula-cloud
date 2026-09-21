@@ -38,7 +38,7 @@ type FakeAccountManager struct {
 
 	// ClearSecondFactorsErr, when set, is returned by ClearSecondFactors
 	// specifically, without disturbing GetAccountByEmail -- how #615's
-	// spend-handler tests prove clearEnrolmentAndRecord's own failure
+	// spend-handler tests prove clearEnrollmentAndRecord's own failure
 	// branch, distinct from the account-lookup failure that precedes it.
 	ClearSecondFactorsErr error
 
@@ -76,8 +76,8 @@ func (f *FakeAccountManager) Password(uid string) string {
 	return ""
 }
 
-// EnrollTOTP marks uid as holding a TOTP enrolment, as though she had
-// completed Identity Platform's client-side enrolment flow -- #615's
+// EnrollTOTP marks uid as holding a TOTP enrollment, as though she had
+// completed Identity Platform's client-side enrollment flow -- #615's
 // tests seed this so a recovery spend has something to clear.
 func (f *FakeAccountManager) EnrollTOTP(uid string) {
 	f.mu.Lock()

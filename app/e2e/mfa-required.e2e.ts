@@ -11,9 +11,9 @@ import { acceptStaffInvite, seedFoundingOwner } from './staffSignup';
 // Firebase Auth emulator has no TOTP path (see mfa.ts's doc comment), so
 // these specs get a session carrying `firebase.sign_in_second_factor`
 // the same way mfa.ts does for every fixture that needs one -- through
-// the emulator's PHONE_SMS enrolment -- and prove the gate itself
+// the emulator's PHONE_SMS enrollment -- and prove the gate itself
 // (api/internal/staffauth/middleware.go) via direct API calls rather
-// than the product's own login/enrolment screens, which are separate
+// than the product's own login/enrollment screens, which are separate
 // work landing on this branch at the same time as this file.
 const API_URL = `http://${E2E_API_HOST}:${E2E_API_PORT}`;
 
@@ -72,14 +72,14 @@ test('a Doula with no second factor is barred once the Practice requires MFA for
 	const doula = await seedContractorDoula(request, practiceId, ownerHeaders);
 
 	// The tight proof: the gate itself, independent of anything the app's
-	// own login/enrolment screens (landing on this branch alongside this
+	// own login/enrollment screens (landing on this branch alongside this
 	// file) do with the refusal.
 	await expectMFARequired(request, sessionURL(practiceId), doula.headers);
 
 	// The product-facing proof: apiFetchWithSession (app/src/lib/api.ts,
 	// already built ahead of this file) routes a live MFA_REQUIRED
 	// refusal to /mfa/enroll rather than treating it as a signed-out
-	// session, carrying returnTo so enrolment can send her back to the
+	// session, carrying returnTo so enrollment can send her back to the
 	// Practice she was trying to reach -- checked here, not just the bare
 	// pathname, so a redirect that lands on /mfa/enroll for the wrong
 	// reason (or clobbers returnTo with /mfa/enroll itself, the shape of
@@ -109,7 +109,7 @@ test('the same Doula is admitted once her session carries a second factor', asyn
 	await expectMFARequired(request, sessionURL(practiceId), doula.headers);
 
 	// accept-invite already verified her email as a side effect of
-	// AcceptInviteHandler (#613) -- enrolSecondFactor needs nothing more
+	// AcceptInviteHandler (#613) -- enrollSecondFactor needs nothing more
 	// than her own idToken from that same acceptance.
 	const enrolledIdToken = await enrollSecondFactor(request, doula.idToken);
 	const enrolledHeaders = await signIn(request, API_URL, enrolledIdToken);
@@ -146,7 +146,7 @@ test('one identity, two Practices: MFA required at one and not the other', async
 	});
 	const xHeadersAtA = await signIn(request, API_URL, xIdToken);
 
-	// Y signs up as Owner at Practice B, enrols (an Owner is always
+	// Y signs up as Owner at Practice B, enrolls (an Owner is always
 	// gated, switch or no switch), and invites X's own email as a plain
 	// Doula there -- one identity holding roles at two Practices, per
 	// #606's own two-Practice-split criterion.

@@ -123,7 +123,7 @@ func TestSessionHandler_SingleMembership(t *testing.T) {
 
 // TestSessionHandler_SecondFactor proves the response carries this
 // session's own second-factor fact (#606) -- the account screen's
-// "Enrol" vs "Remove" branch reads it straight from here, not from a
+// "Enroll" vs "Remove" branch reads it straight from here, not from a
 // fresh Identity Platform lookup.
 func TestSessionHandler_SecondFactor(t *testing.T) {
 	db := testdb.New(t)

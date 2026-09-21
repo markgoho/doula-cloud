@@ -9,14 +9,14 @@ import (
 )
 
 // RemoveSecondFactorHandler lets a signed-in Staff member remove her own
-// TOTP enrolment (#606) -- the voluntary mirror of #615's three recovery
+// TOTP enrollment (#606) -- the voluntary mirror of #615's three recovery
 // paths, for a person who still holds her factor and simply wants it
 // gone (a phone upgrade, say). Self-only, same "no {practiceId}, no
 // staff id" shape as UpdateWorkStateHandler.
 //
 // Guarded by RequireRecentAuth, the same step-up #605's Owner-vouch
 // action uses: removing a factor is exactly the sensitive action that
-// exists for. Reuses clearEnrolmentAndRecord, #615's own convergence
+// exists for. Reuses clearEnrollmentAndRecord, #615's own convergence
 // point -- Admin SDK clear, end every live session, queue the notice,
 // record the audit row -- with AuthEventRemoved marking this as
 // self-caused (actor_staff_id = staff_id) rather than one of the three
@@ -48,7 +48,7 @@ func RemoveSecondFactorHandler(verifier authn.Verifier, accounts authn.AccountMa
 			return
 		}
 
-		if err := clearEnrolmentAndRecord(r.Context(), tx, accounts, staffID, uid, AuthEventRemoved, staffID, ""); err != nil {
+		if err := clearEnrollmentAndRecord(r.Context(), tx, accounts, staffID, uid, AuthEventRemoved, staffID, ""); err != nil {
 			// coverage:ignore reason: DB/Admin SDK failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return

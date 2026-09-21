@@ -92,10 +92,10 @@ describe('apiFetchWithSession', () => {
 	/*
 	 * #606: a 403 carrying `{code: "MFA_REQUIRED"}` is a live, valid
 	 * session that may not enter this Practice -- not an ended session, so
-	 * it never touches `signOut` -- and it routes to enrolment rather than
+	 * it never touches `signOut` -- and it routes to enrollment rather than
 	 * to a login screen.
 	 */
-	it('routes a 403 carrying MFA_REQUIRED to enrolment, carrying returnTo', async () => {
+	it('routes a 403 carrying MFA_REQUIRED to enrollment, carrying returnTo', async () => {
 		setup({ pathname: '/practices/prac-1/invoices' });
 		vi.stubGlobal(
 			'fetch',

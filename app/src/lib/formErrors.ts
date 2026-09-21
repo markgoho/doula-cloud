@@ -363,7 +363,7 @@ export function authRefusal(
 
 /*
  * Identity Platform's refusal for the password re-entry step MFA
- * enrolment and removal both use (#606) -- a step-up reauthentication,
+ * enrollment and removal both use (#606) -- a step-up reauthentication,
  * not the original sign-in, so there is no email field to blame and no
  * account-enumeration concern (she is already signed in as herself).
  */
@@ -387,7 +387,7 @@ export function passwordReauthRefusal(cause: unknown, passwordId: string): FormE
 }
 
 /*
- * A wrong or expired TOTP code, at either the enrolment step (confirming
+ * A wrong or expired TOTP code, at either the enrollment step (confirming
  * a freshly scanned authenticator) or the sign-in challenge (#606's AC:
  * "fails as a sign-in failure ... not an app error"). TOTP has no
  * separate "expired" code the way SMS does (`auth/code-expired`) -- a

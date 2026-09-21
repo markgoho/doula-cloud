@@ -142,13 +142,13 @@ func Begin(w http.ResponseWriter, r *http.Request, db *sql.DB, population Tier) 
 // BeginBootstrap is Begin for the endpoints that cannot read a session
 // cookie because they run before the session they need exists: Staff
 // signup, Staff invitation acceptance, Client portal invitation
-// acceptance, and -- since #606 -- finishing a TOTP enrolment, which
+// acceptance, and -- since #606 -- finishing a TOTP enrollment, which
 // deliberately mints a fresh session from the just-enrolled token rather
 // than trusting whatever session cookie the caller already holds. They
 // read a Bearer ID token and verify it against Identity Platform, which
 // costs a network round trip while the transaction is held open --
 // acceptable at these seams because each is a once-per-person or
-// once-per-enrolment event, not a per-request cost, and unacceptable
+// once-per-enrollment event, not a per-request cost, and unacceptable
 // everywhere else, which is why Begin no longer offers it. There is no
 // cookie fallback: a caller with nothing to bootstrap has no reason to
 // be here.
@@ -306,7 +306,7 @@ type VerifiedToken struct {
 	AuthTime time.Time
 	// SecondFactor reports whether this sign-in challenged a second
 	// factor, read from the `firebase.sign_in_second_factor` claim
-	// (#606). It describes the sign-in event, not enrolment -- but
+	// (#606). It describes the sign-in event, not enrollment -- but
 	// Identity Platform challenges the second factor on every sign-in
 	// once a person has enrolled one, so it is a sound proxy for "this
 	// identity has MFA". The session store carries it forward onto the

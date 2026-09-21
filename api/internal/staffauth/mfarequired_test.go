@@ -258,7 +258,7 @@ func TestGetMFAImpactHandler_CountsEveryoneWithoutAFactor(t *testing.T) {
 	if !body.Required {
 		t.Fatalf("required = false, want true")
 	}
-	// The Owner has no TOTP enrolment seeded, and neither does the
+	// The Owner has no TOTP enrollment seeded, and neither does the
 	// unenrolled Doula -- two of the three Staff members here.
 	if body.WithoutSecondFactor != 2 {
 		t.Fatalf("withoutSecondFactor = %d, want 2", body.WithoutSecondFactor)

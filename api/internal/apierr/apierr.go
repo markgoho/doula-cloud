@@ -45,7 +45,7 @@ const (
 	// CodeMFARequired is #606's Practice-scoped boundary refusal: a live,
 	// valid session that may not enter this Practice without a second
 	// factor. Its own code, not CodeForbidden, so the app's credentialed
-	// fetch can route into enrolment rather than treating this as an
+	// fetch can route into enrollment rather than treating this as an
 	// ended session (#606's AC: "distinguishable from an ended session
 	// ... does not send the browser to the login screen"). #842 moves it
 	// here from staffauth's own local APIError copy.

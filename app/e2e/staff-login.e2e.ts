@@ -3,12 +3,12 @@ import { seedFoundingOwner } from './staffSignup';
 
 // #606: a fresh signup has no second factor enrolled at all, and an Owner
 // is gated behind one at every Practice-scoped route (staffauth.Middleware) --
-// so she is driven into enrolment rather than landing on her Practice.
+// so she is driven into enrollment rather than landing on her Practice.
 // This is still the right spec for login mechanics (the session cookie,
 // the cleared Firebase JS SDK credential, session persistence across a
 // closed tab): none of those depend on which screen she lands on, only on
 // the sign-in itself having gone through.
-test('Staff login drives an unenrolled Owner into MFA enrolment, carrying returnTo', async ({ page, request }) => {
+test('Staff login drives an unenrolled Owner into MFA enrollment, carrying returnTo', async ({ page, request }) => {
 	const { email, password, practiceId } = await seedFoundingOwner(request);
 
 	await page.goto('/login');
@@ -62,7 +62,7 @@ test('Staff login drives an unenrolled Owner into MFA enrolment, carrying return
 	// Closing the tab and returning within the session lifetime leaves the
 	// person signed in: the __session cookie lives on the browser context,
 	// not the tab, so a fresh page navigating straight to the practice URL
-	// lands on the same MFA-enrolment redirect a live session gets -- not
+	// lands on the same MFA-enrollment redirect a live session gets -- not
 	// on /login, which is what an ended or missing session would produce.
 	await page.close();
 	const reopened = await page.context().newPage();

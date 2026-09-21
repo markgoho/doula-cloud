@@ -47,7 +47,7 @@ func registerInternalRoutes(g *staffauth.GatedRouter, d Deps) {
 	// total -- so this is an operator endpoint that records who issued
 	// them, not a screen and not an ad-hoc INSERT.
 	g.Write("POST /api/internal/billing/founding-grants", billing.FoundingGrantHandler(d.DB, d.InternalAuth))
-	// #605's support path: an operator clears a sole Owner's enrolment
+	// #605's support path: an operator clears a sole Owner's enrollment
 	// after a live video call and government-ID match against her
 	// Practice's Stripe Connect identity (ADR-0007), per
 	// docs/runbooks/mfa-recovery-support.md. Same guard, same shape as

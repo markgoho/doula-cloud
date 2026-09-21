@@ -114,7 +114,7 @@ func TestSupportClearHandler_UnknownStaffID(t *testing.T) {
 }
 
 // TestSupportClearHandler_Success covers #605's last-resort path: the
-// enrolment clears and the audit row names the operator by free text,
+// enrollment clears and the audit row names the operator by free text,
 // carrying no actor_staff_id -- she is not a Staff member.
 func TestSupportClearHandler_Success(t *testing.T) {
 	db := testdb.New(t)
@@ -134,7 +134,7 @@ func TestSupportClearHandler_Success(t *testing.T) {
 		t.Fatalf("status = %d, want 204", resp.StatusCode)
 	}
 	if accounts.HasSecondFactor(targetUID) {
-		t.Fatal("TOTP enrolment still present, want it cleared")
+		t.Fatal("TOTP enrollment still present, want it cleared")
 	}
 	if got := authntest.CountFor(t, db.App, targetUID); got != 0 {
 		t.Fatalf("session rows = %d, want 0", got)

@@ -27,7 +27,7 @@ export const session: SessionInfo = {
 /*
  * The other screen this route renders (#694). Two of its sections branch
  * on facts the session carries, and the base fixture above realizes
- * neither: a person with no second factor is offered enrolment rather
+ * neither: a person with no second factor is offered enrollment rather
  * than removal, and a person who is not a Practice's sole Owner is
  * offered no recovery codes at all. This is the branch that has both --
  * the widest the screen ever gets, and the only one where the Recovery

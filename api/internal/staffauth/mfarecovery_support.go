@@ -12,7 +12,7 @@ import (
 )
 
 // SupportClearRequest is the body a Doula Cloud operator's own tooling
-// sends: which Staff member's enrolment to clear, and the operator's own
+// sends: which Staff member's enrollment to clear, and the operator's own
 // name -- staff_auth_events.actor_operator, docs/runbooks/mfa-recovery-
 // support.md's "who ran it" requirement.
 type SupportClearRequest struct {
@@ -21,7 +21,7 @@ type SupportClearRequest struct {
 }
 
 // SupportClearHandler is #605's last-resort path: an operator clears a
-// sole Owner's enrolment after matching a live video call and government
+// sole Owner's enrollment after matching a live video call and government
 // ID against the identity-verified representative on her Practice's
 // Stripe Connect account (ADR-0007) -- proof this endpoint has no way to
 // check itself, which is exactly why the AC asks for no product surface.
@@ -87,7 +87,7 @@ func SupportClearHandler(accounts authn.AccountManager, db *sql.DB, auth *intern
 			return
 		}
 
-		if err := clearEnrolmentAndRecord(r.Context(), tx, accounts, req.StaffID, identityUID, AuthEventSupport, "", operator); err != nil {
+		if err := clearEnrollmentAndRecord(r.Context(), tx, accounts, req.StaffID, identityUID, AuthEventSupport, "", operator); err != nil {
 			// coverage:ignore reason: DB/Admin SDK failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
