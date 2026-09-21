@@ -64,7 +64,9 @@
 <container-l>
 	<center-l max="none" gutters="var(--page-gutter)">
 		{#if loadError}
-			<stack-l space="var(--space-7)">
+			<!-- data-load-error: see FormPage.svelte's own comment on this
+			     attribute (#1258) -- the same fact, the same reason. -->
+			<stack-l space="var(--space-7)" data-load-error>
 				<Heading level={1} variant="page" text={title} />
 				<Notice variant="error" message={loadError} />
 			</stack-l>
