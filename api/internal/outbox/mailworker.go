@@ -126,8 +126,7 @@ func (w MailWorker[R]) handle(ctx context.Context, tx *sql.Tx, inner Worker, c c
 		return inner.MarkSent(ctx, tx, c.meta.ID, now)
 	}
 	if err != nil {
-		var dl *DeadLetterError
-		if errors.As(err, &dl) {
+		if dl, ok := errors.AsType[*DeadLetterError](err); ok {
 			return inner.MarkDeadLetteredNow(ctx, tx, c.meta.ID, dl.Reason)
 		}
 		return inner.MarkFailed(ctx, tx, c.meta.ID, c.meta.AttemptCount, err, now)

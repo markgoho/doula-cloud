@@ -1,6 +1,6 @@
 module doula-cloud/api
 
-go 1.26.5
+go 1.27.1
 
 require (
 	cloud.google.com/go/cloudtasks v1.18.0

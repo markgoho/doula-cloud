@@ -184,7 +184,7 @@ func TestEndToEnd_CreateClientNoDuplicateRowOnRetry(t *testing.T) {
 		// match-refusal path (covered in the client package's own tests), and
 		// without it the no-key retry below would collide with the first
 		// call's identical GivenName and 409 instead of creating its own row.
-		body, err := json.Marshal(client.CreateRequest{Record: client.Record{GivenName: "E2E Client"}, Override: true})
+		body, err := json.Marshal(client.CreateRequest{GivenName: "E2E Client", Override: true})
 		if err != nil {
 			t.Fatalf("marshal body: %v", err)
 		}

@@ -34,8 +34,8 @@ func NewStripeAPI(apiKey string) *StripeAPI {
 func (s *StripeAPI) CreateClock(ctx context.Context, accountID string, frozenTime time.Time) (Clock, error) {
 	// coverage:ignore reason: requires a real Stripe API key and network access, not exercised by unit tests
 	clock, err := s.client.V1TestHelpersTestClocks.Create(ctx, &stripe.TestHelpersTestClockCreateParams{
-		Params:     stripe.Params{StripeAccount: stripe.String(accountID)},
-		FrozenTime: new(frozenTime.Unix()),
+		StripeAccount: stripe.String(accountID),
+		FrozenTime:    new(frozenTime.Unix()),
 	})
 	// coverage:ignore reason: requires a real Stripe API key and network access, not exercised by unit tests
 	if err != nil {
@@ -53,10 +53,10 @@ func (s *StripeAPI) CreateClock(ctx context.Context, accountID string, frozenTim
 func (s *StripeAPI) CreateCustomer(ctx context.Context, accountID, clockID, email, name string) (string, error) {
 	// coverage:ignore reason: requires a real Stripe API key and network access, not exercised by unit tests
 	cust, err := s.client.V1Customers.Create(ctx, &stripe.CustomerCreateParams{
-		Params:    stripe.Params{StripeAccount: stripe.String(accountID)},
-		Email:     stripe.String(email),
-		Name:      stripe.String(name),
-		TestClock: stripe.String(clockID),
+		StripeAccount: stripe.String(accountID),
+		Email:         stripe.String(email),
+		Name:          stripe.String(name),
+		TestClock:     stripe.String(clockID),
 	})
 	// coverage:ignore reason: requires a real Stripe API key and network access, not exercised by unit tests
 	if err != nil {
@@ -74,8 +74,8 @@ func (s *StripeAPI) CreateCustomer(ctx context.Context, accountID, clockID, emai
 func (s *StripeAPI) AdvanceClock(ctx context.Context, accountID, clockID string, to time.Time) error {
 	// coverage:ignore reason: requires a real Stripe API key and network access, not exercised by unit tests
 	_, err := s.client.V1TestHelpersTestClocks.Advance(ctx, clockID, &stripe.TestHelpersTestClockAdvanceParams{
-		Params:     stripe.Params{StripeAccount: stripe.String(accountID)},
-		FrozenTime: new(to.Unix()),
+		StripeAccount: stripe.String(accountID),
+		FrozenTime:    new(to.Unix()),
 	})
 	// coverage:ignore reason: requires a real Stripe API key and network access, not exercised by unit tests
 	if err != nil {
@@ -89,7 +89,7 @@ func (s *StripeAPI) AdvanceClock(ctx context.Context, accountID, clockID string,
 func (s *StripeAPI) ClockStatus(ctx context.Context, accountID, clockID string) (ClockStatus, error) {
 	// coverage:ignore reason: requires a real Stripe API key and network access, not exercised by unit tests
 	clock, err := s.client.V1TestHelpersTestClocks.Retrieve(ctx, clockID, &stripe.TestHelpersTestClockRetrieveParams{
-		Params: stripe.Params{StripeAccount: stripe.String(accountID)},
+		StripeAccount: stripe.String(accountID),
 	})
 	// coverage:ignore reason: requires a real Stripe API key and network access, not exercised by unit tests
 	if err != nil {
@@ -106,7 +106,7 @@ func (s *StripeAPI) ClockStatus(ctx context.Context, accountID, clockID string) 
 func (s *StripeAPI) CustomerIsDeleted(ctx context.Context, accountID, customerID string) (bool, error) {
 	// coverage:ignore reason: requires a real Stripe API key and network access, not exercised by unit tests
 	cust, err := s.client.V1Customers.Retrieve(ctx, customerID, &stripe.CustomerRetrieveParams{
-		Params: stripe.Params{StripeAccount: stripe.String(accountID)},
+		StripeAccount: stripe.String(accountID),
 	})
 	// coverage:ignore reason: requires a real Stripe API key and network access, not exercised by unit tests
 	if err != nil {

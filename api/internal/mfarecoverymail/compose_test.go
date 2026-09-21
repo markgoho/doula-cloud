@@ -59,8 +59,7 @@ func TestComposeCode_UnknownRecipientDeadLetters(t *testing.T) {
 	r := pendingRow{recipientIdentityUID: "owner-uid-gone", subjectStaffID: subjectID, token: sql.NullString{String: "55556666", Valid: true}}
 
 	_, _, _, err := runCompose(t.Context(), composeTx(t, db), accounts, r)
-	var dl *outbox.DeadLetterError
-	if !errors.As(err, &dl) {
+	if _, ok := errors.AsType[*outbox.DeadLetterError](err); !ok {
 		t.Fatalf("err = %v, want a *outbox.DeadLetterError", err)
 	}
 }

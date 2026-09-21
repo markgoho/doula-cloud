@@ -107,9 +107,8 @@ func TestHandler_ErasedClientExportsRedactedWithSealedDiff(t *testing.T) {
 	// A real edit through the endpoint, so its Activity row is genuinely
 	// sealed under her key, holding her phone number in the diff.
 	editResp := authedPUT(t, session, srv.URL+"/api/practices/"+practiceID+"/clients/"+clientID,
-		client.EditRequest{Record: client.Record{
-			GivenName: "Ada", FamilyName: "Lovelace", Email: "ada@example.com", Phone: "585-555-0199",
-		}, Override: true})
+		client.EditRequest{
+			GivenName: "Ada", FamilyName: "Lovelace", Email: "ada@example.com", Phone: "585-555-0199", Override: true})
 	defer editResp.Body.Close()
 	if editResp.StatusCode != http.StatusOK {
 		t.Fatalf("edit status = %d, want %d", editResp.StatusCode, http.StatusOK)

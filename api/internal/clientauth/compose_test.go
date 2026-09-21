@@ -38,8 +38,7 @@ func TestComposeMagicLink_NoTokenDeadLetters(t *testing.T) {
 	r := magicLinkRow{signInAddress: testSignInAddress}
 
 	_, _, _, err := c(nil, nil, r, time.Now())
-	var dl *outbox.DeadLetterError
-	if !errors.As(err, &dl) {
+	if _, ok := errors.AsType[*outbox.DeadLetterError](err); !ok {
 		t.Fatalf("err = %v, want a *outbox.DeadLetterError", err)
 	}
 }
@@ -68,8 +67,7 @@ func TestComposeAddressChange_NoTokenDeadLetters(t *testing.T) {
 	r := addressChangeRow{toAddress: testNewAddress}
 
 	_, _, _, err := c(nil, nil, r, time.Now())
-	var dl *outbox.DeadLetterError
-	if !errors.As(err, &dl) {
+	if _, ok := errors.AsType[*outbox.DeadLetterError](err); !ok {
 		t.Fatalf("err = %v, want a *outbox.DeadLetterError", err)
 	}
 }

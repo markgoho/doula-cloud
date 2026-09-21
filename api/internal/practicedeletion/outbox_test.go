@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"doula-cloud/api/internal/mail"
-	"doula-cloud/api/internal/outbox"
 	"doula-cloud/api/internal/practicedeletion"
 	"doula-cloud/api/internal/testdb"
 )
@@ -16,9 +15,8 @@ const testAppBaseURL = "https://app.example.test" //nolint:gosec // test fixture
 const statusSent = "sent"
 
 func newTestWorker(sender mail.Sender) practicedeletion.Worker {
-	return practicedeletion.Worker{Mailer: outbox.Mailer{
-		Sender: sender, Now: time.Now, AppBaseURL: testAppBaseURL, From: "a@b.test", ReplyTo: "support@b.test",
-	}}
+	return practicedeletion.Worker{
+		Sender: sender, Now: time.Now, AppBaseURL: testAppBaseURL, From: "a@b.test", ReplyTo: "support@b.test"}
 }
 
 // seedOutboxRow inserts a practice_deletion_outbox row directly, the

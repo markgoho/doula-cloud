@@ -82,7 +82,7 @@ func TestMergeHandler_AbsorbsUnattachedIntoAttachedMatch(t *testing.T) {
 
 	resp := authedJSON(t, session, http.MethodPost, srv.URL+"/api/practices/"+practiceID+"/clients/"+stubID+"/merge",
 		client.MergeRequest{
-			Record:        client.Record{GivenName: testMaya, Phone: "555-0142"},
+			GivenName: testMaya, Phone: "555-0142",
 			OtherClientID: survivorID,
 		})
 	defer resp.Body.Close()
@@ -180,7 +180,7 @@ func TestMergeHandler_BothUnattachedOlderSurvives(t *testing.T) {
 		defer srv.Close()
 
 		resp := authedJSON(t, session, http.MethodPost, srv.URL+"/api/practices/"+practiceID+"/clients/"+youngerID+"/merge",
-			client.MergeRequest{Record: client.Record{GivenName: "Robin"}, OtherClientID: olderID})
+			client.MergeRequest{GivenName: "Robin", OtherClientID: olderID})
 		defer resp.Body.Close()
 		if resp.StatusCode != http.StatusOK {
 			t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
@@ -206,7 +206,7 @@ func TestMergeHandler_BothUnattachedOlderSurvives(t *testing.T) {
 		defer srv.Close()
 
 		resp := authedJSON(t, session, http.MethodPost, srv.URL+"/api/practices/"+practiceID+"/clients/"+olderID+"/merge",
-			client.MergeRequest{Record: client.Record{GivenName: "Robin Ellis"}, OtherClientID: youngerID})
+			client.MergeRequest{GivenName: "Robin Ellis", OtherClientID: youngerID})
 		defer resp.Body.Close()
 		if resp.StatusCode != http.StatusOK {
 			t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
@@ -238,7 +238,7 @@ func TestMergeHandler_AttachedSourceSurvivesAndAbsorbsTheOther(t *testing.T) {
 	defer srv.Close()
 
 	resp := authedJSON(t, session, http.MethodPost, srv.URL+"/api/practices/"+practiceID+"/clients/"+attachedID+"/merge",
-		client.MergeRequest{Record: client.Record{GivenName: "Cora James"}, OtherClientID: otherID})
+		client.MergeRequest{GivenName: "Cora James", OtherClientID: otherID})
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
@@ -267,7 +267,7 @@ func TestMergeHandler_RefusesErasedTarget(t *testing.T) {
 	defer srv.Close()
 
 	resp := authedJSON(t, session, http.MethodPost, srv.URL+"/api/practices/"+practiceID+"/clients/"+stubID+"/merge",
-		client.MergeRequest{Record: client.Record{GivenName: testMaya}, OtherClientID: erasedID})
+		client.MergeRequest{GivenName: testMaya, OtherClientID: erasedID})
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusConflict {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusConflict)
@@ -286,7 +286,7 @@ func TestMergeHandler_RefusesSelfMerge(t *testing.T) {
 	defer srv.Close()
 
 	resp := authedJSON(t, session, http.MethodPost, srv.URL+"/api/practices/"+practiceID+"/clients/"+soloID+"/merge",
-		client.MergeRequest{Record: client.Record{GivenName: "Solo Client"}, OtherClientID: soloID})
+		client.MergeRequest{GivenName: "Solo Client", OtherClientID: soloID})
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusConflict {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusConflict)
@@ -310,7 +310,7 @@ func TestMergeHandler_RefusesErasedSource(t *testing.T) {
 	defer srv.Close()
 
 	resp := authedJSON(t, session, http.MethodPost, srv.URL+"/api/practices/"+practiceID+"/clients/"+erasedID+"/merge",
-		client.MergeRequest{Record: client.Record{GivenName: "Erased Client"}, OtherClientID: otherID})
+		client.MergeRequest{GivenName: "Erased Client", OtherClientID: otherID})
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusConflict {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusConflict)
@@ -333,7 +333,7 @@ func TestMergeHandler_InvalidInput(t *testing.T) {
 
 	t.Run("invalid client id", func(t *testing.T) {
 		resp := authedJSON(t, session, http.MethodPost, srv.URL+"/api/practices/"+practiceID+"/clients/not-a-uuid/merge",
-			client.MergeRequest{Record: client.Record{GivenName: testStub}, OtherClientID: otherID})
+			client.MergeRequest{GivenName: testStub, OtherClientID: otherID})
 		defer resp.Body.Close()
 		if resp.StatusCode != http.StatusBadRequest {
 			t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
@@ -356,7 +356,7 @@ func TestMergeHandler_InvalidInput(t *testing.T) {
 
 	t.Run("blank given name", func(t *testing.T) {
 		resp := authedJSON(t, session, http.MethodPost, srv.URL+"/api/practices/"+practiceID+"/clients/"+stubID+"/merge",
-			client.MergeRequest{Record: client.Record{GivenName: "  "}, OtherClientID: otherID})
+			client.MergeRequest{GivenName: "  ", OtherClientID: otherID})
 		defer resp.Body.Close()
 		if resp.StatusCode != http.StatusBadRequest {
 			t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
@@ -365,7 +365,7 @@ func TestMergeHandler_InvalidInput(t *testing.T) {
 
 	t.Run("invalid other client id", func(t *testing.T) {
 		resp := authedJSON(t, session, http.MethodPost, srv.URL+"/api/practices/"+practiceID+"/clients/"+stubID+"/merge",
-			client.MergeRequest{Record: client.Record{GivenName: testStub}, OtherClientID: "not-a-uuid"})
+			client.MergeRequest{GivenName: testStub, OtherClientID: "not-a-uuid"})
 		defer resp.Body.Close()
 		if resp.StatusCode != http.StatusBadRequest {
 			t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
@@ -389,7 +389,7 @@ func TestMergeHandler_NotFound(t *testing.T) {
 
 	t.Run("nonexistent source", func(t *testing.T) {
 		resp := authedJSON(t, session, http.MethodPost, srv.URL+"/api/practices/"+practiceID+"/clients/"+missingID+"/merge",
-			client.MergeRequest{Record: client.Record{GivenName: "Nobody"}, OtherClientID: otherID})
+			client.MergeRequest{GivenName: "Nobody", OtherClientID: otherID})
 		defer resp.Body.Close()
 		if resp.StatusCode != http.StatusNotFound {
 			t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusNotFound)
@@ -398,7 +398,7 @@ func TestMergeHandler_NotFound(t *testing.T) {
 
 	t.Run("nonexistent target", func(t *testing.T) {
 		resp := authedJSON(t, session, http.MethodPost, srv.URL+"/api/practices/"+practiceID+"/clients/"+stubID+"/merge",
-			client.MergeRequest{Record: client.Record{GivenName: testStub}, OtherClientID: missingID})
+			client.MergeRequest{GivenName: testStub, OtherClientID: missingID})
 		defer resp.Body.Close()
 		if resp.StatusCode != http.StatusNotFound {
 			t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusNotFound)
@@ -412,7 +412,7 @@ func TestMergeHandler_NotFound(t *testing.T) {
 
 	t.Run("contractor cannot reach the source", func(t *testing.T) {
 		resp := authedJSON(t, contractorSession, http.MethodPost, contractorSrv.URL+"/api/practices/"+practiceID+"/clients/"+stubID+"/merge",
-			client.MergeRequest{Record: client.Record{GivenName: testStub}, OtherClientID: otherID})
+			client.MergeRequest{GivenName: testStub, OtherClientID: otherID})
 		defer resp.Body.Close()
 		if resp.StatusCode != http.StatusNotFound {
 			t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusNotFound)
@@ -427,7 +427,7 @@ func TestMergeHandler_NotFound(t *testing.T) {
 		defer reachingSrv.Close()
 
 		resp := authedJSON(t, reachingSession, http.MethodPost, reachingSrv.URL+"/api/practices/"+practiceID+"/clients/"+attachedID+"/merge",
-			client.MergeRequest{Record: client.Record{GivenName: "Attached To Contractor"}, OtherClientID: otherID})
+			client.MergeRequest{GivenName: "Attached To Contractor", OtherClientID: otherID})
 		defer resp.Body.Close()
 		if resp.StatusCode != http.StatusNotFound {
 			t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusNotFound)
@@ -461,7 +461,7 @@ func TestMergeHandler_ChangedEmailRevokesPendingInviteAndOverlaysFieldValues(t *
 	// happens to already be on the stub's own row.
 	resp := authedJSON(t, session, http.MethodPost, srv.URL+"/api/practices/"+practiceID+"/clients/"+stubID+"/merge",
 		client.MergeRequest{
-			Record:        client.Record{GivenName: "Nia", Email: testNewEmail, FieldValues: json.RawMessage(`{"referralSource":"Hospital"}`)},
+			GivenName: "Nia", Email: testNewEmail, FieldValues: json.RawMessage(`{"referralSource":"Hospital"}`),
 			OtherClientID: survivorID,
 		})
 	defer resp.Body.Close()
@@ -509,7 +509,7 @@ func TestMergeHandler_RefusesChainedAndRepeatedMerge(t *testing.T) {
 	defer srv.Close()
 
 	first := authedJSON(t, session, http.MethodPost, srv.URL+"/api/practices/"+practiceID+"/clients/"+firstStubID+"/merge",
-		client.MergeRequest{Record: client.Record{GivenName: "First Stub"}, OtherClientID: survivorID})
+		client.MergeRequest{GivenName: "First Stub", OtherClientID: survivorID})
 	defer first.Body.Close()
 	if first.StatusCode != http.StatusOK {
 		t.Fatalf("first merge status = %d, want %d", first.StatusCode, http.StatusOK)
@@ -517,7 +517,7 @@ func TestMergeHandler_RefusesChainedAndRepeatedMerge(t *testing.T) {
 
 	// Chained: firstStubID is now a tombstone, refused as a target.
 	chained := authedJSON(t, session, http.MethodPost, srv.URL+"/api/practices/"+practiceID+"/clients/"+secondStubID+"/merge",
-		client.MergeRequest{Record: client.Record{GivenName: "Second Stub"}, OtherClientID: firstStubID})
+		client.MergeRequest{GivenName: "Second Stub", OtherClientID: firstStubID})
 	defer chained.Body.Close()
 	if chained.StatusCode != http.StatusConflict {
 		t.Fatalf("chained merge status = %d, want %d", chained.StatusCode, http.StatusConflict)
@@ -525,7 +525,7 @@ func TestMergeHandler_RefusesChainedAndRepeatedMerge(t *testing.T) {
 
 	// Repeated: firstStubID (now a tombstone) cannot be merged again.
 	repeated := authedJSON(t, session, http.MethodPost, srv.URL+"/api/practices/"+practiceID+"/clients/"+firstStubID+"/merge",
-		client.MergeRequest{Record: client.Record{GivenName: "First Stub"}, OtherClientID: survivorID})
+		client.MergeRequest{GivenName: "First Stub", OtherClientID: survivorID})
 	defer repeated.Body.Close()
 	if repeated.StatusCode != http.StatusConflict {
 		t.Fatalf("repeated merge status = %d, want %d", repeated.StatusCode, http.StatusConflict)

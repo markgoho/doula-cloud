@@ -23,7 +23,7 @@ func TestEditHandler_CollisionPredicate_TwoSarahsPostalCodeSavesFreely(t *testin
 	defer srv.Close()
 
 	resp := authedJSON(t, session, http.MethodPut, srv.URL+"/api/practices/"+practiceID+"/clients/"+editingID,
-		client.EditRequest{Record: client.Record{GivenName: "Sarah", FamilyName: "Osei", AddressPostalCode: "14604"}})
+		client.EditRequest{GivenName: "Sarah", FamilyName: "Osei", AddressPostalCode: "14604"})
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("status = %d, want %d (no prompt for two Sarahs)", resp.StatusCode, http.StatusOK)
@@ -46,7 +46,7 @@ func TestEditHandler_CollisionPredicate_AnnDoesNotCollideWithSubstringCousins(t 
 	defer srv.Close()
 
 	resp := authedJSON(t, session, http.MethodPut, srv.URL+"/api/practices/"+practiceID+"/clients/"+editingID,
-		client.EditRequest{Record: client.Record{GivenName: "Ann", FamilyName: "Reyes", AddressLocality: "Rochester"}})
+		client.EditRequest{GivenName: "Ann", FamilyName: "Reyes", AddressLocality: "Rochester"})
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("status = %d, want %d (Ann must not collide with Joanna/Hannah/Deanna)", resp.StatusCode, http.StatusOK)
@@ -68,7 +68,7 @@ func TestEditHandler_CollisionPredicate_SharedDateOfBirthNoNameWordSavesFreely(t
 	defer srv.Close()
 
 	resp := authedJSON(t, session, http.MethodPut, srv.URL+"/api/practices/"+practiceID+"/clients/"+editingID,
-		client.EditRequest{Record: client.Record{GivenName: "Wren", FamilyName: testFletcher, DateOfBirth: "1990-05-01", Phone: "555-0199"}})
+		client.EditRequest{GivenName: "Wren", FamilyName: testFletcher, DateOfBirth: "1990-05-01", Phone: "555-0199"})
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("status = %d, want %d (shared DOB with no shared name word must not prompt)", resp.StatusCode, http.StatusOK)
@@ -88,7 +88,7 @@ func TestEditHandler_CollisionPredicate_SharedDateOfBirthWithNameWordAsks(t *tes
 	defer srv.Close()
 
 	resp := authedJSON(t, session, http.MethodPut, srv.URL+"/api/practices/"+practiceID+"/clients/"+editingID,
-		client.EditRequest{Record: client.Record{GivenName: "Priya", FamilyName: testFletcher, DateOfBirth: "1990-05-01"}})
+		client.EditRequest{GivenName: "Priya", FamilyName: testFletcher, DateOfBirth: "1990-05-01"})
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusConflict {
 		t.Fatalf("status = %d, want %d (shared DOB + shared name word is a possible duplicate)", resp.StatusCode, http.StatusConflict)
@@ -116,7 +116,7 @@ func TestEditHandler_CollisionPredicate_ExactEmailAsksRegardlessOfName(t *testin
 	defer srv.Close()
 
 	resp := authedJSON(t, session, http.MethodPut, srv.URL+"/api/practices/"+practiceID+"/clients/"+editingID,
-		client.EditRequest{Record: client.Record{GivenName: "Wren", FamilyName: testFletcher, Email: "shared@example.com"}})
+		client.EditRequest{GivenName: "Wren", FamilyName: testFletcher, Email: "shared@example.com"})
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusConflict {
 		t.Fatalf("status = %d, want %d (exact email collides regardless of name)", resp.StatusCode, http.StatusConflict)
@@ -137,7 +137,7 @@ func TestEditHandler_CollisionPredicate_CorrectingToExistingFirstNameSaves(t *te
 	defer srv.Close()
 
 	resp := authedJSON(t, session, http.MethodPut, srv.URL+"/api/practices/"+practiceID+"/clients/"+editingID,
-		client.EditRequest{Record: client.Record{GivenName: "Sarah", FamilyName: "Beck"}})
+		client.EditRequest{GivenName: "Sarah", FamilyName: "Beck"})
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("status = %d, want %d (Sara -> Sarah Beck must not collide with Sarah Chen)", resp.StatusCode, http.StatusOK)
@@ -159,7 +159,7 @@ func TestEditHandler_CollisionPredicate_SubstitutionBlocksWithSubstitutionFlag(t
 	defer srv.Close()
 
 	resp := authedJSON(t, session, http.MethodPut, srv.URL+"/api/practices/"+practiceID+"/clients/"+editingID,
-		client.EditRequest{Record: client.Record{GivenName: testNadia, FamilyName: testHaddad}})
+		client.EditRequest{GivenName: testNadia, FamilyName: testHaddad})
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusConflict {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusConflict)
@@ -196,7 +196,7 @@ func TestEditHandler_RefusesEditingAMergedRecord(t *testing.T) {
 	defer srv.Close()
 
 	resp := authedJSON(t, session, http.MethodPut, srv.URL+"/api/practices/"+practiceID+"/clients/"+absorbedID,
-		client.EditRequest{Record: client.Record{GivenName: "Absorbed", AddressLocality: "Rochester"}})
+		client.EditRequest{GivenName: "Absorbed", AddressLocality: "Rochester"})
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusConflict {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusConflict)

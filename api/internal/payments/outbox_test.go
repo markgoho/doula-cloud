@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"doula-cloud/api/internal/mail"
-	"doula-cloud/api/internal/outbox"
 	"doula-cloud/api/internal/payments"
 	"doula-cloud/api/internal/testdb"
 )
@@ -31,7 +30,7 @@ const (
 // file's stand-in AppBaseURL/From/ReplyTo -- every outbox test needs
 // one, only the injected Sender and (occasionally) Now vary.
 func newTestPayoutWorker(sender mail.Sender) payments.Worker {
-	return payments.Worker{Mailer: outbox.Mailer{Sender: sender, Now: time.Now, AppBaseURL: testPayoutAppBaseURL, From: testOutboxFrom, ReplyTo: testOutboxReplyTo}}
+	return payments.Worker{Sender: sender, Now: time.Now, AppBaseURL: testPayoutAppBaseURL, From: testOutboxFrom, ReplyTo: testOutboxReplyTo}
 }
 
 // seedPayoutOutboxRow inserts a pending payout_outbox row for

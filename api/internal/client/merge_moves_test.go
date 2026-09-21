@@ -125,7 +125,7 @@ func TestMergeHandler_MovesEngagementsRequestsAndPortalLinks(t *testing.T) {
 	defer srv.Close()
 
 	resp := authedJSON(t, session, http.MethodPost, srv.URL+"/api/practices/"+practiceID+"/clients/"+absorbedID+"/merge",
-		client.MergeRequest{Record: client.Record{GivenName: "Rosa Lind", Email: "rosa2@example.com"}, OtherClientID: survivorID})
+		client.MergeRequest{GivenName: "Rosa Lind", Email: "rosa2@example.com", OtherClientID: survivorID})
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("status = %d, want %d: %s", resp.StatusCode, http.StatusOK, readBody(t, resp))
@@ -214,7 +214,7 @@ func TestDetailHandler_MergedClientShowsBothHistoriesAsTwo(t *testing.T) {
 	defer srv.Close()
 
 	merge := authedJSON(t, session, http.MethodPost, srv.URL+"/api/practices/"+practiceID+"/clients/"+absorbedID+"/merge",
-		client.MergeRequest{Record: client.Record{GivenName: "Nell Frost"}, OtherClientID: survivorID})
+		client.MergeRequest{GivenName: "Nell Frost", OtherClientID: survivorID})
 	defer merge.Body.Close()
 	if merge.StatusCode != http.StatusOK {
 		t.Fatalf("merge status = %d, want %d: %s", merge.StatusCode, http.StatusOK, readBody(t, merge))
@@ -279,7 +279,7 @@ func TestEraseHandler_ReachesTheAbsorbedRecord(t *testing.T) {
 	defer srv.Close()
 
 	merge := authedJSON(t, session, http.MethodPost, srv.URL+"/api/practices/"+practiceID+"/clients/"+absorbedID+"/merge",
-		client.MergeRequest{Record: client.Record{GivenName: "Vera Ash"}, OtherClientID: survivorID})
+		client.MergeRequest{GivenName: "Vera Ash", OtherClientID: survivorID})
 	defer merge.Body.Close()
 	if merge.StatusCode != http.StatusOK {
 		t.Fatalf("merge status = %d, want %d: %s", merge.StatusCode, http.StatusOK, readBody(t, merge))
@@ -365,7 +365,7 @@ func TestMergeHandler_RevokesTheAbsorbedRecordsPendingInvitation(t *testing.T) {
 	defer srv.Close()
 
 	resp := authedJSON(t, session, http.MethodPost, srv.URL+"/api/practices/"+practiceID+"/clients/"+absorbedID+"/merge",
-		client.MergeRequest{Record: client.Record{GivenName: "Della Roe"}, OtherClientID: survivorID})
+		client.MergeRequest{GivenName: "Della Roe", OtherClientID: survivorID})
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("status = %d, want %d: %s", resp.StatusCode, http.StatusOK, readBody(t, resp))
@@ -466,7 +466,7 @@ func TestRedactAbsorbedClientWritesTheSameNameErasureDoes(t *testing.T) {
 	defer srv.Close()
 
 	merge := authedJSON(t, session, http.MethodPost, srv.URL+"/api/practices/"+practiceID+"/clients/"+absorbedID+"/merge",
-		client.MergeRequest{Record: client.Record{GivenName: "Kept Record"}, OtherClientID: survivorID})
+		client.MergeRequest{GivenName: "Kept Record", OtherClientID: survivorID})
 	defer merge.Body.Close()
 	if merge.StatusCode != http.StatusOK {
 		t.Fatalf("merge status = %d, want %d: %s", merge.StatusCode, http.StatusOK, readBody(t, merge))
@@ -508,7 +508,7 @@ func TestMergeHandler_RefusesTwoPendingRequestsOfOneKind(t *testing.T) {
 	defer srv.Close()
 
 	resp := authedJSON(t, session, http.MethodPost, srv.URL+"/api/practices/"+practiceID+"/clients/"+otherID+"/merge",
-		client.MergeRequest{Record: client.Record{GivenName: "Wren Ash"}, OtherClientID: survivorID})
+		client.MergeRequest{GivenName: "Wren Ash", OtherClientID: survivorID})
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusConflict {
 		t.Fatalf("status = %d, want %d: %s", resp.StatusCode, http.StatusConflict, readBody(t, resp))
@@ -544,7 +544,7 @@ func TestMergeHandler_EnteredInErrorDoesNotCountAsAttached(t *testing.T) {
 	defer srv.Close()
 
 	resp := authedJSON(t, session, http.MethodPost, srv.URL+"/api/practices/"+practiceID+"/clients/"+typoID+"/merge",
-		client.MergeRequest{Record: client.Record{GivenName: "Iris Vale"}, OtherClientID: realID})
+		client.MergeRequest{GivenName: "Iris Vale", OtherClientID: realID})
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("status = %d, want %d: %s", resp.StatusCode, http.StatusOK, readBody(t, resp))

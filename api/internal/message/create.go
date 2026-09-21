@@ -125,8 +125,7 @@ func decodeMultipartCreate(w http.ResponseWriter, r *http.Request, store objects
 		// as the post-parse header.Size check below, rather than letting
 		// the parse-boundary leak out as a different status code for what
 		// is, to the caller, the same failure.
-		var maxBytesErr *http.MaxBytesError
-		if errors.As(err, &maxBytesErr) {
+		if _, ok := errors.AsType[*http.MaxBytesError](err); ok {
 			apierr.WriteError(w, "attachment exceeds the 10MB limit", http.StatusRequestEntityTooLarge)
 			return "", nil, false
 		}

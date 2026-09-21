@@ -90,7 +90,7 @@ func FindCollisions(ctx context.Context, tx *sql.Tx, practiceID, givenName, fami
 			// coverage:ignore reason: row scan failure, not exercised by unit tests
 			return nil, fmt.Errorf("client: scan collision: %w", err)
 		}
-		candidates = append(candidates, Collision{Match: Match{Record: rec}, CreatedAt: createdAt})
+		candidates = append(candidates, Collision{Record: rec, CreatedAt: createdAt})
 	}
 	if err := rows.Err(); err != nil {
 		// coverage:ignore reason: row iteration failure, not exercised by unit tests

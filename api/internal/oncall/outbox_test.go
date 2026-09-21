@@ -9,7 +9,6 @@ import (
 
 	"doula-cloud/api/internal/mail"
 	"doula-cloud/api/internal/oncall"
-	"doula-cloud/api/internal/outbox"
 	"doula-cloud/api/internal/testdb"
 )
 
@@ -50,7 +49,7 @@ func newNoticeFixture(t *testing.T, db *testdb.DB, prefix string) noticeFixture 
 // one pass and commits.
 func runWorker(t *testing.T, db *testdb.DB, sender *mail.FakeSender) {
 	t.Helper()
-	w := oncall.GapNoticeWorker{Mailer: outbox.Mailer{Sender: sender, Now: time.Now, AppBaseURL: testAppBaseURL, From: "from@example.test", ReplyTo: "reply@example.test"}}
+	w := oncall.GapNoticeWorker{Sender: sender, Now: time.Now, AppBaseURL: testAppBaseURL, From: "from@example.test", ReplyTo: "reply@example.test"}
 	tx, err := db.App.BeginTx(t.Context(), nil)
 	if err != nil {
 		t.Fatalf("begin: %v", err)

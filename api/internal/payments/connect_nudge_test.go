@@ -11,7 +11,6 @@ import (
 	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/idempotency"
 	"doula-cloud/api/internal/mail"
-	"doula-cloud/api/internal/outbox"
 	"doula-cloud/api/internal/payments"
 	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/tasknudge"
@@ -71,7 +70,7 @@ func nudgeRefusalMessage(t *testing.T, resp *http.Response) string {
 }
 
 func newTestConnectNudgeWorker(sender mail.Sender) payments.ConnectNudgeWorker {
-	return payments.ConnectNudgeWorker{Mailer: outbox.Mailer{Sender: sender, Now: time.Now, AppBaseURL: testPayoutAppBaseURL, From: testOutboxFrom, ReplyTo: testOutboxReplyTo}}
+	return payments.ConnectNudgeWorker{Sender: sender, Now: time.Now, AppBaseURL: testPayoutAppBaseURL, From: testOutboxFrom, ReplyTo: testOutboxReplyTo}
 }
 
 // runConnectNudgeWorker mirrors runPayoutWorker: it sets the trusted

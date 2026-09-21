@@ -264,9 +264,9 @@ func accountStatusFrom(acct *stripe.V2CoreAccount) AccountStatus {
 func (c *StripeAPIClient) CreateCustomer(ctx context.Context, accountID, customerEmail, customerName string) (string, error) {
 	// coverage:ignore reason: requires a real Stripe API key and network access, not exercised by unit tests
 	cust, err := c.client.V1Customers.Create(ctx, &stripe.CustomerCreateParams{
-		Params: stripe.Params{StripeAccount: stripe.String(accountID)},
-		Email:  stripe.String(customerEmail),
-		Name:   stripe.String(customerName),
+		StripeAccount: stripe.String(accountID),
+		Email:         stripe.String(customerEmail),
+		Name:          stripe.String(customerName),
 	})
 	// coverage:ignore reason: requires a real Stripe API key and network access, not exercised by unit tests
 	if err != nil {
@@ -338,7 +338,7 @@ func (c *StripeAPIClient) CreateInvoice(ctx context.Context, accountID, customer
 func (c *StripeAPIClient) FinalizeInvoice(ctx context.Context, accountID, invoiceID string) (string, string, error) {
 	// coverage:ignore reason: requires a real Stripe API key and network access, not exercised by unit tests
 	inv, err := c.client.V1Invoices.FinalizeInvoice(ctx, invoiceID, &stripe.InvoiceFinalizeInvoiceParams{
-		Params: stripe.Params{StripeAccount: stripe.String(accountID)},
+		StripeAccount: stripe.String(accountID),
 	})
 	// coverage:ignore reason: requires a real Stripe API key and network access, not exercised by unit tests
 	if err != nil {
@@ -355,7 +355,7 @@ func (c *StripeAPIClient) FinalizeInvoice(ctx context.Context, accountID, invoic
 func (c *StripeAPIClient) PayOutOfBand(ctx context.Context, accountID, invoiceID string) error {
 	// coverage:ignore reason: requires a real Stripe API key and network access, not exercised by unit tests
 	_, err := c.client.V1Invoices.Pay(ctx, invoiceID, &stripe.InvoicePayParams{
-		Params:        stripe.Params{StripeAccount: stripe.String(accountID)},
+		StripeAccount: stripe.String(accountID),
 		PaidOutOfBand: new(true),
 	})
 	// coverage:ignore reason: requires a real Stripe API key and network access, not exercised by unit tests
@@ -399,7 +399,7 @@ func (c *StripeAPIClient) RetrieveInvoicePaymentReference(ctx context.Context, a
 func (c *StripeAPIClient) DeleteCustomer(ctx context.Context, accountID, customerID string) error {
 	// coverage:ignore reason: requires a real Stripe API key and network access, not exercised by unit tests
 	_, err := c.client.V1Customers.Delete(ctx, customerID, &stripe.CustomerDeleteParams{
-		Params: stripe.Params{StripeAccount: stripe.String(accountID)},
+		StripeAccount: stripe.String(accountID),
 	})
 	// coverage:ignore reason: requires a real Stripe API key and network access, not exercised by unit tests
 	var serr *stripe.Error
@@ -456,11 +456,11 @@ func (c *StripeAPIClient) CreateRedactionJob(ctx context.Context, accountID, cus
 	// The preview API version rides as an explicit header rather than a
 	// param: a preview endpoint is not addressable from the SDK's pinned
 	// GA version, and stripe.Params has no version override field.
-	params := &stripe.RawParams{Params: stripe.Params{
+	params := &stripe.RawParams{
 		StripeAccount: stripe.String(accountID),
 		Context:       ctx,
 		Headers:       http.Header{"Stripe-Version": []string{redactionJobAPIVersion}},
-	}}
+	}
 	// coverage:ignore reason: requires a real Stripe API key and network access, not exercised by unit tests
 	body := "objects[customers][]=" + url.QueryEscape(customerID)
 	// coverage:ignore reason: requires a real Stripe API key and network access, not exercised by unit tests
