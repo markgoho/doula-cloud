@@ -24,7 +24,7 @@
 | --- | --- | --- | --- |
 | 1.1 | Open the invite link at `/accept-invite` | The accept form renders | `manual` |
 | 1.2 | Set email and password, press **Accept invite** | `POST /api/staff/accept-invite` creates the membership with zero roles | `manual` |
-| 1.3 | Choose the Practice from the membership list | **Nothing to choose** — one membership, so `decideLanding` redirects straight to `/practices/[practiceId]` (`app/src/lib/landing.ts:24-26`) and the picker never renders. Unwalkable for anyone until [LV-G2](https://github.com/markgoho/doula-cloud/issues/225) | `manual` |
+| 1.3 | Choose the Practice from the membership list | **Nothing to choose** — one membership, so `decideLanding` redirects straight to `/practices/[practiceId]` (`app/src/lib/landing.ts:24-26`) and the picker never renders. The picker needs a second membership, which only Lena Vasquez's journey gives a Persona | `manual` |
 
 ### Stage 2 — Receive the Admin role
 

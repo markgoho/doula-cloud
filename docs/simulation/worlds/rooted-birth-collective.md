@@ -26,7 +26,7 @@ Concretely:
 
 | Act | How | Why |
 | --- | --- | --- |
-| Every Invitation, and every acceptance of one | **Walked** | The invite-and-accept route is the only path that produces a role-limited Doula or a distinct Admin at all, it has never been walked at scale, and it has a known collision waiting in it — `staff.identity_uid` is `UNIQUE`, and `InviteHandler` always inserts a fresh `staff` row, so Lena joining Rooted on an account she already holds at Ridgeline is a live question, not a hypothetical. |
+| Every Invitation, and every acceptance of one | **Walked** | The invite-and-accept route is the only path that produces a role-limited Doula or a distinct Admin at all, and it has never been walked at scale — including the case this map is built to exercise: Lena joining Rooted on an account she already holds at Ridgeline, which `staffauth`'s accept path resolves by reusing her existing `staff` row rather than colliding on it (`staff.identity_uid` stays `UNIQUE`). |
 | Every Offer, and every answer to one | **Walked** | A contractor Doula's only door in. Four contractors at Rooted means it is walked repeatedly, by more than one person, on real work. |
 | Every act by any of the nine Personas | **Walked** | The premise of the map. |
 | Every Client a Persona speaks to, plans for, bills, or visits | **Walked**, from Engagement Request through Contract | These are the Clients whose records a friction log will cite. |
@@ -45,7 +45,7 @@ One Practice cannot show tenant isolation, and one Practice cannot show a person
 | --- | --- | --- | --- | --- |
 | **Rooted Birth Collective** | Rochester, NY | 15 Staff, 14 of them holding the Doula role | The agency the map is about. The only Practice with enough people, enough Clients and enough money for a query to get slow. | The run's day zero. |
 | **Okonkwo Birth Support** | Providence, RI | Maya Okonkwo alone, all three roles | Three of the nine Personas live here — Maya, Hannah, Nadia. A solo Practice is not a small agency; it is a different product, and Maya is the person for whom every default must be right the first time. | A second, staggered first-contact, three simulated weeks after Renata's. |
-| **Ridgeline Doula Group** | Rochester, NY | One Owner, plus Lena Vasquez's contractor Membership | Lena's second agency, across town. **Without it, Lena is not Lena** — LV-G2 is her two-Practice problem, and a person holding two Memberships is unobservable in a one-Practice world. Nothing else happens here. | Already on the product before the run starts, because Lena's account has to pre-date her invitation to Rooted for the collision to be real. |
+| **Ridgeline Doula Group** | Rochester, NY | One Owner, plus Lena Vasquez's contractor Membership | Lena's second agency, across town. **Without it, Lena is not Lena** — she is the one Persona who holds two Memberships, and that is unobservable in a one-Practice world. Nothing else happens here. | Already on the product before the run starts, because Lena's account has to pre-date her invitation to Rooted — the accept path reuses her existing `staff` row rather than creating a fresh one. |
 | **Bell & Ortiz Birth Services** | Tucson, AZ | Tasha Bell, two doulas on a spreadsheet | Tasha's evaluation. She is the only cast member allowed to abandon halfway, and where she stops is the finding. | Created mid-run, at `/signup`, cold. Her marketing-site leg is out of scope — the simulation starts where an agency meets the product, not where it hears about it. |
 
 Ridgeline's Owner is the one cast member with no walk of her own at all: she exists so that Lena's Membership there has somebody who created it.
@@ -143,7 +143,7 @@ Nadia's pregnancy ends in stillbirth at 31 weeks. **It falls in run week 14**, s
 
 Rochester, New York, across town from Rooted. Deborah Ridge owns it and Lena Vasquez contracts for it. It exists for one reason and does one thing.
 
-It is **already on the product** before the run's day zero, because the collision this map wants to see requires Lena to hold an account first: Rooted's invitation must arrive at an address that Doula Cloud already knows. `InviteHandler` always inserts a fresh `staff` row and acceptance claims it by writing an identity onto it, while `staff.identity_uid` is `UNIQUE` — and the same migration's own comment says a person may work at more than one Practice. Both cannot be true. The run finds out which.
+It is **already on the product** before the run's day zero, because the two-Practice membership this map wants to see requires Lena to hold an account first: Rooted's invitation must arrive at an address that Doula Cloud already knows. `staffauth`'s accept path resolves her existing `staff` row by `identity_uid` and inserts a second `practice_memberships` row on it, exactly what the same migration's own comment always said a person may do — the run walks it for real, at scale, for the first time.
 
 Beyond that, Ridgeline gives Lena somewhere else to be. She lands on the Practice picker more often than any other cast member, she must never see a Rooted Client from a Ridgeline session, and "what she is at each Practice" is two Memberships and must behave as two.
 
@@ -169,7 +169,7 @@ What the product makes her do to get there — whether the roster must precede t
 
 Two ordering facts are fixed, and only because the World would otherwise be incoherent:
 
-- **Lena's Ridgeline account predates her Rooted invitation.** Without that the collision is not real.
+- **Lena's Ridgeline account predates her Rooted invitation.** Without that, there is no existing `staff` row for Rooted's acceptance to reuse.
 - **Nadia and Hannah are Maya's Clients before Maya signs up.** Their care is already under way; the product is joining it late, which is the ordinary case for every Client in this World and the unusual case for a product that has only ever been walked from an empty fixture.
 
 ## The entity surface of run one
@@ -180,7 +180,7 @@ The smallest set that still produces real collisions is most of the model, becau
 
 | | |
 | --- | --- |
-| Practice, Staff, Membership, Invitation | Fifteen invitations at Rooted, one collision expected, one Membership changed mid-run. |
+| Practice, Staff, Membership, Invitation | Fifteen invitations at Rooted, one `staff` row reused across Practices, one Membership changed mid-run. |
 | Employment type, Offer, Attachment | Four contractors at Rooted, an attachment that should have ended (Trish), and the whole of Lena's read rule. |
 | Work State | Fourteen of fifteen in New York, which is what makes the tax share on a Credit purchase a real fraction. |
 | Client, Client Field Template, Portal Account | Three client-side Personas, one of whom (Camille) reaches two Practices' worth of history that is not there. |

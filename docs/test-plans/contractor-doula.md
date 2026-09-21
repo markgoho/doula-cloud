@@ -5,9 +5,7 @@
 - **A pass means**: the Engagement she took is finished, she can point to what she
   agreed and what she was paid, and she never saw a Client who was not hers.
 
-This plan is expected to fail at step 1.2 and never reach stage 3 unmodified. It is
-written to be run anyway: the failures are the evidence, and the fixture bypass
-below is what lets the later stages be walked at all.
+Step 1.2 no longer fails: accepting a second Practice's invitation on an account she already holds now succeeds outright. The plan still never reaches stage 3 unmodified — the Offer model that stage needs does not exist (LV-G6, LV-G7).
 
 ## Preconditions
 
@@ -16,11 +14,7 @@ below is what lets the later stages be walked at all.
   point of her.
 - Rooted Birth Collective with an Owner and **at least two** Clients, only one of
   which is meant to be hers.
-- **Fixture bypass for stages 2–8.** Stage 1 cannot produce her second membership
-  (LV-G2), so insert a `practice_memberships` row for her **existing** `staff` row
-  against the second Practice, directly in Postgres. Whether the schema accepts
-  that is itself unproven — `00002` promises multi-Practice membership in its own
-  comment — so the run's first job is to find out, and to record the answer.
+- **No fixture bypass for her second membership any more.** Step 1.2 itself produces it: accepting Rooted's invitation on the account her other agency already gave her resolves to that existing `staff` row and inserts a `practice_memberships` row for the new Practice. The `practice_memberships` bypass the 2026-08-23 walk used predates LV-G2's close and is history now, not a precondition.
 - No fixture can create an **Offer** or an employment type. Stage 3 has nothing to
   provision.
 
@@ -31,13 +25,13 @@ below is what lets the later stages be walked at all.
 | Step | Action | Expected result | Mark |
 | --- | --- | --- | --- |
 | 1.1 | Open the invite link at `/accept-invite` | The accept form renders | `manual` |
-| 1.2 | Sign in as herself and submit | **Expected failure**: `InviteHandler` inserted a fresh `staff` row and acceptance writes her identity onto it, but `staff.identity_uid` is `UNIQUE` and hers is on the other agency's row. A unique-constraint violation, caught at `accept.go:104` and surfacing as a **`409`**, "a staff account already exists for this identity" | `manual` |
-| 1.2-a | Check for a second membership | **None she can reach.** One *does* get written — `invite.go:56` and `:66` insert the pending `staff` row and its `roles = '{}'` membership at invite time, before anyone accepts — but it hangs off a second `staff` row her identity can never claim, so the Practice gains a member who cannot sign in and whom nothing removes ([LV-G8](https://github.com/markgoho/doula-cloud/issues/291)) | `missing-feature (LV-G2)` [#225](https://github.com/markgoho/doula-cloud/issues/225) |
+| 1.2 | Sign in as herself and submit | `staffauth`'s accept path (`resolveStaff`, `accept.go:306`) finds her existing `staff` row by `identity_uid` and reuses it: **`200`**, holding the same `staffId` her other agency already gave her and Rooted Birth Collective's `practiceId` | `manual` |
+| 1.2-a | Check for a second membership | **It exists.** The same request that succeeded inserted a `practice_memberships` row for Rooted Birth Collective on her existing `staff` row (`accept.go:226`), rather than a second `staff` row — LV-G2 is closed, and `InviteHandler` no longer writes a pending `staff` row at invite time either ([LV-G8](https://github.com/markgoho/doula-cloud/issues/291) closed) | `manual` |
 | 1.3 | Record that she is a contractor, not an employee | `practice_memberships` is `(practice_id, staff_id, roles, created_at)` — no column holds it | `missing-feature (LV-G1)` [#225](https://github.com/markgoho/doula-cloud/issues/225) |
 
 ### Stage 2 — Sign in and choose the agency
 
-Reachable only after the fixture bypass.
+Reachable once stage 1 is walked — step 1.2 is what gives her the second membership this stage's picker needs.
 
 | Step | Action | Expected result | Mark |
 | --- | --- | --- | --- |
@@ -108,8 +102,8 @@ half is the half the product already treats correctly.
 | Mark | Steps |
 | --- | --- |
 | `automated` | 1 |
-| `manual` | 17 (13 on the plan as drafted, plus 2.3-a, 2.3-b, 4.1-a and 5.2-a appended by the walk) |
-| `missing-feature` | 9 steps over 6 gaps ([LV-G1](https://github.com/markgoho/doula-cloud/issues/225), [LV-G2](https://github.com/markgoho/doula-cloud/issues/225), [LV-G3](https://github.com/markgoho/doula-cloud/issues/225), [LV-G4](https://github.com/markgoho/doula-cloud/issues/225), [LV-G6](https://github.com/markgoho/doula-cloud/issues/225), [LV-G7](https://github.com/markgoho/doula-cloud/issues/225)) |
+| `manual` | 18 (13 on the plan as drafted, plus 2.3-a, 2.3-b, 4.1-a and 5.2-a appended by the walk, plus 1.2-a re-marked 2026-09-20) |
+| `missing-feature` | 8 steps over 5 gaps ([LV-G1](https://github.com/markgoho/doula-cloud/issues/225), [LV-G3](https://github.com/markgoho/doula-cloud/issues/225), [LV-G4](https://github.com/markgoho/doula-cloud/issues/225), [LV-G6](https://github.com/markgoho/doula-cloud/issues/225), [LV-G7](https://github.com/markgoho/doula-cloud/issues/225)) |
 
 LV-G5 is observed at 4.2 rather than given a step of its own: the list opens, and
 what it shows is the finding.
@@ -223,4 +217,18 @@ product cannot offer one. What the walk adds to the map's argument is the direct
 the leak — the map wrote her as someone the product tells too much, and 4.1-a and 5.2-a
 show it also lets her *do* too much, spending the agency's credits and pricing its
 Clients' care.
+
+### 2026-09-20 — narrative reconciliation ([#1242](https://github.com/markgoho/doula-cloud/issues/1242))
+
+A desk pass, not a walk, over this plan's stage-1 cells and Preconditions: LV-G2 and its adjacent gap LV-G8 both closed since the 2026-08-23 walk above, and the plan still told the old story. Nothing was re-walked and the dated entries above are untouched.
+
+| Step | Cell corrected | What settled it |
+| --- | --- | --- |
+| 1.2 | "Expected failure: ... a 409, 'a staff account already exists for this identity'" -> `staffauth`'s accept path resolves her existing `staff` row and succeeds with a `200` | `resolveStaff` in `api/internal/staffauth/accept.go:306`; [LV-G2](https://github.com/markgoho/doula-cloud/issues/225) closed |
+| 1.2-a | "None she can reach ... LV-G8" -> the second membership exists, inserted by the same accept call, and there is no pending `staff` row left over to leave a phantom member behind; re-marked `missing-feature (LV-G2)` -> `manual` | The `practice_memberships` insert at `accept.go:226`; `InviteHandler` no longer writes a pending `staff` row at invite time (`invite.go:54`); [LV-G8](https://github.com/markgoho/doula-cloud/issues/291) closed |
+| Preconditions | "Fixture bypass for stages 2-8 ... Stage 1 cannot produce her second membership" -> no bypass is needed; step 1.2 produces the membership for real | Same as 1.2 above |
+
+**One mark moves: 1.2-a, from `missing-feature (LV-G2)` to `manual`.** The Marks summary above is recounted with it, to 1 / 18 / 0 / 8, and `docs/test-plans/README.md`'s run-status row and Total move the same way.
+
+**Left alone on purpose.** LV-G1's employment-type claim on step 1.3, LV-G4, LV-G6, LV-G7 and RA-G8's roles-on-an-invitation claim are the same shape of drift, spotted while rewriting the same stage-1 narrative, but reading each against the code closely enough to correct it is a wider job than this ticket's own scope. Held at [#1434](https://github.com/markgoho/doula-cloud/issues/1434).
 
