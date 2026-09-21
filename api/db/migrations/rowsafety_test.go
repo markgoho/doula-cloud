@@ -15,7 +15,7 @@ func TestRowDependentLeavesAFreshTableAlone(t *testing.T) {
 
 	old := `CREATE TABLE new_thing (id uuid);
 	        CREATE UNIQUE INDEX old_thing_slug_key ON old_thing (slug);`
-	if got := RowDependent(old); len(got) != 1 || got[0].Class != "CREATE UNIQUE INDEX" {
+	if got := RowDependent(old); len(got) != 1 || got[0].Class != classCreateUniqueIndex {
 		t.Errorf("RowDependent over a table that predates the migration = %+v, want one CREATE UNIQUE INDEX finding", got)
 	}
 }
@@ -31,7 +31,7 @@ func TestSafeFormOnlyExemptsASingleAction(t *testing.T) {
 
 	beside := `ALTER TABLE t ADD CONSTRAINT t_id_positive CHECK (id > 0) NOT VALID,
 	                         ADD CONSTRAINT t_amount_positive CHECK (amount > 0);`
-	if got := RowDependent(beside); len(got) != 1 || got[0].Class != "ADD CONSTRAINT ... CHECK" {
+	if got := RowDependent(beside); len(got) != 1 || got[0].Class != classAddConstraintCheck {
 		t.Errorf("RowDependent over two CHECK actions sharing one NOT VALID = %+v, want one ADD CONSTRAINT ... CHECK finding", got)
 	}
 }
@@ -41,7 +41,7 @@ func TestSafeFormOnlyExemptsASingleAction(t *testing.T) {
 // row, and a constraint written on the column is then checked against
 // what it filled in.
 func TestADefaultOnAnInlineConstraintIsNotSafe(t *testing.T) {
-	const class = "ADD COLUMN ... DEFAULT with an inline constraint"
+	const class = classAddColumnDefaultWithInlineConstraint
 
 	after := `ALTER TABLE t ADD COLUMN parent_id int NOT NULL DEFAULT 99 REFERENCES parent (id);`
 	if got := RowDependent(after); len(got) != 1 || got[0].Class != class {

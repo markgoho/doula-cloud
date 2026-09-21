@@ -4,6 +4,10 @@
 
 ## ADD CONSTRAINT ... UNIQUE / PRIMARY KEY / EXCLUDE
 
+```sql
+ALTER TABLE client_portal_users ADD CONSTRAINT client_portal_users_identity_client_key UNIQUE (identity_uid, client_id)
+```
+
 No existing row can be a duplicate of the pair, in two halves that cover the table's whole history.
 
 Before `00081`, `client_portal_users.identity_uid` carried a table-wide `UNIQUE` constraint from `00006`. A constraint on `identity_uid` alone refuses every duplicate of any pair that contains it, so nothing written before `00081` can be a duplicate `(identity_uid, client_id)`.
