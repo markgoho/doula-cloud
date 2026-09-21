@@ -5,11 +5,10 @@
 	import TextInput from '#lib/components/atoms/TextInput.svelte';
 	import Button from '#lib/components/atoms/Button.svelte';
 	import Notice from '#lib/components/atoms/Notice.svelte';
-	import Heading from '#lib/components/atoms/Heading.svelte';
 	import LabeledField from '#lib/components/molecules/LabeledField.svelte';
 	import StackedForm from '#lib/components/molecules/StackedForm.svelte';
 	import ErrorSummary from '#lib/components/molecules/ErrorSummary.svelte';
-	import PageTitle from '#lib/components/PageTitle.svelte';
+	import EntryPage from '#lib/components/templates/EntryPage.svelte';
 
 	const emailId = 'forgot-password-email';
 
@@ -39,33 +38,39 @@
 	}
 </script>
 
-<PageTitle page="Forgot your password?" isError={submission.errors.length > 0} />
+{#snippet errorSummary()}
+	<ErrorSummary errors={submission.errors} />
+{/snippet}
 
-<ErrorSummary errors={submission.errors} />
+{#snippet content()}
+	{#if hasSubmitted}
+		<Notice
+			variant="status"
+			message="If that email address is on an account, we've sent a link to reset your password."
+		/>
+	{:else}
+		<StackedForm onSubmit={handleSubmit}>
+			<LabeledField id={emailId} label="Email" error={submission.errorFor(emailId)}>
+				{#snippet children({ id, describedBy, invalid })}
+					<TextInput
+						{id}
+						{describedBy}
+						{invalid}
+						type="email"
+						value={email}
+						onInput={(value) => (email = value)}
+						required
+						autocomplete="username"
+					/>
+				{/snippet}
+			</LabeledField>
+			<Button type="submit" label="Send reset link" loading={submission.isSubmitting} />
+		</StackedForm>
+	{/if}
+{/snippet}
 
-<Heading level={1} variant="page" text="Forgot your password?" />
-
-{#if hasSubmitted}
-	<Notice
-		variant="status"
-		message="If that email address is on an account, we've sent a link to reset your password."
-	/>
-{:else}
-	<StackedForm onSubmit={handleSubmit}>
-		<LabeledField id={emailId} label="Email" error={submission.errorFor(emailId)}>
-			{#snippet children({ id, describedBy, invalid })}
-				<TextInput
-					{id}
-					{describedBy}
-					{invalid}
-					type="email"
-					value={email}
-					onInput={(value) => (email = value)}
-					required
-					autocomplete="username"
-				/>
-			{/snippet}
-		</LabeledField>
-		<Button type="submit" label="Send reset link" loading={submission.isSubmitting} />
-	</StackedForm>
-{/if}
+<EntryPage
+	title="Forgot your password?"
+	errorSummary={submission.errors.length > 0 ? errorSummary : undefined}
+	{content}
+/>

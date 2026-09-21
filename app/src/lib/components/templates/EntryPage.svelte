@@ -5,15 +5,17 @@
 	 * (unauthenticated entry) ... deliberately left". #490 gives it a
 	 * Template.
 	 *
-	 * Five routes share this shape: login and accept-invite on both the
-	 * Staff and portal sides, and signup. Each already has a product or
-	 * Practice name on the bar above (`SignedOutTopBar`, #452's shell),
-	 * so this Template's own job is the title, the error summary's
-	 * position, and the frame around whatever the route asks for next --
-	 * one form, two forms that switch, a Notice, a "choose a Practice" or
-	 * "choose an Engagement" picker. That variety is exactly the
-	 * region-internal arrangement ADR-0018 leaves to the page; this
-	 * Template owns only the page-level part.
+	 * Eight routes share this shape: login and accept-invite on both the
+	 * Staff and portal sides, signup, forgot-password and reset-password,
+	 * and the pre-account Offer read (#1222, joining the last three).
+	 * Each already has a product or Practice name on the bar above
+	 * (`SignedOutTopBar`, #452's shell), so this Template's own job is
+	 * the title, the error summary's position, and the frame around
+	 * whatever the route asks for next -- one form, two forms that
+	 * switch, a Notice, a "choose a Practice" or "choose an Engagement"
+	 * picker, a read-only record summary with decision controls. That
+	 * variety is exactly the region-internal arrangement ADR-0018 leaves
+	 * to the page; this Template owns only the page-level part.
 	 *
 	 * Top-aligned in a --form-max column, not centered in the viewport.
 	 * Every other Template in this layer -- FormPage, QuestionPage,
@@ -40,10 +42,12 @@
 		errorSummary?: Snippet;
 		/**
 		 * Everything under the title: the credentials form, a second step,
-		 * a Notice, a picker. A single region because the five routes this
+		 * a Notice, a picker. A single region because the eight routes this
 		 * Template serves differ in what that is -- accept-invite switches
-		 * between two forms and a read-only summary, the plain logins never
-		 * do -- and a Template does not get to know which.
+		 * between two forms and a read-only summary, the offer read
+		 * switches between an access-code form and a read-only record with
+		 * decision controls, the plain logins never do -- and a Template
+		 * does not get to know which.
 		 */
 		content: Snippet;
 	}
