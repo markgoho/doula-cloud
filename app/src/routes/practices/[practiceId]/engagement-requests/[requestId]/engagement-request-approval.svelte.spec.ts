@@ -167,6 +167,10 @@ describe('the approval screen', () => {
 			'href',
 			`/practices/${practiceId}/billing`
 		);
+		// The Notice already says there is nothing to spend -- the negative
+		// arithmetic behind it never reaches the screen (#1235).
+		await expect.element(testPage.getByText('Balance after')).not.toBeInTheDocument();
+		await expect.element(testPage.getByText('-1', { exact: true })).not.toBeInTheDocument();
 
 		await testPage.getByRole('button', { name: 'Approve and start the work' }).click();
 
