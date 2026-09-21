@@ -195,11 +195,7 @@ type Gap struct {
 // overlaps a half-open instant range. engagement_coverage_gaps_live
 // (00114) serves it: its leading column is the ANY($1) lookup and its
 // predicate is this query's cleared_at clause.
-const liveGapsSelect = `SELECT g.id, g.engagement_id, g.staff_id, s.name, g.starts_at, g.ends_at,
-	       g.reason, g.covering_staff_id, cs.name
-	  FROM engagement_coverage_gaps g
-	  LEFT JOIN staff s ON s.id = g.staff_id
-	  LEFT JOIN staff cs ON cs.id = g.covering_staff_id
+const liveGapsSelect = `SELECT ` + gapColumns + ` ` + gapJoins + `
 	 WHERE g.engagement_id = ANY($1::uuid[])
 	   AND g.cleared_at IS NULL
 	   AND g.starts_at < $3
@@ -220,19 +216,10 @@ func loadLiveGaps(ctx context.Context, tx *sql.Tx, engagementIDs []string, from,
 	}
 	defer func() { _ = rows.Close() }()
 	for rows.Next() {
-		var g Gap
-		var staffName, reason, coveringID, coveringName sql.NullString
-		if err := rows.Scan(&g.ID, &g.EngagementID, &g.StaffID, &staffName, &g.StartsAt, &g.EndsAt,
-			&reason, &coveringID, &coveringName); err != nil {
+		g, err := scanGap(rows)
+		if err != nil {
 			// coverage:ignore reason: row scan failure, not exercised by unit tests
-			return nil, fmt.Errorf("oncall: scan live gap: %w", err)
-		}
-		g.StaffName = displayName(staffName)
-		g.Reason = nullString(reason)
-		g.CoveringStaffID = nullString(coveringID)
-		if g.CoveringStaffID != nil {
-			name := displayName(coveringName)
-			g.CoveringStaffName = &name
+			return nil, err
 		}
 		out[g.EngagementID] = append(out[g.EngagementID], g)
 	}

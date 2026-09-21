@@ -3,9 +3,7 @@ package oncall
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
 	"errors"
-	"fmt"
 	"net/http"
 	"time"
 
@@ -209,24 +207,8 @@ func PutNarrowingHandler() http.Handler {
 // recordEngagement writes one on-call action to an Engagement's ledger,
 // naming the acting Staff member.
 func recordEngagement(ctx context.Context, tx *sql.Tx, practiceID, engagementID string, action activity.EngagementAction, diff any) error {
-	raw, err := json.Marshal(diff)
-	if err != nil {
-		// coverage:ignore reason: marshal of a fixed, always-serializable value never fails
-		return fmt.Errorf("oncall: marshal %s diff: %w", action, err)
-	}
 	actor, _ := staffauth.StaffID(ctx)
-	if err := activity.Record(ctx, tx, activity.Entry{
-		PracticeID:  practiceID,
-		SubjectKind: activity.SubjectEngagement,
-		SubjectID:   engagementID,
-		Action:      string(action),
-		Diff:        raw,
-		Actor:       activity.StaffActor(actor),
-	}); err != nil {
-		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		return fmt.Errorf("oncall: record %s: %w", action, err)
-	}
-	return nil
+	return record(ctx, tx, activity.SubjectEngagement, practiceID, engagementID, actor, string(action), diff)
 }
 
 func sameRule(a, b RuleRequest) bool {

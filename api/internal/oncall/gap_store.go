@@ -66,21 +66,34 @@ func lockLiveGap(ctx context.Context, tx *sql.Tx, engagementID, gapID string) (g
 	return f, nil
 }
 
-// readGap reads one gap as the response shows it.
-func readGap(ctx context.Context, tx *sql.Tx, gapID string) (Gap, error) {
+// gapColumns is the projection every Gap is read through, in the order
+// scanGap takes them. One list, so the roster's read and the write
+// handlers' read-back cannot shape a Gap two different ways.
+const gapColumns = `g.id, g.engagement_id, g.staff_id, s.name, g.starts_at, g.ends_at,
+	       g.reason, g.covering_staff_id, cs.name`
+
+// gapJoins resolves both Staff names a Gap carries. LEFT, because a
+// colleague whose Membership has ended is a row this Practice can no
+// longer see, and the reader gets the words for that rather than a bare
+// id (displayName).
+const gapJoins = `FROM engagement_coverage_gaps g
+	   LEFT JOIN staff s ON s.id = g.staff_id
+	   LEFT JOIN staff cs ON cs.id = g.covering_staff_id`
+
+// scanner is what a *sql.Row and a *sql.Rows both are, so scanGap serves
+// the one-row read and the list read without knowing which it is in.
+type scanner interface {
+	Scan(dest ...any) error
+}
+
+// scanGap reads one gapColumns row into the shape a response carries.
+func scanGap(row scanner) (Gap, error) {
 	var g Gap
 	var staffName, reason, coveringID, coveringName sql.NullString
-	if err := tx.QueryRowContext(ctx,
-		`SELECT g.id, g.engagement_id, g.staff_id, s.name, g.starts_at, g.ends_at,
-		        g.reason, g.covering_staff_id, cs.name
-		   FROM engagement_coverage_gaps g
-		   LEFT JOIN staff s ON s.id = g.staff_id
-		   LEFT JOIN staff cs ON cs.id = g.covering_staff_id
-		  WHERE g.id = $1`, gapID,
-	).Scan(&g.ID, &g.EngagementID, &g.StaffID, &staffName, &g.StartsAt, &g.EndsAt,
+	if err := row.Scan(&g.ID, &g.EngagementID, &g.StaffID, &staffName, &g.StartsAt, &g.EndsAt,
 		&reason, &coveringID, &coveringName); err != nil {
-		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		return Gap{}, fmt.Errorf("oncall: read coverage gap: %w", err)
+		// coverage:ignore reason: DB scan failure, not exercised by unit tests
+		return Gap{}, fmt.Errorf("oncall: scan coverage gap: %w", err)
 	}
 	g.StaffName = displayName(staffName)
 	g.Reason = nullString(reason)
@@ -92,19 +105,32 @@ func readGap(ctx context.Context, tx *sql.Tx, gapID string) (Gap, error) {
 	return g, nil
 }
 
-// recordGap writes one gap action to the Engagement's Activity ledger,
-// naming the acting Staff member.
+// readGap reads one gap as the response shows it.
+func readGap(ctx context.Context, tx *sql.Tx, gapID string) (Gap, error) {
+	return scanGap(tx.QueryRowContext(ctx, `SELECT `+gapColumns+` `+gapJoins+` WHERE g.id = $1`, gapID))
+}
+
+// recordGap writes one gap action to the Engagement's Activity ledger.
 func recordGap(ctx context.Context, tx *sql.Tx, practiceID, engagementID, actorStaffID string, action activity.EngagementAction, diff gapDiff) error {
+	return record(ctx, tx, activity.SubjectEngagement, practiceID, engagementID, actorStaffID, string(action), diff)
+}
+
+// record is the one path every on-call write takes to the Activity
+// ledger: marshal the diff, name the acting Staff member, and say which
+// action failed if the write does. The three write sites -- a gap, an
+// Engagement's rule or narrowing, and the Practice's own rule -- differ
+// only in the subject they name and the diff they carry.
+func record(ctx context.Context, tx *sql.Tx, subjectKind, practiceID, subjectID, actorStaffID, action string, diff any) error {
 	raw, err := json.Marshal(diff)
 	if err != nil {
-		// coverage:ignore reason: marshal of a fixed, always-serializable struct never fails
-		return fmt.Errorf("oncall: marshal gap diff: %w", err)
+		// coverage:ignore reason: marshal of a fixed, always-serializable value never fails
+		return fmt.Errorf("oncall: marshal %s diff: %w", action, err)
 	}
 	if err := activity.Record(ctx, tx, activity.Entry{
 		PracticeID:  practiceID,
-		SubjectKind: activity.SubjectEngagement,
-		SubjectID:   engagementID,
-		Action:      string(action),
+		SubjectKind: subjectKind,
+		SubjectID:   subjectID,
+		Action:      action,
 		Diff:        raw,
 		Actor:       activity.StaffActor(actorStaffID),
 	}); err != nil {
