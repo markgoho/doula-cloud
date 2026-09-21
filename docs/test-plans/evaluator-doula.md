@@ -33,8 +33,8 @@ marketing site is out of scope for this map).
 
 | Step | Action | Expected result | Mark |
 | --- | --- | --- | --- |
-| 2.1 | Look for a price, per month, for two doulas | No price is published anywhere, inside the product or outside it | `missing-feature (TB-G2)` [#285](https://github.com/markgoho/doula-cloud/issues/285) |
-| 2.1-a | Open the only money surface that does exist, `/practices/[practiceId]/billing`, once signed up | It sells "credits" and nothing says what a credit buys | `manual` |
+| 2.1 | Look for a price, per month, for two doulas | No price is published on the marketing site. TB-G2's in-product half is closed ([#285](https://github.com/markgoho/doula-cloud/issues/285)); the marketing-site half moved to [#868](https://github.com/markgoho/doula-cloud/issues/868) (what the site says) and [#284](https://github.com/markgoho/doula-cloud/issues/284) (building it) | `missing-feature (TB-G2)` [#868](https://github.com/markgoho/doula-cloud/issues/868) [#284](https://github.com/markgoho/doula-cloud/issues/284) |
+| 2.1-a | Open the only money surface that does exist, `/practices/[practiceId]/billing`, once signed up | `Billing` states `One Credit covers one Engagement` and `One Credit costs $20.00`, and the ledger's Origin column runs every value through a label instead of printing the raw enum (TB-G2's in-product half, closed by [#285](https://github.com/markgoho/doula-cloud/issues/285), and TB-G3, closed by [#286](https://github.com/markgoho/doula-cloud/issues/286)) | `manual` |
 
 **Abandon check**: an unanswered price reads as expensive.
 
@@ -45,7 +45,7 @@ marketing site is out of scope for this map).
 | 3.1 | Open `/signup` | One screen, four fields, no email confirmation step. This is the strongest leg of her journey | `automated (signup-form.e2e.ts)` |
 | 3.2 | Fill Practice name, Your name, Email, Password | "Practice name" asks her to name a business she may not think of as one | `automated (signup-form.e2e.ts)` |
 | 3.3 | Press **Create Practice** | `POST /api/staff/signup` creates the Practice, the Staff row, and a membership holding Owner + Admin + Doula in one statement | `automated (signup-form.e2e.ts)` |
-| 3.3-a | Look for anything telling her roles exist, or that she now holds three | Nothing at signup or on the first screen does. The **Staff** screen does, one unprompted click away, and it reads `Owner, Admin, Doula` — the team's words, since [#262](https://github.com/markgoho/doula-cloud/issues/262) replaced the raw enum render | `manual` |
+| 3.3-a | Look for anything telling her roles exist, or that she now holds three | The signup screen itself now states it, before she commits: the account holds Owner, Admin and Doula, why, that an invited person gets only the roles chosen for her, and where roles are read and changed afterward ([#290](https://github.com/markgoho/doula-cloud/issues/290), closed). The role-scoped **Staff** nav item repeats it, and the roster reads `Owner, Admin, Doula`, the team's words, not the schema's ([#262](https://github.com/markgoho/doula-cloud/issues/262), closed) | `manual` |
 
 **Abandon check**: low risk. Time the whole stage — under a minute is the claim.
 
@@ -53,11 +53,11 @@ marketing site is out of scope for this map).
 
 | Step | Action | Expected result | Mark |
 | --- | --- | --- | --- |
-| 4.1 | Land on `/practices/[practiceId]` | `Welcome to {practice name}` and seven links: Clients, Billing, Invite a Staff member, Staff, Plan Templates, Contract Template, Payments | `manual` |
-| 4.1-a | Search the screen for the words "birth plan" and "visit" | Neither appears. Six of the seven links are administration; nothing here is about supporting a birth | `manual` |
-| 4.2 | Choose where to go first | No guidance on which link comes first | `manual` |
+| 4.1 | Land on `/practices/[practiceId]` | `Welcome to {practice name}`. The old seven-link menu is gone ([#452](https://github.com/markgoho/doula-cloud/issues/452), closed): Clients, Billing and Staff moved into the shell's persistent, role-scoped top bar, Plan Templates, Contract Template and Payments moved under **Settings**, and this screen is `OverviewHub`'s own content | `manual` |
+| 4.1-a | Search the screen for the words "birth plan" and "visit" | With no Client yet, `OverviewHub`'s empty state reads: "Nothing is here yet, because no Client is. Add one and this becomes the Client's birth plan, your visits to the Client, and the contract and invoices between you." Both words appear, naming the work rather than administration | `manual` |
+| 4.2 | Choose where to go first | One action, **Add your first Client**, not a menu | `manual` |
 
-**Abandon check**: this screen. It is an empty filing cabinet, not proof (TB-G4).
+**Abandon check**: none remaining. TB-G4 is closed by [#287](https://github.com/markgoho/doula-cloud/issues/287).
 
 ### Stage 5 — Kick the tires
 
@@ -74,9 +74,9 @@ marketing site is out of scope for this map).
 
 | Step | Action | Expected result | Mark |
 | --- | --- | --- | --- |
-| 6.1 | Export her data — any format — or delete the account | No export of any kind and no account deletion. "Can I get out again?" is unanswerable | `missing-feature (TB-G5)` [#288](https://github.com/markgoho/doula-cloud/issues/288) |
+| 6.1 | Export her data — any format — or delete the account | **Settings** offers both, as two separate acts: a whole-Practice data export ([TB-G5](https://github.com/markgoho/doula-cloud/issues/288), closed) and **Delete this Practice**, a 30-day countdown before erasure ([#871](https://github.com/markgoho/doula-cloud/issues/871), closed, split out of #288) | `manual` |
 
-**Abandon check**: half her stated question has no answer.
+**Abandon check**: both halves of her stated question are now answered.
 
 ### Stage 7 — Judge the way in (migrating owner)
 
@@ -93,12 +93,10 @@ cannot come with her.
 | Mark | Steps |
 | --- | --- |
 | `automated` | 5 |
-| `manual` | 10 |
-| `missing-feature` | 5 steps over 4 gaps ([TB-G1](https://github.com/markgoho/doula-cloud/issues/284), [TB-G2](https://github.com/markgoho/doula-cloud/issues/285), [TB-G5](https://github.com/markgoho/doula-cloud/issues/288), [TB-G6](https://github.com/markgoho/doula-cloud/issues/289)) |
+| `manual` | 11 |
+| `missing-feature` | 4 steps over 3 gaps ([TB-G1](https://github.com/markgoho/doula-cloud/issues/284), [TB-G2](https://github.com/markgoho/doula-cloud/issues/868), [TB-G6](https://github.com/markgoho/doula-cloud/issues/289)) |
 
-TB-G3 (unexplained credits), TB-G4 (the admin-menu first screen) and TB-G7 (the
-unsignposted roster model) are observed at 2.1-a, 4.1-a and 3.3-a: all three
-screens open, and what they show is the finding. TB-G1 backs two steps.
+Five gaps are closed: TB-G2's in-product half and TB-G3 (unexplained credits) are both observed at 2.1-a; TB-G4 (the admin-menu first screen) at 4.1-a; TB-G7 (the unsignposted roster model) at 3.3-a; and TB-G5 (export and account deletion) at 6.1. All four steps now show the state that closed the gap rather than the gap itself. TB-G1 backs two steps.
 
 3.3-a moved from `missing-feature (TB-G7)` to `manual` in the 2026-08-22 walk
 below: the step can be performed, and what the Staff screen hands back is the
@@ -123,6 +121,24 @@ migration, the Go BFF and the Firebase Auth emulator, all local.
 | 5.3 | `birth-plan.e2e.ts` | pass |
 
 **1 automated steps: all pass.**
+
+### 2026-09-20 — six falsified findings corrected ([#873](https://github.com/markgoho/doula-cloud/issues/873))
+
+A desk pass, not a walk, over the six findings the 2026-09-06/07 triage of [#319](https://github.com/markgoho/doula-cloud/issues/319)'s children falsified: TB-G2's price and scope, TB-G3, TB-G4, TB-G5 and TB-G7 (five gaps, the table below) and the Credit-per-Engagement unit claim (below the table, already correct, needed no change). Every claim below was read out of the code and the closed gap issues, not out of the stale prose.
+
+| Gap | Was | Is, and what settled it |
+| --- | --- | --- |
+| TB-G2 | A credit costs $5.00; no price anywhere | The in-product half is closed ([#285](https://github.com/markgoho/doula-cloud/issues/285)): `Billing` states `One Credit costs $20.00` ([#439](https://github.com/markgoho/doula-cloud/issues/439), [#448](https://github.com/markgoho/doula-cloud/issues/448)). The marketing-site half is still open, now at [#868](https://github.com/markgoho/doula-cloud/issues/868) and [#284](https://github.com/markgoho/doula-cloud/issues/284) |
+| TB-G3 | Nothing says what a credit buys; the ledger origin prints as a raw enum | Closed ([#286](https://github.com/markgoho/doula-cloud/issues/286)): `Billing` states one Credit covers one Engagement, and `originLabel` maps every ledger origin to prose |
+| TB-G4 | The first screen is an admin link menu, the abandon point | Closed ([#287](https://github.com/markgoho/doula-cloud/issues/287)): the seven-link menu is gone (redistributed to the shell's top bar and a **Settings** hub), and this screen is `OverviewHub`'s zero-Client state, naming the work and offering one action |
+| TB-G5 | No export, no account deletion | Closed, split in two: a whole-Practice export ([#288](https://github.com/markgoho/doula-cloud/issues/288)) and a 30-day-countdown deletion ([#871](https://github.com/markgoho/doula-cloud/issues/871)), both on **Settings** |
+| TB-G7 | The Staff screen reads the schema's word, `office_manager`; nothing signposts the roster | Closed: the roster reads `Admin` ([#262](https://github.com/markgoho/doula-cloud/issues/262)), a role-scoped **Staff** nav item signposts it, and signup itself now states what it grants ([#290](https://github.com/markgoho/doula-cloud/issues/290), [#878](https://github.com/markgoho/doula-cloud/issues/878)) |
+
+The Credit-unit claim ("one Credit covers one Engagement, not one Client") was already correct on both documents and needed no correction.
+
+**One mark moved**: 6.1 leaves `missing-feature (TB-G5)` for `manual`, because the feature it named is built. The Marks summary above is recounted from the Steps tables, to 5 / 11 / 0 / 4, and [README.md](README.md)'s run-status row and Total move with it.
+
+[#869](https://github.com/markgoho/doula-cloud/issues/869) merged just ahead of this pass and already swapped `office_manager` for `admin` on the TB-G7 gap row and step 3.3-a, and recorded [#262](https://github.com/markgoho/doula-cloud/issues/262) as closed — its own commit message explicitly deferred the Staff-nav-signposting half to this ticket. This pass builds on that: the Staff-nav fact, the signup-silence fact ([#878](https://github.com/markgoho/doula-cloud/issues/878)) and the full TB-G7 closure are new here. The remaining `office_manager` mentions elsewhere in the repo are either dated walk-log rows #869 deliberately left untouched or other Personas' documents, both out of scope here.
 
 ### 2026-09-10 — Add Client corrected against ADR-0017 ([#1121](https://github.com/markgoho/doula-cloud/issues/1121))
 
