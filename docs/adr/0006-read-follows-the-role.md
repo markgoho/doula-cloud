@@ -106,7 +106,7 @@ negotiating it. So one attribute governs two things at once: what a Doula reads
 about money, and which Engagements she reads at all.
 
 That attribute is **not** a fourth value in `practice_role`
-(`('owner', 'office_manager', 'doula')`). A role says what you **do**; employment
+(`('owner', 'office_manager', 'doula')` when this ADR was written; `office_manager` was renamed to `admin` by [ADR-0008](0008-employment-type-gates-the-practice-attachment-gates-the-engagement.md)). A role says what you **do**; employment
 says what you **are to the business**, and the two are orthogonal — an Admin can be
 a contractor too. Folding them into one array would allow a membership holding
 `{contractor}` and nothing else, which means nothing. Employment type is a separate

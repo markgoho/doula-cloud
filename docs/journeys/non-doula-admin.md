@@ -39,7 +39,7 @@ Dee is a domain expert on the business half and a stranger to the care half.
 
 | Domain term | What Dee says | Note |
 | --- | --- | --- |
-| Admin | "office manager" | Dee's own word for themself is the word `CONTEXT.md` ruled out — **and the screen agrees with Dee, not with `CONTEXT.md`** (RA-G3) |
+| Admin | "office manager" | Dee's own word for themself is the word `CONTEXT.md` ruled out. The screen now agrees with `CONTEXT.md`, not with Dee: `rolesLabel` renders `Admin` (RA-G3, closed) |
 | Engagement | "the file", "a booking" | |
 | Contract | "the agreement" | `CONTEXT.md` avoids "agreement" |
 | Invoice | "the bill" | `CONTEXT.md` avoids "bill" |
@@ -67,7 +67,7 @@ Dee is a domain expert on the business half and a stranger to the care half.
 **Pain points**: this stage cannot be walked — there is no role UI (RA-G2). And
 even once the role is set, nothing reads it.
 
-- **2.1** — Renata sets `office_manager` on Dee's membership. No screen does this.
+- **2.1** — Renata sets `admin` on Dee's membership. No screen does this.
 
 ### Stage 3 — Discover what the Admin role grants
 
@@ -195,7 +195,7 @@ Record it as an open decision, not as a pass or a failure.
 
 | ID | Stage | Layer | Gap | Issue |
 | --- | --- | --- | --- | --- |
-| DW-G1 | 3 | Both | The Admin role grants nothing. The permission model is binary owner / non-owner, and `office_manager` is never read. Dee is indistinguishable from any other non-owner. | [#269](https://github.com/markgoho/doula-cloud/issues/269) |
+| DW-G1 | 3 | Both | **Closed.** The Admin role granted nothing when this map was drawn; `admin` is read now for the Practice's Stripe Connect state ([#267](https://github.com/markgoho/doula-cloud/issues/267)) — see the Stage 3 note above. | [#269](https://github.com/markgoho/doula-cloud/issues/269) |
 | DW-G2 | 8 | Experience | Missing Stripe infrastructure surfaces to a non-owner as "ask a Practice Owner" — an infrastructure gap that reads as a permission error. | [#270](https://github.com/markgoho/doula-cloud/issues/270) |
 | DW-G3 | 9 | Interaction | No manual Payment recording. Payments are written only by the Stripe webhook, so a cheque or bank transfer cannot be recorded. | [#271](https://github.com/markgoho/doula-cloud/issues/271) |
 | DW-G4 | 3 | Interaction | The Billing balance and ledger are not owner-gated in the UI or the API (`billing/balance.go:86` takes any Staff member), so any non-owner sees the Practice's spending. Buying credits is correctly owner-gated (`billing/purchase.go:33`). | [#272](https://github.com/markgoho/doula-cloud/issues/272) |
@@ -205,7 +205,7 @@ Record it as an open decision, not as a pass or a failure.
 | DW-G8 | every stage | Both | **No screen in the product has a title.** `document.title` is `""` on `/login`, the practice landing, Clients, Billing and the Engagement page, so every tab is blank and SvelteKit's own live region announces `untitled page` to a screen reader on each client-side navigation. Found on Dee's walk because it is on every screen Dee opens; it is app-wide, not theirs. | [#276](https://github.com/markgoho/doula-cloud/issues/276) |
 
 Also hit here, filed on their owning maps: **RA-G1** (no invite email),
-**RA-G2** (no role UI), **RA-G3** (`office_manager` on screen), **RA-G4** (no
+**RA-G2** (no role UI), **RA-G3** (raw enum on screen, closed), **RA-G4** (no
 Doula on an Engagement), **MO-G3** (Client takes name and email only).
 
 ## Open decisions

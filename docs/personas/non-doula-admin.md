@@ -3,7 +3,7 @@
 - **Archetype**: Office manager who never works a Visit
 - **Pronouns**: they/them
 - **Surface**: staff app, business screens
-- **Roles**: **Admin** only — stored today as the enum value `office_manager`
+- **Roles**: **Admin** only — stored today as the enum value `admin`
 - **Entry point**: an invitation from Renata, accepted at `/accept-invite`
 
 ## Who they are
@@ -45,10 +45,7 @@ recorded Payment — all without Dee ever opening a Care Plan or logging a Visit
   .../payments/connect` there — so Dee reads a Practice's Stripe Connect state. Only
   the *write* in `payments/connect.go` is still Owner-only. The sentence above is kept
   as the finding that was made, not as a description of trunk.
-- **Admin is the settled word** (CONTEXT.md), and the code has not caught up: the enum
-  value is still `office_manager`, and the Staff list renders roles as raw strings
-  (`member.roles.join(', ')`), so Dee shows up on screen as `office_manager`. Journey
-  maps, test plans, and gap-issue titles all say **Admin**.
+- **Admin is the settled word** (CONTEXT.md), and both halves of the old gap are closed: migration `00031_admin_role_rename.sql` renamed the enum from `office_manager` to `admin`, and [#262](https://github.com/markgoho/doula-cloud/issues/262) replaced the Staff list's raw `member.roles.join(', ')` with `rolesLabel`, so Dee now shows up on screen as **Admin**.
 - Dee is reachable as a distinct persona because the invite path grants zero roles
   (`invite.go` inserts `'{}'`), and an Owner then assigns a subset. Signup is the
   opposite: it grants all three at once. Only the invite route produces an Admin.

@@ -18,7 +18,7 @@ fixture and is the only practice-side plan that needs no seeded state.
 | Step | Action | Expected result | Mark |
 | --- | --- | --- | --- |
 | 1.1 | Open `/signup` | The form shows Practice name, Your name, Email, Password | `automated (signup-form.e2e.ts)` |
-| 1.2 | Fill all four and press **Create Practice** | `POST /api/staff/signup` succeeds; a Practice, a Staff row, and a membership holding `owner`, `office_manager` and `doula` are created together | `automated (signup-form.e2e.ts)` |
+| 1.2 | Fill all four and press **Create Practice** | `POST /api/staff/signup` succeeds; a Practice, a Staff row, and a membership holding `owner`, `admin` and `doula` are created together | `automated (signup-form.e2e.ts)` |
 | 1.3 | Land on `/practices/[practiceId]` | `Welcome to {practice name}`, with all seven tiles including the five owner-only ones | `automated (signup-form.e2e.ts)` |
 | 1.3-a | Read the credit balance on **Billing** | `Credit balance: 3`, one `signup_bonus` ledger row of `+3` | `automated (billing.e2e.ts)` |
 
