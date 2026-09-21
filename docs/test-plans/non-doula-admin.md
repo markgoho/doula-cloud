@@ -2,19 +2,13 @@
 
 - **Journey**: [non-doula-admin.md](../journeys/non-doula-admin.md)
 - **Persona**: [non-doula-admin.md](../personas/non-doula-admin.md)
-- **A pass means**: an Engagement with a Doula assigned, a signed Contract, and an
-  Invoice with a recorded Payment — reached without Dee opening a Care Plan or
-  logging a Visit.
+- **A pass means**: an Engagement with a Doula assigned, a signed Contract, and an Invoice with a recorded Payment — reached without Dee opening a Care Plan or logging a Visit.
 
 ## Preconditions
 
-- A Practice with an Owner (Renata) and at least one other Staff member holding
-  `doula`, so there is somebody for Dee to assign.
-- An invitation issued by the Owner. The link is emailed to the invited address
-  and is not printed on the invite screen (#316), so read it from the mailbox.
-- Dee's role rides that Invitation, and **Edit membership** on the Staff screen
-  changes it afterwards (#316). The zero-role membership DW-G1's second run
-  needed is no longer reachable, so run the plan once, with `admin`.
+- A Practice with an Owner (Renata) and at least one other Staff member holding `doula`, so there is somebody for Dee to assign.
+- An invitation issued by the Owner. The link is emailed to the invited address and is not printed on the invite screen (#316), so read it from the mailbox.
+- Dee's role rides that Invitation, and **Edit membership** on the Staff screen changes it afterwards (#316). The zero-role membership DW-G1's second run needed is no longer reachable, so run the plan once, with `admin`.
 
 ## Steps
 
@@ -41,8 +35,7 @@
 | 3.2 | Open Credits | The Practice's credit balance and purchase ledger render for an Admin — the balance read is `staffauth.OwnerAndAdmin` since [DW-G4](https://github.com/markgoho/doula-cloud/issues/272), so an Admin is inside the seat and a Doula meets the refusal screen instead | `manual` |
 | 3.2-a | Buy credits | **Not refused.** The purchase declares the same Owner-and-Admin seat the balance does ([#257](https://github.com/markgoho/doula-cloud/issues/257), [#910](https://github.com/markgoho/doula-cloud/issues/910)), and the button is drawn plainly enabled for every session that reaches the screen ([#1162](https://github.com/markgoho/doula-cloud/issues/1162)) | `manual` |
 
-The Billing screen is automated for an *Owner* (`billing.e2e.ts`); no spec reads it
-as a non-owner, which is the case that matters here.
+The Billing screen is automated for an *Owner* (`billing.e2e.ts`); no spec reads it as a non-owner, which is the case that matters here.
 
 ### Stage 4 — Take the call and create the Client
 
@@ -76,14 +69,7 @@ as a non-owner, which is the case that matters here.
 | 7.2 | Find every Engagement whose Contract is unsigned | No such list; every Engagement must be opened in turn | `missing-feature (DW-G5)` [#273](https://github.com/markgoho/doula-cloud/issues/273) |
 | 7.2-a | Raise an Invoice against the Contract just voided | **It is not refused.** `POST .../contract/invoices` does not read the Contract's status and goes straight to the Connect gate, while **Create Invoice** keeps rendering on a `voided` Contract ([DW-G7](https://github.com/markgoho/doula-cloud/issues/275)) | `manual` |
 
-**Nadia crossing, settled.** `POST .../contract/void` had no step here.
-[Her plan](loss-client.md) needs a voided Contract for its stage 6, and the only
-control that produces one is on this screen — so **7.1-a is added** and the void
-path is walked once, on the Staff side that owns it. Stages 8 and 9 are
-**unchanged**: what she adds there is the Client's side of the same moment — the
-bare word `voided` (**NH-G5**) and the absence of any Invoice surface in the portal
-(**NH-G6**) — and both gaps are hers to own. The step ids here are otherwise
-untouched.
+**Nadia crossing, settled.** `POST .../contract/void` had no step here. [Her plan](loss-client.md) needs a voided Contract for its stage 6, and the only control that produces one is on this screen — so **7.1-a is added** and the void path is walked once, on the Staff side that owns it. Stages 8 and 9 are **unchanged**: what she adds there is the Client's side of the same moment — the bare word `voided` (**NH-G5**) and the absence of any Invoice surface in the portal (**NH-G6**) — and both gaps are hers to own. The step ids here are otherwise untouched.
 
 ### Stage 8 — Raise the Invoice
 
@@ -92,24 +78,14 @@ untouched.
 | 8.1 | `POST .../contract/invoices` | **Creates the Invoice.** `201 {"connectRequired":false,"invoice":{…,"status":"open"}}` on a Practice whose Stripe account is connected, for Dee, who is not an Owner — the endpoint never was owner-gated. On a Practice that has *not* connected it answers `200 {"connectRequired":true}` instead; `IsOwner` carries `omitempty` (`api/internal/payments/invoice.go:51`), so for a non-owner the field is absent rather than `false`, and the client defaults it (`+page.svelte:311`) | `manual` |
 | 8.2 | Read the message the UI shows | On an unconnected Practice: "Ask a Practice Owner to connect Stripe" — an infrastructure gap wearing a permission error's costume ([DW-G2](https://github.com/markgoho/doula-cloud/issues/270)). The same sentence is on the **Payments** screen for a non-owner, so DW-G2 is not confined to this stage | `manual` |
 
-**8.1 was `blocked` for most of 2026-08-22, and cleared on Dee's own walk.** The
-reason changed four times in a day, which is worth keeping because each change was
-real work rather than a re-reading.
+**8.1 was `blocked` for most of 2026-08-22, and cleared on Dee's own walk.** The reason changed four times in a day, which is worth keeping because each change was real work rather than a re-reading.
 
 1. The Sandbox did not exist. [#242](https://github.com/markgoho/doula-cloud/issues/242) created it, and Credits cleared.
 2. Stripe refused `POST /v1/accounts` for new integrations while every merged Connect path was Accounts v1. [#247](https://github.com/markgoho/doula-cloud/issues/247) moved the leg to Accounts v2.
 3. No Practice had been through the hosted onboarding. Two attempts from a Playwright-launched Chromium were **CAPTCHA'd** — headless at the email step, headed at the password step.
 4. Driven through the user's own Chrome with `playwriter`, **no CAPTCHA appeared on any screen** and it completed. `card_payments` and `payouts` both went `active`, written by the `capability_status_updated` thin event rather than by a poll.
 
-**The CAPTCHA is not the boundary; the browser is.** Stripe challenged a
-Playwright-launched Chromium in *both* headless and headed mode — at the email
-step and at the password step respectively — and never challenged the user's own
-Chrome driven through `playwriter`, across all nine screens. So this is not an
-attendance requirement and the step is not closed to automation: it is walkable
-unattended **provided it is driven through a real browser**, which is why 8.1 is
-`manual` rather than `blocked`. See
-[connect-onboarding.md](connect-onboarding.md) for the recipe, so no later walk
-re-derives it.
+**The CAPTCHA is not the boundary; the browser is.** Stripe challenged a Playwright-launched Chromium in *both* headless and headed mode — at the email step and at the password step respectively — and never challenged the user's own Chrome driven through `playwriter`, across all nine screens. So this is not an attendance requirement and the step is not closed to automation: it is walkable unattended **provided it is driven through a real browser**, which is why 8.1 is `manual` rather than `blocked`. See [connect-onboarding.md](connect-onboarding.md) for the recipe, so no later walk re-derives it.
 
 ### Stage 9 — Record the Payment (moment of truth)
 
@@ -117,8 +93,7 @@ re-derives it.
 | --- | --- | --- | --- |
 | 9.1 | Mark an Invoice paid after a bank transfer | No screen, no endpoint. Payments are written only by the Stripe webhook, so the normal case for a small practice cannot be recorded at all | `missing-feature (DW-G3)` [#271](https://github.com/markgoho/doula-cloud/issues/271) |
 
-A live Stripe account would not fix this step. It is not the out-of-scope Stripe
-gap; the missing capability is manual Payment recording.
+A live Stripe account would not fix this step. It is not the out-of-scope Stripe gap; the missing capability is manual Payment recording.
 
 ### Stage 10 — Read a filled Care Plan or Birth Plan
 
@@ -135,25 +110,17 @@ gap; the missing capability is manual Payment recording.
 | `blocked` | 0 (8.1 cleared on the walk — Connect completed) |
 | `missing-feature` | 3 ([RA-G4](https://github.com/markgoho/doula-cloud/issues/225), [DW-G3](https://github.com/markgoho/doula-cloud/issues/271), [DW-G5](https://github.com/markgoho/doula-cloud/issues/273)) |
 
-Stages 8 and 9 sat either side of the `blocked` / `missing-feature` line, and the
-walk proved the line was drawn in the right place: connecting a live Stripe account
-**did** clear 8.1 and did **not** touch 9.1, because recording a bank transfer has
-no code path at all. This plan now has no `blocked` step.
+Stages 8 and 9 sat either side of the `blocked` / `missing-feature` line, and the walk proved the line was drawn in the right place: connecting a live Stripe account **did** clear 8.1 and did **not** touch 9.1, because recording a bank transfer has no code path at all. This plan now has no `blocked` step.
 
-Dee's is the only practice-side plan with **no automated step**. Every spec in the
-suite runs as an Owner who signed up, and the Admin exists only past the invite
-route, which no spec walks.
+Dee's is the only practice-side plan with **no automated step**. Every spec in the suite runs as an Owner who signed up, and the Admin exists only past the invite route, which no spec walks.
 
 ## Run log
 
 ### 2026-08-22 — automated steps ([#209](https://github.com/markgoho/doula-cloud/issues/209))
 
-`bun run test:e2e` in `app/`, whole suite, one run: **16 passed, 0 failed** (20.5s).
-Stack per [docs/testing.md](../testing.md) — Postgres in compose, the goose
-migration, the Go BFF and the Firebase Auth emulator, all local.
+`bun run test:e2e` in `app/`, whole suite, one run: **16 passed, 0 failed** (20.5s). Stack per [docs/testing.md](../testing.md) — Postgres in compose, the goose migration, the Go BFF and the Firebase Auth emulator, all local.
 
-This plan has **no** `automated` step, so the suite says nothing about it.
-Every step below stage 1 waits on the walk.
+This plan has **no** `automated` step, so the suite says nothing about it. Every step below stage 1 waits on the walk.
 
 ### 2026-09-10, later — one button name ([#1121](https://github.com/markgoho/doula-cloud/issues/1121))
 
@@ -182,18 +149,9 @@ A desk pass, not a walk. [#318](https://github.com/markgoho/doula-cloud/issues/3
 
 ### 2026-08-22 — manual walk ([#236](https://github.com/markgoho/doula-cloud/issues/236))
 
-`bun run dev:full` in `app/`, walked in a desktop browser at 1280x720 as Dee
-Whitlock, with separate contexts for Renata (Owner) and for the Client who has to
-sign. Preconditions built as the plan allows: `POST /api/staff/signup` for
-`Rooted Birth Collective`, then `POST .../invitations` for Priya Raman and for Dee,
-and `PATCH .../staff/{staffId}/roles` giving Priya `doula` so stage 5 has a target.
-This plan has no `automated` step, so nothing was skipped as already-run.
+`bun run dev:full` in `app/`, walked in a desktop browser at 1280x720 as Dee Whitlock, with separate contexts for Renata (Owner) and for the Client who has to sign. Preconditions built as the plan allows: `POST /api/staff/signup` for `Rooted Birth Collective`, then `POST .../invitations` for Priya Raman and for Dee, and `PATCH .../staff/{staffId}/roles` giving Priya `doula` so stage 5 has a target. This plan has no `automated` step, so nothing was skipped as already-run.
 
-**On "run the plan twice".** Walking all 24 steps twice would prove DW-G1 no
-better than walking the *comparison* twice, so the second run is a fixed battery
-rather than the whole plan: the same 10 endpoints and the same 7 screens, captured
-once at `roles = '{}'` and again at `office_manager`, and diffed. The session's
-call, recorded here rather than asked.
+**On "run the plan twice".** Walking all 24 steps twice would prove DW-G1 no better than walking the *comparison* twice, so the second run is a fixed battery rather than the whole plan: the same 10 endpoints and the same 7 screens, captured once at `roles = '{}'` and again at `office_manager`, and diffed. The session's call, recorded here rather than asked.
 
 | Step | Mark | Result | What was seen |
 | --- | --- | --- | --- |
@@ -223,87 +181,28 @@ call, recorded here rather than asked.
 | 9.1 | `missing-feature (DW-G3)` [#271](https://github.com/markgoho/doula-cloud/issues/271) | as expected | Confirmed unwalkable. No control on the Engagement page matches pay / paid / mark / record, and `api/main.go` has no route that writes a Payment. The only writer is the `invoice.paid` webhook |
 | 10.1 | `manual` | as expected — **and correct** | Dee opened the Engagement and read both filled plans in full: the Care Plan's support people, pain management and backup-doula checkbox, and the Birth Plan's setting, people to notify and atmosphere. Per ADR-0006 an Admin reading both is right, not a leak |
 
-**21 `manual` steps walked (8.1 among them, after the addendum below); 4
-`missing-feature` steps confirmed unwalkable; no `blocked` step left on this
-plan.** Three expected results
-were falsified — 1.3, 3.1 and 5.2 — and one new step, 7.2-a, was added by the
-walk. Two gaps minted on the journey map (**DW-G6**, **DW-G7**), plus **DW-G8**
-below. No `journey-gap` issue was filed — that is
-[#209](https://github.com/markgoho/doula-cloud/issues/209).
+**21 `manual` steps walked (8.1 among them, after the addendum below); 4 `missing-feature` steps confirmed unwalkable; no `blocked` step left on this plan.** Three expected results were falsified — 1.3, 3.1 and 5.2 — and one new step, 7.2-a, was added by the walk. Two gaps minted on the journey map (**DW-G6**, **DW-G7**), plus **DW-G8** below. No `journey-gap` issue was filed — that is [#209](https://github.com/markgoho/doula-cloud/issues/209).
 
-**One finding is not Dee's and is not any stage's: no screen in the product has a
-title.** `document.title` is `""` on `/login`, the practice landing, Clients,
-Billing and the Engagement page, so every browser tab is blank and SvelteKit's own
-live region announces `untitled page` to a screen reader at every client-side
-navigation. It surfaced here because it is on every screen this walk opened. Filed
-as **DW-G8** on Dee's map for want of a better owner; it belongs to all nine.
+**One finding is not Dee's and is not any stage's: no screen in the product has a title.** `document.title` is `""` on `/login`, the practice landing, Clients, Billing and the Engagement page, so every browser tab is blank and SvelteKit's own live region announces `untitled page` to a screen reader at every client-side navigation. It surfaced here because it is on every screen this walk opened. Filed as **DW-G8** on Dee's map for want of a better owner; it belongs to all nine.
 
-**Verdict against "a pass means": it does not pass, and it fails at both ends.**
-The middle holds and holds well — Dee creates the Client, sends the portal invite,
-builds, sends and voids the Contract, and reads both plans, all as a non-owner,
-refused only where the refusal is correct. What fails is the paperwork the journey
-is named for. There is **no Doula assigned**, and now no proxy for one either: the
-one act the map offered as a workaround is Doula-gated and refuses them (DW-G6).
-There is **no recorded Payment**, and no route that could write one (DW-G3).
+**Verdict against "a pass means": it does not pass, and it fails at both ends.** The middle holds and holds well — Dee creates the Client, sends the portal invite, builds, sends and voids the Contract, and reads both plans, all as a non-owner, refused only where the refusal is correct. What fails is the paperwork the journey is named for. There is **no Doula assigned**, and now no proxy for one either: the one act the map offered as a workaround is Doula-gated and refuses them (DW-G6). There is **no recorded Payment**, and no route that could write one (DW-G3).
 
-Their moment of truth landed where the map put it, and the walk made the argument
-for it honest rather than merely plausible. Stage 5 lost the comparison for the
-wrong reason — the map credited Dee with a product workaround they do not have.
-Stage 9 still wins, on the ground that survives: a doula can be told by phone, and
-the work happens anyway; money that arrived by bank transfer cannot be written
-down anywhere, and the book stays open.
+Their moment of truth landed where the map put it, and the walk made the argument for it honest rather than merely plausible. Stage 5 lost the comparison for the wrong reason — the map credited Dee with a product workaround they do not have. Stage 9 still wins, on the ground that survives: a doula can be told by phone, and the work happens anyway; money that arrived by bank transfer cannot be written down anywhere, and the book stays open.
 
-The role, meanwhile, is a null. Two runs of the same battery, one with no roles at
-all and one holding `office_manager`, came back identical in every byte. Whatever
-Dee is allowed to do, they are allowed to do it because they are Staff.
+The role, meanwhile, is a null. Two runs of the same battery, one with no roles at all and one holding `office_manager`, came back identical in every byte. Whatever Dee is allowed to do, they are allowed to do it because they are Staff.
 
 ### 2026-08-22, later — Connect completed, and 8.1 cleared ([#236](https://github.com/markgoho/doula-cloud/issues/236))
 
-The walk above left 8.1 `blocked` because Stripe's hosted onboarding served a
-CAPTCHA to the Playwright-launched browser. It was then driven again through the
-**user's own Chrome**, which Stripe did not challenge the same way, and it
-completed. Recipe kept at [connect-onboarding.md](connect-onboarding.md).
+The walk above left 8.1 `blocked` because Stripe's hosted onboarding served a CAPTCHA to the Playwright-launched browser. It was then driven again through the **user's own Chrome**, which Stripe did not challenge the same way, and it completed. Recipe kept at [connect-onboarding.md](connect-onboarding.md).
 
-`acct_1U7Rwv1rKod8tdZe`, an unregistered US business, industry *Other personal
-services*, Stripe test bank, Radar Pro, Climate and Tax declined. On submission
-Stripe redirected to `?connect=return`; `status` went `onboarding_incomplete` ->
-`pending` -> **`active`**, with `cardPaymentsStatus` and `payoutsStatus` both
-`active` and no requirements outstanding. **The webhook wrote it**: the
-`capability_status_updated` thin event landed on `/api/stripe/account-webhook`
-and every delivery answered `200`.
+`acct_1U7Rwv1rKod8tdZe`, an unregistered US business, industry *Other personal services*, Stripe test bank, Radar Pro, Climate and Tax declined. On submission Stripe redirected to `?connect=return`; `status` went `onboarding_incomplete` -> `pending` -> **`active`**, with `cardPaymentsStatus` and `payoutsStatus` both `active` and no requirements outstanding. **The webhook wrote it**: the `capability_status_updated` thin event landed on `/api/stripe/account-webhook` and every delivery answered `200`.
 
 Four things fell out of it.
 
-**8.1 clears, and the practice side has no `blocked` step left.** As Dee — not an
-Owner — `POST .../contract/invoices` answered `201 {"connectRequired":false,…}`
-and created a `$900.00` Invoice at `open`. The endpoint never was owner-gated and
-the walk now proves it end to end rather than at a gate.
+**8.1 clears, and the practice side has no `blocked` step left.** As Dee — not an Owner — `POST .../contract/invoices` answered `201 {"connectRequired":false,…}` and created a `$900.00` Invoice at `open`. The endpoint never was owner-gated and the walk now proves it end to end rather than at a gate.
 
-**DW-G7 is worse than the pre-connect walk could show.** The Contract was voided
-and the *same* call was made again: `201`, a second Invoice, `$500.00`, `open`.
-Stripe holds a real, finalized, payable invoice with a hosted payment URL against
-an agreement the Practice has already voided. Before Connect this only reached the
-`connectRequired` gate, so the gap read as a missing status check; it is in fact a
-bill a Client can pay for a Contract that no longer exists.
+**DW-G7 is worse than the pre-connect walk could show.** The Contract was voided and the *same* call was made again: `201`, a second Invoice, `$500.00`, `open`. Stripe holds a real, finalized, payable invoice with a hosted payment URL against an agreement the Practice has already voided. Before Connect this only reached the `connectRequired` gate, so the gap read as a missing status check; it is in fact a bill a Client can pay for a Contract that no longer exists.
 
-**An Invoice can be raised before the Practice can take payment.** The $900 one
-was created while `cardPaymentsStatus` was still `restricted` and the account was
-`pending`. The product's gate is *has a connected account*, not *can actually
-accept a card payment*, so a Client can be sent a bill during Stripe's review
-window. Recorded here rather than minted: whether that is wrong is a decision
-about what the gate should mean, and [#209](https://github.com/markgoho/doula-cloud/issues/209)
-is where it gets argued.
+**An Invoice can be raised before the Practice can take payment.** The $900 one was created while `cardPaymentsStatus` was still `restricted` and the account was `pending`. The product's gate is *has a connected account*, not *can actually accept a card payment*, so a Client can be sent a bill during Stripe's review window. Recorded here rather than minted: whether that is wrong is a decision about what the gate should mean, and [#209](https://github.com/markgoho/doula-cloud/issues/209) is where it gets argued.
 
-**The Practice name reaches the Client, and the Payments screen does not reach the
-Owner.** Both Stripe invoices carry `account_name: "Rooted Birth Collective"`, so
-the `display_name` fix from `7261a59` holds on a second, independent Practice —
-the `DOULA.CLOU` regression has not come back. The Payments screen is the opposite
-story: seconds after a successful submission it still read `Onboarding incomplete`
-/ "Stripe still needs some details before Clients can pay you" and offered
-**Continue Stripe onboarding**, a dead end, while the API already said `pending`
-with zero requirements. It fetches once in `onMount` and never again
-(`settings/payments/+page.svelte:21`), so its own banner — "Status updates once
-Stripe confirms your account is active" — describes something the page never does.
-A manual reload showed `Awaiting Stripe review` / "Nothing is needed from you."
-New gap **MO-G11** on [Maya's map](../journeys/solo-birth-doula.md), which owns
-the Connect step.
+**The Practice name reaches the Client, and the Payments screen does not reach the Owner.** Both Stripe invoices carry `account_name: "Rooted Birth Collective"`, so the `display_name` fix from `7261a59` holds on a second, independent Practice — the `DOULA.CLOU` regression has not come back. The Payments screen is the opposite story: seconds after a successful submission it still read `Onboarding incomplete` / "Stripe still needs some details before Clients can pay you" and offered **Continue Stripe onboarding**, a dead end, while the API already said `pending` with zero requirements. It fetches once in `onMount` and never again (`settings/payments/+page.svelte:21`), so its own banner — "Status updates once Stripe confirms your account is active" — describes something the page never does. A manual reload showed `Awaiting Stripe review` / "Nothing is needed from you." New gap **MO-G11** on [Maya's map](../journeys/solo-birth-doula.md), which owns the Connect step.

@@ -115,7 +115,7 @@ The design system is built to evoke the warmth of a private journal and the reli
 The style is a blend of **Editorial Minimalism** and **Tonal Layering**. It prioritizes high-contrast serif typography and generous whitespace to create a sense of calm and focus. Rather than using shadows to create depth, the system relies on subtle shifts in background warmth to define different functional areas, ensuring the interface feels organic and grounded.
 
 ## Colors
-The palette is rooted in earth tones, moving away from clinical blues and grays. 
+The palette is rooted in earth tones, moving away from clinical blues and grays.
 
 - **Ground**: The base layer of the application uses a warm cream (#fff8f6), providing a soft, non-reflective canvas that reduces eye strain.
 - **Tonal Stepping**: Depth is achieved through a hierarchy of warmth. Use `#fdf0ec` for secondary containers (like sidebars or list views) and `#f9e8e2` for interactive surface elements (like input backgrounds or active cards).
@@ -123,7 +123,7 @@ The palette is rooted in earth tones, moving away from clinical blues and grays.
 - **Typography**: All text should be rendered in a deep, warm charcoal (#2d1a15) rather than pure black to maintain the organic feel.
 
 ## Typography
-The typographic hierarchy creates an "Editorial" feel. 
+The typographic hierarchy creates an "Editorial" feel.
 
 - **Headlines**: Playfair Display provides an authoritative yet maternal voice. Its high-contrast strokes should be used for page titles and section headers to give the app the presence of a well-bound book.
 - **Body & Labels**: Inter is used for all functional data and long-form reading. It provides the necessary clarity for practice management tasks, schedules, and clinical notes.
@@ -132,7 +132,7 @@ The typographic hierarchy creates an "Editorial" feel.
 ## Layout & Spacing
 This design system employs a **Fluid Grid** model with high internal margins to maintain a relaxed, premium feel.
 
-- **Rhythm**: All spacing is derived from an 8px base unit. 
+- **Rhythm**: All spacing is derived from an 8px base unit.
 - **Density**: Use "Medium-High" density for data tables but "Low" density for dashboard views and intake forms. Components should never feel cramped; when in doubt, increase the `xl` padding (40px) between major sections.
 - **Structure**: Desktop layouts should favor a wide left-hand navigation bar (on the `surface_sunken` tone) with a centered or wide-margin content area. This mimics the layout of a ledger or journal.
 
@@ -142,7 +142,7 @@ In this design system, **shadows are strictly prohibited.** Depth is communicate
 1.  **Level 0 (The Ground):** The base `#fff8f6` layer.
 2.  **Level 1 (The Surface):** Use `#fdf0ec` for containers that sit on the ground, such as sidebars or card groups.
 3.  **Level 2 (The Focus):** Use `#f9e8e2` for elements that need to stand out within a surface, such as active input fields or selected list items.
-4.  **The Stroke:** Use a very thin (1px) border in a slightly darker version of the surface color to define boundaries without adding visual weight. 
+4.  **The Stroke:** Use a very thin (1px) border in a slightly darker version of the surface color to define boundaries without adding visual weight.
 
 This creates a "flat-tactile" look where elements feel like paper layers stacked on a desk.
 

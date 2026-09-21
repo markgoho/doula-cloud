@@ -1,16 +1,8 @@
 # One bounded context; the Client register translates at the UI edge
 
-> **Extended by [ADR-0009](0009-notification-is-one-term-two-voices-keyed-by-recipient.md).**
-> Binding scope widens from "the client portal" to every Client-facing surface,
-> starting with Practice Notification subject and body wording. The reasoning
-> below stands; only the scope of what the register binds has changed.
+> **Extended by [ADR-0009](0009-notification-is-one-term-two-voices-keyed-by-recipient.md).** Binding scope widens from "the client portal" to every Client-facing surface, starting with Practice Notification subject and body wording. The reasoning below stands; only the scope of what the register binds has changed.
 
-> **One paragraph superseded by [ADR-0015](0015-three-facts-on-an-engagement-the-person-lives-in-the-login.md).**
-> The paragraph beginning "It covers **states, not only nouns**" fixes a `_Client says_:` label for
-> each of four `engagement_status` values. There are three values now: `postpartum` is not a status,
-> and the terminal state this document argued was missing turned out to be a value too many rather
-> than one too few. The rule that produced the change — *if a status cannot be labeled kindly for
-> every Client, the status set is missing a value* — stands, and ADR-0015 is its first application.
+> **One paragraph superseded by [ADR-0015](0015-three-facts-on-an-engagement-the-person-lives-in-the-login.md).** The paragraph beginning "It covers **states, not only nouns**" fixes a `_Client says_:` label for each of four `engagement_status` values. There are three values now: `postpartum` is not a status, and the terminal state this document argued was missing turned out to be a value too many rather than one too few. The rule that produced the change — *if a status cannot be labeled kindly for every Client, the status set is missing a value* — stands, and ADR-0015 is its first application.
 
 Doula Cloud's glossary is the language of the model and of the team. It is not automatically the copy a Client reads, and the persona cast made that seam visible: Renata Alvarez and Dee Whitlock say "Engagement" and "Plan Instance" natively, because they are the domain experts. Hannah Sorensen does not. She says "my doula", "my birth plan", "my due date". Nadia Haddad's vocabulary after a stillbirth is different again, and getting it wrong there is not a copy nit. The question this settles is whether the client portal is a **second bounded context** with its own model and its own language, or **one context** whose UI translates at the last step.
 

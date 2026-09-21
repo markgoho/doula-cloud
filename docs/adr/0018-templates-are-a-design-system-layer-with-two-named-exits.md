@@ -1,65 +1,30 @@
 # Templates are a design-system layer, and there are exactly two ways to deviate from one
 
-Twenty-three routes each invent their own page layout. That is not an accident, it is a decision:
-[#93](https://github.com/markgoho/doula-cloud/issues/93)'s scope note read *"Atomic Design scope: atoms,
-molecules, organisms only. Templates/pages stay as ordinary SvelteKit routes, not design-system
-artifacts."* This document reverses it, on the wayfinder map
-[Holistic application design](https://github.com/markgoho/doula-cloud/issues/405), decided on
-[#410](https://github.com/markgoho/doula-cloud/issues/410).
+Twenty-three routes each invent their own page layout. That is not an accident, it is a decision: [#93](https://github.com/markgoho/doula-cloud/issues/93)'s scope note read *"Atomic Design scope: atoms, molecules, organisms only. Templates/pages stay as ordinary SvelteKit routes, not design-system artifacts."* This document reverses it, on the wayfinder map [Holistic application design](https://github.com/markgoho/doula-cloud/issues/405), decided on [#410](https://github.com/markgoho/doula-cloud/issues/410).
 
 The reversal is small. The part worth writing down is the second half of the title.
 
 ## Template means the Atomic Design layer, and the domain nouns stay qualified
 
-`CONTEXT.md` already defines **Plan Template** and **Client Field Template**: a Practice's own field
-definitions, per [ADR-0001](0001-practice-defined-plan-templates.md) and
-[ADR-0017](0017-twelve-columns-a-practice-defined-layer-and-an-engagement-that-is-asked-for.md). Adding a
-UI layer called Template creates an ambiguity, and it is tolerated rather than designed away, because
-Atomic Design is one of two things the map declared it would not change.
+`CONTEXT.md` already defines **Plan Template** and **Client Field Template**: a Practice's own field definitions, per [ADR-0001](0001-practice-defined-plan-templates.md) and [ADR-0017](0017-twelve-columns-a-practice-defined-layer-and-an-engagement-that-is-asked-for.md). Adding a UI layer called Template creates an ambiguity, and it is tolerated rather than designed away, because Atomic Design is one of two things the map declared it would not change.
 
-The ambiguity is resolved by convention, not by renaming: **the domain nouns are always written
-qualified**, and a bare "Template" therefore always means the Atomic Design layer. Considered and
-rejected: calling the layer `PageShell` or `Scaffold`, which removes the collision at the cost of no
-longer speaking Atomic Design in the one codebase organized by it.
+The ambiguity is resolved by convention, not by renaming: **the domain nouns are always written qualified**, and a bare "Template" therefore always means the Atomic Design layer. Considered and rejected: calling the layer `PageShell` or `Scaffold`, which removes the collision at the cost of no longer speaking Atomic Design in the one codebase organized by it.
 
-The components themselves carry **no `Template` suffix** — `templates/RecordDetail.svelte`, not
-`RecordDetailTemplate.svelte` — for the same reason `Button.svelte` is not `ButtonAtom.svelte`: the
-directory carries the tier. This also keeps every bare "Template" in prose meaning the layer and never
-a component.
+The components themselves carry **no `Template` suffix** — `templates/RecordDetail.svelte`, not `RecordDetailTemplate.svelte` — for the same reason `Button.svelte` is not `ButtonAtom.svelte`: the directory carries the tier. This also keeps every bare "Template" in prose meaning the layer and never a component.
 
 ## What a Template owns
 
 A Template owns **page-level arrangement, and nothing else**.
 
-- **Chrome belongs to `+layout.svelte`.** The top bar, the flat nav, the Practice switcher and the
-  avatar menu described in [the design brief](../design/brief.md)'s Density section are built once per
-  side — Staff and Portal — in the existing layout files. A Template never renders navigation and never
-  renders sign-out, so it can be dropped into any route without knowing which side of the app it is on,
-  and can be rendered in a test with no session.
-- **Page gutters and max-width belong to the Template**, not the layout. This is the one piece of
-  chrome-adjacent styling that moves down, and it moves so that a full-bleed document page — archetype
-  G, the portal Birth Plan and Contract print views — can opt out later without fighting the shell.
-- **Layout primitives are internal.** A Template is built out of [ADR-0003](0003-css-layout-primitives-as-native-custom-elements.md)'s
-  light-DOM custom elements — `stack-l`, `sidebar-l`, `switcher-l` and the rest — and exposes none of
-  them. No `gap` prop, no `sidebarWidth`. **Page-level arrangement is the Template's job; region-internal
-  arrangement is the page's** — inside a region, a page still reaches for a primitive to put three
-  buttons in a row. This finally gives the twelve primitives a clear consumer; they were built in one
-  pass ahead of any.
+- **Chrome belongs to `+layout.svelte`.** The top bar, the flat nav, the Practice switcher and the avatar menu described in [the design brief](../design/brief.md)'s Density section are built once per side — Staff and Portal — in the existing layout files. A Template never renders navigation and never renders sign-out, so it can be dropped into any route without knowing which side of the app it is on, and can be rendered in a test with no session.
+- **Page gutters and max-width belong to the Template**, not the layout. This is the one piece of chrome-adjacent styling that moves down, and it moves so that a full-bleed document page — archetype G, the portal Birth Plan and Contract print views — can opt out later without fighting the shell.
+- **Layout primitives are internal.** A Template is built out of [ADR-0003](0003-css-layout-primitives-as-native-custom-elements.md)'s light-DOM custom elements — `stack-l`, `sidebar-l`, `switcher-l` and the rest — and exposes none of them. No `gap` prop, no `sidebarWidth`. **Page-level arrangement is the Template's job; region-internal arrangement is the page's** — inside a region, a page still reaches for a primitive to put three buttons in a row. This finally gives the twelve primitives a clear consumer; they were built in one pass ahead of any.
 
 ## The API extends #97 rather than reopening it
 
-[#97](https://github.com/markgoho/doula-cloud/issues/97) fixed typed Svelte props as the sole external
-configuration surface: no `class` or `style` passthrough, no general CSS-variable escape hatch. A
-Template is nothing but regions of markup passed in from outside, so it makes **Snippets** central where
-they had been incidental. This is an extension, not a reversal — #97 governs *styling* escape hatches,
-and a Snippet is content. It is the third confirmed use, after `LabeledField`'s typed `children` and
-`DataTable`'s `rowActions`, which [#199](https://github.com/markgoho/doula-cloud/issues/199) already
-called a confirmed second.
+[#97](https://github.com/markgoho/doula-cloud/issues/97) fixed typed Svelte props as the sole external configuration surface: no `class` or `style` passthrough, no general CSS-variable escape hatch. A Template is nothing but regions of markup passed in from outside, so it makes **Snippets** central where they had been incidental. This is an extension, not a reversal — #97 governs *styling* escape hatches, and a Snippet is content. It is the third confirmed use, after `LabeledField`'s typed `children` and `DataTable`'s `rowActions`, which [#199](https://github.com/markgoho/doula-cloud/issues/199) already called a confirmed second.
 
-The shape is hybrid, and the hybrid is forced by a real page: the staff Engagement detail is an `h1`, a
-`DescriptionList`, then **a variable number** of `<h2>`-headed sections — Visits, N Plan sections,
-Contract, Invoices, Offers, Messages — which named region props cannot express. So fixed regions are
-named Snippet props and the repeatable part is a typed array, `DataTable.rowActions`'s shape generalised.
+The shape is hybrid, and the hybrid is forced by a real page: the staff Engagement detail is an `h1`, a `DescriptionList`, then **a variable number** of `<h2>`-headed sections — Visits, N Plan sections, Contract, Invoices, Offers, Messages — which named region props cannot express. So fixed regions are named Snippet props and the repeatable part is a typed array, `DataTable.rowActions`'s shape generalised.
 
 | Archetype | Component | Regions |
 |---|---|---|
@@ -71,370 +36,143 @@ named Snippet props and the repeatable part is a typed array, `DataTable.rowActi
 | **E** Question page | `templates/QuestionPage.svelte` | `journey`, `steps`, `allStepsHref?`, `backHref`, `errorSummary?`, `caption?`, `question`, `hint?`, `content`, `actions` — see the second amendment below |
 | **E** Check answers | `templates/CheckAnswers.svelte` | `journey`, `steps`, `allStepsHref?`, `backHref`, `title`, `caption?`, `errorSummary?`, `sections`, `isWide?`, `actions` — same amendment |
 
-`FormPage.fieldsets` is ADR-0017's shape: the twelve-column structural core is one fieldset and each
-Practice-defined section is another appended below it — the pattern the
-[#406](https://github.com/markgoho/doula-cloud/issues/406) survey found in Cliniko and endorsed as the
-one matching ADR-0017.
+`FormPage.fieldsets` is ADR-0017's shape: the twelve-column structural core is one fieldset and each Practice-defined section is another appended below it — the pattern the [#406](https://github.com/markgoho/doula-cloud/issues/406) survey found in Cliniko and endorsed as the one matching ADR-0017.
 
-`OverviewHub`'s required empty-state pair is the surprising entry, and it is the strongest argument for
-the layer existing at all. `docs/journeys/evaluator-doula.md` names the Practice landing page as Tasha
-Bell's **abandon point** — *"It is an empty filing cabinet, not proof"* — because nobody had to think
-about the zero-data case. A Template that **cannot be instantiated without** an empty-state region makes
-that structurally impossible to forget. It is the difference between a Template being page furniture and
-being a rule.
+`OverviewHub`'s required empty-state pair is the surprising entry, and it is the strongest argument for the layer existing at all. `docs/journeys/evaluator-doula.md` names the Practice landing page as Tasha Bell's **abandon point** — *"It is an empty filing cabinet, not proof"* — because nobody had to think about the zero-data case. A Template that **cannot be instantiated without** an empty-state region makes that structurally impossible to forget. It is the difference between a Template being page furniture and being a rule.
 
 ## Two named exits, and no third
 
-Uniformity is the point, but deviation has to stay possible or people will fight the Templates instead
-of using them. The rule above closes every *anonymous* escape route — no `class`, no `style`, no
-primitive knobs — so deviation needs a named mechanism.
+Uniformity is the point, but deviation has to stay possible or people will fight the Templates instead of using them. The rule above closes every *anonymous* escape route — no `class`, no `style`, no primitive knobs — so deviation needs a named mechanism.
 
 There are exactly two:
 
-1. **Opt out entirely.** A route that genuinely does not fit imports no Template and composes raw. This
-   is visible in review as a deliberate act, and findable later by grepping for routes with no Template
-   import. That grep *is* the enforcement mechanism, and it costs nothing to build.
-2. **Propose a variant prop or a new Template.** The deviation is absorbed, and the second page that
-   needs it gets it free.
+1. **Opt out entirely.** A route that genuinely does not fit imports no Template and composes raw. This is visible in review as a deliberate act, and findable later by grepping for routes with no Template import. That grep *is* the enforcement mechanism, and it costs nothing to build.
+2. **Propose a variant prop or a new Template.** The deviation is absorbed, and the second page that needs it gets it free.
 
-Which exit applies is decided by the bar this repo already uses for extraction:
-[#196](https://github.com/markgoho/doula-cloud/issues/196) built `DescriptionList` only once two
-byte-identical consumers existed, while [#187](https://github.com/markgoho/doula-cloud/issues/187)'s
-diverging pair did not clear it; [#189](https://github.com/markgoho/doula-cloud/issues/189) kept
-`invite`'s inline `<code>` as a raw exception rather than widen `Text`. **One consumer stays a raw
-exception; two identical consumers earn a variant or a Template.**
+Which exit applies is decided by the bar this repo already uses for extraction: [#196](https://github.com/markgoho/doula-cloud/issues/196) built `DescriptionList` only once two byte-identical consumers existed, while [#187](https://github.com/markgoho/doula-cloud/issues/187)'s diverging pair did not clear it; [#189](https://github.com/markgoho/doula-cloud/issues/189) kept `invite`'s inline `<code>` as a raw exception rather than widen `Text`. **One consumer stays a raw exception; two identical consumers earn a variant or a Template.**
 
-Considered and rejected: `class` passthrough on Templates only, on the grounds that they are page-level
-rather than atoms. Rejected because it is anonymous and ungrepable — it reopens #97 by the side door,
-and it removes the asymmetry that makes this work. The asymmetry is the whole design: deviating is
-permitted and costs one moment of thought, conforming is free, so conformity wins by default rather than
-by prohibition.
+Considered and rejected: `class` passthrough on Templates only, on the grounds that they are page-level rather than atoms. Rejected because it is anonymous and ungrepable — it reopens #97 by the side door, and it removes the asymmetry that makes this work. The asymmetry is the whole design: deviating is permitted and costs one moment of thought, conforming is free, so conformity wins by default rather than by prohibition.
 
-This rule is expected to be revised. As the Templates meet real routes, where deviation is acceptable —
-or necessary — will become clearer than it can be now; what this document fixes is that deviation is
-never *anonymous*, not that today's bar is final.
+This rule is expected to be revised. As the Templates meet real routes, where deviation is acceptable — or necessary — will become clearer than it can be now; what this document fixes is that deviation is never *anonymous*, not that today's bar is final.
 
 ## Where Templates live, and how they are proven
 
-`app/src/lib/components/templates/`, beside the three existing tiers. That location opts Templates into
-both CI gates knowingly:
+`app/src/lib/components/templates/`, beside the three existing tiers. That location opts Templates into both CI gates knowingly:
 
-- The **100% line-coverage gate** on `src/lib/**`. Route files under `routes/**` sit outside it, which is
-  why [#202](https://github.com/markgoho/doula-cloud/issues/202) shipped without a route spec; a Template
-  is mostly markup, so its spec is cheap, but it is a real spec per Template rather than none.
-- **`style-guide.spec.ts`**, which reads the tier directories off disk and fails CI for any component with
-  no matching `/style-guide` page. Its `tiers` array grows by one string.
+- The **100% line-coverage gate** on `src/lib/**`. Route files under `routes/**` sit outside it, which is why [#202](https://github.com/markgoho/doula-cloud/issues/202) shipped without a route spec; a Template is mostly markup, so its spec is cheap, but it is a real spec per Template rather than none.
+- **`style-guide.spec.ts`**, which reads the tier directories off disk and fails CI for any component with no matching `/style-guide` page. Its `tiers` array grows by one string.
 
-Each Template gets its own style-guide page rendered with realistic placeholder content, because an
-unfilled Template is an empty frame. Those pages render **outside** `style-guide/+layout.svelte`'s
-`box-l`/`stack-l` wrapper, inside a bordered frame standing in for the viewport — otherwise a Template
-that owns its own gutters and max-width renders nothing like it does in the app. Exempting Templates from
-the gate was considered and rejected: Templates are the layer most likely to drift, precisely because they
-are the least visible.
+Each Template gets its own style-guide page rendered with realistic placeholder content, because an unfilled Template is an empty frame. Those pages render **outside** `style-guide/+layout.svelte`'s `box-l`/`stack-l` wrapper, inside a bordered frame standing in for the viewport — otherwise a Template that owns its own gutters and max-width renders nothing like it does in the app. Exempting Templates from the gate was considered and rejected: Templates are the layer most likely to drift, precisely because they are the least visible.
 
 ## Scope
 
-Seven layout archetypes were found across all 23 routes and are recorded in #405's Notes. **Three get
-Templates here** — B, D and E. (Archetype E later turned out to be three Templates rather than one; see
-the 2026-08-29 amendment below.) A (unauthenticated entry), C (index/list), F (settings/editor) and G
-(document/print) are deliberately left, as is retrofitting the remaining routes onto these three.
+Seven layout archetypes were found across all 23 routes and are recorded in #405's Notes. **Three get Templates here** — B, D and E. (Archetype E later turned out to be three Templates rather than one; see the 2026-08-29 amendment below.) A (unauthenticated entry), C (index/list), F (settings/editor) and G (document/print) are deliberately left, as is retrofitting the remaining routes onto these three.
 
-The Practice landing page's *content* is not decided here either. The persona and journey documents supply
-it — an Offer inbox, roster health, credit and Connect state, and the empty state — but three of the
-blocks they ask for cannot be served: there is no practice-wide contracts-awaiting-signature endpoint, no
-unpaid-invoice roll-up, and coverage is blocked at the schema, since `00007_visit.sql` gives a Visit no
-date at all. Those are product and backend work beyond this map's destination.
+The Practice landing page's *content* is not decided here either. The persona and journey documents supply it — an Offer inbox, roster health, credit and Connect state, and the empty state — but three of the blocks they ask for cannot be served: there is no practice-wide contracts-awaiting-signature endpoint, no unpaid-invoice roll-up, and coverage is blocked at the schema, since `00007_visit.sql` gives a Visit no date at all. Those are product and backend work beyond this map's destination.
 
 
 ## Amendment, 2026-08-29 — `RecordDetail` gains a `contents` region
 
-Added on [#433](https://github.com/markgoho/doula-cloud/issues/433), drawing the two Engagement detail
-pages. The staff one is the page this Template was shaped against, and drawing it produced **eight**
-sections: Contract, Visits, Care Plan, Birth Plan, Invoices, Offers, Messages, Activity.
+Added on [#433](https://github.com/markgoho/doula-cloud/issues/433), drawing the two Engagement detail pages. The staff one is the page this Template was shaped against, and drawing it produced **eight** sections: Contract, Visits, Care Plan, Birth Plan, Invoices, Offers, Messages, Activity.
 
-Eight `<h2>`s in one column is a page you scroll to search. Two journey gaps say so independently:
-**PR-G5** ([#280](https://github.com/markgoho/doula-cloud/issues/280)) is that the Birth Plan is *"a
-section partway down a long page with no deep link"*, found at Priya Raman's moment of truth — reading it
-on a phone, in a hospital corridor, under time pressure — and **PR-G9**
-([#283](https://github.com/markgoho/doula-cloud/issues/283)) is that the page renders **no `<a>` elements
-at all**, so there is no way off it or around it.
+Eight `<h2>`s in one column is a page you scroll to search. Two journey gaps say so independently: **PR-G5** ([#280](https://github.com/markgoho/doula-cloud/issues/280)) is that the Birth Plan is *"a section partway down a long page with no deep link"*, found at Priya Raman's moment of truth — reading it on a phone, in a hospital corridor, under time pressure — and **PR-G9** ([#283](https://github.com/markgoho/doula-cloud/issues/283)) is that the page renders **no `<a>` elements at all**, so there is no way off it or around it.
 
-So `RecordDetail` takes an optional **`contents`** region: a list of the page's own sections, rendered
-beside the column at desktop width and as a jump-to strip under the title at narrow width. It is
-optional because archetype D covers short records too, and a contents list above three sections is
-furniture.
+So `RecordDetail` takes an optional **`contents`** region: a list of the page's own sections, rendered beside the column at desktop width and as a jump-to strip under the title at narrow width. It is optional because archetype D covers short records too, and a contents list above three sections is furniture.
 
-Two things this deliberately is not. It is **not a nav** — a Template still renders no navigation, and
-these are in-page anchors, not routes, so the rule in *What a Template owns* stands unbroken. And it is
-**not a tab set or an accordion**: `docs/design/govuk-alignment.md` marks both *"nothing needs one"*, and
-hiding the Birth Plan behind a tab is PR-G5 with extra steps rather than a fix for it.
+Two things this deliberately is not. It is **not a nav** — a Template still renders no navigation, and these are in-page anchors, not routes, so the rule in *What a Template owns* stands unbroken. And it is **not a tab set or an accordion**: `docs/design/govuk-alignment.md` marks both *"nothing needs one"*, and hiding the Birth Plan behind a tab is PR-G5 with extra steps rather than a fix for it.
 
-The arrangement is not new — it is the 260px rail plus 1052px column the Intake question pages already
-established, so archetype D reads as the same product as archetype E rather than inventing a second page
-geometry.
+The arrangement is not new — it is the 260px rail plus 1052px column the Intake question pages already established, so archetype D reads as the same product as archetype E rather than inventing a second page geometry.
 
 ### Built on [#424](https://github.com/markgoho/doula-cloud/issues/424): the region is a boolean
 
-`contents` is the one region that is **not** a Snippet. It is `isContentsShown`, a boolean, and the list
-is derived from `sections`. That is what keeps the "it is not a nav" promise enforceable rather than
-merely stated: a Snippet region would let a route hand the rail a route, and nothing in the Template
-could stop it.
+`contents` is the one region that is **not** a Snippet. It is `isContentsShown`, a boolean, and the list is derived from `sections`. That is what keeps the "it is not a nav" promise enforceable rather than merely stated: a Snippet region would let a route hand the rail a route, and nothing in the Template could stop it.
 
-The drawing put a 260px rail beside a 1052px column, which is 1360px of content and wider than
-`--page-max`'s 76rem. The token wins: the rail stays at its drawn 16.25rem and the column takes whatever
-`--page-max` leaves. A second page width for one archetype would be a worse answer than a column 144px
-narrower than a 1440px artboard suggested.
+The drawing put a 260px rail beside a 1052px column, which is 1360px of content and wider than `--page-max`'s 76rem. The token wins: the rail stays at its drawn 16.25rem and the column takes whatever `--page-max` leaves. A second page width for one archetype would be a worse answer than a column 144px narrower than a 1440px artboard suggested.
 
 **Superseded on [#541](https://github.com/markgoho/doula-cloud/issues/541).** `--page-max` no longer exists: it froze a page column at 1216px, which would have spent a quarter of the fluid ramp [#531](https://github.com/markgoho/doula-cloud/issues/531) introduced, whatever monitor the page was on. The rail still stays at its drawn 16.25rem; the column now takes whatever the space it is given leaves, and the paragraph above stands only as the reason a second page width was refused.
 
 **Amended on [#543](https://github.com/markgoho/doula-cloud/issues/543).** A Template that cannot spend more room does not take it: where its content is fixed by its purpose — a question page asks one question — the rail and the column center in whatever space is given rather than pinning to the inline start. This is the companion to [#531](https://github.com/markgoho/doula-cloud/issues/531)'s rule that past the plateau more room buys more content, read from the other end, and not an exception to it: neither statement licenses a width, and both put the decision on what the content is. `QuestionPage` and `CheckAnswers` do it with `justify-content: center` over a `var(--page-rail) minmax(0, var(--form-max))` grid — the sizes the rail and the column already had, so no page width returns by another route. `CheckAnswers`'s wide exit has something to put there, so it restores the flexible track, which leaves `justify-content` no free space and stops the centring by itself.
 
-The same list is rendered twice — a rail and a jump-to strip — with exactly one of them `display: none`
-at any width, which takes the other out of the accessibility tree entirely. One list restyled by a
-container query is not available: the two looks are `Link` variants (`rail` and `chip`), and an atom does
-not get to know how wide its page frame is.
+The same list is rendered twice — a rail and a jump-to strip — with exactly one of them `display: none` at any width, which takes the other out of the accessibility tree entirely. One list restyled by a container query is not available: the two looks are `Link` variants (`rail` and `chip`), and an atom does not get to know how wide its page frame is.
 
 ## Amendment, 2026-08-29 — archetype E is three Templates, and one of them renders a landmark
 
-Added on [#464](https://github.com/markgoho/doula-cloud/issues/464), building what
-[#432](https://github.com/markgoho/doula-cloud/issues/432) drew. There are now **five** Templates, not
-three.
+Added on [#464](https://github.com/markgoho/doula-cloud/issues/464), building what [#432](https://github.com/markgoho/doula-cloud/issues/432) drew. There are now **five** Templates, not three.
 
 ### Why a prop could not do it
 
-`FormPage` renders `<Heading level={1}>` and, separately, `<fieldset><legend>`. A GOV.UK question page
-needs the legend — or the `<label>`, where the page holds a single input — to **be** the `<h1>`, so a
-screen reader announces the question once rather than twice. The [Dates
-pattern](https://design-system.service.gov.uk/patterns/dates/) ships the markup:
-`<legend><h1 class="govuk-fieldset__heading">`. That is a different tree, not a different attribute.
+`FormPage` renders `<Heading level={1}>` and, separately, `<fieldset><legend>`. A GOV.UK question page needs the legend — or the `<label>`, where the page holds a single input — to **be** the `<h1>`, so a screen reader announces the question once rather than twice. The [Dates pattern](https://design-system.service.gov.uk/patterns/dates/) ships the markup: `<legend><h1 class="govuk-fieldset__heading">`. That is a different tree, not a different attribute.
 
-A mode flag on `FormPage` was considered and rejected on the account owner's call: it hides two
-genuinely different page shapes behind a boolean, which is the thing the *two named exits* rule above
-exists to prevent. `FormPage` keeps the job it is right for — a genuinely multi-fieldset form — and
-after this its caller is `invite`, not `clients/new`.
+A mode flag on `FormPage` was considered and rejected on the account owner's call: it hides two genuinely different page shapes behind a boolean, which is the thing the *two named exits* rule above exists to prevent. `FormPage` keeps the job it is right for — a genuinely multi-fieldset form — and after this its caller is `invite`, not `clients/new`.
 
-- **`QuestionPage`** — one question per page, where GOV.UK's *one thing* is a question and not a field.
-  The question is a discriminated union, `{ as: 'legend' }` or `{ as: 'label', for }`, so the `for` a
-  label needs cannot be forgotten and cannot be supplied where it means nothing.
-- **`CheckAnswers`** — the summary page that ends the sequence, with key / value / **Change** rows on
-  hairline dividers and GOV.UK's two column widths.
+- **`QuestionPage`** — one question per page, where GOV.UK's *one thing* is a question and not a field. The question is a discriminated union, `{ as: 'legend' }` or `{ as: 'label', for }`, so the `for` a label needs cannot be forgotten and cannot be supplied where it means nothing.
+- **`CheckAnswers`** — the summary page that ends the sequence, with key / value / **Change** rows on hairline dividers and GOV.UK's two column widths.
 
 ### The step rail is a `<nav>`, which amends *What a Template owns*
 
-The rule above says a Template never renders navigation and never renders a landmark. `QuestionPage`
-and `CheckAnswers` both render `organisms/StepRail.svelte`, which is a `<nav>` named after the journey.
-That is a deliberate amendment, decided by the account owner on #464 over the two alternatives (a plain
-unnamed list, or a slot in the shell).
+The rule above says a Template never renders navigation and never renders a landmark. `QuestionPage` and `CheckAnswers` both render `organisms/StepRail.svelte`, which is a `<nav>` named after the journey. That is a deliberate amendment, decided by the account owner on #464 over the two alternatives (a plain unnamed list, or a slot in the shell).
 
-The rule's *reason* was that chrome is site-wide and session-derived, so a Template rendering it could
-not be dropped into any route or rendered in a test with no session. A journey rail is neither: it is
-page-scoped, handed in as data by the route, and means nothing outside the one sequence it belongs to.
-**The shell cannot render it, because the shell does not know the journey.** So the amended rule is
-that a Template renders no *chrome* navigation; journey navigation scoped to the page's own task
-sequence is a Template region. `banner` and `main` stay the shell's, and no Template renders either.
+The rule's *reason* was that chrome is site-wide and session-derived, so a Template rendering it could not be dropped into any route or rendered in a test with no session. A journey rail is neither: it is page-scoped, handed in as data by the route, and means nothing outside the one sequence it belongs to. **The shell cannot render it, because the shell does not know the journey.** So the amended rule is that a Template renders no *chrome* navigation; journey navigation scoped to the page's own task sequence is a Template region. `banner` and `main` stay the shell's, and no Template renders either.
 
-#432's drawing asked for the `<nav>` *before* `<main>`. That is not available:
-[#452](https://github.com/markgoho/doula-cloud/issues/452) put `<main>` in the shell, so everything a
-Template renders is already inside it. A `<nav>` inside `<main>` is valid and is a landmark either way.
+#432's drawing asked for the `<nav>` *before* `<main>`. That is not available: [#452](https://github.com/markgoho/doula-cloud/issues/452) put `<main>` in the shell, so everything a Template renders is already inside it. A `<nav>` inside `<main>` is valid and is a landmark either way.
 
-This does **not** reopen the `contents` region above. That one stays a boolean deriving its list from
-`sections`, because its entries are in-page anchors and "it is not a nav" has to stay enforceable. A
-step rail's entries are routes, so it is the opposite case: it *is* navigation, and saying so is what
-makes the step number announceable.
+This does **not** reopen the `contents` region above. That one stays a boolean deriving its list from `sections`, because its entries are in-page anchors and "it is not a nav" has to stay enforceable. A step rail's entries are routes, so it is the opposite case: it *is* navigation, and saying so is what makes the step number announceable.
 
 ### Three smaller calls recorded here
 
-- **`StepRail` is an organism, not a region on each Template.** Two identical consumers is exactly the
-  extraction bar above, and #424's rule — a molecule is a part of a section, an organism is a whole one
-  — puts it in the organism tier. `BackLink` is extracted as a **molecule** on the same bar: GOV.UK's
-  Back link is a named component with rules of its own (top of the page, above the error summary, the
-  word is *Back*), and without it those rules are copied into two stylesheets.
-- **The error summary is a position, never markup.** Both Templates take `errorSummary?: Snippet` and
-  render it below the back link and above the `<h1>`, which is GOV.UK's position and is page-level
-  arrangement. Neither renders a `Notice` or an error box of its own; the component is
-  [#467](https://github.com/markgoho/doula-cloud/issues/467)'s, and a second one built here is the
-  duplication that ticket exists to remove.
-- **`CheckAnswers` keeps its row markup internal rather than growing `DescriptionList`.** A
-  check-answers row is a label, a value and an action, and `DescriptionList` has no action column.
-  Growing a molecule for exactly one consumer is what the extraction bar exists to prevent. The row
-  moves out when a second page wants it.
+- **`StepRail` is an organism, not a region on each Template.** Two identical consumers is exactly the extraction bar above, and #424's rule — a molecule is a part of a section, an organism is a whole one — puts it in the organism tier. `BackLink` is extracted as a **molecule** on the same bar: GOV.UK's Back link is a named component with rules of its own (top of the page, above the error summary, the word is *Back*), and without it those rules are copied into two stylesheets.
+- **The error summary is a position, never markup.** Both Templates take `errorSummary?: Snippet` and render it below the back link and above the `<h1>`, which is GOV.UK's position and is page-level arrangement. Neither renders a `Notice` or an error box of its own; the component is [#467](https://github.com/markgoho/doula-cloud/issues/467)'s, and a second one built here is the duplication that ticket exists to remove.
+- **`CheckAnswers` keeps its row markup internal rather than growing `DescriptionList`.** A check-answers row is a label, a value and an action, and `DescriptionList` has no action column. Growing a molecule for exactly one consumer is what the extraction bar exists to prevent. The row moves out when a second page wants it.
 
 ## Amendment, 2026-08-30 — a Template owns its own loading and load-error states
 
-Filed as [#480](https://github.com/markgoho/doula-cloud/issues/480), found while retrofitting the two
-Engagement detail pages: every retrofitted route had the same three-branch shape —
-`{#if error}<Notice/>{:else if data}<Template/>{:else}<Skeleton/>{/if}` — and only the middle branch
-ever reached the Template's frame. A `Notice` or a `Skeleton` rendered bare, at the viewport edge, so
-the loaded state jumped into gutters and a max-width that its own placeholder never reserved.
+Filed as [#480](https://github.com/markgoho/doula-cloud/issues/480), found while retrofitting the two Engagement detail pages: every retrofitted route had the same three-branch shape — `{#if error}<Notice/>{:else if data}<Template/>{:else}<Skeleton/>{/if}` — and only the middle branch ever reached the Template's frame. A `Notice` or a `Skeleton` rendered bare, at the viewport edge, so the loaded state jumped into gutters and a max-width that its own placeholder never reserved.
 
-**"What a Template owns" now covers the states a page is in before it has content, not only laid-out
-content.** `OverviewHub`, `RecordDetail` and `FormPage` each gain two optional props:
+**"What a Template owns" now covers the states a page is in before it has content, not only laid-out content.** `OverviewHub`, `RecordDetail` and `FormPage` each gain two optional props:
 
-- **`loading?: string`** — presence is the state, and the value is also the `Skeleton`'s accessible
-  label, so a caller cannot ask for "loading" without saying what is loading (`Skeleton`'s own rule,
-  extended to the prop that reaches it).
+- **`loading?: string`** — presence is the state, and the value is also the `Skeleton`'s accessible label, so a caller cannot ask for "loading" without saying what is loading (`Skeleton`'s own rule, extended to the prop that reaches it).
 - **`loadError?: string`** — presence is the state, value is the `Notice`'s message.
 
-Precedence is `loadError` → `loading` → normal content, matching the order every route already wrote by
-hand. A route now renders its Template exactly once, unconditionally, and lets these two props carry
-the state instead of branching outside it — deleting the three-way `{#if}` from every retrofitted route
-rather than adding a competing frame primitive. That was the real choice this ticket carried: a route
-could instead have been handed a bare, Template-free frame wrapper to put its `Notice`/`Skeleton` in,
-but this map's own "Not yet specified" section already treats *"a frame lives only on a Template"* as
-load-bearing — the next map's whole approach to archetypes A, C, F and G is "which Template does this
-route get," not "here is a frame primitive it can reach for instead." A bare frame escape hatch would
-have undercut that before the next map even starts.
+Precedence is `loadError` → `loading` → normal content, matching the order every route already wrote by hand. A route now renders its Template exactly once, unconditionally, and lets these two props carry the state instead of branching outside it — deleting the three-way `{#if}` from every retrofitted route rather than adding a competing frame primitive. That was the real choice this ticket carried: a route could instead have been handed a bare, Template-free frame wrapper to put its `Notice`/`Skeleton` in, but this map's own "Not yet specified" section already treats *"a frame lives only on a Template"* as load-bearing — the next map's whole approach to archetypes A, C, F and G is "which Template does this route get," not "here is a frame primitive it can reach for instead." A bare frame escape hatch would have undercut that before the next map even starts.
 
-This is the same kind of amendment the `isEmpty`/`empty` pair already made: a Template owning a named
-*state*, not only content layout. It is not a third named exit — `loading`/`loadError` are alternate
-values of the Template's own required inputs, not a new way to deviate from one.
+This is the same kind of amendment the `isEmpty`/`empty` pair already made: a Template owning a named *state*, not only content layout. It is not a third named exit — `loading`/`loadError` are alternate values of the Template's own required inputs, not a new way to deviate from one.
 
-**`loadError` is a new name, not `FormPage`'s existing `error?`.** The regions table above still lists
-`FormPage` as taking `error?`; the shipped prop has always been `errorSummary?: Snippet` — GOV.UK's
-validation error summary for a form the person is actively filling in, built by the route (#467). That
-is a different concern from `loadError`, which is the page's own data failing to arrive before there is
-a form to fail at all, and the two can be true independently (a page could, in principle, load and then
-have its own submission refused). `loadError` borrows its name from the route-local variable
-`account/+page.svelte` already used for exactly this state, rather than reusing or renaming
-`errorSummary`.
+**`loadError` is a new name, not `FormPage`'s existing `error?`.** The regions table above still lists `FormPage` as taking `error?`; the shipped prop has always been `errorSummary?: Snippet` — GOV.UK's validation error summary for a form the person is actively filling in, built by the route (#467). That is a different concern from `loadError`, which is the page's own data failing to arrive before there is a form to fail at all, and the two can be true independently (a page could, in principle, load and then have its own submission refused). `loadError` borrows its name from the route-local variable `account/+page.svelte` already used for exactly this state, rather than reusing or renaming `errorSummary`.
 
-**`RecordDetail`'s rail is not derived during loading, because it cannot be — `isContentsShown` already
-does not depend on data.** Every call site sets `isContentsShown` as a static literal known at the
-route's own authoring time (`isContentsShown` is unconditionally `true` on the staff Engagement page,
-absent on the portal one); it has never varied by what `sections` turns out to hold. So `loading`
-reuses the same prop to reserve the rail's column width in the container-query grid, filled with
-nothing rather than placeholder links — an empty region carries no ARIA role, so it does not compete
-with the `Skeleton`'s own `role="status"` for what gets announced.
+**`RecordDetail`'s rail is not derived during loading, because it cannot be — `isContentsShown` already does not depend on data.** Every call site sets `isContentsShown` as a static literal known at the route's own authoring time (`isContentsShown` is unconditionally `true` on the staff Engagement page, absent on the portal one); it has never varied by what `sections` turns out to hold. So `loading` reuses the same prop to reserve the rail's column width in the container-query grid, filled with nothing rather than placeholder links — an empty region carries no ARIA role, so it does not compete with the `Skeleton`'s own `role="status"` for what gets announced.
 
-**Fixed on six routes**: the Practice landing page and both Engagement detail pages (`OverviewHub`,
-`RecordDetail` ×2 — #423, #424), the Client detail page (`RecordDetail`), and `account` and
-`settings/website` (`FormPage` ×2, #474's `account` and a second, previously-unticketed instance on
-`settings/website`). Two of the six — `account` and `settings/website` — had no loading branch at all
-before this: `account`'s `{#if loadError}{:else if isLoaded}{/if}` and `settings/website`'s
-`{#if loadError}{:else if current}{/if}` both left the gap between mount and the first response
-uncovered, so nothing rendered there, not even outside the frame. `settings/website`
-composes `FormPage` for only one of its three steps; the other two (`review`, `saved`) already built
-`container-l`/`center-l` by hand and keep doing so — its `loadError` branch was made to match that
-existing hand-built frame rather than routed through `FormPage`, since `FormPage` covers only the
-`answers` step there.
+**Fixed on six routes**: the Practice landing page and both Engagement detail pages (`OverviewHub`, `RecordDetail` ×2 — #423, #424), the Client detail page (`RecordDetail`), and `account` and `settings/website` (`FormPage` ×2, #474's `account` and a second, previously-unticketed instance on `settings/website`). Two of the six — `account` and `settings/website` — had no loading branch at all before this: `account`'s `{#if loadError}{:else if isLoaded}{/if}` and `settings/website`'s `{#if loadError}{:else if current}{/if}` both left the gap between mount and the first response uncovered, so nothing rendered there, not even outside the frame. `settings/website` composes `FormPage` for only one of its three steps; the other two (`review`, `saved`) already built `container-l`/`center-l` by hand and keep doing so — its `loadError` branch was made to match that existing hand-built frame rather than routed through `FormPage`, since `FormPage` covers only the `answers` step there.
 
-`QuestionPage` and `CheckAnswers` are not touched: neither is wired into a real route yet, both are
-style-guide-only per the amendment above, so there is no retrofitted `{#if error}` to find on either.
+`QuestionPage` and `CheckAnswers` are not touched: neither is wired into a real route yet, both are style-guide-only per the amendment above, so there is no retrofitted `{#if error}` to find on either.
 
 ## Amendment, 2026-09-02 — archetype A gets a Template, `EntryPage`
 
-Filed as [#490](https://github.com/markgoho/doula-cloud/issues/490), found on #467 by opening a refused
-`/login` in a real browser at 1440 and 480 — the check `workflow.md` has required since #424, and the
-third time it has caught something no spec could (#425's `LabeledField` and #451 being the others). Five
-archetype-A routes — login and accept-invite on both the Staff and portal sides, and Staff signup —
-rendered with no page frame at all, so the `<h1>`, every field and the submit button sat flush against
-the viewport edge, and #467's error summary ran edge to edge once it shipped. `(signed-out)/+layout.svelte`
-already said why: *"No gutters and no max-width here: those belong to the Template the page instantiates
-(ADR-0018)"* — but archetype A had no Template to instantiate. The *Scope* section above left A, C, F and
-G out deliberately; this is that gap closing for A alone, not a reopening of the other three.
+Filed as [#490](https://github.com/markgoho/doula-cloud/issues/490), found on #467 by opening a refused `/login` in a real browser at 1440 and 480 — the check `workflow.md` has required since #424, and the third time it has caught something no spec could (#425's `LabeledField` and #451 being the others). Five archetype-A routes — login and accept-invite on both the Staff and portal sides, and Staff signup — rendered with no page frame at all, so the `<h1>`, every field and the submit button sat flush against the viewport edge, and #467's error summary ran edge to edge once it shipped. `(signed-out)/+layout.svelte` already said why: *"No gutters and no max-width here: those belong to the Template the page instantiates (ADR-0018)"* — but archetype A had no Template to instantiate. The *Scope* section above left A, C, F and G out deliberately; this is that gap closing for A alone, not a reopening of the other three.
 
-`templates/EntryPage.svelte` holds it: `title`, an optional `errorSummary` positioned above the `<h1>` —
-the same position every other Template in this layer already uses — and one `content` region carrying
-everything under the title. A single region rather than named ones (fieldsets, actions, a picker),
-because the five routes disagree about what that is: the two plain logins are one form plus an optional
-"choose a Practice/Engagement" list; the two accept-invite screens switch between two forms and a
-read-only summary; signup is a longer single form with no picker at all. Giving each a fixed shape would
-have produced a Template that only fits some of its own consumers, so the variety stays where ADR-0018
-already puts region-internal arrangement: on the route.
+`templates/EntryPage.svelte` holds it: `title`, an optional `errorSummary` positioned above the `<h1>` — the same position every other Template in this layer already uses — and one `content` region carrying everything under the title. A single region rather than named ones (fieldsets, actions, a picker), because the five routes disagree about what that is: the two plain logins are one form plus an optional "choose a Practice/Engagement" list; the two accept-invite screens switch between two forms and a read-only summary; signup is a longer single form with no picker at all. Giving each a fixed shape would have produced a Template that only fits some of its own consumers, so the variety stays where ADR-0018 already puts region-internal arrangement: on the route.
 
-**Top-aligned in a `--form-max` column, not centered in the viewport.** Every Template in this layer —
-`FormPage`, `QuestionPage`, `CheckAnswers`, `RecordDetail`, `OverviewHub`, `ErrorPage` — renders in normal
-flow under `padding-block: var(--space-8)`, and none owns the viewport's own height. Centring this one
-vertically would be a second layout mechanism kept for a single archetype, sized against a bar
-(`SignedOutTopBar`) whose height a Template has no business knowing — the kind of anonymous escape hatch
-the *Two named exits* section above exists to prevent. `--form-max` is `FormPage`'s own form-column token,
-reused rather than a new width entering the app for one more archetype.
+**Top-aligned in a `--form-max` column, not centered in the viewport.** Every Template in this layer — `FormPage`, `QuestionPage`, `CheckAnswers`, `RecordDetail`, `OverviewHub`, `ErrorPage` — renders in normal flow under `padding-block: var(--space-8)`, and none owns the viewport's own height. Centring this one vertically would be a second layout mechanism kept for a single archetype, sized against a bar (`SignedOutTopBar`) whose height a Template has no business knowing — the kind of anonymous escape hatch the *Two named exits* section above exists to prevent. `--form-max` is `FormPage`'s own form-column token, reused rather than a new width entering the app for one more archetype.
 
-`clients/new` (archetype E) is not this Template and was not touched: [#466](https://github.com/markgoho/doula-cloud/issues/466)
-rebuilds it on `QuestionPage`, which already owns a frame. The five routes fixed —
-`(signed-out)/login`, `(signed-out)/signup`, `(signed-out)/accept-invite`, `portal/(signed-out)/login`
-and `portal/(signed-out)/accept-invite` — now import `EntryPage` and pass `title`, `errorSummary` and
-`content`; none renders a bare `<h1>` and `<form>` any more.
+`clients/new` (archetype E) is not this Template and was not touched: [#466](https://github.com/markgoho/doula-cloud/issues/466) rebuilds it on `QuestionPage`, which already owns a frame. The five routes fixed — `(signed-out)/login`, `(signed-out)/signup`, `(signed-out)/accept-invite`, `portal/(signed-out)/login` and `portal/(signed-out)/accept-invite` — now import `EntryPage` and pass `title`, `errorSummary` and `content`; none renders a bare `<h1>` and `<form>` any more.
 
 ## Amendment, 2026-09-02 — archetype C gets a Template, archetype F reuses one
 
-Filed as [#491](https://github.com/markgoho/doula-cloud/issues/491), found the same way [#490](https://github.com/markgoho/doula-cloud/issues/490) found archetype A's gap: eight authenticated Staff
-routes reached no further than `<main>`, which carries no styles of its own, so none of them had gutters,
-a width cap, or the vertical rhythm a Template sets. Four were archetype C (`clients`, `billing`, `staff`,
-`offers`) and four were archetype F (`settings/payments`, `settings/client-fields`,
-`settings/contract-template`, `settings/plan-templates`).
+Filed as [#491](https://github.com/markgoho/doula-cloud/issues/491), found the same way [#490](https://github.com/markgoho/doula-cloud/issues/490) found archetype A's gap: eight authenticated Staff routes reached no further than `<main>`, which carries no styles of its own, so none of them had gutters, a width cap, or the vertical rhythm a Template sets. Four were archetype C (`clients`, `billing`, `staff`, `offers`) and four were archetype F (`settings/payments`, `settings/client-fields`, `settings/contract-template`, `settings/plan-templates`).
 
-**C gets a new Template, `templates/ListPage.svelte`** — `title`, `intro?`, `actions?`, `content`.
-`OverviewHub` was considered first, since the two archetypes' shapes look close, and rejected:
-`OverviewHub`'s `isEmpty`/`empty` pair is required because a hub's whole body is either the populated
-view or the empty one. A list screen does not divide that way — `clients`' "Find or add a Client" link
-and "See everyone" toggle render whether or not the table has rows, and `DataTable` already carries its
-own `emptyMessage` for the zero-row case. Forcing every route here to split its body into
-`primary`/`empty` would recreate a state that already exists one layer down, so `ListPage` takes a
-single `content` region instead, and no cap on `center-l` — `OverviewHub`'s own reasoning: a list is
-tables, not prose, and past the ramp's plateau more room buys more content (#531, #541).
+**C gets a new Template, `templates/ListPage.svelte`** — `title`, `intro?`, `actions?`, `content`. `OverviewHub` was considered first, since the two archetypes' shapes look close, and rejected: `OverviewHub`'s `isEmpty`/`empty` pair is required because a hub's whole body is either the populated view or the empty one. A list screen does not divide that way — `clients`' "Find or add a Client" link and "See everyone" toggle render whether or not the table has rows, and `DataTable` already carries its own `emptyMessage` for the zero-row case. Forcing every route here to split its body into `primary`/`empty` would recreate a state that already exists one layer down, so `ListPage` takes a single `content` region instead, and no cap on `center-l` — `OverviewHub`'s own reasoning: a list is tables, not prose, and past the ramp's plateau more room buys more content (#531, #541).
 
-**F reuses the existing `templates/FormPage.svelte` — no new Template.** `settings/website` is the one F
-route that already had a frame, and reading its route file first (as this ticket's brief directed) found
-it is one Template and three hand-built copies of the same frame: only its `answers` step renders
-`FormPage`; the `review`, `saved` and `loadError` steps each hand-roll
-`<container-l><center-l max="var(--form-max)" gutters="var(--page-gutter)"><stack-l space="var(--space-7)">`
-by hand, because `FormPage` covers only the one step (recorded in the 2026-08-30 amendment above). So
-"the F pattern" was never a distinct frame — it is `FormPage`'s own frame, proven on the same route four
-times over. Building a second Template that spent the same three tokens would be the near-duplicate the
-extraction bar in *Two named exits* above exists to catch, not a new archetype. The four F routes this
-ticket fixed are settings screens with no genuine multi-legend form structure, but `FormPage`'s `legend`
-was already optional for exactly this ("a form can have a group that names nothing"): a single
-un-legended fieldset renders as a plain stack, which is what `client-fields`, `contract-template` and
-`plan-templates` (an editor organism plus a Save button) and `payments` (a status display, a
-conditional checklist, and a Connect button) each needed. None of the four wraps its content in a real
-`<form>`, and none needed to — `FormPage` renders no `<form>` element of its own either.
+**F reuses the existing `templates/FormPage.svelte` — no new Template.** `settings/website` is the one F route that already had a frame, and reading its route file first (as this ticket's brief directed) found it is one Template and three hand-built copies of the same frame: only its `answers` step renders `FormPage`; the `review`, `saved` and `loadError` steps each hand-roll `<container-l><center-l max="var(--form-max)" gutters="var(--page-gutter)"><stack-l space="var(--space-7)">` by hand, because `FormPage` covers only the one step (recorded in the 2026-08-30 amendment above). So "the F pattern" was never a distinct frame — it is `FormPage`'s own frame, proven on the same route four times over. Building a second Template that spent the same three tokens would be the near-duplicate the extraction bar in *Two named exits* above exists to catch, not a new archetype. The four F routes this ticket fixed are settings screens with no genuine multi-legend form structure, but `FormPage`'s `legend` was already optional for exactly this ("a form can have a group that names nothing"): a single un-legended fieldset renders as a plain stack, which is what `client-fields`, `contract-template` and `plan-templates` (an editor organism plus a Save button) and `payments` (a status display, a conditional checklist, and a Connect button) each needed. None of the four wraps its content in a real `<form>`, and none needed to — `FormPage` renders no `<form>` element of its own either.
 
-**Two claims in this ticket's own body were stale, checked against the code rather than trusted.**
-`--page-max` — the "every Template wraps content in `center-l max="var(--page-max)"`" description — was
-removed on [#541](https://github.com/markgoho/doula-cloud/issues/541); no Template uses it today, and
-`ListPage` and `FormPage` spend `none` and `var(--form-max)` respectively, per each archetype's own
-reasoning above. `DataTable`'s `inline-size: 100%` — the mechanism this ticket named for the table
-"running from one edge of the viewport to the other" — was removed on
-[#542](https://github.com/markgoho/doula-cloud/issues/542); a `DataTable` has stopped at its content
-width since. Neither change reduces the actual defect: `practices/+layout.svelte`'s `<main>` carries no
-styles at all, so a route with no Template still opens flush against the viewport edge with no gutter
-and no cap, whatever `DataTable` does with the room it is given.
+**Two claims in this ticket's own body were stale, checked against the code rather than trusted.** `--page-max` — the "every Template wraps content in `center-l max="var(--page-max)"`" description — was removed on [#541](https://github.com/markgoho/doula-cloud/issues/541); no Template uses it today, and `ListPage` and `FormPage` spend `none` and `var(--form-max)` respectively, per each archetype's own reasoning above. `DataTable`'s `inline-size: 100%` — the mechanism this ticket named for the table "running from one edge of the viewport to the other" — was removed on [#542](https://github.com/markgoho/doula-cloud/issues/542); a `DataTable` has stopped at its content width since. Neither change reduces the actual defect: `practices/+layout.svelte`'s `<main>` carries no styles at all, so a route with no Template still opens flush against the viewport edge with no gutter and no cap, whatever `DataTable` does with the room it is given.
 
-`payments` gained `loading`/`loadError` wiring it never had (the #480 gap: nothing rendered between mount
-and the first response, not even outside the frame); `clients`, `billing`, `staff` and `offers` keep
-their existing in-place `Notice`/`Skeleton` branching inside `ListPage`'s `content` region rather than
-routing it through `loading`/`loadError` — those four already show controls (a toggle, an "Invite"
-link) that stay on screen through a reload, which `ListPage`'s page-level `loading`/`loadError` would
-hide along with everything else; keeping the branching local preserves that instead of trading it away
-for a frame that was reachable without the trade.
+`payments` gained `loading`/`loadError` wiring it never had (the #480 gap: nothing rendered between mount and the first response, not even outside the frame); `clients`, `billing`, `staff` and `offers` keep their existing in-place `Notice`/`Skeleton` branching inside `ListPage`'s `content` region rather than routing it through `loading`/`loadError` — those four already show controls (a toggle, an "Invite" link) that stay on screen through a reload, which `ListPage`'s page-level `loading`/`loadError` would hide along with everything else; keeping the branching local preserves that instead of trading it away for a frame that was reachable without the trade.
 
 ## Amendment, 2026-09-20 — the last three archetype-A routes join `EntryPage`
 
-Filed as [#1222](https://github.com/markgoho/doula-cloud/issues/1222), found the same way #490 found
-archetype A's original gap: `forgot-password`, `reset-password` and the pre-account Offer read
-(`offers/[offerId]`) never adopted `EntryPage` when the 2026-09-02 amendment above shipped it, so all
-three still wrote `PageTitle`, `ErrorSummary` and a bare `Heading` straight into `(signed-out)/
-+layout.svelte`, which supplies no gutters or max-width of its own. At 1440px the `<h1>` sat at the
-viewport edge, and once a submit was refused, `ErrorSummary`'s bordered box ran edge to edge.
+Filed as [#1222](https://github.com/markgoho/doula-cloud/issues/1222), found the same way #490 found archetype A's original gap: `forgot-password`, `reset-password` and the pre-account Offer read (`offers/[offerId]`) never adopted `EntryPage` when the 2026-09-02 amendment above shipped it, so all three still wrote `PageTitle`, `ErrorSummary` and a bare `Heading` straight into `(signed-out)/ +layout.svelte`, which supplies no gutters or max-width of its own. At 1440px the `<h1>` sat at the viewport edge, and once a submit was refused, `ErrorSummary`'s bordered box ran edge to edge.
 
-`forgot-password` and `reset-password` are a mechanical fit — one field, one form, the same shape as the
-two plain logins — and needed no decision. `offers/[offerId]` did: its access-code step followed by a
-read-only record summary with decision controls (Join and accept, Decline) is a two-phase shape no other
-archetype-A route had when the *Two named exits* section above was written, and this document said the
-choice — adopt `EntryPage`, adopt a different Template, or opt out with a reason recorded — was the
-implementing agent's to make and argue against that section.
+`forgot-password` and `reset-password` are a mechanical fit — one field, one form, the same shape as the two plain logins — and needed no decision. `offers/[offerId]` did: its access-code step followed by a read-only record summary with decision controls (Join and accept, Decline) is a two-phase shape no other archetype-A route had when the *Two named exits* section above was written, and this document said the choice — adopt `EntryPage`, adopt a different Template, or opt out with a reason recorded — was the implementing agent's to make and argue against that section.
 
-**It adopted `EntryPage`, and the extraction bar did not apply.** The bar above governs building a *new*
-Template or variant for a shape that does not already fit one; it does not govern reusing an existing
-Template whose region is already generic enough. `content` was never named or shaped around "a form" —
-it is one Snippet standing in for whatever a route's own steps are — and `accept-invite`'s
-already-shipped `existing` branch (a credential step, then a read-only summary of a name and a work
-state, with a link out) already proved that shape fits inside it. The Offer read's access-code step
-followed by a `dl` summary and decision controls is one more branch of the same kind, not a shape
-`EntryPage` had never met. Hand-rolling `container-l`/`center-l max="var(--form-max)"`/`stack-l` beside
-a Template that already encapsulates exactly those three lines would have been the near-duplicate the
-extraction bar exists to catch, not the raw exception it licenses for a genuine one-off.
+**It adopted `EntryPage`, and the extraction bar did not apply.** The bar above governs building a *new* Template or variant for a shape that does not already fit one; it does not govern reusing an existing Template whose region is already generic enough. `content` was never named or shaped around "a form" — it is one Snippet standing in for whatever a route's own steps are — and `accept-invite`'s already-shipped `existing` branch (a credential step, then a read-only summary of a name and a work state, with a link out) already proved that shape fits inside it. The Offer read's access-code step followed by a `dl` summary and decision controls is one more branch of the same kind, not a shape `EntryPage` had never met. Hand-rolling `container-l`/`center-l max="var(--form-max)"`/`stack-l` beside a Template that already encapsulates exactly those three lines would have been the near-duplicate the extraction bar exists to catch, not the raw exception it licenses for a genuine one-off.
 
-All three routes now import `EntryPage` and pass `title`, `errorSummary` and `content`; none renders a
-bare `<h1>` and `<form>` (or `<dl>`) any more. Eight routes share the archetype now, not five.
+All three routes now import `EntryPage` and pass `title`, `errorSummary` and `content`; none renders a bare `<h1>` and `<form>` (or `<dl>`) any more. Eight routes share the archetype now, not five.

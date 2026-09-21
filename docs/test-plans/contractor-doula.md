@@ -2,21 +2,16 @@
 
 - **Journey**: [contractor-doula.md](../journeys/contractor-doula.md)
 - **Persona**: [contractor-doula.md](../personas/contractor-doula.md)
-- **A pass means**: the Engagement she took is finished, she can point to what she
-  agreed and what she was paid, and she never saw a Client who was not hers.
+- **A pass means**: the Engagement she took is finished, she can point to what she agreed and what she was paid, and she never saw a Client who was not hers.
 
 Step 1.2 no longer fails: accepting a second Practice's invitation on an account she already holds now succeeds outright. The plan still never reaches stage 3 unmodified — the Offer model that stage needs does not exist (LV-G6, LV-G7).
 
 ## Preconditions
 
-- **Two** Practices: the other agency where Lena already works, and Rooted Birth
-  Collective. She holds a Staff account at the first one already — that is the
-  point of her.
-- Rooted Birth Collective with an Owner and **at least two** Clients, only one of
-  which is meant to be hers.
+- **Two** Practices: the other agency where Lena already works, and Rooted Birth Collective. She holds a Staff account at the first one already — that is the point of her.
+- Rooted Birth Collective with an Owner and **at least two** Clients, only one of which is meant to be hers.
 - **No fixture bypass for her second membership any more.** Step 1.2 itself produces it: accepting Rooted's invitation on the account her other agency already gave her resolves to that existing `staff` row and inserts a `practice_memberships` row for the new Practice. The `practice_memberships` bypass the 2026-08-23 walk used predates LV-G2's close and is history now, not a precondition.
-- No fixture can create an **Offer** or an employment type. Stage 3 has nothing to
-  provision.
+- No fixture can create an **Offer** or an employment type. Stage 3 has nothing to provision.
 
 ## Steps
 
@@ -50,8 +45,7 @@ Reachable once stage 1 is walked — step 1.2 is what gives her the second membe
 | 3.2 | Read enough to take or refuse it — Client, dates, on-call terms, fee — while still an outsider | No read rule covers *offered, not yet accepted*; ADR-0006's table has four columns and none is hers | `missing-feature (LV-G7)` [#225](https://github.com/markgoho/doula-cloud/issues/225) |
 | 3.3 | Decline, and have Renata see the refusal | A decline is not recorded anywhere, so silence and "no" are the same thing to the Practice | `missing-feature (LV-G6)` [#225](https://github.com/markgoho/doula-cloud/issues/225) |
 
-Every step of the stage her whole relationship with the product is built on is a
-hole. Nothing here degrades to a manual walk-through: there is no screen to open.
+Every step of the stage her whole relationship with the product is built on is a hole. Nothing here degrades to a manual walk-through: there is no screen to open.
 
 ### Stage 4 — Find the one job she took
 
@@ -73,10 +67,7 @@ hole. Nothing here degrades to a manual walk-through: there is no screen to open
 
 ### Stage 6 — Do the work
 
-Identical to Priya's stages 6–8 and marked there; walk
-[employed-doula.md](employed-doula.md) steps 6.1 to 8.2 as Lena and record only
-where a contractor differs. Nothing is expected to — which is the finding: the care
-half is the half the product already treats correctly.
+Identical to Priya's stages 6–8 and marked there; walk [employed-doula.md](employed-doula.md) steps 6.1 to 8.2 as Lena and record only where a contractor differs. Nothing is expected to — which is the finding: the care half is the half the product already treats correctly.
 
 | Step | Action | Expected result | Mark |
 | --- | --- | --- | --- |
@@ -105,16 +96,13 @@ half is the half the product already treats correctly.
 | `manual` | 18 (13 on the plan as drafted, plus 2.3-a, 2.3-b, 4.1-a and 5.2-a appended by the walk, plus 1.2-a re-marked 2026-09-20) |
 | `missing-feature` | 8 steps over 5 gaps ([LV-G1](https://github.com/markgoho/doula-cloud/issues/225), [LV-G3](https://github.com/markgoho/doula-cloud/issues/225), [LV-G4](https://github.com/markgoho/doula-cloud/issues/225), [LV-G6](https://github.com/markgoho/doula-cloud/issues/225), [LV-G7](https://github.com/markgoho/doula-cloud/issues/225)) |
 
-LV-G5 is observed at 4.2 rather than given a step of its own: the list opens, and
-what it shows is the finding.
+LV-G5 is observed at 4.2 rather than given a step of its own: the list opens, and what it shows is the finding.
 
 ## Run log
 
 ### 2026-08-22 — automated steps ([#209](https://github.com/markgoho/doula-cloud/issues/209))
 
-`bun run test:e2e` in `app/`, whole suite, one run: **16 passed, 0 failed** (20.5s).
-Stack per [docs/testing.md](../testing.md) — Postgres in compose, the goose
-migration, the Go BFF and the Firebase Auth emulator, all local.
+`bun run test:e2e` in `app/`, whole suite, one run: **16 passed, 0 failed** (20.5s). Stack per [docs/testing.md](../testing.md) — Postgres in compose, the goose migration, the Go BFF and the Firebase Auth emulator, all local.
 
 | Step | Spec | Result |
 | --- | --- | --- |
@@ -139,34 +127,13 @@ A desk pass, not a walk, over this plan's Add Client, Visits and Contract cells 
 
 ### 2026-08-23 — manual walk ([#238](https://github.com/markgoho/doula-cloud/issues/238))
 
-`bun run dev:full` in `app/`, walked as Lena Vasquez at 1280x900. Her journey names
-no device, so the desktop default stands. This plan's one `automated` step was **not**
-re-run; `/login` was driven anyway, because 2.2 sits behind it.
+`bun run dev:full` in `app/`, walked as Lena Vasquez at 1280x900. Her journey names no device, so the desktop default stands. This plan's one `automated` step was **not** re-run; `/login` was driven anyway, because 2.2 sits behind it.
 
-Preconditions built as the plan requires, and in the order the plan requires — stage 1
-is only a test while the bypass does not yet exist. **Willow Bend Doulas** (Beth
-Alvarado, Owner) invited Lena and she accepted, which is what put her `identity_uid`
-on a `staff` row and made her the person this plan is about; Beth then gave her
-`doula`. **Rooted Birth Collective** (Renata Alvarez, Owner) was signed up separately
-with two Clients — **Adaeze Nwosu**, the February birth offered to Lena, and
-**Tabitha Nunes**, who is not hers — a filled Birth Plan and Care Plan on Adaeze's
-Engagement, a Contract priced `$2,400` and `sent`, and Adaeze's portal invite accepted.
-Renata then invited Lena to Rooted, and that invitation **is** steps 1.1 and 1.2, so it
-was not provisioned away.
+Preconditions built as the plan requires, and in the order the plan requires — stage 1 is only a test while the bypass does not yet exist. **Willow Bend Doulas** (Beth Alvarado, Owner) invited Lena and she accepted, which is what put her `identity_uid` on a `staff` row and made her the person this plan is about; Beth then gave her `doula`. **Rooted Birth Collective** (Renata Alvarez, Owner) was signed up separately with two Clients — **Adaeze Nwosu**, the February birth offered to Lena, and **Tabitha Nunes**, who is not hers — a filled Birth Plan and Care Plan on Adaeze's Engagement, a Contract priced `$2,400` and `sent`, and Adaeze's portal invite accepted. Renata then invited Lena to Rooted, and that invitation **is** steps 1.1 and 1.2, so it was not provisioned away.
 
-**The fixture bypass, and the answer the plan asked it for.** Postgres took the insert:
-`INSERT INTO practice_memberships (practice_id, staff_id, roles) VALUES (<rooted>,
-<lena's existing staff id>, '{doula}')` returned one row. `00002`'s own comment is
-**true of the schema and false of the API** — the table's only relevant constraint is
-`UNIQUE (practice_id, staff_id)`, which a second Practice does not touch. `roles` was
-the session's call, not the plan's: `{doula}` is what her Persona says she is, 2.3
-expects a non-owner's tiles, and `visit/roles.go:40` would 403 her out of 6.2 without
-it. Recorded here rather than asked.
+**The fixture bypass, and the answer the plan asked it for.** Postgres took the insert: `INSERT INTO practice_memberships (practice_id, staff_id, roles) VALUES (<rooted>, <lena's existing staff id>, '{doula}')` returned one row. `00002`'s own comment is **true of the schema and false of the API** — the table's only relevant constraint is `UNIQUE (practice_id, staff_id)`, which a second Practice does not touch. `roles` was the session's call, not the plan's: `{doula}` is what her Persona says she is, 2.3 expects a non-owner's tiles, and `visit/roles.go:40` would 403 her out of 6.2 without it. Recorded here rather than asked.
 
-**Four steps were appended by the walk** — 2.3-a and 2.3-b (the cell says Billing is
-not her business; whether she can actually read it is the finding), 4.1-a and 5.2-a
-(both stages test her *reads* and neither tested what she can write). Dee's 7.2-a and
-Priya's 5.2-a are the precedent.
+**Four steps were appended by the walk** — 2.3-a and 2.3-b (the cell says Billing is not her business; whether she can actually read it is the finding), 4.1-a and 5.2-a (both stages test her *reads* and neither tested what she can write). Dee's 7.2-a and Priya's 5.2-a are the precedent.
 
 | Step | Mark | Result | What was seen |
 | --- | --- | --- | --- |
@@ -198,25 +165,9 @@ Priya's 5.2-a are the precedent.
 | 8.1 | `missing-feature (LV-G4)` [#225](https://github.com/markgoho/doula-cloud/issues/225) | as expected, and the cell understated it | Confirmed unwalkable, and the workaround the cell names does not exist either: `api/main.go` mounts no route that removes a membership or a `staff` row. The one lever an Owner has on the Staff screen is **End sessions everywhere** (`DELETE .../staff/{staffId}/sessions`), which ends a sign-in, not a read. Renata pulled it: `204` |
 | 8.1-a | `manual` | as expected | Lena signed in again immediately afterwards and read `Adaeze Nwosu` and `Tabitha Nunes`, `200`. After the job is done, and after the only lever the product gives an Owner, an outside contractor still reads the agency's whole book |
 
-**17 `manual` steps walked (2.3-a, 2.3-b, 4.1-a and 5.2-a added by the walk); 9
-`missing-feature` steps confirmed unwalkable; no `blocked` step on this plan.** Three
-expected results were falsified — 1.2-a, 2.3 and 8.1 — and none was re-marked: 2.3 is a
-performable step whose claim was wrong, and 1.2-a and 8.1 are still unwalkable, only
-for a sharper reason than the cell gave ([#235](https://github.com/markgoho/doula-cloud/issues/235)'s
-precedent both times). Two gaps minted on the journey map that owns the stages,
-**LV-G8** and **LV-G9**. No `journey-gap` issue was filed — that is
-[#209](https://github.com/markgoho/doula-cloud/issues/209).
+**17 `manual` steps walked (2.3-a, 2.3-b, 4.1-a and 5.2-a added by the walk); 9 `missing-feature` steps confirmed unwalkable; no `blocked` step on this plan.** Three expected results were falsified — 1.2-a, 2.3 and 8.1 — and none was re-marked: 2.3 is a performable step whose claim was wrong, and 1.2-a and 8.1 are still unwalkable, only for a sharper reason than the cell gave ([#235](https://github.com/markgoho/doula-cloud/issues/235)'s precedent both times). Two gaps minted on the journey map that owns the stages, **LV-G8** and **LV-G9**. No `journey-gap` issue was filed — that is [#209](https://github.com/markgoho/doula-cloud/issues/209).
 
-**Verdict against "a pass means": it does not pass, and it fails on all three
-clauses.** The Engagement she took cannot be finished — no status moves and nothing
-ends an attachment. She can point to what she *agreed* only by reading the Client's
-price, and to what she was *paid* not at all. And she saw every Client the agency has,
-before and after the job, plus its credit ledger and its Stripe status. Stage 3, her
-moment of truth, has no screen in it at all: she never weighed the job, because the
-product cannot offer one. What the walk adds to the map's argument is the direction of
-the leak — the map wrote her as someone the product tells too much, and 4.1-a and 5.2-a
-show it also lets her *do* too much, spending the agency's credits and pricing its
-Clients' care.
+**Verdict against "a pass means": it does not pass, and it fails on all three clauses.** The Engagement she took cannot be finished — no status moves and nothing ends an attachment. She can point to what she *agreed* only by reading the Client's price, and to what she was *paid* not at all. And she saw every Client the agency has, before and after the job, plus its credit ledger and its Stripe status. Stage 3, her moment of truth, has no screen in it at all: she never weighed the job, because the product cannot offer one. What the walk adds to the map's argument is the direction of the leak — the map wrote her as someone the product tells too much, and 4.1-a and 5.2-a show it also lets her *do* too much, spending the agency's credits and pricing its Clients' care.
 
 ### 2026-09-20 — narrative reconciliation ([#1242](https://github.com/markgoho/doula-cloud/issues/1242))
 

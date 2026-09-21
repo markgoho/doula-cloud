@@ -1,7 +1,6 @@
 # Terraform owns the shape, not the image, and `apply` stays off CI
 
-> **One sentence amended by [ADR-0037](0037-the-internal-boundary-is-a-caller-identity-not-a-shared-secret.md).**
-> "`docs/infrastructure.md` accepts exactly one secret in state: the Scheduler jobs' `X-Internal-Secret` header" was true only while a shared string was the boundary on `/api/internal/**`. It is an `oidc_token` block naming a service account instead, which is not a secret, so state carries none once the Terraform half of [#1052](https://github.com/markgoho/doula-cloud/issues/1052) lands. Everything else here stands, including the reasoning that put secret *shells* in and secret *versions* out.
+> **One sentence amended by [ADR-0037](0037-the-internal-boundary-is-a-caller-identity-not-a-shared-secret.md).** "`docs/infrastructure.md` accepts exactly one secret in state: the Scheduler jobs' `X-Internal-Secret` header" was true only while a shared string was the boundary on `/api/internal/**`. It is an `oidc_token` block naming a service account instead, which is not a secret, so state carries none once the Terraform half of [#1052](https://github.com/markgoho/doula-cloud/issues/1052) lands. Everything else here stands, including the reasoning that put secret *shells* in and secret *versions* out.
 
 [#797](https://github.com/markgoho/doula-cloud/issues/797) asked whether Doula Cloud's GCP project should be in code, and if so which parts. The boundary itself — every resource, owned or not, with its reason — is `docs/infrastructure.md`. This records the decision and what was rejected.
 

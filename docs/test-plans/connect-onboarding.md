@@ -1,11 +1,8 @@
 # Onboarding a Practice's Stripe Connect account for a walk
 
-Written from the walk that first completed it
-([#236](https://github.com/markgoho/doula-cloud/issues/236)). Every later walk that
-needs a Practice able to raise Invoices follows this rather than re-deriving it.
+Written from the walk that first completed it ([#236](https://github.com/markgoho/doula-cloud/issues/236)). Every later walk that needs a Practice able to raise Invoices follows this rather than re-deriving it.
 
-**Drive it with `playwriter`, against the user's own Chrome.** This is the whole
-trick, and getting it wrong costs a CAPTCHA and a restart:
+**Drive it with `playwriter`, against the user's own Chrome.** This is the whole trick, and getting it wrong costs a CAPTCHA and a restart:
 
 | Browser | Result |
 | --- | --- |
@@ -13,32 +10,19 @@ trick, and getting it wrong costs a CAPTCHA and a restart:
 | Playwright-launched Chromium, headed | CAPTCHA at the password step |
 | `playwriter` -> the user's own Chrome | **no CAPTCHA on any of the nine screens** |
 
-Stripe fingerprints the automation-launched browser, not the absence of a human,
-so a real profiled Chrome walks straight through and **no human is needed for the
-form itself**. Do not `chromium.launch()` for this — headed does not help.
+Stripe fingerprints the automation-launched browser, not the absence of a human, so a real profiled Chrome walks straight through and **no human is needed for the form itself**. Do not `chromium.launch()` for this — headed does not help.
 
-**It signs your browser into Stripe as the Persona.** The password step creates a
-real Stripe *user* for the Owner's fake address, and the hosted flow logs the
-browser into it. Afterwards `dashboard.stripe.com` in that Chrome resolves to the
-**connected account**, not the Doula Cloud platform — so a Dashboard settings page
-opened straight after a walk is the Practice's, not yours. Switch accounts
-top-left, or sign out, before touching any platform setting.
+**It signs your browser into Stripe as the Persona.** The password step creates a real Stripe *user* for the Owner's fake address, and the hosted flow logs the browser into it. Afterwards `dashboard.stripe.com` in that Chrome resolves to the **connected account**, not the Doula Cloud platform — so a Dashboard settings page opened straight after a walk is the Practice's, not yours. Switch accounts top-left, or sign out, before touching any platform setting.
 
 ## Before starting
 
 - `bun run dev:full` in `app/`.
-- `./scripts/stripe-listen.sh`. **Check the secret it prints equals
-  `STRIPE_WEBHOOK_SECRET` in `app/.env.local`** — all three secrets there hold the
-  one session secret locally. Read the log for `<--` lines, not `-->`: a `-->`
-  with no `<--` means the event arrived and was never delivered.
-- The stack's Postgres is torn down with its volumes (`app/e2e/stack.ts:171`), so
-  **a connected account does not survive the session that made it.** Do the
-  onboarding inside the session that needs it.
+- `./scripts/stripe-listen.sh`. **Check the secret it prints equals `STRIPE_WEBHOOK_SECRET` in `app/.env.local`** — all three secrets there hold the one session secret locally. Read the log for `<--` lines, not `-->`: a `-->` with no `<--` means the event arrived and was never delivered.
+- The stack's Postgres is torn down with its volumes (`app/e2e/stack.ts:171`), so **a connected account does not survive the session that made it.** Do the onboarding inside the session that needs it.
 
 ## The walk
 
-Sign in as the Owner, open **Getting paid**, click **Connect Stripe** (or **Continue
-Stripe onboarding** if `POST .../payments/connect` already made an account).
+Sign in as the Owner, open **Getting paid**, click **Connect Stripe** (or **Continue Stripe onboarding** if `POST .../payments/connect` already made an account).
 
 ### Stripe user account — the outer page, not an iframe
 
@@ -49,21 +33,14 @@ Stripe onboarding** if `POST .../payments/connect` already made an account).
 | Two-step auth | **Enter code manually instead** reveals a base32 TOTP secret | generate codes from it; fill `getByRole('textbox', { name: 'Verification code' })`, which auto-submits |
 | Backup code | `[data-testid="backup-code-submit-button"]` | — |
 
-A six-digit TOTP from a base32 secret is ~10 lines of `node:crypto`
-(`createHmac('sha1', key)` over the 30-second counter, dynamic truncation).
+A six-digit TOTP from a base32 secret is ~10 lines of `node:crypto` (`createHmac('sha1', key)` over the 30-second counter, dynamic truncation).
 
 ### The account form — inside `iframe[name*="account-onboarding"]`
 
 Reach it with `page.frameLocator('iframe').first()`. Two traps:
 
-- **`snapshot({ frame })` times out on this iframe.** Read
-  `fr.locator('body').innerText()` and enumerate controls with
-  `fr.locator('input,select,textarea,button').evaluateAll(...)`.
-- **The Industry dropdown renders in a different frame** —
-  `connect-js.stripe.com/accessory_layer_*`, not the onboarding iframe. So does
-  the bank-account modal. Find it with
-  `page.frames().find((f) => f.url().includes('accessory_layer'))`. Its search box
-  placeholder is `Search…` with a Unicode ellipsis, not three dots.
+- **`snapshot({ frame })` times out on this iframe.** Read `fr.locator('body').innerText()` and enumerate controls with `fr.locator('input,select,textarea,button').evaluateAll(...)`.
+- **The Industry dropdown renders in a different frame** — `connect-js.stripe.com/accessory_layer_*`, not the onboarding iframe. So does the bank-account modal. Find it with `page.frames().find((f) => f.url().includes('accessory_layer'))`. Its search box placeholder is `Search…` with a Unicode ellipsis, not three dots.
 
 | Screen | What worked |
 | --- | --- |
@@ -75,16 +52,8 @@ Reach it with `page.frameLocator('iframe').first()`. Two traps:
 | Radar / Climate / Tax | **Continue with Pro**, **No thanks**, **Not right now** |
 | Review | **Agree and submit** |
 
-Test values: street `address_full_match`, DOB `01/01/1990`, SSN last 4 `0000`,
-phone `2015550123`, routing `110000000`, account `000123456789`, card
-`4242 4242 4242 4242`. A website on `example.com` is rejected as "Not a valid
-URL" — Stripe blocks the reserved domain, so use a plausible one.
+Test values: street `address_full_match`, DOB `01/01/1990`, SSN last 4 `0000`, phone `2015550123`, routing `110000000`, account `000123456789`, card `4242 4242 4242 4242`. A website on `example.com` is rejected as "Not a valid URL" — Stripe blocks the reserved domain, so use a plausible one.
 
 ## After
 
-Poll `GET /api/practices/{id}/payments/connect` until `cardPaymentsStatus` is
-`active` — the fastest way to script a wait. The Getting paid screen itself
-also catches up on its own now (**MO-G11**, fixed by #259): landing on
-`?connect=return` re-reads status on a short, bounded poll while it can still
-move, and a **Check status again** button is always there for an on-demand
-read. Either way works; the screen no longer needs a manual reload.
+Poll `GET /api/practices/{id}/payments/connect` until `cardPaymentsStatus` is `active` — the fastest way to script a wait. The Getting paid screen itself also catches up on its own now (**MO-G11**, fixed by #259): landing on `?connect=return` re-reads status on a short, bounded poll while it can still move, and a **Check status again** button is always there for an on-demand read. Either way works; the screen no longer needs a manual reload.

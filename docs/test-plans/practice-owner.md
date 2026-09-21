@@ -2,17 +2,12 @@
 
 - **Journey**: [practice-owner.md](../journeys/practice-owner.md)
 - **Persona**: [practice-owner.md](../personas/practice-owner.md)
-- **A pass means**: a new Doula has accepted an invitation, holds the Doula role,
-  and appears as the assigned Doula on a live Engagement; and one screen shows
-  every Engagement in the Practice with its Contract and Invoice state.
+- **A pass means**: a new Doula has accepted an invitation, holds the Doula role, and appears as the assigned Doula on a live Engagement; and one screen shows every Engagement in the Practice with its Contract and Invoice state.
 
 ## Preconditions
 
-- A Practice with Renata as Owner, and at least two Clients with Engagements.
-  Build it through Maya's stages 1 and 3, or provision it with
-  `POST /api/staff/signup` plus `POST /api/practices/{id}/clients` as the specs do.
-- A second Identity Platform account for the invitee, and a way to read the
-  invitation token (it is printed on the invite screen; no email is sent).
+- A Practice with Renata as Owner, and at least two Clients with Engagements. Build it through Maya's stages 1 and 3, or provision it with `POST /api/staff/signup` plus `POST /api/practices/{id}/clients` as the specs do.
+- A second Identity Platform account for the invitee, and a way to read the invitation token (it is printed on the invite screen; no email is sent).
 
 ## Steps
 
@@ -24,9 +19,7 @@
 | 1.2 | Choose Rooted Birth Collective from her memberships | **There is no choosing.** With one membership `decideLanding` redirects straight to `/practices/{id}` (`app/src/lib/landing.ts:24-26`); the `Choose a Practice` picker renders only for two or more, which her own journey never gives her — only Lena Vasquez's does | `manual` |
 | 1.3 | Read the tiles | All seven render for her — but only **four** are owner-gated (Invite, Staff, Plan Templates, Contract Template). **Payments sits outside the gate** (`app/src/routes/practices/[practiceId]/+page.svelte:76-81`), so every member sees it, roles or none ([RA-G9](https://github.com/markgoho/doula-cloud/issues/267)) | `manual` |
 
-The membership picker (1.2) is exercised by no spec — every spec's Staff member
-belongs to exactly one Practice, so the multi-membership path is untested here and
-is Lena's normal case.
+The membership picker (1.2) is exercised by no spec — every spec's Staff member belongs to exactly one Practice, so the multi-membership path is untested here and is Lena's normal case.
 
 ### Stage 2 — Invite a new Doula
 
@@ -107,9 +100,7 @@ RA-G2 and RA-G3 are observed at 3.3 and 3.2 rather than given steps of their own
 
 ### 2026-08-22 — automated steps ([#209](https://github.com/markgoho/doula-cloud/issues/209))
 
-`bun run test:e2e` in `app/`, whole suite, one run: **16 passed, 0 failed** (20.5s).
-Stack per [docs/testing.md](../testing.md) — Postgres in compose, the goose
-migration, the Go BFF and the Firebase Auth emulator, all local.
+`bun run test:e2e` in `app/`, whole suite, one run: **16 passed, 0 failed** (20.5s). Stack per [docs/testing.md](../testing.md) — Postgres in compose, the goose migration, the Go BFF and the Firebase Auth emulator, all local.
 
 | Step | Spec | Result |
 | --- | --- | --- |
@@ -139,13 +130,7 @@ A desk pass, not a walk. [#318](https://github.com/markgoho/doula-cloud/issues/3
 
 ### 2026-08-22 — manual walk ([#235](https://github.com/markgoho/doula-cloud/issues/235))
 
-`bun run dev:full` in `app/`, walked in a desktop browser at 1280x900 as Renata
-Alvarez, with a second context for the invitee and a 390x844 iPhone context for
-stage 8. Preconditions built as the plan allows: `POST /api/staff/signup` for
-`Rooted Birth Collective`, then two Clients through `POST .../clients` — two of
-the three signup credits, leaving one for 6.1-a. The 5 `automated` steps were
-**not** re-run. No step is `blocked`: this plan has none, and Stripe is never
-reached.
+`bun run dev:full` in `app/`, walked in a desktop browser at 1280x900 as Renata Alvarez, with a second context for the invitee and a 390x844 iPhone context for stage 8. Preconditions built as the plan allows: `POST /api/staff/signup` for `Rooted Birth Collective`, then two Clients through `POST .../clients` — two of the three signup credits, leaving one for 6.1-a. The 5 `automated` steps were **not** re-run. No step is `blocked`: this plan has none, and Stripe is never reached.
 
 | Step | Mark | Result | What was seen |
 | --- | --- | --- | --- |
@@ -173,29 +158,10 @@ reached.
 | 8.2 | `missing-feature (RA-G5)` [#263](https://github.com/markgoho/doula-cloud/issues/263) | as expected | Confirmed unwalkable. From the phone the only screens that exist are Clients (Name, Status) and Billing. No availability, no on-call, no coverage — and no route to build one from |
 | 9.2 | `manual` | as expected — **passes** | Filled the Birth Plan (`atmosphere: filled-0`), saved, then added `Hospital transfer wishes` to the Birth Plan template and saved that. Reopening the Engagement showed the original five fields and the kept answer; the new field is in the template response and **absent** from the instance. The snapshot holds |
 
-**16 `manual` steps walked; 7 `missing-feature` steps confirmed unwalkable; no
-`blocked` step on this plan.** Three expected results were falsified — 1.2, 1.3
-and 4.3 — minting **RA-G9** and **RA-G10** on the journey map; the plan's own
-cells are corrected above. No `journey-gap` issue was filed — that is
-[#209](https://github.com/markgoho/doula-cloud/issues/209).
+**16 `manual` steps walked; 7 `missing-feature` steps confirmed unwalkable; no `blocked` step on this plan.** Three expected results were falsified — 1.2, 1.3 and 4.3 — minting **RA-G9** and **RA-G10** on the journey map; the plan's own cells are corrected above. No `journey-gap` issue was filed — that is [#209](https://github.com/markgoho/doula-cloud/issues/209).
 
-**Verdict against "a pass means": it does not pass, and the one half that passes
-is the half she did not ask about.** A new Doula did accept an invitation and does
-hold the Doula role — but only because a `PATCH` was made from a terminal against
-a staff id no screen prints; nothing in the product does it. She does **not**
-appear as the assigned Doula on an Engagement (RA-G4); the nearest thing the
-product has is a dateless Visit reassigned by pasting a UUID (RA-G10). And no
-screen shows every Engagement with its Contract and Invoice state (RA-G6, RA-G7).
-What does pass is 6.1-a: the Clients list really is Practice-wide, so a Client
-created by anyone shows up for everyone.
+**Verdict against "a pass means": it does not pass, and the one half that passes is the half she did not ask about.** A new Doula did accept an invitation and does hold the Doula role — but only because a `PATCH` was made from a terminal against a staff id no screen prints; nothing in the product does it. She does **not** appear as the assigned Doula on an Engagement (RA-G4); the nearest thing the product has is a dateless Visit reassigned by pasting a UUID (RA-G10). And no screen shows every Engagement with its Contract and Invoice state (RA-G6, RA-G7). What does pass is 6.1-a: the Clients list really is Practice-wide, so a Client created by anyone shows up for everyone.
 
-Her moment of truth landed where the map put it, and the walk sharpened *why*.
-Stage 8 does not fail on the phone — the screen renders cleanly at 390px with no
-overflow. It fails because there is nothing on it: at 2 a.m. the product can tell
-her the names of three Clients and that each is `intake`. The failure is absence,
-not layout, which is what makes RA-G5 a feature and not a stylesheet.
+Her moment of truth landed where the map put it, and the walk sharpened *why*. Stage 8 does not fail on the phone — the screen renders cleanly at 390px with no overflow. It fails because there is nothing on it: at 2 a.m. the product can tell her the names of three Clients and that each is `intake`. The failure is absence, not layout, which is what makes RA-G5 a feature and not a stylesheet.
 
-**For the walks behind this one**: Priya's plan step 3.3 and her journey map's
-stage 3.3 both carry the claim this walk falsified — that Payments is owner-gated
-— and both are corrected. A non-owner will see **Clients, Billing and Payments**,
-not two tiles.
+**For the walks behind this one**: Priya's plan step 3.3 and her journey map's stage 3.3 both carry the claim this walk falsified — that Payments is owner-gated — and both are corrected. A non-owner will see **Clients, Billing and Payments**, not two tiles.

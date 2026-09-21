@@ -2,21 +2,13 @@
 
 - **Journey**: [evaluator-doula.md](../journeys/evaluator-doula.md)
 - **Persona**: [evaluator-doula.md](../personas/evaluator-doula.md)
-- **A pass means**: a Practice with one test Client in it and an intention to come
-  back — **or** a clear, recorded reason she left. Both close the journey.
+- **A pass means**: a Practice with one test Client in it and an intention to come back — **or** a clear, recorded reason she left. Both close the journey.
 
-Tasha is the only Persona who may legitimately abandon, so every stage carries an
-**abandon check**: the tester records whether a real evaluator would close the tab
-there. That check is the point of the plan, and it is a judgment, not an
-assertion — record what was seen, in her words, not a pass or a fail.
+Tasha is the only Persona who may legitimately abandon, so every stage carries an **abandon check**: the tester records whether a real evaluator would close the tab there. That check is the point of the plan, and it is a judgment, not an assertion — record what was seen, in her words, not a pass or a fail.
 
 ## Preconditions
 
-None, and that is the test. Tasha arrives from outside with no account and no
-fixture. Stages 1 and 2 land on a marketing site that has not been built, so this
-plan is the only practice-side one whose first steps have no product to run
-against — they are `missing-feature`, not work to be done here (building the
-marketing site is out of scope for this map).
+None, and that is the test. Tasha arrives from outside with no account and no fixture. Stages 1 and 2 land on a marketing site that has not been built, so this plan is the only practice-side one whose first steps have no product to run against — they are `missing-feature`, not work to be done here (building the marketing site is out of scope for this map).
 
 ## Steps
 
@@ -85,8 +77,7 @@ marketing site is out of scope for this map).
 | 7.1 | Import two years of Clients from a spreadsheet | No import exists | `missing-feature (TB-G6)` [#289](https://github.com/markgoho/doula-cloud/issues/289) |
 | 7.1-a | Reproduce one spreadsheet row by hand instead | Possible now, one row at a time: intake asks given, family and preferred name, date of birth, email, phone and address, and a Practice adds the columns we did not think of to its own Client Field Template ([MO-G3](https://github.com/markgoho/doula-cloud/issues/252) is closed). What still cannot happen is two years of rows arriving together — that is [TB-G6](https://github.com/markgoho/doula-cloud/issues/289) at 7.1, and it is untouched. `manual`, because the claim is about the whole sequence and every Practice-defined field behind it, and no spec answers a question past the first one — `accessibility.e2e.ts` opens four of the routes to run axe over them, which tests the pages and not the transcription | `manual` |
 
-**Abandon check**: her existing data is the reason switching is expensive, and it
-cannot come with her.
+**Abandon check**: her existing data is the reason switching is expensive, and it cannot come with her.
 
 ## Marks
 
@@ -98,23 +89,17 @@ cannot come with her.
 
 Five gaps are closed: TB-G2's in-product half and TB-G3 (unexplained credits) are both observed at 2.1-a; TB-G4 (the admin-menu first screen) at 4.1-a; TB-G7 (the unsignposted roster model) at 3.3-a; and TB-G5 (export and account deletion) at 6.1. All four steps now show the state that closed the gap rather than the gap itself. TB-G1 backs two steps.
 
-3.3-a moved from `missing-feature (TB-G7)` to `manual` in the 2026-08-22 walk
-below: the step can be performed, and what the Staff screen hands back is the
-result.
+3.3-a moved from `missing-feature (TB-G7)` to `manual` in the 2026-08-22 walk below: the step can be performed, and what the Staff screen hands back is the result.
 
 5.1 moved from `manual` to `automated (add-client-visits.e2e.ts)` in the 2026-09-10 desk pass below, and 5.2-b was appended: the free save and the act that spends the Credit are two acts now, so they are two steps.
 
-Her plan is the least automatable of the six, and for a reason worth keeping: two
-of her seven stages happen before the product exists, and a Playwright spec cannot
-run against a marketing site that has not been written.
+Her plan is the least automatable of the six, and for a reason worth keeping: two of her seven stages happen before the product exists, and a Playwright spec cannot run against a marketing site that has not been written.
 
 ## Run log
 
 ### 2026-08-22 — automated steps ([#209](https://github.com/markgoho/doula-cloud/issues/209))
 
-`bun run test:e2e` in `app/`, whole suite, one run: **16 passed, 0 failed** (20.5s).
-Stack per [docs/testing.md](../testing.md) — Postgres in compose, the goose
-migration, the Go BFF and the Firebase Auth emulator, all local.
+`bun run test:e2e` in `app/`, whole suite, one run: **16 passed, 0 failed** (20.5s). Stack per [docs/testing.md](../testing.md) — Postgres in compose, the goose migration, the Go BFF and the Firebase Auth emulator, all local.
 
 | Step | Spec | Result |
 | --- | --- | --- |
@@ -169,8 +154,7 @@ The Marks summary is recounted from the Steps table above — 5 / 10 / 0 / 5 —
 
 ### 2026-09-03 — new automated steps ([#318](https://github.com/markgoho/doula-cloud/issues/318))
 
-`bun run test:e2e` in `app/`, whole suite, one run: **30 passed, 0 failed**
-(29.0s).
+`bun run test:e2e` in `app/`, whole suite, one run: **30 passed, 0 failed** (29.0s).
 
 | Step | Spec | Result |
 | --- | --- | --- |
@@ -178,15 +162,11 @@ The Marks summary is recounted from the Steps table above — 5 / 10 / 0 / 5 —
 | 3.2 | `signup-form.e2e.ts` | pass |
 | 3.3 | `signup-form.e2e.ts` | pass |
 
-**3 newly automated steps: all pass**, bringing the plan's total to 4. The
-2026-08-22 manual walk below is unchanged as a historical record.
+**3 newly automated steps: all pass**, bringing the plan's total to 4. The 2026-08-22 manual walk below is unchanged as a historical record.
 
 ### 2026-08-22 — manual walk ([#233](https://github.com/markgoho/doula-cloud/issues/233))
 
-`bun run dev:full` in `app/`, walked once end to end in a desktop browser at
-1280x900 as Tasha Bell. Preconditions: none, as the plan says — signed up from
-`/signup` with no fixture. Practice `Bell & Co Birth Support`, one Client
-`Test Client One`. The 1 `automated` step was **not** re-run.
+`bun run dev:full` in `app/`, walked once end to end in a desktop browser at 1280x900 as Tasha Bell. Preconditions: none, as the plan says — signed up from `/signup` with no fixture. Practice `Bell & Co Birth Support`, one Client `Test Client One`. The 1 `automated` step was **not** re-run.
 
 | Step | Mark | Result | What was seen |
 | --- | --- | --- | --- |
@@ -209,38 +189,18 @@ The Marks summary is recounted from the Steps table above — 5 / 10 / 0 / 5 —
 | 7.1 | `missing-feature (TB-G6)` [#289](https://github.com/markgoho/doula-cloud/issues/289) | as expected | Same route table: no import endpoint exists |
 | 7.1-a | `manual` | as expected | Walked and impossible, as claimed: `Add a Client` accepts a name and an email and nothing else (**[MO-G3](https://github.com/markgoho/doula-cloud/issues/252)**) |
 
-**12 `manual` steps walked, 1 re-marked from `missing-feature`; 5 remaining
-`missing-feature` steps confirmed unwalkable; 0 `blocked` steps (this plan has
-none).** One gap wording was falsified and rewritten (TB-G7); two were sharpened
-in place (TB-G1, TB-G2). No gap ID was minted, and no `journey-gap` issue was
-filed — that is
-[#209](https://github.com/markgoho/doula-cloud/issues/209).
+**12 `manual` steps walked, 1 re-marked from `missing-feature`; 5 remaining `missing-feature` steps confirmed unwalkable; 0 `blocked` steps (this plan has none).** One gap wording was falsified and rewritten (TB-G7); two were sharpened in place (TB-G1, TB-G2). No gap ID was minted, and no `journey-gap` issue was filed — that is [#209](https://github.com/markgoho/doula-cloud/issues/209).
 
 #### Abandon checks — what a real evaluator would do
 
 Recorded as judgment, in Tasha's words, not as pass or fail.
 
 - **Stage 1** — She never arrives. Nothing to close the tab on.
-- **Stage 2** — "What does it cost?" is unanswered before signup *and* after it.
-  The Billing screen is worse than silence: it names a currency she has never
-  heard of, prints `signup_bonus` at her, and the one button that might explain
-  the price returns `internal error`. She would not put a card near this.
-- **Stage 3** — She would not leave here. Four fields, one screen, no
-  confirmation email. This is the strongest leg, exactly as the map says.
-- **Stage 4** — **This is where she closes the tab.** Seven links and a Sign out
-  button. She came to see whether it is built for doulas; the screen answers with
-  a filing cabinet. Nothing on it says the word she was shopping for.
-- **Stage 5** — If she pushes past stage 4, the Engagement page rescues her:
-  Birth Plan is on it, in her own words, at three clicks. The finding is not that
-  the page is bad — it is that it sits behind the screen she would have left at,
-  and that reaching it costs her a credit and a Client she had to invent.
-- **Stage 6** — "Can I get out again?" — no. Half her stated question has no
-  answer anywhere in the product.
-- **Stage 7** — Her spreadsheet cannot come with her, and cannot be retyped
-  either. For a two-doula practice with two years of history, this is the
-  expensive half of switching and the product has nothing to say about it.
+- **Stage 2** — "What does it cost?" is unanswered before signup *and* after it. The Billing screen is worse than silence: it names a currency she has never heard of, prints `signup_bonus` at her, and the one button that might explain the price returns `internal error`. She would not put a card near this.
+- **Stage 3** — She would not leave here. Four fields, one screen, no confirmation email. This is the strongest leg, exactly as the map says.
+- **Stage 4** — **This is where she closes the tab.** Seven links and a Sign out button. She came to see whether it is built for doulas; the screen answers with a filing cabinet. Nothing on it says the word she was shopping for.
+- **Stage 5** — If she pushes past stage 4, the Engagement page rescues her: Birth Plan is on it, in her own words, at three clicks. The finding is not that the page is bad — it is that it sits behind the screen she would have left at, and that reaching it costs her a credit and a Client she had to invent.
+- **Stage 6** — "Can I get out again?" — no. Half her stated question has no answer anywhere in the product.
+- **Stage 7** — Her spreadsheet cannot come with her, and cannot be retyped either. For a two-doula practice with two years of history, this is the expensive half of switching and the product has nothing to say about it.
 
-**Verdict against "a pass means"**: a Practice with one test Client in it exists,
-so the mechanical half passed. The intention to come back does not — she leaves
-at stage 4, for a recorded reason. Both close the journey, and this journey
-closes on the second one.
+**Verdict against "a pass means"**: a Practice with one test Client in it exists, so the mechanical half passed. The intention to come back does not — she leaves at stage 4, for a recorded reason. Both close the journey, and this journey closes on the second one.

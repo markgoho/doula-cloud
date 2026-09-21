@@ -1,14 +1,10 @@
 # The design workflow
 
-How a screen goes from a ticket to Svelte on trunk, and how a hand-correction on the canvas gets back
-into the code.
+How a screen goes from a ticket to Svelte on trunk, and how a hand-correction on the canvas gets back into the code.
 
-The decision behind this — pen.dev as the working surface, code as the truth, one committed `.pen` file
-— is [ADR-0019](../adr/0019-pen-dev-is-the-working-surface-and-code-is-the-truth.md). This document is
-the procedure, and it is expected to change as we learn. The ADR is not.
+The decision behind this — pen.dev as the working surface, code as the truth, one committed `.pen` file — is [ADR-0019](../adr/0019-pen-dev-is-the-working-surface-and-code-is-the-truth.md). This document is the procedure, and it is expected to change as we learn. The ADR is not.
 
-Everything obeys [the design brief](brief.md). A screen that wants to depart from the brief changes the
-brief first.
+Everything obeys [the design brief](brief.md). A screen that wants to depart from the brief changes the brief first.
 
 ## The pieces
 
@@ -22,11 +18,8 @@ brief first.
 
 Two consequences worth holding on to:
 
-- **`execute` edits whatever the app has open.** Before an agent touches the canvas, the app must have
-  `doula-cloud.pen` as its active editor. Confirm with `get_app_state`, which prints the active path.
-- **The CLI is the file-writing path.** `execute` changes are in memory until the canvas is saved, and
-  `printf 'save()\nexit()\n' | bunx pen interactive --app desktop` is how an agent saves it. See
-  [Autosave, and the one operation it misses](#autosave-and-the-one-operation-it-misses).
+- **`execute` edits whatever the app has open.** Before an agent touches the canvas, the app must have `doula-cloud.pen` as its active editor. Confirm with `get_app_state`, which prints the active path.
+- **The CLI is the file-writing path.** `execute` changes are in memory until the canvas is saved, and `printf 'save()\nexit()\n' | bunx pen interactive --app desktop` is how an agent saves it. See [Autosave, and the one operation it misses](#autosave-and-the-one-operation-it-misses).
 
 ## The export is a read-back, not a source
 
@@ -38,126 +31,54 @@ It is explicitly not an interchange format. ADR-0019 already rejected "Generatin
 
 ## Designing a screen
 
-1. **Open the file.** `doula-cloud.pen` in the desktop app. The agent confirms with `get_app_state` that
-   the active editor is that path and no other.
-2. **Look for an existing screen to copy.** This is the first move, not a fallback. `Copy` on a reusable
-   frame creates a connected instance, so a screen that reuses `QuickCard` or an activity row inherits
-   later edits to it. Generating from nothing is for a genuinely new archetype.
-3. **Draw it**, against the brief and against the Templates in `app/src/lib/components/templates/`. A
-   screen that instantiates an existing Template is arranging regions, not inventing a page.
-4. **Check it before showing it.** `Get` with a visitor reports `ctx.bounds` and `ctx.problems`, which
-   catches clipping and collapsed layout without a screenshot. Screenshot only to judge color, type and
-   alignment.
+1. **Open the file.** `doula-cloud.pen` in the desktop app. The agent confirms with `get_app_state` that the active editor is that path and no other.
+2. **Look for an existing screen to copy.** This is the first move, not a fallback. `Copy` on a reusable frame creates a connected instance, so a screen that reuses `QuickCard` or an activity row inherits later edits to it. Generating from nothing is for a genuinely new archetype.
+3. **Draw it**, against the brief and against the Templates in `app/src/lib/components/templates/`. A screen that instantiates an existing Template is arranging regions, not inventing a page.
+4. **Check it before showing it.** `Get` with a visitor reports `ctx.bounds` and `ctx.problems`, which catches clipping and collapsed layout without a screenshot. Screenshot only to judge color, type and alignment.
 5. **Save**, so the `.pen` change is on disk and in `git diff`.
 6. **Regenerate the export.** `bun run design:export`, and commit `docs/design/doula-cloud.export.md` in the same commit as the `.pen` change (see Committing, below). A commit that changes the `.pen` file without this fails CI.
 
 ## Five `execute` rules that are not in Pen's own skill
 
-Each of these cost a rebuild on [#431](https://github.com/markgoho/doula-cloud/issues/431). They are
-about the tool, not about design, and none of them is discoverable from the API documentation.
+Each of these cost a rebuild on [#431](https://github.com/markgoho/doula-cloud/issues/431). They are about the tool, not about design, and none of them is discoverable from the API documentation.
 
-**Build a subtree in one declarative call, not by growing it.** `Insert` a node, then `Insert` its
-children into the returned id, and the layout comes out wrong — children land outside their parent's
-box and the frame renders blank or clipped, while `Get` reports bounds that do not match what the
-canvas draws. The reliable shape is `id = Insert(parent, {…empty frame…})` followed by
-`Replace(id, {…the whole tree, `children` nested…})`. Passing nested `children` to `Insert` directly
-fails the same way that growing it does; only `Replace` settles the layout.
+**Build a subtree in one declarative call, not by growing it.** `Insert` a node, then `Insert` its children into the returned id, and the layout comes out wrong — children land outside their parent's box and the frame renders blank or clipped, while `Get` reports bounds that do not match what the canvas draws. The reliable shape is `id = Insert(parent, {…empty frame…})` followed by `Replace(id, {…the whole tree, `children` nested…})`. Passing nested `children` to `Insert` directly fails the same way that growing it does; only `Replace` settles the layout.
 
-**`Replace` throws inside a reusable component.** Any descendant of a node marked `reusable: true`
-rejects `Replace` with `TypeError: Cannot read properties of undefined (reading 'type')`, whatever the
-replacement is — a bare text node fails as readily as a subtree. Inside a component, `Insert`,
-`Update`, `Delete` and `Move` all work. When a component needs a nested structure changed, build that
-structure as **its own root-level component** and `Insert` a single `ref` to it; a `ref` nests inside
-a component without complaint. That is why `BrandLockup` exists as a component rather than as two
-nodes inside `StaffTopBar`.
+**`Replace` throws inside a reusable component.** Any descendant of a node marked `reusable: true` rejects `Replace` with `TypeError: Cannot read properties of undefined (reading 'type')`, whatever the replacement is — a bare text node fails as readily as a subtree. Inside a component, `Insert`, `Update`, `Delete` and `Move` all work. When a component needs a nested structure changed, build that structure as **its own root-level component** and `Insert` a single `ref` to it; a `ref` nests inside a component without complaint. That is why `BrandLockup` exists as a component rather than as two nodes inside `StaffTopBar`.
 
-**`strokeWidth` on a `path` is node pixels, not `viewBox` units.** The `viewBox` scales the geometry
-onto the node's box; the stroke is not scaled with it. A mark authored at `stroke-width: 14` in a
-202-unit-wide `viewBox` needs roughly `height / 6.5` once it is drawn at 40x19, or it renders as a
-blob. Re-derive the stroke for every size the mark is used at, rather than copying the number out of
-the source SVG.
+**`strokeWidth` on a `path` is node pixels, not `viewBox` units.** The `viewBox` scales the geometry onto the node's box; the stroke is not scaled with it. A mark authored at `stroke-width: 14` in a 202-unit-wide `viewBox` needs roughly `height / 6.5` once it is drawn at 40x19, or it renders as a blob. Re-derive the stroke for every size the mark is used at, rather than copying the number out of the source SVG.
 
-**There is no variant system, and theme axes are the substitute.** Pen has no Figma-style variants:
-a component is one tree, and an instance customizes it through `ref` properties and a `descendants`
-map. What fills the gap is that **variables take a value per theme-axis value, and any node can be
-pinned to one** through its `theme` property. `SetVariables` registers a new axis on the fly, so
-`mark-stroke` carries `9`/`4`/`3` on a `size` axis of `lg`/`md`/`sm`, the `CloudMark` arcs reference
-`$mark-stroke`, and an instance picks its weight with `theme: {size: "sm"}`. One component, three
-sizes, no duplication — and it composes with the `mode` light/dark axis already in the document
-rather than competing with it. Reach for this whenever instances differ by a *value* rather than by
-structure; `descendants` is still the answer when they differ by content.
+**There is no variant system, and theme axes are the substitute.** Pen has no Figma-style variants: a component is one tree, and an instance customizes it through `ref` properties and a `descendants` map. What fills the gap is that **variables take a value per theme-axis value, and any node can be pinned to one** through its `theme` property. `SetVariables` registers a new axis on the fly, so `mark-stroke` carries `9`/`4`/`3` on a `size` axis of `lg`/`md`/`sm`, the `CloudMark` arcs reference `$mark-stroke`, and an instance picks its weight with `theme: {size: "sm"}`. One component, three sizes, no duplication — and it composes with the `mode` light/dark axis already in the document rather than competing with it. Reach for this whenever instances differ by a *value* rather than by structure; `descendants` is still the answer when they differ by content.
 
-**Pin the component master too.** An unpinned node resolves the variable on whatever the axis
-falls back to, so a master drawn at the small size but left unpinned renders with the large
-value and looks broken the moment somebody opens the component — which is exactly how this was
-found. Give the master an explicit `theme` matching the size it is drawn at, and never rely on
-which axis value happens to come first. Note also that an instance scales its subtree from the
-`ref`'s own `width`/`height`: if the component's *children* carry explicit sizes matching the
-master, the override stops scaling them and every instance renders at one size.
+**Pin the component master too.** An unpinned node resolves the variable on whatever the axis falls back to, so a master drawn at the small size but left unpinned renders with the large value and looks broken the moment somebody opens the component — which is exactly how this was found. Give the master an explicit `theme` matching the size it is drawn at, and never rely on which axis value happens to come first. Note also that an instance scales its subtree from the `ref`'s own `width`/`height`: if the component's *children* carry explicit sizes matching the master, the override stops scaling them and every instance renders at one size.
 
-**`TakeScreenshot` renders the file on disk, not the document in memory.** Found on
-[#433](https://github.com/markgoho/doula-cloud/issues/433): a solid red 400x200 probe rectangle inserted
-into a frame screenshotted as blank white, while the pre-existing top bar in the same frame rendered
-correctly. Everything created since the last save is simply absent from the image. Combined with the
-autosave section below, this means **a screenshot can silently show you the previous version of your own
-work** — the one review step you would trust most is the one that lies. Verify structure with `Get` and
-`ctx.bounds`; take a screenshot only after `git status` confirms the file is written.
+**`TakeScreenshot` renders the file on disk, not the document in memory.** Found on [#433](https://github.com/markgoho/doula-cloud/issues/433): a solid red 400x200 probe rectangle inserted into a frame screenshotted as blank white, while the pre-existing top bar in the same frame rendered correctly. Everything created since the last save is simply absent from the image. Combined with the autosave section below, this means **a screenshot can silently show you the previous version of your own work** — the one review step you would trust most is the one that lies. Verify structure with `Get` and `ctx.bounds`; take a screenshot only after `git status` confirms the file is written.
 
-**`ctx.bounds.y` carries a uniform +50px offset, so `ctx.problems` cries "clipped" constantly.** Also
-#433: every node at every depth reported a y 50px lower than its true position, which made a correctly
-laid-out page report `partially clipped` on most of its frames. The **heights are right** and they are
-what to check — a root that sums to its children (`453 = 60` top bar `+ 393` content) is correct however
-loudly `problems` complains. Treat a clipping warning as a prompt to check the arithmetic, never as the
-finding itself. What `problems` still catches honestly is a **collapsed** node, which `execute` reports
-separately as a `Collapsed size` issue and is always real.
+**`ctx.bounds.y` carries a uniform +50px offset, so `ctx.problems` cries "clipped" constantly.** Also #433: every node at every depth reported a y 50px lower than its true position, which made a correctly laid-out page report `partially clipped` on most of its frames. The **heights are right** and they are what to check — a root that sums to its children (`453 = 60` top bar `+ 393` content) is correct however loudly `problems` complains. Treat a clipping warning as a prompt to check the arithmetic, never as the finding itself. What `problems` still catches honestly is a **collapsed** node, which `execute` reports separately as a `Collapsed size` issue and is always real.
 
-**Globals do not survive between `execute` calls, whatever the API notes say.** `execute.md` states that
-assigning without `const`/`let` persists a value to later calls, and the response even labels the ids it
-captured `(= variable)`. A later call referencing one fails with `ReferenceError`. Capture the ids from
-the response's name-to-id mapping and paste them as string literals, and **redefine helper functions in
-every call** that uses them.
+**Globals do not survive between `execute` calls, whatever the API notes say.** `execute.md` states that assigning without `const`/`let` persists a value to later calls, and the response even labels the ids it captured `(= variable)`. A later call referencing one fails with `ReferenceError`. Capture the ids from the response's name-to-id mapping and paste them as string literals, and **redefine helper functions in every call** that uses them.
 
-**`phosphor` is a valid icon library on the canvas.** The schema's `Icon.library` accepts `lucide`,
-`feather`, three Material Symbols variants and `phosphor`, so a drawing is not forced onto Lucide
-stand-ins. #411's `weight: 300` rendering bug still stands, so a drawn icon is not evidence about the
-shipped one either way; the code follows [#96](https://github.com/markgoho/doula-cloud/issues/96)
-regardless of what the canvas shows.
+**`phosphor` is a valid icon library on the canvas.** The schema's `Icon.library` accepts `lucide`, `feather`, three Material Symbols variants and `phosphor`, so a drawing is not forced onto Lucide stand-ins. #411's `weight: 300` rendering bug still stands, so a drawn icon is not evidence about the shipped one either way; the code follows [#96](https://github.com/markgoho/doula-cloud/issues/96) regardless of what the canvas shows.
 
 ## Hand-correcting on the canvas
 
 Open the canvas and change what looks wrong. That is the point of the tool.
 
 - **Save when done.** Until the file is saved, the change exists only in the app.
-- **Either say so, or expect it to be found.** Every design ticket starts by running `git diff` on
-  `doula-cloud.pen`, so an unmentioned edit is picked up at the start of the next piece of work. Telling
-  the agent directly gets it handled now instead.
-- **You do not have to say what changed.** Reading the correction back cold is a tested capability, not
-  an assumption: on [#411](https://github.com/markgoho/doula-cloud/issues/411) a blind reorder of the
-  quick-link cards was read back correctly and carried into the code.
+- **Either say so, or expect it to be found.** Every design ticket starts by running `git diff` on `doula-cloud.pen`, so an unmentioned edit is picked up at the start of the next piece of work. Telling the agent directly gets it handled now instead.
+- **You do not have to say what changed.** Reading the correction back cold is a tested capability, not an assumption: on [#411](https://github.com/markgoho/doula-cloud/issues/411) a blind reorder of the quick-link cards was read back correctly and carried into the code.
 - **Regenerate the export after saving.** `bun run design:export`, so `docs/design/doula-cloud.export.md` matches what is now on disk; CI fails otherwise and names the same command.
 
 ## Carrying a design into code
 
 1. **Read the canvas**, not a screenshot of it. `Get` returns schema data with resolved bounds. When Pen.app is not open and no MCP tools are reachable, read `docs/design/doula-cloud.export.md` instead — regenerate it first with `bun run design:export` if it looks stale. If neither the live canvas nor a fresh export answers the question, say so plainly rather than guessing at the design.
-2. **Write Svelte against the repo's own rules.** Atoms, molecules, organisms and Templates come first.
-   Raw `<a>` and `<button>` are forbidden outside the atoms by `svelte/no-restricted-html-elements`.
-3. **When the design needs something an atom cannot do, grow the atom.** Do not bypass the rule and do
-   not hand-roll the markup. On #411 this produced a real improvement: `Link.svelte` gained an icon slot,
-   a `current` state and a `card` variant, and landed on trunk on its own merit.
-4. **Tokens come from `tokens.css`, never from the canvas.** Import runs one way, CSS → canvas Variables,
-   and it is byte-exact. There is no *token* export mechanism: `Export()` writes images, PDF and HTML, never CSS
-   custom properties. Turning canvas Variables back into CSS is an agent translating by hand, which is
-   how a token drifts. Change `tokens.css`, then re-import.
+2. **Write Svelte against the repo's own rules.** Atoms, molecules, organisms and Templates come first. Raw `<a>` and `<button>` are forbidden outside the atoms by `svelte/no-restricted-html-elements`.
+3. **When the design needs something an atom cannot do, grow the atom.** Do not bypass the rule and do not hand-roll the markup. On #411 this produced a real improvement: `Link.svelte` gained an icon slot, a `current` state and a `card` variant, and landed on trunk on its own merit.
+4. **Tokens come from `tokens.css`, never from the canvas.** Import runs one way, CSS → canvas Variables, and it is byte-exact. There is no *token* export mechanism: `Export()` writes images, PDF and HTML, never CSS custom properties. Turning canvas Variables back into CSS is an agent translating by hand, which is how a token drifts. Change `tokens.css`, then re-import.
 5. **Verify**: `bun run check`, `bun run lint`, `bun run test` in `app/`, with the coverage gate intact.
-6. **Then open it in a browser**, at a desktop and a narrow width, on the real route and not only the
-   style guide. Every ticket on this map that skipped this missed something the whole suite passed
-   over: `LabeledField`'s stacked orientation did not stack (#425), and `GET /clients` did not mean
-   what the empty state assumed (#423). `bun run dev:full` brings up the stack; seed a fixture the way
-   `e2e/stack.ts` does and log in as a real person.
+6. **Then open it in a browser**, at a desktop and a narrow width, on the real route and not only the style guide. Every ticket on this map that skipped this missed something the whole suite passed over: `LabeledField`'s stacked orientation did not stack (#425), and `GET /clients` did not mean what the empty state assumed (#423). `bun run dev:full` brings up the stack; seed a fixture the way `e2e/stack.ts` does and log in as a real person.
 
-   **This machine's Chrome inverts page colors** with an extension, so a screenshot taken through it
-   is evidence about layout and never about the palette. For color, use a clean browser
-   (`playwriter session new --browser headless`) or read the computed value rather than the picture.
+   **This machine's Chrome inverts page colors** with an extension, so a screenshot taken through it is evidence about layout and never about the palette. For color, use a clean browser (`playwriter session new --browser headless`) or read the computed value rather than the picture.
 
 ## Committing
 
@@ -167,52 +88,26 @@ The `.pen` change, its regenerated export, and the Svelte change **go in the sam
 
 Every new route goes through the canvas for now.
 
-That rule expires when all of these are true: the three Templates
-([#422](https://github.com/markgoho/doula-cloud/issues/422)) have shipped, the application shell has
-shipped, and three consecutive routes have been built by instantiating a Template with no canvas step.
-After that, the canvas is for genuinely novel surfaces — a new archetype, a new embedding context — and
-a route that picks an existing Template goes straight to code.
+That rule expires when all of these are true: the three Templates ([#422](https://github.com/markgoho/doula-cloud/issues/422)) have shipped, the application shell has shipped, and three consecutive routes have been built by instantiating a Template with no canvas step. After that, the canvas is for genuinely novel surfaces — a new archetype, a new embedding context — and a route that picks an existing Template goes straight to code.
 
 The test exists because "once the design system is mature" is not a thing anyone ever declares.
 
 ## Autosave, and the one operation it misses
 
-**The desktop app does autosave, and the trigger is a scenegraph change** — settled on
-[#417](https://github.com/markgoho/doula-cloud/issues/417), against a healthy editor opened on the real
-`docs/design/doula-cloud.pen`, which is the condition the earlier test could not rule out. The app's own
-title bar states which it is: a document reads `— Auto-saved` once written, and `— Edited` while dirty.
+**The desktop app does autosave, and the trigger is a scenegraph change** — settled on [#417](https://github.com/markgoho/doula-cloud/issues/417), against a healthy editor opened on the real `docs/design/doula-cloud.pen`, which is the condition the earlier test could not rule out. The app's own title bar states which it is: a document reads `— Auto-saved` once written, and `— Edited` while dirty.
 
-**What is not established is the trigger, and it is not worth guessing at.** On #417: `SetVariables`
-wrote 76 tokens and registered the `mode` axis, and the file stayed untouched on disk for four minutes
-while `GetVariables()` read every one of them back. A save did land later, around a throwaway frame
-insert. But a subsequent `Delete`, and then a net-zero insert-and-delete in one call, each failed to
-flush within 90 seconds. One observation is not a mechanism, so treat the trigger as **unpredictable
-from an agent's side**.
+**What is not established is the trigger, and it is not worth guessing at.** On #417: `SetVariables` wrote 76 tokens and registered the `mode` axis, and the file stayed untouched on disk for four minutes while `GetVariables()` read every one of them back. A save did land later, around a throwaway frame insert. But a subsequent `Delete`, and then a net-zero insert-and-delete in one call, each failed to flush within 90 seconds. One observation is not a mechanism, so treat the trigger as **unpredictable from an agent's side**.
 
 Two consequences, and they are the durable part:
 
-> **No read can tell you whether your work is on disk.** `GetVariables()` and `Get()` both return the
-> in-memory document and will happily confirm work that was never written. **`git status` on the `.pen`
-> file is the only check that distinguishes saved from unsaved**, and it belongs at the end of every
-> canvas pass.
+> **No read can tell you whether your work is on disk.** `GetVariables()` and `Get()` both return the in-memory document and will happily confirm work that was never written. **`git status` on the `.pen` file is the only check that distinguishes saved from unsaved**, and it belongs at the end of every canvas pass.
 
-> **`pen interactive --app desktop` has a `save()`, and that is the deterministic write.** There is
-> still no save in the `execute` API — `Export()` writes PNG, JPEG, WEBP, PDF and HTML, never `.pen`.
-> But `bunx pen interactive --app desktop` attaches to the same live document the MCP `execute` calls
-> edit, and its `save()` command writes that document to disk, so an agent can flush its own work with
-> nobody at the keyboard:
+> **`pen interactive --app desktop` has a `save()`, and that is the deterministic write.** There is still no save in the `execute` API — `Export()` writes PNG, JPEG, WEBP, PDF and HTML, never `.pen`. But `bunx pen interactive --app desktop` attaches to the same live document the MCP `execute` calls edit, and its `save()` command writes that document to disk, so an agent can flush its own work with nobody at the keyboard:
 >
 > ```sh
 > printf 'save()\nexit()\n' | bunx pen interactive --app desktop
 > ```
 >
-> Settled on [#1085](https://github.com/markgoho/doula-cloud/issues/1085): `execute` changed two text
-> nodes, `git status` on the `.pen` file stayed clean through a minute of waiting and an `osascript`
-> ⌘S that reported no error, and the piped `save()` wrote the file on the first try.
+> Settled on [#1085](https://github.com/markgoho/doula-cloud/issues/1085): `execute` changed two text nodes, `git status` on the `.pen` file stayed clean through a minute of waiting and an `osascript` ⌘S that reported no error, and the piped `save()` wrote the file on the first try.
 >
-> **⌘S is the fallback, and it is not always reachable.** On #1085 the desktop app was running with
-> **zero windows**: `get_app_state` reported `doula-cloud.pen` as the active canvas editor and
-> `execute` edited it happily, while `System Events` counted no window to aim a keystroke at
-> (`tell process "Pen" to get count of windows` returned `0`). So an agent that has finished a canvas
-> change should verify with `git status` and, if the file is unchanged, run `save()` through the
-> interactive shell — rather than asking for a keystroke that may have nowhere to land.
+> **⌘S is the fallback, and it is not always reachable.** On #1085 the desktop app was running with **zero windows**: `get_app_state` reported `doula-cloud.pen` as the active canvas editor and `execute` edited it happily, while `System Events` counted no window to aim a keystroke at (`tell process "Pen" to get count of windows` returned `0`). So an agent that has finished a canvas change should verify with `git status` and, if the file is unchanged, run `save()` through the interactive shell — rather than asking for a keystroke that may have nowhere to land.

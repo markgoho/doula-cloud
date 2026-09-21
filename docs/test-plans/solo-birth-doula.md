@@ -2,14 +2,11 @@
 
 - **Journey**: [solo-birth-doula.md](../journeys/solo-birth-doula.md)
 - **Persona**: [solo-birth-doula.md](../personas/solo-birth-doula.md)
-- **A pass means**: one Client carries a signed Contract, a filled Birth Plan the
-  Client can read in the portal, at least one Visit, an open message thread, and an
-  Invoice — reached by one person with no help.
+- **A pass means**: one Client carries a signed Contract, a filled Birth Plan the Client can read in the portal, at least one Visit, an open message thread, and an Invoice — reached by one person with no help.
 
 ## Preconditions
 
-None. Maya's journey starts at a cold `/signup`, so this plan builds its own
-fixture and is the only practice-side plan that needs no seeded state.
+None. Maya's journey starts at a cold `/signup`, so this plan builds its own fixture and is the only practice-side plan that needs no seeded state.
 
 ## Steps
 
@@ -22,9 +19,7 @@ fixture and is the only practice-side plan that needs no seeded state.
 | 1.3 | Land on `/practices/[practiceId]` | `Welcome to {practice name}`, with all seven tiles including the five owner-only ones | `automated (signup-form.e2e.ts)` |
 | 1.3-a | Read the credit balance on **Billing** | `Credit balance: 3`, one `signup_bonus` ledger row of `+3` | `automated (billing.e2e.ts)` |
 
-#318 closed the seam this note used to describe: `signup-form.e2e.ts` drives
-the `/signup` screen itself, rather than provisioning through
-`POST /api/staff/signup` directly the way every other spec still does.
+#318 closed the seam this note used to describe: `signup-form.e2e.ts` drives the `/signup` screen itself, rather than provisioning through `POST /api/staff/signup` directly the way every other spec still does.
 
 ### Stage 2 — Judge the seeded Plan Templates
 
@@ -48,23 +43,9 @@ the `/signup` screen itself, rather than provisioning through
 | 3.4 | Add a second and third Client, start work with all three, then attempt a fourth Engagement | Clients are free and unlimited; the wall is on Engagements. The fourth **Start work with {name}** returns `402 no credits remaining, ask a practice owner or admin to buy more` — to Maya, who *is* the Owner — and the whole act rolls back, leaving no half-written Request behind. The refusal offers **Buy credits** inline, on the same screen and with what she typed still on it. Before the click, the preview does **not** stop at zero: on an empty balance an approver reads `Balance after -1`, which is what the product does as built ([#1235](https://github.com/markgoho/doula-cloud/issues/1235)) | `manual` |
 | 3.4-a | Follow that instruction and try to buy credits | Stripe Checkout opens for the chosen quantity; paying credits the ledger | `manual` |
 
-**The doula's card statement says `DOULA.CLOU`.** Found on Dee's walk
-([#236](https://github.com/markgoho/doula-cloud/issues/236)) while tracing the
-Client-facing `DOULA.CLOU` that `7261a59` fixed. This is the *other* half of that
-bug and it is **not** fixed: the credits Checkout session sets no descriptor
-(`billing/purchase.go`), so the charge falls back to the platform account's, and
-the platform's `statement_descriptor` is `DOULA.CLOUD` — 11 characters. Stripe caps
-a card prefix at 10 and truncates, giving `DOULA.CLOU`. The Client never sees it,
-because a connected account now carries its own `display_name`; the **doula** sees
-it every time she buys credits.
+**The doula's card statement says `DOULA.CLOU`.** Found on Dee's walk ([#236](https://github.com/markgoho/doula-cloud/issues/236)) while tracing the Client-facing `DOULA.CLOU` that `7261a59` fixed. This is the *other* half of that bug and it is **not** fixed: the credits Checkout session sets no descriptor (`billing/purchase.go`), so the charge falls back to the platform account's, and the platform's `statement_descriptor` is `DOULA.CLOUD` — 11 characters. Stripe caps a card prefix at 10 and truncates, giving `DOULA.CLOU`. The Client never sees it, because a connected account now carries its own `display_name`; the **doula** sees it every time she buys credits.
 
-**No code change fixes this** — it is one Dashboard field, so it is a launch
-checklist item rather than a `journey-gap`. Set the *shortened descriptor* (the
-prefix) on the Doula Cloud account to `DoulaCloud`, which is exactly 10 characters
-and drops the period that makes the truncation read as a cut-off URL. It must be
-set on **both** the sandbox and the live account; Stripe only exposes it in the
-Dashboard (`settings/business-details`), not the API. Verified against the Sandbox
-on 2026-08-22.
+**No code change fixes this** — it is one Dashboard field, so it is a launch checklist item rather than a `journey-gap`. Set the *shortened descriptor* (the prefix) on the Doula Cloud account to `DoulaCloud`, which is exactly 10 characters and drops the period that makes the truncation read as a cut-off URL. It must be set on **both** the sandbox and the live account; Stripe only exposes it in the Dashboard (`settings/business-details`), not the API. Verified against the Sandbox on 2026-08-22.
 
 
 ### Stage 4 — Fill the Care Plan and the Birth Plan
@@ -123,17 +104,13 @@ on 2026-08-22.
 
 MO-G3 ([#252](https://github.com/markgoho/doula-cloud/issues/252)) is closed and 3.1-a is walkable, so it no longer holds a step.
 
-MO-G5 to MO-G9 are experience-layer or infrastructure findings; they are observed
-inside the steps above (3.4, 7.1, 7.2-a) rather than given steps of their own.
-MO-G9 ([#257](https://github.com/markgoho/doula-cloud/issues/257)) is closed as well — 3.4 still meets a wall, but a paid one she can walk through, not the dead end that gap named.
+MO-G5 to MO-G9 are experience-layer or infrastructure findings; they are observed inside the steps above (3.4, 7.1, 7.2-a) rather than given steps of their own. MO-G9 ([#257](https://github.com/markgoho/doula-cloud/issues/257)) is closed as well — 3.4 still meets a wall, but a paid one she can walk through, not the dead end that gap named.
 
 ## Run log
 
 ### 2026-08-22 — automated steps ([#209](https://github.com/markgoho/doula-cloud/issues/209))
 
-`bun run test:e2e` in `app/`, whole suite, one run: **16 passed, 0 failed** (20.5s).
-Stack per [docs/testing.md](../testing.md) — Postgres in compose, the goose
-migration, the Go BFF and the Firebase Auth emulator, all local.
+`bun run test:e2e` in `app/`, whole suite, one run: **16 passed, 0 failed** (20.5s). Stack per [docs/testing.md](../testing.md) — Postgres in compose, the goose migration, the Go BFF and the Firebase Auth emulator, all local.
 
 | Step | Spec | Result |
 | --- | --- | --- |
@@ -149,8 +126,7 @@ migration, the Go BFF and the Firebase Auth emulator, all local.
 
 **9 automated steps: all pass.**
 
-The `manual`, `blocked` and `missing-feature` steps are **not walked yet**.
-That is [#234](https://github.com/markgoho/doula-cloud/issues/234).
+The `manual`, `blocked` and `missing-feature` steps are **not walked yet**. That is [#234](https://github.com/markgoho/doula-cloud/issues/234).
 
 ### 2026-09-10 — Marks summary recounted ([#685](https://github.com/markgoho/doula-cloud/issues/685))
 
@@ -186,8 +162,7 @@ The Marks summary is recounted from the Steps table above — 13 / 20 / 0 / 3 �
 
 ### 2026-09-03 — new automated steps ([#318](https://github.com/markgoho/doula-cloud/issues/318))
 
-`bun run test:e2e` in `app/`, whole suite, one run: **30 passed, 0 failed**
-(29.0s).
+`bun run test:e2e` in `app/`, whole suite, one run: **30 passed, 0 failed** (29.0s).
 
 | Step | Spec | Result |
 | --- | --- | --- |
@@ -195,17 +170,11 @@ The Marks summary is recounted from the Steps table above — 13 / 20 / 0 / 3 �
 | 1.2 | `signup-form.e2e.ts` | pass |
 | 1.3 | `signup-form.e2e.ts` | pass |
 
-**3 newly automated steps: all pass**, bringing the plan's total to 12. The
-2026-08-22 manual walk below is unchanged as a historical record; it walked
-these three steps by hand before `signup-form.e2e.ts` existed.
+**3 newly automated steps: all pass**, bringing the plan's total to 12. The 2026-08-22 manual walk below is unchanged as a historical record; it walked these three steps by hand before `signup-form.e2e.ts` existed.
 
 ### 2026-08-22 — manual walk ([#234](https://github.com/markgoho/doula-cloud/issues/234))
 
-`bun run dev:full` in `app/`, walked in a desktop browser at 1280x900 as Maya
-Okonkwo, with a second 390x844 context for the Client. Preconditions: none, as
-the plan says — signed up from `/signup` with no fixture, twice (one pass for
-stages 1–8, a second to observe 4.2-a's template edit, 7.2's Invoice with an
-amount, and stage 8). The 9 `automated` steps were **not** re-run.
+`bun run dev:full` in `app/`, walked in a desktop browser at 1280x900 as Maya Okonkwo, with a second 390x844 context for the Client. Preconditions: none, as the plan says — signed up from `/signup` with no fixture, twice (one pass for stages 1–8, a second to observe 4.2-a's template edit, 7.2's Invoice with an amount, and stage 8). The 9 `automated` steps were **not** re-run.
 
 | Step | Mark | Result | What was seen |
 | --- | --- | --- | --- |
@@ -236,54 +205,23 @@ amount, and stage 8). The 9 `automated` steps were **not** re-run.
 | 8.1 | `manual` | as expected | `201`, and the message renders as `Maya Okonkwo (staff) — 8/22/2026, 2:04:28 PM`. No edit and no delete control on the message, as claimed |
 | 8.2 | `manual` | as expected | The Client replied from the portal (`201`, `senderType: "client"`), and Maya's reloaded thread showed both in order, staff then client, each labeled with its sender type |
 
-**17 `manual` steps walked; 4 `missing-feature` steps confirmed unwalkable; 5
-`blocked` steps attempted and their real responses recorded (2 re-marked from
-`manual`).** One expected result was falsified (5.2), minting **MO-G10** on the
-journey map. No `journey-gap` issue was filed — that is
-[#209](https://github.com/markgoho/doula-cloud/issues/209).
+**17 `manual` steps walked; 4 `missing-feature` steps confirmed unwalkable; 5 `blocked` steps attempted and their real responses recorded (2 re-marked from `manual`).** One expected result was falsified (5.2), minting **MO-G10** on the journey map. No `journey-gap` issue was filed — that is [#209](https://github.com/markgoho/doula-cloud/issues/209).
 
-**Verdict against "a pass means"**: **it does not pass, and one of the two
-reasons is not the product's fault.** One Client carries a filled Birth Plan the
-Client can read in the portal, a Visit, an open two-way message thread, and a
-Contract — all reached by one person with no help. The Contract is **not
-signed**, because the walking stack has no object store; that is the harness, and
-the deployed service has the bucket. The **Invoice does not exist**, and that is
-the product's own missing leg, blocked on a Stripe account nobody has opened.
+**Verdict against "a pass means"**: **it does not pass, and one of the two reasons is not the product's fault.** One Client carries a filled Birth Plan the Client can read in the portal, a Visit, an open two-way message thread, and a Contract — all reached by one person with no help. The Contract is **not signed**, because the walking stack has no object store; that is the harness, and the deployed service has the bucket. The **Invoice does not exist**, and that is the product's own missing leg, blocked on a Stripe account nobody has opened.
 
-Her moment of truth landed where the map put it. The Add Client form takes a name
-and an email, so at minute five the paper folder survives the move — and the walk
-found the same shape one stage later, in a Contract that asks her to retype the
-Practice name and the Client name the product already holds, and then lets her
-send it blank.
+Her moment of truth landed where the map put it. The Add Client form takes a name and an email, so at minute five the paper folder survives the move — and the walk found the same shape one stage later, in a Contract that asks her to retype the Practice name and the Client name the product already holds, and then lets her send it blank.
 
-**For the walks behind this one** ([#235](https://github.com/markgoho/doula-cloud/issues/235)–[#241](https://github.com/markgoho/doula-cloud/issues/241)):
-every plan with a Contract-signing step meets the same 500. To walk it, run a
-fake GCS (`fsouza/fake-gcs-server`) and point `STORAGE_EMULATOR_HOST` at it in
-`app/e2e/stack.ts` instead of `storage-emulator-disabled.invalid:1`. That is test
-infrastructure, not a product change, and it belongs to
-[#209](https://github.com/markgoho/doula-cloud/issues/209) rather than to any one
-walk.
+**For the walks behind this one** ([#235](https://github.com/markgoho/doula-cloud/issues/235)–[#241](https://github.com/markgoho/doula-cloud/issues/241)): every plan with a Contract-signing step meets the same 500. To walk it, run a fake GCS (`fsouza/fake-gcs-server`) and point `STORAGE_EMULATOR_HOST` at it in `app/e2e/stack.ts` instead of `storage-emulator-disabled.invalid:1`. That is test infrastructure, not a product change, and it belongs to [#209](https://github.com/markgoho/doula-cloud/issues/209) rather than to any one walk.
 
 #### Addendum, same day — the two `blocked` steps walked
 
-The walk above left 5.4-a and 5.5 `blocked` on an object store the stack did not
-have, and recommended standing one up. That was done the same day:
-`app/compose.e2e.yaml` gained a pinned `fsouza/fake-gcs-server`, `stack.ts`
-creates the bucket and points the BFF at it. Both steps went back to `manual` and
-were walked.
+The walk above left 5.4-a and 5.5 `blocked` on an object store the stack did not have, and recommended standing one up. That was done the same day: `app/compose.e2e.yaml` gained a pinned `fsouza/fake-gcs-server`, `stack.ts` creates the bucket and points the BFF at it. Both steps went back to `manual` and were walked.
 
 | Step | Mark | Result | What was seen |
 | --- | --- | --- | --- |
 | 5.4-a | `manual` (was `blocked`) | as the plan originally claimed | `POST /api/portal/engagements/{id}/contract/sign` -> `200`, `"status":"signed"`, and the portal screen changed from `Status: sent` to `Status: signed` and dropped the signing form. The signed PDF is really in the store: `contracts/{engagementId}/signed.pdf`, 1245 bytes, `application/pdf` |
 | 5.5 | `manual` (was `blocked`) | as expected, plus one control the plan does not name | Maya's Engagement reads `Status: signed` without leaving the app, and the Contract section now offers **Void Contract** — the button Dee's plan walks at 7.1-a |
 
-**Final marks for this plan: 9 `automated`, 19 `manual`, 3 `blocked` (all
-Stripe), 4 `missing-feature`.** The Contract leg of "a pass means" now passes
-end to end — invite, build, send, sign, and Maya sees it — and the only leg still
-short is the Invoice, which is blocked on a Stripe account nobody has opened.
+**Final marks for this plan: 9 `automated`, 19 `manual`, 3 `blocked` (all Stripe), 4 `missing-feature`.** The Contract leg of "a pass means" now passes end to end — invite, build, send, sign, and Maya sees it — and the only leg still short is the Invoice, which is blocked on a Stripe account nobody has opened.
 
-One thing the fix made visible that the first walk could not: with the merge
-fields **filled**, the Client reads `This agreement is between Okonkwo Birth
-Support and Hannah Sorensen for doula services.` The prose resolves correctly the
-moment values exist — which is what makes **MO-G10** a gap about the product not
-filling in what it already knows, rather than a broken template.
+One thing the fix made visible that the first walk could not: with the merge fields **filled**, the Client reads `This agreement is between Okonkwo Birth Support and Hannah Sorensen for doula services.` The prose resolves correctly the moment values exist — which is what makes **MO-G10** a gap about the product not filling in what it already knows, rather than a broken template.
