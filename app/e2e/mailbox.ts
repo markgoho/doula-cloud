@@ -21,7 +21,7 @@
 // process beside the BFF and the Auth emulator, and points the BFF at it
 // with MAILGUN_API_BASE.
 import { createHmac, randomUUID } from 'node:crypto';
-import { E2E_API_HOST, E2E_API_PORT, MAILBOX_HOST, MAILBOX_PORT } from './ports';
+import { API_URL, MAILBOX_HOST, MAILBOX_PORT } from './ports';
 
 // One captured message. `seq` is arrival order and it is deliberately
 // the only ordering the inbox shows -- see the clock note on `label`.
@@ -48,7 +48,7 @@ const messages: Captured[] = [];
 // entry is allowed to say about when.
 const runClock = { label: 'unlabeled' };
 
-const BOUNCE_TARGET = `http://${E2E_API_HOST}:${E2E_API_PORT}/api/mailgun/webhook`;
+const BOUNCE_TARGET = `${API_URL}/api/mailgun/webhook`;
 
 // The signing key the BFF verifies the bounce/complaint webhook against
 // (MAILGUN_WEBHOOK_SIGNING_KEY). Locally it is any agreed string --

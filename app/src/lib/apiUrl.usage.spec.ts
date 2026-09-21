@@ -26,7 +26,16 @@ const OWNER = 'app/e2e/ports.ts';
 // repoRoot rather than appRoot -- e2e/ sits outside src/ entirely.
 const e2eFiles = globSync('app/e2e/**/*.{ts,js}', { cwd: repoRoot }).filter((file) => file !== OWNER);
 
+// Catches a reintroduced `const API_URL = ...` under that exact name.
 const DECLARATION = /\bconst\s+API_URL\s*=/;
+
+// Catches the underlying duplication even under a different name --
+// mailbox.ts's old `BOUNCE_TARGET` and simulation/clock.ts's inline drain
+// URL both built this same string without ever calling it `API_URL`, so
+// the name-only check above would have missed both. The issue's own
+// framing ("every one of them derives the same value the same way") is
+// about the derivation, not the identifier.
+const DERIVATION = /\$\{E2E_API_HOST\}:\$\{E2E_API_PORT\}/;
 
 describe('app/e2e derives API_URL in one place', () => {
 	it('reads the whole app/e2e tree', () => {
@@ -43,6 +52,14 @@ describe('app/e2e derives API_URL in one place', () => {
 	it('redeclares API_URL nowhere else under app/e2e', () => {
 		const offenders = e2eFiles.filter((file) =>
 			DECLARATION.test(readFileSync(path.join(repoRoot, file), 'utf8'))
+		);
+
+		expect(offenders).toEqual([]);
+	});
+
+	it('rebuilds the host:port pair nowhere else under app/e2e, under any name', () => {
+		const offenders = e2eFiles.filter((file) =>
+			DERIVATION.test(readFileSync(path.join(repoRoot, file), 'utf8'))
 		);
 
 		expect(offenders).toEqual([]);

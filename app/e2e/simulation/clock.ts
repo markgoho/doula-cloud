@@ -4,7 +4,7 @@
 // happen together on every jump, in that order, so a nudge queued by the
 // advance is drained before the mailbox's arrival order is asked to mean
 // anything.
-import { E2E_API_HOST, E2E_API_PORT } from '../ports';
+import { API_URL } from '../ports';
 import { MAILBOX_URL, advanceOffset, readSimulatedNow } from '../stack';
 
 // api/internal/outbox/drain.go's DrainPath: the one endpoint #794 put
@@ -64,7 +64,7 @@ async function postJSON(url: string, body: unknown, headers: Record<string, stri
 export async function jump(amount: JumpAmount, options: { label: string; workerSecret: string }): Promise<JumpResult> {
 	advanceOffset(toIntervalLiteral(amount));
 
-	const drained = await fetch(`http://${E2E_API_HOST}:${E2E_API_PORT}${DRAIN_PATH}`, {
+	const drained = await fetch(`${API_URL}${DRAIN_PATH}`, {
 		method: 'POST',
 		headers: { 'X-Internal-Secret': options.workerSecret }
 	});

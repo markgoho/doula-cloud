@@ -564,21 +564,13 @@ async function readInviteTokenFromMailbox(
 // (#861). If one ever were, this throws naming both places it looked
 // rather than returning an empty string a caller pastes into a URL.
 //
-// This does not carry #1141's drain-and-read race, and threading
-// `request` through to the shared `readMailbox` (#1254) does not change
-// that: #1141's race is between a caller that itself drains an outbox
-// and then reads for its own row, where a neighbor's concurrent drain
-// can claim that row first and leave the read empty. This function never
-// drains anything -- it only reads the mailbox once its own SQL check
-// above has confirmed the outbox row already went terminal, and
-// outbox.MailWorker's claim-scan-compose-send-mark loop always sends
-// before it marks a row terminal, inside the same transaction. So the
-// mail this reads for is guaranteed to already be there by construction,
-// not by timing. staff-invite-role.e2e.ts, mfa-required.e2e.ts,
-// mfa-recovery.e2e.ts, mail-delivery.e2e.ts and simulation-world.e2e.ts
-// exercise this call together and were run at `--repeat-each 10
-// --workers 3` (90 runs) with no failures to confirm it holds, the same
-// shape #1141 used to confirm its own fix.
+// #1254 threaded `request` through to the shared `readMailbox` here,
+// which does not reopen #1141's drain-and-read race: this function never
+// drains anything itself, and the "sends before it marks" invariant two
+// paragraphs up already means the mail read above is guaranteed present
+// by construction rather than by timing. See docs/testing.md's
+// "Confirming a flake fixed" section for the repeat-batch count that
+// proves it.
 export async function readStaffInviteToken(
 	request: APIRequestContext,
 	invitationId: string
