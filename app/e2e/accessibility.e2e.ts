@@ -183,7 +183,7 @@ async function scan(page: Page, route: Route) {
 	).toHaveCount(0);
 	await expect(
 		page.locator(LOAD_ERROR_SELECTOR),
-		`${route.key} failed to load -- axe would have scanned an error Notice and reported the placeholder's own clean bill of health as the screen's`
+		`${route.key} failed to load -- axe would have scanned the error Notice and reported its own clean bill of health as the screen's`
 	).toHaveCount(0);
 
 	const { violations } = await new AxeBuilder({ page }).withTags(WCAG_TAGS).analyze();
