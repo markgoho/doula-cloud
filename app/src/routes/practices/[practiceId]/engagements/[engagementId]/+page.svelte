@@ -502,8 +502,8 @@
 	// #1280: the Practice's own zone (ADR-0036) InvoiceSection reads
 	// "today" in for the payment-date field's default and its
 	// future-date ceiling, matching PostManualPaymentHandler's own
-	// guard (#1167). Read alongside the Invoice list and the billing
-	// mode -- '' means "not loaded yet", which gates the Invoices
+	// guard (#1167). Loaded once at mount (loadPracticeTimezoneSection
+	// below) -- '' means "not loaded yet", which gates the Invoices
 	// section out below rather than handing InvoiceSection a zone that
 	// would fall back to UTC's own day.
 	const practiceTimezoneState = new SectionState('');
