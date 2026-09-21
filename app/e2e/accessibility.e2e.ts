@@ -11,6 +11,7 @@ import {
 import { seedEngagement, seedEngagementRequest } from './stack';
 import { enterPracticeAsEnrolled } from './mfa';
 import { seedAccountWithNoPractice } from './staffSignup';
+import { stubTotpFactor } from './totpStub';
 
 const API_URL = `http://${E2E_API_HOST}:${E2E_API_PORT}`;
 
@@ -49,17 +50,6 @@ const WCAG_TAGS = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'];
  *   its link by `aria-describedby`; that join is asserted directly in
  *   this repo's unit suite rather than here, since axe scans the DOM
  *   instances it is pointed at and not the pattern behind them.
- * - `mfa/enroll`'s second step -- the QR code, the fallback secret and
- *   the code field. Step one, the password re-authentication, IS scanned
- *   below (#1114). Step two was unreachable until #1132: the vendored
- *   Firebase Auth emulator has no TOTP enrollment path and 400s the
- *   `TotpMultiFactorGenerator.generateSecret()` call that opens it
- *   (firebase-tools#6224, and docs/testing.md's own note). #1132's
- *   `e2e/totpStub.ts` closed that, and `e2e/mfa-totp.e2e.ts` walks step
- *   two in a browser now -- but the inventory below is keyed by URL, and
- *   step two is a state rather than a route, so enrolling it needs this
- *   harness to learn how to reach a state before it scans. #1240 owns
- *   that, and step two gets its own entry here when it lands.
  */
 
 /**
@@ -75,12 +65,23 @@ const WCAG_TAGS = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'];
  * comment before adding a row -- it is why a row does not have to name a
  * node its own loaded state renders, and why a row whose screen never
  * finishes loading fails here rather than scanning a Skeleton.
+ *
+ * `reach` is optional, and is what lets a row describe a screen that is
+ * a *state* rather than a route (#1240) -- one reached by acting on the
+ * page after `goto`, not by navigating anywhere else. `scan` runs it, if
+ * present, before its own two ready waits, so a `reach` only has to
+ * drive the page to the state those waits (and then axe) should measure
+ * -- it does not have to wait for readiness itself. Most rows need none:
+ * their `url` already is the screen. TOTP enrollment's second step is
+ * the first that does, since it is reached by answering step one's
+ * password prompt rather than by navigating to it.
  */
 interface Route {
 	key: string;
 	archetype: string;
 	url: string;
 	h1: string | RegExp;
+	reach?: (page: Page) => Promise<void>;
 }
 
 /**
@@ -133,6 +134,7 @@ const LOADING_AFFORDANCE_SELECTOR = '[role="status"][aria-busy="true"]';
 
 async function scan(page: Page, route: Route) {
 	await page.goto(route.url);
+	await route.reach?.(page);
 	await expect(
 		page.getByRole('heading', { level: 1, name: route.h1 }),
 		`${route.key} never finished loading -- axe would have scanned a skeleton`
@@ -212,15 +214,22 @@ test('Archetype A -- the screens a person meets signed out', async ({ page }) =>
 // session, and provisioning it twice would buy nothing but a second
 // account. `mfa/enroll` reads that session only for the email it
 // re-authenticates with, so a Practice-less one realizes its step one
-// exactly as a Practice-bearing one would -- and it is step one that
-// this repo can scan at all (see the exclusion note at the top of this
-// file for why step two cannot be reached).
+// exactly as a Practice-bearing one would -- see the comment ahead of
+// its own scan below for what that costs and how it is answered.
+//
+// Step two joins step one here rather than in a test of its own (#1240):
+// it shares this same session, and reaching it is exactly what a `reach`
+// on the step-two row below is for. `stubTotpFactor` (totpStub.ts) is
+// installed ahead of both `mfa/enroll` scans -- step one's submit opens
+// a real TOTP enrollment session with Identity Platform, and the
+// vendored emulator has no such path (#1132) -- even though only the
+// second scan's `reach` ever exercises it.
 test('Archetype A -- the two screens behind a session with no Practice', async ({
 	page,
 	request,
 	context
 }) => {
-	const { headers } = await seedAccountWithNoPractice(request);
+	const { headers, password, email } = await seedAccountWithNoPractice(request);
 	const token = headers.Cookie.replace('__session=', '');
 	await context.addCookies([
 		{ name: '__session', value: token, url: PREVIEW_SERVER_ORIGIN, httpOnly: true, secure: false, sameSite: 'Lax' }
@@ -233,11 +242,59 @@ test('Archetype A -- the two screens behind a session with no Practice', async (
 		h1: 'Your account is not part of a Practice'
 	});
 
+	/*
+	 * `mfa/enroll`'s own onMount reads `/api/staff/session` for the email
+	 * it re-authenticates with -- and this identity has no staff row
+	 * (that is the whole of `seedAccountWithNoPractice`), so the real
+	 * endpoint 404s (`requireSelf`, api/internal/staffauth/self.go) and
+	 * onMount redirects to /login the moment that resolves. Step one's
+	 * own scan never noticed: its `<h1>` is already painted at mount, and
+	 * the retrying `toBeVisible` below catches that before the redirect's
+	 * round trip lands. Step two's `reach` does not get that head start
+	 * -- filling the password field and clicking Continue is real
+	 * Playwright-driven interaction, which is long enough for the
+	 * redirect to win outright and leave nothing here to click.
+	 *
+	 * Answered here at the network boundary instead, the same shape
+	 * totpStub.ts already uses for identitytoolkit: both steps read
+	 * nothing off this response but the email, so a 200 carrying just
+	 * that closes the race for good rather than trying to out-time it.
+	 * Installed after the no-practice scan above, which depends on the
+	 * real 404 for its own screen.
+	 */
+	await page.route(
+		(url) => url.pathname === '/api/staff/session',
+		(route) => route.fulfill({ status: 200, json: { email } })
+	);
+	await stubTotpFactor(page, request);
+
 	await scan(page, {
 		key: 'mfa/enroll',
 		archetype: 'A',
 		url: '/mfa/enroll',
 		h1: 'Set up two-factor authentication'
+	});
+
+	// #1240: reached by answering step one's password prompt rather than
+	// by navigating anywhere, so `reach` drives that submit and waits for
+	// the QR code step two renders -- the state the two ready waits below
+	// and axe should measure, not step one's own screen (which the h1
+	// alone cannot tell apart from this, since both steps share one
+	// title).
+	await scan(page, {
+		key: 'mfa/enroll (step two)',
+		archetype: 'A',
+		url: '/mfa/enroll',
+		h1: 'Set up two-factor authentication',
+		reach: async (page) => {
+			await page.getByLabel('Password').fill(password);
+			await page.getByRole('button', { name: 'Continue' }).click();
+			await expect(
+				page.getByRole('img', {
+					name: 'QR code for setting up two-factor authentication in an authenticator app'
+				})
+			).toBeVisible();
+		}
 	});
 
 	/*

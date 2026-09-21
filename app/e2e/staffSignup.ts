@@ -116,6 +116,7 @@ export function acceptStaffInvite(
 
 export interface SeededNoPracticeAccount {
 	email: string;
+	password: string;
 	headers: { Cookie: string };
 }
 
@@ -126,22 +127,28 @@ export interface SeededNoPracticeAccount {
  * resulting session is authenticated but resolves to no staff row: the
  * state `/no-practice` (#745) exists for, and which #749's accessibility
  * scan needs a fixture for, distinct from holding no session at all.
+ *
+ * The password comes back too (#1240): `mfa/enroll`'s own step one asks
+ * for it again, through the Firebase JS SDK, once a caller reaches past
+ * step one into step two -- so this account does sign in through a form
+ * after all, just not the app's own `/login` one.
  */
 export async function seedAccountWithNoPractice(request: APIRequestContext): Promise<SeededNoPracticeAccount> {
 	const email = uniqueEmail('no-practice');
 
-	// No password constant of its own: this account never signs in through
-	// a form, only ever by ID token, so the value only has to satisfy
-	// accounts:signUp -- reusing FOUNDING_OWNER_PASSWORD here would name
-	// this account after a role it never holds.
+	// No constant shared with FOUNDING_OWNER_PASSWORD: reusing that name
+	// here would name this account after a role it never holds. The value
+	// only has to satisfy accounts:signUp and the password re-auth on
+	// mfa/enroll's own step one.
+	const password = 'password123';
 	const signUp = await request.post(
 		`${EMULATOR_URL}/identitytoolkit.googleapis.com/v1/accounts:signUp?key=fake-key`,
-		{ data: { email, password: 'password123', returnSecureToken: true } }
+		{ data: { email, password, returnSecureToken: true } }
 	);
 	expect(signUp.ok(), `no-practice account signUp failed: ${signUp.status()} ${await signUp.text()}`).toBe(true);
 	const { idToken } = await signUp.json();
 
 	const headers = await signIn(request, API_URL, idToken);
 
-	return { email, headers };
+	return { email, password, headers };
 }
