@@ -405,26 +405,32 @@ describe('InvoiceSection.svelte', () => {
 		});
 
 		// #1280: the same boundary #1167 already fixed server-side. 02:30
-		// UTC on the 21st is 22:30 on the 20th in America/New_York -- a
-		// zone behind UTC -- so the Practice's own "today" is the 20th,
-		// not the 21st `toISOString().slice(0, 10)` used to read.
+		// UTC on the 16th is 22:30 on the 15th in America/New_York -- a
+		// zone behind UTC -- so the Practice's own "today" is the 15th,
+		// not the 16th `toISOString().slice(0, 10)` used to read. June,
+		// not the real run date, and past DST's spring-forward edge (no
+		// ambiguity from the clock change itself) -- a date matching
+		// whatever day this suite happens to run on would pass whether or
+		// not `vi.setSystemTime` actually reaches the component's own
+		// `new Date()` in the browser realm, which is exactly the thing
+		// this test has to prove.
 		it("reads today in the Practice's own zone, not UTC's, for both the default date and the future-date ceiling", async () => {
 			vi.useFakeTimers();
-			vi.setSystemTime(new Date('2026-09-21T02:30:00Z'));
+			vi.setSystemTime(new Date('2026-06-16T02:30:00Z'));
 			await setup({ invoices: [invoiceOpen], isOwnerOrAdmin: true, practiceTimezone: 'America/New_York' });
 
 			await page.getByRole('button', { name: 'Record payment' }).click();
 			// The default -- todayIsoDate() feeds paymentDate's own initial
 			// value (startRecordingPayment).
-			await expect.element(page.getByLabelText('Date received')).toHaveValue('2026-09-20');
+			await expect.element(page.getByLabelText('Date received')).toHaveValue('2026-06-15');
 
 			// UTC's own "today" is the zone's tomorrow, still refused.
-			await page.getByLabelText('Date received').fill('2026-09-21');
+			await page.getByLabelText('Date received').fill('2026-06-16');
 			await page.getByRole('button', { name: 'Continue' }).click();
 			await expect.element(page.getByText('The date cannot be in the future').first()).toBeVisible();
 
 			// The zone's own "today" clears the same ceiling.
-			await page.getByLabelText('Date received').fill('2026-09-20');
+			await page.getByLabelText('Date received').fill('2026-06-15');
 			await page.getByRole('button', { name: 'Continue' }).click();
 			await expect.element(page.getByRole('button', { name: 'Confirm and record' })).toBeVisible();
 			await expect.element(page.getByText('The date cannot be in the future')).not.toBeInTheDocument();

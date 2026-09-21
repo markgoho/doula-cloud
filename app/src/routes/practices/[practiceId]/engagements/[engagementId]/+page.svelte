@@ -884,8 +884,14 @@
 			() => loadBillingMode(apiFetchWithSession, page.params.practiceId!),
 			'Failed to load billing mode'
 		);
-		// #1280: read alongside the two above -- InvoiceSection needs the
-		// Practice's own zone before it can compute "today" in it.
+	}
+
+	// #1280: a Practice's zone (ADR-0036) does not move when a Payment is
+	// recorded, voided, reversed, or refunded, so this is loaded once at
+	// mount rather than inside loadInvoicesSection above -- which those
+	// four writes re-run -- to avoid re-reading a fact none of them
+	// changes.
+	async function loadPracticeTimezoneSection() {
 		await practiceTimezoneState.load(async () => {
 			const timezone = await loadPracticeTimezone(apiFetchWithSession, page.params.practiceId!);
 			return timezone.timezone;
@@ -1101,6 +1107,7 @@
 		await Promise.all(planSections.map((section) => loadPlan(section.type)));
 		await loadContractSection();
 		await loadInvoicesSection();
+		await loadPracticeTimezoneSection();
 		await loadRoster();
 		await loadOnCall();
 		await loadOffersSection();
