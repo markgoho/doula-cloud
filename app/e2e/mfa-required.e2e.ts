@@ -1,5 +1,5 @@
 import { expect, test, type APIRequestContext } from '@playwright/test';
-import { E2E_API_HOST, E2E_API_PORT, PREVIEW_SERVER_ORIGIN } from './ports';
+import { API_URL, PREVIEW_SERVER_ORIGIN } from './ports';
 import { signIn, sessionCookieFrom } from './auth';
 import { readStaffInviteToken } from './stack';
 import { enrollSecondFactor, signInEnrolled } from './mfa';
@@ -15,7 +15,6 @@ import { acceptStaffInvite, seedFoundingOwner } from './staffSignup';
 // (api/internal/staffauth/middleware.go) via direct API calls rather
 // than the product's own login/enrollment screens, which are separate
 // work landing on this branch at the same time as this file.
-const API_URL = `http://${E2E_API_HOST}:${E2E_API_PORT}`;
 
 /**
  * Provisions a fresh Practice with an enrolled Owner -- an Owner is
@@ -161,7 +160,7 @@ test('one identity, two Practices: MFA required at one and not the other', async
 	const { invitationId } = JSON.parse(inviteBody);
 	// readStaffInviteToken throws, naming both places it looked, when the
 	// token is in neither -- so there is nothing left here to assert.
-	const inviteToken = await readStaffInviteToken(invitationId);
+	const inviteToken = await readStaffInviteToken(request, invitationId);
 
 	const accept = await acceptStaffInvite(request, xIdToken, { inviteToken, name: 'Sasha Owner' });
 	const acceptBody = await accept.text();

@@ -1,11 +1,10 @@
 import { expect, test } from '@playwright/test';
-import { E2E_API_HOST, E2E_API_PORT, E2E_EMULATOR_HOST, E2E_EMULATOR_PORT } from './ports';
+import { API_URL, E2E_EMULATOR_HOST, E2E_EMULATOR_PORT } from './ports';
 import { uniqueEmail } from './staffSignup';
 
 // The Firebase Auth emulator and the Go BFF -- both host processes -- see
 // e2e/global-setup.ts and e2e/stack.ts for how these get started.
 const EMULATOR_URL = `http://${E2E_EMULATOR_HOST}:${E2E_EMULATOR_PORT}`;
-const API_URL = `http://${E2E_API_HOST}:${E2E_API_PORT}`;
 
 // This is the one seam (#144) that proves a real browser -- not just a
 // Go http.Client in the unit suite -- actually accepts and stores the

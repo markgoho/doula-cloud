@@ -1,10 +1,8 @@
 import { expect, test } from '@playwright/test';
-import { E2E_API_HOST, E2E_API_PORT } from './ports';
+import { API_URL } from './ports';
 import { seedEngagement } from './stack';
 import { signInEnrolled, enterPracticeAsEnrolled } from './mfa';
 import { seedFoundingOwner, uniqueEmail } from './staffSignup';
-
-const API_URL = `http://${E2E_API_HOST}:${E2E_API_PORT}`;
 
 // Drives ADR-0008's Offer flow (#317) through the two screens it adds:
 // the make-an-offer panel on the Engagement, and the Doula's own inbox.

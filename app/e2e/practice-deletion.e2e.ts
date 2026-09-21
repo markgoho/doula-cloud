@@ -1,5 +1,5 @@
 import { expect, test, type APIRequestContext } from '@playwright/test';
-import { E2E_API_HOST, E2E_API_PORT, PREVIEW_SERVER_ORIGIN } from './ports';
+import { API_URL, PREVIEW_SERVER_ORIGIN } from './ports';
 import { seedFoundingOwner } from './staffSignup';
 import { signInEnrolled } from './mfa';
 import { seedContractorDoula } from './portalClient';
@@ -11,7 +11,6 @@ import { seedContractorDoula } from './portalClient';
 // lands on the restore screen -- not just that the load() function
 // returns the right redirect target in isolation
 // (practice-layout-load.spec.ts already covers that).
-const API_URL = `http://${E2E_API_HOST}:${E2E_API_PORT}`;
 
 async function seedEnrolledOwner(request: APIRequestContext, practiceName: string) {
 	const { email, idToken, localId, practiceId } = await seedFoundingOwner(request, { practiceName });

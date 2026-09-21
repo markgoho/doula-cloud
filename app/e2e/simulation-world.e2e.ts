@@ -9,13 +9,12 @@ import { fileURLToPath } from 'node:url';
 import { expect, test } from '@playwright/test';
 import { sessionCookieFrom } from './auth';
 import { signInEnrolled } from './mfa';
-import { E2E_API_HOST, E2E_API_PORT, E2E_EMULATOR_HOST, E2E_EMULATOR_PORT } from './ports';
+import { API_URL, E2E_EMULATOR_HOST, E2E_EMULATOR_PORT } from './ports';
 import { provisionTail, standUpRidgeline, writeWorldRecord } from './simulation/provision';
 import { describeWorld, ROOTED_TAIL_TOTAL, type SeededClient } from './simulation/world';
 import { readStaffInviteToken } from './stack';
 import { acceptStaffInvite, seedFoundingOwner, uniqueEmail } from './staffSignup';
 
-const API_URL = `http://${E2E_API_HOST}:${E2E_API_PORT}`;
 const EMULATOR_URL = `http://${E2E_EMULATOR_HOST}:${E2E_EMULATOR_PORT}`;
 const RUNS_ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), 'test-results', 'simulation-world-rehearsal');
 const RUN_ID = 'rehearsal-1';
@@ -83,7 +82,7 @@ test.describe.serial('The World stands up: description, Ridgeline, the tail', ()
 			data: { email: doulaEmail, roles: ['doula'], employmentType: 'employee' }
 		});
 		const { invitationId } = JSON.parse(await invited.text());
-		const inviteToken = await readStaffInviteToken(invitationId);
+		const inviteToken = await readStaffInviteToken(request, invitationId);
 		const signedUp = await request.post(`${EMULATOR_URL}/identitytoolkit.googleapis.com/v1/accounts:signUp?key=fake-key`, {
 			data: { email: doulaEmail, password: 'password123', returnSecureToken: true }
 		});

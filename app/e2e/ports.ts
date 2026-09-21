@@ -63,6 +63,14 @@ function shift(port: number): number {
 
 export const E2E_API_HOST = '127.0.0.1';
 export const E2E_API_PORT = shift(18_080);
+// The one place a spec addresses the local BFF (#1254): every one of 17
+// files under e2e used to derive this same string from E2E_API_HOST and
+// E2E_API_PORT on its own, so a change to the scheme or the pieces above
+// had 17 sites to find and a spec that missed one failed looking like an
+// environment problem rather than a stale constant.
+// apiUrl.usage.spec.ts is the gate that keeps a new spec from redeclaring
+// it locally.
+export const API_URL = `http://${E2E_API_HOST}:${E2E_API_PORT}`;
 export const E2E_EMULATOR_HOST = '127.0.0.1';
 export const E2E_EMULATOR_PORT = shift(9099);
 export const DB_HOST = '127.0.0.1';

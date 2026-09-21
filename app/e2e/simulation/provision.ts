@@ -9,13 +9,12 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { type APIRequestContext, expect } from '@playwright/test';
-import { E2E_API_HOST, E2E_API_PORT, E2E_EMULATOR_HOST, E2E_EMULATOR_PORT } from '../ports';
+import { API_URL, E2E_EMULATOR_HOST, E2E_EMULATOR_PORT } from '../ports';
 import { MAILBOX_URL, readStaffInviteToken } from '../stack';
 import { signInEnrolled } from '../mfa';
 import { seedFoundingOwner, uniqueEmail } from '../staffSignup';
 import type { SeededClient, WorldDescription } from './world';
 
-const API_URL = `http://${E2E_API_HOST}:${E2E_API_PORT}`;
 const EMULATOR_URL = `http://${E2E_EMULATOR_HOST}:${E2E_EMULATOR_PORT}`;
 
 async function readBody(response: { ok(): boolean; status(): number; text(): Promise<string> }, context: string): Promise<string> {
@@ -94,7 +93,7 @@ export async function standUpRidgeline(request: APIRequestContext): Promise<Ridg
 	// worlds/rooted-birth-collective.md's objection to that shortcut ("it
 	// skips the act") is about a *walked* invitation; Ridgeline's is
 	// explicitly not one.
-	const inviteToken = await readStaffInviteToken(invitationId);
+	const inviteToken = await readStaffInviteToken(request, invitationId);
 
 	const signedUp = await request.post(`${EMULATOR_URL}/identitytoolkit.googleapis.com/v1/accounts:signUp?key=fake-key`, {
 		data: { email: lenaEmail, password: LENA_PASSWORD, returnSecureToken: true }

@@ -1,11 +1,9 @@
 import { expect, test } from '@playwright/test';
-import { E2E_API_HOST, E2E_API_PORT } from './ports';
+import { API_URL } from './ports';
 import { seedClientPortalUser, seedEngagement } from './stack';
 import { signInEnrolled } from './mfa';
 import { signInPortalClient } from './portalClient';
 import { seedFoundingOwner, uniqueEmail } from './staffSignup';
-
-const API_URL = `http://${E2E_API_HOST}:${E2E_API_PORT}`;
 
 // #61's e2e AC: simulate a push event end to end (push received -> service
 // worker fetches -> thread UI updates) without a real VAPID round-trip --

@@ -1,13 +1,11 @@
 import { expect, type APIRequestContext } from '@playwright/test';
-import { E2E_API_HOST, E2E_API_PORT } from './ports';
+import { API_URL } from './ports';
 import { MAILBOX_URL, WORKER_SECRET } from './stack';
 // One message as the sandbox mailbox serves it back over
 // `/api/messages`: the catcher's own row shape, not a second copy of it
 // that nothing keeps in step. Type-only, so a spec importing this file
 // never loads mailbox.ts's `Bun.serve` half.
 import type { Captured as MailboxMessage } from './mailbox';
-
-const API_URL = `http://${E2E_API_HOST}:${E2E_API_PORT}`;
 
 /**
  * Reads one address's sandbox mailbox (e2e/mailbox.ts) as JSON.

@@ -1,5 +1,5 @@
 import { expect, test, type APIRequestContext } from '@playwright/test';
-import { E2E_API_HOST, E2E_API_PORT, PREVIEW_SERVER_ORIGIN } from './ports';
+import { API_URL, PREVIEW_SERVER_ORIGIN } from './ports';
 import { seedFoundingOwner } from './staffSignup';
 import { signInEnrolled } from './mfa';
 import { seedContractorDoula } from './portalClient';
@@ -10,7 +10,6 @@ import { seedContractorDoula } from './portalClient';
 // deletion really does end her ability to authenticate against the
 // running BFF afterwards -- a redacted row in a test database is not the
 // same claim as a live session cookie that stops working.
-const API_URL = `http://${E2E_API_HOST}:${E2E_API_PORT}`;
 
 async function useSession(
 	context: { addCookies: (cookies: unknown[]) => Promise<void> },

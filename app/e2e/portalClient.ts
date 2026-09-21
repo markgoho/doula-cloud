@@ -1,5 +1,5 @@
 import { expect, type APIRequestContext, type Page } from '@playwright/test';
-import { E2E_API_HOST, E2E_API_PORT, E2E_EMULATOR_HOST, E2E_EMULATOR_PORT } from './ports';
+import { API_URL, E2E_EMULATOR_HOST, E2E_EMULATOR_PORT } from './ports';
 import { sessionCookieFrom } from './auth';
 import { signInEnrolled } from './mfa';
 import {
@@ -20,7 +20,6 @@ const MAGIC_LINK_SUBJECT = 'Your Doula Cloud sign-in link';
 // The Firebase Auth emulator and the Go BFF -- both host processes -- see
 // e2e/global-setup.ts and e2e/stack.ts for how these get started.
 const EMULATOR_URL = `http://${E2E_EMULATOR_HOST}:${E2E_EMULATOR_PORT}`;
-const API_URL = `http://${E2E_API_HOST}:${E2E_API_PORT}`;
 
 /**
  * Signs a Client into the portal through the real magic-link flow
@@ -200,7 +199,7 @@ export async function seedContractorDoula(
 
 	// readStaffInviteToken throws, naming both places it looked, when the
 	// token is in neither -- so there is nothing left here to assert.
-	const inviteToken = await readStaffInviteToken(invitationId);
+	const inviteToken = await readStaffInviteToken(request, invitationId);
 
 	const signUp = await request.post(
 		`${EMULATOR_URL}/identitytoolkit.googleapis.com/v1/accounts:signUp?key=fake-key`,

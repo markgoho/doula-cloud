@@ -4,6 +4,12 @@ import { createConnection } from 'node:net';
 import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import type { APIRequestContext } from '@playwright/test';
+// outboxMail.ts imports MAILBOX_URL and WORKER_SECRET back from this
+// file, so this is a deliberate cycle -- safe because both sides only
+// reach for the other's export inside a function body, never at module
+// scope, so neither is read before the whole graph has finished loading.
+import { readMailbox } from './outboxMail';
 import {
 	E2E_API_HOST,
 	E2E_API_PORT,
@@ -504,12 +510,17 @@ const ACCEPT_INVITE_LINK = /\/accept-invite\?token=(\S+)/g;
 // invitation was minted with (staffauth.TokenDigest), so the candidate
 // whose own digest matches is the right one and no other candidate can
 // be mistaken for it.
-async function readInviteTokenFromMailbox(address: string, digest: string): Promise<string> {
-	const inbox = await fetch(`${MAILBOX_URL}/api/messages?to=${encodeURIComponent(address)}`);
-	if (!inbox.ok) {
-		throw new Error(`stack: reading ${address}'s sandbox mailbox failed: ${inbox.status}`);
-	}
-	const messages = (await inbox.json()) as { text: string }[];
+//
+// Spends outboxMail.ts's shared `readMailbox` (#1254) rather than a
+// second hand-rolled read over global `fetch`: the only thing that kept
+// this reader separate was needing an `APIRequestContext`, which every
+// caller below already holds and threads down to here.
+async function readInviteTokenFromMailbox(
+	request: APIRequestContext,
+	address: string,
+	digest: string
+): Promise<string> {
+	const messages = await readMailbox(request, address);
 	for (const message of messages) {
 		for (const [, candidate] of message.text.matchAll(ACCEPT_INVITE_LINK)) {
 			if (createHash('sha256').update(candidate).digest('hex') === digest) {
@@ -552,7 +563,18 @@ async function readInviteTokenFromMailbox(address: string, digest: string): Prom
 // InviteHandler refuses a suppressed address before any row exists
 // (#861). If one ever were, this throws naming both places it looked
 // rather than returning an empty string a caller pastes into a URL.
-export async function readStaffInviteToken(invitationId: string): Promise<string> {
+//
+// #1254 threaded `request` through to the shared `readMailbox` here,
+// which does not reopen #1141's drain-and-read race: this function never
+// drains anything itself, and the "sends before it marks" invariant two
+// paragraphs up already means the mail read above is guaranteed present
+// by construction rather than by timing. See docs/testing.md's
+// "Confirming a flake fixed" section for the repeat-batch count that
+// proves it.
+export async function readStaffInviteToken(
+	request: APIRequestContext,
+	invitationId: string
+): Promise<string> {
 	const pending = querySQLValue(
 		`SELECT invite_token FROM staff_invite_outbox WHERE invitation_id = ${sqlLiteral(invitationId)} AND status = 'pending'`
 	);
@@ -570,7 +592,7 @@ export async function readStaffInviteToken(invitationId: string): Promise<string
 	}
 	const [address, digest] = invitation.split('|', 2);
 
-	const mailed = await readInviteTokenFromMailbox(address, digest);
+	const mailed = await readInviteTokenFromMailbox(request, address, digest);
 	if (mailed === '') {
 		throw new Error(
 			`stack: no invite token for invitation ${invitationId}: no pending staff_invite_outbox row, and no accept link matching its token digest in ${address}'s sandbox mailbox`

@@ -1,10 +1,8 @@
 import { expect, test } from '@playwright/test';
-import { E2E_API_HOST, E2E_API_PORT } from './ports';
+import { API_URL } from './ports';
 import { seedEngagement } from './stack';
 import { signInEnrolled } from './mfa';
 import { seedFoundingOwner, uniqueEmail } from './staffSignup';
-
-const API_URL = `http://${E2E_API_HOST}:${E2E_API_PORT}`;
 
 // This test drives the real provisioning path #90 added -- invite via the
 // BFF, accept through the UI, then land in the portal -- rather than
