@@ -167,6 +167,42 @@ describe('ContractStatus.svelte', () => {
 			.not.toBeInTheDocument();
 	});
 
+	// #1229: a fresh Draft (or an unsigned Sent Contract) never has a PDF
+	// of its own -- #72's partial unique index requires the prior row to
+	// be voided before this one could exist -- so hasSignedPdf true here
+	// can only be that earlier, voided Contract's file.
+	it('names the PDF as an earlier Contract\'s on a draft Contract that has a signed PDF', async () => {
+		await setup({ status: 'draft', hasSignedPdf: true, onDownloadPdf: vi.fn() });
+
+		await expect
+			.element(page.getByText('This PDF is from an earlier Contract on this Engagement that was signed and later voided.'))
+			.toBeVisible();
+	});
+
+	it('names the PDF as an earlier Contract\'s on a sent Contract that has a signed PDF', async () => {
+		await setup({ status: 'sent', hasSignedPdf: true, onDownloadPdf: vi.fn() });
+
+		await expect
+			.element(page.getByText('This PDF is from an earlier Contract on this Engagement that was signed and later voided.'))
+			.toBeVisible();
+	});
+
+	it('adds no notice on a signed Contract, whose PDF is always its own', async () => {
+		await setup({ status: 'signed', hasSignedPdf: true, onDownloadPdf: vi.fn() });
+
+		await expect
+			.element(page.getByText('This PDF is from an earlier Contract on this Engagement that was signed and later voided.'))
+			.not.toBeInTheDocument();
+	});
+
+	it('adds no notice on a voided Contract, whose PDF is always its own', async () => {
+		await setup({ status: 'voided', hasSignedPdf: true, onDownloadPdf: vi.fn() });
+
+		await expect
+			.element(page.getByText('This PDF is from an earlier Contract on this Engagement that was signed and later voided.'))
+			.not.toBeInTheDocument();
+	});
+
 	it('offers the PDF download on a signed Contract when onDownloadPdf is provided', async () => {
 		await setup({ status: 'signed', hasSignedPdf: true, onDownloadPdf: vi.fn() });
 

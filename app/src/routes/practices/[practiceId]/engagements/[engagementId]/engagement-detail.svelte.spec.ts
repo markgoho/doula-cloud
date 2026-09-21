@@ -901,6 +901,42 @@ describe('the Contract PDF download survives a void (#1119)', () => {
 	});
 });
 
+// #1229: a fresh Draft (created after #72's recreate-after-void flow)
+// beside an older signed-and-voided Contract used to read "Status: draft"
+// next to the download control with nothing saying the PDF is the earlier
+// Contract's, not the Draft's -- a reader could only conclude the Draft
+// had somehow been signed.
+describe('a recreated Draft names the PDF as a previous Contract\'s (#1229)', () => {
+	beforeEach(() => {
+		apiFetchWithSession.mockReset();
+	});
+
+	it('names the earlier Contract on a fresh Draft beside an older signed-and-voided one', async () => {
+		await setupWithContract(
+			() => mockContract(draftOf({ hasSignedPdf: true })),
+			fixtureDetail,
+			session
+		);
+
+		await expect.element(testPage.getByText('Status: draft')).toBeVisible();
+		await expect
+			.element(testPage.getByText('This PDF is from an earlier Contract on this Engagement that was signed and later voided.'))
+			.toBeVisible();
+		await expect
+			.element(testPage.getByRole('button', { name: 'Download signed Contract (PDF)' }))
+			.toBeVisible();
+	});
+
+	it('adds no notice on a plain Draft with no signed PDF anywhere on the Engagement', async () => {
+		await setupWithContract(() => mockContract(draftOf()), fixtureDetail, session);
+
+		await expect.element(testPage.getByText('Status: draft')).toBeVisible();
+		await expect
+			.element(testPage.getByText('This PDF is from an earlier Contract on this Engagement that was signed and later voided.'))
+			.not.toBeInTheDocument();
+	});
+});
+
 // #280: the Birth Plan's own address, one level down -- reading and
 // printing move there (see that route's own spec, including the PDF
 // download this file used to own before the move), and this page keeps

@@ -41,6 +41,16 @@
 	 * the current Contract row regardless of who is looking, so a
 	 * declined ask stays visible to whoever asked even after a different
 	 * request on the same Contract has since been granted.
+	 *
+	 * isPreviousContractPdf (#1229) names the one case hasSignedPdf alone
+	 * leaves ambiguous: a fresh Draft or an unsigned Sent Contract has no
+	 * PDF of its own, so hasSignedPdf true there can only be an earlier,
+	 * voided Contract's file (#72's partial unique index requires the
+	 * prior row to be voided before a fresh one can exist). A notice names
+	 * that before the download control, so "Status: draft" beside the
+	 * button no longer reads as "this Draft was signed." A signed or
+	 * voided Contract's PDF is always its own, so neither status adds the
+	 * notice.
 	 */
 	let {
 		status,
@@ -65,6 +75,16 @@
 	let isVoiding = $state(false);
 	let isDownloading = $state(false);
 	let error = $state('');
+
+	// #1229: hasSignedPdf is Engagement-scoped (signedPDFObjectPath reads
+	// every Contract row for the Engagement, newest signed one wins), not
+	// this Contract row's own. A signed or voided Contract's PDF is always
+	// its own -- each Contract id gets its own object-store key -- so
+	// those two statuses need no extra wording. Any other status (draft,
+	// sent) has no PDF of its own: #72's partial unique index only lets a
+	// fresh Contract exist once the prior one is voided, so hasSignedPdf
+	// true here can only be that earlier, voided Contract's file.
+	const isPreviousContractPdf = $derived(hasSignedPdf && status !== 'signed' && status !== 'voided');
 
 	// The open requests still waiting on a decision, and the ones already
 	// declined -- a granted (voided) request needs no display of its own
@@ -193,6 +213,9 @@
 {/if}
 
 {#if hasSignedPdf && onDownloadPdf}
+	{#if isPreviousContractPdf}
+		<p role="status">This PDF is from an earlier Contract on this Engagement that was signed and later voided.</p>
+	{/if}
 	<Button
 		label="Download signed Contract (PDF)"
 		icon="file-text"
