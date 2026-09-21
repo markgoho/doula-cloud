@@ -213,6 +213,30 @@ describe('who may buy Credits (#257, #1162)', () => {
 	});
 });
 
+// #1228: the Quantity box's own `required min={1}` was the only refusal
+// this form had -- StackedForm's `novalidate` (ADR-0021) takes it away.
+describe('what an empty or zero Quantity refuses (#1228)', () => {
+	it('refuses a zero quantity through the summary, without starting checkout', async () => {
+		await renderBilling();
+
+		await testPage.getByLabelText('Quantity').fill('0');
+		await testPage.getByRole('button', { name: 'Buy credits' }).click();
+
+		expect(apiFetchWithSession).not.toHaveBeenCalled();
+		await expect.element(testPage.getByText('Enter a quantity of 1 or more').first()).toBeVisible();
+	});
+
+	it('refuses an emptied quantity the same way', async () => {
+		await renderBilling();
+
+		await testPage.getByLabelText('Quantity').fill('');
+		await testPage.getByRole('button', { name: 'Buy credits' }).click();
+
+		expect(apiFetchWithSession).not.toHaveBeenCalled();
+		await expect.element(testPage.getByText('Enter a quantity of 1 or more').first()).toBeVisible();
+	});
+});
+
 describe('billing ledger', () => {
 	it('right-aligns the Quantity column, header and body cell alike (#509)', async () => {
 		// DataTable's own content floor (#508) stacks it into a <dl> below

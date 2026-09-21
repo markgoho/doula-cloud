@@ -2,6 +2,7 @@ import { page } from 'vitest/browser';
 import { describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import SignContract from './SignContract.svelte';
+import { SERVICE_PROBLEM } from '#lib/formErrors.js';
 
 async function setup() {
 	const onSign = vi.fn().mockResolvedValue(undefined);
@@ -39,32 +40,55 @@ describe('SignContract.svelte', () => {
 			.toBeInTheDocument();
 	});
 
-	it('disables Sign until both a full legal name and the attestation are given', async () => {
-		await setup();
+	// #1228: Sign is never disabled -- ADR-0021's pattern is a refusal
+	// through the summary, not a control withheld until the answer looks
+	// right (`required`'s own browser bubble did that job before
+	// StackedForm's `novalidate` took it away).
+	it('refuses an empty submit through the summary, naming both fields', async () => {
+		const { onSign } = await setup();
 		await affirmDisclosure();
 
-		const submit = page.getByRole('button', { name: 'Sign' });
-		await expect.element(submit).toBeDisabled();
+		await page.getByRole('button', { name: 'Sign' }).click();
 
-		await page.getByLabelText('Full legal name').fill('Jamie Doe');
-		await expect.element(submit).toBeDisabled();
-
-		await page
-			.getByLabelText('I have read this Contract and I am signing it electronically')
-			.click();
-		await expect.element(submit).toBeEnabled();
+		expect(onSign).not.toHaveBeenCalled();
+		await expect.element(page.getByText('There is a problem')).toBeVisible();
+		await expect.element(page.getByRole('link', { name: 'Enter your full legal name' })).toBeVisible();
+		await expect
+			.element(
+				page.getByRole('link', {
+					name: 'Confirm that you have read the Contract and are signing it electronically'
+				})
+			)
+			.toBeVisible();
 	});
 
-	it('treats a whitespace-only name as not enough to enable Sign', async () => {
-		await setup();
+	it('refuses a submit with the name filled but the attestation unticked', async () => {
+		const { onSign } = await setup();
+		await affirmDisclosure();
+
+		await page.getByLabelText('Full legal name').fill('Jamie Doe');
+		await page.getByRole('button', { name: 'Sign' }).click();
+
+		expect(onSign).not.toHaveBeenCalled();
+		// .first() -- #1228's ErrorSummary repeats the message as a link, so
+		// it now appears twice on screen (the summary and the field).
+		await expect
+			.element(page.getByText('Confirm that you have read the Contract and are signing it electronically').first())
+			.toBeVisible();
+	});
+
+	it('treats a whitespace-only name as not enough', async () => {
+		const { onSign } = await setup();
 		await affirmDisclosure();
 
 		await page.getByLabelText('Full legal name').fill(' '.repeat(3));
 		await page
 			.getByLabelText('I have read this Contract and I am signing it electronically')
 			.click();
+		await page.getByRole('button', { name: 'Sign' }).click();
 
-		await expect.element(page.getByRole('button', { name: 'Sign' })).toBeDisabled();
+		expect(onSign).not.toHaveBeenCalled();
+		await expect.element(page.getByText('Enter your full legal name').first()).toBeVisible();
 	});
 
 	it('calls onSign with the trimmed name and attestation state on submit', async () => {
@@ -94,7 +118,7 @@ describe('SignContract.svelte', () => {
 		await expect.element(page.getByRole('alert')).toHaveTextContent('contract is not awaiting signature');
 	});
 
-	it('shows a generic error message when onSign rejects with a non-Error value', async () => {
+	it('falls back to the service problem message when onSign rejects with a non-Error value', async () => {
 		const onSign = vi.fn().mockRejectedValue('boom');
 		await render(SignContract, { onSign });
 		await affirmDisclosure();
@@ -105,7 +129,7 @@ describe('SignContract.svelte', () => {
 			.click();
 		await page.getByRole('button', { name: 'Sign' }).click();
 
-		await expect.element(page.getByRole('alert')).toHaveTextContent('Failed to sign');
+		await expect.element(page.getByRole('alert')).toHaveTextContent(SERVICE_PROBLEM);
 	});
 
 	/*

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
 	authRefusal,
+	emailFormatError,
 	errorsFromCause,
 	isMultiFactorAuthRequired,
 	passwordReauthRefusal,
@@ -508,5 +509,30 @@ describe('refusalError and errorsFromCause', () => {
 
 	it('reads something thrown that is not an Error as the service problem', () => {
 		expect(errorsFromCause('a bare string')).toEqual([{ message: SERVICE_PROBLEM }]);
+	});
+});
+
+describe('emailFormatError', () => {
+	it('passes an address with something on each side of the @', () => {
+		expect(emailFormatError('name@example.com')).toBeUndefined();
+	});
+
+	it('refuses an address with nothing before the @', () => {
+		expect(emailFormatError('@example.com')).toBe(
+			'Enter an email address in the correct format, like name@example.com'
+		);
+	});
+
+	it('refuses an address with nothing after the @', () => {
+		expect(emailFormatError('name@')).toBe(
+			'Enter an email address in the correct format, like name@example.com'
+		);
+	});
+
+	it('refuses an address with no @ at all', () => {
+		expect(emailFormatError('nameexample.com')).toBe(
+			'Enter an email address in the correct format, like name@example.com'
+		);
+		expect(BANNED.test(emailFormatError('nameexample.com')!)).toBe(false);
 	});
 });

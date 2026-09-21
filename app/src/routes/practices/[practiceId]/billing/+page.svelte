@@ -12,13 +12,17 @@
 	} from '#lib/billing.js';
 	import { formatMoney } from '#lib/money.js';
 	import { readApprovalReturn } from '#lib/engagementRequest.js';
+	import { FormSubmission, orThrownMessage } from '#lib/formSubmission.svelte.js';
+	import type { FormError } from '#lib/formErrors.js';
 	import DataTable from '#lib/components/organisms/DataTable.svelte';
 	import Link from '#lib/components/atoms/Link.svelte';
 	import Notice from '#lib/components/atoms/Notice.svelte';
 	import Text from '#lib/components/atoms/Text.svelte';
 	import Button from '#lib/components/atoms/Button.svelte';
 	import TextInput from '#lib/components/atoms/TextInput.svelte';
+	import ErrorSummary from '#lib/components/molecules/ErrorSummary.svelte';
 	import LabeledField from '#lib/components/molecules/LabeledField.svelte';
+	import StackedForm from '#lib/components/molecules/StackedForm.svelte';
 	import DescriptionList from '#lib/components/molecules/DescriptionList.svelte';
 	import ListPage from '#lib/components/templates/ListPage.svelte';
 	import type { PageProps as PageProperties } from './$types';
@@ -66,8 +70,7 @@
 	// nearer Stripe's 3.2% effective rate than the 4.4% a single Credit
 	// pays (#286, decided on #429).
 	let quantity = $state(5);
-	let purchaseError = $state('');
-	let isPurchasing = $state(false);
+	const purchaseSubmission = new FormSubmission();
 
 	// Undefined, not zero, when the BFF couldn't read the Price off Stripe
 	// (#285) -- the price region below says so in words instead of
@@ -88,18 +91,20 @@
 		approvalReturn = readApprovalReturn();
 	});
 
+	// #1228: the Quantity box's own `required min={1}` was the only refusal
+	// this form had -- StackedForm's `novalidate` (ADR-0021) takes that away,
+	// so this check replaces it before the endpoint ever sees an empty or
+	// zero quantity.
 	async function handlePurchase(event: SubmitEvent) {
 		event.preventDefault();
-		purchaseError = '';
-		isPurchasing = true;
-		try {
+		await purchaseSubmission.run(async () => {
+			if (!Number.isFinite(quantity) || quantity < 1) {
+				const error: FormError = { message: 'Enter a quantity of 1 or more', targetId: quantityId };
+				return [error];
+			}
 			const checkoutUrl = await purchaseCredits(apiFetchWithSession, page.params.practiceId!, quantity);
 			location.assign(checkoutUrl);
-		} catch (error_) {
-			purchaseError = error_ instanceof Error ? error_.message : 'Failed to start credit purchase';
-		} finally {
-			isPurchasing = false;
-		}
+		}, orThrownMessage);
 	}
 </script>
 
@@ -149,67 +154,64 @@
 		<Notice message="Credit purchase canceled." variant="status" />
 	{/if}
 
-	<!-- stacked-form:ignore: #1108 -- the Quantity box is `required` with a `min`, and that is the only thing standing between an empty or zero quantity and a Stripe checkout. `StackedForm` sets `novalidate` (ADR-0021), so adopting it here would take that refusal away and put nothing in its place; #1228 is where this form gets a refusal of its own and then adopts the molecule. The stack below is `StackedForm`'s own arrangement, written inline meanwhile. -->
-	<form onsubmit={handlePurchase}>
-		<stack-l space="var(--space-5)">
-			<!--
-				Through LabeledField and TextInput rather than a raw <label> around a
-				raw <input>: reaching around the atoms put the word "Quantity" on the
-				same line as its box, which is the defect #425 found and #475 walked
-				the pages to catch the rest of.
-			-->
-			<LabeledField id={quantityId} label="Quantity">
-				{#snippet children({ id, describedBy, invalid })}
-					<TextInput
-						{id}
-						{describedBy}
-						{invalid}
-						type="number"
-						inputmode="numeric"
-						min={1}
-						required
-						value={String(quantity)}
-						onInput={(entered) => (quantity = Number(entered))}
-					/>
-				{/snippet}
-			</LabeledField>
-
-			{#if data.price}
-				<DescriptionList items={priceItems} />
-				<Text
-					text="New York sales tax is added at checkout where it applies."
-					step="body-sm"
-					tone="variant"
+	<StackedForm onSubmit={handlePurchase}>
+		{#if purchaseSubmission.errors.length > 0}
+			<ErrorSummary errors={purchaseSubmission.errors} />
+		{/if}
+		<!--
+			Through LabeledField and TextInput rather than a raw <label> around a
+			raw <input>: reaching around the atoms put the word "Quantity" on the
+			same line as its box, which is the defect #425 found and #475 walked
+			the pages to catch the rest of.
+		-->
+		<LabeledField id={quantityId} label="Quantity" error={purchaseSubmission.errorFor(quantityId)}>
+			{#snippet children({ id, describedBy, invalid })}
+				<TextInput
+					{id}
+					{describedBy}
+					{invalid}
+					type="number"
+					inputmode="numeric"
+					min={1}
+					required
+					value={String(quantity)}
+					onInput={(entered) => (quantity = Number(entered))}
 				/>
-			{:else}
-				<!--
-					#256's intro above now states the ordinary $20.00 price as a
-					fixed fact, so this sentence is scoped to what is actually
-					missing -- today's checkout total from Stripe -- rather than
-					repeating "price" and reading as a contradiction of it.
-				-->
-				<Text text="This purchase's exact price could not be confirmed with Stripe right now." step="body-sm" tone="variant" />
-			{/if}
+			{/snippet}
+		</LabeledField>
 
+		{#if data.price}
+			<DescriptionList items={priceItems} />
+			<Text
+				text="New York sales tax is added at checkout where it applies."
+				step="body-sm"
+				tone="variant"
+			/>
+		{:else}
 			<!--
-				Unconditional, and this screen reads no role of its own
-				(#1162). Who may be here at all is ADR-0008's Credit row --
-				Owner and Admin, never a Doula -- and both the balance read
-				and the purchase declare that same seat,
-				staffauth.OwnerAndAdmin in billing/mount.go. The balance
-				arrives through +page.ts's own load, so a session outside that
-				seat meets its refuseRead and practices/+error.svelte and
-				never mounts this component; every session that does mount it
-				may buy. Drawing this button disabled for a caller who cannot
-				reach the page was #257's fix, which #272 and #910 between
-				them left with no session to fire for.
+				#256's intro above now states the ordinary $20.00 price as a
+				fixed fact, so this sentence is scoped to what is actually
+				missing -- today's checkout total from Stripe -- rather than
+				repeating "price" and reading as a contradiction of it.
 			-->
-			<Button label="Buy credits" type="submit" loading={isPurchasing} />
-			{#if purchaseError}
-				<Notice message={purchaseError} variant="error" />
-			{/if}
-		</stack-l>
-	</form>
+			<Text text="This purchase's exact price could not be confirmed with Stripe right now." step="body-sm" tone="variant" />
+		{/if}
+
+		<!--
+			Unconditional, and this screen reads no role of its own
+			(#1162). Who may be here at all is ADR-0008's Credit row --
+			Owner and Admin, never a Doula -- and both the balance read
+			and the purchase declare that same seat,
+			staffauth.OwnerAndAdmin in billing/mount.go. The balance
+			arrives through +page.ts's own load, so a session outside that
+			seat meets its refuseRead and practices/+error.svelte and
+			never mounts this component; every session that does mount it
+			may buy. Drawing this button disabled for a caller who cannot
+			reach the page was #257's fix, which #272 and #910 between
+			them left with no session to fire for.
+		-->
+		<Button label="Buy credits" type="submit" loading={purchaseSubmission.isSubmitting} />
+	</StackedForm>
 {/snippet}
 
 <ListPage title="Credits" {intro} {content} />

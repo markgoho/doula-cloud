@@ -569,7 +569,21 @@
 	// and its remedy are on screen the moment she picks the name, and
 	// handleCreateVisit below returns without sending anything. Prevented
 	// here, still enforced at the BFF (api/internal/visit/roles.go).
-	const newVisitBlock = $derived(assigneeBlock(doulas ?? [], visitStaffId));
+	//
+	// #1228: an empty pick used to fall to the Select's own `required` --
+	// StackedForm's `novalidate` (ADR-0021) takes that away, so an empty
+	// visitStaffId is refused here too, but only once a submit has been
+	// attempted (hasAttemptedCreateVisit): there is no live indicator for
+	// "nothing chosen yet" the way #911's ineligible-pick block already is
+	// one. Guarded on canAssignVisits, because visitStaffId also reads ''
+	// for a plain Doula logging her own Visit, who is never shown this
+	// picker at all and so has nothing to refuse.
+	let hasAttemptedCreateVisit = $state(false);
+	const newVisitBlock = $derived(
+		canAssignVisits && !visitStaffId
+			? (hasAttemptedCreateVisit ? 'Select who this Visit is for' : '')
+			: assigneeBlock(doulas ?? [], visitStaffId)
+	);
 	// The Offers section turns on the Offers read alone, not on the roster.
 	// The two happen to be the same pair of roles today (both Owner and
 	// Admin), so tying Offers to `canAssignVisits` looked free -- but it
@@ -1032,11 +1046,22 @@
 		);
 	}
 
+	// #1228: the reassign Select's own `required` was the only refusal an
+	// empty pick had; StackedForm's `novalidate` (ADR-0021) takes it away.
+	// Silent until a submit is attempted -- there is no live indicator for
+	// "empty" the way there is for an ineligible pick (#911's own block,
+	// still the live one, below). reassignAttempted is keyed the same way
+	// reassignSections already is: one row's own submit never marks
+	// another's as attempted.
+	let reassignAttempted = $state<Record<string, boolean>>({});
+
 	// The same block the create picker carries, asked per row: the
 	// reassign picker offers the same people from the same list, so it
 	// refuses the same choice with the same words.
 	function reassignBlock(visitId: string): string {
-		return assigneeBlock(doulas ?? [], reassignStaffId[visitId] ?? '');
+		const chosen = reassignStaffId[visitId] ?? '';
+		if (!chosen) return reassignAttempted[visitId] ? 'Select who to reassign this Visit to' : '';
+		return assigneeBlock(doulas ?? [], chosen);
 	}
 
 	async function handleCreateOffer(offer: NewOffer) {
@@ -1090,6 +1115,7 @@
 	// before the field existed.
 	async function handleCreateVisit(event: SubmitEvent) {
 		event.preventDefault();
+		hasAttemptedCreateVisit = true;
 		// #911: the request is never sent for somebody this Engagement
 		// cannot admit. The refusal and its remedy are already on screen,
 		// beside the field, from the moment she was picked.
@@ -1113,6 +1139,7 @@
 
 	async function handleReassign(visitId: string, event: SubmitEvent) {
 		event.preventDefault();
+		reassignAttempted[visitId] = true;
 		// #911, the same block the create form makes.
 		if (reassignBlock(visitId)) return;
 		const section = (reassignSections[visitId] ??= new SectionState<void>(undefined));
@@ -1379,37 +1406,43 @@
 		{#if reassignOptions.length === 0}
 			<p>There is nobody else to reassign this Visit to.</p>
 		{:else}
-			<!-- stacked-form:ignore: #1108 -- the Select below is `required`, and that is the only thing standing between an empty pick and the endpoint. `StackedForm` sets `novalidate` (ADR-0021), so adopting it here would take that refusal away and put nothing in its place; #1228 is where this form gets a refusal of its own and then adopts the molecule. The stack below is `StackedForm`'s own arrangement, written inline meanwhile. -->
-			<form onsubmit={(event) => handleReassign(visit.visitId, event)}>
-				<stack-l space="var(--space-5)">
-					<LabeledField
-						id={`${view}-reassign-staff-${visit.visitId}`}
-						label="Reassign to"
-						hint={assigneeHint}
-						error={reassignBlock(visit.visitId)}
-					>
-						{#snippet children({ id, describedBy, invalid })}
-							<Select
-								{id}
-								{describedBy}
-								{invalid}
-								options={reassignOptions}
-								placeholder="Choose a Doula"
-								value={reassignStaffId[visit.visitId] ?? ''}
-								onChange={(value) => (reassignStaffId[visit.visitId] = value)}
-								required
-							/>
-						{/snippet}
-					</LabeledField>
-					<Button
-						label="Reassign"
-						type="submit"
-						size="sm"
-						variant="secondary"
-						describedBy="{view}-visit-{visit.visitId}-name"
-					/>
-				</stack-l>
-			</form>
+			{@const refusal = reassignBlock(visit.visitId)}
+			{@const reassignFieldId = `${view}-reassign-staff-${visit.visitId}`}
+			<StackedForm onSubmit={(event) => handleReassign(visit.visitId, event)}>
+				<!--
+					Gated on reassignAttempted, not on refusal alone: #911's own
+					live block (an ineligible pick) fires the instant she chooses
+					a name, well before any submit, and ErrorSummary's own
+					contract ("cannot steal focus from someone who has not
+					submitted") assumes errors only ever arrive from a submit.
+					Without this gate, picking an ineligible name would yank
+					focus to the summary mid-selection (#1228).
+				-->
+				{#if reassignAttempted[visit.visitId] && refusal}
+					<ErrorSummary errors={[{ message: refusal, targetId: reassignFieldId }]} />
+				{/if}
+				<LabeledField id={reassignFieldId} label="Reassign to" hint={assigneeHint} error={refusal}>
+					{#snippet children({ id, describedBy, invalid })}
+						<Select
+							{id}
+							{describedBy}
+							{invalid}
+							options={reassignOptions}
+							placeholder="Choose a Doula"
+							value={reassignStaffId[visit.visitId] ?? ''}
+							onChange={(value) => (reassignStaffId[visit.visitId] = value)}
+							required
+						/>
+					{/snippet}
+				</LabeledField>
+				<Button
+					label="Reassign"
+					type="submit"
+					size="sm"
+					variant="secondary"
+					describedBy="{view}-visit-{visit.visitId}-name"
+				/>
+			</StackedForm>
 		{/if}
 		{#if reassignSections[visit.visitId]?.error}
 			<Notice variant="error" message={reassignSections[visit.visitId]!.error} />
@@ -1484,56 +1517,65 @@
 		control rather than a button that 403s.
 	-->
 	{#if canAssignVisits || canLogOwnVisit}
-		<!-- stacked-form:ignore: #1108 -- the assignee Select is `required`, and that is the only thing standing between an empty pick and the endpoint. `StackedForm` sets `novalidate` (ADR-0021), so adopting it here would take that refusal away and put nothing in its place; #1228 is where this form gets a refusal of its own and then adopts the molecule. The stack below is `StackedForm`'s own arrangement, written inline meanwhile. -->
-		<form onsubmit={handleCreateVisit}>
-			<stack-l space="var(--space-5)">
-				{#if canAssignVisits}
-					<!--
-						#909: this picker opens on the reader herself when she is on
-						the roster, with her own option first and marked "(you)".
-						GOV.UK's Select guidance says not to pre-select an option for
-						a question, and this departs from it on purpose -- the reason
-						is recorded in docs/design/govuk-alignment.md, on the commit
-						that departed.
-						#911: and every name says whether this Engagement can admit
-						her, with the hint explaining the marker and the error
-						refusing the choice before anything is sent.
-					-->
-					<LabeledField
-						id="new-visit-staff"
-						label="Who is this Visit for?"
-						hint={assigneeHint}
-						error={newVisitBlock}
-					>
-						{#snippet children({ id, describedBy, invalid })}
-							<Select
-								{id}
-								{describedBy}
-								{invalid}
-								options={createAssigneeOptions}
-								placeholder="Choose a Doula"
-								value={visitStaffId}
-								onChange={(value) => (newVisitStaffId = value)}
-								required
-							/>
-						{/snippet}
-					</LabeledField>
-				{/if}
-				<LabeledField id="new-visit-scheduled-at" label="Scheduled date and time (optional)">
+		<StackedForm onSubmit={handleCreateVisit}>
+			<!--
+				Gated on hasAttemptedCreateVisit, not on newVisitBlock alone:
+				#911's own live block (an ineligible pick) fires the instant
+				she chooses a name, well before any submit, and ErrorSummary's
+				own contract ("cannot steal focus from someone who has not
+				submitted") assumes errors only ever arrive from a submit.
+				Without this gate, picking an ineligible name would yank focus
+				to the summary mid-selection (#1228).
+			-->
+			{#if hasAttemptedCreateVisit && newVisitBlock}
+				<ErrorSummary errors={[{ message: newVisitBlock, targetId: 'new-visit-staff' }]} />
+			{/if}
+			{#if canAssignVisits}
+				<!--
+					#909: this picker opens on the reader herself when she is on
+					the roster, with her own option first and marked "(you)".
+					GOV.UK's Select guidance says not to pre-select an option for
+					a question, and this departs from it on purpose -- the reason
+					is recorded in docs/design/govuk-alignment.md, on the commit
+					that departed.
+					#911: and every name says whether this Engagement can admit
+					her, with the hint explaining the marker and the error
+					refusing the choice before anything is sent.
+				-->
+				<LabeledField
+					id="new-visit-staff"
+					label="Who is this Visit for?"
+					hint={assigneeHint}
+					error={newVisitBlock}
+				>
 					{#snippet children({ id, describedBy, invalid })}
-						<TextInput
+						<Select
 							{id}
 							{describedBy}
 							{invalid}
-							type="datetime-local"
-							value={newVisitScheduledAt}
-							onInput={(value) => (newVisitScheduledAt = value)}
+							options={createAssigneeOptions}
+							placeholder="Choose a Doula"
+							value={visitStaffId}
+							onChange={(value) => (newVisitStaffId = value)}
+							required
 						/>
 					{/snippet}
 				</LabeledField>
-				<Button label="Add a Visit" type="submit" loading={isCreatingVisit} />
-			</stack-l>
-		</form>
+			{/if}
+			<LabeledField id="new-visit-scheduled-at" label="Scheduled date and time (optional)">
+				{#snippet children({ id, describedBy, invalid })}
+					<TextInput
+						{id}
+						{describedBy}
+						{invalid}
+						type="datetime-local"
+						value={newVisitScheduledAt}
+						onInput={(value) => (newVisitScheduledAt = value)}
+					/>
+				{/snippet}
+			</LabeledField>
+			<Button label="Add a Visit" type="submit" loading={isCreatingVisit} />
+		</StackedForm>
 	{/if}
 
 	{#if rosterState.error}
