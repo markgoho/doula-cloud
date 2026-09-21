@@ -30,14 +30,14 @@
 
 | Step | Action | Expected result | Mark |
 | --- | --- | --- | --- |
-| 2.1 | As the Owner, set `admin` on Dee's membership from a screen | **Edit membership** on Dee's row saves it. The Staff screen then prints the raw enum `admin`, not "Admin" ([RA-G3](https://github.com/markgoho/doula-cloud/issues/262)) | `manual` |
+| 2.1 | As the Owner, set `admin` on Dee's membership from a screen | **Edit membership** on Dee's row saves it. The Staff screen prints `Admin`, the team's word — `rolesLabel` replaced the raw enum ([RA-G3](https://github.com/markgoho/doula-cloud/issues/262), closed) | `manual` |
 
 ### Stage 3 — Discover what the Admin role grants
 
 | Step | Action | Expected result | Mark |
 | --- | --- | --- | --- |
 | 3.1 | Land on `/practices/[practiceId]` | **Three** tiles: Clients, Billing and **Payments**. Four tiles are owner-gated; Payments sits outside the block ([RA-G9](https://github.com/markgoho/doula-cloud/issues/267)) | `manual` |
-| 3.1-a | Compare this run against the zero-role run | **Identical.** `office_manager` is read nowhere in the codebase; the role grants nothing and withholds nothing | `manual` |
+| 3.1-a | Compare this run against the zero-role run | **No longer identical.** [DW-G1](https://github.com/markgoho/doula-cloud/issues/269) is closed: `admin` is read now for the Practice's Stripe Connect state (`staffauth.OwnerAndAdmin`, [#267](https://github.com/markgoho/doula-cloud/issues/267)) — see the journey map's Stage 3 note | `manual` |
 | 3.2 | Open Credits | The Practice's credit balance and purchase ledger render for an Admin — the balance read is `staffauth.OwnerAndAdmin` since [DW-G4](https://github.com/markgoho/doula-cloud/issues/272), so an Admin is inside the seat and a Doula meets the refusal screen instead | `manual` |
 | 3.2-a | Buy credits | **Not refused.** The purchase declares the same Owner-and-Admin seat the balance does ([#257](https://github.com/markgoho/doula-cloud/issues/257), [#910](https://github.com/markgoho/doula-cloud/issues/910)), and the button is drawn plainly enabled for every session that reaches the screen ([#1162](https://github.com/markgoho/doula-cloud/issues/1162)) | `manual` |
 

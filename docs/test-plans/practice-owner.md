@@ -44,7 +44,7 @@ is Lena's normal case.
 | Step | Action | Expected result | Mark |
 | --- | --- | --- | --- |
 | 3.1 | Open `/practices/[practiceId]/staff` | The roster loads; the `GET` is owner-gated and passes for Renata | `manual` |
-| 3.2 | Read the Roles column | Raw enum strings render — an Admin shows as `office_manager`, the word `CONTEXT.md` rules out | `manual` |
+| 3.2 | Read the Roles column | Renders the team's words via `rolesLabel` — an Admin shows as `Admin` (closed by [#262](https://github.com/markgoho/doula-cloud/issues/262)) | `manual` |
 | 3.3 | Change a member's roles from the screen | **Edit membership** opens roles and employment type on one form and saves both (#316). No staff id is needed and no terminal is involved, so a roster can be built in the product | `manual` |
 | 3.4 | Read the Pending invitations group | Addresses asked but not answered, each with its roles, employment type, expiry and a **Revoke** action — a second group, not a row in the members list | `manual` |
 

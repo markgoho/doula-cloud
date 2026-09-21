@@ -45,7 +45,7 @@ marketing site is out of scope for this map).
 | 3.1 | Open `/signup` | One screen, four fields, no email confirmation step. This is the strongest leg of her journey | `automated (signup-form.e2e.ts)` |
 | 3.2 | Fill Practice name, Your name, Email, Password | "Practice name" asks her to name a business she may not think of as one | `automated (signup-form.e2e.ts)` |
 | 3.3 | Press **Create Practice** | `POST /api/staff/signup` creates the Practice, the Staff row, and a membership holding Owner + Admin + Doula in one statement | `automated (signup-form.e2e.ts)` |
-| 3.3-a | Look for anything telling her roles exist, or that she now holds three | Nothing at signup or on the first screen does. The **Staff** screen does, one unprompted click away, and it reads `owner, office_manager, doula` — the schema's word, not **Admin** | `manual` |
+| 3.3-a | Look for anything telling her roles exist, or that she now holds three | Nothing at signup or on the first screen does. The **Staff** screen does, one unprompted click away, and it reads `Owner, Admin, Doula` — the team's words, since [#262](https://github.com/markgoho/doula-cloud/issues/262) replaced the raw enum render | `manual` |
 
 **Abandon check**: low risk. Time the whole stage — under a minute is the claim.
 

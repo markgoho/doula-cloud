@@ -4,7 +4,7 @@ import { readStaffInviteToken } from './stack';
 import { seedFoundingOwner, uniqueEmail } from './staffSignup';
 
 // Every other spec that signs in does so as the Owner signup itself creates,
-// who holds owner + office_manager + doula at once. This is the one spec
+// who holds owner + admin + doula at once. This is the one spec
 // that reaches the app as a Staff member holding a role set that is not
 // that bundle -- a Doula invited and accepted through the real invite
 // route -- and the one spec that asserts a role refusal (a 403 where a

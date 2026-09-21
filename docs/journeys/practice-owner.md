@@ -76,9 +76,7 @@ screen has no role control. Its only row action is **End sessions everywhere**.
 
 - **3.1** — Open `/practices/[practiceId]/staff` (owner-gated at
   `staffauth/staff.go:25`).
-- **3.2** — Read the Roles column, which renders raw enum strings
-  (`member.roles.join(', ')`) — so Dee appears as `office_manager`, a word
-  `CONTEXT.md` has ruled out.
+- **3.2** — Read the Roles column, which now renders the team's words via `rolesLabel` — Dee appears as `Admin`, not a raw enum ([#262](https://github.com/markgoho/doula-cloud/issues/262), closed).
 - **3.3** — Find no way to change them.
 
 Until this is built, the whole roster is unbuildable through the UI, and every
@@ -166,7 +164,7 @@ it, because there is no click to record.
 | --- | --- | --- | --- | --- |
 | RA-G1 | 2 | Both | Invitations send no email. The Owner must copy a link and deliver it out of band. | [#260](https://github.com/markgoho/doula-cloud/issues/260) |
 | RA-G2 | 3 | Interaction | No role-assignment UI. The `PATCH .../roles` endpoint exists but nothing calls it, so the roster cannot be built in the product. | [#261](https://github.com/markgoho/doula-cloud/issues/261) |
-| RA-G3 | 3 | Both | The Staff list renders raw enum values, so an Admin shows on screen as `office_manager` — the word `CONTEXT.md` ruled out. | [#262](https://github.com/markgoho/doula-cloud/issues/262) |
+| RA-G3 | 3 | Both | **Closed.** The Staff list rendered raw enum values, so an Admin showed on screen as `office_manager` (later `admin`) rather than the word `CONTEXT.md` prescribes; `rolesLabel` now renders `Admin`. | [#262](https://github.com/markgoho/doula-cloud/issues/262) |
 | RA-G4 | 4 | Interaction | An Engagement has no assigned Doula. No column, no endpoint, no screen. Assignment exists only per Visit. | [#225](https://github.com/markgoho/doula-cloud/issues/225) |
 | RA-G5 | 8 | Experience | No coverage or availability view, and no dated Visits to build one from. Her stated anxiety has no surface at all. | [#263](https://github.com/markgoho/doula-cloud/issues/263) |
 | RA-G6 | 6 | Both | The Clients list shows Name and Status only. No Contract state, Invoice state, or Doula — so "see the whole Practice" needs one Engagement page per Client. | [#264](https://github.com/markgoho/doula-cloud/issues/264) |
