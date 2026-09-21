@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"time"
 
+	"doula-cloud/api/internal/activity"
 	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/pagecursor"
 	"doula-cloud/api/internal/practicetimezone"
@@ -154,13 +155,26 @@ func ListHandler() http.Handler {
 // so DeriveType compares two YYYY-MM-DD strings rather than a
 // time.Time whose zone would have to be guessed.
 //
+// staff is a LEFT JOIN, not the INNER JOIN it used to be (#1322):
+// staff_practice_visibility (00002) reaches a staff row only through a
+// live practice_memberships row, so once the assigned Doula's own
+// Membership ends -- a plain departure or ADR-0033's login deletion,
+// both a hard DELETE FROM practice_memberships -- an INNER JOIN drops
+// the Visit from the whole result set, not just her name from it, which
+// is the audit-trail gap CLAUDE.md names ("who did it and when" must
+// stay answerable). StaffID is read from v.staff_id, which always
+// exists, rather than from s.id, which does not once the join finds no
+// row; StaffName falls back to activity.DepartedStaffName, the same
+// word #887/#1150 settled on for the Activity ledger and #1322's
+// message.listMessages now also uses.
+//
 // zone is the Practice's own timezone, loaded once by the caller (#953):
 // it decides which calendar day each row's instant falls on, and every
 // row on the page uses the same one.
 func listVisits(ctx context.Context, tx *sql.Tx, engagementID string, after *pagecursor.Cursor, zone *time.Location) ([]Visit, error) {
-	query := `SELECT v.id, s.id, s.name, v.created_at, v.scheduled_at, v.notes, e.pregnancy_ended_on::text
+	query := `SELECT v.id, v.staff_id, s.name, v.created_at, v.scheduled_at, v.notes, e.pregnancy_ended_on::text
 		 FROM visits v
-		 JOIN staff s ON s.id = v.staff_id
+		 LEFT JOIN staff s ON s.id = v.staff_id
 		 JOIN engagements e ON e.id = v.engagement_id
 		 WHERE v.engagement_id = $1`
 	args := []any{engagementID}
@@ -182,12 +196,18 @@ func listVisits(ctx context.Context, tx *sql.Tx, engagementID string, after *pag
 	list := []Visit{}
 	for rows.Next() {
 		var v Visit
+		var staffName sql.NullString
 		var scheduledAt sql.NullTime
 		var notes sql.NullString
 		var pregnancyEndedOn sql.NullString
-		if err := rows.Scan(&v.VisitID, &v.StaffID, &v.StaffName, &v.CreatedAt, &scheduledAt, &notes, &pregnancyEndedOn); err != nil {
+		if err := rows.Scan(&v.VisitID, &v.StaffID, &staffName, &v.CreatedAt, &scheduledAt, &notes, &pregnancyEndedOn); err != nil {
 			// coverage:ignore reason: row scan failure, not exercised by unit tests
 			return nil, fmt.Errorf("visit: scan visit row: %w", err)
+		}
+		if staffName.Valid {
+			v.StaffName = staffName.String
+		} else {
+			v.StaffName = activity.DepartedStaffName
 		}
 		if scheduledAt.Valid {
 			v.ScheduledAt = &scheduledAt.Time

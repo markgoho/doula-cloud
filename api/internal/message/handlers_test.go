@@ -11,6 +11,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"doula-cloud/api/internal/activity"
 	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/idempotency"
 	"doula-cloud/api/internal/message"
@@ -992,21 +993,15 @@ func TestCreateHandler_JSONRequestStillTextOnly(t *testing.T) {
 	}
 }
 
-// TestListHandler_UnchangedForASenderWhoDeletedHerLogin is #1198 AC2: the
-// Staff-side thread passes "" into listMessages' unresolvedStaffSenderName
-// parameter, the same value the code produced before that parameter
-// existed, so this locks in that the fix left this side alone. It also
-// documents the actual (not the ticket's assumed) Staff-side behavior:
-// staff_practice_visibility (00002) reaches a staff row only through a
-// live practice_memberships row, same as the gap #887/#1150 named
-// activity.DepartedStaffName ("a former colleague") for the Activity
-// ledger -- a Staff reader here does not see "Deleted Staff Member",
-// because RemoveMembership (run by both a plain departure and ADR-0033's
-// login deletion) makes the row unreachable before deleted_at is ever
-// checked. That gap is real and pre-existing, filed separately as #1322
-// rather than fixed here, since fixing it means changing what the
-// Staff-side thread shows -- exactly what this ticket's AC2 forbids.
-func TestListHandler_UnchangedForASenderWhoDeletedHerLogin(t *testing.T) {
+// TestListHandler_SenderWhoDeletedHerLoginShowsAFormerColleague is #1322's
+// fix for the gap #1198 AC2 left standing: staff_practice_visibility
+// (00002) reaches a staff row only through a live practice_memberships
+// row, same as the gap #887/#1150 named activity.DepartedStaffName ("a
+// former colleague") for the Activity ledger, so a Staff reader here now
+// reads that same word rather than the "" the code produced before this
+// fix -- and, since RemoveMembership already makes the row unreachable,
+// still not the redacted "Deleted Staff Member" ADR-0033 writes to it.
+func TestListHandler_SenderWhoDeletedHerLoginShowsAFormerColleague(t *testing.T) {
 	const identityUIDSender = "staff-side-deleted-login-sender"
 	const identityUIDReader = "staff-side-deleted-login-reader"
 	const body = "See you Thursday."
@@ -1014,7 +1009,7 @@ func TestListHandler_UnchangedForASenderWhoDeletedHerLogin(t *testing.T) {
 	db := testdb.New(t)
 	practiceID := testdb.SeedPractice(t, db, "Staff Side Deleted Login Practice")
 	senderID := testdb.SeedNamedStaffAtPractice(t, db, practiceID, identityUIDSender, "Maya Okonkwo", []string{doulaRole}, "employee")
-	testdb.SeedStaffAtPractice(t, db, practiceID, identityUIDReader, []string{"owner"}, "employee")
+	testdb.SeedStaffAtPractice(t, db, practiceID, identityUIDReader, []string{ownerRole}, "employee")
 	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Nadia Client", "nadia-staff-side@example.com")
 
 	senderSrv, senderSession := newServer(t, db, identityUIDSender)
@@ -1049,7 +1044,56 @@ func TestListHandler_UnchangedForASenderWhoDeletedHerLogin(t *testing.T) {
 	if len(thread.Items) != 1 {
 		t.Fatalf("thread = %+v, want the one Message she sent", thread.Items)
 	}
-	if thread.Items[0].SenderName != "" {
-		t.Fatalf("senderName = %q, want the Staff side's unchanged empty name", thread.Items[0].SenderName)
+	if thread.Items[0].SenderName != activity.DepartedStaffName {
+		t.Fatalf("senderName = %q, want %q", thread.Items[0].SenderName, activity.DepartedStaffName)
+	}
+}
+
+// TestListHandler_SenderWhoPlainlyLeftShowsAFormerColleague is
+// TestListHandler_SenderWhoDeletedHerLoginShowsAFormerColleague's sibling
+// for a plain departure -- no ADR-0033 login deletion, no redacted staff
+// row -- proving the fallback is reached by RemoveMembership alone: #1322
+// AC1's root cause is staff_practice_visibility (00002) itself, which
+// gates on a live practice_memberships row and never looks at
+// staff.deleted_at.
+func TestListHandler_SenderWhoPlainlyLeftShowsAFormerColleague(t *testing.T) {
+	const identityUIDSender = "staff-side-plain-departure-sender"
+	const identityUIDReader = "staff-side-plain-departure-reader"
+	const body = "See you Thursday."
+
+	db := testdb.New(t)
+	practiceID := testdb.SeedPractice(t, db, "Staff Side Plain Departure Practice")
+	senderID := testdb.SeedNamedStaffAtPractice(t, db, practiceID, identityUIDSender, "Priya Chandra", []string{doulaRole}, "employee")
+	testdb.SeedStaffAtPractice(t, db, practiceID, identityUIDReader, []string{ownerRole}, "employee")
+	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Nadia Client", "nadia-staff-side-plain@example.com")
+
+	senderSrv, senderSession := newServer(t, db, identityUIDSender)
+	defer senderSrv.Close()
+	b, _ := json.Marshal(message.CreateRequest{Body: body})
+	created := authedPost(t, senderSession, senderSrv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/messages", b)
+	defer created.Body.Close()
+	if created.StatusCode != http.StatusCreated {
+		t.Fatalf("create status = %d, want %d", created.StatusCode, http.StatusCreated)
+	}
+
+	testdb.RemoveMembership(t, db, senderID)
+
+	readerSrv, readerSession := newServer(t, db, identityUIDReader)
+	defer readerSrv.Close()
+	resp := authedGet(t, readerSession, readerSrv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/messages")
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
+	}
+
+	var thread message.ListResponse
+	if err := json.NewDecoder(resp.Body).Decode(&thread); err != nil {
+		t.Fatalf("decode thread: %v", err)
+	}
+	if len(thread.Items) != 1 {
+		t.Fatalf("thread = %+v, want the one Message she sent", thread.Items)
+	}
+	if thread.Items[0].SenderName != activity.DepartedStaffName {
+		t.Fatalf("senderName = %q, want %q", thread.Items[0].SenderName, activity.DepartedStaffName)
 	}
 }

@@ -222,6 +222,51 @@ func TestListHandler_ReturnsVisitsForEngagement(t *testing.T) {
 	}
 }
 
+// TestListHandler_AssigneeWhoLeftStillShowsTheVisit is #1322's fix for
+// listVisits' own gap: JOIN staff was an INNER JOIN, so once the
+// assigned Doula's Membership ended (RemoveMembership -- a plain
+// departure or ADR-0033's login deletion, both a hard DELETE FROM
+// practice_memberships), staff_practice_visibility (00002) made her row
+// unreachable and the join predicate excluded the whole Visit, not just
+// her name -- the audit-trail gap CLAUDE.md names ("who did it and
+// when" must stay answerable). The now-LEFT JOIN keeps the row and
+// names her activity.DepartedStaffName ("a former colleague"), the same
+// word #887/#1150 settled on for the Activity ledger and #1322's
+// message.listMessages now also uses.
+func TestListHandler_AssigneeWhoLeftStillShowsTheVisit(t *testing.T) {
+	db := testdb.New(t)
+	practiceID, assigneeID := testdb.SeedStaffAtNewPractice(t, db, "visit-assignee-who-left", []string{doulaRole}, "employee")
+	testdb.SeedStaffAtPractice(t, db, practiceID, "visit-list-reader", []string{ownerRole}, "employee")
+	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
+	visitID := seedVisit(t, db, engagementID, assigneeID)
+
+	testdb.RemoveMembership(t, db, assigneeID)
+
+	srv, session := newServer(t, db, "visit-list-reader")
+	defer srv.Close()
+
+	resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/visits")
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
+	}
+	var listResp visit.ListResponse
+	if err := json.NewDecoder(resp.Body).Decode(&listResp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	list := listResp.Items
+	if len(list) != 1 || list[0].VisitID != visitID {
+		t.Fatalf("list = %+v, want the one Visit %q, assigned to a departed Doula", list, visitID)
+	}
+	if list[0].StaffID != assigneeID {
+		t.Fatalf("staffId = %q, want %q -- her id, unlike her name, is never lost", list[0].StaffID, assigneeID)
+	}
+	if list[0].StaffName != activity.DepartedStaffName {
+		t.Fatalf("staffName = %q, want %q", list[0].StaffName, activity.DepartedStaffName)
+	}
+}
+
 func TestListHandler_VisibleToNonDoulaStaff(t *testing.T) {
 	db := testdb.New(t)
 	practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, "doula-creator", []string{doulaRole}, "employee")

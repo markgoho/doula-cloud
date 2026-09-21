@@ -7,6 +7,7 @@ import (
 )
 
 const doulaRole = "doula"
+const ownerRole = "owner"
 
 // seedMessage inserts a Message on engagementID from senderType/senderID,
 // using the superuser Admin connection so fixture setup isn't gated by
