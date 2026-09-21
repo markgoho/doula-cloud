@@ -81,6 +81,33 @@ func TestDetailHandler_DueDate(t *testing.T) {
 	}
 }
 
+// TestDetailHandler_Kind proves the Staff side reads engagements.kind
+// (#874) -- staff-only, and absent from portal.Detail entirely
+// (api/internal/portal/detail_test.go's own key-absence assertion).
+func TestDetailHandler_Kind(t *testing.T) {
+	db := testdb.New(t)
+	const identityUID = "staff-viewing-kind"
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, employeeType)
+	_, engagementID := testdb.SeedEngagementWithKind(t, db, practiceID, "Kind Client", "kind@example.com", string(engagement.KindPostpartum))
+
+	srv, session := newServer(t, db, identityUID)
+	defer srv.Close()
+
+	resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID)
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
+	}
+	var d engagement.Detail
+	if err := json.NewDecoder(resp.Body).Decode(&d); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if d.Kind != string(engagement.KindPostpartum) {
+		t.Fatalf("kind = %q, want postpartum", d.Kind)
+	}
+}
+
 // TestDetailHandler_NullDueDate covers ADR-0017's "genuinely none" case: a
 // postpartum-only Engagement has no due date, and the field must be
 // omitted from the JSON entirely -- the page relies on `omitempty` to

@@ -175,6 +175,11 @@ export const detail = {
 	clientName,
 	status: 'active',
 	createdAt: '2026-08-01T00:00:00Z',
+	// #874: what the Practice sold. 'birth' agrees with the recorded birth
+	// outcome below -- a postpartum Engagement never carries one -- and is
+	// what earns the Kind section's "Change to Postpartum" control its own
+	// row in the sweep.
+	kind: 'birth',
 	dueDate: '2027-03-01',
 	// #253: the one legal move from 'active' every role in the fixture's
 	// own role table reaches, so the continuum check sees the status

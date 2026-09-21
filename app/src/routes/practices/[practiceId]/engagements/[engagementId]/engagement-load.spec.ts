@@ -28,6 +28,7 @@ describe('engagements/[engagementId]/+page.ts load', () => {
 			clientId: 'client-1',
 			clientName: 'Tasha Bell',
 			status: 'active',
+			kind: 'birth',
 			createdAt: '2027-05-01T00:00:00Z'
 		};
 		const { fetchMock } = setup(200, detail);

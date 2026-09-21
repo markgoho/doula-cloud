@@ -115,7 +115,7 @@ func TestRecordBirthOutcomeHandler_RolesMayRecord(t *testing.T) {
 		{ownerRole, []string{ownerRole}, employeeType, true},
 		{adminRole, []string{adminRole}, employeeType, true},
 		{employeeDoulaKind, []string{doulaRole}, employeeType, true},
-		{"contractor doula", []string{doulaRole}, contractorType, false},
+		{contractorDoulaKind, []string{doulaRole}, contractorType, false},
 		{"no role", []string{}, employeeType, false},
 	}
 	for _, tc := range cases {

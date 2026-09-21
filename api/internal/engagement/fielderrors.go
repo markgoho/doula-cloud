@@ -24,6 +24,12 @@ const (
 	// MsgBirthOutcomeUnknown is the birthOutcome field on the birth
 	// outcome form, matching its own client-side check.
 	MsgBirthOutcomeUnknown = "Select what happened to the pregnancy"
+	// MsgKindUnknown is the kind field on the kind-change endpoint (#874).
+	// Nobody reaches it from the Engagement hub, whose control offers only
+	// the other of the two kinds as a named button; it is here for a
+	// caller that sent its own body, the same reasoning MsgStatusUnknown
+	// gives for its own control.
+	MsgKindUnknown = "Choose whether this Engagement is for birth or postpartum care"
 	// MsgEndedOnNeeded answers a birth outcome of 'live_birth' or 'loss'
 	// sent with no date: those two say the pregnancy ended, and when it
 	// ended is the other half of that fact.

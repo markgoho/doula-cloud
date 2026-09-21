@@ -47,3 +47,9 @@ const contractorType = "contractor"
 // carries, named once for the same reason -- two role tables in this
 // package name her, and one of them branches on the label.
 const employeeDoulaKind = "employee doula"
+
+// contractorDoulaKind is the role-table case label a contractor Doula's
+// row carries, named once for the same reason -- three role tables in
+// this package name her (transition_test.go, outcome_test.go,
+// kind_change_test.go).
+const contractorDoulaKind = "contractor doula"

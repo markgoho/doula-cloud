@@ -88,3 +88,30 @@ func recordOutcomeEvent(ctx context.Context, tx *sql.Tx, e outcomeEvent) error {
 	}
 	return nil
 }
+
+// kindEvent is one row ChangeKindHandler (#874) writes to
+// engagement_events -- the same table statusEvent and outcomeEvent use,
+// under event_type 'kind_changed'. previous_kind/kind (00090) were added
+// to the table alongside its own creation, named for exactly this future
+// writer, so this ticket needs no migration of its own.
+type kindEvent struct {
+	practiceID   string
+	engagementID string
+	previousKind string
+	kind         string
+	actorStaffID *string
+}
+
+// recordKindEvent writes one 'kind_changed' engagement_events row.
+func recordKindEvent(ctx context.Context, tx *sql.Tx, e kindEvent) error {
+	if _, err := tx.ExecContext(ctx,
+		`INSERT INTO engagement_events
+		     (practice_id, engagement_id, event_type, previous_kind, kind, actor_staff_id)
+		 VALUES ($1, $2, 'kind_changed', $3, $4, $5)`,
+		e.practiceID, e.engagementID, e.previousKind, e.kind, e.actorStaffID,
+	); err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		return fmt.Errorf("engagement: record kind event: %w", err)
+	}
+	return nil
+}

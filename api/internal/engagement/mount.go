@@ -20,6 +20,8 @@ import (
 // surfaces. RecordBirthOutcomeHandler (#293) carries none for the same
 // reason and gates the same way: ADR-0015's role table refuses a
 // contractor Doula outright rather than asking what she is attached to.
+// ChangeKindHandler (#874) carries none and gates the same way too, for
+// the identical reason.
 func Mount(g *staffauth.GatedRouter, ir *idempotency.Router) {
 	g.Get("/api/practices/{practiceId}/engagements/{engagementId}", staffauth.AnyStaff, DetailHandler())
 	g.Get("/api/practices/{practiceId}/engagements/{engagementId}/activity", staffauth.AnyStaff, ListActivityHandler())
@@ -29,4 +31,7 @@ func Mount(g *staffauth.GatedRouter, ir *idempotency.Router) {
 	ir.Exempt("PUT /api/practices/{practiceId}/engagements/{engagementId}/birth-outcome",
 		"naturally idempotent (docs/api-design.md rule 4): a PUT of the birth outcome the Engagement already holds writes nothing and returns the same 200",
 		false, RecordBirthOutcomeHandler())
+	ir.Exempt("PUT /api/practices/{practiceId}/engagements/{engagementId}/kind",
+		"naturally idempotent (docs/api-design.md rule 4): a PUT of the kind the Engagement already holds writes nothing and returns the same 200",
+		false, ChangeKindHandler())
 }

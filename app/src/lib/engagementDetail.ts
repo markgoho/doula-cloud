@@ -45,6 +45,11 @@ export interface EngagementSummary {
 	clientName: string;
 	status: string;
 	createdAt: string;
+	/** ADR-0015's own fact (#874): what the Practice sold, 'birth' or
+	 * 'postpartum'. Never absent -- engagements.kind is NOT NULL -- and
+	 * staff-only: `kindLabel` (engagementRequest.ts) is the one place the
+	 * two words are printed, and never on a portal route. */
+	kind: string;
 	dueDate?: string;
 	/** The target statuses this caller may move the Engagement to from
 	 * its current status (#253, ADR-0015) -- always present, empty when
@@ -150,6 +155,32 @@ export function messagesURL(reference: EngagementReference): string {
 
 export function portalInviteURL(reference: EngagementReference): string {
 	return `${engagementURL(reference)}/portal-invite`;
+}
+
+export function kindURL(reference: EngagementReference): string {
+	return `${engagementURL(reference)}/kind`;
+}
+
+/**
+ * Changes what the Practice sold (#874, ADR-0015): 'birth' or
+ * 'postpartum', mutable in both directions for the life of the
+ * Engagement. `PUT` and no `Idempotency-Key`: re-sending the kind the
+ * Engagement already holds is a no-op (docs/api-design.md rule 4), the
+ * same naturally-idempotent shape `recordBirthOutcome` uses for its own
+ * PUT.
+ */
+export async function changeEngagementKind(
+	fetcher: Fetcher,
+	reference: EngagementReference,
+	kind: string
+): Promise<Pick<EngagementSummary, 'kind'>> {
+	const response = await fetcher(kindURL(reference), {
+		method: 'PUT',
+		headers: { 'Content-Type': 'application/json' },
+		body: JSON.stringify({ kind })
+	});
+	if (!response.ok) throw new Error(await apiErrorMessage(response));
+	return (await response.json()) as Pick<EngagementSummary, 'kind'>;
 }
 
 /**

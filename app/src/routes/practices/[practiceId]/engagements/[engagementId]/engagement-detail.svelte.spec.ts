@@ -53,6 +53,7 @@ interface Detail {
 	clientName: string;
 	status: string;
 	createdAt: string;
+	kind: string;
 	dueDate?: string;
 	statusMoves: string[];
 	birthOutcome?: string;
@@ -1363,6 +1364,137 @@ describe('the birth outcome section', () => {
 		);
 		await expect
 			.element(testPage.getByText('The Practice never learned what happened').first())
+			.toBeVisible();
+	});
+});
+
+// #874: ADR-0015's kind is mutable in both directions while the
+// pregnancy is still expected, so unlike the birth outcome above there is
+// no correction dialog -- a single named button offering the one other
+// value, the same bare-command shape the status section's own
+// reopen/activate moves use. The one exception is the upgrade,
+// postpartum -> birth, once a birth outcome is recorded ("attending a
+// birth that has already happened means nothing", ADR-0015) -- the
+// fixture's own Engagement already carries one (`birthOutcome:
+// 'live_birth'`), so every test below that offers 'Change to Postpartum'
+// is exercising the downgrade, which carries no such caveat.
+describe('the Kind section (#874)', () => {
+	interface KindOptions {
+		detail?: Detail;
+		roles?: string[];
+		isContractor?: boolean;
+	}
+
+	async function setupKind({
+		detail = fixtureDetail,
+		roles = ['owner', 'doula'],
+		isContractor = false
+	}: KindOptions = {}) {
+		await testPage.viewport(1440, 900);
+		apiFetchWithSession.mockResolvedValue(jsonResponse('not available', 403));
+		await render(Page, {
+			data: { ...detail, session: { ...sessionFor(roles), isContractor } },
+			params: fixture.params
+		});
+	}
+
+	it("reads what the Practice sold off the Engagement's own read, and offers the other kind", async () => {
+		await setupKind();
+
+		await expect.element(testPage.getByText('What the Practice sold')).toBeVisible();
+		await expect.element(testPage.getByText('Birth', { exact: true })).toBeVisible();
+		await expect.element(testPage.getByRole('button', { name: 'Change to Postpartum' })).toBeVisible();
+	});
+
+	it("offers a contractor Doula no way to change it, matching the BFF's own refusal", async () => {
+		await setupKind({ roles: ['doula'], isContractor: true });
+
+		await expect
+			.element(testPage.getByRole('button', { name: 'Change to Postpartum' }))
+			.not.toBeInTheDocument();
+	});
+
+	// ADR-0015: "the product stops offering a postpartum -> birth change
+	// once the birth outcome is recorded." The fixture's own Engagement
+	// carries a recorded outcome, so a postpartum Engagement built from it
+	// is exactly this state.
+	it("does not offer the upgrade once a birth outcome is recorded, matching the BFF's own refusal", async () => {
+		await setupKind({ detail: { ...fixtureDetail, kind: 'postpartum' } });
+
+		await expect.element(testPage.getByText('Postpartum', { exact: true })).toBeVisible();
+		await expect
+			.element(testPage.getByRole('button', { name: 'Change to Birth' }))
+			.not.toBeInTheDocument();
+	});
+
+	// The other side of the same rule: a postpartum Engagement whose
+	// pregnancy is still expected -- #874's own motivating case, a Client
+	// who decides she wants a birth doula too -- still offers the upgrade.
+	it('offers the upgrade while the pregnancy is still expected (no birth outcome recorded)', async () => {
+		await setupKind({
+			detail: { ...fixtureDetail, kind: 'postpartum', birthOutcome: undefined, pregnancyEndedOn: undefined }
+		});
+
+		await expect.element(testPage.getByRole('button', { name: 'Change to Birth' })).toBeVisible();
+	});
+
+	it('puts the other kind to the kind endpoint, reads it back and announces the change', async () => {
+		await setupKind();
+		apiFetchWithSession.mockClear();
+		// Scoped to the `/kind` path rather than a blanket
+		// `mockResolvedValue`: every other section on this page is still
+		// mid-fetch behind its own "not available" 403, and overwriting the
+		// default for all of them breaks whichever one settles next (e.g.
+		// InvoiceSection reading a kind-shaped body as its own Invoice list).
+		apiFetchWithSession.mockImplementation((path: string) =>
+			Promise.resolve(
+				path.endsWith('/kind')
+					? jsonResponse({ engagementId: 'engagement-1', kind: 'postpartum' })
+					: jsonResponse('not available', 403)
+			)
+		);
+
+		await testPage.getByRole('button', { name: 'Change to Postpartum' }).click();
+
+		expect(apiFetchWithSession).toHaveBeenCalledWith(
+			'/api/practices/practice-1/engagements/engagement-1/kind',
+			expect.objectContaining({ method: 'PUT', body: JSON.stringify({ kind: 'postpartum' }) })
+		);
+		await expect.element(testPage.getByText('Postpartum', { exact: true })).toBeVisible();
+		// The upgrade back to 'birth' is not offered: the fixture's own
+		// birth outcome ('live_birth') rides along unchanged -- a kind
+		// change moves nothing else -- so this Engagement is now exactly
+		// the state ADR-0015's upgrade caveat describes.
+		await expect
+			.element(testPage.getByRole('button', { name: 'Change to Birth' }))
+			.not.toBeInTheDocument();
+		// #874's own live-region requirement -- announces the result, not
+		// only the visible value change. Scoped by its own text rather than
+		// getByRole('status'), which also matches InvoiceSection's unrelated
+		// "Invoicing is unavailable" notice on this same fixture.
+		await expect.element(testPage.getByText('Now set to Postpartum.')).toBeVisible();
+	});
+
+	it('shows the refusal when the BFF rejects the change', async () => {
+		await setupKind();
+		apiFetchWithSession.mockClear();
+		// Same scoping reason as above.
+		apiFetchWithSession.mockImplementation((path: string) =>
+			Promise.resolve(
+				jsonResponse(
+					path.endsWith('/kind') ? 'only a Practice Owner, Admin or Doula can do that' : 'not available',
+					403
+				)
+			)
+		);
+
+		await testPage.getByRole('button', { name: 'Change to Postpartum' }).click();
+
+		// Scoped by its own text rather than getByRole('alert'), which also
+		// matches the page's other sections, each already refusing with the
+		// same 403 mock this test installs.
+		await expect
+			.element(testPage.getByText('only a Practice Owner, Admin or Doula can do that').first())
 			.toBeVisible();
 	});
 });

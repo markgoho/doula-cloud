@@ -29,6 +29,11 @@ type Detail struct {
 	ClientName   string    `json:"clientName"`
 	Status       string    `json:"status"`
 	CreatedAt    time.Time `json:"createdAt"`
+	// Kind is ADR-0015's own fact (#874's write side): what the Practice
+	// sold, "birth" or "postpartum". Staff-only, per kind.go's own
+	// package comment -- portal.Detail never carries this column, only
+	// OffersBirthPlan's derived answer.
+	Kind string `json:"kind"`
 	// DueDate is ADR-0017's `engagements.due_date`, nullable because a
 	// postpartum-only Engagement has none. Mirrors portal.Detail's own
 	// field (#505) -- same nullable-column read, same omitted-when-null
@@ -109,13 +114,13 @@ func DetailHandler() http.Handler {
 		var dueDate sql.NullString
 		err = tx.QueryRowContext(r.Context(),
 			`SELECT e.id, c.id, c.given_name, c.preferred_name, e.status, e.created_at, e.due_date::text,
-			        e.birth_outcome::text, e.pregnancy_ended_on::text
+			        e.kind::text, e.birth_outcome::text, e.pregnancy_ended_on::text
 			 FROM engagements e
 			 JOIN clients c ON c.id = e.client_id
 			 WHERE e.id = $1 AND e.practice_id = $2`,
 			engagementID, practiceID,
 		).Scan(&d.EngagementID, &d.ClientID, &givenName, &preferredName, &d.Status, &d.CreatedAt, &dueDate,
-			&d.BirthOutcome, &d.PregnancyEndedOn)
+			&d.Kind, &d.BirthOutcome, &d.PregnancyEndedOn)
 		if errors.Is(err, sql.ErrNoRows) {
 			apierr.WriteError(w, "engagement not found", http.StatusNotFound)
 			return

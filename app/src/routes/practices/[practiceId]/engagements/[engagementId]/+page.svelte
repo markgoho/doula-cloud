@@ -7,6 +7,7 @@
 	import { FormSubmission, orThrownErrors } from '#lib/formSubmission.svelte.js';
 	import { triggerBlobDownload } from '#lib/blobDownload.js';
 	import {
+		changeEngagementKind,
 		changeEngagementStatus,
 		createVisit,
 		downloadAttachment,
@@ -27,6 +28,7 @@
 		type BirthOutcomeRequest,
 		type Visit
 	} from '#lib/engagementDetail.js';
+	import { kindLabel } from '#lib/engagementRequest.js';
 	import {
 		assigneeBlock,
 		loadVisitAssigneesOrNone,
@@ -125,6 +127,9 @@
 		clientName: string;
 		status: string;
 		createdAt: string;
+		// #874: what the Practice sold, 'birth' or 'postpartum' -- ADR-0015,
+		// mutable in both directions, never Client-facing as a word.
+		kind: string;
 		dueDate?: string;
 		statusMoves: string[];
 		// #293/#943: ADR-0015's birth outcome and the date the pregnancy
@@ -246,6 +251,17 @@
 		}, orThrownErrors(completeFieldIds));
 	}
 
+	// The app-side mirror of api/internal/engagement/transition.go's own
+	// refuseFactWrite: a contractor Doula may not write any of ADR-0015's
+	// mutable Engagement facts, and neither may a member holding none of
+	// the three roles. Shared by the birth-outcome and kind sections
+	// below, which both gate on this exact role table. Drawing only,
+	// never the gate -- the endpoint refuses her whether or not the
+	// control was drawn (ADR-0006).
+	const canWriteFact = $derived(
+		!isAmbientContractor(data.session) && (isPracticeOwnerOrAdmin || isDoula(data.session))
+	);
+
 	// #943: what happened to the pregnancy, overlaid on the load-time read
 	// once a record succeeds, exactly as statusOverride above does -- so
 	// the section reads back the new pair without a reload. `undefined`
@@ -263,15 +279,6 @@
 		}
 	);
 
-	// The app-side mirror of api/internal/engagement/transition.go's own
-	// refuseFactWrite: a contractor Doula may not record this fact, and
-	// neither may a member holding none of the three roles. Drawing only,
-	// never the gate -- the endpoint refuses her whether or not the
-	// control was drawn (ADR-0006).
-	const canRecordBirthOutcome = $derived(
-		!isAmbientContractor(data.session) && (isPracticeOwnerOrAdmin || isDoula(data.session))
-	);
-
 	async function handleRecordBirthOutcome(
 		request: BirthOutcomeRequest,
 		fieldIds: Record<string, string>
@@ -279,6 +286,39 @@
 		const result = await recordBirthOutcome(apiFetchWithSession, reference, request, fieldIds);
 		if (result.kind === 'recorded') birthOutcomeOverride = result.facts;
 		return result;
+	}
+
+	// #874: what the Practice sold, overlaid on the load-time read once a
+	// change succeeds -- the same statusOverride shape above. ADR-0015:
+	// mutable in both directions while the pregnancy is still expected, so
+	// this is a bare command (no form asks anything), the same shape the
+	// status section's own reopen/activate moves use.
+	const kindChange = new SectionState<void>(undefined);
+	let kindOverride = $state<string | undefined>();
+	let kindChangedMessage = $state('');
+	const displayKind = $derived(kindOverride ?? detail?.kind ?? '');
+	const otherKind = $derived(displayKind === 'birth' ? 'postpartum' : 'birth');
+	// ADR-0015's other kind rule, beside the role gate every mutable fact
+	// shares: "the product stops offering a postpartum -> birth change
+	// once the birth outcome is recorded, because attending a birth that
+	// has already happened means nothing." Reads the same overlaid
+	// `birthOutcome` the section above renders, so an outcome recorded
+	// earlier on this same page view hides the button without a reload --
+	// the endpoint refuses the write either way (refuseUpgradeAfterBirth);
+	// this only decides whether the control is drawn. The downgrade,
+	// 'birth' -> 'postpartum', carries no such caveat.
+	const canChangeKind = $derived(
+		canWriteFact && (displayKind === 'birth' || birthOutcome.birthOutcome === undefined)
+	);
+
+	async function handleChangeKind() {
+		kindChangedMessage = '';
+		const target = otherKind;
+		await kindChange.mutate(async () => {
+			const result = await changeEngagementKind(apiFetchWithSession, reference, target);
+			kindOverride = result.kind;
+			kindChangedMessage = `Now set to ${kindLabel(result.kind)}.`;
+		}, 'Failed to change what the Practice sold');
 	}
 
 	/** The label a status-move button carries -- "Reopen" reads as a
@@ -577,12 +617,17 @@
 	function summaryItems(
 		d: Detail,
 		status: string,
+		kind: string,
 		portalState: PortalInviteSubject,
 		hasClientEmail: boolean
 	): { label: string; value: string }[] {
 		const items = [
 			{ label: 'Client', value: d.clientName },
 			{ label: 'Status', value: status },
+			// #874: what the Practice sold, in the Staff-only word ADR-0015
+			// gives it -- this row and the Kind section's own control are the
+			// one place the Engagement hub prints 'Birth'/'Postpartum' at all.
+			{ label: 'What the Practice sold', value: kindLabel(kind) },
 			{ label: 'Portal invite', value: portalInviteSummaryText(portalState, hasClientEmail) },
 			{ label: 'Created', value: new Date(d.createdAt).toLocaleDateString() }
 		];
@@ -1154,7 +1199,9 @@
 
 {#snippet summary()}
 	<stack-l space="var(--space-4)">
-		<DescriptionList items={summaryItems(detail!, displayStatus, clientPortalState, hasClientEmailOnFile)} />
+		<DescriptionList
+			items={summaryItems(detail!, displayStatus, displayKind, clientPortalState, hasClientEmailOnFile)}
+		/>
 
 		<!--
 			#253: exactly the moves ADR-0015's role table admits from the
@@ -1179,6 +1226,32 @@
 		{#if directMove.error}
 			<Notice variant="error" message={directMove.error} />
 		{/if}
+
+		<!--
+			#874: there is only ever one other kind to offer, so this is a
+			single named button, the same bare-command shape the
+			reopen/activate moves above use, not a form. canChangeKind is
+			canWriteFact narrowed by ADR-0015's own upgrade caveat (see its
+			own declaration); the endpoint refuses her whether or not the
+			control is drawn.
+		-->
+		{#if canChangeKind}
+			<cluster-l space="var(--space-3)">
+				<Button
+					label={`Change to ${kindLabel(otherKind)}`}
+					size="sm"
+					variant="secondary"
+					loading={kindChange.isBusy}
+					onClick={handleChangeKind}
+				/>
+			</cluster-l>
+		{/if}
+		{#if kindChange.error}
+			<Notice variant="error" message={kindChange.error} />
+		{:else if kindChangedMessage}
+			<Notice variant="status" message={kindChangedMessage} />
+		{/if}
+
 		{#if isCompleteFormShown}
 			<StackedForm onSubmit={handleCompleteSubmit}>
 				{#if completeSubmission.errors.length > 0}
@@ -1826,7 +1899,7 @@
 	<BirthOutcomeSection
 		outcome={birthOutcome.birthOutcome}
 		endedOn={birthOutcome.pregnancyEndedOn}
-		canRecord={canRecordBirthOutcome}
+		canRecord={canWriteFact}
 		canCorrect={isPracticeOwner}
 		onRecord={handleRecordBirthOutcome}
 	/>
