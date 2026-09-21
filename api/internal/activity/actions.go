@@ -51,9 +51,13 @@ const ActionPortalSessionsEnded ClientAction = "portal_sessions_ended"
 const SubjectClient = "client"
 
 // SubjectPractice is the subject_kind a write site records against a
-// Practice's own id: staffauth's PutMFARequiredHandler (the "require MFA
-// for all staff" switch) and export.Handler (#288's whole-Practice
-// export) both write against it. Exported for the same reason
+// Practice's own id, rather than a record inside it: staffauth's
+// PutMFARequiredHandler (the "require MFA for all staff" switch),
+// export.Handler (#288's whole-Practice export), practicedeletion's
+// initiate/restore/finalize, and payments', practicerate's,
+// practicetimezone's and oncall's own settings writes (billing mode,
+// payment terms, the Connect nudge, the rate card, the timezone, the
+// on-call settings) all write against it. Exported for the same reason
 // SubjectClient is -- a second write site is exactly the drift this
 // prevents.
 const SubjectPractice = "practice"

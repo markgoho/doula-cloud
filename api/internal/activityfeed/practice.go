@@ -310,7 +310,10 @@ func queryBatch(ctx context.Context, tx *sql.Tx, practiceID string, after *pagec
 // and leaves the reader to guess whose roles moved. An Engagement's or a
 // Client's own rows name a record the reader is looking at or can reach
 // by id, and are left empty rather than given a second, differently-
-// shaped label.
+// shaped label. A Practice's own rows (#1255) are the same case for a
+// different reason: subject_id is the reader's own practice_id, so a
+// name would only print the Practice's own name on every row of its own
+// feed -- decided empty, deliberately, not merely left off.
 //
 // Where this degrades, said plainly rather than left to be discovered:
 // staff_practice_visibility (00002) reaches a staff row only through a
