@@ -179,6 +179,9 @@ type ActorJoin struct {
 // one, which has no subject to scope by and so cannot use Statement
 // itself. Before #1281 the two wrote the same join and the same three
 // columns by hand.
+//
+// It is a var and not a const only because Go has no const struct; treat
+// it as one -- neither field is ever reassigned, here or in a caller.
 var SharedActorJoin = ActorJoin{
 	Columns: `s.name, c.given_name, c.preferred_name`,
 	Joins: `LEFT JOIN staff s ON s.id = a.actor_staff_id

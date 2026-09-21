@@ -166,6 +166,18 @@ const personSubjectKind = activity.SubjectMembership
 // own JIT canary almost to its ceiling and why the shipped shape does
 // not.
 //
+// Re-measured after #1281 composed activitypage.SharedActorJoin into this
+// query instead of hand-writing its columns and joins a second time:
+// TestListPracticeActivityQuery_ComposesTheSharedActorJoin
+// (perf_test.go) pins listPracticeActivityQuery byte-for-byte against the
+// text this section describes, so the change could not have moved the
+// plan -- and the two fixtures above were re-run to confirm it did not
+// (2026-09-21): TestPracticeQueryPlanAtScale, 78.8 ms (against the 67 ms
+// recorded above -- machine variance, not a regression, same shape);
+// TestPracticeQueryPlanWithDepartedMembershipSubjects, 147.2 ms (against
+// 140 ms above). Both still Limit -> Sort (top-N heapsort) -> an
+// activity_subject-prefixed scan, still no JIT section in either case.
+//
 // The subject join (subj) is #1148's own addition: a feed spanning many
 // subject kinds has to say who a roster change happened to, or "Roles
 // changed" names the actor and nobody else, and a reader cannot tell one
