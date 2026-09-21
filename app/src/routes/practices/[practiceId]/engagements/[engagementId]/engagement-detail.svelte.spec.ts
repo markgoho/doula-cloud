@@ -19,6 +19,7 @@ import {
 	session
 } from './page.fixture.js';
 import type { Contract } from '#lib/contract.js';
+import { PREVIOUS_CONTRACT_PDF_NOTICE } from '#lib/components/molecules/ContractStatus.svelte';
 if (!customElements.get('center-l')) registerLayoutPrimitives();
 
 /*
@@ -898,6 +899,42 @@ describe('the Contract PDF download survives a void (#1119)', () => {
 
 		await expect.element(testPage.getByText('Status: voided')).toBeVisible();
 		expect(testPage.getByRole('button', { name: 'Download signed Contract (PDF)' }).elements()).toHaveLength(0);
+	});
+});
+
+// #1229: a fresh Draft (created after #72's recreate-after-void flow)
+// beside an older signed-and-voided Contract used to read "Status: draft"
+// next to the download control with nothing saying the PDF is the earlier
+// Contract's, not the Draft's -- a reader could only conclude the Draft
+// had somehow been signed.
+describe('a recreated Draft names the PDF as a previous Contract\'s (#1229)', () => {
+	beforeEach(() => {
+		apiFetchWithSession.mockReset();
+	});
+
+	it('names the earlier Contract on a fresh Draft beside an older signed-and-voided one', async () => {
+		await setupWithContract(
+			() => mockContract(draftOf({ hasSignedPdf: true })),
+			fixtureDetail,
+			session
+		);
+
+		await expect.element(testPage.getByText('Status: draft')).toBeVisible();
+		await expect
+			.element(testPage.getByText(PREVIOUS_CONTRACT_PDF_NOTICE))
+			.toBeVisible();
+		await expect
+			.element(testPage.getByRole('button', { name: 'Download signed Contract (PDF)' }))
+			.toBeVisible();
+	});
+
+	it('adds no notice on a plain Draft with no signed PDF anywhere on the Engagement', async () => {
+		await setupWithContract(() => mockContract(draftOf()), fixtureDetail, session);
+
+		await expect.element(testPage.getByText('Status: draft')).toBeVisible();
+		await expect
+			.element(testPage.getByText(PREVIOUS_CONTRACT_PDF_NOTICE))
+			.not.toBeInTheDocument();
 	});
 });
 

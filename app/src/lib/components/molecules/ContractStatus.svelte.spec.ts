@@ -1,7 +1,7 @@
 import { page } from 'vitest/browser';
 import { describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
-import ContractStatus from './ContractStatus.svelte';
+import ContractStatus, { PREVIOUS_CONTRACT_PDF_NOTICE } from './ContractStatus.svelte';
 import type { VoidRequestSummary } from '#lib/contract.js';
 
 interface SetupOptions {
@@ -164,6 +164,42 @@ describe('ContractStatus.svelte', () => {
 
 		await expect
 			.element(page.getByRole('button', { name: 'Download signed Contract (PDF)' }))
+			.not.toBeInTheDocument();
+	});
+
+	// #1229: a fresh Draft (or an unsigned Sent Contract) never has a PDF
+	// of its own -- #72's partial unique index requires the prior row to
+	// be voided before this one could exist -- so hasSignedPdf true here
+	// can only be that earlier, voided Contract's file.
+	it('names the PDF as an earlier Contract\'s on a draft Contract that has a signed PDF', async () => {
+		await setup({ status: 'draft', hasSignedPdf: true, onDownloadPdf: vi.fn() });
+
+		await expect
+			.element(page.getByText(PREVIOUS_CONTRACT_PDF_NOTICE))
+			.toBeVisible();
+	});
+
+	it('names the PDF as an earlier Contract\'s on a sent Contract that has a signed PDF', async () => {
+		await setup({ status: 'sent', hasSignedPdf: true, onDownloadPdf: vi.fn() });
+
+		await expect
+			.element(page.getByText(PREVIOUS_CONTRACT_PDF_NOTICE))
+			.toBeVisible();
+	});
+
+	it('adds no notice on a signed Contract, whose PDF is always its own', async () => {
+		await setup({ status: 'signed', hasSignedPdf: true, onDownloadPdf: vi.fn() });
+
+		await expect
+			.element(page.getByText(PREVIOUS_CONTRACT_PDF_NOTICE))
+			.not.toBeInTheDocument();
+	});
+
+	it('adds no notice on a voided Contract, whose PDF is always its own', async () => {
+		await setup({ status: 'voided', hasSignedPdf: true, onDownloadPdf: vi.fn() });
+
+		await expect
+			.element(page.getByText(PREVIOUS_CONTRACT_PDF_NOTICE))
 			.not.toBeInTheDocument();
 	});
 
