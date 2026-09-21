@@ -293,11 +293,13 @@ function isTotalRow(row: readonly string[]): boolean {
 // describes even if AC1's check were somehow silenced.
 function runStatusOffenses(table: Table, plans: readonly Plan[]): string[] {
 	const byFile = new Map(plans.map((plan) => [plan.file, plan]));
+	const rowFiles = new Set<string>();
 	const offenses: string[] = [];
 	for (const row of table.rows) {
 		if (isTotalRow(row)) continue;
 		const file = planFileFromCell(row[0] ?? '');
 		const plan = file === undefined ? undefined : byFile.get(file);
+		if (file !== undefined) rowFiles.add(file);
 		if (plan === undefined) continue;
 		for (const [index, kind] of MARK_KINDS.entries()) {
 			const readmeCount = numberFromCell(row[2 + index] ?? '');
@@ -307,6 +309,14 @@ function runStatusOffenses(table: Table, plans: readonly Plan[]): string[] {
 					`README.md: the run-status row for ${file} says \`${kind}\` is ${readmeCount}, but ${file}'s Marks summary says ${summaryCount}`
 				);
 			}
+		}
+	}
+	// A plan the run-status table carries no row for at all is a drift the
+	// per-row comparison above can never see -- the Total could still
+	// happen to add up without it.
+	for (const plan of plans) {
+		if (!rowFiles.has(plan.file)) {
+			offenses.push(`README.md: the run-status table carries no row for ${plan.file}`);
 		}
 	}
 	return offenses;
@@ -679,6 +689,15 @@ describe('runStatusTable, isTotalRow, runStatusOffenses and totalRowOffenses', (
 		const table = runStatusTable(readmeSection);
 		if (table === undefined) throw new Error('fixture run-status table failed to parse');
 		expect(runStatusOffenses(table, [])).toEqual([]);
+	});
+
+	it('reports a plan the run-status table carries no row for at all', () => {
+		const table = runStatusTable(readmeSection);
+		if (table === undefined) throw new Error('fixture run-status table failed to parse');
+		const plan = fakePlan('missing.md', { automated: 0, manual: 0, blocked: 0, 'missing-feature': 0 });
+		expect(runStatusOffenses(table, [plan])).toEqual([
+			'README.md: the run-status table carries no row for missing.md'
+		]);
 	});
 
 	it('reports the Total row disagreeing with the sum of the rows above it', () => {
