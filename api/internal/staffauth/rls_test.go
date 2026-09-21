@@ -434,3 +434,123 @@ func TestRLS_LoginDeletionPolicyRefusesAnotherPersonsRow(t *testing.T) {
 		}
 	})
 }
+
+// seedMembershipRemovedEvent writes the one activity row
+// staff_was_ever_a_member_at_practice (00116) reads: a 'removed'
+// Membership event naming staffID as the subject at practiceID. It does
+// not touch practice_memberships -- callers that need a plain departure
+// rather than a "never had a live row here" fixture still have to add
+// and remove the membership themselves.
+func seedMembershipRemovedEvent(t *testing.T, db *testdb.DB, practiceID, staffID string) {
+	t.Helper()
+	if _, err := db.Admin.ExecContext(t.Context(),
+		`INSERT INTO activity (practice_id, subject_kind, subject_id, action, diff, actor_kind, actor_staff_id)
+		 VALUES ($1, 'membership', $2, 'removed', '{}'::jsonb, 'staff', $2)`,
+		practiceID, staffID,
+	); err != nil {
+		t.Fatalf("seed membership removed event: %v", err)
+	}
+}
+
+// TestRLS_StaffVisibleToOwnPracticeMembershipHistory proves 00116's
+// policy directly, at the SQL level rather than through
+// activityfeed_test's own HTTP-level proof: a departed (not redacted)
+// Staff row is visible to a session scoped to a Practice that recorded a
+// Membership event about her; a redacted row (ADR-0033) stays hidden
+// regardless, exactly as 00111's own policy already excludes one; and a
+// Staff row with no Membership event at this Practice at all -- she
+// never worked here -- stays hidden too, so this policy is scoped to
+// "this Practice's own roster history", not "every Staff row alive".
+func TestRLS_StaffVisibleToOwnPracticeMembershipHistory(t *testing.T) {
+	db := testdb.New(t)
+	practiceID := testdb.SeedPractice(t, db, "Membership History Practice")
+	otherPracticeID := testdb.SeedPractice(t, db, "Other Membership History Practice")
+
+	departedID := seedStaffWithEmail(t, db, "rls-membership-history-departed", "rls-membership-history-departed@example.com")
+	seedMembershipRemovedEvent(t, db, practiceID, departedID)
+
+	redactedID := seedStaffWithEmail(t, db, "rls-membership-history-redacted", "rls-membership-history-redacted@example.com")
+	seedMembershipRemovedEvent(t, db, practiceID, redactedID)
+	testdb.RedactDeletedLogin(t, db, redactedID)
+
+	neverMemberID := seedStaffWithEmail(t, db, "rls-membership-history-never-member", "rls-membership-history-never-member@example.com")
+
+	for _, tc := range []struct {
+		name    string
+		staffID string
+		want    bool
+	}{
+		{"departed, not redacted, visible", departedID, true},
+		{"redacted, hidden behind DepartedStaffName instead", redactedID, false},
+		{"never a member at this Practice, hidden", neverMemberID, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			tx, err := db.App.BeginTx(t.Context(), nil)
+			if err != nil {
+				t.Fatalf("begin: %v", err)
+			}
+			defer func() { _ = tx.Rollback() }()
+			if _, err := tx.ExecContext(t.Context(), `SELECT set_config('app.current_practice_id', $1, true)`, practiceID); err != nil {
+				t.Fatalf("set_config: %v", err)
+			}
+			var count int
+			if err := tx.QueryRowContext(t.Context(), `SELECT count(*) FROM staff WHERE id = $1`, tc.staffID).Scan(&count); err != nil {
+				t.Fatalf("query staff: %v", err)
+			}
+			if got := count == 1; got != tc.want {
+				t.Fatalf("visible = %v, want %v", got, tc.want)
+			}
+		})
+	}
+
+	t.Run("scoped to the Practice the event happened at, not any Practice", func(t *testing.T) {
+		tx, err := db.App.BeginTx(t.Context(), nil)
+		if err != nil {
+			t.Fatalf("begin: %v", err)
+		}
+		defer func() { _ = tx.Rollback() }()
+		if _, err := tx.ExecContext(t.Context(), `SELECT set_config('app.current_practice_id', $1, true)`, otherPracticeID); err != nil {
+			t.Fatalf("set_config: %v", err)
+		}
+		var count int
+		if err := tx.QueryRowContext(t.Context(), `SELECT count(*) FROM staff WHERE id = $1`, departedID).Scan(&count); err != nil {
+			t.Fatalf("query staff: %v", err)
+		}
+		if count != 0 {
+			t.Fatalf("visible from an unrelated Practice = %d, want 0 -- 00116's policy leaked across Practices", count)
+		}
+	})
+}
+
+// TestRLS_StaffVisibleToOwnPracticeMembershipHistoryNeverAppliesToAClientSession
+// proves 00116's guard on app.current_practice_id being set already
+// excludes a Client-portal session: clientauth.Middleware only ever sets
+// app.current_client_id and app.current_identity_uid
+// (api/internal/clientauth/middleware.go), never app.current_practice_id,
+// so this policy cannot widen a Client's own reach past 00111's own
+// deliberately narrower "worked with her" scope.
+func TestRLS_StaffVisibleToOwnPracticeMembershipHistoryNeverAppliesToAClientSession(t *testing.T) {
+	db := testdb.New(t)
+	practiceID := testdb.SeedPractice(t, db, "Client Session Membership History Practice")
+	clientID := testdb.SeedNamedClient(t, db, practiceID, "Some Client", "client-membership-history@example.com")
+
+	departedID := seedStaffWithEmail(t, db, "rls-client-session-departed", "rls-client-session-departed@example.com")
+	seedMembershipRemovedEvent(t, db, practiceID, departedID)
+
+	tx, err := db.App.BeginTx(t.Context(), nil)
+	if err != nil {
+		t.Fatalf("begin: %v", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	if _, err := tx.ExecContext(t.Context(), `SELECT set_config('app.current_client_id', $1, true)`, clientID); err != nil {
+		t.Fatalf("set_config: %v", err)
+	}
+
+	var count int
+	if err := tx.QueryRowContext(t.Context(), `SELECT count(*) FROM staff WHERE id = $1`, departedID).Scan(&count); err != nil {
+		t.Fatalf("query staff: %v", err)
+	}
+	if count != 0 {
+		t.Fatalf("00116's policy admitted a departed Staff row to a Client session with no app.current_practice_id set; want 0, got %d", count)
+	}
+}

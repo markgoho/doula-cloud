@@ -17,6 +17,10 @@ const (
 	doulaRole      = "doula"
 	employeeType   = "employee"
 	contractorType = "contractor"
+	// renataAlvarez is membership_test.go's own Membership subject name,
+	// shared across three tests there so goconst has one place to point
+	// at rather than three literals free to drift.
+	renataAlvarez = "Renata Alvarez"
 )
 
 // newServer mounts this package's route through activityfeed.Mount, the
