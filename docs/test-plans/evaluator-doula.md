@@ -138,7 +138,7 @@ The Credit-unit claim ("one Credit covers one Engagement, not one Client") was a
 
 **One mark moved**: 6.1 leaves `missing-feature (TB-G5)` for `manual`, because the feature it named is built. The Marks summary above is recounted from the Steps tables, to 5 / 11 / 0 / 4, and [README.md](README.md)'s run-status row and Total move with it.
 
-`office_manager` still appears in two ADRs (0006, 0008), one persona document, two other journey documents, four other test-plan documents and one e2e comment — all outside these two files, and out of scope here. That sweep is [#869](https://github.com/markgoho/doula-cloud/issues/869)'s open pull request, which independently proposes the same TB-G7 wording change landed here; whoever resumes #869 will find this hunk already applied.
+[#869](https://github.com/markgoho/doula-cloud/issues/869) merged just ahead of this pass and already swapped `office_manager` for `admin` on the TB-G7 gap row and step 3.3-a, and recorded [#262](https://github.com/markgoho/doula-cloud/issues/262) as closed — its own commit message explicitly deferred the Staff-nav-signposting half to this ticket. This pass builds on that: the Staff-nav fact, the signup-silence fact ([#878](https://github.com/markgoho/doula-cloud/issues/878)) and the full TB-G7 closure are new here. The remaining `office_manager` mentions elsewhere in the repo are either dated walk-log rows #869 deliberately left untouched or other Personas' documents, both out of scope here.
 
 ### 2026-09-10 — Add Client corrected against ADR-0017 ([#1121](https://github.com/markgoho/doula-cloud/issues/1121))
 
