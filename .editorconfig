@@ -11,3 +11,18 @@ trim_trailing_whitespace = true
 [*.md]
 max_line_length = off
 trim_trailing_whitespace = false
+
+# gofmt indents Go with tabs by definition, and the repo already gates that
+# with `gofmt -l .` in CI and step 1 of scripts/hooks/pre-commit -- this
+# override just says the thing everyone already enforces (#1232).
+[*.go]
+indent_style = tab
+
+# app/ is uniformly tab-indented with no override or gate of its own before
+# #1232, unlike the two tooling trees #1120 gave a "conform to [*]" decision
+# to (they were split against themselves, 7 of 29 files already matching).
+# Zero of app/'s files match the bare [*] block, so this tree gets an
+# override instead -- indent.usage.spec.ts (app/src/lib/) is the check
+# behind it. See docs/testing.md's "Formatting" section.
+[app/**]
+indent_style = tab

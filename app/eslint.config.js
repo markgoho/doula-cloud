@@ -1,5 +1,6 @@
 import path from 'node:path';
 import js from '@eslint/js';
+import stylistic from '@stylistic/eslint-plugin';
 import svelte from 'eslint-plugin-svelte';
 import unicorn from 'eslint-plugin-unicorn';
 import { defineConfig, includeIgnoreFile } from 'eslint/config';
@@ -110,6 +111,22 @@ export default defineConfig(
 						'Use the TextInput atom (#lib/components/atoms/TextInput.svelte), the Checkbox atom, or the RadioGroup molecule instead of a raw <input> element. A file input has no atom -- disable this rule on that one line with a comment saying so (#492).'
 				}
 			]
+		}
+	},
+	{
+		// #1232: app/ is single-quoted (see docs/testing.md's "Formatting"
+		// section for the decision and why indentation is gated by
+		// indent.usage.spec.ts instead of an ESLint rule). Icon/generated/
+		// is machine-written by scripts/sync-icons.ts from raw SVG markup,
+		// which is why its strings are double-quoted -- escaping the
+		// SVG's own double-quoted attributes would be noisier than the
+		// generator's own output, and the file says "Do not edit by
+		// hand" for the same reason a human would not hand-fix this.
+		files: ['**/*.{ts,js,svelte}'],
+		ignores: ['src/lib/components/atoms/Icon/generated/**'],
+		plugins: { '@stylistic': stylistic },
+		rules: {
+			'@stylistic/quotes': ['error', 'single', { avoidEscape: true, allowTemplateLiterals: 'always' }]
 		}
 	}
 );
