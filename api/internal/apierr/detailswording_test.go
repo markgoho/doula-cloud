@@ -164,10 +164,12 @@ func collectStringConsts(file *ast.File, into map[string]string) {
 // detailOffenses reports every banned word in a Details value written in
 // file: the values of a map[string]string composite literal, the
 // right-hand side of an assignment into one built up key by key, and the
-// message argument of an apierr.WriteFieldError call -- WriteFieldError
-// turns that one string into the single Details entry itself (#1188), so
-// a call site that moves onto it carries no map[string]string literal of
-// its own for this gate to read the old way.
+// message argument of an apierr.WriteFieldError or apierr.FieldDetails
+// call -- both turn that one string into the single Details entry itself
+// (#1188, and #1298 for a caller that returns the pair rather than
+// writing it), so a call site that moves onto either carries no
+// map[string]string literal of its own for this gate to read the old
+// way.
 func detailOffenses(file *ast.File, fset *token.FileSet, rel string, consts map[string]string, _ bool) []string {
 	var offenses []string
 	check := func(expr ast.Expr) {
@@ -202,8 +204,11 @@ func detailOffenses(file *ast.File, fset *token.FileSet, rel string, consts map[
 				check(node.Rhs[i])
 			}
 		case *ast.CallExpr:
-			if isWriteFieldErrorCall(node) && len(node.Args) >= 5 {
+			switch {
+			case isWriteFieldErrorCall(node) && len(node.Args) >= 5:
 				check(node.Args[4])
+			case isFieldDetailsCall(node) && len(node.Args) >= 2:
+				check(node.Args[1])
 			}
 		}
 		return true
@@ -214,14 +219,14 @@ func detailOffenses(file *ast.File, fset *token.FileSet, rel string, consts map[
 // identifierOffenses reports every Details value in file that opens with
 // its own key as a bare identifier -- the wire's own name for the field,
 // which docs/api-design.md section 7 rule 4 reserves for Message, not
-// Details (#1189). Reads the same three shapes detailOffenses does, this
+// Details (#1189). Reads the same shapes detailOffenses does, this
 // time keeping the key beside the value: the values of a
 // map[string]string composite literal, an assignment into one built up
-// key by key, and the field/message pair of an apierr.WriteFieldError
-// call. A key this cannot resolve -- contracts/send.go's per-merge-field
-// key, built from a loop variable rather than a literal -- is skipped
-// rather than guessed at, the same restraint stringValue already applies
-// to a value it cannot read.
+// key by key, and the field/message pair of an apierr.WriteFieldError or
+// apierr.FieldDetails call (#1298). A key this cannot resolve --
+// contracts/send.go's per-merge-field key, built from a loop variable
+// rather than a literal -- is skipped rather than guessed at, the same
+// restraint stringValue already applies to a value it cannot read.
 //
 // The composite-literal and keyed-assignment shapes are read from
 // function bodies only, gated on dirImportsApierr (decided per package
@@ -238,8 +243,9 @@ func detailOffenses(file *ast.File, fset *token.FileSet, rel string, consts map[
 // passed inline as a call argument. Restricting the walk to function
 // bodies reads structuralFieldNames as what it is, a var declaration
 // nothing here inspects, rather than nine Details entries that happen to
-// name their own field. The WriteFieldError call shape needs no such
-// restriction: it can only ever appear inside a function body already.
+// name their own field. The WriteFieldError and FieldDetails call shapes
+// need no such restriction: a call can only ever appear inside a
+// function body already.
 func identifierOffenses(file *ast.File, fset *token.FileSet, rel string, consts map[string]string, dirImportsApierr bool) []string {
 	var offenses []string
 	check := func(keyExpr, valueExpr ast.Expr) {
@@ -280,8 +286,11 @@ func identifierOffenses(file *ast.File, fset *token.FileSet, rel string, consts 
 				check(index.Index, node.Rhs[i])
 			}
 		case *ast.CallExpr:
-			if isWriteFieldErrorCall(node) && len(node.Args) >= 5 {
+			switch {
+			case isWriteFieldErrorCall(node) && len(node.Args) >= 5:
 				check(node.Args[3], node.Args[4])
+			case isFieldDetailsCall(node) && len(node.Args) >= 2:
+				check(node.Args[0], node.Args[1])
 			}
 		}
 		return true
@@ -325,12 +334,33 @@ func opensWithIdentifier(text, key string) bool {
 
 // isWriteFieldErrorCall reports whether call is apierr.WriteFieldError(...).
 func isWriteFieldErrorCall(call *ast.CallExpr) bool {
+	return apierrCallName(call) == "WriteFieldError"
+}
+
+// isFieldDetailsCall reports whether call is apierr.FieldDetails(...) --
+// WriteFieldError's own "message written once" step (#1188), pulled out
+// for a caller like offer's resolveTarget (#1298) that has to return the
+// (message, details) pair to a shared apierr.Write call site rather than
+// call apierr.Write itself. It takes the same (field, message) pair
+// WriteFieldError does, just as its first two arguments rather than its
+// last two, so it needs the same two gates WriteFieldError's own call
+// shape gets below.
+func isFieldDetailsCall(call *ast.CallExpr) bool {
+	return apierrCallName(call) == "FieldDetails"
+}
+
+// apierrCallName reports call's selector name when call is
+// apierr.<name>(...), and "" otherwise.
+func apierrCallName(call *ast.CallExpr) string {
 	sel, ok := call.Fun.(*ast.SelectorExpr)
-	if !ok || sel.Sel.Name != "WriteFieldError" {
-		return false
+	if !ok {
+		return ""
 	}
 	pkg, ok := sel.X.(*ast.Ident)
-	return ok && pkg.Name == "apierr"
+	if !ok || pkg.Name != "apierr" {
+		return ""
+	}
+	return sel.Sel.Name
 }
 
 // isStringMapType reports whether expr is the type `map[string]string` --
@@ -394,8 +424,8 @@ func isWordByte(b byte) bool {
 
 // TestDetailOffensesCatchesABannedWord is the gate's own proof: without
 // it TestDetailsWording passing would be indistinguishable from it
-// reading nothing at all. Both value forms the gate resolves are here,
-// alongside a whole-word near-miss it must not report.
+// reading nothing at all. All the value forms the gate resolves are
+// here, alongside a whole-word near-miss it must not report.
 func TestDetailOffensesCatchesABannedWord(t *testing.T) {
 	const src = `package p
 
@@ -410,6 +440,7 @@ func f(w W) {
 	other := map[string]int{"n": 1}
 	_ = other
 	apierr.WriteFieldError(w, 400, CodeInvalidArgument, "netDays", "Enter a valid number of days")
+	apierr.FieldDetails("amountCents", "Enter a valid amount")
 }
 `
 	fset := token.NewFileSet()
@@ -428,6 +459,7 @@ func f(w W) {
 	want := []string{
 		`p.go:10: "Please select a role" contains "please"`,
 		`p.go:13: "Enter a valid number of days" contains "valid"`,
+		`p.go:14: "Enter a valid amount" contains "valid"`,
 		`p.go:6: "Enter a valid address" contains "valid"`,
 		`p.go:7: "Password is required" contains "required"`,
 	}
@@ -444,12 +476,14 @@ func f(w W) {
 
 // TestIdentifierOffensesCatchesABareIdentifierOpener is
 // TestDetailsOpenWithThePersonsNoun's own gate proof, the counterpart to
-// TestDetailOffensesCatchesABannedWord above. It covers all three shapes
-// identifierOffenses reads, a same-package const resolved through
-// consts, a key it cannot resolve (skipped rather than guessed at), and
-// a near-miss that must not report: a value that merely contains its key
-// after the first word, and one whose opening word only shares a prefix
-// with the key ("time" is not "timezone").
+// TestDetailOffensesCatchesABannedWord above. It covers all the shapes
+// identifierOffenses reads (including WriteFieldError and FieldDetails
+// together, on purpose -- see the dirImportsApierr=false check below), a
+// same-package const resolved through consts, a key it cannot resolve
+// (skipped rather than guessed at), and a near-miss that must not
+// report: a value that merely contains its key after the first word,
+// and one whose opening word only shares a prefix with the key ("time"
+// is not "timezone").
 func TestIdentifierOffensesCatchesABareIdentifierOpener(t *testing.T) {
 	const src = `package p
 
@@ -467,6 +501,7 @@ func f(w W) {
 	details[dynamicKey] = "reason cannot be blank"
 	apierr.WriteFieldError(w, 400, CodeInvalidArgument, "reason", "reason cannot be blank")
 	apierr.WriteFieldError(w, 400, CodeInvalidArgument, "reason", "Enter a reason for reversing this payment")
+	apierr.FieldDetails("amountCents", "amountCents must be positive")
 }
 `
 	fset := token.NewFileSet()
@@ -482,6 +517,7 @@ func f(w W) {
 	want := []string{
 		`p.go:13: "mode must be \"own\" or \"hosted\"" opens with "mode", its own key`,
 		`p.go:15: "reason cannot be blank" opens with "reason", its own key`,
+		`p.go:17: "amountCents must be positive" opens with "amountCents", its own key`,
 		`p.go:8: "paidOn cannot be in the future" opens with "paidOn", its own key`,
 		`p.go:9: "netDays is out of range" opens with "netDays", its own key`,
 	}
@@ -499,15 +535,22 @@ func f(w W) {
 	// where some other file, not this one, imports apierr and sends what
 	// this one builds. The map/assignment offenses go dark -- there is
 	// nothing here to tell this map from clientfieldtemplate's
-	// structuralFieldNames -- but a WriteFieldError call still can't
-	// exist in a file that doesn't import apierr, so that shape is
-	// unaffected either way.
+	// structuralFieldNames -- but a WriteFieldError or FieldDetails call
+	// still can't exist in a file that doesn't import apierr, so those
+	// two shapes are unaffected either way.
 	gotUnimported := identifierOffenses(file, fset, "p.go", consts, false)
 	sort.Strings(gotUnimported)
 	wantUnimported := []string{
 		`p.go:15: "reason cannot be blank" opens with "reason", its own key`,
+		`p.go:17: "amountCents must be positive" opens with "amountCents", its own key`,
 	}
-	if len(gotUnimported) != len(wantUnimported) || gotUnimported[0] != wantUnimported[0] {
+	sort.Strings(wantUnimported)
+	if len(gotUnimported) != len(wantUnimported) {
 		t.Fatalf("offenses with dirImportsApierr=false = %v, want %v", gotUnimported, wantUnimported)
+	}
+	for i := range gotUnimported {
+		if gotUnimported[i] != wantUnimported[i] {
+			t.Fatalf("offenses with dirImportsApierr=false = %v, want %v", gotUnimported, wantUnimported)
+		}
 	}
 }
