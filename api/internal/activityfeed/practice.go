@@ -152,6 +152,20 @@ const personSubjectKind = activity.SubjectMembership
 // add a (practice_id, created_at DESC, id DESC) index -- not a case this
 // one needs to solve against a fixture.
 //
+// Re-measured after 00116 (#1256) added a fourth policy on staff so the
+// subj join's own subject could resolve to a real name once she has
+// left: 67 ms on this same all-live-actor fixture (TestPracticeQueryPlan
+// AtScale), against the 13.1 ms recorded above -- every one of the
+// 5,000 actor-staff reads now costs one SECURITY DEFINER function call.
+// TestPracticeQueryPlanWithDepartedMembershipSubjects is the fixture the
+// caveat above says this file never had: 5,000 rows where the subj join
+// really is driven, every one of them a departed Membership subject.
+// 140 ms there, still no JIT section in either case -- the number that
+// keeps mattering, per #1077 and per 00116's own doc comment, which
+// records the version of this policy that priced the Engagement ledger's
+// own JIT canary almost to its ceiling and why the shipped shape does
+// not.
+//
 // The subject join (subj) is #1148's own addition: a feed spanning many
 // subject kinds has to say who a roster change happened to, or "Roles
 // changed" names the actor and nobody else, and a reader cannot tell one

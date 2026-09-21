@@ -53,16 +53,23 @@
 --
 -- Because this policy applies to every SELECT against staff for the
 -- app_runtime role, not only the practice-wide feed's own subj join, it
--- also resolves the same degradation everywhere else a Staff-side reader
--- hits it -- the Engagement ledger's actor name, the Membership
--- history's actor name (#872), and the two gaps #1322 named in
--- message.ListHandler and visit.listVisits. That is not a second
--- migration's worth of work pulled forward; RLS cannot be scoped to one
--- caller, so a correct policy for this ticket's own read is, by
--- construction, a correct policy for every other Staff-side read of the
--- same table, and #1322's own two fixes (message.go, visit.go) already
--- fall back to DepartedStaffName exactly where this policy now finds a
--- real name to give them instead.
+-- also admits the same row everywhere else a Staff-side reader hits it
+-- by construction -- the Engagement ledger's actor name, the Membership
+-- history's actor name (#872), and message.ListHandler's and
+-- visit.listVisits' own unresolvedStaffSenderName fallback (#1322,
+-- already closed on its own DepartedStaffName-shaped fix). That is not a
+-- second migration's worth of work pulled forward; RLS cannot be scoped
+-- to one caller, so a correct policy for this ticket's own read is,
+-- mechanically, a correct policy for every other Staff-side read of the
+-- same table too. Said as mechanism rather than as a tested claim: this
+-- PR touches no code in message/ or visit/, and their own #1322 fixture
+-- (testdb.RemoveMembership, a bare DELETE) never writes the 'removed'
+-- activity row this policy's own function reads, so their existing
+-- tests still exercise the "genuinely no audit trail" case and pass
+-- unchanged rather than proving the wider claim. Production's own
+-- RemoveMembershipHandler and logindeletion.go always write that row
+-- first, so the mechanism holds there; it is recorded here rather than
+-- left to be rediscovered, not verified by a new test in this PR.
 --
 -- Client-portal sessions never set app.current_practice_id
 -- (clientauth.Middleware only ever sets app.current_client_id and
@@ -70,12 +77,38 @@
 -- app.current_practice_id being set already excludes them without a
 -- separate Staff-only term -- the same guard 00002's own
 -- staff_practice_visibility policy relies on for the same reason.
+-- The live-membership check below lives inside this function, not in the
+-- policy's own USING clause, and that placement is load-bearing, not
+-- style. SECURITY DEFINER makes the function run as the table owner,
+-- which bypasses RLS on every table *it* queries -- so a NOT EXISTS
+-- against practice_memberships in here pays only that table's own index
+-- lookup. The same NOT EXISTS written directly into the policy's USING
+-- clause is a different query entirely: the rewriter inlines it, which
+-- drags in practice_memberships' OWN policies -- including
+-- practice_memberships_visible_to_own_client_portal_engagements (00009),
+-- itself an inlined EXISTS through engagements -- and that cascade
+-- doubles the already-near-jit_above_cost estimated cost of
+-- engagement.listEngagementActivity's own three staff joins (99,757 of a
+-- 100,000 budget, measured with that version of this migration applied,
+-- against a 77,043 pre-migration baseline -- 22,714 of 22,957 available
+-- points spent, a margin no other change could safely share). Measured
+-- with the guard moved in here instead: see this policy's own doc
+-- comment below for the number, and
+-- engagement/activity_jit_internal_test.go's own
+-- TestListEngagementActivityQuery_StaysOffTheJITCliff for the canary
+-- that would have caught the first version outright had its own
+-- threshold been any narrower.
 -- +goose StatementBegin
 CREATE FUNCTION staff_was_ever_a_member_at_practice(target_staff_id uuid, target_practice_id uuid) RETURNS boolean
     LANGUAGE sql SECURITY DEFINER STABLE
     SET search_path = public, pg_temp
     AS $$
-        SELECT EXISTS (
+        SELECT NOT EXISTS (
+            SELECT 1 FROM practice_memberships pm
+            WHERE pm.staff_id = target_staff_id
+              AND pm.practice_id = target_practice_id
+        )
+        AND EXISTS (
             SELECT 1 FROM activity
             WHERE practice_id = target_practice_id
               AND subject_kind = 'membership'
@@ -90,42 +123,57 @@ CREATE FUNCTION staff_was_ever_a_member_at_practice(target_staff_id uuid, target
 -- "Deleted Staff Member" -- an internal sentinel that was never meant to
 -- reach a reader.
 --
--- The NOT EXISTS guard measures its own cost: without it,
--- listPracticeActivityQuery's actor join re-evaluates
--- staff_was_ever_a_member_at_practice for every one of a fixture's 5,000
--- rows (they share one live actor, so 00002's own staff_practice_
--- visibility policy already admits every one of them) and execution time
--- moves from 10.6 ms to 54.8 ms -- no JIT, but a real 5x this migration
--- does not need to spend. 00002's own policy is a plain column
--- comparison, unable to short-circuit an OR'd sibling policy it knows
--- nothing about, so the short-circuit has to be authored inside this
--- policy's own USING clause instead: a currently-live Membership is
--- common (most actor rows are a live Owner or Admin) and cheap to rule
--- out first, an indexed lookup on practice_memberships' own (practice_id,
--- staff_id) unique key, not a cascading EXISTS through visits or
--- engagements the way 00105's own failed attempt was -- so inlining it
--- costs nothing like that one did. Re-measured with the guard in place,
--- on TestPracticeQueryPlanAtScale's own all-live-actor fixture where the
--- guard rules out every row before the function is ever called: 19 ms,
--- repeatable across runs, against a 10.6 ms pre-migration baseline and no
--- JIT section -- the added cost is the extra OR branch's own planning,
--- not a per-row function call.
--- TestPracticeQueryPlanWithDepartedMembershipSubjects measures the
--- guard's own worst case instead -- 5,000 rows where every subject
--- really is departed, so the guard is false and the function runs every
--- time: 68 ms, still no JIT. Both live in perf_test.go, and both assert
--- the JIT section's absence rather than a wall-clock number, which is
--- the one thing 00111's own history says actually matters.
+-- This USING clause is one opaque function call plus two cheap guards --
+-- current_setting and a column read -- the same shape 00111's own policy
+-- has, and for the same reason: anything more than that here is visible
+-- to the rewriter and eligible for inlining. An earlier version of this
+-- migration put the "already a live member" short-circuit here instead,
+-- as its own NOT EXISTS against practice_memberships. That query reads
+-- fine on its own, but practice_memberships carries a policy of its own
+-- that is not SECURITY DEFINER --
+-- practice_memberships_visible_to_own_client_portal_engagements (00009),
+-- an inlined EXISTS through engagements -- and the rewriter pulled that
+-- whole cascade into this one too. Measured against
+-- engagement.listEngagementActivity, the one reader in this codebase
+-- that already joins staff three times (engagement/activity_jit_internal
+-- _test.go's own TestListEngagementActivityQuery_StaysOffTheJITCliff):
+-- 99,757 of a 100,000 jit_above_cost budget, against a 77,043
+-- pre-migration baseline -- the guard priced almost every point of
+-- margin that query had left, on a canary built for exactly this
+-- failure mode. The short-circuit moved inside
+-- staff_was_ever_a_member_at_practice instead (see its own doc comment):
+-- SECURITY DEFINER means that NOT EXISTS runs as the table owner and
+-- never touches practice_memberships' own policies at all, so nothing
+-- about this policy's shape gives the rewriter anything to pull in.
+-- Re-measured with the guard moved: the same canary reads 77,223 -- 180
+-- points over the unmodified baseline for one more opaque call in the
+-- plan, not a cascade.
+--
+-- Wall-clock, on TestPracticeQueryPlanAtScale's own all-live-actor
+-- fixture (perf_test.go): 67 ms against a 10.6 ms pre-migration
+-- baseline, no JIT -- every one of the 5,000 rows now calls the function
+-- once (it short-circuits its own internal AND on the live-membership
+-- half, but still pays one SPI round trip per row, which the plain
+-- EXISTS this replaced never did).
+-- TestPracticeQueryPlanWithDepartedMembershipSubjects measures this
+-- policy's own worst case instead -- 5,000 rows where every subject
+-- really is departed, so the function's internal AND runs both halves
+-- every time: 140 ms, still no JIT. Both
+-- numbers are slower than the version this migration rejected above, and
+-- that trade is deliberate: the estimated-cost budget the JIT canary
+-- guards is a hard ceiling this codebase cannot safely spend from, where
+-- a few dozen milliseconds of actual execution time on a fixture four
+-- orders of magnitude past a pilot Practice's real Membership-event
+-- volume is not. Both perf tests assert the JIT section's absence rather
+-- than only a wall-clock number, which is the one thing 00111's own
+-- history says actually matters, and the Engagement ledger's own canary
+-- is what caught the version of this migration that would have shipped
+-- otherwise.
 CREATE POLICY staff_visible_to_own_practice_membership_history ON staff
     FOR SELECT
     USING (
         staff.deleted_at IS NULL
         AND NULLIF(current_setting('app.current_practice_id', true), '') IS NOT NULL
-        AND NOT EXISTS (
-            SELECT 1 FROM practice_memberships pm
-            WHERE pm.staff_id = staff.id
-              AND pm.practice_id = NULLIF(current_setting('app.current_practice_id', true), '')::uuid
-        )
         AND staff_was_ever_a_member_at_practice(staff.id, NULLIF(current_setting('app.current_practice_id', true), '')::uuid)
     );
 
