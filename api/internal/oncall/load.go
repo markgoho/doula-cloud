@@ -186,9 +186,9 @@ type Gap struct {
 	StaffName         string    `json:"staffName"`
 	StartsAt          time.Time `json:"startsAt"`
 	EndsAt            time.Time `json:"endsAt"`
-	Reason            *string   `json:"reason"`
-	CoveringStaffID   *string   `json:"coveringStaffId"`
-	CoveringStaffName *string   `json:"coveringStaffName"`
+	Reason            *string   `json:"reason,omitempty"`
+	CoveringStaffID   *string   `json:"coveringStaffId,omitempty"`
+	CoveringStaffName *string   `json:"coveringStaffName,omitempty"`
 }
 
 // liveGapsSelect reads every live gap on a set of Engagements that

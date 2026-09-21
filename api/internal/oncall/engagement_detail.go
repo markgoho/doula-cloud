@@ -29,16 +29,16 @@ type RuleView struct {
 }
 
 // EngagementDoula is one Doula with an open, granted Attachment on the
-// birth. From and To are her narrowing, null where she has none;
-// OnCallFrom and OnCallTo are the days she is actually on call, null
+// birth. From and To are her narrowing, absent where she has none;
+// OnCallFrom and OnCallTo are the days she is actually on call, absent
 // where there is no window or her narrowing misses it.
 type EngagementDoula struct {
 	StaffID    string  `json:"staffId"`
 	Name       string  `json:"name"`
-	From       *string `json:"from"`
-	To         *string `json:"to"`
-	OnCallFrom *string `json:"onCallFrom"`
-	OnCallTo   *string `json:"onCallTo"`
+	From       *string `json:"from,omitempty"`
+	To         *string `json:"to,omitempty"`
+	OnCallFrom *string `json:"onCallFrom,omitempty"`
+	OnCallTo   *string `json:"onCallTo,omitempty"`
 }
 
 // EngagementHandler reads one Engagement's on-call panel. Mounted
