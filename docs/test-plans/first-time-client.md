@@ -112,11 +112,7 @@ No step is `blocked`. She never reaches a Stripe surface — the portal has none
 so the one thing she cannot see about money (**NH-G6**: no Invoice, balance or
 payment view anywhere in the portal) is a hole in the product, not a bill.
 
-NH-G4, **RA-G1**, **PR-G7**, **MO-G3** and
-[#212](https://github.com/markgoho/doula-cloud/issues/212) are observed inside
-walkable steps (3.1, 1.2, 3.1-a) rather than given steps of their own. HS-G1 is
-closed ([#300](https://github.com/markgoho/doula-cloud/issues/300)) and its
-exposing step, 2.2-a, is gone with it.
+NH-G4, **RA-G1**, **PR-G7**, **MO-G3** and [#212](https://github.com/markgoho/doula-cloud/issues/212) are observed inside walkable steps (3.1, 1.2, 3.1-a) rather than given steps of their own. HS-G1 is closed ([#300](https://github.com/markgoho/doula-cloud/issues/300)) and its exposing step, 2.2-a, is gone with it.
 
 The Birth Plan's absent export is now [her map](../journeys/first-time-client.md)'s
 **HS-G7**, and 4.3's absent Contract copy sharpened into **HS-G6** — both minted at
@@ -162,6 +158,17 @@ Two more cells are re-marked, both `missing-feature` -> `manual`, because the ga
 And two cells are corrected without moving: 4.1's `Status: sent` and 4.1-a's "for this Engagement" are both the team's words, and the portal speaks the Client register's now (`app/src/lib/clientRegister.ts`, [#212](https://github.com/markgoho/doula-cloud/issues/212)).
 
 The 2026-08-23 walk below is unchanged as a historical record; it walked 4.2 by hand before any spec did.
+
+### 2026-09-20 — stage 9 and stage 2, against #309/#819/#617 as built ([#1244](https://github.com/markgoho/doula-cloud/issues/1244))
+
+A desk pass, correcting two stale claims. Nothing was re-walked. Two steps are corrected and one is dropped.
+
+| Step | Cell corrected | What settled it |
+| --- | --- | --- |
+| 2.1-a, 2.2 | password field + account-mode radio -> a single **Continue** button, no password | #617 (ADR-0026): a Client has no password, so accepting an invitation is pressing Continue, nothing else |
+| 9.1 | `client_portal_users` holds one `identity_uid` per Client, password-sharing -> `invite()`'s handler-level refusal, mailbox-sharing | The table-wide `UNIQUE` on `identity_uid` was dropped and `UNIQUE (identity_uid, client_id)` put in its place (#309, #819, `00107_portal_account_client_pair_unique.sql`); `invite()` (`portalinvite/invite.go`) refuses a second invite on an already-accepted Client by `client_id`, not by a schema constraint |
+
+**One step is dropped, not corrected.** 2.2-a asked her to repeat accept-invite with "I already have an account" chosen — a choice the screen no longer offers (#617). HS-G1, the gap row it exposed, closes with it ([#300](https://github.com/markgoho/doula-cloud/issues/300), already implemented by #617). The plan's Marks summary and README's run-status row and Total are recounted for the one mark this drops. The walk logs above and below are records of what was seen on the day and are untouched.
 
 ### 2026-08-23 — manual and missing-feature steps ([#240](https://github.com/markgoho/doula-cloud/issues/240))
 
