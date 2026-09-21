@@ -93,18 +93,47 @@ type KindChangeResponse struct {
 // birthOutcomes/endingReasons shape outcome.go and transition.go use.
 var kinds = map[string]bool{string(KindBirth): true, string(KindPostpartum): true}
 
+// kindRow is the row ChangeKindHandler reads before it writes: the kind
+// held now, and the birth outcome that decides whether an upgrade to
+// 'birth' is still offered.
+type kindRow struct {
+	kind         string
+	birthOutcome *string
+}
+
 // ChangeKindHandler moves an Engagement between ADR-0015's two kinds
 // (#874): "birth" or "postpartum", what the Practice sold. Unlike the
-// birth outcome (00093's freeze) and the status (transition.go's
-// six-move table), kind carries no freeze in either direction -- 00093's
-// own comment states the freeze was considered and rejected, because a
-// postpartum-only Engagement records live_birth at intake, so a database
-// freeze keyed on the outcome would freeze kind from the moment the row
-// was created. Every Staff role that may change any of ADR-0015's mutable
-// facts may change this one too: refuseFactWrite is the same gate
-// TransitionHandler and RecordBirthOutcomeHandler already use (ADR-0006
-// as ADR-0015's role table applies it) -- a contractor Doula is refused
-// outright, and everyone else must be an Owner, an Admin or a Doula.
+// birth outcome (00093's freeze), kind carries no *database* freeze --
+// 00093's own comment states a freeze keyed on the outcome was
+// considered and rejected, because a postpartum-only Engagement records
+// live_birth at intake, so it would freeze kind from the moment the row
+// was created and leave Camille's cohort no correction window at all.
+// There is no CHECK and no trigger here, in line with that.
+//
+// The ADR states a *product* rule instead, in its "post-birth freeze on
+// kind is a rule, not a constraint" section: "the product stops offering
+// a postpartum -> birth change once the birth outcome is recorded,
+// because attending a birth that has already happened means nothing"
+// (docs/adr/0015, the paragraph beginning "The product stops offering").
+// refuseUpgradeAfterBirth is that rule, enforced here rather than only
+// drawn away in the UI -- every other ADR-0015 rule in this package is
+// handler-enforced, and a Birth Plan re-offered for a birth that already
+// happened (OffersBirthPlan would answer true again once kind reads
+// 'birth' and the frozen outcome is still 'live_birth') is exactly the
+// harm the sentence exists to prevent. The reverse move,
+// 'birth' -> 'postpartum', carries no such caveat: standing rule 2 names
+// it "the rare downgrade" and the reason kind is not DB-frozen at all.
+// Kind carries no correction flag of its own -- the ADR gives that hatch
+// to the outcome alone ("an Owner, and only an Owner, may correct a
+// frozen birth outcome"), so the outcome's own Owner-only correction
+// (RecordBirthOutcomeHandler) is the fix for a truly mis-set pair, run
+// before this endpoint rather than a second hatch built here.
+//
+// Every Staff role that may change any of ADR-0015's mutable facts may
+// change this one too: refuseFactWrite is the same gate TransitionHandler
+// and RecordBirthOutcomeHandler already use (ADR-0006 as ADR-0015's role
+// table applies it) -- a contractor Doula is refused outright, and
+// everyone else must be an Owner, an Admin or a Doula.
 //
 // PUT and no Idempotency-Key: re-sending the kind the Engagement already
 // holds is a no-op that writes nothing and raises no second audit row,
@@ -112,19 +141,19 @@ var kinds = map[string]bool{string(KindBirth): true, string(KindPostpartum): tru
 // uses (docs/api-design.md's rule 4: a full-replacement PUT is inherently
 // idempotent). The write itself is compare-and-set on the kind this
 // handler just read, so a second writer's own concurrent change is never
-// silently overwritten by a stale read rather than reported as "somebody
-// else already moved it" (the n != 1 branch below).
+// silently overwritten by a stale read -- the write is refused rather
+// than applied over it (the n != 1 branch below).
 //
-// What changing kind does not do, per ADR-0015's own list: it moves no
-// Visit (visit.DeriveType derives a Visit's type from the Engagement's
-// pregnancy-end date alone, never from kind), spends no second Credit,
-// and touches no Contract or Invoice -- none of those three tables
-// carries a kind column or a kind-keyed rule, so there is nothing here to
-// cascade. Whether a Birth Plan is offered is OffersBirthPlan's own
-// question, answered fresh on every portal read (portal.DetailHandler
-// selects e.kind on every request rather than caching it), so the very
-// next read after this write already agrees -- no separate flag to keep
-// in step.
+// What changing kind does not otherwise do, per ADR-0015's own list: it
+// moves no Visit (visit.DeriveType derives a Visit's type from the
+// Engagement's pregnancy-end date alone, never from kind), spends no
+// second Credit, and touches no Contract or Invoice -- none of those
+// three tables carries a kind column or a kind-keyed rule, so there is
+// nothing here to cascade. Whether a Birth Plan is offered is
+// OffersBirthPlan's own question, answered fresh on every portal read
+// (portal.DetailHandler selects e.kind on every request rather than
+// caching it), so the very next read after this write already agrees --
+// no separate flag to keep in step.
 //
 // Must be mounted behind staffauth.Middleware.
 func ChangeKindHandler() http.Handler {
@@ -160,11 +189,11 @@ func ChangeKindHandler() http.Handler {
 			return
 		}
 
-		var current string
+		var current kindRow
 		err := tx.QueryRowContext(r.Context(),
-			`SELECT kind::text FROM engagements WHERE id = $1 AND practice_id = $2`,
+			`SELECT kind::text, birth_outcome::text FROM engagements WHERE id = $1 AND practice_id = $2`,
 			engagementID, practiceID,
-		).Scan(&current)
+		).Scan(&current.kind, &current.birthOutcome)
 		if errors.Is(err, sql.ErrNoRows) {
 			apierr.WriteError(w, "engagement not found", http.StatusNotFound)
 			return
@@ -175,14 +204,17 @@ func ChangeKindHandler() http.Handler {
 			return
 		}
 
-		if current == req.Kind {
-			apierr.WriteJSON(w, http.StatusOK, KindChangeResponse{EngagementID: engagementID, Kind: current})
+		if current.kind == req.Kind {
+			apierr.WriteJSON(w, http.StatusOK, KindChangeResponse{EngagementID: engagementID, Kind: current.kind})
+			return
+		}
+		if refuseUpgradeAfterBirth(w, current, req.Kind) {
 			return
 		}
 
 		result, err := tx.ExecContext(r.Context(),
 			`UPDATE engagements SET kind = $1 WHERE id = $2 AND practice_id = $3 AND kind = $4`,
-			req.Kind, engagementID, practiceID, current,
+			req.Kind, engagementID, practiceID, current.kind,
 		)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
@@ -199,7 +231,7 @@ func ChangeKindHandler() http.Handler {
 		if err := recordKindEvent(r.Context(), tx, kindEvent{
 			practiceID:   practiceID,
 			engagementID: engagementID,
-			previousKind: current,
+			previousKind: current.kind,
 			kind:         req.Kind,
 			actorStaffID: &actorStaffID,
 		}); err != nil {
@@ -210,4 +242,30 @@ func ChangeKindHandler() http.Handler {
 
 		apierr.WriteJSON(w, http.StatusOK, KindChangeResponse{EngagementID: engagementID, Kind: req.Kind})
 	})
+}
+
+// refuseUpgradeAfterBirth is ADR-0015's own sentence, checked before the
+// write: "the product stops offering a postpartum -> birth change once
+// the birth outcome is recorded, because attending a birth that has
+// already happened means nothing." A birth outcome of any recorded value
+// -- live_birth, loss or unknown -- counts as "already happened": all
+// three mean the pregnancy is no longer expected (HasLivingOrExpectedBaby
+// answers the finer-grained question OffersBirthPlan needs; this refusal
+// only needs to know whether the outcome column is still null). The
+// reverse move, target == 'birth' -> 'postpartum', is never refused here
+// -- see ChangeKindHandler's own doc comment.
+//
+// Named and tested apart from the write, matching refuseClearOnCompleted
+// and refuseUnexplainedCompletion's own shape: a raw CHECK violation
+// would otherwise surface as an unnamed 500, and this endpoint has only
+// the one 409 to answer with, so the generic apierr.CodeConflict is
+// enough (#692's tell-apart-by-code rule only bites once an endpoint
+// answers more than one 409).
+func refuseUpgradeAfterBirth(w http.ResponseWriter, current kindRow, target string) bool {
+	if current.kind != string(KindPostpartum) || target != string(KindBirth) || current.birthOutcome == nil {
+		return false
+	}
+	apierr.Write(w, http.StatusConflict, apierr.CodeConflict,
+		"this Engagement's birth outcome is already recorded, so its kind can no longer be changed to 'birth'", nil)
+	return true
 }

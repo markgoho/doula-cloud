@@ -8,18 +8,19 @@ import (
 	"testing"
 	"time"
 
+	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/engagement"
 	"doula-cloud/api/internal/testdb"
 )
 
-// kindChangeResponseBody decodes ChangeKindHandler's success DTO. A
-// separate small struct rather than engagement.KindChangeResponse itself,
-// the same reasoning outcomeResponseBody gives: one decode has to serve
-// both the success shape and a refusal that carries no matching field.
+// kindChangeResponseBody decodes both shapes this endpoint answers with:
+// the success DTO, and apierr's own error envelope's Code, the same
+// dual-purpose shape outcomeResponseBody uses.
 type kindChangeResponseBody struct {
-	EngagementID string `json:"engagementId"`
-	Kind         string `json:"kind"`
+	EngagementID string      `json:"engagementId"`
+	Kind         string      `json:"kind"`
+	Code         apierr.Code `json:"code"`
 }
 
 // changeKindAs PUTs a kind change as uid and returns the status code and
@@ -103,7 +104,7 @@ func newKindServer(t *testing.T, db *testdb.DB, uid string, roles []string, empl
 // -- refused every status move outright -- is refused this too.
 func TestChangeKindHandler_RolesMayChange(t *testing.T) {
 	cases := []struct {
-		kind           string
+		role           string
 		roles          []string
 		employmentType string
 		wantOK         bool
@@ -115,9 +116,9 @@ func TestChangeKindHandler_RolesMayChange(t *testing.T) {
 		{"no role", []string{}, employeeType, false},
 	}
 	for _, tc := range cases {
-		t.Run(tc.kind, func(t *testing.T) {
+		t.Run(tc.role, func(t *testing.T) {
 			db := testdb.New(t)
-			uid := "change-kind-" + tc.kind
+			uid := "change-kind-" + tc.role
 			srv, practiceID, engagementID := newKindServer(t, db, uid, tc.roles, tc.employmentType)
 
 			status, body := changeKindAs(t, db, srv, uid, practiceID, engagementID, string(engagement.KindPostpartum))
@@ -169,9 +170,13 @@ func TestChangeKindHandler_Validation(t *testing.T) {
 }
 
 // TestChangeKindHandler_BothDirectionsAndNoOp proves ADR-0015's "mutable
-// in both directions" is not a one-way door, and that PUT is naturally
-// idempotent: re-sending the kind an Engagement already holds writes
-// nothing and raises no second audit row (docs/api-design.md rule 4).
+// in both directions" is not a one-way door while the pregnancy is still
+// expected (birth_outcome stays null throughout -- SeedEngagementWithKind
+// records none), and that PUT is naturally idempotent: re-sending the
+// kind an Engagement already holds writes nothing and raises no second
+// audit row (docs/api-design.md rule 4). The postpartum -> birth move
+// once a birth outcome is recorded is TestChangeKindHandler_UpgradeAfterBirthRefused's
+// own subject, not this one's.
 func TestChangeKindHandler_BothDirectionsAndNoOp(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "kind-both-directions-owner"
@@ -195,6 +200,63 @@ func TestChangeKindHandler_BothDirectionsAndNoOp(t *testing.T) {
 		t.Fatalf("engagement_events rows = %d, want 2", n)
 	}
 	assertKindEvent(t, db, engagementID, string(engagement.KindPostpartum), string(engagement.KindBirth))
+}
+
+// TestChangeKindHandler_UpgradeAfterBirthRefused is ADR-0015's own
+// sentence: "the product stops offering a postpartum -> birth change once
+// the birth outcome is recorded, because attending a birth that has
+// already happened means nothing." Once SeedBirthOutcome records one,
+// the upgrade a bare 200 would otherwise allow is refused with a named
+// 409, the kind is left untouched, and no audit row is written.
+func TestChangeKindHandler_UpgradeAfterBirthRefused(t *testing.T) {
+	db := testdb.New(t)
+	const uid = "kind-upgrade-after-birth-owner"
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, employeeType)
+	_, engagementID := testdb.SeedEngagementWithKind(t, db, practiceID, "Client", uid+"@example.com", string(engagement.KindPostpartum))
+	testdb.SeedBirthOutcome(t, db, engagementID)
+	srv, _ := newServer(t, db, uid)
+	t.Cleanup(srv.Close)
+
+	status, body := changeKindAs(t, db, srv, uid, practiceID, engagementID, string(engagement.KindBirth))
+	if status != http.StatusConflict {
+		t.Fatalf("status = %d, want 409", status)
+	}
+	if body.Code != apierr.CodeConflict {
+		t.Fatalf("code = %q, want %s", body.Code, apierr.CodeConflict)
+	}
+	if got := readEngagementKind(t, db, engagementID); got != string(engagement.KindPostpartum) {
+		t.Fatalf("kind = %q, want left unchanged at postpartum", got)
+	}
+	if n := countEngagementEvents(t, db, engagementID); n != 0 {
+		t.Fatalf("engagement_events rows = %d, want 0 -- the refusal writes nothing", n)
+	}
+}
+
+// TestChangeKindHandler_DowngradeAfterBirthStillAllowed is the other side
+// of the same rule: standing rule 2 names 'birth' -> 'postpartum' "the
+// rare downgrade" kind's own lack of a database freeze exists for, and
+// the ADR attaches no birth-outcome caveat to it. A recorded outcome
+// refuses the upgrade only; the downgrade goes through exactly as it does
+// with no outcome recorded at all.
+func TestChangeKindHandler_DowngradeAfterBirthStillAllowed(t *testing.T) {
+	db := testdb.New(t)
+	const uid = "kind-downgrade-after-birth-owner"
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, employeeType)
+	_, engagementID := testdb.SeedEngagementWithKind(t, db, practiceID, "Client", uid+"@example.com", string(engagement.KindBirth))
+	testdb.SeedBirthOutcome(t, db, engagementID)
+	srv, _ := newServer(t, db, uid)
+	t.Cleanup(srv.Close)
+
+	status, body := changeKindAs(t, db, srv, uid, practiceID, engagementID, string(engagement.KindPostpartum))
+	if status != http.StatusOK {
+		t.Fatalf("status = %d, want 200", status)
+	}
+	if body.Kind != string(engagement.KindPostpartum) {
+		t.Fatalf("kind = %q, want postpartum", body.Kind)
+	}
+	if n := countEngagementEvents(t, db, engagementID); n != 1 {
+		t.Fatalf("engagement_events rows = %d, want 1", n)
+	}
 }
 
 // TestChangeKindHandler_UnknownEngagement covers both doors an engagement
