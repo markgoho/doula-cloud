@@ -48,7 +48,7 @@ test('A Doula invited via the Staff invite route is refused an Owner-only action
 	// outbox row, or out of the sandbox mailbox if a parallel spec's drain
 	// mailed it first (#827). It throws when it is in neither, so there is
 	// nothing left here to assert.
-	const inviteToken = await readStaffInviteToken(invitationId);
+	const inviteToken = await readStaffInviteToken(request, invitationId);
 
 	// Accepting is walked through the real screen too (#437's two-step
 	// form): a brand-new person, so the signup branch and both questions on

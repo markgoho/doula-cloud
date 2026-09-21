@@ -1,9 +1,7 @@
 import { expect, test } from '@playwright/test';
 import { openMagicLink, seedPortalClient, signInPortalClient } from './portalClient';
 import { enterPracticeAsEnrolled } from './mfa';
-import { E2E_API_HOST, E2E_API_PORT } from './ports';
-
-const API_URL = `http://${E2E_API_HOST}:${E2E_API_PORT}`;
+import { API_URL } from './ports';
 
 test('Client-portal login lands on their engagement-scoped URL', async ({ page, request }) => {
 	const practiceName = 'Riverside Doulas';

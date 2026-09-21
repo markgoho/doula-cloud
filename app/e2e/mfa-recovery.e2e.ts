@@ -1,13 +1,11 @@
 import { expect, test, type APIRequestContext } from '@playwright/test';
-import { E2E_API_HOST, E2E_API_PORT } from './ports';
+import { API_URL } from './ports';
 import { readStaffInviteToken } from './stack';
 import { drainUntilMailArrives, readMailbox } from './outboxMail';
 import { signIn } from './auth';
 import { enrollSecondFactor, enterPracticeAsEnrolled, verifyEmail } from './mfa';
 import { seedFoundingOwner, uniqueEmail } from './staffSignup';
 import { STUB_TOTP_CODE, stubTotpFactor } from './totpStub';
-
-const API_URL = `http://${E2E_API_HOST}:${E2E_API_PORT}`;
 
 // The subject mfarecoverymail's Compose gives the vouched code. Named
 // once because both claims below are about it: that the Owner received
@@ -207,7 +205,7 @@ test('An Owner vouches for a locked-out doula, and the code reaches her and nobo
 
 		// readStaffInviteToken throws, naming both places it looked, when the
 		// token is in neither -- so there is nothing left here to assert.
-		const token = await readStaffInviteToken(invitationId);
+		const token = await readStaffInviteToken(request, invitationId);
 
 		await page.goto(`/accept-invite?token=${token}`);
 		await page.getByLabel('Email').fill(doulaEmail);

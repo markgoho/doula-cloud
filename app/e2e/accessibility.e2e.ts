@@ -1,6 +1,6 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Page } from '@playwright/test';
-import { E2E_API_HOST, E2E_API_PORT, PREVIEW_SERVER_ORIGIN } from './ports';
+import { API_URL, PREVIEW_SERVER_ORIGIN } from './ports';
 import {
 	seedClient,
 	seedContractorDoula,
@@ -12,8 +12,6 @@ import { seedEngagement, seedEngagementRequest } from './stack';
 import { enterPracticeAsEnrolled } from './mfa';
 import { seedAccountWithNoPractice } from './staffSignup';
 import { stubTotpFactor } from './totpStub';
-
-const API_URL = `http://${E2E_API_HOST}:${E2E_API_PORT}`;
 
 /**
  * The automated half of the accessibility gate (#447). Everything about

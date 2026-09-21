@@ -1,5 +1,5 @@
 import { expect, type APIRequestContext, type BrowserContext, type Page } from '@playwright/test';
-import { E2E_API_HOST, E2E_API_PORT, E2E_EMULATOR_HOST, E2E_EMULATOR_PORT, PREVIEW_SERVER_ORIGIN } from './ports';
+import { API_URL, E2E_EMULATOR_HOST, E2E_EMULATOR_PORT, PREVIEW_SERVER_ORIGIN } from './ports';
 import { signIn } from './auth';
 
 // The Firebase Auth emulator (firebase-tools 15.27, vendored in
@@ -59,7 +59,6 @@ import { signIn } from './auth';
 // with no null allowed, in each. The SDK side is
 // firebase.google.com/go/v4 v4.21.0, its newest release.
 export const EMULATOR_URL = `http://${E2E_EMULATOR_HOST}:${E2E_EMULATOR_PORT}`;
-const API_URL = `http://${E2E_API_HOST}:${E2E_API_PORT}`;
 
 // The e2e stack always starts the emulator against this one project (see
 // stack.ts's `--project doula-cloud`), so the emulator's own debug/admin

@@ -1,10 +1,9 @@
 import { expect, type APIRequestContext } from '@playwright/test';
-import { E2E_API_HOST, E2E_API_PORT, E2E_EMULATOR_HOST, E2E_EMULATOR_PORT } from './ports';
+import { API_URL, E2E_EMULATOR_HOST, E2E_EMULATOR_PORT } from './ports';
 import { signIn } from './auth';
 import { retryPastRateLimit } from './rateLimit';
 
 const EMULATOR_URL = `http://${E2E_EMULATOR_HOST}:${E2E_EMULATOR_PORT}`;
-const API_URL = `http://${E2E_API_HOST}:${E2E_API_PORT}`;
 
 const FOUNDING_OWNER_PASSWORD = 'password123';
 

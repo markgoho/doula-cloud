@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { E2E_API_HOST, E2E_API_PORT } from './ports';
+import { API_URL } from './ports';
 import { seedClientPortalUser, seedEngagement } from './stack';
 import { signInEnrolled, enterPracticeAsEnrolled } from './mfa';
 import { signInPortalClient } from './portalClient';
@@ -11,7 +11,6 @@ import { seedFoundingOwner, uniqueEmail } from './staffSignup';
 // the Client-portal account the same way client-portal-login.e2e.ts does
 // -- this test isn't re-proving login itself, just that both sides of the
 // Birth Plan feature agree.
-const API_URL = `http://${E2E_API_HOST}:${E2E_API_PORT}`;
 
 test('Staff fills a Birth Plan, and the Client portal shows the matching read-only view', async ({
 	page,
