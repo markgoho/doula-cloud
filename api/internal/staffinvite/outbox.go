@@ -1,9 +1,8 @@
 // Package staffinvite is the Staff invitation Notification (RA-G1, #339,
 // ADR-0010, map #213) -- the outbox and worker that mail a
 // practice_invitations row's accept link, mirroring portalinvite's
-// shape. No handler in this codebase yet writes practice_invitations
-// (#316 builds InviteHandler/accept); Queue is the seam that handler
-// calls once it exists, in the same transaction as the invite/rotate.
+// shape. staffauth.InviteHandler (#316) writes practice_invitations and
+// calls Queue in the same transaction with the freshly minted token.
 package staffinvite
 
 import (
