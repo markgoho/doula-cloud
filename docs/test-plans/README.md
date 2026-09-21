@@ -88,16 +88,7 @@ at `roles = '{}'` and again at `['doula']` found it read in exactly one place �
 `visit/roles.go` — gating the one act her journey is named for. The gap survives in
 narrowed form on the map that owns it, the same treatment TB-G7 got.
 
-**One claim ran through four plans before a walk could settle it.** Renata's 1.2,
-Dee's 1.3 and Priya's 3.2 each expected a Practice picker and each found none, and
-each walk recorded it as unwalkable rather than missing. Lena's walk rendered it:
-signing in with two memberships lists both Practices under `Choose a Practice`, on
-`/login` itself. The picker was never absent — every other Persona holds exactly one
-membership, and LV-G2 made a second unreachable through the product at the time, so
-only the fixture bypass then in Lena's Preconditions could produce the state the walk
-needed. LV-G2 is closed now ([#1242](https://github.com/markgoho/doula-cloud/issues/1242)), and her plan's own step 1.2 produces the second
-membership directly. A claim no single plan could test is worth carrying across plans
-rather than deleting.
+**One claim ran through four plans before a walk could settle it.** Renata's 1.2, Dee's 1.3 and Priya's 3.2 each expected a Practice picker and each found none, and each walk recorded it as unwalkable rather than missing. Lena's walk rendered it: signing in with two memberships lists both Practices under `Choose a Practice`, on `/login` itself. The picker was never absent — every other Persona holds exactly one membership, and LV-G2 made a second unreachable through the product at the time, so only the fixture bypass then in Lena's Preconditions could produce the state the walk needed. LV-G2 is closed now ([#1242](https://github.com/markgoho/doula-cloud/issues/1242)), and her plan's own step 1.2 produces the second membership directly. A claim no single plan could test is worth carrying across plans rather than deleting.
 
 A walk may **re-mark a step**. Tasha's 3.3-a went from `missing-feature (TB-G7)`
 to `manual` once the Staff screen turned out to answer it — the rule that a mark
