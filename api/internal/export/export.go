@@ -8,10 +8,10 @@ import (
 	"fmt"
 	"log"
 	"net/http"
-	"time"
 
 	"doula-cloud/api/internal/activity"
 	"doula-cloud/api/internal/apierr"
+	"doula-cloud/api/internal/clock"
 	"doula-cloud/api/internal/staffauth"
 )
 
@@ -83,7 +83,7 @@ func Handler() http.Handler {
 			return
 		}
 
-		now := time.Now().UTC()
+		now := clock.Now(r.Context()).UTC()
 		filename := fmt.Sprintf("%s export %s.zip", practiceName, now.Format("2006-01-02"))
 		w.Header().Set("Content-Type", "application/zip")
 		w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", filename))

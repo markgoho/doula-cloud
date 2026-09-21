@@ -11,6 +11,7 @@ import (
 
 	"doula-cloud/api/internal/activity"
 	"doula-cloud/api/internal/apierr"
+	"doula-cloud/api/internal/clock"
 	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/staffinvite"
 	"doula-cloud/api/internal/tasknudge"
@@ -254,7 +255,7 @@ func create(ctx context.Context, tx *sql.Tx, practiceID, engagementID, actorStaf
 		return CreateResponse{}, http.StatusConflict, apierr.CodeConflict, "that person already has an open offer on this engagement", nil
 	}
 
-	expiresAt := time.Now().Add(Lifetime)
+	expiresAt := clock.Now(ctx).Add(Lifetime)
 	var offerID string
 	if err := tx.QueryRowContext(ctx,
 		`INSERT INTO engagement_offers

@@ -24,6 +24,7 @@ import (
 	"time"
 
 	"doula-cloud/api/internal/apierr"
+	"doula-cloud/api/internal/clock"
 )
 
 // Rule is one dimension a request is checked and counted against,
@@ -81,7 +82,7 @@ func Wrap(db *sql.DB, endpoint string, rules []Rule) func(http.Handler) http.Han
 				}
 
 				if count > rule.Max {
-					retryAfter := retryAfterSeconds(windowStart, rule.Window)
+					retryAfter := retryAfterSeconds(windowStart, clock.Now(r.Context()), rule.Window)
 					// coverage:ignore reason: DB query failure, not exercised by unit tests
 					if err := recordRefusal(r.Context(), db, endpoint, rule.Dimension, key); err != nil {
 						// A failed refusal log must not itself turn a refusal
@@ -165,9 +166,13 @@ func recordRefusal(ctx context.Context, db *sql.DB, endpoint, dimension, key str
 
 // retryAfterSeconds is how long the caller must wait for windowStart's
 // bucket to roll off, rounded up so a caller retrying at exactly this
-// value never arrives a moment too early.
-func retryAfterSeconds(windowStart time.Time, window time.Duration) int {
-	remaining := int(math.Ceil(time.Until(windowStart.Add(window)).Seconds()))
+// value never arrives a moment too early. now is #773's Clock seam,
+// read once by Wrap and passed in here rather than called again --
+// windowStart itself is Postgres's own now() (see touch's SQL above),
+// so comparing it against anything but the same simulated instant would
+// read as clock skew under a simulation run even when nothing skewed.
+func retryAfterSeconds(windowStart, now time.Time, window time.Duration) int {
+	remaining := int(math.Ceil(windowStart.Add(window).Sub(now).Seconds()))
 	if remaining < 1 {
 		// coverage:ignore reason: only reachable on clock skew between this
 		// process and Postgres, not exercised by unit tests

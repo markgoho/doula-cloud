@@ -12,6 +12,7 @@ import (
 
 	"doula-cloud/api/internal/activity"
 	"doula-cloud/api/internal/apierr"
+	"doula-cloud/api/internal/clock"
 	"doula-cloud/api/internal/staffauth"
 )
 
@@ -285,7 +286,7 @@ func resolveByToken(ctx context.Context, tx *sql.Tx, offerID, token, code string
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		return PreAccountOffer{}, http.StatusInternalServerError, "", apierr.MsgInternalError
 	}
-	if o.State == stateOffered && !expiresAt.After(time.Now()) {
+	if o.State == stateOffered && !expiresAt.After(clock.Now(ctx)) {
 		o.State = stateExpired
 	}
 

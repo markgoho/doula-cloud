@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"doula-cloud/api/internal/apierr"
+	"doula-cloud/api/internal/clock"
 	"doula-cloud/api/internal/portalinvite"
 	"doula-cloud/api/internal/staffauth"
 )
@@ -249,7 +250,7 @@ func MergeHandler() http.Handler {
 		// row as their precondition, so the database verifies a merge is
 		// under way from a durable fact rather than from a session flag
 		// this handler would otherwise have to be trusted to set.
-		if err := setMergedInto(r.Context(), tx, absorbedID, survivorID, staffID, time.Now().UTC()); err != nil {
+		if err := setMergedInto(r.Context(), tx, absorbedID, survivorID, staffID, clock.Now(r.Context()).UTC()); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return

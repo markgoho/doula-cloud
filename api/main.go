@@ -21,6 +21,7 @@ import (
 	"doula-cloud/api/internal/billing"
 	"doula-cloud/api/internal/client"
 	"doula-cloud/api/internal/clientauth"
+	"doula-cloud/api/internal/clock"
 	"doula-cloud/api/internal/engagementrequest"
 	"doula-cloud/api/internal/internalauth"
 	"doula-cloud/api/internal/mail"
@@ -107,6 +108,10 @@ func internalCallerAuth(getenv func(string) string) tasknudge.CallerAuth {
 
 func main() {
 	port := resolvePort()
+	// now is #773's Clock seam, wired once here and threaded to every
+	// worker that already carried its own Now field, plus Deps.Now,
+	// which routes() seeds into every request's context (clock.Middleware).
+	now := clock.Real
 
 	// coverage:ignore reason: requires a real DATABASE_URL and network access, not exercised by unit tests
 	db, err := sql.Open("pgx", os.Getenv("DATABASE_URL"))
@@ -197,7 +202,7 @@ func main() {
 	// swapping in the Client portal invite's noreply@ ReplyTo -- the only
 	// kind that speaks Practice voice.
 	platformMailer := outbox.Mailer{
-		Sender: mailgunSender, Now: time.Now, AppBaseURL: appBaseURL,
+		Sender: mailgunSender, Now: now, AppBaseURL: appBaseURL,
 		From: notificationsFrom, ReplyTo: supportReplyTo,
 	}
 	practiceVoiceMailer := platformMailer
@@ -253,13 +258,13 @@ func main() {
 			// meaningful leading or trailing whitespace.
 			Token: strings.TrimSpace(os.Getenv("GITHUB_DISPATCH_TOKEN")),
 		},
-		Now: time.Now,
+		Now: now,
 	}
 	pageVerifier := sitebuild.Verifier{
 		// The same constant #442 hands Stripe, so the address probed is
 		// by construction the address Stripe was told about.
 		Prober: sitebuild.HTTPProber{Client: siteHTTP, BaseURL: website.SiteBaseURL},
-		Now:    time.Now,
+		Now:    now,
 	}
 
 	// Built before the nudge enqueuer, because the enqueuer is told where
@@ -311,11 +316,12 @@ func main() {
 		// Client has no Identity Platform account left to delete.
 		ClientErasureWorker: client.ErasureWorker{
 			Stripe: paymentsClient,
-			Now:    time.Now,
+			Now:    now,
 		},
 		PracticeDeletionWorker: practiceDeletionOutboxWorker,
 
 		ExpectedOrigins: resolveExpectedOrigins(),
+		Now:             now,
 	}
 
 	// ADR-0013: one shared queue nudging eleven of the thirteen outboxes

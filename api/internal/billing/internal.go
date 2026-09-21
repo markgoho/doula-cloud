@@ -4,9 +4,9 @@ import (
 	"database/sql"
 	"errors"
 	"net/http"
-	"time"
 
 	"doula-cloud/api/internal/apierr"
+	"doula-cloud/api/internal/clock"
 	"doula-cloud/api/internal/internalauth"
 	"doula-cloud/api/internal/staffauth"
 )
@@ -83,7 +83,7 @@ func RefundHandler(db *sql.DB, client StripeClient, auth *internalauth.Guard) ht
 			return
 		}
 
-		receipt, err := Refund(r.Context(), tx, client, req.PracticeID, requestKey, req.Quantity, time.Now())
+		receipt, err := Refund(r.Context(), tx, client, req.PracticeID, requestKey, req.Quantity, clock.Now(r.Context()))
 		if errors.Is(err, ErrNothingRefundable) || errors.Is(err, ErrRefundExceedsLot) {
 			apierr.WriteError(w, err.Error(), http.StatusConflict)
 			return
@@ -122,7 +122,7 @@ func DormantPracticesHandler(db *sql.DB, auth *internalauth.Guard) http.Handler 
 		}
 		defer func() { _ = tx.Rollback() }()
 
-		dormant, err := DormantPractices(r.Context(), tx, time.Now().AddDate(-DormancyNoticeYears, 0, 0))
+		dormant, err := DormantPractices(r.Context(), tx, clock.Now(r.Context()).AddDate(-DormancyNoticeYears, 0, 0))
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)

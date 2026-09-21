@@ -21,6 +21,7 @@ import (
 	"firebase.google.com/go/v4/auth"
 
 	"doula-cloud/api/internal/apierr"
+	"doula-cloud/api/internal/clock"
 )
 
 // SessionCookieName is the name of the session cookie Begin reads. It
@@ -208,7 +209,15 @@ func sessionCredential(w http.ResponseWriter, r *http.Request, tx *sql.Tx, db *s
 		return "", false, false
 	}
 
-	now := time.Now()
+	// #773's decision for this call site: session expiry is product
+	// behavior, not credential verification, so it reads clock.Now
+	// rather than a bare time.Now(). A session must actually age across
+	// a simulated jump for #762's harness to exercise renewal and
+	// expiry at all -- unlike idTokenCredential below, which verifies a
+	// Bearer token against Identity Platform's own real-time check and
+	// deliberately reads no clock this package injects (see
+	// FirebaseVerifier.VerifyIDToken's doc comment for that exemption).
+	now := clock.Now(r.Context())
 	uid, expiresAt, secondFactor, err := lookupSession(r.Context(), tx, cookie.Value, now)
 	if errors.Is(err, errNoSession) {
 		apierr.WriteError(w, MsgInvalidSession, http.StatusUnauthorized)
@@ -359,6 +368,17 @@ func NewFirebaseVerifier(ctx context.Context, projectID string) (*FirebaseVerifi
 
 // VerifyIDToken verifies idToken against Identity Platform and returns
 // the caller's uid.
+//
+// #773 exemption: this reads no injected Clock, on purpose. #762 found
+// that pointing a fake clock at token verification makes every sign-in
+// fail -- the Admin SDK checks a token's freshness against real wall
+// time inside itself, a check no value this codebase threads can reach,
+// so simulating time here would only make the check wrong rather than
+// simulated. sessionCredential (authn.go, above) is the call site that
+// *does* read clock.Now, for exactly the opposite reason: session
+// expiry is product behavior a simulation must age, while this is a
+// third party's freshness check on a credential this codebase does not
+// control the clock of.
 func (v *FirebaseVerifier) VerifyIDToken(ctx context.Context, idToken string) (*VerifiedToken, error) {
 	// coverage:ignore reason: requires a real Identity Platform token, not exercised by unit tests
 	token, err := v.client.VerifyIDToken(ctx, idToken)

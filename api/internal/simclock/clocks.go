@@ -406,7 +406,11 @@ func (r Runner) Advance(ctx context.Context, delta time.Duration) error {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		return err
 	}
-	if err := refuseExpired(clocks, time.Now()); err != nil {
+	// #773 exemption: DeletesAfter (see the Clock type's own doc comment
+	// above) is when Stripe really deletes the test clock, a real-time
+	// fact no offset row can move -- so the comparison below is
+	// deliberately against real time.Now(), never a simulated one.
+	if err := refuseExpired(clocks, time.Now()); err != nil { //nolint:forbidigo // #773: real-time fact, see comment above
 		return err
 	}
 
@@ -511,7 +515,10 @@ func (r Runner) waitForReady(ctx context.Context, clocks []heldClock) error {
 	if timeout <= 0 {
 		timeout = defaultPollTimeout
 	}
-	deadline := time.Now().Add(timeout)
+	// #773 exemption: this polls Stripe's own real-world API for a real-time
+	// advance to finish -- a wall-clock timeout on a network call, not
+	// product behavior a simulation run has any reason to move.
+	deadline := time.Now().Add(timeout) //nolint:forbidigo // #773: real-time poll deadline, see comment above
 
 	for _, c := range clocks {
 		for {
@@ -525,7 +532,7 @@ func (r Runner) waitForReady(ctx context.Context, clocks []heldClock) error {
 			if status != ClockAdvancing {
 				return fmt.Errorf("simclock: clock %s reported status %q", c.ID, status)
 			}
-			if time.Now().After(deadline) {
+			if time.Now().After(deadline) { //nolint:forbidigo // #773: real-time poll deadline, see waitForReady's comment above
 				return fmt.Errorf("simclock: clock %s still advancing after %s", c.ID, timeout)
 			}
 			select {

@@ -3,11 +3,12 @@ package tasknudge
 import (
 	"context"
 	"fmt"
-	"time"
 
 	cloudtasks "cloud.google.com/go/cloudtasks/apiv2"
 	"cloud.google.com/go/cloudtasks/apiv2/cloudtaskspb"
 	"google.golang.org/protobuf/types/known/timestamppb"
+
+	"doula-cloud/api/internal/clock"
 )
 
 // CallerAuth is how a nudge task identifies itself to the process-*
@@ -64,7 +65,7 @@ func NewCloudTasksEnqueuer(client *cloudtasks.Client, queue, targetBaseURL strin
 // de-duplication by name isn't wanted here, since a burst of writes to
 // the same outbox should nudge every time rather than collapse into a
 // single task.
-func (e *CloudTasksEnqueuer) task(outboxType OutboxType) (*cloudtaskspb.Task, error) {
+func (e *CloudTasksEnqueuer) task(ctx context.Context, outboxType OutboxType) (*cloudtaskspb.Task, error) {
 	path, ok := e.endpointPath[outboxType]
 	if !ok {
 		return nil, fmt.Errorf("tasknudge: unknown outbox type %q", outboxType)
@@ -94,14 +95,14 @@ func (e *CloudTasksEnqueuer) task(outboxType OutboxType) (*cloudtaskspb.Task, er
 	// unset when the delay is zero, which is what "as soon as you can"
 	// has always meant here.
 	if d := Delay(outboxType); d > 0 {
-		task.ScheduleTime = timestamppb.New(time.Now().Add(d))
+		task.ScheduleTime = timestamppb.New(clock.Now(ctx).Add(d))
 	}
 	return task, nil
 }
 
 // Enqueue creates the task built above on the shared queue.
 func (e *CloudTasksEnqueuer) Enqueue(ctx context.Context, outboxType OutboxType) error {
-	task, err := e.task(outboxType)
+	task, err := e.task(ctx, outboxType)
 	if err != nil {
 		return err
 	}

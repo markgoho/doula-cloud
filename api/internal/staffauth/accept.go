@@ -12,6 +12,7 @@ import (
 	"doula-cloud/api/internal/activity"
 	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/authn"
+	"doula-cloud/api/internal/clock"
 	"doula-cloud/api/internal/sessionmint"
 	"doula-cloud/api/internal/tasknudge"
 )
@@ -176,7 +177,7 @@ func acceptInvite(ctx context.Context, tx *sql.Tx, verified authn.VerifiedToken,
 		return AcceptInviteResponse{}, http.StatusForbidden, "this invitation was sent to a different email address", nil
 	}
 
-	if !inv.expiresAt.After(time.Now()) {
+	if !inv.expiresAt.After(clock.Now(ctx)) {
 		// Flip the column on the way past rather than waiting for a
 		// sweep: the person holding the link is the one who found out it
 		// is stale, and the Owner's Staff screen should say so too. The

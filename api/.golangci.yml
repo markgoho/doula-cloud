@@ -21,6 +21,7 @@ linters:
     - errname
     - errorlint
     - exhaustive
+    - forbidigo
     - godot
     - goconst
     - gocritic
@@ -42,6 +43,19 @@ linters:
     - wastedassign
     - whitespace
     - wrapcheck
+  settings:
+    # #773: the gate that keeps the bare-time.Now() count from silently
+    # climbing again -- every production call site reads through
+    # api/internal/clock's Now(ctx) or an injected clock.Clock instead.
+    # A handful of call sites read real wall time on purpose (a CLI
+    # startup wait, Stripe's own test-clock deletion deadline, a test
+    # helper package); each carries its own //nolint:forbidigo and an
+    # inline reason, the same shape the coverage gate's own exceptions
+    # take.
+    forbidigo:
+      forbid:
+        - pattern: '^time\.Now$'
+          msg: "read time through clock.Now(ctx) or an injected clock.Clock (api/internal/clock) instead of calling time.Now() directly -- see issue #773"
   exclusions:
     rules:
       # Deferred Close()/Rollback() on response bodies, rows, and
@@ -49,6 +63,11 @@ linters:
       - path: _test\.go
         linters:
           - errcheck
+      # Every _test.go file is free to call time.Now() directly -- #773's
+      # count, and this gate, are both about production Go only.
+      - path: _test\.go
+        linters:
+          - forbidigo
 
 # Report every finding, not the default first 50 per linter and first 3
 # of a kind (#1409). Moving to Go 1.27 turned on modernize analyzers with

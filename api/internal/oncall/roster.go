@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"doula-cloud/api/internal/apierr"
+	"doula-cloud/api/internal/clock"
 	"doula-cloud/api/internal/staffauth"
 )
 
@@ -150,7 +151,7 @@ func RosterHandler() http.Handler {
 // question the screen opens on -- and an absent to is the same day.
 func parseRange(w http.ResponseWriter, r *http.Request, zone *time.Location) (Window, bool) {
 	query := r.URL.Query()
-	rng := Window{Start: time.Now().In(zone).Format(dateLayout)}
+	rng := Window{Start: clock.Now(r.Context()).In(zone).Format(dateLayout)}
 	if raw := query.Get("from"); raw != "" {
 		if _, err := time.Parse(dateLayout, raw); err != nil {
 			apierr.WriteError(w, MsgInvalidFrom, http.StatusBadRequest)

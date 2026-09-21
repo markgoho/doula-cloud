@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"doula-cloud/api/internal/apierr"
+	"doula-cloud/api/internal/clock"
 	"doula-cloud/api/internal/staffauth"
 )
 
@@ -218,7 +219,7 @@ func whyNotOnCall(ctx context.Context, tx *sql.Tx, practiceID, engagementID stri
 	// answers; what matters is whether anybody holds one at all.
 	var grantedOn *string
 	if granted {
-		today := time.Now().Format(dateLayout)
+		today := clock.Now(ctx).Format(dateLayout)
 		grantedOn = &today
 	}
 	_, reason := DeriveWindow(WindowInput{Kind: kind, Status: status, FirstGrantedOn: grantedOn})

@@ -34,6 +34,7 @@ import (
 
 	"doula-cloud/api/internal/activity"
 	"doula-cloud/api/internal/apierr"
+	"doula-cloud/api/internal/clock"
 	"doula-cloud/api/internal/staffauth"
 )
 
@@ -245,7 +246,7 @@ func InitiateHandler() http.Handler {
 		}
 
 		staffID, _ := staffauth.StaffID(r.Context())
-		now := time.Now().UTC()
+		now := clock.Now(r.Context()).UTC()
 		finalizeAt := now.Add(RestoreWindow)
 		reminderAt := now.Add(ReminderLeadTime)
 

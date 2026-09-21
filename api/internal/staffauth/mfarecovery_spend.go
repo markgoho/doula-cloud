@@ -11,6 +11,7 @@ import (
 	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/authn"
 	"doula-cloud/api/internal/authtoken"
+	"doula-cloud/api/internal/clock"
 )
 
 // msgMFARecoveryInvalid is the one message #615's spend endpoint ever
@@ -96,7 +97,7 @@ func SpendMFARecoveryHandler(accounts authn.AccountManager, db *sql.DB) http.Han
 			return
 		}
 
-		staffID, identityUID, reason, actorStaffID, ok, err := spendAnyMFACode(r.Context(), tx, req.Code, time.Now())
+		staffID, identityUID, reason, actorStaffID, ok, err := spendAnyMFACode(r.Context(), tx, req.Code, clock.Now(r.Context()))
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)

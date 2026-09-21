@@ -14,6 +14,7 @@ import (
 	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/authn"
 	"doula-cloud/api/internal/clientkey"
+	"doula-cloud/api/internal/clock"
 	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/tasknudge"
 )
@@ -181,7 +182,7 @@ func EraseHandler(enq tasknudge.Enqueuer) http.Handler {
 		}
 
 		staffID, _ := staffauth.StaffID(r.Context())
-		out, err := Erase(r.Context(), tx, practiceID, clientID, activity.StaffActor(staffID), time.Now().UTC())
+		out, err := Erase(r.Context(), tx, practiceID, clientID, activity.StaffActor(staffID), clock.Now(r.Context()).UTC())
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)

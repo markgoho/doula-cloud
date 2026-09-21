@@ -11,6 +11,7 @@ import (
 	"doula-cloud/api/internal/activity"
 	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/authn"
+	"doula-cloud/api/internal/clock"
 )
 
 // DeletedStaffName is what a deleted login's staff.name becomes. The
@@ -172,7 +173,7 @@ func DeleteLoginHandler(accounts authn.AccountManager, db *sql.DB) http.Handler 
 			return
 		}
 
-		if err := redactStaffRow(r.Context(), tx, staffID, uid, time.Now().UTC()); err != nil {
+		if err := redactStaffRow(r.Context(), tx, staffID, uid, clock.Now(r.Context()).UTC()); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return

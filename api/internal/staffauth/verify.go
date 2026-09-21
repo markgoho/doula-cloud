@@ -5,12 +5,12 @@ import (
 	"errors"
 	"net/http"
 	"strings"
-	"time"
 
 	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/authmail"
 	"doula-cloud/api/internal/authn"
 	"doula-cloud/api/internal/authtoken"
+	"doula-cloud/api/internal/clock"
 )
 
 // RequestVerificationHandler lets a signed-in Staff member ask for a
@@ -60,7 +60,7 @@ func RequestVerificationHandler(db *sql.DB) http.Handler {
 			return
 		}
 
-		token, err := authtoken.Mint(r.Context(), tx, uid, authtoken.PurposeStaffEmailVerification, authmail.VerificationLinkLifetime, time.Now())
+		token, err := authtoken.Mint(r.Context(), tx, uid, authtoken.PurposeStaffEmailVerification, authmail.VerificationLinkLifetime, clock.Now(r.Context()))
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
@@ -121,7 +121,7 @@ func SpendVerificationHandler(accounts authn.AccountManager, db *sql.DB) http.Ha
 			}
 		}()
 
-		uid, err := authtoken.Spend(r.Context(), tx, req.Token, authtoken.PurposeStaffEmailVerification, time.Now())
+		uid, err := authtoken.Spend(r.Context(), tx, req.Token, authtoken.PurposeStaffEmailVerification, clock.Now(r.Context()))
 		if errors.Is(err, authtoken.ErrInvalid) {
 			apierr.WriteError(w, "this link is invalid or has expired -- ask for a new one", http.StatusBadRequest)
 			return

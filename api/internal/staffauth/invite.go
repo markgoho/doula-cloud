@@ -13,6 +13,7 @@ import (
 	"github.com/google/uuid"
 
 	"doula-cloud/api/internal/apierr"
+	"doula-cloud/api/internal/clock"
 	"doula-cloud/api/internal/staffinvite"
 	"doula-cloud/api/internal/tasknudge"
 )
@@ -199,7 +200,7 @@ func MintInvitation(ctx context.Context, tx *sql.Tx, practiceID, invitedBy, addr
 	}
 
 	token = uuid.NewString()
-	expiresAt = time.Now().Add(InvitationLifetime)
+	expiresAt = clock.Now(ctx).Add(InvitationLifetime)
 	if err := tx.QueryRowContext(ctx,
 		`INSERT INTO practice_invitations
 		     (practice_id, address, roles, employment_type, token_digest, invited_by, expires_at)

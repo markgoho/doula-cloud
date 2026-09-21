@@ -238,8 +238,11 @@ func openDB() (*sql.DB, error) {
 // waitForConnection is cmd/migrate's own helper, duplicated rather than
 // shared: cmd packages are deliberately not importable from one another,
 // and the eight lines aren't worth a new internal package.
+//
+// #773 exemption: cmd/simclock is a run-operator CLI, not a production
+// request path -- the same reasoning as cmd/migrate's own copy.
 func waitForConnection(ctx context.Context, db *sql.DB, timeout time.Duration) error {
-	deadline := time.Now().Add(timeout)
+	deadline := time.Now().Add(timeout) //nolint:forbidigo // #773: CLI startup wait, not a request path -- see doc comment above
 	var lastErr error
 	for {
 		lastErr = db.PingContext(ctx)
@@ -247,7 +250,7 @@ func waitForConnection(ctx context.Context, db *sql.DB, timeout time.Duration) e
 		if lastErr == nil {
 			return nil
 		}
-		if time.Now().After(deadline) {
+		if time.Now().After(deadline) { //nolint:forbidigo // #773: CLI startup wait, not a request path -- see doc comment above
 			return fmt.Errorf("simclock: db not reachable after %s: %w", timeout, lastErr)
 		}
 		time.Sleep(200 * time.Millisecond)
