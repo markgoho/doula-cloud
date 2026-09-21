@@ -29,7 +29,7 @@ type SpendMFARecoveryRequest struct {
 
 // SpendMFARecoveryHandler is #615's one unauthenticated endpoint for all
 // three recovery paths' actual spend: it clears the named identity's
-// TOTP enrolment and mints no session (#605's sequence -- Identity
+// TOTP enrollment and mints no session (#605's sequence -- Identity
 // Platform challenges for the second factor on every sign-in once one
 // exists, so a locked-out person cannot sign in first and spend a code
 // afterward). The code alone is the credential, the same way
@@ -107,7 +107,7 @@ func SpendMFARecoveryHandler(accounts authn.AccountManager, db *sql.DB) http.Han
 			return
 		}
 
-		if err := clearEnrolmentAndRecord(r.Context(), tx, accounts, staffID, identityUID, reason, actorStaffID, ""); err != nil {
+		if err := clearEnrollmentAndRecord(r.Context(), tx, accounts, staffID, identityUID, reason, actorStaffID, ""); err != nil {
 			// coverage:ignore reason: DB/Admin SDK failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return

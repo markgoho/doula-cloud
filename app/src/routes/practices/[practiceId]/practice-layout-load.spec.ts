@@ -63,7 +63,7 @@ describe('practices/[practiceId]/+layout.ts load', () => {
 	// `isMFARequired` reads a `.clone()` of the body, which the fake
 	// (api.spec.ts's own `isMFARequired` tests use the same real
 	// `Response`, for the same reason) does not implement.
-	it('redirects to MFA enrolment on a 403 carrying MFA_REQUIRED, carrying returnTo', async () => {
+	it('redirects to MFA enrollment on a 403 carrying MFA_REQUIRED, carrying returnTo', async () => {
 		const { load } = await import('./+layout.js');
 		vi.stubGlobal(
 			'fetch',

@@ -147,7 +147,7 @@ type Finish func(ctx context.Context, tx *sql.Tx) error
 // expects the Owner's still-injected cookie to keep working -- which a
 // blanket same-tier replace silently broke. adapter.ReplaceSameTier is
 // the caller-scoped opt-in that survives that lesson: true only for
-// mfaenroll, whose pre-enrolment cookie is, by that flow's own
+// mfaenroll, whose pre-enrollment cookie is, by that flow's own
 // construction (a step-up on an already-signed-in identity, or a
 // refusal-driven redirect that starts with none at all), always the
 // same identity re-authenticating, never someone else's.

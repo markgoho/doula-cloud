@@ -195,7 +195,7 @@ func Middleware(db *sql.DB) func(http.Handler) http.Handler {
 			// This is not an ended session (401 would send the browser to
 			// the login screen, per credentialed-fetch's own contract),
 			// so it is a distinct, machine-readable 403 the app branches
-			// on to route into enrolment instead.
+			// on to route into enrollment instead.
 			if !secondFactor && (reader.Has(roleOwner) || requireMFA) {
 				writeMFARequired(w)
 				return

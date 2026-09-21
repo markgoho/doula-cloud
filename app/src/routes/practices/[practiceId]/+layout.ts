@@ -50,8 +50,8 @@ const deleteSettingsPath = (practiceId: string) =>
  *
  * #606: a 403 carrying `{code: "MFA_REQUIRED"}` is a live session barred
  * from *this* Practice only, not a stale Membership -- it routes to
- * enrolment instead, the same as `apiFetchWithSession` does for every
- * other fetch, carrying `returnTo` so enrolment can send her back here.
+ * enrollment instead, the same as `apiFetchWithSession` does for every
+ * other fetch, carrying `returnTo` so enrollment can send her back here.
  * `apiFetch`, not `apiFetchWithSession`, does not run this check itself,
  * so this `load` runs it before the stale-Membership branch below can
  * misread an MFA refusal as one.

@@ -124,7 +124,7 @@ var mfaRecoveryRotateRules = []ratelimit.Rule{
 // Staff roster, Membership, Invitation, session-management and MFA
 // surface (behind Middleware via ir), and the routes that precede a
 // Practice session entirely -- sign-up, sign-in, invitation acceptance,
-// and the person-level facts (work state, email, MFA enrolment) that
+// and the person-level facts (work state, email, MFA enrollment) that
 // #437 and #613 keep off any one Membership (mounted directly on g,
 // since there is no session yet for Middleware to establish).
 func Mount(g *GatedRouter, ir WriteRouter, db *sql.DB, verifier authn.Verifier, accounts authn.AccountManager, enq tasknudge.Enqueuer, suppressed SuppressionChecker) {
@@ -289,11 +289,11 @@ func mountSessionRoutes(g *GatedRouter, db *sql.DB, verifier authn.Verifier, acc
 	// path by which she ever sees a saved code's plaintext (#615).
 	g.Write("POST /api/staff/mfa-recovery/saved-codes/rotate",
 		ratelimit.Wrap(db, "staff_mfa_recovery_rotate", mfaRecoveryRotateRules)(RotateSavedCodesHandler(db)))
-	// #606: enrolment is per person, not per Practice (the brief), so
+	// #606: enrollment is per person, not per Practice (the brief), so
 	// finishing one sits beside work-state and email above, not under a
 	// Practice. Rate limited with loginRules, not bootstrapRules: unlike
 	// signup or invite acceptance this can fire more than once per
-	// person (voluntary enrolment, a later re-enrolment after removing a
+	// person (voluntary enrollment, a later re-enrollment after removing a
 	// factor), the same "cached token reused, sign-in fires more than
 	// once" reasoning loginRules exists for.
 	g.Write("POST /api/staff/mfa",

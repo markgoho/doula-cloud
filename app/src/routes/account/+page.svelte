@@ -405,7 +405,7 @@
 			A link, not a button: this only ever navigates, the same reason
 			`DataTable`'s rowHref cells and the practice-picker links are
 			`Link` rather than `Button` + `goto`. `returnTo=/account` brings
-			her back here once enrolment finishes (docs/design's link-text
+			her back here once enrollment finishes (docs/design's link-text
 			rule is why the label matches /mfa/enroll's own title verbatim).
 		-->
 		<Link href={`${resolve('/(signed-out)/mfa/enroll')}?returnTo=${encodeURIComponent(resolve('/account'))}`} label="Set up two-factor authentication" />

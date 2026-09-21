@@ -52,9 +52,9 @@ type SessionResponse struct {
 	Memberships         []Membership `json:"memberships"`
 	// SecondFactor is this session's own second-factor fact (#606,
 	// authn.Begin), not a query of her current Identity Platform
-	// enrolment -- decision 3's session-carried claim, read straight
-	// through. It is what the account screen offers "Enrol" or "Remove"
-	// against: a person enrolled on another device still sees "Enrol"
+	// enrollment -- decision 3's session-carried claim, read straight
+	// through. It is what the account screen offers "Enroll" or "Remove"
+	// against: a person enrolled on another device still sees "Enroll"
 	// here until she signs in again on this one, at which point the
 	// TOTP challenge fires and the next session carries it.
 	SecondFactor bool `json:"secondFactor"`

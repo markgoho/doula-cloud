@@ -133,7 +133,7 @@ func TestSpendMFARecoveryHandler_MissingFields(t *testing.T) {
 }
 
 // TestSpendMFARecoveryHandler_IssuedCode covers #605's Owner-vouch path
-// end to end: the enrolment clears, no session is minted, every existing
+// end to end: the enrollment clears, no session is minted, every existing
 // session ends, and the audit row names the vouching Owner.
 func TestSpendMFARecoveryHandler_IssuedCode(t *testing.T) {
 	db := testdb.New(t)
@@ -160,7 +160,7 @@ func TestSpendMFARecoveryHandler_IssuedCode(t *testing.T) {
 		t.Fatalf("Set-Cookie = %q, want no session minted", resp.Header.Get("Set-Cookie"))
 	}
 	if accounts.HasSecondFactor(targetUID) {
-		t.Fatal("TOTP enrolment still present, want it cleared")
+		t.Fatal("TOTP enrollment still present, want it cleared")
 	}
 	if got := authntest.CountFor(t, db.App, targetUID); got != 0 {
 		t.Fatalf("session rows = %d, want 0", got)
@@ -178,7 +178,7 @@ func TestSpendMFARecoveryHandler_IssuedCode(t *testing.T) {
 }
 
 // TestSpendMFARecoveryHandler_ClearSecondFactorsFailureIs500 covers the
-// Admin SDK failure branch clearEnrolmentAndRecord's first call can take
+// Admin SDK failure branch clearEnrollmentAndRecord's first call can take
 // -- proving a spend that cannot actually clear the factor never reaches
 // 204, rather than silently succeeding.
 func TestSpendMFARecoveryHandler_ClearSecondFactorsFailureIs500(t *testing.T) {
@@ -229,7 +229,7 @@ func TestSpendMFARecoveryHandler_IssuedCodeIsSingleUse(t *testing.T) {
 }
 
 // TestSpendMFARecoveryHandler_SavedCode covers the sole-Owner self-service
-// path: the enrolment clears, the audit row names her as her own actor,
+// path: the enrollment clears, the audit row names her as her own actor,
 // and a replacement code keeps her live-code count unchanged.
 func TestSpendMFARecoveryHandler_SavedCode(t *testing.T) {
 	db := testdb.New(t)
@@ -250,7 +250,7 @@ func TestSpendMFARecoveryHandler_SavedCode(t *testing.T) {
 		t.Fatalf("status = %d, want 204", resp.StatusCode)
 	}
 	if accounts.HasSecondFactor(targetUID) {
-		t.Fatal("TOTP enrolment still present, want it cleared")
+		t.Fatal("TOTP enrollment still present, want it cleared")
 	}
 
 	var reason, actorStaffID string

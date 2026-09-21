@@ -27,6 +27,11 @@ import { describe, expect, it } from 'vitest';
  * #921 also widened the sweep from `app/src` alone to `api/`'s Go source,
  * since a spelling rule that only watched half the repo was gating nothing
  * for the other half.
+ * #1218 widened it again, to `app/e2e` -- the same argument a third time,
+ * since a Playwright spec's own prose and assertion messages are copy a
+ * person reads on failure, the same as anything in the first two trees.
+ * The family that found the gap (`enrol`/`enrolment`/`enrols`) is in RULES
+ * below.
  *
  * #1154 was a third wave -- "double-barrel\u{6C}ed" -- and the reason there was
  * a third is the shape of RULES rather than any word missing from it. RULES
@@ -136,7 +141,17 @@ const RULES: readonly Rule[] = [
 	{ british: 'prioriti\u{73}ing', american: 'prioritizing' },
 	// American English doubles the L here, the reverse of most of this
 	// list's -ed/-ing pairs: "fulfillment", not "fulfilment".
-	{ british: 'fulfi\u{6C}ment', american: 'fulfillment' }
+	{ british: 'fulfi\u{6C}ment', american: 'fulfillment' },
+	// #1218. Two of this family's three forms are safe substrings: the
+	// American spelling doubles the L, so "enro\u{6C}ment" is not a
+	// substring of "enrollment" and "enrols" is not a substring of
+	// "enrolls". The bare form has no safe rule -- "enrol" is a substring
+	// of "enroll", "enrolled", "enrolling" and "enrollment" themselves,
+	// the same collision "tyres" and "programme" have above, so it stays
+	// unruled and its occurrences were fixed by hand alongside the other
+	// two.
+	{ british: 'enro\u{6C}ment', american: 'enrollment' },
+	{ british: 'enro\u{6C}s', american: 'enrolls' }
 ];
 
 // One word of the `-alled`/`-elled`/`-alling`/`-elling` family, matched
@@ -326,9 +341,18 @@ const sourceFiles = globSync('src/**/*.{svelte,ts,js,css,svg,html,md}', { cwd: a
 // runs from repoRoot rather than appRoot.
 const apiFiles = globSync('api/**/*.go', { cwd: repoRoot });
 
+// #1218: app/e2e held its own drift -- "enrolment" in prose comments and
+// assertion messages -- invisible to both trees above, since specs live
+// outside app/src and Playwright config outside api/'s Go source. Every
+// file in the tree today is `.ts`; `.js` is included too so a future
+// helper written that way is not silently unswept the way this one was.
+// Paths come back prefixed "app/e2e/", the same shape apiFiles already
+// has, since the glob runs from repoRoot.
+const e2eFiles = globSync('app/e2e/**/*.{ts,js}', { cwd: repoRoot });
+
 // Read and scanned once, at module scope, so the cost of walking roughly
-// 640 files in app/src plus 650 in api/ is paid on import rather than
-// charged against one `it`'s 5-second `testTimeout`. Under a quiet
+// 640 files in app/src, 650 in api/, and 56 in app/e2e is paid on import
+// rather than charged against one `it`'s 5-second `testTimeout`. Under a quiet
 // machine that scan finishes in well under a second; under the full
 // suite's contention for disk and CPU it has been measured taking
 // 20-40x longer, which is what made the test below time out and pass on
@@ -339,10 +363,13 @@ const offenses = [
 	),
 	...apiFiles.flatMap((file) =>
 		findOffensesInLines(file, readFileSync(path.join(repoRoot, file), 'utf8'))
+	),
+	...e2eFiles.flatMap((file) =>
+		findOffensesInLines(file, readFileSync(path.join(repoRoot, file), 'utf8'))
 	)
 ];
 
-describe('app/src and api/ spell every word the American way', () => {
+describe('app/src, app/e2e and api/ spell every word the American way', () => {
 	it('reads the whole app source tree', () => {
 		// A glob that silently matched nothing would make the assertion
 		// below pass while checking no source at all.
@@ -351,6 +378,13 @@ describe('app/src and api/ spell every word the American way', () => {
 
 	it('reads the whole api Go source tree', () => {
 		expect(apiFiles.length).toBeGreaterThan(100);
+	});
+
+	it('reads the whole app/e2e tree', () => {
+		// Same proof as the two trees above: a glob that silently matched
+		// nothing would make the gate pass while checking no source at
+		// all (#1218).
+		expect(e2eFiles.length).toBeGreaterThan(10);
 	});
 
 	// The family rule is the one rule here that can be wrong in both

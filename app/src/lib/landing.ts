@@ -38,9 +38,9 @@ export interface SessionInfo {
 	// the design has, since nothing prompts a re-assertion (#415).
 	workStateReportedAt: string;
 	// Whether *this session* showed a second factor at sign-in (#606) --
-	// not a fresh read of her current Identity Platform enrolment. A
+	// not a fresh read of her current Identity Platform enrollment. A
 	// person enrolled on another device still sees this false here until
-	// she next signs in on this one; the account screen's Enrol/Remove
+	// she next signs in on this one; the account screen's Enroll/Remove
 	// branch reads it as-is, which is deliberate (staffauth.Middleware
 	// reads the same session-carried fact, never re-derived per request).
 	secondFactor: boolean;

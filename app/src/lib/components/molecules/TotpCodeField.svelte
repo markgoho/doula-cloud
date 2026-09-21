@@ -3,7 +3,7 @@
 	 * GOV.UK's "one time passcode" pattern (ADR-0021): a single numeric
 	 * text field, never split into six boxes. #606 reuses this markup at
 	 * two call sites that never render together -- confirming a freshly
-	 * scanned authenticator during enrolment, and the sign-in challenge on
+	 * scanned authenticator during enrollment, and the sign-in challenge on
 	 * the login screen -- so it is composed once here rather than typed
 	 * twice, the same reason WorkStateField wraps a field this app asks
 	 * for more than once.

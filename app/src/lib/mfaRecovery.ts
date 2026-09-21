@@ -96,7 +96,7 @@ export async function rotateSavedCodes(fetcher: Fetcher): Promise<string[]> {
 /**
  * Spends a recovery code -- an Owner-vouched one or a sole Owner's own
  * saved one, the endpoint works out which -- clearing the named account's
- * second-factor enrolment.
+ * second-factor enrollment.
  *
  * It mints no session, deliberately: Identity Platform challenges for a
  * second factor on every sign-in while one exists, so a locked-out person

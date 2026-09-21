@@ -166,7 +166,7 @@ func TestIssue_CrossPopulationConfirmedEvictsAndMints(t *testing.T) {
 }
 
 // TestIssue_ReplaceSameTierEndsThePriorSessionSilently is mfaenroll's own
-// shape: its adapter sets ReplaceSameTier, so its own pre-enrolment
+// shape: its adapter sets ReplaceSameTier, so its own pre-enrollment
 // session (same identity, same tier) is ended silently rather than left
 // to expire uncleaned.
 func TestIssue_ReplaceSameTierEndsThePriorSessionSilently(t *testing.T) {

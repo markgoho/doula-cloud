@@ -210,11 +210,11 @@ func QueueSessionEvicted(ctx context.Context, tx *sql.Tx, ev authn.Eviction) (qu
 	return true, nil
 }
 
-// QueueMFARecoveryCleared records that identityUID's TOTP enrolment was
+// QueueMFARecoveryCleared records that identityUID's TOTP enrollment was
 // just cleared by one of #615's three recovery paths -- a distinct
 // notice from QueueSessionRevoked's "sessions ended", queued alongside
 // it rather than instead of it, because the two facts (sessions ended,
-// enrolment cleared) are both individually notice-worthy per #615's AC.
+// enrollment cleared) are both individually notice-worthy per #615's AC.
 // Same one-pending-row race guard as QueueSessionRevoked.
 func QueueMFARecoveryCleared(ctx context.Context, tx *sql.Tx, identityUID string) error {
 	if _, err := tx.ExecContext(ctx,

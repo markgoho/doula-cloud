@@ -10,7 +10,7 @@ import (
 )
 
 // AuthEventReason mirrors staff_auth_event_reason (00062) -- which of
-// #615's three recovery paths caused an enrolment removal.
+// #615's three recovery paths caused an enrollment removal.
 type AuthEventReason string
 
 const (
@@ -32,8 +32,8 @@ const (
 	AuthEventRemoved AuthEventReason = "removed"
 )
 
-// clearEnrolmentAndRecord is where #615's three recovery paths converge:
-// clear the identity's TOTP enrolment via the Admin SDK, end every live
+// clearEnrollmentAndRecord is where #615's three recovery paths converge:
+// clear the identity's TOTP enrollment via the Admin SDK, end every live
 // session, queue both notices, and write the staff_auth_events row --
 // all inside tx, so a failure partway through rolls every DB-side part
 // back together. accounts.ClearSecondFactors is a real Admin SDK call
@@ -47,7 +47,7 @@ const (
 // staff_auth_events_actor_shape's CHECK constraint: owner_vouched and
 // self_service carry actorStaffID (self_service passes staffID for
 // both -- she is her own actor); support carries actorOperator.
-func clearEnrolmentAndRecord(ctx context.Context, tx *sql.Tx, accounts authn.AccountManager, staffID, identityUID string, reason AuthEventReason, actorStaffID, actorOperator string) error {
+func clearEnrollmentAndRecord(ctx context.Context, tx *sql.Tx, accounts authn.AccountManager, staffID, identityUID string, reason AuthEventReason, actorStaffID, actorOperator string) error {
 	if err := accounts.ClearSecondFactors(ctx, identityUID); err != nil {
 		return fmt.Errorf("staffauth: clear second factors: %w", err)
 	}

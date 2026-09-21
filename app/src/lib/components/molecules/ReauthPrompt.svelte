@@ -20,7 +20,7 @@
 	 * single-use and there is nothing left here to retry against.
 	 *
 	 * `/mfa/enroll` deliberately does not use this. It re-authenticates
-	 * too, but what it does next is open an *enrolment* session against a
+	 * too, but what it does next is open an *enrollment* session against a
 	 * factor that does not exist yet, so it never meets the TOTP challenge
 	 * this component's second step exists for.
 	 */

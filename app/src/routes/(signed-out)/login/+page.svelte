@@ -158,7 +158,7 @@
 				if (isMultiFactorAuthRequired(error_)) {
 					// Identity Platform accepted the password and is waiting on
 					// the second factor -- not a refusal, so nothing is shown as
-					// one. `resolver.hints[0].uid` is the enrolment's id: TOTP is
+					// one. `resolver.hints[0].uid` is the enrollment's id: TOTP is
 					// the only second factor this product ever offers, so there
 					// is exactly one hint and no picker to show.
 					mfaResolver = getMultiFactorResolver(getFirebaseAuth(), error_ as MultiFactorError);

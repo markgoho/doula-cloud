@@ -53,7 +53,7 @@ type AccountManager interface {
 	// ClearSecondFactors removes every MFA factor uid has enrolled --
 	// #615's mechanism note: MFASettings(MultiFactorSettings{}) is a
 	// whole-list replace, there is no per-factor delete, and a Staff
-	// member is never expected to hold more than the one TOTP enrolment
+	// member is never expected to hold more than the one TOTP enrollment
 	// this exists to clear. Every recovery path's spend calls this, never
 	// accounts.mfaEnrollment:withdraw, which #605 ruled out -- it demands
 	// the end user's own ID token and cannot be driven by this service
@@ -63,7 +63,7 @@ type AccountManager interface {
 	// enrolled MFA factor -- #606's switch confirmation, "how many Staff
 	// it will affect before she throws it". A session's second_factor
 	// column (see store.go) describes a past sign-in, not current
-	// enrolment, so this is the one place the count has to ask Identity
+	// enrollment, so this is the one place the count has to ask Identity
 	// Platform directly rather than read Postgres. Batched (100 uids per
 	// Admin SDK call, GetUsers' own limit) rather than one round trip per
 	// Staff member -- CLAUDE.md's performance expectation -- so a

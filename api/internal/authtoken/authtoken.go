@@ -35,7 +35,7 @@ const (
 	PurposeStaffPasswordReset Purpose = "staff_password_reset"
 	// PurposeStaffMFARecovery is the Owner-vouched issued recovery code
 	// (#615, #605 §4.2.1.3): spending it clears the named identity's TOTP
-	// enrolment and mints no session. 24-hour expiry, minted by MintCode
+	// enrollment and mints no session. 24-hour expiry, minted by MintCode
 	// rather than Mint -- a short decimal code read aloud over the phone,
 	// not a link.
 	PurposeStaffMFARecovery Purpose = "staff_mfa_recovery"

@@ -46,10 +46,10 @@ func postFinishEnrollmentWithSession(t *testing.T, srv *httptest.Server, session
 
 // TestFinishEnrollmentHandler_Success proves decision 4's happy path: a
 // token that shows a second factor mints a fresh session carrying it and
-// records the enrolment in staff_auth_events.
+// records the enrollment in staff_auth_events.
 func TestFinishEnrollmentHandler_Success(t *testing.T) {
 	db := testdb.New(t)
-	const identityUID = "staff-finishes-enrolment"
+	const identityUID = "staff-finishes-enrollment"
 	staffID := testdb.SeedStaff(t, db, identityUID)
 
 	srv := newFinishEnrollmentServer(t, db, authntest.Verifier{UID: identityUID, SecondFactor: true})
@@ -98,7 +98,7 @@ func TestFinishEnrollmentHandler_Success(t *testing.T) {
 // TestFinishEnrollmentHandler_TokenWithoutSecondFactorRejected is
 // decision 4's fallback trigger: a token that doesn't carry the claim
 // (enroll() didn't actually finish, or the token is stale) is rejected
-// rather than silently minting a session that lies about her enrolment.
+// rather than silently minting a session that lies about her enrollment.
 func TestFinishEnrollmentHandler_TokenWithoutSecondFactorRejected(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "staff-stale-token"
@@ -150,13 +150,13 @@ func TestFinishEnrollmentHandler_InvalidToken(t *testing.T) {
 
 // TestFinishEnrollmentHandler_EndsPriorSession proves the voluntary
 // account-settings entry point (the other of the AC's two required
-// paths, alongside a refusal-driven enrolment): a person already holding
-// a pre-enrolment session who enrols mid-session ends up with exactly
+// paths, alongside a refusal-driven enrollment): a person already holding
+// a pre-enrollment session who enrolls mid-session ends up with exactly
 // one session, not two, and it is the new one -- "replace, don't leave
 // in place".
 func TestFinishEnrollmentHandler_EndsPriorSession(t *testing.T) {
 	db := testdb.New(t)
-	const identityUID = "staff-enrols-mid-session"
+	const identityUID = "staff-enrolls-mid-session"
 	testdb.SeedStaff(t, db, identityUID)
 	priorSession := authntest.SeedSession(t, db.App, identityUID)
 
