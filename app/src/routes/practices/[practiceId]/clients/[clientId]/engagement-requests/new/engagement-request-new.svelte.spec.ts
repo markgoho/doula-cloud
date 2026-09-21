@@ -101,6 +101,26 @@ describe('the Engagement Request screen', () => {
 		await expect.element(testPage.getByText('2', { exact: true })).toBeVisible();
 	});
 
+	it('states a zero balance before any submit, never a negative Balance after', async () => {
+		await setup({ roles: ['owner'], balance: 0 });
+
+		await expect
+			.element(testPage.getByText("There are no credits left on this Practice's balance."))
+			.toBeVisible();
+		await expect.element(testPage.getByRole('link', { name: 'Buy credits' })).toBeVisible();
+		await expect.element(testPage.getByText('Credit cost')).not.toBeInTheDocument();
+		await expect.element(testPage.getByText('-1', { exact: true })).not.toBeInTheDocument();
+	});
+
+	it('saves what she typed while a zero balance is already on screen, before any submit', async () => {
+		await setup({ roles: ['owner'], balance: 0 });
+
+		await testPage.getByLabelText('Birth').click();
+		await testPage.getByLabelText('Due date').fill('2027-03-01');
+
+		await expect.poll(() => sessionStorage.getItem(draftKey)).toContain('2027-03-01');
+	});
+
 	it('shows an Admin the same "Start work with" phrasing', async () => {
 		await setup({ roles: ['admin'], balance: 5 });
 

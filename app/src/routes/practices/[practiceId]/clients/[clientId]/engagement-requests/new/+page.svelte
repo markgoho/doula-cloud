@@ -73,6 +73,18 @@
 	let hasNoCredits = $state(false);
 
 	const isApprover = $derived(isOwnerOrAdmin(session));
+	// The empty-balance path is offered before the attempt as well as
+	// after it (#1235): the balance is already loaded, so an approver on
+	// an empty Practice is told she has nothing to spend rather than
+	// reading "Balance after -1" or discovering it by pressing submit.
+	// `balance <= 0` reads as "nothing to spend" because this request
+	// always costs exactly one Credit (the hardcoded 'Credit cost: 1
+	// credit' below) -- the same fixed cost the approval screen's own
+	// `isBalanceEmpty` bakes into `balanceAfter < 0`. `isApprover &&` is
+	// belt-and-braces: `balance` is only ever set for an approver below,
+	// but the empty check should not depend on that living two functions
+	// away to stay true.
+	const isBalanceEmpty = $derived(isApprover && balance !== undefined && balance <= 0);
 	// ADR-0017's second-live-Engagement warning, read from the Client detail
 	// already loaded rather than a separate call -- "warns, never refuses"
 	// at request time so the requester can reconsider before submitting.
@@ -109,10 +121,13 @@
 		note: string;
 	}
 
-	// Saved only at the moment a 402 is discovered, and read back once on
-	// mount -- see the header comment. Wrapped in try/catch because
-	// sessionStorage can throw in a private window with site data blocked,
-	// and losing a draft is a far smaller failure than losing the screen.
+	// Saved at the moment an empty balance is discovered -- either the
+	// pre-submit $effect below, reading the balance already on screen, or
+	// the 402 branch, for the race where it was not yet empty at load --
+	// and read back once on mount, see the header comment. Wrapped in
+	// try/catch because sessionStorage can throw in a private window with
+	// site data blocked, and losing a draft is a far smaller failure than
+	// losing the screen.
 	function saveDraft() {
 		try {
 			sessionStorage.setItem(draftKey(), JSON.stringify({ kind, dueDate, note } satisfies Draft));
@@ -142,6 +157,15 @@
 			// Nothing left to clean up if storage was never reachable.
 		}
 	}
+
+	// Saved proactively whenever a zero balance is already on screen, not
+	// only after a 402 (#1235) -- so a reader who types before or after
+	// noticing the Buy Credits link doesn't lose it on that round trip.
+	// Reading kind/dueDate/note inside saveDraft() during this effect's own
+	// run is what makes it re-save on every keystroke while true.
+	$effect(() => {
+		if (isBalanceEmpty) saveDraft();
+	});
 
 	/*
 	 * The due date is asked for on both kinds and demanded only on birth
@@ -218,18 +242,16 @@
 			/>
 		{/if}
 
-		{#if isApprover && balance !== undefined}
+		{#if hasNoCredits || isBalanceEmpty}
+			<Notice variant="error" message="There are no credits left on this Practice's balance." />
+			<Link href={billingHref()} label="Buy credits" />
+		{:else if isApprover && balance !== undefined}
 			<DescriptionList
 				items={[
 					{ label: 'Credit cost', value: '1 credit' },
 					{ label: 'Balance after', value: String(balance - 1) }
 				]}
 			/>
-		{/if}
-
-		{#if hasNoCredits}
-			<Notice variant="error" message="There are no credits left on this Practice's balance." />
-			<Link href={billingHref()} label="Buy credits" />
 		{/if}
 	</stack-l>
 {/snippet}

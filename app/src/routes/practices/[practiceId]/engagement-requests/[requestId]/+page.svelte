@@ -79,6 +79,10 @@
 	// The empty-balance path is offered before the attempt as well as after
 	// it: the read already knows the balance, so an approver is told she
 	// must buy Credits rather than discovering it by pressing Approve.
+	// `balanceAfter` already has the one-Credit cost subtracted server-side
+	// (engagementrequest.DetailResponse), so "empty" is `< 0` here rather
+	// than the request form's own `balance <= 0` -- the same one-Credit
+	// assumption, read off a value that already has it applied.
 	const isBalanceEmpty = $derived(detail !== undefined && detail.balanceAfter < 0);
 
 	function clientName(record: ApprovalDetail['client']): string {
@@ -87,7 +91,7 @@
 	}
 
 	function facts(request: ApprovalDetail): { label: string; value: string }[] {
-		return [
+		const items = [
 			{
 				label: 'Client',
 				value: `${clientName(request.client)} -- ${request.client.isNewToPractice ? 'new to this practice' : 'already known here'}`
@@ -96,9 +100,17 @@
 			{ label: 'Kind of work', value: kindLabel(request.kind) },
 			{ label: 'Due date', value: request.dueDate ? formatCalendarDay(request.dueDate) : 'Not given' },
 			{ label: 'Note', value: request.note ?? 'None' },
-			{ label: 'Credit cost', value: `${request.creditCost} credit` },
-			{ label: 'Balance after', value: String(request.balanceAfter) }
+			{ label: 'Credit cost', value: `${request.creditCost} credit` }
 		];
+		// `balanceAfter` is honestly negative on an empty balance
+		// (engagementRequest.ts) so `isBalanceEmpty`'s own Notice can be
+		// driven off it -- but that makes it unfit to print here too. The
+		// line is omitted rather than floored (#1235): the Notice right
+		// beside it already says there is nothing to spend.
+		if (request.balanceAfter >= 0) {
+			items.push({ label: 'Balance after', value: String(request.balanceAfter) });
+		}
+		return items;
 	}
 
 	function engagementLabel(engagement: ApprovalDetail['engagements'][number]): string {
