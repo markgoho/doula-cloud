@@ -136,6 +136,27 @@ describe('unwrapProse', () => {
 		);
 	});
 
+	it('never joins a GitHub Alert marker into the line after it', () => {
+		// `> [!WARNING]` only renders as the colored callout when its marker
+		// sits alone on the blockquote's first line -- CommonMark itself sees
+		// no reason not to join it into the next line (lazy continuation, no
+		// blank line between them), which is exactly what broke this real
+		// file's warning box during #776's own migration.
+		const document_ =
+			'> [!WARNING]\n> **Superseded.** Do not build from this document.\n>\n> More detail continues\n> onto a second line.';
+		expect(unwrapProse(document_)).toBe(
+			'> [!WARNING]\n> **Superseded.** Do not build from this document.\n>\n> More detail continues onto a second line.'
+		);
+	});
+
+	it.each(['[!NOTE]', '[!TIP]', '[!IMPORTANT]', '[!CAUTION]'])(
+		'recognizes %s as an alert marker too',
+		(marker) => {
+			const document_ = `> ${marker}\n> Body text continues\n> onto a second line.`;
+			expect(unwrapProse(document_)).toBe(`> ${marker}\n> Body text continues onto a second line.`);
+		}
+	);
+
 	it('joins an unordered list item wrapped across two lines', () => {
 		const document_ =
 			'- **Goal**: carry one Client for a Practice she does not belong to, see the money on\n  that job, and see nothing else of the Practice';
@@ -245,13 +266,24 @@ const rootProseFiles = ['CONTEXT.md', 'README.md', 'CLAUDE.md'];
 
 const proseFiles = [...documentFiles, ...rootProseFiles].toSorted((a, b) => a.localeCompare(b));
 
+// Read and swept once, at module scope, rather than inside each `it.each`
+// case -- the same reason `spelling.usage.spec.ts` and `layout.usage.
+// spec.ts` do theirs (#1211, docs/testing.md's "whole-tree scan" note): a
+// per-file read charged against each generated test's own 5s
+// `testTimeout` is fine quiet, but a scan repeated this many times is the
+// shape that timed out under the full suite's contention for disk and CPU
+// and then passed again on a bare rerun of the same commit.
+const sweep = proseFiles.map((file) => ({
+	file,
+	content: readFileSync(path.join(repoRoot, file), 'utf8')
+}));
+
 describe('every in-scope doc carries no hard-wrapped prose', () => {
 	it('finds the docs tree at all, so an empty sweep cannot pass silently', () => {
 		expect(documentFiles.length).toBeGreaterThan(100);
 	});
 
-	it.each(proseFiles)('%s has nothing unwrapProse would change', (file) => {
-		const content = readFileSync(path.join(repoRoot, file), 'utf8');
+	it.each(sweep)('$file has nothing unwrapProse would change', ({ file, content }) => {
 		expect(
 			unwrapProse(content),
 			`${file} has a hard-wrapped paragraph, list item or blockquote -- run unwrapProse over it (see #776) and commit the result`

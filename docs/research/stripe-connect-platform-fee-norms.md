@@ -1,6 +1,7 @@
 # Stripe Connect platform application fee — market norms
 
-> [!WARNING] **Superseded. Do not build from this document.**
+> [!WARNING]
+> **Superseded. Do not build from this document.**
 >
 > This research assumed a Stripe Connect **Express** account with the platform taking an `application_fee_amount`. Neither survived. [ADR-0007](../adr/0007-connect-account-state-is-two-capabilities-and-a-requirements-list.md) settled the integration on **Accounts v2** with the `merchant` configuration, and [#383](https://github.com/markgoho/doula-cloud/issues/383) established from the code and a live Sandbox walk that the integration uses **direct charges** with **no application fee anywhere** — the Practice is merchant of record, Stripe's fee is charged to the Practice, and no money ever reaches a platform balance.
 >

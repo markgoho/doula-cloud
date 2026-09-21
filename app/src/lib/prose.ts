@@ -27,6 +27,18 @@
  * migration that unwrapped the existing tree needed to call it from a
  * plain script, outside the Vitest runner that importing a `*.spec.ts`
  * file would have pulled in.
+ *
+ * One construct is GitHub's, not CommonMark's: a GitHub Alert
+ * (`> [!WARNING]`, `> [!NOTE]`, ...) only renders as the colored callout
+ * if its `[!TYPE]` marker sits alone on the blockquote's first line.
+ * CommonMark itself sees no reason not to join that line into the
+ * sentence after it -- they're lazy continuation of one paragraph, no
+ * blank line between them -- and joining them is exactly what silently
+ * broke `docs/research/stripe-connect-platform-fee-norms.md`'s warning
+ * box during #776's own migration (caught by code review, not by the
+ * rendered-HTML diff, since the `marked` renderer used for that diff
+ * doesn't implement GitHub's Alert extension either). `ALERT_MARKER_RE`
+ * is handled the same way a heading is: always its own line.
  */
 
 const FENCE_RE = /^ {0,3}(`{3,}|~{3,})/;
@@ -34,6 +46,7 @@ const FENCE_CLOSE_RE = /^ {0,3}(`{3,}|~{3,})\s*$/;
 const HEADING_RE = /^ {0,3}#{1,6}(?:\s|$)/;
 const THEMATIC_BREAK_RE = /^ {0,3}(?:-\s*){3,}$|^ {0,3}(?:\*\s*){3,}$|^ {0,3}(?:_\s*){3,}$/;
 const LINK_REF_DEF_RE = /^\[[^\]]+\]:\s*\S/;
+const ALERT_MARKER_RE = /^\[!(?:NOTE|TIP|IMPORTANT|WARNING|CAUTION)\]\s*$/i;
 const BLOCKQUOTE_RE = /^ {0,3}>( ?)(.*)$/;
 const LIST_ITEM_RE = /^(\s*)([-*+]|\d{1,9}[.)])(\s+)(.*)$/;
 const TABLE_DELIMITER_RE = /^\|?\s*:?-+:?\s*(?:\|\s*:?-+:?\s*)*\|?$/;
@@ -144,6 +157,7 @@ function isOtherBlockStart(lines: readonly string[], index: number): boolean {
 		HEADING_RE.test(line) ||
 		THEMATIC_BREAK_RE.test(line) ||
 		LINK_REF_DEF_RE.test(line) ||
+		ALERT_MARKER_RE.test(line) ||
 		BLOCKQUOTE_RE.test(line) ||
 		LIST_ITEM_RE.test(line) ||
 		isTableStart(lines, index)
@@ -211,7 +225,12 @@ function unwrapLines(lines: readonly string[]): string[] {
 			continue;
 		}
 
-		if (HEADING_RE.test(line) || THEMATIC_BREAK_RE.test(line) || LINK_REF_DEF_RE.test(line)) {
+		if (
+			HEADING_RE.test(line) ||
+			THEMATIC_BREAK_RE.test(line) ||
+			LINK_REF_DEF_RE.test(line) ||
+			ALERT_MARKER_RE.test(line)
+		) {
 			out.push(line);
 			index++;
 			continue;
