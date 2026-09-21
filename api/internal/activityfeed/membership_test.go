@@ -37,7 +37,7 @@ func TestPracticeHandler_SurfacesEveryMembershipEvent(t *testing.T) {
 	const identityUID = "owner-feed-membership"
 	practiceID := testdb.SeedPractice(t, db, "Feed Membership Practice")
 	ownerID := testdb.SeedNamedStaffAtPractice(t, db, practiceID, identityUID, "Priya Raman", []string{ownerRole}, employeeType)
-	subjectID := testdb.SeedNamedStaffAtPractice(t, db, practiceID, "doula-feed-membership", "Renata Alvarez", []string{doulaRole}, employeeType)
+	subjectID := testdb.SeedNamedStaffAtPractice(t, db, practiceID, "doula-feed-membership", renataAlvarez, []string{doulaRole}, employeeType)
 
 	for _, action := range membershipActions() {
 		testdb.SeedActivity(t, db, practiceID, activity.SubjectMembership, subjectID, action, activity.StaffActor(ownerID))
@@ -70,8 +70,8 @@ func TestPracticeHandler_SurfacesEveryMembershipEvent(t *testing.T) {
 		}
 		// #1148's AC2: the person it happened to, not only the person
 		// who did it -- a reader can tell one roster change from another.
-		if entry.SubjectName != "Renata Alvarez" {
-			t.Errorf("%q SubjectName = %q, want %q", action, entry.SubjectName, "Renata Alvarez")
+		if entry.SubjectName != renataAlvarez {
+			t.Errorf("%q SubjectName = %q, want %q", action, entry.SubjectName, renataAlvarez)
 		}
 		if entry.ActorName != "Priya Raman" {
 			t.Errorf("%q ActorName = %q, want %q", action, entry.ActorName, "Priya Raman")
@@ -79,28 +79,72 @@ func TestPracticeHandler_SurfacesEveryMembershipEvent(t *testing.T) {
 	}
 }
 
-// TestPracticeHandler_NamesADepartedMembershipSubject is the one case
-// #1148's AC2 degrades in, recorded rather than left to be discovered: a
-// 'removed' event's subject is by construction someone whose
+// TestPracticeHandler_NamesADepartedMembershipSubject is #1256's own AC:
+// a 'removed' event's subject is by construction someone whose
 // practice_memberships row is gone, and staff_practice_visibility (00002)
-// reaches a staff row only through a live one. The feed says plainly that
-// the person is gone -- activity.DepartedStaffName, the same word #887
-// settled on for an absent actor -- rather than printing a bare uuid or
-// an empty cell.
+// reaches a staff row only through a live one. 00116's
+// staff_visible_to_own_practice_membership_history policy is the second
+// door -- a plain departure (Membership removed, login intact) still
+// resolves to her real name, because the activity table itself proves
+// she was once a subject of a Membership event at this Practice, and her
+// staff row is not redacted. A staff row that IS redacted (ADR-0033) is
+// TestPracticeHandler_RedactedDepartedSubjectReadsAsAFormerColleague's
+// case, not this one -- this test would have passed before 00116 too,
+// which is why that second test exists.
 func TestPracticeHandler_NamesADepartedMembershipSubject(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "owner-feed-departed-subject"
 	practiceID := testdb.SeedPractice(t, db, "Feed Departed Subject Practice")
 	testdb.SeedStaffAtPractice(t, db, practiceID, identityUID, []string{ownerRole}, employeeType)
-	departedID := testdb.SeedNamedStaffAtPractice(t, db, practiceID, "doula-feed-departed", "Renata Alvarez", []string{doulaRole}, employeeType)
+	departedID := testdb.SeedNamedStaffAtPractice(t, db, practiceID, "doula-feed-departed", renataAlvarez, []string{doulaRole}, employeeType)
 
 	// The actor is the departed person herself, which is the shape
 	// logindeletion's endEveryMembership writes: somebody deleting her own
 	// login ends every Membership she holds, so both halves of the
-	// sentence -- who it happened to, and who did it -- resolve to a staff
-	// row no reader can reach.
+	// sentence -- who it happened to, and who did it -- name the same
+	// departed person.
 	testdb.SeedActivity(t, db, practiceID, activity.SubjectMembership, departedID, string(activity.ActionMembershipRemoved), activity.StaffActor(departedID))
 	testdb.RemoveMembership(t, db, departedID)
+
+	srv, session := newServer(t, db, identityUID)
+	defer srv.Close()
+
+	resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/activity")
+	defer resp.Body.Close()
+	var got activityfeed.ListResponse
+	if err := json.NewDecoder(resp.Body).Decode(&got); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if len(got.Items) != 1 {
+		t.Fatalf("Items = %+v, want 1", got.Items)
+	}
+	if got.Items[0].SubjectName != renataAlvarez {
+		t.Errorf("SubjectName = %q, want %q", got.Items[0].SubjectName, renataAlvarez)
+	}
+	// Both halves, not only the subject: the reader who removed her is
+	// also the person who just left, and both columns now name her.
+	if got.Items[0].ActorName != renataAlvarez {
+		t.Errorf("ActorName = %q, want %q", got.Items[0].ActorName, renataAlvarez)
+	}
+}
+
+// TestPracticeHandler_RedactedDepartedSubjectReadsAsAFormerColleague is
+// #1256's AC4: 00116's policy excludes a redacted staff row
+// (staff.deleted_at IS NOT NULL, ADR-0033) on purpose, so a Doula who
+// deleted her own login still reads as activity.DepartedStaffName rather
+// than handing the feed the "Deleted Staff Member" sentinel
+// redactStaffRow writes -- an internal string that was never meant to
+// reach a reader.
+func TestPracticeHandler_RedactedDepartedSubjectReadsAsAFormerColleague(t *testing.T) {
+	db := testdb.New(t)
+	const identityUID = "owner-feed-redacted-subject"
+	practiceID := testdb.SeedPractice(t, db, "Feed Redacted Subject Practice")
+	testdb.SeedStaffAtPractice(t, db, practiceID, identityUID, []string{ownerRole}, employeeType)
+	departedID := testdb.SeedNamedStaffAtPractice(t, db, practiceID, "doula-feed-redacted", renataAlvarez, []string{doulaRole}, employeeType)
+
+	testdb.SeedActivity(t, db, practiceID, activity.SubjectMembership, departedID, string(activity.ActionMembershipRemoved), activity.StaffActor(departedID))
+	testdb.RemoveMembership(t, db, departedID)
+	testdb.RedactDeletedLogin(t, db, departedID)
 
 	srv, session := newServer(t, db, identityUID)
 	defer srv.Close()
@@ -117,8 +161,6 @@ func TestPracticeHandler_NamesADepartedMembershipSubject(t *testing.T) {
 	if got.Items[0].SubjectName != activity.DepartedStaffName {
 		t.Errorf("SubjectName = %q, want %q", got.Items[0].SubjectName, activity.DepartedStaffName)
 	}
-	// Both halves, not only the subject: a blank Who column is a worse
-	// answer than a plain one, and this row is the case that produces it.
 	if got.Items[0].ActorName != activity.DepartedStaffName {
 		t.Errorf("ActorName = %q, want %q", got.Items[0].ActorName, activity.DepartedStaffName)
 	}

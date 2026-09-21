@@ -2,6 +2,7 @@ package activityfeed
 
 import (
 	"os"
+	"strings"
 	"testing"
 
 	"doula-cloud/api/internal/testdb"
@@ -82,6 +83,7 @@ func TestPracticeQueryPlanAtScale(t *testing.T) {
 		t.Fatalf("explain: %v", err)
 	}
 	defer func() { _ = rows.Close() }()
+	var plan []string
 	t.Logf("EXPLAIN (ANALYZE, BUFFERS) for practice-wide feed query at %d rows:", rowCount)
 	for rows.Next() {
 		var line string
@@ -89,8 +91,100 @@ func TestPracticeQueryPlanAtScale(t *testing.T) {
 			t.Fatalf("scan explain line: %v", err)
 		}
 		t.Log(line)
+		plan = append(plan, line)
 	}
 	if err := rows.Err(); err != nil {
 		t.Fatalf("iterate explain lines: %v", err)
 	}
+
+	assertNoJIT(t, plan)
+}
+
+// assertNoJIT fails the test if plan carries a JIT section -- the one
+// number 00111's own history (00111_staff_name_survives_a_departure.sql)
+// says actually matters: a wall-clock number moves with the machine, a
+// JIT section means the plan crossed jit_above_cost and a policy on
+// staff just repeated 00105's own failure.
+func assertNoJIT(t *testing.T, plan []string) {
+	t.Helper()
+	for _, line := range plan {
+		if strings.Contains(line, "JIT:") {
+			t.Fatalf("query JITs at this scale -- exactly the failure mode 00111 measured for a plain EXISTS policy: %s", line)
+		}
+	}
+}
+
+// TestPracticeQueryPlanWithDepartedMembershipSubjects is #1256's AC3:
+// 00116 added a fourth policy on staff, so its plan cost is measured the
+// way 00111 measured its own -- plan shape, and whether the query JITs.
+//
+// TestPracticeQueryPlanAtScale's own caveat says why this needs a
+// separate fixture: its 5,000 rows are all subject_kind = 'engagement'
+// with one live actor, so the subj join -- and 00116's own policy -- are
+// never driven at all. This fixture seeds departed Membership subjects
+// instead, so both the join and the policy actually run the way a real
+// Practice's roster history would drive them.
+//
+// Run it deliberately, the same way:
+//
+//	RUN_PERF_TEST=1 go test ./internal/activityfeed/... -run TestPracticeQueryPlanWithDepartedMembershipSubjects -v
+func TestPracticeQueryPlanWithDepartedMembershipSubjects(t *testing.T) {
+	if os.Getenv("RUN_PERF_TEST") == "" {
+		t.Skip("set RUN_PERF_TEST=1 to run (seeds thousands of rows)")
+	}
+
+	db := testdb.New(t)
+	practiceID := testdb.SeedPractice(t, db, "Perf Departed Practice")
+	ownerID := testdb.SeedStaffAtPractice(t, db, practiceID, "perf-departed-owner", []string{"owner"}, "employee")
+
+	// 5,000 departed Doulas: each held a Membership, each was removed by
+	// the Owner, and each 'removed' row is what this migration's policy
+	// has to admit a name for -- the worst case for the policy's own
+	// added cost, not the best one.
+	const rowCount = 5000
+	if _, err := db.Admin.ExecContext(t.Context(),
+		`WITH departed AS (
+		     INSERT INTO staff (identity_uid, name, email, work_state)
+		     SELECT 'perf-departed-' || n, 'Perf Doula ' || n, 'perf-departed-' || n || '@example.com', 'NY'
+		     FROM generate_series(1, $2) AS n
+		     RETURNING id
+		 )
+		 INSERT INTO activity (practice_id, subject_kind, subject_id, action, diff, actor_kind, actor_staff_id, created_at)
+		 SELECT $1, 'membership', id, 'removed', '{}'::jsonb, 'staff', $3,
+		        now() - (row_number() OVER () || ' minutes')::interval
+		 FROM departed`,
+		practiceID, rowCount, ownerID,
+	); err != nil {
+		t.Fatalf("seed departed membership rows: %v", err)
+	}
+
+	tx, err := db.App.BeginTx(t.Context(), nil)
+	if err != nil {
+		t.Fatalf("begin tx: %v", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	if _, err := tx.ExecContext(t.Context(), `SELECT set_config('app.current_practice_id', $1, true)`, practiceID); err != nil {
+		t.Fatalf("set practice id: %v", err)
+	}
+
+	rows, err := tx.QueryContext(t.Context(), "EXPLAIN (ANALYZE, BUFFERS) "+listPracticeActivityQuery, practiceID)
+	if err != nil {
+		t.Fatalf("explain: %v", err)
+	}
+	defer func() { _ = rows.Close() }()
+	var plan []string
+	t.Logf("EXPLAIN (ANALYZE, BUFFERS) for practice-wide feed query at %d departed Membership subjects:", rowCount)
+	for rows.Next() {
+		var line string
+		if err := rows.Scan(&line); err != nil {
+			t.Fatalf("scan explain line: %v", err)
+		}
+		t.Log(line)
+		plan = append(plan, line)
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatalf("iterate explain lines: %v", err)
+	}
+
+	assertNoJIT(t, plan)
 }

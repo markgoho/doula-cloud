@@ -165,7 +165,12 @@ const personSubjectKind = activity.SubjectMembership
 // It is a join and not a read of a.diff on purpose: the shared reader
 // carries no diff (#1150 is the ticket for that), and a name copied into
 // a diff at write time would be a second place a Practice's roster
-// spells a person, free to drift from the staff row.
+// spells a person, free to drift from the staff row -- and, #1256 found,
+// unable to honor ADR-0033's redaction, since activity is INSERT-only
+// and a diff-carried name would survive a later login deletion forever.
+// 00116's RLS policy on staff reads the row's current state instead, so
+// a redaction this join's own subject already sits behind takes effect
+// the moment it is written, with nothing here to update.
 //
 // %[2]s is personSubjectKind, interpolated for the same reason
 // %[1]d is: a package-internal constant, never request input, and naming
@@ -315,19 +320,31 @@ func queryBatch(ctx context.Context, tx *sql.Tx, practiceID string, after *pagec
 // name would only print the Practice's own name on every row of its own
 // feed -- decided empty, deliberately, not merely left off.
 //
-// Where this degrades, said plainly rather than left to be discovered:
-// staff_practice_visibility (00002) reaches a staff row only through a
-// live practice_memberships row, so once a person leaves, EVERY row about
-// her loses its name at once -- the 'removed' event itself, whose subject
-// is by construction somebody whose Membership has just gone, and equally
-// the 'joined' and 'roles_changed' rows still sitting further down the
-// same feed from when she was here. The feed says
-// activity.DepartedStaffName -- the same word #887
-// settled on for an actor who has left, so a Practice never meets two
-// different words for the same absence. Recovering the name would mean
-// either a fourth policy on staff, which #1077 measured the cost of, or
-// copying the name into the event's diff at write time; neither is this
-// ticket's to spend.
+// #1256 closed the gap this comment used to describe: staff_practice_
+// visibility (00002) reaches a staff row only through a live
+// practice_memberships row, so a departed person's row was unreachable
+// here -- the 'removed' event itself, whose subject is by construction
+// somebody whose Membership has just gone, and equally the 'joined' and
+// 'roles_changed' rows still sitting further down the same feed from
+// when she was here. 00116's staff_visible_to_own_practice_membership_
+// history policy is the second door: SECURITY DEFINER-shaped like 00111,
+// so the planner cannot inline it into this query's plan, it admits a
+// staff row this session's Practice has ever recorded a Membership
+// event about, whether or not her own membership is still live. subj.name
+// (the query's own LEFT JOIN, unchanged by this function) is populated
+// whenever either policy admits the row, so subjectName.Valid alone still
+// decides real name vs. activity.DepartedStaffName -- this function did
+// not need to change shape, only what the column beneath it can see.
+//
+// activity.DepartedStaffName still covers the one case 00116 leaves
+// alone on purpose: a staff row ADR-0033 has redacted. That route was
+// chosen over writing the name into the event's diff at write time
+// specifically because the diff route cannot honor ADR-0033 -- activity
+// is INSERT-only (ADR-0022), so a name baked into a diff would outlive a
+// later login deletion and hand back her real name forever, which is
+// exactly what ADR-0033's redaction promises stops happening. 00116's own
+// doc comment carries the full reasoning and the cost measurement #1077
+// asked any fourth staff policy to repeat.
 func resolveSubjectName(subjectKind string, subjectName sql.NullString) string {
 	if subjectKind != personSubjectKind {
 		return ""
