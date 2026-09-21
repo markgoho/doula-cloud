@@ -34,6 +34,8 @@ already fences Practice from Practice on both tiers, proved by a dedicated
 cross-cutting test (`api/internal/rlsguardrail`). Everything below is **inside**
 one Practice.
 
+> **This is the rule as it stood when this ADR was accepted, not the rule today.** For the live table, read [ADR-0008](0008-employment-type-gates-the-practice-attachment-gates-the-engagement.md)'s five-column version. One row below now disagrees with it — **Contract — money, and Invoice history** — and the disagreement is explained in ADR-0008, not re-argued here: the employed-Doula cell moved from ✗ to ✓ ([#282](https://github.com/markgoho/doula-cloud/issues/282)), and the contractor cell narrowed from "✓ on her Engagements" to her own agreed fee only, never the Practice's price ([#230](https://github.com/markgoho/doula-cloud/issues/230)). Every other row below still agrees with ADR-0008's table.
+
 | | Owner | Admin | Doula (employee) | Doula (contractor) |
 | --- | --- | --- | --- | --- |
 | Engagements, Visits, Messages | all | all | all at the Practice | only those she is attached to |
