@@ -21,6 +21,25 @@ type Finding struct {
 	Remedy string
 }
 
+// Class names, exactly as RowDependent reports them on a Finding. Named
+// once here so a safety note check, a grandfathered entry and a test
+// state a class as an identifier the compiler checks, rather than
+// retyping the string and risking a silent mismatch.
+const (
+	classAddColumnNotNullWithoutDefault       = "ADD COLUMN ... NOT NULL without DEFAULT"
+	classAddColumnDefaultWithInlineConstraint = "ADD COLUMN ... DEFAULT with an inline constraint"
+	classAlterColumnSetNotNull                = "ALTER COLUMN ... SET NOT NULL"
+	classAlterColumnType                      = "ALTER COLUMN ... TYPE"
+	classAddConstraintUnique                  = "ADD CONSTRAINT ... UNIQUE / PRIMARY KEY / EXCLUDE"
+	classAddConstraintCheck                   = "ADD CONSTRAINT ... CHECK"
+	classAddConstraintForeignKey              = "ADD CONSTRAINT ... FOREIGN KEY"
+	classValidateConstraint                   = "VALIDATE CONSTRAINT"
+	classCreateUniqueIndex                    = "CREATE UNIQUE INDEX"
+	classAddColumnGeneratedAlwaysAs           = "ADD COLUMN ... GENERATED ALWAYS AS"
+	classDML                                  = "DML (UPDATE / DELETE / INSERT)"
+	classDoBlock                              = "DO block"
+)
+
 // rowClass is one member of the family. pattern is matched against a
 // single comment-stripped, whitespace-collapsed, upper-cased statement.
 // safe, when set, exempts a statement that also matches it -- the form
@@ -41,7 +60,7 @@ type rowClass struct {
 // DO block, which a PR's empty database runs over nothing at all.
 var rowClasses = []rowClass{
 	{
-		name:    "ADD COLUMN ... NOT NULL without DEFAULT",
+		name:    classAddColumnNotNullWithoutDefault,
 		pattern: regexp.MustCompile(`\bADD COLUMN\b.*\bNOT NULL\b`),
 		safe:    regexp.MustCompile(`\bDEFAULT\b`),
 		failure: `column "..." of relation "..." contains null values (23502) -- every existing row gets NULL`,
@@ -49,7 +68,7 @@ var rowClasses = []rowClass{
 			"    ALTER TABLE <table> ALTER COLUMN <col> DROP DEFAULT;",
 	},
 	{
-		name: "ADD COLUMN ... DEFAULT with an inline constraint",
+		name: classAddColumnDefaultWithInlineConstraint,
 		// A DEFAULT fills the new column in every existing row, so a
 		// constraint written on the column itself is checked against
 		// those filled-in values -- the one case where DEFAULT, which
@@ -63,7 +82,7 @@ var rowClasses = []rowClass{
 			"    constraint in a later statement whose own safety you can state.",
 	},
 	{
-		name:    "ALTER COLUMN ... SET NOT NULL",
+		name:    classAlterColumnSetNotNull,
 		pattern: regexp.MustCompile(`\bALTER COLUMN\b.*\bSET NOT NULL\b`),
 		failure: `column "..." of relation "..." contains null values (23502) -- one existing NULL refuses it`,
 		remedy: "Backfill in the same migration and say in a safety note why the backfill\n" +
@@ -72,21 +91,21 @@ var rowClasses = []rowClass{
 			"    ALTER TABLE <table> ALTER COLUMN <col> SET NOT NULL;",
 	},
 	{
-		name:    "ALTER COLUMN ... TYPE",
+		name:    classAlterColumnType,
 		pattern: regexp.MustCompile(`\bALTER COLUMN\b.*\b(SET DATA )?TYPE\b`),
 		failure: "the cast runs over every existing row and fails on the first value it cannot convert",
 		remedy: "Add a USING clause that converts every value the column can already hold,\n" +
 			"    and record in a safety note which values those are.",
 	},
 	{
-		name:    "ADD CONSTRAINT ... UNIQUE / PRIMARY KEY / EXCLUDE",
+		name:    classAddConstraintUnique,
 		pattern: regexp.MustCompile(`\bADD (CONSTRAINT \S+ )?(UNIQUE|PRIMARY KEY|EXCLUDE)\b`),
 		failure: `could not create unique index "..." -- Key (...) is duplicated (23505)`,
 		remedy: "Prove in a safety note that no duplicate can already exist, or delete the\n" +
 			"    duplicates first -- and check the delete is itself safe (see the DML class).",
 	},
 	{
-		name:    "ADD CONSTRAINT ... CHECK",
+		name:    classAddConstraintCheck,
 		pattern: regexp.MustCompile(`\bADD (CONSTRAINT \S+ )?CHECK\b`),
 		safe:    regexp.MustCompile(`\bNOT VALID\b`),
 		failure: `check constraint "..." of relation "..." is violated by some row (23514)`,
@@ -94,33 +113,33 @@ var rowClasses = []rowClass{
 			"    that every existing row already satisfies the predicate.",
 	},
 	{
-		name:    "ADD CONSTRAINT ... FOREIGN KEY",
+		name:    classAddConstraintForeignKey,
 		pattern: regexp.MustCompile(`\bADD (CONSTRAINT \S+ )?FOREIGN KEY\b`),
 		safe:    regexp.MustCompile(`\bNOT VALID\b`),
 		failure: `insert or update on table "..." violates foreign key constraint (23503) -- an existing orphan`,
 		remedy:  "Add it NOT VALID, or prove in a safety note that no orphan row exists.",
 	},
 	{
-		name:    "VALIDATE CONSTRAINT",
+		name:    classValidateConstraint,
 		pattern: regexp.MustCompile(`\bVALIDATE CONSTRAINT\b`),
 		failure: "this is the scan a NOT VALID constraint deferred; it fails on the first row that breaks it",
 		remedy:  "Prove in a safety note that every existing row satisfies the constraint.",
 	},
 	{
-		name:    "CREATE UNIQUE INDEX",
+		name:    classCreateUniqueIndex,
 		pattern: regexp.MustCompile(`^CREATE UNIQUE INDEX\b`),
 		failure: `could not create unique index "..." -- Key (...) is duplicated (23505)`,
 		remedy:  "Prove in a safety note that no duplicate can already exist.",
 	},
 	{
-		name:    "ADD COLUMN ... GENERATED ALWAYS AS",
+		name:    classAddColumnGeneratedAlwaysAs,
 		pattern: regexp.MustCompile(`\bADD COLUMN\b.*\bGENERATED ALWAYS AS \(`),
 		failure: "the generation expression is evaluated for every existing row and fails on the first one it cannot compute",
 		remedy: "Prove in a safety note that the expression is total over the values the\n" +
 			"    source columns already hold.",
 	},
 	{
-		name:    "DML (UPDATE / DELETE / INSERT)",
+		name:    classDML,
 		pattern: regexp.MustCompile(`^(UPDATE|DELETE FROM|INSERT INTO)\b`),
 		failure: "a PR's empty database runs this over nothing, so nothing it does to real rows is tested -- " +
 			"a DELETE meets a foreign key with no ON DELETE clause, an UPDATE meets a constraint",
@@ -128,7 +147,7 @@ var rowClasses = []rowClass{
 			"    could refuse them -- every foreign key pointing at the rows a DELETE removes included.",
 	},
 	{
-		name:    "DO block",
+		name:    classDoBlock,
 		pattern: regexp.MustCompile(`^DO\b`),
 		failure: "an anonymous block runs immediately and can read or write existing rows, and a PR's empty database exercises none of that",
 		remedy:  "Say in a safety note what the block does when the tables it touches are not empty.",
