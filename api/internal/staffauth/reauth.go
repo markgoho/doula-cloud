@@ -7,6 +7,7 @@ import (
 
 	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/authn"
+	"doula-cloud/api/internal/clock"
 )
 
 // recentAuthWindow is how fresh a re-authentication must be for
@@ -63,7 +64,7 @@ func RequireRecentAuth(w http.ResponseWriter, r *http.Request, verifier authn.Ve
 		return false
 	}
 
-	if time.Since(verified.AuthTime) > recentAuthWindow {
+	if clock.Now(r.Context()).Sub(verified.AuthTime) > recentAuthWindow {
 		apierr.WriteError(w, "this action requires a fresh sign-in", http.StatusUnauthorized)
 		return false
 	}

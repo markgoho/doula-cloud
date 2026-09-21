@@ -12,10 +12,10 @@ import (
 	"context"
 	"database/sql"
 	"net/http"
-	"time"
 
 	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/authn"
+	"doula-cloud/api/internal/clock"
 	"doula-cloud/api/internal/sessionmint"
 	"doula-cloud/api/internal/sessionnotice"
 	"doula-cloud/api/internal/tasknudge"
@@ -80,7 +80,7 @@ func CreateHandler(verifier authn.Verifier, db *sql.DB, enq tasknudge.Enqueuer) 
 		// Best-effort, same as EndHandler's swallowed EndSession below: a
 		// failed notice queue must never turn a legitimate sign-in into a
 		// 500 (#345).
-		_ = sessionnotice.QueueNewSignInIfDue(r.Context(), db, verified.UID, time.Now(), enq)
+		_ = sessionnotice.QueueNewSignInIfDue(r.Context(), db, verified.UID, clock.Now(r.Context()), enq)
 	})
 }
 

@@ -31,7 +31,7 @@ func TestTask_CarriesAnOIDCTokenWhenAServiceAccountIsNamed(t *testing.T) {
 		ServiceAccount: testRuntimeSA,
 		Audience:       testBaseURL,
 		Secret:         "should-not-be-sent",
-	}).task(PortalInvite)
+	}).task(t.Context(), PortalInvite)
 	if err != nil {
 		t.Fatalf("task() error = %v", err)
 	}
@@ -61,7 +61,7 @@ func TestTask_CarriesAnOIDCTokenWhenAServiceAccountIsNamed(t *testing.T) {
 // The local and end-to-end shape: no service account to mint a token
 // for, so the task falls back to the header the stack configures.
 func TestTask_FallsBackToTheHeaderWithNoServiceAccount(t *testing.T) {
-	task, err := testEnqueuer(CallerAuth{Secret: testSecret}).task(PortalInvite)
+	task, err := testEnqueuer(CallerAuth{Secret: testSecret}).task(t.Context(), PortalInvite)
 	if err != nil {
 		t.Fatalf("task() error = %v", err)
 	}
@@ -91,7 +91,7 @@ func TestTask_DelaysOnlyTheSiteRebuild(t *testing.T) {
 		},
 	}
 
-	prompt, err := enqueuer.task(PortalInvite)
+	prompt, err := enqueuer.task(t.Context(), PortalInvite)
 	if err != nil {
 		t.Fatalf("task(PortalInvite) error = %v", err)
 	}
@@ -99,7 +99,7 @@ func TestTask_DelaysOnlyTheSiteRebuild(t *testing.T) {
 		t.Error("PortalInvite nudge carries a schedule time, want none")
 	}
 
-	delayed, err := enqueuer.task(SiteBuild)
+	delayed, err := enqueuer.task(t.Context(), SiteBuild)
 	if err != nil {
 		t.Fatalf("task(SiteBuild) error = %v", err)
 	}

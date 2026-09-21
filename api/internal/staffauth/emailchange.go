@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"net/http"
-	"time"
 
 	firebaseauth "firebase.google.com/go/v4/auth"
 
@@ -12,6 +11,7 @@ import (
 	"doula-cloud/api/internal/authmail"
 	"doula-cloud/api/internal/authn"
 	"doula-cloud/api/internal/authtoken"
+	"doula-cloud/api/internal/clock"
 )
 
 // ChangeEmailRequest is the body of a Staff email change: the address to
@@ -154,7 +154,7 @@ func changeEmail(ctx context.Context, tx *sql.Tx, accounts authn.AccountManager,
 	// same fresh verification link self-signup sends -- otherwise she is
 	// signed in, unverified, with no link mailed and nothing to click
 	// until she finds the resend button on her own.
-	verifyToken, err := authtoken.Mint(ctx, tx, uid, authtoken.PurposeStaffEmailVerification, authmail.VerificationLinkLifetime, time.Now())
+	verifyToken, err := authtoken.Mint(ctx, tx, uid, authtoken.PurposeStaffEmailVerification, authmail.VerificationLinkLifetime, clock.Now(ctx))
 	if err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		return http.StatusInternalServerError, apierr.MsgInternalError

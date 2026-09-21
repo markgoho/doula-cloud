@@ -35,6 +35,7 @@ ranked against the feature, and no ticket has to ask for them.
 - **Security.** What is built refuses what it should refuse, at the boundary
   that can actually enforce it.
 - **Layout.** What is built adapts intrinsically to the space it is given, never to a device it assumes it is on. Every screen is complete and usable from 320px up, and a component behaves correctly wherever it is placed — full page, narrow column, or embedded in a Practice's own website. **Choosing a component is a layout decision**: whoever picks one owns what it does at 320px with a real Practice's content in it, even on a screen that writes no CSS at all. See `docs/adr/0024-layout-is-intrinsic-and-320px-is-a-conformance-commitment.md` for the mechanism and `docs/adr/0025-layout-is-verified-across-the-continuum.md` for how it is checked.
+- **Time.** What is built reads the current instant through `api/internal/clock` (`clock.Now(ctx)`, or an injected `clock.Clock` for a struct that already carries one, such as `outbox.Worker.Now`) rather than calling `time.Now()` directly, so a future simulation run can move it; `api/.golangci.yml`'s `forbidigo` rule fails the build on a new bare `time.Now()` outside a documented exemption. See #773 for the seam and the exemptions it drew (Firebase token verification, `cmd/migrate`/`cmd/simclock` startup waits, `internal/simclock`'s own real-time Stripe deadlines, and the `authntest` test helper).
 
 ## Language: American English
 

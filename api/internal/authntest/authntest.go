@@ -62,7 +62,7 @@ func (v Verifier) VerifyIDToken(_ context.Context, _ string) (*authn.VerifiedTok
 // place the expiry in the past.
 func SeedSession(t *testing.T, q authn.Querier, uid string) string {
 	t.Helper()
-	return SeedSessionAt(t, q, uid, time.Now())
+	return SeedSessionAt(t, q, uid, time.Now()) //nolint:forbidigo // #773: test helper package, not a production request path
 }
 
 // SeedSessionAt creates a session as though it had been minted at now,
@@ -91,7 +91,7 @@ func SeedSessionAt(t *testing.T, q authn.Querier, uid string, now time.Time) str
 // refuses an un-enrolled one.
 func SeedSessionWithSecondFactor(t *testing.T, q authn.Querier, uid string, secondFactor bool) string {
 	t.Helper()
-	return seedSessionAt(t, q, uid, secondFactor, time.Now())
+	return seedSessionAt(t, q, uid, secondFactor, time.Now()) //nolint:forbidigo // #773: test helper package, not a production request path
 }
 
 func seedSessionAt(t *testing.T, q authn.Querier, uid string, secondFactor bool, now time.Time) string {

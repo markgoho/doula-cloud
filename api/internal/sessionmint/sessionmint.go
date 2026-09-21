@@ -25,10 +25,10 @@ import (
 	"context"
 	"database/sql"
 	"net/http"
-	"time"
 
 	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/authn"
+	"doula-cloud/api/internal/clock"
 	"doula-cloud/api/internal/sessionevict"
 	"doula-cloud/api/internal/tasknudge"
 )
@@ -157,7 +157,7 @@ type Finish func(ctx context.Context, tx *sql.Tx) error
 // comes back false.
 func Issue(w http.ResponseWriter, r *http.Request, tx *sql.Tx, enq tasknudge.Enqueuer, adapter Adapter, step Step, finish Finish) (committed bool) {
 	ctx := r.Context()
-	now := time.Now()
+	now := clock.Now(ctx)
 
 	result, err := step(ctx, tx)
 	if err != nil {

@@ -13,6 +13,7 @@ import (
 	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/authn"
 	"doula-cloud/api/internal/authtoken"
+	"doula-cloud/api/internal/clock"
 	"doula-cloud/api/internal/pgerr"
 	"doula-cloud/api/internal/staffauth"
 )
@@ -120,7 +121,7 @@ func RequestAddressChangeHandler(db *sql.DB) http.Handler {
 		// token_hash -- so asking a second time, naming a different
 		// address, retires the first address along with its token rather
 		// than leaving two live links pointing at two different mailboxes.
-		token, err := authtoken.Mint(r.Context(), tx, uid, authtoken.PurposeClientSignInAddressChange, AddressChangeLifetime, time.Now())
+		token, err := authtoken.Mint(r.Context(), tx, uid, authtoken.PurposeClientSignInAddressChange, AddressChangeLifetime, clock.Now(r.Context()))
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
@@ -257,7 +258,7 @@ func SpendAddressChangeHandler(db *sql.DB) http.Handler {
 // UPDATE aborts the Postgres transaction outright, so nothing may run on
 // tx afterwards but the rollback the handler's defer performs.)
 func applyAddressChange(ctx context.Context, tx *sql.Tx, token string) (address string, status int, msg string) {
-	identifier, err := authtoken.Spend(ctx, tx, token, authtoken.PurposeClientSignInAddressChange, time.Now())
+	identifier, err := authtoken.Spend(ctx, tx, token, authtoken.PurposeClientSignInAddressChange, clock.Now(ctx))
 	if errors.Is(err, authtoken.ErrInvalid) {
 		return "", http.StatusBadRequest, MsgAddressLinkInvalid
 	}

@@ -9,6 +9,7 @@ import (
 	"doula-cloud/api/internal/billing"
 	"doula-cloud/api/internal/client"
 	"doula-cloud/api/internal/clientauth"
+	"doula-cloud/api/internal/clock"
 	"doula-cloud/api/internal/csrf"
 	"doula-cloud/api/internal/engagementrequest"
 	"doula-cloud/api/internal/idempotency"
@@ -123,6 +124,15 @@ type Deps struct {
 
 	NudgeEnqueuer   tasknudge.Enqueuer
 	ExpectedOrigins []string
+
+	// Now is #773's Clock seam: every handler that needs the current
+	// instant reads clock.Now(r.Context()) rather than calling
+	// time.Now() directly, and routes() below is the one place that
+	// seeds it, via clock.Middleware, so nothing downstream needs a
+	// Clock parameter of its own. Nil (every test's and every route
+	// table's zero value before this field existed) falls back to
+	// clock.Real -- see clock.Middleware's own doc comment for why.
+	Now clock.Clock
 }
 
 // routes builds the BFF's route table.
@@ -180,5 +190,12 @@ func routes(d Deps) (http.Handler, []staffauth.GatedRoute, []idempotency.Route) 
 	registerInternalRoutes(g, d)
 	registerWebhookRoutes(g, d)
 
-	return csrf.Wrap(d.ExpectedOrigins, mux), g.Routes(), ir.Routes()
+	// clock.Middleware wraps the whole mux, not one route group: every
+	// handler this table serves, at whatever depth, reads the same
+	// per-request instant back with clock.Now(r.Context()). Wrapping
+	// here, once, is what let #773 add the seam without widening
+	// staffauth.Middleware, clientauth.Middleware, or the ~20 other
+	// signatures between them and authn.Begin -- see api/internal/clock's
+	// package doc for why that mattered.
+	return csrf.Wrap(d.ExpectedOrigins, clock.Middleware(d.Now)(mux)), g.Routes(), ir.Routes()
 }

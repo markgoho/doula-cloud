@@ -11,6 +11,7 @@ import (
 
 	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/authtoken"
+	"doula-cloud/api/internal/clock"
 	"doula-cloud/api/internal/sessionmint"
 	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/tasknudge"
@@ -76,7 +77,7 @@ func RequestMagicLinkHandler(db *sql.DB) http.Handler {
 			return
 		}
 
-		token, err := authtoken.Mint(r.Context(), tx, identifier, authtoken.PurposeClientMagicLink, MagicLinkLifetime, time.Now())
+		token, err := authtoken.Mint(r.Context(), tx, identifier, authtoken.PurposeClientMagicLink, MagicLinkLifetime, clock.Now(r.Context()))
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
@@ -163,7 +164,7 @@ func RedeemMagicLinkHandler(db *sql.DB, enq tasknudge.Enqueuer) http.Handler {
 			// refusal here rolls the transaction back, which un-spends
 			// the token -- so the confirmed retry redeems the same live
 			// link.
-			identifier, err := authtoken.Spend(ctx, tx, req.Token, authtoken.PurposeClientMagicLink, time.Now())
+			identifier, err := authtoken.Spend(ctx, tx, req.Token, authtoken.PurposeClientMagicLink, clock.Now(ctx))
 			if errors.Is(err, authtoken.ErrInvalid) {
 				return sessionmint.Result{Refusal: &sessionmint.Refusal{
 					Status: http.StatusBadRequest, Message: "this link is invalid or has expired -- ask for a new one",

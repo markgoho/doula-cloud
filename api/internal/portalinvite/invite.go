@@ -17,6 +17,7 @@ import (
 
 	"doula-cloud/api/internal/activity"
 	"doula-cloud/api/internal/apierr"
+	"doula-cloud/api/internal/clock"
 	"doula-cloud/api/internal/mailsuppress"
 	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/tasknudge"
@@ -172,7 +173,7 @@ func invite(ctx context.Context, tx *sql.Tx, clientID string) (resp InviteRespon
 		  LIMIT 1`,
 		clientID,
 	).Scan(&existingID, &identityUID)
-	expiresAt := time.Now().Add(inviteTokenLifetime)
+	expiresAt := clock.Now(ctx).Add(inviteTokenLifetime)
 
 	switch {
 	case errors.Is(err, sql.ErrNoRows):

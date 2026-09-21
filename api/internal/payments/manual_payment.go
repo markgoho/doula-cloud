@@ -12,6 +12,7 @@ import (
 
 	"doula-cloud/api/internal/activity"
 	"doula-cloud/api/internal/apierr"
+	"doula-cloud/api/internal/clock"
 	"doula-cloud/api/internal/practicetimezone"
 	"doula-cloud/api/internal/staffauth"
 )
@@ -236,7 +237,7 @@ func PostManualPaymentHandler(client Client) http.Handler {
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
-		if paidOnAfterPracticeToday(paidOn, time.Now(), zone) {
+		if paidOnAfterPracticeToday(paidOn, clock.Now(r.Context()), zone) {
 			// The details value names no calendar day -- not "today", not a
 			// date (#1062). That choice is what keeps this wording correct
 			// across #1167's own change of comparison: it named no day when
@@ -597,7 +598,7 @@ func PostReversePaymentHandler() http.Handler {
 			return
 		}
 
-		reversedAt := time.Now().UTC()
+		reversedAt := clock.Now(r.Context()).UTC()
 		var reversalID string
 		var createdAt time.Time
 		if err := tx.QueryRowContext(r.Context(),

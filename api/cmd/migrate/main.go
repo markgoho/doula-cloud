@@ -83,8 +83,12 @@ func run() error {
 // waitForConnection retries db.PingContext until it succeeds or timeout
 // elapses, so a container that has started but isn't accepting
 // connections yet doesn't fail this step outright.
+//
+// #773 exemption: cmd/migrate is a startup step, not a production
+// request path -- there is no request context for a Clock to ride, and
+// nothing about a simulation run ever wants this deadline simulated.
 func waitForConnection(ctx context.Context, db *sql.DB, timeout time.Duration) error {
-	deadline := time.Now().Add(timeout)
+	deadline := time.Now().Add(timeout) //nolint:forbidigo // #773: startup wait, not a request path -- see doc comment above
 	var lastErr error
 	for {
 		lastErr = db.PingContext(ctx)
@@ -92,7 +96,7 @@ func waitForConnection(ctx context.Context, db *sql.DB, timeout time.Duration) e
 		if lastErr == nil {
 			return nil
 		}
-		if time.Now().After(deadline) {
+		if time.Now().After(deadline) { //nolint:forbidigo // #773: startup wait, not a request path -- see doc comment above
 			return fmt.Errorf("migrate: db not reachable after %s: %w", timeout, lastErr)
 		}
 		time.Sleep(200 * time.Millisecond)

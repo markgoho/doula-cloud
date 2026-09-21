@@ -7,10 +7,10 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
-	"time"
 
 	"doula-cloud/api/internal/activity"
 	"doula-cloud/api/internal/apierr"
+	"doula-cloud/api/internal/clock"
 	"doula-cloud/api/internal/pgerr"
 	"doula-cloud/api/internal/portalaccount"
 	"doula-cloud/api/internal/sessionmint"
@@ -158,7 +158,7 @@ func acceptInvite(r *http.Request, tx *sql.Tx, inviteToken string) (result accep
 	// takes CodeForStatus's default the way staffauth's own 410 path does
 	// (via apierr.WriteError) -- an explicit derivation, not a mistaken
 	// CodeInternal literal for what is an expected, not a server, failure.
-	if !expiresAt.Valid || !expiresAt.Time.After(time.Now()) {
+	if !expiresAt.Valid || !expiresAt.Time.After(clock.Now(ctx)) {
 		return acceptResult{}, "", "", false, http.StatusGone, apierr.CodeForStatus(http.StatusGone), "this invitation has expired -- ask your practice to send a new one"
 	}
 

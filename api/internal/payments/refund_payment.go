@@ -12,6 +12,7 @@ import (
 
 	"doula-cloud/api/internal/activity"
 	"doula-cloud/api/internal/apierr"
+	"doula-cloud/api/internal/clock"
 	"doula-cloud/api/internal/staffauth"
 )
 
@@ -267,7 +268,7 @@ func PostRefundPaymentHandler(client Client) http.Handler {
 			note = sql.NullString{String: req.Note, Valid: true}
 		}
 
-		refundedAt := time.Now().UTC()
+		refundedAt := clock.Now(r.Context()).UTC()
 		var refundID string
 		var createdAt time.Time
 		if err := tx.QueryRowContext(r.Context(),

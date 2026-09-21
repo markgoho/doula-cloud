@@ -5,13 +5,13 @@ import (
 	"database/sql"
 	"net/http"
 	"strings"
-	"time"
 
 	"doula-cloud/api/internal/activity"
 	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/authmail"
 	"doula-cloud/api/internal/authn"
 	"doula-cloud/api/internal/authtoken"
+	"doula-cloud/api/internal/clock"
 	"doula-cloud/api/internal/ianazone"
 	"doula-cloud/api/internal/pgerr"
 	"doula-cloud/api/internal/sessionmint"
@@ -267,7 +267,7 @@ func signup(r *http.Request, tx *sql.Tx, verified authn.VerifiedToken, req Signu
 	// this address has already been sent its link, and a second one for
 	// the same mailbox is noise rather than a step (#745).
 	if !resuming {
-		verifyToken, err := authtoken.Mint(ctx, tx, identityUID, authtoken.PurposeStaffEmailVerification, authmail.VerificationLinkLifetime, time.Now())
+		verifyToken, err := authtoken.Mint(ctx, tx, identityUID, authtoken.PurposeStaffEmailVerification, authmail.VerificationLinkLifetime, clock.Now(ctx))
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			return SignupResponse{}, http.StatusInternalServerError, apierr.MsgInternalError

@@ -9,6 +9,7 @@ import (
 
 	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/client"
+	"doula-cloud/api/internal/clock"
 	"doula-cloud/api/internal/pagecursor"
 	"doula-cloud/api/internal/staffauth"
 )
@@ -161,7 +162,7 @@ func PracticeScheduleHandler() http.Handler {
 // could be edited, a Reader cannot.
 func parseScheduleFilter(w http.ResponseWriter, r *http.Request) (scheduleFilter, bool) {
 	query := r.URL.Query()
-	filter := scheduleFilter{from: time.Now().UTC()}
+	filter := scheduleFilter{from: clock.Now(r.Context()).UTC()}
 
 	if raw := query.Get("from"); raw != "" {
 		parsed, err := time.Parse(time.RFC3339, raw)

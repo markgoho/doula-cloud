@@ -4,11 +4,11 @@ import (
 	"database/sql"
 	"errors"
 	"net/http"
-	"time"
 
 	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/authn"
 	"doula-cloud/api/internal/authtoken"
+	"doula-cloud/api/internal/clock"
 	"doula-cloud/api/internal/mfarecoverymail"
 	"doula-cloud/api/internal/tasknudge"
 )
@@ -66,7 +66,7 @@ func VouchHandler(verifier authn.Verifier, enq tasknudge.Enqueuer) http.Handler 
 			return
 		}
 
-		code, err := authtoken.MintCode(r.Context(), tx, targetIdentityUID, authtoken.PurposeStaffMFARecovery, mfarecoverymail.CodeLifetime, time.Now())
+		code, err := authtoken.MintCode(r.Context(), tx, targetIdentityUID, authtoken.PurposeStaffMFARecovery, mfarecoverymail.CodeLifetime, clock.Now(r.Context()))
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)

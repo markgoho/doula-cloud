@@ -8,12 +8,12 @@ import (
 	"fmt"
 	"log"
 	"net/http"
-	"time"
 
 	"github.com/stripe/stripe-go/v86"
 
 	"doula-cloud/api/internal/activity"
 	"doula-cloud/api/internal/apierr"
+	"doula-cloud/api/internal/clock"
 )
 
 // The two v1 snapshot event types that report money going back to a
@@ -123,7 +123,7 @@ func recordStripeRefund(ctx context.Context, tx *sql.Tx, practiceID, invoiceID, 
 	if _, err := tx.ExecContext(ctx,
 		`INSERT INTO payments (invoice_id, amount_cents, paid_at, kind, target_payment_id, stripe_payment_reference)
 		 VALUES ($1, $2, $3, 'refund', $4, $5)`,
-		invoiceID, -amountCents, time.Now().UTC(), targetPaymentID, reference,
+		invoiceID, -amountCents, clock.Now(ctx).UTC(), targetPaymentID, reference,
 	); err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		return fmt.Errorf("payments: insert stripe refund: %w", err)
