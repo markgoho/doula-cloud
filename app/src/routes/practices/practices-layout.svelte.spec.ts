@@ -152,6 +152,7 @@ describe('the nav', () => {
 		'Overview',
 		'Clients',
 		'Schedule',
+		'On call',
 		'Invoices',
 		'Contracts',
 		'Credits',
@@ -180,7 +181,7 @@ describe('the nav', () => {
 		await expect.element(page.getByRole('link', { name: label, exact: true })).not.toBeInTheDocument();
 	});
 
-	it.each(['Overview', 'Clients', 'Schedule', 'Offers', 'Settings'])(
+	it.each(['Overview', 'Clients', 'Schedule', 'On call', 'Offers', 'Settings'])(
 		'still offers %s to a Doula',
 		async (label) => {
 			await setup({ roles: ['doula'] });

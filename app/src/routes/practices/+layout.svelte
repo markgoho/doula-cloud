@@ -62,6 +62,12 @@
 			// shorter list rather than a refusal -- so offering it to every
 			// role is a promise the endpoint keeps.
 			{ label: 'Schedule', href: resolve('/practices/[practiceId]/schedule', { practiceId }) },
+			// Who is on call (#1093). Outside the admin block for the same
+			// reason the schedule is: `GET .../on-call` is `anyStaff`, and a
+			// contractor Doula gets the births she is on rather than a
+			// refusal, so offering it to every role is a promise the
+			// endpoint keeps.
+			{ label: 'On call', href: resolve('/practices/[practiceId]/on-call', { practiceId }) },
 			...(isAdmin
 				? [
 						// Invoices is the Practice's money in, Credits its money
