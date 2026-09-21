@@ -41,7 +41,7 @@ const doulaRole = "doula"
 // requires, and the one an emailed Invitation joins someone as.
 const contractorType = "contractor"
 
-// blockedDetails is the field-keyed refusal both target shapes below
+// blockedDetails is the (message, details) pair both target shapes below
 // share for a currently-suppressed address (ADR-0029):
 // staffauth.MsgAddressBlocked rather than a package-local copy of it,
 // because offer already imports staffauth for everything else this file
@@ -49,8 +49,17 @@ const contractorType = "contractor"
 // mailsuppress import here could cycle with (unlike staffauth.InviteHandler's
 // own SuppressionChecker indirection, needed only because
 // mailsuppress.Mount takes a *staffauth.GatedRouter).
-func blockedDetails() map[string]string {
-	return map[string]string{"email": staffauth.MsgAddressBlocked}
+//
+// It routes through apierr.FieldDetails rather than building the summary
+// message and the details map as two separate literals: resolveTarget's
+// two suppressed-address branches sit behind create.go's one generic
+// apierr.Write call, which also has to carry branches that pass nil
+// details, so they can't call apierr.WriteFieldError directly the way a
+// handler with its own apierr.Write call would (#1298). FieldDetails is
+// WriteFieldError's own "message written once" step, so this stays that
+// same guarantee -- staffauth.MsgAddressBlocked named here exactly once.
+func blockedDetails() (string, map[string]string) {
+	return apierr.FieldDetails("email", staffauth.MsgAddressBlocked)
 }
 
 // resolveTarget turns the request's staffId-or-email into an offerTarget,
@@ -113,7 +122,8 @@ func resolveStaffTarget(ctx context.Context, tx *sql.Tx, practiceID, staffID str
 		return offerTarget{}, http.StatusInternalServerError, apierr.CodeInternal, apierr.MsgInternalError, nil
 	}
 	if blocked {
-		return offerTarget{}, http.StatusConflict, apierr.CodeFailedPrecondition, staffauth.MsgAddressBlocked, blockedDetails()
+		msg, details := blockedDetails()
+		return offerTarget{}, http.StatusConflict, apierr.CodeFailedPrecondition, msg, details
 	}
 
 	return offerTarget{
@@ -161,7 +171,8 @@ func resolveEmailTarget(ctx context.Context, tx *sql.Tx, practiceID, actorStaffI
 		return offerTarget{}, http.StatusInternalServerError, apierr.CodeInternal, apierr.MsgInternalError, nil
 	}
 	if blocked {
-		return offerTarget{}, http.StatusBadRequest, apierr.CodeInvalidArgument, staffauth.MsgAddressBlocked, blockedDetails()
+		msg, details := blockedDetails()
+		return offerTarget{}, http.StatusBadRequest, apierr.CodeInvalidArgument, msg, details
 	}
 
 	invitationID, token, _, rotated, err := staffauth.MintInvitation(ctx, tx, practiceID, actorStaffID, address, "{"+doulaRole+"}", employmentType)

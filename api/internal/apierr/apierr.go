@@ -215,7 +215,23 @@ func Write(w http.ResponseWriter, status int, code Code, message string, details
 // same way it reads a details map's value elsewhere: a call site that
 // moves onto WriteFieldError does not go dark to that gate.
 func WriteFieldError(w http.ResponseWriter, status int, code Code, field, message string) {
-	Write(w, status, code, message, map[string]string{field: message})
+	msg, details := FieldDetails(field, message)
+	Write(w, status, code, msg, details)
+}
+
+// FieldDetails is WriteFieldError's own "message written once" step,
+// pulled out for a caller that has to return the (message, details) pair
+// to a shared Write call site rather than call Write itself. offer's
+// resolveTarget is that case (#1298): its two suppressed-address
+// branches sit behind create.go's one generic apierr.Write(status, code,
+// msg, details) call, which also has to carry a role-refusal and an
+// internal-error branch that both pass nil details, so resolveTarget's
+// return shape can't move onto WriteFieldError wholesale. Routing
+// through FieldDetails instead of building the map by hand keeps message
+// written once for those branches too, the same guarantee WriteFieldError
+// gives a caller that can call it directly.
+func FieldDetails(field, message string) (string, map[string]string) {
+	return message, map[string]string{field: message}
 }
 
 // DecodeJSON decodes r.Body into v, first wrapping it in
