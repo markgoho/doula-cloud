@@ -160,27 +160,31 @@ describe('BirthOutcomeSection', () => {
 		expect(onRecord).not.toHaveBeenCalled();
 	});
 
-	it('refuses an outcome with no date, naming the date', async () => {
+	it('refuses an outcome with no date, naming the date and linking to the month box', async () => {
 		const { onRecord } = await setup();
 		await openForm();
 		await page.getByLabelText('The baby was born alive').click();
 		await page.getByRole('button', { name: 'Record this outcome' }).click();
 
 		await expect
-			.element(page.getByText('Enter the date the pregnancy ended').first())
-			.toBeVisible();
+			.element(page.getByRole('link', { name: 'Enter the date the pregnancy ended' }))
+			.toHaveAttribute('href', '#pregnancy-ended-on-month');
+		await expect.element(page.getByLabelText('Month')).toHaveAttribute('aria-invalid', 'true');
+		await expect.element(page.getByLabelText('Day')).toHaveAttribute('aria-invalid', 'false');
 		expect(onRecord).not.toHaveBeenCalled();
 	});
 
-	it('refuses a date that is not a real one', async () => {
+	it('refuses a date that is not a real one, naming the box the day is wrong in', async () => {
 		const { onRecord } = await setup();
 		await openForm();
 		await chooseAndDate('The baby was born alive', '2', '30', '2026');
 		await page.getByRole('button', { name: 'Record this outcome' }).click();
 
 		await expect
-			.element(page.getByText('The date the pregnancy ended must be a real date').first())
-			.toBeVisible();
+			.element(page.getByRole('link', { name: 'The date the pregnancy ended must be a real date' }))
+			.toHaveAttribute('href', '#pregnancy-ended-on-day');
+		await expect.element(page.getByLabelText('Day')).toHaveAttribute('aria-invalid', 'true');
+		await expect.element(page.getByLabelText('Month')).toHaveAttribute('aria-invalid', 'false');
 		expect(onRecord).not.toHaveBeenCalled();
 	});
 

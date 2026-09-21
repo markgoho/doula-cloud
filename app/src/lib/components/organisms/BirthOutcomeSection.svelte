@@ -40,9 +40,10 @@
 	import { formatCalendarDay } from '#lib/dates.js';
 	import {
 		EMPTY_DATE_PARTS,
+		dateFieldId,
+		dateGroupRefusal,
 		joinDate,
 		splitDate,
-		type DateField,
 		type DateParts
 	} from '#lib/intakeDate.js';
 	import { FormSubmission, orServiceProblem, type FormError } from '#lib/formSubmission.svelte.js';
@@ -105,7 +106,7 @@
 	   group itself is a <fieldset> and is not focusable. */
 	const FIELD_IDS = {
 		birthOutcome: OUTCOME_FIELD_ID,
-		pregnancyEndedOn: `${DATE_NAME}-day`
+		pregnancyEndedOn: dateFieldId(DATE_NAME, 'day')
 	};
 
 	let isFormShown = $state(false);
@@ -132,25 +133,22 @@
 	let pendingRequest = $state<BirthOutcomeRequest>({ birthOutcome: null });
 	let isClearDialogShown = $state(false);
 
-	/* Which of the three boxes a date refusal belongs to, kept beside the
-	   summary's own copy rather than parsed back out of a `targetId`.
-	   `joinDate` already reports the field; `DateFields` already takes
-	   one, and the round trip through a string id in between was the only
-	   thing that needed a cast. Cleared at the top of every submit, which
-	   is inside `run`'s own reset. */
-	let dateRefusal = $state<{ message: string; field: DateField } | undefined>();
+	/* Which of the three boxes a date refusal belongs to, read back out of
+	   the one array `ErrorSummary` renders rather than tracked a second
+	   time beside it (#1214) -- so a refusal named by `send`'s own result
+	   marks a box exactly the way a locally composed one does. */
+	const dateRefusal = $derived(dateGroupRefusal(submission.errors, DATE_NAME));
 
 	const recordLabel = $derived(isRecorded ? 'Correct what was recorded' : 'Record what happened');
 
 	function openForm() {
 		choice = outcome ?? '';
 		parts = endedOn === undefined ? { ...EMPTY_DATE_PARTS } : splitDate(endedOn);
-		// Both refusals, not just the summary's: `dateRefusal` outlives
-		// `submission.errors` otherwise, and a form reopened after a
-		// refused date renders the old message against boxes nobody has
-		// typed in yet.
+		// `dateRefusal` derives from `submission.errors`, so clearing this
+		// is the only reset a form reopened after a refused date needs --
+		// otherwise it would render the old message against boxes nobody
+		// has typed in yet.
 		submission.errors = [];
-		dateRefusal = undefined;
 		clearState.error = '';
 		isFormShown = true;
 	}
@@ -181,7 +179,6 @@
 	async function handleSubmit(event: SubmitEvent) {
 		event.preventDefault();
 		await submission.run(async () => {
-			dateRefusal = undefined;
 			if (choice === '') {
 				return [{ message: 'Select what happened to the pregnancy', targetId: OUTCOME_FIELD_ID }];
 			}
@@ -189,13 +186,12 @@
 			if (isDateAsked) {
 				const date = joinDate(parts, 'The date the pregnancy ended');
 				if (!date.ok) {
-					dateRefusal = { message: date.message, field: date.field };
-					return [{ message: date.message, targetId: `${DATE_NAME}-${date.field}` }];
+					return [{ message: date.message, targetId: dateFieldId(DATE_NAME, date.field) }];
 				}
 				if (date.value === '') {
-					const message = 'Enter the date the pregnancy ended';
-					dateRefusal = { message, field: 'month' };
-					return [{ message, targetId: `${DATE_NAME}-month` }];
+					return [
+						{ message: 'Enter the date the pregnancy ended', targetId: dateFieldId(DATE_NAME, 'month') }
+					];
 				}
 				pregnancyEndedOn = date.value;
 			}

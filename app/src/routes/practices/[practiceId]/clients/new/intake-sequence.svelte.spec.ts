@@ -7,9 +7,11 @@ import { intakeDraft, type IntakeAnswers } from '#lib/intakeDraft.svelte.js';
 import { toPageState, type RouteFixture } from '../../../../routeFixture.js';
 import { seedIntake } from './intakeFixture.js';
 import NamePage from './name/+page.svelte';
+import DateOfBirthPage from './date-of-birth/+page.svelte';
 import CheckPage from './check/+page.svelte';
 import DuplicatePage from './duplicate/+page.svelte';
 import { fixture as nameFixture } from './name/page.fixture.js';
+import { fixture as dateOfBirthFixture } from './date-of-birth/page.fixture.js';
 import { fixture as checkFixture } from './check/page.fixture.js';
 import { fixture as duplicateFixture } from './duplicate/page.fixture.js';
 
@@ -142,6 +144,28 @@ describe('the first question', () => {
 		expect((sent().fieldValues as Record<string, unknown>).birthplace).toBe(
 			'Strong Memorial Hospital'
 		);
+	});
+});
+
+describe('the date of birth question', () => {
+	const setup = setupFor(dateOfBirthFixture, DateOfBirthPage);
+
+	// #1214: the group's refusal is read back out of the summary's own
+	// array through `dateGroupRefusal`, so the box it marks and the link
+	// it renders can never drift from each other's wording.
+	it('refuses a date that is not one, linking to the box that has to change', async () => {
+		await setup();
+
+		await testPage.getByLabelText('Month').fill('2');
+		await testPage.getByLabelText('Day').fill('30');
+		await testPage.getByRole('button', { name: 'Continue' }).click();
+
+		await expect
+			.element(testPage.getByRole('link', { name: 'Date of birth must be a real date' }))
+			.toHaveAttribute('href', '#intake-date-of-birth-day');
+		await expect.element(testPage.getByLabelText('Day')).toHaveAttribute('aria-invalid', 'true');
+		await expect.element(testPage.getByLabelText('Month')).toHaveAttribute('aria-invalid', 'false');
+		expect(goto).not.toHaveBeenCalled();
 	});
 });
 
