@@ -40,9 +40,8 @@ func seedFullClient(t *testing.T, db *testdb.DB, practiceID, staffID string) (cl
 func editOnce(t *testing.T, session string, srv *httptest.Server, practiceID, clientID string) {
 	t.Helper()
 	resp := authedJSON(t, session, http.MethodPut, srv.URL+"/api/practices/"+practiceID+"/clients/"+clientID,
-		client.EditRequest{Record: client.Record{
-			GivenName: "Ada", FamilyName: "Lovelace", Email: "ada@example.com", Phone: "585-555-0199",
-		}, Override: true})
+		client.EditRequest{
+			GivenName: "Ada", FamilyName: "Lovelace", Email: "ada@example.com", Phone: "585-555-0199", Override: true})
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("seeding edit: status = %d, want %d", resp.StatusCode, http.StatusOK)
@@ -423,7 +422,7 @@ func TestEditHandler_RefusesAnErasedClient(t *testing.T) {
 	}
 
 	resp := authedJSON(t, session, http.MethodPut, srv.URL+"/api/practices/"+practiceID+"/clients/"+clientID,
-		client.EditRequest{Record: client.Record{GivenName: "Ada"}, Override: true})
+		client.EditRequest{GivenName: "Ada", Override: true})
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusConflict {
 		t.Fatalf("edit status = %d, want %d", resp.StatusCode, http.StatusConflict)

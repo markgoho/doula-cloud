@@ -107,8 +107,7 @@ func TestComposeTokenMail_UnknownAccountDeadLetters(t *testing.T) {
 	r := tokenMailRow{identityUID: "uid-ghost", kind: KindPasswordReset, token: sql.NullString{String: "reset-token", Valid: true}}
 
 	_, _, _, err := runComposeTokenMail(t.Context(), nil, accounts, r)
-	var dl *outbox.DeadLetterError
-	if !errors.As(err, &dl) {
+	if _, ok := errors.AsType[*outbox.DeadLetterError](err); !ok {
 		t.Fatalf("err = %v, want a *outbox.DeadLetterError", err)
 	}
 }

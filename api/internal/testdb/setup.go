@@ -70,7 +70,10 @@ func Main(m *testing.M) int {
 	// go test -coverprofile finalizes the profile inside m.Run(), so
 	// nothing below this point is ever reflected in coverage.out, even
 	// though it does run (verified via manual testing: the
-	// container.Terminate log lines appear in a local run).
+	// container.Terminate log lines appear in a local run). Go 1.26 hid
+	// that behind the covered block m.Run() starts; 1.27 counts this
+	// check on its own and reports it (#1409).
+	// coverage:ignore reason: runs after m.Run() has already finalized coverage.out, see comment above
 	if container != nil {
 		// coverage:ignore reason: unreachable in coverage.out, see comment above
 		if err := container.Terminate(context.Background()); err != nil {

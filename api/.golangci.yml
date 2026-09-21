@@ -49,3 +49,12 @@ linters:
       - path: _test\.go
         linters:
           - errcheck
+
+# Report every finding, not the default first 50 per linter and first 3
+# of a kind (#1409). Moving to Go 1.27 turned on modernize analyzers with
+# about 88 findings; the defaults would have shown 9, so a red CI run
+# would have been fixed a page at a time. Uncapped, CI and a local run
+# both show the whole list.
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0

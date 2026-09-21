@@ -279,5 +279,5 @@ func acceptInvite(r *http.Request, tx *sql.Tx, inviteToken string) (result accep
 		return acceptResult{}, "", "", false, http.StatusInternalServerError, apierr.CodeInternal, apierr.MsgInternalError
 	}
 
-	return acceptResult{AcceptInviteResponse: AcceptInviteResponse{ClientID: clientID}, practiceID: practiceID}, identifier, engagementID, reused, http.StatusOK, "", ""
+	return acceptResult{ClientID: clientID, practiceID: practiceID}, identifier, engagementID, reused, http.StatusOK, "", ""
 }

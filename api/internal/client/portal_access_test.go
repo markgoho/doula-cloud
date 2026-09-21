@@ -40,7 +40,7 @@ func TestEditHandler_EmailChangeLeavesPortalAccessAlone(t *testing.T) {
 	defer srv.Close()
 
 	resp := authedJSON(t, session, http.MethodPut, srv.URL+"/api/practices/"+practiceID+"/clients/"+clientID,
-		client.EditRequest{Record: client.Record{GivenName: "Portal Client", Email: "new-contact@example.com"}})
+		client.EditRequest{GivenName: "Portal Client", Email: "new-contact@example.com"})
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)

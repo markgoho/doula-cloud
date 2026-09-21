@@ -233,8 +233,9 @@ CI runs `golangci-lint` (config: `api/.golangci.yml`) as its own gating step,
 separate from `go vet`/`go build` -- a change can compile and pass `go test`
 while still failing CI on `golangci-lint` alone (goconst, noctx, unparam,
 wrapcheck, and the rest of the curated set in that config). `go vet` is not a
-substitute for it. Before considering `api/` work done, run the same command
-CI runs:
+substitute for it. The local binary must also be the version CI pins; see
+"Toolchain versions: local must match CI exactly" below. Before considering
+`api/` work done, run the same command CI runs:
 
 ```sh
 cd api
@@ -282,6 +283,17 @@ go run ./tools/covcheck -profile=coverage.out -module=doula-cloud/api -skip=doul
 tests same as any other package) but excluded from the coverage
 *requirement* via `-skip` — it's dev tooling, not shipped application
 code.
+
+"Directly above" means above the block as Go 1.26 reported it, which is how every marker in the repo is placed. Go 1.27 reports the same code in different shapes: an `if` body's block starts at its first statement rather than on the brace line, and a straight-line block is cut into pieces at each comment line. covcheck maps a 1.27 profile back onto the 1.26 blocks before judging it, so the marker above the `if` keeps working and nothing moves ([#1409](https://github.com/markgoho/doula-cloud/issues/1409)). One real difference remains: 1.27 counts some lines on their own that 1.26 folded into a neighboring covered block, so a genuinely unreachable line can appear for the first time. That one needs its own marker.
+
+## Toolchain versions: local must match CI exactly
+
+A local run is evidence of what CI will do only when both run the same Go and the same golangci-lint. They drifted once without anyone noticing: Homebrew moved this machine to Go 1.27.1 and golangci-lint 2.13.2 while CI ran 1.26.5 and v2.12.2. A local covcheck then reported 279 lines that CI passed, and local lint reported findings that CI did not ([#1409](https://github.com/markgoho/doula-cloud/issues/1409)).
+
+- **Go**: `api/go.mod`'s `go` line is the only place the version is named. CI reads it through setup-go's `go-version-file`. `api/Dockerfile`'s `FROM golang:` tag must be the same exact version, not a floating minor. `api/toolchain_guardrail_test.go` fails when the Go running `go test` is not the version go.mod declares, or when the Dockerfile tag differs. A local Go that is *older* fixes itself, because `GOTOOLCHAIN=auto` downloads the declared one. A *newer* one just runs, and that is the case this test catches. To keep the newer Go, move go.mod and the Dockerfile to it in one commit, and CI follows. To stay on the declared Go, run with `GOTOOLCHAIN=go<version>`.
+- **golangci-lint**: the `version:` under `golangci/golangci-lint-action` in `.github/workflows/ci.yml` is the pin. `.claude/hooks/gate-golangci-lint-cache.sh` refuses a `golangci-lint run` from a Claude Code session when `golangci-lint version --short` differs from it. To keep the newer version, change the pin and fix what it reports in the same PR. To stay on the pinned version, install it. If either version cannot be read, the hook lets the run through: no binary on `PATH` fails on its own, and a moved ci.yml step is the repo's problem to fix, not a reason to block every lint.
+
+Moving either one usually means fixing what the new version reports in the same PR. A new Go language version turns on new `modernize` analyzers. `api/.golangci.yml` sets both of golangci-lint's per-linter output caps to 0, so CI and a local run show the whole list, not the first page of it. `golangci-lint run --fix` applies the findings that have an automatic fix.
 
 **`app/` (SvelteKit + Vitest):** Vitest's `v8` coverage provider has this
 built in — use `/* v8 ignore next */` (or `/* v8 ignore start */` /

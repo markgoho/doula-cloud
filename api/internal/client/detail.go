@@ -193,7 +193,7 @@ func DetailHandler() http.Handler {
 			// Absorbed: the screen redirects rather than renders, so
 			// nothing past this point (history, resolved fields, erasure
 			// state) is worth reading.
-			apierr.WriteJSON(w, http.StatusOK, DetailResponse{Record: Record{ID: clientID}, MergedInto: mergedInto})
+			apierr.WriteJSON(w, http.StatusOK, DetailResponse{ID: clientID, MergedInto: mergedInto})
 			return
 		}
 

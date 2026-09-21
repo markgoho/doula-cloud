@@ -23,13 +23,12 @@ const workerSecret = "worker-secret-test"
 // newWorker builds a Worker whose clock the test controls and whose mail
 // goes to an in-memory sender.
 func newWorker(sender mail.Sender, now time.Time) offer.Worker {
-	return offer.Worker{Mailer: outbox.Mailer{
+	return offer.Worker{
 		Sender:     sender,
 		Now:        func() time.Time { return now },
 		AppBaseURL: "https://app.example.test",
 		From:       "Doula Cloud <notifications@mg.example.test>",
-		ReplyTo:    "support@mg.example.test",
-	}}
+		ReplyTo:    "support@mg.example.test"}
 }
 
 // runWorker drives one ProcessPending pass through the same endpoint

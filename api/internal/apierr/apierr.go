@@ -256,8 +256,7 @@ func decodeJSON(w http.ResponseWriter, r *http.Request, v any, allowEmpty bool) 
 		if allowEmpty && errors.Is(err, io.EOF) {
 			return true
 		}
-		var tooLarge *http.MaxBytesError
-		if errors.As(err, &tooLarge) {
+		if _, ok := errors.AsType[*http.MaxBytesError](err); ok {
 			Write(w, http.StatusRequestEntityTooLarge, CodePayloadTooLarge, "request body exceeds 1 MiB", nil)
 			return false
 		}

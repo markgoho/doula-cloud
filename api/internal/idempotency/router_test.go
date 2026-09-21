@@ -126,9 +126,10 @@ func TestRouter_ExemptGatedPanicsWithoutAReason(t *testing.T) {
 }
 
 // TestRouter_ExemptGatedRecordsRoles proves a route registered through
-// ExemptGated carries its role declaration on the registry -- #970's
-// TestRoutes_ContractWritesDeclareRoles walks this field against the
-// real route table routes() builds.
+// ExemptGated carries its role declaration on the registry --
+// TestRoutes_EveryMutatingWriteDeclaresRolesOrIsExempt (#1028, which
+// replaced #970's Contract-only list) walks this field against the real
+// route table routes() builds.
 func TestRouter_ExemptGatedRecordsRoles(t *testing.T) {
 	rt := idempotency.NewRouter(discardMounter{}, nil)
 	rt.ExemptGated("POST /api/practices/{practiceId}/engagements/{engagementId}/contract/void",
@@ -149,10 +150,10 @@ func TestRouter_ExemptGatedRecordsRoles(t *testing.T) {
 
 // TestRouter_ReplayableGatedRecordsRoles proves a route registered
 // through ReplayableGated carries both its Replayable flag and its role
-// declaration on the registry -- #990's
-// TestRoutes_PaymentAndRateWritesDeclareRoles walks this field against
-// the real route table routes() builds, the same way #970's own
-// ExemptGated test does above. Registered twice, attaching=true and
+// declaration on the registry -- the field
+// TestRoutes_EveryMutatingWriteDeclaresRolesOrIsExempt (#1028) walks
+// against the real route table routes() builds, the same one the
+// ExemptGated test above covers. Registered twice, attaching=true and
 // attaching=false, so both of ReplayableGated's branches run.
 func TestRouter_ReplayableGatedRecordsRoles(t *testing.T) {
 	rt := idempotency.NewRouter(discardMounter{}, nil)

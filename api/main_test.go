@@ -58,26 +58,26 @@ var testWorker = portalinvite.NewWorker(outbox.Mailer{Sender: &mail.FakeSender{}
 // testLowCreditWorker is every routes() test's stand-in for the
 // out-of-Credits outbox worker (#342), the billing package's counterpart
 // to testWorker above.
-var testLowCreditWorker = billing.Worker{Mailer: outbox.Mailer{Sender: &mail.FakeSender{}, Now: time.Now, AppBaseURL: testExpectedOrigin, From: testWorkerFrom, ReplyTo: testWorkerReplyTo}}
+var testLowCreditWorker = billing.Worker{Sender: &mail.FakeSender{}, Now: time.Now, AppBaseURL: testExpectedOrigin, From: testWorkerFrom, ReplyTo: testWorkerReplyTo}
 
 // testPayoutOutboxWorker is every routes() test's stand-in for the
 // payout-account-incomplete outbox worker (#343), the payments package's
 // counterpart to testLowCreditWorker above.
-var testPayoutOutboxWorker = payments.Worker{Mailer: outbox.Mailer{Sender: &mail.FakeSender{}, Now: time.Now, AppBaseURL: testExpectedOrigin, From: testWorkerFrom, ReplyTo: testWorkerReplyTo}}
+var testPayoutOutboxWorker = payments.Worker{Sender: &mail.FakeSender{}, Now: time.Now, AppBaseURL: testExpectedOrigin, From: testWorkerFrom, ReplyTo: testWorkerReplyTo}
 
 // testConnectNudgeOutboxWorker is every routes() test's stand-in for the
 // connect-nudge outbox worker (#917), the payments package's third
 // outbox worker beside the two either side of it here.
-var testConnectNudgeOutboxWorker = payments.ConnectNudgeWorker{Mailer: outbox.Mailer{Sender: &mail.FakeSender{}, Now: time.Now, AppBaseURL: testExpectedOrigin, From: testWorkerFrom, ReplyTo: testWorkerReplyTo}}
+var testConnectNudgeOutboxWorker = payments.ConnectNudgeWorker{Sender: &mail.FakeSender{}, Now: time.Now, AppBaseURL: testExpectedOrigin, From: testWorkerFrom, ReplyTo: testWorkerReplyTo}
 
 // testGapNoticeOutboxWorker is every routes() test's stand-in for the
 // coverage-gap outbox worker (#1093).
-var testGapNoticeOutboxWorker = oncall.GapNoticeWorker{Mailer: outbox.Mailer{Sender: &mail.FakeSender{}, Now: time.Now, AppBaseURL: testExpectedOrigin, From: testWorkerFrom, ReplyTo: testWorkerReplyTo}}
+var testGapNoticeOutboxWorker = oncall.GapNoticeWorker{Sender: &mail.FakeSender{}, Now: time.Now, AppBaseURL: testExpectedOrigin, From: testWorkerFrom, ReplyTo: testWorkerReplyTo}
 
 // testPaymentOutboxWorker is every routes() test's stand-in for the
 // payment-received outbox worker (#344), the payments package's
 // counterpart to testPayoutOutboxWorker above.
-var testPaymentOutboxWorker = payments.PaymentReceivedWorker{Mailer: outbox.Mailer{Sender: &mail.FakeSender{}, Now: time.Now, AppBaseURL: testExpectedOrigin, From: testWorkerFrom, ReplyTo: testWorkerReplyTo}}
+var testPaymentOutboxWorker = payments.PaymentReceivedWorker{Sender: &mail.FakeSender{}, Now: time.Now, AppBaseURL: testExpectedOrigin, From: testWorkerFrom, ReplyTo: testWorkerReplyTo}
 
 // testSessionNoticeOutboxWorker is every routes() test's stand-in for the
 // new-sign-in/session-revoked outbox worker (#345), the sessionnotice
@@ -94,7 +94,7 @@ var testStaffInviteOutboxWorker = staffinvite.NewWorker(outbox.Mailer{Sender: &m
 // testOfferOutboxWorker is every routes() test's stand-in for the Offer
 // outbox worker (#317), the offer package's counterpart to testWorker
 // above.
-var testOfferOutboxWorker = offer.Worker{Mailer: outbox.Mailer{Sender: &mail.FakeSender{}, Now: time.Now, AppBaseURL: testExpectedOrigin, From: testWorkerFrom, ReplyTo: testWorkerReplyTo}}
+var testOfferOutboxWorker = offer.Worker{Sender: &mail.FakeSender{}, Now: time.Now, AppBaseURL: testExpectedOrigin, From: testWorkerFrom, ReplyTo: testWorkerReplyTo}
 
 // testEngagementRequestOutboxWorker is every routes() test's stand-in for
 // the Engagement Request outbox worker (#398), the engagementrequest

@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"doula-cloud/api/internal/mail"
-	"doula-cloud/api/internal/outbox"
 	"doula-cloud/api/internal/payments"
 	"doula-cloud/api/internal/testdb"
 )
@@ -23,7 +22,7 @@ const (
 // outbox test needs one, only the injected Sender and (occasionally) Now
 // vary.
 func newTestPaymentWorker(sender mail.Sender) payments.PaymentReceivedWorker {
-	return payments.PaymentReceivedWorker{Mailer: outbox.Mailer{Sender: sender, Now: time.Now, AppBaseURL: testPaymentAppBaseURL, From: testOutboxFrom, ReplyTo: testOutboxReplyTo}}
+	return payments.PaymentReceivedWorker{Sender: sender, Now: time.Now, AppBaseURL: testPaymentAppBaseURL, From: testOutboxFrom, ReplyTo: testOutboxReplyTo}
 }
 
 // seedPaymentOutboxAmountCents is every seedPaymentOutboxRow fixture's
