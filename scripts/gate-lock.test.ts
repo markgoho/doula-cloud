@@ -120,8 +120,9 @@ describe('the wrapper', () => {
       [
         `import fs from 'node:fs';`,
         `const journal = process.argv[2];`,
+        `const sleepMs = Number(process.argv[4] ?? 300);`,
         `fs.appendFileSync(journal, \`start \${process.pid}\\n\`);`,
-        `await new Promise(r => setTimeout(r, 300));`,
+        `await new Promise(r => setTimeout(r, sleepMs));`,
         `fs.appendFileSync(journal, \`end \${process.pid}\\n\`);`,
         `process.exit(Number(process.argv[3] ?? 0));`,
       ].join('\n')
@@ -150,8 +151,21 @@ describe('the wrapper', () => {
     });
   }
 
-  const runMarker = (env?: Record<string, string | undefined>, exitCode = 0) =>
-    invoke(['bun', marker, journal, String(exitCode)], env);
+  const runMarker = (
+    env?: Record<string, string | undefined>,
+    exitCode = 0,
+    sleepMs?: number
+  ) =>
+    invoke(
+      [
+        'bun',
+        marker,
+        journal,
+        String(exitCode),
+        ...(sleepMs === undefined ? [] : [String(sleepMs)]),
+      ],
+      env
+    );
 
   const journalLines = () =>
     fs.readFileSync(journal, 'utf8').trim().split('\n');
@@ -298,12 +312,38 @@ describe('the wrapper', () => {
   // gate that legitimately ran past it would have its lock taken while
   // it was still working -- two gates at once, the thing this prevents.
   test('keeps the lock fresh while the wrapped command runs', async () => {
-    const running = runMarker({ GATE_LOCK_HEARTBEAT_MS: '50' });
+    // A plain setInterval (startHeartbeat's mechanism) carries no promise
+    // of firing on schedule under event-loop backpressure, so a short
+    // observation window can see zero ticks on a loaded machine (#1320).
+    // Two things used to cap that window: a fixed 150ms sleep before the
+    // one-shot assertion below, and the wrapped marker's own fixed 300ms
+    // life, which erases the lock (and so the only thing to observe)
+    // regardless of how patient the assertion is. Both are replaced with
+    // a poll for the first observed mtime change -- the same shape as
+    // the owner.json existsSync waits above, watching mtime instead of
+    // existence -- against a marker deliberately kept alive twenty times
+    // longer than one heartbeat tick, so the window itself stays
+    // generous under load rather than being bounded by a short-lived
+    // process.
+    const MARKER_SLEEP_MS = 3000;
+    const running = runMarker(
+      { GATE_LOCK_HEARTBEAT_MS: '50' },
+      0,
+      MARKER_SLEEP_MS
+    );
     while (!fs.existsSync(lockDir))
       await new Promise((resolve) => setTimeout(resolve, 5));
     const atStart = fs.statSync(lockDir).mtimeMs;
-    await new Promise((resolve) => setTimeout(resolve, 150));
-    const laterMs = fs.statSync(lockDir).mtimeMs;
+    const deadline = Date.now() + MARKER_SLEEP_MS + 2000;
+    let laterMs = atStart;
+    while (
+      laterMs <= atStart &&
+      fs.existsSync(lockDir) &&
+      Date.now() < deadline
+    ) {
+      await new Promise((resolve) => setTimeout(resolve, 5));
+      if (fs.existsSync(lockDir)) laterMs = fs.statSync(lockDir).mtimeMs;
+    }
 
     expect(laterMs).toBeGreaterThan(atStart);
     expect((await running).exitCode).toBe(0);
