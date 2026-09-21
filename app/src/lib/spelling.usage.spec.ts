@@ -327,7 +327,7 @@ const sourceFiles = globSync('src/**/*.{svelte,ts,js,css,svg,html,md}', { cwd: a
 const apiFiles = globSync('api/**/*.go', { cwd: repoRoot });
 
 // Read and scanned once, at module scope, so the cost of walking roughly
-// 2,000 files in app/src plus 593 in api/ is paid on import rather than
+// 640 files in app/src plus 650 in api/ is paid on import rather than
 // charged against one `it`'s 5-second `testTimeout`. Under a quiet
 // machine that scan finishes in well under a second; under the full
 // suite's contention for disk and CPU it has been measured taking

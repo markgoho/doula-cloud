@@ -53,8 +53,8 @@ interface Offense {
 
 // Every component read and reduced to its style lines once, at module
 // scope, so the cost of that whole-tree read and parse is paid on import
-// rather than charged against each of `scan`'s and `scanDeclarations`'s
-// three callers below, which each used to re-read and re-parse every
+// rather than charged against the three `it`s below that call `scan` or
+// `scanDeclarations`, each of which used to re-read and re-parse every
 // component on its own (#1211).
 const componentStyleLines = componentFiles.map((file) => ({
 	file,
