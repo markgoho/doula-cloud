@@ -18,7 +18,7 @@ export from `LabeledField.svelte`'s own `<script module>` block so that
 importing `vitest` here never touches the production bundle -- nothing
 outside a spec imports this file.
 */
-export async function fieldError(id: string, message: string): Promise<void> {
+export async function expectFieldError(id: string, message: string): Promise<void> {
 	await vi.waitFor(() => {
 		expect(document.querySelector(`#${id}-error`)?.textContent).toBe(message);
 	});

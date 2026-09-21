@@ -2,7 +2,7 @@ import { page as testPage } from 'vitest/browser';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import { jsonResponse } from '#lib/testResponse.js';
-import { fieldError } from '#lib/components/molecules/LabeledField.testing.js';
+import { expectFieldError } from '#lib/components/molecules/LabeledField.testing.js';
 import Page from './+page.svelte';
 import { toApiResponder, toPageState } from '../../routeFixture.js';
 import { afterSessionEnded, fixture, session } from './page.fixture.js';
@@ -308,7 +308,7 @@ describe('Staff login -- the TOTP sign-in challenge (#606)', () => {
 
 		await testPage.getByRole('button', { name: 'Continue' }).click();
 
-		await fieldError('login-totp-code', 'Enter the 6-digit code from your authenticator app');
+		await expectFieldError('login-totp-code', 'Enter the 6-digit code from your authenticator app');
 		expect(resolver.resolveSignIn).not.toHaveBeenCalled();
 	});
 
@@ -339,7 +339,7 @@ describe('Staff login -- the TOTP sign-in challenge (#606)', () => {
 		await testPage.getByLabelText('Authenticator app code').fill('000000');
 		await testPage.getByRole('button', { name: 'Continue' }).click();
 
-		await fieldError(
+		await expectFieldError(
 			'login-totp-code',
 			'The code is not correct. Enter the 6-digit code from your authenticator app.'
 		);
