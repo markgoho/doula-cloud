@@ -17,15 +17,19 @@ var validRoles = map[string]bool{roleOwner: true, roleAdmin: true, "doula": true
 // holds the 'owner' role at that Practice, writing the appropriate error
 // response itself if not. Zero-query: the Reader already carries the
 // roles Middleware resolved for this request. Shared by Owner-only
-// handlers across packages -- inside staffauth (invite, role assignment,
-// the MFA switch, ending sessions, the recovery vouch) and outside it
-// (Practice deletion, export, payments Connect onboarding, and
-// client.EraseEligibilityHandler) -- the same way RequireTx is, exported
-// so no package needs its own copy of the owner check. A write whose
-// Owner-only rule is the whole rule can declare it at the mount instead,
-// through idempotency.Router.ExemptGated (#970, #990, #1016); the calls
-// left here are the GETs, whose role the mount already declares through
-// GatedRouter.Get, and the writes not yet moved.
+// handlers across packages -- the same way RequireTx is, exported so no
+// package needs its own copy of the owner check.
+//
+// Since #1028 every caller left is a GET whose Owner-only seat the mount
+// already declares through GatedRouter.Get (the pending-deletion read,
+// the export, client.EraseEligibilityHandler): each is the redundant
+// half of a pair, not the gate. No write calls this any more. A write
+// whose Owner-only rule is the whole rule declares it at the mount, through
+// idempotency.Router.ExemptGated or ReplayableGated (#970, #990, #1016,
+// #1028), where GatedWrite's startup panic and
+// api/write_role_guardrail_test.go can both see it -- and that test now
+// refuses a new mutating route that declares nothing, so reaching for
+// this call in a fresh write would not pass.
 func RequireOwner(w http.ResponseWriter, r *http.Request) (tx *sql.Tx, practiceID string, ok bool) {
 	tx, has := Tx(r.Context())
 	if !has {

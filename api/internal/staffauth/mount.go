@@ -11,16 +11,27 @@ import (
 	"doula-cloud/api/internal/tasknudge"
 )
 
-// WriteRouter is the idempotency.Router surface Mount needs: Replayable
-// and Exempt, the only two doors a mutating Practice route can be
-// registered through. An interface, not *idempotency.Router, because
-// idempotency imports staffauth to apply Middleware and AttachingWrite
-// itself -- staffauth importing idempotency back would cycle.
-// *idempotency.Router satisfies this without either package naming the
-// other.
+// WriteRouter is the idempotency.Router surface Mount needs: the two
+// doors a mutating Practice route can be registered through, Replayable
+// and Exempt, and each one's role-declaring variant. An interface, not
+// *idempotency.Router, because idempotency imports staffauth to apply
+// Middleware and AttachingWrite itself -- staffauth importing idempotency
+// back would cycle. *idempotency.Router satisfies this without either
+// package naming the other.
+//
+// The gated pair arrived with #1028. Until then this interface named only
+// the role-free doors, so the seven Owner-only writes this package owns
+// could not declare their rule at the mount even though every other
+// package's could (#970, #990, #1016) -- they checked RequireOwner
+// in-handler instead, where no startup panic and no registry-walking test
+// can see it. The signatures are *idempotency.Router's own, so the
+// routes() call site that hands the concrete router to Mount is itself
+// the check that the two have not drifted.
 type WriteRouter interface {
 	Replayable(pattern string, attaching bool, h http.Handler)
 	Exempt(pattern, reason string, attaching bool, h http.Handler)
+	ReplayableGated(pattern string, attaching bool, roles []string, h http.Handler)
+	ExemptGated(pattern, reason string, attaching bool, roles []string, h http.Handler)
 }
 
 // SuppressionChecker reports whether address is currently blocked from
@@ -128,18 +139,25 @@ func mountPracticeRoutes(g *GatedRouter, ir WriteRouter, verifier authn.Verifier
 	// Roles and employment type are edited together on one surface
 	// (RA-G2, #261) -- ADR-0008 makes them the two halves of what a
 	// person is at a Practice, so there is one endpoint, not two.
-	ir.Exempt("PATCH /api/practices/{practiceId}/staff/{staffId}/membership",
+	//
+	// Every write below declares Owner-only at the mount rather than
+	// calling RequireOwner inside the handler (#1028, following #970,
+	// #990 and #1016): deciding who is at the Practice at all is
+	// ADR-0008's Owner seat outright, never a reach question, so the
+	// route table is where the rule belongs -- and where a startup panic
+	// and api/write_role_guardrail_test.go can both see it.
+	ir.ExemptGated("PATCH /api/practices/{practiceId}/staff/{staffId}/membership",
 		"PATCH replaces roles and employment type wholesale to the caller's given values, and records an audit event only for an axis that actually changed -- a repeated call with the same body is a no-op on both",
-		false, UpdateMembershipHandler())
+		false, OwnerOnly, UpdateMembershipHandler())
 	// The route #291 found missing: without it a roster row nobody wants
 	// can never be taken off.
-	ir.Exempt("DELETE /api/practices/{practiceId}/staff/{staffId}/membership",
+	ir.ExemptGated("DELETE /api/practices/{practiceId}/staff/{staffId}/membership",
 		"delete; a retry after the first succeeds finds no membership row left and 404s instead of removing or recording removal twice",
-		false, RemoveMembershipHandler())
-	ir.Replayable("POST /api/practices/{practiceId}/staff/invitations", false, InviteHandler(enq, suppressed))
-	ir.Exempt("POST /api/practices/{practiceId}/staff/invitations/{invitationId}/revoke",
+		false, OwnerOnly, RemoveMembershipHandler())
+	ir.ReplayableGated("POST /api/practices/{practiceId}/staff/invitations", false, OwnerOnly, InviteHandler(enq, suppressed))
+	ir.ExemptGated("POST /api/practices/{practiceId}/staff/invitations/{invitationId}/revoke",
 		"state-guarded UPDATE ... WHERE status = 'pending'; a retry after the first commit affects zero rows and 404s instead of revoking twice",
-		false, RevokeInvitationHandler())
+		false, OwnerOnly, RevokeInvitationHandler())
 	// Staff roster -- members and pending invitations both: Owner and
 	// Admin only (ADR-0008's read table) -- a Doula has no reason to see
 	// the full roster.
@@ -156,24 +174,24 @@ func mountPracticeRoutes(g *GatedRouter, ir WriteRouter, verifier authn.Verifier
 	// all along, not a widening.
 	g.Get("/api/practices/{practiceId}/staff/{staffId}/membership-history",
 		OwnerAndAdmin, ListMembershipHistoryHandler())
-	ir.Exempt("DELETE /api/practices/{practiceId}/staff/{staffId}/sessions",
+	ir.ExemptGated("DELETE /api/practices/{practiceId}/staff/{staffId}/sessions",
 		"EndAllSessions ends whatever remains and no-ops once already ended, and QueueSessionRevoked's own ON CONFLICT ... WHERE status = 'pending' DO NOTHING dedupes the notification; a retry can't double-notify",
-		false, EndSessionsHandler(enq))
+		false, OwnerOnly, EndSessionsHandler(enq))
 	// #615: an Owner vouching for a locked-out colleague. Replayable, not
 	// Exempt -- unlike EndSessions, a bare retry here is not a no-op: it
 	// would invalidate the just-minted code (authtoken.MintCode's own
 	// re-request rule) and queue a second email before the Owner has
 	// necessarily read the first.
-	ir.Replayable("POST /api/practices/{practiceId}/staff/{staffId}/mfa-recovery/vouch", false, VouchHandler(verifier, enq))
+	ir.ReplayableGated("POST /api/practices/{practiceId}/staff/{staffId}/mfa-recovery/vouch", false, OwnerOnly, VouchHandler(verifier, enq))
 	// #606: the switch's pre-throw count -- how many Staff it will
 	// affect, read before an Owner ever calls the PUT below. Owner-only,
 	// the same population who may throw the switch at all.
 	g.Get("/api/practices/{practiceId}/mfa-required/impact", OwnerOnly, GetMFAImpactHandler(accounts))
 	// A retry with the same body reads the same current value and writes
 	// nothing new -- see PutMFARequiredHandler's own doc comment.
-	ir.Exempt("PUT /api/practices/{practiceId}/mfa-required",
+	ir.ExemptGated("PUT /api/practices/{practiceId}/mfa-required",
 		"idempotent by construction: the handler reads the current value first and updates/records only when the given value actually differs from it",
-		false, PutMFARequiredHandler())
+		false, OwnerOnly, PutMFARequiredHandler())
 }
 
 // mountSessionRoutes is the pre-Practice half of Mount: sign-in, sign-up,

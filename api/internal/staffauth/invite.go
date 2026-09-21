@@ -67,9 +67,16 @@ var validEmploymentTypes = map[string]bool{"employee": true, "contractor": true}
 // *GatedRouter, so this package importing mailsuppress back would cycle
 // -- the same reason WriteRouter (mount.go) exists. Must be mounted
 // behind staffauth.Middleware.
+//
+// Owner-only is declared at the mount, not checked here (#1028,
+// following #970, #990 and #1016): this handler no longer calls
+// RequireOwner, because an Admin or a Doula is refused by the gate
+// before it runs. Widening or narrowing this route means editing its
+// role list in mount.go.
 func InviteHandler(enq tasknudge.Enqueuer, suppressed SuppressionChecker) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, practiceID, ok := RequireOwner(w, r)
+		tx, practiceID, ok := RequireTx(w, r)
+		// coverage:ignore reason: staffauth.Middleware always sets a tx before this handler runs
 		if !ok {
 			return
 		}
@@ -238,9 +245,16 @@ func AddressHoldsMembership(ctx context.Context, tx *sql.Tx, practiceID, address
 // of the record, the same reasoning 00030 applies to the table as a whole
 // -- so this flips status and records the actor and the moment. Must be
 // mounted behind staffauth.Middleware.
+//
+// Owner-only is declared at the mount, not checked here (#1028,
+// following #970, #990 and #1016): this handler no longer calls
+// RequireOwner, because an Admin or a Doula is refused by the gate
+// before it runs. Widening or narrowing this route means editing its
+// role list in mount.go.
 func RevokeInvitationHandler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, practiceID, ok := RequireOwner(w, r)
+		tx, practiceID, ok := RequireTx(w, r)
+		// coverage:ignore reason: staffauth.Middleware always sets a tx before this handler runs
 		if !ok {
 			return
 		}

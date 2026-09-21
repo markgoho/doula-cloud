@@ -177,9 +177,16 @@ type UpdateMembershipResponse struct {
 // on ambient reach, and a gate that keeps honouring the old answer is
 // not a gate. Both halves of the change are recorded with actor and
 // timestamp. Must be mounted behind staffauth.Middleware.
+//
+// Owner-only is declared at the mount, not checked here (#1028,
+// following #970, #990 and #1016): this handler no longer calls
+// RequireOwner, because an Admin or a Doula is refused by the gate
+// before it runs. Widening or narrowing this route means editing its
+// role list in mount.go.
 func UpdateMembershipHandler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, practiceID, ok := RequireOwner(w, r)
+		tx, practiceID, ok := RequireTx(w, r)
+		// coverage:ignore reason: staffauth.Middleware always sets a tx before this handler runs
 		if !ok {
 			return
 		}
@@ -317,9 +324,16 @@ func removesLastOwner(ctx context.Context, tx *sql.Tx, practiceID, targetStaffID
 // activity row this writes first is the only place who
 // removed her and when survives. Must be mounted behind
 // staffauth.Middleware.
+//
+// Owner-only is declared at the mount, not checked here (#1028,
+// following #970, #990 and #1016): this handler no longer calls
+// RequireOwner, because an Admin or a Doula is refused by the gate
+// before it runs. Widening or narrowing this route means editing its
+// role list in mount.go.
 func RemoveMembershipHandler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, practiceID, ok := RequireOwner(w, r)
+		tx, practiceID, ok := RequireTx(w, r)
+		// coverage:ignore reason: staffauth.Middleware always sets a tx before this handler runs
 		if !ok {
 			return
 		}
