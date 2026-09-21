@@ -36,9 +36,8 @@ Nadia Haddad's, Nadia's plan was written first
 | Step | Action | Expected result | Mark |
 | --- | --- | --- | --- |
 | 2.1 | Open `/portal/accept-invite` with no token | "Missing invite token" and nothing else — no form | `manual` |
-| 2.1-a | Open it with the token | Email, Password, an **Account mode** radio defaulting to "I'm new here — create an account", and **Accept invite** | `automated (portal-invite-accept.e2e.ts)` |
-| 2.2 | Fill email and password, leave the mode alone, press **Accept invite** | `POST /api/portal/accept-invite` claims the pending row and sets the session cookie on its own response (#145). No Identity Platform credential is left in IndexedDB (#150). Password minimum is six characters; nothing else is asked, because the Practice already holds her name | `automated (portal-invite-accept.e2e.ts)` |
-| 2.2-a | Repeat with "I already have an account — log in" chosen | **Fails**, with a generic "Accept invite failed" covering both the sign-up and the sign-in path. For a first-time Client this option can only fail, and the form asked her to choose before she could know which she was ([HS-G1](https://github.com/markgoho/doula-cloud/issues/300)) | `manual` |
+| 2.1-a | Open it with the token | A single **Continue** button — no email, password or account-mode choice. #617 (ADR-0026) closed [HS-G1](https://github.com/markgoho/doula-cloud/issues/300): a Client has no password | `automated (portal-invite-accept.e2e.ts)` |
+| 2.2 | Press **Continue** | `POST /api/portal/accept-invite` claims the pending row and sets the session cookie on its own response (#145). Nothing is asked of her — the Practice already holds her name, and there is no account-setup step to complete | `automated (portal-invite-accept.e2e.ts)` |
 | 2.3 | Watch where she lands | `GET /api/portal/session` resolves one Engagement, so she is redirected straight to it rather than shown a chooser | `automated (portal-invite-accept.e2e.ts)` |
 
 ### Stage 3 — The first screen
@@ -99,23 +98,25 @@ Nadia Haddad's, Nadia's plan was written first
 
 | Step | Action | Expected result | Mark |
 | --- | --- | --- | --- |
-| 9.1 | Give her partner access | `client_portal_users` holds one `identity_uid` per Client row. No second invite, no guest role, no read-only share of the Birth Plan. The supported path is sharing her password, which is the one path nobody designed | `missing-feature (HS-G5)` [#304](https://github.com/markgoho/doula-cloud/issues/304) |
+| 9.1 | Give her partner access | No invite flow, no guest role, no read-only share of the Birth Plan. What refuses a second invitation today is `invite()` (`portalinvite/invite.go`), a handler-level check against the accepted Client, not the schema — `client_portal_users` now allows more than one `(identity_uid, client_id)` pair. The path nobody designed is sharing the mailbox that receives her sign-in links, not her password — she has none (ADR-0026) | `missing-feature (HS-G5)` [#304](https://github.com/markgoho/doula-cloud/issues/304) |
 
 ## Marks
 
 | Mark | Steps |
 | --- | --- |
 | `automated` | 8 |
-| `manual` | 18 |
+| `manual` | 17 |
 | `missing-feature` | 6 ([HS-G4](https://github.com/markgoho/doula-cloud/issues/303) ×2, [HS-G2](https://github.com/markgoho/doula-cloud/issues/301), [PR-G5](https://github.com/markgoho/doula-cloud/issues/280), [MO-G4](https://github.com/markgoho/doula-cloud/issues/253), [HS-G5](https://github.com/markgoho/doula-cloud/issues/304)) |
 
 No step is `blocked`. She never reaches a Stripe surface — the portal has none —
 so the one thing she cannot see about money (**NH-G6**: no Invoice, balance or
 payment view anywhere in the portal) is a hole in the product, not a bill.
 
-HS-G1, NH-G4, **RA-G1**, **PR-G7**, **MO-G3** and
+NH-G4, **RA-G1**, **PR-G7**, **MO-G3** and
 [#212](https://github.com/markgoho/doula-cloud/issues/212) are observed inside
-walkable steps (2.2-a, 3.1, 1.2, 3.1-a) rather than given steps of their own.
+walkable steps (3.1, 1.2, 3.1-a) rather than given steps of their own. HS-G1 is
+closed ([#300](https://github.com/markgoho/doula-cloud/issues/300)) and its
+exposing step, 2.2-a, is gone with it.
 
 The Birth Plan's absent export is now [her map](../journeys/first-time-client.md)'s
 **HS-G7**, and 4.3's absent Contract copy sharpened into **HS-G6** — both minted at
