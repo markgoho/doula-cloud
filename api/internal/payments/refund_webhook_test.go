@@ -11,6 +11,9 @@ import (
 const (
 	stripeEventTypeCreditNoteCreated = "credit_note.created"
 	stripeEventTypeRefundCreated     = "refund.created"
+	// notANumber is a string where Stripe sends an integer -- the shape
+	// every malformed-object webhook test uses to make decoding fail.
+	notANumber = "not-a-number"
 )
 
 // refundWebhookFixture is a connected Practice with a Stripe-backed
@@ -260,11 +263,11 @@ func TestConnectWebhook_MalformedRefundObjectsAreRejected(t *testing.T) {
 	cases := map[string]func(f refundWebhookFixture) []byte{
 		"credit_note.created": func(f refundWebhookFixture) []byte {
 			return buildConnectEventPayload(t, "evt_cn_bad", stripeEventTypeCreditNoteCreated, f.accountID,
-				map[string]any{"id": "cn_bad", "out_of_band_amount": "not-a-number"})
+				map[string]any{"id": "cn_bad", "out_of_band_amount": notANumber})
 		},
 		"refund.created": func(f refundWebhookFixture) []byte {
 			return buildConnectEventPayload(t, "evt_re_bad", stripeEventTypeRefundCreated, f.accountID,
-				map[string]any{"id": "re_bad", "amount": "not-a-number"})
+				map[string]any{"id": "re_bad", "amount": notANumber})
 		},
 	}
 	for name, payload := range cases {

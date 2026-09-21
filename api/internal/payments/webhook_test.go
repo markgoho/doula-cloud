@@ -1173,7 +1173,7 @@ func TestPostConnectWebhookHandler_InvoicePaidMalformedObjectRejected(t *testing
 	// amount_paid as a string (instead of an integer) fails to unmarshal
 	// into invoicePaidObject.
 	payload := buildConnectEventPayload(t, "evt_invoice_paid_malformed", stripeEventTypeInvoicePaid, "acct_malformed",
-		map[string]any{"id": "in_malformed", "amount_paid": "not-a-number"})
+		map[string]any{"id": "in_malformed", "amount_paid": notANumber})
 
 	resp := postConnectWebhook(t, srv, payload, stripeConnectWebhookSecret)
 	defer resp.Body.Close()
