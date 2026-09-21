@@ -55,21 +55,23 @@ const WCAG_TAGS = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'];
 /**
  * One route to scan. `key` is the stable name a KNOWN entry points at --
  * the route pattern, not the provisioned URL, so an allowance survives a
- * new fixture. `h1` is HALF the ready signal: this is a client-rendered
+ * new fixture. `h1` is ONE of three ready signals: this is a client-rendered
  * SPA, so `goto` resolves long before the data lands, and axe run against
  * a half-loaded page finds a different set of violations every time --
  * which CI's `retries: 2` would then quietly launder into green.
  *
- * The other half is `LOADING_AFFORDANCE` below, and a new row needs
- * nothing for it: `scan` waits on it for every route at once. Read that
- * comment before adding a row -- it is why a row does not have to name a
- * node its own loaded state renders, and why a row whose screen never
- * finishes loading fails here rather than scanning a Skeleton.
+ * The other two are `LOADING_AFFORDANCE_SELECTOR` and `LOAD_ERROR_SELECTOR`
+ * below, and a new row needs nothing for either: `scan` waits on both for
+ * every route at once. Read those comments before adding a row -- they
+ * are why a row does not have to name a node its own loaded state
+ * renders, and why a row whose screen never finishes loading, or never
+ * finishes loading successfully, fails here rather than scanning a
+ * Skeleton or an error Notice.
  *
  * `reach` is optional, and is what lets a row describe a screen that is
  * a *state* rather than a route (#1240) -- one reached by acting on the
  * page after `goto`, not by navigating anywhere else. `scan` runs it, if
- * present, before its own two ready waits, so a `reach` only has to
+ * present, before its own three ready waits, so a `reach` only has to
  * drive the page to the state those waits (and then axe) should measure
  * -- it does not have to wait for readiness itself. Most rows need none:
  * their `url` already is the screen. TOTP enrollment's second step is
@@ -132,6 +134,42 @@ const KNOWN: Known[] = [];
  */
 const LOADING_AFFORDANCE_SELECTOR = '[role="status"][aria-busy="true"]';
 
+/*
+ * The load-failure signal (#1258), and the third state `scan` refuses
+ * rather than measures. `FormPage` and `ListPage` render their `<h1>` and
+ * no `Skeleton` in their `loadError` branch too -- only a `Notice` beside
+ * the title -- so a route whose own data read fails under the e2e stack
+ * satisfied both waits above already, and axe scanned the one-`Notice`
+ * error screen while the row's key claimed it scanned the form or list.
+ * The same shape of miss #1152 fixed for the loading branch, one branch
+ * over.
+ *
+ * `[role="alert"]` alone was tried first and refused on `accept-invite`:
+ * its no-token state is `EntryPage`, not a `Template` with a `loadError`
+ * prop, and its "Missing invite token" `Notice` is the row's own,
+ * deliberately-scanned state ("the form is the page", per that row's own
+ * comment below). That Notice's markup -- an `<h1>` plus one
+ * `role="alert"` paragraph and nothing else -- is byte-identical to a
+ * `Template`'s `loadError` branch, so no selector built from what `Notice`
+ * renders can tell the two apart; only the `Template` itself knows which
+ * one it is in. `data-load-error` is that fact, stated once on
+ * `FormPage`'s and `ListPage`'s own `loadError` branch (their doc
+ * comments carry the reasoning) rather than guessed at from a node three
+ * layers down -- presence-only, the same shape as Skeleton's own
+ * `aria-busy`, and invisible to sight and to assistive tech, so nothing a
+ * person meets changes. It holds for every row at once, the same property
+ * that picked `LOADING_AFFORDANCE_SELECTOR` over naming a node per row.
+ *
+ * Ordering matters here, not just narration: this wait runs AFTER the
+ * loading-affordance one. A route that goes loading -> loadError would
+ * otherwise pass this check during the loading window, before the
+ * attribute exists, then pass the loading check once the Skeleton leaves
+ * -- and axe would scan the error state regardless. Checking
+ * loading-affordance first, then this one, is what makes the pair catch
+ * that route in either order it fails.
+ */
+const LOAD_ERROR_SELECTOR = '[data-load-error]';
+
 async function scan(page: Page, route: Route) {
 	await page.goto(route.url);
 	await route.reach?.(page);
@@ -142,6 +180,10 @@ async function scan(page: Page, route: Route) {
 	await expect(
 		page.locator(LOADING_AFFORDANCE_SELECTOR),
 		`${route.key} still had a loading affordance on screen -- axe would have scanned a Skeleton and reported the placeholder's own clean bill of health as the screen's`
+	).toHaveCount(0);
+	await expect(
+		page.locator(LOAD_ERROR_SELECTOR),
+		`${route.key} failed to load -- axe would have scanned the error Notice and reported its own clean bill of health as the screen's`
 	).toHaveCount(0);
 
 	const { violations } = await new AxeBuilder({ page }).withTags(WCAG_TAGS).analyze();
@@ -262,9 +304,9 @@ test('Archetype A -- the two screens behind a session with no Practice', async (
 
 	// #1240: reached by answering step one's password prompt rather than
 	// by navigating anywhere, so `reach` drives that submit and waits for
-	// the QR code step two renders -- the state the two ready waits below
-	// and axe should measure, not step one's own screen (which the h1
-	// alone cannot tell apart from this, since both steps share one
+	// the QR code step two renders -- the state the three ready waits
+	// below and axe should measure, not step one's own screen (which the
+	// h1 alone cannot tell apart from this, since both steps share one
 	// title).
 	await scan(page, {
 		key: 'mfa/enroll (step two)',
@@ -772,9 +814,48 @@ test('the sweep refuses a screen whose loading affordance is still up', async ({
 		h1: 'Multi-factor authentication'
 	};
 
-	// The h1 half of the signal is satisfied here -- FormPage renders the
-	// title in its loading branch -- so a `scan` that stopped at the h1
-	// would have gone on to run axe against the Skeleton and passed. It is
-	// the second wait that rejects, and it names what it saw.
+	// The h1 signal is satisfied here -- FormPage renders the title in its
+	// loading branch -- so a `scan` that stopped at the h1 would have gone
+	// on to run axe against the Skeleton and passed. It is the
+	// loading-affordance wait that rejects, and it names what it saw.
 	await expect(scan(page, held)).rejects.toThrow(/still had a loading affordance on screen/);
+});
+
+// The guard on LOAD_ERROR_SELECTOR (#1258), the same shape as the loading
+// guard above: it holds a screen in its `loadError` branch on purpose and
+// asserts that `scan` REFUSES it, rather than trusting the wait to keep
+// working. Same subject and same endpoint as the loading guard, so
+// `settings/mfa`'s own reasoning above for why that endpoint is this
+// page's own read, not the shared layout session read, applies here too --
+// only the route handler's answer differs: a refusal this time, not a
+// hung request, so `loadImpact` catches and sets `loadError` rather than
+// waiting forever.
+test('the sweep refuses a screen whose Template is in its loadError branch', async ({
+	page,
+	request,
+	context
+}) => {
+	const seeded = await seedPortalClient(request, 'Riverside Doulas');
+	const { practiceId } = seeded;
+	await enterPracticeAsEnrolled(context, page, seeded.staffHeaders, practiceId);
+
+	await page.route('**/mfa-required/impact', (route) =>
+		route.fulfill({ status: 500, contentType: 'application/json', body: '{}' })
+	);
+
+	const held: Route = {
+		key: 'practices/[practiceId]/settings/mfa (held loadError)',
+		// Not a row in the inventory above, and the label says so, matching
+		// the loading guard's own fixture above.
+		archetype: 'F, as a guard fixture rather than an inventory row',
+		url: `/practices/${practiceId}/settings/mfa`,
+		h1: 'Multi-factor authentication'
+	};
+
+	// Both the h1 and loading-affordance waits are satisfied here -- FormPage
+	// renders the title and no Skeleton in its loadError branch -- so a
+	// `scan` that stopped at either would have gone on to run axe against
+	// the one-Notice error screen and passed. It is the load-error wait
+	// that rejects, and it names what it saw.
+	await expect(scan(page, held)).rejects.toThrow(/failed to load/);
 });

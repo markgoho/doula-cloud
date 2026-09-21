@@ -108,7 +108,13 @@
 <container-l>
 	<center-l max="var(--form-max)" gutters="var(--page-gutter)">
 		{#if loadError}
-			<stack-l space="var(--space-7)">
+			<!-- data-load-error: a fact this Template already has about its
+			     own state, not a test hook -- app/e2e/accessibility.e2e.ts
+			     reads it to refuse scanning this branch as though it were the
+			     loaded screen (#1258). Presence-only, like Skeleton's own
+			     aria-busy, and invisible to sight and to assistive tech: the
+			     Notice below still carries role="alert" on its own. -->
+			<stack-l space="var(--space-7)" data-load-error>
 				<Heading level={1} variant="page" text={title} />
 				{@render introRegion()}
 				<Notice variant="error" message={loadError} />
