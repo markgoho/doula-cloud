@@ -19,15 +19,23 @@ import (
 // member holds, on every device -- offboarding, or a lost phone. This is
 // deliberately not what ordinary sign-out does: sign-out ends only the
 // browser making the request, this ends all of them (#154). Must be
-// mounted behind staffauth.Middleware, which is what makes the 403s for
-// a non-Owner or an Owner at a different Practice automatic: the caller
-// must already hold a membership at :practiceId to reach RequireOwner at
-// all. enq is ADR-0013's Cloud Tasks nudge for the session-notice outbox
-// row QueueSessionRevoked queues below -- registered rather than fired
-// directly, same reasoning as portalinvite.InviteHandler.
+// mounted behind staffauth.Middleware, which is what makes the 403 for
+// an Owner at a different Practice automatic: the caller must already
+// hold a membership at :practiceId for the mount's own role check to
+// resolve at all. enq is ADR-0013's Cloud Tasks nudge for the
+// session-notice outbox row QueueSessionRevoked queues below --
+// registered rather than fired directly, same reasoning as
+// portalinvite.InviteHandler.
+//
+// Owner-only is declared at the mount, not checked here (#1028,
+// following #970, #990 and #1016): this handler no longer calls
+// RequireOwner, because an Admin or a Doula is refused by the gate
+// before it runs. Widening or narrowing this route means editing its
+// role list in mount.go.
 func EndSessionsHandler(enq tasknudge.Enqueuer) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, practiceID, ok := RequireOwner(w, r)
+		tx, practiceID, ok := RequireTx(w, r)
+		// coverage:ignore reason: staffauth.Middleware always sets a tx before this handler runs
 		if !ok {
 			return
 		}

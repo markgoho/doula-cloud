@@ -9,9 +9,13 @@ import (
 // Mount registers Stripe Connect account creation and status, per-Engagement
 // Invoice creation and history, and the Practice-wide Invoice list (#265).
 func Mount(g *staffauth.GatedRouter, ir *idempotency.Router, client Client, enq tasknudge.Enqueuer) {
-	ir.Exempt("POST /api/practices/{practiceId}/payments/connect",
+	// Owner-only declared here rather than checked in PostConnectHandler
+	// (#1028, following #970, #990 and #1016): connecting the rail the
+	// Practice is paid on is the Owner's act outright, not a reach
+	// question, so the route table is where the rule belongs.
+	ir.ExemptGated("POST /api/practices/{practiceId}/payments/connect",
 		"lazily creates the Stripe Connect account and reuses the stored account id on any retry, row-locked against a concurrent create; a duplicate call resumes the same account, not a second one",
-		false, PostConnectHandler(client))
+		false, staffauth.OwnerOnly, PostConnectHandler(client))
 	// Connect state rides the same row as the money it carries: ADR-0008's
 	// read table gives "Stripe Connect state" to an Owner and an Admin and
 	// to nobody else (#267), for the reason it already gives Invoice

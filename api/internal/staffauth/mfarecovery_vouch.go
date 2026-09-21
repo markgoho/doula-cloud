@@ -23,9 +23,16 @@ import (
 // RequireRecentAuth's genuine step-up re-authentication, since this is
 // the one recovery path an already-signed-in person can trigger for
 // someone else. Must be mounted behind staffauth.Middleware.
+//
+// That Owner-only rule is declared at the mount, not checked here
+// (#1028, following #970, #990 and #1016): this handler no longer calls
+// RequireOwner, because an Admin or a Doula is refused by the gate
+// before it runs. Widening or narrowing this route means editing its
+// role list in mount.go.
 func VouchHandler(verifier authn.Verifier, enq tasknudge.Enqueuer) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, practiceID, ok := RequireOwner(w, r)
+		tx, practiceID, ok := RequireTx(w, r)
+		// coverage:ignore reason: staffauth.Middleware always sets a tx before this handler runs
 		if !ok {
 			return
 		}

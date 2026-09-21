@@ -196,9 +196,16 @@ func StatusHandler() http.Handler {
 // header is what proves it tried.
 //
 // Must be mounted behind staffauth.Middleware.
+//
+// Owner-only is declared at the mount, not checked here (#1028,
+// following #970, #990 and #1016): this handler no longer calls
+// staffauth.RequireOwner, because an Admin or a Doula is refused by the
+// gate before it runs. Widening or narrowing this route means editing
+// its role list in mount.go.
 func InitiateHandler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, practiceID, ok := staffauth.RequireOwner(w, r)
+		tx, practiceID, ok := staffauth.RequireTx(w, r)
+		// coverage:ignore reason: staffauth.Middleware always sets a tx before this handler runs
 		if !ok {
 			return
 		}
@@ -294,9 +301,16 @@ func InitiateHandler() http.Handler {
 // package doc comment).
 //
 // Must be mounted behind staffauth.Middleware.
+//
+// Owner-only is declared at the mount, not checked here (#1028,
+// following #970, #990 and #1016): this handler no longer calls
+// staffauth.RequireOwner, because an Admin or a Doula is refused by the
+// gate before it runs. Widening or narrowing this route means editing
+// its role list in mount.go.
 func RestoreHandler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, practiceID, ok := staffauth.RequireOwner(w, r)
+		tx, practiceID, ok := staffauth.RequireTx(w, r)
+		// coverage:ignore reason: staffauth.Middleware always sets a tx before this handler runs
 		if !ok {
 			return
 		}

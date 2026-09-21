@@ -13,13 +13,17 @@ func Mount(g *staffauth.GatedRouter, ir *idempotency.Router) {
 	// repeat while deletion is already pending or final, the same
 	// self-idempotent shape client/mount.go's own erasure POST argues for
 	// Exempt.
-	ir.Exempt("POST /api/practices/{practiceId}/deletion",
+	// Owner-only is declared here rather than checked in each handler
+	// (#1028, following #970, #990 and #1016) -- the same seat the
+	// pending-deletion read above already declares, and never a reach
+	// question: ending the Practice is the Owner's act outright.
+	ir.ExemptGated("POST /api/practices/{practiceId}/deletion",
 		"InitiateHandler locks the practices row FOR UPDATE and refuses a repeat while deletion is already pending or final, so a retry after the first commit 409s instead of enqueueing a second reminder and finalization",
-		false, InitiateHandler())
+		false, staffauth.OwnerOnly, InitiateHandler())
 	// DELETE is naturally idempotent (docs/api-design.md section 3):
 	// restoring an already-restored Practice 409s rather than no-opping,
 	// but that refusal is itself stable under a retry.
-	ir.Exempt("DELETE /api/practices/{practiceId}/deletion",
+	ir.ExemptGated("DELETE /api/practices/{practiceId}/deletion",
 		"DELETE is naturally idempotent per docs/api-design.md section 3; RestoreHandler's own 409 on nothing-pending is stable under a retry",
-		false, RestoreHandler())
+		false, staffauth.OwnerOnly, RestoreHandler())
 }
