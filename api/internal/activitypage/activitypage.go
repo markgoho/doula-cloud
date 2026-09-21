@@ -152,19 +152,51 @@ type Page[T any] struct {
 	HasMore    bool
 }
 
-// sharedColumns is what every subject-scoped reader selects, in scan
-// order: the row's identity and timing, and the three name columns the
-// two actor joins reach.
-const sharedColumns = `a.id, a.subject_kind, a.subject_id, a.action, a.actor_kind::text,
-	       s.name, c.given_name, c.preferred_name, a.created_at`
+// ActorJoin is the actor half of a row, named as one unit rather than as
+// two exported strings, so a caller cannot take the join without the
+// columns it feeds or the columns without the join that reaches them
+// (#1281). It carries nothing beyond that: not a general SQL fragment a
+// caller could extend, the same restriction Projection's own doc comment
+// places on a caller's Joins and Columns.
+//
+// Columns is s.name, c.given_name, c.preferred_name -- ActorName's own
+// three inputs, in the scan order both this package's List and
+// activityfeed's practice-wide reader expect them.
+//
+// Joins reaches the actor's name whichever of ADR-0022's two named actor
+// kinds wrote the row. Both are LEFT JOINs: a system-written row matches
+// neither, and a Staff actor who has since left matches the first one no
+// longer (staff_practice_visibility, 00002), which is the case
+// Row.ActorName names rather than blanks.
+type ActorJoin struct {
+	Columns string
+	Joins   string
+}
 
-// sharedJoins reach the actor's name whichever of ADR-0022's two named
-// actor kinds wrote the row. Both are LEFT JOINs: a system-written row
-// matches neither, and a Staff actor who has since left matches the
-// first one no longer (staff_practice_visibility, 00002), which is the
-// case Row.ActorName names rather than blanks.
-const sharedJoins = `LEFT JOIN staff s ON s.id = a.actor_staff_id
-	LEFT JOIN clients c ON c.id = a.actor_client_id`
+// SharedActorJoin is the one spelling of the actor half every reader of
+// ADR-0022's activity table composes into its own query: this package's
+// own subject-scoped Statement below, and activityfeed's practice-wide
+// one, which has no subject to scope by and so cannot use Statement
+// itself. Before #1281 the two wrote the same join and the same three
+// columns by hand.
+//
+// It is a var and not a const only because Go has no const struct; treat
+// it as one -- neither field is ever reassigned, here or in a caller.
+var SharedActorJoin = ActorJoin{
+	Columns: `s.name, c.given_name, c.preferred_name`,
+	Joins: `LEFT JOIN staff s ON s.id = a.actor_staff_id
+	LEFT JOIN clients c ON c.id = a.actor_client_id`,
+}
+
+// sharedColumns is what every subject-scoped reader selects, in scan
+// order: the row's identity and timing, and the three name columns
+// SharedActorJoin's own joins reach.
+var sharedColumns = `a.id, a.subject_kind, a.subject_id, a.action, a.actor_kind::text,
+	       ` + SharedActorJoin.Columns + `, a.created_at`
+
+// sharedJoins is SharedActorJoin's own Joins -- every subject-scoped
+// reader needs no join beyond the actor's.
+var sharedJoins = SharedActorJoin.Joins
 
 // Statement returns the SQL and arguments List issues for q and p.
 //
