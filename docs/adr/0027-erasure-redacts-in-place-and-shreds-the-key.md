@@ -73,6 +73,10 @@ The liveness question crosses tenants by construction, so it cannot be asked und
 
 [ADR-0031](0031-practice-deletion-is-a-thirty-day-window-then-the-erasure-cascade.md)'s deletion cascade runs the same act per Client and inherits this rule unchanged. It spares a **login**, and only while an un-erased Client still reaches it; it retains no record of care and restores nothing, which is the interaction [#1094](https://github.com/markgoho/doula-cloud/issues/1094) asks about from the other side.
 
+## Amendment, 2026-09-21: a billed Engagement can hold what this ADR would otherwise destroy ([#1094](https://github.com/markgoho/doula-cloud/issues/1094))
+
+New York Medicaid's own six-to-ten-year record-retention requirement conflicts with this ADR's redact-in-place cascade on an Engagement that billed a claim. The shape of the hold — what survives, the trigger, the clock, what happens at expiry, and the copy a Client reads — is recorded as an amendment to [ADR-0031](0031-practice-deletion-is-a-thirty-day-window-then-the-erasure-cascade.md) rather than here, because [#1094](https://github.com/markgoho/doula-cloud/issues/1094) also has to settle what a departed Practice's Deletion owes the same obligation, and the two questions read better answered together. This ADR's own redact-in-place act is what a hold defers, not what decides it: nothing above this amendment changes for a Client with no billed Engagement, and the mechanism the amendment describes is layered onto the act this ADR already runs.
+
 ## Considered and rejected
 
 **Deleting the `clients` row.** It would take every Invoice, Contract and Visit with it, or leave them dangling. The Practice's financial and clinical record is not hers to delete, and it is not the product's either.

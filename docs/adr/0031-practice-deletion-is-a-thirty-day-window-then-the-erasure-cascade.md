@@ -52,7 +52,56 @@ The mechanism is the "skip-at-send recheck" `offer/outbox.go` already uses for a
 
 `deletion_finalize_at` on `practices` is the durable "restore closes on this date" fact; `practice_deletion_outbox`'s own `next_attempt_at` is the separately mutable retry clock a failed send's backoff schedule can move. This is the same split migration `00065` drew between `client_erasure_outbox.redactable_after` and `next_attempt_at` for exactly the same reason: a retry backoff must never quietly move a deadline an Owner has already been shown.
 
+## Amendment, 2026-09-21: a billed Engagement holds its claim-carried fields through Erasure, and Deletion waits on a complete export ([#1094](https://github.com/markgoho/doula-cloud/issues/1094))
+
+New York Medicaid's own enrollment agreement — 18 NYCRR §504.3(a) and §517.3(b)(1), and the ETIN Certification Statement every enrolled doula signs and renews annually — obliges her to keep the records a submitted claim relied on for six years from the date of payment, longer under a Managed Care plan's own contract, and longer still for a minor. Erasure ([ADR-0027](0027-erasure-redacts-in-place-and-shreds-the-key.md)) and this ADR's own finalization cascade both destroy exactly those records, on a Client's word or a Practice's. Full research and both founder decisions are on [#1094](https://github.com/markgoho/doula-cloud/issues/1094); this amendment records the shape they settle on.
+
+### Erasure holds the claim-carried fields; it never refuses
+
+Erasure still runs the moment a Client asks, and still destroys everything it destroys today — every free-text field, the Stripe Customer, the sealed `activity` key. What changes is narrow: on an Engagement with a submitted Medicaid claim, the handful of identifying fields that claim carried are held rather than redacted, marked as held rather than silently kept, until the retention period tied to that claim's payer ends. The rejected alternative — refusing Erasure outright while any claim is unexpired — tells a Client "no" for six to ten years and holds her Practice's own non-billed data about her for no reason any regulation asks; it is recorded below.
+
+**The trigger is a submitted claim on the Engagement's own Visit, not the Practice's Medicaid enrollment.** A Practice enrolled with Medicaid that never billed for a given Client's care owes nothing extra for her record; the fact that gates the hold sits on the Engagement, by way of its Visits, never on the Practice. `CONTEXT.md`'s **Erasure** entry states this.
+
+**What is retained, concretely, and what is not, on a billed Engagement:**
+
+| Survives Erasure, held, only where a claim was submitted | Destroyed exactly as ADR-0027 already runs it |
+| --- | --- |
+| `clients.given_name`, `family_name`, `preferred_name` | `clients.email`, `phone` |
+| `clients.date_of_birth` | `clients.field_values` (the Practice-defined layer) |
+| The five `clients` address columns | `contracts.merge_field_values` |
+| The Medicaid member ID — no column exists yet; lands with [#335](https://github.com/markgoho/doula-cloud/issues/335) | Her sealed `activity` diffs, via key shredding — audit metadata about edits, not a claim-supporting record |
+| The practitioner's written recommendation — no entity holds it yet; lands with [#335](https://github.com/markgoho/doula-cloud/issues/335) | Her Stripe Customer(s), deleted immediately, redacted 90 days out |
+| | Every free-text field — a Message, a signed Contract's prose, a Plan Instance answer, a Visit's notes |
+
+A Client with no billed Engagement is unaffected: Erasure runs exactly as the rest of this ADR and ADR-0027 already describe it.
+
+### The clock: date of payment, carried as payer data, not a constant
+
+The retention clock starts on the date of payment — the latest of the three start events the statutes and the ETIN Certification Statement each use (date furnished, date furnished-or-billed, date of payment), so designing to payment satisfies all three. Its duration is not a constant: New York DOH's own Doula Manual Policy Guidelines make it per payer contract — six years from payment for fee-for-service, up to ten years from date of service under a Managed Care plan's own contract, and ten years or three years past majority for a minor member, whichever is later ([`docs/research/ny-medicaid-claims-route.md`](../research/ny-medicaid-claims-route.md)). The period is therefore data carried on the payer relationship a claim was billed against, seeded with New York fee-for-service's six years, never hard-coded — the same relationship [#335](https://github.com/markgoho/doula-cloud/issues/335)'s claims-submission design already has to give an Engagement a payer.
+
+**At expiry, the product stops refusing to finish erasing the held fields; it does not destroy them itself.** 18 NYCRR §517.3(b)(1) tolls the six-year period the day the state gives notice of an audit, and drops it entirely where fraud may be involved — a clock the software ran to completion and acted on unattended could destroy evidence during an open audit. What expiry changes is permission: before it, finishing the redaction the held fields were spared from is refused; after it, an Owner may run it, the same way she runs any other Erasure, and nothing runs it for her.
+
+### The copy she reads
+
+Where a field is held, this is the fixed wording Erasure's confirmation and record both carry, in full:
+
+> Most of your information has been deleted today. Because your care was billed to Medicaid, the law requires us to keep your name, date of birth, and address on file until {date}. After that date, your doula can finish deleting them too.
+
+Where nothing is held, today's copy is unchanged. `{date}` resolves from the retention period on the payer relationship the claim was billed against.
+
+### The interaction with #830: unchanged, because nothing about the login moves
+
+A held field lives on the `clients` row — the same row ADR-0027's own cascade already redacts everything else on. [#830](https://github.com/markgoho/doula-cloud/issues/830)'s rule governs `portal_accounts` and the sessions attached to the login, and it already says the deletion cascade "retains no record of care and restores nothing." Holding a claim-carried field does not touch that: the login is unlinked and, where nothing else reaches it, deleted, exactly as #830 already runs it, whether or not the Client whose Erasure ran has a held field behind her. A retained clinical record at one Practice never resurrects a login the Client removed.
+
+### Deletion refuses to start until a complete export exists
+
+Export was previously this ADR's own "stated prerequisite in product terms, not a code dependency" — a Practice could take its data out first, but nothing enforced that it happened before deletion started. It becomes a precheck: initiation refuses, the same way the unsettled-invoice precheck above already does, until the Owner has downloaded a complete export of the Practice's data. With that met, finalization runs exactly as this ADR describes today — every Client on file erased through the same cascade, the balance forfeited, the row locked. Deletion does not gain a retained-records tier that outlives a departed Practice: a Client's claim-carried fields, wherever they were being held under an unexpired retention period, are exported to the Practice along with the rest of her record and then destroyed at finalization the same as everything else the cascade already destroys — the six-to-ten-year obligation moves to whoever signed the ETIN Certification Statement for it, not to Doula Cloud. This is the return path 45 CFR §164.504(e)(2)(ii)(J) names for a business associate at termination, and it is feasible here specifically because export exists.
+
 ## Considered and rejected
+
+**Refusing Erasure outright while a Medicaid claim is unexpired ([#1094](https://github.com/markgoho/doula-cloud/issues/1094)).** Simpler to build and worse to read: a Client who asks is told "no" for six to ten years, and her Practice's own non-billed data about her stays too, which no regulation asks for. Holding only the claim-carried fields, and running everything else exactly as before, was chosen instead.
+
+**Doula Cloud hosting a departed Practice's claim-carried records for the full retention period ([#1094](https://github.com/markgoho/doula-cloud/issues/1094)).** Five to ten years of storage and backup per departed Practice, inside the audit and security surface, for a Practice that pays nothing further — against one precheck at initiation. 45 CFR §164.504(e)(2)(ii)(J)'s return-if-feasible path also points at handing the records over rather than holding them, and export already makes that feasible.
 
 **Deleting the `practices` row.** The same argument ADR-0027 makes for `clients`, one table wider: it would take fifty-odd related tables with it or leave them orphaned, and Doula Cloud's own billing record is not the Practice's to delete.
 
