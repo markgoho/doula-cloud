@@ -18,6 +18,10 @@ import "time"
 // is read and compared as (visit.dateLayout, engagement.dateLayout).
 const dateLayout = "2006-01-02"
 
+// KindBirth is the engagement_kind a window can exist for: postpartum
+// work is shift-shaped, not on-call-shaped.
+const KindBirth = "birth"
+
 // fullTermWeeks is the gestational age a due date names: 40w0d. A
 // gestational-week start rule counts back from the due date by the
 // difference.
@@ -119,7 +123,7 @@ type Window struct {
 // birth day -- and otherwise the due date plus the Practice's grace.
 func DeriveWindow(in WindowInput) (*Window, NoWindowReason) {
 	switch {
-	case in.Kind != "birth":
+	case in.Kind != KindBirth:
 		return nil, NoWindowPostpartum
 	case in.Status != "active":
 		return nil, NoWindowNotActive
@@ -131,10 +135,9 @@ func DeriveWindow(in WindowInput) (*Window, NoWindowReason) {
 	ended, hasEnded := parseDate(in.PregnancyEndedOn)
 
 	var start time.Time
-	switch in.Rule.Start {
-	case StartAttachmentGranted:
+	if in.Rule.Start == StartAttachmentGranted {
 		start, _ = parseDate(in.FirstGrantedOn)
-	default:
+	} else {
 		if !hasDue {
 			return nil, NoWindowNoDueDate
 		}

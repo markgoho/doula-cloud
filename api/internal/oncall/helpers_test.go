@@ -23,6 +23,25 @@ const (
 	adminRole    = "admin"
 	employeeType = "employee"
 	zone         = "America/New_York"
+	backupName   = "Bo Backup"
+	statusSent   = "sent"
+	fieldWeek    = "startWeek"
+)
+
+// The fixture calendar, named once. Every date test in this package
+// works against one birth due 2026-10-30, whose default window under a
+// 37-week rule and a 14-day grace runs windowStart..windowEnd.
+const (
+	windowStart    = "2026-10-09"
+	windowEnd      = "2026-11-13"
+	octFirst       = "2026-10-01"
+	octTwelfth     = "2026-10-12"
+	octFifteen     = "2026-10-15"
+	octTwenty      = "2026-10-20"
+	octTwentyTwo   = "2026-10-22"
+	octTwentyThree = "2026-10-23"
+	octLast        = "2026-10-31"
+	grantedOn      = "2026-06-01"
 )
 
 // newServer mounts this package's whole surface through oncall.Mount, the
@@ -71,6 +90,21 @@ func authedBody(t *testing.T, session, method, url string, body any) *http.Respo
 		t.Fatalf("request: %v", err)
 	}
 	return resp
+}
+
+// doJSON performs one authenticated call and decodes its body into T,
+// failing on any status but want. The request and its body's close live
+// in one place, so no test has to hold a response open across an
+// assertion.
+func doJSON[T any](t *testing.T, session, method, url string, body any, want int) T {
+	t.Helper()
+	return decode[T](t, authedBody(t, session, method, url, body), want) //nolint:bodyclose // decode closes the body
+}
+
+// getJSON is doJSON for a read.
+func getJSON[T any](t *testing.T, session, url string, want int) T {
+	t.Helper()
+	return doJSON[T](t, session, http.MethodGet, url, nil, want)
 }
 
 // decode reads resp's body into T, failing on any status but want.

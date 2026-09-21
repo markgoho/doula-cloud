@@ -23,6 +23,13 @@ type gapFacts struct {
 	reason          *string
 }
 
+// diffBefore and diffAfter are the two keys every on-call diff in this
+// package is written under, so a ledger reader meets one convention.
+const (
+	diffBefore = "before"
+	diffAfter  = "after"
+)
+
 // gapDiff is the Activity diff every gap action records. Before is
 // absent on a create and After on a clear.
 type gapDiff struct {

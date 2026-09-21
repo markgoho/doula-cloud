@@ -86,7 +86,7 @@ func PutRuleHandler() http.Handler {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
-		case kind != "birth":
+		case kind != KindBirth:
 			apierr.Write(w, http.StatusConflict, apierr.CodeFailedPrecondition, MsgNotABirth, nil)
 			return
 		}
@@ -106,7 +106,7 @@ func PutRuleHandler() http.Handler {
 				return
 			}
 			if err := recordEngagement(r.Context(), tx, practiceID, engagementID, activity.ActionOnCallRuleChanged,
-				map[string]RuleRequest{"before": before, "after": req}); err != nil {
+				map[string]RuleRequest{diffBefore: before, diffAfter: req}); err != nil {
 				// coverage:ignore reason: DB query failure, not exercised by unit tests
 				apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 				return
@@ -196,7 +196,7 @@ func PutNarrowingHandler() http.Handler {
 				return
 			}
 			if err := recordEngagement(r.Context(), tx, practiceID, engagementID, activity.ActionOnCallNarrowingChanged,
-				map[string]any{"staffId": staffID, "before": before, "after": req}); err != nil {
+				map[string]any{"staffId": staffID, diffBefore: before, diffAfter: req}); err != nil {
 				// coverage:ignore reason: DB query failure, not exercised by unit tests
 				apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 				return
@@ -215,14 +215,18 @@ func recordEngagement(ctx context.Context, tx *sql.Tx, practiceID, engagementID 
 		return fmt.Errorf("oncall: marshal %s diff: %w", action, err)
 	}
 	actor, _ := staffauth.StaffID(ctx)
-	return activity.Record(ctx, tx, activity.Entry{
+	if err := activity.Record(ctx, tx, activity.Entry{
 		PracticeID:  practiceID,
 		SubjectKind: activity.SubjectEngagement,
 		SubjectID:   engagementID,
 		Action:      string(action),
 		Diff:        raw,
 		Actor:       activity.StaffActor(actor),
-	})
+	}); err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		return fmt.Errorf("oncall: record %s: %w", action, err)
+	}
+	return nil
 }
 
 func sameRule(a, b RuleRequest) bool {

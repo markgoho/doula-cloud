@@ -67,7 +67,7 @@ func TestCreateGap_AnUncoveredGapIsRecordedAndQueuesOneNotice(t *testing.T) {
 	srv, session, enq := newServerWithNudge(t, db, f.ownerUID)
 	defer srv.Close()
 
-	gap := decode[oncall.Gap](t, authedBody(t, session, http.MethodPost, gapsURL(srv.URL, f.practiceID, f.engagementID), gapBody(f.doulaID, nil)), http.StatusCreated)
+	gap := doJSON[oncall.Gap](t, session, http.MethodPost, gapsURL(srv.URL, f.practiceID, f.engagementID), gapBody(f.doulaID, nil), http.StatusCreated)
 	if gap.StaffID != f.doulaID || !gap.StartsAt.Equal(gapStart) || gap.CoveringStaffID != nil {
 		t.Fatalf("gap = %+v", gap)
 	}
@@ -98,13 +98,13 @@ func countOwner(t *testing.T, db *testdb.DB, f soloFixture) string {
 func TestCreateGap_ACoveredGapQueuesNothing(t *testing.T) {
 	db := testdb.New(t)
 	f := newSoloFixture(t, db, "gap-covered")
-	backupID := testdb.SeedNamedStaffAtPractice(t, db, f.practiceID, "gap-covered-backup", "Bo Backup", []string{doulaRole}, employeeType)
+	backupID := testdb.SeedNamedStaffAtPractice(t, db, f.practiceID, "gap-covered-backup", backupName, []string{doulaRole}, employeeType)
 	testdb.SeedGrantedAttachment(t, db, f.engagementID, backupID)
 	srv, session, enq := newServerWithNudge(t, db, f.ownerUID)
 	defer srv.Close()
 
-	gap := decode[oncall.Gap](t, authedBody(t, session, http.MethodPost, gapsURL(srv.URL, f.practiceID, f.engagementID), gapBody(f.doulaID, &backupID)), http.StatusCreated)
-	if gap.CoveringStaffName == nil || *gap.CoveringStaffName != "Bo Backup" {
+	gap := doJSON[oncall.Gap](t, session, http.MethodPost, gapsURL(srv.URL, f.practiceID, f.engagementID), gapBody(f.doulaID, &backupID), http.StatusCreated)
+	if gap.CoveringStaffName == nil || *gap.CoveringStaffName != backupName {
 		t.Fatalf("covering = %v, want Bo Backup", gap.CoveringStaffName)
 	}
 	if n := pendingNotices(t, db, gap.ID); n != 0 || len(enq.Calls()) != 0 {
@@ -135,7 +135,7 @@ func TestCreateGap_RefusesWhatItShould(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			body := decode[map[string]any](t, authedBody(t, session, http.MethodPost, gapsURL(srv.URL, f.practiceID, f.engagementID), tt.body), http.StatusBadRequest)
+			body := doJSON[map[string]any](t, session, http.MethodPost, gapsURL(srv.URL, f.practiceID, f.engagementID), tt.body, http.StatusBadRequest)
 			details, _ := body["details"].(map[string]any)
 			if _, ok := details[tt.field]; !ok {
 				t.Fatalf("details = %v, want a refusal under %q", details, tt.field)
@@ -154,7 +154,7 @@ func TestCreateGap_NoWindowIsRefused(t *testing.T) {
 	srv, session := newServer(t, db, f.ownerUID)
 	defer srv.Close()
 
-	body := decode[map[string]any](t, authedBody(t, session, http.MethodPost, gapsURL(srv.URL, f.practiceID, f.engagementID), gapBody(f.doulaID, nil)), http.StatusConflict)
+	body := doJSON[map[string]any](t, session, http.MethodPost, gapsURL(srv.URL, f.practiceID, f.engagementID), gapBody(f.doulaID, nil), http.StatusConflict)
 	if body["message"] != oncall.MsgNoWindow {
 		t.Fatalf("message = %v, want %q", body["message"], oncall.MsgNoWindow)
 	}
@@ -164,14 +164,14 @@ func TestCreateGap_ADoulaRecordsOnlyHerOwn(t *testing.T) {
 	db := testdb.New(t)
 	f := newSoloFixture(t, db, "gap-self")
 	const colleagueUID = "gap-self-colleague"
-	colleagueID := testdb.SeedNamedStaffAtPractice(t, db, f.practiceID, colleagueUID, "Bo Backup", []string{doulaRole}, employeeType)
+	colleagueID := testdb.SeedNamedStaffAtPractice(t, db, f.practiceID, colleagueUID, backupName, []string{doulaRole}, employeeType)
 	testdb.SeedGrantedAttachment(t, db, f.engagementID, colleagueID)
 	srv, session := newServer(t, db, colleagueUID)
 	defer srv.Close()
 
 	url := gapsURL(srv.URL, f.practiceID, f.engagementID)
-	decode[map[string]any](t, authedBody(t, session, http.MethodPost, url, gapBody(f.doulaID, nil)), http.StatusForbidden)
-	decode[oncall.Gap](t, authedBody(t, session, http.MethodPost, url+"?self", gapBody(colleagueID, nil)), http.StatusCreated)
+	doJSON[map[string]any](t, session, http.MethodPost, url, gapBody(f.doulaID, nil), http.StatusForbidden)
+	doJSON[oncall.Gap](t, session, http.MethodPost, url+"?self", gapBody(colleagueID, nil), http.StatusCreated)
 }
 
 func TestCreateGap_AContractorReachesOnlyHerOwnBirth(t *testing.T) {
@@ -183,8 +183,8 @@ func TestCreateGap_AContractorReachesOnlyHerOwnBirth(t *testing.T) {
 	defer srv.Close()
 
 	url := gapsURL(srv.URL, f.practiceID, f.engagementID)
-	decode[map[string]any](t, authedBody(t, session, http.MethodPost, url, gapBody(contractorID, nil)), http.StatusNotFound)
+	doJSON[map[string]any](t, session, http.MethodPost, url, gapBody(contractorID, nil), http.StatusNotFound)
 
 	testdb.SeedGrantedAttachment(t, db, f.engagementID, contractorID)
-	decode[oncall.Gap](t, authedBody(t, session, http.MethodPost, url+"?attached", gapBody(contractorID, nil)), http.StatusCreated)
+	doJSON[oncall.Gap](t, session, http.MethodPost, url+"?attached", gapBody(contractorID, nil), http.StatusCreated)
 }

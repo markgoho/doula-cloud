@@ -125,7 +125,7 @@ func writeSettings(ctx context.Context, tx *sql.Tx, practiceID string, before, a
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		return fmt.Errorf("oncall: write practice on-call rule: %w", err)
 	}
-	diff, err := json.Marshal(map[string]Settings{"before": before, "after": after})
+	diff, err := json.Marshal(map[string]Settings{diffBefore: before, diffAfter: after})
 	if err != nil {
 		// coverage:ignore reason: marshal of a fixed, always-serializable struct never fails
 		return fmt.Errorf("oncall: marshal on-call rule diff: %w", err)

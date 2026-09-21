@@ -30,7 +30,7 @@ func newNoticeFixture(t *testing.T, db *testdb.DB, prefix string) noticeFixture 
 	exec(t, db, `UPDATE practices SET name = 'Willow Birth Collective' WHERE id = $1`, f.practiceID)
 	testdb.SeedStaffAtPractice(t, db, f.practiceID, prefix+"-admin", []string{adminRole}, employeeType)
 	f.doulaID = testdb.SeedNamedStaffAtPractice(t, db, f.practiceID, prefix+"-doula", "Maya Primary", []string{doulaRole}, employeeType)
-	f.backupID = testdb.SeedNamedStaffAtPractice(t, db, f.practiceID, prefix+"-backup", "Bo Backup", []string{doulaRole}, employeeType)
+	f.backupID = testdb.SeedNamedStaffAtPractice(t, db, f.practiceID, prefix+"-backup", backupName, []string{doulaRole}, employeeType)
 
 	due := time.Now().AddDate(0, 0, 10).Format("2006-01-02")
 	f.engagementID = seedBirth(t, db, f.practiceID, "Ada Whitfield", due)
@@ -41,8 +41,8 @@ func newNoticeFixture(t *testing.T, db *testdb.DB, prefix string) noticeFixture 
 	ends := starts.Add(4 * time.Hour)
 	srv, session := newServer(t, db, f.ownerUID)
 	defer srv.Close()
-	f.gapID = decode[oncall.Gap](t, authedBody(t, session, http.MethodPost, gapsURL(srv.URL, f.practiceID, f.engagementID),
-		oncall.GapRequest{StaffID: f.doulaID, StartsAt: &starts, EndsAt: &ends}), http.StatusCreated).ID
+	f.gapID = doJSON[oncall.Gap](t, session, http.MethodPost, gapsURL(srv.URL, f.practiceID, f.engagementID),
+		oncall.GapRequest{StaffID: f.doulaID, StartsAt: &starts, EndsAt: &ends}, http.StatusCreated).ID
 	return f
 }
 
@@ -85,7 +85,7 @@ func TestGapNoticeWorker_MailsEveryOwnerAndAdminAndNamesNothing(t *testing.T) {
 	var to []string
 	for _, msg := range sender.Sent() {
 		to = append(to, msg.To)
-		for _, identifying := range []string{"Willow", "Ada", "Whitfield", "Maya", "Bo Backup"} {
+		for _, identifying := range []string{"Willow", "Ada", "Whitfield", "Maya", backupName} {
 			if strings.Contains(msg.Subject+msg.Text+msg.From, identifying) {
 				t.Errorf("the notice carries %q; a Platform Notification is content-free", identifying)
 			}
@@ -99,7 +99,7 @@ func TestGapNoticeWorker_MailsEveryOwnerAndAdminAndNamesNothing(t *testing.T) {
 	if !slices.Equal(to, want) {
 		t.Fatalf("mailed %v, want every Owner and Admin %v and no Doula", to, want)
 	}
-	if got := noticeStatus(t, db, f.gapID); got != "sent" {
+	if got := noticeStatus(t, db, f.gapID); got != statusSent {
 		t.Fatalf("status = %q, want sent", got)
 	}
 	if n := countRows(t, db, `SELECT count(*) FROM coverage_gap_outbox WHERE gap_id = $1 AND cardinality(notified_staff_ids) = 2`, f.gapID); n != 1 {
@@ -123,7 +123,7 @@ func TestGapNoticeWorker_SendsNothingForAGapNoLongerOpen(t *testing.T) {
 			if len(sender.Sent()) != 0 {
 				t.Fatalf("mailed %d messages for a gap that was %s", len(sender.Sent()), name)
 			}
-			if got := noticeStatus(t, db, f.gapID); got != "sent" {
+			if got := noticeStatus(t, db, f.gapID); got != statusSent {
 				t.Fatalf("status = %q, want sent with nothing mailed", got)
 			}
 		})

@@ -6,8 +6,6 @@ import (
 	"doula-cloud/api/internal/oncall"
 )
 
-func ptr(s string) *string { return &s }
-
 // birth is the ordinary case every table row below starts from: an
 // active birth Engagement with a granted Attachment, the Practice's
 // default rule, and a due date.
@@ -15,8 +13,8 @@ func birth() oncall.WindowInput {
 	return oncall.WindowInput{
 		Kind:           "birth",
 		Status:         "active",
-		DueDate:        ptr("2026-10-30"),
-		FirstGrantedOn: ptr("2026-06-01"),
+		DueDate:        new("2026-10-30"),
+		FirstGrantedOn: new(grantedOn),
 		Rule:           oncall.Rule{Start: oncall.StartGestationalWeek, Week: 37, GraceDays: 14},
 	}
 }
@@ -32,31 +30,31 @@ func TestDeriveWindow(t *testing.T) {
 		{
 			name:      "37w0d is three weeks before the due date, and the end is the due date plus the grace",
 			edit:      func(*oncall.WindowInput) {},
-			wantStart: "2026-10-09",
-			wantEnd:   "2026-11-13",
+			wantStart: windowStart,
+			wantEnd:   windowEnd,
 		},
 		{
 			name:      "a later gestational week starts later",
 			edit:      func(in *oncall.WindowInput) { in.Rule.Week = 39 },
-			wantStart: "2026-10-23",
-			wantEnd:   "2026-11-13",
+			wantStart: octTwentyThree,
+			wantEnd:   windowEnd,
 		},
 		{
 			name:      "the grant-date rule starts on the day the Attachment was granted",
 			edit:      func(in *oncall.WindowInput) { in.Rule.Start = oncall.StartAttachmentGranted },
-			wantStart: "2026-06-01",
-			wantEnd:   "2026-11-13",
+			wantStart: grantedOn,
+			wantEnd:   windowEnd,
 		},
 		{
 			name:      "a recorded pregnancy end closes the window on that day, not on the grace",
-			edit:      func(in *oncall.WindowInput) { in.PregnancyEndedOn = ptr("2026-10-27") },
-			wantStart: "2026-10-09",
+			edit:      func(in *oncall.WindowInput) { in.PregnancyEndedOn = new("2026-10-27") },
+			wantStart: windowStart,
 			wantEnd:   "2026-10-27",
 		},
 		{
 			name:      "zero grace ends on the due date itself",
 			edit:      func(in *oncall.WindowInput) { in.Rule.GraceDays = 0 },
-			wantStart: "2026-10-09",
+			wantStart: windowStart,
 			wantEnd:   "2026-10-30",
 		},
 		{
@@ -77,9 +75,9 @@ func TestDeriveWindow(t *testing.T) {
 			edit: func(in *oncall.WindowInput) {
 				in.DueDate = nil
 				in.Rule.Start = oncall.StartAttachmentGranted
-				in.PregnancyEndedOn = ptr("2026-09-02")
+				in.PregnancyEndedOn = new("2026-09-02")
 			},
-			wantStart: "2026-06-01",
+			wantStart: grantedOn,
 			wantEnd:   "2026-09-02",
 		},
 		{
@@ -104,12 +102,12 @@ func TestDeriveWindow(t *testing.T) {
 		},
 		{
 			name:       "a birth before the window would have opened leaves no window",
-			edit:       func(in *oncall.WindowInput) { in.PregnancyEndedOn = ptr("2026-09-20") },
+			edit:       func(in *oncall.WindowInput) { in.PregnancyEndedOn = new("2026-09-20") },
 			wantReason: oncall.NoWindowEndedBeforeStart,
 		},
 		{
 			name:       "an empty due-date string is treated as absent",
-			edit:       func(in *oncall.WindowInput) { in.DueDate = ptr("") },
+			edit:       func(in *oncall.WindowInput) { in.DueDate = new("") },
 			wantReason: oncall.NoWindowNoDueDate,
 		},
 	}
@@ -146,17 +144,17 @@ func TestRuleResolve(t *testing.T) {
 	}
 
 	week := int16(38)
-	if got := practice.Resolve(ptr(string(oncall.StartGestationalWeek)), &week); got.Week != 38 || got.GraceDays != 10 {
+	if got := practice.Resolve(new(string(oncall.StartGestationalWeek)), &week); got.Week != 38 || got.GraceDays != 10 {
 		t.Fatalf("week override = %+v, want week 38 and the Practice's grace", got)
 	}
 
-	if got := practice.Resolve(ptr(string(oncall.StartAttachmentGranted)), nil); got.Start != oncall.StartAttachmentGranted || got.GraceDays != 10 {
+	if got := practice.Resolve(new(string(oncall.StartAttachmentGranted)), nil); got.Start != oncall.StartAttachmentGranted || got.GraceDays != 10 {
 		t.Fatalf("grant-date override = %+v, want the grant-date rule with the Practice's grace", got)
 	}
 }
 
 func TestEffectiveInterval(t *testing.T) {
-	window := oncall.Window{Start: "2026-10-09", End: "2026-11-13"}
+	window := oncall.Window{Start: windowStart, End: windowEnd}
 
 	tests := []struct {
 		name     string
@@ -165,12 +163,12 @@ func TestEffectiveInterval(t *testing.T) {
 		wantTo   string
 		wantNone bool
 	}{
-		{name: "no narrowing is the whole window", wantFrom: "2026-10-09", wantTo: "2026-11-13"},
-		{name: "a narrowing inside the window is the narrowing", from: ptr("2026-10-20"), to: ptr("2026-10-25"), wantFrom: "2026-10-20", wantTo: "2026-10-25"},
-		{name: "an open end runs to the window's end", from: ptr("2026-10-23"), wantFrom: "2026-10-23", wantTo: "2026-11-13"},
-		{name: "an open start runs from the window's start", to: ptr("2026-10-22"), wantFrom: "2026-10-09", wantTo: "2026-10-22"},
-		{name: "a narrowing wider than the window is clipped to it", from: ptr("2026-09-01"), to: ptr("2026-12-01"), wantFrom: "2026-10-09", wantTo: "2026-11-13"},
-		{name: "a narrowing wholly outside the window is not on call at all", from: ptr("2026-12-01"), to: ptr("2026-12-05"), wantNone: true},
+		{name: "no narrowing is the whole window", wantFrom: windowStart, wantTo: windowEnd},
+		{name: "a narrowing inside the window is the narrowing", from: new(octTwenty), to: new("2026-10-25"), wantFrom: octTwenty, wantTo: "2026-10-25"},
+		{name: "an open end runs to the window's end", from: new(octTwentyThree), wantFrom: octTwentyThree, wantTo: windowEnd},
+		{name: "an open start runs from the window's start", to: new(octTwentyTwo), wantFrom: windowStart, wantTo: octTwentyTwo},
+		{name: "a narrowing wider than the window is clipped to it", from: new("2026-09-01"), to: new("2026-12-01"), wantFrom: windowStart, wantTo: windowEnd},
+		{name: "a narrowing wholly outside the window is not on call at all", from: new("2026-12-01"), to: new("2026-12-05"), wantNone: true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

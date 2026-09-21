@@ -8,8 +8,8 @@ import (
 )
 
 func TestUnstaffedDays(t *testing.T) {
-	window := oncall.Window{Start: "2026-10-09", End: "2026-11-13"}
-	october := oncall.Window{Start: "2026-10-01", End: "2026-10-31"}
+	window := oncall.Window{Start: windowStart, End: windowEnd}
+	october := oncall.Window{Start: octFirst, End: octLast}
 
 	tests := []struct {
 		name       string
@@ -27,8 +27,8 @@ func TestUnstaffedDays(t *testing.T) {
 			name: "a primary until week 39 and a backup after it meet with no hole",
 			rng:  october,
 			effectives: []oncall.Window{
-				{Start: "2026-10-09", End: "2026-10-22"},
-				{Start: "2026-10-23", End: "2026-11-13"},
+				{Start: windowStart, End: octTwentyTwo},
+				{Start: octTwentyThree, End: windowEnd},
 			},
 			want: nil,
 		},
@@ -36,28 +36,28 @@ func TestUnstaffedDays(t *testing.T) {
 			name: "two narrowings that leave days between them leave exactly those days",
 			rng:  october,
 			effectives: []oncall.Window{
-				{Start: "2026-10-09", End: "2026-10-15"},
-				{Start: "2026-10-20", End: "2026-11-13"},
+				{Start: windowStart, End: octFifteen},
+				{Start: octTwenty, End: windowEnd},
 			},
 			want: []oncall.Window{{Start: "2026-10-16", End: "2026-10-19"}},
 		},
 		{
 			name:       "a hole outside the chosen range is not reported",
-			rng:        oncall.Window{Start: "2026-10-01", End: "2026-10-12"},
-			effectives: []oncall.Window{{Start: "2026-10-09", End: "2026-10-15"}},
+			rng:        oncall.Window{Start: octFirst, End: octTwelfth},
+			effectives: []oncall.Window{{Start: windowStart, End: octFifteen}},
 			want:       nil,
 		},
 		{
 			name:       "a hole at the window's tail is clipped to the range",
 			rng:        october,
-			effectives: []oncall.Window{{Start: "2026-10-09", End: "2026-10-27"}},
-			want:       []oncall.Window{{Start: "2026-10-28", End: "2026-10-31"}},
+			effectives: []oncall.Window{{Start: windowStart, End: "2026-10-27"}},
+			want:       []oncall.Window{{Start: "2026-10-28", End: octLast}},
 		},
 		{
 			name:       "nobody on call at all is the whole overlap",
 			rng:        october,
 			effectives: nil,
-			want:       []oncall.Window{{Start: "2026-10-09", End: "2026-10-31"}},
+			want:       []oncall.Window{{Start: windowStart, End: octLast}},
 		},
 		{
 			name:       "a range that misses the window has nothing to report",
@@ -67,25 +67,25 @@ func TestUnstaffedDays(t *testing.T) {
 		},
 		{
 			name: "a narrowing that ends before the range is passed over",
-			rng:  oncall.Window{Start: "2026-10-20", End: "2026-10-31"},
+			rng:  oncall.Window{Start: octTwenty, End: octLast},
 			effectives: []oncall.Window{
-				{Start: "2026-10-09", End: "2026-10-12"},
-				{Start: "2026-10-20", End: "2026-11-13"},
+				{Start: windowStart, End: octTwelfth},
+				{Start: octTwenty, End: windowEnd},
 			},
 			want: nil,
 		},
 		{
 			name:       "a narrowing that starts after the range leaves the range's tail, clipped",
-			rng:        oncall.Window{Start: "2026-10-01", End: "2026-10-12"},
-			effectives: []oncall.Window{{Start: "2026-10-20", End: "2026-11-13"}},
-			want:       []oncall.Window{{Start: "2026-10-09", End: "2026-10-12"}},
+			rng:        oncall.Window{Start: octFirst, End: octTwelfth},
+			effectives: []oncall.Window{{Start: octTwenty, End: windowEnd}},
+			want:       []oncall.Window{{Start: windowStart, End: octTwelfth}},
 		},
 		{
 			name: "overlapping narrowings are one coverage",
 			rng:  october,
 			effectives: []oncall.Window{
-				{Start: "2026-10-15", End: "2026-11-13"},
-				{Start: "2026-10-09", End: "2026-10-20"},
+				{Start: octFifteen, End: windowEnd},
+				{Start: windowStart, End: octTwenty},
 			},
 			want: nil,
 		},
@@ -101,14 +101,14 @@ func TestUnstaffedDays(t *testing.T) {
 }
 
 func TestWindowOverlaps(t *testing.T) {
-	w := oncall.Window{Start: "2026-10-09", End: "2026-11-13"}
-	if !w.Overlaps(oncall.Window{Start: "2026-11-13", End: "2026-11-20"}) {
+	w := oncall.Window{Start: windowStart, End: windowEnd}
+	if !w.Overlaps(oncall.Window{Start: windowEnd, End: "2026-11-20"}) {
 		t.Error("a range starting on the window's last day overlaps it")
 	}
 	if w.Overlaps(oncall.Window{Start: "2026-11-14", End: "2026-11-20"}) {
 		t.Error("a range starting the day after the window does not overlap it")
 	}
-	if w.Overlaps(oncall.Window{Start: "2026-10-01", End: "2026-10-08"}) {
+	if w.Overlaps(oncall.Window{Start: octFirst, End: "2026-10-08"}) {
 		t.Error("a range ending the day before the window does not overlap it")
 	}
 }

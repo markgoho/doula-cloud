@@ -82,7 +82,7 @@ func TestRoster_ContractorReadsOnlyHerOwnEngagements(t *testing.T) {
 	srv, session := newServer(t, db, f.contractorUID)
 	defer srv.Close()
 
-	resp := authedGet(t, session, rosterURL(srv.URL, f.practiceID, "2026-10-01", "2026-10-31"))
+	resp := authedGet(t, session, rosterURL(srv.URL, f.practiceID, octFirst, octLast))
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("status = %d, want 200", resp.StatusCode)
@@ -103,7 +103,7 @@ func TestRoster_ContractorReadsOnlyHerOwnEngagements(t *testing.T) {
 		}
 	}
 
-	roster := decode[oncall.RosterResponse](t, authedGet(t, session, rosterURL(srv.URL, f.practiceID, "2026-10-01", "2026-10-31")), http.StatusOK)
+	roster := getJSON[oncall.RosterResponse](t, session, rosterURL(srv.URL, f.practiceID, octFirst, octLast), http.StatusOK)
 	if got := windowIDs(roster); !slices.Equal(got, []string{f.adaEngagement}) {
 		t.Fatalf("windows = %v, want only her own %s", got, f.adaEngagement)
 	}
@@ -125,7 +125,7 @@ func TestRoster_ContractorSeesAColleagueByNameAndAvailabilityOnly(t *testing.T) 
 	srv, session := newServer(t, db, f.contractorUID)
 	defer srv.Close()
 
-	roster := decode[oncall.RosterResponse](t, authedGet(t, session, rosterURL(srv.URL, f.practiceID, "2026-10-17", "2026-10-17")), http.StatusOK)
+	roster := getJSON[oncall.RosterResponse](t, session, rosterURL(srv.URL, f.practiceID, "2026-10-17", "2026-10-17"), http.StatusOK)
 
 	byID := map[string]oncall.RosterDoula{}
 	for _, d := range roster.Doulas {
@@ -163,7 +163,7 @@ func TestRoster_AmbientReadersReadTheWholePractice(t *testing.T) {
 			srv, session := newServer(t, db, uid)
 			defer srv.Close()
 
-			roster := decode[oncall.RosterResponse](t, authedGet(t, session, rosterURL(srv.URL, f.practiceID, "2026-10-01", "2026-10-31")), http.StatusOK)
+			roster := getJSON[oncall.RosterResponse](t, session, rosterURL(srv.URL, f.practiceID, octFirst, octLast), http.StatusOK)
 			want := sorted(f.adaEngagement, f.beaEngagement, f.cleoEngagement)
 			if got := windowIDs(roster); !slices.Equal(got, want) {
 				t.Fatalf("windows = %v, want %v", got, want)

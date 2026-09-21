@@ -159,7 +159,7 @@ func loadEngagements(ctx context.Context, tx *sql.Tx, practiceID string, setting
 			granted := doula.attachedAt.In(settings.zone).Format(dateLayout)
 			current := &out[len(out)-1]
 			current.window, current.reason = DeriveWindow(WindowInput{
-				Kind:             "birth",
+				Kind:             KindBirth,
 				Status:           "active",
 				DueDate:          current.dueDate,
 				PregnancyEndedOn: nullString(endedOn),

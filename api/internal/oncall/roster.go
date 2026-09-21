@@ -33,22 +33,22 @@ type RosterResponse struct {
 // RosterWindow is one Engagement with a live window in the range: who is
 // on call for it, the gaps in force, and whether it is uncovered.
 type RosterWindow struct {
-	EngagementID  string        `json:"engagementId"`
-	ClientName    string        `json:"clientName"`
-	DueDate       *string       `json:"dueDate"`
-	Window        Window        `json:"window"`
-	OnCall        []OnCallDoula `json:"onCall"`
-	Gaps          []Gap         `json:"gaps"`
-	UnstaffedDays []Window      `json:"unstaffedDays"`
+	EngagementID  string         `json:"engagementId"`
+	ClientName    string         `json:"clientName"`
+	DueDate       *string        `json:"dueDate"`
+	Window        Window         `json:"window"`
+	OnCall        []RosterOnCall `json:"onCall"`
+	Gaps          []Gap          `json:"gaps"`
+	UnstaffedDays []Window       `json:"unstaffedDays"`
 	// Uncovered is true where some part of the range has nobody on call:
 	// a run of days no narrowing covers, or a gap with nobody covering it.
 	Uncovered bool `json:"uncovered"`
 }
 
-// OnCallDoula is one attached Doula and the part of the window she is on
+// RosterOnCall is one attached Doula and the part of the window she is on
 // call for. Narrowed says whether that is her own narrowing or the whole
 // window.
-type OnCallDoula struct {
+type RosterOnCall struct {
 	StaffID  string `json:"staffId"`
 	Name     string `json:"name"`
 	From     string `json:"from"`

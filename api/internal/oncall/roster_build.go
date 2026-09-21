@@ -68,7 +68,7 @@ func rosterWindow(e engagementOnCall, rng Window, gaps []Gap) RosterWindow {
 		ClientName:   e.clientName,
 		DueDate:      e.dueDate,
 		Window:       *e.window,
-		OnCall:       []OnCallDoula{},
+		OnCall:       []RosterOnCall{},
 		Gaps:         gaps,
 	}
 	if row.Gaps == nil {
@@ -83,7 +83,7 @@ func rosterWindow(e engagementOnCall, rng Window, gaps []Gap) RosterWindow {
 		}
 		effectives = append(effectives, effective)
 		if effective.Overlaps(rng) {
-			row.OnCall = append(row.OnCall, OnCallDoula{
+			row.OnCall = append(row.OnCall, RosterOnCall{
 				StaffID:  d.staffID,
 				Name:     d.name,
 				From:     effective.Start,

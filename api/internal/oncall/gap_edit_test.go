@@ -19,12 +19,12 @@ func newGapEditFixture(t *testing.T, db *testdb.DB, prefix string) gapEditFixtur
 	t.Helper()
 	f := gapEditFixture{soloFixture: newSoloFixture(t, db, prefix)}
 	f.ownerID = countOwner(t, db, f.soloFixture)
-	f.backupID = testdb.SeedNamedStaffAtPractice(t, db, f.practiceID, prefix+"-backup", "Bo Backup", []string{doulaRole}, employeeType)
+	f.backupID = testdb.SeedNamedStaffAtPractice(t, db, f.practiceID, prefix+"-backup", backupName, []string{doulaRole}, employeeType)
 	testdb.SeedGrantedAttachment(t, db, f.engagementID, f.backupID)
 
 	srv, session := newServer(t, db, f.ownerUID)
 	defer srv.Close()
-	f.gapID = decode[oncall.Gap](t, authedBody(t, session, http.MethodPost, gapsURL(srv.URL, f.practiceID, f.engagementID), gapBody(f.doulaID, nil)), http.StatusCreated).ID
+	f.gapID = doJSON[oncall.Gap](t, session, http.MethodPost, gapsURL(srv.URL, f.practiceID, f.engagementID), gapBody(f.doulaID, nil), http.StatusCreated).ID
 	return f
 }
 
@@ -39,7 +39,7 @@ func TestUpdateGap_AddingCoverQueuesNothingAndIsRecorded(t *testing.T) {
 	srv, session, enq := newServerWithNudge(t, db, f.ownerUID)
 	defer srv.Close()
 
-	gap := decode[oncall.Gap](t, authedBody(t, session, http.MethodPut, f.gapURL(srv.URL), gapBody(f.doulaID, &f.backupID)), http.StatusOK)
+	gap := doJSON[oncall.Gap](t, session, http.MethodPut, f.gapURL(srv.URL), gapBody(f.doulaID, &f.backupID), http.StatusOK)
 	if gap.CoveringStaffID == nil || *gap.CoveringStaffID != f.backupID {
 		t.Fatalf("covering = %v, want the backup", gap.CoveringStaffID)
 	}
@@ -58,7 +58,7 @@ func TestUpdateGap_SavingItStillUncoveredQueuesAgain(t *testing.T) {
 	srv, session, enq := newServerWithNudge(t, db, f.ownerUID)
 	defer srv.Close()
 
-	decode[oncall.Gap](t, authedBody(t, session, http.MethodPut, f.gapURL(srv.URL), gapBody(f.doulaID, nil)), http.StatusOK)
+	doJSON[oncall.Gap](t, session, http.MethodPut, f.gapURL(srv.URL), gapBody(f.doulaID, nil), http.StatusOK)
 	if n := pendingNotices(t, db, f.gapID); n != 1 || len(enq.Calls()) != 1 {
 		t.Fatalf("an uncovered save queued %d pending and %d nudges, want 1 and 1", n, len(enq.Calls()))
 	}
@@ -70,7 +70,7 @@ func TestUpdateGap_TwoSavesBeforeTheMailGoesAreOneNotice(t *testing.T) {
 	srv, session, enq := newServerWithNudge(t, db, f.ownerUID)
 	defer srv.Close()
 
-	decode[oncall.Gap](t, authedBody(t, session, http.MethodPut, f.gapURL(srv.URL), gapBody(f.doulaID, nil)), http.StatusOK)
+	doJSON[oncall.Gap](t, session, http.MethodPut, f.gapURL(srv.URL), gapBody(f.doulaID, nil), http.StatusOK)
 	if n := pendingNotices(t, db, f.gapID); n != 1 || len(enq.Calls()) != 0 {
 		t.Fatalf("a second save before the send left %d pending and %d nudges, want 1 and 0", n, len(enq.Calls()))
 	}
@@ -82,8 +82,8 @@ func TestUpdateGap_ADoulaCannotEditAColleaguesGap(t *testing.T) {
 	srv, session := newServer(t, db, "gap-edit-colleague-backup")
 	defer srv.Close()
 
-	decode[map[string]any](t, authedBody(t, session, http.MethodPut, f.gapURL(srv.URL), gapBody(f.doulaID, &f.backupID)), http.StatusForbidden)
-	decode[map[string]any](t, authedBody(t, session, http.MethodDelete, f.gapURL(srv.URL), nil), http.StatusForbidden)
+	doJSON[map[string]any](t, session, http.MethodPut, f.gapURL(srv.URL), gapBody(f.doulaID, &f.backupID), http.StatusForbidden)
+	doJSON[map[string]any](t, session, http.MethodDelete, f.gapURL(srv.URL), nil, http.StatusForbidden)
 }
 
 func TestClearGap_ClearsOnceAndRecordsIt(t *testing.T) {
@@ -93,7 +93,7 @@ func TestClearGap_ClearsOnceAndRecordsIt(t *testing.T) {
 	defer srv.Close()
 
 	resp := authedBody(t, session, http.MethodDelete, f.gapURL(srv.URL), nil)
-	resp.Body.Close()
+	_ = resp.Body.Close()
 	if resp.StatusCode != http.StatusNoContent {
 		t.Fatalf("clear status = %d, want 204", resp.StatusCode)
 	}
@@ -104,6 +104,6 @@ func TestClearGap_ClearsOnceAndRecordsIt(t *testing.T) {
 		t.Fatalf("cleared entries = %v, want one naming the Owner", got)
 	}
 
-	decode[map[string]any](t, authedBody(t, session, http.MethodDelete, f.gapURL(srv.URL)+"?again", nil), http.StatusNotFound)
-	decode[map[string]any](t, authedBody(t, session, http.MethodPut, f.gapURL(srv.URL), gapBody(f.doulaID, nil)), http.StatusNotFound)
+	doJSON[map[string]any](t, session, http.MethodDelete, f.gapURL(srv.URL)+"?again", nil, http.StatusNotFound)
+	doJSON[map[string]any](t, session, http.MethodPut, f.gapURL(srv.URL), gapBody(f.doulaID, nil), http.StatusNotFound)
 }
