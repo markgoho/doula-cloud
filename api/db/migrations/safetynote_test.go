@@ -26,6 +26,26 @@ func TestParseSafetyNoteScopesToTheQuotedStatement(t *testing.T) {
 	}
 }
 
+// TestParseSafetyNoteKeepsAnInlineCommentOnANonFinalLine proves a block
+// carries its newlines into normalizeStatement, so an inline -- comment
+// in the middle of a multi-line block doesn't swallow the line after
+// it. Joining block lines with a space instead of a newline would make
+// SplitStatements' line-comment scan run to the end of the block.
+func TestParseSafetyNoteKeepsAnInlineCommentOnANonFinalLine(t *testing.T) {
+	note := "## CREATE UNIQUE INDEX\n\n" +
+		"```sql\n" +
+		"CREATE UNIQUE INDEX a_key -- the key\n" +
+		"    ON a (x)\n" +
+		"```\n"
+
+	quoted := parseSafetyNote(note)
+	want := normalizeStatement("CREATE UNIQUE INDEX a_key ON a (x)")
+
+	if !statementQuoted(quoted[classCreateUniqueIndex], want) {
+		t.Errorf("parseSafetyNote(%q)[%q] = %v, want it to contain %q -- an inline comment on a non-final line must not swallow the rest of the block", note, classCreateUniqueIndex, quoted[classCreateUniqueIndex], want)
+	}
+}
+
 // TestParseSafetyNoteIgnoresABlockOutsideAnyHeading proves a fenced
 // block before the first "## " heading cannot excuse anything: it is
 // keyed to the empty class, which RowDependent never reports.

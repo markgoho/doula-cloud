@@ -267,7 +267,7 @@ func parseSafetyNote(body string) map[string][]string {
 			block = nil
 		case block != nil:
 			block.WriteString(line)
-			block.WriteString(" ")
+			block.WriteString("\n")
 		}
 	}
 	return quoted
