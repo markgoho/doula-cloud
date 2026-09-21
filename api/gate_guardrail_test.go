@@ -27,8 +27,9 @@ func TestRoutes_EveryDeclaredGETHasRoleDeclaration(t *testing.T) {
 			// surface is gated on reach alone. What it must do is be here
 			// at all, which TestRoutes_EveryRouteIsRegisteredThroughTheGate
 			// checks. A GatedWrite-mounted write (#970's Contract void) does
-			// carry Roles, checked instead by
-			// TestRoutes_ContractWritesDeclareRoles.
+			// carry Roles, checked instead -- for every mutating route, not
+			// one ticket's list -- by
+			// TestRoutes_EveryMutatingWriteDeclaresRolesOrIsExempt (#1028).
 			continue
 		}
 		if route.Exempt {
