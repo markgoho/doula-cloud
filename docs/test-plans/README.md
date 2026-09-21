@@ -260,7 +260,7 @@ Every plan has been executed once ([#209](https://github.com/markgoho/doula-clou
 
 | Plan | Persona | `automated` | `manual` | `blocked` | `missing-feature` |
 | --- | --- | --- | --- | --- | --- |
-| [evaluator-doula.md](evaluator-doula.md) | Tasha Bell | 5 | 10 | 0 | 5 |
+| [evaluator-doula.md](evaluator-doula.md) | Tasha Bell | 5 | 11 | 0 | 4 |
 | [solo-birth-doula.md](solo-birth-doula.md) | Maya Okonkwo | 13 | 20 | 0 | 3 |
 | [practice-owner.md](practice-owner.md) | Renata Alvarez | 5 | 17 | 0 | 6 |
 | [non-doula-admin.md](non-doula-admin.md) | Dee Whitlock | 0 | 21 | 0 | 3 |
@@ -269,7 +269,7 @@ Every plan has been executed once ([#209](https://github.com/markgoho/doula-clou
 | [loss-client.md](loss-client.md) | Nadia Haddad | 5 | 14 | 0 | 8 |
 | [first-time-client.md](first-time-client.md) | Hannah Sorensen | 8 | 18 | 0 | 6 |
 | [returning-postpartum-client.md](returning-postpartum-client.md) | Camille Boyd | 0 | 14 | 0 | 5 |
-| **Total** | | **40** | **152** | **0** | **50** |
+| **Total** | | **40** | **153** | **0** | **49** |
 
 Every `automated` step passed. **No plan carries a `blocked` step any more** — Stripe was the last holdout and [#242](https://github.com/markgoho/doula-cloud/issues/242) opened the Sandbox, after which Connect, Checkout and Invoices were all walked for real.
 
@@ -286,6 +286,8 @@ Every `automated` step passed. **No plan carries a `blocked` step any more** —
 **[#1135](https://github.com/markgoho/doula-cloud/issues/1135) did the portal half of the same job on returning-postpartum-client.md**, the stages #685 named as waiting on a walk. [#309](https://github.com/markgoho/doula-cloud/issues/309) removed the refusal Camille Boyd's whole plan was written around — the table-wide `UNIQUE` on `client_portal_users.identity_uid` — and [#819](https://github.com/markgoho/doula-cloud/issues/819) replaced it with `UNIQUE (identity_uid, client_id)` in `00107_portal_account_client_pair_unique.sql`, so the string her map called her moment of truth cannot be printed any more. Her stages 5 and 6 are rewritten against what accept does today, including the one refusal that remains and where the *other* one now sits: an invitation is raised per Client, so a second one on the Client she already is refuses at the invite rather than the accept, and the accept-side refusal is reachable only where a duplicate Client was saved deliberately. Three marks moved and all three moved the same way, from `missing-feature` or `automated` to `manual`: 6.2-a and 6.2-b because [#310](https://github.com/markgoho/doula-cloud/issues/310) built both the way back to the root list from inside an Engagement and the label that tells two at one Practice apart, and 6.1 because her path now ends on a root list of two Engagements that **no spec drives** — both portal specs provision a never-seen Client with exactly one. That leaves her with no `automated` step at all, and the run-status table above is recounted from her Steps table, Total with it, to 40 / 152 / 0 / 50. Her remaining stale stages, whose gaps are closed for reasons of their own, are held at [#1241](https://github.com/markgoho/doula-cloud/issues/1241); the `staff.identity_uid` version of the same drift on Lena Vasquez's documents is at [#1242](https://github.com/markgoho/doula-cloud/issues/1242).
 
 **No check would have caught this drift.** Nothing in `app/` or CI reads these documents: a Marks summary can disagree with its own Steps table, and the Total can disagree with every row, and the build stays green — which is how three summaries were found wrong in #685 and two more corrected here. [#1233](https://github.com/markgoho/doula-cloud/issues/1233) holds the arithmetic half of that, which is the half a machine can check.
+
+**[#873](https://github.com/markgoho/doula-cloud/issues/873) corrected six findings the 2026-09-06/07 triage of #319's children had falsified** on evaluator-doula.md's map and plan: TB-G2, TB-G3, TB-G4, TB-G5 and TB-G7 had each moved, closed or narrowed since the findings were written, and the documents still stated the old versions. A dated Run-log section on the plan names what moved. One mark changed: 6.1 leaves `missing-feature (TB-G5)` for `manual`, because the export and the account deletion it named are both built. The run-status table above is recounted from evaluator-doula.md's Steps table, Total with it, to 40 / 153 / 0 / 49.
 
 ### Gap issues
 
