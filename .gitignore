@@ -76,6 +76,9 @@ hugo/content/p/
 # #1193) -- written beside .port-offset while a `test:e2e`/`dev:full` run
 # is actually using the stack, and removed when it stops.
 .e2e-heartbeat
+# The Claude Code process that owns a worktree (.claude/hooks/worktree-owner.ts,
+# #1212) -- written at provision; nothing removes a worktree while it is alive.
+.worktree-owner.json
 # golangci-lint's own results cache, scoped per worktree via GOLANGCI_LINT_CACHE
 # (docs/testing.md) so a pruned worktree's stale results can never leak into
 # another worktree's `golangci-lint run` (#587).

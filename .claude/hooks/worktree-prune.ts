@@ -5,10 +5,12 @@
 //   bun .claude/hooks/worktree-prune.ts [--dry-run|--merged]
 //
 // --dry-run (default): list every worktree under .claude/worktrees with
-//   its branch, PR state, dirty flag, and size. Removes nothing live.
+//   its branch, owner, PR state, dirty flag, and size. Removes nothing live.
 // --merged: remove a worktree only when its branch is merged into trunk
-//   AND its tree is clean. A branch merged into trunk can never lose work
-//   by being deleted; anything else (uncommitted changes, or committed
+//   AND its tree is clean AND the Claude Code process that owns it is not
+//   still running (worktree-owner.ts, #1212) -- a live agent that has not
+//   committed yet looks abandoned by every other signal. A branch merged
+//   into trunk can never lose work by being deleted; anything else (uncommitted changes, or committed
 //   work not yet merged -- including a local-only branch never pushed) is
 //   left alone and reported. Also fast-forwards the main checkout's own
 //   local `trunk` to `origin/trunk` (see sync-trunk.ts) -- a backstop for
@@ -27,6 +29,11 @@ import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { syncTrunkToOrigin } from './sync-trunk.ts';
+import {
+  describeOwner,
+  ownerStatus,
+  type OwnerStatus,
+} from './worktree-owner.ts';
 import { findMainCheckoutRoot } from './worktree-root.ts';
 
 const SOURCE_ROOT = findMainCheckoutRoot(import.meta.dir);
@@ -133,12 +140,22 @@ function isDirty(worktreePath: string): boolean {
  * squash merge writes a NEW commit, so the branch tip never becomes an
  * ancestor of trunk and `git branch --merged` never lists it -- which
  * made this check, and therefore `--merged`, inert for every branch
- * landed the documented way. A `MERGED` PR is the authority; the
- * ancestor test still covers a branch merged or rebased by hand, and
- * costs nothing when `gh` is unreachable.
+ * landed the documented way. A `MERGED` PR is the authority.
+ *
+ * The ancestor test answers only when the worktree's owner is provably
+ * gone (#1212). A branch with no commits of its own sits at trunk's tip,
+ * so `git branch --merged` lists it -- and that is also the exact state of
+ * a live agent that has not reached its first commit. With the owner gone
+ * the test is safe: a clean tree whose tip trunk already holds has
+ * nothing to lose. With the owner alive or unknown it proves nothing.
  */
-function isMergedIntoTrunk(branch: string, pr: string): boolean {
+function isMergedIntoTrunk(
+  branch: string,
+  pr: string,
+  owner: OwnerStatus
+): boolean {
   if (isLanded(pr)) return true;
+  if (owner.state !== 'gone') return false;
   try {
     const merged = runGit([
       'branch',
@@ -332,6 +349,7 @@ function main(): void {
     }
 
     let touched: boolean;
+    let owner: OwnerStatus;
     let dirty: boolean;
     let size: string;
     let pr: string;
@@ -341,10 +359,11 @@ function main(): void {
          rewrites the index it is being measured by, so asking after the
          dirty check makes every worktree look freshly touched forever. */
       touched = recentlyTouched(wt.path);
+      owner = ownerStatus(wt.path);
       dirty = isDirty(wt.path);
       size = dirSize(wt.path);
       pr = wt.branch ? prState(wt.branch, tipOf('HEAD', wt.path)) : 'no branch';
-      mergedFlag = wt.branch ? isMergedIntoTrunk(wt.branch, pr) : false;
+      mergedFlag = wt.branch ? isMergedIntoTrunk(wt.branch, pr, owner) : false;
     } catch (error) {
       // Defense in depth: `stale` already covers the known case (the
       // directory disappearing before the check above), but nothing
@@ -357,7 +376,7 @@ function main(): void {
 
     if (!merged) {
       console.log(
-        `${wt.path}  branch=${branch}  locked=${wt.locked}  dirty=${dirty}  merged=${mergedFlag}  pr=${pr}  size=${size}`
+        `${wt.path}  branch=${branch}  owner=${describeOwner(owner)}  locked=${wt.locked}  dirty=${dirty}  merged=${mergedFlag}  pr=${pr}  size=${size}`
       );
       continue;
     }
@@ -368,6 +387,13 @@ function main(): void {
     }
     if (dirty) {
       console.log(`skip (dirty): ${wt.path}`);
+      continue;
+    }
+    /* Before anything about the branch: a live owner means an agent may
+       be mid-run in here, and no branch or tree state can say otherwise
+       (#1212). */
+    if (owner.state === 'alive') {
+      console.log(`skip (owner ${describeOwner(owner)}): ${wt.path}`);
       continue;
     }
     if (!wt.branch || !mergedFlag) {
@@ -383,10 +409,16 @@ function main(): void {
       continue;
     }
 
+    /* Never `--force`. The dirty check above ran a moment ago; if git
+       refuses now, something was written since, and forcing would destroy
+       exactly the uncommitted work this pruner exists to keep. */
     try {
       runGit(['worktree', 'remove', wt.path]);
-    } catch {
-      runGit(['worktree', 'remove', '--force', wt.path]);
+    } catch (error) {
+      console.log(
+        `skip (remove refused): ${wt.path}  ${error instanceof Error ? error.message : String(error)}`
+      );
+      continue;
     }
     try {
       runGit(['branch', '-d', wt.branch]);
