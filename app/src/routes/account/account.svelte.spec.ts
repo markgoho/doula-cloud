@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import { workStateReportedOn } from '#lib/workStates.js';
 import { jsonResponse as buildResponse } from '#lib/testResponse.js';
+import { fieldError } from '#lib/components/molecules/LabeledField.testing.js';
 import Page from './+page.svelte';
 import { resetAccountSession } from './session.svelte.js';
 import { session, soleOwnerSession } from './page.fixture.js';
@@ -94,18 +95,6 @@ afterEach(() => {
 
 const saveButton = () => testPage.getByRole('button', { name: 'Save work state' });
 const stateSelect = () => testPage.getByRole('combobox', { name: 'Which state do you work from?' });
-
-/*
- * A field-targeted refusal renders beside its own control -- LabeledField's
- * own `<p role="alert">`, `id`d off the field's own id -- the same helper
- * `mfa/enroll`'s and the login screen's own specs use, since `getByText`
- * cannot single it out from an identical error summary entry.
- */
-async function fieldError(id: string, message: string) {
-	await vi.waitFor(() => {
-		expect(document.querySelector(`#${id}-error`)?.textContent).toBe(message);
-	});
-}
 
 async function setup(options: MockOptions = {}) {
 	mockApi(options);

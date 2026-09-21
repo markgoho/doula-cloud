@@ -2,6 +2,7 @@ import { page as testPage } from 'vitest/browser';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import { jsonResponse } from '#lib/testResponse.js';
+import { fieldError } from '#lib/components/molecules/LabeledField.testing.js';
 import Page from './+page.svelte';
 import { toPageState } from '../../../routeFixture.js';
 import { fixture } from './page.fixture.js';
@@ -30,21 +31,6 @@ function urlWith(returnTo?: string): URL {
 
 const passwordId = 'mfa-enroll-password';
 const codeId = 'mfa-enroll-code';
-
-/*
- * A field-targeted refusal renders twice by GOV.UK's own design (#467):
- * once as a link in the error summary, once beside the control itself --
- * `LabeledField`'s own `<p role="alert">`. `getByText` cannot tell the
- * two apart, since both carry the identical words; this reads the one
- * beside the control, by the id `LabeledField` derives from the field's
- * own id, the same way `WorkStateField.svelte.spec.ts` reads a hint by
- * id where no accessible query can single it out either.
- */
-async function fieldError(id: string, message: string) {
-	await vi.waitFor(() => {
-		expect(document.querySelector(`#${id}-error`)?.textContent).toBe(message);
-	});
-}
 
 const goto = vi.hoisted(() => vi.fn());
 vi.mock('$app/navigation', () => ({ goto }));
