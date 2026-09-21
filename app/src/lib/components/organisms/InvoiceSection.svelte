@@ -66,6 +66,7 @@
 		hasClientEmail,
 		isOwner,
 		isOwnerOrAdmin,
+		practiceTimezone,
 		paymentsSettingsHref,
 		onCreate,
 		onRecordPayment,
@@ -82,6 +83,13 @@
 		clientsCanPay: boolean;
 		hasClientEmail: boolean;
 		isOwner: boolean;
+		/** The Practice's own IANA zone (`practices.timezone`, ADR-0036) --
+		 * what `todayIsoDate` reads "today" in, so the payment-date field's
+		 * default and its future-date ceiling agree with
+		 * `PostManualPaymentHandler`'s own guard (#1167, #1280) instead of
+		 * UTC's calendar day. The caller fetches it the same way the
+		 * timezone settings screen does (`loadPracticeTimezone`). */
+		practiceTimezone: string;
 		/** Gates Record payment/Void/Write off/Reverse payment/Return money -- ADR-0008's
 		 * Contract-money write row, Owner and Admin only. */
 		isOwnerOrAdmin: boolean;
@@ -133,9 +141,18 @@
 	}
 
 	/** Today's date in the form TextInput type="date" reads and writes --
-	 * the default paymentDate, and the future-date guard's own ceiling. */
+	 * the default paymentDate, and the future-date guard's own ceiling.
+	 *
+	 * Read in the Practice's own zone (#1280), not UTC's: `en-CA` formats
+	 * `Intl.DateTimeFormat` as `YYYY-MM-DD` directly, so the offset zone
+	 * gives back exactly the calendar day this field wants, with no
+	 * further reassembly. Before this, `toISOString().slice(0, 10)` read
+	 * UTC's day, which for several evening hours in a zone behind UTC
+	 * (including America/New_York) disagreed with
+	 * `PostManualPaymentHandler`'s own guard (#1167) and refused a Staff
+	 * member's genuinely-today date. */
 	function todayIsoDate(): string {
-		return new Date().toISOString().slice(0, 10);
+		return new Intl.DateTimeFormat('en-CA', { timeZone: practiceTimezone }).format(new Date());
 	}
 
 	// #271's recording flow: which Invoice (if any) is being settled, and

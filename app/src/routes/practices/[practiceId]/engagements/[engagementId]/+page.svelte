@@ -91,6 +91,7 @@
 		type PaymentMethod,
 		type RefundPaymentInput
 	} from '#lib/invoice.js';
+	import { loadPracticeTimezone } from '#lib/practiceTimezone.js';
 	import OfferSection from '#lib/components/organisms/OfferSection.svelte';
 	import { createOffer, loadEngagementOffers, withdrawOffer, type NewOffer, type Offer } from '#lib/offer.js';
 	import { resolve } from '$app/paths';
@@ -498,6 +499,16 @@
 	const billingModeState = new SectionState<BillingMode | undefined>(undefined);
 	const billingMode = $derived(billingModeState.value);
 
+	// #1280: the Practice's own zone (ADR-0036) InvoiceSection reads
+	// "today" in for the payment-date field's default and its
+	// future-date ceiling, matching PostManualPaymentHandler's own
+	// guard (#1167). Read alongside the Invoice list and the billing
+	// mode -- '' means "not loaded yet", which gates the Invoices
+	// section out below rather than handing InvoiceSection a zone that
+	// would fall back to UTC's own day.
+	const practiceTimezoneState = new SectionState('');
+	const practiceTimezone = $derived(practiceTimezoneState.value);
+
 	// Offers on this Engagement (#317). Owner/Admin only at the BFF, so a
 	// Doula's load simply fails and the section stays hidden -- the read
 	// table keeps who-was-asked away from her, and an error banner about
@@ -873,6 +884,12 @@
 			() => loadBillingMode(apiFetchWithSession, page.params.practiceId!),
 			'Failed to load billing mode'
 		);
+		// #1280: read alongside the two above -- InvoiceSection needs the
+		// Practice's own zone before it can compute "today" in it.
+		await practiceTimezoneState.load(async () => {
+			const timezone = await loadPracticeTimezone(apiFetchWithSession, page.params.practiceId!);
+			return timezone.timezone;
+		}, 'Failed to load Practice timezone');
 	}
 
 	// Reported by InvoiceSection's onCreate prop. No catch here, same as
@@ -1727,23 +1744,35 @@
 	{#if billingModeState.error}
 		<Notice variant="error" message={billingModeState.error} />
 	{/if}
+	{#if practiceTimezoneState.error}
+		<Notice variant="error" message={practiceTimezoneState.error} />
+	{/if}
 
-	<InvoiceSection
-		{invoices}
-		contractStatus={contract!.status}
-		{billingMode}
-		clientsCanPay={canClientsPay}
-		hasClientEmail={hasClientEmailOnFile}
-		isOwner={isPracticeOwner}
-		isOwnerOrAdmin={isPracticeOwnerOrAdmin}
-		{paymentsSettingsHref}
-		onCreate={handleCreateInvoice}
-		onRecordPayment={handleRecordPayment}
-		onReversePayment={handleReversePayment}
-		onRefundPayment={handleRefundPayment}
-		onVoidInvoice={handleVoidInvoice}
-		onWriteOffInvoice={handleWriteOffInvoice}
-	/>
+	<!-- #1280: InvoiceSection's own todayIsoDate reads "today" in
+	     practiceTimezone with no UTC fallback (ADR-0036's own rule for a
+	     zone that will not load), so it waits here for a real zone name
+	     rather than mounting with '' and throwing on its own first date
+	     computation. A still-loading or failed read leaves this gap
+	     blank; the Notice above already says why. -->
+	{#if practiceTimezone}
+		<InvoiceSection
+			{invoices}
+			contractStatus={contract!.status}
+			{billingMode}
+			clientsCanPay={canClientsPay}
+			hasClientEmail={hasClientEmailOnFile}
+			isOwner={isPracticeOwner}
+			isOwnerOrAdmin={isPracticeOwnerOrAdmin}
+			{practiceTimezone}
+			{paymentsSettingsHref}
+			onCreate={handleCreateInvoice}
+			onRecordPayment={handleRecordPayment}
+			onReversePayment={handleReversePayment}
+			onRefundPayment={handleRefundPayment}
+			onVoidInvoice={handleVoidInvoice}
+			onWriteOffInvoice={handleWriteOffInvoice}
+		/>
+	{/if}
 {/snippet}
 
 {#snippet offersSection()}
