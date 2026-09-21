@@ -29,6 +29,7 @@ const openInvoice: Invoice = {
 	createdAt: '2026-09-01T00:00:00Z',
 	dueAt: '2026-10-01T00:00:00Z',
 	reference: 'INV-0001',
+	refundedCents: 0,
 	billingMode: 'by_hand'
 };
 

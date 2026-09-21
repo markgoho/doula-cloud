@@ -217,6 +217,12 @@ const CLIENT_ACTIVITY_PHRASES: Record<string, string> = {
 	invoice_paid: 'An Invoice was paid.',
 	payment_recorded: 'A payment from you was recorded.',
 	payment_reversed: 'A payment recorded earlier was removed.',
+	// #1009. "Returned to you", never "refunded": she hears a refund as a
+	// store's word for something going wrong, and nothing went wrong -- a
+	// deposit came back because her care ended before it began. Plain
+	// about the money and silent on why, the same restraint the voided
+	// and written-off phrase below keeps.
+	payment_refunded: 'Money was returned to you.',
 	invoice_voided: 'An Invoice is no longer owed.',
 	invoice_written_off: 'An Invoice is no longer owed.',
 

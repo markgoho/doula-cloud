@@ -154,7 +154,7 @@ var activityProjection = activitypage.Projection[ActivityEntry]{
 				Diff:      diff,
 				ActorKind: r.ActorKind,
 				ActorName: r.ActorName,
-				Detail:    reassignmentDetail(r.Action, beforeStaffName, afterStaffName),
+				Detail:    entryDetail(r.Action, diff, beforeStaffName, afterStaffName),
 				CreatedAt: r.CreatedAt,
 			}
 		}
@@ -199,6 +199,33 @@ func listEngagementActivity(ctx context.Context, tx *sql.Tx, practiceID, engagem
 		return activitypage.Page[ActivityEntry]{}, fmt.Errorf("engagement: list activity: %w", err)
 	}
 	return page, nil
+}
+
+// entryDetail picks the one-sentence Detail an entry carries, if any.
+// Two actions have something to add beyond their own name today.
+func entryDetail(action string, diff []byte, before, after sql.NullString) string {
+	if action == string(activity.ActionPaymentRefunded) {
+		return refundDetail(diff)
+	}
+	return reassignmentDetail(action, before, after)
+}
+
+// refundDetail says where a Refund came from when nobody in Doula Cloud
+// issued it (#1009). A Refund a Practice issues from her own Stripe
+// Dashboard reaches the log through the Connect webhook, recorded by
+// Doula Cloud -- ADR-0022's third actor, whose Who column reads "Doula
+// Cloud". Left at the generic "Payment refunded", that row would read as
+// Doula Cloud having returned her Client's money on its own; this
+// sentence says what actually happened. A Refund an Owner or Admin issued
+// here names her in the Who column already and gets no sentence.
+func refundDetail(diff []byte) string {
+	var fields struct {
+		Origin string `json:"origin"`
+	}
+	if err := json.Unmarshal(diff, &fields); err != nil || fields.Origin != activity.RefundOriginStripeDashboard {
+		return ""
+	}
+	return "Payment refunded from the Practice's Stripe Dashboard"
 }
 
 // reassignmentDetail renders a visit_reassigned entry as the move it

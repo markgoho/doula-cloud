@@ -112,8 +112,9 @@
 		/*
 		 * type="number"'s increment, so a money field can accept cents
 		 * (`step={0.01}`) instead of whole units only. No dedicated money
-		 * control exists yet -- a prefix and rune-safe cents parsing stay
-		 * fog until a third money field justifies one (#492).
+		 * control exists yet -- a prefix and rune-safe cents parsing stayed
+		 * fog until a third money field justified one (#492). #1009's Refund
+		 * amount was that third; #1411 builds the control.
 		 */
 		step?: number;
 		/*

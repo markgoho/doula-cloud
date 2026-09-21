@@ -29,6 +29,16 @@ const invoicePageSize = 30
 // literal typed twice.
 const invoiceStatusOpen = "open"
 
+// invoiceStatusPaid is "open"'s pair for a settled Invoice, named once
+// for the same goconst reason: #1009's Refund made a third reader of it,
+// beside the reversal and the invoice.paid webhook guard.
+const invoiceStatusPaid = "paid"
+
+// fieldMethod is the wire and diff name of a Payment's or a Refund's
+// method -- a field-error key on a 400 and a key in an Activity diff.
+// Named once because #1009 gave it a second writer.
+const fieldMethod = "method"
+
 // InvoiceView is one Invoice, as returned by both PostInvoiceHandler (the
 // row just created) and GetInvoicesHandler (a page of existing rows).
 //
@@ -56,15 +66,29 @@ type InvoiceView struct {
 	DueAt       time.Time `json:"dueAt"`
 	Reference   string    `json:"reference"`
 	BillingMode string    `json:"billingMode"`
-	// ActivePaymentID (#945) is the one manually recorded Payment
-	// currently covering this Invoice, if any -- nil unless the Invoice
-	// is 'paid' by a 'manual' row nothing has reversed yet. What
-	// PostReversePaymentHandler's own :paymentId path segment needs; a
-	// Stripe-collected ('stripe' kind) Payment is never reachable this way
-	// (refund is a different mechanism, out of scope), and this stays nil
-	// on a Stripe-backed Invoice regardless since reversal refuses that
-	// case outright.
+	// ActivePaymentID (#945) is the one Payment currently covering this
+	// Invoice, if any -- nil unless the Invoice is 'paid' by a row nothing
+	// has reversed. What the two acts that name a specific Payment need in
+	// their own path: PostReversePaymentHandler's :paymentId and, since
+	// #1009, PostRefundPaymentHandler's. A Stripe-collected ('stripe' kind)
+	// Payment appears here too as of #1009, because a Refund can reach one;
+	// reversal cannot, and refuses a Stripe-backed Invoice at its own gate
+	// rather than relying on this column to hide it.
 	ActivePaymentID *string `json:"activePaymentId,omitempty"`
+	// ActivePaymentKind (#1009) is that Payment's kind -- "stripe" for a
+	// card Payment Stripe collected, "manual" for one recorded by hand --
+	// set whenever ActivePaymentID is. A Refund of each asks a different
+	// question (a method for a by-hand one; a warning that Stripe keeps
+	// its fee for a card one), and a Stripe-backed Invoice can carry
+	// either, so the rail alone cannot tell a screen which to ask.
+	ActivePaymentKind string `json:"activePaymentKind,omitempty"`
+	// RefundedCents (#1009) is how much of this Invoice has gone back to
+	// the Client, as a positive number -- 0 when none has. The Invoice's
+	// own status says nothing about it and deliberately never will: a
+	// refunded Invoice stays 'paid', exactly as Stripe's own does
+	// (00115_payment_refund.sql), so this field is the only thing that
+	// answers "is this Client owed money back".
+	RefundedCents int64 `json:"refundedCents"`
 }
 
 // CreateInvoiceRequest is the body of a POST to PostInvoiceHandler.
@@ -637,28 +661,61 @@ func resolveStripeCustomer(ctx context.Context, tx *sql.Tx, stripeClient Client,
 // direct contract_id = $1 filter) so an Invoice created against a
 // since-voided Contract still lists under the Engagement that Contract
 // belonged to.
-// activePaymentIDSubquery is #945's own addition: the one manually
-// recorded Payment currently covering an Invoice, if any -- a 'manual'
-// row nothing has reversed yet. The all-or-nothing Payment model means at
-// most one ever exists at a time for a 'paid' Invoice, so ORDER BY ...
-// LIMIT 1 is a safety net against a future model change rather than a
-// real ambiguity today. Reversal needs this id (PostReversePaymentHandler
-// takes :paymentId in its own path, not just :invoiceId), and nothing
-// before this ticket ever exposed it to a caller.
-const activePaymentIDSubquery = `(SELECT p.id FROM payments p
-	 WHERE p.invoice_id = i.id AND p.kind = 'manual'
-	   AND NOT EXISTS (SELECT 1 FROM payments r WHERE r.reversed_payment_id = p.id)
-	 ORDER BY p.created_at DESC LIMIT 1) AS active_payment_id`
+// activePaymentIDSubquery is #945's own addition: the one Payment
+// currently covering an Invoice, if any. The all-or-nothing Payment model
+// means at most one ever exists at a time for a 'paid' Invoice, so
+// ORDER BY ... LIMIT 1 is a safety net against a future model change
+// rather than a real ambiguity today. Both acts that target a specific
+// Payment need this id in their own path rather than just :invoiceId --
+// PostReversePaymentHandler and, since #1009, PostRefundPaymentHandler --
+// and nothing before #945 ever exposed it to a caller.
+//
+// #1009 widened it twice. The kind filter was 'manual' alone, because
+// reversal was the only act and it refuses a Stripe-backed Invoice; a
+// Refund reaches a Stripe-collected Payment too, so 'stripe' joins it.
+// Reverse stays by-hand-only at its own gate -- InvoiceSection.svelte
+// shows that button only when billingMode is 'by_hand', and
+// PostReversePaymentHandler refuses the rest -- so widening here offers
+// nothing that was not already refused.
+//
+// The NOT EXISTS now names kind = 'reversal' explicitly. It did not have
+// to before, when a reversal was the only row that could point at a
+// Payment; a Refund points at one through the same column (00115) without
+// undoing it, so an unqualified NOT EXISTS would make a refunded Payment
+// vanish from this column and hide every act still available against it.
+//
+// It is a LATERAL join rather than the scalar subquery #945 wrote,
+// because #1009 needs the Payment's kind as well as its id -- one lookup,
+// two columns -- and a scalar subquery can return only one. The kind is
+// what a Staff screen cannot work out any other way: a Stripe-backed
+// Invoice can be covered by a card Payment or by one recorded by hand
+// against it, and a Refund of the two asks different questions.
+const activePaymentJoin = `LEFT JOIN LATERAL (SELECT p.id, p.kind::text AS kind FROM payments p
+	 WHERE p.invoice_id = i.id AND p.kind IN ('manual', 'stripe')
+	   AND NOT EXISTS (SELECT 1 FROM payments r WHERE r.target_payment_id = p.id AND r.kind = 'reversal')
+	 ORDER BY p.created_at DESC LIMIT 1) ap ON true`
 
-const listInvoicesQuery = `SELECT i.id, i.contract_id, i.status, i.amount_cents, i.currency, i.created_at, i.paid_at, i.due_at, i.reference, i.stripe_invoice_id, ` + activePaymentIDSubquery + `
+// refundedCentsSubquery is how much of an Invoice has been returned to
+// the Client (#1009) -- a positive number, summed from the negative
+// Refund rows against it, and 0 when there are none. It is the whole
+// reason the Invoice's own status does not have to move: "is this Client
+// owed money back, and how much came back already" is answered here, and
+// never by invoice_status, which stays 'paid' exactly as Stripe's own
+// does (00115's comment).
+const refundedCentsSubquery = `(SELECT COALESCE(-SUM(f.amount_cents), 0) FROM payments f
+	 WHERE f.invoice_id = i.id AND f.kind = 'refund') AS refunded_cents`
+
+const listInvoicesQuery = `SELECT i.id, i.contract_id, i.status, i.amount_cents, i.currency, i.created_at, i.paid_at, i.due_at, i.reference, i.stripe_invoice_id, ap.id, ap.kind, ` + refundedCentsSubquery + `
 	FROM invoices i
 	JOIN contracts c ON c.id = i.contract_id
+	` + activePaymentJoin + `
 	WHERE c.engagement_id = $1
 	ORDER BY i.created_at DESC, i.id DESC LIMIT $2`
 
-const listInvoicesAfterQuery = `SELECT i.id, i.contract_id, i.status, i.amount_cents, i.currency, i.created_at, i.paid_at, i.due_at, i.reference, i.stripe_invoice_id, ` + activePaymentIDSubquery + `
+const listInvoicesAfterQuery = `SELECT i.id, i.contract_id, i.status, i.amount_cents, i.currency, i.created_at, i.paid_at, i.due_at, i.reference, i.stripe_invoice_id, ap.id, ap.kind, ` + refundedCentsSubquery + `
 	FROM invoices i
 	JOIN contracts c ON c.id = i.contract_id
+	` + activePaymentJoin + `
 	WHERE c.engagement_id = $1 AND (i.created_at, i.id) < ($2, $3)
 	ORDER BY i.created_at DESC, i.id DESC LIMIT $4`
 
@@ -685,8 +742,8 @@ func listInvoices(ctx context.Context, tx *sql.Tx, engagementID string, after *i
 		var it InvoiceView
 		var paidAt sql.NullTime
 		var stripeInvoiceID sql.NullString
-		var activePaymentID sql.NullString
-		if err := rows.Scan(&it.ID, &it.ContractID, &it.Status, &it.AmountCents, &it.Currency, &it.CreatedAt, &paidAt, &it.DueAt, &it.Reference, &stripeInvoiceID, &activePaymentID); err != nil {
+		var activePaymentID, activePaymentKind sql.NullString
+		if err := rows.Scan(&it.ID, &it.ContractID, &it.Status, &it.AmountCents, &it.Currency, &it.CreatedAt, &paidAt, &it.DueAt, &it.Reference, &stripeInvoiceID, &activePaymentID, &activePaymentKind, &it.RefundedCents); err != nil {
 			// coverage:ignore reason: row scan failure, not exercised by unit tests
 			return nil, false, fmt.Errorf("payments: scan invoice row: %w", err)
 		}
@@ -695,6 +752,7 @@ func listInvoices(ctx context.Context, tx *sql.Tx, engagementID string, after *i
 		}
 		if activePaymentID.Valid {
 			it.ActivePaymentID = &activePaymentID.String
+			it.ActivePaymentKind = activePaymentKind.String
 		}
 		it.BillingMode = billingModeOf(stripeInvoiceID)
 		items = append(items, it)

@@ -63,6 +63,11 @@
 			value: String(data.outstandingCount)
 		},
 		{ label: 'Paid', value: formatAmount(data.paidCents) },
+		// #1009: a refunded Invoice stays 'paid' and still counts in Paid
+		// in full, so the money that went back is its own figure right
+		// beside it -- always shown, $0.00 included, so the block has one
+		// shape whatever the book holds.
+		{ label: 'Returned to Clients', value: formatAmount(data.refundedCents) },
 		// #768: the aging figure sits beside the outstanding one it is a
 		// slice of, so "who owes me, and for how long" is answered by the
 		// same block rather than by opening a second screen.

@@ -37,11 +37,15 @@
 		clientsCannotPayMessage,
 		formatAmount,
 		invoiceStatusLabel,
+		paymentMethodLabels,
+		paymentMethodOptions,
 		unbillableContractMessage,
 		type BillingMode,
 		type Invoice,
-		type PaymentMethod
+		type PaymentMethod,
+		type RefundPaymentInput
 	} from '#lib/invoice.js';
+	import RefundPaymentForm from '#lib/components/organisms/RefundPaymentForm.svelte';
 	import { RefusalError } from '#lib/formErrors.js';
 	import Button from '#lib/components/atoms/Button.svelte';
 	import Link from '#lib/components/atoms/Link.svelte';
@@ -66,7 +70,8 @@
 		onRecordPayment,
 		onVoidInvoice,
 		onWriteOffInvoice,
-		onReversePayment
+		onReversePayment,
+		onRefundPayment
 	}: {
 		invoices: Invoice[];
 		contractStatus: string;
@@ -76,7 +81,7 @@
 		clientsCanPay: boolean;
 		hasClientEmail: boolean;
 		isOwner: boolean;
-		/** Gates Record payment/Void/Write off/Reverse payment -- ADR-0008's
+		/** Gates Record payment/Void/Write off/Reverse payment/Return money -- ADR-0008's
 		 * Contract-money write row, Owner and Admin only. */
 		isOwnerOrAdmin: boolean;
 		paymentsSettingsHref: string;
@@ -88,6 +93,10 @@
 		onVoidInvoice: (invoiceId: string) => Promise<void>;
 		onWriteOffInvoice: (invoiceId: string) => Promise<void>;
 		onReversePayment: (invoiceId: string, paymentId: string, reason: string) => Promise<void>;
+		/**
+		Returns money against the Invoice's covering Payment (#1009).
+		*/
+		onRefundPayment: (invoiceId: string, paymentId: string, input: RefundPaymentInput) => Promise<void>;
 	} = $props();
 
 	const isBillable = $derived(contractStatus === billableContractStatus);
@@ -179,20 +188,6 @@
 		paymentError = error_ instanceof Error ? error_.message : 'Failed to record payment';
 	}
 
-	const paymentMethodOptions = [
-		{ value: 'check' as const, label: 'Check' },
-		{ value: 'bank_transfer' as const, label: 'Bank transfer' },
-		{ value: 'cash' as const, label: 'Cash' },
-		{ value: 'other' as const, label: 'Other' }
-	];
-
-	const paymentMethodLabels: Record<PaymentMethod, string> = {
-		check: 'Check',
-		bank_transfer: 'Bank transfer',
-		cash: 'Cash',
-		other: 'Other'
-	};
-
 	function startRecordingPayment(invoiceId: string) {
 		payingInvoiceId = invoiceId;
 		paymentStep = 'form';
@@ -201,6 +196,7 @@
 		paymentDate = todayIsoDate();
 		resetPaymentErrors();
 		cancelReversingPayment();
+		cancelRefundingPayment();
 	}
 
 	function cancelRecordingPayment() {
@@ -293,6 +289,7 @@
 		reversalReason = '';
 		resetReversalErrors();
 		cancelRecordingPayment();
+		cancelRefundingPayment();
 	}
 
 	function cancelReversingPayment() {
@@ -331,6 +328,41 @@
 
 	function reversingInvoice(): Invoice | undefined {
 		return invoices.find((invoice) => invoice.id === reversingInvoiceId);
+	}
+
+	// #1009's Refund flow: which Invoice/Payment (if any) money is being
+	// returned against. The form itself is RefundPaymentForm, which owns
+	// its own steps and errors; only one Invoice's form of any kind is ever
+	// open at a time, so opening this one closes the other two.
+	let refundingInvoiceId = $state('');
+	let refundingPaymentId = $state('');
+
+	function startRefundingPayment(invoiceId: string, paymentId: string) {
+		refundingInvoiceId = invoiceId;
+		refundingPaymentId = paymentId;
+		cancelRecordingPayment();
+		cancelReversingPayment();
+	}
+
+	function cancelRefundingPayment() {
+		refundingInvoiceId = '';
+		refundingPaymentId = '';
+	}
+
+	async function confirmRefund(input: RefundPaymentInput) {
+		await onRefundPayment(refundingInvoiceId, refundingPaymentId, input);
+		cancelRefundingPayment();
+	}
+
+	function refundingInvoice(): Invoice | undefined {
+		return invoices.find((invoice) => invoice.id === refundingInvoiceId);
+	}
+
+	/**
+	Whether any money is still left to return on a paid Invoice.
+	*/
+	function hasMoneyLeftToReturn(invoice: Invoice): boolean {
+		return invoice.amountCents > invoice.refundedCents;
 	}
 
 	// Void and write-off (#271) need no confirm step of their own -- #271
@@ -378,6 +410,14 @@
 					(paid {new Date(invoice.paidAt).toLocaleDateString()})
 					<!-- v8 ignore stop -->
 				{/if}
+				{#if invoice.refundedCents > 0}
+					<!-- The status stays "Paid" after a Refund, as Stripe's own does
+					     (#1009), so this line is where the money that went back is
+					     said at all. -->
+					<!-- v8 ignore start: Svelte's compiled null-guard on this text node is unreachable -- formatAmount always returns a string -->
+					— {formatAmount(invoice.refundedCents)} returned
+					<!-- v8 ignore stop -->
+				{/if}
 				{#if invoice.status === 'open' && isOwnerOrAdmin}
 					<cluster-l space="var(--space-2)">
 						<Button
@@ -404,15 +444,29 @@
 						{/if}
 					</cluster-l>
 				{/if}
-				{#if invoice.status === 'paid' && invoice.billingMode === 'by_hand' && isOwnerOrAdmin && invoice.activePaymentId}
+				{#if invoice.status === 'paid' && isOwnerOrAdmin && invoice.activePaymentId}
 					{@const activePaymentId = invoice.activePaymentId}
 					<cluster-l space="var(--space-2)">
-						<Button
-							label="Reverse payment"
-							variant="secondary"
-							size="sm"
-							onClick={() => startReversingPayment(invoice.id, activePaymentId)}
-						/>
+						{#if hasMoneyLeftToReturn(invoice)}
+							<Button
+								label="Return money"
+								variant="secondary"
+								size="sm"
+								onClick={() => startRefundingPayment(invoice.id, activePaymentId)}
+							/>
+						{/if}
+						<!-- Reverse is by-hand only (#945), and never once money has
+						     gone back: the BFF refuses a refunded Payment
+						     (MsgRefundedPaymentCannotBeReversed), so the button that
+						     would only earn that refusal is not offered. -->
+						{#if invoice.billingMode === 'by_hand' && invoice.refundedCents === 0}
+							<Button
+								label="Reverse payment"
+								variant="secondary"
+								size="sm"
+								onClick={() => startReversingPayment(invoice.id, activePaymentId)}
+							/>
+						{/if}
 					</cluster-l>
 				{/if}
 			</li>
@@ -528,6 +582,19 @@
 				<p role="alert">{reversalError}</p>
 			{/if}
 		</section>
+	{/if}
+	<!-- v8 ignore stop -->
+{/if}
+
+{#if refundingInvoiceId}
+	{@const invoice = refundingInvoice()}
+	<!-- v8 ignore start: refundingInvoiceId is only ever set to an id already
+	     present in invoices (startRefundingPayment) -- the same reload-race
+	     guard the two forms above carry. -->
+	{#if invoice}
+		{#key refundingInvoiceId}
+			<RefundPaymentForm {invoice} onConfirm={confirmRefund} onCancel={cancelRefundingPayment} />
+		{/key}
 	{/if}
 	<!-- v8 ignore stop -->
 {/if}

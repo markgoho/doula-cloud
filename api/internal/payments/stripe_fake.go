@@ -57,6 +57,19 @@ type FakeAccountInvoiceCall struct {
 	InvoiceID string
 }
 
+// FakeRefundCreditNoteCall records one IssueRefundCreditNote call --
+// which connected account and Stripe Invoice, how much, and which of the
+// two credit note amounts it asked for (#1009). OutOfBand is the one a
+// test most needs to see: it is what separates returning a card Payment
+// Stripe still holds from recording that the Practice returned money
+// Stripe never touched.
+type FakeRefundCreditNoteCall struct {
+	AccountID   string
+	InvoiceID   string
+	AmountCents int64
+	OutOfBand   bool
+}
+
 // FakeClient is an in-memory Client double, injected into handler tests
 // instead of a real Stripe account -- mirrors billing.FakeStripeClient.
 // The *Err fields, when set, are returned by the corresponding method
@@ -82,6 +95,10 @@ type FakeClient struct {
 	// PayOutOfBand -- #271's tests assert a manual Payment against a
 	// Stripe-backed Invoice calls this before writing anything locally.
 	PayOutOfBandCalls []FakeAccountInvoiceCall
+	// RefundCreditNoteCalls records every IssueRefundCreditNote call --
+	// #1009's tests assert a Refund against a Stripe-backed Invoice calls
+	// this before writing anything locally, and with the right amount.
+	RefundCreditNoteCalls []FakeRefundCreditNoteCall
 	// DeleteCustomerCalls and RedactionJobCalls are #394's two erasure
 	// acts, recorded as (connected account, Customer) pairs so a test can
 	// prove erasure reached the right Customer on the right Practice's
@@ -109,6 +126,7 @@ type FakeClient struct {
 	FinalizeInvoiceErr   error
 	PaymentReferenceErr  error
 	PayOutOfBandErr      error
+	RefundCreditNoteErr  error
 
 	// FinalizeInvoiceNumber, keyed by the fake invoice id FinalizeInvoice
 	// returns, is what it reports as Stripe's `number` -- tests set this to
@@ -262,6 +280,27 @@ func (f *FakeClient) PayOutOfBand(_ context.Context, accountID, invoiceID string
 	}
 	f.PayOutOfBandCalls = append(f.PayOutOfBandCalls, FakeAccountInvoiceCall{AccountID: accountID, InvoiceID: invoiceID})
 	return nil
+}
+
+// IssueRefundCreditNote records the call and returns a deterministic
+// reference in the shape the real one does: a Refund object's re_... id
+// when Stripe held the money, and a credit note's cn_... id when the
+// credit note was out of band -- so a test can assert the reference a
+// Refund row stores without faking which of the two it is.
+func (f *FakeClient) IssueRefundCreditNote(_ context.Context, accountID, invoiceID string, amountCents int64, outOfBand bool) (string, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.RefundCreditNoteErr != nil {
+		return "", f.RefundCreditNoteErr
+	}
+	f.RefundCreditNoteCalls = append(f.RefundCreditNoteCalls, FakeRefundCreditNoteCall{
+		AccountID: accountID, InvoiceID: invoiceID, AmountCents: amountCents, OutOfBand: outOfBand,
+	})
+	f.nextID++
+	if outOfBand {
+		return fmt.Sprintf("cn_fake_%d", f.nextID), nil
+	}
+	return fmt.Sprintf("re_fake_%d", f.nextID), nil
 }
 
 // VerifyWebhookSignature is not exercised through FakeClient by any

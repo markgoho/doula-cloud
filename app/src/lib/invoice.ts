@@ -34,12 +34,27 @@ export interface Invoice {
 	 * date, never a day count: `daysOverdue` derives the count here, at
 	 * read, so it stays right in a tab left open overnight. */
 	dueAt: string;
-	/** The one manually recorded Payment currently covering this Invoice
-	 * (#945), if any -- present only while status is 'paid' via a manual
-	 * Payment nothing has reversed yet. What reversePayment's own
-	 * paymentId argument needs. */
+	/** The Payment currently covering this Invoice (#945), if any --
+	 * present only while status is 'paid' via a Payment nothing has
+	 * reversed. What reversePayment's and refundPayment's own paymentId
+	 * argument needs. Since #1009 a card Payment Stripe collected appears
+	 * here too, because a Refund can reach one. */
 	activePaymentId?: string;
+	/** That Payment's kind (#1009), present whenever activePaymentId is:
+	 * 'stripe' for a card Payment Stripe collected, 'manual' for one
+	 * recorded by hand. A Stripe-backed Invoice can carry either, so the
+	 * rail alone cannot say which questions a Refund must ask. */
+	activePaymentKind?: ActivePaymentKind;
+	/** How much of this Invoice has been returned to the Client (#1009),
+	 * as a positive number -- 0 when nothing has. The status stays 'paid'
+	 * after a Refund, exactly as Stripe's own does, so this is the only
+	 * field that says money went back. */
+	refundedCents: number;
 }
+
+/** The two kinds of Payment that can cover an Invoice -- see
+ * Invoice.activePaymentKind. */
+export type ActivePaymentKind = 'stripe' | 'manual';
 
 /** A Practice's choice of billing rail (#271): Stripe-hosted Invoicing,
  * or an Invoice the Practice raises and collects by hand. */
@@ -51,8 +66,12 @@ export type BillingMode = 'stripe' | 'by_hand';
  * superset here; the BFF keeps its own PracticeInvoiceView a separate
  * struct only because Go has no such extension, and neither list should
  * be able to quietly grow the other's fields. `clientName` is her
- * preferred name, the one every screen uses. */
-export interface PracticeInvoice extends Invoice {
+ * preferred name, the one every screen uses.
+ *
+ * Less refundedCents (#1009): the Practice-wide list sends no per-row
+ * Refund total -- the book's own RefundedCents on the page is what that
+ * screen shows -- so the type does not claim one it will never receive. */
+export interface PracticeInvoice extends Omit<Invoice, 'refundedCents'> {
 	engagementId: string;
 	clientName: string;
 }
@@ -68,7 +87,14 @@ export interface PracticeInvoicePage {
 	hasMore: boolean;
 	outstandingCents: number;
 	outstandingCount: number;
+	/** Every 'paid' Invoice's full amount -- settled bills. A refunded
+	 * Invoice stays 'paid', so it still counts here in full; what went
+	 * back is refundedCents beside it. */
 	paidCents: number;
+	/**
+	Every Refund across the book (#1009), as a positive number.
+	*/
+	refundedCents: number;
 	/** The part of the outstanding book that is past its due date (#768)
 	 * -- a narrowing of the two figures above, never a book beside them,
 	 * so an overdue Invoice is counted in both. Whole-book, like every
@@ -219,19 +245,42 @@ export async function setBillingMode(
  * "other" requires a note -- see RecordPaymentInput. */
 export type PaymentMethod = 'check' | 'bank_transfer' | 'cash' | 'other';
 
+/** Each PaymentMethod's label, in the words a Staff member reads -- one
+ * table for the two forms that ask for one (recording a Payment, and
+ * returning one by hand, #1009), so a fifth method cannot reach one form
+ * and not the other. */
+export const paymentMethodLabels: Readonly<Record<PaymentMethod, string>> = {
+	check: 'Check',
+	bank_transfer: 'Bank transfer',
+	cash: 'Cash',
+	other: 'Other'
+};
+
+/** The same four methods as RadioGroup options, in the order both forms
+ * list them. */
+export const paymentMethodOptions = (Object.keys(paymentMethodLabels) as PaymentMethod[]).map((value) => ({
+	value,
+	label: paymentMethodLabels[value]
+}));
+
 /**
 One payments row -- a manually recorded Payment (as returned by
-recordPayment) or its reversal (#945, as returned by reversePayment).
-reversedPaymentId and reason are set only on a reversal row; method and
-note only on a manually recorded one.
+recordPayment), its reversal (#945, as returned by reversePayment), or a
+Refund of it (#1009, as returned by refundPayment). targetPaymentId is
+set on a reversal and on a Refund; reason only on a reversal; method and
+note on a manually recorded Payment and on a Refund the Practice sent
+back herself.
 */
 export interface Payment {
 	id: string;
 	invoiceId: string;
+	/** The row's own kind, so a Refund is never inferred from a negative
+	 * amount, which it shares with a reversal. */
+	kind: 'manual' | 'reversal' | 'refund';
 	amountCents: number;
 	method?: PaymentMethod;
 	note?: string;
-	reversedPaymentId?: string;
+	targetPaymentId?: string;
 	reason?: string;
 	paidAt: string;
 	createdAt: string;
@@ -302,6 +351,54 @@ export async function reversePayment(
 	// refusalError, matching recordPayment above: PostReversePaymentHandler's
 	// blank-reason refusal carries a `reason` details entry (#945) that
 	// apiErrorMessage would discard.
+	if (!response.ok) {
+		throw await refusalError(response);
+	}
+	return response.json();
+}
+
+/** What refundPayment sends (#1009). amountCents is supplied, unlike
+ * recording a Payment: a partial Refund is the same shape as a full one.
+ * method is required when the Payment was recorded by hand and must be
+ * absent when it was a card Payment -- Stripe returns that money itself,
+ * so there is no way the Practice sent it back to name. */
+export interface RefundPaymentInput {
+	amountCents: number;
+	method?: PaymentMethod;
+	note?: string;
+}
+
+/** What an Owner or Admin reads before she confirms a Refund of a card
+ * Payment (#1009): Stripe keeps its processing fee, and her account pays
+ * it. Stated as a fact about what is about to happen -- WarningText, not
+ * Notice -- and the amount she typed is never adjusted to cover it.
+ * Doula Cloud takes no cut of a Client's money (no ApplicationFeeAmount
+ * anywhere in the integration), so the fee is Stripe's alone. */
+export const stripeRefundFeeWarning =
+	"Stripe sends this money back to the Client's card. Stripe does not return its processing fee, so this Practice's Stripe account pays it. The Client gets back the full amount above.";
+
+/** Returns money a Client paid (#1009): a new, additive payments row
+ * with a negative amount pointing at paymentId. The Invoice stays
+ * 'paid' -- the money arrived and the bill was settled; the Refund is a
+ * separate fact. Owner and Admin only, matching recordPayment's gate.
+ * Against a Stripe-backed Invoice this issues a credit note at Stripe
+ * first, and a Stripe refusal (502) saves nothing. Refused (409) when the
+ * Invoice is not 'paid', when paymentId was reversed, or when the amount
+ * is more than is left to return on it. */
+export async function refundPayment(
+	fetcher: Fetcher,
+	practiceId: string,
+	invoiceId: string,
+	paymentId: string,
+	input: RefundPaymentInput
+): Promise<Payment> {
+	const response = await fetcher(`${invoiceActionPath(practiceId, invoiceId, 'payments')}/${paymentId}/refund`, {
+		method: 'POST',
+		headers: { 'Content-Type': 'application/json' },
+		body: JSON.stringify(input)
+	});
+	// refusalError, matching recordPayment: the handler's field refusals
+	// carry `amountCents`, `method` and `note` details entries.
 	if (!response.ok) {
 		throw await refusalError(response);
 	}
@@ -442,7 +539,7 @@ const MS_PER_DAY = 24 * 60 * 60 * 1000;
  *
  * "Payment due", never "due date": in this domain a due date is the
  * pregnancy's (ADR-0015), and the two must not share a word. */
-export function dueLabel(invoice: Invoice, now: Date): string {
+export function dueLabel(invoice: Pick<Invoice, 'status' | 'dueAt'>, now: Date): string {
 	const due = new Date(invoice.dueAt).toLocaleDateString();
 	if (invoice.status !== 'open') {
 		return due;

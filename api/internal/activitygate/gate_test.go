@@ -133,7 +133,7 @@ func TestRestrictedActions_Engagement(t *testing.T) {
 	want := []string{
 		contractPricedAction, "contract_amount_overridden", "contract_amount_repriced",
 		"invoice_raised", invoicePaidAction, "payment_recorded", "invoice_voided", "invoice_written_off",
-		"payment_reversed",
+		"payment_reversed", "payment_refunded",
 	}
 	got := activitygate.RestrictedActions(activity.SubjectEngagement)
 	if len(got) != len(want) {

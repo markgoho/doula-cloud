@@ -81,11 +81,13 @@
 		loadBillingMode,
 		recordPayment,
 		reversePayment,
+		refundPayment,
 		voidInvoice,
 		writeOffInvoice,
 		type BillingMode,
 		type Invoice,
-		type PaymentMethod
+		type PaymentMethod,
+		type RefundPaymentInput
 	} from '#lib/invoice.js';
 	import OfferSection from '#lib/components/organisms/OfferSection.svelte';
 	import { createOffer, loadEngagementOffers, withdrawOffer, type NewOffer, type Offer } from '#lib/offer.js';
@@ -848,6 +850,13 @@
 
 	async function handleReversePayment(invoiceId: string, paymentId: string, reason: string) {
 		await reversePayment(apiFetchWithSession, page.params.practiceId!, invoiceId, paymentId, reason);
+		await loadInvoicesSection();
+	}
+
+	// #1009: reloads the section afterwards, as every other money write
+	// here does -- the Invoice's refundedCents is the BFF's to sum.
+	async function handleRefundPayment(invoiceId: string, paymentId: string, input: RefundPaymentInput) {
+		await refundPayment(apiFetchWithSession, page.params.practiceId!, invoiceId, paymentId, input);
 		await loadInvoicesSection();
 	}
 
@@ -1616,6 +1625,7 @@
 		onCreate={handleCreateInvoice}
 		onRecordPayment={handleRecordPayment}
 		onReversePayment={handleReversePayment}
+		onRefundPayment={handleRefundPayment}
 		onVoidInvoice={handleVoidInvoice}
 		onWriteOffInvoice={handleWriteOffInvoice}
 	/>

@@ -207,6 +207,37 @@ type Client interface {
 	// PostConnectWebhookHandler; handleInvoicePaid's already-paid guard is
 	// what keeps that echo from writing a second payments row.
 	PayOutOfBand(ctx context.Context, accountID, invoiceID string) error
+	// IssueRefundCreditNote returns amountCents of invoiceID to the Client
+	// on accountID's connected account (#1009), and reports the Stripe id
+	// that identifies the return.
+	//
+	// A credit note is the object, never a bare Refund against the charge.
+	// That is not a preference: verified in the Sandbox before this was
+	// built (#1009's issue comment), a bare refund leaves Stripe's own
+	// Invoice record untouched -- post_payment_credit_notes_amount stays
+	// where it was while the money leaves -- so Stripe's invoice and
+	// Stripe's money disagree. A credit note keeps them in step, and
+	// leaves the Invoice at 'paid' either way.
+	//
+	// outOfBand picks which of the two amounts the credit note carries,
+	// and it follows the Payment being returned rather than the Invoice's
+	// rail. False means Stripe still holds the money (a card Payment
+	// collected through the hosted invoice): refund_amount, and Stripe
+	// creates and settles the Refund object itself. True means Stripe
+	// never held it (a Payment recorded against a Stripe-backed Invoice
+	// with paid_out_of_band, #271): out_of_band_amount, which moves no
+	// money and only records that the Practice returned it herself.
+	//
+	// The returned reference is the Refund object's id when the credit
+	// note created one, and the credit note's own id when it did not. It
+	// is the payments row's audit trail and also the echo key the Connect
+	// webhook dedupes on -- see handleCreditNoteCreated.
+	//
+	// Stripe enforces its own cap ("must not exceed the remaining
+	// creditable amount"), so a caller that has already checked the local
+	// remaining amount has a second backstop on this rail; the by-hand
+	// rail, which never reaches this call, has only the local one.
+	IssueRefundCreditNote(ctx context.Context, accountID, invoiceID string, amountCents int64, outOfBand bool) (reference string, err error)
 	// RetrieveInvoicePaymentReference reports the Stripe id that identifies
 	// how invoiceID was actually paid -- the PaymentIntent id -- for the
 	// payments row's audit trail.

@@ -366,6 +366,85 @@ func (c *StripeAPIClient) PayOutOfBand(ctx context.Context, accountID, invoiceID
 	return nil
 }
 
+// IssueRefundCreditNote creates a credit note against invoiceID on
+// accountID's connected account, carrying amountCents either as
+// refund_amount (Stripe holds the money and returns it) or as
+// out_of_band_amount (Stripe never held it, and the credit note only
+// records that the Practice returned it herself). See the Client
+// interface for why a credit note rather than a bare Refund, and for what
+// the returned reference is.
+//
+// Amount and the amount field are sent as the same number, with no
+// lines[]: the Invoice carries a single line item
+// (InvoiceLineItemDescription, unconditionally), so there is no line-level
+// detail a credit note could carry that the Invoice does not already
+// state. Verified accepted in the Sandbox on #1009.
+func (c *StripeAPIClient) IssueRefundCreditNote(ctx context.Context, accountID, invoiceID string, amountCents int64, outOfBand bool) (string, error) {
+	// coverage:ignore reason: requires a real Stripe API key and network access, not exercised by unit tests
+	note, err := c.client.V1CreditNotes.Create(ctx, refundCreditNoteParams(accountID, invoiceID, amountCents, outOfBand))
+	// coverage:ignore reason: requires a real Stripe API key and network access, not exercised by unit tests
+	if err != nil {
+		return "", fmt.Errorf("payments: create stripe credit note: %w", err)
+	}
+	// coverage:ignore reason: requires a real Stripe API key and network access, not exercised by unit tests
+	return creditNoteReference(note), nil
+}
+
+// refundCreditNoteParams builds IssueRefundCreditNote's request. Split
+// out, the way accountStatusFrom is, so the one decision in it -- which
+// of the two amounts a credit note carries -- is testable without a real
+// Stripe account.
+func refundCreditNoteParams(accountID, invoiceID string, amountCents int64, outOfBand bool) *stripe.CreditNoteCreateParams {
+	params := &stripe.CreditNoteCreateParams{
+		Invoice: stripe.String(invoiceID),
+		Amount:  new(amountCents),
+	}
+	params.StripeAccount = stripe.String(accountID)
+	if outOfBand {
+		params.OutOfBandAmount = new(amountCents)
+	} else {
+		params.RefundAmount = new(amountCents)
+	}
+	return params
+}
+
+// creditNoteReference adapts a created *stripe.CreditNote to
+// refundReference, the one rule both sides of the echo apply.
+func creditNoteReference(note *stripe.CreditNote) string {
+	refundIDs := make([]string, 0, len(note.Refunds))
+	for _, refund := range note.Refunds {
+		if refund != nil && refund.Refund != nil {
+			refundIDs = append(refundIDs, refund.Refund.ID)
+		}
+	}
+	return refundReference(note.ID, refundIDs)
+}
+
+// refundReference picks the Stripe id that identifies a credit note's
+// return of money: the first Refund object's id when the credit note
+// created one, else the credit note's own id. IssueRefundCreditNote
+// stores it on the Refund row it writes, and the Connect webhook computes
+// it again from a credit_note.created event (handleCreditNoteCreated) --
+// the same rule on the same object, which is what lets the webhook find
+// that row and recognize the event as the echo of a Refund this system
+// just issued, rather than record it a second time.
+//
+// The Refund id is preferred over the credit note's own because a card
+// Refund is reported twice, once as credit_note.created and once as
+// refund.created, and refund.created carries no credit note id at all
+// (verified in the Sandbox, #1009's issue comment). Keying on the Refund
+// id lets either event, arriving in either order, find the other's row.
+// An out-of-band credit note creates no Refund object, since there was no
+// Stripe-side money to return, so it always falls through to its own id.
+func refundReference(creditNoteID string, refundIDs []string) string {
+	for _, id := range refundIDs {
+		if id != "" {
+			return id
+		}
+	}
+	return creditNoteID
+}
+
 // RetrieveInvoicePaymentReference reports the PaymentIntent id behind
 // invoiceID's payment, read from the InvoicePayment list rather than the
 // Invoice itself: under this SDK's API version an Invoice carries neither

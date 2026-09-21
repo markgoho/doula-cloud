@@ -327,6 +327,24 @@ const (
 	// ActionPaymentRecorded carries: an Owner or Admin chose to undo it,
 	// never the Client's own act.
 	ActionPaymentReversed EngagementAction = "payment_reversed"
+	// ActionPaymentRefunded records money a Client had genuinely paid
+	// going back to her (#1009) -- an additive payments row pointing at
+	// the Payment it returns, which leaves the Invoice at 'paid'. The
+	// opposite fact from ActionPaymentReversed, which says the money never
+	// arrived and puts the Client back in debt; kept as its own action so
+	// "who returned this money, when, and how much" never reads as an
+	// undo. A StaffActor when an Owner or Admin issued or recorded it here;
+	// a SystemActor when the Connect webhook recorded one a Practice issued
+	// from her own Stripe Dashboard, since no Staff member of this system
+	// did it.
+	ActionPaymentRefunded EngagementAction = "payment_refunded"
+
+	// RefundOriginStripeDashboard is a payment_refunded diff's "origin"
+	// when the Connect webhook recorded a Refund the Practice issued from
+	// her own Stripe Dashboard (#1009). Named here, on the write side, so
+	// payments (which writes it) and engagement (whose Staff-facing
+	// sentence reads it) spell it once.
+	RefundOriginStripeDashboard = "stripe_dashboard"
 
 	ActionPortalInviteSent EngagementAction = "portal_invite_sent"
 
@@ -393,6 +411,7 @@ var moneyActions = map[EngagementAction]bool{
 	ActionInvoiceVoided:            true,
 	ActionInvoiceWrittenOff:        true,
 	ActionPaymentReversed:          true,
+	ActionPaymentRefunded:          true,
 }
 
 // MoneyActions returns every action ADR-0008 keeps Owner/Admin-only,

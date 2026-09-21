@@ -513,13 +513,15 @@ func redactContractMergeFields(ctx context.Context, tx *sql.Tx, clientID string)
 	return int(n), nil
 }
 
-// redactPaymentNotes empties the free-text note on every manually
-// recorded Payment (#271) against one of clientID's Invoices -- a Staff
-// member can type anything in there, including a check number that
-// carries her name or address, so it is a personal-data surface the same
-// way a Contract's merge fields are. Only manual rows ever carry a note
-// (payments_method_matches_kind's own CHECK), so this reaches nothing a
-// Stripe-webhook-written row holds.
+// redactPaymentNotes empties the free-text note on every payments row
+// against one of clientID's Invoices -- a Staff member can type anything
+// in there, including a check number that carries her name or address,
+// so it is a personal-data surface the same way a Contract's merge fields
+// are. Two kinds carry one: a manually recorded Payment (#271) and a
+// Refund the Practice returned by hand (#1009). The UPDATE deliberately
+// filters on no kind, so any later kind that gains a note is swept the
+// day it lands; a Stripe-webhook-written row never carries one, so this
+// reaches nothing it holds.
 func redactPaymentNotes(ctx context.Context, tx *sql.Tx, clientID string) (int, error) {
 	res, err := tx.ExecContext(ctx,
 		`UPDATE payments SET note = NULL
