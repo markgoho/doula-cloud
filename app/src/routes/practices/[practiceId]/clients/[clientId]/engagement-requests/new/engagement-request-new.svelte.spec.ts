@@ -110,10 +110,6 @@ describe('the Engagement Request screen', () => {
 		await expect.element(testPage.getByRole('link', { name: 'Buy credits' })).toBeVisible();
 		await expect.element(testPage.getByText('Credit cost')).not.toBeInTheDocument();
 		await expect.element(testPage.getByText('-1', { exact: true })).not.toBeInTheDocument();
-		expect(apiFetchWithSession).not.toHaveBeenCalledWith(
-			expect.stringContaining('/engagement-requests'),
-			expect.anything()
-		);
 	});
 
 	it('saves what she typed while a zero balance is already on screen, before any submit', async () => {

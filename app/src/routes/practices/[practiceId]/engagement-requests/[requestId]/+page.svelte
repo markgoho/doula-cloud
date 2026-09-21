@@ -79,6 +79,10 @@
 	// The empty-balance path is offered before the attempt as well as after
 	// it: the read already knows the balance, so an approver is told she
 	// must buy Credits rather than discovering it by pressing Approve.
+	// `balanceAfter` already has the one-Credit cost subtracted server-side
+	// (engagementrequest.DetailResponse), so "empty" is `< 0` here rather
+	// than the request form's own `balance <= 0` -- the same one-Credit
+	// assumption, read off a value that already has it applied.
 	const isBalanceEmpty = $derived(detail !== undefined && detail.balanceAfter < 0);
 
 	function clientName(record: ApprovalDetail['client']): string {

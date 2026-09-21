@@ -77,7 +77,14 @@
 	// after it (#1235): the balance is already loaded, so an approver on
 	// an empty Practice is told she has nothing to spend rather than
 	// reading "Balance after -1" or discovering it by pressing submit.
-	const isBalanceEmpty = $derived(balance !== undefined && balance <= 0);
+	// `balance <= 0` reads as "nothing to spend" because this request
+	// always costs exactly one Credit (the hardcoded 'Credit cost: 1
+	// credit' below) -- the same fixed cost the approval screen's own
+	// `isBalanceEmpty` bakes into `balanceAfter < 0`. `isApprover &&` is
+	// belt-and-braces: `balance` is only ever set for an approver below,
+	// but the empty check should not depend on that living two functions
+	// away to stay true.
+	const isBalanceEmpty = $derived(isApprover && balance !== undefined && balance <= 0);
 	// ADR-0017's second-live-Engagement warning, read from the Client detail
 	// already loaded rather than a separate call -- "warns, never refuses"
 	// at request time so the requester can reconsider before submitting.
