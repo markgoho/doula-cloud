@@ -15,6 +15,18 @@ import (
 // gap rather than per route.
 func Mount(g *staffauth.GatedRouter, ir *idempotency.Router, enq tasknudge.Enqueuer) {
 	g.Get("/api/practices/{practiceId}/on-call", staffauth.AnyStaff, RosterHandler())
+	g.Get("/api/practices/{practiceId}/engagements/{engagementId}/on-call", staffauth.AnyStaff, EngagementHandler())
+
+	g.Get("/api/practices/{practiceId}/on-call-settings", staffauth.OwnerAndAdmin, GetSettingsHandler())
+	ir.ExemptGated("PUT /api/practices/{practiceId}/on-call-settings",
+		"full-replace UPDATE of the Practice's one on-call rule; re-sending the same body writes and records nothing (see PutSettingsHandler)",
+		false, staffauth.OwnerAndAdmin, PutSettingsHandler())
+	ir.ExemptGated("PUT /api/practices/{practiceId}/engagements/{engagementId}/on-call-rule",
+		"full-replace UPDATE of one Engagement's start-rule override; re-sending the same body writes and records nothing",
+		false, staffauth.OwnerAndAdmin, PutRuleHandler())
+	ir.ExemptGated("PUT /api/practices/{practiceId}/engagements/{engagementId}/attachments/{staffId}/on-call",
+		"full-replace UPDATE of one Doula's narrowing; re-sending the same body writes and records nothing",
+		false, staffauth.OwnerAndAdmin, PutNarrowingHandler())
 
 	ir.Replayable("POST /api/practices/{practiceId}/engagements/{engagementId}/coverage-gaps", true, CreateGapHandler(enq))
 	ir.Exempt("PUT /api/practices/{practiceId}/engagements/{engagementId}/coverage-gaps/{gapId}",

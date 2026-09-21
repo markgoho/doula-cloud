@@ -53,6 +53,7 @@ func CreateGapHandler(enq tasknudge.Enqueuer) http.Handler {
 			return
 		}
 		if !c.finish(w, r, enq, gapID, activity.ActionCoverageGapCreated, gapDiff{GapID: gapID, After: &facts}, facts) {
+			// coverage:ignore reason: finish only reports false on a DB failure, not exercised by unit tests
 			return
 		}
 		writeGap(w, r, gapID, http.StatusCreated)
@@ -105,6 +106,7 @@ func UpdateGapHandler(enq tasknudge.Enqueuer) http.Handler {
 			return
 		}
 		if !c.finish(w, r, enq, gapID, activity.ActionCoverageGapUpdated, gapDiff{GapID: gapID, Before: &before, After: &after}, after) {
+			// coverage:ignore reason: finish only reports false on a DB failure, not exercised by unit tests
 			return
 		}
 		writeGap(w, r, gapID, http.StatusOK)

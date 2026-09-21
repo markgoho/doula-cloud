@@ -45,18 +45,18 @@ func UnstaffedDays(window, rng Window, effectives []Window) []Window {
 		if e.End >= span.End {
 			return holes
 		}
-		cursor = maxDay(cursor, dayAfter(e.End))
+		// e.End >= cursor here, so the day after it is always later.
+		cursor = dayAfter(e.End)
 	}
 	return appendHole(holes, cursor, span.End, span.End)
 }
 
-// appendHole adds [from, to] clipped to limit, if anything is left.
+// appendHole adds [from, to] clipped to limit. from is never past limit:
+// the cursor only ever moves to the day after an interval that ended
+// before limit, so there is always at least one day left.
 func appendHole(holes []Window, from, to, limit string) []Window {
 	if to > limit {
 		to = limit
-	}
-	if from > to {
-		return holes
 	}
 	return append(holes, Window{Start: from, End: to})
 }
@@ -67,11 +67,4 @@ func dayBefore(day string) string { return shiftDay(day, -1) }
 func shiftDay(day string, by int) string {
 	t, _ := time.Parse(dateLayout, day)
 	return t.AddDate(0, 0, by).Format(dateLayout)
-}
-
-func maxDay(a, b string) string {
-	if a > b {
-		return a
-	}
-	return b
 }

@@ -66,6 +66,21 @@ func TestUnstaffedDays(t *testing.T) {
 			want:       nil,
 		},
 		{
+			name: "a narrowing that ends before the range is passed over",
+			rng:  oncall.Window{Start: "2026-10-20", End: "2026-10-31"},
+			effectives: []oncall.Window{
+				{Start: "2026-10-09", End: "2026-10-12"},
+				{Start: "2026-10-20", End: "2026-11-13"},
+			},
+			want: nil,
+		},
+		{
+			name:       "a narrowing that starts after the range leaves the range's tail, clipped",
+			rng:        oncall.Window{Start: "2026-10-01", End: "2026-10-12"},
+			effectives: []oncall.Window{{Start: "2026-10-20", End: "2026-11-13"}},
+			want:       []oncall.Window{{Start: "2026-10-09", End: "2026-10-12"}},
+		},
+		{
 			name: "overlapping narrowings are one coverage",
 			rng:  october,
 			effectives: []oncall.Window{
