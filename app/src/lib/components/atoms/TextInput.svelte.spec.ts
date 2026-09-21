@@ -282,7 +282,7 @@ describe('TextInput.svelte', () => {
 			await expect.element(page.getByRole('textbox')).toHaveAttribute('type', 'text');
 		});
 
-		it("names which password it reveals, where a page holds more than one", async () => {
+		it('names which password it reveals, where a page holds more than one', async () => {
 			await setup({ type: 'password', passwordLabel: 'new password' });
 
 			await expect.element(page.getByRole('button', { name: 'Show new password' })).toBeVisible();

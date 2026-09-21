@@ -748,7 +748,7 @@ describe('docs/test-plans/ arithmetic, read off the real tree (#1233)', () => {
 
 	it(
 		"agrees with itself: every plan's Marks summary matches its own Steps table, README's run-status " +
-			"table and Total match the plans, every mark is one of the four, every automated spec exists " +
+			'table and Total match the plans, every mark is one of the four, every automated spec exists ' +
 			'under app/e2e/, and every missing-feature gap ID is one README.md owns',
 		() => {
 			expect(offenses).toEqual([]);

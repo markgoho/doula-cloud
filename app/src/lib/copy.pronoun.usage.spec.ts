@@ -144,7 +144,7 @@ describe('findOffensesInLines', () => {
 	});
 
 	it('flags a pronoun inside a quoted script string, not the surrounding code', () => {
-		const source = ['<script>', "// she waits", "const message = 'She waits';", '</script>'].join(
+		const source = ['<script>', '// she waits', "const message = 'She waits';", '</script>'].join(
 			'\n'
 		);
 

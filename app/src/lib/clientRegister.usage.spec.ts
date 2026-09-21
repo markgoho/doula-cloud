@@ -171,7 +171,7 @@ describe('findOffensesInLines', () => {
 	});
 
 	it('ignores "signed" inside an unrelated route path', () => {
-		const source = ["<script>", "goto('/portal/(signed-out)/login');", '</script>'].join('\n');
+		const source = ['<script>', "goto('/portal/(signed-out)/login');", '</script>'].join('\n');
 
 		expect(findOffensesInLines('fixture.svelte', regionLines(source))).toEqual([]);
 	});

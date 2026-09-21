@@ -110,7 +110,7 @@ export async function standUpRidgeline(request: APIRequestContext): Promise<Ridg
 		headers: { Authorization: `Bearer ${lenaIdToken}` },
 		data: { inviteToken, name: 'Lena Vasquez', workState: 'NY' }
 	});
-	const { staffId: lenaStaffId } = JSON.parse(await readBody(accepted, "standUpRidgeline: Lena accepting her invitation"));
+	const { staffId: lenaStaffId } = JSON.parse(await readBody(accepted, 'standUpRidgeline: Lena accepting her invitation'));
 
 	return {
 		practiceId: owner.practiceId,

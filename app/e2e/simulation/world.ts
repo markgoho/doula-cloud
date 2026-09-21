@@ -189,7 +189,7 @@ export const STAGED_ARRIVALS: StagedArrival[] = [
 	{
 		practiceSlug: 'bell-ortiz',
 		offsetWeeks: undefined,
-		note: "Tasha arrives mid-run at a point her own walk decides (calendar.md places it mid-month-3); not scheduled here."
+		note: 'Tasha arrives mid-run at a point her own walk decides (calendar.md places it mid-month-3); not scheduled here.'
 	}
 ];
 
