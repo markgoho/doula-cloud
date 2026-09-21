@@ -302,8 +302,21 @@ describe('the wrapper', () => {
     while (!fs.existsSync(lockDir))
       await new Promise((resolve) => setTimeout(resolve, 5));
     const atStart = fs.statSync(lockDir).mtimeMs;
-    await new Promise((resolve) => setTimeout(resolve, 150));
-    const laterMs = fs.statSync(lockDir).mtimeMs;
+    // A plain setInterval (startHeartbeat's mechanism) carries no promise
+    // of firing on schedule under event-loop backpressure, so a fixed
+    // sleep-then-assert window can see zero ticks on a loaded machine
+    // (#1320). Poll for the observed mtime change instead, the same
+    // pattern the owner.json waits above use.
+    const deadline = Date.now() + 15000;
+    let laterMs = atStart;
+    while (
+      laterMs <= atStart &&
+      fs.existsSync(lockDir) &&
+      Date.now() < deadline
+    ) {
+      await new Promise((resolve) => setTimeout(resolve, 5));
+      if (fs.existsSync(lockDir)) laterMs = fs.statSync(lockDir).mtimeMs;
+    }
 
     expect(laterMs).toBeGreaterThan(atStart);
     expect((await running).exitCode).toBe(0);
