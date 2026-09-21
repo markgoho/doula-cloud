@@ -51,6 +51,16 @@ interface Offense {
 	found: string;
 }
 
+// Every component read and reduced to its style lines once, at module
+// scope, so the cost of that whole-tree read and parse is paid on import
+// rather than charged against the three `it`s below that call `scan` or
+// `scanDeclarations`, each of which used to re-read and re-parse every
+// component on its own (#1211).
+const componentStyleLines = componentFiles.map((file) => ({
+	file,
+	lines: styleLines(readFileSync(new URL(file, appRoot), 'utf8'), IGNORE)
+}));
+
 /*
  * Declaration-level rather than pattern-level, because a negative
  * lookahead after `\s*` backtracks onto the whitespace and matches
@@ -60,9 +70,8 @@ interface Offense {
 function scanDeclarations(properties: string[], isAllowed: (value: string) => boolean): Offense[] {
 	const declaration = new RegExp(String.raw`(${properties.join('|')})\s*:\s*([^;]+)`, 'g');
 	const offenses: Offense[] = [];
-	for (const file of componentFiles) {
-		const source = readFileSync(new URL(file, appRoot), 'utf8');
-		for (const { line, text } of styleLines(source, IGNORE)) {
+	for (const { file, lines } of componentStyleLines) {
+		for (const { line, text } of lines) {
 			const breaches = text
 				.matchAll(declaration)
 				.filter((match) => !isAllowed(match[2]!.trim()))
@@ -79,9 +88,8 @@ function scanDeclarations(properties: string[], isAllowed: (value: string) => bo
 // neither scanner has to think about the marker.
 function scan(pattern: RegExp): Offense[] {
 	const offenses: Offense[] = [];
-	for (const file of componentFiles) {
-		const source = readFileSync(new URL(file, appRoot), 'utf8');
-		for (const { line, text } of styleLines(source, IGNORE)) {
+	for (const { file, lines } of componentStyleLines) {
+		for (const { line, text } of lines) {
 			const match = pattern.exec(text);
 			pattern.lastIndex = 0;
 			if (match !== null) offenses.push({ file, line, text: text.trim(), found: match[0] });

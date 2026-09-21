@@ -85,6 +85,22 @@ function sourceFiles(): string[] {
 	return found.toSorted((left, right) => left.localeCompare(right));
 }
 
+// The file list and every file's contents, read once at import rather than
+// inside a timed `it`. Before this, `sourceFiles()` and a fresh
+// `readFileSync` per file ran again inside several `it` bodies below --
+// `declarations()` re-walked and re-read the whole tree on each of its
+// three callers, `referenceCount()` did the same once per token it was
+// asked about, and two more `it`s walked and read the tree directly -- as
+// many as eight full-tree reads charged against Vitest's 5-second
+// per-`it` default. Under a quiet machine the scan finishes in well under
+// a second; under the full suite's contention for disk and CPU it was
+// measured crossing the limit, and passing again on a bare rerun of the
+// identical commit (#1211).
+const ALL_SOURCE_FILES = sourceFiles();
+const FILE_CONTENTS = new Map(
+	ALL_SOURCE_FILES.map((filePath) => [filePath, readFileSync(filePath, 'utf8')])
+);
+
 /**
  * The character ranges holding CSS: the whole file for a stylesheet, each
  * `<style>` body for a component.
@@ -206,8 +222,8 @@ interface Declaration {
 }
 
 function declarations(): Declaration[] {
-	return sourceFiles().flatMap((filePath) => {
-		const raw = readFileSync(filePath, 'utf8');
+	return ALL_SOURCE_FILES.flatMap((filePath) => {
+		const raw = FILE_CONTENTS.get(filePath)!;
 		const blanked = withoutComments(raw);
 		const styles = styleRanges(filePath, raw);
 		const allowed = noPreferenceRanges(blanked);
@@ -244,10 +260,18 @@ function tokensIn(value: string): { names: string[]; literals: string } {
 function referenceCount(token: string): number {
 	// The declaration in `tokens.css` is not a use of the token; only `var()` is.
 	const uses = new RegExp(String.raw`var\(\s*${token}\b`, 'g');
-	return sourceFiles()
-		.map((filePath) => readFileSync(filePath, 'utf8').matchAll(uses).toArray().length)
-		.reduce((total, count) => total + count, 0);
+	return ALL_SOURCE_FILES.map(
+		(filePath) => FILE_CONTENTS.get(filePath)!.matchAll(uses).toArray().length
+	).reduce((total, count) => total + count, 0);
 }
+
+// Every declaration, and every token's reference count, computed once here
+// rather than inside each `it` that used to call `declarations()` or
+// `referenceCount()` on its own.
+const ALL_DECLARATIONS = declarations();
+const TOKEN_REFERENCE_COUNTS = new Map(
+	[...DURATION_TOKENS, ...EASING_TOKENS].map((token) => [token, referenceCount(token)])
+);
 
 function describeOffender(declaration: Declaration): string {
 	return `${declaration.file}: ${declaration.property}: ${declaration.value}`;
@@ -255,7 +279,7 @@ function describeOffender(declaration: Declaration): string {
 
 describe('motion is spent only on the brief’s durations and curve', () => {
 	it('never writes a raw duration or easing keyword into a transition or animation', () => {
-		const offenders = declarations()
+		const offenders = ALL_DECLARATIONS
 			.filter((declaration) => !declaration.isExcused)
 			.filter((declaration) => {
 				const { literals } = tokensIn(declaration.value);
@@ -272,7 +296,7 @@ describe('motion is spent only on the brief’s durations and curve', () => {
 	});
 
 	it('references only the three duration tokens and the one easing token', () => {
-		const offenders = declarations().flatMap((declaration) =>
+		const offenders = ALL_DECLARATIONS.flatMap((declaration) =>
 			tokensIn(declaration.value)
 				.names.filter((name) => name.startsWith('--motion') || name.startsWith('--ease'))
 				.filter((name) => !DURATION_TOKENS.has(name) && !EASING_TOKENS.has(name))
@@ -285,7 +309,7 @@ describe('motion is spent only on the brief’s durations and curve', () => {
 
 describe('movement can always be switched off', () => {
 	it('animates a transform only inside a prefers-reduced-motion: no-preference block', () => {
-		const offenders = declarations()
+		const offenders = ALL_DECLARATIONS
 			.filter((declaration) => declaration.movesSomething)
 			.filter((declaration) => !declaration.isInNoPreference && !declaration.isExcused)
 			.map((declaration) => describeOffender(declaration));
@@ -294,8 +318,8 @@ describe('movement can always be switched off', () => {
 	});
 
 	it('justifies every @keyframes, because a keyframe animation moves without being asked', () => {
-		const offenders = sourceFiles().flatMap((filePath) => {
-			const raw = readFileSync(filePath, 'utf8');
+		const offenders = ALL_SOURCE_FILES.flatMap((filePath) => {
+			const raw = FILE_CONTENTS.get(filePath)!;
 			const styles = styleRanges(filePath, raw);
 			return withoutComments(raw)
 				.matchAll(/@keyframes\s+([\w-]+)/g)
@@ -312,28 +336,28 @@ describe('movement can always be switched off', () => {
 describe('the motion tokens are honest about who uses them', () => {
 	it('names a future consumer for every token nothing uses yet', () => {
 		const unused = [...DURATION_TOKENS, ...EASING_TOKENS].filter(
-			(token) => referenceCount(token) === 0
+			(token) => TOKEN_REFERENCE_COUNTS.get(token) === 0
 		);
 		expect(unused.filter((token) => !AWAITING_A_CONSUMER.has(token))).toEqual([]);
 	});
 
 	it('empties the waiting list once a token finds a consumer', () => {
 		const adopted = AWAITING_A_CONSUMER.keys()
-			.filter((token) => referenceCount(token) > 0)
+			.filter((token) => (TOKEN_REFERENCE_COUNTS.get(token) ?? 0) > 0)
 			.toArray();
 		expect(adopted).toEqual([]);
 	});
 
 	it('spends --motion-nav on at most one view transition, as the brief allows exactly one', () => {
-		expect(referenceCount('--motion-nav')).toBeLessThanOrEqual(1);
+		expect(TOKEN_REFERENCE_COUNTS.get('--motion-nav')).toBeLessThanOrEqual(1);
 	});
 });
 
 describe('nothing shifts when an image arrives', () => {
 	it('gives every img an intrinsic width and height', () => {
-		const components = sourceFiles().filter((filePath) => filePath.endsWith('.svelte'));
+		const components = ALL_SOURCE_FILES.filter((filePath) => filePath.endsWith('.svelte'));
 		const offenders = components.flatMap((filePath) => {
-			const raw = readFileSync(filePath, 'utf8');
+			const raw = FILE_CONTENTS.get(filePath)!;
 			return markupOnly(raw)
 				.matchAll(/<img\b[\s\S]{0,600}?\/?>/g)
 				.filter((match) => !(/\bwidth[=\s]/.test(match[0]) && /\bheight[=\s]/.test(match[0])))
