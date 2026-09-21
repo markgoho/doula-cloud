@@ -51,18 +51,11 @@ cited, not re-filed.
 
 ### Stage 2 — Making an account
 
-**Thinking**: "Another password."
-**Pain points**: the form asks her to choose between "I'm new here — create an
-account" and "I already have an account — log in" before she knows which she is;
-for a first-time Client the second option can only fail. Password minimum is six
-characters and nothing else is asked — no name, because the Practice already
-holds it.
+**Thinking**: "That's it?"
+**Pain points**: none — #617 (ADR-0026) closed HS-G1 along with the account-mode question it named. A Client has no password, so accepting an invitation is nothing but pressing **Continue**, with no email or password to enter.
 
-- **2.1** — Open `/portal/accept-invite?token=…`. With no token the page shows
-  "Missing invite token" and nothing else.
-- **2.2** — Enter email and password, leave the mode radio on **signup**, press
-  **Accept invite** (`POST /api/portal/accept-invite`). The session cookie is set
-  on that response (#145).
+- **2.1** — Open `/portal/accept-invite?token=…`. With no token the page shows "Missing invite token" and nothing else.
+- **2.2** — Press **Continue** (`POST /api/portal/accept-invite`). The session cookie is set on that response (#145).
 - **2.3** — `GET /api/portal/session` → one Engagement → redirect straight to it.
 
 ### Stage 3 — The first screen
@@ -155,11 +148,7 @@ and the Birth Plan link stays exactly where it was.
 ### Stage 9 — Her partner asks for the login
 
 **Thinking**: "Just use mine, I suppose."
-**Pain points**: `client_portal_users` holds one `identity_uid` per Client row, and
-`CONTEXT.md` names portal access for a second person a **future extension of
-Client**, not a new entity. So there is no second account, no invite, and no
-read-only guest — the supported path is sharing her password, which is the one path
-nobody designed (HS-G5).
+**Pain points**: `CONTEXT.md` names portal access for a second person a **future extension of Client**, not a new entity, so there is no invite flow built for one. What actually stops Maya from sending a second invite is not the schema — `client_portal_users` now allows more than one `(identity_uid, client_id)` pair (#819) — it is `invite()` itself (`portalinvite/invite.go`), which reads the row by `client_id` and answers an already-accepted Client with "this client already has portal access", a handler rule guarding the one Portal Account Hannah holds. The path nobody designed is not password-sharing — a Client has no password to share (ADR-0026) — it is sharing the mailbox that receives her sign-in links (HS-G5).
 
 - **9.1** — No step. There is nothing to click.
 
@@ -167,11 +156,11 @@ nobody designed (HS-G5).
 
 | ID | Stage | Layer | Gap | Issue |
 | --- | --- | --- | --- | --- |
-| HS-G1 | 2 | Experience | The accept-invite form makes her choose "new here" or "I already have an account" before she can know which she is, and the wrong choice fails with a generic "Accept invite failed". | [#300](https://github.com/markgoho/doula-cloud/issues/300) |
+| HS-G1 | 2 | Experience | **Closed 2026-09-20, [#1244](https://github.com/markgoho/doula-cloud/issues/1244).** Already implemented by #617 (ADR-0026): the accept-invite screen has no account-mode question left to get wrong — a single **Continue** button, no "new here" / "already have an account" choice. | [#300](https://github.com/markgoho/doula-cloud/issues/300) |
 | HS-G2 | 5, 6 | Both | The Birth Plan is hers in every sense except authorship: staff-drafted, read-only to the Client, with no comment, no suggested edit, and no acknowledgement that she has read it. The correction route is the message thread and a re-type by Staff. | [#301](https://github.com/markgoho/doula-cloud/issues/301) |
 | HS-G3 | 4 | Interaction | The Client cannot get a copy of what she signed. `GET /api/portal/engagements/{id}/contract/pdf` is routed (`main.go:226`) but nothing in `portal/…/contract/+page.svelte` links it. | [#302](https://github.com/markgoho/doula-cloud/issues/302) |
 | HS-G4 | 3, 7 | Experience | Push is registered silently on first landing and can never be reviewed, muted, or explained. There is no notification setting, and nothing tells her that a push is not an alarm (ADR-0002). Nadia's NH-G7 is the same absence at its cruellest. | [#303](https://github.com/markgoho/doula-cloud/issues/303) |
-| HS-G5 | 9 | Both | A second person cannot be given portal access. One `identity_uid` per Client, no guest role, no read-only share of the Birth Plan — so partners are onboarded by password-sharing. `CONTEXT.md` marks this a future extension of Client. | [#304](https://github.com/markgoho/doula-cloud/issues/304) |
+| HS-G5 | 9 | Both | A second person cannot be given portal access. No invite flow, no guest role, no read-only share of the Birth Plan — `invite()` refuses a second invitation on an already-accepted Client at the handler level (`portalinvite/invite.go`), not the schema, which now allows more than one `(identity_uid, client_id)` pair. Partners are onboarded by sharing the mailbox that receives Hannah's sign-in links instead. `CONTEXT.md` marks a second Portal Account a future extension of Client. | [#304](https://github.com/markgoho/doula-cloud/issues/304) |
 | HS-G6 | 4, 7 | Interaction | Retrieving a stored object 500s outright — the write succeeds and the object is present in the store, but nothing can read it back. Confirmed on both the signed Contract PDF (`GET .../contract/pdf`, sharpening HS-G3: fixing the missing link would not fix this) and a message attachment, in both directions. `objectstore.GCSStore.Get` (`api/internal/objectstore/gcs.go`) is backed by a `storage.Client` built with no options (`main.go:263`); whether this also breaks against real GCS or is local-emulator-only is unverified — walked at [#240](https://github.com/markgoho/doula-cloud/issues/240). | [#305](https://github.com/markgoho/doula-cloud/issues/305) |
 | HS-G7 | 6 | Interaction | The Birth Plan has no export mechanism of its own beyond the browser's **Print** — no PDF, no share link, from the Client's own side. Distinct from PR-G5, which is the same absence from the Doula's side of the same moment. Walked at [#240](https://github.com/markgoho/doula-cloud/issues/240). | [#306](https://github.com/markgoho/doula-cloud/issues/306) |
 
