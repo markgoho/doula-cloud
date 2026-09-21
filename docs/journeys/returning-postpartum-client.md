@@ -28,15 +28,9 @@ Her persona file calls `clients` having no `practice_id` a sign the schema suppo
 ### Stage 1 — Two years ago, the first Engagement ends
 
 **Thinking**: nothing — it is over and it went well.
-**Pain points**: none. `TransitionHandler` (`PATCH .../engagements/{id}/status`)
-runs `UPDATE engagements SET status = 'completed', ending_reason = $2,
-ending_note = $3 ...`, and `engagement_events` (`00090`) records both sides of the
-move (**MO-G4**, closed). A birth Engagement is refused at `completed` until its
-birth outcome is recorded first (#940's `engagements_completed_is_explained`), so
-the record cannot simply stop updating — it has to say what happened.
+**Pain points**: none. `TransitionHandler` (`PATCH .../engagements/{id}/status`) runs `UPDATE engagements SET status = 'completed', ending_reason = $2, ending_note = $3 ...`, and `engagement_events` (`00090`) records both sides of the move (**MO-G4**, closed). A birth Engagement is refused at `completed` until its birth outcome is recorded first (#940's `engagements_completed_is_explained`), so the record cannot simply stop updating — it has to say what happened.
 
-- **1.1** — Priya marks her first Engagement `completed`, naming an ending reason.
-  It stops reading `intake` two years after the fact.
+- **1.1** — Priya marks her first Engagement `completed`, naming an ending reason. It stops reading `intake` two years after the fact.
 
 ### Stage 2 — She calls Priya
 
@@ -67,19 +61,9 @@ credit is consumed for a person the Practice already paid for (**MO-G9**).
 ### Stage 4 — Declaring it postpartum-only
 
 **Thinking**: "They know it's not a birth this time, right?"
-**Pain points**: none. `engagements.kind` (`engagement_kind`: `birth`/`postpartum`,
-`00042_client_intake_schema.sql`) is exactly the fact `CONTEXT.md`'s "deliberately
-generic" claim needed and did not have (**CB-G2**, closed). The Engagement Request
-Priya raises from Camille's Client detail hub asks "Select whether this is birth or
-postpartum work" before it can be approved, and the Engagement it creates carries
-that answer as `kind` from the start — not a status borrowed to say it. Moving
-`status` itself to anything but `active`/`completed` stays refused
-(`TransitionHandler`'s own 400), but that refusal no longer matters: `kind` is
-where the fact belongs, and it is no longer silent.
+**Pain points**: none. `engagements.kind` (`engagement_kind`: `birth`/`postpartum`, `00042_client_intake_schema.sql`) is exactly the fact `CONTEXT.md`'s "deliberately generic" claim needed and did not have (**CB-G2**, closed). The Engagement Request Priya raises from Camille's Client detail hub asks "Select whether this is birth or postpartum work" before it can be approved, and the Engagement it creates carries that answer as `kind` from the start — not a status borrowed to say it. Moving `status` itself to anything but `active`/`completed` stays refused (`TransitionHandler`'s own 400), but that refusal no longer matters: `kind` is where the fact belongs, and it is no longer silent.
 
-- **4.1** — Priya raises an Engagement Request for Camille naming
-  `kind: postpartum`. Approving it creates the Engagement already declared as
-  postpartum work.
+- **4.1** — Priya raises an Engagement Request for Camille naming `kind: postpartum`. Approving it creates the Engagement already declared as postpartum work.
 
 ### Stage 5 — The second invitation, and the login she already has
 
@@ -101,37 +85,18 @@ where the fact belongs, and it is no longer silent.
 ### Stage 7 — No Birth Plan offered, because none applies
 
 **Thinking**: nothing — there is no link there to notice.
-**Pain points**: none. `OffersBirthPlan` (`engagement/kind.go`, #311/#294) answers
-`kind == birth && HasLivingOrExpectedBaby`, and Camille's Engagement carries
-`kind: postpartum`, so the authenticated portal layout leaves the **Birth plan** nav
-item out entirely rather than rendering it and hoping the page explains itself
-(**CB-G5**, closed). Navigating to the URL directly meets the portal's ordinary
-not-found page, not a "No Birth Plan has been created … yet" promise that one is
-coming — `CONTEXT.md`'s rule that where a Birth Plan does not apply, she meets no
-mention of it at all.
+**Pain points**: none. `OffersBirthPlan` (`engagement/kind.go`, #311/#294) answers `kind == birth && HasLivingOrExpectedBaby`, and Camille's Engagement carries `kind: postpartum`, so the authenticated portal layout leaves the **Birth plan** nav item out entirely rather than rendering it and hoping the page explains itself (**CB-G5**, closed). Navigating to the URL directly meets the portal's ordinary not-found page, not a "No Birth Plan has been created … yet" promise that one is coming — `CONTEXT.md`'s rule that where a Birth Plan does not apply, she meets no mention of it at all.
 
-- **7.1** — Open the portal home → **Contract** link only; no **Birth plan** item in
-  the nav.
-- **7.2** — Navigate to the Birth Plan URL directly → the portal's ordinary
-  "not found" page, with a way back to her care.
+- **7.1** — Open the portal home → **Contract** link only; no **Birth plan** item in the nav.
+- **7.2** — Navigate to the Birth Plan URL directly → the portal's ordinary "not found" page, with a way back to her care.
 
 ### Stage 8 — What came with her is the record, not a fresh start
 
-**Thinking**: "I'm explaining all of this again" — true of the message thread,
-false of the record itself.
-**Pain points**: none on "have I cared for this person before". Messages stay one
-continuous thread **per Engagement** (`CONTEXT.md`) and Plan Instances stay per
-Engagement (ADR-0001's snapshot rule) — that scoping is correct and unchanged, so a
-fresh Message thread is still what she meets on the new Engagement. But the
-question above it now has an answer on both sides: Priya's Client detail hub lists
-every Engagement Camille's Client record holds — kind, status, started — beside a
-merged History table of Engagement Requests and Client edits (**CB-G6**, closed,
-#494), and Camille's own portal root list is the same fact from her side (stage 6).
+**Thinking**: "I'm explaining all of this again" — true of the message thread, false of the record itself.
+**Pain points**: none on "have I cared for this person before". Messages stay one continuous thread **per Engagement** (`CONTEXT.md`) and Plan Instances stay per Engagement (ADR-0001's snapshot rule) — that scoping is correct and unchanged, so a fresh Message thread is still what she meets on the new Engagement. But the question above it now has an answer on both sides: Priya's Client detail hub lists every Engagement Camille's Client record holds — kind, status, started — beside a merged History table of Engagement Requests and Client edits (**CB-G6**, closed, #494), and Camille's own portal root list is the same fact from her side (stage 6).
 
-- **8.1** — Read her new, empty message thread. Still empty — that scoping did not
-  change.
-- **8.2** — Priya opens Camille's Client detail hub → the Engagements table lists
-  both her Engagements, and History shows both Engagement Requests.
+- **8.1** — Read her new, empty message thread. Still empty — that scoping did not change.
+- **8.2** — Priya opens Camille's Client detail hub → the Engagements table lists both her Engagements, and History shows both Engagement Requests.
 
 ## Gaps found
 
@@ -144,16 +109,7 @@ merged History table of Engagement Requests and Client edits (**CB-G6**, closed,
 | CB-G5 | 7 | Both | **Closed.** `OffersBirthPlan` (`engagement/kind.go`) derives whether a Birth Plan applies from `kind` and the recorded birth outcome, on every read. The authenticated portal layout leaves the **Birth plan** nav item out entirely where it answers false, and the route itself renders the portal's ordinary not-found page rather than a Birth-Plan-shaped promise. | [#311](https://github.com/markgoho/doula-cloud/issues/311) |
 | CB-G6 | 8 | Both | **Closed.** A Practice can see a Client's Engagements over time on the Client detail hub — an Engagements table (kind, status, started) beside a merged History of Engagement Requests and Client edits (#494) — and a Client sees her own on the portal root list (stage 6, `engagements_identity_visibility`, `00082`). | [#312](https://github.com/markgoho/doula-cloud/issues/312) |
 
-Also hit here, filed on their owning maps: **MO-G4** (closed — her first
-Engagement can now be marked `completed`, and `intake` → `active` moves
-automatically with the first Visit scheduled), **MO-G3** (name and email only, so
-nothing about her carries over), **MO-G9** (narrowed — a Credit no longer locks
-per Client; sizing the founding grant is now
-[#243](https://github.com/markgoho/doula-cloud/issues/243)'s question), **RA-G1**
-(the invite arrives by hand), **NH-G4** (the unconditional "Welcome to
-{practiceName}" heading), and
-[#212](https://github.com/markgoho/doula-cloud/issues/212) (raw `engagement_status`
-and "Engagement" in portal copy).
+Also hit here, filed on their owning maps: **MO-G4** (closed — her first Engagement can now be marked `completed`, and `intake` → `active` moves automatically with the first Visit scheduled), **MO-G3** (name and email only, so nothing about her carries over), **MO-G9** (narrowed — a Credit no longer locks per Client; sizing the founding grant is now [#243](https://github.com/markgoho/doula-cloud/issues/243)'s question), **RA-G1** (the invite arrives by hand), **NH-G4** (the unconditional "Welcome to {practiceName}" heading), and [#212](https://github.com/markgoho/doula-cloud/issues/212) (raw `engagement_status` and "Engagement" in portal copy).
 
 ## Open decisions
 
@@ -161,9 +117,5 @@ Not gaps, and not `journey-gap` issues. Model questions here are out of scope fo
 this effort and are parked on
 [#224](https://github.com/markgoho/doula-cloud/issues/224).
 
-- **Is "postpartum-only" a kind of Engagement, a Plan Template choice, or a
-  Practice's own service list?** **Settled: a kind of Engagement.** CB-G2 (closed)
-  landed `engagements.kind` (`birth`/`postpartum`), and CB-G5 (closed) reads it
-  directly to decide which portal links show — neither a Plan Template choice nor a
-  Practice's own service list was built or needed.
+- **Is "postpartum-only" a kind of Engagement, a Plan Template choice, or a Practice's own service list?** **Settled: a kind of Engagement.** CB-G2 (closed) landed `engagements.kind` (`birth`/`postpartum`), and CB-G5 (closed) reads it directly to decide which portal links show — neither a Plan Template choice nor a Practice's own service list was built or needed.
 - **Does one identity hold many Clients, or does one Client hold many Engagements?** ~~CB-G1 and CB-G3 are the same problem seen from two tables.~~ **Settled: both.** ADR-0015 answers the first — a Portal Account reaches many Clients, at most one per Practice, which is what [#309](https://github.com/markgoho/doula-cloud/issues/309) built and [#819](https://github.com/markgoho/doula-cloud/issues/819) made the table's own rule. ADR-0017 answers the second — a Client is found before one is added, and a further Engagement is asked for against the record she already is. They were decided together, as this said they should be, and the CB-G1 row in the table above now agrees ([#1236](https://github.com/markgoho/doula-cloud/issues/1236)).

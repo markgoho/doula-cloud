@@ -11,11 +11,7 @@ Her persona file says the schema supports her, and it does: `clients` carries no
 - A Practice with an Owner and Priya holding `doula`, set either by the
   Invitation that brought her in or by **Edit membership** on the Staff screen
   (#316).
-- **Her first Engagement, created and completed.** Mark it `completed` through
-  **PATCH .../engagements/{id}/status** with an ending reason — recording a birth
-  outcome first, since it is a birth Engagement and completion refuses without one
-  — then treat it as the 2024 one. That she can close it and it stays readable
-  afterward is stage 1's finding.
+- **Her first Engagement, created and completed.** Mark it `completed` through **PATCH .../engagements/{id}/status** with an ending reason — recording a birth outcome first, since it is a birth Engagement and completion refuses without one — then treat it as the 2024 one. That she can close it and it stays readable afterward is stage 1's finding.
 - **At least two Client credits.** Stage 3 spends a second one on a person the
   Practice has already paid for (**MO-G9**).
 - **A portal login she already holds.** Her 2024 Client must carry an *accepted* `client_portal_users` row before stage 5 begins — invite it and accept it as part of building the fixture. `invite()` refuses only where `identity_uid` is already set, so a Client whose portal row is still pending answers 5.1 with `201`, and the walk reads the plan as wrong rather than the fixture as unfinished.
