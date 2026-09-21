@@ -49,13 +49,7 @@ paid, and she never saw a Client who was not hers.
   (`api/db/migrations/00002_practice_staff_tenancy.sql:29`). There is no employment
   type anywhere in the schema, so neither half of her read rule — the money she should
   see, and the Engagements she should not — is expressible today.
-- **She already has an account, and the invite route assumes she does not.**
-  `InviteHandler` always inserts a fresh `staff` row
-  (`api/internal/staffauth/invite.go:58`), and acceptance claims it by writing her
-  identity onto it (`api/internal/staffauth/accept.go:101`) — but `staff.identity_uid`
-  is `UNIQUE` (`00002_practice_staff_tenancy.sql:21`). The same migration's own comment
-  (lines 16–18) says a person may work at more than one Practice via separate
-  memberships.
+- **She already has an account, and the accept route now reuses it.** `staffauth`'s accept path resolves her existing `staff` row by `identity_uid` (`resolveStaff` in `api/internal/staffauth/accept.go`) and inserts a `practice_memberships` row for the new Practice, rather than a second `staff` row — `staff.identity_uid` stays `UNIQUE` (`00002_practice_staff_tenancy.sql:21`) as the one-row-per-identity mechanism the same migration's own comment (lines 16–18) always described.
 - **The work she takes is not recorded as hers.** `engagements` has no staff column
   (`00005_client_engagement.sql:20`), so "the Engagement she is attached to" — the
   phrase her whole read rule rests on ([ADR-0006](../adr/0006-read-follows-the-role.md))

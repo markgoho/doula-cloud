@@ -21,7 +21,7 @@
 | Step | Action | Expected result | Mark |
 | --- | --- | --- | --- |
 | 1.1 | Sign in at `/login` | `POST /api/session` sets `__session`; the browser lands on `/practices/[practiceId]` | `automated (staff-login.e2e.ts)` |
-| 1.2 | Choose Rooted Birth Collective from her memberships | **There is no choosing.** With one membership `decideLanding` redirects straight to `/practices/{id}` (`app/src/lib/landing.ts:24-26`); the `Choose a Practice` picker renders only for two or more, which [LV-G2](https://github.com/markgoho/doula-cloud/issues/225) makes unreachable through the product | `manual` |
+| 1.2 | Choose Rooted Birth Collective from her memberships | **There is no choosing.** With one membership `decideLanding` redirects straight to `/practices/{id}` (`app/src/lib/landing.ts:24-26`); the `Choose a Practice` picker renders only for two or more, which her own journey never gives her — only Lena Vasquez's does | `manual` |
 | 1.3 | Read the tiles | All seven render for her — but only **four** are owner-gated (Invite, Staff, Plan Templates, Contract Template). **Payments sits outside the gate** (`app/src/routes/practices/[practiceId]/+page.svelte:76-81`), so every member sees it, roles or none ([RA-G9](https://github.com/markgoho/doula-cloud/issues/267)) | `manual` |
 
 The membership picker (1.2) is exercised by no spec — every spec's Staff member

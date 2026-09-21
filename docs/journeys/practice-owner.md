@@ -43,10 +43,7 @@ Practice's Stripe state to anyone who is a member at all (RA-G9), which she will
 not notice until she invites someone.
 
 - **1.1** — `/login`, sign in (`POST /api/session`).
-- **1.2** — Choose Rooted Birth Collective from her memberships. **There is
-  nothing to choose**: `decideLanding` redirects a person with one membership
-  straight to their Practice (`app/src/lib/landing.ts:24-26`), and LV-G2 means a
-  second membership cannot be reached through the product.
+- **1.2** — Choose Rooted Birth Collective from her memberships. **There is nothing to choose**: `decideLanding` redirects a person with one membership straight to their Practice (`app/src/lib/landing.ts:24-26`), and her own journey gives her only the one — a second membership is Lena Vasquez's journey alone.
 - **1.3** — Land on `/practices/[practiceId]`. Because she holds `owner`, the
   page shows the Invite, Staff, Plan Templates and Contract Template tiles, gated
   by `{#if roles.includes('owner')}`. **Payments is not in that block**

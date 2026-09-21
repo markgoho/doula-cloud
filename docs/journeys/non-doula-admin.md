@@ -55,11 +55,7 @@ Dee is a domain expert on the business half and a stranger to the care half.
 - **1.1** — Open the invite link at `/accept-invite`.
 - **1.2** — Set email and password; press **Accept invite**
   (`POST /api/staff/accept-invite`). The membership is created with zero roles.
-- **1.3** — ~~Choose the Practice from the membership list.~~ **There is nothing
-  to choose**: acceptance leaves one membership, so `decideLanding` redirects
-  straight to `/practices/{id}` (`app/src/lib/landing.ts:24-26`) and the picker
-  never renders. Same root as Renata's 1.2 — the picker needs two memberships,
-  which **LV-G2** says a person cannot have.
+- **1.3** — ~~Choose the Practice from the membership list.~~ **There is nothing to choose**: acceptance leaves one membership, so `decideLanding` redirects straight to `/practices/{id}` (`app/src/lib/landing.ts:24-26`) and the picker never renders. Same root as Renata's 1.2 — the picker needs two memberships, which only Lena Vasquez's journey gives a Persona.
 
 ### Stage 2 — Receive the Admin role
 

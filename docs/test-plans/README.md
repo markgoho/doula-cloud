@@ -88,14 +88,7 @@ at `roles = '{}'` and again at `['doula']` found it read in exactly one place �
 `visit/roles.go` — gating the one act her journey is named for. The gap survives in
 narrowed form on the map that owns it, the same treatment TB-G7 got.
 
-**One claim ran through four plans before a walk could settle it.** Renata's 1.2,
-Dee's 1.3 and Priya's 3.2 each expected a Practice picker and each found none, and
-each walk recorded it as unwalkable rather than missing. Lena's walk rendered it:
-signing in with two memberships lists both Practices under `Choose a Practice`, on
-`/login` itself. The picker was never absent — every other Persona holds exactly one
-membership, and LV-G2 makes a second unreachable through the product, so only the
-fixture bypass in Lena's Preconditions can produce the state it needs. A claim no
-single plan could test is worth carrying across plans rather than deleting.
+**One claim ran through four plans before a walk could settle it.** Renata's 1.2, Dee's 1.3 and Priya's 3.2 each expected a Practice picker and each found none, and each walk recorded it as unwalkable rather than missing. Lena's walk rendered it: signing in with two memberships lists both Practices under `Choose a Practice`, on `/login` itself. The picker was never absent — every other Persona holds exactly one membership, and LV-G2 made a second unreachable through the product at the time, so only the fixture bypass then in Lena's Preconditions could produce the state the walk needed. LV-G2 is closed now ([#1242](https://github.com/markgoho/doula-cloud/issues/1242)), and her plan's own step 1.2 produces the second membership directly. A claim no single plan could test is worth carrying across plans rather than deleting.
 
 A walk may **re-mark a step**. Tasha's 3.3-a went from `missing-feature (TB-G7)`
 to `manual` once the Staff screen turned out to answer it — the rule that a mark
@@ -265,11 +258,11 @@ Every plan has been executed once ([#209](https://github.com/markgoho/doula-clou
 | [practice-owner.md](practice-owner.md) | Renata Alvarez | 5 | 17 | 0 | 6 |
 | [non-doula-admin.md](non-doula-admin.md) | Dee Whitlock | 0 | 21 | 0 | 3 |
 | [employed-doula.md](employed-doula.md) | Priya Raman | 3 | 21 | 0 | 5 |
-| [contractor-doula.md](contractor-doula.md) | Lena Vasquez | 1 | 17 | 0 | 9 |
+| [contractor-doula.md](contractor-doula.md) | Lena Vasquez | 1 | 18 | 0 | 8 |
 | [loss-client.md](loss-client.md) | Nadia Haddad | 5 | 14 | 0 | 8 |
 | [first-time-client.md](first-time-client.md) | Hannah Sorensen | 8 | 17 | 0 | 6 |
 | [returning-postpartum-client.md](returning-postpartum-client.md) | Camille Boyd | 0 | 19 | 0 | 0 |
-| **Total** | | **40** | **157** | **0** | **44** |
+| **Total** | | **40** | **158** | **0** | **43** |
 
 Every `automated` step passed. **No plan carries a `blocked` step any more** — Stripe was the last holdout and [#242](https://github.com/markgoho/doula-cloud/issues/242) opened the Sandbox, after which Connect, Checkout and Invoices were all walked for real.
 
@@ -292,6 +285,8 @@ Every `automated` step passed. **No plan carries a `blocked` step any more** —
 **[#1241](https://github.com/markgoho/doula-cloud/issues/1241) closed the four stages [#1135](https://github.com/markgoho/doula-cloud/issues/1135) left held on returning-postpartum-client.md**: stages 1, 4, 7 and 8 each named a gap that had since closed — MO-G4 (#253), CB-G2 (#308), CB-G5 (#311) and CB-G6 (#312) — and both the map and the plan still told the old story. A dated Run-log section on the plan names what moved. Five marks changed, all `missing-feature` to `manual`: 1.1 because `TransitionHandler` now completes an Engagement; 4.1 because the Engagement Request that creates a second Engagement asks birth-or-postpartum and the Engagement carries `kind` from creation; 4.1-a because the status-to-`postpartum` approximation is both refused (the status value no longer exists) and unneeded now that 4.1 records the fact directly; 7.2-a because the Birth Plan suppression is fully derived, with no separate control to mark it; and 8.1-a because the Client detail hub's Engagements table and merged History (#494) answer "have I cared for this person before" for Priya, and the portal root list answers it for Camille. 7.1 and 7.2 were already `manual`; their cell text is corrected to match the Birth Plan nav item being left out entirely rather than rendered unconditionally, with no mark of their own to move. That leaves her with no `missing-feature` step at all. The run-status table above is recounted from her Steps table, Total with it, to 40 / 158 / 0 / 44. Stage 3's CB-G1 row still tells the pre-ADR-0017 story and is held at [#1236](https://github.com/markgoho/doula-cloud/issues/1236).
 
 **[#1244](https://github.com/markgoho/doula-cloud/issues/1244) corrected two stale claims on first-time-client.md's map and plan.** Stage 9's partner-access gap (HS-G5) named a schema rule that is gone: `client_portal_users`'s table-wide `UNIQUE` on `identity_uid` was dropped by #309 and replaced with `UNIQUE (identity_uid, client_id)` by #819, and what actually refuses a second invitation today is `invite()`'s handler-level check on an already-accepted Client (`portalinvite/invite.go`), not the schema. Both documents also described the supported partner-access path as sharing a password — a Client has none (ADR-0026: a sign-in link, not a password) — corrected to sharing the mailbox that receives it. HS-G1's own gap row closes with it: #617 (ADR-0026) removed the account-mode question it named, and the mode-radio step it exposed — the plan's 2.2-a — is gone with it. One mark moved, 2.2-a itself, dropping the plan's `manual` count by one; the run-status table above is recounted from the plan's own Steps table, Total with it, to 40 / 157 / 0 / 44.
+
+**[#1242](https://github.com/markgoho/doula-cloud/issues/1242) closed the `staff.identity_uid` drift #1135 held for it**, on contractor-doula.md: LV-G2 (a person cannot be Staff at two Practices) and its adjacent gap LV-G8 (a failed acceptance leaves a member behind) both closed 2026-08-25 against #225 and #291, and the plan, its journey map, its persona, and the two simulation documents that named Rooted Birth Collective's day zero still told the old refusal's story. Step 1.2's expected result is rewritten against what `staffauth`'s accept path does today — it resolves her existing `staff` row by `identity_uid` and succeeds — and the fixture bypass her Preconditions carried is removed, because step 1.2 now produces her second membership directly. One mark moved, 1.2-a from `missing-feature (LV-G2)` to `manual`, and the run-status table above is recounted with it, Total with it — landing on top of #1241's and #1244's own recounts above — to 40 / 158 / 0 / 43. Three other plans (practice-owner.md, non-doula-admin.md and employed-doula.md) cited LV-G2 as the reason their own Practice picker step is unwalkable for anyone; that prose is corrected to say why without citing a closed gap, and no mark on those plans moved. A wider drift on the same map — LV-G1, LV-G4, LV-G6, LV-G7 and RA-G8, all owned by #225 too — was spotted but not read closely enough to correct here, and is held at [#1434](https://github.com/markgoho/doula-cloud/issues/1434).
 
 ### Gap issues
 
