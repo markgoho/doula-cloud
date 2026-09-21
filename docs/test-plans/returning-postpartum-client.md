@@ -2,7 +2,7 @@
 
 - **Journey**: [returning-postpartum-client.md](../journeys/returning-postpartum-client.md)
 - **Persona**: [returning-postpartum-client.md](../personas/returning-postpartum-client.md)
-- **A pass means**: two Engagements at one Practice — one closed and still readable, one live and postpartum — reachable from one portal account. **The third clause passes.** One Portal Account reaches her Client, `engagements_identity_visibility` (`00082`) makes every Engagement it holds readable before one is chosen, the portal root lists them, and `engagementLabel` tells two at one Practice apart by when each began ([#309](https://github.com/markgoho/doula-cloud/issues/309), [#310](https://github.com/markgoho/doula-cloud/issues/310), [#312](https://github.com/markgoho/doula-cloud/issues/312)). The first two clauses are not settled here: the cells that carry them are read against their own gap issues at [#1241](https://github.com/markgoho/doula-cloud/issues/1241), and until that is done this plan's stages 1 and 4 are the ones to believe about them.
+- **A pass means**: two Engagements at one Practice — one closed and still readable, one live and postpartum — reachable from one portal account. **All three clauses pass.** Her first Engagement completes through `TransitionHandler` (`PATCH .../engagements/{id}/status`) and stays readable afterward ([MO-G4](https://github.com/markgoho/doula-cloud/issues/253), closed); her second is created already declared `kind: postpartum` through the Engagement Request Priya raises from her Client detail hub ([CB-G2](https://github.com/markgoho/doula-cloud/issues/308), closed); and one Portal Account reaches her Client, `engagements_identity_visibility` (`00082`) makes every Engagement it holds readable before one is chosen, the portal root lists them, and `engagementLabel` tells two at one Practice apart by when each began ([#309](https://github.com/markgoho/doula-cloud/issues/309), [#310](https://github.com/markgoho/doula-cloud/issues/310), [#312](https://github.com/markgoho/doula-cloud/issues/312)).
 
 Her persona file says the schema supports her, and it does: `clients` carries no `practice_id`. This plan is walkable to the end — the one refusal still on her path is one she can observe, and it is a refusal the product means.
 
@@ -11,10 +11,11 @@ Her persona file says the schema supports her, and it does: `clients` carries no
 - A Practice with an Owner and Priya holding `doula`, set either by the
   Invitation that brought her in or by **Edit membership** on the Staff screen
   (#316).
-- **Her first Engagement, created and left alone.** It cannot be closed
-  (**MO-G4**), so create it fresh and treat it as the 2024 one. That two years of
-  finished work is indistinguishable from an Engagement made this morning is stage
-  1's finding, not a defect in the fixture.
+- **Her first Engagement, created and completed.** Mark it `completed` through
+  **PATCH .../engagements/{id}/status** with an ending reason — recording a birth
+  outcome first, since it is a birth Engagement and completion refuses without one
+  — then treat it as the 2024 one. That she can close it and it stays readable
+  afterward is stage 1's finding.
 - **At least two Client credits.** Stage 3 spends a second one on a person the
   Practice has already paid for (**MO-G9**).
 - **A portal login she already holds.** Her 2024 Client must carry an *accepted* `client_portal_users` row before stage 5 begins — invite it and accept it as part of building the fixture. `invite()` refuses only where `identity_uid` is already set, so a Client whose portal row is still pending answers 5.1 with `201`, and the walk reads the plan as wrong rather than the fixture as unfinished.
@@ -26,7 +27,7 @@ Her persona file says the schema supports her, and it does: `clients` carries no
 
 | Step | Action | Expected result | Mark |
 | --- | --- | --- | --- |
-| 1.1 | Mark her first Engagement finished | No handler writes `UPDATE engagements`. The record of her first birth still reads `intake`, and nothing distinguishes it from one created this morning | `missing-feature (MO-G4)` [#253](https://github.com/markgoho/doula-cloud/issues/253) |
+| 1.1 | Mark her first Engagement finished | `TransitionHandler` (`PATCH .../engagements/{id}/status`) writes `UPDATE engagements SET status = 'completed', ending_reason = $2, ending_note = $3 ...` and records an `engagement_events` row (`00090`). The record of her first birth stops reading `intake` | `manual` |
 
 ### Stage 2 — She calls Priya
 
@@ -48,8 +49,8 @@ mark; the consequences land in stages 3 and 8.
 
 | Step | Action | Expected result | Mark |
 | --- | --- | --- | --- |
-| 4.1 | Record that this Engagement is postpartum work, not a birth | `engagements` has no type or kind column, only `status`, and the create handler names `intake` as the constant with no create-time alternative. `CONTEXT.md` calls Engagement "deliberately generic so it fits both birth-doula and postpartum-doula work"; **generic turns out to mean silent** | `missing-feature (CB-G2)` [#308](https://github.com/markgoho/doula-cloud/issues/308) |
-| 4.1-a | Approximate it by moving the status to `postpartum` | Unavailable anyway (**MO-G4**) — and it would say she has given birth under this Engagement, which she has not | `missing-feature (MO-G4)` [#253](https://github.com/markgoho/doula-cloud/issues/253) |
+| 4.1 | Record that this Engagement is postpartum work, not a birth | **She can, at the ask.** The Engagement Request Priya raises from Camille's Client detail hub demands "Select whether this is birth or postpartum work" before it can be approved, and approval creates the Engagement already carrying `kind: postpartum` (`engagements.kind`, `00042_client_intake_schema.sql`). `CONTEXT.md`'s "deliberately generic" claim now holds because the product knows which it is | `manual` |
+| 4.1-a | Approximate it by moving the status to `postpartum` | **Refused, and no longer needed.** `engagement_status` carries no `postpartum` member any more (dropped by `00057_engagement_status_drop_postpartum.sql`), and `TransitionHandler` refuses any target besides `active`/`completed` with a 400. 4.1's `kind` field already records the fact directly, so there is nothing left to approximate | `manual` |
 
 ### Stage 5 — The second invitation, and the login she already has
 
@@ -72,24 +73,24 @@ mark; the consequences land in stages 3 and 8.
 
 | Step | Action | Expected result | Mark |
 | --- | --- | --- | --- |
-| 7.1 | Open the portal home on the postpartum Engagement | **Birth Plan** and **Contract** links, both rendered unconditionally | `manual` |
-| 7.2 | Open the Birth Plan link | "No Birth Plan has been created for this Engagement yet" — which promises one is coming rather than saying it does not apply | `manual` |
-| 7.2-a | Mark that no Birth Plan applies to this Engagement | There is no way to mark an Engagement as anything ([CB-G2](https://github.com/markgoho/doula-cloud/issues/308)). Priya may fill one in just to clear the empty state, which puts a labour-preferences document on a postpartum Engagement | `missing-feature (CB-G5)` [#311](https://github.com/markgoho/doula-cloud/issues/311) |
+| 7.1 | Open the portal home on the postpartum Engagement | **Contract** link only. `offersBirthPlan` is false (`kind == postpartum`), so the authenticated layout's nav leaves **Birth plan** out entirely | `manual` |
+| 7.2 | Open the Birth Plan URL directly | The portal's ordinary not-found page, with a way back to her care — not a "No Birth Plan has been created … yet" promise that one is coming | `manual` |
+| 7.2-a | Confirm nothing marks the Engagement "no Birth Plan" by hand | There is no separate control, and none is needed: `OffersBirthPlan` (`engagement/kind.go`) derives the suppression from `kind` and the birth outcome on every read, so nothing can drift out of sync with a stored flag ([CB-G5](https://github.com/markgoho/doula-cloud/issues/311), closed) | `manual` |
 
 ### Stage 8 — Nothing came with her
 
 | Step | Action | Expected result | Mark |
 | --- | --- | --- | --- |
-| 8.1 | Read her new message thread | Empty. Messages are one thread per Engagement and Plan Instances are per Engagement by ADR-0001's snapshot rule — correct scoping, and it means her history does not travel | `manual` |
-| 8.1-a | See a person's Engagements over time, from her side or Priya's | No such view exists on either side. "They know me" is true of Priya and false of the product | `missing-feature (CB-G6)` [#312](https://github.com/markgoho/doula-cloud/issues/312) |
+| 8.1 | Read her new message thread | Empty. Messages are one thread per Engagement and Plan Instances are per Engagement by ADR-0001's snapshot rule — correct scoping, unchanged, and it means her history does not travel | `manual` |
+| 8.1-a | See a person's Engagements over time, from her side or Priya's | **Both sides answer it now.** Priya's Client detail hub lists every Engagement Camille's Client record holds (kind, status, started) beside a merged History table of Engagement Requests and Client edits (`clientDetail.ts`'s `EngagementSummary`, #494); Camille's own portal root list is the same fact from her side (stage 6, `engagements_identity_visibility` / `00082`) | `manual` |
 
 ## Marks
 
 | Mark | Steps |
 | --- | --- |
 | `automated` | 0 |
-| `manual` | 14 |
-| `missing-feature` | 5 ([MO-G4](https://github.com/markgoho/doula-cloud/issues/253) ×2, [CB-G2](https://github.com/markgoho/doula-cloud/issues/308), [CB-G5](https://github.com/markgoho/doula-cloud/issues/311), [CB-G6](https://github.com/markgoho/doula-cloud/issues/312)) |
+| `manual` | 19 |
+| `missing-feature` | 0 |
 
 No step is `blocked`. Nothing on her path touches Stripe.
 
@@ -184,3 +185,17 @@ this ticket alone now that it is the last of the nine.
 clauses. The 2024 Engagement stays `intake` forever; the postpartum one
 cannot declare what it is; and reaching both from one portal account is
 refused at the exact step the map names as her moment of truth.
+
+### 2026-09-20 — stages 1, 4, 7 and 8 correction ([#1241](https://github.com/markgoho/doula-cloud/issues/1241))
+
+A desk pass over the four stages [#685](https://github.com/markgoho/doula-cloud/issues/685) and [#1135](https://github.com/markgoho/doula-cloud/issues/1135) left alone on purpose, corrected against the closed issues they named. Nothing was re-walked. Five steps are re-marked, all from `missing-feature` to `manual`, because the capability each gap named is now built.
+
+| Step | Cell corrected | What settled it |
+| --- | --- | --- |
+| 1.1 | "No handler writes `UPDATE engagements`" -> `TransitionHandler` completes an Engagement, recording an ending reason and an `engagement_events` row | `engagement/transition.go`, `engagement/activate.go`, `00090_engagement_status_transition.sql`. [MO-G4](https://github.com/markgoho/doula-cloud/issues/253) is closed |
+| 4.1 | "No type or kind column" -> the Engagement Request that creates a second Engagement asks birth-or-postpartum and the Engagement carries `kind` from creation | `engagements.kind` (`engagement_kind`), `00042_client_intake_schema.sql`, and the Engagement Request form's own required field. [CB-G2](https://github.com/markgoho/doula-cloud/issues/308) is closed |
+| 4.1-a | `missing-feature (MO-G4)` -> `manual`: the status-to-`postpartum` approximation is refused (the status value itself no longer exists) and no longer needed, now that 4.1 records the fact directly | `00057_engagement_status_drop_postpartum.sql`, `TransitionHandler`'s target validation, and 4.1's own `kind` field |
+| 7.1, 7.2, 7.2-a | "Birth Plan link renders unconditionally" / "promises one is coming" -> the nav item is left out entirely where `offersBirthPlan` is false, and the route itself renders the portal's ordinary not-found page | `engagement.OffersBirthPlan` (`engagement/kind.go`), the authenticated portal layout's nav, and the Birth Plan route's own not-found branch. [CB-G5](https://github.com/markgoho/doula-cloud/issues/311) is closed |
+| 8.1-a | "No such view exists on either side" -> the Client detail hub's Engagements table and merged History answer it for Priya, and the portal root list answers it for Camille | `clientDetail.ts`'s `EngagementSummary`/`HistoryEntry` (#494) on the Practice side, `engagements_identity_visibility` (`00082`) and the portal root list (stage 6) on the Client side. [CB-G6](https://github.com/markgoho/doula-cloud/issues/312) is closed |
+
+**Left alone on purpose.** Stage 3's CB-G1 row still tells the pre-ADR-0017 story and is held at [#1236](https://github.com/markgoho/doula-cloud/issues/1236), a parallel ticket correcting the same map's stale rows. The walk logs above are records of what was seen on the day and are untouched. The run-status table in [docs/test-plans/README.md](README.md) is recounted from this plan's Steps table, Total with it, to 40 / 158 / 0 / 44.
