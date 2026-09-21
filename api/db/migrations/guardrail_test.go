@@ -41,7 +41,7 @@ const beforeGuardrail = "already applied to doula-cloud-pg before the guardrail 
 // migration takes the safe form or writes a safety note, never an
 // exemption.
 //
-//nolint:gosec // G101 reads the constraint classes below as a possible credential; every value is a filename and a sentence of English, and nothing in this package holds a secret
+//nolint:gosec // G101 reads the class identifiers below as a possible credential; every value is a filename, a class constant or a sentence of English, and nothing in this package holds a secret
 var grandfathered = map[string]grandfatheredEntry{
 	"00002_practice_staff_tenancy.sql":        {classes: []string{classDoBlock}, reason: beforeGuardrail},
 	"00020_contracts_recreate_after_void.sql": {classes: []string{classCreateUniqueIndex}, reason: beforeGuardrail},
@@ -52,7 +52,7 @@ var grandfathered = map[string]grandfatheredEntry{
 	},
 	"00030_employment_attachment_offer.sql": {
 		classes: []string{classAddColumnNotNullWithoutDefault, classAlterColumnSetNotNull},
-		reason:  "applied 2026-06 against an empty staff_practices",
+		reason:  "applied 2026-06 against empty staff and practice_memberships tables",
 	},
 	"00039_membership_events.sql": {classes: []string{classCreateUniqueIndex}, reason: beforeGuardrail},
 	"00042_client_intake_schema.sql": {
@@ -107,7 +107,7 @@ var grandfathered = map[string]grandfatheredEntry{
 	},
 	"00095_manual_payment_recording.sql": {
 		classes: []string{classAddColumnNotNullWithoutDefault, classAddConstraintCheck},
-		reason:  "applied 2026-09-08 against an empty invoices",
+		reason:  "applied 2026-09-08 against empty invoices and payments tables",
 	},
 	"00101_staff_login_deletion_rules.sql": {classes: []string{classAddConstraintCheck}, reason: beforeGuardrail},
 	"00103_payment_reversal.sql": {
@@ -203,16 +203,28 @@ package doc in embed.go.`,
 		strings.TrimSuffix(name, ".sql"), f.Class, fence, fence, f.Statement, fence, f.Class)
 }
 
+// readSafetyNote returns safety/<migration>.md's body, or "", false when
+// the migration has no note -- the one filesystem access safetyNoteClasses
+// and safetyNoteStatements both need before they can read it differently.
+func readSafetyNote(t *testing.T, name string) (string, bool) {
+	t.Helper()
+	body, err := safetyFS.ReadFile(safetyNotePath(name))
+	if err != nil {
+		return "", false
+	}
+	return string(body), true
+}
+
 // safetyNoteClasses returns the classes safety/<migration>.md attests
 // to, keyed by the guardrail's own name for each class.
 func safetyNoteClasses(t *testing.T, name string) map[string]bool {
 	t.Helper()
-	body, err := safetyFS.ReadFile(safetyNotePath(name))
-	if err != nil {
+	body, ok := readSafetyNote(t, name)
+	if !ok {
 		return nil
 	}
 	covered := map[string]bool{}
-	for line := range strings.SplitSeq(string(body), "\n") {
+	for line := range strings.SplitSeq(body, "\n") {
 		if heading, ok := strings.CutPrefix(strings.TrimSpace(line), "## "); ok {
 			covered[strings.TrimSpace(heading)] = true
 		}
@@ -229,14 +241,21 @@ func safetyNoteClasses(t *testing.T, name string) map[string]bool {
 // narrows the exemption to the one statement it names.
 func safetyNoteStatements(t *testing.T, name string) map[string][]string {
 	t.Helper()
-	body, err := safetyFS.ReadFile(safetyNotePath(name))
-	if err != nil {
+	body, ok := readSafetyNote(t, name)
+	if !ok {
 		return nil
 	}
+	return parseSafetyNote(body)
+}
+
+// parseSafetyNote is safetyNoteStatements' pure worker, split out so it
+// can be driven with an inline note body in a test rather than a file in
+// safety/.
+func parseSafetyNote(body string) map[string][]string {
 	quoted := map[string][]string{}
 	class := ""
 	var block *strings.Builder
-	for line := range strings.SplitSeq(string(body), "\n") {
+	for line := range strings.SplitSeq(body, "\n") {
 		trimmed := strings.TrimSpace(line)
 		switch {
 		case strings.HasPrefix(trimmed, "## "):
@@ -254,12 +273,17 @@ func safetyNoteStatements(t *testing.T, name string) map[string][]string {
 	return quoted
 }
 
-// normalizeStatement collapses a quoted statement onto one line,
-// upper-cases it and drops a trailing semicolon -- exactly how
-// RowDependent builds Finding.Statement, plus the semicolon a block
-// copied straight out of a migration's SQL still carries.
+// normalizeStatement puts a quoted statement through the same pipeline
+// RowDependent builds Finding.Statement with -- SplitStatements, then
+// collapse and upper-case -- so a block copied straight out of a
+// migration's SQL, an inline `-- comment` and a trailing semicolon
+// included, normalizes to exactly what RowDependent reports.
 func normalizeStatement(s string) string {
-	return strings.TrimSuffix(strings.ToUpper(collapse(s)), ";")
+	stmts := SplitStatements(s)
+	if len(stmts) == 0 {
+		return ""
+	}
+	return strings.ToUpper(collapse(stmts[0]))
 }
 
 // safetyNotePath is where a migration's safety note lives.
