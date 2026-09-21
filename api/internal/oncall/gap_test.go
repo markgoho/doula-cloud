@@ -155,8 +155,52 @@ func TestCreateGap_NoWindowIsRefused(t *testing.T) {
 	defer srv.Close()
 
 	body := doJSON[map[string]any](t, session, http.MethodPost, gapsURL(srv.URL, f.practiceID, f.engagementID), gapBody(f.doulaID, nil), http.StatusConflict)
-	if body["message"] != oncall.MsgNoWindow {
-		t.Fatalf("message = %v, want %q", body["message"], oncall.MsgNoWindow)
+	if body["message"] != oncall.MsgNoWindowNoDueDate {
+		t.Fatalf("message = %v, want %q", body["message"], oncall.MsgNoWindowNoDueDate)
+	}
+}
+
+// TestCreateGap_SaysWhichReasonThereIsNoWindow: "add a due date" is the
+// wrong advice for four of the five reasons a birth has no window, so
+// each says its own sentence -- the same rule the roster follows when it
+// states why a birth has no window rather than guessing.
+func TestCreateGap_SaysWhichReasonThereIsNoWindow(t *testing.T) {
+	tests := map[string]struct {
+		prefix string
+		fixup  string
+		want   string
+	}{
+		"postpartum care is not on-call work": {
+			"pp", `UPDATE engagements SET kind = 'postpartum' WHERE id = $1`, oncall.MsgNoWindowPostpartum,
+		},
+		"care has not started": {
+			"intake", `UPDATE engagements SET status = 'intake' WHERE id = $1`, oncall.MsgNoWindowNotActive,
+		},
+		"nobody is on the birth": {
+			"nobody",
+			`UPDATE engagement_attachments SET ended_at = now(), ended_by = staff_id WHERE engagement_id = $1`,
+			oncall.MsgNoWindowNobodyOnIt,
+		},
+		"the baby arrived before on call would have opened": {
+			"early",
+			`UPDATE engagements SET birth_outcome = 'live_birth', pregnancy_ended_on = '2026-09-20' WHERE id = $1`,
+			oncall.MsgNoWindowEnded,
+		},
+	}
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			db := testdb.New(t)
+			f := newSoloFixture(t, db, "gap-why-"+tt.prefix)
+			exec(t, db, tt.fixup, f.engagementID)
+			srv, session := newServer(t, db, f.ownerUID)
+			defer srv.Close()
+
+			body := doJSON[map[string]any](t, session, http.MethodPost,
+				gapsURL(srv.URL, f.practiceID, f.engagementID), gapBody(f.doulaID, nil), http.StatusConflict)
+			if body["message"] != tt.want {
+				t.Fatalf("message = %v, want %q", body["message"], tt.want)
+			}
+		})
 	}
 }
 

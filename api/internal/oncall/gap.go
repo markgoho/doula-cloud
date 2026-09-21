@@ -1,6 +1,8 @@
 package oncall
 
 import (
+	"context"
+	"database/sql"
 	"net/http"
 	"strings"
 	"time"
@@ -24,16 +26,25 @@ const (
 
 // The sentences a gap refusal says, written for the person at the form.
 const (
-	MsgNoWindow         = "This birth has no on-call window yet, so there is no time to record a gap in. Add a due date first."
-	MsgNotOnCall        = "Choose a doula who is on this birth."
-	MsgStartsAtRequired = "Enter when the gap starts."
-	MsgEndsAtRequired   = "Enter when the gap ends."
-	MsgEndsBeforeStarts = "The gap must end after it starts."
-	MsgOutsideWindow    = "The gap must fall inside this birth's on-call window."
-	MsgReasonTooLong    = "Keep the reason to 500 characters or fewer."
-	MsgCoverIsTheSame   = "Choose someone other than the doula who cannot be reached."
-	MsgOnlyYourOwnGap   = "You can record a gap only for yourself. An owner or an admin can record one for a colleague."
-	MsgGapNotFound      = "This coverage gap was not found. It may already have been cleared."
+	// The five sentences a gap write meets when the birth has no window
+	// to record one in. One per reason DeriveWindow can give, because
+	// each is fixed by something different and "add a due date" is wrong
+	// advice for four of them -- the same rule the roster follows when
+	// it states why a birth has no window rather than guessing a date.
+	MsgNoWindowNoDueDate  = "This birth has no on-call window yet, so there is no time to record a gap in. Add a due date first."
+	MsgNoWindowPostpartum = "Postpartum care is not on-call work, so there is no on-call window to record a gap in."
+	MsgNoWindowNotActive  = "Care has not started on this birth, or it has ended, so there is no on-call window to record a gap in."
+	MsgNoWindowNobodyOnIt = "Nobody is on this birth yet, so there is nobody to record a gap for."
+	MsgNoWindowEnded      = "The baby arrived before on call would have opened, so there is no window to record a gap in."
+	MsgNotOnCall          = "Choose a doula who is on this birth."
+	MsgStartsAtRequired   = "Enter when the gap starts."
+	MsgEndsAtRequired     = "Enter when the gap ends."
+	MsgEndsBeforeStarts   = "The gap must end after it starts."
+	MsgOutsideWindow      = "The gap must fall inside this birth's on-call window."
+	MsgReasonTooLong      = "Keep the reason to 500 characters or fewer."
+	MsgCoverIsTheSame     = "Choose someone other than the doula who cannot be reached."
+	MsgOnlyYourOwnGap     = "You can record a gap only for yourself. An owner or an admin can record one for a colleague."
+	MsgGapNotFound        = "This coverage gap was not found. It may already have been cleared."
 )
 
 // GapRequest is the body of a gap create and a gap edit. An edit is a
@@ -86,7 +97,17 @@ func beginGapWrite(w http.ResponseWriter, r *http.Request) (gapWrite, bool) {
 		return gapWrite{}, false
 	}
 	if len(engagements) == 0 || engagements[0].window == nil {
-		apierr.Write(w, http.StatusConflict, apierr.CodeFailedPrecondition, MsgNoWindow, nil)
+		var reason NoWindowReason
+		if len(engagements) == 0 {
+			// The Engagement is not a live birth with anybody granted on
+			// it, so loadEngagements never returned it and cannot say
+			// which of the three that is. DeriveWindow can, from the two
+			// columns that decide it.
+			reason = whyNotOnCall(r.Context(), tx, practiceID, engagementID)
+		} else {
+			reason = engagements[0].reason
+		}
+		apierr.Write(w, http.StatusConflict, apierr.CodeFailedPrecondition, noWindowRefusal(reason), nil)
 		return gapWrite{}, false
 	}
 	return gapWrite{
@@ -174,4 +195,53 @@ func (c gapWrite) validate(w http.ResponseWriter, req GapRequest) (gapFacts, boo
 		CoveringStaffID: covering,
 		reason:          reason,
 	}, true
+}
+
+// whyNotOnCall says why an Engagement loadEngagements did not return has
+// no window: it is not a birth, care is not under way, or nobody holds a
+// granted Attachment on it. Answered through DeriveWindow rather than
+// here, so one function decides it for every caller.
+func whyNotOnCall(ctx context.Context, tx *sql.Tx, practiceID, engagementID string) NoWindowReason {
+	var kind, status string
+	var granted bool
+	if err := tx.QueryRowContext(ctx,
+		`SELECT e.kind::text, e.status::text,
+		        EXISTS (SELECT 1 FROM engagement_attachments ea
+		                 WHERE ea.engagement_id = e.id AND ea.origin = 'granted' AND ea.ended_at IS NULL)
+		   FROM engagements e WHERE e.id = $1 AND e.practice_id = $2`,
+		engagementID, practiceID,
+	).Scan(&kind, &status, &granted); err != nil {
+		// coverage:ignore reason: AttachingWrite already refused an Engagement this Practice cannot reach, so the row is always here
+		return NoWindowNoDueDate
+	}
+	// The grant day itself does not matter to the three reasons this
+	// answers; what matters is whether anybody holds one at all.
+	var grantedOn *string
+	if granted {
+		today := time.Now().Format(dateLayout)
+		grantedOn = &today
+	}
+	_, reason := DeriveWindow(WindowInput{Kind: kind, Status: status, FirstGrantedOn: grantedOn})
+	return reason
+}
+
+// noWindowRefusal is the sentence a person reads for each reason a birth
+// has no window to record a gap in. One per reason, because each is
+// fixed by something different.
+func noWindowRefusal(reason NoWindowReason) string {
+	switch reason {
+	case NoWindowPostpartum:
+		return MsgNoWindowPostpartum
+	case NoWindowNotActive:
+		return MsgNoWindowNotActive
+	case NoWindowNobodyAttached:
+		return MsgNoWindowNobodyOnIt
+	case NoWindowEndedBeforeStart:
+		return MsgNoWindowEnded
+	case NoWindowNoDueDate:
+		return MsgNoWindowNoDueDate
+	default:
+		// coverage:ignore reason: DeriveWindow gives no sixth reason, and a window that exists never reaches here -- the fallback exists so a refusal always carries a sentence
+		return MsgNoWindowNoDueDate
+	}
 }
