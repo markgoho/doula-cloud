@@ -7,7 +7,6 @@ import (
 
 	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/authn"
-	"doula-cloud/api/internal/clock"
 )
 
 // recentAuthWindow is how fresh a re-authentication must be for
@@ -64,7 +63,15 @@ func RequireRecentAuth(w http.ResponseWriter, r *http.Request, verifier authn.Ve
 		return false
 	}
 
-	if clock.Now(r.Context()).Sub(verified.AuthTime) > recentAuthWindow {
+	// #773 exemption: verified.AuthTime is a real Identity Platform token
+	// claim, the same real wall-clock fact FirebaseVerifier.VerifyIDToken
+	// exempts (see its own doc comment, citing #762). Comparing it against
+	// clock.Now instead of time.Now would reproduce that exact bug: under
+	// a simulated jump, a token minted seconds ago in the real world would
+	// read as arbitrarily stale (or fresh) against a clock the real sign-in
+	// never ran on. time.Since stays real for the same reason the token
+	// verification two lines up does.
+	if time.Since(verified.AuthTime) > recentAuthWindow {
 		apierr.WriteError(w, "this action requires a fresh sign-in", http.StatusUnauthorized)
 		return false
 	}
