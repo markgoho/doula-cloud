@@ -213,11 +213,16 @@ func TestPracticeHandler_UnregisteredSubjectKindNeverAppears(t *testing.T) {
 }
 
 // TestPracticeHandler_PracticeScopedRowVisibleToOwnerAndAdminOnly proves
-// #1255's AC1 and AC4: a Practice-scoped row (the MFA-required switch is
-// the example seeded here) reaches the feed for an Owner and an Admin,
-// carries no SubjectName -- its subject is the Practice the reader is
-// already inside, never a record to name -- and stays refused for a
-// Doula, the same population as a Membership row.
+// #1255's AC1 and AC4 against both of the ticket's own examples -- the
+// MFA-required switch and a whole-Practice export -- seeded from two
+// different write sites (staffauth, export) rather than one convenient
+// case, so AC1's "a Practice-scoped event ... appears in the
+// practice-wide activity feed" is proven for both, not just one. Table-
+// driven over the three roles, the same shape export_test.go's own
+// TestHandler_RefusesEveryRoleButOwner uses. An Owner and an Admin see
+// both rows and carry no SubjectName -- their subject is the Practice
+// the reader is already inside, never a record to name -- and a Doula
+// sees neither, the same population as a Membership row.
 func TestPracticeHandler_PracticeScopedRowVisibleToOwnerAndAdminOnly(t *testing.T) {
 	db := testdb.New(t)
 	practiceID := testdb.SeedPractice(t, db, "Feed Practice Scoped Practice")
@@ -229,44 +234,39 @@ func TestPracticeHandler_PracticeScopedRowVisibleToOwnerAndAdminOnly(t *testing.
 	testdb.SeedStaffAtPractice(t, db, practiceID, doulaUID, []string{doulaRole}, employeeType)
 
 	testdb.SeedActivity(t, db, practiceID, activity.SubjectPractice, practiceID, "mfa_required_enabled", activity.StaffActor(ownerID))
+	testdb.SeedActivity(t, db, practiceID, activity.SubjectPractice, practiceID, "practice_data_exported", activity.StaffActor(ownerID))
 
-	srv, session := newServer(t, db, ownerUID)
-	defer srv.Close()
-	resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/activity")
-	defer resp.Body.Close()
-	var owner activityfeed.ListResponse
-	if err := json.NewDecoder(resp.Body).Decode(&owner); err != nil {
-		t.Fatalf("decode owner: %v", err)
+	cases := []struct {
+		name        string
+		uid         string
+		wantActions map[string]bool
+	}{
+		{"owner sees both", ownerUID, map[string]bool{"mfa_required_enabled": true, "practice_data_exported": true}},
+		{"admin sees both", adminUID, map[string]bool{"mfa_required_enabled": true, "practice_data_exported": true}},
+		{"doula sees none", doulaUID, map[string]bool{}},
 	}
-	if len(owner.Items) != 1 || owner.Items[0].Action != "mfa_required_enabled" {
-		t.Fatalf("owner Items = %+v, want exactly one mfa_required_enabled row", owner.Items)
-	}
-	if owner.Items[0].SubjectName != "" {
-		t.Fatalf("owner Items[0].SubjectName = %q, want empty -- subject_id is the reader's own practice", owner.Items[0].SubjectName)
-	}
-
-	adminSrv, adminSession := newServer(t, db, adminUID)
-	defer adminSrv.Close()
-	adminResp := authedGet(t, adminSession, adminSrv.URL+"/api/practices/"+practiceID+"/activity")
-	defer adminResp.Body.Close()
-	var admin activityfeed.ListResponse
-	if err := json.NewDecoder(adminResp.Body).Decode(&admin); err != nil {
-		t.Fatalf("decode admin: %v", err)
-	}
-	if len(admin.Items) != 1 || admin.Items[0].Action != "mfa_required_enabled" {
-		t.Fatalf("admin Items = %+v, want exactly one mfa_required_enabled row", admin.Items)
-	}
-
-	doulaSrv, doulaSession := newServer(t, db, doulaUID)
-	defer doulaSrv.Close()
-	doulaResp := authedGet(t, doulaSession, doulaSrv.URL+"/api/practices/"+practiceID+"/activity")
-	defer doulaResp.Body.Close()
-	var doula activityfeed.ListResponse
-	if err := json.NewDecoder(doulaResp.Body).Decode(&doula); err != nil {
-		t.Fatalf("decode doula: %v", err)
-	}
-	if len(doula.Items) != 0 {
-		t.Fatalf("doula Items = %+v, want none -- a practice-scoped row is Owner/Admin only", doula.Items)
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			srv, session := newServer(t, db, tc.uid)
+			defer srv.Close()
+			resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/activity")
+			defer resp.Body.Close()
+			var got activityfeed.ListResponse
+			if err := json.NewDecoder(resp.Body).Decode(&got); err != nil {
+				t.Fatalf("decode: %v", err)
+			}
+			if len(got.Items) != len(tc.wantActions) {
+				t.Fatalf("Items = %+v, want %d row(s): %v", got.Items, len(tc.wantActions), tc.wantActions)
+			}
+			for _, item := range got.Items {
+				if !tc.wantActions[item.Action] {
+					t.Errorf("unexpected Action %q in Items %+v", item.Action, got.Items)
+				}
+				if item.SubjectName != "" {
+					t.Errorf("Items SubjectName = %q, want empty -- subject_id is the reader's own practice", item.SubjectName)
+				}
+			}
+		})
 	}
 }
 

@@ -120,18 +120,16 @@ var registry = map[string]Rule{
 		// unregistered below.
 		//
 		// Owner and Admin, the same population as the roster's own Rule
-		// above, and for the matching reason: activity/actions.go's own
-		// SubjectPractice comment names every write site that records
-		// against it today (staffauth's MFA-required switch, export.Handler,
-		// practicedeletion's initiate/restore/finalize, payments' billing
-		// mode, payment terms and Connect nudge, practicerate's rate card,
-		// practicetimezone's zone, and oncall's on-call settings), and most
-		// of them -- payment terms, the rate card, the timezone and the
-		// on-call settings, all four "the same authority that writes the
-		// rate card and the payment terms" CONTEXT.md names -- are mounted
-		// staffauth.OwnerAndAdmin. Narrowing the feed to Owner alone would
-		// hide an Admin's own writes from her, which no other Rule in this
-		// registry does.
+		// above. Not narrower: activity/actions.go's own SubjectPractice
+		// comment names every write site that records against this kind
+		// today, not repeated here to avoid the two lists drifting the
+		// way staffauth/mount.go's own comment warns a route-name prose
+		// list would -- and most of them (payment terms, the rate card,
+		// the timezone, the on-call settings: "the same authority that
+		// writes the rate card and the payment terms" CONTEXT.md names)
+		// are mounted staffauth.OwnerAndAdmin. Narrowing the feed to
+		// Owner alone would hide an Admin's own writes from her, which no
+		// other Rule in this registry does.
 		//
 		// Not wider: the rate card and payment terms are the Practice's
 		// price, which ADR-0008's money tier already keeps off a
@@ -140,17 +138,16 @@ var registry = map[string]Rule{
 		// inside both boundaries at once, the same test the Membership
 		// Rule above applies.
 		//
-		// A handful of write sites gate narrower than that: the
+		// A handful of write sites gate narrower still, at OwnerOnly: the
 		// MFA-required switch, export.Handler, practicedeletion's
-		// initiate/restore, and payments' PutBillingModeHandler are all
-		// mounted staffauth.OwnerOnly (the ticket that found this gap
-		// named export as Owner/Admin -- it is not; export_test.go's own
-		// TestHandler_RefusesEveryRoleButOwner refuses Admin too, and this
-		// comment corrects that rather than repeating it). Admin still
-		// reads their audit row here, on the same reasoning ADR-0008
-		// already gives for Stripe Connect state: "reading widens to
-		// Admin; starting or resuming hosted onboarding stays the Owner's
-		// alone." A feed row carries only subject/action/actor/time and no
+		// initiate/restore, and payments' PutBillingModeHandler (the
+		// ticket that found this gap named export as Owner/Admin -- it is
+		// not; export_test.go's own TestHandler_RefusesEveryRoleButOwner
+		// refuses Admin too). Admin still reads their audit row here, on
+		// the same reasoning ADR-0008 already gives for Stripe Connect
+		// state: "reading widens to Admin; starting or resuming hosted
+		// onboarding stays the Owner's alone." A feed row carries only
+		// subject/action/actor/time and no
 		// diff (activityfeed.Entry has none to send), so it holds none of
 		// what those handlers' own narrower reads keep back --
 		// GetMFAImpactHandler's affected-staff count, practicedeletion's

@@ -390,6 +390,18 @@ func TestCanAccessSubject_Practice(t *testing.T) {
 // money tier (Owner+Admin+employed Doula) it would otherwise apply --
 // nobody who reaches the subject at all needs a further per-action
 // exclusion.
+//
+// Iterates a literal list rather than activity.MembershipActions()'s own
+// shape deliberately: that vocabulary exists because every Membership
+// action is written by one package (staffauth) behind one typed
+// MembershipAction. A Practice-scoped action has no such home -- eight
+// packages each write their own private action constant against this
+// kind (activity/actions.go's own SubjectPractice comment names them) --
+// so building the equivalent aggregator would mean exporting every one
+// of those constants first, which is a bigger change than this ticket
+// makes. The two actions below are copied from their write sites'
+// literal strings (staffauth/mfarequired.go, export/entities.go) rather
+// than invented.
 func TestCanSeeAction_PracticeRestrictsNothing(t *testing.T) {
 	if got := activitygate.RestrictedActions(activity.SubjectPractice); got != nil {
 		t.Fatalf("RestrictedActions(practice) = %v, want nil", got)
