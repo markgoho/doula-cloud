@@ -242,26 +242,11 @@ test('Archetype A -- the two screens behind a session with no Practice', async (
 		h1: 'Your account is not part of a Practice'
 	});
 
-	/*
-	 * `mfa/enroll`'s own onMount reads `/api/staff/session` for the email
-	 * it re-authenticates with -- and this identity has no staff row
-	 * (that is the whole of `seedAccountWithNoPractice`), so the real
-	 * endpoint 404s (`requireSelf`, api/internal/staffauth/self.go) and
-	 * onMount redirects to /login the moment that resolves. Step one's
-	 * own scan never noticed: its `<h1>` is already painted at mount, and
-	 * the retrying `toBeVisible` below catches that before the redirect's
-	 * round trip lands. Step two's `reach` does not get that head start
-	 * -- filling the password field and clicking Continue is real
-	 * Playwright-driven interaction, which is long enough for the
-	 * redirect to win outright and leave nothing here to click.
-	 *
-	 * Answered here at the network boundary instead, the same shape
-	 * totpStub.ts already uses for identitytoolkit: both steps read
-	 * nothing off this response but the email, so a 200 carrying just
-	 * that closes the race for good rather than trying to out-time it.
-	 * Installed after the no-practice scan above, which depends on the
-	 * real 404 for its own screen.
-	 */
+	// `/api/staff/session` is answered here rather than left to the real
+	// endpoint, which 404s for this identity -- see docs/testing.md's own
+	// account of the race that answer closes, ahead of this session's
+	// `mfa/enroll` scans below. Installed after the no-practice scan
+	// above, which depends on the real 404 for its own screen.
 	await page.route(
 		(url) => url.pathname === '/api/staff/session',
 		(route) => route.fulfill({ status: 200, json: { email } })
