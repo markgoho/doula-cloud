@@ -190,28 +190,39 @@ const personSubjectKind = activity.SubjectMembership
 // %[1]d is: a package-internal constant, never request input, and naming
 // the constant rather than repeating the literal is what keeps the write
 // side and this join from drifting apart.
+//
+// %[3]s and %[4]s are activitypage.SharedActorJoin's own Columns and
+// Joins (#1281): this feed has no single subject to scope by, so it
+// cannot call activitypage.Statement itself, but the actor half of its
+// row is the same fact activitypage.List resolves for every
+// subject-scoped reader, reached the same way. Composing the one
+// exported value rather than hand-writing the three columns and two
+// joins again is what keeps this query and activitypage's from drifting
+// on what those columns are or how they are reached -- #1150 already did
+// that for what a name resolves to (ActorName below); this is the SQL
+// that reaches it.
 const listPracticeActivityQueryTemplate = `SELECT a.id, a.subject_kind, a.subject_id, a.action, a.actor_kind::text,
-	       s.name, c.given_name, c.preferred_name, subj.name, a.created_at
+	       %[3]s, subj.name, a.created_at
 	FROM activity a
-	LEFT JOIN staff s ON s.id = a.actor_staff_id
-	LEFT JOIN clients c ON c.id = a.actor_client_id
+	%[4]s
 	LEFT JOIN staff subj ON a.subject_kind = '%[2]s' AND subj.id = a.subject_id
 	WHERE a.practice_id = $1
 	ORDER BY a.created_at DESC, a.id DESC LIMIT %[1]d`
 
 const listPracticeActivityAfterQueryTemplate = `SELECT a.id, a.subject_kind, a.subject_id, a.action, a.actor_kind::text,
-	       s.name, c.given_name, c.preferred_name, subj.name, a.created_at
+	       %[3]s, subj.name, a.created_at
 	FROM activity a
-	LEFT JOIN staff s ON s.id = a.actor_staff_id
-	LEFT JOIN clients c ON c.id = a.actor_client_id
+	%[4]s
 	LEFT JOIN staff subj ON a.subject_kind = '%[2]s' AND subj.id = a.subject_id
 	WHERE a.practice_id = $1
 	  AND (a.created_at, a.id) < ($2, $3)
 	ORDER BY a.created_at DESC, a.id DESC LIMIT %[1]d`
 
-var listPracticeActivityQuery = fmt.Sprintf(listPracticeActivityQueryTemplate, practiceBatchSize+1, personSubjectKind) //nolint:gosec // both interpolated values are package-internal constants, not request input
+var listPracticeActivityQuery = fmt.Sprintf(listPracticeActivityQueryTemplate, //nolint:gosec // all four interpolated values are package-internal constants (the last two activitypage's own), not request input
+	practiceBatchSize+1, personSubjectKind, activitypage.SharedActorJoin.Columns, activitypage.SharedActorJoin.Joins)
 
-var listPracticeActivityAfterQuery = fmt.Sprintf(listPracticeActivityAfterQueryTemplate, practiceBatchSize+1, personSubjectKind) //nolint:gosec // both interpolated values are package-internal constants, not request input
+var listPracticeActivityAfterQuery = fmt.Sprintf(listPracticeActivityAfterQueryTemplate, //nolint:gosec // all four interpolated values are package-internal constants (the last two activitypage's own), not request input
+	practiceBatchSize+1, personSubjectKind, activitypage.SharedActorJoin.Columns, activitypage.SharedActorJoin.Joins)
 
 // rawEntry is Entry plus the row id fetchPage needs to mint a cursor but
 // never puts in the response, the same shape engagement.activityRow

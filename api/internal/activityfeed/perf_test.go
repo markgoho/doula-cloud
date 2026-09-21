@@ -5,8 +5,40 @@ import (
 	"strings"
 	"testing"
 
+	"doula-cloud/api/internal/activitypage"
 	"doula-cloud/api/internal/testdb"
 )
+
+// TestListPracticeActivityQuery_ComposesTheSharedActorJoin is #1281's own
+// AC1: the practice-wide feed and activitypage reach the actor's three
+// name columns through one spelling, activitypage.SharedActorJoin, rather
+// than two hand-written copies of the same join and the same columns.
+//
+// It also pins the query text this package's own EXPLAIN comment measured
+// (practice.go's doc comment above listPracticeActivityQueryTemplate):
+// composing SharedActorJoin must not change a single byte of what
+// PracticeHandler sends Postgres, or the recorded plan and timings stop
+// describing the query that actually ships.
+func TestListPracticeActivityQuery_ComposesTheSharedActorJoin(t *testing.T) {
+	for _, query := range []string{listPracticeActivityQuery, listPracticeActivityAfterQuery} {
+		if !strings.Contains(query, activitypage.SharedActorJoin.Columns) {
+			t.Errorf("query does not contain SharedActorJoin.Columns:\n%s", query)
+		}
+		if !strings.Contains(query, activitypage.SharedActorJoin.Joins) {
+			t.Errorf("query does not contain SharedActorJoin.Joins:\n%s", query)
+		}
+	}
+
+	const wantColumns = `s.name, c.given_name, c.preferred_name, subj.name, a.created_at`
+	if !strings.Contains(listPracticeActivityQuery, wantColumns) {
+		t.Errorf("listPracticeActivityQuery select list = %q, want it to contain %q byte-for-byte", listPracticeActivityQuery, wantColumns)
+	}
+
+	const wantJoins = "LEFT JOIN staff s ON s.id = a.actor_staff_id\n\tLEFT JOIN clients c ON c.id = a.actor_client_id\n\tLEFT JOIN staff subj ON"
+	if !strings.Contains(listPracticeActivityQuery, wantJoins) {
+		t.Errorf("listPracticeActivityQuery joins = %q, want it to contain %q byte-for-byte", listPracticeActivityQuery, wantJoins)
+	}
+}
 
 // TestPracticeQueryPlanAtScale is not part of the coverage gate's normal
 // run -- it seeds several thousand rows, which is disproportionate to run
