@@ -345,3 +345,59 @@ func TestCanSeeAction_MembershipRestrictsNothing(t *testing.T) {
 		}
 	}
 }
+
+// TestCanAccessSubject_Practice proves #1255's Rule: an Owner and an
+// Admin reach a Practice-scoped row (the MFA-required switch, a
+// whole-Practice export, and the several other write sites gate.go's own
+// comment names) and nobody else does -- the same population, and the
+// same reasoning, as the roster's own Membership Rule above. An employed
+// Doula's ambient reach over every Engagement and Client still does not
+// extend to the Practice's own settings history, any more than it does
+// to the roster's.
+func TestCanAccessSubject_Practice(t *testing.T) {
+	db := testdb.New(t)
+	practiceID := testdb.SeedPractice(t, db, "Gate Practice Access Practice")
+	ownerID := testdb.SeedStaffAtPractice(t, db, practiceID, "gate-practice-owner", []string{ownerRole}, employeeType)
+
+	cases := []struct {
+		name           string
+		roles          []string
+		employmentType string
+		want           bool
+	}{
+		{ownerReachesCase, []string{ownerRole}, employeeType, true},
+		{"admin reaches", []string{adminRole}, employeeType, true},
+		{"employee doula refused", []string{doulaRole}, employeeType, false},
+		{"contractor doula refused", []string{doulaRole}, contractorType, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			reader, tx := buildReader(t, db, practiceID, ownerID, tc.roles, tc.employmentType)
+			got, err := activitygate.CanAccessSubject(t.Context(), tx, reader, activity.SubjectPractice, practiceID)
+			if err != nil {
+				t.Fatalf("CanAccessSubject: %v", err)
+			}
+			if got != tc.want {
+				t.Fatalf("CanAccessSubject(practice) = %v, want %v", got, tc.want)
+			}
+		})
+	}
+}
+
+// TestCanSeeAction_PracticeRestrictsNothing is TestCanSeeAction_MembershipRestrictsNothing's
+// counterpart: RestrictedActions is nil for practice too, because the
+// base gate above is already narrower (Owner+Admin only) than ADR-0008's
+// money tier (Owner+Admin+employed Doula) it would otherwise apply --
+// nobody who reaches the subject at all needs a further per-action
+// exclusion.
+func TestCanSeeAction_PracticeRestrictsNothing(t *testing.T) {
+	if got := activitygate.RestrictedActions(activity.SubjectPractice); got != nil {
+		t.Fatalf("RestrictedActions(practice) = %v, want nil", got)
+	}
+	owner := staffauth.NewReader("owner-id", []string{ownerRole}, employeeType)
+	for _, action := range []string{"mfa_required_enabled", "mfa_required_disabled", "practice_data_exported"} {
+		if !activitygate.CanSeeAction(owner, activity.SubjectPractice, action) {
+			t.Errorf("CanSeeAction(owner, practice, %q) = false, want true", action)
+		}
+	}
+}
