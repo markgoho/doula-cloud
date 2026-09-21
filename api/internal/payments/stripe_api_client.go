@@ -396,10 +396,10 @@ func (c *StripeAPIClient) IssueRefundCreditNote(ctx context.Context, accountID, 
 // Stripe account.
 func refundCreditNoteParams(accountID, invoiceID string, amountCents int64, outOfBand bool) *stripe.CreditNoteCreateParams {
 	params := &stripe.CreditNoteCreateParams{
-		Params:  stripe.Params{StripeAccount: stripe.String(accountID)},
 		Invoice: stripe.String(invoiceID),
 		Amount:  new(amountCents),
 	}
+	params.StripeAccount = stripe.String(accountID)
 	if outOfBand {
 		params.OutOfBandAmount = new(amountCents)
 	} else {
