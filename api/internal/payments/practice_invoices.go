@@ -66,7 +66,16 @@ type PracticeInvoicesResponse struct {
 	HasMore          bool                  `json:"hasMore"`
 	OutstandingCents int64                 `json:"outstandingCents"`
 	OutstandingCount int                   `json:"outstandingCount"`
-	PaidCents        int64                 `json:"paidCents"`
+	// PaidCents is every 'paid' Invoice's full amount -- bills that were
+	// settled. A refunded Invoice stays 'paid' (00115), so it still counts
+	// here in full, and deliberately so: the bill was settled, and this
+	// figure has always meant settled bills. What went back is
+	// RefundedCents, a separate number beside it, never folded silently
+	// into this one where a Practice could not see it had happened.
+	PaidCents int64 `json:"paidCents"`
+	// RefundedCents (#1009) is every Refund across the book, as a
+	// positive number: money the Practice has returned to Clients.
+	RefundedCents int64 `json:"refundedCents"`
 	// OverdueCents and OverdueCount (#768) are the part of the
 	// outstanding book that is past its due date: 'open' and due_at <
 	// now(), evaluated by Postgres at read. They are a narrowing of the
@@ -157,6 +166,7 @@ func GetPracticeInvoicesHandler() http.Handler {
 			OutstandingCents: totals.outstandingCents,
 			OutstandingCount: totals.outstandingCount,
 			PaidCents:        totals.paidCents,
+			RefundedCents:    totals.refundedCents,
 			OverdueCents:     totals.overdueCents,
 			OverdueCount:     totals.overdueCount,
 			ClientsCanPay:    clientsCanPay,
@@ -301,17 +311,25 @@ type invoiceTotals struct {
 	paidCents        int64
 	overdueCents     int64
 	overdueCount     int
+	refundedCents    int64
 }
 
-// practiceInvoiceTotalsQuery reads all three totals in one pass with
-// FILTER clauses rather than three queries or a GROUP BY the caller then
-// has to re-shape. COALESCE covers the empty book, where SUM is null.
+// practiceInvoiceTotalsQuery reads every total in one pass with FILTER
+// clauses rather than several queries or a GROUP BY the caller then has
+// to re-shape. COALESCE covers the empty book, where SUM is null.
+//
+// The refunded total (#1009) is a scalar subquery over payments, since
+// it is a sum of rows that are not Invoices. It is the whole book's money
+// gone back to Clients, as a positive number.
 const practiceInvoiceTotalsQuery = `SELECT
 		COALESCE(SUM(amount_cents) FILTER (WHERE status = 'open'), 0),
 		COUNT(*) FILTER (WHERE status = 'open'),
 		COALESCE(SUM(amount_cents) FILTER (WHERE status = 'paid'), 0),
 		COALESCE(SUM(amount_cents) FILTER (WHERE status = 'open' AND due_at < now()), 0),
-		COUNT(*) FILTER (WHERE status = 'open' AND due_at < now())
+		COUNT(*) FILTER (WHERE status = 'open' AND due_at < now()),
+		(SELECT COALESCE(-SUM(p.amount_cents), 0) FROM payments p
+		   JOIN invoices ri ON ri.id = p.invoice_id
+		  WHERE ri.practice_id = $1 AND p.kind = 'refund')
 	FROM invoices WHERE practice_id = $1`
 
 // practiceInvoiceTotals sums the Practice's outstanding and paid money.
@@ -322,7 +340,7 @@ const practiceInvoiceTotalsQuery = `SELECT
 func practiceInvoiceTotals(ctx context.Context, tx *sql.Tx, practiceID string) (invoiceTotals, error) {
 	var t invoiceTotals
 	if err := tx.QueryRowContext(ctx, practiceInvoiceTotalsQuery, practiceID).
-		Scan(&t.outstandingCents, &t.outstandingCount, &t.paidCents, &t.overdueCents, &t.overdueCount); err != nil {
+		Scan(&t.outstandingCents, &t.outstandingCount, &t.paidCents, &t.overdueCents, &t.overdueCount, &t.refundedCents); err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		return invoiceTotals{}, fmt.Errorf("payments: practice invoice totals: %w", err)
 	}

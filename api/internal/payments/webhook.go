@@ -23,9 +23,10 @@ import (
 // its (separate) webhook endpoint.
 const maxWebhookBodyBytes = 1 << 20 // 1 MiB
 
-// The two v1 snapshot event types the Connect endpoint handles: #82's
-// invoice.paid / invoice.payment_failed. Any other event type is logged
-// and dropped. WebhookEvent.Type is a plain string (the Client port
+// The v1 snapshot event types the Connect endpoint handles: #82's
+// invoice.paid / invoice.payment_failed below, and #1009's
+// credit_note.created / refund.created (refund_webhook.go). Any other
+// event type is logged and dropped. WebhookEvent.Type is a plain string (the Client port
 // abstracts away *stripe.Event), so stripe-go's own typed constants are
 // converted once here rather than hand-rolling the literals.
 //
@@ -122,6 +123,10 @@ func PostConnectWebhookHandler(db *sql.DB, client Client, webhookSecret string, 
 			handleInvoicePaid(w, r, db, client, event, enq)
 		case eventTypeInvoicePaymentFailed:
 			handleInvoicePaymentFailed(w, r, db, event)
+		case eventTypeCreditNoteCreated:
+			handleCreditNoteCreated(w, r, db, event)
+		case eventTypeRefundCreated:
+			handleRefundCreated(w, r, db, event)
 		default:
 			log.Printf("payments: connect webhook: dropping unhandled event type %q (id %s)", event.Type, event.ID)
 			w.WriteHeader(http.StatusOK)
@@ -172,6 +177,26 @@ func commitAndAck(w http.ResponseWriter, tx *sql.Tx, committed *bool) {
 	w.WriteHeader(http.StatusOK)
 }
 
+// resolvePracticeForEvent resolves accountID to a Practice and scopes the
+// rest of tx to it (app.current_practice_id), so every later read and
+// write on invoices and payments is filtered by RLS too. Split out of
+// resolveInvoiceForEvent for #1009's refund.created, which reaches a
+// Payment by its PaymentIntent and has no Stripe invoice id to look up.
+// sql.ErrNoRows for an account no Practice holds.
+func resolvePracticeForEvent(ctx context.Context, tx *sql.Tx, accountID string) (practiceID string, err error) {
+	if err := tx.QueryRowContext(ctx,
+		`SELECT id FROM practices WHERE stripe_connect_account_id = $1`, accountID,
+	).Scan(&practiceID); err != nil {
+		// coverage:ignore reason: the sql.ErrNoRows branch (unrecognized account) is exercised by unit tests; a non-ErrNoRows DB failure here is not
+		return "", fmt.Errorf("payments: resolve practice for webhook event: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx, `SELECT set_config('app.current_practice_id', $1, true)`, practiceID); err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		return "", fmt.Errorf("payments: scope webhook event tx to practice: %w", err)
+	}
+	return practiceID, nil
+}
+
 // resolveInvoiceForEvent resolves accountID to a Practice (the same
 // account-resolution rule handleCapabilityStatusUpdated uses) and, on a
 // match,
@@ -188,16 +213,9 @@ func commitAndAck(w http.ResponseWriter, tx *sql.Tx, committed *bool) {
 // rather than error. Also returns practiceID -- handleInvoicePaid needs
 // it to queue a payment_received_outbox row (#344).
 func resolveInvoiceForEvent(ctx context.Context, tx *sql.Tx, stripeInvoiceID, accountID string) (invoiceID, practiceID string, err error) {
-	if err := tx.QueryRowContext(ctx,
-		`SELECT id FROM practices WHERE stripe_connect_account_id = $1`, accountID,
-	).Scan(&practiceID); err != nil {
-		// coverage:ignore reason: the sql.ErrNoRows branch (unrecognized account) is exercised by unit tests; a non-ErrNoRows DB failure here is not
-		return "", "", fmt.Errorf("payments: resolve practice for webhook event: %w", err)
-	}
-
-	if _, err := tx.ExecContext(ctx, `SELECT set_config('app.current_practice_id', $1, true)`, practiceID); err != nil {
-		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		return "", "", fmt.Errorf("payments: scope webhook event tx to practice: %w", err)
+	practiceID, err = resolvePracticeForEvent(ctx, tx, accountID)
+	if err != nil {
+		return "", "", err
 	}
 
 	if err := tx.QueryRowContext(ctx,
@@ -305,7 +323,7 @@ func handleInvoicePaid(w http.ResponseWriter, r *http.Request, db *sql.DB, clien
 		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 		return
 	}
-	if currentStatus == "paid" {
+	if currentStatus == invoiceStatusPaid {
 		log.Printf("payments: connect webhook: invoice.paid for %q already paid, skipping (event id %s)", inv.ID, event.ID)
 		commitAndAck(w, tx, &committed)
 		return

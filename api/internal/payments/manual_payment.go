@@ -102,19 +102,27 @@ type RecordPaymentRequest struct {
 }
 
 // PaymentView is one payments row -- a manually recorded Payment (as
-// returned by PostManualPaymentHandler) or its reversal (#945, as returned
-// by PostReversePaymentHandler). ReversedPaymentID and Reason are set only
-// on a reversal row; Method and Note only on a manually recorded one.
+// returned by PostManualPaymentHandler), its reversal (#945, as returned
+// by PostReversePaymentHandler), or a Refund of it (#1009, as returned by
+// PostRefundPaymentHandler). TargetPaymentID is set on the two kinds that
+// point at another Payment, a reversal and a Refund; Reason only on a
+// reversal; Method and Note on a manually recorded Payment and on a
+// Refund that the Practice sent back herself.
 type PaymentView struct {
-	ID                string    `json:"id"`
-	InvoiceID         string    `json:"invoiceId"`
-	AmountCents       int64     `json:"amountCents"`
-	Method            string    `json:"method,omitempty"`
-	Note              *string   `json:"note,omitempty"`
-	ReversedPaymentID *string   `json:"reversedPaymentId,omitempty"`
-	Reason            *string   `json:"reason,omitempty"`
-	PaidAt            time.Time `json:"paidAt"`
-	CreatedAt         time.Time `json:"createdAt"`
+	ID        string `json:"id"`
+	InvoiceID string `json:"invoiceId"`
+	// Kind is the payments row's own kind -- "manual", "reversal" or
+	// "refund" for a row this package's handlers return -- so a caller
+	// never has to infer a Refund from the sign of AmountCents, which it
+	// shares with a reversal.
+	Kind            string    `json:"kind"`
+	AmountCents     int64     `json:"amountCents"`
+	Method          string    `json:"method,omitempty"`
+	Note            *string   `json:"note,omitempty"`
+	TargetPaymentID *string   `json:"targetPaymentId,omitempty"`
+	Reason          *string   `json:"reason,omitempty"`
+	PaidAt          time.Time `json:"paidAt"`
+	CreatedAt       time.Time `json:"createdAt"`
 }
 
 // resolveInvoiceForPractice locks :invoiceId's row FOR UPDATE within
@@ -193,7 +201,7 @@ func PostManualPaymentHandler(client Client) http.Handler {
 			// stays exactly as it was (#1037, #1189).
 			apierr.Write(w, http.StatusBadRequest, apierr.CodeInvalidArgument,
 				`method must be "check", "bank_transfer", "cash", or "other"`,
-				map[string]string{"method": "Select a method from the list"})
+				map[string]string{fieldMethod: "Select a method from the list"})
 			return
 		}
 		if req.Method == PaymentMethodOther && req.Note == "" {
@@ -299,7 +307,7 @@ func PostManualPaymentHandler(client Client) http.Handler {
 		}
 
 		staffID, _ := staffauth.StaffID(r.Context())
-		diff, err := json.Marshal(map[string]any{"method": string(req.Method), diffKeyAmountCents: amountCents})
+		diff, err := json.Marshal(map[string]any{fieldMethod: string(req.Method), diffKeyAmountCents: amountCents})
 		if err != nil {
 			// coverage:ignore reason: a map of a string and an int64 always marshals cleanly, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
@@ -321,6 +329,7 @@ func PostManualPaymentHandler(client Client) http.Handler {
 		view := PaymentView{
 			ID:          paymentID,
 			InvoiceID:   invoiceID,
+			Kind:        paymentKindManual,
 			AmountCents: amountCents,
 			Method:      string(req.Method),
 			PaidAt:      paidOn,
@@ -433,6 +442,21 @@ func PostWriteOffInvoiceHandler() http.Handler {
 // not manually recorded) so the handler can tell the two refusals apart.
 var errPaymentAlreadyReversed = errors.New("payments: payment already reversed")
 
+// errPaymentRefunded signals that :paymentId has at least one Refund
+// against it (#1009), so it cannot be reversed. Before #1009 a reversal
+// was the only row that could point at a Payment, and "something points
+// at it" meant "already reversed"; a Refund now points at one too, and
+// reads the opposite way.
+var errPaymentRefunded = errors.New("payments: payment has been refunded")
+
+// MsgRefundedPaymentCannotBeReversed refuses reversing a Payment money has
+// already been returned against (#1009). A reversal says the money never
+// arrived and puts the Client back in debt for it; saying that about
+// money the Practice has since sent back to her would bill her again for
+// what she was just given. The Refund is the record to correct, if one
+// was wrong.
+const MsgRefundedPaymentCannotBeReversed = "Money has already been returned against this Payment, so it cannot be reversed."
+
 // ReversePaymentRequest is the body of a POST to
 // PostReversePaymentHandler. Reason is always required -- unlike a
 // recorded Payment's own optional note, undoing one always needs a stated
@@ -447,10 +471,12 @@ type ReversePaymentRequest struct {
 // sql.ErrNoRows a nonexistent id would (MsgPaymentNotReversible covers
 // all three; the caller does not need to tell them apart). Returns
 // errPaymentAlreadyReversed if a reversal already targets this Payment --
-// the partial unique index on payments.reversed_payment_id
-// (00103_payment_reversal.sql) is the same invariant enforced at the
-// database level, but this pre-check turns it into a clean 409 instead of
-// a raw constraint violation.
+// payments_one_reversal_per_payment (00115_payment_refund.sql, rebuilt
+// from 00103's index) is the same invariant enforced at the database
+// level, but this pre-check turns it into a clean 409 instead of a raw
+// constraint violation -- and errPaymentRefunded if a Refund does
+// (#1009), which no index can express, because a Payment may carry any
+// number of Refunds.
 func resolvePaymentForReversal(ctx context.Context, tx *sql.Tx, invoiceID, paymentID string) (amountCents int64, err error) {
 	err = tx.QueryRowContext(ctx,
 		`SELECT amount_cents FROM payments
@@ -462,15 +488,22 @@ func resolvePaymentForReversal(ctx context.Context, tx *sql.Tx, invoiceID, payme
 	if err != nil {
 		return 0, fmt.Errorf("payments: resolve payment for reversal: %w", err)
 	}
-	var alreadyReversed bool
+	// Both kinds that can point at a Payment are read in one pass, and
+	// told apart, because since #1009 "something points at this Payment"
+	// no longer means only "it was reversed".
+	var alreadyReversed, refunded bool
 	if err := tx.QueryRowContext(ctx,
-		`SELECT EXISTS (SELECT 1 FROM payments WHERE reversed_payment_id = $1)`, paymentID,
-	).Scan(&alreadyReversed); err != nil {
+		`SELECT EXISTS (SELECT 1 FROM payments WHERE target_payment_id = $1 AND kind = 'reversal'),
+		        EXISTS (SELECT 1 FROM payments WHERE target_payment_id = $1 AND kind = 'refund')`, paymentID,
+	).Scan(&alreadyReversed, &refunded); err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		return 0, fmt.Errorf("payments: check payment already reversed: %w", err)
 	}
 	if alreadyReversed {
 		return 0, errPaymentAlreadyReversed
+	}
+	if refunded {
+		return 0, errPaymentRefunded
 	}
 	return amountCents, nil
 }
@@ -540,7 +573,7 @@ func PostReversePaymentHandler() http.Handler {
 			apierr.Write(w, http.StatusConflict, apierr.CodeFailedPrecondition, MsgStripeInvoiceCannotBeReversed, nil)
 			return
 		}
-		if status != "paid" {
+		if status != invoiceStatusPaid {
 			apierr.Write(w, http.StatusConflict, apierr.CodeFailedPrecondition, MsgInvoiceNotPaid, nil)
 			return
 		}
@@ -554,6 +587,10 @@ func PostReversePaymentHandler() http.Handler {
 			apierr.Write(w, http.StatusConflict, apierr.CodeFailedPrecondition, MsgPaymentAlreadyReversed, nil)
 			return
 		}
+		if errors.Is(err, errPaymentRefunded) {
+			apierr.Write(w, http.StatusConflict, apierr.CodeFailedPrecondition, MsgRefundedPaymentCannotBeReversed, nil)
+			return
+		}
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
@@ -564,7 +601,7 @@ func PostReversePaymentHandler() http.Handler {
 		var reversalID string
 		var createdAt time.Time
 		if err := tx.QueryRowContext(r.Context(),
-			`INSERT INTO payments (invoice_id, amount_cents, paid_at, kind, reversed_payment_id, reason)
+			`INSERT INTO payments (invoice_id, amount_cents, paid_at, kind, target_payment_id, reason)
 			 VALUES ($1, $2, $3, 'reversal', $4, $5) RETURNING id, created_at`,
 			invoiceID, -amountCents, reversedAt, paymentID, req.Reason,
 		).Scan(&reversalID, &createdAt); err != nil {
@@ -585,7 +622,7 @@ func PostReversePaymentHandler() http.Handler {
 		// own diff excludes note the same way, so a personal-data-bearing
 		// field never lands anywhere but the one column the erasure sweep
 		// (client.redactPaymentReasons) actually reaches.
-		diff, err := json.Marshal(map[string]any{diffKeyAmountCents: -amountCents, "reversedPaymentId": paymentID})
+		diff, err := json.Marshal(map[string]any{diffKeyAmountCents: -amountCents, "targetPaymentId": paymentID})
 		if err != nil {
 			// coverage:ignore reason: a map of an int64 and a string always marshals cleanly, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
@@ -605,13 +642,14 @@ func PostReversePaymentHandler() http.Handler {
 		}
 
 		view := PaymentView{
-			ID:                reversalID,
-			InvoiceID:         invoiceID,
-			AmountCents:       -amountCents,
-			ReversedPaymentID: &paymentID,
-			Reason:            &req.Reason,
-			PaidAt:            reversedAt,
-			CreatedAt:         createdAt,
+			ID:              reversalID,
+			InvoiceID:       invoiceID,
+			Kind:            paymentKindReversal,
+			AmountCents:     -amountCents,
+			TargetPaymentID: &paymentID,
+			Reason:          &req.Reason,
+			PaidAt:          reversedAt,
+			CreatedAt:       createdAt,
 		}
 		apierr.WriteJSON(w, http.StatusCreated, view)
 	})

@@ -18,6 +18,7 @@
 			paidAt: '2027-09-28T00:00:00Z',
 			dueAt: '2027-10-14T00:00:00Z',
 			reference: 'DC-0014',
+			refundedCents: 0,
 			billingMode: 'stripe'
 		},
 		{
@@ -29,8 +30,29 @@
 			createdAt: '2027-11-30T00:00:00Z',
 			dueAt: '2027-12-30T00:00:00Z',
 			reference: 'INV-0002',
+			refundedCents: 0,
 			billingMode: 'by_hand'
 		}
+	];
+
+	/*
+	 * #1009: an Owner's view once money has gone back -- a partly refunded
+	 * by-hand Invoice, whose row carries the returned figure beside "Paid"
+	 * and still offers Return money but no longer Reverse payment, beside a
+	 * card-paid one that offers Return money alone. The widest figure again:
+	 * most of a four-figure package returned, to the cent.
+	 */
+	const refundedInvoices: Invoice[] = [
+		{
+			...invoices[0],
+			id: 'in_3',
+			reference: 'INV-0003',
+			billingMode: 'by_hand',
+			activePaymentId: 'pay_3',
+			activePaymentKind: 'manual',
+			refundedCents: 387_550
+		},
+		{ ...invoices[0], id: 'in_4', activePaymentId: 'pay_4', activePaymentKind: 'stripe' }
 	];
 
 	const paymentsSettingsHref = 'https://example.test/practices/practice-1/settings/payments';
@@ -55,6 +77,27 @@
 			onVoidInvoice={async () => {}}
 			onWriteOffInvoice={async () => {}}
 			onReversePayment={async () => {}}
+			onRefundPayment={async () => {}}
+		/>
+	</section>
+
+	<section>
+		<h2>An Owner, after money was returned</h2>
+		<InvoiceSection
+			invoices={refundedInvoices}
+			contractStatus="signed"
+			clientsCanPay={true}
+			hasClientEmail={true}
+			isOwner={true}
+			isOwnerOrAdmin={true}
+			billingMode="stripe"
+			{paymentsSettingsHref}
+			onCreate={async () => {}}
+			onRecordPayment={async () => {}}
+			onVoidInvoice={async () => {}}
+			onWriteOffInvoice={async () => {}}
+			onReversePayment={async () => {}}
+			onRefundPayment={async () => {}}
 		/>
 	</section>
 
@@ -74,6 +117,7 @@
 			onVoidInvoice={async () => {}}
 			onWriteOffInvoice={async () => {}}
 			onReversePayment={async () => {}}
+			onRefundPayment={async () => {}}
 		/>
 	</section>
 
@@ -97,6 +141,7 @@
 			onVoidInvoice={async () => {}}
 			onWriteOffInvoice={async () => {}}
 			onReversePayment={async () => {}}
+			onRefundPayment={async () => {}}
 		/>
 	</section>
 
@@ -116,6 +161,7 @@
 			onVoidInvoice={async () => {}}
 			onWriteOffInvoice={async () => {}}
 			onReversePayment={async () => {}}
+			onRefundPayment={async () => {}}
 		/>
 	</section>
 
@@ -135,6 +181,7 @@
 			onVoidInvoice={async () => {}}
 			onWriteOffInvoice={async () => {}}
 			onReversePayment={async () => {}}
+			onRefundPayment={async () => {}}
 		/>
 	</section>
 
@@ -156,6 +203,7 @@
 			onVoidInvoice={async () => {}}
 			onWriteOffInvoice={async () => {}}
 			onReversePayment={async () => {}}
+			onRefundPayment={async () => {}}
 		/>
 	</section>
 
@@ -175,6 +223,7 @@
 			onVoidInvoice={async () => {}}
 			onWriteOffInvoice={async () => {}}
 			onReversePayment={async () => {}}
+			onRefundPayment={async () => {}}
 		/>
 	</section>
 
@@ -197,6 +246,7 @@
 			onVoidInvoice={async () => {}}
 			onWriteOffInvoice={async () => {}}
 			onReversePayment={async () => {}}
+			onRefundPayment={async () => {}}
 		/>
 	</section>
 
@@ -219,6 +269,7 @@
 			onVoidInvoice={async () => {}}
 			onWriteOffInvoice={async () => {}}
 			onReversePayment={async () => {}}
+			onRefundPayment={async () => {}}
 		/>
 	</section>
 </stack-l>

@@ -207,7 +207,7 @@ func TestEraseHandler_RedactsPaymentReversalReasons(t *testing.T) {
 		t.Fatalf("seed manual payment: %v", err)
 	}
 	if _, err := db.Admin.ExecContext(t.Context(),
-		`INSERT INTO payments (invoice_id, amount_cents, paid_at, kind, reversed_payment_id, reason)
+		`INSERT INTO payments (invoice_id, amount_cents, paid_at, kind, target_payment_id, reason)
 		 VALUES ($1, -15000, now(), 'reversal', $2, 'logged against the wrong invoice')`,
 		invoiceID, paymentID,
 	); err != nil {
@@ -246,6 +246,58 @@ func TestEraseHandler_RedactsPaymentReversalReasons(t *testing.T) {
 	}
 	if reason != nil {
 		t.Fatalf("reversal reason = %v, want NULL after erasure", *reason)
+	}
+}
+
+// TestEraseHandler_RedactsRefundNote proves erasure reaches the note on a
+// Refund (#1009) -- money a Practice returned by hand, whose note is the
+// same free text a recorded Payment's is ("check #2201 mailed to her home
+// address"). The note must go while the Refund row itself stays: it is
+// the record that money went back, and nothing about her.
+func TestEraseHandler_RedactsRefundNote(t *testing.T) {
+	db := testdb.New(t)
+	const uid = "owner-erase-refund-note"
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
+	clientID, engagementID := testdb.SeedEngagementInStatus(t, db, practiceID, "Ada Lovelace", "ada@example.com", "active")
+	contractID := seedClientContract(t, db, engagementID, "signed")
+	invoiceID := seedClientInvoice(t, db, practiceID, contractID, "paid", 15000)
+
+	var paymentID string
+	if err := db.Admin.QueryRowContext(t.Context(),
+		`INSERT INTO payments (invoice_id, amount_cents, paid_at, kind, method) VALUES ($1, 15000, now(), 'manual', 'check') RETURNING id`,
+		invoiceID,
+	).Scan(&paymentID); err != nil {
+		t.Fatalf("seed manual payment: %v", err)
+	}
+	if _, err := db.Admin.ExecContext(t.Context(),
+		`INSERT INTO payments (invoice_id, amount_cents, paid_at, kind, target_payment_id, method, note)
+		 VALUES ($1, -15000, now(), 'refund', $2, 'check', 'check #2201 mailed to 12 Elm St')`,
+		invoiceID, paymentID,
+	); err != nil {
+		t.Fatalf("seed refund: %v", err)
+	}
+
+	srv, session := newServer(t, db, uid)
+	defer srv.Close()
+
+	resp := postErasure(t, session, srv, practiceID, clientID)
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
+	}
+
+	var note *string
+	var amount int64
+	if err := db.Admin.QueryRowContext(t.Context(),
+		`SELECT note, amount_cents FROM payments WHERE invoice_id = $1 AND kind = 'refund'`, invoiceID,
+	).Scan(&note, &amount); err != nil {
+		t.Fatalf("query refund after erasure: %v", err)
+	}
+	if note != nil {
+		t.Fatalf("refund note = %q, want NULL after erasure", *note)
+	}
+	if amount != -15000 {
+		t.Fatalf("refund amount = %d, want the row kept at -15000", amount)
 	}
 }
 

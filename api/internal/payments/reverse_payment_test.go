@@ -62,7 +62,7 @@ func paymentRowByID(t *testing.T, db *testdb.DB, paymentID string) reversalRow {
 	t.Helper()
 	var row reversalRow
 	if err := db.Admin.QueryRowContext(t.Context(),
-		`SELECT kind::text, amount_cents, reversed_payment_id::text, reason FROM payments WHERE id = $1`, paymentID,
+		`SELECT kind::text, amount_cents, target_payment_id::text, reason FROM payments WHERE id = $1`, paymentID,
 	).Scan(&row.kind, &row.amountCents, &row.reversedPaymentID, &row.reason); err != nil {
 		t.Fatalf("query payment %s: %v", paymentID, err)
 	}
@@ -97,8 +97,8 @@ func TestPostReversePaymentHandler_ByHandHappyPath(t *testing.T) {
 	if out.AmountCents != -seedByHandInvoiceAmountCents {
 		t.Fatalf("reversal.amountCents = %d, want %d", out.AmountCents, -seedByHandInvoiceAmountCents)
 	}
-	if out.ReversedPaymentID == nil || *out.ReversedPaymentID != paymentID {
-		t.Fatalf("reversal.reversedPaymentId = %v, want %q", out.ReversedPaymentID, paymentID)
+	if out.TargetPaymentID == nil || *out.TargetPaymentID != paymentID {
+		t.Fatalf("reversal.targetPaymentId = %v, want %q", out.TargetPaymentID, paymentID)
 	}
 	if out.Reason == nil || *out.Reason != "logged against the wrong invoice" {
 		t.Fatalf("reversal.reason = %v, want the given reason", out.Reason)

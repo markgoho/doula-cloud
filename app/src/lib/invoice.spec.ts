@@ -9,6 +9,7 @@ import {
 	loadPracticeInvoices,
 	practiceInvoicesPath,
 	recordPayment,
+	refundPayment,
 	reversePayment,
 	setBillingMode,
 	unbillableContractMessage,
@@ -231,13 +232,58 @@ describe('recordPayment', () => {
 	});
 });
 
+describe('refundPayment', () => {
+	it('POSTs the amount, method, and note to the refund action and returns the Refund', async () => {
+		const refund = {
+			id: 'pay-3',
+			invoiceId: 'inv-1',
+			kind: 'refund',
+			amountCents: -5000,
+			method: 'check',
+			targetPaymentId: 'pay-1',
+			paidAt: '2026-01-02T00:00:00Z',
+			createdAt: '2026-01-02T00:00:00Z'
+		};
+		const fetcher = vi.fn().mockResolvedValue(jsonResponse(refund));
+
+		const result = await refundPayment(fetcher, 'practice-1', 'inv-1', 'pay-1', { amountCents: 5000, method: 'check' });
+
+		expect(fetcher).toHaveBeenCalledWith('/api/practices/practice-1/invoices/inv-1/payments/pay-1/refund', {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ amountCents: 5000, method: 'check' })
+		});
+		expect(result).toEqual(refund);
+	});
+
+	it('throws a RefusalError carrying the refused field', async () => {
+		const fetcher = vi.fn().mockResolvedValue(
+			jsonResponse(
+				{
+					code: 'invalid_argument',
+					message: 'amountCents must be greater than zero',
+					details: { amountCents: 'Enter an amount to return greater than $0.00' }
+				},
+				400
+			)
+		);
+
+		const rejection = refundPayment(fetcher, 'practice-1', 'inv-1', 'pay-1', { amountCents: 0 });
+
+		await expect(rejection).rejects.toBeInstanceOf(RefusalError);
+		await expect(rejection).rejects.toMatchObject({
+			details: { amountCents: 'Enter an amount to return greater than $0.00' }
+		});
+	});
+});
+
 describe('reversePayment', () => {
 	it('POSTs the reason to the reverse action and returns the reversal Payment', async () => {
 		const reversal = {
 			id: 'pay-2',
 			invoiceId: 'inv-1',
 			amountCents: -15_000,
-			reversedPaymentId: 'pay-1',
+			targetPaymentId: 'pay-1',
 			reason: 'logged against the wrong invoice',
 			paidAt: '2026-01-02T00:00:00Z',
 			createdAt: '2026-01-02T00:00:00Z'

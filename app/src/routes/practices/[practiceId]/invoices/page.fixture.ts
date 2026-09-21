@@ -67,6 +67,7 @@ export const data: PracticeInvoiceListData = {
 	outstandingCents: 450_000,
 	outstandingCount: 1,
 	paidCents: 250_000,
+	refundedCents: 125_050,
 	overdueCents: 450_000,
 	overdueCount: 1,
 	clientsCanPay: true,

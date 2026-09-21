@@ -122,6 +122,17 @@ func Mount(g *staffauth.GatedRouter, ir *idempotency.Router, client Client, enq 
 	// Stripe client call is threaded through here.
 	ir.ReplayableGated("POST /api/practices/{practiceId}/invoices/{invoiceId}/payments/{paymentId}/reverse", false, staffauth.OwnerAndAdmin, PostReversePaymentHandler())
 
+	// Returning money a Client paid (#1009): Owner and Admin only, the same
+	// gate recording a Payment carries -- #1009's own criterion is that
+	// the two match. Money-moving, so Replayable: a double-click must not
+	// return the same deposit twice. That matters more here than on the
+	// reversal above, because nothing else would catch it -- a Payment may
+	// carry several partial Refunds, so a second identical request is not
+	// refused on its face the way a second reversal is. The Stripe client
+	// is threaded through, unlike reversal, because a Refund against a
+	// Stripe-backed Invoice issues a credit note there first.
+	ir.ReplayableGated("POST /api/practices/{practiceId}/invoices/{invoiceId}/payments/{paymentId}/refund", false, staffauth.OwnerAndAdmin, PostRefundPaymentHandler(client))
+
 	// Void and write-off (#271) exist only so a by-hand Invoice -- which
 	// nothing else in the model ever moves out of 'open' -- is not stuck
 	// there forever on a mistyped amount. Both are state-guarded

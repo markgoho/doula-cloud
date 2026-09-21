@@ -328,7 +328,7 @@ browser redirect.
 **Connect.** The Client pays the Practice. An **Accounts v2** connected
 account per Practice carrying the `merchant` configuration, onboarded
 through a hosted v2 Account Link, with Invoices raised on-behalf-of using
-the `Stripe-Account` header. Three events matter, and they no longer
+the `Stripe-Account` header. Five events matter, and they do not all
 arrive the same way:
 
 | Event | Kind | Route |
@@ -336,6 +336,10 @@ arrive the same way:
 | `v2.core.account[configuration.merchant].capability_status_updated` | thin | `/api/stripe/account-webhook` |
 | `invoice.paid` | snapshot | `/api/stripe/connect-webhook` |
 | `invoice.payment_failed` | snapshot | `/api/stripe/connect-webhook` |
+| `credit_note.created` | snapshot | `/api/stripe/connect-webhook` |
+| `refund.created` | snapshot | `/api/stripe/connect-webhook` |
+
+The two Refund events (#1009) are both needed, and dropping either one is silent. A credit note a Practice issues from the Invoice page of her Stripe Dashboard fires `credit_note.created`; a refund she makes from the Payments page, against the charge, fires only `refund.created` and never creates a credit note. A card refund fires both, and `payments.refundReference` keys each on the same Refund object's id, so the second arrival finds the first's row. Verified in the Sandbox on #1009's issue comment.
 
 `account.updated` is no longer what we act on. A v2 account **does** still
 emit v1 snapshot `account.updated` on the connected account — an earlier
@@ -450,7 +454,7 @@ enforced at `wrap.go:44`; the origin list is resolved in
 | --- | --- | --- | --- | --- |
 | `/api/stripe/webhook` | `checkout.session.completed` | snapshot | `@self` | `we_1U7NT01rKoVEA79vnOcBFqtV`, enabled |
 | `/api/stripe/account-webhook` | `v2.core.account[configuration.merchant].capability_status_updated` | thin | `@self` | `ed_test_61VGn5QffuUmiONhX16VGl100QSQI7KSJpC2tKXrs4xU`, enabled |
-| `/api/stripe/connect-webhook` | `invoice.paid`, `invoice.payment_failed` | snapshot | `@accounts` | `we_1U7Ocp1rKoVEA79vT9AXETKU`, enabled |
+| `/api/stripe/connect-webhook` | `invoice.paid`, `invoice.payment_failed`, `credit_note.created`, `refund.created` | snapshot | `@accounts` | `we_1U7Ocp1rKoVEA79vT9AXETKU`, enabled |
 
 The two Connect rows are one feature, split by Stripe's own constraint: an
 event destination has one `event_payload`, and the account events are thin

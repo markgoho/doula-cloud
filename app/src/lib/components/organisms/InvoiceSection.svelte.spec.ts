@@ -2,7 +2,7 @@ import { page } from 'vitest/browser';
 import { describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import InvoiceSection from './InvoiceSection.svelte';
-import type { BillingMode, Invoice, PaymentMethod } from '#lib/invoice.js';
+import type { BillingMode, Invoice, PaymentMethod, RefundPaymentInput } from '#lib/invoice.js';
 import { RefusalError } from '#lib/formErrors.js';
 
 interface SetupOptions {
@@ -26,6 +26,7 @@ interface SetupOptions {
 	onVoidInvoice?: (invoiceId: string) => Promise<void>;
 	onWriteOffInvoice?: (invoiceId: string) => Promise<void>;
 	onReversePayment?: (invoiceId: string, paymentId: string, reason: string) => Promise<void>;
+	onRefundPayment?: (invoiceId: string, paymentId: string, input: RefundPaymentInput) => Promise<void>;
 }
 
 const paymentsSettingsHref = 'https://example.test/practices/practice-1/settings/payments';
@@ -39,6 +40,7 @@ const invoiceOpen: Invoice = {
 	createdAt: '2026-01-01T00:00:00Z',
 	dueAt: '2026-01-31T00:00:00Z',
 	reference: 'STRIPE-in_1',
+	refundedCents: 0,
 	billingMode: 'stripe'
 };
 
@@ -52,7 +54,17 @@ const invoicePaid: Invoice = {
 	paidAt: '2026-01-05T00:00:00Z',
 	dueAt: '2026-02-01T00:00:00Z',
 	reference: 'STRIPE-in_2',
+	refundedCents: 0,
 	billingMode: 'stripe'
+};
+
+// A paid Stripe-backed Invoice covered by a card Payment (#1009): Return
+// money is offered, Reverse payment never is (#945 refuses that rail).
+const invoicePaidByCard: Invoice = {
+	...invoicePaid,
+	id: 'inv-4',
+	activePaymentId: 'payment-card',
+	activePaymentKind: 'stripe'
 };
 
 // A paid by-hand Invoice with an active Payment (#945) -- the one state
@@ -69,8 +81,10 @@ const invoicePaidByHand: Invoice = {
 	paidAt: '2026-01-06T00:00:00Z',
 	dueAt: '2026-02-02T00:00:00Z',
 	reference: 'INV-0003',
+	refundedCents: 0,
 	billingMode: 'by_hand',
-	activePaymentId: 'payment-1'
+	activePaymentId: 'payment-1',
+	activePaymentKind: 'manual'
 };
 
 async function setup({
@@ -85,7 +99,8 @@ async function setup({
 	onRecordPayment = vi.fn().mockResolvedValue(undefined),
 	onVoidInvoice = vi.fn().mockResolvedValue(undefined),
 	onWriteOffInvoice = vi.fn().mockResolvedValue(undefined),
-	onReversePayment = vi.fn().mockResolvedValue(undefined)
+	onReversePayment = vi.fn().mockResolvedValue(undefined),
+	onRefundPayment = vi.fn().mockResolvedValue(undefined)
 }: SetupOptions = {}) {
 	await render(InvoiceSection, {
 		invoices,
@@ -100,9 +115,10 @@ async function setup({
 		onRecordPayment,
 		onVoidInvoice,
 		onWriteOffInvoice,
-		onReversePayment
+		onReversePayment,
+		onRefundPayment
 	});
-	return { onCreate, onRecordPayment, onVoidInvoice, onWriteOffInvoice, onReversePayment };
+	return { onCreate, onRecordPayment, onVoidInvoice, onWriteOffInvoice, onReversePayment, onRefundPayment };
 }
 
 describe('InvoiceSection.svelte', () => {
@@ -708,6 +724,87 @@ describe('InvoiceSection.svelte', () => {
 
 			expect(page.getByRole('heading', { name: /Record a payment/ }).all()).toHaveLength(0);
 			await expect.element(page.getByRole('heading', { name: /Reverse a payment/ })).toBeVisible();
+		});
+	});
+
+	describe('return money to the Client (#1009)', () => {
+		it('offers Return money on a paid Invoice on either rail, and Reverse payment only on the by-hand one', async () => {
+			await setup({ invoices: [invoicePaidByCard, invoicePaidByHand], isOwnerOrAdmin: true });
+
+			expect(page.getByRole('button', { name: 'Return money' }).all()).toHaveLength(2);
+			expect(page.getByRole('button', { name: 'Reverse payment' }).all()).toHaveLength(1);
+		});
+
+		it('hides Return money from anyone but Owner or Admin', async () => {
+			await setup({ invoices: [invoicePaidByCard, invoicePaidByHand], isOwnerOrAdmin: false });
+
+			expect(page.getByRole('button', { name: 'Return money' }).all()).toHaveLength(0);
+		});
+
+		it('says how much went back on a partly refunded Invoice, keeps it Paid, and stops offering Reverse payment', async () => {
+			const partlyRefunded: Invoice = { ...invoicePaidByHand, refundedCents: 10_000 };
+			await setup({ invoices: [partlyRefunded], isOwnerOrAdmin: true });
+
+			await expect.element(page.getByText(/\$100\.00 returned/)).toBeVisible();
+			await expect.element(page.getByText(/Paid/)).toBeVisible();
+			await expect.element(page.getByRole('button', { name: 'Return money' })).toBeVisible();
+			expect(page.getByRole('button', { name: 'Reverse payment' }).all()).toHaveLength(0);
+		});
+
+		it('stops offering Return money once everything has gone back', async () => {
+			const fullyRefunded: Invoice = { ...invoicePaidByHand, refundedCents: invoicePaidByHand.amountCents };
+			await setup({ invoices: [fullyRefunded], isOwnerOrAdmin: true });
+
+			await expect.element(page.getByText(/\$250\.00 returned/)).toBeVisible();
+			expect(page.getByRole('button', { name: 'Return money' }).all()).toHaveLength(0);
+		});
+
+		it('calls onRefundPayment with the Invoice id, Payment id, and what was entered, then closes the form', async () => {
+			const { onRefundPayment } = await setup({ invoices: [invoicePaidByHand], isOwnerOrAdmin: true });
+
+			await page.getByRole('button', { name: 'Return money' }).click();
+			await page.getByLabelText('Amount to return (USD)').fill('100');
+			await page.getByRole('button', { name: 'Continue' }).click();
+			await page.getByRole('button', { name: 'Confirm and return money' }).click();
+
+			expect(onRefundPayment).toHaveBeenCalledWith(invoicePaidByHand.id, invoicePaidByHand.activePaymentId, {
+				amountCents: 10_000,
+				method: 'check',
+				note: undefined
+			});
+			await expect.element(page.getByRole('region', { name: 'Return money to the Client' })).not.toBeInTheDocument();
+		});
+
+		it('keeps the form open and shows why when onRefundPayment throws', async () => {
+			const onRefundPayment = vi.fn().mockRejectedValue(new Error('That is more than is left to return on this Payment.'));
+			await setup({ invoices: [invoicePaidByHand], isOwnerOrAdmin: true, onRefundPayment });
+
+			await page.getByRole('button', { name: 'Return money' }).click();
+			await page.getByLabelText('Amount to return (USD)').fill('100');
+			await page.getByRole('button', { name: 'Continue' }).click();
+			await page.getByRole('button', { name: 'Confirm and return money' }).click();
+
+			await expect.element(page.getByText('That is more than is left to return on this Payment.')).toBeVisible();
+		});
+
+		it('keeps one form open at a time across Return money, Reverse payment, and Record payment', async () => {
+			const openByHand: Invoice = { ...invoiceOpen, id: 'inv-5', billingMode: 'by_hand', reference: 'INV-0005' };
+			await setup({ invoices: [openByHand, invoicePaidByHand], isOwnerOrAdmin: true });
+			const refundForm = page.getByRole('region', { name: 'Return money to the Client' });
+
+			await page.getByRole('button', { name: 'Return money' }).click();
+			await expect.element(refundForm).toBeVisible();
+
+			await page.getByRole('button', { name: 'Reverse payment' }).click();
+			await expect.element(refundForm).not.toBeInTheDocument();
+
+			await page.getByRole('button', { name: 'Return money' }).click();
+			await page.getByRole('button', { name: 'Record payment' }).click();
+			await expect.element(refundForm).not.toBeInTheDocument();
+
+			await page.getByRole('button', { name: 'Return money' }).click();
+			await page.getByRole('button', { name: 'Cancel' }).click();
+			await expect.element(refundForm).not.toBeInTheDocument();
 		});
 	});
 });
