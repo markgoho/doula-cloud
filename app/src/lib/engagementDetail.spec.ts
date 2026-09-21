@@ -4,6 +4,7 @@ import { jsonResponse } from './testResponse.js';
 import {
 	birthOutcomeLabel,
 	birthOutcomeURL,
+	changeEngagementKind,
 	changeEngagementStatus,
 	createVisit,
 	downloadAttachment,
@@ -238,6 +239,29 @@ describe('changeEngagementStatus', () => {
 
 		await expect(changeEngagementStatus(fetcher, reference, 'completed')).rejects.toThrow(
 			'endingReason is required'
+		);
+	});
+});
+
+describe('changeEngagementKind', () => {
+	it('puts the target kind', async () => {
+		const fetcher = vi.fn().mockResolvedValue(jsonResponse({ engagementId: 'engagement-1', kind: 'postpartum' }));
+
+		const result = await changeEngagementKind(fetcher, reference, 'postpartum');
+
+		expect(fetcher).toHaveBeenCalledWith(`${base}/kind`, {
+			method: 'PUT',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ kind: 'postpartum' })
+		});
+		expect(result).toEqual({ engagementId: 'engagement-1', kind: 'postpartum' });
+	});
+
+	it('throws a refusal', async () => {
+		const fetcher = vi.fn().mockResolvedValue(jsonResponse('only a Practice Owner, Admin or Doula can do that', 403));
+
+		await expect(changeEngagementKind(fetcher, reference, 'postpartum')).rejects.toThrow(
+			'only a Practice Owner, Admin or Doula can do that'
 		);
 	});
 });

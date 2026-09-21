@@ -7,6 +7,7 @@
 	import { FormSubmission, orThrownErrors } from '#lib/formSubmission.svelte.js';
 	import { triggerBlobDownload } from '#lib/blobDownload.js';
 	import {
+		changeEngagementKind,
 		changeEngagementStatus,
 		createVisit,
 		downloadAttachment,
@@ -27,6 +28,7 @@
 		type BirthOutcomeRequest,
 		type Visit
 	} from '#lib/engagementDetail.js';
+	import { kindLabel } from '#lib/engagementRequest.js';
 	import {
 		assigneeBlock,
 		loadVisitAssigneesOrNone,
@@ -125,6 +127,9 @@
 		clientName: string;
 		status: string;
 		createdAt: string;
+		// #874: what the Practice sold, 'birth' or 'postpartum' -- ADR-0015,
+		// mutable in both directions, never Client-facing as a word.
+		kind: string;
 		dueDate?: string;
 		statusMoves: string[];
 		// #293/#943: ADR-0015's birth outcome and the date the pregnancy
@@ -244,6 +249,32 @@
 			completeReasonValue = '';
 			completeNoteValue = '';
 		}, orThrownErrors(completeFieldIds));
+	}
+
+	// #874: what the Practice sold, overlaid on the load-time read once a
+	// change succeeds -- the same statusOverride shape above. ADR-0015:
+	// mutable in both directions, so this is a bare command (no form asks
+	// anything), the same shape the status section's own reopen/activate
+	// moves use.
+	const kindChange = new SectionState<void>(undefined);
+	let kindOverride = $state<string | undefined>();
+	let kindChangedMessage = $state('');
+	const displayKind = $derived(kindOverride ?? detail?.kind ?? '');
+	const otherKind = $derived(displayKind === 'birth' ? 'postpartum' : 'birth');
+	// The app-side mirror of refuseFactWrite, the identical predicate
+	// canRecordBirthOutcome below already uses for the same role table.
+	const canChangeKind = $derived(
+		!isAmbientContractor(data.session) && (isPracticeOwnerOrAdmin || isDoula(data.session))
+	);
+
+	async function handleChangeKind() {
+		kindChangedMessage = '';
+		const target = otherKind;
+		await kindChange.mutate(async () => {
+			const result = await changeEngagementKind(apiFetchWithSession, reference, target);
+			kindOverride = result.kind;
+			kindChangedMessage = `Now set to ${kindLabel(result.kind)}.`;
+		}, 'Failed to change what the Practice sold');
 	}
 
 	// #943: what happened to the pregnancy, overlaid on the load-time read
@@ -577,12 +608,17 @@
 	function summaryItems(
 		d: Detail,
 		status: string,
+		kind: string,
 		portalState: PortalInviteSubject,
 		hasClientEmail: boolean
 	): { label: string; value: string }[] {
 		const items = [
 			{ label: 'Client', value: d.clientName },
 			{ label: 'Status', value: status },
+			// #874: what the Practice sold, in the Staff-only word ADR-0015
+			// gives it -- this row and the Kind section's own control are the
+			// one place the Engagement hub prints 'Birth'/'Postpartum' at all.
+			{ label: 'What the Practice sold', value: kindLabel(kind) },
 			{ label: 'Portal invite', value: portalInviteSummaryText(portalState, hasClientEmail) },
 			{ label: 'Created', value: new Date(d.createdAt).toLocaleDateString() }
 		];
@@ -1154,7 +1190,9 @@
 
 {#snippet summary()}
 	<stack-l space="var(--space-4)">
-		<DescriptionList items={summaryItems(detail!, displayStatus, clientPortalState, hasClientEmailOnFile)} />
+		<DescriptionList
+			items={summaryItems(detail!, displayStatus, displayKind, clientPortalState, hasClientEmailOnFile)}
+		/>
 
 		<!--
 			#253: exactly the moves ADR-0015's role table admits from the
@@ -1179,6 +1217,31 @@
 		{#if directMove.error}
 			<Notice variant="error" message={directMove.error} />
 		{/if}
+
+		<!--
+			#874: ADR-0015's kind is mutable in both directions, and there is
+			only ever one other value to offer -- so this is a single named
+			button, the same bare-command shape the reopen/activate moves
+			above use, not a form. canChangeKind mirrors refuseFactWrite; the
+			endpoint refuses her whether or not the control is drawn.
+		-->
+		{#if canChangeKind}
+			<cluster-l space="var(--space-3)">
+				<Button
+					label={`Change to ${kindLabel(otherKind)}`}
+					size="sm"
+					variant="secondary"
+					loading={kindChange.isBusy}
+					onClick={handleChangeKind}
+				/>
+			</cluster-l>
+		{/if}
+		{#if kindChange.error}
+			<Notice variant="error" message={kindChange.error} />
+		{:else if kindChangedMessage}
+			<Notice variant="status" message={kindChangedMessage} />
+		{/if}
+
 		{#if isCompleteFormShown}
 			<StackedForm onSubmit={handleCompleteSubmit}>
 				{#if completeSubmission.errors.length > 0}

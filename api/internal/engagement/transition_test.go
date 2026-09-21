@@ -168,7 +168,7 @@ func TestTransitionHandler_LegalMovesByRole(t *testing.T) {
 		{ownerRole, []string{ownerRole}, employeeType},
 		{adminRole, []string{adminRole}, employeeType},
 		{employeeDoulaKind, []string{doulaRole}, employeeType},
-		{"contractor doula", []string{doulaRole}, contractorType},
+		{contractorDoulaKind, []string{doulaRole}, contractorType},
 	}
 
 	for _, move := range moves {

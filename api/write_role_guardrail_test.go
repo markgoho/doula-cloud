@@ -47,6 +47,7 @@ var roleFreeWriteRoutes = map[string]string{
 
 	"PATCH /api/practices/{practiceId}/engagements/{engagementId}/status":      "ADR-0015's six-move table decides per move who may make it (engagement.TransitionHandler: an Owner or Admin for a reopen, an Owner or Admin or Doula for the rest), so the rule is move-dependent and no single mount role list expresses it",
 	"PUT /api/practices/{practiceId}/engagements/{engagementId}/birth-outcome": "ADR-0015's role table, narrowed again once the Engagement is frozen (outcome.go's frozen-and-not-Owner branch): state-dependent, so no single mount role list expresses it",
+	"PUT /api/practices/{practiceId}/engagements/{engagementId}/kind":          "ADR-0015's role table (engagement.refuseFactWrite): an Owner, an Admin or an employee Doula, but not a contractor Doula who also holds the doula role -- a role-and-employment-type rule a flat mount role list cannot express",
 
 	"POST /api/practices/{practiceId}/clients":                                  "any Staff member but a contractor Doula, refused in-handler through staffauth.Reader (client.Mount): a contractor narrowing, not one of ADR-0008's role seats",
 	"POST /api/practices/{practiceId}/clients/{clientId}/engagement-requests":   "any Staff member but a contractor Doula (engagementrequest.Mount), and enforced independently by engagement_requests_insert's own RLS policy: a contractor narrowing, not a role seat",
