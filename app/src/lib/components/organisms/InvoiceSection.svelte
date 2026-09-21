@@ -46,14 +46,15 @@
 		type RefundPaymentInput
 	} from '#lib/invoice.js';
 	import RefundPaymentForm from '#lib/components/organisms/RefundPaymentForm.svelte';
-	import { RefusalError } from '#lib/formErrors.js';
+	import { RefusalError, type FormError } from '#lib/formErrors.js';
 	import Button from '#lib/components/atoms/Button.svelte';
 	import Link from '#lib/components/atoms/Link.svelte';
 	import Notice from '#lib/components/atoms/Notice.svelte';
 	import TextInput from '#lib/components/atoms/TextInput.svelte';
 	import Textarea from '#lib/components/atoms/Textarea.svelte';
+	import ErrorSummary from '#lib/components/molecules/ErrorSummary.svelte';
 	import LabeledField from '#lib/components/molecules/LabeledField.svelte';
-	import RadioGroup from '#lib/components/molecules/RadioGroup.svelte';
+	import RadioGroup, { radioFieldId } from '#lib/components/molecules/RadioGroup.svelte';
 	import StackedForm from '#lib/components/molecules/StackedForm.svelte';
 	import DescriptionList from '#lib/components/molecules/DescriptionList.svelte';
 
@@ -149,13 +150,38 @@
 	// paymentError is the untargeted GOV.UK summary fallback (#1038): a
 	// refusal naming no field of this form -- a Stripe-side failure, an
 	// Invoice no longer open. The three below carry a refusal that does
-	// name a field, read into the LabeledField/RadioGroup it concerns
-	// rather than only this detached paragraph.
+	// name a field, read into the LabeledField/RadioGroup it concerns and
+	// into the summary (#1228) alike -- one string, both places.
 	let paymentError = $state('');
 	let paymentMethodError = $state('');
 	let paymentNoteError = $state('');
 	let paymentDateError = $state('');
 	let isRecordingPayment = $state(false);
+
+	const paymentMethodName = 'record-payment-method';
+	// The first option's own id, the same trick `endingReasonFieldId`
+	// (above `completeSubmission`, on the Engagement detail page) uses: a
+	// radio group's refusal belongs to the question, not to whichever
+	// option happens to be checked, so the summary link always lands on
+	// the first one. Built through `radioFieldId` rather than a second
+	// hand-rolled copy of RadioGroup's own `${name}-${value}` template.
+	const paymentMethodFieldId = radioFieldId(paymentMethodName, paymentMethodOptions[0]!.value);
+	const paymentNoteFieldId = 'record-payment-note';
+	const paymentDateFieldId = 'record-payment-date';
+
+	// #1228: assembled from the same four strings the fields already show,
+	// so the summary and the field-level message cannot drift. Built only
+	// while the form step is on screen -- the review step shows a
+	// DescriptionList, not these controls, so nothing here could be linked
+	// to during it.
+	const paymentFormErrors = $derived<FormError[]>(
+		[
+			paymentDateError ? { message: paymentDateError, targetId: paymentDateFieldId } : undefined,
+			paymentMethodError ? { message: paymentMethodError, targetId: paymentMethodFieldId } : undefined,
+			paymentNoteError ? { message: paymentNoteError, targetId: paymentNoteFieldId } : undefined,
+			paymentError ? { message: paymentError } : undefined
+		].filter((entry) => entry !== undefined)
+	);
 
 	function resetPaymentErrors() {
 		paymentError = '';
@@ -208,18 +234,23 @@
 	 * validation the BFF itself enforces -- so a Staff member sees the
 	 * refusal before, not after, typing the whole thing twice. Each check
 	 * targets the field it is about (#1038), the same as a refusal read
-	 * back off the BFF. */
+	 * back off the BFF.
+	 *
+	 * The empty-date check used to be `required`'s job -- #1228 adopted
+	 * `StackedForm`, whose `novalidate` (ADR-0021) took that browser
+	 * refusal away, so this function covers emptiness now as well as the
+	 * semantic checks it already made. */
 	function reviewPayment(event: SubmitEvent) {
 		event.preventDefault();
 		resetPaymentErrors();
+		if (paymentDate.trim() === '') {
+			paymentDateError = 'Enter the date the payment was received';
+			return;
+		}
 		if (paymentMethod === 'other' && paymentNote.trim() === '') {
 			paymentNoteError = 'Enter a note for "Other"';
 			return;
 		}
-		// No empty-date check: the date TextInput's own `required` already
-		// blocks an empty submission from ever reaching this handler --
-		// `required` covers emptiness, this function covers the semantic
-		// checks beyond it.
 		if (paymentDate > todayIsoDate()) {
 			paymentDateError = 'The date cannot be in the future';
 			return;
@@ -488,39 +519,48 @@
 	{#if invoice}
 		<section aria-label="Record a payment">
 			<h3>Record a payment of {formatAmount(invoice.amountCents)}</h3>
+			<!--
+				Above the step switch, not inside the form branch: a refusal
+				that names no field (applyPaymentRefusal's untargeted
+				paymentError) leaves paymentStep at 'review', where the form
+				below is not even rendered, and this is still where it has to
+				show (#1228). One region for the whole section, matching
+				ErrorSummary's own "never two alert regions on one form" rule.
+			-->
+			{#if paymentFormErrors.length > 0}
+				<ErrorSummary errors={paymentFormErrors} />
+			{/if}
 			{#if paymentStep === 'form'}
-				<!-- stacked-form:ignore: #1108 -- the "Date received" box is `required`, and the comment on `reviewPayment` above says so in as many words: it covers emptiness so that function only has to cover the semantic checks. `StackedForm` sets `novalidate` (ADR-0021), so adopting it here would take that refusal away and put nothing in its place; #1228 is where this form gets a refusal of its own and then adopts the molecule. The stack below is `StackedForm`'s own arrangement, written inline meanwhile. -->
-				<form onsubmit={reviewPayment}>
-					<stack-l space="var(--space-5)">
-						<RadioGroup
-							legend="Method"
-							options={paymentMethodOptions}
-							value={paymentMethod}
-							onChange={(value) => (paymentMethod = value)}
-							error={paymentMethodError || undefined}
-						/>
-						<LabeledField label="Note (optional)" error={paymentNoteError || undefined}>
-							{#snippet children({ id, describedBy, invalid })}
-								<Textarea {id} {describedBy} {invalid} value={paymentNote} onInput={(value) => (paymentNote = value)} />
-							{/snippet}
-						</LabeledField>
-						<LabeledField label="Date received" error={paymentDateError || undefined}>
-							{#snippet children({ id, describedBy, invalid })}
-								<TextInput
-									{id}
-									{describedBy}
-									{invalid}
-									type="date"
-									value={paymentDate}
-									onInput={(value) => (paymentDate = value)}
-									required
-								/>
-							{/snippet}
-						</LabeledField>
-						<Button label="Continue" type="submit" />
-						<Button label="Cancel" variant="secondary" onClick={cancelRecordingPayment} />
-					</stack-l>
-				</form>
+				<StackedForm onSubmit={reviewPayment}>
+					<RadioGroup
+						legend="Method"
+						name={paymentMethodName}
+						options={paymentMethodOptions}
+						value={paymentMethod}
+						onChange={(value) => (paymentMethod = value)}
+						error={paymentMethodError || undefined}
+					/>
+					<LabeledField id={paymentNoteFieldId} label="Note (optional)" error={paymentNoteError || undefined}>
+						{#snippet children({ id, describedBy, invalid })}
+							<Textarea {id} {describedBy} {invalid} value={paymentNote} onInput={(value) => (paymentNote = value)} />
+						{/snippet}
+					</LabeledField>
+					<LabeledField id={paymentDateFieldId} label="Date received" error={paymentDateError || undefined}>
+						{#snippet children({ id, describedBy, invalid })}
+							<TextInput
+								{id}
+								{describedBy}
+								{invalid}
+								type="date"
+								value={paymentDate}
+								onInput={(value) => (paymentDate = value)}
+								required
+							/>
+						{/snippet}
+					</LabeledField>
+					<Button label="Continue" type="submit" />
+					<Button label="Cancel" variant="secondary" onClick={cancelRecordingPayment} />
+				</StackedForm>
 			{:else}
 				<DescriptionList
 					items={[
@@ -539,9 +579,6 @@
 				/>
 				<Button label="Confirm and record" onClick={confirmPayment} loading={isRecordingPayment} />
 				<Button label="Change" variant="secondary" onClick={() => (paymentStep = 'form')} />
-			{/if}
-			{#if paymentError}
-				<p role="alert">{paymentError}</p>
 			{/if}
 		</section>
 	{/if}

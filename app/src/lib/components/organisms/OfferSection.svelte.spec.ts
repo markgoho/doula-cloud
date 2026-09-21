@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import OfferSection from './OfferSection.svelte';
 import type { NewOffer, Offer } from '#lib/offer.js';
+import { SERVICE_PROBLEM } from '#lib/formErrors.js';
 
 const contractor = { staffId: 'staff-1', name: 'Renata Alvarez', employmentType: 'contractor' };
 const employee = { staffId: 'staff-2', name: 'Dana Okafor', employmentType: 'employee' };
@@ -212,7 +213,9 @@ describe('OfferSection.svelte', () => {
 		await page.getByRole('button', { name: 'Send Offer' }).click();
 
 		expect(onCreate).not.toHaveBeenCalled();
-		await expect.element(page.getByText('Enter a fee greater than zero')).toBeVisible();
+		// .first() -- #1228's ErrorSummary repeats the message as a link,
+		// so it now appears twice on screen (the summary and the field).
+		await expect.element(page.getByText('Enter a fee greater than zero').first()).toBeVisible();
 	});
 
 	it('clears the typed fields once the Offer is away', async () => {
@@ -240,7 +243,7 @@ describe('OfferSection.svelte', () => {
 		await expect.element(page.getByText('that address already holds a membership')).toBeVisible();
 	});
 
-	it('falls back to a generic message when onCreate rejects with a non-Error', async () => {
+	it('falls back to the service problem message when onCreate rejects with a non-Error', async () => {
 		const onCreate = vi.fn().mockRejectedValue('boom');
 		await setup({ onCreate });
 
@@ -249,6 +252,84 @@ describe('OfferSection.svelte', () => {
 		await fillFacts();
 		await page.getByRole('button', { name: 'Send Offer' }).click();
 
-		await expect.element(page.getByText('Failed to send offer')).toBeVisible();
+		await expect.element(page.getByText(SERVICE_PROBLEM)).toBeVisible();
+	});
+
+	// #1228: novalidate takes StackedForm's browser refusal away, so this
+	// form's own required check is what stops an empty submit now. The
+	// Client's first initial is pre-filled from her name (#1228's setup
+	// seeds it), so it carries no refusal of its own here.
+	it('refuses an empty submit through the summary, without calling onCreate', async () => {
+		const { onCreate } = await setup();
+
+		await page.getByRole('button', { name: 'Send Offer' }).click();
+
+		expect(onCreate).not.toHaveBeenCalled();
+		await expect.element(page.getByText('There is a problem')).toBeVisible();
+		await expect.element(page.getByRole('link', { name: 'Select a Doula' })).toBeVisible();
+		await expect.element(page.getByRole('link', { name: 'Enter the general area' })).toBeVisible();
+		await expect.element(page.getByRole('link', { name: 'Enter the due date' })).toBeVisible();
+	});
+
+	it('refuses an emptied Client first initial', async () => {
+		const { onCreate } = await setup();
+
+		await page.getByLabelText("Client's first initial").fill('');
+		await page.getByLabelText('General area').fill('North side');
+		await page.getByLabelText('Due date').fill('2027-01-04');
+		await page.getByLabelText('Renata Alvarez').click();
+		await page.getByLabelText('Fee (USD)').fill('450');
+		await page.getByRole('button', { name: 'Send Offer' }).click();
+
+		expect(onCreate).not.toHaveBeenCalled();
+		await expect.element(page.getByText("Enter the Client's first initial").first()).toBeVisible();
+	});
+
+	it('refuses an unpicked Doula, which carried no browser check of its own', async () => {
+		const { onCreate } = await setup();
+
+		await fillFacts();
+		await page.getByRole('button', { name: 'Send Offer' }).click();
+
+		expect(onCreate).not.toHaveBeenCalled();
+		await expect.element(page.getByText('Select a Doula').first()).toBeVisible();
+	});
+
+	it('refuses an empty email address for the "someone new" target', async () => {
+		const { onCreate } = await setup();
+
+		await page.getByLabelText('Someone new, by email').click();
+		await page.getByLabelText('Fee (USD)').fill('450');
+		await fillFacts();
+		await page.getByRole('button', { name: 'Send Offer' }).click();
+
+		expect(onCreate).not.toHaveBeenCalled();
+		await expect.element(page.getByText('Enter an email address').first()).toBeVisible();
+	});
+
+	it('refuses a malformed email address, which lost its type="email" browser check', async () => {
+		const { onCreate } = await setup();
+
+		await page.getByLabelText('Someone new, by email').click();
+		await page.getByLabelText('Email address').fill('not-an-email');
+		await page.getByLabelText('Fee (USD)').fill('450');
+		await fillFacts();
+		await page.getByRole('button', { name: 'Send Offer' }).click();
+
+		expect(onCreate).not.toHaveBeenCalled();
+		await expect
+			.element(page.getByText('Enter an email address in the correct format, like name@example.com').first())
+			.toBeVisible();
+	});
+
+	it('refuses an empty fee for a contractor Doula', async () => {
+		const { onCreate } = await setup();
+
+		await page.getByLabelText('Renata Alvarez').click();
+		await fillFacts();
+		await page.getByRole('button', { name: 'Send Offer' }).click();
+
+		expect(onCreate).not.toHaveBeenCalled();
+		await expect.element(page.getByText('Enter a fee').first()).toBeVisible();
 	});
 });

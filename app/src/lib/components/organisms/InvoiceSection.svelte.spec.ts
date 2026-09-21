@@ -371,7 +371,10 @@ describe('InvoiceSection.svelte', () => {
 			await page.getByLabelText('Date received').fill('2026-01-02');
 			await page.getByRole('button', { name: 'Continue' }).click();
 
-			await expect.element(page.getByText('Enter a note for "Other"')).toBeVisible();
+			// .first() -- #1228's ErrorSummary repeats every message as a
+			// link, so the wording now appears twice on screen, same as the
+			// established pattern elsewhere in this suite (fillFacts, etc).
+			await expect.element(page.getByText('Enter a note for "Other"').first()).toBeVisible();
 			await expect.element(page.getByLabelText('Note (optional)')).toHaveAttribute('aria-invalid', 'true');
 			await expect.element(page.getByLabelText('Date received')).toHaveAttribute('aria-invalid', 'false');
 		});
@@ -387,7 +390,24 @@ describe('InvoiceSection.svelte', () => {
 			await page.getByLabelText('Date received').fill(future.toISOString().slice(0, 10));
 			await page.getByRole('button', { name: 'Continue' }).click();
 
-			await expect.element(page.getByText('The date cannot be in the future')).toBeVisible();
+			await expect.element(page.getByText('The date cannot be in the future').first()).toBeVisible();
+			await expect.element(page.getByLabelText('Date received')).toHaveAttribute('aria-invalid', 'true');
+		});
+
+		// #1228: `Date received`'s own `required` was the only refusal this
+		// field had; StackedForm's `novalidate` (ADR-0021) took it away, so
+		// `reviewPayment` covers emptiness itself now. The field defaults
+		// to today's date (todayIsoDate()), so this clears it first --
+		// otherwise there is nothing empty to refuse.
+		it('rejects an empty date, wired into the Date received field, without calling onRecordPayment', async () => {
+			const { onRecordPayment } = await setup({ invoices: [invoiceOpen], isOwnerOrAdmin: true });
+
+			await page.getByRole('button', { name: 'Record payment' }).click();
+			await page.getByLabelText('Date received').fill('');
+			await page.getByRole('button', { name: 'Continue' }).click();
+
+			expect(onRecordPayment).not.toHaveBeenCalled();
+			await expect.element(page.getByText('Enter the date the payment was received').first()).toBeVisible();
 			await expect.element(page.getByLabelText('Date received')).toHaveAttribute('aria-invalid', 'true');
 		});
 
@@ -437,7 +457,7 @@ describe('InvoiceSection.svelte', () => {
 			await page.getByRole('button', { name: 'Continue' }).click();
 			await page.getByRole('button', { name: 'Confirm and record' }).click();
 
-			await expect.element(page.getByText('Enter a note for "Other"')).toBeVisible();
+			await expect.element(page.getByText('Enter a note for "Other"').first()).toBeVisible();
 			await expect.element(page.getByLabelText('Note (optional)')).toHaveAttribute('aria-invalid', 'true');
 		});
 
@@ -457,7 +477,7 @@ describe('InvoiceSection.svelte', () => {
 			await page.getByRole('button', { name: 'Confirm and record' }).click();
 
 			await expect
-				.element(page.getByText('Enter the date received as a real date, like 2027-04-23'))
+				.element(page.getByText('Enter the date received as a real date, like 2027-04-23').first())
 				.toBeVisible();
 			await expect.element(page.getByLabelText('Date received')).toHaveAttribute('aria-invalid', 'true');
 		});
@@ -475,7 +495,7 @@ describe('InvoiceSection.svelte', () => {
 			await page.getByRole('button', { name: 'Continue' }).click();
 			await page.getByRole('button', { name: 'Confirm and record' }).click();
 
-			await expect.element(page.getByText('Select a method from the list')).toBeVisible();
+			await expect.element(page.getByText('Select a method from the list').first()).toBeVisible();
 		});
 
 		// #1038's second shape: a refusal naming no field of this form --

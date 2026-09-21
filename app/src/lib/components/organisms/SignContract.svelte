@@ -3,6 +3,10 @@
 	import TextInput from '#lib/components/atoms/TextInput.svelte';
 	import Checkbox from '#lib/components/atoms/Checkbox.svelte';
 	import Button from '#lib/components/atoms/Button.svelte';
+	import ErrorSummary from '#lib/components/molecules/ErrorSummary.svelte';
+	import StackedForm from '#lib/components/molecules/StackedForm.svelte';
+	import { FormSubmission, orThrownMessage } from '#lib/formSubmission.svelte.js';
+	import type { FormError } from '#lib/formErrors.js';
 
 	let {
 		onSign
@@ -13,22 +17,35 @@
 	let isDisclosureAffirmed = $state(false);
 	let fullLegalName = $state('');
 	let isAttestation = $state(false);
-	let error = $state('');
-	let isSubmitting = $state(false);
 
-	const canSubmit = $derived(fullLegalName.trim() !== '' && isAttestation && !isSubmitting);
+	// #1228: both controls carried `required`, the only refusal this form
+	// had -- StackedForm's `novalidate` (ADR-0021) takes that away, so the
+	// same two checks that used to gate the Sign button (`canSubmit`) move
+	// here instead. Refusing on submit rather than disabling the button
+	// keeps the same pattern every other form in the app uses: a control
+	// that is always reachable, and a summary that says why it refused.
+	const fullLegalNameFieldId = 'sign-contract-full-legal-name';
+	const attestationFieldId = 'sign-contract-attestation';
+
+	const signSubmission = new FormSubmission();
 
 	async function handleSubmit(event: SubmitEvent) {
 		event.preventDefault();
-		error = '';
-		isSubmitting = true;
-		try {
+		await signSubmission.run(async () => {
+			const errors: FormError[] = [];
+			if (fullLegalName.trim() === '') {
+				errors.push({ message: 'Enter your full legal name', targetId: fullLegalNameFieldId });
+			}
+			if (!isAttestation) {
+				errors.push({
+					message: 'Confirm that you have read the Contract and are signing it electronically',
+					targetId: attestationFieldId
+				});
+			}
+			if (errors.length > 0) return errors;
+
 			await onSign(fullLegalName.trim(), isAttestation);
-		} catch (error_) {
-			error = error_ instanceof Error ? error_.message : 'Failed to sign';
-		} finally {
-			isSubmitting = false;
-		}
+		}, orThrownMessage);
 	}
 </script>
 
@@ -47,28 +64,34 @@
 		/>
 	</section>
 {:else}
-	<!-- stacked-form:ignore: #1108 -- both controls are `required`, and that is the only thing standing between an unsigned name or an unticked attestation and the signing endpoint. `StackedForm` sets `novalidate` (ADR-0021), so adopting it here would take that refusal away and put nothing in its place; #1228 is where this form gets a refusal of its own and then adopts the molecule. The stack below is `StackedForm`'s own arrangement, written inline meanwhile. -->
-	<form onsubmit={handleSubmit}>
-		<stack-l space="var(--space-5)">
-			<LabeledField label="Full legal name">
-				{#snippet children(control)}
-					<TextInput
-						value={fullLegalName}
-						onInput={(value) => (fullLegalName = value)}
-						required
-						{...control}
-					/>
-				{/snippet}
-			</LabeledField>
-			<LabeledField label="I have read this Contract and I am signing it electronically" orientation="inline">
-				{#snippet children(control)}
-					<Checkbox checked={isAttestation} onChange={(checked) => (isAttestation = checked)} required {...control} />
-				{/snippet}
-			</LabeledField>
-			{#if error}
-				<p role="alert">{error}</p>
-			{/if}
-			<Button label="Sign" type="submit" disabled={!canSubmit} />
-		</stack-l>
-	</form>
+	<StackedForm onSubmit={handleSubmit}>
+		{#if signSubmission.errors.length > 0}
+			<ErrorSummary errors={signSubmission.errors} />
+		{/if}
+		<LabeledField
+			id={fullLegalNameFieldId}
+			label="Full legal name"
+			error={signSubmission.errorFor(fullLegalNameFieldId)}
+		>
+			{#snippet children(control)}
+				<TextInput
+					value={fullLegalName}
+					onInput={(value) => (fullLegalName = value)}
+					required
+					{...control}
+				/>
+			{/snippet}
+		</LabeledField>
+		<LabeledField
+			id={attestationFieldId}
+			label="I have read this Contract and I am signing it electronically"
+			orientation="inline"
+			error={signSubmission.errorFor(attestationFieldId)}
+		>
+			{#snippet children(control)}
+				<Checkbox checked={isAttestation} onChange={(checked) => (isAttestation = checked)} required {...control} />
+			{/snippet}
+		</LabeledField>
+		<Button label="Sign" type="submit" loading={signSubmission.isSubmitting} />
+	</StackedForm>
 {/if}

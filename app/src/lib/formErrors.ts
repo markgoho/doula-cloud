@@ -455,3 +455,24 @@ function authErrorCode(cause: unknown): string {
 	}
 	return '';
 }
+
+/*
+ * The format half of an email check, for a caller that has already ruled
+ * out emptiness (whose own message names the field in its own words, so
+ * it is not this function's to write). undefined when `address` has an
+ * "@" with something on each side of it -- the same loose check the BFF
+ * itself would 400 on, not a full RFC 5322 parse.
+ *
+ * Shared rather than written per screen (#1228): the sign-in address
+ * screen and Send an Offer both lost their `type="email"` browser check
+ * once they adopted `StackedForm`'s `novalidate` (ADR-0021), and a second
+ * hand-rolled version of this same "does it have an @" test would have
+ * been the second place the wording could drift from the first.
+ */
+export function emailFormatError(address: string): string | undefined {
+	const at = address.indexOf('@');
+	if (at <= 0 || at >= address.length - 1) {
+		return 'Enter an email address in the correct format, like name@example.com';
+	}
+	return undefined;
+}

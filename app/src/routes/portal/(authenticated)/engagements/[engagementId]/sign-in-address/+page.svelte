@@ -25,7 +25,7 @@
 	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
 	import { apiErrorMessage, apiFetch, apiFetchWithSession } from '#lib/api.js';
-	import { refusalErrors, SERVICE_PROBLEM } from '#lib/formErrors.js';
+	import { emailFormatError, refusalErrors, SERVICE_PROBLEM } from '#lib/formErrors.js';
 	import { FormSubmission, orServiceProblem } from '#lib/formSubmission.svelte.js';
 	import { portalPushSubscriptionsPath, unregisterPushSubscription } from '#lib/pushRegistration.js';
 	import { bestEffort, UNREGISTER_TIMEOUT_MS } from '#lib/signOut.js';
@@ -83,11 +83,7 @@
 	// server).
 	function localError(address: string): string {
 		if (address.trim() === '') return 'Enter your new sign-in address';
-		const at = address.trim().indexOf('@');
-		if (at <= 0 || at >= address.trim().length - 1) {
-			return 'Enter an email address in the correct format, like name@example.com';
-		}
-		return '';
+		return emailFormatError(address.trim()) ?? '';
 	}
 
 	async function handleSubmit(event: SubmitEvent) {

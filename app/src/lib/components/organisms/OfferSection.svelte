@@ -16,13 +16,17 @@
 	 */
 	import { untrack } from 'svelte';
 	import { formatFee, isOpen, offerStateLabels, offerStateVariants, type NewOffer, type Offer } from '#lib/offer.js';
+	import { emailFormatError, type FormError } from '#lib/formErrors.js';
+	import { FormSubmission, orThrownMessage } from '#lib/formSubmission.svelte.js';
 	import Badge from '#lib/components/atoms/Badge.svelte';
 	import Button from '#lib/components/atoms/Button.svelte';
 	import Notice from '#lib/components/atoms/Notice.svelte';
 	import Textarea from '#lib/components/atoms/Textarea.svelte';
 	import TextInput from '#lib/components/atoms/TextInput.svelte';
+	import ErrorSummary from '#lib/components/molecules/ErrorSummary.svelte';
 	import LabeledField from '#lib/components/molecules/LabeledField.svelte';
-	import RadioGroup from '#lib/components/molecules/RadioGroup.svelte';
+	import RadioGroup, { radioFieldId } from '#lib/components/molecules/RadioGroup.svelte';
+	import StackedForm from '#lib/components/molecules/StackedForm.svelte';
 
 	let {
 		offers,
@@ -56,8 +60,6 @@
 	let initial = $state(untrack(() => clientName).slice(0, 1));
 	let clientArea = $state('');
 	let dueDate = $state('');
-	let isSending = $state(false);
-	let createError = $state('');
 	let withdrawError = $state('');
 
 	// Which employment type the fee rule is read against: her own
@@ -68,43 +70,80 @@
 	);
 	const isFeeRequired = $derived(selectedType === 'contractor');
 
+	// #1228: five of this form's controls carried `required`, the only
+	// refusal it had -- StackedForm's `novalidate` (ADR-0021) takes that
+	// away, so every one of them (plus the "Doula" radio pick, which
+	// carried no browser check of its own to lose) is checked here first.
+	const doulaGroupName = 'offer-doula';
+	const doulaFieldId = $derived(radioFieldId(doulaGroupName, doulas[0]?.staffId ?? ''));
+	const emailFieldId = 'offer-email';
+	const feeFieldId = 'offer-fee';
+	const initialFieldId = 'offer-initial';
+	const areaFieldId = 'offer-area';
+	const dueDateFieldId = 'offer-due-date';
+
+	const offerSubmission = new FormSubmission();
+
 	async function handleCreate(event: SubmitEvent) {
 		event.preventDefault();
-		createError = '';
+		await offerSubmission.run(async () => {
+			const errors: FormError[] = [];
 
-		const offer: NewOffer = {
-			clientFirstInitial: initial,
-			clientArea,
-			dueDate,
-			terms: terms || undefined
-		};
-		if (target === 'email') {
-			offer.email = email;
-		} else {
-			offer.staffId = staffId;
-		}
-		if (isFeeRequired) {
-			const dollars = Number(feeDollars);
-			if (!Number.isFinite(dollars) || dollars <= 0) {
-				createError = 'Enter a fee greater than zero';
-				return;
+			if (target === 'staff') {
+				if (!staffId) errors.push({ message: 'Select a Doula', targetId: doulaFieldId });
+			} else if (email.trim() === '') {
+				errors.push({ message: 'Enter an email address', targetId: emailFieldId });
+			} else {
+				const formatError = emailFormatError(email.trim());
+				if (formatError) errors.push({ message: formatError, targetId: emailFieldId });
 			}
-			offer.amountCents = Math.round(dollars * 100);
-		}
 
-		isSending = true;
-		try {
+			if (initial.trim() === '') {
+				errors.push({ message: "Enter the Client's first initial", targetId: initialFieldId });
+			}
+			if (clientArea.trim() === '') {
+				errors.push({ message: 'Enter the general area', targetId: areaFieldId });
+			}
+			if (dueDate === '') {
+				errors.push({ message: 'Enter the due date', targetId: dueDateFieldId });
+			}
+
+			let amountCents: number | undefined;
+			if (isFeeRequired) {
+				if (feeDollars.trim() === '') {
+					errors.push({ message: 'Enter a fee', targetId: feeFieldId });
+				} else {
+					const dollars = Number(feeDollars);
+					if (!Number.isFinite(dollars) || dollars <= 0) {
+						errors.push({ message: 'Enter a fee greater than zero', targetId: feeFieldId });
+					} else {
+						amountCents = Math.round(dollars * 100);
+					}
+				}
+			}
+
+			if (errors.length > 0) return errors;
+
+			const offer: NewOffer = {
+				clientFirstInitial: initial,
+				clientArea,
+				dueDate,
+				terms: terms || undefined
+			};
+			if (target === 'email') {
+				offer.email = email;
+			} else {
+				offer.staffId = staffId;
+			}
+			if (amountCents !== undefined) offer.amountCents = amountCents;
+
 			await onCreate(offer);
 			email = '';
 			feeDollars = '';
 			terms = '';
 			clientArea = '';
 			dueDate = '';
-		} catch (error_) {
-			createError = error_ instanceof Error ? error_.message : 'Failed to send offer';
-		} finally {
-			isSending = false;
-		}
+		}, orThrownMessage);
 	}
 
 	async function handleWithdraw(offerId: string) {
@@ -152,100 +191,98 @@
 	<Notice message={withdrawError} variant="error" />
 {/if}
 
-<!-- stacked-form:ignore: #1108 -- five of this form's controls are `required`, and that is the only thing standing between an incomplete offer and the endpoint. `StackedForm` sets `novalidate` (ADR-0021), so adopting it here would take that refusal away and put nothing in its place; #1228 is where this form gets a refusal of its own and then adopts the molecule. The stack below is `StackedForm`'s own arrangement, written inline meanwhile. -->
-<form onsubmit={handleCreate}>
-	<stack-l space="var(--space-5)">
+<StackedForm onSubmit={handleCreate}>
+	{#if offerSubmission.errors.length > 0}
+		<ErrorSummary errors={offerSubmission.errors} />
+	{/if}
+	<RadioGroup
+		legend="Offer this work to"
+		options={[
+			{ value: 'staff', label: 'Someone already at this practice' },
+			{ value: 'email', label: 'Someone new, by email' }
+		]}
+		value={target}
+		onChange={(value) => (target = value)}
+	/>
+
+	{#if target === 'staff'}
 		<RadioGroup
-			legend="Offer this work to"
-			options={[
-				{ value: 'staff', label: 'Someone already at this practice' },
-				{ value: 'email', label: 'Someone new, by email' }
-			]}
-			value={target}
-			onChange={(value) => (target = value)}
+			legend="Doula"
+			name={doulaGroupName}
+			options={doulas.map((doula) => ({ value: doula.staffId, label: doula.name }))}
+			value={staffId}
+			onChange={(value) => (staffId = value)}
+			error={offerSubmission.errorFor(doulaFieldId)}
 		/>
+	{:else}
+		<LabeledField id={emailFieldId} label="Email address" error={offerSubmission.errorFor(emailFieldId)}>
+			{#snippet children({ id, describedBy, invalid })}
+				<TextInput
+					{id}
+					{describedBy}
+					{invalid}
+					type="email"
+					value={email}
+					onInput={(value) => (email = value)}
+					required
+				/>
+			{/snippet}
+		</LabeledField>
+		<p>A doula invited by email joins the practice as a contractor, so this offer carries a fee.</p>
+	{/if}
 
-		{#if target === 'staff'}
-			<RadioGroup
-				legend="Doula"
-				options={doulas.map((doula) => ({ value: doula.staffId, label: doula.name }))}
-				value={staffId}
-				onChange={(value) => (staffId = value)}
+	{#if isFeeRequired}
+		<LabeledField id={feeFieldId} label="Fee (USD)" error={offerSubmission.errorFor(feeFieldId)}>
+			{#snippet children({ id, describedBy, invalid })}
+				<TextInput
+					{id}
+					{describedBy}
+					{invalid}
+					type="number"
+					step={0.01}
+					value={feeDollars}
+					onInput={(value) => (feeDollars = value)}
+					required
+				/>
+			{/snippet}
+		</LabeledField>
+	{/if}
+
+	<LabeledField id={initialFieldId} label="Client's first initial" error={offerSubmission.errorFor(initialFieldId)}>
+		{#snippet children({ id, describedBy, invalid })}
+			<TextInput
+				{id}
+				{describedBy}
+				{invalid}
+				maxlength={1}
+				value={initial}
+				onInput={(value) => (initial = value)}
+				required
 			/>
-		{:else}
-			<LabeledField label="Email address">
-				{#snippet children({ id, describedBy, invalid })}
-					<TextInput
-						{id}
-						{describedBy}
-						{invalid}
-						type="email"
-						value={email}
-						onInput={(value) => (email = value)}
-						required
-					/>
-				{/snippet}
-			</LabeledField>
-			<p>A doula invited by email joins the practice as a contractor, so this offer carries a fee.</p>
-		{/if}
+		{/snippet}
+	</LabeledField>
+	<LabeledField id={areaFieldId} label="General area" error={offerSubmission.errorFor(areaFieldId)}>
+		{#snippet children({ id, describedBy, invalid })}
+			<TextInput
+				{id}
+				{describedBy}
+				{invalid}
+				value={clientArea}
+				onInput={(value) => (clientArea = value)}
+				required
+			/>
+		{/snippet}
+	</LabeledField>
+	<LabeledField id={dueDateFieldId} label="Due date" error={offerSubmission.errorFor(dueDateFieldId)}>
+		{#snippet children({ id, describedBy, invalid })}
+			<TextInput {id} {describedBy} {invalid} type="date" value={dueDate} onInput={(value) => (dueDate = value)} required />
+		{/snippet}
+	</LabeledField>
+	<LabeledField label="Terms">
+		{#snippet children({ id, describedBy, invalid })}
+			<Textarea {id} {describedBy} {invalid} value={terms} onInput={(next) => (terms = next)} />
+		{/snippet}
+	</LabeledField>
 
-		{#if isFeeRequired}
-			<LabeledField label="Fee (USD)">
-				{#snippet children({ id, describedBy, invalid })}
-					<TextInput
-						{id}
-						{describedBy}
-						{invalid}
-						type="number"
-						step={0.01}
-						value={feeDollars}
-						onInput={(value) => (feeDollars = value)}
-						required
-					/>
-				{/snippet}
-			</LabeledField>
-		{/if}
-
-		<LabeledField label="Client's first initial">
-			{#snippet children({ id, describedBy, invalid })}
-				<TextInput
-					{id}
-					{describedBy}
-					{invalid}
-					maxlength={1}
-					value={initial}
-					onInput={(value) => (initial = value)}
-					required
-				/>
-			{/snippet}
-		</LabeledField>
-		<LabeledField label="General area">
-			{#snippet children({ id, describedBy, invalid })}
-				<TextInput
-					{id}
-					{describedBy}
-					{invalid}
-					value={clientArea}
-					onInput={(value) => (clientArea = value)}
-					required
-				/>
-			{/snippet}
-		</LabeledField>
-		<LabeledField label="Due date">
-			{#snippet children({ id, describedBy, invalid })}
-				<TextInput {id} {describedBy} {invalid} type="date" value={dueDate} onInput={(value) => (dueDate = value)} required />
-			{/snippet}
-		</LabeledField>
-		<LabeledField label="Terms">
-			{#snippet children({ id, describedBy, invalid })}
-				<Textarea {id} {describedBy} {invalid} value={terms} onInput={(next) => (terms = next)} />
-			{/snippet}
-		</LabeledField>
-
-		<Button label="Send Offer" type="submit" loading={isSending} />
-	</stack-l>
-</form>
-
-{#if createError}
-	<Notice message={createError} variant="error" />
-{/if}
+	<Button label="Send Offer" type="submit" loading={offerSubmission.isSubmitting} />
+</StackedForm>

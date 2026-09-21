@@ -1,3 +1,18 @@
+<script module lang="ts">
+	/**
+	 * The id a group's own option carries (`id="{name}-{option.value}"`
+	 * below) -- exported so a caller building a `FormError`'s `targetId`
+	 * for this group's first option (#1228: `InvoiceSection`'s Method,
+	 * `OfferSection`'s Doula, the same trick `endingReasonFieldId` uses on
+	 * the Engagement detail page) constructs the same string this
+	 * component does, rather than a third hand-rolled copy of the
+	 * template literal agreeing with it by coincidence.
+	 */
+	export function radioFieldId(name: string, value: string): string {
+		return `${name}-${value}`;
+	}
+</script>
+
 <script lang="ts" generics="T extends string">
 	interface Option<T> {
 		value: T;

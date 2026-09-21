@@ -474,8 +474,10 @@ export function unnameableHint(assignees: readonly VisitAssignee[]): string {
  * the BFF (`requireEligibleAssignee`) -- never a dismissible warning, and
  * never letting the BFF's own `400` be the first a person hears of it.
  * An id that is not on the list at all is not this function's refusal to
- * make: an empty picker is the field's own `required`, and an unknown id
- * is the BFF's.
+ * make: an empty picker is its caller's own `required`-shaped check
+ * (#1228: the reassign and Add a Visit pickers on the Engagement detail
+ * route both make one, now that neither can lean on the browser's own
+ * refusal), and an unknown id is the BFF's.
  */
 export function assigneeBlock(assignees: readonly VisitAssignee[], staffId: string): string {
 	const chosen = assignees.find((assignee) => assignee.staffId === staffId);

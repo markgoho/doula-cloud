@@ -1125,6 +1125,21 @@ describe('choosing who a Visit is for (#268, #274)', () => {
 			await expect.element(testPage.getByLabelText('Who is this Visit for?')).toHaveValue('');
 		});
 
+		// #1228: the placeholder above is empty, not pre-selected, so this
+		// picker carried no browser refusal to lose in the first place --
+		// only the required Selects in this file did. Refused here rather
+		// than sent as an empty staffId for the BFF to 400 on.
+		it('refuses an Add a Visit submit left on the placeholder, without calling the API', async () => {
+			await setupWithRoster(undefined, ['admin'], 'staff-bookkeeper');
+			await expect.element(testPage.getByLabelText('Who is this Visit for?')).toHaveValue('');
+			apiFetchWithSession.mockClear();
+
+			await testPage.getByRole('button', { name: 'Add a Visit' }).click();
+
+			expect(apiFetchWithSession).not.toHaveBeenCalled();
+			await expect.element(testPage.getByText('Select who this Visit is for').first()).toBeVisible();
+		});
+
 		// And a plain Doula is never asked at all -- the roster read
 		// refuses her, and an absent assignee already means her.
 		it('asks a plain Doula nothing, and still lets her log her own Visit', async () => {
@@ -1296,6 +1311,23 @@ describe('who can be named on a Visit at this Engagement (#911)', () => {
 			.toBeVisible();
 	});
 
+	// #1228: ErrorSummary's own contract ("a clean form never reaches
+	// here... this cannot steal focus from someone who has not submitted")
+	// assumes its errors only ever arrive from a submit. #911's own live
+	// block does not -- it fires the instant an ineligible name is picked
+	// -- so the summary has to wait for an actual submit attempt even
+	// though the inline field error (unchanged since #911) shows at once.
+	it('marks an ineligible pick on the field at once, without mounting the summary or moving focus', async () => {
+		await setupWithRoster();
+		const picker = testPage.getByLabelText('Who is this Visit for?');
+		await expect.element(picker).toBeVisible();
+
+		await picker.selectOptions(unattachedOption);
+
+		await expect.element(picker).toHaveAttribute('aria-invalid', 'true');
+		await expect.element(testPage.getByRole('heading', { name: 'There is a problem' })).not.toBeInTheDocument();
+	});
+
 	// The hard block: the request is never sent, and the refusal names the
 	// act that changes it (GOV.UK's error-message rule).
 	it('blocks the create submit rather than letting the BFF 400 be the first news', async () => {
@@ -1305,9 +1337,11 @@ describe('who can be named on a Visit at this Engagement (#911)', () => {
 		await testPage.getByRole('button', { name: 'Add a Visit' }).click();
 
 		expect(apiFetchWithSession).not.toHaveBeenCalled();
+		// .first() -- #1228's ErrorSummary repeats the message as a link, so
+		// it now appears twice on screen (the summary and the field).
 		await expect
 			.element(
-				testPage.getByText(new RegExp(`^${unattached} is a contractor who has not accepted`))
+				testPage.getByText(new RegExp(`^${unattached} is a contractor who has not accepted`)).first()
 			)
 			.toBeVisible();
 	});
@@ -1319,6 +1353,22 @@ describe('who can be named on a Visit at this Engagement (#911)', () => {
 		await testPage.getByRole('button', { name: 'Reassign' }).first().click();
 
 		expect(apiFetchWithSession).not.toHaveBeenCalled();
+	});
+
+	// #1228: the reassign Select's own `required` was the only refusal an
+	// empty pick had -- StackedForm's `novalidate` (ADR-0021) took it
+	// away. Left on its own placeholder, not touched at all.
+	it('refuses a reassign submit left on the placeholder, without calling the API', async () => {
+		await setupWithRoster();
+		await expect.element(testPage.getByLabelText('Reassign to').first()).toBeVisible();
+		apiFetchWithSession.mockClear();
+
+		await testPage.getByRole('button', { name: 'Reassign' }).first().click();
+
+		expect(apiFetchWithSession).not.toHaveBeenCalled();
+		await expect
+			.element(testPage.getByText('Select who to reassign this Visit to').first())
+			.toBeVisible();
 	});
 
 	// The caller's own row takes the self rule, not the named-colleague
