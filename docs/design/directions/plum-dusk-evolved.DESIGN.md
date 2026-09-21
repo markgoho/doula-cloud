@@ -132,8 +132,8 @@ The layout follows a **Fixed Grid** philosophy for desktop to maintain a structu
 
 This design system is strictly **Flat**. Depth is achieved exclusively through **Tonal Layering** and **Hairline Borders**.
 
-- **Shadows:** No drop shadows or inner shadows are permitted. 
-- **Borders:** All interactive surfaces and containers are defined by 1px solid borders in a neutral gray. 
+- **Shadows:** No drop shadows or inner shadows are permitted.
+- **Borders:** All interactive surfaces and containers are defined by 1px solid borders in a neutral gray.
 - **Z-Index:** Layering is communicated by stacking order. Overlays (modals) use a solid, high-contrast border and a dim, neutral-tinted backdrop rather than a shadow cast.
 - **Active State:** Elements indicate focus or selection by changing border color to the primary Plum or adding the faint Plum surface tint.
 

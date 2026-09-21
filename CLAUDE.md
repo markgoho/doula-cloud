@@ -2,38 +2,23 @@ This is a project called Doula Cloud, it includes a Svelte application and a Hug
 
 ## Status: pre-launch
 
-**Doula Cloud has not launched. It has no users, and no production data.** The
-target launch is **January 2027**.
+**Doula Cloud has not launched. It has no users, and no production data.** The target launch is **January 2027**.
 
 This changes how findings are handled:
 
-- **Everything found will be fixed before launch.** A missing capability is work
-  not yet done, not a defect to triage against a live system.
-- **Do not rank work by user impact or severity.** There are no users to impact.
-  Where order matters at all, it is because one piece of work depends on another,
-  not because one gap hurts more. Do not spend a session producing a priority
-  ranking unless asked for one directly.
-- **There is no backwards compatibility to preserve** and no migration of live
-  data to plan. Schema and API changes are cheap right now, and get expensive in
-  January.
-- Nothing is in front of a customer, so a broken or absent path is not an
-  incident.
+- **Everything found will be fixed before launch.** A missing capability is work not yet done, not a defect to triage against a live system.
+- **Do not rank work by user impact or severity.** There are no users to impact. Where order matters at all, it is because one piece of work depends on another, not because one gap hurts more. Do not spend a session producing a priority ranking unless asked for one directly.
+- **There is no backwards compatibility to preserve** and no migration of live data to plan. Schema and API changes are cheap right now, and get expensive in January.
+- Nothing is in front of a customer, so a broken or absent path is not an incident.
 
 ## Cross-cutting expectations
 
-Every feature carries these. They are not separate work items, they are not
-ranked against the feature, and no ticket has to ask for them.
+Every feature carries these. They are not separate work items, they are not ranked against the feature, and no ticket has to ask for them.
 
-- **Audit trail.** A user must be able to answer "how did this thing come to
-  be?" — who sent the invoice, when a person accepted an invitation, when an
-  employment type changed. Anything that changes state records who did it and
-  when. Design each feature so that question has an answer; the shape of the
-  record is the feature's own choice.
+- **Audit trail.** A user must be able to answer "how did this thing come to be?" — who sent the invoice, when a person accepted an invitation, when an employment type changed. Anything that changes state records who did it and when. Design each feature so that question has an answer; the shape of the record is the feature's own choice.
 - **Accessibility.** What is built is usable by everyone who has to use it.
-- **Performance.** What is built stays quick under a real Practice's data, not
-  only a fixture's.
-- **Security.** What is built refuses what it should refuse, at the boundary
-  that can actually enforce it.
+- **Performance.** What is built stays quick under a real Practice's data, not only a fixture's.
+- **Security.** What is built refuses what it should refuse, at the boundary that can actually enforce it.
 - **Layout.** What is built adapts intrinsically to the space it is given, never to a device it assumes it is on. Every screen is complete and usable from 320px up, and a component behaves correctly wherever it is placed — full page, narrow column, or embedded in a Practice's own website. **Choosing a component is a layout decision**: whoever picks one owns what it does at 320px with a real Practice's content in it, even on a screen that writes no CSS at all. See `docs/adr/0024-layout-is-intrinsic-and-320px-is-a-conformance-commitment.md` for the mechanism and `docs/adr/0025-layout-is-verified-across-the-continuum.md` for how it is checked.
 - **Time.** What is built reads the current instant through `api/internal/clock` (`clock.Now(ctx)`, or an injected `clock.Clock` for a struct that already carries one, such as `outbox.Worker.Now`) rather than calling `time.Now()` directly, so a future simulation run can move it; `api/.golangci.yml`'s `forbidigo` rule fails the build on a new bare `time.Now()` outside a documented exemption. See #773 for the seam and the exemptions it drew (Firebase token verification, `cmd/migrate`/`cmd/simclock` startup waits, `internal/simclock`'s own real-time Stripe deadlines, and the `authntest` test helper).
 
@@ -51,12 +36,7 @@ One family is checked the other way round. British English doubles a final `l` b
 
 ### Git flow: worktree + PR, not a direct push to trunk
 
-Default to one worktree per unit of work, landed via a PR with squash auto-merge — not a
-direct push to `trunk`. See `docs/agents/worktree-flow.md` for the exact commands, what gets
-provisioned automatically, and the cleanup pruner. Rollout note: the local edit-block hook
-and the GitHub ruleset that make this a hard requirement are rolling out in stages — until
-both are confirmed active, treat this as the default to follow by choice, not yet as
-something that will refuse a direct trunk push.
+Default to one worktree per unit of work, landed via a PR with squash auto-merge — not a direct push to `trunk`. See `docs/agents/worktree-flow.md` for the exact commands, what gets provisioned automatically, and the cleanup pruner. Rollout note: the local edit-block hook and the GitHub ruleset that make this a hard requirement are rolling out in stages — until both are confirmed active, treat this as the default to follow by choice, not yet as something that will refuse a direct trunk push.
 
 ### Issue tracker
 
@@ -76,22 +56,15 @@ A book is evidence, and only the founder's recorded decision turns it into a rul
 
 ### Service patterns
 
-The GOV.UK Design System is the default reference for any screen that asks a person for
-something or reports a failure — the decision, never the markup or the look. See
-`docs/adr/0021-govuk-is-the-reference-for-service-patterns.md` for the rule and
-`docs/design/govuk-alignment.md` for the pattern-by-pattern table. Check the table before
-building such a screen; a departure needs a recorded reason.
+The GOV.UK Design System is the default reference for any screen that asks a person for something or reports a failure — the decision, never the markup or the look. See `docs/adr/0021-govuk-is-the-reference-for-service-patterns.md` for the rule and `docs/design/govuk-alignment.md` for the pattern-by-pattern table. Check the table before building such a screen; a departure needs a recorded reason.
 
 ### Testing
 
-100% line coverage gate (with justified inline exceptions), the Podman-based
-test infra for `api/` and `app/`, and goose migrations. See `docs/testing.md`.
+100% line coverage gate (with justified inline exceptions), the Podman-based test infra for `api/` and `app/`, and goose migrations. See `docs/testing.md`.
 
 ### Environment variables
 
-Every variable the BFF reads, and what it holds locally, in CI, and on
-Cloud Run — including the Stripe test-mode setup and its two webhook
-surfaces. See `docs/environment.md`.
+Every variable the BFF reads, and what it holds locally, in CI, and on Cloud Run — including the Stripe test-mode setup and its two webhook surfaces. See `docs/environment.md`.
 
 ### API design
 

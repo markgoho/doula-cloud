@@ -1,31 +1,19 @@
 # Renata Alvarez — grow and run the roster
 
 - **Persona**: [practice-owner.md](../personas/practice-owner.md)
-- **Goal**: see the whole Practice at once — who is assigned to whom, which
-  Contracts are unsigned, which Invoices are unpaid — without asking four people
+- **Goal**: see the whole Practice at once — who is assigned to whom, which Contracts are unsigned, which Invoices are unpaid — without asking four people
 - **Entry point**: already has a Practice; signs in at `/login`
-- **Done looks like**: a new Doula has accepted an invitation, holds the Doula
-  role, and appears as the assigned Doula on a live Engagement. Renata can see, in
-  one place, every Engagement in the Practice and its Contract and Invoice state.
+- **Done looks like**: a new Doula has accepted an invitation, holds the Doula role, and appears as the assigned Doula on a live Engagement. Renata can see, in one place, every Engagement in the Practice and its Contract and Invoice state.
 
-> **This persona is contradicted by the schema.** Her file states that she assigns
-> a Doula to an Engagement and that the Doula "appears as the assigned Doula on a
-> live Engagement". The `engagements` table has no staff column
-> (`00005_client_engagement.sql`); only `visits.staff_id` exists. The need is real
-> and stays in this map as Stage 4. The persona sentence asserting the capability
-> exists should be revised. See RA-G4.
+> **This persona is contradicted by the schema.** Her file states that she assigns a Doula to an Engagement and that the Doula "appears as the assigned Doula on a live Engagement". The `engagements` table has no staff column (`00005_client_engagement.sql`); only `visits.staff_id` exists. The need is real and stays in this map as Stage 4. The persona sentence asserting the capability exists should be revised. See RA-G4.
 
 ## Moment of truth
 
-**Stage 8 — two Clients go into labour the same night, and she needs to know
-within a minute who is free.** Coverage is her stated anxiety, and it is the one
-thing that cannot wait until morning. Today no screen in the product answers it,
-and the underlying data to answer it does not exist either.
+**Stage 8 — two Clients go into labour the same night, and she needs to know within a minute who is free.** Coverage is her stated anxiety, and it is the one thing that cannot wait until morning. Today no screen in the product answers it, and the underlying data to answer it does not exist either.
 
 ## Words
 
-Renata is a domain expert. Her language and `CONTEXT.md` mostly agree, which is
-itself worth recording: the divergences below are the exceptions, not the rule.
+Renata is a domain expert. Her language and `CONTEXT.md` mostly agree, which is itself worth recording: the divergences below are the exceptions, not the rule.
 
 | Domain term | What Renata says | Note |
 | --- | --- | --- |
@@ -38,122 +26,72 @@ itself worth recording: the divergences below are the exceptions, not the rule.
 
 ### Stage 1 — Sign in and choose the Practice
 
-**Thinking**: routine. **Pain points**: the landing screen offers her whole
-Practice's Stripe state to anyone who is a member at all (RA-G9), which she will
-not notice until she invites someone.
+**Thinking**: routine. **Pain points**: the landing screen offers her whole Practice's Stripe state to anyone who is a member at all (RA-G9), which she will not notice until she invites someone.
 
 - **1.1** — `/login`, sign in (`POST /api/session`).
 - **1.2** — Choose Rooted Birth Collective from her memberships. **There is nothing to choose**: `decideLanding` redirects a person with one membership straight to their Practice (`app/src/lib/landing.ts:24-26`), and her own journey gives her only the one — a second membership is Lena Vasquez's journey alone.
-- **1.3** — Land on `/practices/[practiceId]`. Because she holds `owner`, the
-  page shows the Invite, Staff, Plan Templates and Contract Template tiles, gated
-  by `{#if roles.includes('owner')}`. **Payments is not in that block**
-  (`app/src/routes/practices/[practiceId]/+page.svelte:76-81`): it renders for
-  every member, including one holding no roles at all. See RA-G9.
+- **1.3** — Land on `/practices/[practiceId]`. Because she holds `owner`, the page shows the Invite, Staff, Plan Templates and Contract Template tiles, gated by `{#if roles.includes('owner')}`. **Payments is not in that block** (`app/src/routes/practices/[practiceId]/+page.svelte:76-81`): it renders for every member, including one holding no roles at all. See RA-G9.
 
 ### Stage 2 — Invite a new Doula
 
-**Thinking**: "She starts in two weeks. Get her set up."
-**Pain points**: no email is sent. The screen says so and prints a link that
-Renata must deliver herself, by text or by her own email client. Her new hire's
-first impression of the Practice's software is a pasted URL.
+**Thinking**: "She starts in two weeks. Get her set up." **Pain points**: no email is sent. The screen says so and prints a link that Renata must deliver herself, by text or by her own email client. Her new hire's first impression of the Practice's software is a pasted URL.
 
 - **2.1** — Open `/practices/[practiceId]/invite`.
-- **2.2** — Enter the new Doula's name and email; press **Send invite**
-  (`POST /api/practices/{id}/invitations`, owner-gated).
+- **2.2** — Enter the new Doula's name and email; press **Send invite** (`POST /api/practices/{id}/invitations`, owner-gated).
 - **2.3** — Copy the printed link and send it out of band.
-- **2.4** — The invitee accepts at `/accept-invite`. The membership is created
-  holding **zero** roles (`invite.go` inserts `'{}'`).
+- **2.4** — The invitee accepts at `/accept-invite`. The membership is created holding **zero** roles (`invite.go` inserts `'{}'`).
 
 ### Stage 3 — Set the new Doula's roles
 
-**Thinking**: "Now make her a doula, not an owner."
-**Pain points**: this stage cannot be walked in the product. The API exists —
-`PATCH /api/practices/{id}/staff/{staffId}/roles`, owner-gated — but the Staff
-screen has no role control. Its only row action is **End sessions everywhere**.
+**Thinking**: "Now make her a doula, not an owner." **Pain points**: this stage cannot be walked in the product. The API exists — `PATCH /api/practices/{id}/staff/{staffId}/roles`, owner-gated — but the Staff screen has no role control. Its only row action is **End sessions everywhere**.
 
-- **3.1** — Open `/practices/[practiceId]/staff` (owner-gated at
-  `staffauth/staff.go:25`).
+- **3.1** — Open `/practices/[practiceId]/staff` (owner-gated at `staffauth/staff.go:25`).
 - **3.2** — Read the Roles column, which now renders the team's words via `rolesLabel` — Dee appears as `Admin`, not a raw enum ([#262](https://github.com/markgoho/doula-cloud/issues/262), closed).
 - **3.3** — Find no way to change them.
 
-Until this is built, the whole roster is unbuildable through the UI, and every
-Persona reachable only through the invite route (Priya, Dee) starts with no roles
-at all.
+Until this is built, the whole roster is unbuildable through the UI, and every Persona reachable only through the invite route (Priya, Dee) starts with no roles at all.
 
 ### Stage 4 — Assign the Doula to Engagements
 
-**Thinking**: "Priya takes the two October clients."
-**Pain points**: an Engagement has no Doula. There is no field, no endpoint, and
-no screen. The assignment she thinks in terms of does not exist in the model.
+**Thinking**: "Priya takes the two October clients." **Pain points**: an Engagement has no Doula. There is no field, no endpoint, and no screen. The assignment she thinks in terms of does not exist in the model.
 
 - **4.1** — Open an Engagement.
 - **4.2** — Look for an assignment control. There is none.
-- **4.3** — The nearest available act is to add a Visit — but **it cannot name
-  anyone**. `POST .../visits` takes no body and assigns the caller
-  (`api/internal/visit/create.go:32,47`); handing the Visit to a colleague is a
-  second act through the **Reassign to Staff id** free-text box, which wants a
-  staff UUID no screen prints (RA-G10). It also requires the **Doula** role
-  (`api/internal/visit/roles.go:40`), which an Owner holds only because signup
-  grants all three. Assignment exists at Visit level only, and a Visit has no
-  date, so this cannot express "Priya covers this birth".
+- **4.3** — The nearest available act is to add a Visit — but **it cannot name anyone**. `POST .../visits` takes no body and assigns the caller (`api/internal/visit/create.go:32,47`); handing the Visit to a colleague is a second act through the **Reassign to Staff id** free-text box, which wants a staff UUID no screen prints (RA-G10). It also requires the **Doula** role (`api/internal/visit/roles.go:40`), which an Owner holds only because signup grants all three. Assignment exists at Visit level only, and a Visit has no date, so this cannot express "Priya covers this birth".
 
 ### Stage 5 — Reassign when someone is sick
 
-**Thinking**: "Priya is ill. Move her Thursday to Jo."
-**Pain points**: reassignment works, but only over the Visit-level assignment from
-Stage 4, so it moves a dateless record rather than a booking.
+**Thinking**: "Priya is ill. Move her Thursday to Jo." **Pain points**: reassignment works, but only over the Visit-level assignment from Stage 4, so it moves a dateless record rather than a booking.
 
-- **5.1** — `PATCH /api/practices/{id}/engagements/{id}/visits/{visitId}` with a
-  new `staffId`.
+- **5.1** — `PATCH /api/practices/{id}/engagements/{id}/visits/{visitId}` with a new `staffId`.
 
 ### Stage 6 — See the whole Practice
 
-**Thinking**: "Show me everyone."
-**Pain points**: the list is Practice-wide, which is what she needs — but it has
-two columns, Name and Status, and Status is `intake` for every row forever
-(MO-G4). Nothing about Contracts, Invoices, or who is covering whom.
+**Thinking**: "Show me everyone." **Pain points**: the list is Practice-wide, which is what she needs — but it has two columns, Name and Status, and Status is `intake` for every row forever (MO-G4). Nothing about Contracts, Invoices, or who is covering whom.
 
-- **6.1** — Open `/practices/[practiceId]/clients`
-  (`GET /api/practices/{id}/clients`). The handler is explicitly
-  Practice-scoped: "every Client with an Engagement at the current Practice,
-  regardless of which Staff member created it". **This half of her requirement
-  passes.**
-- **6.2** — Open each Engagement one at a time to learn its Contract and Invoice
-  state. There is no roll-up.
+- **6.1** — Open `/practices/[practiceId]/clients` (`GET /api/practices/{id}/clients`). The handler is explicitly Practice-scoped: "every Client with an Engagement at the current Practice, regardless of which Staff member created it". **This half of her requirement passes.**
+- **6.2** — Open each Engagement one at a time to learn its Contract and Invoice state. There is no roll-up.
 
 ### Stage 7 — See the money across all Staff
 
-**Thinking**: "Which invoices are unpaid?"
-**Pain points**: Invoices exist only inside one Engagement's Contract. There is no
-Practice-wide invoice list and no unpaid view. The screen named **Billing** is
-about credits she buys from Doula Cloud, not money her Clients owe her.
+**Thinking**: "Which invoices are unpaid?" **Pain points**: Invoices exist only inside one Engagement's Contract. There is no Practice-wide invoice list and no unpaid view. The screen named **Billing** is about credits she buys from Doula Cloud, not money her Clients owe her.
 
-- **7.1** — Open `/practices/[practiceId]/billing` and find a credit balance and
-  ledger.
-- **7.2** — Look for unpaid Client invoices. Find none, at any level above a
-  single Engagement.
+- **7.1** — Open `/practices/[practiceId]/billing` and find a credit balance and ledger.
+- **7.2** — Look for unpaid Client invoices. Find none, at any level above a single Engagement.
 
 ### Stage 8 — Coverage, at 2 a.m. — moment of truth
 
-**Thinking**: "Who is already at a birth?"
-**Pain points**: no screen shows availability, on-call state, or who is where.
-Because Visits carry no dates (MO-G1), the data a coverage view would read does
-not exist. This is the highest-value gap in the whole practice-side set, and it
-came from the experience layer — a click-by-click map would never have surfaced
-it, because there is no click to record.
+**Thinking**: "Who is already at a birth?" **Pain points**: no screen shows availability, on-call state, or who is where. Because Visits carry no dates (MO-G1), the data a coverage view would read does not exist. This is the highest-value gap in the whole practice-side set, and it came from the experience layer — a click-by-click map would never have surfaced it, because there is no click to record.
 
 - **8.1** — Sign in on a phone.
 - **8.2** — Look for who is free. There is nowhere to look.
 
 ### Stage 9 — Edit Plan Templates for the whole Practice
 
-**Thinking**: "Add the hospital-transfer question to every birth plan."
-**Pain points**: none identified.
+**Thinking**: "Add the hospital-transfer question to every birth plan." **Pain points**: none identified.
 
-- **9.1** — `/practices/[practiceId]/settings/plan-templates`,
-  `PUT /api/practices/{id}/plan-templates/{planType}` (owner-gated).
-- **9.2** — Confirm an already-filled Plan Instance is unchanged. It snapshots the
-  field definitions at creation (`00012_plan_instances.sql`), so this **passes**.
+- **9.1** — `/practices/[practiceId]/settings/plan-templates`, `PUT /api/practices/{id}/plan-templates/{planType}` (owner-gated).
+- **9.2** — Confirm an already-filled Plan Instance is unchanged. It snapshots the field definitions at creation (`00012_plan_instances.sql`), so this **passes**.
 
 ## Gaps found
 
@@ -170,6 +108,4 @@ it, because there is no click to record.
 | RA-G9 | 1 | Interaction | The **Payments** tile is not owner-gated, and `GET .../payments/connect` carries no role gate either (`api/internal/payments/connect.go:163-165`, unlike its `POST` sibling at line 96). So every Staff member — including the zero-role member RA-G8 says an invitation must produce — is *offered* the Practice's Stripe account state and reads it: a Doula's `GET` answered `200 {"status":"not_connected",…}`. [ADR-0006](../adr/0006-read-follows-the-role.md)'s table has no row for Stripe Connect state, so this is a read rule the ADR cannot yet be implemented against, not only a mis-placed link. | [#267](https://github.com/markgoho/doula-cloud/issues/267) |
 | RA-G10 | 4 | Both | A Visit cannot be created for a colleague, only reassigned to one — and reassignment asks for a staff UUID by hand. `POST .../visits` takes no body and assigns the caller; the only way to put Jo on a Visit is to paste her id into a free-text box, and no screen in the product prints a staff id. Distinct root from RA-G4: even the Visit-level assignment the model *does* have is unreachable for anyone but yourself. | [#268](https://github.com/markgoho/doula-cloud/issues/268) |
 
-Also hit here, filed on their owning maps: **MO-G4** (an Engagement's status never
-changes, so her one status column is dead), **MO-G1** (dateless Visits, which is
-why RA-G5 has no data to read).
+Also hit here, filed on their owning maps: **MO-G4** (an Engagement's status never changes, so her one status column is dead), **MO-G1** (dateless Visits, which is why RA-G5 has no data to read).

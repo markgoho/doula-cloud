@@ -1,15 +1,11 @@
 # Tasha Bell — evaluate and decide
 
 - **Persona**: [evaluator-doula.md](../personas/evaluator-doula.md)
-- **Goal**: answer one question fast — is this built for what I actually do, and
-  can I get out again if it is not?
-- **Entry point**: a search result or a doula Facebook group, landing on a
-  marketing site that does not exist yet
-- **Done looks like**: a Practice with one test Client in it and an intention to
-  come back — **or** a clear reason she left. Both close the journey.
+- **Goal**: answer one question fast — is this built for what I actually do, and can I get out again if it is not?
+- **Entry point**: a search result or a doula Facebook group, landing on a marketing site that does not exist yet
+- **Done looks like**: a Practice with one test Client in it and an intention to come back — **or** a clear reason she left. Both close the journey.
 
-Tasha is the only Persona who may legitimately abandon. Every stage therefore
-names its **abandon point**: what makes her close the tab there.
+Tasha is the only Persona who may legitimately abandon. Every stage therefore names its **abandon point**: what makes her close the tab there.
 
 ## Moment of truth
 
@@ -27,18 +23,13 @@ Tasha is not yet a domain expert. She is the Persona furthest from `CONTEXT.md`.
 | Plan Template | "the form" | `CONTEXT.md` avoids "form" deliberately — the two agree on nothing |
 | Birth Plan | "birth plan" | The one term that matches. It is also the term she is shopping for |
 
-The divergence is the finding: the terms she arrives with are the terms
-`CONTEXT.md` explicitly rejects. This is not a naming quibble at the top of the
-funnel — it is the vocabulary of the page that has to sell her.
+The divergence is the finding: the terms she arrives with are the terms `CONTEXT.md` explicitly rejects. This is not a naming quibble at the top of the funnel — it is the vocabulary of the page that has to sell her.
 
 ## Stages
 
 ### Stage 1 — Find it and judge it in thirty seconds
 
-**Thinking**: "Is this another clinic tool wearing a doula costume?"
-**Pain points**: she has been burned by medical software before. Three other tabs
-are open. She wants to see "doula" and "birth plan" before she gives anyone an
-email address.
+**Thinking**: "Is this another clinic tool wearing a doula costume?" **Pain points**: she has been burned by medical software before. Three other tabs are open. She wants to see "doula" and "birth plan" before she gives anyone an email address.
 
 - **1.1** — Follow a link from a search result or a Facebook group.
 - **1.2** — Read what the product is for.
@@ -47,9 +38,7 @@ email address.
 
 ### Stage 2 — Find the price
 
-**Thinking**: "What does this cost, per month, for two doulas?"
-**Pain points**: pricing is the second question she asks, and an unanswered one
-reads as expensive.
+**Thinking**: "What does this cost, per month, for two doulas?" **Pain points**: pricing is the second question she asks, and an unanswered one reads as expensive.
 
 - **2.1** — Look for a pricing page.
 
@@ -57,27 +46,21 @@ reads as expensive.
 
 ### Stage 3 — Sign up
 
-**Thinking**: "Fine, I will spend one minute."
-**Pain points**: she has none of Maya's motivation. Every field costs her.
+**Thinking**: "Fine, I will spend one minute." **Pain points**: she has none of Maya's motivation. Every field costs her.
 
 - **3.1** — Open `/signup`.
 - **3.2** — Fill four fields: Practice name, Your name, Email, Password.
-- **3.3** — Press **Create Practice** (`POST /api/staff/signup`). The Practice, the
-  Staff record, and a membership holding Owner + Admin + Doula are created in one
-  statement (`signup.go:152`).
+- **3.3** — Press **Create Practice** (`POST /api/staff/signup`). The Practice, the Staff record, and a membership holding Owner + Admin + Doula are created in one statement (`signup.go:152`).
 
-This stage is genuinely cheap and is the strongest leg of her journey. One screen,
-four fields, no email confirmation step.
+This stage is genuinely cheap and is the strongest leg of her journey. One screen, four fields, no email confirmation step.
 
 - **3.3-a** — Look for anything telling her roles exist. The signup screen now states it, before she commits: the account holds Owner, Admin and Doula, why, and where roles are read and changed afterward. The role-scoped **Staff** nav item repeats it (TB-G7, closed).
 
-**Abandon point**: "Practice name" asks her to name a business she may not think
-of as one. Low risk, worth watching.
+**Abandon point**: "Practice name" asks her to name a business she may not think of as one. Low risk, worth watching.
 
 ### Stage 4 — The first screen — moment of truth
 
-**Thinking**: "Show me the thing I came for."
-**Pain points**: none remaining. The old seven-link menu is gone ([#452](https://github.com/markgoho/doula-cloud/issues/452), closed): Clients, Billing and Staff moved into the shell's persistent, role-scoped top bar, Plan Templates, Contract Template and Payments moved under **Settings**, and this screen is now `OverviewHub`'s zero-Client state, which names the work rather than the filing cabinet and offers one action.
+**Thinking**: "Show me the thing I came for." **Pain points**: none remaining. The old seven-link menu is gone ([#452](https://github.com/markgoho/doula-cloud/issues/452), closed): Clients, Billing and Staff moved into the shell's persistent, role-scoped top bar, Plan Templates, Contract Template and Payments moved under **Settings**, and this screen is now `OverviewHub`'s zero-Client state, which names the work rather than the filing cabinet and offers one action.
 
 - **4.1** — Land on `/practices/[practiceId]`.
 - **4.2** — Read "Nothing is here yet, because no Client is. Add one and this becomes the Client's birth plan, your visits to the Client, and the contract and invoices between you." and follow **Add your first Client**.
@@ -86,21 +69,17 @@ of as one. Low risk, worth watching.
 
 ### Stage 5 — Kick the tires
 
-**Thinking**: "Let me put a fake client in and see what happens."
-**Pain points**: she must invent a client to see any real screen.
+**Thinking**: "Let me put a fake client in and see what happens." **Pain points**: she must invent a client to see any real screen.
 
 - **5.1** — **Find or add a Client** on the Clients list, search, find nobody, follow **Add a new Client**. Intake is one question per page from there (ADR-0017): the name, then date of birth, email, phone, address, then whatever the Practice put on its own Client Field Template.
 - **5.2** — Answer the name question and press **Save and come back later**. The save is **free** and creates a Client and nothing else — no Engagement, no credit spent — and lands her on that Client's own detail hub.
 - **5.2-b** — **Start new work with {name}** from the hub. This is the act that costs, and it says so before she commits: `Credit cost 1 credit` and `Balance after 2`. She holds Owner, so asking and approving collapse into one act, and the Engagement is created and the Credit locked there. A trial still has a size — three Engagements, not three Clients — but it is now named on screen rather than discovered at a paywall.
 - **5.3** — Open the Engagement from the Clients list.
-- **5.4** — See Visits, Care Plan, Birth Plan, Contract, Invoices, and Messages on
-  one page. This is the first moment the product looks like doula work — and it is
-  four clicks past the point where she was deciding whether to leave.
+- **5.4** — See Visits, Care Plan, Birth Plan, Contract, Invoices, and Messages on one page. This is the first moment the product looks like doula work — and it is four clicks past the point where she was deciding whether to leave.
 
 ### Stage 6 — Judge the exit
 
-**Thinking**: "If I hate this in six months, do I get my clients back?"
-**Pain points**: none remaining. Both halves of her stated question are now answered from **Settings**.
+**Thinking**: "If I hate this in six months, do I get my clients back?" **Pain points**: none remaining. Both halves of her stated question are now answered from **Settings**.
 
 - **6.1** — Look for an export.
 
@@ -108,15 +87,11 @@ of as one. Low risk, worth watching.
 
 ### Stage 7 — Judge the way in (migrating owner)
 
-**Thinking**: "I have two years of clients in a spreadsheet and a Drive folder."
-**Pain points**: Tasha *is* the migrating owner. Her existing data is the reason
-switching is expensive.
+**Thinking**: "I have two years of clients in a spreadsheet and a Drive folder." **Pain points**: Tasha *is* the migrating owner. Her existing data is the reason switching is expensive.
 
 - **7.1** — Look for an import.
 
-**Abandon point**: there is no import (TB-G6). Every Client must be typed by hand,
-and the only fields that exist to type are name and email — so the spreadsheet
-cannot be reproduced even manually.
+**Abandon point**: there is no import (TB-G6). Every Client must be typed by hand, and the only fields that exist to type are name and email — so the spreadsheet cannot be reproduced even manually.
 
 ## Gaps found
 
@@ -130,5 +105,4 @@ cannot be reproduced even manually.
 | TB-G6 | 7 | Interaction | No data import for a migrating owner, and Client creation accepts only name and email. | [#289](https://github.com/markgoho/doula-cloud/issues/289) |
 | TB-G7 | 3 | Experience | **Closed.** Signup grants Owner + Admin + Doula and now says so, before she commits ([#878](https://github.com/markgoho/doula-cloud/issues/878)). The Staff screen speaks the team's words, `Owner, Admin, Doula`, not the schema's ([#262](https://github.com/markgoho/doula-cloud/issues/262), closed), and a role-scoped **Staff** nav item signposts the roster from every screen. | [#290](https://github.com/markgoho/doula-cloud/issues/290) |
 
-Also hit here, filed on their owning maps: **MO-G3** (Client takes name and email
-only — which is also why TB-G6 cannot be worked around by hand).
+Also hit here, filed on their owning maps: **MO-G3** (Client takes name and email only — which is also why TB-G6 cannot be worked around by hand).

@@ -1,34 +1,16 @@
 # Test plans
 
-One test plan per [Journey](../journeys/). Each file slug matches its journey file
-slug, which matches its [persona](../personas/) file slug, one-to-one.
+One test plan per [Journey](../journeys/). Each file slug matches its journey file slug, which matches its [persona](../personas/) file slug, one-to-one.
 
-A test plan is the **runnable form of a journey map's interaction layer**. The
-experience layer does not become steps — it becomes `journey-gap` issues on the
-map itself. A plan therefore proves or disproves the map: every step below is a
-claim about the product read out of the code.
+A test plan is the **runnable form of a journey map's interaction layer**. The experience layer does not become steps — it becomes `journey-gap` issues on the map itself. A plan therefore proves or disproves the map: every step below is a claim about the product read out of the code.
 
-**Stripe status (2026-08-22, second update):** the Sandbox exists and **Buy
-credits is walked and passing** — see Maya's 3.4-a. Connect's code leg is now
-built too: [#247](https://github.com/markgoho/doula-cloud/issues/247) moved it
-to Accounts v2 and both Sandbox event destinations are created, so
-`POST .../payments/connect` no longer 401s.
+**Stripe status (2026-08-22, second update):** the Sandbox exists and **Buy credits is walked and passing** — see Maya's 3.4-a. Connect's code leg is now built too: [#247](https://github.com/markgoho/doula-cloud/issues/247) moved it to Accounts v2 and both Sandbox event destinations are created, so `POST .../payments/connect` no longer 401s.
 
-**Connect and Invoices are now walked too** (2026-08-22). A Practice onboarded
-through the v2 Account Link to an active account, raised a $1,800 Invoice, and a
-Client paid it with a test card; `invoice.paid` created the `payments` row.
+**Connect and Invoices are now walked too** (2026-08-22). A Practice onboarded through the v2 Account Link to an active account, raised a $1,800 Invoice, and a Client paid it with a test card; `invoice.paid` created the `payments` row.
 
-**The practice side now has no `blocked` step at all.** Dee's 8.1 was the last one,
-and [#236](https://github.com/markgoho/doula-cloud/issues/236) cleared it by
-onboarding a second Practice end to end: `card_payments` and `payouts` both
-`active`, written by the `capability_status_updated` thin event, after which a
-**non-owner Admin** raised a `$900` Invoice. The recipe is kept at
-[connect-onboarding.md](connect-onboarding.md) so no later walk re-derives it.
+**The practice side now has no `blocked` step at all.** Dee's 8.1 was the last one, and [#236](https://github.com/markgoho/doula-cloud/issues/236) cleared it by onboarding a second Practice end to end: `card_payments` and `payouts` both `active`, written by the `capability_status_updated` thin event, after which a **non-owner Admin** raised a `$900` Invoice. The recipe is kept at [connect-onboarding.md](connect-onboarding.md) so no later walk re-derives it.
 
-**On the CAPTCHA.** That walk first hit one and recorded the step as closed to
-automation. That was wrong twice over, and the corrected reading is the useful
-one. The variable is **whose browser**, not headless-vs-headed and not whether a
-person is watching:
+**On the CAPTCHA.** That walk first hit one and recorded the step as closed to automation. That was wrong twice over, and the corrected reading is the useful one. The variable is **whose browser**, not headless-vs-headed and not whether a person is watching:
 
 | Browser | Result |
 | --- | --- |
@@ -36,172 +18,63 @@ person is watching:
 | Playwright-launched Chromium, headed | CAPTCHA at the password step |
 | `playwriter` driving the user's own Chrome | **no CAPTCHA on any of the nine screens** |
 
-Stripe is fingerprinting the automation-launched browser, not the absence of a
-human. The run that completed was driven end to end by `playwriter` and was never
-challenged, so **a Connect step is walkable unattended provided it is driven
-through the user's real Chrome** — which makes it `manual`, not `blocked`. A walk
-still never works around an anti-automation control; it uses a browser that does
-not trip one, and hands over to the human if that fails.
+Stripe is fingerprinting the automation-launched browser, not the absence of a human. The run that completed was driven end to end by `playwriter` and was never challenged, so **a Connect step is walkable unattended provided it is driven through the user's real Chrome** — which makes it `manual`, not `blocked`. A walk still never works around an anti-automation control; it uses a browser that does not trip one, and hands over to the human if that fails.
 
-The walk earned its keep: it found four defects that reading could not. Two were
-config that reported itself healthy while delivering nothing (`events_from` on
-the event destination, and `--forward-thin-connect-to` in `stripe-listen.sh`),
-and two were only visible to the Client (an invoice that said `From DOULA.CLOU`,
-and `payments` rows with no Stripe reference). One of them passed its unit tests
-because the fixture supplied a field production never sends.
+The walk earned its keep: it found four defects that reading could not. Two were config that reported itself healthy while delivering nothing (`events_from` on the event destination, and `--forward-thin-connect-to` in `stripe-listen.sh`), and two were only visible to the Client (an invoice that said `From DOULA.CLOU`, and `payments` rows with no Stripe reference). One of them passed its unit tests because the fixture supplied a field production never sends.
 
-**Run status (2026-08-22):** the automated steps of all nine plans are run and
-**all pass** — `bun run test:e2e`, 16 passed, 0 failed. One walk ticket per plan
-carries the rest ([#233](https://github.com/markgoho/doula-cloud/issues/233)–[#241](https://github.com/markgoho/doula-cloud/issues/241)),
-and each plan's **Run log** names its own. **The six practice-side plans are walked** — Tasha
-Bell's, Maya Okonkwo's, Renata Alvarez's, Dee Whitlock's, Priya Raman's and Lena
-Vasquez's
-([#233](https://github.com/markgoho/doula-cloud/issues/233),
-[#234](https://github.com/markgoho/doula-cloud/issues/234),
-[#235](https://github.com/markgoho/doula-cloud/issues/235),
-[#236](https://github.com/markgoho/doula-cloud/issues/236),
-[#237](https://github.com/markgoho/doula-cloud/issues/237),
-[#238](https://github.com/markgoho/doula-cloud/issues/238)). **Two of the three
-client-side plans are walked** — Nadia Haddad's and Hannah Sorensen's
-([#239](https://github.com/markgoho/doula-cloud/issues/239),
-[#240](https://github.com/markgoho/doula-cloud/issues/240)); Camille Boyd's is
-not. Filing the `journey-gap` issues stays
-[#209](https://github.com/markgoho/doula-cloud/issues/209), which waits on all
-nine walks.
+**Run status (2026-08-22):** the automated steps of all nine plans are run and **all pass** — `bun run test:e2e`, 16 passed, 0 failed. One walk ticket per plan carries the rest ([#233](https://github.com/markgoho/doula-cloud/issues/233)–[#241](https://github.com/markgoho/doula-cloud/issues/241)), and each plan's **Run log** names its own. **The six practice-side plans are walked** — Tasha Bell's, Maya Okonkwo's, Renata Alvarez's, Dee Whitlock's, Priya Raman's and Lena Vasquez's ([#233](https://github.com/markgoho/doula-cloud/issues/233), [#234](https://github.com/markgoho/doula-cloud/issues/234), [#235](https://github.com/markgoho/doula-cloud/issues/235), [#236](https://github.com/markgoho/doula-cloud/issues/236), [#237](https://github.com/markgoho/doula-cloud/issues/237), [#238](https://github.com/markgoho/doula-cloud/issues/238)). **Two of the three client-side plans are walked** — Nadia Haddad's and Hannah Sorensen's ([#239](https://github.com/markgoho/doula-cloud/issues/239), [#240](https://github.com/markgoho/doula-cloud/issues/240)); Camille Boyd's is not. Filing the `journey-gap` issues stays [#209](https://github.com/markgoho/doula-cloud/issues/209), which waits on all nine walks.
 
-A walk may also **falsify an expected result** without moving its mark. Renata's
-1.2, 1.3 and 4.3 each stayed `manual` — the step is performable, and what the
-product did when it was performed is simply not what the plan claimed. The cell is
-corrected in place and the finding goes to the owning map (RA-G9, RA-G10), the
-same treatment Maya's 5.2 got.
+A walk may also **falsify an expected result** without moving its mark. Renata's 1.2, 1.3 and 4.3 each stayed `manual` — the step is performable, and what the product did when it was performed is simply not what the plan claimed. The cell is corrected in place and the finding goes to the owning map (RA-G9, RA-G10), the same treatment Maya's 5.2 got.
 
-A walk may also **add a step**. Dee's 7.2-a came out of voiding a Contract and then
-noticing **Create Invoice** still rendered on it — a check no cell had named. A new
-`-a` id is the same move as a plan appending a check the map's step does not name;
-the map still owns the gap it mints (DW-G7). Priya's 5.2-a is the same move from the
-other direction: her 5.2 tested only whether she could *read* a Contract's money, so
-the walk appended the write, and she set a price and sent the Contract (PR-G8).
+A walk may also **add a step**. Dee's 7.2-a came out of voiding a Contract and then noticing **Create Invoice** still rendered on it — a check no cell had named. A new `-a` id is the same move as a plan appending a check the map's step does not name; the map still owns the gap it mints (DW-G7). Priya's 5.2-a is the same move from the other direction: her 5.2 tested only whether she could *read* a Contract's money, so the walk appended the write, and she set a price and sent the Contract (PR-G8).
 
-A walk may **narrow a gap rather than confirm or delete it**. Priya's PR-G3 claimed
-the `doula` role "is never read anywhere in the codebase". A 21-endpoint battery run
-at `roles = '{}'` and again at `['doula']` found it read in exactly one place —
-`visit/roles.go` — gating the one act her journey is named for. The gap survives in
-narrowed form on the map that owns it, the same treatment TB-G7 got.
+A walk may **narrow a gap rather than confirm or delete it**. Priya's PR-G3 claimed the `doula` role "is never read anywhere in the codebase". A 21-endpoint battery run at `roles = '{}'` and again at `['doula']` found it read in exactly one place — `visit/roles.go` — gating the one act her journey is named for. The gap survives in narrowed form on the map that owns it, the same treatment TB-G7 got.
 
 **One claim ran through four plans before a walk could settle it.** Renata's 1.2, Dee's 1.3 and Priya's 3.2 each expected a Practice picker and each found none, and each walk recorded it as unwalkable rather than missing. Lena's walk rendered it: signing in with two memberships lists both Practices under `Choose a Practice`, on `/login` itself. The picker was never absent — every other Persona holds exactly one membership, and LV-G2 made a second unreachable through the product at the time, so only the fixture bypass then in Lena's Preconditions could produce the state the walk needed. LV-G2 is closed now ([#1242](https://github.com/markgoho/doula-cloud/issues/1242)), and her plan's own step 1.2 produces the second membership directly. A claim no single plan could test is worth carrying across plans rather than deleting.
 
-A walk may **re-mark a step**. Tasha's 3.3-a went from `missing-feature (TB-G7)`
-to `manual` once the Staff screen turned out to answer it — the rule that a mark
-is a claim read out of the code cuts both ways, and the run is what settles it.
-Re-marking is not minting: the gap ID stays owned by its journey map, and its
-wording is corrected there.
+A walk may **re-mark a step**. Tasha's 3.3-a went from `missing-feature (TB-G7)` to `manual` once the Staff screen turned out to answer it — the rule that a mark is a claim read out of the code cuts both ways, and the run is what settles it. Re-marking is not minting: the gap ID stays owned by its journey map, and its wording is corrected there.
 
 ## Fixed structure
 
 1. **Header** — journey link, persona link, what a pass means.
-2. **Preconditions** — the state the run needs before step 1, and how to reach it
-   when the product cannot build it.
+2. **Preconditions** — the state the run needs before step 1, and how to reach it when the product cannot build it.
 3. **Steps** — one small table per stage, mirroring the journey map's stages.
-4. **Permission boundary** — where the plan carries one. Only Priya's does
-   (PR-B1 to PR-B6). Tester-only steps, never persona steps.
+4. **Permission boundary** — where the plan carries one. Only Priya's does (PR-B1 to PR-B6). Tester-only steps, never persona steps.
 5. **Marks** — the count, and the run log.
 
 ### Step ids
 
-A step keeps the id it has on the journey map (`3.2` is Maya 3.2), so a plan and a
-map can be read side by side. Where a test needs a check the map's step does not
-name, the check is appended as `3.2-a`. A plan never renumbers a map.
+A step keeps the id it has on the journey map (`3.2` is Maya 3.2), so a plan and a map can be read side by side. Where a test needs a check the map's step does not name, the check is appended as `3.2-a`. A plan never renumbers a map.
 
 ## The four marks
 
 Every step carries exactly one mark.
 
-- **`automated (<spec>)`** — an existing Playwright spec drives this step and
-  asserts its result. It counts only when the spec exercises the step the way the
-  Persona would, through the UI, or asserts that behavior directly.
-  **Fixture setup does not count.** `birth-plan.e2e.ts` creates its Client with `POST /api/practices/{id}/clients`; that automates nothing about the intake sequence, which `add-client-visits.e2e.ts` walks separately and on purpose. The `/signup` form was the same shape of hole until [#318](https://github.com/markgoho/doula-cloud/issues/318) wrote `signup-form.e2e.ts` for it: every other spec still provisions its Practice through `POST /api/staff/signup` directly, and that provisioning is still fixture setup rather than coverage.
-- **`manual`** — a person can walk the step today against the running stack. The
-  expected result is what the product does **as built**, which includes a refusal
-  or an error where that is the honest answer (`connectRequired`, `402 no credits
-  remaining`, a raw enum on screen). A step is `manual` when it can be performed
-  and the result observed, whatever the result is.
-- **`blocked`** — the code path is complete and the step can be attempted, but it
-  cannot finish because third-party infrastructure the walking stack does not
-  have is absent.
+- **`automated (<spec>)`** — an existing Playwright spec drives this step and asserts its result. It counts only when the spec exercises the step the way the Persona would, through the UI, or asserts that behavior directly. **Fixture setup does not count.** `birth-plan.e2e.ts` creates its Client with `POST /api/practices/{id}/clients`; that automates nothing about the intake sequence, which `add-client-visits.e2e.ts` walks separately and on purpose. The `/signup` form was the same shape of hole until [#318](https://github.com/markgoho/doula-cloud/issues/318) wrote `signup-form.e2e.ts` for it: every other spec still provisions its Practice through `POST /api/staff/signup` directly, and that provisioning is still fixture setup rather than coverage.
+- **`manual`** — a person can walk the step today against the running stack. The expected result is what the product does **as built**, which includes a refusal or an error where that is the honest answer (`connectRequired`, `402 no credits remaining`, a raw enum on screen). A step is `manual` when it can be performed and the result observed, whatever the result is.
+- **`blocked`** — the code path is complete and the step can be attempted, but it cannot finish because third-party infrastructure the walking stack does not have is absent.
 
-  **The Stripe account now exists** ([#242](https://github.com/markgoho/doula-cloud/issues/242)),
-  and Credits went `blocked` -> `manual` on 2026-08-22: Maya's 3.4-a buys two
-  credits through Stripe Checkout and the ledger is credited by the
-  `checkout.session.completed` webhook. Connect and Invoices did **not** clear,
-  and the reason has changed in a way the mark does not fit cleanly.
+  **The Stripe account now exists** ([#242](https://github.com/markgoho/doula-cloud/issues/242)), and Credits went `blocked` -> `manual` on 2026-08-22: Maya's 3.4-a buys two credits through Stripe Checkout and the ledger is credited by the `checkout.session.completed` webhook. Connect and Invoices did **not** clear, and the reason has changed in a way the mark does not fit cleanly.
 
-  **The rule needs restating, because reality moved.** The old test — *would
-  connecting the third-party infrastructure clear it* — assumed the only way a
-  complete code path can fail is that the infrastructure is missing. Connecting
-  Stripe did not clear Connect: Stripe refused `POST /v1/accounts` for new
-  integrations while every merged Connect path was Accounts v1. The
-  infrastructure was present and our code could not use it.
+  **The rule needs restating, because reality moved.** The old test — *would connecting the third-party infrastructure clear it* — assumed the only way a complete code path can fail is that the infrastructure is missing. Connecting Stripe did not clear Connect: Stripe refused `POST /v1/accounts` for new integrations while every merged Connect path was Accounts v1. The infrastructure was present and our code could not use it.
 
-  [#247](https://github.com/markgoho/doula-cloud/issues/247) has since fixed the
-  code, so that particular gap is closed — but the restated rule below is what
-  caught it, and it holds for the third reason Connect is still `blocked`: the
-  walk itself has not been done.
+  [#247](https://github.com/markgoho/doula-cloud/issues/247) has since fixed the code, so that particular gap is closed — but the restated rule below is what caught it, and it holds for the third reason Connect is still `blocked`: the walk itself has not been done.
 
-  So `blocked` now means: **the step cannot finish for a reason outside the
-  screen it is walked from, and no product decision is missing.** A step whose
-  code targets a withdrawn third-party API is `blocked`, not
-  `missing-feature` — the feature was specified and built, and what it needs is
-  a migration, not a decision. A walk that meets one records *which* of the two
-  reasons applies, because they clear on completely different work.
+  So `blocked` now means: **the step cannot finish for a reason outside the screen it is walked from, and no product decision is missing.** A step whose code targets a withdrawn third-party API is `blocked`, not `missing-feature` — the feature was specified and built, and what it needs is a migration, not a decision. A walk that meets one records *which* of the two reasons applies, because they clear on completely different work.
 
-  It was briefly two. Maya's walk found Contract signing answering a bare 500,
-  because signing writes the PDF to the object store before it writes the status
-  (`api/internal/contracts/sign.go:85-89`) and the stack pointed the SDK at
-  `storage-emulator-disabled.invalid:1`. That was the harness, not the product —
-  the deployed service has the real bucket — so `compose.e2e.yaml` gained a
-  `fake-gcs-server` and the steps went back to `manual`
-  ([#234](https://github.com/markgoho/doula-cloud/issues/234)). **Prefer that fix
-  to the mark**: where the missing infrastructure can be stood up locally, stand
-  it up, and keep `blocked` for the one thing that cannot be (a Stripe account is
-  a business relationship, not a container). Dee's walk
-  ([#236](https://github.com/markgoho/doula-cloud/issues/236)) drew the second
-  half of that line and then erased it: Stripe's hosted onboarding CAPTCHA'd a
-  Playwright-launched browser in both headless and headed mode, and let the user's
-  own Chrome through `playwriter` straight past, unchallenged, on every screen. So
-  what looked like a closed door was **the wrong browser**. A walk never works
-  around an anti-automation control; it uses one that does not trip it.
+  It was briefly two. Maya's walk found Contract signing answering a bare 500, because signing writes the PDF to the object store before it writes the status (`api/internal/contracts/sign.go:85-89`) and the stack pointed the SDK at `storage-emulator-disabled.invalid:1`. That was the harness, not the product — the deployed service has the real bucket — so `compose.e2e.yaml` gained a `fake-gcs-server` and the steps went back to `manual` ([#234](https://github.com/markgoho/doula-cloud/issues/234)). **Prefer that fix to the mark**: where the missing infrastructure can be stood up locally, stand it up, and keep `blocked` for the one thing that cannot be (a Stripe account is a business relationship, not a container). Dee's walk ([#236](https://github.com/markgoho/doula-cloud/issues/236)) drew the second half of that line and then erased it: Stripe's hosted onboarding CAPTCHA'd a Playwright-launched browser in both headless and headed mode, and let the user's own Chrome through `playwriter` straight past, unchallenged, on every screen. So what looked like a closed door was **the wrong browser**. A walk never works around an anti-automation control; it uses one that does not trip it.
 
-  The expected result is still the real as-built response, so the step is walked
-  and observed like a `manual` one — the mark exists so the first run's numbers do
-  not read a bill we have not paid as a hole in the product. **That response is
-  not always graceful**: the Invoice leg answers `connectRequired` on a Practice
-  that has not connected. The bare `internal error` (HTTP 500) that Buy credits
-  and Connect Stripe both used to answer was the missing API key, and is gone —
-  both legs were walked end to end on 2026-08-22.
-- **`missing-feature (<gap id>)`** — the step cannot be performed at all: no
-  screen, no endpoint, no column. It cites the gap ID **owned by a journey map**.
-  A test plan never mints a gap ID. If a run exposes a gap no map owns, it goes
-  back to the map that owns the stage.
+  The expected result is still the real as-built response, so the step is walked and observed like a `manual` one — the mark exists so the first run's numbers do not read a bill we have not paid as a hole in the product. **That response is not always graceful**: the Invoice leg answers `connectRequired` on a Practice that has not connected. The bare `internal error` (HTTP 500) that Buy credits and Connect Stripe both used to answer was the missing API key, and is gone — both legs were walked end to end on 2026-08-22.
+- **`missing-feature (<gap id>)`** — the step cannot be performed at all: no screen, no endpoint, no column. It cites the gap ID **owned by a journey map**. A test plan never mints a gap ID. If a run exposes a gap no map owns, it goes back to the map that owns the stage.
 
-The line between `manual` and `missing-feature` is *can the step be attempted*,
-not *does it give a good answer*. A step whose honest as-built result is a refusal
-(`402 no credits remaining`, a role refusal, a raw enum on screen) is `manual`.
+The line between `manual` and `missing-feature` is *can the step be attempted*, not *does it give a good answer*. A step whose honest as-built result is a refusal (`402 no credits remaining`, a role refusal, a raw enum on screen) is `manual`.
 
-The line between `blocked` and `missing-feature` is **is a product decision
-missing** — if not, it is `blocked`, whether what it waits on is infrastructure
-we have not stood up or a third-party API we have not migrated to. Dee's stage 9
-is the case that fixes the rule in mind:
-recording a bank transfer stays impossible with Stripe connected, so it is
-`missing-feature (DW-G3)`, while the Invoice she cannot raise one stage earlier is
-`blocked`.
+The line between `blocked` and `missing-feature` is **is a product decision missing** — if not, it is `blocked`, whether what it waits on is infrastructure we have not stood up or a third-party API we have not migrated to. Dee's stage 9 is the case that fixes the rule in mind: recording a bank transfer stays impossible with Stripe connected, so it is `missing-feature (DW-G3)`, while the Invoice she cannot raise one stage earlier is `blocked`.
 
 ## Running
 
-- **Automated steps**: `bun run test:e2e` in `app/`. The stack — Postgres in
-  compose, migrate, the BFF, and the Firebase Auth emulator — is started and
-  stopped by `app/e2e/stack.ts`; see [docs/testing.md](../testing.md).
-- **Manual steps**: `bun run dev:full` in `app/`, walked in a browser as the
-  Persona, on the device the journey names (Priya's stage 6 is a phone).
+- **Automated steps**: `bun run test:e2e` in `app/`. The stack — Postgres in compose, migrate, the BFF, and the Firebase Auth emulator — is started and stopped by `app/e2e/stack.ts`; see [docs/testing.md](../testing.md).
+- **Manual steps**: `bun run dev:full` in `app/`, walked in a browser as the Persona, on the device the journey names (Priya's stage 6 is a phone).
 
 ## Spec inventory
 
@@ -242,10 +115,7 @@ Nothing in the suite exercises: Invoices, or the Staff roster screen (`/practice
 | [first-time-client.md](first-time-client.md) | Hannah Sorensen | [journey](../journeys/first-time-client.md) |
 | [returning-postpartum-client.md](returning-postpartum-client.md) | Camille Boyd | [journey](../journeys/returning-postpartum-client.md) |
 
-The first six are practice-side ([#207](https://github.com/markgoho/doula-cloud/issues/207)),
-the last three client-side ([#208](https://github.com/markgoho/doula-cloud/issues/208)).
-**No plan carries a `blocked` step on the client side**: Stripe never reaches the
-Client portal, so every hole a Client meets is a hole in the product.
+The first six are practice-side ([#207](https://github.com/markgoho/doula-cloud/issues/207)), the last three client-side ([#208](https://github.com/markgoho/doula-cloud/issues/208)). **No plan carries a `blocked` step on the client side**: Stripe never reaches the Client portal, so every hole a Client meets is a hole in the product.
 
 ## The run, and the gap issues
 

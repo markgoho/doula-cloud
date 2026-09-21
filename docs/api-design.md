@@ -118,19 +118,7 @@ APIs run at code speed, not human click speed. Protect the backend against unthr
 
 ### What's built (#602)
 
-`api/internal/ratelimit` is the one seam every limited handler wraps in, the same decorator
-shape as `idempotency.Wrap`: `ratelimit.Wrap(db, endpoint, rules)(handler)`. Counters live in
-Postgres (`rate_limit_buckets`, migration `00060`), not process memory — Cloud Run runs more
-than one instance, so an in-process counter would not actually limit anything (ADR-0004 made
-the same call for sessions and idempotency keys). A `Rule` is one dimension: a name, how to
-read its key off the request, a cap, and a window; an endpoint combines more than one so that
-evading any single dimension still runs into another. A refused request gets `429`, the
-headers above, and section 7's structured error body; the refusal is also appended to
-`rate_limit_refusals` (migration `00060`) so repeated refusals against one address can be seen
-after the fact. That table is not an `activity` row (ADR-0022) — every endpoint below runs
-before any Practice exists or is known, and `activity.practice_id` is `NOT NULL` — the same
-shape ADR-0022 itself names for `staff_work_state_events` (00043): where `activity` cannot
-hold the fact, the record lives on the table that owns it.
+`api/internal/ratelimit` is the one seam every limited handler wraps in, the same decorator shape as `idempotency.Wrap`: `ratelimit.Wrap(db, endpoint, rules)(handler)`. Counters live in Postgres (`rate_limit_buckets`, migration `00060`), not process memory — Cloud Run runs more than one instance, so an in-process counter would not actually limit anything (ADR-0004 made the same call for sessions and idempotency keys). A `Rule` is one dimension: a name, how to read its key off the request, a cap, and a window; an endpoint combines more than one so that evading any single dimension still runs into another. A refused request gets `429`, the headers above, and section 7's structured error body; the refusal is also appended to `rate_limit_refusals` (migration `00060`) so repeated refusals against one address can be seen after the fact. That table is not an `activity` row (ADR-0022) — every endpoint below runs before any Practice exists or is known, and `activity.practice_id` is `NOT NULL` — the same shape ADR-0022 itself names for `staff_work_state_events` (00043): where `activity` cannot hold the fact, the record lives on the table that owns it.
 
 Every public unauthenticated endpoint that existed when this landed, and its disposition:
 
@@ -158,22 +146,10 @@ Every public unauthenticated endpoint that existed when this landed, and its dis
 
 Deliberately not limited:
 
-- `GET /api/hello` — a liveness/readiness probe with no side effect and no cost, curled in a
-  loop by CI's own smoke tests and by Cloud Run's health check. Limiting it would break exactly
-  the callers it exists for.
-- `DELETE /api/session` — only ever clears a cookie the caller already holds (or no-ops if
-  there is none); no credential is checked, so there is nothing for an attacker to gain by
-  repeating it.
-- `GET /api/staff/session`, `PUT /api/staff/work-state`, `PUT /api/staff/email`,
-  `GET /api/portal/session`, and every route behind `staffauth.Middleware` /
-  `clientauth.Middleware` — gated by `authn.Begin`'s own `__session` cookie check. A missing or
-  invalid session is a `401` at that gate; there is no bootstrap-style window here for an
-  attacker to spend.
-- `POST /api/internal/**` and `POST /api/stripe/**` / `POST /api/mailgun/webhook` — authenticated
-  by a Google-signed OIDC ID token from an allowlisted service account
-  ([ADR-0037](adr/0037-the-internal-boundary-is-a-caller-identity-not-a-shared-secret.md);
-  `X-Internal-Secret` is the local and end-to-end fallback only) or a signature over the request
-  body, not a session, and called only by Cloud Scheduler, Cloud Tasks, or the vendor itself.
+- `GET /api/hello` — a liveness/readiness probe with no side effect and no cost, curled in a loop by CI's own smoke tests and by Cloud Run's health check. Limiting it would break exactly the callers it exists for.
+- `DELETE /api/session` — only ever clears a cookie the caller already holds (or no-ops if there is none); no credential is checked, so there is nothing for an attacker to gain by repeating it.
+- `GET /api/staff/session`, `PUT /api/staff/work-state`, `PUT /api/staff/email`, `GET /api/portal/session`, and every route behind `staffauth.Middleware` / `clientauth.Middleware` — gated by `authn.Begin`'s own `__session` cookie check. A missing or invalid session is a `401` at that gate; there is no bootstrap-style window here for an attacker to spend.
+- `POST /api/internal/**` and `POST /api/stripe/**` / `POST /api/mailgun/webhook` — authenticated by a Google-signed OIDC ID token from an allowlisted service account ([ADR-0037](adr/0037-the-internal-boundary-is-a-caller-identity-not-a-shared-secret.md); `X-Internal-Secret` is the local and end-to-end fallback only) or a signature over the request body, not a session, and called only by Cloud Scheduler, Cloud Tasks, or the vendor itself.
 
 ---
 

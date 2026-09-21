@@ -157,8 +157,7 @@ That last point deserves its own sentence. **Buttondown, a Stripe-billed SaaS wi
 - Footer: **Privacy** (`/legal/privacy`), **Terms** (`/legal/terms`), GDPR compliance, **Contact** (`/about/contact`), **Help Centre** (`/docs`) <!-- spelling:ignore: Fathom's own footer label, quoted verbatim --> — spelled that way on Fathom's own footer, so quoted verbatim rather than Americanized — Imprint, Status, Sitemap. **Observed.** No `/sitemap.xml`; `robots.txt` points at `/sitemap-index.xml`. No standalone refund URL anywhere in it.
 - Refund position, a **titled subsection inside** `/legal/terms` — **observed**:
 
-> Refunds
-> All Fees paid by you to us are non-refundable, except if required by law.
+> Refunds All Fees paid by you to us are non-refundable, except if required by law.
 
 > In the event of any account suspension or deletion, you acknowledge and agree that you will not be entitled to any refunds of any amounts previously paid to us.
 
@@ -193,8 +192,7 @@ Fathom is the pattern our page is closest to in spirit: a heading called **Refun
 - A one-person product. Homepage footer: Documentation (`/docs`), Changelog, RSS, `llms.txt`, the creator's personal site, **Terms** (`/docs/terms`), **Privacy** (`/docs/privacy`). **No contact or support link in the homepage footer at all.** **Absent**, verified against the raw footer markup.
 - Refund position, a **titled subsection inside** `/docs/terms` — **observed**:
 
-> Refund Policy
-> We offer a 30-day, no-questions-asked refund policy on initial payments.
+> Refund Policy We offer a 30-day, no-questions-asked refund policy on initial payments.
 
 > Violations of these Terms of Service will result in immediate account termination without refund.
 

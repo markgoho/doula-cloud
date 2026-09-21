@@ -2,23 +2,16 @@
 
 - **Journey**: [employed-doula.md](../journeys/employed-doula.md)
 - **Persona**: [employed-doula.md](../personas/employed-doula.md)
-- **A pass means**: an active membership holding the Doula role, an Engagement
-  assigned to her opened, a Visit logged, messages exchanged — **and she never saw
-  a screen she had no right to see.**
+- **A pass means**: an active membership holding the Doula role, an Engagement assigned to her opened, a Visit logged, messages exchanged — **and she never saw a screen she had no right to see.**
 
-She is the negative-permission Persona, so half this plan is the
-[Permission boundary](#permission-boundary) matrix, which is tester work rather
-than anything Priya would do.
+She is the negative-permission Persona, so half this plan is the [Permission boundary](#permission-boundary) matrix, which is tester work rather than anything Priya would do.
 
 ## Preconditions
 
-- A Practice with an Owner, **two or more** Clients, at least one of them created
-  by a different Staff member — otherwise stage 4 cannot fail the way it should.
+- A Practice with an Owner, **two or more** Clients, at least one of them created by a different Staff member — otherwise stage 4 cannot fail the way it should.
 - One Engagement carrying a filled Birth Plan and a Contract with an amount on it.
-- Priya invited as a `doula` and accepted. The role rides the Invitation now
-  (#316), so there is no follow-up call to make.
-- A phone, or a phone-sized viewport, for stage 6. It is the moment of truth and it
-  is device-specific.
+- Priya invited as a `doula` and accepted. The role rides the Invitation now (#316), so there is no follow-up call to make.
+- A phone, or a phone-sized viewport, for stage 6. It is the moment of truth and it is device-specific.
 
 ## Steps
 
@@ -85,19 +78,11 @@ than anything Priya would do.
 | 8.2 | Have the Client reply | One continuous thread, in order, immutable | `manual` |
 | 8.2-a | With the Client's thread open, deliver a push event | The tab refetches and shows the message; the push itself carries no content (ADR-0002) | `automated (push-notification.e2e.ts)` |
 
-**Nadia crossing, settled.** Stages 7 and 8 are where an Engagement ending in loss
-lands on the Doula's side — a bereavement Visit, and a thread that must not carry
-on unchanged. [Her plan](loss-client.md) now exists and **neither stage changes**:
-her 7.1 walks the bereavement Visit against **PR-G6**, **MO-G1** and **MO-G2**,
-already given steps here, and the thread with no way to mark that its subject has
-changed is hers to own (**NH-G7**). No step id here moves.
+**Nadia crossing, settled.** Stages 7 and 8 are where an Engagement ending in loss lands on the Doula's side — a bereavement Visit, and a thread that must not carry on unchanged. [Her plan](loss-client.md) now exists and **neither stage changes**: her 7.1 walks the bereavement Visit against **PR-G6**, **MO-G1** and **MO-G2**, already given steps here, and the thread with no way to mark that its subject has changed is hers to own (**NH-G7**). No step id here moves.
 
 ## Permission boundary
 
-**Not stages.** Priya would never type these URLs. Each is walked as Priya, signed
-in, holding `doula` and not `owner`. No owner-only route has a `+page.ts` load
-guard, so the page always renders; what differs is whether the API hands over data
-(PR-G4).
+**Not stages.** Priya would never type these URLs. Each is walked as Priya, signed in, holding `doula` and not `owner`. No owner-only route has a `+page.ts` load guard, so the page always renders; what differs is whether the API hands over data (PR-G4).
 
 | Step | Route | Expected result | Mark |
 | --- | --- | --- | --- |
@@ -108,9 +93,7 @@ guard, so the page always renders; what differs is whether the API hands over da
 | PR-B5 | `/practices/[practiceId]/settings/payments` | **Holds, and not at the endpoint.** The screen prints the Practice's Stripe status to her (`Not connected` — [RA-G9](https://github.com/markgoho/doula-cloud/issues/267)), then renders **no Connect button at all**, only `Ask a Practice Owner to connect Stripe.` `POST .../connect` also refuses on a direct call | `manual` |
 | PR-B6 | `/practices/[practiceId]/billing` | **Fails.** The balance and ledger take any Staff member, so she reads the Practice's spending; buying is correctly refused ([DW-G4](https://github.com/markgoho/doula-cloud/issues/272)) — **Buy credits** renders `disabled` for a non-owner (`billing/+page.svelte:84`) and the endpoint `403`s on a direct call | `manual` |
 
-The pattern under test: protection sits on the write endpoint, never on the read.
-No spec in the suite asserts a refusal by role at all, so every row here is new
-ground.
+The pattern under test: protection sits on the write endpoint, never on the read. No spec in the suite asserts a refusal by role at all, so every row here is new ground.
 
 ## Marks
 
@@ -120,18 +103,13 @@ ground.
 | `manual` | 21 (five of them the permission boundary; 5.2-a added by the walk) |
 | `missing-feature` | 5 ([RA-G4](https://github.com/markgoho/doula-cloud/issues/225), [PR-G5](https://github.com/markgoho/doula-cloud/issues/280), [PR-G6](https://github.com/markgoho/doula-cloud/issues/281), [MO-G1](https://github.com/markgoho/doula-cloud/issues/250), [MO-G2](https://github.com/markgoho/doula-cloud/issues/251)) |
 
-PR-G1, PR-G2, PR-G3, PR-G4 and PR-G8 are observed inside walkable steps (4.2, 5.2,
-5.2-a, 2.1-b, PR-B3 to PR-B6) rather than given steps of their own: the step can be
-performed, and what it hands back is the finding. **PR-G9** is observed at 6.1, in
-what happens *before* the step rather than in the step itself.
+PR-G1, PR-G2, PR-G3, PR-G4 and PR-G8 are observed inside walkable steps (4.2, 5.2, 5.2-a, 2.1-b, PR-B3 to PR-B6) rather than given steps of their own: the step can be performed, and what it hands back is the finding. **PR-G9** is observed at 6.1, in what happens *before* the step rather than in the step itself.
 
 ## Run log
 
 ### 2026-08-22 — automated steps ([#209](https://github.com/markgoho/doula-cloud/issues/209))
 
-`bun run test:e2e` in `app/`, whole suite, one run: **16 passed, 0 failed** (20.5s).
-Stack per [docs/testing.md](../testing.md) — Postgres in compose, the goose
-migration, the Go BFF and the Firebase Auth emulator, all local.
+`bun run test:e2e` in `app/`, whole suite, one run: **16 passed, 0 failed** (20.5s). Stack per [docs/testing.md](../testing.md) — Postgres in compose, the goose migration, the Go BFF and the Firebase Auth emulator, all local.
 
 | Step | Spec | Result |
 | --- | --- | --- |
@@ -146,42 +124,21 @@ No step is re-marked and no cell is rewritten here. The `missing-feature` count 
 
 ### 2026-09-03 — new automated step ([#318](https://github.com/markgoho/doula-cloud/issues/318))
 
-`bun run test:e2e` in `app/`, whole suite, one run: **30 passed, 0 failed**
-(29.0s).
+`bun run test:e2e` in `app/`, whole suite, one run: **30 passed, 0 failed** (29.0s).
 
 | Step | Spec | Result |
 | --- | --- | --- |
 | PR-B2 | `staff-invite-role.e2e.ts` | pass |
 
-**1 newly automated step: pass**, bringing the plan's total to 3.
-`staff-invite-role.e2e.ts` also drives Stage 1/2's invite-and-accept shape,
-but with the Invitation carrying the `doula` role directly (#316) rather than
-the empty-then-edited-membership shape Stage 1.2 describes, so those two
-steps are left `manual` rather than reconciled here. The 2026-08-23 manual
-walk below is unchanged as a historical record.
+**1 newly automated step: pass**, bringing the plan's total to 3. `staff-invite-role.e2e.ts` also drives Stage 1/2's invite-and-accept shape, but with the Invitation carrying the `doula` role directly (#316) rather than the empty-then-edited-membership shape Stage 1.2 describes, so those two steps are left `manual` rather than reconciled here. The 2026-08-23 manual walk below is unchanged as a historical record.
 
 ### 2026-08-23 — manual walk ([#237](https://github.com/markgoho/doula-cloud/issues/237))
 
-`bun run dev:full` in `app/`, walked as Priya Raman: stages 1 and 6 on an emulated
-Pixel 7 (412x839), everything else at 1280x900, with separate contexts for Renata
-(Owner) and for Marisol Vega (the Client who replies). This plan's two `automated`
-steps were **not** re-run.
+`bun run dev:full` in `app/`, walked as Priya Raman: stages 1 and 6 on an emulated Pixel 7 (412x839), everything else at 1280x900, with separate contexts for Renata (Owner) and for Marisol Vega (the Client who replies). This plan's two `automated` steps were **not** re-run.
 
-Preconditions built as the plan allows, and no further: `POST /api/staff/signup` for
-`Rooted Birth Collective` (Renata, whom signup grants all three roles), the Client
-**Marisol Vega** created by Renata and the Client **Tabitha Nunes** created by a
-second Staff member, **Jo Mercer**, so stage 4 can fail the way it should; a filled
-Care Plan and Birth Plan and a `sent` Contract priced `$1,800` on Marisol's
-Engagement; and her portal invite accepted, so stage 8 has a reply side. Priya's own
-invitation was only *sent* — accepting it **is** steps 1.1 and 1.2, and the
-`PATCH .../staff/{staffId}/roles` **is** step 2.1-a, so neither was provisioned away.
+Preconditions built as the plan allows, and no further: `POST /api/staff/signup` for `Rooted Birth Collective` (Renata, whom signup grants all three roles), the Client **Marisol Vega** created by Renata and the Client **Tabitha Nunes** created by a second Staff member, **Jo Mercer**, so stage 4 can fail the way it should; a filled Care Plan and Birth Plan and a `sent` Contract priced `$1,800` on Marisol's Engagement; and her portal invite accepted, so stage 8 has a reply side. Priya's own invitation was only *sent* — accepting it **is** steps 1.1 and 1.2, and the `PATCH .../staff/{staffId}/roles` **is** step 2.1-a, so neither was provisioned away.
 
-**On "compare every later step with and without the role" (2.1-b).** Walking all 28
-steps twice would say nothing 2.1-b does not, so the second pass is a fixed battery
-rather than the whole plan: **21 endpoints**, captured once at `roles = '{}'` — the
-state acceptance actually leaves her in — and again at `['doula']`, then diffed with
-ids and timestamps normalized away. The session's call, recorded here rather than
-asked, following Dee's precedent.
+**On "compare every later step with and without the role" (2.1-b).** Walking all 28 steps twice would say nothing 2.1-b does not, so the second pass is a fixed battery rather than the whole plan: **21 endpoints**, captured once at `roles = '{}'` — the state acceptance actually leaves her in — and again at `['doula']`, then diffed with ids and timestamps normalized away. The session's call, recorded here rather than asked, following Dee's precedent.
 
 | Step | Mark | Result | What was seen |
 | --- | --- | --- | --- |
@@ -216,30 +173,9 @@ asked, following Dee's precedent.
 | PR-B5 | `manual` | **falsified in shape** | It holds, but not where the cell said. The screen hands her the Practice's Stripe status first — `Stripe Connect status: Not connected` ([RA-G9](https://github.com/markgoho/doula-cloud/issues/267)) — and then renders **no Connect button at all**, only `Ask a Practice Owner to connect Stripe.` The direct `POST .../connect` also `403`s. So the refusal she meets is a hidden control, not a rejected press |
 | PR-B6 | `manual` | as expected, with one correction | **Fails on read**: `Credit balance: 1` and the whole ledger, three rows, `signup_bonus +3` and two `consumption -1`. She reads what the Practice spends ([DW-G4](https://github.com/markgoho/doula-cloud/issues/272)). Buying is refused twice over — **Buy credits** renders `disabled` for a non-owner (`billing/+page.svelte:84`), and the endpoint answers `403 only a Practice Owner can do that` on a direct call |
 
-**22 `manual` steps walked (5.2-a added by the walk); 6 `missing-feature` steps
-confirmed unwalkable; no `blocked` step on this plan.** Four expected results were
-falsified — 2.1-b, 3.2, 5.2 and PR-B5 — and none was re-marked, because every one of
-them is a performable step whose claim was simply wrong ([#235](https://github.com/markgoho/doula-cloud/issues/235)'s
-precedent). Two gaps minted on the journey map, **PR-G8** and **PR-G9**, and **PR-G3**
-narrowed rather than deleted. No `journey-gap` issue was filed — that is
-[#209](https://github.com/markgoho/doula-cloud/issues/209).
+**22 `manual` steps walked (5.2-a added by the walk); 6 `missing-feature` steps confirmed unwalkable; no `blocked` step on this plan.** Four expected results were falsified — 2.1-b, 3.2, 5.2 and PR-B5 — and none was re-marked, because every one of them is a performable step whose claim was simply wrong ([#235](https://github.com/markgoho/doula-cloud/issues/235)'s precedent). Two gaps minted on the journey map, **PR-G8** and **PR-G9**, and **PR-G3** narrowed rather than deleted. No `journey-gap` issue was filed — that is [#209](https://github.com/markgoho/doula-cloud/issues/209).
 
-**Verdict against "a pass means": it does not pass, and the walk made the failure
-worse than the map argued.** Three of the four clauses hold: she has an active
-membership holding the Doula role, she logged a Visit — and only the role let her —
-and she exchanged messages with the Client in one clean thread. The Engagement she
-opened is **not assigned to her**, because no Engagement is assigned to anyone
-(RA-G4). The last clause fails hardest. The map's case was that she *sees* screens she
-has no right to: the whole Practice's Client list, another Doula's Contract price, the
-Practice's credit ledger, both Templates, the Stripe status. All of that is confirmed.
-What the map did not claim, and the walk found, is that she can **act** on what she
-should not even see — set the price on a Contract and send it to a Client
-(**PR-G8**). Reading follows no role; writing follows only the Contract's own status.
+**Verdict against "a pass means": it does not pass, and the walk made the failure worse than the map argued.** Three of the four clauses hold: she has an active membership holding the Doula role, she logged a Visit — and only the role let her — and she exchanged messages with the Client in one clean thread. The Engagement she opened is **not assigned to her**, because no Engagement is assigned to anyone (RA-G4). The last clause fails hardest. The map's case was that she *sees* screens she has no right to: the whole Practice's Client list, another Doula's Contract price, the Practice's credit ledger, both Templates, the Stripe status. All of that is confirmed. What the map did not claim, and the walk found, is that she can **act** on what she should not even see — set the price on a Contract and send it to a Client (**PR-G8**). Reading follows no role; writing follows only the Contract's own status.
 
-**Her moment of truth stands where the map put it, and fails for a different
-reason.** Once she is on the Engagement page the Birth Plan is 0.83 screens away and
-reads correctly in under two seconds, which is not the corridor disaster the map
-feared. Getting there is: the product's front door is the framework's demo page, the
-Engagement page has no links on it, and there is no deep link, no collapse and no
-print. The corridor problem is real; it is a problem of arrival, not of scrolling.
+**Her moment of truth stands where the map put it, and fails for a different reason.** Once she is on the Engagement page the Birth Plan is 0.83 screens away and reads correctly in under two seconds, which is not the corridor disaster the map feared. Getting there is: the product's front door is the framework's demo page, the Engagement page has no links on it, and there is no deep link, no collapse and no print. The corridor problem is real; it is a problem of arrival, not of scrolling.
 

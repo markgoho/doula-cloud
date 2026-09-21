@@ -97,9 +97,7 @@ Note that the amount entered is the **receipt**, not the tax: the credit is take
 
 — emphasis added. Schedule CW carries a line written for exactly this situation:
 
-> **11** Bad debt under Tax Law § 1132(e)
-> **12** **Refund issued to a customer for sale reported in a prior period**
-> **13** Materials stored in bulk or fabricated in New York State [...]
+> **11** Bad debt under Tax Law § 1132(e) **12** **Refund issued to a customer for sale reported in a prior period** **13** Materials stored in bulk or fabricated in New York State [...]
 
 — [Form ST-100-ATT, Quarterly Schedule CW (6/26)](https://www.tax.ny.gov/pdf/current_forms/st/st100att.pdf), "Other types of credits". The form's own header repeats the point: *"Note: If you must complete this form, you must also complete Form AU-11 [...] and mail it to the address in the instructions with documentation to substantiate your claim."* Its Credit summary asks for **"the total amount of taxable receipts"** — again the receipt, not the tax.
 
@@ -224,8 +222,7 @@ The Department then works the arithmetic itself, at the same 8% combined rate th
 
 **What specifically substantiates a refund credit.** TB-ST-810's list of documents, of which the first is the one that matters here:
 
-> copies of the receipts or invoices showing **the credit issued with the amount of the sales tax that was returned to the customer** after you remitted the tax to the Tax Department;
-> [...] copies of the original invoices showing the amount of the sales, the sales tax collected, **the customer name and address**
+> copies of the receipts or invoices showing **the credit issued with the amount of the sales tax that was returned to the customer** after you remitted the tax to the Tax Department; [...] copies of the original invoices showing the amount of the sales, the sales tax collected, **the customer name and address**
 
 > If your documents are voluminous, you may submit a summary in table form or a schedule.
 

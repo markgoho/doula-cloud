@@ -153,41 +153,18 @@ If renderers from another session are live, wait rather than kill them — they 
 
 ## Smoothness: gated on causes, not on frame rate
 
-[ADR-0020](adr/0020-smoothness-is-gated-on-causes-because-the-outcome-is-not-measurable-where-the-gate-lives.md)
-records why, with the measurements behind it. The short version: headless
-Chromium reports a fixed ~8.3ms frame no matter what it renders, and CI's
-`app` job runs Postgres, the Auth emulator, the Go BFF and Chromium on one
-shared runner with `retries: 2`. Neither frame rate nor interaction latency
-can be read honestly in either place. Facts about *space* can, so those are
-what is asserted.
+[ADR-0020](adr/0020-smoothness-is-gated-on-causes-because-the-outcome-is-not-measurable-where-the-gate-lives.md) records why, with the measurements behind it. The short version: headless Chromium reports a fixed ~8.3ms frame no matter what it renders, and CI's `app` job runs Postgres, the Auth emulator, the Go BFF and Chromium on one shared runner with `retries: 2`. Neither frame rate nor interaction latency can be read honestly in either place. Facts about *space* can, so those are what is asserted.
 
 Four specs carry it, all in the unit suite, all blocking:
 
-- `app/src/lib/styles/motion.spec.ts` — parses every `.svelte` and `.css`
-  file under `app/src` for raw durations and easing keywords, ungated
-  transforms, unjustified `@keyframes`, motion tokens with no consumer, and
-  `<img>` without intrinsic dimensions. Break a rule deliberately by putting
-  `motion:ignore` plus the reason in a comment attached to the declaration
-  or to the rule that encloses it — the same shape as `coverage:ignore` in
-  `api/`.
-- `app/src/lib/components/organisms/DataTable.usage.spec.ts` — no route may
-  hand `DataTable` an unbounded list. Four routes are on a justified waiting
-  list until [#446](https://github.com/markgoho/doula-cloud/issues/446)
-  gives their endpoints a cursor; the spec fails if one is left on that list
-  after it starts paginating.
+- `app/src/lib/styles/motion.spec.ts` — parses every `.svelte` and `.css` file under `app/src` for raw durations and easing keywords, ungated transforms, unjustified `@keyframes`, motion tokens with no consumer, and `<img>` without intrinsic dimensions. Break a rule deliberately by putting `motion:ignore` plus the reason in a comment attached to the declaration or to the rule that encloses it — the same shape as `coverage:ignore` in `api/`.
+- `app/src/lib/components/organisms/DataTable.usage.spec.ts` — no route may hand `DataTable` an unbounded list. Four routes are on a justified waiting list until [#446](https://github.com/markgoho/doula-cloud/issues/446) gives their endpoints a cursor; the spec fails if one is left on that list after it starts paginating.
 - `app/src/lib/components/organisms/DataTable.performance.svelte.spec.ts` — a row costs at most six elements, and reads the row array a fixed, small number of times rather than reading the rest of the list per row. A read count, never a millisecond budget — [#489](https://github.com/markgoho/doula-cloud/issues/489) replaced the last wall-clock assertion in this file after it flaked on CI.
-- `app/src/lib/components/atoms/Skeleton.layoutShift.svelte.spec.ts` — a
-  skeleton reserves the space the content it stands in for will occupy.
+- `app/src/lib/components/atoms/Skeleton.layoutShift.svelte.spec.ts` — a skeleton reserves the space the content it stands in for will occupy.
 
 A whole-tree scan like `motion.spec.ts`'s runs once, at module scope, never inside an `it` — Vitest's 5-second `testTimeout` is a per-test budget, and a scan of the whole of `app/src` charged against it passes on a quiet machine and times out under the full suite's contention for disk and CPU, then passes again on a bare rerun of the identical commit ([#1211](https://github.com/markgoho/doula-cloud/issues/1211)). `layout.usage.spec.ts` already reads this way and is the pattern to copy.
 
-**What is not checked** is listed in ADR-0020 rather than left to be
-discovered: frame rate, the 100ms and 400ms latency budgets, route-level
-Cumulative Layout Shift, and the blank first frame an SPA paints before its
-JavaScript boots. Scroll feel is a human check on a real display when a
-ticket touches a list. Focus visibility and keyboard reachability belong to
-accessibility — the next section is what that sentence points at — not to
-this gate, so nothing is asserted twice under two names.
+**What is not checked** is listed in ADR-0020 rather than left to be discovered: frame rate, the 100ms and 400ms latency budgets, route-level Cumulative Layout Shift, and the blank first frame an SPA paints before its JavaScript boots. Scroll feel is a human check on a real display when a ticket touches a list. Focus visibility and keyboard reachability belong to accessibility — the next section is what that sentence points at — not to this gate, so nothing is asserted twice under two names.
 
 ## Accessibility: axe on every archetype, and a keyboard walk beside it
 
@@ -245,13 +222,7 @@ Layout is verified by sweeping a subject across the space it can be given rather
 
 ## `api/`: lint with golangci-lint, matching CI exactly
 
-CI runs `golangci-lint` (config: `api/.golangci.yml`) as its own gating step,
-separate from `go vet`/`go build` -- a change can compile and pass `go test`
-while still failing CI on `golangci-lint` alone (goconst, noctx, unparam,
-wrapcheck, and the rest of the curated set in that config). `go vet` is not a
-substitute for it. The local binary must also be the version CI pins; see
-"Toolchain versions: local must match CI exactly" below. Before considering
-`api/` work done, run the same command CI runs:
+CI runs `golangci-lint` (config: `api/.golangci.yml`) as its own gating step, separate from `go vet`/`go build` -- a change can compile and pass `go test` while still failing CI on `golangci-lint` alone (goconst, noctx, unparam, wrapcheck, and the rest of the curated set in that config). `go vet` is not a substitute for it. The local binary must also be the version CI pins; see "Toolchain versions: local must match CI exactly" below. Before considering `api/` work done, run the same command CI runs:
 
 ```sh
 cd api
@@ -260,23 +231,13 @@ GOLANGCI_LINT_CACHE="$(git rev-parse --show-toplevel)/api/.golangci-cache" golan
 
 **Always set `GOLANGCI_LINT_CACHE` to a path under `--show-toplevel`, never bare `golangci-lint run`.** Without it, golangci-lint's results cache defaults to one location shared by every worktree on the machine (`~/.cache/golangci-lint` / `~/Library/Caches/golangci-lint`), keyed in a way that does not account for a worktree's path being reused or removed -- a session linting after another worktree was pruned can see findings that point at files that no longer exist on disk, or, worse, a stale "clean" entry that masks a real issue in the current worktree's own changed file (#587). `--show-toplevel` resolves to the current worktree's own root, so the cache lives and dies with that worktree and never leaks into another one; `.golangci-cache` is gitignored, and `.claude/hooks/gate-golangci-lint-cache.sh` blocks a bare `golangci-lint run` in a Claude Code session. If you ever see findings in files that don't exist in your working tree, that's this problem: run `golangci-lint cache clean` with the same `GOLANGCI_LINT_CACHE` set, then rerun.
 
-Two linters in this set are package-wide, not per-file, so a change to one
-file can newly flag lines you didn't touch in other files in the same
-package -- `goconst` (a literal crosses its repetition threshold once new
-call sites are added elsewhere) and `unparam` (a return value becomes
-"never used" once it's whole-package, not just per-caller). Don't skip
-fixing those on the grounds that "that file isn't part of this change" --
-if `golangci-lint run` at the repo's current state reports it, CI will too.
+Two linters in this set are package-wide, not per-file, so a change to one file can newly flag lines you didn't touch in other files in the same package -- `goconst` (a literal crosses its repetition threshold once new call sites are added elsewhere) and `unparam` (a return value becomes "never used" once it's whole-package, not just per-caller). Don't skip fixing those on the grounds that "that file isn't part of this change" -- if `golangci-lint run` at the repo's current state reports it, CI will too.
 
 ## Coverage: 100% line coverage, with justified exceptions
 
-Both `api/` and `app/` are gated at 100% line coverage in CI. A line that
-genuinely can't be exercised by a test (e.g. `log.Fatal` on listener
-startup failure) needs an inline comment justifying the exception — it is
-not left to ad-hoc PR discussion.
+Both `api/` and `app/` are gated at 100% line coverage in CI. A line that genuinely can't be exercised by a test (e.g. `log.Fatal` on listener startup failure) needs an inline comment justifying the exception — it is not left to ad-hoc PR discussion.
 
-**`api/` (Go):** mark the line, or the `if` guarding it, with a comment
-containing `coverage:ignore`:
+**`api/` (Go):** mark the line, or the `if` guarding it, with a comment containing `coverage:ignore`:
 
 ```go
 // coverage:ignore reason: listener startup, not exercised by unit tests
@@ -285,9 +246,7 @@ if err := http.ListenAndServe(":"+port, nil); err != nil {
 }
 ```
 
-`api/tools/covcheck` parses the `go test -coverprofile` output and fails
-the build on any zero-coverage line that has no `coverage:ignore` comment
-directly above it or within the uncovered block. Run it locally:
+`api/tools/covcheck` parses the `go test -coverprofile` output and fails the build on any zero-coverage line that has no `coverage:ignore` comment directly above it or within the uncovered block. Run it locally:
 
 ```sh
 cd api
@@ -295,10 +254,7 @@ go test ./... -coverprofile=coverage.out
 go run ./tools/covcheck -profile=coverage.out -module=doula-cloud/api -skip=doula-cloud/api/tools/
 ```
 
-`tools/covcheck` itself is still tested (`go test ./...` runs its unit
-tests same as any other package) but excluded from the coverage
-*requirement* via `-skip` — it's dev tooling, not shipped application
-code.
+`tools/covcheck` itself is still tested (`go test ./...` runs its unit tests same as any other package) but excluded from the coverage *requirement* via `-skip` — it's dev tooling, not shipped application code.
 
 "Directly above" means above the block as Go 1.26 reported it, which is how every marker in the repo is placed. Go 1.27 reports the same code in different shapes: an `if` body's block starts at its first statement rather than on the brace line, and a straight-line block is cut into pieces at each comment line. covcheck maps a 1.27 profile back onto the 1.26 blocks before judging it, so the marker above the `if` keeps working and nothing moves ([#1409](https://github.com/markgoho/doula-cloud/issues/1409)). One real difference remains: 1.27 counts some lines on their own that 1.26 folded into a neighboring covered block, so a genuinely unreachable line can appear for the first time. That one needs its own marker.
 
@@ -311,35 +267,13 @@ A local run is evidence of what CI will do only when both run the same Go and th
 
 Moving either one usually means fixing what the new version reports in the same PR. A new Go language version turns on new `modernize` analyzers. `api/.golangci.yml` sets both of golangci-lint's per-linter output caps to 0, so CI and a local run show the whole list, not the first page of it. `golangci-lint run --fix` applies the findings that have an automatic fix.
 
-**`app/` (SvelteKit + Vitest):** Vitest's `v8` coverage provider has this
-built in — use `/* v8 ignore next */` (or `/* v8 ignore start */` /
-`/* v8 ignore stop */` for a range), with a trailing reason comment. The
-100% threshold is set in `app/vite.config.ts` under `test.coverage`,
-scoped to `src/lib/**` — the code Vitest unit-tests. `src/routes/**` is
-exercised by the Playwright e2e suite instead, but that suite does not
-currently collect coverage, so route code has no coverage gate yet. As
-route code accumulates real logic (beyond markup), instrumenting the e2e
-run's coverage and merging it into the same threshold is the follow-up;
-until then the 100% gate is honest about covering `src/lib/**` only, not
-all of `app/`.
+**`app/` (SvelteKit + Vitest):** Vitest's `v8` coverage provider has this built in — use `/* v8 ignore next */` (or `/* v8 ignore start */` / `/* v8 ignore stop */` for a range), with a trailing reason comment. The 100% threshold is set in `app/vite.config.ts` under `test.coverage`, scoped to `src/lib/**` — the code Vitest unit-tests. `src/routes/**` is exercised by the Playwright e2e suite instead, but that suite does not currently collect coverage, so route code has no coverage gate yet. As route code accumulates real logic (beyond markup), instrumenting the e2e run's coverage and merging it into the same threshold is the follow-up; until then the 100% gate is honest about covering `src/lib/**` only, not all of `app/`.
 
 ## `api/`: real Postgres for tests, container-engine-agnostic
 
-`api/internal/testdb` uses testcontainers-go to start **one** real,
-disposable Postgres container per test *process* (`go test` forks one
-process per package), applies the goose migrations (`api/db/migrations`)
-once into a template database, and then hands each call to `testdb.New(t)`
-a fresh database cloned from that template — a file copy, not a migration
-replay. It hands back a `*testdb.DB` with two connections: `Admin` (the
-superuser the migrations ran as, for fixture setup) and `App` (a
-low-privilege `app_runtime`-derived role, the one the running application
-actually connects as). Postgres superusers and table owners always bypass
-Row-Level Security, so tests that need to observe RLS in effect — not just
-assume it — must query through `App`, not `Admin`.
+`api/internal/testdb` uses testcontainers-go to start **one** real, disposable Postgres container per test *process* (`go test` forks one process per package), applies the goose migrations (`api/db/migrations`) once into a template database, and then hands each call to `testdb.New(t)` a fresh database cloned from that template — a file copy, not a migration replay. It hands back a `*testdb.DB` with two connections: `Admin` (the superuser the migrations ran as, for fixture setup) and `App` (a low-privilege `app_runtime`-derived role, the one the running application actually connects as). Postgres superusers and table owners always bypass Row-Level Security, so tests that need to observe RLS in effect — not just assume it — must query through `App`, not `Admin`.
 
-Every package that calls `testdb.New` must define a `TestMain` that hands
-off to `testdb.Main`, so the shared container is terminated once at
-process exit rather than leaked or torn down mid-run:
+Every package that calls `testdb.New` must define a `TestMain` that hands off to `testdb.Main`, so the shared container is terminated once at process exit rather than leaked or torn down mid-run:
 
 ```go
 func TestMain(m *testing.M) {
@@ -347,10 +281,7 @@ func TestMain(m *testing.M) {
 }
 ```
 
-CI runs this against Docker (preinstalled on the runner, no setup needed).
-Locally, testcontainers-go reads `DOCKER_HOST` from the environment, so
-pointing that at a Podman socket runs the same tests against Podman
-instead, with no code change:
+CI runs this against Docker (preinstalled on the runner, no setup needed). Locally, testcontainers-go reads `DOCKER_HOST` from the environment, so pointing that at a Podman socket runs the same tests against Podman instead, with no code change:
 
 ```sh
 # macOS: podman machine start, then export the socket it prints, e.g.
@@ -363,19 +294,9 @@ cd api
 go test ./...
 ```
 
-Ryuk being disabled locally is why `testdb.Main` exists: without an
-explicit `container.Terminate` at process exit, a full local `go test
-./...` would leave one Postgres container running per package that calls
-`testdb.New`. CI leaves Ryuk enabled as a backstop, but relies on
-`testdb.Main` too, since Ryuk only reaps containers after they're already
-orphaned.
+Ryuk being disabled locally is why `testdb.Main` exists: without an explicit `container.Terminate` at process exit, a full local `go test ./...` would leave one Postgres container running per package that calls `testdb.New`. CI leaves Ryuk enabled as a backstop, but relies on `testdb.Main` too, since Ryuk only reaps containers after they're already orphaned.
 
-Every package that calls `testdb.New` must wire up its own `TestMain` --
-four didn't (`internal/mfarecoverymail`, `internal/outbox`,
-`internal/sessionmint`, `internal/sessionnotice`), which meant those
-packages leaked their container on every run, clean or not, until #889
-gave each one the same three-line `TestMain` every other package already
-had.
+Every package that calls `testdb.New` must wire up its own `TestMain` -- four didn't (`internal/mfarecoverymail`, `internal/outbox`, `internal/sessionmint`, `internal/sessionnotice`), which meant those packages leaked their container on every run, clean or not, until #889 gave each one the same three-line `TestMain` every other package already had.
 
 ### A due-time fixture must not compare two clocks
 
@@ -387,37 +308,13 @@ Seed a due-time from the database's own clock, never the host's. `insertTestRow`
 
 ## Reaping orphaned testcontainers
 
-`testdb.Main`'s teardown above only runs on a clean process exit. A
-killed test process -- an interrupted agent, a timeout, a cut-short TDD
-loop -- never reaches it, and Ryuk being disabled locally (previous
-section) means nothing else reaps that container either. With several
-parallel Claude Code agent sessions on one machine, these orphans
-accumulate without bound: 116 running `postgres:16-alpine` containers,
-146 total, 133MB free of a 4GB Podman machine, observed live (#889). That
-starvation made `podman compose up` for `dev:full` time out with
-`ETIMEDOUT` and made unrelated `api/internal/visit` tests flake locally
-while staying green in CI.
+`testdb.Main`'s teardown above only runs on a clean process exit. A killed test process -- an interrupted agent, a timeout, a cut-short TDD loop -- never reaches it, and Ryuk being disabled locally (previous section) means nothing else reaps that container either. With several parallel Claude Code agent sessions on one machine, these orphans accumulate without bound: 116 running `postgres:16-alpine` containers, 146 total, 133MB free of a 4GB Podman machine, observed live (#889). That starvation made `podman compose up` for `dev:full` time out with `ETIMEDOUT` and made unrelated `api/internal/visit` tests flake locally while staying green in CI.
 
-`.claude/hooks/testdb-reap.ts` is a `SessionStart` hook (registered in
-`.claude/settings.json`) that clears these out at the start of every
-session. It removes any container labeled `org.testcontainers=true`
-(testcontainers-go's own label, present on every container `testdb.New`
-starts and nothing else on the machine) that is older than **15
-minutes**. That threshold is deliberately generous, not tight: a
-container backs one `go test` process for one package, so a live one
-lives minutes at most, and the slowest single package observed on this
-machine (`internal/payments`, idle machine) finished in 90.4s. 15 minutes
-is roughly 10x that, enough headroom for several sessions competing for
-the same 4GB Podman machine -- which is exactly the condition that causes
-the leak -- without ever mistaking a live run for an orphan. The
-reasoning lives as a comment on `REAP_THRESHOLD_MS` in the hook itself,
-not only here.
+`.claude/hooks/testdb-reap.ts` is a `SessionStart` hook (registered in `.claude/settings.json`) that clears these out at the start of every session. It removes any container labeled `org.testcontainers=true` (testcontainers-go's own label, present on every container `testdb.New` starts and nothing else on the machine) that is older than **15 minutes**. That threshold is deliberately generous, not tight: a container backs one `go test` process for one package, so a live one lives minutes at most, and the slowest single package observed on this machine (`internal/payments`, idle machine) finished in 90.4s. 15 minutes is roughly 10x that, enough headroom for several sessions competing for the same 4GB Podman machine -- which is exactly the condition that causes the leak -- without ever mistaking a live run for an orphan. The reasoning lives as a comment on `REAP_THRESHOLD_MS` in the hook itself, not only here.
 
 The hook points the engine at `DOCKER_HOST` when the variable is set, the same way `testdb.go` does (previous section) — but **an unset `DOCKER_HOST` is not a reason to skip the run**, and treating it as one made this hook inert for months. The variable is exported by hand into the shell that runs the tests, as the block above shows; it is never set from a login profile, and a `SessionStart` hook inherits the login environment rather than that shell's. So the hook never saw it and always returned early: 55 containers, the oldest 38 hours old, on a machine that had started dozens of sessions since ([#1066](https://github.com/markgoho/doula-cloud/issues/1066)). `podman ps` with no `--url` reaches the same engine through its default `podman machine` connection, so `.claude/hooks/container-engine.ts` — the seam both reapers share — adds `--url` only when there is a socket to name, and otherwise just invokes the engine. If the engine isn't reachable at all, the hook does nothing and exits 0. It **fails open on every error path** -- unlike `gate-worktree-edit.ts`/`gate-bash-write.ts`, which fail closed because they're `PreToolUse` gates deciding whether to allow a tool call. This hook runs on `SessionStart`, makes no such decision, and exists purely to tidy up; a reaper that errors must never block or slow a session from starting. `gate-shared-index.sh` is the existing fail-open precedent, for the same class of reason. It's quiet when there's nothing to reap; when it does reap, it logs the count and the reason.
 
-If containers pile up faster than a session boundary clears them, the
-same manual command #889 was diagnosed with still works as an escape
-hatch:
+If containers pile up faster than a session boundary clears them, the same manual command #889 was diagnosed with still works as an escape hatch:
 
 ```sh
 podman rm -f -t 2 $(podman ps -aq --filter 'label=org.testcontainers=true')
@@ -453,13 +350,7 @@ kill "$(cat "$TMPDIR/doula-cloud-e2e-api-<offset>.pid")" && rm "$TMPDIR/doula-cl
 
 ## `api/`: migrations via goose
 
-Migrations live in `api/db/migrations`. In dev/CI, `internal/testdb`
-applies them programmatically (see above). At deploy time,
-`scripts/migrate.sh` applies them through the Cloud SQL Auth Proxy as a
-blocking pre-deploy step — it must exit non-zero, and stop the deploy, if
-migration fails. It's not yet wired to a real instance (none is
-provisioned in the `doula-cloud` GCP project); see the script's header for
-the required env vars.
+Migrations live in `api/db/migrations`. In dev/CI, `internal/testdb` applies them programmatically (see above). At deploy time, `scripts/migrate.sh` applies them through the Cloud SQL Auth Proxy as a blocking pre-deploy step — it must exit non-zero, and stop the deploy, if migration fails. It's not yet wired to a real instance (none is provisioned in the `doula-cloud` GCP project); see the script's header for the required env vars.
 
 **The row-safety guardrail.** `migrate`, `deploy-api` and `deploy-app` run only on a push to trunk, and every pull request builds an empty Postgres, so a statement that only *existing rows* can refuse is green on the PR and red on the first trunk push — with both deploys stuck behind it. That is [#1021](https://github.com/markgoho/doula-cloud/issues/1021). `api/db/migrations/rowsafety.go` classifies every statement in a migration's Up section against the family of shapes that can fail that way — `ADD COLUMN … NOT NULL` with no `DEFAULT`, `ADD COLUMN … DEFAULT` carrying an inline `REFERENCES`/`CHECK`/`UNIQUE`, `ALTER COLUMN … SET NOT NULL`, `ALTER COLUMN … TYPE`, `ADD CONSTRAINT … UNIQUE`/`PRIMARY KEY`/`EXCLUDE`, `ADD CONSTRAINT … CHECK`, `ADD CONSTRAINT … FOREIGN KEY`, `VALIDATE CONSTRAINT`, `CREATE UNIQUE INDEX`, a generated column, DML, and a `DO` block — and `guardrail_test.go`, a required PR check, fails any it finds. Each class is proved against a real populated Postgres in `rowsafety_pg_test.go`, not asserted from the documentation: the statement must succeed on an empty database and fail on one holding a row. A statement that is genuinely safe gets a note in `api/db/migrations/safety/` saying why, headed by the class it answers; `safety/README.md` describes the shape. Two things are never reported: a statement on a table the same migration creates, which has no rows yet, and an `ALTER TABLE` action carrying its own `DEFAULT` or `NOT VALID` — the classifier reads each action of a multi-action `ALTER TABLE` on its own, so one action's marker never covers the action beside it.
 
@@ -467,46 +358,9 @@ the required env vars.
 
 What a run of this stack costs in memory, and why `workers` is pinned rather than left at Playwright's CPU-derived default, is in "What the e2e suite costs, and why its workers are capped" above.
 
-`app/compose.e2e.yaml` defines two backing services: a pinned
-`postgres:16-alpine`, and a pinned `fsouza/fake-gcs-server` on
-`127.0.0.1:14443` standing in for the GCS bucket the BFF writes signed
-Contract PDFs and message attachments to. `stack.ts` creates the one
-bucket (`seedGCSBucket`) the same way it creates the one login role, and
-points the BFF's `STORAGE_EMULATOR_HOST`/`GCS_ATTACHMENTS_BUCKET` at it.
-The store used to be aimed at an unreachable host on the grounds that no
-spec touches the attachment endpoints — which also made Contract signing
-answer a bare 500, since it puts the PDF in the store before it writes the
-status (`api/internal/contracts/sign.go`). Everything else Playwright e2e
-tests run against —
-the goose migration step, the `app_e2e` login role, the Go BFF, the
-Firebase Auth emulator, and the sandbox mailbox (`app/e2e/mailbox.ts`,
-#764 — the Mailgun-shaped sink `MAILGUN_API_BASE` points the BFF at, so
-no local stack can post real mail to real Mailgun and a spec can read
-what a person would have received) — runs as a plain host process, started/stopped by
-`app/e2e/stack.ts` (`startStack`/`stopStack`), which `app/playwright.config.ts`
-wires up via `globalSetup`/`globalTeardown`
-(`app/e2e/global-setup.ts`/`app/e2e/global-teardown.ts`). `stack.ts` runs
-`api/cmd/migrate` with `go run` and the BFF with `go build` + a tracked
-PID (mirroring how it already managed the Firebase emulator), against
-`DATABASE_URL`s pointed at the compose Postgres over `127.0.0.1:15432`.
-Building the BFF and migrate binaries as compose images used to cost the
-e2e run a cold `go mod download`/build on every CI run with no cache
-sharing between them; running them as host processes instead lets CI's
-`app` job share a single warm Go build cache (via `actions/setup-go`,
-keyed on `api/go.sum`) with everything else that touches `api/`.
+`app/compose.e2e.yaml` defines two backing services: a pinned `postgres:16-alpine`, and a pinned `fsouza/fake-gcs-server` on `127.0.0.1:14443` standing in for the GCS bucket the BFF writes signed Contract PDFs and message attachments to. `stack.ts` creates the one bucket (`seedGCSBucket`) the same way it creates the one login role, and points the BFF's `STORAGE_EMULATOR_HOST`/`GCS_ATTACHMENTS_BUCKET` at it. The store used to be aimed at an unreachable host on the grounds that no spec touches the attachment endpoints — which also made Contract signing answer a bare 500, since it puts the PDF in the store before it writes the status (`api/internal/contracts/sign.go`). Everything else Playwright e2e tests run against — the goose migration step, the `app_e2e` login role, the Go BFF, the Firebase Auth emulator, and the sandbox mailbox (`app/e2e/mailbox.ts`, #764 — the Mailgun-shaped sink `MAILGUN_API_BASE` points the BFF at, so no local stack can post real mail to real Mailgun and a spec can read what a person would have received) — runs as a plain host process, started/stopped by `app/e2e/stack.ts` (`startStack`/`stopStack`), which `app/playwright.config.ts` wires up via `globalSetup`/`globalTeardown` (`app/e2e/global-setup.ts`/`app/e2e/global-teardown.ts`). `stack.ts` runs `api/cmd/migrate` with `go run` and the BFF with `go build` + a tracked PID (mirroring how it already managed the Firebase emulator), against `DATABASE_URL`s pointed at the compose Postgres over `127.0.0.1:15432`. Building the BFF and migrate binaries as compose images used to cost the e2e run a cold `go mod download`/build on every CI run with no cache sharing between them; running them as host processes instead lets CI's `app` job share a single warm Go build cache (via `actions/setup-go`, keyed on `api/go.sum`) with everything else that touches `api/`.
 
-Postgres and the object store stay in `compose.e2e.yaml` (image pinning
-matters more than build cost there) and are brought up/down via `$CONTAINER_ENGINE
-compose` (`docker compose` and `podman compose` share the same v2 CLI
-syntax) — CI sets `CONTAINER_ENGINE=docker` (preinstalled, no
-rootless-socket setup needed on `ubuntu-latest`); it defaults to `podman`
-for local dev, which needs `podman-compose` on `PATH` (`brew install
-podman-compose`). Since every process now reaches Postgres, the emulator,
-and the BFF's own listener over loopback directly, the old
-`E2E_HOST_GATEWAY`/`host.containers.internal`/`host.docker.internal`
-container-to-host routing machinery is gone — it was only ever needed to
-get a *container* to reach a host-bound service, and nothing runs the BFF
-in a container anymore.
+Postgres and the object store stay in `compose.e2e.yaml` (image pinning matters more than build cost there) and are brought up/down via `$CONTAINER_ENGINE compose` (`docker compose` and `podman compose` share the same v2 CLI syntax) — CI sets `CONTAINER_ENGINE=docker` (preinstalled, no rootless-socket setup needed on `ubuntu-latest`); it defaults to `podman` for local dev, which needs `podman-compose` on `PATH` (`brew install podman-compose`). Since every process now reaches Postgres, the emulator, and the BFF's own listener over loopback directly, the old `E2E_HOST_GATEWAY`/`host.containers.internal`/`host.docker.internal` container-to-host routing machinery is gone — it was only ever needed to get a *container* to reach a host-bound service, and nothing runs the BFF in a container anymore.
 
 **Running this from a worktree on macOS with Podman** needs nothing beyond what the rest of this doc already says: `DOCKER_HOST` pointed at the Podman machine's socket and `TESTCONTAINERS_RYUK_DISABLED=true` (see "Reaping orphaned testcontainers" above), exported in the same shell that runs `bun run test:e2e` or `bun run dev:full`. `startDatabase` (`app/e2e/stack.ts`) scopes every `podman compose` call to a per-worktree project name (`doula-cloud-e2e-<PORT_OFFSET>`) and host port pair already, so two worktrees' stacks never collide — no extra setup is needed per worktree beyond what `EnterWorktree` already provisions.
 
@@ -535,31 +389,13 @@ If you add a fixture that posts to another rate-limited route and a repeated bat
 
 The failure itself did not reproduce under repeated attempts here — by hand, via a direct `execFileSync` call matching `startDatabase`'s own arguments, and via a full `bunx playwright test` run through `global-setup.ts` — with both the original and the fixed code, at a non-zero offset, with the Podman VM under real concurrent load from other worktree sessions (`podman ps -a` showed 16 containers from other sessions' `go test` runs at the time, some several hours old; load average over 9 on the VM's 7 CPUs). `COMPOSE_ENV` and `PATH` both checked out correctly under `execFileSync` in every attempt. The best-supported explanation, given the repo already diagnosed the identical shared resource once before, is transient contention on the single 4GB Podman machine every worktree's containers share — the same VM #889 found running on 133MB free under concurrent `go test` load, which made `podman compose up` for `dev:full` fail a different way (`ETIMEDOUT` rather than a bare exit status). That reaper only clears `org.testcontainers=true`-labeled containers from `go test`, not a `podman-compose` e2e stack a killed worktree session left running — see [#1066](https://github.com/markgoho/doula-cloud/issues/1066) for closing that gap.
 
-Because that removes the only thing that proved `api/Dockerfile` still
-builds and boots (the runtime image is distroless
-`gcr.io/distroless/static-debian12`, where a missing CA bundle or tzdata
-would break a real deploy even though `go build`/`go test` pass cleanly),
-CI's `api-image` job (`.github/workflows/ci.yml`) now builds that image
-with `docker/build-push-action` and runs a boot smoke test against it —
-container stays running and answers on its port — in parallel with `app`,
-off the critical path (see PR #108 for measured before/after timings).
+Because that removes the only thing that proved `api/Dockerfile` still builds and boots (the runtime image is distroless `gcr.io/distroless/static-debian12`, where a missing CA bundle or tzdata would break a real deploy even though `go build`/`go test` pass cleanly), CI's `api-image` job (`.github/workflows/ci.yml`) now builds that image with `docker/build-push-action` and runs a boot smoke test against it — container stays running and answers on its port — in parallel with `app`, off the critical path (see PR #108 for measured before/after timings).
 
 ## Stripe: fakes in CI, the Sandbox by hand
 
-`bun run test:e2e` sets no Stripe variables, so both Stripe clients run
-against their injected fakes (`api/internal/billing/stripe_fake.go`,
-`api/internal/payments/stripe_fake.go`). That is the deliberate choice,
-not a gap: a GitHub-hosted runner has no public URL for Stripe to deliver
-a webhook to, and the Stripe Sandbox is one shared, stateful environment
-that parallel runs would trample.
+`bun run test:e2e` sets no Stripe variables, so both Stripe clients run against their injected fakes (`api/internal/billing/stripe_fake.go`, `api/internal/payments/stripe_fake.go`). That is the deliberate choice, not a gap: a GitHub-hosted runner has no public URL for Stripe to deliver a webhook to, and the Stripe Sandbox is one shared, stateful environment that parallel runs would trample.
 
-Driving the real thing — a real Checkout Session, real Connect
-onboarding, real `invoice.paid` — is a local, by-hand job. `bun run
-dev:full` picks up `app/.env.local`, and `bash scripts/stripe-listen.sh`
-forwards Stripe's events to the local BFF beside it. Everything about
-that setup, including which variable holds what in each environment, is
-in [docs/environment.md](environment.md). First-time setup is copying
-`app/.env.example` and filling it in by hand.
+Driving the real thing — a real Checkout Session, real Connect onboarding, real `invoice.paid` — is a local, by-hand job. `bun run dev:full` picks up `app/.env.local`, and `bash scripts/stripe-listen.sh` forwards Stripe's events to the local BFF beside it. Everything about that setup, including which variable holds what in each environment, is in [docs/environment.md](environment.md). First-time setup is copying `app/.env.example` and filling it in by hand.
 
 ## Logging in as Staff locally
 

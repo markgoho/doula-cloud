@@ -1,17 +1,10 @@
 # Doula fees and competing practice-management software pricing
 
-Research for pricing one "Credit" (one Credit = one Client engagement) in
-Doula Cloud. Two anchors: (1) what a doula charges per birth engagement, and
-(2) what competing practice-management/CRM software charges a doula or small
-maternal-health practice. Facts and ranges only — no price recommendation.
-All figures fetched August 28, 2026 unless noted.
+Research for pricing one "Credit" (one Credit = one Client engagement) in Doula Cloud. Two anchors: (1) what a doula charges per birth engagement, and (2) what competing practice-management/CRM software charges a doula or small maternal-health practice. Facts and ranges only — no price recommendation. All figures fetched August 28, 2026 unless noted.
 
 ## 1. NY Medicaid doula reimbursement — the hard, citable floor
 
-Primary source: the eMedNY **Doula Fee Schedule** (`Doula_Fee_Schedule.xlsx`,
-last modified 2024-04-09), cross-checked against the eMedNY **Doula Services
-Policy Manual** (`Doula_Policy_Guidelines.pdf`, document version 6/2/2025,
-"March 2026" header, "Effective date: March 1, 2024").
+Primary source: the eMedNY **Doula Fee Schedule** (`Doula_Fee_Schedule.xlsx`, last modified 2024-04-09), cross-checked against the eMedNY **Doula Services Policy Manual** (`Doula_Policy_Guidelines.pdf`, document version 6/2/2025, "March 2026" header, "Effective date: March 1, 2024").
 
 - <https://www.emedny.org/ProviderManuals/Doula/PDFS/Doula_Fee_Schedule.xlsx>
 - <https://www.emedny.org/ProviderManuals/Doula/PDFS/Doula_Policy_Guidelines.pdf>
@@ -25,34 +18,22 @@ Policy Manual** (`Doula_Policy_Guidelines.pdf`, document version 6/2/2025,
 - NYC: 8 × $93.75 + $750.00 = **$1,500.00**
 - Rest of State (Rochester/Monroe County): 8 × $84.37 + $675.00 = **$1,349.96 (~$1,350)**
 
-Effective dates: doula services became a statewide Medicaid fee-for-service
-(FFS) benefit **March 1, 2024**; doula services were carved out of Medicaid
-Managed Care (MMC) plan benefit packages from March 1, 2024 through March 31,
-2025, then added to the MMC benefit package effective **April 1, 2025** —
-doulas now bill the member's MMC plan directly rather than FFS, except for
-members who remain in FFS. A doula is a public health worker, not a licensed
-provider type; enrollment requires either a 24-hour training pathway or a
-work-experience pathway (30 births or 1,000 hours in the last 10 years).
+Effective dates: doula services became a statewide Medicaid fee-for-service (FFS) benefit **March 1, 2024**; doula services were carved out of Medicaid Managed Care (MMC) plan benefit packages from March 1, 2024 through March 31, 2025, then added to the MMC benefit package effective **April 1, 2025** — doulas now bill the member's MMC plan directly rather than FFS, except for members who remain in FFS. A doula is a public health worker, not a licensed provider type; enrollment requires either a 24-hour training pathway or a work-experience pathway (30 births or 1,000 hours in the last 10 years).
 
-This is a floor, not a market rate: it is what Medicaid pays, not what a
-privately-paying client pays, and it applies only to Medicaid members.
+This is a floor, not a market rate: it is what Medicaid pays, not what a privately-paying client pays, and it applies only to Medicaid members.
 
 ## 2. What a doula charges per birth engagement (private pay)
 
 ### Rochester / Monroe County / Upstate NY
 
-**Best data point (N=113):** Bornbir's local aggregator page, updated
-August 2026, states its statistics are "based on 113 package prices from 47
-providers listed on Bornbir within 150 miles of Rochester, NY."
-<https://www.bornbir.com/rochester/ny/doula/cost> (fetched Aug 28, 2026)
+**Best data point (N=113):** Bornbir's local aggregator page, updated August 2026, states its statistics are "based on 113 package prices from 47 providers listed on Bornbir within 150 miles of Rochester, NY." <https://www.bornbir.com/rochester/ny/doula/cost> (fetched Aug 28, 2026)
 
 - Median birth-doula package price: **$800**
 - Typical package range: **$263–$1,200**
 - Median postpartum hourly rate: **$35/hr**
 - Typical hourly range: **$28–$37/hr**
 
-Individual Rochester-area doula/agency pricing pages found directly (primary,
-not aggregated, so these sit above the median and are not a random sample):
+Individual Rochester-area doula/agency pricing pages found directly (primary, not aggregated, so these sit above the median and are not a random sample):
 
 - Birth & Beyond Rochester bundles — <https://bbcroc.com/doula-care-bundles/> (fetched Aug 28, 2026): Traditional Bundle $1,800, Signature Bundle $2,200, Full Circle Bundle $2,500 (bundles include doula support plus childbirth/lactation/CPR classes, not doula support alone — not directly comparable to a bare "Credit").
 - A secondary web-search summary (not independently verified against a named primary URL) reported an "average fee in the Rochester area... around $1,000" with individual doulas ranging $100–$1,500 flat rate. **Inferred/lower-confidence** — treat the Bornbir N=113 figures above as the stronger data point.
@@ -67,20 +48,11 @@ not aggregated, so these sit above the median and are not a random sample):
 - truejoybirthing.com: national range **$650–$3,000**, median/average **$1,200–$1,500**. Metro areas cited higher ($1,800–$2,500); rural/small-town lower ($650–$1,500). No sample size disclosed — **inferred**.
 - A DONA International press release (via doulamatch.net data comparison) reportedly found DONA-certified doulas charge ~25% more than non-certified doulas and ~7% more than doulas certified through other organizations. Could not be independently verified — dona.org returned HTTP 403 to direct fetch. **Inferred/unverified.**
 
-**Overall read:** across the sources gathered, no single source is a
-rigorous, disclosed-methodology survey with a strong sample. The most
-defensible number for a Rochester/Upstate-anchored decision is the Bornbir
-N=113 dataset (median $800, range $263–$1,200), corroborated in shape by
-national medians landing around $1,200–$1,500 and by the fact that the NY
-Medicaid "Rest of State" reimbursement ceiling ($1,350) sits inside that same
-band. Treat $800–$1,500 as the reasonable working range for a single birth
-engagement in the Rochester/Upstate market, acknowledging real dispersion
-from ~$263 to $2,500+ depending on doula experience and package inclusions.
+**Overall read:** across the sources gathered, no single source is a rigorous, disclosed-methodology survey with a strong sample. The most defensible number for a Rochester/Upstate-anchored decision is the Bornbir N=113 dataset (median $800, range $263–$1,200), corroborated in shape by national medians landing around $1,200–$1,500 and by the fact that the NY Medicaid "Rest of State" reimbursement ceiling ($1,350) sits inside that same band. Treat $800–$1,500 as the reasonable working range for a single birth engagement in the Rochester/Upstate market, acknowledging real dispersion from ~$263 to $2,500+ depending on doula experience and package inclusions.
 
 ## 3. Postpartum doula — hourly, not per-birth
 
-Postpartum doulas are consistently billed hourly, not as a flat per-birth
-fee, across every source found:
+Postpartum doulas are consistently billed hourly, not as a flat per-birth fee, across every source found:
 
 - National hourly range: **$25–$50/hr**, national average **~$35/hr**; up to $75–$80/hr in big cities; overnight/awake shifts carry a **+$5–$15/hr** premium.
 - California specifically: **$55–$75/hr**.
@@ -125,14 +97,4 @@ Recommendation for use: treat **20–30 births/year** as the more defensible pla
 
 ### What this means for a per-Credit model
 
-No product researched bills its **core** practice-management access per
-client engagement. Every doula-specific and general small-practice tool
-found uses flat monthly/annual subscription pricing (optionally gated by a
-client-count ceiling per tier, as with Practice Better and Hello Doula
-Solo). The one genuine prepaid/pay-as-you-go **credit** model found —
-Halaxy — meters individual communication/telehealth actions on top of a
-free core, not the client relationship itself. DoulaMatch charges an
-annual **per-profile** fee, which is a listing fee, not a software-usage
-fee. A pure "one Credit = one Client engagement" software-pricing model, as
-described in the research question, was not found among the products
-surveyed here.
+No product researched bills its **core** practice-management access per client engagement. Every doula-specific and general small-practice tool found uses flat monthly/annual subscription pricing (optionally gated by a client-count ceiling per tier, as with Practice Better and Hello Doula Solo). The one genuine prepaid/pay-as-you-go **credit** model found — Halaxy — meters individual communication/telehealth actions on top of a free core, not the client relationship itself. DoulaMatch charges an annual **per-profile** fee, which is a listing fee, not a software-usage fee. A pure "one Credit = one Client engagement" software-pricing model, as described in the research question, was not found among the products surveyed here.

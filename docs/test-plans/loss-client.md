@@ -2,34 +2,18 @@
 
 - **Journey**: [loss-client.md](../journeys/loss-client.md)
 - **Persona**: [loss-client.md](../personas/loss-client.md)
-- **A pass means**: the record is accurate, Maya can still reach her, and no
-  screen, label, or link addresses her as a pregnant person. **This plan cannot
-  pass.** It is written to be run so the failures are recorded rather than
-  imagined.
+- **A pass means**: the record is accurate, Maya can still reach her, and no screen, label, or link addresses her as a pregnant person. **This plan cannot pass.** It is written to be run so the failures are recorded rather than imagined.
 
-Written first, before the two other client-side plans, because the method standard
-says to walk Nadia before any journey hers overlaps.
+Written first, before the two other client-side plans, because the method standard says to walk Nadia before any journey hers overlaps.
 
-Her journey turns mid-way, so half this plan is walked as Maya on the staff side
-and observed from Nadia's screen. Those steps are marked as her map marks them —
-the stage belongs to her even where the click does not.
+Her journey turns mid-way, so half this plan is walked as Maya on the staff side and observed from Nadia's screen. Those steps are marked as her map marks them — the stage belongs to her even where the click does not.
 
 ## Preconditions
 
-- A solo Practice (Owner + Admin + Doula in one person) with one Client and one
-  Engagement carrying a **signed** Contract, a **filled** Birth Plan Instance,
-  several Visits, and a message thread with traffic both ways.
-- **The Engagement cannot be aged.** Every Engagement is created at `intake` and
-  no code anywhere runs `UPDATE engagements` (**MO-G4**), so "four months in"
-  cannot be represented. Run against a fresh Engagement and treat it as the
-  four-month one. That a four-month Engagement is indistinguishable from an
-  hour-old one is stage 1's finding, not a defect in the fixture.
-- Stage 6 needs a **voided** Contract. Sign it as the Client first, then void it
-  from the staff Engagement page — the **Void** button renders only on a `signed`
-  Contract (`app/src/lib/ContractStatus.svelte`). This is Dee's step 7.1-a; see
-  the crossing note there.
-- Two browser sessions or two profiles: Nadia in the portal, Maya on the staff
-  side, both open at once. Stages 2, 3 and 7 need them side by side.
+- A solo Practice (Owner + Admin + Doula in one person) with one Client and one Engagement carrying a **signed** Contract, a **filled** Birth Plan Instance, several Visits, and a message thread with traffic both ways.
+- **The Engagement cannot be aged.** Every Engagement is created at `intake` and no code anywhere runs `UPDATE engagements` (**MO-G4**), so "four months in" cannot be represented. Run against a fresh Engagement and treat it as the four-month one. That a four-month Engagement is indistinguishable from an hour-old one is stage 1's finding, not a defect in the fixture.
+- Stage 6 needs a **voided** Contract. Sign it as the Client first, then void it from the staff Engagement page — the **Void** button renders only on a `signed` Contract (`app/src/lib/ContractStatus.svelte`). This is Dee's step 7.1-a; see the crossing note there.
+- Two browser sessions or two profiles: Nadia in the portal, Maya on the staff side, both open at once. Stages 2, 3 and 7 need them side by side.
 
 ## Steps
 
@@ -102,9 +86,7 @@ Walked as Maya. Nadia is not in the app.
 | --- | --- | --- | --- |
 | 8.1 | Close the Engagement truthfully | It sits at `intake` forever. "Done looks like" is unreachable: the record is permanent, which is right, and permanently wrong, which is not | `missing-feature (NH-G1)` [#293](https://github.com/markgoho/doula-cloud/issues/293) |
 
-8.1 is 2.1-a and 2.1-b met a second time, from her side rather than Maya's. Both
-stages are kept because the map keeps both, and because the run should record that
-the same absence is hit twice by two different people.
+8.1 is 2.1-a and 2.1-b met a second time, from her side rather than Maya's. Both stages are kept because the map keeps both, and because the run should record that the same absence is hit twice by two different people.
 
 ## Marks
 
@@ -114,18 +96,11 @@ the same absence is hit twice by two different people.
 | `manual` | 14 |
 | `missing-feature` | 8 ([MO-G3](https://github.com/markgoho/doula-cloud/issues/252), [NH-G3](https://github.com/markgoho/doula-cloud/issues/295), [NH-G1](https://github.com/markgoho/doula-cloud/issues/293) ×2, [MO-G4](https://github.com/markgoho/doula-cloud/issues/253), [NH-G2](https://github.com/markgoho/doula-cloud/issues/294), [NH-G6](https://github.com/markgoho/doula-cloud/issues/297), [NH-G7](https://github.com/markgoho/doula-cloud/issues/298)) |
 
-No step is `blocked`. Stripe never reaches the Client portal, so nothing here waits
-on an account nobody has opened — **NH-G6** is a hole in the product, not a bill.
+No step is `blocked`. Stripe never reaches the Client portal, so nothing here waits on an account nobody has opened — **NH-G6** is a hole in the product, not a bill.
 
-NH-G4, NH-G5, **MO-G1**, **MO-G2**, **PR-G6** and
-[#212](https://github.com/markgoho/doula-cloud/issues/212) are observed inside
-walkable steps (4.2, 6.2, 7.1, 4.2-b) rather than given steps of their own: the
-step can be performed, and what it hands back is the finding.
+NH-G4, NH-G5, **MO-G1**, **MO-G2**, **PR-G6** and [#212](https://github.com/markgoho/doula-cloud/issues/212) are observed inside walkable steps (4.2, 6.2, 7.1, 4.2-b) rather than given steps of their own: the step can be performed, and what it hands back is the finding.
 
-Her five automated steps all come from specs written for a happy path. Every one of
-them passes on this journey, and passing is the problem: `client-portal-login`
-greets her, `push-notification` reaches her, `birth-plan` shows her the document.
-The suite cannot tell her journey from Hannah's.
+Her five automated steps all come from specs written for a happy path. Every one of them passes on this journey, and passing is the problem: `client-portal-login` greets her, `push-notification` reaches her, `birth-plan` shows her the document. The suite cannot tell her journey from Hannah's.
 
 ## Run log
 
@@ -140,9 +115,7 @@ The Marks table is recounted with it: `manual` 13 -> 14, `missing-feature` 9 -> 
 
 ### 2026-08-22 — automated steps ([#209](https://github.com/markgoho/doula-cloud/issues/209))
 
-`bun run test:e2e` in `app/`, whole suite, one run: **16 passed, 0 failed** (20.5s).
-Stack per [docs/testing.md](../testing.md) — Postgres in compose, the goose
-migration, the Go BFF and the Firebase Auth emulator, all local.
+`bun run test:e2e` in `app/`, whole suite, one run: **16 passed, 0 failed** (20.5s). Stack per [docs/testing.md](../testing.md) — Postgres in compose, the goose migration, the Go BFF and the Firebase Auth emulator, all local.
 
 | Step | Spec | Result |
 | --- | --- | --- |
@@ -154,8 +127,7 @@ migration, the Go BFF and the Firebase Auth emulator, all local.
 
 **5 automated steps: all pass.**
 
-The `manual`, `blocked` and `missing-feature` steps are **not walked yet**.
-That is [#239](https://github.com/markgoho/doula-cloud/issues/239).
+The `manual`, `blocked` and `missing-feature` steps are **not walked yet**. That is [#239](https://github.com/markgoho/doula-cloud/issues/239).
 
 ### 2026-09-10 — narrative reconciliation ([#685](https://github.com/markgoho/doula-cloud/issues/685))
 
@@ -171,22 +143,9 @@ A desk pass over this plan's Contract and Visits cells, which [#318](https://git
 
 ### 2026-08-23 — manual and missing-feature steps ([#239](https://github.com/markgoho/doula-cloud/issues/239))
 
-`bun run dev:full` in `app/`, against a fresh solo Practice ("Willow Creek
-Doula Care", Owner+Admin+Doula in one Staff row — Maya's shape, since her
-journey carries this plan's staff-side stages) with one Client (Nadia
-Haddad), one Engagement, four Visits, a filled Birth Plan, a Contract signed
-by the Client and then voided by staff, and a four-message thread. Walked in
-Chrome via playwriter, one browser profile.
+`bun run dev:full` in `app/`, against a fresh solo Practice ("Willow Creek Doula Care", Owner+Admin+Doula in one Staff row — Maya's shape, since her journey carries this plan's staff-side stages) with one Client (Nadia Haddad), one Engagement, four Visits, a filled Birth Plan, a Contract signed by the Client and then voided by staff, and a four-message thread. Walked in Chrome via playwriter, one browser profile.
 
-**Note on the fixture**: Staff and Client-portal sessions share one
-`__session` cookie per origin (confirmed via `Network.getCookies`), so a
-single profile can hold only one of the two logged in at a time on
-`localhost:5173` — signing in as the other silently 403s the first
-("no matching staff account" on next request). This is exactly what the
-plan's Preconditions warn about ("Two browser sessions or two profiles");
-not a new finding, and not evidence of a production defect, since staff and
-portal are reached via different routes there. Walked by re-authenticating
-whichever side was about to act, immediately before each of its steps.
+**Note on the fixture**: Staff and Client-portal sessions share one `__session` cookie per origin (confirmed via `Network.getCookies`), so a single profile can hold only one of the two logged in at a time on `localhost:5173` — signing in as the other silently 403s the first ("no matching staff account" on next request). This is exactly what the plan's Preconditions warn about ("Two browser sessions or two profiles"); not a new finding, and not evidence of a production defect, since staff and portal are reached via different routes there. Walked by re-authenticating whichever side was about to act, immediately before each of its steps.
 
 | Step | Mark | Result | What was seen |
 | --- | --- | --- | --- |
@@ -213,20 +172,8 @@ whichever side was about to act, immediately before each of its steps.
 | 7.2-a | `missing-feature (NH-G7)` [#298](https://github.com/markgoho/doula-cloud/issues/298) | confirmed | No mute, pause, or subject-change control on either side's Messages section |
 | 8.1 | `missing-feature (NH-G1)` [#293](https://github.com/markgoho/doula-cloud/issues/293) | confirmed | Same absence as 2.1-a/2.1-b, observed a second time from the Client's own side |
 
-**22 steps walked: 13 `manual`, 9 `missing-feature`. Every mark holds; one
-reasoning corrected (6.2-a) and one new gap minted (NH-G8, added to
-[docs/journeys/loss-client.md](../journeys/loss-client.md)).** No `blocked`
-step exists on this plan, confirmed. No `journey-gap` issue filed from this
-ticket — that is [#209](https://github.com/markgoho/doula-cloud/issues/209).
+**22 steps walked: 13 `manual`, 9 `missing-feature`. Every mark holds; one reasoning corrected (6.2-a) and one new gap minted (NH-G8, added to [docs/journeys/loss-client.md](../journeys/loss-client.md)).** No `blocked` step exists on this plan, confirmed. No `journey-gap` issue filed from this ticket — that is [#209](https://github.com/markgoho/doula-cloud/issues/209).
 
-**Verdict**: this plan cannot pass, as written, and does not. Every
-`missing-feature` step confirmed genuinely unwalkable; the record stays at
-`intake` forever, the Birth Plan cannot be retired, and money has no
-client-facing surface at all.
+**Verdict**: this plan cannot pass, as written, and does not. Every `missing-feature` step confirmed genuinely unwalkable; the record stays at `intake` forever, the Birth Plan cannot be retired, and money has no client-facing surface at all.
 
-**Unexplained, not chased**: three `404`s in the browser console right after
-**Save Contract** and one after **Void Contract** (staff side), origin not
-identified. Neither action's own result was wrong — the Contract saved and
-voided correctly both times — so this was not chased down to a source. Named
-here rather than dropped, since an unexplained `404` on a write path is
-exactly what turned into real findings on Maya's and Dee's walks.
+**Unexplained, not chased**: three `404`s in the browser console right after **Save Contract** and one after **Void Contract** (staff side), origin not identified. Neither action's own result was wrong — the Contract saved and voided correctly both times — so this was not chased down to a source. Named here rather than dropped, since an unexplained `404` on a write path is exactly what turned into real findings on Maya's and Dee's walks.

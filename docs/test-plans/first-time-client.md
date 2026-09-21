@@ -2,25 +2,16 @@
 
 - **Journey**: [first-time-client.md](../journeys/first-time-client.md)
 - **Persona**: [first-time-client.md](../personas/first-time-client.md)
-- **A pass means**: a portal account, a signed Contract, a Birth Plan she has read
-  and printed, a thread with traffic both ways, and an Engagement that reflects
-  where she actually is. The last of the five is unreachable.
+- **A pass means**: a portal account, a signed Contract, a Birth Plan she has read and printed, a thread with traffic both ways, and an Engagement that reflects where she actually is. The last of the five is unreachable.
 
-She is the full-arc Client and the only Persona who walks every client-facing
-screen the product has, so it carries the most `automated` steps of any client-side
-plan — every portal spec was written along her path. Only Maya's, at nine, carries
-more, and hers are the Staff side of the same walk. Where her path crosses
-Nadia Haddad's, Nadia's plan was written first
-([loss-client.md](loss-client.md)).
+She is the full-arc Client and the only Persona who walks every client-facing screen the product has, so it carries the most `automated` steps of any client-side plan — every portal spec was written along her path. Only Maya's, at nine, carries more, and hers are the Staff side of the same walk. Where her path crosses Nadia Haddad's, Nadia's plan was written first ([loss-client.md](loss-client.md)).
 
 ## Preconditions
 
-- A Practice with an Owner and one Client created for Hannah — name and email
-  only, which is all `POST .../clients` takes (**MO-G3**).
+- A Practice with an Owner and one Client created for Hannah — name and email only, which is all `POST .../clients` takes (**MO-G3**).
 - A Contract Template with merge fields, so stage 4 has prose to render.
 - Nothing else. She is the one Persona the product can provision end to end.
-- A phone, or a phone-sized viewport, for stages 6 and 7. Stage 6 is the moment of
-  truth and it is device-specific: she prints from whatever she has to hand.
+- A phone, or a phone-sized viewport, for stages 6 and 7. Stage 6 is the moment of truth and it is device-specific: she prints from whatever she has to hand.
 
 ## Steps
 
@@ -108,23 +99,17 @@ Nadia Haddad's, Nadia's plan was written first
 | `manual` | 17 |
 | `missing-feature` | 6 ([HS-G4](https://github.com/markgoho/doula-cloud/issues/303) ×2, [HS-G2](https://github.com/markgoho/doula-cloud/issues/301), [PR-G5](https://github.com/markgoho/doula-cloud/issues/280), [MO-G4](https://github.com/markgoho/doula-cloud/issues/253), [HS-G5](https://github.com/markgoho/doula-cloud/issues/304)) |
 
-No step is `blocked`. She never reaches a Stripe surface — the portal has none —
-so the one thing she cannot see about money (**NH-G6**: no Invoice, balance or
-payment view anywhere in the portal) is a hole in the product, not a bill.
+No step is `blocked`. She never reaches a Stripe surface — the portal has none — so the one thing she cannot see about money (**NH-G6**: no Invoice, balance or payment view anywhere in the portal) is a hole in the product, not a bill.
 
 NH-G4, **RA-G1**, **PR-G7**, **MO-G3** and [#212](https://github.com/markgoho/doula-cloud/issues/212) are observed inside walkable steps (3.1, 1.2, 3.1-a) rather than given steps of their own. HS-G1 is closed ([#300](https://github.com/markgoho/doula-cloud/issues/300)) and its exposing step, 2.2-a, is gone with it.
 
-The Birth Plan's absent export is now [her map](../journeys/first-time-client.md)'s
-**HS-G7**, and 4.3's absent Contract copy sharpened into **HS-G6** — both minted at
-the run ([#240](https://github.com/markgoho/doula-cloud/issues/240)). The one fact this plan used to hand forward — **stage 4 is the strongest screen in the portal with no spec on it** — is answered: `contract-lifecycle.e2e.ts` signs the Contract as the Client, and 4.1 and 4.2 are `automated` on the strength of it.
+The Birth Plan's absent export is now [her map](../journeys/first-time-client.md)'s **HS-G7**, and 4.3's absent Contract copy sharpened into **HS-G6** — both minted at the run ([#240](https://github.com/markgoho/doula-cloud/issues/240)). The one fact this plan used to hand forward — **stage 4 is the strongest screen in the portal with no spec on it** — is answered: `contract-lifecycle.e2e.ts` signs the Contract as the Client, and 4.1 and 4.2 are `automated` on the strength of it.
 
 ## Run log
 
 ### 2026-08-22 — automated steps ([#209](https://github.com/markgoho/doula-cloud/issues/209))
 
-`bun run test:e2e` in `app/`, whole suite, one run: **16 passed, 0 failed** (20.5s).
-Stack per [docs/testing.md](../testing.md) — Postgres in compose, the goose
-migration, the Go BFF and the Firebase Auth emulator, all local.
+`bun run test:e2e` in `app/`, whole suite, one run: **16 passed, 0 failed** (20.5s). Stack per [docs/testing.md](../testing.md) — Postgres in compose, the goose migration, the Go BFF and the Firebase Auth emulator, all local.
 
 | Step | Spec | Result |
 | --- | --- | --- |
@@ -172,17 +157,9 @@ A desk pass, correcting two stale claims. Nothing was re-walked. Two steps are c
 
 ### 2026-08-23 — manual and missing-feature steps ([#240](https://github.com/markgoho/doula-cloud/issues/240))
 
-`bun run dev:full` in `app/`, against a fresh solo Practice ("Rooted Birth
-Collective", Owner+Admin+Doula in one Staff row) with one Client (Hannah
-Sorensen), a Contract sent with real merge-field values entered, and a filled
-Birth Plan. Walked in Chrome via playwriter, one browser profile, phone
-viewport (390×844) for stages 6 and 7.
+`bun run dev:full` in `app/`, against a fresh solo Practice ("Rooted Birth Collective", Owner+Admin+Doula in one Staff row) with one Client (Hannah Sorensen), a Contract sent with real merge-field values entered, and a filled Birth Plan. Walked in Chrome via playwriter, one browser profile, phone viewport (390×844) for stages 6 and 7.
 
-**Note on the fixture**: confirms the same shared-`__session`-cookie fact
-[#239](https://github.com/markgoho/doula-cloud/issues/239) already recorded —
-signing in as Staff or as the Client silently invalidates whichever side was
-signed in on the other route. Not re-argued here; walked by re-authenticating
-whichever side was about to act, immediately before each of its steps.
+**Note on the fixture**: confirms the same shared-`__session`-cookie fact [#239](https://github.com/markgoho/doula-cloud/issues/239) already recorded — signing in as Staff or as the Client silently invalidates whichever side was signed in on the other route. Not re-argued here; walked by re-authenticating whichever side was about to act, immediately before each of its steps.
 
 | Step | Mark | Result | What was seen |
 | --- | --- | --- | --- |
@@ -213,22 +190,8 @@ whichever side was about to act, immediately before each of its steps.
 | 8.1-b | `manual` | as expected | No Visits section anywhere on the Client side of the product |
 | 9.1 | `missing-feature (HS-G5)` [#304](https://github.com/markgoho/doula-cloud/issues/304) | confirmed | No second-account, guest, or share control anywhere in the portal — the banner holds only **Sign out** |
 
-**26 steps walked: 18 `manual`, 8 `missing-feature`. Every existing mark
-holds; 4.3 was falsified in part (sharpened, not deleted) and two new gaps
-minted — HS-G6 and HS-G7 — added to
-[docs/journeys/first-time-client.md](../journeys/first-time-client.md).** No
-`blocked` step exists on this plan, confirmed. No `journey-gap` issue filed
-from this ticket — that is
-[#209](https://github.com/markgoho/doula-cloud/issues/209).
+**26 steps walked: 18 `manual`, 8 `missing-feature`. Every existing mark holds; 4.3 was falsified in part (sharpened, not deleted) and two new gaps minted — HS-G6 and HS-G7 — added to [docs/journeys/first-time-client.md](../journeys/first-time-client.md).** No `blocked` step exists on this plan, confirmed. No `journey-gap` issue filed from this ticket — that is [#209](https://github.com/markgoho/doula-cloud/issues/209).
 
-**Verdict**: this plan cannot pass, as written, and does not. Every
-`missing-feature` step confirmed genuinely unwalkable; the Contract's own
-merge fields never render, and what looked like a merely-unlinked PDF copy
-(HS-G3) turned out to be a PDF copy that cannot be fetched at all — the same
-defect silently breaks message attachments in both directions.
+**Verdict**: this plan cannot pass, as written, and does not. Every `missing-feature` step confirmed genuinely unwalkable; the Contract's own merge fields never render, and what looked like a merely-unlinked PDF copy (HS-G3) turned out to be a PDF copy that cannot be fetched at all — the same defect silently breaks message attachments in both directions.
 
-**Facts handed forward, not gaps**: stage 4 remains the strongest screen in
-the portal with no spec on it — 4.2 signs a Contract and the suite never
-does. And the "Birth Plan has no export but Print" callout the plan itself
-flagged for this run is now minted as HS-G7, so it no longer needs carrying
-forward.
+**Facts handed forward, not gaps**: stage 4 remains the strongest screen in the portal with no spec on it — 4.2 signs a Contract and the suite never does. And the "Birth Plan has no export but Print" callout the plan itself flagged for this run is now minted as HS-G7, so it no longer needs carrying forward.

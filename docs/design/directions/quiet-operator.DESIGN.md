@@ -108,7 +108,7 @@ The design system is built for "Quiet Operator," a practice-management aesthetic
 The style is **Professional Minimalism** with a focus on structural clarity. It avoids emotional artifice, relying instead on high information density and a "tool-like" precision. There are no shadows, no gradients, and no unnecessary decorations. Visual hierarchy is established through meticulous alignment and subtle tonal shifts in the neutral palette.
 
 ## Colors
-The palette is intentionally restrained to reduce cognitive load. 
+The palette is intentionally restrained to reduce cognitive load.
 
 - **Ground:** A cool, near-white slate (#F8FAFC) serves as the primary background color for the application workspace.
 - **Primary:** Deep Pine Green (#1F5F4B) is reserved strictly for primary call-to-action buttons, active navigation states, and critical toggle indicators.
@@ -116,7 +116,7 @@ The palette is intentionally restrained to reduce cognitive load.
 - **Status:** Functional colors (red for errors, amber for warnings) should be desaturated to match the professional tone, used only in small icons or subtle text labels.
 
 ## Typography
-The system utilizes **Inter** for its neutral, grotesque character and exceptional legibility at small sizes. 
+The system utilizes **Inter** for its neutral, grotesque character and exceptional legibility at small sizes.
 
 - **Base Size:** 14px is the standard for all body and input text.
 - **Tabular Figures:** For all numerical data, timestamps, and pricing, the `tnum` (tabular figures) OpenType feature must be enabled to ensure vertical alignment in tables.
@@ -132,7 +132,7 @@ This design system employs a **Compact Fluid Grid**. The layout is designed to m
 - **Grouping:** Use logical grouping through whitespace (16px or 24px) rather than containment boxes where possible.
 
 ## Elevation & Depth
-In keeping with the "Quiet Operator" aesthetic, this system **uses zero shadows**. 
+In keeping with the "Quiet Operator" aesthetic, this system **uses zero shadows**.
 
 - **Flat Hierarchy:** Depth is communicated through color-blocking and hairline dividers (1px solid #E2E8F0).
 - **Surface Tiers:** Backgrounds are #F8FAFC. Active work areas or "cards" are white (#FFFFFF) with a hairline border.
@@ -140,9 +140,9 @@ In keeping with the "Quiet Operator" aesthetic, this system **uses zero shadows*
 - **Modals:** Overlays use a semi-transparent slate backdrop (60% opacity) to focus attention, but the modal itself remains flat with a crisp 1px border.
 
 ## Shapes
-The shape language is "nearly square." 
+The shape language is "nearly square."
 
-- **Standard Radius:** All buttons, input fields, and containers use a **4px (0.25rem)** corner radius. 
+- **Standard Radius:** All buttons, input fields, and containers use a **4px (0.25rem)** corner radius.
 - **Context:** This slight softening prevents the UI from feeling aggressive while maintaining a precise, architectural appearance.
 - **Exceptions:** Status "pills" or tags may use a fully rounded radius to differentiate them from interactive buttons.
 
@@ -150,6 +150,6 @@ The shape language is "nearly square."
 - **Buttons:** Primary buttons are Solid Pine Green with white text. Secondary buttons are White with a Slate border and Slate text. No hover "lift"; hover states should simply darken the background color by 5-10%.
 - **Inputs:** Text fields are white with a 1px Slate-200 border. Focus states use a 1px Pine Green border. No glow or outer shadows on focus.
 - **Data Tables:** These are the core of the app. Rows have a 1px bottom border. Header cells use `label-md` styling (uppercase, bold). Use alternating row stripes (Slate-50) only for very wide data sets.
-- **Chips/Tags:** Small, rectangular (4px radius). Use Slate-100 backgrounds with Slate-700 text for neutral status. 
+- **Chips/Tags:** Small, rectangular (4px radius). Use Slate-100 backgrounds with Slate-700 text for neutral status.
 - **Lists:** High-density vertical stacks. Iconography is monochromatic (Slate-500). Use horizontal hairline dividers to separate items.
 - **Checkboxes:** Square with a 2px radius. When checked, the fill is Pine Green with a white checkmark.

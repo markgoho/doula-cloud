@@ -1,9 +1,6 @@
 # Design export
 
-Generated from `docs/design/doula-cloud.pen`. Do not hand-edit this file:
-run `bun run design:export` to regenerate it, and commit the result alongside
-the `.pen` change it was generated from. See docs/design/workflow.md for
-what this export is for, and what it is not.
+Generated from `docs/design/doula-cloud.pen`. Do not hand-edit this file: run `bun run design:export` to regenerate it, and commit the result alongside the `.pen` change it was generated from. See docs/design/workflow.md for what this export is for, and what it is not.
 
 
 ## QuickCard (reusable)

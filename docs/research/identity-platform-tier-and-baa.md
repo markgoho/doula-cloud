@@ -64,9 +64,7 @@ Being named on the covered-products list means Google is *willing* to sign a BAA
 
 The BAA acceptance record lives at `console.cloud.google.com/iam-admin/privacy?project=doula-cloud`, under "Legal & Compliance" → "Additional terms for Google Cloud Platform." Checked live today via an authenticated browser session as `markgoho@gmail.com`, the project owner:
 
-> **Google Cloud Platform HIPAA Business Associate Addendum**
-> Review the Google Cloud Platform HIPAA Business Associate Addendum
-> Reviewed and accepted on Aug 30, 2026 by markgoho@gmail.com
+> **Google Cloud Platform HIPAA Business Associate Addendum** Review the Google Cloud Platform HIPAA Business Associate Addendum Reviewed and accepted on Aug 30, 2026 by markgoho@gmail.com
 
 Screenshot on file confirms this text rendered on the live Console page, with "You're currently working in Doula Cloud" visible in the header, ruling out a stale or wrong-project cache. For contrast, the "Cloud Data Processing Addendum" directly above it on the same page shows an active "Review and Accept" button with no acceptance date — that one is not yet accepted, which is unrelated to HIPAA but confirms the page correctly distinguishes accepted terms from unaccepted ones rather than showing everything as accepted by default.
 

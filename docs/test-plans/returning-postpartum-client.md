@@ -8,12 +8,9 @@ Her persona file says the schema supports her, and it does: `clients` carries no
 
 ## Preconditions
 
-- A Practice with an Owner and Priya holding `doula`, set either by the
-  Invitation that brought her in or by **Edit membership** on the Staff screen
-  (#316).
+- A Practice with an Owner and Priya holding `doula`, set either by the Invitation that brought her in or by **Edit membership** on the Staff screen (#316).
 - **Her first Engagement, created and completed.** Mark it `completed` through **PATCH .../engagements/{id}/status** with an ending reason — recording a birth outcome first, since it is a birth Engagement and completion refuses without one — then treat it as the 2024 one. That she can close it and it stays readable afterward is stage 1's finding.
-- **At least two Client credits.** Stage 3 spends a second one on a person the
-  Practice has already paid for (**MO-G9**).
+- **At least two Client credits.** Stage 3 spends a second one on a person the Practice has already paid for (**MO-G9**).
 - **A portal login she already holds.** Her 2024 Client must carry an *accepted* `client_portal_users` row before stage 5 begins — invite it and accept it as part of building the fixture. `invite()` refuses only where `identity_uid` is already set, so a Client whose portal row is still pending answers 5.1 with `201`, and the walk reads the plan as wrong rather than the fixture as unfinished.
 - **One email address, and one deliberate duplicate.** She needs only the address she already signs in with: 5.2 is her existing login, not a second account. Step 5.3 alone needs a second Client record for her at this Practice, saved on purpose by answering intake's duplicate screen with *a different person* — that branch is the only way to reach the accept-side refusal, and reaching it is the point of the step.
 
@@ -27,10 +24,7 @@ Her persona file says the schema supports her, and it does: `clients` carries no
 
 ### Stage 2 — She calls Priya
 
-No step: the product is not involved, and **that is the finding**. Every fact she
-is relying on — who she is, who her doula was, how her first birth went — lives in
-a message thread and in Priya's memory, not in a field. Nothing to walk, nothing to
-mark; the consequences land in stages 3 and 8.
+No step: the product is not involved, and **that is the finding**. Every fact she is relying on — who she is, who her doula was, how her first birth went — lives in a message thread and in Priya's memory, not in a field. Nothing to walk, nothing to mark; the consequences land in stages 3 and 8.
 
 ### Stage 3 — The Practice types her in again
 
@@ -98,9 +92,7 @@ CB-G3, **MO-G9**, **RA-G1** and NH-G4 are observed inside walkable steps (5.2, 3
 
 ### 2026-08-22 — automated steps ([#209](https://github.com/markgoho/doula-cloud/issues/209))
 
-`bun run test:e2e` in `app/`, whole suite, one run: **16 passed, 0 failed** (20.5s).
-Stack per [docs/testing.md](../testing.md) — Postgres in compose, the goose
-migration, the Go BFF and the Firebase Auth emulator, all local.
+`bun run test:e2e` in `app/`, whole suite, one run: **16 passed, 0 failed** (20.5s). Stack per [docs/testing.md](../testing.md) — Postgres in compose, the goose migration, the Go BFF and the Firebase Auth emulator, all local.
 
 | Step | Spec | Result |
 | --- | --- | --- |
@@ -141,14 +133,7 @@ A desk pass over stages 5 and 6, which [#685](https://github.com/markgoho/doula-
 
 ### 2026-08-23 — manual and missing-feature steps ([#241](https://github.com/markgoho/doula-cloud/issues/241))
 
-`bun run dev:full` in `app/`, against a fresh solo Practice ("Rooted Birth
-Collective", Owner+Admin+Doula in one Staff row — Priya's shape, since her
-journey carries this plan's staff-side stages) with two `clients` rows for
-one person (Camille Boyd), her two Engagements, and two portal accounts
-under two email addresses. Walked in Chrome via playwriter, one browser
-profile, re-authenticating whichever side was about to act — staff and
-Client-portal share one `__session` cookie per origin on `localhost:5173`,
-as prior walks found; not a new finding.
+`bun run dev:full` in `app/`, against a fresh solo Practice ("Rooted Birth Collective", Owner+Admin+Doula in one Staff row — Priya's shape, since her journey carries this plan's staff-side stages) with two `clients` rows for one person (Camille Boyd), her two Engagements, and two portal accounts under two email addresses. Walked in Chrome via playwriter, one browser profile, re-authenticating whichever side was about to act — staff and Client-portal share one `__session` cookie per origin on `localhost:5173`, as prior walks found; not a new finding.
 
 | Step | Mark | Result | What was seen |
 | --- | --- | --- | --- |
@@ -171,16 +156,9 @@ as prior walks found; not a new finding.
 | 8.1 | `manual` | as expected | The postpartum Engagement's message thread is empty, isolated from the 2024 thread |
 | 8.1-a | `missing-feature (CB-G6)` [#312](https://github.com/markgoho/doula-cloud/issues/312) | confirmed | No view, on either side, shows a person's Engagements over time |
 
-**18 steps walked: 9 `manual`, 9 `missing-feature`. Every mark holds.** No
-`blocked` step exists on this plan, confirmed — nothing on her path touches
-Stripe. No `journey-gap` issue filed from this ticket — that is
-[#209](https://github.com/markgoho/doula-cloud/issues/209), still blocked on
-this ticket alone now that it is the last of the nine.
+**18 steps walked: 9 `manual`, 9 `missing-feature`. Every mark holds.** No `blocked` step exists on this plan, confirmed — nothing on her path touches Stripe. No `journey-gap` issue filed from this ticket — that is [#209](https://github.com/markgoho/doula-cloud/issues/209), still blocked on this ticket alone now that it is the last of the nine.
 
-**Verdict**: this plan cannot pass, as written, and does not, on all three
-clauses. The 2024 Engagement stays `intake` forever; the postpartum one
-cannot declare what it is; and reaching both from one portal account is
-refused at the exact step the map names as her moment of truth.
+**Verdict**: this plan cannot pass, as written, and does not, on all three clauses. The 2024 Engagement stays `intake` forever; the postpartum one cannot declare what it is; and reaching both from one portal account is refused at the exact step the map names as her moment of truth.
 
 ### 2026-09-20 — stages 1, 4, 7 and 8 correction ([#1241](https://github.com/markgoho/doula-cloud/issues/1241))
 

@@ -171,22 +171,13 @@ Renata Alvarez, walking [Stage 2 — Invite a new Doula](../journeys/practice-ow
 
 > ### Stage 2 — Invite a new Doula
 >
-> **2.1** — `completed` · 240 ms
-> **Act**: Clicked **Invite Staff** on `/practices/{id}/staff`.
-> **Result**: The invitation form rendered with Email, Roles and Employment type.
-> **Evidence**: `shots/practice-owner-2.1.png`
+> **2.1** — `completed` · 240 ms **Act**: Clicked **Invite Staff** on `/practices/{id}/staff`. **Result**: The invitation form rendered with Email, Roles and Employment type. **Evidence**: `shots/practice-owner-2.1.png`
 >
-> **2.2** — `completed with friction` · 3,910 ms
-> **Act**: Submitted the form for `jo@rootedbirth.example` with the Doula role, employment type `contractor`.
-> **Result**: `POST /api/practices/{id}/invitations → 201 created`. The roster returned and showed the invitation as pending. The wait fell in the 1–10 s band.
-> **Evidence**: `POST /api/practices/{id}/invitations → 201`; `shots/practice-owner-2.2.png`
+> **2.2** — `completed with friction` · 3,910 ms **Act**: Submitted the form for `jo@rootedbirth.example` with the Doula role, employment type `contractor`. **Result**: `POST /api/practices/{id}/invitations → 201 created`. The roster returned and showed the invitation as pending. The wait fell in the 1–10 s band. **Evidence**: `POST /api/practices/{id}/invitations → 201`; `shots/practice-owner-2.2.png`
 >
 > > I hit send and then sat there. It's a form with three fields — I couldn't tell whether it had gone through or whether I'd need to do it again, and doing it twice is exactly the sort of thing that ends up with Jo getting two emails and asking me which one is real.
 >
-> **2.2-a** — `refused` · 180 ms
-> **Act**: Submitted the same form again for the same address, to see what a duplicate does.
-> **Result**: `POST /api/practices/{id}/invitations → 409 conflict`, rendered as "Something went wrong" with no field named.
-> **Evidence**: `POST /api/practices/{id}/invitations → 409`; `api/internal/<package>/<file>.go:<line>`; `shots/practice-owner-2.2-a.png`
+> **2.2-a** — `refused` · 180 ms **Act**: Submitted the same form again for the same address, to see what a duplicate does. **Result**: `POST /api/practices/{id}/invitations → 409 conflict`, rendered as "Something went wrong" with no field named. **Evidence**: `POST /api/practices/{id}/invitations → 409`; `api/internal/<package>/<file>.go:<line>`; `shots/practice-owner-2.2-a.png`
 >
 > > It stopped me, which is right, but it didn't tell me it was because I'd already invited her. I don't know if the problem is the email address or something else, so now I'm going to go and look at the roster to work out what I actually did.
 >
