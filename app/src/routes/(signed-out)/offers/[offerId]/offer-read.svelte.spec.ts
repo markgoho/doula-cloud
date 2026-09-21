@@ -1,6 +1,7 @@
 import { page as testPage } from 'vitest/browser';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
+import { expectFieldError } from '#lib/components/molecules/LabeledField.testing.js';
 import Page from './+page.svelte';
 import { fixture } from './page.fixture.js';
 
@@ -128,9 +129,10 @@ describe('the pre-account Offer read refuses its own submit', () => {
 		await expect
 			.element(testPage.getByLabelText('Access code'))
 			.toHaveAttribute('aria-describedby', 'offer-access-code-error');
-		expect(document.querySelector('#offer-access-code-error')?.textContent).toBe(
-			'Enter the six-digit code from your email'
-		);
+		// expectFieldError polls (#1223) rather than asserting once as this
+		// line used to -- the message is already on screen by the time this
+		// runs, so it settles on the first check; the assertion is unchanged.
+		await expectFieldError('offer-access-code', 'Enter the six-digit code from your email');
 	});
 
 	it('refuses a code that is not six digits, and shows what one looks like', async () => {
