@@ -175,6 +175,8 @@ Four specs carry it, all in the unit suite, all blocking:
 - `app/src/lib/components/atoms/Skeleton.layoutShift.svelte.spec.ts` — a
   skeleton reserves the space the content it stands in for will occupy.
 
+A whole-tree scan like `motion.spec.ts`'s runs once, at module scope, never inside an `it` — Vitest's 5-second `testTimeout` is a per-test budget, and a scan of the whole of `app/src` charged against it passes on a quiet machine and times out under the full suite's contention for disk and CPU, then passes again on a bare rerun of the identical commit ([#1211](https://github.com/markgoho/doula-cloud/issues/1211)). `layout.usage.spec.ts` already reads this way and is the pattern to copy.
+
 **What is not checked** is listed in ADR-0020 rather than left to be
 discovered: frame rate, the 100ms and 400ms latency budgets, route-level
 Cumulative Layout Shift, and the blank first frame an SPA paints before its

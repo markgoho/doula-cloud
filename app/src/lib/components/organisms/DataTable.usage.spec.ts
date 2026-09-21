@@ -81,15 +81,21 @@ function unboundedUsers(): string[] {
 	return offenders;
 }
 
+// Walked and read once, at module scope, so the cost of the whole-tree
+// walk is paid on import rather than charged against either `it` below,
+// which each used to call `unboundedUsers()` -- and its own fresh
+// `readdirSync`/`readFileSync` walk -- a second time (#1211).
+const unbounded = unboundedUsers();
+
 describe('a route never hands a list every row there is', () => {
 	it('passes hasMore to every DataTable it renders', () => {
-		const unexcused = unboundedUsers().filter((route) => !AWAITING_A_CURSOR.has(route));
+		const unexcused = unbounded.filter((route) => !AWAITING_A_CURSOR.has(route));
 		expect(unexcused).toEqual([]);
 	});
 
 	it('keeps no route on the waiting list once its endpoint paginates', () => {
 		const bounded = AWAITING_A_CURSOR.keys()
-			.filter((route) => !unboundedUsers().includes(route))
+			.filter((route) => !unbounded.includes(route))
 			.toArray();
 		expect(bounded).toEqual([]);
 	});

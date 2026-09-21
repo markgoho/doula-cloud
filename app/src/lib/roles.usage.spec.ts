@@ -65,6 +65,13 @@ const sourceFiles = globSync('src/**/*.{svelte,ts}', { cwd: appRoot }).filter(
 	(file) => !file.includes('.spec.') && file !== 'src/lib/roles.ts'
 );
 
+// Read and scanned once, at module scope, so the cost of the whole-tree
+// read is paid on import rather than charged against one `it`'s 5-second
+// `testTimeout` (#1211).
+const offenses = sourceFiles.flatMap((file) =>
+	findOffenses(file, readFileSync(path.join(appRoot, file), 'utf8'))
+);
+
 describe('practice_role and employment_type are labeled in one place', () => {
 	it('reads the whole app source tree', () => {
 		// A glob that silently matched nothing would make the assertion
@@ -73,10 +80,6 @@ describe('practice_role and employment_type are labeled in one place', () => {
 	});
 
 	it('finds no raw join and no second label map', () => {
-		const offenses = sourceFiles.flatMap((file) =>
-			findOffenses(file, readFileSync(path.join(appRoot, file), 'utf8'))
-		);
-
 		expect(offenses.map((offense) => `${offense.file}: ${offense.found}`)).toEqual([]);
 	});
 });

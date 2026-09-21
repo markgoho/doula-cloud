@@ -292,7 +292,9 @@ function findOffensesInLines(file: string, source: string): Offense[] {
 		// Every word FAMILY can match holds a double L, and almost no line
 		// in the tree does. The cheap `includes` keeps the split-and-match
 		// off the other lines: this spec reads every source file in two
-		// trees on every run, and #1211 has it timing out already.
+		// trees once, at module scope rather than inside a timed `it`
+		// (#1211), but the split-and-match itself is still worth skipping
+		// on every line that cannot possibly match.
 		if (!lower.includes('ll')) return named;
 		const family = asWords(line)
 			.matchAll(FAMILY)
@@ -323,6 +325,22 @@ const sourceFiles = globSync('src/**/*.{svelte,ts,js,css,svg,html,md}', { cwd: a
 // words it held. Paths come back already prefixed "api/", since the glob
 // runs from repoRoot rather than appRoot.
 const apiFiles = globSync('api/**/*.go', { cwd: repoRoot });
+
+// Read and scanned once, at module scope, so the cost of walking roughly
+// 2,000 files in app/src plus 593 in api/ is paid on import rather than
+// charged against one `it`'s 5-second `testTimeout`. Under a quiet
+// machine that scan finishes in well under a second; under the full
+// suite's contention for disk and CPU it has been measured taking
+// 20-40x longer, which is what made the test below time out and pass on
+// a bare rerun of the same commit (#1211).
+const offenses = [
+	...sourceFiles.flatMap((file) =>
+		findOffensesInLines(file, readFileSync(path.join(appRoot, file), 'utf8'))
+	),
+	...apiFiles.flatMap((file) =>
+		findOffensesInLines(file, readFileSync(path.join(repoRoot, file), 'utf8'))
+	)
+];
 
 describe('app/src and api/ spell every word the American way', () => {
 	it('reads the whole app source tree', () => {
@@ -375,15 +393,6 @@ describe('app/src and api/ spell every word the American way', () => {
 	});
 
 	it('finds no British spelling of a word the repo already spells one way', () => {
-		const offenses = [
-			...sourceFiles.flatMap((file) =>
-				findOffensesInLines(file, readFileSync(path.join(appRoot, file), 'utf8'))
-			),
-			...apiFiles.flatMap((file) =>
-				findOffensesInLines(file, readFileSync(path.join(repoRoot, file), 'utf8'))
-			)
-		];
-
 		expect(
 			offenses.map(
 				(offense) =>

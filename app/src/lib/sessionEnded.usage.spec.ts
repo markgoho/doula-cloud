@@ -75,6 +75,11 @@ const sourceFiles = globSync('src/**/*.{svelte,ts}', { cwd: appRoot }).filter(
 	(file) => !file.includes('.spec.') && !file.includes('.fixture.') && file !== OWNER
 );
 
+// Read and scanned once, at module scope, so the cost of the whole-tree
+// read is paid on import rather than charged against one `it`'s 5-second
+// `testTimeout` (#1211).
+const offenses = sourceFiles.flatMap((file) => offensesIn(file, quotedStrings(file, appRoot)));
+
 describe('the session-ended flag is spelled in one place', () => {
 	it('reads the whole app source tree', () => {
 		// A glob that silently matched nothing would make the assertion
@@ -83,8 +88,6 @@ describe('the session-ended flag is spelled in one place', () => {
 	});
 
 	it('finds no file but the owner naming the flag', () => {
-		const offenses = sourceFiles.flatMap((file) => offensesIn(file, quotedStrings(file, appRoot)));
-
 		expect(offenses.map((offense) => `${offense.file}:${offense.line}: ${offense.found}`)).toEqual([]);
 	});
 });

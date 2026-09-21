@@ -64,6 +64,12 @@ function findOffenses(file: string): Offense[] {
 	return found;
 }
 
+// Read and scanned once, at module scope, so the cost of the whole-tree
+// read is paid on import rather than charged against each banned word's
+// own `it` -- previously a fresh full-tree scan per word, four in this
+// file (#1211).
+const offenses = sourceFiles.flatMap((file) => findOffenses(file));
+
 describe('GOV.UK error wording', () => {
 	it('reads every component and route', () => {
 		// A glob that silently matched nothing would make every assertion
@@ -73,12 +79,10 @@ describe('GOV.UK error wording', () => {
 
 	for (const word of BANNED) {
 		it(`no user-facing string says "${word}"`, () => {
-			const offenses = sourceFiles
-				.flatMap((file) => findOffenses(file))
-				.filter((offense) => offense.found === word);
+			const wordOffenses = offenses.filter((offense) => offense.found === word);
 
 			expect(
-				offenses.map((offense) => `${offense.file}:${offense.line} "${offense.text}"`)
+				wordOffenses.map((offense) => `${offense.file}:${offense.line} "${offense.text}"`)
 			).toEqual([]);
 		});
 	}

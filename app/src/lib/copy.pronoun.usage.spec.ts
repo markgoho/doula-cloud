@@ -105,6 +105,11 @@ function findOffenses(file: string): Offense[] {
 	return findOffensesInLines(file, regionLinesInFile(file, appRoot));
 }
 
+// Read and scanned once, at module scope, so the cost of the whole-tree
+// read is paid on import rather than charged against one `it`'s 5-second
+// `testTimeout` (#1211).
+const offenses = sourceFiles.flatMap((file) => findOffenses(file));
+
 describe('product copy names a Client or Staff member, never a pronoun', () => {
 	it('reads every component and route, including the style guide', () => {
 		// A glob that silently matched nothing would make every assertion
@@ -113,8 +118,6 @@ describe('product copy names a Client or Staff member, never a pronoun', () => {
 	});
 
 	it('uses no gendered pronoun anywhere a Client or Staff member reads', () => {
-		const offenses = sourceFiles.flatMap((file) => findOffenses(file));
-
 		expect(offenses.map((offense) => `${offense.file}:${offense.line} "${offense.text}"`)).toEqual(
 			[]
 		);
