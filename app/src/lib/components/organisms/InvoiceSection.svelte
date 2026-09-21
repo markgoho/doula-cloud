@@ -37,6 +37,8 @@
 		clientsCannotPayMessage,
 		formatAmount,
 		invoiceStatusLabel,
+		paymentMethodLabels,
+		paymentMethodOptions,
 		unbillableContractMessage,
 		type BillingMode,
 		type Invoice,
@@ -185,20 +187,6 @@
 		}
 		paymentError = error_ instanceof Error ? error_.message : 'Failed to record payment';
 	}
-
-	const paymentMethodOptions = [
-		{ value: 'check' as const, label: 'Check' },
-		{ value: 'bank_transfer' as const, label: 'Bank transfer' },
-		{ value: 'cash' as const, label: 'Cash' },
-		{ value: 'other' as const, label: 'Other' }
-	];
-
-	const paymentMethodLabels: Record<PaymentMethod, string> = {
-		check: 'Check',
-		bank_transfer: 'Bank transfer',
-		cash: 'Cash',
-		other: 'Other'
-	};
 
 	function startRecordingPayment(invoiceId: string) {
 		payingInvoiceId = invoiceId;

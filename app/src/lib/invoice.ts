@@ -245,6 +245,24 @@ export async function setBillingMode(
  * "other" requires a note -- see RecordPaymentInput. */
 export type PaymentMethod = 'check' | 'bank_transfer' | 'cash' | 'other';
 
+/** Each PaymentMethod's label, in the words a Staff member reads -- one
+ * table for the two forms that ask for one (recording a Payment, and
+ * returning one by hand, #1009), so a fifth method cannot reach one form
+ * and not the other. */
+export const paymentMethodLabels: Readonly<Record<PaymentMethod, string>> = {
+	check: 'Check',
+	bank_transfer: 'Bank transfer',
+	cash: 'Cash',
+	other: 'Other'
+};
+
+/** The same four methods as RadioGroup options, in the order both forms
+ * list them. */
+export const paymentMethodOptions = (Object.keys(paymentMethodLabels) as PaymentMethod[]).map((value) => ({
+	value,
+	label: paymentMethodLabels[value]
+}));
+
 /**
 One payments row -- a manually recorded Payment (as returned by
 recordPayment), its reversal (#945, as returned by reversePayment), or a

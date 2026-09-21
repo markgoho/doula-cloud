@@ -31,6 +31,8 @@
 	 */
 	import {
 		formatAmount,
+		paymentMethodLabels,
+		paymentMethodOptions,
 		stripeRefundFeeWarning,
 		type Invoice,
 		type PaymentMethod,
@@ -79,20 +81,6 @@
 	let methodError = $state('');
 	let noteError = $state('');
 	let isSubmitting = $state(false);
-
-	const methodOptions = [
-		{ value: 'check' as const, label: 'Check' },
-		{ value: 'bank_transfer' as const, label: 'Bank transfer' },
-		{ value: 'cash' as const, label: 'Cash' },
-		{ value: 'other' as const, label: 'Other' }
-	];
-
-	const methodLabels: Record<PaymentMethod, string> = {
-		check: 'Check',
-		bank_transfer: 'Bank transfer',
-		cash: 'Cash',
-		other: 'Other'
-	};
 
 	function resetErrors() {
 		error = '';
@@ -194,7 +182,7 @@
 			{#if !isCardPayment}
 				<RadioGroup
 					legend="How was the money returned?"
-					options={methodOptions}
+					options={paymentMethodOptions}
 					value={method}
 					onChange={(value) => (method = value)}
 					error={methodError || undefined}
@@ -217,7 +205,7 @@
 					]
 				: [
 						{ label: 'Amount to return', value: formatAmount(reviewedCents) },
-						{ label: 'Method', value: methodLabels[method] },
+						{ label: 'Method', value: paymentMethodLabels[method] },
 						{ label: 'Note', value: note.trim() === '' ? '—' : note }
 					]}
 		/>
