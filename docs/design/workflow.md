@@ -17,8 +17,8 @@ Everything obeys [the design brief](brief.md). A screen that wants to depart fro
 
 Two consequences worth holding on to:
 
-- **`execute` edits whatever the app has open.** Before an agent touches the canvas, the app must have `doula-cloud.pen` as its active editor. Confirm with `get_app_state`, which prints the active path.
-- **A person's ⌘S, or the app's autosave, is the file-writing path.** `execute` changes are in memory until the canvas is saved, and an agent has no way to save it on its own. See [Autosave, and the one operation it misses](#autosave-and-the-one-operation-it-misses).
+- **`execute` edits whatever the app has open.** Before an agent touches the canvas, the app must have `doula-cloud.pen` as its active editor. Confirm with `get_app_state`, which prints the active path — and it must be the copy under the working tree the agent commits from. An agent in a worktree opens that worktree's file (`open -a Pen "$PWD/docs/design/doula-cloud.pen"`); an editor on the main checkout's copy makes every `git status` check below look at the wrong file.
+- **An agent saves by clicking Pen's own File > Save through macOS UI scripting.** `execute` changes are in memory until the canvas is saved. The Pencil MCP server has no save, but `osascript` can click the app's Save menu item with nobody at the keyboard and without bringing the app to the front. See [Autosave, and the one operation it misses](#autosave-and-the-one-operation-it-misses) for the command and its one precondition.
 
 ## The export is a read-back, not a source
 
@@ -34,7 +34,7 @@ It is explicitly not an interchange format. ADR-0019 already rejected "Generatin
 2. **Look for an existing screen to copy.** This is the first move, not a fallback. `Copy` on a reusable frame creates a connected instance, so a screen that reuses `QuickCard` or an activity row inherits later edits to it. Generating from nothing is for a genuinely new archetype.
 3. **Draw it**, against the brief and against the Templates in `app/src/lib/components/templates/`. A screen that instantiates an existing Template is arranging regions, not inventing a page.
 4. **Check it before showing it.** `Get` with a visitor reports `ctx.bounds` and `ctx.problems`, which catches clipping and collapsed layout without a screenshot. Screenshot only to judge color, type and alignment.
-5. **Save**, so the `.pen` change is on disk and in `git diff`.
+5. **Save**, so the `.pen` change is on disk and in `git diff`. An agent uses the menu Save command in [Autosave, and the one operation it misses](#autosave-and-the-one-operation-it-misses), then confirms with `git status`.
 6. **Regenerate the export.** `bun run design:export`, and commit `docs/design/doula-cloud.export.md` in the same commit as the `.pen` change (see Committing, below). A commit that changes the `.pen` file without this fails CI.
 
 ## Five `execute` rules that are not in Pen's own skill
@@ -101,6 +101,25 @@ Two consequences, and they are the durable part:
 
 > **No read can tell you whether your work is on disk.** `GetVariables()` and `Get()` both return the in-memory document and will happily confirm work that was never written. **`git status` on the `.pen` file is the only check that distinguishes saved from unsaved**, and it belongs at the end of every canvas pass.
 
-> **An agent cannot save the canvas; a person does.** There is no save in the `execute` API — `Export()` writes PNG, JPEG, WEBP, PDF and HTML, never `.pen`. The `@pen.dev/cli` package had an interactive `save()` that an agent could pipe in with nobody at the keyboard ([#1085](https://github.com/markgoho/doula-cloud/issues/1085)), but the package was removed from the repo on 2026-09-25 after Microsoft Defender flagged it, so that path is gone. An agent that has finished a canvas change checks the `.pen` file with `git status` and, if the file is unchanged, asks the person to press ⌘S in Pen.app. A save through the Pencil MCP server is [#1469](https://github.com/markgoho/doula-cloud/issues/1469).
+> **An agent saves by clicking File > Save through `System Events`.** This is the working save path, settled on [#1469](https://github.com/markgoho/doula-cloud/issues/1469):
 >
-> **⌘S needs a window.** On #1085 the desktop app was running with **zero windows**: `get_app_state` reported `doula-cloud.pen` as the active canvas editor and `execute` edited it happily, while `System Events` counted no window to aim a keystroke at (`tell process "Pen" to get count of windows` returned `0`). If the person sees no window, they open `doula-cloud.pen` in the app first.
+> ```sh
+> osascript -e 'tell application "System Events" to tell process "Pen" to perform action "AXRaise" of window "doula-cloud.pen"' -e 'tell application "System Events" to tell process "Pen" to click menu item "Save" of menu "File" of menu bar 1'
+> ```
+>
+> Then `git status` on the `.pen` file, which is still the only check that counts. It is one line on purpose: this repo's worktree hook refuses a multi-line `tell` block.
+>
+> **The one precondition is macOS Accessibility.** UI scripting works only when the process running `osascript` — the terminal, or whatever app hosts the agent — is allowed in System Settings > Privacy & Security > Accessibility. Without it the command fails with "osascript is not allowed assistive access" (error `-1719` or `-25211`). That is a one-time grant a person makes; an agent that sees the error stops and asks for it, rather than falling back silently.
+
+**What #1469 checked, on Pen.app 1.2.13, 2026-09-25.** The Pencil MCP server has five tools — `execute`, `get_app_state`, `get_style`, `read_skill`, `browser` — and none of them saves. `execute.md` lists no save, and the `execute` scope holds nothing undocumented: its globals are the fourteen documented functions plus `InternalError`. `Export()` refuses `"pen"` as a format ("must be one of png, jpeg, webp, pdf, html-tailwind, html-css"). Each fallback the ticket named was then tried:
+
+| Fallback | Result |
+|---|---|
+| File > Save through `System Events` (the command above) | **Works — chosen.** Six saves out of six, the last two by the exact command above, landed on disk within 2–3 seconds, two of them after a 30-second wait in which autosave did not fire. Pen stayed in the background the whole time (Chrome was frontmost), so it takes no focus from a person working. It saved `doula-cloud.pen` even with the app's Dashboard window raised instead, because Save acts on the active canvas editor and the Dashboard holds no document; the `AXRaise` is there so a second open `.pen` window can never become the target. |
+| A scenegraph change that reliably triggers autosave | **Not found.** A root-level `Insert` and a `Delete` each sat unwritten for the full 30 seconds, two rounds out of two — more evidence beside #417's, not a replacement for it, since 30 seconds is shorter than #417's windows. Nothing an agent can do makes autosave predictable. |
+| A person's ⌘S | Still works, and stays the fallback when the Accessibility grant is missing. |
+| `@pen.dev/cli`, or the app's own File > "Install 'pen' CLI…" item | **Never.** The package was removed on 2026-09-25 after Microsoft Defender flagged it ([#1085](https://github.com/markgoho/doula-cloud/issues/1085) had used its interactive `save()`). Neither it nor any other third-party Pen CLI comes back, globally or through `bunx`. |
+
+> **Save needs a document window.** On #1085 the desktop app was running with **zero windows**: `get_app_state` reported `doula-cloud.pen` as the active canvas editor and `execute` edited it happily, while `System Events` counted no window to aim at. Before saving, check with `osascript -e 'tell application "System Events" to tell process "Pen" to get {count of windows, enabled of menu item "Save" of menu "File" of menu bar 1}'`; a healthy editor answers a nonzero count and `true`. On `0`, run `open -a Pen "$PWD/docs/design/doula-cloud.pen"` first — the same command fixes `get_app_state` and `read_skill` failing with "A file needs to be open in the editor". #1469 could not reproduce the zero-window state on purpose: File > Close Window, clicked the same way while Pen was in the background, did nothing, so the background behavior is a property of Save, not of every menu item.
+>
+> **Saving rewrites the format version.** Pen.app 1.2.13 changed the file's top-level `"version"` from `2.17` to `2.18` on its first save, with no other difference. `git checkout` cannot undo that while the app has the file open, since the next save writes it again; commit it with the change it arrived beside.
