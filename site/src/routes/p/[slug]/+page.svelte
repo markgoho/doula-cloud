@@ -1,5 +1,5 @@
 <!--
-A Practice's public page (#441), at doula.cloud/p/<slug>/.
+A Practice's public page (#441), at doula.cloud/p/<slug>.
 
 Every connected account has to declare a website to Stripe, and #421
 walked what happens to a Practice who has none: she completes hosted
@@ -34,7 +34,7 @@ file is what holds it in place.
 	<!-- Indexed and reachable: this is the Practice's public website, and a
 	     hidden one would fail the job it exists to do. -->
 	<meta name="description" content={metaDescription(page.serviceDescription)} />
-	<link rel="canonical" href="{SITE_ORIGIN}/p/{page.slug}/" />
+	<link rel="canonical" href="{SITE_ORIGIN}/p/{page.slug}" />
 </svelte:head>
 
 <!-- data-practice-page is what #443's probe looks for after a deploy. A

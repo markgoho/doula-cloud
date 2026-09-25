@@ -10,8 +10,9 @@ export const prerender = true;
 // eslint-disable-next-line unicorn/consistent-boolean-name -- `csr` is SvelteKit's mandated export name for this config
 export const csr = false;
 
-// Every page is a directory with an index.html in it -- /pilot-terms/,
-// /p/<slug>/ -- which is the exact shape the Hugo site published. The URL
-// Stripe holds for each Practice (#382), and the one the #443 probe
-// requests, end in that slash.
-export const trailingSlash = 'always';
+// Every page is a URL with no trailing slash -- /pilot-terms, /p/<slug> --
+// which is SvelteKit's default `trailingSlash: 'never'`, so it is not set
+// here. The build writes pilot-terms.html, and firebase.json's `cleanUrls`
+// serves it at /pilot-terms (#1475). That is the form
+// website.HostedPageURL hands Stripe (#382), so the URL Stripe holds
+// answers 200 with no redirect first.

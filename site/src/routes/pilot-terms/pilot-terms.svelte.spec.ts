@@ -3,14 +3,14 @@ import { describe, expect, it } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import Page from './+page.svelte';
 
-describe('the pilot terms at /pilot-terms/ (#444)', () => {
+describe('the pilot terms at /pilot-terms (#444)', () => {
 	it('is unlisted: noindex, with its canonical address', async () => {
 		await render(Page);
 		expect(document.head.querySelector('meta[name="robots"]')?.getAttribute('content')).toBe(
 			'noindex, nofollow'
 		);
 		expect(document.head.querySelector('link[rel="canonical"]')?.getAttribute('href')).toBe(
-			'https://doula.cloud/pilot-terms/'
+			'https://doula.cloud/pilot-terms'
 		);
 	});
 

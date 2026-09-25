@@ -20,7 +20,7 @@ thing being avoided.
 <svelte:head>
 	<title>{title} | {PRODUCT_NAME}</title>
 	<meta name="robots" content="noindex, nofollow" />
-	<link rel="canonical" href="{SITE_ORIGIN}/pilot-terms/" />
+	<link rel="canonical" href="{SITE_ORIGIN}/pilot-terms" />
 </svelte:head>
 
 <ReadingPage {title} updated="2026-08-29">

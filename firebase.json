@@ -9,6 +9,8 @@
     {
       "target": "site",
       "public": "site/build",
+      "cleanUrls": true,
+      "trailingSlash": false,
       "ignore": [
         "firebase.json",
         "**/.*",

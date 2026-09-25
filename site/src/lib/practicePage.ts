@@ -1,5 +1,5 @@
 /**
- * A Practice's published page at doula.cloud/p/<slug>/ (#441).
+ * A Practice's published page at doula.cloud/p/<slug> (#441).
  *
  * This file is the contract between the two halves of the page:
  * scripts/sync-practice-pages.ts reads the rows out of Postgres and writes
@@ -14,7 +14,7 @@
 /*
  * One published page, as the sync script reads it out of Postgres.
  *
- * - slug: the path segment of doula.cloud/p/<slug>/, assigned once (00046).
+ * - slug: the path segment of doula.cloud/p/<slug>, assigned once (00046).
  * - name: the Practice's name, and the business name Stripe asks for.
  * - serviceDescription: what she offers, in her own words, up to 500
  *   characters.
