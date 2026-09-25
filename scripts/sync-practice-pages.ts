@@ -1,14 +1,19 @@
 /**
- * Pre-build step: write every published Practice page into the Hugo
- * content tree (#441).
+ * Pre-build step: write every published Practice page's data where the
+ * site's build will find it (#441).
  *
- * Runs before `hugo` in the same `bun run build` the deploy workflow
- * already calls. Reads the Practices that chose a hosted page (#440's
- * `practice_websites`, mode 'hosted') and writes
- * `hugo/content/p/<slug>/index.md` for each. The result is a static file
- * behind Firebase Hosting's CDN: no dynamic path on doula.cloud, no
+ * Runs before the site's `vite build` in the same `bun run build` the
+ * deploy workflow already calls. Reads the Practices that chose a hosted
+ * page (#440's `practice_websites`, mode 'hosted') and writes
+ * `site/practice-pages/<slug>.json` for each; site/src/routes/p/[slug]/
+ * prerenders each file into `p/<slug>/index.html`. The result is a static
+ * file behind Firebase Hosting's CDN: no dynamic path on doula.cloud, no
  * Cloud Run rewrite, nothing to be up at the moment a Client or a Stripe
  * reviewer opens the page.
+ *
+ * Every value a Practice typed travels as JSON data and is printed by a
+ * Svelte template, which escapes it. Nothing she typed is ever run
+ * through a markdown renderer or inserted as HTML.
  *
  * Usage:
  *   SYNC_PRACTICE_PAGES=required DATABASE_URL=... bun scripts/sync-practice-pages.ts
@@ -36,17 +41,10 @@
 import { mkdir, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { SQL } from 'bun';
-import {
-  type PracticePage,
-  pageDirectory,
-  renderPage,
-  renderSectionIndex,
-} from './practice-page';
+import type { PracticePage } from '../site/src/lib/practicePage';
 
-const CONTENT_ROOT = path.resolve(import.meta.dirname, '../hugo/content');
-
-/** The whole generated tree. Rebuilt from the database on every run. */
-const PAGES_ROOT = path.join(CONTENT_ROOT, 'p');
+/** The whole generated directory. Rebuilt from the database on every run. */
+const PAGES_ROOT = path.resolve(import.meta.dirname, '../site/practice-pages');
 
 /**
  * The published pages, and the Owner each one names as its contact.
@@ -163,12 +161,28 @@ async function readPublishedPages(
 }
 
 /**
- * Replaces the generated tree with exactly the pages given.
+ * One page's file: its data as JSON, and nothing else.
+ *
+ * JSON because JSON.stringify is a complete escaper for arbitrary text,
+ * whatever she typed. Two spaces and a trailing newline: the file is
+ * generated, but it is also the thing anyone debugging a rejected Stripe
+ * review will read.
+ */
+export function renderPage(page: PracticePage): string {
+  return `${JSON.stringify(page, null, 2)}\n`;
+}
+
+/**
+ * Replaces the generated directory with exactly the pages given.
  *
  * Removed wholesale and rewritten rather than reconciled, because the
- * requirement is a tree that matches the database and not a tree that
+ * requirement is a directory that matches the database and not one that
  * has been patched toward it. The directory is generated output and is
  * gitignored, so there is nothing here for the removal to lose.
+ *
+ * The file is named for the slug alone, and the slug is assigned once and
+ * never recomputed (00046), so renaming a Practice never moves the URL
+ * Stripe holds (#382).
  */
 export async function writePages(
   pages: PracticePage[],
@@ -176,18 +190,19 @@ export async function writePages(
 ): Promise<void> {
   await rm(root, { recursive: true, force: true });
   await mkdir(root, { recursive: true });
-  await writeFile(path.join(root, '_index.md'), renderSectionIndex(), 'utf8');
   for (const page of pages) {
-    const dir = path.join(path.dirname(root), pageDirectory(page.slug));
-    await mkdir(dir, { recursive: true });
-    await writeFile(path.join(dir, 'index.md'), renderPage(page), 'utf8');
+    await writeFile(
+      path.join(root, `${page.slug}.json`),
+      renderPage(page),
+      'utf8'
+    );
   }
 }
 
 async function main(): Promise<void> {
   if (process.env.SYNC_PRACTICE_PAGES !== 'required') {
     console.log(
-      "sync-practice-pages: SYNC_PRACTICE_PAGES is not 'required'; leaving hugo/content/p alone."
+      "sync-practice-pages: SYNC_PRACTICE_PAGES is not 'required'; leaving site/practice-pages alone."
     );
     return;
   }

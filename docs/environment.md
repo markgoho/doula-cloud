@@ -1,6 +1,6 @@
 # Environment variables
 
-Every variable `api/main.go` reads, what it is for, and what it holds in each of the three places the BFF runs. The Hugo site's own build reads two of its own — see [The Hugo site's build](#the-hugo-sites-build). `app/.env.example` is the local template; the Stripe half of it is filled in by hand, from the Sandbox keys and the `stripe listen` secret (see [Stripe](#stripe)).
+Every variable `api/main.go` reads, what it is for, and what it holds in each of the three places the BFF runs. The marketing site's own build reads two of its own — see [The marketing site's build](#the-marketing-sites-build). `app/.env.example` is the local template; the Stripe half of it is filled in by hand, from the Sandbox keys and the `stripe listen` secret (see [Stripe](#stripe)).
 
 **Before you provision anything by hand, read [`docs/infrastructure.md`](infrastructure.md).** It is the boundary [#797](https://github.com/markgoho/doula-cloud/issues/797) drew between what Terraform owns and what stays a console visit, and it names every resource in the `doula-cloud` project on both sides with a reason. This page still describes what each value *is* and how it gets set; that page says whether setting it by hand is the right thing to do at all. The short version: secret values, Cloud SQL logins, Identity Platform and everything outside GCP stay by hand, and nearly everything else — the Scheduler jobs, the Tasks queue, `doula-api`'s configuration, the secret shells, IAM, the bucket and the database instance — becomes a change to a configuration file and a `terraform apply`. [ADR-0034](adr/0034-terraform-owns-the-shape-not-the-image-and-apply-stays-off-ci.md) records the decision.
 
@@ -51,16 +51,16 @@ The account now holds, and holds nothing beyond: `roles/cloudsql.client` and a t
 | `NOTIFICATION_TASKS_TARGET_BASE_URL` | unset | unset | the same raw Cloud Run URL `gcloud run services describe` reports (see [Deployed webhook endpoints](#deployed-webhook-endpoints)), plain env var |
 | `GITHUB_DISPATCH_TOKEN` | unset (nothing local fires a real deploy) | unset | Secret Manager `doula-cloud-github-dispatch-token`, a fine-grained personal access token scoped to `markgoho/doula-cloud` with **Contents: write** |
 
-## The Hugo site's build
+## The marketing site's build
 
-`bun run build` runs `scripts/sync-practice-pages.ts` before `hugo`, which writes a page into `hugo/content/p/<slug>/` for every Practice that published one (#441). It reads two variables, and neither belongs to the BFF.
+`bun run build` runs `scripts/sync-practice-pages.ts` before the `site/` build, which writes `site/practice-pages/<slug>.json` for every Practice that published one (#441); the build prerenders each file into `p/<slug>/index.html`. It reads two variables, and neither belongs to the BFF.
 
 | Variable | Local | PR preview | Merge deploy |
 | --- | --- | --- | --- |
 | `SYNC_PRACTICE_PAGES` | unset | unset | `required`, set in `firebase-hosting-merge.yml` |
 | `DATABASE_URL` | unset | unset | built from Secret Manager `doula-cloud-pg-site-builder-dsn`, dialed through the Cloud SQL Auth Proxy on `127.0.0.1:5432` |
 
-**Unset means "touch nothing", not "connect if you can".** The script prunes `hugo/content/p` before it writes, because that is the only way a Practice who switches back to her own website loses her page. So an unreachable database and an empty result set would produce the same output — every live page deleted, against a Stripe review #382 established is ongoing. `SYNC_PRACTICE_PAGES=required` makes an unreachable database fail the build instead, and the workflow's build/deploy split means a failed build uploads no artifact and the live site stays exactly as it was.
+**Unset means "touch nothing", not "connect if you can".** The script prunes `site/practice-pages` before it writes, because that is the only way a Practice who switches back to her own website loses her page. So an unreachable database and an empty result set would produce the same output — every live page deleted, against a Stripe review #382 established is ongoing. `SYNC_PRACTICE_PAGES=required` makes an unreachable database fail the build instead, and the workflow's build/deploy split means a failed build uploads no artifact and the live site stays exactly as it was.
 
 The DSN belongs to `site_builder_login`, a Cloud SQL user created for this and granted `site_builder` — 00046's role, which holds `SELECT` on five tables and no write grant at all. The build job's credential can read what is about to be published and change nothing. The name mirrors `app_runtime_login`, which is granted `app_runtime` the same way.
 

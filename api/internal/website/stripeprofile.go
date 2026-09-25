@@ -9,9 +9,9 @@ import (
 )
 
 // SiteBaseURL is where a hosted Practice page is published. The same
-// value hugo/hugo.toml carries as its baseURL, and the two have to
-// agree: this is the address the BFF hands Stripe, and Hugo is what
-// makes something answer at it.
+// value site/src/lib/product.ts carries as SITE_ORIGIN, and the two have
+// to agree: this is the address the BFF hands Stripe, and the site's
+// build is what makes something answer at it.
 //
 // A constant rather than an environment variable, because it is a fact
 // about the product and not about a deployment -- there is one Doula

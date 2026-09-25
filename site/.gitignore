@@ -1,0 +1,30 @@
+node_modules
+
+# Output
+.output
+.vercel
+.netlify
+.wrangler
+/.svelte-kit
+/build
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Env
+.env
+.env.*
+!.env.example
+!.env.test
+
+# Vite
+vite.config.js.timestamp-*
+vite.config.ts.timestamp-*
+
+# Vitest
+coverage
+
+# Written by scripts/sync-practice-pages.ts from the database on every
+# deploy build, and pruned and rewritten each time (#441). Never committed.
+/practice-pages

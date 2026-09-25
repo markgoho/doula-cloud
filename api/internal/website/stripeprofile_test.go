@@ -98,9 +98,9 @@ func TestReadStripeProfile_HerHostedPage(t *testing.T) {
 }
 
 // TestHostedPageURL pins the one place the site's address and the slug
-// are joined. hugo/hugo.toml carries the same host as its baseURL, and
-// the two have to agree: this is what Stripe is told, and Hugo is what
-// makes something answer at it.
+// are joined. site/src/lib/product.ts carries the same host as
+// SITE_ORIGIN, and the two have to agree: this is what Stripe is told,
+// and the site's build is what makes something answer at it.
 func TestHostedPageURL(t *testing.T) {
 	if got := website.HostedPageURL("rochester-doulas"); got != "https://doula.cloud/p/rochester-doulas" {
 		t.Fatalf("HostedPageURL = %q", got)

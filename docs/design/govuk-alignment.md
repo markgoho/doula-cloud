@@ -99,7 +99,7 @@ Every pattern in [their catalog](https://design-system.service.gov.uk/patterns/)
 
 | GOV.UK pattern | Doula Cloud | Status |
 | --- | --- | --- |
-| [Check a service is suitable](https://design-system.service.gov.uk/patterns/check-a-service-is-suitable/) | The Hugo marketing site does this job, not the app | N/A here |
+| [Check a service is suitable](https://design-system.service.gov.uk/patterns/check-a-service-is-suitable/) | The marketing site (`site/`) does this job, not the app | N/A here |
 | [Check answers](https://design-system.service.gov.uk/patterns/check-answers/) | `templates/CheckAnswers.svelte` -- key / value / Change rows on hairline dividers, `isWide` for a long list. Its first route is Client intake's summary, where every question asked gets a row whether it was answered or not | Aligned -- built on [#464](https://github.com/markgoho/doula-cloud/issues/464), first routed on [#466](https://github.com/markgoho/doula-cloud/issues/466); walked 2026-09-05 |
 | [Complete multiple tasks](https://design-system.service.gov.uk/patterns/complete-multiple-tasks/) | The Practice landing page's roll-ups are the nearest thing; a task list is not adopted | Considered -- see below |
 | [Confirm a phone number](https://design-system.service.gov.uk/patterns/confirm-a-phone-number/) | No SMS is sent, so no code to confirm | N/A |

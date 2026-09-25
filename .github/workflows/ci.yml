@@ -39,12 +39,10 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  # The Hugo site's pre-build step (#441): the generator that turns
-  # published Practice pages into hugo/content/p. Its own job because it
-  # lives at the repo root rather than in app/ or api/, and because it
-  # needs neither a browser nor a database -- the rendering half is pure,
-  # which is what makes the page a Stripe reviewer will read testable at
-  # all.
+  # The repo-root scripts, among them the marketing site's pre-build step
+  # (#441) that turns published Practice pages into site/practice-pages.
+  # Its own job because it lives at the repo root rather than in app/,
+  # site/ or api/, and because it needs neither a browser nor a database.
   scripts:
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -55,6 +53,87 @@ jobs:
 
       - name: Test
         run: bun test scripts/
+
+  # The marketing site (ADR-0051): typecheck, lint, then the unit and
+  # component specs under the same 100% coverage gate app/ has, then a
+  # real build -- the build is what proves every page still prerenders,
+  # since site/vite.config.ts refuses a route that goes unbuilt. No e2e
+  # stack: every page is static HTML with no API behind it. The Playwright
+  # steps are app/'s, cut down, for the browser-mode component specs; see
+  # the `app` job below for why each one is shaped the way it is.
+  site:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: oven-sh/setup-bun@v2
+
+      - name: Cache node_modules
+        uses: actions/cache@v6
+        with:
+          path: site/node_modules
+          key: site-node-modules-${{ runner.os }}-${{ hashFiles('site/bun.lock') }}
+
+      - name: Install dependencies
+        working-directory: site
+        run: bun install --frozen-lockfile
+
+      - name: Typecheck
+        working-directory: site
+        run: bun run check
+
+      - name: Lint
+        working-directory: site
+        run: bun run lint
+
+      - name: Resolve Playwright version
+        id: playwright-version
+        working-directory: site
+        run: |
+          version=$(grep -oP '"playwright@\K[0-9.]+(?=")' bun.lock | head -1)
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Playwright browsers
+        id: playwright-cache
+        uses: actions/cache@v6
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-shell-${{ runner.os }}-${{ steps.playwright-version.outputs.version }}
+
+      - name: Install Playwright browsers
+        working-directory: site
+        run: |
+          for attempt in 1 2 3; do
+            if bunx playwright install --with-deps --only-shell chromium; then
+              exit 0
+            fi
+            echo "Browser install attempt ${attempt} failed; retrying in 30s..."
+            sleep 30
+          done
+          exit 1
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
+
+      - name: Install Playwright OS dependencies only
+        working-directory: site
+        run: |
+          for attempt in 1 2 3; do
+            if timeout 180 bunx playwright install-deps chromium; then
+              exit 0
+            fi
+            echo "OS dependency install attempt ${attempt} failed; retrying in 10s..."
+            sleep 10
+          done
+          exit 1
+        if: steps.playwright-cache.outputs.cache-hit == 'true'
+
+      - name: Unit test with coverage gate
+        working-directory: site
+        run: bun run test:unit:coverage
+
+      - name: Build
+        working-directory: site
+        run: bun run build
 
   # The formatting AND typecheck gates for the repo's own tooling trees,
   # `.claude/hooks/` and `scripts/` (#1120, #1335). Which tree is gated by

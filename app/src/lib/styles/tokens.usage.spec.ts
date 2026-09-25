@@ -38,9 +38,14 @@ import { styleLines } from './styleLines';
 
 const IGNORE = 'tokens:ignore';
 
-const componentFiles = globSync('src/{lib/components,routes}/**/*.svelte', {
-	cwd: fileURLToPath(new URL('../../../', import.meta.url))
-});
+// The marketing site's components too (#1467): it imports this app's
+// tokens.css rather than keeping a palette of its own, so it answers to the
+// same contract. Paths come back prefixed `../site/`, which `new URL`
+// below resolves against appRoot like any other.
+const componentFiles = globSync(
+	['src/{lib/components,routes}/**/*.svelte', '../site/src/{lib/components,routes}/**/*.svelte'],
+	{ cwd: fileURLToPath(new URL('../../../', import.meta.url)) }
+);
 
 const appRoot = new URL('../../../', import.meta.url);
 

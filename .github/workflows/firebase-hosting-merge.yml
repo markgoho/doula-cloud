@@ -1,15 +1,16 @@
-name: Deploy Hugo site to Firebase Hosting on merge
+name: Deploy the marketing site to Firebase Hosting on merge
 on:
   push:
     branches:
       - trunk
     paths:
-      - "hugo/**"
+      - "site/**"
+      # The site's stylesheet is app/'s own, by import (ADR-0051), so a
+      # change to it changes the site.
+      - "app/src/lib/styles/**"
       - "firebase.json"
-      # The site is no longer only the files under hugo/: #441's
-      # pre-build step generates a page per published Practice, so the
-      # generator and the script that runs it are site sources too.
-      - "scripts/practice-page.ts"
+      # #441's pre-build step generates a page per published Practice, so
+      # the generator and the script that runs it are site sources too.
       - "scripts/sync-practice-pages.ts"
       - "package.json"
       - ".github/workflows/firebase-hosting-merge.yml"
@@ -23,10 +24,9 @@ on:
 permissions:
   contents: read
   id-token: write
-  packages: read
 
 # No cancel-in-progress -- this is a live-site deploy, and two quick
-# hugo/** pushes must apply in order, not have the first one cancelled
+# site/** pushes must apply in order, not have the first one cancelled
 # mid-deploy by the second. (ci.yml's push-triggered jobs now make the
 # same choice, after confirming experimentally that a job's own
 # concurrency group doesn't protect it from a cancel-in-progress: true
@@ -42,14 +42,16 @@ jobs:
   build:
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    container:
-      image: ghcr.io/${{ github.repository }}:trunk
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
 
+      - uses: oven-sh/setup-bun@v2
+
+      # site/ only: the sync script needs nothing beyond Bun's own SQL
+      # client, so the root install would be time spent on nothing.
       - name: Install dependencies
-        run: bun install
+        run: bun install --cwd site --frozen-lockfile
 
       - name: Authenticate to Google Cloud
         uses: ./.github/actions/gcp-auth
@@ -93,16 +95,12 @@ jobs:
       # Practice pages in it. A failed build uploads no artifact, the
       # deploy job never runs, and the live pages -- whose URLs Stripe
       # holds under an ongoing review (#382) -- stay exactly as they were.
-      - name: Build Hugo site
+      - name: Build the site
         env:
           SITE_BUILDER_DSN: ${{ steps.secrets.outputs.dsn }}
         run: |
           # --health-check publishes /readiness on --http-port, which is
-          # the proxy's own answer to "are you listening yet". Asked with
-          # curl rather than a bash /dev/tcp redirect: this step runs
-          # under `sh -e` (the container image sets no default shell), and
-          # sh has no /dev/tcp at all -- so the redirect could never
-          # succeed and the wait was decided by the timeout every run.
+          # the proxy's own answer to "are you listening yet".
           cloud-sql-proxy --port 5432 --health-check --http-address 127.0.0.1 --http-port 9090 \
             doula-cloud:us-central1:doula-cloud-pg &
           proxy_pid=$!
@@ -126,11 +124,11 @@ jobs:
           export DATABASE_URL="postgres://${userpass}@127.0.0.1:5432/${db_name%%\?*}?sslmode=disable"
           bun run build
 
-      - name: Upload Hugo build artifacts
+      - name: Upload the site build
         uses: actions/upload-artifact@v7
         with:
-          name: hugo-public
-          path: hugo/public
+          name: site-build
+          path: site/build
           retention-days: 1
 
   deploy:
@@ -141,11 +139,11 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v7
 
-      - name: Download Hugo build artifacts
+      - name: Download the site build
         uses: actions/download-artifact@v8
         with:
-          name: hugo-public
-          path: hugo/public
+          name: site-build
+          path: site/build
 
       # `token_format: id_token` mints the credential the `verify-pages` step
       # below presents, alongside the credentials file the Firebase deploy
@@ -168,7 +166,7 @@ jobs:
       - uses: oven-sh/setup-bun@v2
 
       - name: Deploy to Firebase
-        run: bunx firebase-tools deploy --only hosting:hugo --non-interactive
+        run: bunx firebase-tools deploy --only hosting:site --non-interactive
 
       # #443: prove each published page resolves, and mark the Practice
       # when it does not.

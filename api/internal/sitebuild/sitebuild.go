@@ -1,7 +1,7 @@
 // Package sitebuild rebuilds doula.cloud when a Practice publishes, and
 // proves her page resolves once it has (#443).
 //
-// The deploy workflow fires on a push touching hugo/**. A Practice
+// The deploy workflow fires on a push touching site/**. A Practice
 // publishing her page (#441) produces no commit, so without this
 // nothing builds and her page never appears. #421 decided the BFF fires
 // the deploy itself -- a repository_dispatch -- rather than a schedule

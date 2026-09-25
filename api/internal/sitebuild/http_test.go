@@ -11,7 +11,7 @@ import (
 )
 
 // livePage is the smallest body that counts as a page: the marker the
-// Hugo layout carries and nothing else on the site does.
+// Practice page template carries and nothing else on the site does.
 const livePage = `<main data-practice-page><h1>Rochester Doulas</h1></main>`
 
 // siteBase is the host every prober test is pointed at, named once

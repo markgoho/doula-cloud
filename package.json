@@ -4,7 +4,7 @@
   "type": "module",
   "private": true,
   "scripts": {
-    "build": "bun scripts/sync-practice-pages.ts && cd hugo && hugo --minify",
+    "build": "bun scripts/sync-practice-pages.ts && bun run --cwd site build",
     "design:export": "bun scripts/export-design.ts",
     "dev": "bun run --cwd app dev:full",
     "format": "prettier --write \".claude/hooks/**/*.ts\" \"scripts/**/*.ts\"",
@@ -17,7 +17,6 @@
     "@types/bun": "latest",
     "firebase-tools": "^15.30.2",
     "prettier": "^3.9.8",
-    "prettier-plugin-go-template": "^0.0.15",
     "typescript": "^6.0.3"
   }
 }
