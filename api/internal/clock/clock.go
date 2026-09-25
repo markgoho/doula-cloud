@@ -119,3 +119,5 @@ func Middleware(now Clock) func(http.Handler) http.Handler {
 		})
 	}
 }
+
+// PROOF for #1466: this PR is never merged.
