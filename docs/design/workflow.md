@@ -13,17 +13,16 @@ Everything obeys [the design brief](brief.md). A screen that wants to depart fro
 | `docs/design/doula-cloud.pen` | The whole application's design. One file. | Trunk. |
 | The desktop canvas | `/Applications/Pen.app`. Where a person edits by hand. | The app's memory, then disk on save. |
 | `mcp__pencil__execute` | A JavaScript API — `Insert`, `Update`, `Copy`, `Get`, `SetVariables` — that an agent calls from this session. Deterministic; it is not a generative model choosing a layout. | The **active canvas editor**. Its `filePath` argument is ignored. |
-| `bunx pen --in … --out …` | The CLI. Spawns a separate Claude Agent SDK session that makes those same `execute` calls. | The file paths given. |
 | `bun run design:export` (`scripts/export-design.ts`) | A generated, read-only Markdown derivative of the whole `.pen` file: every artboard's regions, text and component references, in document order. | `docs/design/doula-cloud.export.md`, on trunk. |
 
 Two consequences worth holding on to:
 
 - **`execute` edits whatever the app has open.** Before an agent touches the canvas, the app must have `doula-cloud.pen` as its active editor. Confirm with `get_app_state`, which prints the active path.
-- **The CLI is the file-writing path.** `execute` changes are in memory until the canvas is saved, and `printf 'save()\nexit()\n' | bunx pen interactive --app desktop` is how an agent saves it. See [Autosave, and the one operation it misses](#autosave-and-the-one-operation-it-misses).
+- **A person's ⌘S, or the app's autosave, is the file-writing path.** `execute` changes are in memory until the canvas is saved, and an agent has no way to save it on its own. See [Autosave, and the one operation it misses](#autosave-and-the-one-operation-it-misses).
 
 ## The export is a read-back, not a source
 
-`docs/design/doula-cloud.export.md` exists so that a reader with no Pen.app open — a CI check, a background agent, a PR reviewer — can still answer "what is on this screen": an artboard's regions in order, their text, which component or `ref` each one instantiates, and which `tokens.css` name a styled value points at. `bun run design:export` produces it by reading `doula-cloud.pen` straight off disk as JSON; nothing about it needs the desktop app, the Pencil MCP server, or a `pen` CLI agent session running.
+`docs/design/doula-cloud.export.md` exists so that a reader with no Pen.app open — a CI check, a background agent, a PR reviewer — can still answer "what is on this screen": an artboard's regions in order, their text, which component or `ref` each one instantiates, and which `tokens.css` name a styled value points at. `bun run design:export` produces it by reading `doula-cloud.pen` straight off disk as JSON; nothing about it needs the desktop app or the Pencil MCP server running.
 
 It is explicitly not an interchange format. ADR-0019 already rejected "Generating `DESIGN.md` as an interchange format" on the grounds that a hand-authored stand-in for the canvas would drift from it with no way to detect the drift; this export is different in the one way that matters — it is machine-generated only, from the `.pen` file, and read-only — but the conclusion still holds for it: nobody hand-edits it, it is never itself a source of truth, and a design decision is never made by editing it. `doula-cloud.pen` stays the working surface, `tokens.css` stays the machine-readable truth, and this is a read-back of the first, the way a lockfile is a read-back of a manifest.
 
@@ -102,12 +101,6 @@ Two consequences, and they are the durable part:
 
 > **No read can tell you whether your work is on disk.** `GetVariables()` and `Get()` both return the in-memory document and will happily confirm work that was never written. **`git status` on the `.pen` file is the only check that distinguishes saved from unsaved**, and it belongs at the end of every canvas pass.
 
-> **`pen interactive --app desktop` has a `save()`, and that is the deterministic write.** There is still no save in the `execute` API — `Export()` writes PNG, JPEG, WEBP, PDF and HTML, never `.pen`. But `bunx pen interactive --app desktop` attaches to the same live document the MCP `execute` calls edit, and its `save()` command writes that document to disk, so an agent can flush its own work with nobody at the keyboard:
+> **An agent cannot save the canvas; a person does.** There is no save in the `execute` API — `Export()` writes PNG, JPEG, WEBP, PDF and HTML, never `.pen`. The `@pen.dev/cli` package had an interactive `save()` that an agent could pipe in with nobody at the keyboard ([#1085](https://github.com/markgoho/doula-cloud/issues/1085)), but the package was removed from the repo on 2026-09-25 after Microsoft Defender flagged it, so that path is gone. An agent that has finished a canvas change checks the `.pen` file with `git status` and, if the file is unchanged, asks the person to press ⌘S in Pen.app. A save through the Pencil MCP server is [#1469](https://github.com/markgoho/doula-cloud/issues/1469).
 >
-> ```sh
-> printf 'save()\nexit()\n' | bunx pen interactive --app desktop
-> ```
->
-> Settled on [#1085](https://github.com/markgoho/doula-cloud/issues/1085): `execute` changed two text nodes, `git status` on the `.pen` file stayed clean through a minute of waiting and an `osascript` ⌘S that reported no error, and the piped `save()` wrote the file on the first try.
->
-> **⌘S is the fallback, and it is not always reachable.** On #1085 the desktop app was running with **zero windows**: `get_app_state` reported `doula-cloud.pen` as the active canvas editor and `execute` edited it happily, while `System Events` counted no window to aim a keystroke at (`tell process "Pen" to get count of windows` returned `0`). So an agent that has finished a canvas change should verify with `git status` and, if the file is unchanged, run `save()` through the interactive shell — rather than asking for a keystroke that may have nowhere to land.
+> **⌘S needs a window.** On #1085 the desktop app was running with **zero windows**: `get_app_state` reported `doula-cloud.pen` as the active canvas editor and `execute` edited it happily, while `System Events` counted no window to aim a keystroke at (`tell process "Pen" to get count of windows` returned `0`). If the person sees no window, they open `doula-cloud.pen` in the app first.
