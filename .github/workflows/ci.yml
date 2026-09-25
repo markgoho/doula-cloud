@@ -149,21 +149,26 @@ jobs:
           CHANGED_FILES: ${{ github.event.pull_request.changed_files }}
         run: |
           set -euo pipefail
-          paths=$(gh api "$PR_FILES_URL" --paginate --jq '.[] | .filename, (.previous_filename // empty)')
-          listed=$(gh api "$PR_FILES_URL" --paginate --jq '.[].filename' | wc -l)
+          # One line per changed file; a rename carries its old path as a
+          # second field.
+          files=$(gh api "$PR_FILES_URL" --paginate --jq '.[] | [.filename, (.previous_filename // "")] | @tsv')
+          listed=$(printf '%s\n' "$files" | grep -c . || true)
           docs_only=true
           if [ "$listed" -ne "$CHANGED_FILES" ]; then
             echo "The API listed $listed of $CHANGED_FILES changed files; classifying as code."
             docs_only=false
           fi
-          while IFS= read -r file; do
-            case "$file" in
-              docs/*) ;;
-              */*) echo "code: $file"; docs_only=false ;;
-              *.md) ;;
-              *) echo "code: $file"; docs_only=false ;;
-            esac
-          done <<< "$paths"
+          while IFS=$'\t' read -r file previous; do
+            for path in "$file" "$previous"; do
+              [ -n "$path" ] || continue
+              case "$path" in
+                docs/*) ;;
+                */*) echo "code: $path"; docs_only=false ;;
+                *.md) ;;
+                *) echo "code: $path"; docs_only=false ;;
+              esac
+            done
+          done <<< "$files"
           echo "docs_only=$docs_only"
           echo "docs_only=$docs_only" >> "$GITHUB_OUTPUT"
 
