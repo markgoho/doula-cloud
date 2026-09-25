@@ -2,6 +2,8 @@
 
 Resolves [#408](https://github.com/markgoho/doula-cloud/issues/408), a task ticket of the wayfinder map [Holistic application design](https://github.com/markgoho/doula-cloud/issues/405). Everything below was observed on this machine on 2026-08-28, not read from documentation. Where a claim comes from docs rather than observation, it says so.
 
+> **The CLI is gone (2026-09-25).** `@pen.dev/cli` was removed from the repo after Microsoft Defender flagged it ([#1470](https://github.com/markgoho/doula-cloud/pull/1470)), and nothing installs it again. What this record says about the CLI — the devDependency, `bunx pen`, `pen login`, the flags, and the `bunx pen --prompt … --export` smoke test — is history. Headless generation from a prompt went with it. An agent now edits the canvas through the desktop app's MCP server and saves it by clicking Pen's File > Save through `System Events`; the current procedure is `docs/design/workflow.md`, "Autosave, and the one operation it misses" ([#1469](https://github.com/markgoho/doula-cloud/issues/1469)).
+
 ## What is installed
 
 | | |
