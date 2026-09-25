@@ -91,7 +91,10 @@ type HTTPProber struct {
 // Practice can read; the underlying error is not shown to her, because
 // "dial tcp: i/o timeout" tells her nothing she can act on.
 func (p HTTPProber) Probe(ctx context.Context, slug string) PageProbe {
-	url := p.BaseURL + "/p/" + slug + "/"
+	// No trailing slash: the same address website.HostedPageURL hands
+	// Stripe, so the probe proves the URL Stripe holds answers 200, not
+	// a neighbor of it that Stripe is redirected to (#1475).
+	url := p.BaseURL + "/p/" + slug
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		// coverage:ignore reason: only a malformed method or URL can fail here

@@ -1,5 +1,5 @@
 /**
- * Tests for the data a Practice's page at doula.cloud/p/<slug>/ is built
+ * Tests for the data a Practice's page at doula.cloud/p/<slug> is built
  * from (#441).
  *
  * No database. The only thing that talks to Postgres is one function in

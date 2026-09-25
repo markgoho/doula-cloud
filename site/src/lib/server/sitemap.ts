@@ -5,7 +5,7 @@ import { SITE_ORIGIN } from '#lib/product.js';
  * sitemap.xml for the site: the home page and every Practice page.
  *
  * Listed explicitly rather than discovered, so what a crawler is pointed
- * at is a decision in one place. /pilot-terms/ is left out on purpose
+ * at is a decision in one place. /pilot-terms is left out on purpose
  * (#444): it is noindexed, and listing a noindexed page publishes the URL
  * the tag exists to withhold. There is no /p/ index to list either.
  *
@@ -17,7 +17,7 @@ export function renderSitemap(pages: PracticePage[]): string {
 		`<url><loc>${SITE_ORIGIN}/</loc></url>`,
 		...pages.map(
 			(page) =>
-				`<url><loc>${SITE_ORIGIN}/p/${encodeURIComponent(page.slug)}/</loc><lastmod>${new Date(page.publishedAt).toISOString()}</lastmod></url>`
+				`<url><loc>${SITE_ORIGIN}/p/${encodeURIComponent(page.slug)}</loc><lastmod>${new Date(page.publishedAt).toISOString()}</lastmod></url>`
 		)
 	];
 	return [

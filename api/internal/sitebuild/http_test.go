@@ -30,7 +30,7 @@ func TestHTTPProber_LivePage(t *testing.T) {
 	if got.Detail != "" {
 		t.Fatalf("detail = %q, want empty", got.Detail)
 	}
-	if want := "https://doula.cloud/p/rochester-doulas/"; doer.last.URL.String() != want {
+	if want := "https://doula.cloud/p/rochester-doulas"; doer.last.URL.String() != want {
 		t.Fatalf("requested %q, want %q", doer.last.URL, want)
 	}
 }

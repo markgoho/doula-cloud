@@ -53,7 +53,7 @@ The account now holds, and holds nothing beyond: `roles/cloudsql.client` and a t
 
 ## The marketing site's build
 
-`bun run build` runs `scripts/sync-practice-pages.ts` before the `site/` build, which writes `site/practice-pages/<slug>.json` for every Practice that published one (#441); the build prerenders each file into `p/<slug>/index.html`. It reads two variables, and neither belongs to the BFF.
+`bun run build` runs `scripts/sync-practice-pages.ts` before the `site/` build, which writes `site/practice-pages/<slug>.json` for every Practice that published one (#441); the build prerenders each file into `p/<slug>.html`. It reads two variables, and neither belongs to the BFF.
 
 | Variable | Local | PR preview | Merge deploy |
 | --- | --- | --- | --- |

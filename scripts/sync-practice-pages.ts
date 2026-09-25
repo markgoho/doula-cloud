@@ -6,7 +6,7 @@
  * deploy workflow already calls. Reads the Practices that chose a hosted
  * page (#440's `practice_websites`, mode 'hosted') and writes
  * `site/practice-pages/<slug>.json` for each; site/src/routes/p/[slug]/
- * prerenders each file into `p/<slug>/index.html`. The result is a static
+ * prerenders each file into `p/<slug>.html`. The result is a static
  * file behind Firebase Hosting's CDN: no dynamic path on doula.cloud, no
  * Cloud Run rewrite, nothing to be up at the moment a Client or a Stripe
  * reviewer opens the page.

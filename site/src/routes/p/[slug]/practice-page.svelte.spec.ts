@@ -18,7 +18,7 @@ function renderPage(page: PracticePage = hostile) {
 	return render(Page, { data: { page }, params: { slug: page.slug } } as never);
 }
 
-describe('a Practice page at /p/<slug>/', () => {
+describe('a Practice page at /p/<slug>', () => {
 	it('prints everything she typed as text, never as markup (#441)', async () => {
 		const { container } = await renderPage();
 
@@ -63,7 +63,7 @@ describe('a Practice page at /p/<slug>/', () => {
 		await renderPage();
 		expect(document.head.querySelector('meta[name="robots"]')).toBeNull();
 		expect(document.head.querySelector('link[rel="canonical"]')?.getAttribute('href')).toBe(
-			'https://doula.cloud/p/river-birth/'
+			'https://doula.cloud/p/river-birth'
 		);
 		expect(document.head.querySelector('meta[name="description"]')?.getAttribute('content')).toBe(
 			'Birth support. Postpartum <script>window.pwned = true</script> *care*.'

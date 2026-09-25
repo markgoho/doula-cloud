@@ -4,7 +4,7 @@ One page of prose on the site: a titled column capped at a reading
 measure, and a footer that says when the page last changed.
 
 Every page on the site is this today -- /pilot-terms and each Practice
-page at /p/<slug>/ -- which is what the Hugo site's two layouts each
+page at /p/<slug> -- which is what the Hugo site's two layouts each
 wrote out in full.
 
 The column is `center-l` and `stack-l` from app/'s own layout primitives

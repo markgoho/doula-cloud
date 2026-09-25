@@ -18,7 +18,7 @@ describe('renderSitemap', () => {
 		const xml = renderSitemap([page]);
 		expect(xml).toContain('<url><loc>https://doula.cloud/</loc></url>');
 		expect(xml).toContain(
-			'<url><loc>https://doula.cloud/p/river-birth/</loc><lastmod>2026-09-01T12:00:00.000Z</lastmod></url>'
+			'<url><loc>https://doula.cloud/p/river-birth</loc><lastmod>2026-09-01T12:00:00.000Z</lastmod></url>'
 		);
 	});
 
