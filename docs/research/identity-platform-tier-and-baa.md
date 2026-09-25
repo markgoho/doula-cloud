@@ -18,6 +18,23 @@ Research for wayfinder ticket [#165](https://github.com/markgoho/doula-cloud/iss
 
 **Bottom line: the compliance blocker map #164 flagged is closed.** The tier is the covered one, the BAA is executed, and the not-yet-formed LLC does not stand in the way of any of it. See "What this means for map #164" below. No follow-up ticket is proposed — see that section for why.
 
+## Correction, 2026-09-25: the Console records the BAA per project
+
+Two statements below were read from Google's help text and not checked against the Console. Both are wrong, as [#546](https://github.com/markgoho/doula-cloud/issues/546#issuecomment-5835354369) found.
+
+**Acceptance is recorded per project, not per billing account or Google account.** Google's [support page](https://support.google.com/cloud/answer/6329727) says *"you only need to opt in to the HIPAA BAA within one Google Cloud project in your account"*. On 2026-09-25, signed in as `markgoho@gmail.com`, `iam-admin/privacy` showed this:
+
+| Project | Billing account | HIPAA BAA line |
+|---|---|---|
+| `doula-cloud` | `01873B-…` | "Reviewed and accepted on Aug 30, 2026 by markgoho@gmail.com". No button. |
+| `sturgeons-law` | `01873B-…` (the same one) | "Review and Accept HIPAA Business Associate Addendum" button |
+| `merit-badge-university` | `013DB9-…` | "Review and Accept …" button |
+| `gideonlabs-b4b71` | `00D86C-…` | "Review and Accept …" button |
+
+So "executed for this project's billing account" in §3 and the Summary means executed for **the `doula-cloud` project**. Another project that holds PHI needs its own acceptance. An accepted project also shows no button to accept again.
+
+**The billing account's legal name cannot be updated to the LLC's.** §4 says the billing account's legal or company name "should be updated to the LLC". A Google payments profile's type (individual or business) *"can't be changed"* ([paymentscenter/answer/9028746](https://support.google.com/paymentscenter/answer/9028746)), and a billing account cannot move to a different payments profile. *"To use a different payments profile, create a new Cloud Billing account"* ([modify-billing-account](https://docs.cloud.google.com/billing/docs/how-to/modify-billing-account)). #546 records the route that follows from this.
+
 ## 1. Which tier is provisioned, verified live
 
 `api/internal/authn/authn.go`'s use of "Identity Platform" as a name proves nothing about billing tier — Firebase Authentication and Identity Platform are the same backend behind two front doors, and the code would read identically either way, which is exactly what #164 and #165 flag. The only field that discriminates them is `subtype` on the Identity Toolkit Admin API's project config, and it is output-only — not something a docstring or a console label can spoof.
@@ -136,4 +153,4 @@ The tier in use is BAA-covered, and a BAA is executed for this project's billing
 
 **Secondary-sourced, flagged inline where used:** the specific per-MAU dollar figures beyond each free tier's boundary (§5), and the claim that downgrading Identity Platform to Firebase Authentication has no supported path (§6) — the latter from Google's own community/developer-support forums rather than a formal docs page, because no formal page addressing the reverse direction was found.
 
-**Not verified in this pass:** current SAML/OIDC provider configuration state on the project (only tier eligibility was in scope); whether Identity Platform SKUs appear on an actual Cloud Billing invoice for this project (the `subtype` field was treated as sufficient and enabling Cloud Billing API was avoided to not alter project state, §1); the precise scope of BAA acceptance across the account holder's other GCP projects (`oregon-trail-camporee`, `doula-cooperative`, `sturgeons-law`) — Google's own support guidance says acceptance in one project covers the account, but this was not independently re-verified against each of those other projects.
+**Not verified in this pass:** current SAML/OIDC provider configuration state on the project (only tier eligibility was in scope); whether Identity Platform SKUs appear on an actual Cloud Billing invoice for this project (the `subtype` field was treated as sufficient and enabling Cloud Billing API was avoided to not alter project state, §1); the precise scope of BAA acceptance across the account holder's other GCP projects (`oregon-trail-camporee`, `doula-cooperative`, `sturgeons-law`) — Google's own support guidance says acceptance in one project covers the account, but this was not independently re-verified against each of those other projects. **Since checked, and the guidance does not hold as the Console renders it** — see [Correction, 2026-09-25](#correction-2026-09-25-the-console-records-the-baa-per-project).
