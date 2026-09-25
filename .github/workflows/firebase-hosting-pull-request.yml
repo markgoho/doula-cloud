@@ -1,4 +1,4 @@
-name: Deploy Hugo site to Firebase Hosting on PR
+name: Deploy the marketing site to Firebase Hosting on PR
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -7,13 +7,13 @@ concurrency:
 on:
   pull_request:
     paths:
-      - "hugo/**"
+      - "site/**"
+      - "app/src/lib/styles/**"
       - "firebase.json"
       # As on the merge workflow. The preview build has no database
       # credential and SYNC_PRACTICE_PAGES is unset here on purpose, so
       # a preview shows the site without Practice pages rather than a
       # stale copy of them.
-      - "scripts/practice-page.ts"
       - "scripts/sync-practice-pages.ts"
       - "package.json"
       - ".github/workflows/firebase-hosting-pull-request.yml"
@@ -22,7 +22,6 @@ permissions:
   checks: write
   contents: read
   id-token: write
-  packages: read
   pull-requests: write
 
 jobs:
@@ -30,16 +29,16 @@ jobs:
     if: ${{ github.event.pull_request.head.repo.full_name == github.repository }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    container:
-      image: ghcr.io/${{ github.repository }}:trunk
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
 
-      - name: Install dependencies
-        run: bun install
+      - uses: oven-sh/setup-bun@v2
 
-      - name: Build Hugo site
+      - name: Install dependencies
+        run: bun install --cwd site --frozen-lockfile
+
+      - name: Build the site
         run: bun run build
 
       - name: Authenticate to Google Cloud
@@ -61,7 +60,7 @@ jobs:
         # channels exactly the same way and would.
         run: |
           if ! bunx firebase-tools hosting:channel:deploy "pr-${PR_NUMBER}" \
-            --only hugo --expires 3d --non-interactive --json > deploy-output.json; then
+            --only site --expires 3d --non-interactive --json > deploy-output.json; then
             echo "::error::firebase hosting:channel:deploy failed. Its output follows."
             cat deploy-output.json
             exit 1
@@ -83,11 +82,11 @@ jobs:
 
             const botComment = comments.find(comment =>
               comment.user.type === 'Bot' &&
-              comment.body.includes('Hugo Preview Deployment')
+              comment.body.includes('Site Preview Deployment')
             );
 
             const commentBody = [
-              '## Hugo Preview Deployment',
+              '## Site Preview Deployment',
               '',
               '**Preview URL**: ' + process.env.PREVIEW_URL,
             ].join('\n');

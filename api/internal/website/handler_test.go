@@ -568,7 +568,7 @@ func TestPutHandler_TwoPracticesOfTheSameNameGetDifferentAddresses(t *testing.T)
 }
 
 // #443: publishing a page queues a rebuild, because the deploy workflow
-// fires on a push touching hugo/** and this produces no commit at all.
+// fires on a push touching site/** and this produces no commit at all.
 func TestPutHandler_PublishingQueuesARebuild(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "website-queues-rebuild"

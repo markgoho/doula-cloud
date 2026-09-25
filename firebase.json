@@ -7,8 +7,8 @@
   },
   "hosting": [
     {
-      "target": "hugo",
-      "public": "hugo/public",
+      "target": "site",
+      "public": "site/build",
       "ignore": [
         "firebase.json",
         "**/.*",

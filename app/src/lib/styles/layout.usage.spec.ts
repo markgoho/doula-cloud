@@ -85,8 +85,15 @@ const cwd = fileURLToPath(appRoot);
  * `vw` was found by hand instead (#532). A gate with a blind spot the size
  * of the token layer reports a clean repo that is not clean.
  */
-const svelteFiles = globSync('src/{lib/components,routes}/**/*.svelte', { cwd });
-const cssFiles = globSync('src/**/*.css', { cwd });
+// The marketing site's too (#1467). ADR-0025 stopped at app/ because the
+// Hugo site had no stylesheet to scan; the SvelteKit site that replaced it
+// (ADR-0051) has component styles, and they answer to the same 320px
+// commitment as the app's.
+const svelteFiles = globSync(
+	['src/{lib/components,routes}/**/*.svelte', '../site/src/{lib/components,routes}/**/*.svelte'],
+	{ cwd }
+);
+const cssFiles = globSync(['src/**/*.css', '../site/src/**/*.css'], { cwd });
 
 interface Offense {
 	file: string;

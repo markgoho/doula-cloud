@@ -1,4 +1,4 @@
-This is a project called Doula Cloud, it includes a Svelte application and a Hugo website (for marketing)
+This is a project called Doula Cloud. It includes a Svelte application (`app/`) and a SvelteKit static marketing site (`site/`, ADR-0051).
 
 ## Status: pre-launch
 

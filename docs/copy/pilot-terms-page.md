@@ -2,7 +2,7 @@
 
 The copy below is **final and verbatim**. It was settled on [#444](https://github.com/markgoho/doula-cloud/issues/444), on the map [#375](https://github.com/markgoho/doula-cloud/issues/375), and every number in it comes from a decision made elsewhere: the $20.00 Credit and the three-per-Staff-member founding grant from [#439](https://github.com/markgoho/doula-cloud/issues/439), the shape of the pilot from [#421](https://github.com/markgoho/doula-cloud/issues/421).
 
-Built as `hugo/content/pilot-terms.md` on `hugo/layouts/page.html`.
+Built as `site/src/routes/pilot-terms/+page.svelte` on `site/src/lib/components/ReadingPage.svelte`.
 
 ## Where it lives, and how it is served
 
@@ -14,9 +14,9 @@ Built as `hugo/content/pilot-terms.md` on `hugo/layouts/page.html`.
 
 Three mechanisms make "unlisted" true, and all three are needed:
 
-- `<meta name="robots" content="noindex, nofollow">`, the default in `layouts/page.html`. A page that wants to be indexed sets `robots: index` in its front matter and says so out loud — `/support` ([#419](https://github.com/markgoho/doula-cloud/issues/419)) is the one that will.
-- `sitemap.disable: true` in the page's front matter. A `noindex` page listed in `sitemap.xml` is a mixed signal that publishes the URL anyway.
-- `disableKinds = [..., 'rss']` in `hugo.toml`. The feed at `/index.xml` republished every page's URL **and its whole body**, which handed out exactly what the `noindex` tag withholds. The site has nothing to subscribe to, so the feed was never earning its place.
+- `<meta name="robots" content="noindex, nofollow">` in the page's own `<svelte:head>`. A page that wants to be indexed leaves it out — `/support` ([#419](https://github.com/markgoho/doula-cloud/issues/419)) is the one that will.
+- Left out of `site/src/lib/server/sitemap.ts`, which lists its URLs explicitly. A `noindex` page listed in `sitemap.xml` is a mixed signal that publishes the URL anyway.
+- No RSS feed. The Hugo site's feed at `/index.xml` republished every page's URL **and its whole body**, which handed out exactly what the `noindex` tag withholds. The site has nothing to subscribe to, so the feed was never earning its place.
 
 ## The line that links it
 
@@ -32,7 +32,7 @@ It must sit **beside the accept link**, not in the footer. Placement is the whol
 - **The price is on this page, and that is deliberate.** `/support` carries no price because [#285](https://github.com/markgoho/doula-cloud/issues/285) owns the *published* price on January's marketing site and Stripe does not require one there. Here the number is unavoidable: [#421](https://github.com/markgoho/doula-cloud/issues/421) obliges the terms to state the grant's size and that list pricing applies beyond it, and "what it costs" cannot be said without saying $20.00.
 - **The refund position is `/support`'s, word for word in substance.** Any divergence between the two pages is a bug, not a nuance. See the note at the top of [`support-page.md`](support-page.md).
 - **Connect Terms §3.4(b)** forbids holding ourselves out as a payment facilitator, intermediary or aggregator. The last section says so in the place a Practice is agreeing to something.
-- **The product name is a token.** Every mention goes through the `{{< product >}}` shortcode, which reads `title` from `hugo.toml`, so [#338](https://github.com/markgoho/doula-cloud/issues/338) stays a one-edit change.
+- **The product name is a token.** Every mention goes through `PRODUCT_NAME` in `site/src/lib/product.ts`, so [#338](https://github.com/markgoho/doula-cloud/issues/338) stays a one-edit change.
 
 ---
 

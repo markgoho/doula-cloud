@@ -350,6 +350,11 @@ const apiFiles = globSync('api/**/*.go', { cwd: repoRoot });
 // has, since the glob runs from repoRoot.
 const e2eFiles = globSync('app/e2e/**/*.{ts,js}', { cwd: repoRoot });
 
+// #1467: the marketing site is a SvelteKit package of its own now, and what
+// it says is read by every visitor before the app is. Same extensions as
+// app/src, and the same repoRoot-relative paths as the two trees above.
+const siteFiles = globSync('site/src/**/*.{svelte,ts,js,css,svg,html,md}', { cwd: repoRoot });
+
 // Read and scanned once, at module scope, so the cost of walking roughly
 // 640 files in app/src, 650 in api/, and 56 in app/e2e is paid on import
 // rather than charged against one `it`'s 5-second `testTimeout`. Under a quiet
@@ -365,6 +370,9 @@ const offenses = [
 		findOffensesInLines(file, readFileSync(path.join(repoRoot, file), 'utf8'))
 	),
 	...e2eFiles.flatMap((file) =>
+		findOffensesInLines(file, readFileSync(path.join(repoRoot, file), 'utf8'))
+	),
+	...siteFiles.flatMap((file) =>
 		findOffensesInLines(file, readFileSync(path.join(repoRoot, file), 'utf8'))
 	)
 ];
@@ -385,6 +393,10 @@ describe('app/src, app/e2e and api/ spell every word the American way', () => {
 		// nothing would make the gate pass while checking no source at
 		// all (#1218).
 		expect(e2eFiles.length).toBeGreaterThan(10);
+	});
+
+	it('reads the whole site/src tree', () => {
+		expect(siteFiles.length).toBeGreaterThan(5);
 	});
 
 	// The family rule is the one rule here that can be wrong in both

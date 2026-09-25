@@ -86,7 +86,7 @@ func PutHandler(nudge tasknudge.Enqueuer) http.Handler {
 			return
 		}
 
-		// #443: the deploy workflow fires on a push touching hugo/**,
+		// #443: the deploy workflow fires on a push touching site/**,
 		// and this produces no commit, so without a queued rebuild her
 		// page never appears. Queued inside the request transaction, so
 		// a declaration that rolls back queues no deploy; the nudge is

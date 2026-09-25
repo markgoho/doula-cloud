@@ -282,11 +282,11 @@ Three real tensions. Each is resolved here so no ticket has to relitigate it.
 
 **Standing instruction.** These laws are a checklist for review, not a vocabulary to sprinkle through tickets. Cite one when it decides something. If a design has to break one, say which and why in the ticket — that is a legitimate outcome, and an undocumented one is not.
 
-## Adopting this in `hugo/`
+## Adopting this in `site/`
 
-The marketing site is out of scope for the map that produced this brief, and no Hugo template changes happen because of it. The brief is nevertheless written so the site can adopt it later without a redesign:
+The marketing site was out of scope for the map that produced this brief. Since [ADR-0051](../adr/0051-the-marketing-site-is-sveltekit-not-hugo.md) it is a SvelteKit package that imports the app's own `app.css`, so it already spends these tokens rather than a copy of them. What the brief still says about the site:
 
-- **The palette, the type scale and the spacing scale are stated as values, not as app components.** Nothing above depends on Svelte, on the atom library, or on `tokens.css` specifically. A Hugo stylesheet can consume the same numbers.
+- **The palette, the type scale and the spacing scale are stated as values, not as app components.** The site takes them from `tokens.css` by import, and `tokens.usage.spec.ts` holds its components to the same no-raw-values rule as the app's.
 - **Hanken Grotesk is self-hosted and open-licensed**, so the same font files serve both properties.
 - **Where the two properties should differ, they may.** A marketing page is read once, at a distance, by somebody deciding; the app is read every day by somebody working. The marketing site may use the display step more freely and more generous vertical space. It must not introduce a second accent hue, a second family, or drop shadows.
 - Adoption happens through the same process this map established — a ticket, a decision, a written record — as a separate effort.
