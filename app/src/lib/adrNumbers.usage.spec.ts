@@ -35,10 +35,11 @@ import { describe, expect, it } from 'vitest';
  * reader's head. `docs/agents/domain.md` carries the other half: take
  * the number as late as you can, which is what shrinks that window.
  *
- * The check lives in `app/` because `.github/workflows/ci.yml` puts no
- * `paths:` filter on the `app` job, so it runs on a docs-only PR. That is
- * the only kind of PR that can cause this, and a gate that skipped it
- * would gate nothing.
+ * A docs-only PR is the only kind of PR that can cause this, and a gate
+ * that skipped it would gate nothing. The `app` job skips a docs-only PR
+ * (#1466), so this spec is named in `.github/workflows/ci.yml`'s `docs`
+ * job, which runs it on every PR whatever the PR changes. It still lives
+ * in `app/` because that is where the Vitest setup it runs under lives.
  */
 
 const appRoot = fileURLToPath(new URL('../../', import.meta.url));
