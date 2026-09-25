@@ -116,7 +116,116 @@ jobs:
       - name: Lint workflows
         run: ./actionlint
 
+  # Classifies a PR as docs-only so `api` and `app` -- the two slow jobs,
+  # ~4-5 minutes each on Postgres, the Auth emulator, the Go suite and
+  # Playwright -- can skip a change that uses none of them (#1466).
+  #
+  # Docs-only is an ALLOWLIST: every changed path is under `docs/`, or is a
+  # `*.md` file at the repo root. Any other path, including one nobody
+  # expected, is code. `hugo/` content is code, because the site build
+  # reads it. A rename counts both its old and its new path.
+  #
+  # pull_request only. A push to trunk always runs everything: `migrate`,
+  # `deploy-api` and `deploy-app` need `api` and `app`, and a later trunk
+  # run is the evidence for a canceled one (#1207).
+  #
+  # The file list comes from the API rather than `git diff`, so no deep
+  # clone is needed. The API lists at most 3000 files; a PR larger than
+  # that is classified as code rather than judged on a partial list.
+  changes:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      pull-requests: read
+    outputs:
+      docs_only: ${{ steps.classify.outputs.docs_only }}
+    steps:
+      - name: Classify the diff
+        id: classify
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_FILES_URL: repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/files
+          CHANGED_FILES: ${{ github.event.pull_request.changed_files }}
+        run: |
+          set -euo pipefail
+          # One line per changed file; a rename carries its old path as a
+          # second field.
+          files=$(gh api "$PR_FILES_URL" --paginate --jq '.[] | [.filename, (.previous_filename // "")] | @tsv')
+          listed=$(printf '%s\n' "$files" | grep -c . || true)
+          docs_only=true
+          if [ "$listed" -ne "$CHANGED_FILES" ]; then
+            echo "The API listed $listed of $CHANGED_FILES changed files; classifying as code."
+            docs_only=false
+          fi
+          while IFS=$'\t' read -r file previous; do
+            for path in "$file" "$previous"; do
+              [ -n "$path" ] || continue
+              case "$path" in
+                docs/*) ;;
+                */*) echo "code: $path"; docs_only=false ;;
+                *.md) ;;
+                *) echo "code: $path"; docs_only=false ;;
+              esac
+            done
+          done <<< "$files"
+          echo "docs_only=$docs_only"
+          echo "docs_only=$docs_only" >> "$GITHUB_OUTPUT"
+
+  # Every spec that reads `docs/`, run on its own so a docs-only PR -- where
+  # `app` skips -- is still gated on them (#1466). Runs on every PR and every
+  # trunk push, never conditioned on `changes`, so the gate on `docs/` does
+  # not depend on the classifier being right. A required status check on
+  # `trunk` (see docs/agents/worktree-flow.md).
+  #
+  # The specs were found by grepping app/ for a read of `docs/`. A new spec
+  # that reads `docs/` must be added to the list below, or a docs-only PR
+  # never runs it. `scripts/design-export.test.ts` also reads `docs/design/`,
+  # and is already covered: the `scripts` job runs on every PR.
+  #
+  # The same specs also run inside `app`'s full suite whenever `app` runs.
+  # No --coverage: the 100% gate is measured over the whole suite, and a
+  # partial run would fail it.
+  docs:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: oven-sh/setup-bun@v2
+
+      # The same key as the `app` job's, so the two share one cache entry.
+      - name: Cache node_modules
+        uses: actions/cache@v6
+        with:
+          path: app/node_modules
+          key: node-modules-${{ runner.os }}-${{ hashFiles('app/bun.lock') }}
+
+      - name: Install dependencies
+        working-directory: app
+        run: bun install --frozen-lockfile
+
+      - name: Test the specs that read docs/
+        working-directory: app
+        run: >-
+          bunx vitest --run --project server
+          src/lib/prose.usage.spec.ts
+          src/lib/adrNumbers.usage.spec.ts
+          src/lib/testPlans.usage.spec.ts
+
+  # `api` and `app` skip on a docs-only PR (#1466). GitHub reads a skipped
+  # required check as passed, which is why this is a job-level `if:` and not
+  # a workflow-level `paths:` filter: a required check that never reports
+  # blocks the PR forever.
+  #
+  # The condition fails CLOSED. A plain `needs: changes` would skip these
+  # jobs whenever `changes` failed or was canceled, and a skipped required
+  # check passes, so a broken classifier would merge a code PR with nothing
+  # tested. Instead they run unless `changes` SUCCEEDED and said docs-only.
+  # On a trunk push `changes` is skipped, so they always run there.
   api:
+    needs: changes
+    if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.docs_only != 'true') }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -221,7 +330,10 @@ jobs:
         working-directory: api
         run: go run ./tools/covcheck -profile=coverage.out -module=doula-cloud/api -skip=doula-cloud/api/tools/
 
+  # Skips on a docs-only PR under the same fail-closed condition as `api`.
   app:
+    needs: changes
+    if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.docs_only != 'true') }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     # e2e/stack.ts's db-only compose stack: `docker compose` ships
@@ -482,9 +594,15 @@ jobs:
   # tunnel through the Cloud SQL Admin API, not network-level ACLs --
   # Authorized Networks is left empty, so raw unproxied connections are
   # refused regardless of source IP.
+  #
+  # The `if:` names every need's result rather than leaning on the implicit
+  # `success()`. `api` and `app` need `changes`, which is skipped on a trunk
+  # push, and a skipped job anywhere up the chain makes the implicit
+  # `success()` skip this job too (#1466). The same shape is on
+  # `deploy-api` and `deploy-app` below.
   migrate:
     needs: [api, app]
-    if: github.ref == 'refs/heads/trunk' && github.event_name == 'push'
+    if: ${{ !cancelled() && github.ref == 'refs/heads/trunk' && github.event_name == 'push' && needs.api.result == 'success' && needs.app.result == 'success' }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     # Own concurrency group -- the actual protection from a second quick
@@ -570,7 +688,7 @@ jobs:
   # same way a failed migration does, not run merely in parallel with it.
   deploy-api:
     needs: [api, app, migrate, api-image]
-    if: github.ref == 'refs/heads/trunk' && github.event_name == 'push'
+    if: ${{ !cancelled() && github.ref == 'refs/heads/trunk' && github.event_name == 'push' && needs.api.result == 'success' && needs.app.result == 'success' && needs.migrate.result == 'success' && needs.api-image.result == 'success' }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     # Own concurrency group -- serializes deploy-api runs against each
@@ -688,7 +806,7 @@ jobs:
   # Docker image, which has no bearing on the static app/ SPA build.
   deploy-app:
     needs: [api, app, migrate]
-    if: github.ref == 'refs/heads/trunk' && github.event_name == 'push'
+    if: ${{ !cancelled() && github.ref == 'refs/heads/trunk' && github.event_name == 'push' && needs.api.result == 'success' && needs.app.result == 'success' && needs.migrate.result == 'success' }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     # Own concurrency group -- serializes deploy-app runs against each
