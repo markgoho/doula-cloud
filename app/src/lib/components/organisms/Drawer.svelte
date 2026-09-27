@@ -76,6 +76,12 @@
 		return getComputedStyle(dialog).getPropertyValue('--drawer-full-width').trim() === '1';
 	}
 
+	// Read once, at the moment the effect below opens the dialog -- not
+	// re-read on a later resize while it stays open. A native <dialog>
+	// cannot switch between showModal() and show() without closing and
+	// reopening, so there is nothing this could retoggle live anyway; a
+	// person who resizes past 28rem mid-conversation sees the drawer stay
+	// however it opened until they close and reopen it.
 	$effect(() => {
 		syncDialogOpen(dialog, open, (d) => {
 			if (isFullWidth()) {
@@ -87,12 +93,14 @@
 			 * `showModal()` would otherwise focus the first focusable
 			 * descendant (the Close button) rather than announce the
 			 * dialog's own name first, and `show()` moves focus nowhere
-			 * at all -- neither is what the reviewed prototype does
-			 * ("focus goes to the drawer's heading", #1502). The dialog
-			 * itself carries that name (`aria-label`), so focusing it
-			 * (via the `tabindex="-1"` below) announces it, and a
-			 * keyboard user starts inside the panel rather than on the
-			 * trigger behind it.
+			 * at all -- neither is what the reviewed prototype does. Its
+			 * own doc comment on `prototype/1502-feedback`'s
+			 * `VariantE.svelte` (#1502) states it plainly: "Focus goes to
+			 * the drawer's heading, and back to the banner link on
+			 * close." The dialog itself carries that name (`aria-label`),
+			 * so focusing it (via the `tabindex="-1"` below) announces it,
+			 * and a keyboard user starts inside the panel rather than on
+			 * the trigger behind it.
 			 */
 			d.focus();
 		});

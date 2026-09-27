@@ -216,7 +216,13 @@ const UNDERIVABLE: Readonly<Record<string, string>> = {
 		'same markup and the same content on both sides of it, and what changes is which browser API ' +
 		"opens the dialog (showModal() versus show()), never the DOM tree -- so there is no 'does the " +
 		"content overflow' question for `overflow` (there is one tree, not two) and no cap, no-wrap or " +
-		'single-row question either. #1521 is the ticket the number belongs to.'
+		'single-row question either. The query itself still has to exist (rule 2 is about the LITERAL, ' +
+		'not about whether a query may exist at all): a native <dialog> has exactly two open methods ' +
+		'and no CSS mechanism picks between them, so the choice is this query, a hand-written focus trap ' +
+		'(the ticket forbids one), or opening non-modally and measuring afterward, which would flash the ' +
+		'wrong presentation before correcting it. Permanent, not a will-fix -- there is no follow-up ' +
+		'ticket that replaces this with a derived floor, because the panel width it reads is never going ' +
+		'to become one. #1521 is the ticket the number belongs to.'
 	)
 };
 
