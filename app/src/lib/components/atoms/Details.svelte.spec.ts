@@ -74,7 +74,7 @@ describe('Details', () => {
 	it('appends the hidden text to the summary’s accessible name only', async () => {
 		const { container } = await setup({ summary: 'Membership history', hiddenSummary: 'for Renata Alvarez' });
 
-		await expect.element(page.getByText('Membership history for Renata Alvarez')).toBeInTheDocument();
+		await expect.element(page.getByText('Membership history for Renata Alvarez')).toBeVisible();
 		const hidden = container.querySelector('.visually-hidden');
 		expect(hidden).toHaveTextContent('for Renata Alvarez');
 	});
