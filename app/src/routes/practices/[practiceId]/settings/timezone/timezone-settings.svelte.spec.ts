@@ -11,7 +11,11 @@ import { render } from 'vitest-browser-svelte';
 import { jsonResponse } from '#lib/testResponse.js';
 import Page from './+page.svelte';
 import { toPageState } from '../../../../routeFixture.js';
-import { fixture } from './page.fixture.js';
+import { asDoula, fixture } from './page.fixture.js';
+// The loading Skeleton reserves space with `var(--text-body-size)`, which
+// only exists once the tokens are loaded -- the real app loads them in the
+// root layout. See FormPage.svelte.spec.ts's identical import.
+import '#lib/styles/app.css';
 
 const pageState = vi.hoisted(() => ({
 	params: {} as Record<string, string>,
@@ -132,5 +136,54 @@ describe('the Timezone screen', () => {
 		await setup(jsonResponse('internal error', 500));
 
 		await expect.element(testPage.getByText('internal error')).toBeVisible();
+	});
+
+	it('offers an Owner the editable field and a Save button', async () => {
+		await setup(jsonResponse({ timezone: 'America/Denver' }));
+
+		await expect.element(control()).toHaveValue('America/Denver');
+		await expect.element(testPage.getByRole('button', { name: 'Save' })).toBeVisible();
+	});
+});
+
+/*
+ * #1441: every Staff reads the zone (#1280 widened the GET so
+ * `InvoiceSection` could), but only an Owner or Admin can state it. The
+ * screen shows anyone else the zone as a fact, with no control that
+ * exists only to be refused.
+ */
+describe('the Timezone screen, as a Doula', () => {
+	beforeEach(() => {
+		Object.assign(pageState, toPageState({ ...fixture, ...asDoula }));
+		return () => {
+			Object.assign(pageState, toPageState(fixture));
+		};
+	});
+
+	it('shows the zone the Practice holds, read-only, with no Save button and no error', async () => {
+		await setup(jsonResponse({ timezone: 'America/Denver' }));
+
+		await expect.element(testPage.getByText('Mountain time (Denver)')).toBeVisible();
+		await expect
+			.element(testPage.getByText('Only a Practice Owner or Admin can change the timezone.'))
+			.toBeVisible();
+		await expect.element(control()).not.toBeInTheDocument();
+		await expect.element(testPage.getByRole('button', { name: 'Save' })).not.toBeInTheDocument();
+		await expect.element(testPage.getByRole('alert')).not.toBeInTheDocument();
+	});
+
+	it('says the zone is loading, rather than showing an empty row, until the read answers', async () => {
+		apiFetchWithSession.mockReturnValueOnce(new Promise(() => {}));
+		await render(Page, {});
+
+		await expect
+			.element(testPage.getByRole('status', { name: 'Loading the timezone' }))
+			.toBeVisible();
+	});
+
+	it('shows a stored zone outside the seven-entry list by its own name', async () => {
+		await setup(jsonResponse({ timezone: 'America/Indiana/Indianapolis' }));
+
+		await expect.element(testPage.getByText('America/Indiana/Indianapolis')).toBeVisible();
 	});
 });
