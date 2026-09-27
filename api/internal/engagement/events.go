@@ -3,115 +3,44 @@ package engagement
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
+
+	"doula-cloud/api/internal/activity"
 )
 
-// statusEvent is one row a status move writes to engagement_events
-// (00090) -- ADR-0015's audit table, shaped on
-// practice_membership_events (00039): both sides of the fact that
-// changed, plus a nullable actor. actorStaffID is a pointer rather than
-// a bare string because a future automation this table anticipates (the
-// standing rule engagement_events' own migration names) may record no
-// human actor at all. Nothing needs that yet, and the one automation
-// that exists deliberately does not use it: ADR-0015 rules that the
+// recordFact writes the one activity entry a change to an Engagement's
+// mutable facts leaves behind -- status, kind or birth outcome, ADR-0015's
+// facts -- in the caller's own transaction, so the change and its record
+// land together or not at all.
+//
+// diff carries both sides of every fact the change touched, under
+// activity's xBefore/xAfter convention, with a nil pointer marshaling to
+// JSON null rather than being left out: "how did this thing come to be?"
+// is answered by reading one row, never by replaying the ones before it.
+// That is the shape engagement_events (00090) held in columns until #1423
+// folded it into activity, the one ledger ADR-0022 names.
+//
+// The actor is always a Staff member. ADR-0015 rules that even the
 // automatic intake -> active move a scheduled Visit makes (#895) "records
-// the person who scheduled, not a null system actor -- a doula did
-// that". So every writer today, requested or automatic, has a real Staff
-// id to pass.
-type statusEvent struct {
-	practiceID           string
-	engagementID         string
-	previousStatus       string
-	status               string
-	previousEndingReason *string
-	endingReason         *string
-	previousEndingNote   *string
-	endingNote           *string
-	actorStaffID         *string
-}
-
-// recordStatusEvent writes one 'status_changed' engagement_events row.
-// Exported logic stays local to this file rather than activity's own
-// Record: this is ADR-0015's own staff-only audit table, distinct from
-// the (portal-visible-by-default) activity ledger TransitionHandler also
-// writes to for the two moves ADR-0022 names -- see TransitionHandler's
-// own doc comment. recordOutcomeEvent below is this table's second
-// writer, under event_type 'birth_outcome_recorded' (#293).
-func recordStatusEvent(ctx context.Context, tx *sql.Tx, e statusEvent) error {
-	if _, err := tx.ExecContext(ctx,
-		`INSERT INTO engagement_events
-		     (practice_id, engagement_id, event_type, previous_status, status,
-		      previous_ending_reason, ending_reason, previous_ending_note, ending_note, actor_staff_id)
-		 VALUES ($1, $2, 'status_changed', $3, $4, $5, $6, $7, $8, $9)`,
-		e.practiceID, e.engagementID, e.previousStatus, e.status,
-		e.previousEndingReason, e.endingReason, e.previousEndingNote, e.endingNote, e.actorStaffID,
-	); err != nil {
-		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		return fmt.Errorf("engagement: record status event: %w", err)
+// the person who scheduled, not a null system actor -- a doula did that",
+// so every writer has a real Staff id to pass.
+func recordFact(ctx context.Context, tx *sql.Tx, practiceID, engagementID, actorStaffID string, action activity.EngagementAction, diff map[string]any) error {
+	raw, err := json.Marshal(diff)
+	if err != nil {
+		// coverage:ignore reason: every caller passes strings and string pointers, which always marshal
+		return fmt.Errorf("engagement: %s diff: %w", action, err)
 	}
-	return nil
-}
-
-// outcomeEvent is one row RecordBirthOutcomeHandler writes to
-// engagement_events -- the same table and the same both-sides shape
-// statusEvent uses, under event_type 'birth_outcome_recorded'. One event
-// type covers recording and correcting alike: a row whose previous side
-// is null is a first recording, one whose previous side is set is a
-// correction, and one whose new side is null un-records a value entered
-// on the wrong Engagement -- so the distinction is read off the row
-// rather than asserted twice.
-type outcomeEvent struct {
-	practiceID               string
-	engagementID             string
-	previousBirthOutcome     *string
-	birthOutcome             *string
-	previousPregnancyEndedOn *string
-	pregnancyEndedOn         *string
-	actorStaffID             *string
-}
-
-// recordOutcomeEvent writes one 'birth_outcome_recorded'
-// engagement_events row.
-func recordOutcomeEvent(ctx context.Context, tx *sql.Tx, e outcomeEvent) error {
-	if _, err := tx.ExecContext(ctx,
-		`INSERT INTO engagement_events
-		     (practice_id, engagement_id, event_type,
-		      previous_birth_outcome, birth_outcome,
-		      previous_pregnancy_ended_on, pregnancy_ended_on, actor_staff_id)
-		 VALUES ($1, $2, 'birth_outcome_recorded', $3, $4, $5::date, $6::date, $7)`,
-		e.practiceID, e.engagementID,
-		e.previousBirthOutcome, e.birthOutcome,
-		e.previousPregnancyEndedOn, e.pregnancyEndedOn, e.actorStaffID,
-	); err != nil {
+	if err := activity.Record(ctx, tx, activity.Entry{
+		PracticeID:  practiceID,
+		SubjectKind: activity.SubjectEngagement,
+		SubjectID:   engagementID,
+		Action:      string(action),
+		Diff:        raw,
+		Actor:       activity.StaffActor(actorStaffID),
+	}); err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		return fmt.Errorf("engagement: record outcome event: %w", err)
-	}
-	return nil
-}
-
-// kindEvent is one row ChangeKindHandler (#874) writes to
-// engagement_events -- the same table statusEvent and outcomeEvent use,
-// under event_type 'kind_changed'. previous_kind/kind (00090) were added
-// to the table alongside its own creation, named for exactly this future
-// writer, so this ticket needs no migration of its own.
-type kindEvent struct {
-	practiceID   string
-	engagementID string
-	previousKind string
-	kind         string
-	actorStaffID *string
-}
-
-// recordKindEvent writes one 'kind_changed' engagement_events row.
-func recordKindEvent(ctx context.Context, tx *sql.Tx, e kindEvent) error {
-	if _, err := tx.ExecContext(ctx,
-		`INSERT INTO engagement_events
-		     (practice_id, engagement_id, event_type, previous_kind, kind, actor_staff_id)
-		 VALUES ($1, $2, 'kind_changed', $3, $4, $5)`,
-		e.practiceID, e.engagementID, e.previousKind, e.kind, e.actorStaffID,
-	); err != nil {
-		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		return fmt.Errorf("engagement: record kind event: %w", err)
+		return fmt.Errorf("engagement: record %s: %w", action, err)
 	}
 	return nil
 }

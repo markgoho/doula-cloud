@@ -183,7 +183,9 @@ func TestMoneyActions_Sorted(t *testing.T) {
 // reassignment is which Doula covers it, both Practice-roster facts
 // rather than facts about her; a void request and its refusal (#1096) are
 // the Practice deliberating with itself about her Contract, with nothing
-// of hers changed either way. Money actions are deliberately absent from
+// of hers changed either way. The three facts #1423 moved out of
+// engagement_events are here too, because ADR-0015 kept that audit off
+// the portal. Money actions are deliberately absent from
 // this set (CONTEXT.md: "her money" stays on her own ledger) -- a drift
 // here would either leak the Practice's own facts to a Client or hide a
 // fact she is owed.
@@ -206,6 +208,10 @@ func TestStaffingActions_ContainsExactlyTheRosterSet(t *testing.T) {
 		activity.ActionCoverageGapCleared,
 		activity.ActionOnCallNarrowingChanged,
 		activity.ActionOnCallRuleChanged,
+		// #1423: engagement_events' three facts, folded in, stay staff-only.
+		activity.ActionEngagementReopened,
+		activity.ActionKindChanged,
+		activity.ActionBirthOutcomeRecorded,
 	}
 	if len(got) != len(want) {
 		t.Fatalf("StaffingActions() = %v, want exactly %v", activity.StaffingActions(), want)

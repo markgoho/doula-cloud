@@ -25,7 +25,7 @@ Her persona file calls `clients` having no `practice_id` a sign the schema suppo
 
 ### Stage 1 — Two years ago, the first Engagement ends
 
-**Thinking**: nothing — it is over and it went well. **Pain points**: none. `TransitionHandler` (`PATCH .../engagements/{id}/status`) runs `UPDATE engagements SET status = 'completed', ending_reason = $2, ending_note = $3 ...`, and `engagement_events` (`00090`) records both sides of the move (**MO-G4**, closed). A birth Engagement is refused at `completed` until its birth outcome is recorded first (#940's `engagements_completed_is_explained`), so the record cannot simply stop updating — it has to say what happened.
+**Thinking**: nothing — it is over and it went well. **Pain points**: none. `TransitionHandler` (`PATCH .../engagements/{id}/status`) runs `UPDATE engagements SET status = 'completed', ending_reason = $2, ending_note = $3 ...`, and records both sides of the move as an `engagement_completed` entry in `activity` (**MO-G4**, closed; `engagement_events` folded into `activity` on [#1423](https://github.com/markgoho/doula-cloud/issues/1423)). A birth Engagement is refused at `completed` until its birth outcome is recorded first (#940's `engagements_completed_is_explained`), so the record cannot simply stop updating — it has to say what happened.
 
 - **1.1** — Priya marks her first Engagement `completed`, naming an ending reason. It stops reading `intake` two years after the fact.
 

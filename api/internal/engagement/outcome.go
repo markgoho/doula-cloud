@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"time"
 
+	"doula-cloud/api/internal/activity"
 	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/staffauth"
 )
@@ -178,14 +179,11 @@ func RecordBirthOutcomeHandler() http.Handler {
 		}
 
 		actorStaffID, _ := staffauth.StaffID(r.Context())
-		if err := recordOutcomeEvent(r.Context(), tx, outcomeEvent{
-			practiceID:               practiceID,
-			engagementID:             engagementID,
-			previousBirthOutcome:     current.outcome,
-			birthOutcome:             req.BirthOutcome,
-			previousPregnancyEndedOn: current.endedOn,
-			pregnancyEndedOn:         endedOn,
-			actorStaffID:             &actorStaffID,
+		if err := recordFact(r.Context(), tx, practiceID, engagementID, actorStaffID, activity.ActionBirthOutcomeRecorded, map[string]any{
+			"birthOutcomeBefore":     current.outcome,
+			"birthOutcomeAfter":      req.BirthOutcome,
+			"pregnancyEndedOnBefore": current.endedOn,
+			"pregnancyEndedOnAfter":  endedOn,
 		}); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)

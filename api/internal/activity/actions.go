@@ -199,6 +199,29 @@ const (
 	// engagement.TransitionHandler.
 	ActionCarePhaseChanged EngagementAction = "care_phase_changed"
 
+	// ActionEngagementReopened records an Owner or Admin moving a
+	// completed Engagement back to active (ADR-0015's one correction
+	// move). Its diff carries both sides of the status and of the ending
+	// reason and note the move clears. In staffingActions below: see that
+	// map's own comment for why the three facts #1423 moved out of
+	// engagement_events stay off a Client's ledger.
+	ActionEngagementReopened EngagementAction = "engagement_reopened"
+
+	// ActionKindChanged records an Engagement's kind moving (#874,
+	// ADR-0015) -- diff kindBefore/kindAfter. Written by
+	// engagement.ChangeKindHandler. In staffingActions below.
+	ActionKindChanged EngagementAction = "kind_changed"
+
+	// ActionBirthOutcomeRecorded records a birth outcome and the date the
+	// pregnancy ended being recorded, corrected or cleared (#293) -- diff
+	// birthOutcomeBefore/After and pregnancyEndedOnBefore/After. One
+	// action for all three, read off the diff: a null before is a first
+	// recording, a null after clears a value entered on the wrong
+	// Engagement. Written by engagement.RecordBirthOutcomeHandler. In
+	// staffingActions below: ADR-0015 rules the outcome "staff-only,
+	// never Client-facing".
+	ActionBirthOutcomeRecorded EngagementAction = "birth_outcome_recorded"
+
 	// ActionContractCreated, ActionContractSent, ActionContractSigned and
 	// ActionContractVoided name the Contract *entity*'s own lifecycle --
 	// not in moneyActions below (#972): an employed Doula performs three
@@ -450,6 +473,20 @@ func MoneyActions() []EngagementAction {
 // Money actions (moneyActions above) are a different, Staff-role-only cut
 // and are deliberately absent here: CONTEXT.md also says "her money", so
 // a Client keeps every Contract and Invoice entry on her own Engagement.
+//
+// Three members do not pass that test, and are here by a separate rule
+// (#1423). ActionEngagementReopened, ActionKindChanged and
+// ActionBirthOutcomeRecorded are the Practice's own record of how an
+// Engagement's mutable facts came to be, which ADR-0015 made "never
+// readable from a portal session -- the audit trail is the Practice's
+// record of its own acts". They lived in engagement_events (00090) for
+// that reason until #1423 folded that table into this one; listing them
+// here keeps them exactly as far from a Client as the dropped table did.
+// The birth outcome is also staff-only in its own right (ADR-0015, "The
+// birth outcome, and where it does not reach"). Completion and the intake
+// -> active move are not here: a Client already reads that her care began
+// and ended, and the portal's read carries no diff, so the ending reason
+// those rows now hold never reaches her.
 var staffingActions = map[EngagementAction]bool{
 	ActionOfferSent:             true,
 	ActionOfferAccepted:         true,
@@ -465,6 +502,10 @@ var staffingActions = map[EngagementAction]bool{
 	ActionCoverageGapCleared:     true,
 	ActionOnCallNarrowingChanged: true,
 	ActionOnCallRuleChanged:      true,
+	// #1423: the Practice's own audit of an Engagement's mutable facts.
+	ActionEngagementReopened:   true,
+	ActionKindChanged:          true,
+	ActionBirthOutcomeRecorded: true,
 }
 
 // StaffingActions returns every action CONTEXT.md's Activity entry keeps

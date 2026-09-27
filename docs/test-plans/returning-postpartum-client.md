@@ -20,7 +20,7 @@ Her persona file says the schema supports her, and it does: `clients` carries no
 
 | Step | Action | Expected result | Mark |
 | --- | --- | --- | --- |
-| 1.1 | Mark her first Engagement finished | `TransitionHandler` (`PATCH .../engagements/{id}/status`) writes `UPDATE engagements SET status = 'completed', ending_reason = $2, ending_note = $3 ...` and records an `engagement_events` row (`00090`). The record of her first birth stops reading `intake` | `manual` |
+| 1.1 | Mark her first Engagement finished | `TransitionHandler` (`PATCH .../engagements/{id}/status`) writes `UPDATE engagements SET status = 'completed', ending_reason = $2, ending_note = $3 ...` and records an `engagement_completed` entry in `activity` carrying both sides of the move ([#1423](https://github.com/markgoho/doula-cloud/issues/1423)). The record of her first birth stops reading `intake` | `manual` |
 
 ### Stage 2 — She calls Priya
 

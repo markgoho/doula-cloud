@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 
+	"doula-cloud/api/internal/activity"
 	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/staffauth"
 )
@@ -228,13 +229,8 @@ func ChangeKindHandler() http.Handler {
 		}
 
 		actorStaffID, _ := staffauth.StaffID(r.Context())
-		if err := recordKindEvent(r.Context(), tx, kindEvent{
-			practiceID:   practiceID,
-			engagementID: engagementID,
-			previousKind: current.kind,
-			kind:         req.Kind,
-			actorStaffID: &actorStaffID,
-		}); err != nil {
+		if err := recordFact(r.Context(), tx, practiceID, engagementID, actorStaffID, activity.ActionKindChanged,
+			map[string]any{"kindBefore": current.kind, "kindAfter": req.Kind}); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return

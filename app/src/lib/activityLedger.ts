@@ -16,9 +16,10 @@ import type { Fetcher } from './fetcher.js';
 
 import { apiErrorMessage } from './api.js';
 import { clientActivityPhrase } from './clientRegister.js';
-import { formatActivityTimestamp } from './dates.js';
+import { formatActivityTimestamp, formatCalendarDay } from './dates.js';
 import type { CursorPage } from './paginatedList.svelte.js';
-import type { EngagementReference } from './engagementDetail.js';
+import { birthOutcomeLabel, endingReasons, type EngagementReference } from './engagementDetail.js';
+import { kindLabel } from './engagementRequest.js';
 
 /**
  * subjectKind/subjectId are optional because loadEngagementActivityPage
@@ -56,6 +57,14 @@ export interface ActivityEntry {
 	 * renders through describeActivityAction exactly as it does today.
 	 */
 	detail?: string;
+	/**
+	 * Both sides of what the entry changed, as the write side recorded
+	 * them (`xBefore`/`xAfter`, raw enum values). Only
+	 * engagement.ActivityEntry sends it -- activityfeed.Entry selects no
+	 * diff, which is what keeps it off the Client portal -- and only the
+	 * Engagement's own facts are read from it here (`factChangeText`).
+	 */
+	diff?: Record<string, unknown>;
 	createdAt: string;
 }
 
@@ -76,6 +85,94 @@ export interface ActivityEntry {
 export function describeActivityAction(action: string): string {
 	const spaced = action.replaceAll('_', ' ');
 	return spaced.charAt(0).toUpperCase() + spaced.slice(1);
+}
+
+type Diff = Record<string, unknown>;
+
+/**
+ * The word a side of a change reads as when nothing was recorded there.
+ */
+const NOT_RECORDED = 'Not recorded';
+
+/** One side of a change: the label, `NOT_RECORDED` for a recorded null,
+ * and `undefined` when the diff does not carry that side at all. */
+function side(value: unknown, label: (value: string) => string): string | undefined {
+	if (value === null) return NOT_RECORDED;
+	return typeof value === 'string' ? label(value) : undefined;
+}
+
+/** Both sides of one fact as "before to after", or `undefined` unless the
+ * diff carries both. `labelBefore` differs from `label` only for a birth
+ * outcome, whose date belongs to its own side. */
+function fromTo(
+	diff: Diff,
+	field: string,
+	label: (value: string) => string,
+	labelBefore: (value: string) => string = label
+): string | undefined {
+	const before = side(diff[`${field}Before`], labelBefore);
+	const after = side(diff[`${field}After`], label);
+	return before === undefined || after === undefined ? undefined : `${before} to ${after}`;
+}
+
+/** Looks a stored value up in a label table, or shows it as stored if
+ * this build has not labeled it -- `kindLabel`'s own leniency. */
+function labelFrom(options: readonly { value: string; label: string }[]): (value: string) => string {
+	return (value) => options.find((option) => option.value === value)?.label ?? value;
+}
+
+const statusLabel = labelFrom([
+	{ value: 'intake', label: 'Intake' },
+	{ value: 'active', label: 'Active' },
+	{ value: 'completed', label: 'Completed' }
+]);
+
+/** A birth outcome and the date the pregnancy ended read as one fact, the
+ * way the Engagement page's own section shows them. */
+function outcomeLabel(endedOn: unknown): (outcome: string) => string {
+	return (outcome) => {
+		const label = birthOutcomeLabel(outcome);
+		return typeof endedOn === 'string' ? `${label}, ${formatCalendarDay(endedOn)}` : label;
+	};
+}
+
+/**
+ * How each of an Engagement's mutable facts reads as a change (#1423):
+ * status, kind and birth outcome, the facts ADR-0015 made the Practice
+ * answer "how did this come to be?" for. Each returns `undefined` when
+ * the diff does not carry both sides, and the entry falls back to its
+ * action alone.
+ *
+ * This is a table keyed by action, which `describeActivityAction` argues
+ * against, and the argument does not carry here: that one is about naming
+ * actions, which the write side already does once. These read the values
+ * inside a diff, which the write side stores as raw enum values, and a
+ * raw enum value never reaches the screen (#262) -- the labels for them
+ * live in this app, so the sentence is built here rather than in Go. The
+ * ending note stays out of every sentence on purpose: it is free text,
+ * and the Engagement page is where it is read.
+ */
+const factChanges: Record<string, (diff: Diff) => string | undefined> = {
+	care_phase_changed: (diff) => fromTo(diff, 'status', statusLabel),
+	engagement_reopened: (diff) => fromTo(diff, 'status', statusLabel),
+	engagement_completed: (diff) => {
+		const move = fromTo(diff, 'status', statusLabel);
+		const reason = side(diff.endingReasonAfter, labelFrom(endingReasons));
+		return move && reason ? `${move}. Reason: ${reason}` : move;
+	},
+	kind_changed: (diff) => fromTo(diff, 'kind', kindLabel),
+	birth_outcome_recorded: (diff) =>
+		fromTo(
+			diff,
+			'birthOutcome',
+			outcomeLabel(diff.pregnancyEndedOnAfter),
+			outcomeLabel(diff.pregnancyEndedOnBefore)
+		)
+};
+
+function factChangeText(row: ActivityEntry): string | undefined {
+	const change = row.diff ? factChanges[row.action]?.(row.diff) : undefined;
+	return change ? `${describeActivityAction(row.action)}: ${change}` : undefined;
 }
 
 /**
@@ -99,6 +196,8 @@ export function describeActivityAction(action: string): string {
  */
 function staffEventText(row: ActivityEntry): string {
 	if (row.detail) return row.detail;
+	const change = factChangeText(row);
+	if (change) return change;
 	const described = describeActivityAction(row.action);
 	return row.subjectName ? `${described} — ${row.subjectName}` : described;
 }

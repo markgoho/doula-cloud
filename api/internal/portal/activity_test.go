@@ -222,6 +222,38 @@ func TestActivityHandler_HidesVoidDeliberation(t *testing.T) {
 	}
 }
 
+// TestActivityHandler_HidesTheEngagementAudit proves #1423 at the reader:
+// the three facts that lived in engagement_events -- a table no portal
+// session could read (ADR-0015) -- stay out of a Client's ledger now that
+// they live in activity. engagement_completed is seeded beside them
+// because it is the half she already reads: her care ended, and the
+// ending reason its diff now carries never leaves the database on this
+// read, since the portal's projection selects no diff.
+func TestActivityHandler_HidesTheEngagementAudit(t *testing.T) {
+	db := testdb.New(t)
+	const identityUID = "portal-activity-engagement-audit"
+	practiceID, engagementID := seedEngagementForActivity(t, db, identityUID, "Activity Engagement Audit Practice")
+	staffID := testdb.SeedStaffAtPractice(t, db, practiceID, "portal-activity-audit-staff", []string{ownerRole}, "employee")
+
+	testdb.SeedActivity(t, db, practiceID, activity.SubjectEngagement, engagementID, string(activity.ActionEngagementCompleted), activity.StaffActor(staffID))
+	testdb.SeedActivity(t, db, practiceID, activity.SubjectEngagement, engagementID, string(activity.ActionEngagementReopened), activity.StaffActor(staffID))
+	testdb.SeedActivity(t, db, practiceID, activity.SubjectEngagement, engagementID, string(activity.ActionKindChanged), activity.StaffActor(staffID))
+	testdb.SeedActivity(t, db, practiceID, activity.SubjectEngagement, engagementID, string(activity.ActionBirthOutcomeRecorded), activity.StaffActor(staffID))
+
+	srv, session := activityServer(t, db, identityUID)
+	defer srv.Close()
+
+	resp := authedActivityGet(t, session, srv.URL+"/api/portal/engagements/"+engagementID+"/activity")
+	defer resp.Body.Close()
+	var got activityfeed.ListResponse
+	if err := json.NewDecoder(resp.Body).Decode(&got); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if len(got.Items) != 1 || got.Items[0].Action != string(activity.ActionEngagementCompleted) {
+		t.Fatalf("Items = %+v, want only the engagement_completed row (the audit hidden)", got.Items)
+	}
+}
+
 // TestActivityHandler_PaginatesNewestFirst mirrors
 // engagement.TestListActivityHandler_PaginatesNewestFirst.
 func TestActivityHandler_PaginatesNewestFirst(t *testing.T) {
