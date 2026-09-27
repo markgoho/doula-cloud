@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="48 76 202 94" fill="none" stroke-width="14" stroke-linecap="round">
+	<!--
+		The DoulaCloud mark, one color. For a mark that is less than 28px
+		tall, and for one-color print. See docs/marketing/brand.md.
+
+		Literal colors, because a standalone SVG can reach no custom property.
+		The value is `color-primary` from app/src/lib/styles/tokens.css, in both themes.
+	-->
+	<style>
+		path { stroke: oklch(41.2% 0.119 339); }
+
+		@media (prefers-color-scheme: dark) {
+			path { stroke: oklch(84% 0.116 341); }
+		}
+	</style>
+	<path d="M100 160a32 32 0 0 1 64 0" />
+	<path d="M56 160a76 76 0 0 1 137.97-44 44 44 0 0 1 44.03 44" />
+</svg>
