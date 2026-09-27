@@ -9,7 +9,6 @@
 	 * and after a reload.
 	 */
 	import { tick } from 'svelte';
-	import BackLink from '#lib/components/molecules/BackLink.svelte';
 	import Heading from '#lib/components/atoms/Heading.svelte';
 	import Text from '#lib/components/atoms/Text.svelte';
 	import FeedbackForm from './FeedbackForm.svelte';
@@ -60,7 +59,14 @@
 		<HostBody screenKey={screen.key} title={screen.title} />
 	{:else if view === 'form'}
 		<div class="column">
-			<BackLink href={screen.path} />
+			<a
+				class="back"
+				href={screen.path}
+				onclick={(event) => {
+					event.preventDefault();
+					void show('host', '');
+				}}>← Back</a
+			>
 			<Heading level={1} text={words.pageTitle} />
 			<Text text={words.intro} measure />
 			<FeedbackForm

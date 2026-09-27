@@ -4,7 +4,11 @@
 		<meta charset="utf-8" />
 		<meta name="viewport" content="width=device-width, initial-scale=1" />
 		<meta name="text-scale" content="scale" />
-		<link rel="manifest" href="%sveltekit.assets%/manifest.webmanifest" />
+		<script>
+			// PROTOTYPE (#1502) artifact build: open straight on the prototype route.
+			if (!location.hash.startsWith('#/'))
+				history.replaceState(null, '', '#/prototype-feedback');
+		</script>
 		%sveltekit.head%
 	</head>
 	<body data-sveltekit-preload-data="hover">

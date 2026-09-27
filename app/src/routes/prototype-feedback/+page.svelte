@@ -9,7 +9,6 @@
 	 *
 	 * Run: `bun run dev` in app/, then open /prototype-feedback.
 	 */
-	import { replaceState } from '$app/navigation';
 	import { match } from '$app/paths';
 	import Link from '#lib/components/atoms/Link.svelte';
 	import PageTitle from '#lib/components/PageTitle.svelte';
@@ -32,7 +31,7 @@
 	] as const;
 
 	const initial = new URLSearchParams(globalThis.location?.search ?? '');
-	let variantKey = $state(initial.get('variant') ?? 'A');
+	let variantKey = $state(initial.get('variant') ?? 'E');
 	let shell = $state<Shell>(initial.get('shell') === 'portal' ? 'portal' : 'staff');
 	let screenKey = $state(initial.get('screen') ?? '');
 
@@ -41,16 +40,16 @@
 
 	let routeId = $state('');
 	$effect(() => {
-		const path = screen.path;
-		void match(path).then((route) => (routeId = route?.id ?? '(no route matched)'));
+		const { path, routeId: fallback } = screen;
+		void match(path).then((route) => (routeId = route?.id ?? fallback));
 	});
 
 	let report = $state<Report>({ view: 'host', url: '' });
 
-	$effect(() => {
-		const parameters = new URLSearchParams({ variant: current.key, shell, screen: screen.key });
-		replaceState(`?${parameters}`, {});
-	});
+	// The artifact build uses SvelteKit's hash router and the artifact
+	// viewer passes no query string, so the variant lives in page state
+	// only. Every placeholder link below stays on this route.
+	const stay = (name: string) => `#/prototype-feedback?nav=${encodeURIComponent(name)}`;
 
 	function cycle(step: number) {
 		const index = variants.findIndex((each) => each.key === variantKey);
@@ -67,12 +66,12 @@
 
 	const signOut = async () => ({ ok: true }) as const;
 	const staffNav = ['Overview', 'Clients', 'Schedule', 'On call', 'Invoices', 'Settings'].map(
-		(label) => ({ label, href: `#${label}`, current: label === 'Clients' })
+		(label) => ({ label, href: stay(label), current: label === 'Clients' })
 	);
 	const portalNav = [
-		{ label: 'Your care', href: '#care', current: true },
-		{ label: 'Messages', href: '#messages', current: false },
-		{ label: 'Contract', href: '#contract', current: false }
+		{ label: 'Your care', href: stay('care'), current: true },
+		{ label: 'Messages', href: stay('messages'), current: false },
+		{ label: 'Contract', href: stay('contract'), current: false }
 	];
 </script>
 
@@ -83,11 +82,11 @@
 {#if shell === 'staff'}
 	<StaffTopBar
 		navItems={staffNav}
-		practices={[{ practiceId: 'p_7f3a', practiceName: PRACTICE_NAME, roles: ['owner'], href: '#' }]}
+		practices={[{ practiceId: 'p_7f3a', practiceName: PRACTICE_NAME, roles: ['owner'], href: stay('practice') }]}
 		currentPracticeId="p_7f3a"
 		name="Jordan Blake"
 		email={copy.staff.email}
-		accountHref="#"
+		accountHref={stay('account')}
 		{signOut}
 	/>
 {:else}
@@ -96,7 +95,7 @@
 		switcherLabel={PRACTICE_NAME}
 		navItems={portalNav}
 		name="Alex Rivera"
-		accountHref="#"
+		accountHref={stay('account')}
 		{signOut}
 	/>
 {/if}

@@ -3,7 +3,12 @@ import { defineConfig } from 'vitest/config';
 import { playwright } from '@vitest/browser-playwright';
 import adapter from '@sveltejs/adapter-static';
 import { sveltekit } from '@sveltejs/kit/vite';
-import { E2E_API_HOST, E2E_API_PORT, DEV_SERVER_PORT, PREVIEW_SERVER_PORT } from './e2e/ports.ts';
+import {
+	E2E_API_HOST,
+	E2E_API_PORT,
+	DEV_SERVER_PORT,
+	PREVIEW_SERVER_PORT,
+} from './e2e/ports.ts';
 
 // How many headless Chromium renderers the `client` project may open at
 // once. Six rather than Vitest's own `Math.min(12, ncpu - 1)`, and
@@ -18,7 +23,8 @@ export default defineConfig({
 		sveltekit({
 			compilerOptions: {
 				// Force runes mode for the project, except for libraries. Can be removed in svelte 6.
-				runes: ({ filename }) => filename.split(/[/\\]/).includes('node_modules') ? undefined : true
+				runes: ({ filename }) =>
+					filename.split(/[/\\]/).includes('node_modules') ? undefined : true,
 			},
 
 			// Fully client-side SPA behind auth, no SSR -- see
@@ -26,24 +32,30 @@ export default defineConfig({
 			// requires. `200.html` (not `index.html`) per adapter-static's
 			// own guidance, since it's the name Firebase Hosting's
 			// SPA-rewrite convention expects for a catch-all fallback.
-			adapter: adapter({ fallback: '200.html' })
-		})
+			adapter: adapter({ fallback: '200.html' }),
+			// PROTOTYPE (#1502) artifact build: one self-contained HTML file
+			// that routes on the hash, so it runs as a claude.ai artifact.
+			output: { bundleStrategy: 'inline' },
+			router: { type: 'hash' },
+			serviceWorker: { register: false },
+		}),
 	],
 	// `vite dev` (server) and Playwright's webServer (`vite preview`) each
 	// need their own proxy entry to reach the Go BFF container without
 	// hitting CORS -- see e2e/ports.ts for where the port (and, for a
 	// worktree, the offset) comes from.
+	build: { assetsInlineLimit: 50_000_000 },
 	server: {
 		port: DEV_SERVER_PORT,
 		proxy: {
-			'/api': `http://${E2E_API_HOST}:${E2E_API_PORT}`
-		}
+			'/api': `http://${E2E_API_HOST}:${E2E_API_PORT}`,
+		},
 	},
 	preview: {
 		port: PREVIEW_SERVER_PORT,
 		proxy: {
-			'/api': `http://${E2E_API_HOST}:${E2E_API_PORT}`
-		}
+			'/api': `http://${E2E_API_HOST}:${E2E_API_PORT}`,
+		},
 	},
 	test: {
 		expect: { requireAssertions: true },
@@ -51,8 +63,8 @@ export default defineConfig({
 			provider: 'v8',
 			include: ['src/lib/**/*.{ts,svelte}'],
 			thresholds: {
-				100: true
-			}
+				100: true,
+			},
 		},
 		projects: [
 			{
@@ -84,14 +96,14 @@ export default defineConfig({
 					browser: {
 						enabled: true,
 						provider: playwright(),
-						instances: [{ browser: 'chromium', headless: true }]
+						instances: [{ browser: 'chromium', headless: true }],
 					},
 					include: [
 						'src/**/*.svelte.{test,spec}.{js,ts}',
-						'src/lib/primitives/**/*.{test,spec}.{js,ts}'
+						'src/lib/primitives/**/*.{test,spec}.{js,ts}',
 					],
-					exclude: ['src/lib/server/**']
-				}
+					exclude: ['src/lib/server/**'],
+				},
 			},
 
 			{
@@ -109,10 +121,10 @@ export default defineConfig({
 					include: ['src/**/*.{test,spec}.{js,ts}'],
 					exclude: [
 						'src/**/*.svelte.{test,spec}.{js,ts}',
-						'src/lib/primitives/**/*.{test,spec}.{js,ts}'
-					]
-				}
-			}
-		]
-	}
+						'src/lib/primitives/**/*.{test,spec}.{js,ts}',
+					],
+				},
+			},
+		],
+	},
 });

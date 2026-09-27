@@ -22,23 +22,38 @@ export interface HostScreen {
 	key: string;
 	title: string;
 	path: string;
+	// What `match()` returns in dev; the hash-routed artifact build cannot
+	// match a pathname, so it falls back to this.
+	routeId: string;
 }
 
 export const screens: Record<Shell, readonly HostScreen[]> = {
 	staff: [
-		{ key: 'clients', title: 'Clients', path: '/practices/p_7f3a/clients' },
+		{
+			key: 'clients',
+			title: 'Clients',
+			path: '/practices/p_7f3a/clients',
+			routeId: '/practices/[practiceId]/clients',
+		},
 		{
 			key: 'client',
 			title: 'Alex Rivera',
 			path: '/practices/p_7f3a/clients/c_91b2',
+			routeId: '/practices/[practiceId]/clients/[clientId]',
 		},
 	],
 	portal: [
-		{ key: 'care', title: 'Your care', path: '/portal/engagements/e_55c0' },
+		{
+			key: 'care',
+			title: 'Your care',
+			path: '/portal/engagements/e_55c0',
+			routeId: '/portal/(authenticated)/engagements/[engagementId]',
+		},
 		{
 			key: 'contract',
 			title: 'Contract',
 			path: '/portal/engagements/e_55c0/contract',
+			routeId: '/portal/(authenticated)/engagements/[engagementId]/contract',
 		},
 	],
 };
