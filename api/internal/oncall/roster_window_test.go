@@ -13,13 +13,13 @@ import (
 // and one active birth due 2026-10-30, whose default window is
 // 2026-10-09..2026-11-13.
 type soloFixture struct {
-	practiceID, ownerUID, doulaID, engagementID string
+	practiceID, ownerUID, ownerID, doulaID, engagementID string
 }
 
 func newSoloFixture(t *testing.T, db *testdb.DB, prefix string) soloFixture {
 	t.Helper()
 	f := soloFixture{ownerUID: prefix + "-owner"}
-	f.practiceID, _ = testdb.SeedStaffAtNewPractice(t, db, f.ownerUID, []string{ownerRole}, employeeType)
+	f.practiceID, f.ownerID = testdb.SeedStaffAtNewPractice(t, db, f.ownerUID, []string{ownerRole}, employeeType)
 	testdb.SetPracticeTimezone(t, db, f.practiceID, zone)
 	f.doulaID = testdb.SeedNamedStaffAtPractice(t, db, f.practiceID, prefix+"-doula", "Maya Primary", []string{doulaRole}, employeeType)
 	f.engagementID = seedBirth(t, db, f.practiceID, "Ada Whitfield", "2026-10-30")

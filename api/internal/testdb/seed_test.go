@@ -8,9 +8,12 @@ import (
 	"doula-cloud/api/internal/testdb"
 )
 
-// doulaRole is named once so golangci-lint's goconst check doesn't see
-// three independent "doula" literals across this file's tests.
-const doulaRole = "doula"
+// doulaRole and ownerRole are named once so golangci-lint's goconst check
+// doesn't see independent role literals across this file's tests.
+const (
+	doulaRole = "doula"
+	ownerRole = "owner"
+)
 
 // namespacedCamille is the Portal Account identifier TestPortalUID
 // expects both ways round, named once for the same goconst reason.
@@ -116,7 +119,7 @@ func TestSeedBillingMode(t *testing.T) {
 func TestSeedStaffAtPractice(t *testing.T) {
 	db := testdb.New(t)
 	practiceID := testdb.SeedPractice(t, db, "Seed Test Practice")
-	staffID := testdb.SeedStaffAtPractice(t, db, practiceID, "seed-test-staff", []string{"owner", doulaRole}, "contractor")
+	staffID := testdb.SeedStaffAtPractice(t, db, practiceID, "seed-test-staff", []string{ownerRole, doulaRole}, "contractor")
 
 	var name, email string
 	if err := db.Admin.QueryRowContext(t.Context(),
@@ -192,6 +195,56 @@ func TestRemoveMembership(t *testing.T) {
 	}
 	if staffRows != 1 {
 		t.Fatalf("staff rows = %d, want the person herself still on file", staffRows)
+	}
+}
+
+// TestEndMembership proves the fixture leaves what
+// RemoveMembershipHandler leaves: her Membership gone, her staff row
+// standing, and one 'removed' event naming what she held and who removed
+// her -- the same "removed:doula->/employee->" shape
+// TestRemoveMembershipHandler_Success reads back from the handler (#1455).
+func TestEndMembership(t *testing.T) {
+	db := testdb.New(t)
+	practiceID := testdb.SeedPractice(t, db, "End Membership Test Practice")
+	ownerID := testdb.SeedStaffAtPractice(t, db, practiceID, "end-membership-owner", []string{ownerRole}, "employee")
+	staffID := testdb.SeedNamedStaffAtPractice(t, db, practiceID, "end-membership-staff", "Maya Okonkwo", []string{doulaRole}, "employee")
+
+	testdb.EndMembership(t, db, practiceID, staffID, ownerID)
+
+	var memberships, staffRows int
+	if err := db.Admin.QueryRowContext(t.Context(),
+		`SELECT count(*) FROM practice_memberships WHERE staff_id = $1`, staffID,
+	).Scan(&memberships); err != nil {
+		t.Fatalf("count memberships: %v", err)
+	}
+	if memberships != 0 {
+		t.Fatalf("memberships = %d, want none left", memberships)
+	}
+	if err := db.Admin.QueryRowContext(t.Context(),
+		`SELECT count(*) FROM staff WHERE id = $1`, staffID,
+	).Scan(&staffRows); err != nil {
+		t.Fatalf("count staff: %v", err)
+	}
+	if staffRows != 1 {
+		t.Fatalf("staff rows = %d, want the person herself still on file", staffRows)
+	}
+
+	var event, actor string
+	if err := db.Admin.QueryRowContext(t.Context(),
+		`SELECT action || ':' || (diff->'roles'->>'from') || '->' || (diff->'roles'->>'to') ||
+		        '/' || (diff->'employmentType'->>'from') || '->' || (diff->'employmentType'->>'to'),
+		        actor_staff_id
+		   FROM activity
+		  WHERE practice_id = $1 AND subject_kind = 'membership' AND subject_id = $2`,
+		practiceID, staffID,
+	).Scan(&event, &actor); err != nil {
+		t.Fatalf("read membership event: %v", err)
+	}
+	if event != "removed:doula->/employee->" {
+		t.Fatalf("event = %q, want %q", event, "removed:doula->/employee->")
+	}
+	if actor != ownerID {
+		t.Fatalf("actor = %q, want the Owner %q", actor, ownerID)
 	}
 }
 
@@ -280,7 +333,7 @@ func TestRedactDeletedLogin(t *testing.T) {
 // Staff member on it with the roles and employment type given.
 func TestSeedStaffAtNewPractice(t *testing.T) {
 	db := testdb.New(t)
-	practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, "seed-test-new-practice-owner", []string{"owner"}, "employee")
+	practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, "seed-test-new-practice-owner", []string{ownerRole}, "employee")
 
 	var roles string
 	if err := db.Admin.QueryRowContext(t.Context(),

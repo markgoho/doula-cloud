@@ -999,8 +999,12 @@ func TestCreateHandler_JSONRequestStillTextOnly(t *testing.T) {
 // row, same as the gap #887/#1150 named activity.DepartedStaffName ("a
 // former colleague") for the Activity ledger, so a Staff reader here now
 // reads that same word rather than the "" the code produced before this
-// fix -- and, since RemoveMembership already makes the row unreachable,
-// still not the redacted "Deleted Staff Member" ADR-0033 writes to it.
+// fix -- and still not the redacted "Deleted Staff Member" ADR-0033
+// writes to it. Her departure carries the 'removed' event
+// endEveryMembership writes (#1455), with her as her own actor, so this
+// is 00116's own carve-out at work: the Membership history names her,
+// but staff_visible_to_own_practice_membership_history refuses a row
+// with deleted_at set.
 func TestListHandler_SenderWhoDeletedHerLoginShowsAFormerColleague(t *testing.T) {
 	const identityUIDSender = "staff-side-deleted-login-sender"
 	const identityUIDReader = "staff-side-deleted-login-reader"
@@ -1021,7 +1025,7 @@ func TestListHandler_SenderWhoDeletedHerLoginShowsAFormerColleague(t *testing.T)
 		t.Fatalf("create status = %d, want %d", created.StatusCode, http.StatusCreated)
 	}
 
-	testdb.RemoveMembership(t, db, senderID)
+	testdb.EndMembership(t, db, practiceID, senderID, senderID)
 	if _, err := db.Admin.ExecContext(t.Context(),
 		`UPDATE staff SET name = $1, deleted_at = now() WHERE id = $2`,
 		staffauth.DeletedStaffName, senderID,
@@ -1049,14 +1053,15 @@ func TestListHandler_SenderWhoDeletedHerLoginShowsAFormerColleague(t *testing.T)
 	}
 }
 
-// TestListHandler_SenderWhoPlainlyLeftShowsAFormerColleague is
+// TestListHandler_SenderWhoPlainlyLeftStillNamesHer is
 // TestListHandler_SenderWhoDeletedHerLoginShowsAFormerColleague's sibling
 // for a plain departure -- no ADR-0033 login deletion, no redacted staff
-// row -- proving the fallback is reached by RemoveMembership alone: #1322
-// AC1's root cause is staff_practice_visibility (00002) itself, which
-// gates on a live practice_memberships row and never looks at
-// staff.deleted_at.
-func TestListHandler_SenderWhoPlainlyLeftShowsAFormerColleague(t *testing.T) {
+// row, and the 'removed' activity event every real removal path writes
+// (#1455). staff_practice_visibility (00002) no longer reaches her row
+// once the Membership is gone, but 00116's
+// staff_visible_to_own_practice_membership_history does: the Practice's
+// own Membership history names her, so the thread still does too.
+func TestListHandler_SenderWhoPlainlyLeftStillNamesHer(t *testing.T) {
 	const identityUIDSender = "staff-side-plain-departure-sender"
 	const identityUIDReader = "staff-side-plain-departure-reader"
 	const body = "See you Thursday."
@@ -1064,7 +1069,7 @@ func TestListHandler_SenderWhoPlainlyLeftShowsAFormerColleague(t *testing.T) {
 	db := testdb.New(t)
 	practiceID := testdb.SeedPractice(t, db, "Staff Side Plain Departure Practice")
 	senderID := testdb.SeedNamedStaffAtPractice(t, db, practiceID, identityUIDSender, "Priya Chandra", []string{doulaRole}, "employee")
-	testdb.SeedStaffAtPractice(t, db, practiceID, identityUIDReader, []string{ownerRole}, "employee")
+	ownerID := testdb.SeedStaffAtPractice(t, db, practiceID, identityUIDReader, []string{ownerRole}, "employee")
 	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Nadia Client", "nadia-staff-side-plain@example.com")
 
 	senderSrv, senderSession := newServer(t, db, identityUIDSender)
@@ -1076,7 +1081,7 @@ func TestListHandler_SenderWhoPlainlyLeftShowsAFormerColleague(t *testing.T) {
 		t.Fatalf("create status = %d, want %d", created.StatusCode, http.StatusCreated)
 	}
 
-	testdb.RemoveMembership(t, db, senderID)
+	testdb.EndMembership(t, db, practiceID, senderID, ownerID)
 
 	readerSrv, readerSession := newServer(t, db, identityUIDReader)
 	defer readerSrv.Close()
@@ -1093,7 +1098,7 @@ func TestListHandler_SenderWhoPlainlyLeftShowsAFormerColleague(t *testing.T) {
 	if len(thread.Items) != 1 {
 		t.Fatalf("thread = %+v, want the one Message she sent", thread.Items)
 	}
-	if thread.Items[0].SenderName != activity.DepartedStaffName {
-		t.Fatalf("senderName = %q, want %q", thread.Items[0].SenderName, activity.DepartedStaffName)
+	if thread.Items[0].SenderName != "Priya Chandra" {
+		t.Fatalf("senderName = %q, want %q", thread.Items[0].SenderName, "Priya Chandra")
 	}
 }

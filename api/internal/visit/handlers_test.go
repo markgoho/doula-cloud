@@ -224,24 +224,60 @@ func TestListHandler_ReturnsVisitsForEngagement(t *testing.T) {
 
 // TestListHandler_AssigneeWhoLeftStillShowsTheVisit is #1322's fix for
 // listVisits' own gap: JOIN staff was an INNER JOIN, so once the
-// assigned Doula's Membership ended (RemoveMembership -- a plain
-// departure or ADR-0033's login deletion, both a hard DELETE FROM
-// practice_memberships), staff_practice_visibility (00002) made her row
-// unreachable and the join predicate excluded the whole Visit, not just
-// her name -- the audit-trail gap CLAUDE.md names ("who did it and
-// when" must stay answerable). The now-LEFT JOIN keeps the row and
-// names her activity.DepartedStaffName ("a former colleague"), the same
-// word #887/#1150 settled on for the Activity ledger and #1322's
-// message.listMessages now also uses.
+// assigned Doula's Membership ended, staff_practice_visibility (00002)
+// made her row unreachable and the join predicate excluded the whole
+// Visit, not just her name -- the audit-trail gap CLAUDE.md names ("who
+// did it and when" must stay answerable). The now-LEFT JOIN keeps the
+// row. Her departure carries the 'removed' event every real removal path
+// writes (#1455), so 00116's
+// staff_visible_to_own_practice_membership_history reaches her row again
+// and the Visit still names her.
 func TestListHandler_AssigneeWhoLeftStillShowsTheVisit(t *testing.T) {
 	db := testdb.New(t)
-	practiceID, assigneeID := testdb.SeedStaffAtNewPractice(t, db, "visit-assignee-who-left", []string{doulaRole}, "employee")
+	practiceID := testdb.SeedPractice(t, db, "Visit Assignee Who Left Practice")
+	assigneeID := testdb.SeedNamedStaffAtPractice(t, db, practiceID, "visit-assignee-who-left", "Priya Chandra", []string{doulaRole}, "employee")
+	ownerID := testdb.SeedStaffAtPractice(t, db, practiceID, "visit-list-reader", []string{ownerRole}, "employee")
+	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
+	visitID := seedVisit(t, db, engagementID, assigneeID)
+
+	testdb.EndMembership(t, db, practiceID, assigneeID, ownerID)
+
+	list := listDepartedAssigneeVisits(t, db, practiceID, engagementID, visitID, assigneeID)
+	if list[0].StaffName != "Priya Chandra" {
+		t.Fatalf("staffName = %q, want %q", list[0].StaffName, "Priya Chandra")
+	}
+}
+
+// TestListHandler_AssigneeWhoDeletedHerLoginShowsAFormerColleague is
+// TestListHandler_AssigneeWhoLeftStillShowsTheVisit's sibling for
+// ADR-0033's login deletion: 00116 refuses a redacted staff row on
+// purpose, so the LEFT JOIN finds nothing and the Visit names her
+// activity.DepartedStaffName ("a former colleague"), the same word
+// #887/#1150 settled on for the Activity ledger -- never the "Deleted
+// Staff Member" sentinel the redaction writes.
+func TestListHandler_AssigneeWhoDeletedHerLoginShowsAFormerColleague(t *testing.T) {
+	db := testdb.New(t)
+	practiceID := testdb.SeedPractice(t, db, "Visit Assignee Deleted Login Practice")
+	assigneeID := testdb.SeedNamedStaffAtPractice(t, db, practiceID, "visit-assignee-deleted-login", "Priya Chandra", []string{doulaRole}, "employee")
 	testdb.SeedStaffAtPractice(t, db, practiceID, "visit-list-reader", []string{ownerRole}, "employee")
 	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
 	visitID := seedVisit(t, db, engagementID, assigneeID)
 
-	testdb.RemoveMembership(t, db, assigneeID)
+	testdb.EndMembership(t, db, practiceID, assigneeID, assigneeID)
+	testdb.RedactDeletedLogin(t, db, assigneeID)
 
+	list := listDepartedAssigneeVisits(t, db, practiceID, engagementID, visitID, assigneeID)
+	if list[0].StaffName != activity.DepartedStaffName {
+		t.Fatalf("staffName = %q, want %q", list[0].StaffName, activity.DepartedStaffName)
+	}
+}
+
+// listDepartedAssigneeVisits reads engagementID's Visits as the
+// "visit-list-reader" Owner and checks the one Visit is still there,
+// still carrying the departed assignee's id -- the half both departure
+// tests share, before each asserts the name it expects.
+func listDepartedAssigneeVisits(t *testing.T, db *testdb.DB, practiceID, engagementID, visitID, assigneeID string) []visit.Visit {
+	t.Helper()
 	srv, session := newServer(t, db, "visit-list-reader")
 	defer srv.Close()
 
@@ -262,9 +298,7 @@ func TestListHandler_AssigneeWhoLeftStillShowsTheVisit(t *testing.T) {
 	if list[0].StaffID != assigneeID {
 		t.Fatalf("staffId = %q, want %q -- her id, unlike her name, is never lost", list[0].StaffID, assigneeID)
 	}
-	if list[0].StaffName != activity.DepartedStaffName {
-		t.Fatalf("staffName = %q, want %q", list[0].StaffName, activity.DepartedStaffName)
-	}
+	return list
 }
 
 func TestListHandler_VisibleToNonDoulaStaff(t *testing.T) {
