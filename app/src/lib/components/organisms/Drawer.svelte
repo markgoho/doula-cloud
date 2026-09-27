@@ -45,15 +45,40 @@
 
 	let dialog = $state<HTMLDialogElement>();
 
-	// The same 28rem the stylesheet below sizes the panel with
-	// (`inline-size: min(28rem, 100%)`): below it, `min()` resolves to
-	// 100% and the panel covers the whole screen, so that is exactly when
-	// it must behave as a modal.
-	const FULL_WIDTH_QUERY = '(width < 28rem)';
+	/*
+	 * Whether the room this instance was given is under 28rem -- the same
+	 * number the stylesheet below sizes the panel with
+	 * (`inline-size: min(28rem, 100%)`), so the CSS and this decision
+	 * stay in step. A container query, per ADR-0024 rule 2 ("the only
+	 * sanctioned escape hatch" for a space decision) rather than a
+	 * viewport media query: `.scope` below (a plain wrapper in normal
+	 * flow, wherever a caller places this component) is the named
+	 * container -- the same `container: name / inline-size` shape
+	 * `StaffTopBar.svelte` already uses, and named for the same reason:
+	 * an unnamed query that failed to find it would silently fall back to
+	 * the page as its container and read as a viewport query again, with
+	 * no test able to tell.
+	 *
+	 * `--drawer-full-width` is set on `dialog` itself, never on `.scope`:
+	 * a size container query cannot restyle the element that establishes
+	 * the container (verified directly -- self-targeting compiled and ran
+	 * with no error, but the condition silently never matched, in every
+	 * width this component's own spec tries). `dialog` is `.scope`'s
+	 * child, so this reads the value the cascade already resolved onto it
+	 * rather than re-deriving it from `window.innerWidth`, which would
+	 * answer for the window and not for wherever this component actually
+	 * sits.
+	 */
+	function isFullWidth(): boolean {
+		/* v8 ignore next -- dialog is bound via bind:this before this
+		   function is ever called from the effect below. */
+		if (!dialog) return true;
+		return getComputedStyle(dialog).getPropertyValue('--drawer-full-width').trim() === '1';
+	}
 
 	$effect(() => {
 		syncDialogOpen(dialog, open, (d) => {
-			if (matchMedia(FULL_WIDTH_QUERY).matches) {
+			if (isFullWidth()) {
 				d.showModal();
 			} else {
 				d.show();
@@ -97,24 +122,66 @@
 
 <svelte:window onkeydown={handleKeydown} />
 
-<dialog bind:this={dialog} aria-label={heading} tabindex="-1" onclose={handleClose}>
-	<div class="head">
-		<Heading level={2} text={heading} />
-		<Button label="Close" variant="secondary" size="sm" onClick={() => (open = false)} />
-	</div>
-	<div class="body">
-		{@render children()}
-	</div>
-</dialog>
+<div class="scope">
+	<dialog bind:this={dialog} aria-label={heading} tabindex="-1" onclose={handleClose}>
+		<div class="head">
+			<Heading level={2} text={heading} />
+			<Button label="Close" variant="secondary" size="sm" onClick={() => (open = false)} />
+		</div>
+		<div class="body">
+			{@render children()}
+		</div>
+	</dialog>
+</div>
 
 <style>
 	@layer components {
 		/*
+		 * The measured element (ADR-0024 rule 2): a plain block in normal
+		 * flow, so its own width is however much room a caller's layout
+		 * actually gives this instance -- the viewport today, wherever
+		 * nothing yet narrows it, and whatever a future embedding host
+		 * gives it without this component changing at all. Named, the
+		 * same `container: name / inline-size` shape `StaffTopBar.svelte`
+		 * already uses and for the same reason: an unnamed query that
+		 * failed to find this declaration would silently resolve against
+		 * the page and be a viewport query again, with no test able to
+		 * tell.
+		 */
+		.scope {
+			container: drawer-scope / inline-size;
+		}
+
+		/* `--drawer-full-width` lives on `dialog` below, not here: a size
+		   container query cannot restyle the element that establishes the
+		   container -- verified directly, self-targeting `.scope` compiled
+		   and ran with no error, but the condition silently never matched
+		   at any width this component's own spec tried. `dialog` is
+		   `.scope`'s child, so it is a legal target. Full width is the
+		   default and this narrows it, rather than the other way round,
+		   because `layout.usage.spec.ts`'s own tooling (ADR-0025) only
+		   recognizes a `min-width` shape -- there is no `max-width` form of
+		   this rule to hold the opposite direction. */
+		dialog {
+			--drawer-full-width: 1;
+		}
+
+		/* The same 28rem the panel is sized with, below: at or past it,
+		   `min(28rem, 100%)` resolves to 28rem and the panel sits beside a
+		   space that stays readable and scrollable, so that is exactly
+		   when it must stop behaving as a modal. */
+		@container drawer-scope (min-width: 28rem) {
+			dialog {
+				--drawer-full-width: 0;
+			}
+		}
+
+		/*
 		 * Over the screen, never beside it (AC1): fixed to the viewport
 		 * rather than sized by a layout parent, so the screen under it
 		 * keeps its own layout and never reflows. 28rem is the AC's own
-		 * number (AC2); `FULL_WIDTH_QUERY` above reads the same value so
-		 * the two stay in step.
+		 * number (AC2); the `@container drawer-scope` rule above reads the
+		 * same value so the two stay in step.
 		 *
 		 * The UA's own modal caps (`max-inline-size`/`max-block-size`)
 		 * have to go the same way `StaffTopBar`'s full-screen sheet
@@ -137,6 +204,13 @@
 			inset-inline-start: auto;
 			inset-inline-end: 0;
 			margin: 0;
+			/* The pairing (ADR-0024 rule 4): `.scope` above is a new
+			   containment context, so this re-declares the base size on
+			   its child rather than letting the dialog's text inherit
+			   whatever `--text-body-size`'s own `cqi` resolved to outside
+			   it -- the viewport's width when the panel itself is 28rem,
+			   which is not the same number. */
+			font-size: var(--text-body-size);
 			inline-size: min(28rem, 100%);
 			block-size: 100%;
 			max-inline-size: none;

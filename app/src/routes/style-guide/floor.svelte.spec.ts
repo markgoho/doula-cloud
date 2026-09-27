@@ -210,7 +210,15 @@ const CRITERIA: Readonly<Record<string, Criterion>> = {
  * an empty named hatch makes the next exception visible in a diff, and
  * deleting it would make one invisible instead.
  */
-const UNDERIVABLE: Readonly<Record<string, string>> = {};
+const UNDERIVABLE: Readonly<Record<string, string>> = {
+	'organisms/Drawer.svelte#1': (
+		'28rem is a decided panel width (#1502), not a content-derived floor: the drawer renders the ' +
+		'same markup and the same content on both sides of it, and what changes is which browser API ' +
+		"opens the dialog (showModal() versus show()), never the DOM tree -- so there is no 'does the " +
+		"content overflow' question for `overflow` (there is one tree, not two) and no cap, no-wrap or " +
+		'single-row question either. #1521 is the ticket the number belongs to.'
+	)
+};
 
 // `../../lib/components/organisms/DataTable.svelte` -> `organisms/DataTable.svelte#1`
 function toRegistryKey(condition: Condition): string {
