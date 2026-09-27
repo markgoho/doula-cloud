@@ -56,6 +56,9 @@ type fromTo struct {
 // means "this fact did not move", never "this fact became blank". A
 // Membership always holds at least one role and exactly one employment
 // type, so no real value is ever empty and the two cases cannot collide.
+//
+// testdb.EndMembership writes the 'removed' shape of this by hand (it
+// cannot import this package), so a change here changes it there too.
 type membershipDiff struct {
 	Roles          fromTo `json:"roles"`
 	EmploymentType fromTo `json:"employmentType"`

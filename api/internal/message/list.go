@@ -177,8 +177,7 @@ const listMessagesAfterQuery = `SELECT m.id, m.sender_type, m.sender_id,
 // reaching her redacted row. ListHandler (Staff-facing) passes
 // activity.DepartedStaffName (#1322) -- before that fix the same branch
 // produced "", not the redacted "Deleted Staff Member" #1198 assumed.
-// ClientListHandler
-// (#1198) passes activity.StaffActorDisplayName, the
+// ClientListHandler (#1198) passes activity.StaffActorDisplayName, the
 // same word listPortalVisits already stands in with for the identical
 // gap on the Client-portal side.
 func listMessages(ctx context.Context, tx *sql.Tx, engagementID string, after *messageCursor, unresolvedStaffSenderName string) ([]Message, bool, error) {
