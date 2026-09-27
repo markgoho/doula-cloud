@@ -28,7 +28,7 @@ type StripeEraser interface {
 // account there to delete (ADR-0026).
 //
 // It is the only outbox worker in this product that sends no mail. It
-// still rides outbox.ProcessPending because the machinery is what it
+// still rides outbox.Worker.HandlePending because the machinery is what it
 // needs -- claim with SKIP LOCKED, retry on the shared backoff schedule,
 // dead-letter when retrying stops being worth it -- and none of that is
 // about email.
@@ -74,7 +74,7 @@ func scanErasureRow(rows *sql.Rows) (erasurePendingRow, error) {
 
 // ProcessPending performs every due erasure act within tx.
 func (w ErasureWorker) ProcessPending(ctx context.Context, tx *sql.Tx) error {
-	if err := outbox.ProcessPending(ctx, tx, w.inner(), erasureClaimQuery, scanErasureRow, w.perform); err != nil {
+	if err := w.inner().HandlePending(ctx, tx, erasureClaimQuery, scanErasureRow, w.perform); err != nil {
 		// coverage:ignore reason: only reached by a DB failure inside the outbox package, not exercised by unit tests
 		return fmt.Errorf("client: %w", err)
 	}

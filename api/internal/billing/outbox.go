@@ -83,7 +83,7 @@ func QueueOutOfCreditsNotification(ctx context.Context, db *sql.DB, practiceID s
 }
 
 // Worker sends due low_credit_outbox rows -- the Cloud-Scheduler-driven
-// half of ADR-0010's outbox (outbox.ProcessPending owns the claim/retry/
+// half of ADR-0010's outbox (outbox.Worker.HandlePending owns the claim/retry/
 // dead-letter machinery every mail kind shares).
 //
 // Hand-written rather than built on outbox.MailWorker[R] (#839): it is
@@ -136,7 +136,7 @@ func wrapOutboxErr(err error) error {
 // with zero Owners at send time is marked sent with nothing to mail --
 // there is no one left to notify.
 func (w Worker) ProcessPending(ctx context.Context, tx *sql.Tx) error {
-	return wrapOutboxErr(outbox.ProcessPending(ctx, tx, w.inner(), claimQuery, scanRow, w.send))
+	return wrapOutboxErr(w.inner().HandlePending(ctx, tx, claimQuery, scanRow, w.send))
 }
 
 func (w Worker) send(ctx context.Context, tx *sql.Tx, inner outbox.Worker, r pendingRow, now time.Time) error {

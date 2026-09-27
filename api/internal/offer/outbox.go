@@ -48,7 +48,7 @@ func queue(ctx context.Context, tx *sql.Tx, offerID, token, code string) error {
 }
 
 // Worker sends due engagement_offer_outbox rows -- the
-// Cloud-Scheduler-driven half of ADR-0010's outbox (outbox.ProcessPending
+// Cloud-Scheduler-driven half of ADR-0010's outbox (outbox.Worker.HandlePending
 // owns the claim/retry/dead-letter machinery every mail kind shares).
 //
 // Hand-written rather than built on outbox.MailWorker[R], unlike most of
@@ -117,7 +117,7 @@ func wrapOutboxErr(err error) error {
 // sent is never mailed. The credentials come from the outbox row, not
 // the join, and are cleared once the row leaves 'pending'.
 func (w Worker) ProcessPending(ctx context.Context, tx *sql.Tx) error {
-	return wrapOutboxErr(outbox.ProcessPending(ctx, tx, w.inner(), claimQuery, scanRow, w.send))
+	return wrapOutboxErr(w.inner().HandlePending(ctx, tx, claimQuery, scanRow, w.send))
 }
 
 // send resolves one pending row: skipped if the Offer is no longer open,
