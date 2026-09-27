@@ -12,6 +12,10 @@ import { jsonResponse } from '#lib/testResponse.js';
 import Page from './+page.svelte';
 import { toPageState } from '../../../../routeFixture.js';
 import { asDoula, fixture } from './page.fixture.js';
+// The loading Skeleton reserves space with `var(--text-body-size)`, which
+// only exists once the tokens are loaded -- the real app loads them in the
+// root layout. See FormPage.svelte.spec.ts's identical import.
+import '#lib/styles/app.css';
 
 const pageState = vi.hoisted(() => ({
 	params: {} as Record<string, string>,
@@ -166,6 +170,15 @@ describe('the Timezone screen, as a Doula', () => {
 		await expect.element(control()).not.toBeInTheDocument();
 		await expect.element(testPage.getByRole('button', { name: 'Save' })).not.toBeInTheDocument();
 		await expect.element(testPage.getByRole('alert')).not.toBeInTheDocument();
+	});
+
+	it('says the zone is loading, rather than showing an empty row, until the read answers', async () => {
+		apiFetchWithSession.mockReturnValueOnce(new Promise(() => {}));
+		await render(Page, {});
+
+		await expect
+			.element(testPage.getByRole('status', { name: 'Loading the timezone' }))
+			.toBeVisible();
 	});
 
 	it('shows a stored zone outside the seven-entry list by its own name', async () => {

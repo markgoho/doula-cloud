@@ -34,6 +34,9 @@
 
 	let timezone = $state('');
 	let isSaved = $state(false);
+	/* Until the read answers, the zone is unknown: an empty select or an
+	   empty read-only row would say "no zone" when the truth is "not yet". */
+	let isLoaded = $state(false);
 	const submission = new FormSubmission();
 
 	/* The label a person would say, from the same list the select offers,
@@ -56,6 +59,8 @@
 			timezone = current.timezone;
 		} catch (error) {
 			submission.errors = errorsFromCause(error);
+		} finally {
+			isLoaded = true;
 		}
 	}
 
@@ -126,5 +131,6 @@
 	title="Timezone"
 	fieldsets={[{ content: canChangeTimezone ? fields : readOnlyFields }]}
 	{actions}
+	loading={isLoaded ? undefined : 'Loading the timezone'}
 	errorSummary={submission.errors.length > 0 ? errorSummary : undefined}
 />
