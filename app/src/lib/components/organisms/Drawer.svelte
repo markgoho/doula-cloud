@@ -136,6 +136,17 @@
 		dialog {
 			position: fixed;
 			inset-block: 0;
+			/* The UA stylesheet centers a <dialog> with `inset: 0` (all
+			   four sides) plus `margin: auto`; overriding `margin` alone
+			   still leaves its own `inset-inline-start: 0` in effect
+			   alongside this rule's `inset-inline-end: 0` below, and with
+			   both sides and an explicit width set, the CSS spec's
+			   over-constrained resolution keeps `inset-inline-start` and
+			   drops `inset-inline-end` in a left-to-right document --
+			   measured directly: without this the panel pinned to the
+			   wrong edge. `auto` here is what actually cedes the position
+			   to `inset-inline-end`. */
+			inset-inline-start: auto;
 			inset-inline-end: 0;
 			margin: 0;
 			inline-size: min(28rem, 100%);
