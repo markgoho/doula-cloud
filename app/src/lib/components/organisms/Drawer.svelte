@@ -20,13 +20,15 @@
 	 * narrower than the screen -- and there is no CSS that can choose
 	 * between two different JS calls.
 	 *
-	 * No hand-written focus trap: `showModal()` gives the modal case its
-	 * trap and its own Escape handling for free. A non-modal `show()`
-	 * dialog never enters the top layer, so it gets neither for free --
-	 * `handleKeydown` below supplies only the Escape close that path is
-	 * missing, and focus return is supplied explicitly for both paths
-	 * (`opener`) rather than assumed of the browser for one and hand-built
-	 * for the other.
+	 * No hand-written focus trap and no hand-written focus return either:
+	 * the HTML spec's `close()` steps restore focus to whatever was
+	 * focused before `show()`/`showModal()` was called, for both --
+	 * verified directly (removing an earlier explicit `opener` variable
+	 * changed nothing this component's own spec asserts). `showModal()`
+	 * additionally traps focus and closes on Escape for the modal case; a
+	 * non-modal `show()` dialog never enters the top layer, so
+	 * `handleKeydown` below supplies only the one thing that path is
+	 * missing -- Escape closing it.
 	 */
 	interface Properties {
 		open?: boolean;
@@ -42,12 +44,6 @@
 	let { open = $bindable(false), heading, children }: Properties = $props();
 
 	let dialog = $state<HTMLDialogElement>();
-	// Captured explicitly rather than left to the browser: the platform
-	// restores focus to whatever had it before `showModal()`, but makes no
-	// such promise for `show()` (a non-modal dialog never enters the top
-	// layer), so both paths return focus the same explicit way instead of
-	// one path relying on a platform behavior the other path cannot have.
-	let opener: HTMLElement | null | undefined;
 
 	// The same 28rem the stylesheet below sizes the panel with
 	// (`inline-size: min(28rem, 100%)`): below it, `min()` resolves to
@@ -57,11 +53,6 @@
 
 	$effect(() => {
 		syncDialogOpen(dialog, open, (d) => {
-			// `document.activeElement` is typed `Element | null` because a
-			// focusable SVG element is possible in principle; this app has
-			// none, so the cast stays a type-level convenience rather than
-			// a runtime branch that would never see its other side taken.
-			opener = document.activeElement as HTMLElement | null;
 			if (matchMedia(FULL_WIDTH_QUERY).matches) {
 				d.showModal();
 			} else {
@@ -74,42 +65,39 @@
 			 * at all -- neither is what the reviewed prototype does
 			 * ("focus goes to the drawer's heading", #1502). The dialog
 			 * itself carries that name (`aria-label`), so focusing it
-			 * (via the `tabindex="-1"` below) both announces it and, for
-			 * the non-modal path, gives `handleKeydown` an Escape to
-			 * bubble from -- it never fires while the trigger outside
-			 * still has focus.
+			 * (via the `tabindex="-1"` below) announces it, and a
+			 * keyboard user starts inside the panel rather than on the
+			 * trigger behind it.
 			 */
 			d.focus();
 		});
 	});
 
 	// Fires on Escape, on light dismiss, and on any close() call -- the one
-	// place that needs to sync `open` back and return focus, whichever of
-	// those closed the dialog.
+	// place that needs to sync `open` back, whichever of those closed the
+	// dialog.
 	function handleClose() {
 		open = false;
-		opener?.focus();
-		opener = undefined;
 	}
 
 	// The browser's own Escape handling only exists for a dialog in the top
 	// layer (`showModal()`). A non-modal one (`show()`) is a plain element
 	// with no such handling, so this supplies exactly the part that is
 	// missing rather than duplicating what `:modal` already does for free.
+	//
+	// On the window, not on the dialog: the non-modal case leaves the
+	// uncovered screen interactive, so focus can be out there when Escape
+	// is pressed, and a keydown there never bubbles through the dialog.
 	function handleKeydown(event: KeyboardEvent) {
-		if (dialog && event.key === 'Escape' && !dialog.matches(':modal')) {
+		if (dialog?.open && event.key === 'Escape' && !dialog.matches(':modal')) {
 			open = false;
 		}
 	}
 </script>
 
-<dialog
-	bind:this={dialog}
-	aria-label={heading}
-	tabindex="-1"
-	onclose={handleClose}
-	onkeydown={handleKeydown}
->
+<svelte:window onkeydown={handleKeydown} />
+
+<dialog bind:this={dialog} aria-label={heading} tabindex="-1" onclose={handleClose}>
 	<div class="head">
 		<Heading level={2} text={heading} />
 		<Button label="Close" variant="secondary" size="sm" onClick={() => (open = false)} />

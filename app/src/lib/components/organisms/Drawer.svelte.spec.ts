@@ -98,13 +98,15 @@ describe('when it takes the full width (a narrow screen)', () => {
 		expect(page.getByRole('dialog').element().contains(document.activeElement)).toBe(true);
 	});
 
-	it('closes on Escape', async () => {
+	it('closes on Escape and returns focus to the opener', async () => {
 		await page.viewport(...NARROW);
-		await setupOpenFromTrigger();
+		const { trigger } = await setupOpenFromTrigger();
 
 		await userEvent.keyboard('{Escape}');
 
 		await expect.element(page.getByRole('dialog')).not.toBeInTheDocument();
+		expect(document.activeElement).toBe(trigger);
+		trigger.remove();
 	});
 
 	it('returns focus to the opener on Close', async () => {
@@ -142,13 +144,44 @@ describe('when it is narrower than the full width', () => {
 		outside.remove();
 	});
 
-	it('still closes on Escape', async () => {
+	it('still closes on Escape and returns focus to the opener', async () => {
 		await page.viewport(...WIDE);
-		await setupOpenFromTrigger();
+		const { trigger } = await setupOpenFromTrigger();
 
 		await userEvent.keyboard('{Escape}');
 
 		await expect.element(page.getByRole('dialog')).not.toBeInTheDocument();
+		expect(document.activeElement).toBe(trigger);
+		trigger.remove();
+	});
+
+	/*
+	 * The uncovered screen stays interactive, so a person can be focused
+	 * out there when she presses Escape -- a listener on the dialog alone
+	 * would never hear it.
+	 */
+	it('still closes on Escape while focus is on the uncovered screen', async () => {
+		await page.viewport(...WIDE);
+		const outside = document.createElement('button');
+		outside.textContent = 'Elsewhere on the screen';
+		document.body.append(outside);
+		await setupOpenFromTrigger();
+		outside.focus();
+
+		await userEvent.keyboard('{Escape}');
+
+		await expect.element(page.getByRole('dialog')).not.toBeInTheDocument();
+		outside.remove();
+	});
+
+	it('does nothing on Escape while closed', async () => {
+		await page.viewport(...WIDE);
+		const { rerender } = await setup();
+
+		await userEvent.keyboard('{Escape}');
+		await rerender({ open: true, heading: HEADING, children: CONTENT });
+
+		await expect.element(page.getByRole('dialog')).toBeVisible();
 	});
 
 	it('returns focus to the opener on Close', async () => {
@@ -156,6 +189,16 @@ describe('when it is narrower than the full width', () => {
 		const { trigger } = await setupOpenFromTrigger();
 
 		await page.getByRole('button', { name: 'Close' }).click();
+
+		expect(document.activeElement).toBe(trigger);
+		trigger.remove();
+	});
+
+	it("returns focus to the opener on the caller's own close, for example after a send", async () => {
+		await page.viewport(...WIDE);
+		const { trigger, rerender } = await setupOpenFromTrigger();
+
+		await rerender({ open: false, heading: HEADING, children: CONTENT });
 
 		expect(document.activeElement).toBe(trigger);
 		trigger.remove();
