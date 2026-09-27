@@ -201,7 +201,7 @@ func TestScheduleHandler_ActivatesOnTheLaterSchedule(t *testing.T) {
 		t.Fatalf("care_phase_changed entries = %d, want 1", n)
 	}
 	if got := carePhaseActor(t, db, engagementID); got != actorStaffID {
-		t.Fatalf("status event actor = %q, want the scheduling Staff member %q", got, actorStaffID)
+		t.Fatalf("care phase actor = %q, want the scheduling Staff member %q", got, actorStaffID)
 	}
 }
 

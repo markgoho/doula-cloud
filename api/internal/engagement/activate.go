@@ -39,8 +39,8 @@ import (
 // The write itself is the guard. `WHERE status = 'intake'` decides
 // atomically whether this caller is the one making the move, so a
 // concurrent second write finds no row and reports moved=false rather
-// than laying down a second audit entry claiming the same transition. That is the ordinary, expected answer on the automatic
-// path -- every Visit scheduled after the first one finds the Engagement
+// than laying down a second audit entry claiming the same transition.
+// That is the ordinary, expected answer on the automatic path -- every Visit scheduled after the first one finds the Engagement
 // already 'active' -- and it is what makes ADR-0015's "one-way, one-time"
 // rule hold without a separate read-then-check.
 func ActivateFromIntake(ctx context.Context, tx *sql.Tx, practiceID, engagementID, actorStaffID string) (moved bool, err error) {
