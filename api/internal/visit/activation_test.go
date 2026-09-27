@@ -35,24 +35,11 @@ func engagementStatus(t *testing.T, db *testdb.DB, engagementID string) string {
 	return status
 }
 
-// countStatusEvents counts the engagement_events rows ADR-0015's audit
-// table holds for a status move. "One-way, one-time" is a claim about
+// countCarePhaseEntries counts the activity ledger's care_phase_changed
+// entries -- the one record of the move since #1423 folded
+// engagement_events into activity. "One-way, one-time" is a claim about
 // this count, not only about the status column, so a test that scheduled
 // twice asserts it rather than re-reading 'active'.
-func countStatusEvents(t *testing.T, db *testdb.DB, engagementID string) int {
-	t.Helper()
-	var count int
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`SELECT count(*) FROM engagement_events
-		  WHERE engagement_id = $1 AND event_type = 'status_changed'`, engagementID,
-	).Scan(&count); err != nil {
-		t.Fatalf("count status events: %v", err)
-	}
-	return count
-}
-
-// countCarePhaseEntries is countStatusEvents' twin for the (portal-visible)
-// activity ledger's own care_phase_changed action.
 func countCarePhaseEntries(t *testing.T, db *testdb.DB, engagementID string) int {
 	t.Helper()
 	var count int
@@ -66,27 +53,9 @@ func countCarePhaseEntries(t *testing.T, db *testdb.DB, engagementID string) int
 	return count
 }
 
-// statusEventActor reads the Staff id recorded on the newest
-// 'status_changed' engagement_events row -- ADR-0015's "the event records
-// the person who scheduled, not a null system actor".
-func statusEventActor(t *testing.T, db *testdb.DB, engagementID string) string {
-	t.Helper()
-	var actor *string
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`SELECT actor_staff_id::text FROM engagement_events
-		  WHERE engagement_id = $1 AND event_type = 'status_changed'
-		  ORDER BY created_at DESC LIMIT 1`, engagementID,
-	).Scan(&actor); err != nil {
-		t.Fatalf("read status event actor: %v", err)
-	}
-	if actor == nil {
-		t.Fatal("status event actor is NULL; ADR-0015 requires the person who scheduled")
-	}
-	return *actor
-}
-
-// carePhaseActor is statusEventActor for the activity ledger's own copy of
-// the same move.
+// carePhaseActor reads the Staff id recorded on the newest
+// care_phase_changed entry -- ADR-0015's "the event records the person
+// who scheduled, not a null system actor".
 func carePhaseActor(t *testing.T, db *testdb.DB, engagementID string) string {
 	t.Helper()
 	var actor *string
@@ -140,14 +109,8 @@ func TestCreateHandler_ScheduledVisitActivatesTheEngagement(t *testing.T) {
 	if got := engagementStatus(t, db, engagementID); got != engagement.StatusActive {
 		t.Fatalf("engagement status = %q, want %q", got, engagement.StatusActive)
 	}
-	if n := countStatusEvents(t, db, engagementID); n != 1 {
-		t.Fatalf("status_changed events = %d, want 1", n)
-	}
 	if n := countCarePhaseEntries(t, db, engagementID); n != 1 {
 		t.Fatalf("care_phase_changed entries = %d, want 1", n)
-	}
-	if got := statusEventActor(t, db, engagementID); got != actorStaffID {
-		t.Fatalf("status event actor = %q, want the scheduling Staff member %q", got, actorStaffID)
 	}
 	if got := carePhaseActor(t, db, engagementID); got != actorStaffID {
 		t.Fatalf("care phase actor = %q, want the scheduling Staff member %q", got, actorStaffID)
@@ -178,9 +141,6 @@ func TestCreateHandler_ActivationActorIsTheBookerNotTheAssignee(t *testing.T) {
 	if got := engagementStatus(t, db, engagementID); got != engagement.StatusActive {
 		t.Fatalf("engagement status = %q, want %q", got, engagement.StatusActive)
 	}
-	if got := statusEventActor(t, db, engagementID); got != bookerStaffID {
-		t.Fatalf("status event actor = %q, want the booker %q (assignee is %q)", got, bookerStaffID, assigneeStaffID)
-	}
 	if got := carePhaseActor(t, db, engagementID); got != bookerStaffID {
 		t.Fatalf("care phase actor = %q, want the booker %q (assignee is %q)", got, bookerStaffID, assigneeStaffID)
 	}
@@ -206,9 +166,6 @@ func TestCreateHandler_UnscheduledVisitLeavesTheEngagementAtIntake(t *testing.T)
 
 	if got := engagementStatus(t, db, engagementID); got != engagement.StatusIntake {
 		t.Fatalf("engagement status = %q, want %q", got, engagement.StatusIntake)
-	}
-	if n := countStatusEvents(t, db, engagementID); n != 0 {
-		t.Fatalf("status_changed events = %d, want 0", n)
 	}
 	if n := countCarePhaseEntries(t, db, engagementID); n != 0 {
 		t.Fatalf("care_phase_changed entries = %d, want 0", n)
@@ -240,11 +197,11 @@ func TestScheduleHandler_ActivatesOnTheLaterSchedule(t *testing.T) {
 	if got := engagementStatus(t, db, engagementID); got != engagement.StatusActive {
 		t.Fatalf("engagement status = %q, want %q", got, engagement.StatusActive)
 	}
-	if n := countStatusEvents(t, db, engagementID); n != 1 {
-		t.Fatalf("status_changed events = %d, want 1", n)
+	if n := countCarePhaseEntries(t, db, engagementID); n != 1 {
+		t.Fatalf("care_phase_changed entries = %d, want 1", n)
 	}
-	if got := statusEventActor(t, db, engagementID); got != actorStaffID {
-		t.Fatalf("status event actor = %q, want the scheduling Staff member %q", got, actorStaffID)
+	if got := carePhaseActor(t, db, engagementID); got != actorStaffID {
+		t.Fatalf("care phase actor = %q, want the scheduling Staff member %q", got, actorStaffID)
 	}
 }
 
@@ -269,9 +226,6 @@ func TestScheduleHandler_ClearingAnInstantActivatesNothing(t *testing.T) {
 
 	if got := engagementStatus(t, db, engagementID); got != engagement.StatusIntake {
 		t.Fatalf("engagement status = %q, want %q", got, engagement.StatusIntake)
-	}
-	if n := countStatusEvents(t, db, engagementID); n != 0 {
-		t.Fatalf("status_changed events = %d, want 0", n)
 	}
 	if n := countCarePhaseEntries(t, db, engagementID); n != 0 {
 		t.Fatalf("care_phase_changed entries = %d, want 0", n)
@@ -301,9 +255,6 @@ func TestScheduleHandler_SecondScheduleWritesNoSecondMove(t *testing.T) {
 
 	if got := engagementStatus(t, db, engagementID); got != engagement.StatusActive {
 		t.Fatalf("engagement status = %q, want %q", got, engagement.StatusActive)
-	}
-	if n := countStatusEvents(t, db, engagementID); n != 1 {
-		t.Fatalf("status_changed events = %d, want 1 (the move happens once)", n)
 	}
 	if n := countCarePhaseEntries(t, db, engagementID); n != 1 {
 		t.Fatalf("care_phase_changed entries = %d, want 1 (the move happens once)", n)
@@ -355,9 +306,6 @@ func TestVisitWrites_LeaveAnEngagementPastIntakeAlone(t *testing.T) {
 
 			if got := engagementStatus(t, db, engagementID); got != tc.status {
 				t.Fatalf("engagement status = %q, want it untouched at %q", got, tc.status)
-			}
-			if n := countStatusEvents(t, db, engagementID); n != 0 {
-				t.Fatalf("status_changed events = %d, want 0", n)
 			}
 			if n := countCarePhaseEntries(t, db, engagementID); n != 0 {
 				t.Fatalf("care_phase_changed entries = %d, want 0", n)

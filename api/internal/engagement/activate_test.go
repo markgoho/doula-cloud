@@ -34,14 +34,14 @@ func beginPracticeTx(t *testing.T, db *testdb.DB, practiceID string) *sql.Tx {
 }
 
 // activationRows reads back everything the move is supposed to leave
-// behind, in one place: the Engagement's status, the count and actor of
-// its 'status_changed' engagement_events rows, and the count of
-// care_phase_changed activity entries.
+// behind, in one place: the Engagement's status, and the count and actor
+// of its care_phase_changed activity entries -- the one record of the
+// move since #1423 folded engagement_events' 'status_changed' row into
+// it.
 type activationRows struct {
 	status           string
-	statusEvents     int
-	statusEventActor *string
 	carePhaseEntries int
+	carePhaseActor   *string
 }
 
 func readActivationRows(t *testing.T, tx *sql.Tx, engagementID string) activationRows {
@@ -53,16 +53,10 @@ func readActivationRows(t *testing.T, tx *sql.Tx, engagementID string) activatio
 		t.Fatalf("read status: %v", err)
 	}
 	if err := tx.QueryRowContext(t.Context(),
-		`SELECT count(*), max(actor_staff_id::text) FROM engagement_events
-		  WHERE engagement_id = $1 AND event_type = 'status_changed'`, engagementID,
-	).Scan(&got.statusEvents, &got.statusEventActor); err != nil {
-		t.Fatalf("read status events: %v", err)
-	}
-	if err := tx.QueryRowContext(t.Context(),
-		`SELECT count(*) FROM activity
+		`SELECT count(*), max(actor_staff_id::text) FROM activity
 		  WHERE subject_kind = 'engagement' AND subject_id = $1 AND action = 'care_phase_changed'`,
 		engagementID,
-	).Scan(&got.carePhaseEntries); err != nil {
+	).Scan(&got.carePhaseEntries, &got.carePhaseActor); err != nil {
 		t.Fatalf("read care phase entries: %v", err)
 	}
 	return got
@@ -89,14 +83,11 @@ func TestActivateFromIntake_MovesIntakeToActive(t *testing.T) {
 	if got.status != engagement.StatusActive {
 		t.Fatalf("status = %q, want %q", got.status, engagement.StatusActive)
 	}
-	if got.statusEvents != 1 {
-		t.Fatalf("status_changed events = %d, want 1", got.statusEvents)
-	}
-	if got.statusEventActor == nil || *got.statusEventActor != staffID {
-		t.Fatalf("status event actor = %v, want the scheduling Staff member %q", got.statusEventActor, staffID)
-	}
 	if got.carePhaseEntries != 1 {
 		t.Fatalf("care_phase_changed entries = %d, want 1", got.carePhaseEntries)
+	}
+	if got.carePhaseActor == nil || *got.carePhaseActor != staffID {
+		t.Fatalf("care_phase_changed actor = %v, want the scheduling Staff member %q", got.carePhaseActor, staffID)
 	}
 }
 
@@ -122,9 +113,6 @@ func TestActivateFromIntake_LeavesAnEngagementPastIntakeAlone(t *testing.T) {
 			got := readActivationRows(t, tx, engagementID)
 			if got.status != status {
 				t.Fatalf("status = %q, want it untouched at %q", got.status, status)
-			}
-			if got.statusEvents != 0 {
-				t.Fatalf("status_changed events = %d, want 0", got.statusEvents)
 			}
 			if got.carePhaseEntries != 0 {
 				t.Fatalf("care_phase_changed entries = %d, want 0", got.carePhaseEntries)

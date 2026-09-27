@@ -151,8 +151,8 @@ func TestRecordBirthOutcomeHandler_RolesMayRecord(t *testing.T) {
 			if gotEndedOn == nil || *gotEndedOn != lossOn {
 				t.Fatalf("pregnancy_ended_on = %v, want %s", gotEndedOn, lossOn)
 			}
-			if n := countEngagementEvents(t, db, engagementID); n != 1 {
-				t.Fatalf("engagement_events rows = %d, want 1", n)
+			if n := countFactEntries(t, db, engagementID); n != 1 {
+				t.Fatalf("fact entries = %d, want 1", n)
 			}
 		})
 	}
@@ -221,15 +221,15 @@ func TestRecordBirthOutcomeHandler_FrozenValueRefusesAPlainRecord(t *testing.T) 
 	if gotOutcome == nil || *gotOutcome != engagement.OutcomeLoss {
 		t.Fatalf("birth_outcome = %v, want the frozen loss", gotOutcome)
 	}
-	if n := countEngagementEvents(t, db, engagementID); n != 1 {
-		t.Fatalf("engagement_events rows = %d, want 1 -- the refusal writes nothing", n)
+	if n := countFactEntries(t, db, engagementID); n != 1 {
+		t.Fatalf("fact entries = %d, want 1 -- the refusal writes nothing", n)
 	}
 }
 
 // TestRecordBirthOutcomeHandler_OnlyAnOwnerCorrects walks ADR-0015's
 // correction hatch: an Admin and an employee Doula are refused it, an
 // Owner passes through it, and the correction lands both sides of both
-// facts on engagement_events.
+// facts on its birth_outcome_recorded activity entry.
 func TestRecordBirthOutcomeHandler_OnlyAnOwnerCorrects(t *testing.T) {
 	correctors := []struct {
 		kind   string
@@ -279,31 +279,18 @@ func TestRecordBirthOutcomeHandler_OnlyAnOwnerCorrects(t *testing.T) {
 	}
 }
 
-// assertOutcomeEvent reads the single 'birth_outcome_recorded' row this
-// Engagement's correction wrote and checks both sides of both facts,
-// plus that a human actor is on it -- the cross-cutting audit
-// expectation "how did this thing come to be?".
+// assertOutcomeEvent reads the most recent birth_outcome_recorded
+// activity entry and checks both sides of both facts, plus that a human
+// actor is on it -- the cross-cutting audit expectation "how did this
+// thing come to be?".
 func assertOutcomeEvent(t *testing.T, db *testdb.DB, engagementID, prevOutcome, outcome, prevEndedOn, endedOn string) {
 	t.Helper()
-	var gotPrevOutcome, gotOutcome, gotPrevEndedOn, gotEndedOn string
-	var actor *string
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`SELECT previous_birth_outcome::text, birth_outcome::text,
-		        previous_pregnancy_ended_on::text, pregnancy_ended_on::text, actor_staff_id::text
-		   FROM engagement_events
-		  WHERE engagement_id = $1 AND previous_birth_outcome IS NOT NULL`, engagementID,
-	).Scan(&gotPrevOutcome, &gotOutcome, &gotPrevEndedOn, &gotEndedOn, &actor); err != nil {
-		t.Fatalf("read correction event: %v", err)
-	}
-	if gotPrevOutcome != prevOutcome || gotOutcome != outcome {
-		t.Fatalf("event outcome = %q -> %q, want %q -> %q", gotPrevOutcome, gotOutcome, prevOutcome, outcome)
-	}
-	if gotPrevEndedOn != prevEndedOn || gotEndedOn != endedOn {
-		t.Fatalf("event date = %q -> %q, want %q -> %q", gotPrevEndedOn, gotEndedOn, prevEndedOn, endedOn)
-	}
-	if actor == nil {
-		t.Fatal("actor_staff_id is null, want the Owner who corrected it")
-	}
+	assertDiff(t, readFactDiff(t, db, engagementID, "birth_outcome_recorded"), map[string]any{
+		"birthOutcomeBefore":     prevOutcome,
+		"birthOutcomeAfter":      outcome,
+		"pregnancyEndedOnBefore": prevEndedOn,
+		"pregnancyEndedOnAfter":  endedOn,
+	})
 }
 
 // TestRecordBirthOutcomeHandler_ResendingIsANoOp proves the endpoint is
@@ -325,8 +312,8 @@ func TestRecordBirthOutcomeHandler_ResendingIsANoOp(t *testing.T) {
 			t.Fatalf("birthOutcome = %v, want live_birth", body.BirthOutcome)
 		}
 	}
-	if n := countEngagementEvents(t, db, engagementID); n != 1 {
-		t.Fatalf("engagement_events rows = %d, want 1 -- the resend writes nothing", n)
+	if n := countFactEntries(t, db, engagementID); n != 1 {
+		t.Fatalf("fact entries = %d, want 1 -- the resend writes nothing", n)
 	}
 }
 
@@ -344,8 +331,8 @@ func TestRecordBirthOutcomeHandler_ResendingAnUndatedUnknownIsANoOp(t *testing.T
 			t.Fatalf("status = %d, want 200", status)
 		}
 	}
-	if n := countEngagementEvents(t, db, engagementID); n != 1 {
-		t.Fatalf("engagement_events rows = %d, want 1", n)
+	if n := countFactEntries(t, db, engagementID); n != 1 {
+		t.Fatalf("fact entries = %d, want 1", n)
 	}
 }
 
@@ -484,9 +471,15 @@ func TestRecordBirthOutcomeHandler_AnOwnerCanUnrecord(t *testing.T) {
 	if gotOutcome != nil || gotEndedOn != nil {
 		t.Fatalf("row = (%v, %v), want both cleared", gotOutcome, gotEndedOn)
 	}
-	if n := countEngagementEvents(t, db, engagementID); n != 2 {
-		t.Fatalf("engagement_events rows = %d, want 2 -- the record and the un-recording", n)
+	if n := countFactEntries(t, db, engagementID); n != 2 {
+		t.Fatalf("fact entries = %d, want 2 -- the record and the un-recording", n)
 	}
+	assertDiff(t, readFactDiff(t, db, engagementID, "birth_outcome_recorded"), map[string]any{
+		"birthOutcomeBefore":     engagement.OutcomeLoss,
+		"birthOutcomeAfter":      nil,
+		"pregnancyEndedOnBefore": lossOn,
+		"pregnancyEndedOnAfter":  nil,
+	})
 }
 
 // TestRecordBirthOutcomeHandler_ClearingIsRefusedOnACompletedEngagement

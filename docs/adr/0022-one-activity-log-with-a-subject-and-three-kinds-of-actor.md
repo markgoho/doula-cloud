@@ -57,3 +57,19 @@ So the rule this ADR sets is about Practice-scoped history, which is all the his
 - **Deriving the ledger by joining the tables that already carry timestamps.** Rejected on the evidence: today that yields messages and one signature. Contract sent, Contract voided, Visit reassigned, Plan edited, Offer superseded and Engagement completed are all bare `UPDATE`s with no actor and no time, so the join returns a ledger that is mostly silence about the events people would actually ask after.
 - **Keeping `actor_kind` at `staff | system`** and recording a Client's signature as a system event. Rejected: it makes the product the author of an act a person took, which is the one thing an audit trail exists not to do.
 - **"System" as the display name.** Rejected as jargon, per [ADR-0005](0005-one-context-client-register-at-the-ui-edge.md)'s instinct even though that rule binds only the portal.
+
+## Amendment, 2026-09-27: `engagement_events` was built, and folds back in ([#1423](https://github.com/markgoho/doula-cloud/issues/1423))
+
+**`activity` is the one audit trail for everything that happens at a Practice, and `staff_work_state_events` stays the one exception, for the reason given above.** The first bullet under "Considered and rejected" says a third `engagement_events` table was rejected. Nine days after this document landed, `00090` built that table for [ADR-0015](0015-three-facts-on-an-engagement-the-person-lives-in-the-login.md), and three writers followed it: `status_changed`, `birth_outcome_recorded` and `kind_changed`. Nothing ever read it, so no screen could say who changed an Engagement's status, kind or birth outcome, or from what to what.
+
+**Why it was built.** `00090` states the reason: the table had no client-tier policy, so a Client-portal session could never read it. ADR-0015 calls the audit "the Practice's record of its own acts", and `activity` is visible to a Client unless something excludes it.
+
+**Why that reason does not need a second table.** `activity` already keeps rows away from a Client in two ways. The portal's only reader selects no `diff` column, so no before or after value leaves the database on a Client's read. `activity.StaffingActions()` names the actions that reader excludes outright. So the three facts moved into `activity` under `SubjectEngagement`, and `00117` dropped the table:
+
+- **Status.** Each move writes one entry, never two. The intake to active move writes `care_phase_changed`, and every move to completed writes `engagement_completed`. Both actions existed already, and a Client already sees both. Each now carries both sides of the status, the ending reason and the ending note in its diff, and she never receives that diff. The correction from completed back to active writes a new `engagement_reopened` entry.
+- **Kind and birth outcome.** `kind_changed` and `birth_outcome_recorded` are new actions with both sides in the diff. ADR-0015 makes the birth outcome "staff-only, never Client-facing".
+- **What a Client sees does not change.** `engagement_reopened`, `kind_changed` and `birth_outcome_recorded` are in `StaffingActions()`, so they are exactly as far from a Client as the dropped table was.
+
+A Staff member reads the three facts on the Engagement's own Activity ledger (`engagement.ListActivityHandler`), through the same `reader.CanAccessEngagement` gate as every other entry there. The ledger shows each entry as the change it records, for example "Kind changed: Birth to Postpartum". The Practice-wide feed shows the action name without the diff, as it does for every other subject.
+
+**The rule this sets.** A new fact that must stay away from a Client is a new action in `StaffingActions()`. It is not a new table. The second paragraph of "One log, keyed by subject" gives the cost of a new table, and `engagement_events` paid it: one more table with no reader, and no shared cursor for the feed.

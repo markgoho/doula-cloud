@@ -165,17 +165,18 @@ func refuseUnexplainedCompletion(w http.ResponseWriter, current engagementStatus
 // the manual intake -> active, so there is still one implementation of
 // the move rather than two.
 //
-// Every legal move writes an engagement_events row (ADR-0015's audit
-// table, staff-only, never portal-readable -- see 00090's RLS policy).
-// Two of the four moves also write the (portal-visible-by-default)
-// activity ledger, matching what #476's vocabulary already reserves for
-// them: intake -> active writes ActionCarePhaseChanged, and reaching
-// 'completed' by any legal move writes ActionEngagementCompleted and
-// runs ADR-0008's completion cascade (open Offers withdrawn, open
-// attachments ended) in the same transaction CompleteHandler used to.
-// Reopening (completed -> active) writes only the engagement_events row
-// -- it is a correction, not itself a fact CONTEXT.md's Activity entry
-// names for the ledger.
+// Every legal move writes exactly one activity entry (ADR-0022's one
+// ledger; #1423 folded ADR-0015's engagement_events audit table into
+// it), carrying both sides of the status and of the ending reason and
+// note: intake -> active writes ActionCarePhaseChanged, reaching
+// 'completed' by any legal move writes ActionEngagementCompleted, and
+// reopening (completed -> active) writes ActionEngagementReopened. A
+// Client reads the first two on her portal ledger, never their diff; the
+// reopen is a correction the Practice makes to its own record, so it is
+// in activity.StaffingActions and never reaches her. Reaching
+// 'completed' also runs ADR-0008's completion cascade (open Offers
+// withdrawn, open attachments ended) in the same transaction
+// CompleteHandler used to.
 //
 // Re-requesting the status an Engagement already holds is a no-op: no
 // field write, no audit row, but the completion cascade still runs, so
@@ -327,34 +328,21 @@ func TransitionHandler() http.Handler {
 				return
 			}
 
-			if err := recordStatusEvent(r.Context(), tx, statusEvent{
-				practiceID:           practiceID,
-				engagementID:         engagementID,
-				previousStatus:       current.status,
-				status:               req.Status,
-				previousEndingReason: current.endingReason,
-				endingReason:         newEndingReason,
-				previousEndingNote:   current.endingNote,
-				endingNote:           newEndingNote,
-				actorStaffID:         &actorStaffID,
+			action := activity.ActionEngagementCompleted
+			if isReopen {
+				action = activity.ActionEngagementReopened
+			}
+			if err := recordFact(r.Context(), tx, practiceID, engagementID, actorStaffID, action, map[string]any{
+				"statusBefore":       current.status,
+				"statusAfter":        req.Status,
+				"endingReasonBefore": current.endingReason,
+				"endingReasonAfter":  newEndingReason,
+				"endingNoteBefore":   current.endingNote,
+				"endingNoteAfter":    newEndingNote,
 			}); err != nil {
 				// coverage:ignore reason: DB query failure, not exercised by unit tests
 				apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 				return
-			}
-
-			if req.Status == StatusCompleted {
-				if err := activity.Record(r.Context(), tx, activity.Entry{
-					PracticeID:  practiceID,
-					SubjectKind: activity.SubjectEngagement,
-					SubjectID:   engagementID,
-					Action:      string(activity.ActionEngagementCompleted),
-					Actor:       activity.StaffActor(actorStaffID),
-				}); err != nil {
-					// coverage:ignore reason: DB query failure, not exercised by unit tests
-					apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
-					return
-				}
 			}
 		}
 

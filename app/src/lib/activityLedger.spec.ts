@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
+import { formatCalendarDay } from './dates.js';
 import { jsonResponse } from './testResponse.js';
 import {
 	activityLedgerColumns,
@@ -105,6 +106,89 @@ const entry = (overrides: Partial<ActivityEntry> = {}): ActivityEntry => ({
 	actorName: 'Renata Ruiz',
 	createdAt: '2026-03-04T10:00:00Z',
 	...overrides
+});
+
+// eslint-disable-next-line unicorn/no-null -- the write side records an empty side of a change as JSON null, never an absent key
+const recordedNull = null;
+
+describe('activityLedgerColumns: an Engagement fact, from what to what (#1423)', () => {
+	const what = activityLedgerColumns()[1];
+
+	it.each([
+		['care_phase_changed', { statusBefore: 'intake', statusAfter: 'active' }, 'Care phase changed: Intake to Active'],
+		[
+			'engagement_completed',
+			{
+				statusBefore: 'active',
+				statusAfter: 'completed',
+				endingReasonBefore: recordedNull,
+				endingReasonAfter: 'care_complete',
+				endingNoteBefore: recordedNull,
+				endingNoteAfter: 'Baby arrived safely'
+			},
+			'Engagement completed: Active to Completed. Reason: The work finished as agreed'
+		],
+		[
+			'engagement_completed',
+			{ statusBefore: 'intake', statusAfter: 'completed' },
+			'Engagement completed: Intake to Completed'
+		],
+		[
+			'engagement_reopened',
+			{ statusBefore: 'completed', statusAfter: 'active', endingReasonBefore: 'client_withdrew', endingReasonAfter: recordedNull },
+			'Engagement reopened: Completed to Active'
+		],
+		['kind_changed', { kindBefore: 'birth', kindAfter: 'postpartum' }, 'Kind changed: Birth to Postpartum'],
+		[
+			'birth_outcome_recorded',
+			{
+				birthOutcomeBefore: recordedNull,
+				birthOutcomeAfter: 'unknown',
+				pregnancyEndedOnBefore: recordedNull,
+				pregnancyEndedOnAfter: recordedNull
+			},
+			'Birth outcome recorded: Not recorded to The Practice never learned what happened'
+		],
+		[
+			'birth_outcome_recorded',
+			{
+				birthOutcomeBefore: 'loss',
+				birthOutcomeAfter: recordedNull,
+				pregnancyEndedOnBefore: '2027-03-04',
+				pregnancyEndedOnAfter: recordedNull
+			},
+			`Birth outcome recorded: The pregnancy ended without a living baby, ${formatCalendarDay('2027-03-04')} to Not recorded`
+		]
+	])('reads %s off its diff', (action, diff, want) => {
+		expect(what.accessor(entry({ action, diff }))).toBe(want);
+	});
+
+	it('shows an unlabeled value as it is stored, rather than dropping the change', () => {
+		expect(what.accessor(entry({ action: 'care_phase_changed', diff: { statusBefore: 'intake', statusAfter: 'paused' } }))).toBe(
+			'Care phase changed: Intake to paused'
+		);
+	});
+
+	it.each([
+		['no diff at all, as the practice-wide feed sends', 'engagement_completed', undefined],
+		['no before side', 'kind_changed', { kindAfter: 'birth' }],
+		['no after side', 'kind_changed', { kindBefore: 'birth' }],
+		['no status move, only a reason', 'engagement_completed', { endingReasonAfter: 'care_complete' }]
+	])('falls back to the action alone given %s', (_case, action, diff) => {
+		expect(what.accessor(entry({ action, diff }))).toBe(describeActivityAction(action));
+	});
+
+	it('reads no diff for an action that is not one of these facts', () => {
+		expect(what.accessor(entry({ action: 'visit_scheduled', diff: { scheduledAtBefore: recordedNull } }))).toBe(
+			'Visit scheduled'
+		);
+	});
+
+	it('never puts the ending note in the sentence', () => {
+		const diff = { statusBefore: 'active', statusAfter: 'completed', endingNoteAfter: 'private words' };
+
+		expect(what.accessor(entry({ action: 'engagement_completed', diff }))).not.toContain('private words');
+	});
 });
 
 describe('activityLedgerColumns', () => {

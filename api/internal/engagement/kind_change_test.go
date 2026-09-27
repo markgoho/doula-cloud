@@ -63,28 +63,16 @@ func readEngagementKind(t *testing.T, db *testdb.DB, engagementID string) string
 	return kind
 }
 
-// assertKindEvent reads the most recent 'kind_changed' engagement_events
-// row and checks both sides of the fact, plus that a human actor is on
-// it -- the cross-cutting audit expectation "how did this thing come to
-// be?", the same shape assertOutcomeEvent checks for its own fact.
+// assertKindEvent reads the most recent kind_changed activity entry
+// and checks both sides of the fact, plus that a human actor is on it --
+// the cross-cutting audit expectation "how did this thing come to be?",
+// the same shape assertOutcomeEvent checks for its own fact.
 func assertKindEvent(t *testing.T, db *testdb.DB, engagementID, prevKind, kind string) {
 	t.Helper()
-	var gotPrevKind, gotKind string
-	var actor *string
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`SELECT previous_kind::text, kind::text, actor_staff_id::text
-		   FROM engagement_events
-		  WHERE engagement_id = $1 AND event_type = 'kind_changed'
-		  ORDER BY created_at DESC LIMIT 1`, engagementID,
-	).Scan(&gotPrevKind, &gotKind, &actor); err != nil {
-		t.Fatalf("read kind event: %v", err)
-	}
-	if gotPrevKind != prevKind || gotKind != kind {
-		t.Fatalf("event kind = %q -> %q, want %q -> %q", gotPrevKind, gotKind, prevKind, kind)
-	}
-	if actor == nil {
-		t.Fatal("actor_staff_id is null, want the Staff member who changed it")
-	}
+	assertDiff(t, readFactDiff(t, db, engagementID, "kind_changed"), map[string]any{
+		"kindBefore": prevKind,
+		"kindAfter":  kind,
+	})
 }
 
 // newKindServer mounts this package's whole surface and seeds a birth
@@ -141,8 +129,8 @@ func TestChangeKindHandler_RolesMayChange(t *testing.T) {
 			if got := readEngagementKind(t, db, engagementID); got != string(engagement.KindPostpartum) {
 				t.Fatalf("kind = %q, want postpartum", got)
 			}
-			if n := countEngagementEvents(t, db, engagementID); n != 1 {
-				t.Fatalf("engagement_events rows = %d, want 1", n)
+			if n := countFactEntries(t, db, engagementID); n != 1 {
+				t.Fatalf("fact entries = %d, want 1", n)
 			}
 			assertKindEvent(t, db, engagementID, string(engagement.KindBirth), string(engagement.KindPostpartum))
 		})
@@ -164,8 +152,8 @@ func TestChangeKindHandler_Validation(t *testing.T) {
 	if got := readEngagementKind(t, db, engagementID); got != string(engagement.KindBirth) {
 		t.Fatalf("kind = %q, want left unchanged", got)
 	}
-	if n := countEngagementEvents(t, db, engagementID); n != 0 {
-		t.Fatalf("engagement_events rows = %d, want 0 -- a refused write leaves no audit row", n)
+	if n := countFactEntries(t, db, engagementID); n != 0 {
+		t.Fatalf("fact entries = %d, want 0 -- a refused write leaves no audit row", n)
 	}
 }
 
@@ -189,15 +177,15 @@ func TestChangeKindHandler_BothDirectionsAndNoOp(t *testing.T) {
 	if status, body := changeKindAs(t, db, srv, uid, practiceID, engagementID, string(engagement.KindPostpartum)); status != http.StatusOK || body.Kind != string(engagement.KindPostpartum) {
 		t.Fatalf("resend: status = %d, body = %+v", status, body)
 	}
-	if n := countEngagementEvents(t, db, engagementID); n != 1 {
-		t.Fatalf("engagement_events rows = %d, want 1 -- the resend writes nothing", n)
+	if n := countFactEntries(t, db, engagementID); n != 1 {
+		t.Fatalf("fact entries = %d, want 1 -- the resend writes nothing", n)
 	}
 
 	if status, body := changeKindAs(t, db, srv, uid, practiceID, engagementID, string(engagement.KindBirth)); status != http.StatusOK || body.Kind != string(engagement.KindBirth) {
 		t.Fatalf("postpartum -> birth: status = %d, body = %+v", status, body)
 	}
-	if n := countEngagementEvents(t, db, engagementID); n != 2 {
-		t.Fatalf("engagement_events rows = %d, want 2", n)
+	if n := countFactEntries(t, db, engagementID); n != 2 {
+		t.Fatalf("fact entries = %d, want 2", n)
 	}
 	assertKindEvent(t, db, engagementID, string(engagement.KindPostpartum), string(engagement.KindBirth))
 }
@@ -227,8 +215,8 @@ func TestChangeKindHandler_UpgradeAfterBirthRefused(t *testing.T) {
 	if got := readEngagementKind(t, db, engagementID); got != string(engagement.KindPostpartum) {
 		t.Fatalf("kind = %q, want left unchanged at postpartum", got)
 	}
-	if n := countEngagementEvents(t, db, engagementID); n != 0 {
-		t.Fatalf("engagement_events rows = %d, want 0 -- the refusal writes nothing", n)
+	if n := countFactEntries(t, db, engagementID); n != 0 {
+		t.Fatalf("fact entries = %d, want 0 -- the refusal writes nothing", n)
 	}
 }
 
@@ -254,8 +242,8 @@ func TestChangeKindHandler_DowngradeAfterBirthStillAllowed(t *testing.T) {
 	if body.Kind != string(engagement.KindPostpartum) {
 		t.Fatalf("kind = %q, want postpartum", body.Kind)
 	}
-	if n := countEngagementEvents(t, db, engagementID); n != 1 {
-		t.Fatalf("engagement_events rows = %d, want 1", n)
+	if n := countFactEntries(t, db, engagementID); n != 1 {
+		t.Fatalf("fact entries = %d, want 1", n)
 	}
 }
 
@@ -312,10 +300,12 @@ func TestChangeKindHandler_MalformedBody(t *testing.T) {
 // TestChangeKindHandler_MovesNothingElse is ADR-0015's own list, proved
 // against the database rather than asserted in prose: changing kind moves
 // no Visit, spends no second Credit, and touches no Contract or Invoice.
-// It also folds together this ticket's audit and Client-facing
-// requirements (#874's AC2 and AC6) into one assertion: the one row
-// written lands on engagement_events, the staff-only ledger, and the
-// Client-facing activity table (ADR-0022) gets nothing at all.
+// It also folds together this ticket's audit requirement (#874's AC2)
+// into one assertion: exactly one fact entry is written, and it is the
+// kind_changed one. #874's AC6 -- kind never reaches the Client -- is now
+// activity.StaffingActions()' job since #1423 folded engagement_events
+// into activity; portal's own TestActivityHandler_HidesTheEngagementAudit
+// proves the portal read leaves it out.
 func TestChangeKindHandler_MovesNothingElse(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "kind-moves-nothing-owner"
@@ -427,10 +417,10 @@ func TestChangeKindHandler_MovesNothingElse(t *testing.T) {
 		t.Fatalf("credit_ledger rows for this Engagement = %d, want 1 -- no second Credit spent", creditCount)
 	}
 
-	if n := countEngagementEvents(t, db, engagementID); n != 1 {
-		t.Fatalf("engagement_events rows = %d, want 1", n)
+	if n := countFactEntries(t, db, engagementID); n != 1 {
+		t.Fatalf("fact entries = %d, want 1", n)
 	}
-	if n := countActivityActions(t, db, engagementID, "kind_changed"); n != 0 {
-		t.Fatalf("activity rows for kind_changed = %d, want 0 -- kind is staff-only and never reaches the Client-facing ledger", n)
+	if n := countActivityActions(t, db, engagementID, "kind_changed"); n != 1 {
+		t.Fatalf("kind_changed entries = %d, want 1", n)
 	}
 }

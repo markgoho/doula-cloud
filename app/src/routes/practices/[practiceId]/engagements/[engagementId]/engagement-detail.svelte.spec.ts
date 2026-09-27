@@ -377,6 +377,27 @@ describe('the Activity ledger section (#486)', () => {
 		await expect.element(testPage.getByRole('cell', { name: 'Maya Torres' })).toBeVisible();
 	});
 
+	it('shows who changed a fact, from what, to what (#1423)', async () => {
+		await setup(
+			fixtureDetail,
+			jsonResponse({
+				items: [
+					{
+						action: 'kind_changed',
+						diff: { kindBefore: 'birth', kindAfter: 'postpartum' },
+						actorKind: 'staff',
+						actorName: 'Maya Torres',
+						createdAt: new Date().toISOString()
+					}
+				],
+				hasMore: false
+			})
+		);
+
+		await expect.element(testPage.getByRole('cell', { name: 'Kind changed: Birth to Postpartum' })).toBeVisible();
+		await expect.element(testPage.getByRole('cell', { name: 'Maya Torres' })).toBeVisible();
+	});
+
 	it('shows the empty-ledger message when the Engagement has no activity yet', async () => {
 		await setup(fixtureDetail, jsonResponse({ items: [], hasMore: false }));
 

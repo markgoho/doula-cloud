@@ -93,8 +93,8 @@ func countOutcomeEvents(t *testing.T, db *testdb.DB, engagementID string) int {
 	t.Helper()
 	var n int
 	if err := db.Admin.QueryRowContext(t.Context(),
-		`SELECT count(*) FROM engagement_events
-		  WHERE engagement_id = $1 AND event_type = 'birth_outcome_recorded'`, engagementID,
+		`SELECT count(*) FROM activity
+		  WHERE subject_kind = 'engagement' AND subject_id = $1 AND action = 'birth_outcome_recorded'`, engagementID,
 	).Scan(&n); err != nil {
 		t.Fatalf("count outcome events: %v", err)
 	}
@@ -113,17 +113,73 @@ func readEngagementStatus(t *testing.T, db *testdb.DB, engagementID string) (sta
 	return status, endingReason, endingNote
 }
 
-// countEngagementEvents counts engagement_events rows for engagementID,
-// proving TransitionHandler wrote exactly one (or zero, for a no-op).
-func countEngagementEvents(t *testing.T, db *testdb.DB, engagementID string) int {
+// countFactEntries counts the activity rows that record a change to one
+// of engagementID's mutable facts -- status, kind, birth outcome, the
+// set engagement_events held before #1423 folded it into activity --
+// proving a handler wrote exactly one (or zero, for a no-op or a
+// refusal). Every legal status move writes exactly one of the first
+// three actions, so the count is the same one the dropped table gave.
+func countFactEntries(t *testing.T, db *testdb.DB, engagementID string) int {
 	t.Helper()
 	var n int
 	if err := db.Admin.QueryRowContext(t.Context(),
-		`SELECT count(*) FROM engagement_events WHERE engagement_id = $1`, engagementID,
+		`SELECT count(*) FROM activity
+		  WHERE subject_kind = 'engagement' AND subject_id = $1
+		    AND action IN ('care_phase_changed', 'engagement_completed', 'engagement_reopened',
+		                   'kind_changed', 'birth_outcome_recorded')`, engagementID,
 	).Scan(&n); err != nil {
-		t.Fatalf("count engagement_events: %v", err)
+		t.Fatalf("count fact entries: %v", err)
 	}
 	return n
+}
+
+// diffStatusBefore and diffStatusAfter are the two keys every status
+// move's entry carries (#1423), named once for the three tests that read
+// them.
+const (
+	diffStatusBefore = "statusBefore"
+	diffStatusAfter  = "statusAfter"
+)
+
+// readFactDiff reads the diff of engagementID's most recent activity row
+// carrying action -- the both-sides record engagement_events used to
+// hold in columns (#1423) -- plus its actor, which every writer sets.
+func readFactDiff(t *testing.T, db *testdb.DB, engagementID, action string) map[string]any {
+	t.Helper()
+	var raw []byte
+	var actor *string
+	if err := db.Admin.QueryRowContext(t.Context(),
+		`SELECT diff, actor_staff_id::text FROM activity
+		  WHERE subject_kind = 'engagement' AND subject_id = $1 AND action = $2
+		  ORDER BY created_at DESC, id DESC LIMIT 1`, engagementID, action,
+	).Scan(&raw, &actor); err != nil {
+		t.Fatalf("read %s entry: %v", action, err)
+	}
+	if actor == nil {
+		t.Fatalf("%s entry has no actor_staff_id, want the Staff member who acted", action)
+	}
+	var diff map[string]any
+	if err := json.Unmarshal(raw, &diff); err != nil {
+		t.Fatalf("decode %s diff: %v", action, err)
+	}
+	return diff
+}
+
+// assertDiff checks each key in want against diff; a nil want means the
+// key must be present and JSON null, never absent -- both sides of every
+// fact are recorded, the shape engagement_events' columns had.
+func assertDiff(t *testing.T, diff map[string]any, want map[string]any) {
+	t.Helper()
+	for k, v := range want {
+		got, present := diff[k]
+		if !present {
+			t.Errorf("diff has no %q, want %v (diff = %v)", k, v, diff)
+			continue
+		}
+		if got != v {
+			t.Errorf("diff[%q] = %v, want %v", k, got, v)
+		}
+	}
 }
 
 // countActivityActions counts activity rows for engagementID carrying
@@ -236,6 +292,20 @@ func TestTransitionHandler_ReopenClearsReasonAndNote(t *testing.T) {
 	if outcome, _ := readEngagementOutcome(t, db, engagementID); outcome == nil {
 		t.Fatal("reopening cleared the birth outcome, which the freeze rule says it never does")
 	}
+	// #1423: the reopen is one engagement_reopened entry carrying both
+	// sides of every fact it moved, the ending it cleared included, and
+	// never a completion entry.
+	assertDiff(t, readFactDiff(t, db, engagementID, "engagement_reopened"), map[string]any{
+		diffStatusBefore:     engagement.StatusCompleted,
+		diffStatusAfter:      engagement.StatusActive,
+		"endingReasonBefore": careCompleteReason,
+		"endingReasonAfter":  nil,
+		"endingNoteBefore":   "left the area",
+		"endingNoteAfter":    nil,
+	})
+	if n := countFactEntries(t, db, engagementID); n != 1 {
+		t.Fatalf("fact entries = %d, want 1", n)
+	}
 }
 
 // TestTransitionHandler_CompletingRefusesWithNoBirthOutcome is #940's
@@ -269,8 +339,8 @@ func TestTransitionHandler_CompletingRefusesWithNoBirthOutcome(t *testing.T) {
 	if gotStatus != engagement.StatusActive || endingReason != nil {
 		t.Fatalf("status=%q endingReason=%v, want the row untouched", gotStatus, endingReason)
 	}
-	if n := countEngagementEvents(t, db, engagementID); n != 0 {
-		t.Fatalf("engagement_events = %d, want 0 on a refusal", n)
+	if n := countFactEntries(t, db, engagementID); n != 0 {
+		t.Fatalf("fact entries = %d, want 0 on a refusal", n)
 	}
 	if n := countActivityActions(t, db, engagementID, "engagement_completed"); n != 0 {
 		t.Fatalf("engagement_completed activity rows = %d, want 0 on a refusal", n)
@@ -382,6 +452,16 @@ func TestTransitionHandler_CompletingPersistsEndingNote(t *testing.T) {
 	if endingNote == nil || *endingNote != "Baby arrived safely" {
 		t.Fatalf("ending_note = %v, want %q", endingNote, "Baby arrived safely")
 	}
+	// #1423: the completion entry carries both sides of the status and of
+	// the ending it set -- what engagement_events' columns used to hold.
+	assertDiff(t, readFactDiff(t, db, engagementID, "engagement_completed"), map[string]any{
+		diffStatusBefore:     engagement.StatusActive,
+		diffStatusAfter:      engagement.StatusCompleted,
+		"endingReasonBefore": nil,
+		"endingReasonAfter":  careCompleteReason,
+		"endingNoteBefore":   nil,
+		"endingNoteAfter":    "Baby arrived safely",
+	})
 }
 
 // TestTransitionHandler_CompletingRequiresEndingReason proves the
@@ -479,8 +559,8 @@ func TestTransitionHandler_ReRequestSameStatusIsNoOp(t *testing.T) {
 	if status != http.StatusOK {
 		t.Fatalf("first completion status = %d, want 200", status)
 	}
-	if n := countEngagementEvents(t, db, engagementID); n != 1 {
-		t.Fatalf("engagement_events after first completion = %d, want 1", n)
+	if n := countFactEntries(t, db, engagementID); n != 1 {
+		t.Fatalf("fact entries after first completion = %d, want 1", n)
 	}
 	if n := countActivityActions(t, db, engagementID, "engagement_completed"); n != 1 {
 		t.Fatalf("engagement_completed activity rows = %d, want 1", n)
@@ -503,8 +583,8 @@ func TestTransitionHandler_ReRequestSameStatusIsNoOp(t *testing.T) {
 	if body.Status != engagement.StatusCompleted {
 		t.Fatalf("re-request body status = %q, want completed", body.Status)
 	}
-	if n := countEngagementEvents(t, db, engagementID); n != 1 {
-		t.Fatalf("engagement_events after re-request = %d, want still 1 (no duplicate)", n)
+	if n := countFactEntries(t, db, engagementID); n != 1 {
+		t.Fatalf("fact entries after re-request = %d, want still 1 (no duplicate)", n)
 	}
 	if n := countActivityActions(t, db, engagementID, "engagement_completed"); n != 1 {
 		t.Fatalf("engagement_completed activity rows after re-request = %d, want still 1", n)
@@ -548,6 +628,10 @@ func TestTransitionHandler_IntakeToActiveWritesCarePhaseChanged(t *testing.T) {
 	if actorName != "Test Staff phase-doula" {
 		t.Fatalf("actor name = %q, want the acting Staff member", actorName)
 	}
+	assertDiff(t, readFactDiff(t, db, engagementID, "care_phase_changed"), map[string]any{
+		diffStatusBefore: engagement.StatusIntake,
+		diffStatusAfter:  engagement.StatusActive,
+	})
 }
 
 // TestTransitionHandler_RefusesBareStaffWithNoRole proves a Staff member

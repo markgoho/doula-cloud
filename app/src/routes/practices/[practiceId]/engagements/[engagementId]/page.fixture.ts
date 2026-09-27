@@ -426,6 +426,21 @@ export const fixture: RouteFixture<RouteParameters> = {
 						actorKind: 'staff',
 						actorName: clientName,
 						createdAt: '2026-08-05T00:00:00Z'
+					},
+					// #1423: the widest What-column sentence this ledger can
+					// hold -- a birth outcome corrected, both sides dated, each
+					// side in ADR-0015's own long wording.
+					{
+						action: 'birth_outcome_recorded',
+						actorKind: 'staff',
+						actorName: clientName,
+						diff: {
+							birthOutcomeBefore: 'unknown',
+							birthOutcomeAfter: 'loss',
+							pregnancyEndedOnBefore: '2027-03-04',
+							pregnancyEndedOnAfter: '2027-03-05'
+						},
+						createdAt: '2026-08-06T00:00:00Z'
 					}
 				],
 				hasMore: false
