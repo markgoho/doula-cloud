@@ -10,7 +10,7 @@ The name is set by [ADR-0050](../adr/0050-the-product-is-named-doulacloud-one-wo
 
 **Beside the mark, the name is set in one weight: semibold (600).** The capital C is the only thing that marks the join between the two words. Two other settings were shown and not chosen: two weights (regular, then semibold), and two tones (the second word in `--color-primary`). The two-tone setting also spends the accent on decoration, which [the design brief](../design/brief.md) does not permit.
 
-The gap between the mark and the name is 0.6 of the type size. The mark is 1.2 times the type size in height.
+The sizes are the app's. `BrandLockup` pairs the `sm`, `md`, and `lg` sizes of `CloudMark` with the `subheading`, `heading`, and `display` steps of the type scale, with a gap of `--space-3`. This sheet changes none of them.
 
 ## Mark
 
