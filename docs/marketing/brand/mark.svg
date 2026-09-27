@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="48 76 202 94" fill="none" stroke-width="14" stroke-linecap="round">
+	<!--
+		The DoulaCloud mark, two tones. For a mark that is 28px tall or more.
+		See docs/marketing/brand.md.
+
+		Literal colors, because a standalone SVG can reach no custom property.
+		The values are copied from app/src/lib/styles/tokens.css:
+		.baby is `color-primary-hover` and .mother is `color-primary`, in both themes.
+	-->
+	<style>
+		.baby { stroke: oklch(49.9% 0.121 339); }
+		.mother { stroke: oklch(41.2% 0.119 339); }
+
+		@media (prefers-color-scheme: dark) {
+			.baby { stroke: oklch(90% 0.08 341); }
+			.mother { stroke: oklch(84% 0.116 341); }
+		}
+	</style>
+	<path class="baby" d="M100 160a32 32 0 0 1 64 0" />
+	<path class="mother" d="M56 160a76 76 0 0 1 137.97-44 44 44 0 0 1 44.03 44" />
+</svg>
