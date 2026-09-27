@@ -140,7 +140,11 @@ func TestList_NamesEveryKindOfActorOnce(t *testing.T) {
 	testdb.SeedActivity(t, db, practiceID, activity.SubjectEngagement, engagementID, "departed_acted", activity.StaffActor(departedID))
 	testdb.SeedActivity(t, db, practiceID, activity.SubjectEngagement, engagementID, "client_acted", activity.ClientActor(clientID))
 	testdb.SeedActivity(t, db, practiceID, activity.SubjectEngagement, engagementID, "system_acted", activity.SystemActor())
-	testdb.RemoveMembership(t, db, departedID)
+	// A plain departure still names her through 00116, so the one absence
+	// left is a Doula who deleted her own login (#1455): her Membership
+	// ended by endEveryMembership, her staff row redacted.
+	testdb.EndMembership(t, db, practiceID, departedID, departedID)
+	testdb.RedactDeletedLogin(t, db, departedID)
 
 	tx := beginScopedTx(t, db, practiceID)
 	page, err := activitypage.List(t.Context(), tx, activitypage.Query{

@@ -199,22 +199,48 @@ func TestCreateGap_RefusesALongReasonAndTakesABlankCover(t *testing.T) {
 	}
 }
 
-// TestRoster_ADepartedCoveringColleagueIsNamedAsOne: a Doula whose
-// Membership has ended is no longer a row this Practice can read, so the
-// roster says so in words rather than printing a bare id.
+// TestRoster_ACoveringColleagueWhoLeftIsStillNamed: a Doula whose
+// Membership has ended is still a row this Practice can read, through
+// the 'removed' event her removal wrote (00116, #1455), so the roster
+// keeps her name.
+func TestRoster_ACoveringColleagueWhoLeftIsStillNamed(t *testing.T) {
+	db := testdb.New(t)
+	f, backupID := newDepartedCoverFixture(t, db, "roster-left")
+	testdb.EndMembership(t, db, f.practiceID, backupID, f.ownerID)
+
+	w := f.roster(t, db, "2026-10-17", "2026-10-17").Windows[0]
+	if w.Gaps[0].CoveringStaffName == nil || *w.Gaps[0].CoveringStaffName != backupName {
+		t.Fatalf("covering name = %v, want %q", w.Gaps[0].CoveringStaffName, backupName)
+	}
+}
+
+// TestRoster_ADepartedCoveringColleagueIsNamedAsOne: a Doula who deleted
+// her own login (ADR-0033) is no longer a row this Practice can read --
+// 00116 refuses a redacted row -- so the roster says so in words rather
+// than printing a bare id.
 func TestRoster_ADepartedCoveringColleagueIsNamedAsOne(t *testing.T) {
 	db := testdb.New(t)
-	f := newSoloFixture(t, db, "roster-departed")
-	backupID := testdb.SeedNamedStaffAtPractice(t, db, f.practiceID, "roster-departed-backup", backupName, []string{doulaRole}, employeeType)
-	testdb.SeedGrantedAttachment(t, db, f.engagementID, backupID)
-	exec(t, db, `INSERT INTO engagement_coverage_gaps (engagement_id, staff_id, covering_staff_id, starts_at, ends_at, created_by)
-		VALUES ($1, $2, $3, '2026-10-17T22:00:00Z', '2026-10-18T10:00:00Z', $2)`, f.engagementID, f.doulaID, backupID)
-	testdb.RemoveMembership(t, db, backupID)
+	f, backupID := newDepartedCoverFixture(t, db, "roster-departed")
+	testdb.EndMembership(t, db, f.practiceID, backupID, backupID)
+	testdb.RedactDeletedLogin(t, db, backupID)
 
 	w := f.roster(t, db, "2026-10-17", "2026-10-17").Windows[0]
 	if w.Gaps[0].CoveringStaffName == nil || *w.Gaps[0].CoveringStaffName != "a former colleague" {
 		t.Fatalf("covering name = %v, want the words for a colleague this Practice can no longer read", w.Gaps[0].CoveringStaffName)
 	}
+}
+
+// newDepartedCoverFixture is a solo fixture plus a backup Doula covering
+// one gap, before she leaves -- the setup both departure tests above
+// share, each then ending her Membership its own way.
+func newDepartedCoverFixture(t *testing.T, db *testdb.DB, prefix string) (soloFixture, string) {
+	t.Helper()
+	f := newSoloFixture(t, db, prefix)
+	backupID := testdb.SeedNamedStaffAtPractice(t, db, f.practiceID, prefix+"-backup", backupName, []string{doulaRole}, employeeType)
+	testdb.SeedGrantedAttachment(t, db, f.engagementID, backupID)
+	exec(t, db, `INSERT INTO engagement_coverage_gaps (engagement_id, staff_id, covering_staff_id, starts_at, ends_at, created_by)
+		VALUES ($1, $2, $3, '2026-10-17T22:00:00Z', '2026-10-18T10:00:00Z', $2)`, f.engagementID, f.doulaID, backupID)
+	return f, backupID
 }
 
 // TestRoster_SortsAndSkipsWhatItShould covers the two orderings the

@@ -460,12 +460,15 @@ func PortalUID(name string) string {
 	return portalaccount.Prefix + name
 }
 
-// RemoveMembership is what "she left the Practice" is in the schema: the
-// practice_memberships row goes, and every policy that reaches a Staff
-// row through a live Membership stops reaching hers. Every test that
-// needs a departed Staff member wants exactly this one DELETE, so it
-// lives here beside the seeds it undoes rather than being re-declared
-// per package.
+// RemoveMembership is the bare half of "she left the Practice": every
+// practice_memberships row she holds goes, and every policy that reaches
+// a Staff row through a live Membership stops reaching hers -- but no
+// 'removed' activity event is written. Production never leaves this
+// state: RemoveMembershipHandler and logindeletion's endEveryMembership
+// both record the event first. So this is for a test that seeds its own
+// event beside it (activityfeed's Membership tests), or one whose point
+// is the Membership row alone. A test that wants a departure the way
+// production leaves one uses EndMembership (#1455).
 func RemoveMembership(t *testing.T, db *DB, staffID string) {
 	t.Helper()
 	if _, err := db.Admin.ExecContext(t.Context(),
@@ -473,6 +476,74 @@ func RemoveMembership(t *testing.T, db *DB, staffID string) {
 	); err != nil {
 		// coverage:ignore reason: fixture delete failure, not exercised by the happy-path test
 		t.Fatalf("testdb: remove membership for staff %q: %v", staffID, err)
+	}
+}
+
+// EndMembership is "she left the Practice" the way production leaves it:
+// the 'removed' Membership event staffauth.RecordMembershipEvent writes,
+// naming the roles and employment type she held and who removed her,
+// then the DELETE of her one Membership at practiceID -- both in one
+// transaction, in the handler's order. That event is what 00116's
+// staff_visible_to_own_practice_membership_history keys on, so a
+// departed colleague stays named in the Practice's own records.
+//
+// The diff is built here rather than through RecordMembershipEvent
+// because staffauth cannot be imported from this package without a
+// cycle (authmail's and mfarecoverymail's in-package tests import it).
+// TestEndMembership holds the shape to the one
+// TestRemoveMembershipHandler_Success asserts.
+func EndMembership(t *testing.T, db *DB, practiceID, staffID, actorStaffID string) {
+	t.Helper()
+	tx, err := db.Admin.BeginTx(t.Context(), nil)
+	if err != nil {
+		// coverage:ignore reason: fixture transaction failure, not exercised by the happy-path test
+		t.Fatalf("testdb: end membership begin: %v", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	var roles, employmentType string
+	if err := tx.QueryRowContext(t.Context(),
+		`SELECT array_to_string(roles, ','), employment_type::text
+		   FROM practice_memberships
+		  WHERE practice_id = $1 AND staff_id = $2`,
+		practiceID, staffID,
+	).Scan(&roles, &employmentType); err != nil {
+		// coverage:ignore reason: fixture read failure, not exercised by the happy-path test
+		t.Fatalf("testdb: read membership for staff %q: %v", staffID, err)
+	}
+	type fromTo struct {
+		From string `json:"from"`
+		To   string `json:"to"`
+	}
+	diff, err := json.Marshal(struct {
+		Roles          fromTo `json:"roles"`
+		EmploymentType fromTo `json:"employmentType"`
+	}{fromTo{From: roles}, fromTo{From: employmentType}})
+	if err != nil {
+		// coverage:ignore reason: a struct of plain strings always marshals cleanly
+		t.Fatalf("testdb: marshal membership diff: %v", err)
+	}
+	if err := activity.Record(t.Context(), tx, activity.Entry{
+		PracticeID:  practiceID,
+		SubjectKind: activity.SubjectMembership,
+		SubjectID:   staffID,
+		Action:      string(activity.ActionMembershipRemoved),
+		Diff:        diff,
+		Actor:       activity.StaffActor(actorStaffID),
+	}); err != nil {
+		// coverage:ignore reason: fixture insert failure, not exercised by the happy-path test
+		t.Fatalf("testdb: record membership removal: %v", err)
+	}
+	if _, err := tx.ExecContext(t.Context(),
+		`DELETE FROM practice_memberships WHERE practice_id = $1 AND staff_id = $2`,
+		practiceID, staffID,
+	); err != nil {
+		// coverage:ignore reason: fixture delete failure, not exercised by the happy-path test
+		t.Fatalf("testdb: end membership for staff %q: %v", staffID, err)
+	}
+	if err := tx.Commit(); err != nil {
+		// coverage:ignore reason: fixture transaction failure, not exercised by the happy-path test
+		t.Fatalf("testdb: end membership commit: %v", err)
 	}
 }
 

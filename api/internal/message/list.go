@@ -162,18 +162,22 @@ const listMessagesAfterQuery = `SELECT m.id, m.sender_type, m.sender_id,
 // unresolvedStaffSenderName is what a Staff sender's row renders as when
 // the LEFT JOIN above finds no row. staff_practice_visibility (00002)
 // reaches a staff row only through a live practice_memberships row, and
-// RemoveMembership deletes that row for a plain departure exactly as
-// ADR-0033's login deletion does -- so this branch is reachable from
-// both a Client-facing and a Staff-facing caller, for the same reason,
-// with no ADR-0033 redaction required. For a Client-facing caller
-// 00111's client_portal_sees_staff policy separately refuses a Doula who
-// deleted her own login rather than reaching her redacted row.
-// ListHandler (Staff-facing) passes activity.DepartedStaffName (#1322),
-// confirmed reachable both with and without ADR-0033's login deletion by
-// TestListHandler_SenderWhoDeletedHerLoginShowsAFormerColleague and
-// TestListHandler_SenderWhoPlainlyLeftShowsAFormerColleague
-// (handlers_test.go) -- before this fix the same branch produced "", not
-// the redacted "Deleted Staff Member" #1198 assumed. ClientListHandler
+// both a plain departure and ADR-0033's login deletion delete that row.
+// For a Staff-facing caller, 00116's
+// staff_visible_to_own_practice_membership_history reaches her again
+// through the 'removed' Membership event every removal path writes --
+// unless her row is redacted, so only a login deletion lands here.
+// TestListHandler_SenderWhoPlainlyLeftStillNamesHer and
+// TestListHandler_SenderWhoDeletedHerLoginShowsAFormerColleague
+// (handlers_test.go) hold both halves, and
+// TestRemoveMembershipHandler_LeavesHerNamedInThreadAndSchedule
+// (departure_test.go) drives the real removal route (#1455). For a
+// Client-facing caller 00111's client_portal_sees_staff policy
+// separately refuses a Doula who deleted her own login rather than
+// reaching her redacted row. ListHandler (Staff-facing) passes
+// activity.DepartedStaffName (#1322) -- before that fix the same branch
+// produced "", not the redacted "Deleted Staff Member" #1198 assumed.
+// ClientListHandler
 // (#1198) passes activity.StaffActorDisplayName, the
 // same word listPortalVisits already stands in with for the identical
 // gap on the Client-portal side.
