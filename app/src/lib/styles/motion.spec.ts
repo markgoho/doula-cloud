@@ -40,10 +40,6 @@ const EASING_TOKENS = new Set(['--ease-out']);
  * into a permanent exemption list.
  */
 const AWAITING_A_CONSUMER = new Map([
-	[
-		'--motion-enter',
-		'Toasts, menus and revealed field groups -- none exist yet; the shell design is #431.'
-	],
 	['--motion-nav', 'The single per-navigation view transition -- no view transition exists yet.']
 ]);
 
