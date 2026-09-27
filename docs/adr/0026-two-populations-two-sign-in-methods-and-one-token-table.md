@@ -29,7 +29,7 @@ Full analysis in `docs/research/identity-platform-tier-and-baa.md`, decided on [
 | Method | Verdict | Why, in one line |
 | --- | --- | --- |
 | Email and password | **Adopted** | Daily use against a 12-hour session; the first factor a second factor is added to. |
-| TOTP second factor | **Adopted** | Required for Owners, optional otherwise, raisable per Practice by its Owner. Launch-blocking. |
+| TOTP second factor | **Adopted** | Required for Owners, optional otherwise, raisable per Practice by its Owner. Launch-blocking. Amended by #1492: for an Owner, recommended after three acts and required for five. |
 | SMS second factor | **Rejected** | Weaker than TOTP and additionally needs a reCAPTCHA verifier, which TOTP does not. |
 | Google sign-in | **Rejected** | One click in a shared browser signs you in as whoever used it last. |
 | Sign in with Apple | **Rejected** | Only forced by App Store Guideline 4.8, which binds only alongside another third-party login. |
@@ -79,7 +79,7 @@ Decided on [#167](https://github.com/markgoho/doula-cloud/issues/167) and its sa
 
 **Who must hold one is decided per Membership, not per person:**
 
-- **Owner: required.** A Practice has at least one, and it carries full authority over that Practice's Staff, Plan Templates and billing.
+- **Owner: required.** A Practice has at least one, and it carries full authority over that Practice's Staff, Plan Templates and billing. _Amended by [#1492](https://github.com/markgoho/doula-cloud/issues/1492), at the end of this section: recommended after three acts, required for five._
 - **Admin and Doula: optional**, enrolment offered rather than forced.
 - **Plus a per-Practice switch.** An Owner may turn on "require MFA for all staff" in her Practice's settings, promoting every Membership at that Practice to required.
 
@@ -92,6 +92,17 @@ The blanket rule — every Staff account, because every Doula reads client healt
 **Enrolment is per person, not per Practice.** A contractor enrols once, to get into the Practice that requires it, and then has MFA everywhere she works. The UI must not imply otherwise. And **throwing the switch can lock people out immediately** — it instantly bars every un-enrolled Doula at that Practice, possibly mid-shift — so the switch says how many people it will affect before it is thrown, and the throw lands in [ADR-0022](0022-one-activity-log-with-a-subject-and-three-kinds-of-actor.md)'s activity log with who threw it and when.
 
 Enforcement in the BFF rather than as a browser prompt is the point. Google's own guidance for mandatory MFA is a client-side check of `user.multiFactor.enrolledFactors`, which is a prompt, not a refusal; there is no project-level "require MFA" flag to lean on either, since `multiFactorConfig.state` only says whether MFA is available on the project at all.
+
+**Amendment ([#1492](https://github.com/markgoho/doula-cloud/issues/1492), 2026-09-27): an Owner's second factor is recommended after three acts and required for five, and being an Owner no longer closes the door of a Practice.** The walk on [#1488](https://github.com/markgoho/doula-cloud/issues/1488) put two new Owners through the rule above on a running app: the first screen after **Create Practice** was the enrollment form, it refused each of them until she had opened a message that took three minutes to arrive, and she left the app twice before she saw anything of her own. [ADR-0048](0048-nothing-holds-a-practice-here-but-the-next-family.md) puts First Value three acts from signup. The founder ruled on the two records together, in his words: "it's too much friction to start", and "we could identify certain triggers that make it a better decision to add MFA". What changes is _when_ an Owner needs a second factor. _Where_ a requirement is enforced does not change: in the BFF, as a refusal, never as a browser prompt.
+
+- **The Practice boundary no longer refuses a caller because her Membership is Owner.** It still refuses any Membership with no second factor at a Practice whose switch is on. The rule above now reads: refuse to serve a Practice-scoped request when that Practice has the switch on and the caller's session shows no second factor.
+- **Five acts are refused until the person who asks has a second factor**: downloading the Practice archive (#288), starting Practice deletion (ADR-0031), erasing a Client, vouching for a Staff member who lost her second factor, and turning on "require MFA for all staff". Each one takes every record out at once, cannot be undone, or decides another person's access. None is on the route to First Value. So a stolen Owner password reads records, and it cannot carry the whole Practice away, destroy it, or change who gets in.
+- **The product recommends a second factor to an Owner after three acts of hers**: First Value, her first Staff Invitation sent, and Stripe connected. Each is a moment her account starts to reach more than it did. First Value is on the list because a solo Owner never invites anyone, and she would otherwise never be told. The recommendation is one notice in the app. It is never a message: ADR-0048 names the fourteen-day message as the one nudge. It does not appear on the empty Practice, which asks for one act and nothing else, so an act that comes before First Value shows its notice after. She can close it, and it returns once for each new act on the list; a notice she cannot close is the product chasing her (ADR-0043). It states one fact about her account, so it is no checklist and reads no use of hers (ADR-0046 P5).
+- **Verification moves with enrollment.** "Verification gates nothing new", below, still holds and now gates less: signup still sends the verification message, nothing on the route to First Value waits for it, and it is the first step of enrollment whenever she enrolls. The order there is the provider's: verify, then enroll.
+- **A sole Owner's recovery codes are minted when she enrolls**, and on the Membership event that makes an enrolled Owner the only one. Before she has a second factor there is nothing for a code to recover. "MFA is mandatory for Owners by default", below, no longer holds.
+- **The rule is the same for every Owner**, the one who signed up and one who became an Owner later.
+
+This stays launch-blocking: the five refusals and the recommendation ship with the launch. Rejected: the floor from the first second, which is the rule above and what the walk measured; a date fixed by her signup, fourteen days on, which ADR-0043 would admit and the founder refused for an act of hers; her first session free and every later sign-in gated; First Value itself as a refusal, which stops her at her first success; and no requirement at all, which leaves nothing between one password and the whole archive.
 
 ## Clients get a magic link, and no account with the provider
 
