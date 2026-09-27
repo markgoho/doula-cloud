@@ -19,6 +19,7 @@
 <script lang="ts" generics="T">
 	import type { Snippet } from 'svelte';
 	import Button from '../atoms/Button.svelte';
+	import Details from '../atoms/Details.svelte';
 	import Link from '../atoms/Link.svelte';
 	import Notice from '../atoms/Notice.svelte';
 
@@ -133,12 +134,13 @@
 		loadMoreError?: string;
 		emptyMessage: string;
 		/**
-		 * Wraps the whole table in a closed-by-default `<details>`, named by
-		 * this string -- the Client portal's own placement for the activity
-		 * ledger (brief.md's #433 amendment: "behind a closed disclosure in
-		 * the Client portal"). Absent everywhere else this component is used
-		 * today (the hub feed and the staff Engagement page render it open,
-		 * per the same amendment's "sits low on the page").
+		 * Wraps the whole table in a closed-by-default `Details` (#1520),
+		 * named by this string -- the Client portal's own placement for the
+		 * activity ledger (brief.md's #433 amendment: "behind a closed
+		 * disclosure in the Client portal"). Absent everywhere else this
+		 * component is used today (the hub feed and the staff Engagement
+		 * page render it open, per the same amendment's "sits low on the
+		 * page").
 		 */
 		disclosure?: string;
 	}
@@ -304,28 +306,15 @@
 {/snippet}
 
 {#if disclosure}
-	<details>
-		<summary>{disclosure}</summary>
+	<Details summary={disclosure}>
 		{@render ledgerContent()}
-	</details>
+	</Details>
 {:else}
 	{@render ledgerContent()}
 {/if}
 
 <style>
 	@layer components {
-		/* A closed <details> hides every child but <summary> per the HTML
-		   spec, but that is a user-agent-origin rule, and a plain author
-		   rule -- whatever gives .frame's own `stack-l` its base `display`
-		   -- wins over user-agent styles regardless of specificity (CSS
-		   cascade origin order, not the layer above: this component's own
-		   @layer components still outranks the UA layer). `!important`
-		   makes the closed state explicit rather than depending on that
-		   base rule happening to stay silent about it. */
-		details:not([open]) > .frame {
-			display: none !important;
-		}
-
 		/* The frame is a container, so the switch below reads the room
 		   DataTable's own wrapper has rather than the room the window has.
 		   Named for the same reason StaffTopBar names its own (#540): body
@@ -570,19 +559,6 @@
 
 		.record-view dd.muted {
 			color: var(--color-on-surface-muted);
-		}
-
-		/* The Client-portal disclosure wrapper (brief.md's #433 amendment).
-		   No marker/appearance override: the platform triangle is what GOV.UK's
-		   own Details component keeps, and this repo has no established
-		   disclosure treatment of its own to depart to. */
-		summary {
-			cursor: pointer;
-			font-family: var(--font-family-base);
-			font-size: var(--text-label-size);
-			font-weight: var(--font-weight-medium);
-			color: var(--color-on-surface-variant);
-			padding-block: var(--space-2);
 		}
 	}
 </style>

@@ -11,15 +11,17 @@
 	 * employment type. Two rows of the same table, two histories, one
 	 * disclosure.
 	 *
-	 * A native `<details>`, so opening and closing costs no JavaScript and
-	 * the keyboard and screen-reader behavior is the browser's own
-	 * (GOV.UK's Details pattern, ADR-0021). The only script is the fetch
-	 * the first open triggers, which the caller owns -- this component
-	 * holds no history of its own, because the caller is the one that
-	 * knows what a page of its history is and how to ask for the next.
+	 * Renders through `atoms/Details.svelte` (#1520), so opening and
+	 * closing costs no JavaScript and the keyboard and screen-reader
+	 * behavior is the browser's own (GOV.UK's Details pattern, ADR-0021).
+	 * The only script is the fetch the first open triggers, which the
+	 * caller owns -- this component holds no history of its own, because
+	 * the caller is the one that knows what a page of its history is and
+	 * how to ask for the next.
 	 */
 	import type { Snippet } from 'svelte';
 	import Button from '../atoms/Button.svelte';
+	import Details from '../atoms/Details.svelte';
 	import Notice from '../atoms/Notice.svelte';
 	import Text from '../atoms/Text.svelte';
 
@@ -118,16 +120,14 @@
 	const subjectNameId = $derived(`${idPrefix}-subject-name`);
 </script>
 
-<details ontoggle={(event) => event.currentTarget.open && onOpen()}>
-	<!--
-		A summary computes its accessible name from its own content, so
-		GOV.UK's visually-hidden child applies literally here -- no id and
-		no aria-describedby, which is also why this never meets #666's
-		duplicate ids across DataTable's two trees. The space belongs to
-		the summary's own text node rather than the span: accessible-name
-		computation concatenates inline children without inserting one.
-	-->
-	<summary>{label} <span class="visually-hidden">for {subjectName}</span></summary>
+<!--
+	The summary's accessible name is its own text plus Details' hidden
+	suffix (#667): a screen reader's list of controls tells this row's
+	disclosure apart from every other row's, which never meets #666's
+	duplicate ids across DataTable's two trees because nothing here is an
+	id at all.
+-->
+<Details summary={label} hiddenSummary={`for ${subjectName}`} onToggle={(isOpen) => isOpen && onOpen()}>
 	<!--
 		The failure sits above whatever is already loaded rather than
 		replacing it. A history pages, so the request that fails is
@@ -167,7 +167,7 @@
 		-->
 		<Text text="Loading..." />
 	{/if}
-</details>
+</Details>
 
 <style>
 	@layer components {
@@ -183,19 +183,6 @@
 		}
 
 		li {
-			padding-block: var(--space-1);
-		}
-
-		/* WCAG 2.2 target size (minimum), which the axe archetype scan
-		   enforces and caught on #459: the summary is a touch target, and
-		   body-sm alone gives it a 21px line box. --space-6 is 24px
-		   exactly, and the padding puts it clear of the boundary rather
-		   than on it. */
-		summary {
-			font-size: var(--text-body-sm-size);
-			line-height: var(--text-body-sm-leading);
-			cursor: pointer;
-			min-block-size: var(--space-6);
 			padding-block: var(--space-1);
 		}
 	}
