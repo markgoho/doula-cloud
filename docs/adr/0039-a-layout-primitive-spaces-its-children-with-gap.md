@@ -1,6 +1,6 @@
 # A layout primitive spaces its children with `gap`, not with their margins
 
-`stack-l` spaces its children with `gap` on the container, under `display: flex; flex-direction: column`. It used to space them with `stack-l > * + * { margin-block-start: … }`, and that line — the one ADR-0003 calls "Stack's adjacent-sibling technique" — is what this decision amends. `reel-l` moves with it, for the same reason and in the same pass. `cover-l` deliberately does not; that is recorded below and gets its own answer in [#1220](https://github.com/markgoho/doula-cloud/issues/1220).
+`stack-l` spaces its children with `gap` on the container, under `display: flex; flex-direction: column`. It used to space them with `stack-l > * + * { margin-block-start: … }`, and that line — the one ADR-0003 calls "Stack's adjacent-sibling technique" — is what this decision amends. `reel-l` moves with it, for the same reason and in the same pass. `cover-l` did not at first; that is recorded below, and **amended by [ADR-0052](0052-cover-spaces-with-gap-and-centers-with-one-auto-margin.md)** ([#1220](https://github.com/markgoho/doula-cloud/issues/1220)), which moves Cover to `gap` as well.
 
 ## The mechanism this replaces, and why it could not stay
 
@@ -33,6 +33,8 @@ The one real breakage in the app was `QuestionPage`'s label-as-h1 branch, where 
 
 ## `cover-l` is deliberately margined, and stays that way for now
 
+**Amended by [ADR-0052](0052-cover-spaces-with-gap-and-centers-with-one-auto-margin.md):** Cover now spaces with `gap` and keeps only the centered child's auto margin. The paragraph below is the reasoning that ADR replaced.
+
 Cover's centering *is* an auto margin — `cover-l > h1 { margin-block: auto }` — and `gap` cannot express "`space` at the ends and `auto` in the middle": a gap is uniform between items and writes nothing at the edges. The 2×space it puts between two adjacent non-centered children is deliberate as well, and a gap would halve it. So the answer that fits Stack does not transfer, and Cover carries the same latent exposure Stack just lost. That is recorded here rather than left silent, and [#1220](https://github.com/markgoho/doula-cloud/issues/1220) is where Cover gets its own answer.
 
 ## How this is checked
@@ -41,7 +43,7 @@ Two seams, because neither alone is honest.
 
 `app/src/lib/primitives/stack.spec.ts` renders the defect: a `stack-l` whose second child resets its own margin in `@layer components`, measured against an otherwise identical stack whose child resets nothing. It asserts geometry — the second child's top edge less the first's bottom edge — and not a computed margin, because under the fix that child's `margin-block-start` is still `0px`; the space belongs to the container. Both stacks are measured in the same document against the real `app.css`, so the layer order under test is the one that ships.
 
-`app/src/lib/styles/primitives.usage.spec.ts` reads the mechanism: no `margin*` declaration under a selector containing `>`, in `primitives.css` or in the rules each `primitiveSpecs` entry's own `css()` generates. `auto` is allowed, since an auto margin is alignment rather than spacing. A host rule is untouched — a primitive may margin itself; what it may not do is margin something it does not own. This is a source check rather than a rendering one for the same reason ADR-0025's rule 3 is: the cancellation is a property of a *pair* — a primitive that writes a child margin, and a component that resets its own — and either half can arrive long after the other, on a screen no rendering test happens to cover. `primitives:ignore` with a reason is the escape hatch, scoped to the rule block, exactly as `tokens:ignore` and `layout:ignore` already work here; `cover-l` is its only user.
+`app/src/lib/styles/primitives.usage.spec.ts` reads the mechanism: no `margin*` declaration under a selector containing `>`, in `primitives.css` or in the rules each `primitiveSpecs` entry's own `css()` generates. `auto` is allowed, since an auto margin is alignment rather than spacing. A host rule is untouched — a primitive may margin itself; what it may not do is margin something it does not own. This is a source check rather than a rendering one for the same reason ADR-0025's rule 3 is: the cancellation is a property of a *pair* — a primitive that writes a child margin, and a component that resets its own — and either half can arrive long after the other, on a screen no rendering test happens to cover. `primitives:ignore` with a reason is the escape hatch, scoped to the rule block, exactly as `tokens:ignore` and `layout:ignore` already work here; `cover-l` was its only user until ADR-0052.
 
 ## The enumeration, not a sample
 

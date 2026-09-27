@@ -77,15 +77,14 @@ export const primitiveSpecs: PrimitiveSpec<PropertyDefaults>[] = [
 	{
 		tagName: 'cover-l',
 		defaults: { space: 'var(--space-4)', 'min-height': '100vh', centered: 'h1' },
+		// `gap` for the spacing (ADR-0039); the centered child's auto margin
+		// is alignment, not spacing (ADR-0052).
 		css: (v, s) =>
-			`${s} { min-block-size: ${v['min-height']}; }\n` +
+			`${s} { min-block-size: ${v['min-height']}; gap: ${v.space}; }\n` +
 			// :not([no-pad]) outranks primitives.css's `cover-l[no-pad] { padding: 0; }`
 			// on specificity regardless of injection order, so no-pad still wins
 			// when a non-default space is also set.
 			`${s}:not([no-pad]) { padding: ${v.space}; }\n` +
-			`${s} > * { margin-block: ${v.space}; }\n` +
-			`${s} > :first-child:not(${v.centered}) { margin-block-start: 0; }\n` +
-			`${s} > :last-child:not(${v.centered}) { margin-block-end: 0; }\n` +
 			`${s} > ${v.centered} { margin-block: auto; }`
 	},
 	{

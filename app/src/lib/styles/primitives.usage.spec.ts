@@ -34,8 +34,8 @@ import { styleLines } from './styleLines';
  * child -- one containing `>`. Two deliberate narrowings:
  *
  * - `auto` is allowed. Auto margins are not spacing, they are alignment
- *   (`cover-l > h1 { margin-block: auto }` is Cover's centering), and no
- *   `gap` expresses that.
+ *   (`cover-l > h1 { margin-block: auto }` is Cover's centering, ADR-0052),
+ *   and no `gap` expresses that.
  * - A host rule is untouched. A primitive is free to margin ITSELF; what
  *   it may not do is margin something it does not own.
  *
@@ -52,23 +52,13 @@ import { styleLines } from './styleLines';
  *
  * `primitives:ignore` with a reason, scoped to the rule block it
  * introduces, exactly as `tokens:ignore` and `layout:ignore` already work
- * here. `cover-l` is its one user and ADR-0039 records why. The generated
- * half has no line a marker could sit on, so its exception is `EXEMPT`
- * below -- a tag name and the same reason, which is the narrowest form a
- * generated rule can carry.
+ * here. Nothing uses it: `cover-l` did until #1220 moved its spacing to
+ * `gap` (ADR-0052). The generated half has no line a marker could sit on,
+ * so it has no escape hatch at all -- a primitive whose injected rules
+ * need one needs an ADR first.
  */
 
 const IGNORE = 'primitives:ignore';
-
-/*
- * Cover keeps sibling margins deliberately (ADR-0039): its centering is an
- * auto margin, and a gap cannot write `space` at the ends and `auto` in
- * the middle. It carries the same exposure Stack just lost, and #1220 is
- * where that gets its own answer -- not an exemption that quietly grows.
- */
-const EXEMPT: ReadonlyMap<string, string> = new Map([
-	['cover-l', 'deliberately margined; ADR-0039, follow-up #1220']
-]);
 
 const MARGIN_DECLARATION = /(?:^|[\s;{])(margin(?:-[a-z-]+)?)\s*:\s*([^;}]+)/g;
 
@@ -128,7 +118,7 @@ describe('a layout primitive spaces its children with gap, not with their margin
 		expect(report(findOffenses('primitives.css', judged))).toEqual([]);
 	});
 
-	it.each(primitiveSpecs.filter((spec) => !EXEMPT.has(spec.tagName)))(
+	it.each(primitiveSpecs)(
 		'writes no child margin in the rules $tagName injects for a configured instance',
 		(spec) => {
 			const rules = spec.css(spec.defaults, spec.tagName);
@@ -136,20 +126,4 @@ describe('a layout primitive spaces its children with gap, not with their margin
 			expect(report(findOffenses(`primitives.ts (${spec.tagName})`, rules))).toEqual([]);
 		}
 	);
-
-	/*
-	 * An exemption whose rule no longer fires is an exemption nobody is
-	 * reading, and the next person inherits it as fact -- the shape
-	 * `docs/testing.md` already asks of an allowance list, which fails the
-	 * scan until a spent entry is narrowed or deleted. So the staleness
-	 * check is not "does this primitive still exist" but "does it still
-	 * write the thing it is excused for": the day #1220 gives Cover its own
-	 * answer, this fails and takes the exemption with it.
-	 */
-	it.each(EXEMPT.keys().toArray())('still has something for the %s exemption to excuse', (tagName) => {
-		const spec = primitiveSpecs.find((candidate) => candidate.tagName === tagName);
-
-		expect(spec).toBeDefined();
-		expect(findOffenses(tagName, spec!.css(spec!.defaults, tagName))).not.toEqual([]);
-	});
 });
