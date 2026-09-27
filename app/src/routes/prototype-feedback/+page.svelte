@@ -27,7 +27,7 @@
 		{ key: 'B', name: 'Dialog over the screen', component: VariantB },
 		{ key: 'C', name: 'Form at the foot of every screen', component: VariantC },
 		{ key: 'D', name: 'A, then a Notice back on the origin', component: VariantD },
-		{ key: 'E', name: 'Drawer beside the screen', component: VariantE }
+		{ key: 'E', name: 'Drawer slides over the screen', component: VariantE }
 	] as const;
 
 	const initial = new URLSearchParams(globalThis.location?.search ?? '');

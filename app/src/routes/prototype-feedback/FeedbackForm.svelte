@@ -61,8 +61,12 @@
 				<Textarea {id} {describedBy} {invalid} value={text} onInput={(value) => (text = value)} rows={5} />
 			{/snippet}
 		</LabeledField>
-		<div class="inset">
-			<Text text="We will also send:" step="body-sm" />
+		<Text text={words.destination} />
+		<!-- GOV.UK Details: disclosed, not called out. Nothing is sent that
+		     this list does not name (ADR-0046), but a person does not have
+		     to read it to send. -->
+		<details>
+			<summary>What else we send with your feedback</summary>
 			<ul>
 				<li>the page you were on: {context.screenTitle}</li>
 				<li>your role and Practice: {context.role}, {context.practice}</li>
@@ -70,8 +74,7 @@
 				<li>your screen width and browser: {context.width}px, {context.browser}</li>
 				<li>the version of Doula Cloud: {context.build}</li>
 			</ul>
-		</div>
-		<Text text={words.destination} />
+		</details>
 		<Button type="submit" label={submitLabel} />
 	</StackedForm>
 </div>
@@ -83,14 +86,20 @@
 		gap: var(--space-4);
 	}
 
-	.inset {
-		padding: var(--space-3) var(--space-4);
+	summary {
+		color: var(--color-primary);
+		text-decoration: underline;
+		cursor: pointer;
+	}
+
+	details[open] ul {
+		padding-block: var(--space-3);
 		border-inline-start: var(--border-active) solid var(--color-outline-variant);
 	}
 
 	ul {
-		margin: var(--space-1) 0 0;
-		padding-inline-start: var(--space-5);
+		margin: var(--space-2) 0 0;
+		padding-inline-start: var(--space-7);
 		font-size: var(--text-body-sm-size);
 		line-height: var(--text-body-sm-leading);
 		color: var(--color-on-surface-variant);

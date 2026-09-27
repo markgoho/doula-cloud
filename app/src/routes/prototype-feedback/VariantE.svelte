@@ -1,12 +1,15 @@
 <script lang="ts">
 	/*
-	 * PROTOTYPE -- #1502, variant E: the banner link opens a drawer at the
-	 * inline end. Not modal: the screen beside it stays visible, scrolls,
-	 * and can be read while typing about it. The origin is the screen
-	 * underneath, as in B. Escape or Close shuts it and returns focus to
-	 * the banner link. At 320px the drawer is the full width.
+	 * PROTOTYPE -- #1502, variant E: the banner link slides a drawer in
+	 * from the inline end, over the screen, which does not move. It slides
+	 * back out on Close, Escape, or a send. The origin is the screen
+	 * underneath, as in B. Focus goes to the drawer's heading, and back to
+	 * the banner link on close. Motion stops under prefers-reduced-motion.
+	 * At 320px the drawer is the full width.
 	 */
 	import { tick } from 'svelte';
+	import { fly } from 'svelte/transition';
+	import { cubicOut } from 'svelte/easing';
 	import Button from '#lib/components/atoms/Button.svelte';
 	import Heading from '#lib/components/atoms/Heading.svelte';
 	import Notice from '#lib/components/atoms/Notice.svelte';
@@ -34,16 +37,17 @@
 	let drawer = $state<HTMLElement>();
 	let opener: HTMLElement | undefined;
 
+	const isReducedMotion = globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
+	// Slides its own width: `x` in px, so read the drawer's rendered width.
+	const slide = (node: HTMLElement) =>
+		fly(node, { x: node.offsetWidth, opacity: 1, duration: isReducedMotion ? 0 : 240, easing: cubicOut });
+
 	async function open(event: MouseEvent) {
 		event.preventDefault();
 		opener = event.currentTarget as HTMLElement;
 		isOpen = true;
 		onReport({ view: 'form', url: '' });
 		await tick();
-		focusHeading();
-	}
-
-	function focusHeading() {
 		const heading = drawer?.querySelector<HTMLElement>('h2');
 		heading?.setAttribute('tabindex', '-1');
 		heading?.focus();
@@ -64,7 +68,6 @@
 
 <PhaseBanner text={words.bannerText} linkText={words.bannerLink} href="#feedback" onActivate={open} />
 
-<div class="layout"><div class="row">
 <main id="main" tabindex="-1">
 	{#if isSent && !isOpen}
 		<div class="notice">
@@ -75,46 +78,32 @@
 </main>
 
 {#if isOpen}
-	<aside class="drawer" bind:this={drawer} aria-labelledby="feedback-drawer-heading">
+	<aside class="drawer" bind:this={drawer} aria-labelledby="feedback-drawer-heading" transition:slide>
 		<div class="head">
 			<Heading level={2} id="feedback-drawer-heading" text={words.pageTitle} />
 			<Button label="Close" variant="secondary" size="sm" onClick={close} />
 		</div>
 		<Text text={words.intro} />
-			<FeedbackForm
-				{shell}
-				context={readContext(shell, screen, routeId)}
-				onSent={async ({ kind, text }) => {
-					isSent = true;
-					isOpen = false;
-					onReport({ view: 'sent', url: '', sent: { kind, text, context: readContext(shell, screen, routeId) } });
-					await tick();
-					// Outcomes are a Notice in place (govuk-alignment.md): the
-					// drawer closes and the screen it sat beside says so.
-					const notice = document.querySelector<HTMLElement>('main [role="status"]');
-					notice?.setAttribute('tabindex', '-1');
-					notice?.focus();
-				}}
-			/>
+		<FeedbackForm
+			{shell}
+			context={readContext(shell, screen, routeId)}
+			onSent={async ({ kind, text }) => {
+				isSent = true;
+				isOpen = false;
+				onReport({ view: 'sent', url: '', sent: { kind, text, context: readContext(shell, screen, routeId) } });
+				await tick();
+				// Outcomes are a Notice in place (govuk-alignment.md): the
+				// drawer slides away and the screen under it says so.
+				const notice = document.querySelector<HTMLElement>('main [role="status"]');
+				notice?.setAttribute('tabindex', '-1');
+				notice?.focus();
+			}}
+		/>
 	</aside>
 {/if}
-</div></div>
 
 <style>
-	/* The drawer sits beside the screen and pushes it, never over it, while
-	   the row has room for both; below that it takes the whole width. */
-	.layout {
-		container-type: inline-size;
-	}
-
-	.row {
-		display: flex;
-		align-items: flex-start;
-	}
-
 	main {
-		flex: 1 1 0;
-		min-inline-size: 0;
 		max-inline-size: 72rem;
 		margin-inline: auto;
 		padding: var(--space-6) var(--space-4) var(--space-12);
@@ -124,27 +113,21 @@
 		margin-block-end: var(--space-5);
 	}
 
+	/* Over the screen, never beside it: the screen keeps its layout. */
 	.drawer {
-		position: sticky;
-		inset-block-start: 0;
-		flex: 0 0 28rem;
+		position: fixed;
+		inset-block: 0;
+		inset-inline-end: 0;
+		z-index: 10;
 		display: flex;
 		flex-direction: column;
 		gap: var(--space-4);
-		max-block-size: 100dvh;
+		inline-size: min(28rem, 100%);
 		overflow-y: auto;
 		padding: var(--space-5) var(--space-4) var(--space-12);
 		border-inline-start: var(--border-thin) solid var(--color-outline-variant);
 		background: var(--color-surface-container);
-	}
-
-	@container (inline-size < 52rem) {
-		.drawer {
-			position: fixed;
-			inset: 0;
-			z-index: 10;
-			max-block-size: none;
-		}
+		box-shadow: -8px 0 24px rgb(0 0 0 / 25%);
 	}
 
 	.head {
