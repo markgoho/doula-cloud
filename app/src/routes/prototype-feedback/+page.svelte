@@ -19,12 +19,14 @@
 	import VariantA from './VariantA.svelte';
 	import VariantB from './VariantB.svelte';
 	import VariantC from './VariantC.svelte';
+	import VariantD from './VariantD.svelte';
 	import { copy, PRACTICE_NAME, screens, type Shell } from './fixtures.js';
 
 	const variants = [
 		{ key: 'A', name: 'Own page, origin in ?from=', component: VariantA },
 		{ key: 'B', name: 'Dialog over the screen', component: VariantB },
-		{ key: 'C', name: 'Form at the foot of every screen', component: VariantC }
+		{ key: 'C', name: 'Form at the foot of every screen', component: VariantC },
+		{ key: 'D', name: 'A, then a Notice back on the origin', component: VariantD }
 	] as const;
 
 	const initial = new URLSearchParams(globalThis.location?.search ?? '');
