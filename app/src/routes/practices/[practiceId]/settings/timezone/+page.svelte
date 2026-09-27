@@ -3,10 +3,14 @@
 	import { page } from '#lib/appState.svelte.js';
 	import { apiFetchWithSession } from '#lib/api.js';
 	import { loadPracticeTimezone, savePracticeTimezone } from '#lib/practiceTimezone.js';
-	import { TIMEZONE_HINT, TIMEZONE_NEEDED } from '#lib/timezones.js';
+	import { TIMEZONE_HINT, TIMEZONE_NEEDED, timezoneOptions } from '#lib/timezones.js';
+	import { isOwnerOrAdmin } from '#lib/roles.js';
+	import type { PracticeSession } from '../../+layout.js';
 	import TimezoneField from '#lib/components/molecules/TimezoneField.svelte';
+	import DescriptionList from '#lib/components/molecules/DescriptionList.svelte';
 	import ErrorSummary from '#lib/components/molecules/ErrorSummary.svelte';
 	import Text from '#lib/components/atoms/Text.svelte';
+	import Notice from '#lib/components/atoms/Notice.svelte';
 	import Button from '#lib/components/atoms/Button.svelte';
 	import WarningText from '#lib/components/atoms/WarningText.svelte';
 	import FormPage from '#lib/components/templates/FormPage.svelte';
@@ -14,6 +18,13 @@
 	import { FormSubmission, type FormError } from '#lib/formSubmission.svelte.js';
 
 	const timezoneId = 'practice-timezone';
+
+	/* Every Staff can read the zone -- #1280 widened the GET so
+	   `InvoiceSection` could -- but only an Owner or Admin can state it
+	   (#1441). Anyone else is shown the zone as a fact, never a Save
+	   button that exists only to be refused. */
+	const session = $derived((page.data as { session: PracticeSession }).session);
+	let canChangeTimezone = $derived(isOwnerOrAdmin(session));
 
 	// docs/api-design.md section 7's Details is keyed by the DTO's own
 	// JSON field name -- PUT /api/practices/{practiceId}/timezone's body
@@ -24,6 +35,12 @@
 	let timezone = $state('');
 	let isSaved = $state(false);
 	const submission = new FormSubmission();
+
+	/* The label a person would say, from the same list the select offers,
+	   so the read-only zone and the editable one read alike. */
+	let timezoneLabel = $derived(
+		timezoneOptions(timezone).find((zone) => zone.value === timezone)?.label ?? timezone
+	);
 
 	/* The screen's own refusal is already the list `ErrorSummary` wants,
 	   so it passes straight through; anything thrown is a refusal the BFF
@@ -67,6 +84,14 @@
 	<ErrorSummary errors={submission.errors} />
 {/snippet}
 
+{#snippet readOnlyFields()}
+	<DescriptionList items={[{ label: 'Timezone', value: timezoneLabel }]} />
+	<Text text={TIMEZONE_HINT} />
+	<!-- The payments screen's shape for a fact she can see but not change
+	     (#267): a plain sentence naming who holds it, not the BFF's 403. -->
+	<Notice variant="status" message="Only a Practice Owner or Admin can change the timezone." />
+{/snippet}
+
 {#snippet fields()}
 	{#if isSaved}
 		<Text text="Saved." />
@@ -92,12 +117,14 @@
 {/snippet}
 
 {#snippet actions()}
-	<Button label="Save" loading={submission.isSubmitting} onClick={save} />
+	{#if canChangeTimezone}
+		<Button label="Save" loading={submission.isSubmitting} onClick={save} />
+	{/if}
 {/snippet}
 
 <FormPage
 	title="Timezone"
-	fieldsets={[{ content: fields }]}
+	fieldsets={[{ content: canChangeTimezone ? fields : readOnlyFields }]}
 	{actions}
 	errorSummary={submission.errors.length > 0 ? errorSummary : undefined}
 />
