@@ -30,30 +30,14 @@
  */
 import { afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { registerLayoutPrimitives } from './index.js';
+import { mountForTest, removeMounted, resetMarginInComponentsLayer } from './layerFixture.js';
 import '#lib/styles/app.css';
 
 beforeAll(() => {
 	if (!customElements.get('stack-l')) registerLayoutPrimitives();
 });
 
-const mounted: HTMLElement[] = [];
-
-afterEach(() => {
-	for (const element of mounted) element.remove();
-	mounted.length = 0;
-});
-
-/*
- * A component's own root-element reset, in the layer a component's scoped
- * `<style>` compiles into. One stylesheet per test, removed with the
- * fixture it belongs to.
- */
-function resetMarginInComponentsLayer(selector: string): void {
-	const style = document.createElement('style');
-	style.textContent = `@layer components {\n\t${selector} { margin: 0; }\n}`;
-	document.head.append(style);
-	mounted.push(style);
-}
+afterEach(removeMounted);
 
 function mountStack(space?: string): { first: HTMLElement; second: HTMLElement } {
 	const stack = document.createElement('stack-l');
@@ -67,8 +51,7 @@ function mountStack(space?: string): { first: HTMLElement; second: HTMLElement }
 	second.textContent = 'The notice below it';
 
 	stack.append(first, second);
-	document.body.append(stack);
-	mounted.push(stack);
+	document.body.append(mountForTest(stack));
 
 	return { first, second };
 }

@@ -15,31 +15,23 @@
  * `clamp()` carrying a `cqi`, so the cover's own computed padding -- the
  * same `space`, resolved against the same container -- is the honest
  * source for what it is at each width.
+ *
+ * The three widths are #1220's acceptance criteria, where #1105 measured
+ * Stack's defect. They are not breakpoints: `space` changes with width,
+ * and the claim is that the geometry holds wherever the clamp lands. The
+ * continuum check (ADR-0025) owns overflow; this file owns spacing.
  */
 import { page } from 'vitest/browser';
 import { afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { registerLayoutPrimitives } from './index.js';
+import { mountForTest, removeMounted, resetMarginInComponentsLayer } from './layerFixture.js';
 import '#lib/styles/app.css';
 
 beforeAll(() => {
 	if (!customElements.get('cover-l')) registerLayoutPrimitives();
 });
 
-const mounted: HTMLElement[] = [];
-
-afterEach(() => {
-	for (const element of mounted) element.remove();
-	mounted.length = 0;
-});
-
-// A component's own root-element reset, in the layer a component's scoped
-// `<style>` compiles into.
-function resetMarginInComponentsLayer(selector: string): void {
-	const style = document.createElement('style');
-	style.textContent = `@layer components {\n\t${selector} { margin: 0; }\n}`;
-	document.head.append(style);
-	mounted.push(style);
-}
+afterEach(removeMounted);
 
 function paragraph(className: string): HTMLElement {
 	const element = document.createElement('p');
@@ -58,8 +50,7 @@ function mountCover() {
 	const last = paragraph('last');
 
 	cover.append(first, second, heading, last);
-	document.body.append(cover);
-	mounted.push(cover);
+	document.body.append(mountForTest(cover));
 
 	return { cover, first, second, heading, last };
 }
