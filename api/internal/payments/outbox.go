@@ -46,7 +46,7 @@ func QueuePayoutIncompleteNotification(ctx context.Context, tx *sql.Tx, practice
 }
 
 // Worker sends due payout_outbox rows -- the Cloud-Scheduler-driven half
-// of ADR-0010's outbox (outbox.ProcessPending owns the claim/retry/
+// of ADR-0010's outbox (outbox.Worker.HandlePending owns the claim/retry/
 // dead-letter machinery every mail kind shares).
 //
 // Hand-written rather than built on outbox.MailWorker[R] (#839): it is
@@ -105,7 +105,7 @@ func wrapOutboxErr(err error) error {
 // separately; a row is marked sent once every resolved Owner has been
 // mailed without error.
 func (w Worker) ProcessPending(ctx context.Context, tx *sql.Tx) error {
-	return wrapOutboxErr(outbox.ProcessPending(ctx, tx, w.inner(), payoutClaimQuery, scanPayoutRow, w.send))
+	return wrapOutboxErr(w.inner().HandlePending(ctx, tx, payoutClaimQuery, scanPayoutRow, w.send))
 }
 
 func (w Worker) send(ctx context.Context, tx *sql.Tx, inner outbox.Worker, r payoutPendingRow, now time.Time) error {

@@ -111,7 +111,7 @@ func scanRow(rows *sql.Rows) (pendingRow, error) {
 
 // ProcessPending performs every due reminder or finalization within tx.
 func (w Worker) ProcessPending(ctx context.Context, tx *sql.Tx) error {
-	if err := outbox.ProcessPending(ctx, tx, w.inner(), claimQuery, scanRow, w.perform); err != nil {
+	if err := w.inner().HandlePending(ctx, tx, claimQuery, scanRow, w.perform); err != nil {
 		// coverage:ignore reason: only reached by a DB failure inside the outbox package, not exercised by unit tests
 		return fmt.Errorf("practicedeletion: %w", err)
 	}

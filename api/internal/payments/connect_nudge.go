@@ -240,7 +240,7 @@ func scanConnectNudgeRow(rows *sql.Rows) (connectNudgePendingRow, error) {
 
 // ProcessPending sends every due connect_nudge_outbox row within tx.
 func (w ConnectNudgeWorker) ProcessPending(ctx context.Context, tx *sql.Tx) error {
-	return wrapOutboxErr(outbox.ProcessPending(ctx, tx, w.inner(), connectNudgeClaimQuery, scanConnectNudgeRow, w.send))
+	return wrapOutboxErr(w.inner().HandlePending(ctx, tx, connectNudgeClaimQuery, scanConnectNudgeRow, w.send))
 }
 
 // send mails one claimed row, rechecking the live condition first.

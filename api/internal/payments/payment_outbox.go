@@ -52,7 +52,7 @@ func QueuePaymentReceivedNotification(ctx context.Context, tx *sql.Tx, paymentID
 // Cloud-Scheduler-driven half of ADR-0010's outbox for #344, mirroring
 // Worker's shape (payout_outbox's own worker, kept as a distinct type
 // since the two outbox tables, recipients, and copy are all unrelated).
-// outbox.ProcessPending owns the claim/retry/dead-letter machinery every
+// outbox.Worker.HandlePending owns the claim/retry/dead-letter machinery every
 // mail kind shares.
 //
 // Hand-written rather than built on outbox.MailWorker[R] (#839): it is
@@ -96,7 +96,7 @@ func scanPaymentReceivedRow(rows *sql.Rows) (paymentReceivedPendingRow, error) {
 // payout_outbox's and low_credit_outbox's workers, whose notifications
 // map to Owner-only responsive actions this one has none of.
 func (w PaymentReceivedWorker) ProcessPending(ctx context.Context, tx *sql.Tx) error {
-	return wrapOutboxErr(outbox.ProcessPending(ctx, tx, w.inner(), paymentReceivedClaimQuery, scanPaymentReceivedRow, w.send))
+	return wrapOutboxErr(w.inner().HandlePending(ctx, tx, paymentReceivedClaimQuery, scanPaymentReceivedRow, w.send))
 }
 
 func (w PaymentReceivedWorker) send(ctx context.Context, tx *sql.Tx, inner outbox.Worker, r paymentReceivedPendingRow, now time.Time) error {

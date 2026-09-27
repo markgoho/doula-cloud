@@ -188,7 +188,7 @@ func (w Worker) SendAll(ctx context.Context, tx *sql.Tx, id string, attemptCount
 	return w.MarkSent(ctx, tx, id, now)
 }
 
-// ProcessPending claims every row claimQuery selects (a query that must
+// HandlePending claims every row claimQuery selects (a query that must
 // end in "LIMIT $1 FOR UPDATE [OF ...] SKIP LOCKED" over exactly one
 // outbox table, ordered by next_attempt_at, taking MaxBatch as its one
 // placeholder), scans each with scan, and -- only once the claiming
@@ -202,10 +202,9 @@ func (w Worker) SendAll(ctx context.Context, tx *sql.Tx, id string, attemptCount
 // immediately after. Every claimQuery this package receives follows that
 // rule; it is enforced by convention in each caller's SQL, not by this
 // function.
-func ProcessPending[R any](
+func (w Worker) HandlePending[R any](
 	ctx context.Context,
 	tx *sql.Tx,
-	w Worker,
 	claimQuery string,
 	scan func(*sql.Rows) (R, error),
 	handle func(ctx context.Context, tx *sql.Tx, w Worker, row R, now time.Time) error,

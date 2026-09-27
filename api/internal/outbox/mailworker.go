@@ -68,7 +68,7 @@ type RowMeta struct {
 }
 
 // claimedRow pairs a claimed row's RowMeta with the kind-specific data
-// Compose reads -- the single value outbox.ProcessPending's existing
+// Compose reads -- the single value outbox.Worker.HandlePending's existing
 // claim-scan-handle loop is instantiated over. Unexported: nothing outside
 // this file ever names it.
 type claimedRow[R any] struct {
@@ -115,9 +115,9 @@ func (w MailWorker[R]) scan(rows *sql.Rows) (claimedRow[R], error) {
 
 // ProcessPending sends every due row within tx: claims, scans, composes and
 // marks each one -- what a hand-written kind's own ProcessPending used to
-// do by calling outbox.ProcessPending directly, now done once here.
+// do by calling outbox.Worker.HandlePending directly, now done once here.
 func (w MailWorker[R]) ProcessPending(ctx context.Context, tx *sql.Tx) error {
-	return ProcessPending(ctx, tx, w.inner(), w.ClaimQuery, w.scan, w.handle)
+	return w.inner().HandlePending(ctx, tx, w.ClaimQuery, w.scan, w.handle)
 }
 
 func (w MailWorker[R]) handle(ctx context.Context, tx *sql.Tx, inner Worker, c claimedRow[R], now time.Time) error {

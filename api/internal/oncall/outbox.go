@@ -61,7 +61,7 @@ func scanGapNoticeRow(rows *sql.Rows) (gapNoticeRow, error) {
 
 // ProcessPending sends every due coverage_gap_outbox row within tx.
 func (w GapNoticeWorker) ProcessPending(ctx context.Context, tx *sql.Tx) error {
-	if err := outbox.ProcessPending(ctx, tx, w.inner(), gapNoticeClaimQuery, scanGapNoticeRow, w.send); err != nil {
+	if err := w.inner().HandlePending(ctx, tx, gapNoticeClaimQuery, scanGapNoticeRow, w.send); err != nil {
 		// coverage:ignore reason: only reached by a DB failure inside the outbox package, not exercised by unit tests
 		return fmt.Errorf("oncall: %w", err)
 	}

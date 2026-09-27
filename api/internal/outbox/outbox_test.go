@@ -381,7 +381,7 @@ func TestProcessPending_ClaimsDueRowsInOrderAndSkipsNotYetDue(t *testing.T) {
 		handled = append(handled, r.id)
 		return w.MarkSent(ctx, tx, r.id, now)
 	}
-	if err := outbox.ProcessPending(t.Context(), tx, w, testClaimQuery, scanTestRow, handle); err != nil {
+	if err := w.HandlePending(t.Context(), tx, testClaimQuery, scanTestRow, handle); err != nil {
 		t.Fatalf("ProcessPending: %v", err)
 	}
 	if err := tx.Commit(); err != nil {
@@ -412,7 +412,7 @@ func TestProcessPending_HandleErrorStopsAndPropagates(t *testing.T) {
 	handle := func(_ context.Context, _ *sql.Tx, _ outbox.Worker, _ testRow, _ time.Time) error {
 		return wantErr
 	}
-	if err := outbox.ProcessPending(t.Context(), tx, w, testClaimQuery, scanTestRow, handle); !errors.Is(err, wantErr) {
+	if err := w.HandlePending(t.Context(), tx, testClaimQuery, scanTestRow, handle); !errors.Is(err, wantErr) {
 		t.Fatalf("err = %v, want %v", err, wantErr)
 	}
 }
@@ -437,7 +437,7 @@ func TestProcessPending_ScanErrorPropagates(t *testing.T) {
 		t.Fatal("handle should not run when scan fails")
 		return nil
 	}
-	if err := outbox.ProcessPending(t.Context(), tx, w, badQuery, scanTestRow, handle); err == nil {
+	if err := w.HandlePending(t.Context(), tx, badQuery, scanTestRow, handle); err == nil {
 		t.Fatal("want a scan error, got nil")
 	}
 }
@@ -458,7 +458,7 @@ func TestProcessPending_NoPendingRowsCallsHandleZeroTimes(t *testing.T) {
 		calls++
 		return nil
 	}
-	if err := outbox.ProcessPending(t.Context(), tx, w, testClaimQuery, scanTestRow, handle); err != nil {
+	if err := w.HandlePending(t.Context(), tx, testClaimQuery, scanTestRow, handle); err != nil {
 		t.Fatalf("ProcessPending: %v", err)
 	}
 	if calls != 0 {
