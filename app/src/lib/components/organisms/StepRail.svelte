@@ -149,6 +149,16 @@
 	step list the strip dropped, and nothing is dropped now. It was also
 	passed by nothing outside the style guide, pointing at a route #466
 	has not built.
+
+	This stays a hand-written <details> rather than routing through
+	`atoms/Details.svelte` (#1520). Its summary is not text -- it is the
+	composed row above, a caption plus an `aria-hidden` progress track --
+	and its marker and list are their own departure from the plain shape:
+	`list-style-position: outside` repositions the triangle rather than
+	hiding it, and `details > ol` lays the steps out as a grid. Widening
+	the atom to carry a composed summary and a bespoke marker position
+	would fit one caller and no other; DataTable and HistoryDisclosure are
+	the two real callers a shared shape earns.
 -->
 <nav aria-label={journey}>
 	<details open={expand === 'completed'}>
