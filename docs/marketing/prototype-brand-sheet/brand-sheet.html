@@ -1,0 +1,515 @@
+<title>DoulaCloud Brand Sheet</title>
+<!--
+PROTOTYPE for #1000. Throwaway. One sheet, not a set of page variants:
+the name (ADR-0050), the palette and type (tokens.css, docs/design/brief.md)
+and the voice (#362) are settled. The only open choices are the refinements
+in sections 1 and 2, so only those sections show options side by side.
+Every color below is copied from app/src/lib/styles/tokens.css.
+-->
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:ital,wght@0,400..600;1,400&display=swap">
+<style>
+	:root {
+		--color-surface-bright: oklch(98.5% 0.008 7);
+		--color-surface: oklch(96.7% 0.011 357);
+		--color-surface-container: oklch(94.9% 0.011 357);
+		--color-surface-container-high: oklch(93.3% 0.01 2);
+		--color-surface-container-highest: oklch(91.5% 0.011 355);
+		--color-on-surface: oklch(22.4% 0.009 352);
+		--color-on-surface-variant: oklch(40% 0.023 343);
+		--color-on-surface-muted: oklch(50.8% 0.023 346);
+		--color-outline: oklch(57.3% 0.023 346);
+		--color-outline-variant: oklch(83.1% 0.026 346);
+		--color-primary: oklch(41.2% 0.119 339);
+		--color-primary-hover: oklch(49.9% 0.121 339);
+		--color-on-primary: oklch(99% 0.005 339);
+		--font: 'Hanken Grotesk', ui-sans-serif, system-ui, sans-serif;
+	}
+	@media (prefers-color-scheme: dark) {
+		:root:not([data-theme='light']) {
+			color-scheme: dark;
+			--color-surface-bright: oklch(22% 0.01 350);
+			--color-surface: oklch(17.5% 0.01 350);
+			--color-surface-container: oklch(26% 0.011 350);
+			--color-surface-container-high: oklch(29.5% 0.011 350);
+			--color-surface-container-highest: oklch(33% 0.011 350);
+			--color-on-surface: oklch(93% 0.008 350);
+			--color-on-surface-variant: oklch(78% 0.02 346);
+			--color-on-surface-muted: oklch(71% 0.022 346);
+			--color-outline: oklch(60% 0.023 346);
+			--color-outline-variant: oklch(40% 0.024 346);
+			--color-primary: oklch(84% 0.116 341);
+			--color-primary-hover: oklch(90% 0.08 341);
+			--color-on-primary: oklch(22% 0.03 339);
+		}
+	}
+	:root[data-theme='dark'],
+	.ground-dark {
+		color-scheme: dark;
+		--color-surface-bright: oklch(22% 0.01 350);
+		--color-surface: oklch(17.5% 0.01 350);
+		--color-surface-container: oklch(26% 0.011 350);
+		--color-surface-container-high: oklch(29.5% 0.011 350);
+		--color-surface-container-highest: oklch(33% 0.011 350);
+		--color-on-surface: oklch(93% 0.008 350);
+		--color-on-surface-variant: oklch(78% 0.02 346);
+		--color-on-surface-muted: oklch(71% 0.022 346);
+		--color-outline: oklch(60% 0.023 346);
+		--color-outline-variant: oklch(40% 0.024 346);
+		--color-primary: oklch(84% 0.116 341);
+		--color-primary-hover: oklch(90% 0.08 341);
+		--color-on-primary: oklch(22% 0.03 339);
+	}
+	/* A specimen ground keeps its own palette in either viewer theme. */
+	.ground-light {
+		color-scheme: light;
+		--color-surface-bright: oklch(98.5% 0.008 7);
+		--color-surface: oklch(96.7% 0.011 357);
+		--color-surface-container: oklch(94.9% 0.011 357);
+		--color-surface-container-high: oklch(93.3% 0.01 2);
+		--color-surface-container-highest: oklch(91.5% 0.011 355);
+		--color-on-surface: oklch(22.4% 0.009 352);
+		--color-on-surface-variant: oklch(40% 0.023 343);
+		--color-on-surface-muted: oklch(50.8% 0.023 346);
+		--color-outline: oklch(57.3% 0.023 346);
+		--color-outline-variant: oklch(83.1% 0.026 346);
+		--color-primary: oklch(41.2% 0.119 339);
+		--color-primary-hover: oklch(49.9% 0.121 339);
+		--color-on-primary: oklch(99% 0.005 339);
+	}
+
+	*, *::before, *::after { box-sizing: border-box; }
+	body {
+		background: var(--color-surface);
+		color: var(--color-on-surface);
+		font-family: var(--font);
+		font-size: 0.9375rem;
+		line-height: 1.55;
+	}
+	.page {
+		max-width: 60rem;
+		margin-inline: auto;
+		padding-inline: 1rem;
+		padding-block: 2.5rem 4rem;
+		display: grid;
+		gap: 3rem;
+	}
+	h1, h2, h3, p, ul, dl, dd, figure { margin: 0; }
+	h1 { font-size: 2.25rem; font-weight: 600; line-height: 1.15; letter-spacing: -0.02em; text-wrap: balance; }
+	h2 { font-size: 1.25rem; font-weight: 600; line-height: 1.3; letter-spacing: -0.012em; }
+	h3 { font-size: 1rem; font-weight: 600; line-height: 1.4; letter-spacing: -0.006em; }
+	.meta { font-size: 0.75rem; line-height: 1.4; letter-spacing: 0.01em; color: var(--color-on-surface-muted); }
+	.label { font-size: 0.8125rem; font-weight: 500; line-height: 1.35; letter-spacing: 0.005em; color: var(--color-on-surface-variant); }
+	.prose { max-width: 65ch; display: grid; gap: 0.75rem; }
+	code { font-family: ui-monospace, 'SF Mono', Menlo, monospace; font-size: 0.8125rem; overflow-wrap: anywhere; }
+	a { color: var(--color-primary); }
+	a:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 2px; }
+
+	section { display: grid; gap: 1.25rem; }
+	.head { display: grid; gap: 0.5rem; }
+	.status { display: inline-block; font-size: 0.75rem; font-weight: 500; letter-spacing: 0.01em; padding: 0.125rem 0.5rem; border: 1px solid var(--color-outline); border-radius: 8px; color: var(--color-on-surface-variant); }
+	.status.open { border-color: var(--color-primary); color: var(--color-primary); }
+
+	.grid { display: grid; gap: 1rem; grid-template-columns: repeat(auto-fit, minmax(min(100%, 17rem), 1fr)); }
+	.grid.two { grid-template-columns: repeat(auto-fit, minmax(min(100%, 22rem), 1fr)); }
+	.specimen {
+		background: var(--color-surface);
+		color: var(--color-on-surface);
+		border: 1px solid var(--color-outline-variant);
+		border-radius: 8px;
+		padding: 1.25rem 1.375rem;
+		display: grid;
+		gap: 1rem;
+		align-content: start;
+		min-width: 0;
+	}
+	.specimen { grid-template-columns: minmax(0, 1fr); container-type: inline-size; }
+	.specimen.raised { background: var(--color-surface-bright); }
+	p.prose { display: block; }
+	.grid.wide { grid-template-columns: repeat(auto-fit, minmax(min(100%, 34rem), 1fr)); }
+	.note { font-size: 0.875rem; line-height: 1.5; color: var(--color-on-surface-variant); }
+
+	/* The mark and the lockup */
+	.mark { display: inline-block; vertical-align: middle; fill: none; stroke-linecap: round; flex: none; }
+	.lockup { display: inline-flex; align-items: center; gap: 0.6em; font-weight: 600; line-height: 1.3; color: var(--color-on-surface); }
+	.lockup .mark { height: 1.2em; width: auto; aspect-ratio: 202 / 94; }
+	.lockup.sm { font-size: 1rem; letter-spacing: -0.006em; }
+	.lockup.md { font-size: 1.25rem; letter-spacing: -0.012em; }
+	.lockup.lg { font-size: min(2.25rem, 11cqi); letter-spacing: -0.02em; }
+	.w-two .first { font-weight: 400; }
+	.w-tone .second { color: var(--color-primary); }
+	.stack { display: grid; gap: 0.875rem; justify-items: start; }
+
+	/* Favicon judging */
+	.sizes { display: flex; flex-wrap: wrap; align-items: end; gap: 1.25rem; }
+	.sizes figure { display: grid; gap: 0.375rem; justify-items: center; }
+	.slot { display: grid; place-items: center; }
+	.slot svg { width: 100%; height: auto; }
+	.s16 { width: 16px; height: 16px; }
+	.s32 { width: 32px; height: 32px; }
+	.s48 { width: 48px; height: 48px; }
+	.s128 { width: 128px; height: 128px; border: 1px dashed var(--color-outline-variant); }
+	.tab {
+		display: inline-flex; align-items: center; gap: 0.5rem;
+		max-width: 100%;
+		padding: 0.375rem 0.75rem;
+		background: var(--color-surface-container-high);
+		border: 1px solid var(--color-outline-variant);
+		border-radius: 8px 8px 0 0;
+		font-size: 0.8125rem; font-weight: 400;
+		color: var(--color-on-surface);
+	}
+
+	/* The 500px card */
+	.feed { display: grid; grid-template-columns: minmax(0, 1fr); gap: 0.75rem; max-width: 500px; }
+	.card500 {
+		width: 500px; max-width: 100%; aspect-ratio: 1200 / 630;
+		background: var(--color-surface-bright);
+		border: 1px solid var(--color-outline-variant);
+		border-radius: 8px;
+		padding: 7%;
+		display: grid; align-content: space-between;
+		container-type: inline-size;
+	}
+	.card500 .lockup { font-size: 7.2cqi; letter-spacing: -0.02em; }
+	.card500 .line { font-size: 4.4cqi; line-height: 1.25; font-weight: 600; letter-spacing: -0.012em; text-wrap: balance; }
+	.card500 .date { font-size: 3.2cqi; color: var(--color-on-surface-variant); }
+
+	/* Palette */
+	.swatches { display: grid; gap: 0.5rem; grid-template-columns: repeat(auto-fit, minmax(min(100%, 13rem), 1fr)); }
+	.swatch { display: grid; grid-template-columns: 2.5rem 1fr; gap: 0.75rem; align-items: center; min-width: 0; }
+	.chip { width: 2.5rem; height: 2.5rem; border-radius: 8px; border: 1px solid var(--color-outline-variant); }
+	.swatch code { display: block; color: var(--color-on-surface); }
+	.swatch span { display: block; font-size: 0.75rem; color: var(--color-on-surface-muted); font-variant-numeric: tabular-nums; }
+
+	/* Type */
+	.scale { display: grid; gap: 0.75rem; }
+	.scale div { display: grid; grid-template-columns: minmax(0, 1fr); gap: 0.125rem; padding-block-end: 0.75rem; border-block-end: 1px solid var(--color-outline-variant); }
+	.t-display { font-size: 2.25rem; font-weight: 600; line-height: 1.15; letter-spacing: -0.02em; }
+	.t-heading-lg { font-size: 1.75rem; font-weight: 600; line-height: 1.2; letter-spacing: -0.018em; }
+	.t-heading { font-size: 1.25rem; font-weight: 600; line-height: 1.3; letter-spacing: -0.012em; }
+	.t-body { font-size: 0.9375rem; line-height: 1.55; }
+	.t-label { font-size: 0.8125rem; font-weight: 500; line-height: 1.35; letter-spacing: 0.005em; }
+
+	/* Voice */
+	.letter { font-size: 1.0625rem; line-height: 1.6; max-width: 60ch; display: grid; gap: 0.75rem; }
+	.letter .signed { color: var(--color-on-surface-variant); font-size: 0.875rem; }
+	.quotes { display: grid; gap: 0.75rem; padding: 0; list-style: none; }
+	.quotes li { padding-inline-start: 1rem; border-inline-start: 2px solid var(--color-primary); display: grid; gap: 0.125rem; }
+	.quotes q { font-size: 1.125rem; font-weight: 600; letter-spacing: -0.006em; quotes: none; }
+	.rules { padding-inline-start: 1.125rem; display: grid; gap: 0.375rem; max-width: 65ch; }
+	.table { overflow-x: auto; }
+	table { border-collapse: collapse; width: 100%; font-size: 0.875rem; }
+	th, td { text-align: start; padding: 0.5rem 0.75rem 0.5rem 0; border-block-end: 1px solid var(--color-outline-variant); vertical-align: top; }
+	th { font-size: 0.8125rem; font-weight: 500; color: var(--color-on-surface-variant); }
+</style>
+
+<!-- The mark, drawn once. Strokes read the tokens of the ground they sit on. -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+	<symbol id="m-full" viewBox="48 76 202 94">
+		<g fill="none" stroke-width="14" stroke-linecap="round">
+			<path style="stroke:var(--color-outline-variant)" d="M100 160a32 32 0 0 1 64 0" />
+			<path style="stroke:var(--color-primary-hover)" d="M78 160a54 54 0 0 1 104.61-18.82 22 22 0 0 1 33.39 18.82" />
+			<path style="stroke:var(--color-primary)" d="M56 160a76 76 0 0 1 137.97-44 44 44 0 0 1 44.03 44" />
+		</g>
+	</symbol>
+	<symbol id="m-two" viewBox="46 74 202 96">
+		<g fill="none" stroke-width="18" stroke-linecap="round">
+			<path style="stroke:var(--color-primary-hover)" d="M100 160a32 32 0 0 1 64 0" />
+			<path style="stroke:var(--color-primary)" d="M56 160a76 76 0 0 1 137.97-44 44 44 0 0 1 44.03 44" />
+		</g>
+	</symbol>
+	<symbol id="m-tile" viewBox="0 0 64 64">
+		<rect width="64" height="64" rx="14" style="fill:var(--tile, oklch(41.2% 0.119 339))" />
+		<svg x="9" y="21" width="46" height="21.9" viewBox="46 74 202 96">
+			<g fill="none" stroke-width="18" stroke-linecap="round" style="stroke:var(--on-tile, oklch(99% 0.005 339))">
+				<path d="M100 160a32 32 0 0 1 64 0" />
+				<path d="M56 160a76 76 0 0 1 137.97-44 44 44 0 0 1 44.03 44" />
+			</g>
+		</svg>
+	</symbol>
+</svg>
+
+<main class="page">
+	<header class="head">
+		<p class="meta">Prototype for ticket #1000 · throwaway · 2026-09-27</p>
+		<h1>DoulaCloud brand sheet</h1>
+		<div class="prose">
+			<p>One sheet to react to. The name, the palette, the type and the voice are settled elsewhere and are shown here as they are. Two things are open, and only those show options side by side: how the name is set beside the mark, and what the mark does in a square icon slot.</p>
+			<p class="note">Every color on this page is copied from <code>app/src/lib/styles/tokens.css</code>. The face is Hanken Grotesk, the only family the app carries.</p>
+		</div>
+	</header>
+
+	<section aria-labelledby="s-name">
+		<div class="head">
+			<span><span class="status open">Open · pick one</span></span>
+			<h2 id="s-name">1. The name set beside the mark</h2>
+			<p class="prose note">The string is <code>DoulaCloud</code> (ADR-0050). With the space gone, the capital C is the only thing that separates the two words. Each option is shown at the three lockup sizes, on the light ground and the dark ground.</p>
+		</div>
+		<div class="grid">
+			<div class="specimen ground-light">
+				<h3>A · One weight</h3>
+				<div class="stack w-one">
+					<span class="lockup lg"><svg class="mark"><use href="#m-full" /></svg><span>DoulaCloud</span></span>
+					<span class="lockup md"><svg class="mark"><use href="#m-full" /></svg><span>DoulaCloud</span></span>
+					<span class="lockup sm"><svg class="mark"><use href="#m-full" /></svg><span>DoulaCloud</span></span>
+				</div>
+				<p class="note">Semibold throughout. This is what the app's top bar does today, with the space removed. It changes nothing but the string.</p>
+			</div>
+			<div class="specimen ground-light">
+				<h3>B · Two weights</h3>
+				<div class="stack w-two">
+					<span class="lockup lg"><svg class="mark"><use href="#m-full" /></svg><span><span class="first">Doula</span><span class="second">Cloud</span></span></span>
+					<span class="lockup md"><svg class="mark"><use href="#m-full" /></svg><span><span class="first">Doula</span><span class="second">Cloud</span></span></span>
+					<span class="lockup sm"><svg class="mark"><use href="#m-full" /></svg><span><span class="first">Doula</span><span class="second">Cloud</span></span></span>
+				</div>
+				<p class="note">Regular, then semibold. The weight change marks the join, so the name still reads as two words at a glance.</p>
+			</div>
+			<div class="specimen ground-light">
+				<h3>C · Two tones</h3>
+				<div class="stack w-tone">
+					<span class="lockup lg"><svg class="mark"><use href="#m-full" /></svg><span><span class="first">Doula</span><span class="second">Cloud</span></span></span>
+					<span class="lockup md"><svg class="mark"><use href="#m-full" /></svg><span><span class="first">Doula</span><span class="second">Cloud</span></span></span>
+					<span class="lockup sm"><svg class="mark"><use href="#m-full" /></svg><span><span class="first">Doula</span><span class="second">Cloud</span></span></span>
+				</div>
+				<p class="note">One weight, with Cloud in <code>--color-primary</code>. It spends the accent on the name, which the brief keeps for primary actions and active state.</p>
+			</div>
+		</div>
+		<div class="grid">
+			<div class="specimen ground-dark">
+				<div class="stack w-one">
+					<span class="lockup lg"><svg class="mark"><use href="#m-full" /></svg><span>DoulaCloud</span></span>
+					<span class="lockup sm"><svg class="mark"><use href="#m-full" /></svg><span>DoulaCloud</span></span>
+				</div>
+				<p class="meta">A on the dark ground</p>
+			</div>
+			<div class="specimen ground-dark">
+				<div class="stack w-two">
+					<span class="lockup lg"><svg class="mark"><use href="#m-full" /></svg><span><span class="first">Doula</span><span class="second">Cloud</span></span></span>
+					<span class="lockup sm"><svg class="mark"><use href="#m-full" /></svg><span><span class="first">Doula</span><span class="second">Cloud</span></span></span>
+				</div>
+				<p class="meta">B on the dark ground</p>
+			</div>
+			<div class="specimen ground-dark">
+				<div class="stack w-tone">
+					<span class="lockup lg"><svg class="mark"><use href="#m-full" /></svg><span><span class="first">Doula</span><span class="second">Cloud</span></span></span>
+					<span class="lockup sm"><svg class="mark"><use href="#m-full" /></svg><span><span class="first">Doula</span><span class="second">Cloud</span></span></span>
+				</div>
+				<p class="meta">C on the dark ground</p>
+			</div>
+		</div>
+	</section>
+
+	<section aria-labelledby="s-icon">
+		<div class="head">
+			<span><span class="status open">Open · pick one</span></span>
+			<h2 id="s-icon">2. The mark in a square icon slot</h2>
+			<p class="prose note">The mark is about twice as wide as it is tall. A browser tab, a home-screen icon and a social avatar are all square. Each option is drawn at its true size of 16, 32 and 48 pixels, then enlarged so the drawing can be read. Judge the true sizes, not the enlargement.</p>
+		</div>
+		<div class="grid">
+			<div class="specimen ground-light">
+				<h3>F1 · The mark as it is</h3>
+				<div class="sizes">
+					<figure><span class="slot s16"><svg class="mark"><use href="#m-full" /></svg></span><figcaption class="meta">16</figcaption></figure>
+					<figure><span class="slot s32"><svg class="mark"><use href="#m-full" /></svg></span><figcaption class="meta">32</figcaption></figure>
+					<figure><span class="slot s48"><svg class="mark"><use href="#m-full" /></svg></span><figcaption class="meta">48</figcaption></figure>
+					<figure><span class="slot s128"><svg class="mark"><use href="#m-full" /></svg></span><figcaption class="meta">enlarged</figcaption></figure>
+				</div>
+				<span class="tab"><span class="slot s16"><svg class="mark"><use href="#m-full" /></svg></span>DoulaCloud</span>
+				<p class="note">Three arcs, stroke 14. This is the app's favicon today. At 32 pixels the mark is 15 pixels tall and each stroke is about 2 pixels.</p>
+			</div>
+			<div class="specimen ground-light">
+				<h3>F2 · Two arcs, heavier</h3>
+				<div class="sizes">
+					<figure><span class="slot s16"><svg class="mark"><use href="#m-two" /></svg></span><figcaption class="meta">16</figcaption></figure>
+					<figure><span class="slot s32"><svg class="mark"><use href="#m-two" /></svg></span><figcaption class="meta">32</figcaption></figure>
+					<figure><span class="slot s48"><svg class="mark"><use href="#m-two" /></svg></span><figcaption class="meta">48</figcaption></figure>
+					<figure><span class="slot s128"><svg class="mark"><use href="#m-two" /></svg></span><figcaption class="meta">enlarged</figcaption></figure>
+				</div>
+				<span class="tab"><span class="slot s16"><svg class="mark"><use href="#m-two" /></svg></span>DoulaCloud</span>
+				<p class="note">The outline and the inner arch only, stroke 18. The middle layer and the hairline are dropped below 48 pixels. Still wide in a square slot.</p>
+			</div>
+			<div class="specimen ground-light">
+				<h3>F3 · A plum tile</h3>
+				<div class="sizes">
+					<figure><span class="slot s16"><svg><use href="#m-tile" /></svg></span><figcaption class="meta">16</figcaption></figure>
+					<figure><span class="slot s32"><svg><use href="#m-tile" /></svg></span><figcaption class="meta">32</figcaption></figure>
+					<figure><span class="slot s48"><svg><use href="#m-tile" /></svg></span><figcaption class="meta">48</figcaption></figure>
+					<figure><span class="slot s128" style="border:0"><svg><use href="#m-tile" /></svg></span><figcaption class="meta">enlarged</figcaption></figure>
+				</div>
+				<span class="tab"><span class="slot s16"><svg><use href="#m-tile" /></svg></span>DoulaCloud</span>
+				<p class="note">The two-arc mark in <code>--color-on-primary</code> on a <code>--color-primary</code> square. It fills the slot and does not depend on the ground behind it.</p>
+			</div>
+		</div>
+		<div class="grid">
+			<div class="specimen ground-dark">
+				<div class="sizes">
+					<figure><span class="slot s16"><svg class="mark"><use href="#m-full" /></svg></span><figcaption class="meta">16</figcaption></figure>
+					<figure><span class="slot s32"><svg class="mark"><use href="#m-full" /></svg></span><figcaption class="meta">32</figcaption></figure>
+					<figure><span class="slot s48"><svg class="mark"><use href="#m-full" /></svg></span><figcaption class="meta">48</figcaption></figure>
+				</div>
+				<span class="tab"><span class="slot s16"><svg class="mark"><use href="#m-full" /></svg></span>DoulaCloud</span>
+				<p class="meta">F1 on the dark ground</p>
+			</div>
+			<div class="specimen ground-dark">
+				<div class="sizes">
+					<figure><span class="slot s16"><svg class="mark"><use href="#m-two" /></svg></span><figcaption class="meta">16</figcaption></figure>
+					<figure><span class="slot s32"><svg class="mark"><use href="#m-two" /></svg></span><figcaption class="meta">32</figcaption></figure>
+					<figure><span class="slot s48"><svg class="mark"><use href="#m-two" /></svg></span><figcaption class="meta">48</figcaption></figure>
+				</div>
+				<span class="tab"><span class="slot s16"><svg class="mark"><use href="#m-two" /></svg></span>DoulaCloud</span>
+				<p class="meta">F2 on the dark ground</p>
+			</div>
+			<div class="specimen ground-dark">
+				<div class="sizes">
+					<figure><span class="slot s16"><svg><use href="#m-tile" /></svg></span><figcaption class="meta">16</figcaption></figure>
+					<figure><span class="slot s32"><svg><use href="#m-tile" /></svg></span><figcaption class="meta">32</figcaption></figure>
+					<figure><span class="slot s48"><svg><use href="#m-tile" /></svg></span><figcaption class="meta">48</figcaption></figure>
+				</div>
+				<span class="tab"><span class="slot s16"><svg><use href="#m-tile" /></svg></span>DoulaCloud</span>
+				<p class="meta">F3 on the dark ground. The tile keeps the light theme's plum.</p>
+			</div>
+		</div>
+	</section>
+
+	<section aria-labelledby="s-card">
+		<div class="head">
+			<span><span class="status">Judge</span></span>
+			<h2 id="s-card">3. At 500 pixels, beside text</h2>
+			<p class="prose note">A link pasted into a Facebook group shows as a card about 500 pixels wide, between other posts. The card below is drawn at that width with lockup A. It carries type only: the teaser's generated image is not part of the brand.</p>
+		</div>
+		<div class="grid wide">
+			<div class="specimen raised ground-light">
+				<div class="feed">
+					<p class="t-body">Has anyone found one tool for contracts and invoices? I have three and none of them talk to each other.</p>
+					<div class="card500">
+						<span class="lockup"><svg class="mark"><use href="#m-full" /></svg><span>DoulaCloud</span></span>
+						<div>
+							<p class="line">I'm building the thing you keep rebuilding in a spreadsheet.</p>
+							<p class="date">Coming January 2027 · doula.cloud</p>
+						</div>
+					</div>
+					<p class="meta">Light ground</p>
+				</div>
+			</div>
+			<div class="specimen raised ground-dark">
+				<div class="feed">
+					<p class="t-body">Has anyone found one tool for contracts and invoices? I have three and none of them talk to each other.</p>
+					<div class="card500">
+						<span class="lockup"><svg class="mark"><use href="#m-full" /></svg><span>DoulaCloud</span></span>
+						<div>
+							<p class="line">I'm building the thing you keep rebuilding in a spreadsheet.</p>
+							<p class="date">Coming January 2027 · doula.cloud</p>
+						</div>
+					</div>
+					<p class="meta">Dark ground</p>
+				</div>
+			</div>
+		</div>
+	</section>
+
+	<section aria-labelledby="s-color">
+		<div class="head">
+			<span><span class="status">Settled</span></span>
+			<h2 id="s-color">4. Color</h2>
+			<p class="prose note">Plum Dusk. One accent at hue 339, neutrals that lean pink at about hue 350, and no pure white or pure black. The token name is the brand's name for the color. Marketing uses the token, never a copied value.</p>
+		</div>
+		<div class="grid two">
+			<div class="specimen ground-light">
+				<h3>Light</h3>
+				<div class="swatches">
+					<div class="swatch"><span class="chip" style="background:var(--color-primary)"></span><div><code>--color-primary</code><span>oklch(41.2% 0.119 339)</span></div></div>
+					<div class="swatch"><span class="chip" style="background:var(--color-primary-hover)"></span><div><code>--color-primary-hover</code><span>oklch(49.9% 0.121 339)</span></div></div>
+					<div class="swatch"><span class="chip" style="background:var(--color-on-primary)"></span><div><code>--color-on-primary</code><span>oklch(99% 0.005 339)</span></div></div>
+					<div class="swatch"><span class="chip" style="background:var(--color-surface)"></span><div><code>--color-surface</code><span>oklch(96.7% 0.011 357)</span></div></div>
+					<div class="swatch"><span class="chip" style="background:var(--color-surface-bright)"></span><div><code>--color-surface-bright</code><span>oklch(98.5% 0.008 7)</span></div></div>
+					<div class="swatch"><span class="chip" style="background:var(--color-on-surface)"></span><div><code>--color-on-surface</code><span>oklch(22.4% 0.009 352)</span></div></div>
+					<div class="swatch"><span class="chip" style="background:var(--color-on-surface-variant)"></span><div><code>--color-on-surface-variant</code><span>oklch(40% 0.023 343)</span></div></div>
+					<div class="swatch"><span class="chip" style="background:var(--color-outline-variant)"></span><div><code>--color-outline-variant</code><span>oklch(83.1% 0.026 346)</span></div></div>
+				</div>
+			</div>
+			<div class="specimen ground-dark">
+				<h3>Dark</h3>
+				<div class="swatches">
+					<div class="swatch"><span class="chip" style="background:var(--color-primary)"></span><div><code>--color-primary</code><span>oklch(84% 0.116 341)</span></div></div>
+					<div class="swatch"><span class="chip" style="background:var(--color-primary-hover)"></span><div><code>--color-primary-hover</code><span>oklch(90% 0.08 341)</span></div></div>
+					<div class="swatch"><span class="chip" style="background:var(--color-on-primary)"></span><div><code>--color-on-primary</code><span>oklch(22% 0.03 339)</span></div></div>
+					<div class="swatch"><span class="chip" style="background:var(--color-surface)"></span><div><code>--color-surface</code><span>oklch(17.5% 0.01 350)</span></div></div>
+					<div class="swatch"><span class="chip" style="background:var(--color-surface-bright)"></span><div><code>--color-surface-bright</code><span>oklch(22% 0.01 350)</span></div></div>
+					<div class="swatch"><span class="chip" style="background:var(--color-on-surface)"></span><div><code>--color-on-surface</code><span>oklch(93% 0.008 350)</span></div></div>
+					<div class="swatch"><span class="chip" style="background:var(--color-on-surface-variant)"></span><div><code>--color-on-surface-variant</code><span>oklch(78% 0.02 346)</span></div></div>
+					<div class="swatch"><span class="chip" style="background:var(--color-outline-variant)"></span><div><code>--color-outline-variant</code><span>oklch(40% 0.024 346)</span></div></div>
+				</div>
+			</div>
+		</div>
+		<div class="table">
+			<table>
+				<thead><tr><th>Part of the mark</th><th>Token</th></tr></thead>
+				<tbody>
+					<tr><td>Front outline</td><td><code>--color-primary</code></td></tr>
+					<tr><td>Middle outline</td><td><code>--color-primary-hover</code></td></tr>
+					<tr><td>Inner arch</td><td><code>--color-outline-variant</code></td></tr>
+				</tbody>
+			</table>
+		</div>
+	</section>
+
+	<section aria-labelledby="s-type">
+		<div class="head">
+			<span><span class="status">Settled</span></span>
+			<h2 id="s-type">5. Type</h2>
+			<p class="prose note">Hanken Grotesk, weights 400 to 600, self-hosted. One family for the name, headlines, prose and labels. Marketing can use the display step more freely than the app does. It adds no second face.</p>
+		</div>
+		<div class="specimen raised scale">
+			<div><span class="t-display">Whether it's just you or a dozen doulas</span><span class="meta"><code>display</code> · 36px · 600 · -0.02em</span></div>
+			<div><span class="t-heading-lg">One place for all of it</span><span class="meta"><code>heading-lg</code> · 28px · 600 · -0.018em</span></div>
+			<div><span class="t-heading">Coming January 2027</span><span class="meta"><code>heading</code> · 20px · 600 · -0.012em</span></div>
+			<div><span class="t-body">If you do this work, you already know where the hours go.</span><span class="meta"><code>body</code> · 15px · 400 · 0</span></div>
+			<div><span class="t-label">Add me to the list</span><span class="meta"><code>label</code> · 13px · 500 · 0.005em</span></div>
+		</div>
+	</section>
+
+	<section aria-labelledby="s-voice">
+		<div class="head">
+			<span><span class="status">Settled · wording to confirm</span></span>
+			<h2 id="s-voice">6. Voice</h2>
+			<p class="prose note">Founder voice, first person, on every channel through launch. The paragraph and the three sentences are the teaser's own words, as decided on ticket #362. Nothing here is new copy.</p>
+		</div>
+		<div class="specimen raised">
+			<div class="letter">
+				<p>If you do this work, you already know where the hours go. Chasing a signature. Remembering who is due when. Working out what you're owed, in a spreadsheet only you understand.</p>
+				<p>DoulaCloud is one place for all of it, whether it's just you or a dozen doulas. It opens in January 2027. It's not ready yet, and I'd rather tell you that than show you a demo.</p>
+				<p class="signed">Mark · Building DoulaCloud</p>
+			</div>
+		</div>
+		<ul class="quotes">
+			<li><q>I'm building the thing you keep rebuilding in a spreadsheet.</q><span class="meta">A headline. It names the reader's work, not the product's features.</span></li>
+			<li><q>I need an email address I can actually write to.</q><span class="meta">An error. One person speaks, including when something fails.</span></li>
+			<li><q>Then nothing from me until January.</q><span class="meta">A promise. It says what will not happen.</span></li>
+		</ul>
+		<ul class="rules note">
+			<li>Say <strong>I</strong>, never we. One person signs.</li>
+			<li>Use contractions. Write the way the founder talks.</li>
+			<li>Say what is not ready. No claim that the product cannot show.</li>
+			<li>Name work that a solo doula and an agency both do.</li>
+			<li>No pronoun for a Client or a doula. Use the name, or the noun.</li>
+		</ul>
+	</section>
+
+	<section aria-labelledby="s-found">
+		<div class="head">
+			<span><span class="status">Found while building</span></span>
+			<h2 id="s-found">7. Where the repo and the sheet disagree today</h2>
+		</div>
+		<div class="table">
+			<table>
+				<thead><tr><th>Where</th><th>What it carries now</th><th>What the sheet says</th></tr></thead>
+				<tbody>
+					<tr><td>Teaser prototype and social card (#362)</td><td>Indigo <code>#474bb5</code>, Schibsted Grotesk, Newsreader</td><td>Plum tokens and Hanken Grotesk. The map ruled one identity, so the teaser build takes the app's.</td></tr>
+					<tr><td><code>app/static/icon.svg</code> and the web manifest</td><td>The Svelte logo, theme color <code>#ff3e00</code>, name in two words</td><td>The icon picked in section 2, a plum theme color, <code>DoulaCloud</code></td></tr>
+					<tr><td>The marketing site</td><td>No icon file at all</td><td>The same icon as the app</td></tr>
+					<tr><td>The lockup in the app's top bar</td><td><code>Doula Cloud</code>, two words</td><td>The option picked in section 1. The rename is ticket #1463.</td></tr>
+				</tbody>
+			</table>
+		</div>
+	</section>
+</main>

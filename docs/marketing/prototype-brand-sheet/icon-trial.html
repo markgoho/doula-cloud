@@ -1,0 +1,282 @@
+<title>DoulaCloud Icon Trial</title>
+<!--
+PROTOTYPE for #1000, question 2. Throwaway.
+Five icon candidates for a square slot, switchable with the bar at the
+bottom, the arrow keys, or a #f1..#f5 link. Each icon is drawn as an
+isolated SVG image with literal colors, the way a real favicon is, so it
+cannot borrow the page's tokens. Every color is copied from
+app/src/lib/styles/tokens.css.
+-->
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400..600&display=swap">
+<style>
+	:root {
+		--color-surface-bright: oklch(98.5% 0.008 7);
+		--color-surface: oklch(96.7% 0.011 357);
+		--color-surface-container: oklch(94.9% 0.011 357);
+		--color-surface-container-high: oklch(93.3% 0.01 2);
+		--color-surface-container-highest: oklch(91.5% 0.011 355);
+		--color-on-surface: oklch(22.4% 0.009 352);
+		--color-on-surface-variant: oklch(40% 0.023 343);
+		--color-on-surface-muted: oklch(50.8% 0.023 346);
+		--color-outline: oklch(57.3% 0.023 346);
+		--color-outline-variant: oklch(83.1% 0.026 346);
+		--color-primary: oklch(41.2% 0.119 339);
+		--color-on-primary: oklch(99% 0.005 339);
+		--font: 'Hanken Grotesk', ui-sans-serif, system-ui, sans-serif;
+	}
+	@media (prefers-color-scheme: dark) {
+		:root:not([data-theme='light']) {
+			color-scheme: dark;
+			--color-surface-bright: oklch(22% 0.01 350);
+			--color-surface: oklch(17.5% 0.01 350);
+			--color-surface-container: oklch(26% 0.011 350);
+			--color-surface-container-high: oklch(29.5% 0.011 350);
+			--color-surface-container-highest: oklch(33% 0.011 350);
+			--color-on-surface: oklch(93% 0.008 350);
+			--color-on-surface-variant: oklch(78% 0.02 346);
+			--color-on-surface-muted: oklch(71% 0.022 346);
+			--color-outline: oklch(60% 0.023 346);
+			--color-outline-variant: oklch(40% 0.024 346);
+			--color-primary: oklch(84% 0.116 341);
+			--color-on-primary: oklch(22% 0.03 339);
+		}
+	}
+	:root[data-theme='dark'],
+	.ground-dark {
+		color-scheme: dark;
+		--color-surface-bright: oklch(22% 0.01 350);
+		--color-surface: oklch(17.5% 0.01 350);
+		--color-surface-container: oklch(26% 0.011 350);
+		--color-surface-container-high: oklch(29.5% 0.011 350);
+		--color-surface-container-highest: oklch(33% 0.011 350);
+		--color-on-surface: oklch(93% 0.008 350);
+		--color-on-surface-variant: oklch(78% 0.02 346);
+		--color-on-surface-muted: oklch(71% 0.022 346);
+		--color-outline: oklch(60% 0.023 346);
+		--color-outline-variant: oklch(40% 0.024 346);
+		--color-primary: oklch(84% 0.116 341);
+		--color-on-primary: oklch(22% 0.03 339);
+	}
+	.ground-light {
+		color-scheme: light;
+		--color-surface-bright: oklch(98.5% 0.008 7);
+		--color-surface: oklch(96.7% 0.011 357);
+		--color-surface-container: oklch(94.9% 0.011 357);
+		--color-surface-container-high: oklch(93.3% 0.01 2);
+		--color-surface-container-highest: oklch(91.5% 0.011 355);
+		--color-on-surface: oklch(22.4% 0.009 352);
+		--color-on-surface-variant: oklch(40% 0.023 343);
+		--color-on-surface-muted: oklch(50.8% 0.023 346);
+		--color-outline: oklch(57.3% 0.023 346);
+		--color-outline-variant: oklch(83.1% 0.026 346);
+		--color-primary: oklch(41.2% 0.119 339);
+		--color-on-primary: oklch(99% 0.005 339);
+	}
+
+	*, *::before, *::after { box-sizing: border-box; }
+	body { background: var(--color-surface); color: var(--color-on-surface); font-family: var(--font); font-size: 0.9375rem; line-height: 1.55; }
+	.page { max-width: 64rem; margin-inline: auto; padding-inline: 1rem; padding-block: 2.5rem 7rem; display: grid; gap: 3rem; }
+	h1, h2, h3, p, figure { margin: 0; }
+	h1 { font-size: 2.25rem; font-weight: 600; line-height: 1.15; letter-spacing: -0.02em; text-wrap: balance; }
+	h2 { font-size: 1.25rem; font-weight: 600; line-height: 1.3; letter-spacing: -0.012em; }
+	h3 { font-size: 1rem; font-weight: 600; line-height: 1.4; letter-spacing: -0.006em; }
+	.meta { font-size: 0.75rem; line-height: 1.4; letter-spacing: 0.01em; color: var(--color-on-surface-muted); }
+	.note { font-size: 0.875rem; line-height: 1.5; color: var(--color-on-surface-variant); max-width: 65ch; }
+	section, .head { display: grid; gap: 1.25rem; }
+	.head { gap: 0.5rem; }
+	img { display: block; }
+
+	.cards { display: grid; gap: 1rem; grid-template-columns: repeat(auto-fit, minmax(min(100%, 18rem), 1fr)); }
+	.card {
+		font: inherit; color: inherit; text-align: start; cursor: pointer;
+		background: var(--color-surface-bright);
+		border: 1px solid var(--color-outline-variant);
+		border-radius: 8px;
+		padding: 1.25rem 1.375rem;
+		display: grid; gap: 0.875rem; align-content: start;
+		grid-template-columns: minmax(0, 1fr);
+	}
+	.card[aria-pressed='true'] { border-color: var(--color-primary); outline: 1px solid var(--color-primary); }
+	.card:focus-visible, .switch button:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 2px; }
+	.row { display: flex; flex-wrap: wrap; align-items: end; gap: 1rem; padding: 0.75rem; border-radius: 8px; background: var(--color-surface); }
+	.row figure { display: grid; gap: 0.25rem; justify-items: center; }
+	.row figcaption { font-size: 0.75rem; color: var(--color-on-surface-muted); }
+	canvas.px { width: 128px; height: 128px; image-rendering: pixelated; border: 1px solid var(--color-outline-variant); background: var(--color-surface); }
+
+	.scenes { display: grid; gap: 1rem; grid-template-columns: repeat(auto-fit, minmax(min(100%, 24rem), 1fr)); }
+	.scene { border: 1px solid var(--color-outline-variant); border-radius: 8px; background: var(--color-surface); color: var(--color-on-surface); padding: 1.25rem 1.375rem; display: grid; gap: 0.75rem; grid-template-columns: minmax(0, 1fr); }
+
+	.strip { display: flex; gap: 2px; padding: 6px 6px 0; background: var(--color-surface-container-highest); border-radius: 8px 8px 0 0; overflow: hidden; }
+	.tab { flex: 1 1 0; min-width: 0; display: flex; align-items: center; gap: 8px; padding: 8px 10px; font-size: 0.75rem; border-radius: 8px 8px 0 0; color: var(--color-on-surface-variant); }
+	.tab.active { background: var(--color-surface-bright); color: var(--color-on-surface); }
+	.tab span { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+	.tab img, .prop { flex: none; width: 16px; height: 16px; }
+	.prop { border-radius: 4px; background: var(--color-outline); }
+	.prop.round { border-radius: 50%; }
+	.bar { height: 28px; background: var(--color-surface-bright); border-radius: 0 0 8px 8px; border-block-start: 1px solid var(--color-outline-variant); }
+
+	.phone { display: grid; grid-template-columns: repeat(4, 60px); gap: 18px 14px; justify-content: center; padding: 1.25rem 0.5rem; border-radius: 8px; background: var(--color-surface-container-high); }
+	.app { display: grid; gap: 4px; justify-items: center; font-size: 0.6875rem; color: var(--color-on-surface); }
+	.app .icon { width: 60px; height: 60px; border-radius: 22%; overflow: hidden; display: grid; place-items: center; background: var(--color-outline); }
+	.app .icon.alt { background: var(--color-on-surface-muted); }
+	.app .icon.ours { background: var(--ours-ground); }
+
+	.post { display: grid; grid-template-columns: 40px minmax(0, 1fr); gap: 0.75rem; align-items: start; }
+	.circle { border-radius: 50%; overflow: hidden; display: grid; place-items: center; background: var(--ours-ground); border: 1px solid var(--color-outline-variant); }
+	.c40 { width: 40px; height: 40px; }
+	.c96 { width: 96px; height: 96px; }
+	.post strong { font-weight: 600; }
+
+	.switch {
+		position: fixed; inset-inline: 0; bottom: 0; margin-inline: auto; width: fit-content; max-width: calc(100% - 2rem);
+		margin-block-end: calc(1rem + env(safe-area-inset-bottom, 0px));
+		display: flex; align-items: center; gap: 0.75rem;
+		padding: 0.5rem 0.75rem; border-radius: 999px;
+		background: oklch(22.4% 0.009 352); color: oklch(93% 0.008 350);
+		font-size: 0.875rem; font-weight: 500;
+	}
+	.switch button { font: inherit; color: inherit; background: none; border: 1px solid oklch(57.3% 0.023 346); border-radius: 999px; min-width: 44px; min-height: 44px; cursor: pointer; }
+</style>
+
+<main class="page">
+	<header class="head">
+		<p class="meta">Prototype for ticket #1000, question 2 · throwaway · 2026-09-27</p>
+		<h1>DoulaCloud icon trial</h1>
+		<p class="note">The mark is about twice as wide as it is tall, and an icon slot is square. Five candidates follow. Select one, then look at it in a browser tab, on a home screen and as a social avatar. The pixel views show the real 16 and 32 pixel drawing, enlarged eight and four times.</p>
+	</header>
+
+	<section aria-labelledby="s-all">
+		<h2 id="s-all">1. The candidates</h2>
+		<div id="cards" class="cards"></div>
+	</section>
+
+	<section aria-labelledby="s-tabs">
+		<div class="head">
+			<h2 id="s-tabs">2. In a browser tab</h2>
+			<p class="note">The icon is 16 pixels here. The other tabs are props, not real products.</p>
+		</div>
+		<div id="tabs" class="scenes"></div>
+	</section>
+
+	<section aria-labelledby="s-home">
+		<div class="head">
+			<h2 id="s-home">3. On a home screen</h2>
+			<p class="note">A phone shows the icon at about 60 pixels and gives an open mark a solid ground of its own.</p>
+		</div>
+		<div id="home" class="scenes"></div>
+	</section>
+
+	<section aria-labelledby="s-avatar">
+		<div class="head">
+			<h2 id="s-avatar">4. As a social avatar</h2>
+			<p class="note">A social platform crops the square to a circle, so the corners are lost.</p>
+		</div>
+		<div id="avatar" class="scenes"></div>
+	</section>
+</main>
+
+<nav class="switch" aria-label="Icon candidate">
+	<button type="button" id="prev" aria-label="Previous candidate">←</button>
+	<span id="current" aria-live="polite"></span>
+	<button type="button" id="next" aria-label="Next candidate">→</button>
+</nav>
+
+<script>
+	// Literal token values, per theme. A tile keeps the light theme's plum.
+	const C = {
+		light: { primary: 'oklch(41.2% 0.119 339)', hover: 'oklch(49.9% 0.121 339)', hair: 'oklch(83.1% 0.026 346)', ground: 'oklch(98.5% 0.008 7)' },
+		dark: { primary: 'oklch(84% 0.116 341)', hover: 'oklch(90% 0.08 341)', hair: 'oklch(40% 0.024 346)', ground: 'oklch(22% 0.01 350)' }
+	};
+	const TILE = 'oklch(41.2% 0.119 339)';
+	const ON = 'oklch(99% 0.005 339)';
+	const OUT = 'M56 160a76 76 0 0 1 137.97-44 44 44 0 0 1 44.03 44';
+	const MID = 'M78 160a54 54 0 0 1 104.61-18.82 22 22 0 0 1 33.39 18.82';
+	const IN = 'M100 160a32 32 0 0 1 64 0';
+	const NS = 'xmlns="http://www.w3.org/2000/svg"';
+	const arc = (d, color, width) => `<path d="${d}" fill="none" stroke="${color}" stroke-width="${width}" stroke-linecap="round"/>`;
+
+	const VARIANTS = [
+		{
+			id: 'f1', name: 'The mark as it is', open: true,
+			note: 'Three arcs, stroke 14, centered in the square. The favicon of the app today.',
+			svg: (c) => `<svg ${NS} viewBox="48 22 202 202">${arc(IN, c.hair, 14)}${arc(MID, c.hover, 14)}${arc(OUT, c.primary, 14)}</svg>`
+		},
+		{
+			id: 'f2', name: 'Two arcs, heavier', open: true,
+			note: 'The outline and the inner arch, stroke 18. The middle layer is dropped.',
+			svg: (c) => `<svg ${NS} viewBox="46 22 202 202">${arc(IN, c.hover, 18)}${arc(OUT, c.primary, 18)}</svg>`
+		},
+		{
+			id: 'f3', name: 'A plum tile', open: false,
+			note: 'The two-arc mark, complete, in on-primary on a primary square.',
+			svg: () => `<svg ${NS} viewBox="0 0 64 64"><rect width="64" height="64" rx="14" fill="${TILE}"/><svg x="9" y="9" width="46" height="46" viewBox="46 22 202 202">${arc(IN, ON, 18)}${arc(OUT, ON, 18)}</svg></svg>`
+		},
+		{
+			id: 'f4', name: 'A tile, mark cropped', open: false,
+			note: 'The same tile, with the mark enlarged until the small lobe runs off the right edge. The big lobe fills the square.',
+			svg: () => `<svg ${NS} viewBox="0 0 64 64"><clipPath id="c"><rect width="64" height="64" rx="14"/></clipPath><g clip-path="url(#c)"><rect width="64" height="64" fill="${TILE}"/><svg width="64" height="64" viewBox="30 37 170 170">${arc(IN, ON, 18)}${arc(OUT, ON, 18)}</svg></g></svg>`
+		},
+		{
+			id: 'f5', name: 'A solid cloud', open: true,
+			note: 'The outline filled with primary, and the middle layer cut out of it. No tile and no thin strokes.',
+			svg: (c) => `<svg ${NS} viewBox="46 22 202 202"><mask id="m" maskUnits="userSpaceOnUse" x="0" y="0" width="300" height="300"><rect width="300" height="300" fill="white"/>${arc(MID, 'black', 11)}</mask><path d="${OUT}z" fill="${c.primary}" stroke="${c.primary}" stroke-width="14" stroke-linejoin="round" mask="url(#m)"/></svg>`
+		}
+	];
+
+	const uri = (v, scheme) => 'data:image/svg+xml,' + encodeURIComponent(v.svg(C[scheme]));
+	const img = (v, scheme, size) => `<img src="${uri(v, scheme)}" width="${size}" height="${size}" alt="">`;
+	const sizes = (v, scheme) => `<div class="row ground-${scheme}">${[16, 32, 48].map((s) => `<figure>${img(v, scheme, s)}<figcaption>${s}</figcaption></figure>`).join('')}</div>`;
+
+	function pixels(canvas, v, px) {
+		canvas.width = px; canvas.height = px;
+		const image = new Image();
+		image.onload = () => canvas.getContext('2d').drawImage(image, 0, 0, px, px);
+		image.src = uri(v, 'light');
+	}
+
+	function tabs(v, scheme, active) {
+		const ours = `<div class="tab ${active ? 'active' : ''}">${img(v, scheme, 16)}<span>DoulaCloud</span></div>`;
+		const other = (shape, title, on) => `<div class="tab ${on ? 'active' : ''}"><i class="prop ${shape}"></i><span>${title}</span></div>`;
+		return `<div class="scene ground-${scheme}"><div><div class="strip">${other('', 'Inbox', !active)}${ours}${other('round', 'Calendar', false)}${other('', 'Client intake form', false)}</div><div class="bar"></div></div><p class="meta">${scheme === 'light' ? 'Light' : 'Dark'} browser, our tab ${active ? 'in front' : 'behind'}</p></div>`;
+	}
+
+	function home(v, scheme) {
+		const prop = (alt, name) => `<div class="app"><span class="icon ${alt}"></span>${name}</div>`;
+		const ours = `<div class="app"><span class="icon ours">${img(v, scheme, 60)}</span>DoulaCloud</div>`;
+		return `<div class="scene ground-${scheme}" style="--ours-ground:${C[scheme].ground}"><div class="phone">${prop('', 'Mail')}${prop('alt', 'Notes')}${ours}${prop('', 'Maps')}${prop('alt', 'Photos')}${prop('', 'Bank')}${prop('alt', 'Music')}${prop('', 'Clock')}</div><p class="meta">${scheme === 'light' ? 'Light' : 'Dark'} home screen${v.open ? ', icon on a surface-bright ground' : ''}</p></div>`;
+	}
+
+	function avatar(v, scheme) {
+		return `<div class="scene ground-${scheme}" style="--ours-ground:${C[scheme].ground}"><div class="post"><span class="circle c40">${img(v, scheme, 40)}</span><p><strong>DoulaCloud</strong><br>I'm building the thing you keep rebuilding in a spreadsheet.</p></div><span class="circle c96">${img(v, scheme, 96)}</span><p class="meta">${scheme === 'light' ? 'Light' : 'Dark'} feed, 40 pixels in a post and 96 pixels on a profile</p></div>`;
+	}
+
+	const $ = (id) => document.getElementById(id);
+	let index = Math.max(0, VARIANTS.findIndex((v) => '#' + v.id === location.hash));
+
+	$('cards').innerHTML = VARIANTS.map((v, i) => `<button type="button" class="card" data-i="${i}"><h3>F${i + 1} · ${v.name}</h3>${sizes(v, 'light')}${sizes(v, 'dark')}<div class="row"><figure><canvas class="px" data-px="16"></canvas><figcaption>16 pixels, enlarged</figcaption></figure><figure><canvas class="px" data-px="32"></canvas><figcaption>32 pixels, enlarged</figcaption></figure></div><p class="note">${v.note}</p></button>`).join('');
+	document.querySelectorAll('.card').forEach((card) => {
+		const v = VARIANTS[Number(card.dataset.i)];
+		card.querySelectorAll('canvas').forEach((c) => pixels(c, v, Number(c.dataset.px)));
+		card.addEventListener('click', () => show(Number(card.dataset.i)));
+	});
+
+	function show(i) {
+		index = (i + VARIANTS.length) % VARIANTS.length;
+		const v = VARIANTS[index];
+		$('current').textContent = `F${index + 1} · ${v.name}`;
+		document.querySelectorAll('.card').forEach((card, n) => card.setAttribute('aria-pressed', String(n === index)));
+		$('tabs').innerHTML = tabs(v, 'light', true) + tabs(v, 'light', false) + tabs(v, 'dark', true) + tabs(v, 'dark', false);
+		$('home').innerHTML = home(v, 'light') + home(v, 'dark');
+		$('avatar').innerHTML = avatar(v, 'light') + avatar(v, 'dark');
+		try { history.replaceState(null, '', '#' + v.id); } catch { /* the hash is a convenience */ }
+	}
+
+	$('prev').addEventListener('click', () => show(index - 1));
+	$('next').addEventListener('click', () => show(index + 1));
+	document.addEventListener('keydown', (event) => {
+		if (event.target.closest('input, textarea, [contenteditable]')) return;
+		if (event.key === 'ArrowLeft') show(index - 1);
+		if (event.key === 'ArrowRight') show(index + 1);
+	});
+	show(index);
+</script>

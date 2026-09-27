@@ -1,0 +1,180 @@
+<title>DoulaCloud Mark Trial</title>
+<!--
+PROTOTYPE for #1000. Throwaway.
+The mark has two readings: a cloud, and a pregnant body lying down (the
+big lobe is the belly, the small lobe is the breasts, the inner arch is
+the baby). Four drawings of the same two-lobe outline follow. They differ
+in how the inside carries the baby. Every color is copied from
+app/src/lib/styles/tokens.css.
+-->
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400..600&display=swap">
+<style>
+	:root {
+		--color-surface-bright: oklch(98.5% 0.008 7);
+		--color-surface: oklch(96.7% 0.011 357);
+		--color-surface-container-high: oklch(93.3% 0.01 2);
+		--color-on-surface: oklch(22.4% 0.009 352);
+		--color-on-surface-variant: oklch(40% 0.023 343);
+		--color-on-surface-muted: oklch(50.8% 0.023 346);
+		--color-outline-variant: oklch(83.1% 0.026 346);
+		--color-primary: oklch(41.2% 0.119 339);
+		--font: 'Hanken Grotesk', ui-sans-serif, system-ui, sans-serif;
+	}
+	@media (prefers-color-scheme: dark) {
+		:root:not([data-theme='light']) {
+			color-scheme: dark;
+			--color-surface-bright: oklch(22% 0.01 350);
+			--color-surface: oklch(17.5% 0.01 350);
+			--color-surface-container-high: oklch(29.5% 0.011 350);
+			--color-on-surface: oklch(93% 0.008 350);
+			--color-on-surface-variant: oklch(78% 0.02 346);
+			--color-on-surface-muted: oklch(71% 0.022 346);
+			--color-outline-variant: oklch(40% 0.024 346);
+			--color-primary: oklch(84% 0.116 341);
+		}
+	}
+	:root[data-theme='dark'],
+	.ground-dark {
+		color-scheme: dark;
+		--color-surface-bright: oklch(22% 0.01 350);
+		--color-surface: oklch(17.5% 0.01 350);
+		--color-surface-container-high: oklch(29.5% 0.011 350);
+		--color-on-surface: oklch(93% 0.008 350);
+		--color-on-surface-variant: oklch(78% 0.02 346);
+		--color-on-surface-muted: oklch(71% 0.022 346);
+		--color-outline-variant: oklch(40% 0.024 346);
+		--color-primary: oklch(84% 0.116 341);
+	}
+	.ground-light {
+		color-scheme: light;
+		--color-surface-bright: oklch(98.5% 0.008 7);
+		--color-surface: oklch(96.7% 0.011 357);
+		--color-surface-container-high: oklch(93.3% 0.01 2);
+		--color-on-surface: oklch(22.4% 0.009 352);
+		--color-on-surface-variant: oklch(40% 0.023 343);
+		--color-on-surface-muted: oklch(50.8% 0.023 346);
+		--color-outline-variant: oklch(83.1% 0.026 346);
+		--color-primary: oklch(41.2% 0.119 339);
+	}
+
+	*, *::before, *::after { box-sizing: border-box; }
+	body { background: var(--color-surface); color: var(--color-on-surface); font-family: var(--font); font-size: 0.9375rem; line-height: 1.55; }
+	.page { max-width: 64rem; margin-inline: auto; padding-inline: 1rem; padding-block: 2.5rem 4rem; display: grid; gap: 3rem; }
+	h1, h2, h3, p, figure { margin: 0; }
+	h1 { font-size: 2.25rem; font-weight: 600; line-height: 1.15; letter-spacing: -0.02em; text-wrap: balance; }
+	h2 { font-size: 1.25rem; font-weight: 600; line-height: 1.3; letter-spacing: -0.012em; }
+	h3 { font-size: 1rem; font-weight: 600; line-height: 1.4; letter-spacing: -0.006em; }
+	.meta { font-size: 0.75rem; line-height: 1.4; letter-spacing: 0.01em; color: var(--color-on-surface-muted); }
+	.note { font-size: 0.875rem; line-height: 1.5; color: var(--color-on-surface-variant); max-width: 65ch; }
+	section { display: grid; gap: 1.25rem; }
+	.head { display: grid; gap: 0.5rem; }
+	svg, img { display: block; max-width: 100%; }
+
+	.grid { display: grid; gap: 1rem; grid-template-columns: repeat(auto-fit, minmax(min(100%, 22rem), 1fr)); }
+	.panel {
+		background: var(--color-surface); color: var(--color-on-surface);
+		border: 1px solid var(--color-outline-variant); border-radius: 8px;
+		padding: 1.25rem 1.375rem;
+		display: grid; gap: 1rem; align-content: start; grid-template-columns: minmax(0, 1fr);
+	}
+	.panel.raised { background: var(--color-surface-bright); }
+	.big svg { width: min(100%, 17rem); height: auto; margin-inline: auto; }
+	.pair { display: grid; gap: 0.5rem; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+	.pair > div { border-radius: 8px; padding: 1rem; background: var(--color-surface); display: grid; gap: 0.75rem; justify-items: start; align-content: start; min-width: 0; }
+	.lockup { display: inline-flex; align-items: center; gap: 0.6em; font-weight: 600; line-height: 1.3; color: var(--color-on-surface); }
+	.lockup svg { height: 1.2em; width: auto; flex: none; }
+	.pair > div { container-type: inline-size; }
+	.lockup.lg { font-size: min(1.75rem, 11cqi); letter-spacing: -0.018em; }
+	.lockup.sm { font-size: 1rem; letter-spacing: -0.006em; }
+	.icons { display: flex; flex-wrap: wrap; align-items: end; gap: 0.875rem; }
+	.icons figure { display: grid; gap: 0.25rem; justify-items: center; }
+	canvas.px { width: 128px; height: 128px; image-rendering: pixelated; border: 1px solid var(--color-outline-variant); background: var(--color-surface); }
+	.diagram text { font-family: var(--font); font-size: 11px; font-weight: 500; fill: var(--color-on-surface-variant); text-anchor: middle; }
+</style>
+
+<main class="page">
+	<header class="head">
+		<p class="meta">Prototype for ticket #1000 · throwaway · 2026-09-27</p>
+		<h1>DoulaCloud mark trial</h1>
+		<p class="note">The mark has two readings. It is a cloud. It is also a pregnant body that lies down: the big lobe is the belly, the small lobe is the breasts, and the arch inside is the baby. Two strokes carry the two readings: the outer line and the inner arch.</p>
+	</header>
+
+
+	<section aria-labelledby="s-marks">
+		<div class="head">
+			<h2 id="s-marks">The drop between the lobes</h2>
+			<p class="note">The mark is two strokes: the outer line is the mother and the inner arch is the baby. The large drawing and the large lockup use two tones, with the baby in the lighter plum. The small lockup and each icon use one color. At small sizes the outer line of today reads as one continuous curve. Each drawing below moves the small lobe to the right, which makes a deeper drop between the lobes and a wider mark. The icons use stroke 18. The pixel views show the real 16 pixel drawing, enlarged.</p>
+		</div>
+		<div id="marks" class="grid"></div>
+	</section>
+</main>
+
+<script>
+	// Three roles per ground: strong, mid, faint. Literal token values.
+	const C = {
+		light: { strong: 'oklch(41.2% 0.119 339)', mid: 'oklch(49.9% 0.121 339)', faint: 'oklch(83.1% 0.026 346)' },
+		dark: { strong: 'oklch(84% 0.116 341)', mid: 'oklch(90% 0.08 341)', faint: 'oklch(40% 0.024 346)' },
+		// On the plum tile: on-primary, with primary-hover as the quiet tone.
+		tile: { strong: 'oklch(99% 0.005 339)', mid: 'oklch(99% 0.005 339)', faint: 'oklch(49.9% 0.121 339)' }
+	};
+	const TILE = 'oklch(41.2% 0.119 339)';
+	const IN = 'M100 160a32 32 0 0 1 64 0';
+	const NS = 'xmlns="http://www.w3.org/2000/svg"';
+	const arc = (d, color, w) => `<path d="${d}" fill="none" stroke="${color}" stroke-width="${w}" stroke-linecap="round"/>`;
+
+	// The outline is two circles on one baseline (y = 160) that meet where
+	// they cross. The big lobe is fixed: center 132, radius 76. The drop is
+	// how far the crossing point is below the top of the small lobe.
+	const R1 = 76, X1 = 132, BASE = 160, LEFT = X1 - R1;
+	function outline(x2, r2) {
+		const d = x2 - X1;
+		const a = (d * d + R1 * R1 - r2 * r2) / (2 * d);
+		const h = Math.sqrt(R1 * R1 - a * a);
+		const f = (n) => Number(n.toFixed(2));
+		const path = `M${LEFT} ${BASE}a${R1} ${R1} 0 0 1 ${f(a + R1)} ${f(-h)} ${r2} ${r2} 0 0 1 ${f(x2 + r2 - X1 - a)} ${f(h)}`;
+		return { path, right: x2 + r2, drop: Math.round(r2 - h) };
+	}
+	const mark = (name, x2, r2, note) => {
+		const o = outline(x2, r2);
+		return { name, note: `${note} Drop: ${o.drop} units. Width: ${o.right - LEFT} units.`, right: o.right, draw: (c, w, tones) => arc(IN, tones ? c.mid : c.strong, w) + arc(o.path, c.strong, w) };
+	};
+	const MARKS = [
+		mark('N0 · No drop, as today', 194, 44, 'The lobes cross at the top of the small lobe, so the line only goes down from there.'),
+		mark('N1 · A small drop', 222, 50, 'The small lobe moves right and is a little larger. The line goes down, then up, then down.'),
+		mark('N2 · A medium drop', 236, 50, 'The small lobe moves farther right. The drop is larger than the stroke, so it stays open at small sizes.'),
+		mark('N3 · A deep drop', 246, 50, 'The two lobes are almost apart. The mark is the widest of the four.')
+	];
+
+	// Each view box fits its own mark, so a wider mark is drawn smaller.
+	const span = (m, w) => ({ x: LEFT - w / 2 - 1, width: m.right - LEFT + w + 2 });
+	// Two tones at large sizes only. Small sizes and icons use one color.
+	const wide = (m, c, tones) => { const s = span(m, 14); return `<svg ${NS} viewBox="${s.x} 74 ${s.width} 98" role="img" aria-label="${m.name}">${m.draw(c, 14, tones)}</svg>`; };
+	const square = (m, c) => { const s = span(m, 18); return `viewBox="${s.x} ${122 - s.width / 2} ${s.width} ${s.width}">${m.draw(c, 18)}</svg>`; };
+	const openSvg = (m, c) => `<svg ${NS} ${square(m, c)}`;
+	const tileSvg = (m) => `<svg ${NS} viewBox="0 0 64 64"><rect width="64" height="64" rx="14" fill="${TILE}"/><svg x="8" y="8" width="48" height="48" ${square(m, C.tile)}</svg>`;
+	const image = (svg, size) => `<img width="${size}" height="${size}" alt="" src="data:image/svg+xml,${encodeURIComponent(svg)}">`;
+	const open = (m, c, size) => image(openSvg(m, c), size);
+	const tile = (m, size) => image(tileSvg(m), size);
+	const fig = (html, label) => `<figure>${html}<figcaption class="meta">${label}</figcaption></figure>`;
+	const pixel = (svg, px) => `<canvas class="px" width="${px}" height="${px}" data-svg="${encodeURIComponent(svg)}"></canvas>`;
+	const ground = (m, scheme) => `<div class="ground-${scheme}">
+		<span class="lockup lg">${wide(m, C[scheme], true)}<span>DoulaCloud</span></span>
+		<span class="lockup sm">${wide(m, C[scheme])}<span>DoulaCloud</span></span>
+		<div class="icons">${[16, 32, 48].map((s) => fig(open(m, C[scheme], s), s)).join('')}</div>
+		<div class="icons">${[16, 32, 48].map((s) => fig(tile(m, s), s)).join('')}</div>
+	</div>`;
+
+	document.getElementById('marks').innerHTML = MARKS.map((m) => `<div class="panel raised">
+		<h3>${m.name}</h3>
+		<div class="big">${wide(m, C.light, true)}</div>
+		<div class="pair">${ground(m, 'light')}${ground(m, 'dark')}</div>
+		<div class="icons">${fig(pixel(openSvg(m, C.light), 16), 'open, 16 pixels, enlarged')}${fig(pixel(tileSvg(m), 16), 'tile, 16 pixels, enlarged')}</div>
+		<p class="note">${m.note}</p>
+	</div>`).join('');
+
+	document.querySelectorAll('canvas.px').forEach((canvas) => {
+		const picture = new Image();
+		picture.onload = () => canvas.getContext('2d').drawImage(picture, 0, 0, canvas.width, canvas.height);
+		picture.src = 'data:image/svg+xml,' + canvas.dataset.svg;
+	});
+</script>
