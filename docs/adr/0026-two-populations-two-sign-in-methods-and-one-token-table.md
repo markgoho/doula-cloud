@@ -71,6 +71,19 @@ This is **provisional on one fact nobody has**: whether the pilot agency runs Go
 
 **Staff do not get the Client's magic link.** A Staff member signs in most working days against a 12-hour session, so a magic link makes that a mailbox round-trip every working morning — and on the shared laptop it teaches people to open a personal mailbox on a shared machine, which is worse than typing a password. Note the argument that does *not* carry this: "a magic link is single-factor" is false here, because Identity Platform challenges a second factor on email-link sign-in exactly as it does on password sign-in. The daily round-trip and the shared device are the reasons.
 
+**Amendment ([#1493](https://github.com/markgoho/doula-cloud/issues/1493), 2026-09-27): a Staff password is 15 characters or more, and nothing else is asked of it.** This ADR adopted a password and never said what one is. The product enforced six characters, which is Identity Platform's default and was never argued for: the live config returned `passwordPolicyConfig: null`. Three records gave three numbers. The product said 6. GOV.UK's [Passwords pattern](https://design-system.service.gov.uk/patterns/passwords/) says "set a minimum length of at least 8 characters". NIST SP 800-63B-4, the bar this ADR chose in the section on MFA recovery, says in §3.1.1.2 that a password used as a single factor "SHALL" be "a minimum of 15 characters in length", and may be as short as eight only when it is "only used as part of multi-factor authentication processes". After the amendment on [#1492](https://github.com/markgoho/doula-cloud/issues/1492) a new Owner has no second factor on her way to First Value, and an Admin or a Doula at a Practice that has not thrown the switch may never have one, so a Staff password is a single factor and the number is 15. The founder chose it on 2026-09-27 over 8 and over 12, each of which would have put this product below the bar it chose for itself.
+
+Four things follow, and each is the same two sources agreeing:
+
+- **No composition rule.** No required letter, number or symbol. NIST: a verifier "SHALL NOT impose other composition rules"; GOV.UK asks for none.
+- **No maximum a person can meet.** At least 64 characters are accepted, and paste is never blocked (#470).
+- **A commonly used password is refused.** NIST requires a comparison against a blocklist of "commonly used, expected, or compromised passwords", and GOV.UK says "do not allow commonly used passwords". Identity Platform's password policy has no such list, so this check is the product's own to build.
+- **The rule is the same on every screen that sets a password**, signup, invitation acceptance and password reset, and it is stated in the hint before she types. A screen that only reads a password, sign-in and re-authentication, checks nothing about its shape.
+
+**Where the length is enforced:** in Identity Platform's password policy, in its `require` mode, so the provider refuses a short password whatever the browser sent. The check in the browser is a courtesy that saves a round trip, never the boundary. There are no existing accounts to carry over, since the product has not launched.
+
+Rejected: 8, which is GOV.UK's floor and NIST's number only for a password that is never alone; 12, which agrees with neither source's reasoning; and a confirm-password field to offset the longer password, which #470 already refused, because the show and hide control is what lets her check a long password.
+
 ## TOTP, required for Owners, and enforced at the Practice boundary
 
 Decided on [#167](https://github.com/markgoho/doula-cloud/issues/167) and its same-day amendment. This is launch-blocking.
