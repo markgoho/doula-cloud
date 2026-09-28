@@ -44,12 +44,15 @@
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
-	import { apiFetch } from '#lib/api.js';
+	import { page } from '#lib/appState.svelte.js';
+	import { apiFetch, apiFetchWithSession } from '#lib/api.js';
+	import { sendStaffFeedback } from '#lib/feedback.js';
 	import type { Membership } from '#lib/landing.js';
 	import { unregisterPushSubscription } from '#lib/pushRegistration.js';
 	import { signOutOfSession, type SignOutOutcome } from '#lib/signOut.js';
 	import Heading from '#lib/components/atoms/Heading.svelte';
 	import Link from '#lib/components/atoms/Link.svelte';
+	import StaffFeedback from '#lib/components/organisms/StaffFeedback.svelte';
 	import StaffTopBar from '#lib/components/organisms/StaffTopBar.svelte';
 	import { loadAccountSession } from './session.svelte.js';
 
@@ -99,6 +102,15 @@
 	accountHref={resolve('/account')}
 	signOut={handleSignOut}
 />
+<!-- Keyed on the path, matching practices/+layout.svelte's own reason
+     (#1527): /account has no child route today, but this stays correct
+     if one is ever added under it. -->
+{#key page.url.pathname}
+	<StaffFeedback
+		email={email ?? ''}
+		onSend={(input) => sendStaffFeedback(apiFetchWithSession, input)}
+	/>
+{/key}
 <main id="main" tabindex="-1">
 	{@render children()}
 

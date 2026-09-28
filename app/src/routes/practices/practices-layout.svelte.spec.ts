@@ -15,7 +15,10 @@ import Layout from './+layout.svelte';
 const pageState = vi.hoisted(() => ({
 	params: {} as { practiceId?: string },
 	url: new URL('http://localhost/practices/practice-1'),
-	data: {} as Record<string, unknown>
+	data: {} as Record<string, unknown>,
+	// Read by FeedbackForm.svelte via appState.svelte.js's route getter
+	// (#1527) -- unused by anything else this layout renders.
+	route: { id: '/practices/[practiceId]' } as { id: string | null }
 }));
 vi.mock('$app/state', () => ({ page: pageState }));
 
@@ -252,6 +255,34 @@ describe('the avatar menu', () => {
 		await expect
 			.element(page.getByRole('button', { name: /Your account/ }))
 			.not.toBeInTheDocument();
+	});
+});
+
+describe('the Pilot banner and Feedback drawer (#1527)', () => {
+	it('shows the Staff banner sentence on every screen this layout wraps', async () => {
+		await setup();
+
+		await expect
+			.element(page.getByText('Doula Cloud is new, and you are one of the first to use it.', { exact: false }))
+			.toBeVisible();
+	});
+
+	it("posts a send to /api/staff/feedback with the route's own practiceId, closes the drawer, and shows a Notice", async () => {
+		await setup({ routeParameters: { practiceId: 'practice-1' }, pathname: '/practices/practice-1' });
+
+		await page.getByRole('button', { name: 'Tell us what is not working or what you need.' }).click();
+		await page.getByLabelText('Something is not working').click();
+		await page.getByRole('button', { name: 'Send feedback' }).click();
+
+		await expect
+			.poll(() => apiFetchWithSession.mock.calls.some((call: unknown[]) => call[0] === '/api/staff/feedback'))
+			.toBe(true);
+		const [, init] = apiFetchWithSession.mock.calls.find(
+			(call: unknown[]) => call[0] === '/api/staff/feedback'
+		) as [string, RequestInit];
+		expect(JSON.parse(init.body as string)).toMatchObject({ kind: 'not_working', practiceId: 'practice-1' });
+		await expect.element(page.getByRole('dialog')).not.toBeInTheDocument();
+		await expect.element(page.getByText('Feedback sent.', { exact: false })).toBeVisible();
 	});
 });
 
