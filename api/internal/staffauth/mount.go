@@ -311,4 +311,11 @@ func mountSessionRoutes(g *GatedRouter, db *sql.DB, verifier authn.Verifier, acc
 	// RequireConfirmed, and it can only ever succeed once.
 	g.Write("DELETE /api/staff/account",
 		ratelimit.Wrap(db, "staff_login_delete", verifyRequestRules)(DeleteLoginHandler(accounts, db)))
+	// #1523: any signed-in Staff member sends a piece of Feedback from
+	// any screen. Same "no {practiceId}, no staff id" shape as
+	// PUT /api/staff/work-state above -- a practiceId, when the sending
+	// screen was under one, rides in the body and FeedbackHandler checks
+	// it itself against practice_memberships.
+	g.Write("POST /api/staff/feedback",
+		ratelimit.Wrap(db, "staff_feedback", feedbackRules)(FeedbackHandler(db)))
 }

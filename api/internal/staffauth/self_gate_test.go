@@ -50,6 +50,7 @@ var selfResolvingRoutes = map[string]selfRoute{
 	"POST /api/staff/mfa":                             {bearer: true},
 	"DELETE /api/staff/mfa":                           {},
 	"DELETE /api/staff/account":                       {},
+	"POST /api/staff/feedback":                        {body: `{"kind":"idea_or_request"}`},
 }
 
 // notSelfResolving is the other half of the registry: a pre-Practice
