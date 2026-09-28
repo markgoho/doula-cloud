@@ -1,4 +1,4 @@
-import { globSync } from 'node:fs';
+import { globFiles } from './globFiles';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
@@ -73,7 +73,7 @@ function describeCollisions(collisions: readonly Collision[]): string {
 	return collisions.map(({ number, files }) => `ADR-${number}: ${files.join(', ')}`).join('; ');
 }
 
-const adrFiles = globSync('*.md', { cwd: adrRoot })
+const adrFiles = globFiles('*.md', { cwd: adrRoot })
 	.filter((file) => !NOT_AN_ADR.has(file))
 	.toSorted((a, b) => a.localeCompare(b));
 

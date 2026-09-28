@@ -1,4 +1,4 @@
-import { globSync } from 'node:fs';
+import { globFiles } from './globFiles';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { QUOTED, regionLines, regionLinesInFile } from './quotedCopy';
@@ -62,7 +62,7 @@ const PRONOUNS = ['she', 'her', 'hers', 'herself', 'he', 'him', 'his', 'himself'
 
 const appRoot = fileURLToPath(new URL('../../', import.meta.url));
 
-const sourceFiles = globSync('src/{lib/components,routes}/**/*.svelte', { cwd: appRoot });
+const sourceFiles = globFiles('src/{lib/components,routes}/**/*.svelte', { cwd: appRoot });
 
 interface Offense {
 	file: string;

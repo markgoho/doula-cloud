@@ -1,4 +1,5 @@
-import { globSync, readFileSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
+import { globFiles } from './globFiles';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
@@ -331,7 +332,7 @@ function findOffensesInLines(file: string, source: string): Offense[] {
 	});
 }
 
-const sourceFiles = globSync('src/**/*.{svelte,ts,js,css,svg,html,md}', { cwd: appRoot }).filter(
+const sourceFiles = globFiles('src/**/*.{svelte,ts,js,css,svg,html,md}', { cwd: appRoot }).filter(
 	(file) => file !== 'src/lib/spelling.usage.spec.ts'
 );
 
@@ -339,7 +340,7 @@ const sourceFiles = globSync('src/**/*.{svelte,ts,js,css,svg,html,md}', { cwd: a
 // spelling there was invisible to this file's RULES list no matter what
 // words it held. Paths come back already prefixed "api/", since the glob
 // runs from repoRoot rather than appRoot.
-const apiFiles = globSync('api/**/*.go', { cwd: repoRoot });
+const apiFiles = globFiles('api/**/*.go', { cwd: repoRoot });
 
 // #1218: app/e2e held its own drift -- "enrolment" in prose comments and
 // assertion messages -- invisible to both trees above, since specs live
@@ -348,12 +349,12 @@ const apiFiles = globSync('api/**/*.go', { cwd: repoRoot });
 // helper written that way is not silently unswept the way this one was.
 // Paths come back prefixed "app/e2e/", the same shape apiFiles already
 // has, since the glob runs from repoRoot.
-const e2eFiles = globSync('app/e2e/**/*.{ts,js}', { cwd: repoRoot });
+const e2eFiles = globFiles('app/e2e/**/*.{ts,js}', { cwd: repoRoot });
 
 // #1467: the marketing site is a SvelteKit package of its own now, and what
 // it says is read by every visitor before the app is. Same extensions as
 // app/src, and the same repoRoot-relative paths as the two trees above.
-const siteFiles = globSync('site/src/**/*.{svelte,ts,js,css,svg,html,md}', { cwd: repoRoot });
+const siteFiles = globFiles('site/src/**/*.{svelte,ts,js,css,svg,html,md}', { cwd: repoRoot });
 
 // Read and scanned once, at module scope, so the cost of walking roughly
 // 640 files in app/src, 650 in api/, and 56 in app/e2e is paid on import

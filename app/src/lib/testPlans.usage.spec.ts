@@ -1,4 +1,5 @@
-import { globSync, readFileSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
+import { globFiles } from './globFiles';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
@@ -346,7 +347,7 @@ function totalRowOffenses(table: Table): string[] {
 // rationale applies here too: pay this cost on import, not inside a
 // timed `it`) ------------------------------------------------------------
 
-const planFiles = globSync('*.md', { cwd: testPlansDirectory })
+const planFiles = globFiles('*.md', { cwd: testPlansDirectory })
 	.filter((file) => file !== 'README.md')
 	.toSorted((a, b) => a.localeCompare(b));
 
@@ -354,7 +355,7 @@ const plans = planFiles
 	.map((file) => readPlan(file, readFileSync(path.join(testPlansDirectory, file), 'utf8')))
 	.filter((plan): plan is Plan => plan !== undefined);
 
-const e2eSpecs = new Set(globSync('*.e2e.ts', { cwd: e2eDir }));
+const e2eSpecs = new Set(globFiles('*.e2e.ts', { cwd: e2eDir }));
 
 const readmeText = readFileSync(path.join(testPlansDirectory, 'README.md'), 'utf8');
 const gapIds = recognizedGapIds(readmeText);

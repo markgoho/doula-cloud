@@ -1,4 +1,4 @@
-import { globSync } from 'node:fs';
+import { globFiles } from './globFiles';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { QUOTED, regionLines, regionLinesInFile, type Region } from './quotedCopy';
@@ -50,7 +50,7 @@ const COMPARISON_BEFORE = /[=!]==?$/;
 
 const appRoot = fileURLToPath(new URL('../../', import.meta.url));
 
-const sourceFiles = globSync('src/routes/portal/**/*.svelte', { cwd: appRoot });
+const sourceFiles = globFiles('src/routes/portal/**/*.svelte', { cwd: appRoot });
 
 interface Offense {
 	file: string;

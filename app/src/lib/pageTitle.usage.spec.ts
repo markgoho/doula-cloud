@@ -1,4 +1,5 @@
-import { globSync, readFileSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
+import { globFiles } from './globFiles';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
@@ -39,7 +40,7 @@ const TEMPLATES_WITH_PAGE_TITLE = [
 
 const appRoot = fileURLToPath(new URL('../../', import.meta.url));
 
-const routeFiles = globSync('src/routes/**/+page.svelte', { cwd: appRoot }).filter(
+const routeFiles = globFiles('src/routes/**/+page.svelte', { cwd: appRoot }).filter(
 	(file) => !file.startsWith('src/routes/style-guide/')
 );
 

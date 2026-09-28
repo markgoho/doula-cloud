@@ -1,4 +1,5 @@
-import { globSync, readFileSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
+import { globFiles } from './globFiles';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
@@ -61,7 +62,7 @@ function findOffenses(file: string, source: string): Offense[] {
 	return offenses;
 }
 
-const sourceFiles = globSync('src/**/*.{svelte,ts}', { cwd: appRoot }).filter(
+const sourceFiles = globFiles('src/**/*.{svelte,ts}', { cwd: appRoot }).filter(
 	(file) => !file.includes('.spec.') && file !== 'src/lib/roles.ts'
 );
 

@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { globSync } from 'node:fs';
+import { globFiles } from '../globFiles';
 import { describe, expect, it } from 'vitest';
 import { styleLines } from './styleLines';
 
@@ -42,7 +42,7 @@ const IGNORE = 'tokens:ignore';
 // tokens.css rather than keeping a palette of its own, so it answers to the
 // same contract. Paths come back prefixed `../site/`, which `new URL`
 // below resolves against appRoot like any other.
-const componentFiles = globSync(
+const componentFiles = globFiles(
 	['src/{lib/components,routes}/**/*.svelte', '../site/src/{lib/components,routes}/**/*.svelte'],
 	{ cwd: fileURLToPath(new URL('../../../', import.meta.url)) }
 );

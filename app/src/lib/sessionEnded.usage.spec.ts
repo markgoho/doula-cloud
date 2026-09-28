@@ -1,4 +1,4 @@
-import { globSync } from 'node:fs';
+import { globFiles } from './globFiles';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { quotedStrings, quotedStringsInSource } from './quotedCopy.js';
@@ -71,7 +71,7 @@ function findOffenses(file: string, source: string): Offense[] {
 	return offensesIn(file, quotedStringsInSource(source));
 }
 
-const sourceFiles = globSync('src/**/*.{svelte,ts}', { cwd: appRoot }).filter(
+const sourceFiles = globFiles('src/**/*.{svelte,ts}', { cwd: appRoot }).filter(
 	(file) => !file.includes('.spec.') && !file.includes('.fixture.') && file !== OWNER
 );
 

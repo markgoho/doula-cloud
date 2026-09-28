@@ -1,4 +1,5 @@
-import { globSync, readFileSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
+import { globFiles } from './globFiles';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
@@ -83,10 +84,10 @@ function findViolations(file: string, source: string): Violation[] {
 	return violations;
 }
 
-const appFiles = globSync('src/**/*.{svelte,ts}', { cwd: appRoot }).filter((file) => file !== SELF);
-const e2eFiles = globSync('e2e/**/*.ts', { cwd: appRoot });
-const scriptFiles = globSync('scripts/**/*.ts', { cwd: appRoot });
-const rootFiles = globSync('*.{ts,js}', { cwd: appRoot });
+const appFiles = globFiles('src/**/*.{svelte,ts}', { cwd: appRoot }).filter((file) => file !== SELF);
+const e2eFiles = globFiles('e2e/**/*.ts', { cwd: appRoot });
+const scriptFiles = globFiles('scripts/**/*.ts', { cwd: appRoot });
+const rootFiles = globFiles('*.{ts,js}', { cwd: appRoot });
 const allFiles = [...appFiles, ...e2eFiles, ...scriptFiles, ...rootFiles];
 
 const violations = allFiles.flatMap((file) => findViolations(file, readFileSync(path.join(appRoot, file), 'utf8')));

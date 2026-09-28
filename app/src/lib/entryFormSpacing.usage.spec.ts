@@ -1,4 +1,5 @@
-import { globSync, readFileSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
+import { globFiles } from './globFiles';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
@@ -68,7 +69,7 @@ function isEntryScreen(file: string): boolean {
 	return ENTRY_TEMPLATE_IMPORT.test(read(file));
 }
 
-const entryRoutes = globSync('src/routes/**/+page.svelte', { cwd: appRoot }).filter((file) =>
+const entryRoutes = globFiles('src/routes/**/+page.svelte', { cwd: appRoot }).filter((file) =>
 	isEntryScreen(file)
 );
 

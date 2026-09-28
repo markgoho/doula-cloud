@@ -1,4 +1,5 @@
-import { readFileSync, globSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
+import { globFiles } from '../globFiles';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { styleLines } from './styleLines';
@@ -89,11 +90,11 @@ const cwd = fileURLToPath(appRoot);
 // Hugo site had no stylesheet to scan; the SvelteKit site that replaced it
 // (ADR-0051) has component styles, and they answer to the same 320px
 // commitment as the app's.
-const svelteFiles = globSync(
+const svelteFiles = globFiles(
 	['src/{lib/components,routes}/**/*.svelte', '../site/src/{lib/components,routes}/**/*.svelte'],
 	{ cwd }
 );
-const cssFiles = globSync(['src/**/*.css', '../site/src/**/*.css'], { cwd });
+const cssFiles = globFiles(['src/**/*.css', '../site/src/**/*.css'], { cwd });
 
 interface Offense {
 	file: string;
