@@ -5,7 +5,15 @@
 
 	interface Properties {
 		label: string;
-		variant?: 'primary' | 'secondary' | 'destructive' | 'bare';
+		/*
+		 * `link`: inline prose that reads as a link rather than a control
+		 * with its own chrome -- the GOV.UK phase banner's control
+		 * (`molecules/PilotBanner.svelte`, #1522), which sits inside a
+		 * sentence rather than beside one. `size` has no effect on it: a
+		 * link-in-a-sentence takes exactly the room its own words need,
+		 * never the sm/md/lg padding scale the other variants share.
+		 */
+		variant?: 'primary' | 'secondary' | 'destructive' | 'bare' | 'link';
 		size?: 'sm' | 'md' | 'lg';
 		type?: 'button' | 'submit' | 'reset';
 		disabled?: boolean;
@@ -34,6 +42,14 @@
 		popoverTarget?: string;
 		expanded?: boolean;
 		/*
+		 * The id of the element this button discloses, when that element
+		 * is not the `popoverTarget` above -- `PilotBanner`'s control names
+		 * a caller's own `Drawer` (#1521) this way, since a `Drawer` opens
+		 * through a bound `open` prop rather than through native popover
+		 * invocation.
+		 */
+		ariaControls?: string;
+		/*
 		 * Same mechanism as `Link`'s own `describedBy` (#515): a repeated
 		 * per-row Button -- DataTable's rowActions, DynamicFieldEditor's
 		 * "Move up"/"Move down"/"Remove" -- reads the same bare word on
@@ -60,13 +76,17 @@
 		visual,
 		popoverTarget,
 		expanded,
+		ariaControls,
 		describedBy,
 		onClick
 	}: Properties = $props();
 
 	const isDisabled = $derived(disabled || loading);
 	const iconSize = $derived(size === 'sm' ? 16 : (size === 'lg' ? 24 : 20));
-	const buttonClass = $derived(`${variant} size-${size}`);
+	// `link` carries no size scale of its own (see the prop comment above),
+	// so the `size-*` class -- and the padding/min-height it sets -- is
+	// left off rather than fought with a second, higher-specificity rule.
+	const buttonClass = $derived(variant === 'link' ? 'link' : `${variant} size-${size}`);
 </script>
 
 <button
@@ -75,6 +95,7 @@
 	disabled={isDisabled}
 	aria-busy={loading}
 	aria-expanded={expanded}
+	aria-controls={ariaControls}
 	aria-describedby={describedBy}
 	popovertarget={popoverTarget}
 	onclick={onClick}
@@ -176,6 +197,51 @@
 
 		button.destructive:not(:disabled):hover {
 			opacity: 0.85;
+		}
+
+		/*
+		 * Inline prose, not a control with its own box (#1522): no
+		 * padding, no border, no background. `display: inline` is
+		 * requested rather than the base rule's `inline-flex`, but a
+		 * `<button>` stays an atomic, shrink-to-fit box in every engine
+		 * regardless -- measured directly: inside a narrow flex item, it
+		 * still wraps its own label across lines while sizing itself
+		 * against nearly the *container's* width rather than the
+		 * remaining space on the sentence's own last line, so it drops to
+		 * a line of its own rather than reading as running text. `inline`
+		 * is kept anyway (over the base `inline-flex`) because it turns
+		 * off `align-items`/`justify-content`/`gap`, which have nothing
+		 * to apply to here -- a single text child -- and because it is
+		 * the honest name for what this variant is trying to be, even
+		 * though the element declines it.
+		 *
+		 * `text-align: inherit` overrides the UA stylesheet's own
+		 * `text-align: center` on `button` -- without it, that shrink-
+		 * to-fit box centers its wrapped label under the sentence above
+		 * it rather than reading left-aligned like the prose beside it
+		 * (confirmed on `/style-guide/pilot-banner` at 320px). `border: 0`
+		 * rather than only `border-color: transparent`: the base rule's
+		 * border is a real `--border-thin`, and a transparent border
+		 * still occupies that space.
+		 *
+		 * `Link.svelte`'s `.primary` sets the same color and hover
+		 * treatment for the same reason: this reads as that kind of link,
+		 * not as a button that happens to look like one.
+		 */
+		button.link {
+			display: inline;
+			min-block-size: 0;
+			padding: 0;
+			border: 0;
+			background-color: transparent;
+			color: var(--color-primary);
+			font-weight: var(--font-weight-normal);
+			text-align: inherit;
+			text-decoration: underline;
+		}
+
+		button.link:not(:disabled):hover {
+			color: var(--color-primary-hover);
 		}
 
 		/* Chrome controls: the shell's hamburger, avatar and Practice

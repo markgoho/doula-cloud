@@ -135,4 +135,29 @@ describe('Button.svelte', () => {
 
 		await expect.element(page.getByRole('button')).not.toHaveAttribute('aria-describedby');
 	});
+
+	// PilotBanner's control (#1522): inline prose that reads as a link, not
+	// a control with its own box, so it skips the size-* padding scale the
+	// other variants share.
+	it('renders the link variant with no size class', async () => {
+		const { container } = await setup({ variant: 'link' });
+
+		const button = container.querySelector('button');
+		expect(button).toHaveClass('link');
+		expect(button?.className).not.toMatch(/size-/);
+	});
+
+	it('names the element it discloses via ariaControls', async () => {
+		await setup({ ariaControls: 'feedback-drawer' });
+
+		await expect
+			.element(page.getByRole('button'))
+			.toHaveAttribute('aria-controls', 'feedback-drawer');
+	});
+
+	it('carries no aria-controls when none is given', async () => {
+		await setup();
+
+		await expect.element(page.getByRole('button')).not.toHaveAttribute('aria-controls');
+	});
 });
