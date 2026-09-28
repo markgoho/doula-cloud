@@ -89,6 +89,21 @@ describe('StaffFeedback', () => {
 		expect(document.activeElement).toBe(container.querySelector('.notice'));
 	});
 
+	// #1528's own finding, shared here since feedbackSentNotice (#lib/
+	// feedback.js) is now the one place both StaffFeedback and
+	// PortalFeedback build this Notice: `email` comes off an async,
+	// best-effort session read, so it can genuinely be empty.
+	it('drops the "will email you at" clause when no email is known', async () => {
+		const onSend = vi.fn().mockResolvedValue(undefined);
+		await setup({ email: '', onSend });
+
+		await openDrawer();
+		await page.getByLabelText('Something is not working').click();
+		await page.getByRole('button', { name: 'Send feedback' }).click();
+
+		await expect.element(page.getByText('Feedback sent. Thank you.', { exact: true })).toBeVisible();
+	});
+
 	it('keeps the drawer open and shows the refusal when the send fails', async () => {
 		const onSend = vi
 			.fn()

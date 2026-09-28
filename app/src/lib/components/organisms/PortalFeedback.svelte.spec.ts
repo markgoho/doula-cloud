@@ -115,6 +115,21 @@ describe('PortalFeedback', () => {
 		expect(document.activeElement).toBe(container.querySelector('.notice'));
 	});
 
+	// `email` comes off a separate, best-effort session read the host
+	// layout runs (`GET /api/portal/session`) -- a failed read leaves it
+	// empty, and "will email you at ." is a broken sentence rather than a
+	// graceful degradation.
+	it('drops the "will email you at" clause when no sign-in address is known', async () => {
+		const onSend = vi.fn().mockResolvedValue(undefined);
+		await setup({ email: '', onSend });
+
+		await openDrawer();
+		await page.getByLabelText('Something is not working').click();
+		await page.getByRole('button', { name: 'Send feedback' }).click();
+
+		await expect.element(page.getByText('Feedback sent. Thank you.', { exact: true })).toBeVisible();
+	});
+
 	it('keeps the drawer open and shows the refusal when the send fails', async () => {
 		const onSend = vi
 			.fn()

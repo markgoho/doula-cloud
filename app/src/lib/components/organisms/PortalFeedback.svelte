@@ -26,7 +26,7 @@
 	 * or a just-sent Notice would otherwise follow a person from one
 	 * screen to the next.
 	 */
-	import type { ClientInput } from '#lib/feedback.js';
+	import { feedbackSentNotice, type ClientInput } from '#lib/feedback.js';
 	import Notice from '#lib/components/atoms/Notice.svelte';
 	import Text from '#lib/components/atoms/Text.svelte';
 	import Drawer from '#lib/components/organisms/Drawer.svelte';
@@ -84,7 +84,7 @@
 
 	function handleSent(): void {
 		isOpen = false;
-		sentMessage = `Feedback sent. Thank you. If a reply would help, the Doula Cloud team will email you at ${email}.`;
+		sentMessage = feedbackSentNotice(email, 'the Doula Cloud team');
 	}
 </script>
 

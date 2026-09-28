@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { RefusalError } from './formErrors.js';
 import {
 	browserName,
+	feedbackSentNotice,
 	kindOptions,
 	sendPortalFeedback,
 	sendStaffFeedback,
@@ -81,6 +82,21 @@ describe('sendPortalFeedback', () => {
 			.mockResolvedValue(new Response('{"message":"Select the kind of feedback"}', { status: 400 }));
 
 		await expect(sendPortalFeedback(fetcher, portalInput)).rejects.toThrow(RefusalError);
+	});
+});
+
+describe('feedbackSentNotice', () => {
+	it('names the replier and the address when one is known', () => {
+		expect(feedbackSentNotice('jordan@fingerlakesbirth.example', 'Mark Goho, who builds Doula Cloud,')).toBe(
+			'Feedback sent. Thank you. If a reply would help, Mark Goho, who builds Doula Cloud, will email you at jordan@fingerlakesbirth.example.'
+		);
+		expect(feedbackSentNotice('alex.rivera@example.com', 'the Doula Cloud team')).toBe(
+			'Feedback sent. Thank you. If a reply would help, the Doula Cloud team will email you at alex.rivera@example.com.'
+		);
+	});
+
+	it('drops the "will email you at" clause rather than interpolating an empty address', () => {
+		expect(feedbackSentNotice('', 'the Doula Cloud team')).toBe('Feedback sent. Thank you.');
 	});
 });
 
