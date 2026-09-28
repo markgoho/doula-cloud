@@ -1,8 +1,8 @@
 import { readFileSync } from 'node:fs';
-import { globFiles } from './globFiles';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
+import { globFiles } from './globFiles';
 import { unwrapProse } from './prose.js';
 
 /*

@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { globFiles } from '../globFiles';
 import { describe, expect, it } from 'vitest';
+import { globFiles } from '../globFiles';
 import { styleLines } from './styleLines';
 
 /*

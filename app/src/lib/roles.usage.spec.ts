@@ -1,8 +1,8 @@
 import { readFileSync } from 'node:fs';
-import { globFiles } from './globFiles';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
+import { globFiles } from './globFiles';
 
 /*
  * #262's third AC as a gate, in the mold of `clientRegister.usage.spec.ts`

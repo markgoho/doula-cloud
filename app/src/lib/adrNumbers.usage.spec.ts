@@ -1,7 +1,7 @@
-import { globFiles } from './globFiles';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
+import { globFiles } from './globFiles';
 
 /*
  * #1053's fifth AC as a gate, in the mold of `spelling.usage.spec.ts` and

@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
-import { globFiles } from './globFiles';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
+import { globFiles } from './globFiles';
 
 /*
  * #660's static gate, in the shape `pageTitle.usage.spec.ts` already uses.

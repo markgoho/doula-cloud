@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
-import { globFiles } from './globFiles';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
+import { globFiles } from './globFiles';
 
 /*
  * #487's static gate: a route with no `<title>` is invisible in the axe
