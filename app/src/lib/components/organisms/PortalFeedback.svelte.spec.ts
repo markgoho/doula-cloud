@@ -3,61 +3,87 @@ import { page } from 'vitest/browser';
 import { describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import { RefusalError } from '#lib/formErrors.js';
-import StaffFeedback from './StaffFeedback.svelte';
+import PortalFeedback from './PortalFeedback.svelte';
 
 const CONTROL = 'Tell us what is not working or what you need.';
 
-type SetupOptions = Partial<ComponentProps<typeof StaffFeedback>>;
+type SetupOptions = Partial<ComponentProps<typeof PortalFeedback>>;
 
 function setup({
-	email = 'jordan@fingerlakesbirth.example',
+	email = 'alex.rivera@example.com',
 	onSend = vi.fn().mockResolvedValue(undefined),
 	...rest
 }: SetupOptions = {}) {
-	return render(StaffFeedback, { email, onSend, ...rest });
+	return render(PortalFeedback, { email, onSend, ...rest });
 }
 
 async function openDrawer() {
 	await page.getByRole('button', { name: CONTROL }).click();
 }
 
-describe('StaffFeedback', () => {
-	it("shows the Staff banner's sentence and control", async () => {
+describe('PortalFeedback', () => {
+	it("shows the Portal banner's sentence and control", async () => {
 		await setup();
 
-		await expect
-			.element(page.getByText('Doula Cloud is new, and you are one of the first to use it.', { exact: false }))
-			.toBeVisible();
+		await expect.element(page.getByText('This care portal is new.', { exact: false })).toBeVisible();
 		await expect.element(page.getByRole('button', { name: CONTROL })).toBeVisible();
 	});
 
-	it('opens the drawer to its heading and intro when the banner control is clicked', async () => {
-		await setup();
+	it('opens the drawer to its heading and, with a Practice known, its intro and destination', async () => {
+		await setup({ practiceName: 'Finger Lakes Birth Collective' });
 
 		await openDrawer();
 
-		await expect.element(page.getByRole('dialog', { name: 'Send feedback to Doula Cloud' })).toBeVisible();
+		await expect.element(page.getByRole('dialog', { name: 'Send feedback about this portal' })).toBeVisible();
 		await expect
 			.element(
 				page.getByText(
-					'The Doula Cloud team reads every piece of feedback during the pilot. It is how we decide what to fix first.'
+					'Finger Lakes Birth Collective uses Doula Cloud to run this portal. The Doula Cloud team reads every piece of feedback.'
+				)
+			)
+			.toBeVisible();
+		await expect
+			.element(
+				page.getByText(
+					'This goes to the Doula Cloud team, not to Finger Lakes Birth Collective. For anything about your care, message your doula.'
 				)
 			)
 			.toBeVisible();
 	});
 
-	it('lists the role and Practice line once both are given', async () => {
-		await setup({ practiceName: 'Finger Lakes Birth Collective', roles: ['owner'] });
+	it('names "your doula\'s Practice" when the screen has no single Practice to name', async () => {
+		await setup();
+
+		await openDrawer();
+
+		await expect
+			.element(
+				page.getByText(
+					"Your doula's Practice uses Doula Cloud to run this portal. The Doula Cloud team reads every piece of feedback."
+				)
+			)
+			.toBeVisible();
+		await expect
+			.element(
+				page.getByText(
+					"This goes to the Doula Cloud team, not to your doula's Practice. For anything about your care, message your doula."
+				)
+			)
+			.toBeVisible();
+	});
+
+	it('lists "Client, {Practice name}" once a Practice is known', async () => {
+		await setup({ practiceName: 'Finger Lakes Birth Collective' });
 
 		await openDrawer();
 		await page.getByText('What else we send with your feedback').click();
 
 		await expect
-			.element(page.getByText('your role and Practice: Owner, Finger Lakes Birth Collective'))
+			.element(page.getByText('your role and Practice: Client, Finger Lakes Birth Collective'))
 			.toBeVisible();
 	});
 
-	it('omits the role line under /account, where no Practice is given', async () => {
+	it('omits the role line when there is no single Practice', async () => {
 		await setup();
 
 		await openDrawer();
@@ -68,7 +94,7 @@ describe('StaffFeedback', () => {
 
 	it('calls onSend with the form input, closes the drawer, and shows a focused Notice naming the sender', async () => {
 		const onSend = vi.fn().mockResolvedValue(undefined);
-		const { container } = await setup({ email: 'jordan@fingerlakesbirth.example', onSend });
+		const { container } = await setup({ email: 'alex.rivera@example.com', onSend });
 
 		await openDrawer();
 		await page.getByLabelText('Something is not working').click();
@@ -79,21 +105,21 @@ describe('StaffFeedback', () => {
 
 		await expect.element(page.getByRole('dialog')).not.toBeInTheDocument();
 		const message =
-			'Feedback sent. Thank you. If a reply would help, Mark Goho, who builds Doula Cloud, will email you at jordan@fingerlakesbirth.example.';
+			'Feedback sent. Thank you. If a reply would help, the Doula Cloud team will email you at alex.rivera@example.com.';
 		await expect.element(page.getByText(message)).toBeVisible();
 		// The focused element is the Notice's own wrapper (`.notice`,
 		// tabindex="-1"), not the <p role="status"> text inside it -- no
 		// accessible role names that wrapper, so this is the querySelector
-		// exception for a deliberately non-accessible element, not a
-		// shortcut past an accessible query.
+		// exception for a deliberately non-accessible element, matching
+		// StaffFeedback's own spec.
 		expect(document.activeElement).toBe(container.querySelector('.notice'));
 	});
 
-	// #1528's own finding, shared here since feedbackSentNotice (#lib/
-	// feedback.js) is now the one place both StaffFeedback and
-	// PortalFeedback build this Notice: `email` comes off an async,
-	// best-effort session read, so it can genuinely be empty.
-	it('drops the "will email you at" clause when no email is known', async () => {
+	// `email` comes off a separate, best-effort session read the host
+	// layout runs (`GET /api/portal/session`) -- a failed read leaves it
+	// empty, and "will email you at ." is a broken sentence rather than a
+	// graceful degradation.
+	it('drops the "will email you at" clause when no sign-in address is known', async () => {
 		const onSend = vi.fn().mockResolvedValue(undefined);
 		await setup({ email: '', onSend });
 
@@ -118,7 +144,7 @@ describe('StaffFeedback', () => {
 		await expect
 			.element(page.getByText('There is a problem with the service. Try again in a few minutes.'))
 			.toBeVisible();
-		await expect.element(page.getByRole('dialog', { name: 'Send feedback to Doula Cloud' })).toBeVisible();
+		await expect.element(page.getByRole('dialog', { name: 'Send feedback about this portal' })).toBeVisible();
 		await expect.element(page.getByLabelText('Tell us more')).toHaveValue('Kept on a refusal.');
 	});
 });

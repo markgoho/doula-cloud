@@ -28,7 +28,7 @@
 	 * whether the drawer was open, mid-draft, or just showed a Notice --
 	 * one seam covers all three rather than a state variable per one.
 	 */
-	import type { ClientInput } from '#lib/feedback.js';
+	import { feedbackSentNotice, type ClientInput } from '#lib/feedback.js';
 	import { rolesLabel } from '#lib/roles.js';
 	import Notice from '#lib/components/atoms/Notice.svelte';
 	import Text from '#lib/components/atoms/Text.svelte';
@@ -77,7 +77,12 @@
 
 	function handleSent(): void {
 		isOpen = false;
-		sentMessage = `Feedback sent. Thank you. If a reply would help, Mark Goho, who builds Doula Cloud, will email you at ${email}.`;
+		// feedbackSentNotice (#1528) is shared with PortalFeedback.svelte's
+		// own identical Notice, and is what makes "no address known" -- an
+		// async, best-effort session read can fail on either shell -- a
+		// graceful "Feedback sent. Thank you." rather than the broken
+		// sentence a bare template would interpolate nothing into.
+		sentMessage = feedbackSentNotice(email, 'Mark Goho, who builds Doula Cloud,');
 	}
 </script>
 

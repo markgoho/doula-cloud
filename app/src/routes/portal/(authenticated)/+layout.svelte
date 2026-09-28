@@ -2,8 +2,8 @@
 	import { onMount } from 'svelte';
 	import { goto, invalidateAll } from '$app/navigation';
 	import { resolve } from '$app/paths';
-	import { page } from '$app/state';
-	import { apiFetch } from '#lib/api.js';
+	import { page } from '#lib/appState.svelte.js';
+	import { apiFetch, apiFetchWithSession } from '#lib/api.js';
 	import {
 		portalNotificationPreferencePath,
 		portalPushSubscriptionsPath,
@@ -13,7 +13,9 @@
 	import { apiBaseURL } from '#lib/api.js';
 	import { signOutOfSession, type SignOutOutcome } from '#lib/signOut.js';
 	import { engagementLabel } from '#lib/clientRegister.js';
+	import { sendPortalFeedback } from '#lib/feedback.js';
 	import Link from '#lib/components/atoms/Link.svelte';
+	import PortalFeedback from '#lib/components/organisms/PortalFeedback.svelte';
 	import PortalTopBar from '#lib/components/organisms/PortalTopBar.svelte';
 	import type { NavItem } from '#lib/components/organisms/StaffTopBar.svelte';
 
@@ -43,6 +45,25 @@
 	);
 
 	const engagementId = $derived(page.params.engagementId!);
+
+	// The Portal Account's own sign-in address (#1528), for the Feedback
+	// Notice's "will email you at {email}" -- no load already carries it
+	// (EngagementIdentity doesn't), so this reads it the same way
+	// sign-in-address/+page.svelte reads its own current address. Best
+	// effort: a failed read leaves the Notice naming no address rather
+	// than blocking the screen on it.
+	let signInAddress = $state('');
+
+	async function loadSignInAddress(): Promise<void> {
+		try {
+			const response = await apiFetchWithSession('/api/portal/session');
+			if (!response.ok) return;
+			const session: { signInAddress?: string } = await response.json();
+			signInAddress = session.signInAddress ?? '';
+		} catch {
+			// Best effort -- see the doc comment above.
+		}
+	}
 
 	// #310: the persistent way back to the portal root reads as the same
 	// words the root list and the login/accept-invite choosers use --
@@ -78,6 +99,7 @@
 			portalPushSubscriptionsPath(engagementId),
 			credentialedFetch
 		);
+		void loadSignInAddress();
 	});
 
 	const navItems = $derived.by((): NavItem[] => {
@@ -168,6 +190,22 @@
 	})}
 	signOut={handleSignOut}
 />
+<!--
+	Keyed on the path (#1528, matching practices/+layout.svelte's own
+	reason, #1527): this layout persists across every navigation inside
+	engagements/[engagementId] (Contract to Messages never remounts it),
+	so without this a Feedback draft, an open drawer or a just-sent Notice
+	would silently follow a person from one screen to the next. A
+	navigation is "leaving the screen", and PortalFeedback's own doc
+	comment is why remounting is what that AC asks for.
+-->
+{#key page.url.pathname}
+	<PortalFeedback
+		email={signInAddress}
+		practiceName={detail.practiceName}
+		onSend={(input) => sendPortalFeedback(apiFetchWithSession, { ...input, engagementId })}
+	/>
+{/key}
 <main id="main" tabindex="-1">
 	{@render children()}
 </main>

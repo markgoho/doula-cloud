@@ -82,6 +82,54 @@ export async function sendStaffFeedback(fetcher: Fetcher, input: StaffFeedbackIn
 }
 
 /**
+ * The Portal DTO (`api/internal/clientauth.PortalFeedbackRequest`,
+ * #1523): `ClientInput` plus the Engagement the screen under the drawer
+ * sits inside, when it sits inside one -- a screen with no single
+ * Engagement (#1528's own AC) sends none, and the BFF checks a given one
+ * against the caller's own Portal Account rather than trusting it.
+ */
+export interface PortalFeedbackInput extends ClientInput {
+	engagementId?: string;
+}
+
+/**
+ * Sends a piece of Feedback from a Portal screen (#1523, #1528). Same
+ * refusal shape as `sendStaffFeedback`.
+ */
+export async function sendPortalFeedback(fetcher: Fetcher, input: PortalFeedbackInput): Promise<void> {
+	const response = await fetcher('/api/portal/feedback', {
+		method: 'POST',
+		headers: { 'Content-Type': 'application/json' },
+		body: JSON.stringify(input)
+	});
+	if (!response.ok) {
+		throw await refusalError(response);
+	}
+}
+
+/**
+ * The Notice both `StaffFeedback.svelte` and `PortalFeedback.svelte`
+ * show after a send (#1502 Q4's table), pulled out here rather than
+ * built inline in each -- the two organisms differ only in who replies,
+ * and a shared template is the one place the "no address known" case
+ * has to be handled correctly rather than twice. `email` comes off an
+ * async, best-effort session read on both shells, so it can genuinely be
+ * empty; "will email you at ." is a broken sentence, so the clause is
+ * dropped entirely rather than interpolating nothing into it.
+ *
+ * `replierLabel` carries its own trailing punctuation: Staff's "Mark
+ * Goho, who builds Doula Cloud," is an appositive that needs its closing
+ * comma before "will"; Portal's plain "the Doula Cloud team" needs none.
+ * Baking that into the caller's own string keeps this template from
+ * having to guess which shape a given label wants.
+ */
+export function feedbackSentNotice(email: string, replierLabel: string): string {
+	return email
+		? `Feedback sent. Thank you. If a reply would help, ${replierLabel} will email you at ${email}.`
+		: 'Feedback sent. Thank you.';
+}
+
+/**
  * The browser family shown in the Feedback disclosure (#1498 Q4) --
  * User-Agent sniffing is otherwise unheard of in this app, and it exists
  * here only because the founder reads it as a plain fact on the private
