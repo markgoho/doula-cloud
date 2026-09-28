@@ -50,6 +50,18 @@ describe('Drawer', () => {
 		await expect.element(page.getByRole('dialog', { name: HEADING })).toBeVisible();
 	});
 
+	// A caller's own control (`PilotBanner`'s control, #1522) names this
+	// element via aria-controls -- a dangling reference to no id fails the
+	// accessibility scan.
+	it('carries the id a caller passes, for a control to name via aria-controls', async () => {
+		await page.viewport(...WIDE);
+		await render(Drawer, { open: true, heading: HEADING, id: 'feedback-drawer', children: CONTENT });
+
+		await expect
+			.element(page.getByRole('dialog', { name: HEADING }))
+			.toHaveAttribute('id', 'feedback-drawer');
+	});
+
 	/*
 	 * The whole point of never wrapping the dialog in `{#if open}`: a
 	 * caller's own state inside `children` -- here a plain <input>, since

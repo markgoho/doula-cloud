@@ -1,6 +1,17 @@
 // See https://svelte.dev/docs/kit/types#app.d.ts
 // for information about these interfaces
 declare global {
+	/**
+	 * The app's build stamp (#1527): `vite.config.ts`'s own `define` swaps
+	 * this identifier for a literal string at build time -- the deployed
+	 * commit (`GITHUB_SHA`) in CI, `'dev'` everywhere else, including every
+	 * spec. Declared inside this block, not at the file's own top level:
+	 * the file ends in `export {}`, which makes every top-level `declare`
+	 * a module-scoped export rather than a real global -- `#lib/build.ts`
+	 * is the only reader, and it never imports one.
+	 */
+	declare const __APP_BUILD__: string;
+
 	namespace App {
 		/**
 		 * What `error()` throws and a `+error.svelte` reads back off

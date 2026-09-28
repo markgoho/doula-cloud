@@ -14,6 +14,15 @@ const cpuBudget = Math.max(availableParallelism() - 1, 1);
 const BROWSER_WORKERS = Math.min(6, cpuBudget);
 
 export default defineConfig({
+	// The app's own build stamp (#1527): GITHUB_SHA is set by GitHub
+	// Actions in every job already -- ci.yml's `deploy-app` build step and
+	// firebase-hosting-app-pull-request.yml's preview build alike -- so
+	// there is nothing to add to a workflow file, only this read of the
+	// variable already there. `dev` is what a local `bun run dev` or
+	// `vite build` sees, since GITHUB_SHA is unset outside CI.
+	define: {
+		__APP_BUILD__: JSON.stringify(process.env.GITHUB_SHA ?? 'dev')
+	},
 	plugins: [
 		sveltekit({
 			compilerOptions: {
