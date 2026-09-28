@@ -19,6 +19,13 @@ import (
 
 const testIssueAppBaseURL = "https://app.example.test"
 
+// feedback_issue_outbox_status's own two states this file asserts
+// against, named once so goconst has one spelling to point at.
+const (
+	statusSent    = "sent"
+	statusPending = "pending"
+)
+
 // seedStaffFeedbackRow inserts a bare feedback row directly, bypassing
 // #1523's own handlers -- their coverage is staffauth's and clientauth's,
 // not this worker's. sent from staffID with no Practice in context.
@@ -134,7 +141,7 @@ func TestIssueWorker_FirstCreateOpensAnIssueAndWritesTheNumberBack(t *testing.T)
 	worker := feedback.IssueWorker{Creator: creator, AppBaseURL: testIssueAppBaseURL, Now: time.Now}
 	runIssueWorker(t, db, worker)
 
-	if status := readIssueOutboxStatus(t, db, feedbackID); status != "sent" {
+	if status := readIssueOutboxStatus(t, db, feedbackID); status != statusSent {
 		t.Fatalf("outbox status = %q, want sent", status)
 	}
 	number := readIssueNumber(t, db, feedbackID)
@@ -148,8 +155,8 @@ func TestIssueWorker_FirstCreateOpensAnIssueAndWritesTheNumberBack(t *testing.T)
 	if want := "Something is not working: /clients/[clientId]"; issue.Title != want {
 		t.Errorf("title = %q, want %q", issue.Title, want)
 	}
-	if len(issue.Labels) != 1 || issue.Labels[0] != "not working" {
-		t.Errorf("labels = %v, want [%q]", issue.Labels, "not working")
+	if len(issue.Labels) != 1 || issue.Labels[0] != testNotWorkingLabel {
+		t.Errorf("labels = %v, want [%q]", issue.Labels, testNotWorkingLabel)
 	}
 	if !strings.Contains(issue.Body, "/feedback/"+feedbackID) {
 		t.Errorf("body = %q, want the founder read page link", issue.Body)
@@ -181,7 +188,7 @@ func TestIssueWorker_RetryAdoptsAnIssueFoundByItsMarker(t *testing.T) {
 	worker := feedback.IssueWorker{Creator: creator, AppBaseURL: testIssueAppBaseURL, Now: time.Now}
 	runIssueWorker(t, db, worker)
 
-	if status := readIssueOutboxStatus(t, db, feedbackID); status != "sent" {
+	if status := readIssueOutboxStatus(t, db, feedbackID); status != statusSent {
 		t.Fatalf("outbox status = %q, want sent", status)
 	}
 	number := readIssueNumber(t, db, feedbackID)
@@ -206,7 +213,7 @@ func TestIssueWorker_GitHubErrorOnCreateLeavesTheRowPending(t *testing.T) {
 	worker := feedback.IssueWorker{Creator: creator, AppBaseURL: testIssueAppBaseURL, Now: time.Now}
 	runIssueWorker(t, db, worker)
 
-	if status := readIssueOutboxStatus(t, db, feedbackID); status != "pending" {
+	if status := readIssueOutboxStatus(t, db, feedbackID); status != statusPending {
 		t.Fatalf("outbox status = %q, want pending after a GitHub error", status)
 	}
 	if number := readIssueNumber(t, db, feedbackID); number.Valid {
@@ -227,7 +234,7 @@ func TestIssueWorker_GitHubErrorOnListLeavesTheRowPending(t *testing.T) {
 	worker := feedback.IssueWorker{Creator: creator, AppBaseURL: testIssueAppBaseURL, Now: time.Now}
 	runIssueWorker(t, db, worker)
 
-	if status := readIssueOutboxStatus(t, db, feedbackID); status != "pending" {
+	if status := readIssueOutboxStatus(t, db, feedbackID); status != statusPending {
 		t.Fatalf("outbox status = %q, want pending after a GitHub error", status)
 	}
 	if len(creator.Issues) != 0 {
@@ -250,7 +257,7 @@ func TestIssueWorker_GitHubErrorOnAddLabelsLeavesTheRowPending(t *testing.T) {
 	worker := feedback.IssueWorker{Creator: creator, AppBaseURL: testIssueAppBaseURL, Now: time.Now}
 	runIssueWorker(t, db, worker)
 
-	if status := readIssueOutboxStatus(t, db, feedbackID); status != "pending" {
+	if status := readIssueOutboxStatus(t, db, feedbackID); status != statusPending {
 		t.Fatalf("outbox status = %q, want pending after a GitHub error", status)
 	}
 	if number := readIssueNumber(t, db, feedbackID); number.Valid {
@@ -357,7 +364,7 @@ func TestProcessIssueOutboxHandler_RunsBehindTheDoor(t *testing.T) {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
 	}
 
-	if status := readIssueOutboxStatus(t, db, feedbackID); status != "sent" {
+	if status := readIssueOutboxStatus(t, db, feedbackID); status != statusSent {
 		t.Fatalf("outbox status = %q, want sent -- app_runtime must reach feedback through the door", status)
 	}
 	if number := readIssueNumber(t, db, feedbackID); !number.Valid {

@@ -38,6 +38,16 @@ func (s *stubDoer) Do(req *http.Request) (*http.Response, error) {
 
 const testRepo = "markgoho/doula-cloud-feedback"
 
+// testGitHubToken is every stubDoer test's stand-in bearer token -- its
+// value is never asserted on past the one trim test above, which builds
+// its own literal to prove the trim.
+const testGitHubToken = "a-token"
+
+// testNotWorkingLabel is feedback.KindNotWorking's own GitHub label name
+// (issue_outbox.go's unexported kindLabel map), repeated here because
+// that map is this package's own and not exported for a test to read.
+const testNotWorkingLabel = "not working"
+
 func TestGitHubIssueCreator_CreateIssueSendsNoLabelsAndParsesTheNumber(t *testing.T) {
 	doer := &stubDoer{status: http.StatusCreated, body: `{"number": 42}`}
 	creator := feedback.GitHubIssueCreator{Client: doer, Token: " a-token \n", Repo: testRepo}
@@ -80,9 +90,9 @@ func TestGitHubIssueCreator_CreateIssueNon2xxIsAnError(t *testing.T) {
 
 func TestGitHubIssueCreator_AddLabelsSendsTheKindLabel(t *testing.T) {
 	doer := &stubDoer{status: http.StatusOK, body: `[]`}
-	creator := feedback.GitHubIssueCreator{Client: doer, Token: "a-token", Repo: testRepo}
+	creator := feedback.GitHubIssueCreator{Client: doer, Token: testGitHubToken, Repo: testRepo}
 
-	if err := creator.AddLabels(t.Context(), 42, []string{"not working"}); err != nil {
+	if err := creator.AddLabels(t.Context(), 42, []string{testNotWorkingLabel}); err != nil {
 		t.Fatalf("AddLabels: %v", err)
 	}
 
@@ -94,14 +104,14 @@ func TestGitHubIssueCreator_AddLabelsSendsTheKindLabel(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read request body: %v", err)
 	}
-	if !strings.Contains(string(body), "not working") {
+	if !strings.Contains(string(body), testNotWorkingLabel) {
 		t.Errorf("request body = %s, want the label", body)
 	}
 }
 
 func TestGitHubIssueCreator_ListIssuesParsesNumberAndBody(t *testing.T) {
 	doer := &stubDoer{status: http.StatusOK, body: `[{"number":7,"body":"hello"},{"number":9,"body":"world"}]`}
-	creator := feedback.GitHubIssueCreator{Client: doer, Token: "a-token", Repo: testRepo}
+	creator := feedback.GitHubIssueCreator{Client: doer, Token: testGitHubToken, Repo: testRepo}
 
 	issues, err := creator.ListIssues(t.Context(), time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC))
 	if err != nil {
@@ -125,9 +135,63 @@ func TestGitHubIssueCreator_ListIssuesParsesNumberAndBody(t *testing.T) {
 
 func TestGitHubIssueCreator_NetworkErrorPropagates(t *testing.T) {
 	doer := &stubDoer{err: errors.New("dial tcp: i/o timeout")}
-	creator := feedback.GitHubIssueCreator{Client: doer, Token: "a-token", Repo: testRepo}
+	creator := feedback.GitHubIssueCreator{Client: doer, Token: testGitHubToken, Repo: testRepo}
 
 	if _, err := creator.CreateIssue(t.Context(), "title", "body"); err == nil {
 		t.Fatal("CreateIssue err = nil, want an error when the transport fails")
+	}
+}
+
+func TestGitHubIssueCreator_CreateIssueMalformedResponseIsAnError(t *testing.T) {
+	doer := &stubDoer{status: http.StatusCreated, body: `not json`}
+	creator := feedback.GitHubIssueCreator{Client: doer, Token: testGitHubToken, Repo: testRepo}
+
+	if _, err := creator.CreateIssue(t.Context(), "title", "body"); err == nil {
+		t.Fatal("CreateIssue err = nil, want an error for a malformed response body")
+	}
+}
+
+func TestGitHubIssueCreator_AddLabelsNetworkErrorPropagates(t *testing.T) {
+	doer := &stubDoer{err: errors.New("dial tcp: i/o timeout")}
+	creator := feedback.GitHubIssueCreator{Client: doer, Token: testGitHubToken, Repo: testRepo}
+
+	if err := creator.AddLabels(t.Context(), 42, []string{testNotWorkingLabel}); err == nil {
+		t.Fatal("AddLabels err = nil, want an error when the transport fails")
+	}
+}
+
+func TestGitHubIssueCreator_AddLabelsNon2xxIsAnError(t *testing.T) {
+	doer := &stubDoer{status: http.StatusForbidden, body: `{"message":"Resource not accessible"}`}
+	creator := feedback.GitHubIssueCreator{Client: doer, Token: testGitHubToken, Repo: testRepo}
+
+	if err := creator.AddLabels(t.Context(), 42, []string{testNotWorkingLabel}); err == nil {
+		t.Fatal("AddLabels err = nil, want an error for a 403")
+	}
+}
+
+func TestGitHubIssueCreator_ListIssuesNetworkErrorPropagates(t *testing.T) {
+	doer := &stubDoer{err: errors.New("dial tcp: i/o timeout")}
+	creator := feedback.GitHubIssueCreator{Client: doer, Token: testGitHubToken, Repo: testRepo}
+
+	if _, err := creator.ListIssues(t.Context(), time.Now()); err == nil {
+		t.Fatal("ListIssues err = nil, want an error when the transport fails")
+	}
+}
+
+func TestGitHubIssueCreator_ListIssuesNon2xxIsAnError(t *testing.T) {
+	doer := &stubDoer{status: http.StatusInternalServerError, body: `{"message":"oops"}`}
+	creator := feedback.GitHubIssueCreator{Client: doer, Token: testGitHubToken, Repo: testRepo}
+
+	if _, err := creator.ListIssues(t.Context(), time.Now()); err == nil {
+		t.Fatal("ListIssues err = nil, want an error for a 500")
+	}
+}
+
+func TestGitHubIssueCreator_ListIssuesMalformedResponseIsAnError(t *testing.T) {
+	doer := &stubDoer{status: http.StatusOK, body: `not json`}
+	creator := feedback.GitHubIssueCreator{Client: doer, Token: testGitHubToken, Repo: testRepo}
+
+	if _, err := creator.ListIssues(t.Context(), time.Now()); err == nil {
+		t.Fatal("ListIssues err = nil, want an error for a malformed response body")
 	}
 }

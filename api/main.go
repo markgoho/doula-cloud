@@ -284,6 +284,7 @@ func main() {
 			Repo:   os.Getenv("GITHUB_FEEDBACK_REPO"),
 		}
 	}
+	// coverage:ignore reason: wires the real Deps struct main() serves from, not exercised by unit tests -- routes()/testDeps() in main_test.go exercise the route table itself
 	feedbackIssueWorker := feedback.IssueWorker{
 		Creator:    issueCreator,
 		AppBaseURL: appBaseURL,

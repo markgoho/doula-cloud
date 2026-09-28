@@ -105,10 +105,19 @@ func (c GitHubIssueCreator) CreateIssue(ctx context.Context, title, body string)
 	if resp.StatusCode < 200 || resp.StatusCode > 299 {
 		return 0, fmt.Errorf("feedback: create issue: github returned %d", resp.StatusCode)
 	}
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		// coverage:ignore reason: read failure mid-body, not exercised by unit tests
+		return 0, fmt.Errorf("feedback: read created issue: %w", err)
+	}
 	var out struct {
 		Number int `json:"number"`
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+	// json.Unmarshal on an already-read body, not json.NewDecoder -- this
+	// is GitHub's response, never our own BFF envelope, so it is not
+	// apierr.WriteJSON/DecodeJSON's job to parse (apierr's own
+	// TestNoDirectJSONUsage, api/internal/apierr/usage_test.go).
+	if err := json.Unmarshal(respBody, &out); err != nil {
 		return 0, fmt.Errorf("feedback: decode created issue: %w", err)
 	}
 	return out.Number, nil
@@ -147,11 +156,17 @@ func (c GitHubIssueCreator) ListIssues(ctx context.Context, since time.Time) ([]
 	if resp.StatusCode < 200 || resp.StatusCode > 299 {
 		return nil, fmt.Errorf("feedback: list issues: github returned %d", resp.StatusCode)
 	}
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		// coverage:ignore reason: read failure mid-body, not exercised by unit tests
+		return nil, fmt.Errorf("feedback: read issue list: %w", err)
+	}
 	var out []struct {
 		Number int    `json:"number"`
 		Body   string `json:"body"`
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+	// json.Unmarshal, not json.NewDecoder -- see CreateIssue's own comment.
+	if err := json.Unmarshal(respBody, &out); err != nil {
 		return nil, fmt.Errorf("feedback: decode issue list: %w", err)
 	}
 	issues := make([]Issue, len(out))

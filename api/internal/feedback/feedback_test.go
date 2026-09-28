@@ -205,16 +205,32 @@ func TestRLS_FeedbackRefusesAForeignPortalSender(t *testing.T) {
 	}
 }
 
-// TestGrant_FeedbackHasNoSelect proves 00118's own grant: app_runtime
-// holds INSERT and nothing else, so neither a Staff member nor a Client
-// can ever read a piece of Feedback back through this table (#1523's own
-// AC) -- refused at the privilege check, before RLS is even reached.
-func TestGrant_FeedbackHasNoSelect(t *testing.T) {
+// TestGrant_FeedbackSelectIsRLSGatedToTheTrustedWorker proves 00119's own
+// grant: SELECT on feedback exists for app_runtime (#1524's outbox needs
+// it to build an issue), but feedback_notification_worker_select (00119)
+// admits no row at all outside the trusted-worker door -- so neither a
+// Staff member nor a Client can read a piece of Feedback back through an
+// ordinary session (#1523's own AC), even though the privilege check
+// itself now passes. TestProcessIssueOutboxHandler_RunsBehindTheDoor
+// (issue_outbox_test.go) proves the other side: the same SELECT succeeds
+// and returns rows once the door is open.
+func TestGrant_FeedbackSelectIsRLSGatedToTheTrustedWorker(t *testing.T) {
 	db := testdb.New(t)
-	if _, err := db.App.ExecContext(t.Context(), `SELECT count(*) FROM feedback`); err == nil {
-		t.Fatal("SELECT on feedback succeeded -- app_runtime must hold no SELECT grant on this table")
-	} else if !strings.Contains(err.Error(), "permission denied") {
-		t.Fatalf("expected a permission-denied error, got: %v", err)
+	staffID := testdb.SeedStaff(t, db, "feedback-select-gated")
+	if _, err := db.Admin.ExecContext(t.Context(),
+		`INSERT INTO feedback (id, kind, text, page_url, route_id, app_build, screen_width, browser, staff_id, sent_at)
+		 VALUES ($1, 'not_working', '', '/account', '/account', 'abc1234', 390, 'Unknown browser', $2, now())`,
+		uuid.NewString(), staffID,
+	); err != nil {
+		t.Fatalf("seed feedback row: %v", err)
+	}
+
+	var count int
+	if err := db.App.QueryRowContext(t.Context(), `SELECT count(*) FROM feedback`).Scan(&count); err != nil {
+		t.Fatalf("SELECT on feedback failed: %v -- app_runtime must hold the grant #1524 added", err)
+	}
+	if count != 0 {
+		t.Fatalf("count = %d, want 0 -- an ordinary session with the trusted-worker door closed must see no row", count)
 	}
 }
 
