@@ -14,25 +14,22 @@
 <stack-l space="var(--space-6)">
 	<h1>Feedback form</h1>
 
-	<section>
-		<h2>Staff copy</h2>
-		<FeedbackForm
-			legend="What kind of feedback is it?"
-			errorKind="Select what kind of feedback it is"
-			textLabel="Tell us more"
-			textHint="What were you trying to do, and what happened?"
-			destination="This goes to the Doula Cloud team, not to your Practice."
-			detailsSummary="What else we send with your feedback"
-			roleAndPractice="Owner, Finger Lakes Birth Collective"
-			onSend={async (input) => {
-				posted = JSON.stringify(input, undefined, 2);
-			}}
-			onSent={() => {}}
-		/>
-		{#if posted}
-			<pre>{posted}</pre>
-		{/if}
-	</section>
+	<FeedbackForm
+		legend="What kind of feedback is it?"
+		errorKind="Select what kind of feedback it is"
+		textLabel="Tell us more"
+		textHint="What were you trying to do, and what happened?"
+		destination="This goes to the Doula Cloud team, not to your Practice."
+		detailsSummary="What else we send with your feedback"
+		roleAndPractice="Owner, Riverside Doulas"
+		onSend={async (input) => {
+			posted = JSON.stringify(input, undefined, 2);
+		}}
+		onSent={() => {}}
+	/>
+	{#if posted}
+		<pre>{posted}</pre>
+	{/if}
 </stack-l>
 
 <style>
@@ -43,6 +40,7 @@
 			border-radius: var(--radius);
 			font-size: var(--text-body-sm-size);
 			white-space: pre-wrap;
+			overflow-wrap: anywhere;
 		}
 	}
 </style>

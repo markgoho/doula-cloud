@@ -185,6 +185,13 @@
 			font-size: var(--text-body-sm-size);
 			line-height: var(--text-body-sm-leading);
 			color: var(--color-on-surface-variant);
+			/* the version of Doula Cloud" is a real build's full 40-character
+			   commit SHA in production, never "dev" -- one unbroken token
+			   with no space to wrap at, the same bare-URL case Link.svelte's
+			   own overflow-wrap override exists for. Confirmed on CI, not
+			   locally: a local build's SHA-less "dev" fits at 320px either
+			   way, so this needed the real value to catch at all. */
+			overflow-wrap: anywhere;
 		}
 	}
 </style>
