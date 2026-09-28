@@ -199,22 +199,44 @@
 			opacity: 0.85;
 		}
 
-		/* Inline prose, not a control with its own box (#1522): no padding,
-		   no border, no background, and `display: inline` rather than the
-		   base rule's `inline-flex` -- a flex box does not take part in a
-		   text line's own wrapping the way a plain inline element does, and
-		   this variant's whole point is to sit inside a sentence that
-		   wraps. `Link.svelte`'s `.primary` sets the same color and hover
-		   treatment for the same reason: this reads as that kind of link,
-		   not as a button that happens to look like one. */
+		/*
+		 * Inline prose, not a control with its own box (#1522): no
+		 * padding, no border, no background. `display: inline` is
+		 * requested rather than the base rule's `inline-flex`, but a
+		 * `<button>` stays an atomic, shrink-to-fit box in every engine
+		 * regardless -- measured directly: inside a narrow flex item, it
+		 * still wraps its own label across lines while sizing itself
+		 * against nearly the *container's* width rather than the
+		 * remaining space on the sentence's own last line, so it drops to
+		 * a line of its own rather than reading as running text. `inline`
+		 * is kept anyway (over the base `inline-flex`) because it turns
+		 * off `align-items`/`justify-content`/`gap`, which have nothing
+		 * to apply to here -- a single text child -- and because it is
+		 * the honest name for what this variant is trying to be, even
+		 * though the element declines it.
+		 *
+		 * `text-align: inherit` overrides the UA stylesheet's own
+		 * `text-align: center` on `button` -- without it, that shrink-
+		 * to-fit box centers its wrapped label under the sentence above
+		 * it rather than reading left-aligned like the prose beside it
+		 * (confirmed on `/style-guide/pilot-banner` at 320px). `border: 0`
+		 * rather than only `border-color: transparent`: the base rule's
+		 * border is a real `--border-thin`, and a transparent border
+		 * still occupies that space.
+		 *
+		 * `Link.svelte`'s `.primary` sets the same color and hover
+		 * treatment for the same reason: this reads as that kind of link,
+		 * not as a button that happens to look like one.
+		 */
 		button.link {
 			display: inline;
 			min-block-size: 0;
 			padding: 0;
-			border-color: transparent;
+			border: 0;
 			background-color: transparent;
 			color: var(--color-primary);
 			font-weight: var(--font-weight-normal);
+			text-align: inherit;
 			text-decoration: underline;
 		}
 

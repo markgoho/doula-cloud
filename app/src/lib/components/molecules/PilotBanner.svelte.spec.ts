@@ -31,10 +31,15 @@ describe('PilotBanner.svelte', () => {
 		await expect.element(page.getByText('This care portal is new.', { exact: false })).toBeVisible();
 	});
 
-	it('shows the control text inline, as a button rather than a link', async () => {
+	it('shows the control text inline, as a button rather than a link, with the sentence-closing period folded into it', async () => {
 		await setup({ controlText: 'Send us feedback' });
 
-		const control = page.getByRole('button', { name: 'Send us feedback' });
+		// The period is part of the button's own accessible name, not a
+		// separate text node after it: a `<button>` stays an atomic,
+		// shrink-to-fit box even styled `display: inline`, so a period
+		// placed after it can wrap onto a line of its own once the button
+		// wraps -- confirmed on /style-guide/pilot-banner at 320px.
+		const control = page.getByRole('button', { name: 'Send us feedback.' });
 		await expect.element(control).toBeVisible();
 	});
 

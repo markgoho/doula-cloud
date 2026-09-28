@@ -33,6 +33,13 @@
 	 * elements` requires the atom everywhere but the atom itself), and the
 	 * variant reads as inline prose rather than as a control with its own
 	 * chrome.
+	 *
+	 * The closing "." is part of `label`, not a text node after `<Button>`:
+	 * a `<button>` stays an atomic, shrink-to-fit box even styled `display:
+	 * inline` (`Button.svelte`'s own comment on the `link` variant), so
+	 * text placed after it can land on a line of its own once the button
+	 * wraps -- measured directly on this page at 320px. Folding the period
+	 * into the label keeps it on the button's own last line instead.
 	 */
 	interface Properties {
 		sentence: string;
@@ -52,11 +59,11 @@
 			>{sentence}
 			<Button
 				variant="link"
-				label={controlText}
+				label="{controlText}."
 				expanded={open}
 				ariaControls={controlsId}
 				onClick={onOpenFeedback}
-			/>.</span
+			/></span
 		>
 	</p>
 </div>
@@ -88,6 +95,15 @@
 		 * no `overflow-wrap` override the way `Link.svelte`'s bare-URL case
 		 * does -- only `min-inline-size: 0` to let it shrink past that
 		 * min-content width once the Pilot tag has taken its own room.
+		 *
+		 * 16rem is a wrap-width decision, not a spacing one, the same
+		 * reasoning `Drawer.svelte`'s own bare `28rem` panel width gives
+		 * (`tokens.usage.spec.ts` only gates raw px and color, never rem):
+		 * below the 320px conformance floor's own content box (roughly
+		 * 288px once `.banner`'s padding is subtracted), the sentence and
+		 * the Pilot tag wrap onto separate lines anyway (see `.banner`'s
+		 * `flex-wrap`), so this basis only governs the point above 320px
+		 * where they still share a row.
 		 */
 		span {
 			flex: 1 1 16rem;
