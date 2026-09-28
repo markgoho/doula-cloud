@@ -1,7 +1,8 @@
-import { globSync, readFileSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
+import { globFiles } from './globFiles';
 
 /*
  * #1254: 17 files under app/e2e each declared their own
@@ -24,7 +25,7 @@ const OWNER = 'app/e2e/ports.ts';
 // Paths come back prefixed "app/e2e/", the same shape
 // spelling.usage.spec.ts's own e2eFiles glob uses, since this runs from
 // repoRoot rather than appRoot -- e2e/ sits outside src/ entirely.
-const e2eFiles = globSync('app/e2e/**/*.{ts,js}', { cwd: repoRoot }).filter((file) => file !== OWNER);
+const e2eFiles = globFiles('app/e2e/**/*.{ts,js}', { cwd: repoRoot }).filter((file) => file !== OWNER);
 
 // Catches a reintroduced `const API_URL = ...` under that exact name.
 const DECLARATION = /\bconst\s+API_URL\s*=/;

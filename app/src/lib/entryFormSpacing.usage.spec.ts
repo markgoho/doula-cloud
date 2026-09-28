@@ -1,6 +1,7 @@
-import { globSync, readFileSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
+import { globFiles } from './globFiles';
 
 /*
  * #660's static gate, in the shape `pageTitle.usage.spec.ts` already uses.
@@ -68,7 +69,7 @@ function isEntryScreen(file: string): boolean {
 	return ENTRY_TEMPLATE_IMPORT.test(read(file));
 }
 
-const entryRoutes = globSync('src/routes/**/+page.svelte', { cwd: appRoot }).filter((file) =>
+const entryRoutes = globFiles('src/routes/**/+page.svelte', { cwd: appRoot }).filter((file) =>
 	isEntryScreen(file)
 );
 

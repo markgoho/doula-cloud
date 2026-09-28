@@ -1,7 +1,8 @@
-import { globSync, readFileSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
+import { globFiles } from './globFiles';
 import { unwrapProse } from './prose.js';
 
 /*
@@ -254,7 +255,7 @@ const repoRoot = path.join(fileURLToPath(new URL('../../', import.meta.url)), '.
 // fixed at that source, not by rewriting its output (see that script's
 // `renderExport`); rewriting the committed file here without also fixing
 // the generator would only be undone by the next export.
-const documentFiles = globSync('docs/**/*.md', { cwd: repoRoot }).filter(
+const documentFiles = globFiles('docs/**/*.md', { cwd: repoRoot }).filter(
 	(file) =>
 		!file.startsWith('docs/research/transcripts/') && file !== 'docs/design/doula-cloud.export.md'
 );

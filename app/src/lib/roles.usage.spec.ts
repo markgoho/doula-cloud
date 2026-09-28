@@ -1,7 +1,8 @@
-import { globSync, readFileSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
+import { globFiles } from './globFiles';
 
 /*
  * #262's third AC as a gate, in the mold of `clientRegister.usage.spec.ts`
@@ -61,7 +62,7 @@ function findOffenses(file: string, source: string): Offense[] {
 	return offenses;
 }
 
-const sourceFiles = globSync('src/**/*.{svelte,ts}', { cwd: appRoot }).filter(
+const sourceFiles = globFiles('src/**/*.{svelte,ts}', { cwd: appRoot }).filter(
 	(file) => !file.includes('.spec.') && file !== 'src/lib/roles.ts'
 );
 

@@ -1,6 +1,6 @@
-import { globSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
+import { globFiles } from './globFiles';
 import { quotedStrings } from './quotedCopy';
 
 /*
@@ -42,7 +42,7 @@ const BANNED = ['please', 'valid', 'invalid', 'required'];
 
 const appRoot = fileURLToPath(new URL('../../', import.meta.url));
 
-const sourceFiles = globSync('src/{lib/components,routes}/**/*.svelte', { cwd: appRoot });
+const sourceFiles = globFiles('src/{lib/components,routes}/**/*.svelte', { cwd: appRoot });
 
 interface Offense {
 	file: string;

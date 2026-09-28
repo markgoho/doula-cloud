@@ -1,6 +1,7 @@
-import { globSync, readFileSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
+import { globFiles } from './globFiles';
 
 /*
  * #1108's static gate, the authenticated-side counterpart to
@@ -135,7 +136,7 @@ function unmarkedForms(source: string): number[] {
 	return unmarked;
 }
 
-const authenticatedFiles = globSync('src/**/*.svelte', { cwd: appRoot }).filter(
+const authenticatedFiles = globFiles('src/**/*.svelte', { cwd: appRoot }).filter(
 	(file) => file !== STACKED_FORM && !isEntryScreen(file)
 );
 
