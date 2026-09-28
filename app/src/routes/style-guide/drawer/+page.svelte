@@ -1,7 +1,7 @@
 <script lang="ts">
-	import Details from '#lib/components/atoms/Details.svelte';
 	import Text from '#lib/components/atoms/Text.svelte';
 	import Drawer from '#lib/components/organisms/Drawer.svelte';
+	import FeedbackForm from '#lib/components/organisms/FeedbackForm.svelte';
 
 	/*
 	 * Open by default rather than behind a button: the continuum sweep
@@ -29,31 +29,27 @@
 			sweep at 414px), so only a real width change shows it.
 		</p>
 		<!--
-			The Feedback drawer's own decided copy (#1502 Q4), read here
-			ahead of its own ticket (#1527) landing -- the same move
-			/style-guide/details already made for the disclosure below,
-			since #1520 named this drawer as that atom's newest consumer.
-			Real content rather than lorem ipsum, and long enough that the
-			sweep measures this panel at its busiest state.
+			The real Feedback drawer (#1527), not an approximation of it:
+			`organisms/FeedbackForm.svelte` is `/style-guide/feedback-form`'s
+			own subject, so this page holds it inside a Drawer at its
+			busiest -- the disclosure's role and Practice line included --
+			the same way the panel actually appears on a Staff screen.
 		-->
 		<Drawer bind:open={isOpen} heading="Send feedback to Doula Cloud">
 			<Text
 				text="The Doula Cloud team reads every piece of feedback during the pilot. It is how we decide what to fix first."
 			/>
-			<Text text="What kind of feedback is it?" step="label" />
-			<Text text="Something is not working / An idea or a request / Something else" />
-			<Text text="Tell us more" step="label" />
-			<Text text="What were you trying to do, and what happened?" tone="muted" />
-			<Details summary="What else we send with your feedback">
-				<ul>
-					<li>The page you were on</li>
-					<li>Your role and Practice</li>
-					<li>The time</li>
-					<li>Your screen width and browser</li>
-					<li>The version of Doula Cloud</li>
-				</ul>
-			</Details>
-			<Text text="This goes to the Doula Cloud team, not to your Practice." tone="muted" />
+			<FeedbackForm
+				legend="What kind of feedback is it?"
+				errorKind="Select what kind of feedback it is"
+				textLabel="Tell us more"
+				textHint="What were you trying to do, and what happened?"
+				destination="This goes to the Doula Cloud team, not to your Practice."
+				detailsSummary="What else we send with your feedback"
+				roleAndPractice="Owner, Finger Lakes Birth Collective"
+				onSend={async () => {}}
+				onSent={() => {}}
+			/>
 		</Drawer>
 	</section>
 </stack-l>
