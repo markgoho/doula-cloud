@@ -317,5 +317,5 @@ func mountSessionRoutes(g *GatedRouter, db *sql.DB, verifier authn.Verifier, acc
 	// screen was under one, rides in the body and FeedbackHandler checks
 	// it itself against practice_memberships.
 	g.Write("POST /api/staff/feedback",
-		ratelimit.Wrap(db, "staff_feedback", feedbackRules)(FeedbackHandler(db)))
+		ratelimit.Wrap(db, "staff_feedback", feedbackRules)(FeedbackHandler(db, enq)))
 }

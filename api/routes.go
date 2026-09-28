@@ -12,6 +12,7 @@ import (
 	"doula-cloud/api/internal/clock"
 	"doula-cloud/api/internal/csrf"
 	"doula-cloud/api/internal/engagementrequest"
+	"doula-cloud/api/internal/feedback"
 	"doula-cloud/api/internal/idempotency"
 	"doula-cloud/api/internal/internalauth"
 	"doula-cloud/api/internal/mailsuppress"
@@ -126,6 +127,9 @@ type Deps struct {
 	// PracticeDeletionWorker is #871's day-23 reminder and day-30
 	// finalization for a Practice deleting itself.
 	PracticeDeletionWorker practicedeletion.Worker
+	// FeedbackIssueWorker is #1524's second worker that mails nobody: it
+	// opens a private GitHub issue for a piece of Feedback.
+	FeedbackIssueWorker feedback.IssueWorker
 
 	NudgeEnqueuer   tasknudge.Enqueuer
 	ExpectedOrigins []string

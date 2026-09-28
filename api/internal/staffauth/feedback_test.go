@@ -293,6 +293,37 @@ func TestFeedback_ZeroRoleMembershipStillRecordsAnEmptyArray(t *testing.T) {
 	}
 }
 
+// TestFeedback_QueuesTheIssueOutboxRow is #1524's own AC: both send
+// handlers enqueue the outbox row in the same transaction that saves the
+// piece of Feedback, so a successful send always leaves exactly one
+// pending row behind it.
+func TestFeedback_QueuesTheIssueOutboxRow(t *testing.T) {
+	db := testdb.New(t)
+	testdb.SeedStaff(t, db, "feedback-queues-outbox")
+	srv, session := newWorkStateServer(t, db, "feedback-queues-outbox")
+	defer srv.Close()
+
+	resp := postFeedback(t, srv, session, `{"kind":"idea_or_request"}`)
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusCreated {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusCreated)
+	}
+	var out staffauth.FeedbackResponse
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+
+	var status string
+	if err := db.Admin.QueryRowContext(t.Context(),
+		`SELECT status::text FROM feedback_issue_outbox WHERE feedback_id = $1`, out.ID,
+	).Scan(&status); err != nil {
+		t.Fatalf("read outbox row: %v", err)
+	}
+	if status != "pending" {
+		t.Errorf("outbox status = %q, want pending", status)
+	}
+}
+
 // TestFeedback_RefusesTwentyFirstRequestInAnHour is #1523's own sizing:
 // 20 per hour, per sender.
 func TestFeedback_RefusesTwentyFirstRequestInAnHour(t *testing.T) {

@@ -12,6 +12,7 @@ import (
 	"doula-cloud/api/internal/authn"
 	"doula-cloud/api/internal/clock"
 	"doula-cloud/api/internal/feedback"
+	"doula-cloud/api/internal/tasknudge"
 )
 
 // MsgFeedbackKindNeeded is the kind field on the Feedback form -- the
@@ -65,7 +66,7 @@ type PortalFeedbackResponse struct {
 // neither. Q2's own resolution -- "redundant feedback is better than no
 // feedback" (#1498) -- is also why closing that gap is not worth doing
 // here even where a practice_id happens to be on hand.
-func FeedbackHandler(db *sql.DB) http.Handler {
+func FeedbackHandler(db *sql.DB, enq tasknudge.Enqueuer) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		tx, uid, _, ok := authn.Begin(w, r, db, authn.TierPortal)
 		if !ok {
@@ -168,6 +169,15 @@ func FeedbackHandler(db *sql.DB) http.Handler {
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
+		// #1524: the outbox row that opens a private GitHub issue for this
+		// piece, queued in the same transaction as the insert above so a
+		// crash between the two never leaves a piece of Feedback with no
+		// issue ever queued for it.
+		if err := feedback.EnqueueIssueOutbox(r.Context(), tx, id); err != nil {
+			// coverage:ignore reason: DB query failure, not exercised by unit tests
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+			return
+		}
 
 		if err := tx.Commit(); err != nil {
 			// coverage:ignore reason: DB commit failure, not exercised by unit tests
@@ -175,6 +185,11 @@ func FeedbackHandler(db *sql.DB) http.Handler {
 			return
 		}
 		committed = true
+		// This handler commits its own write rather than running inside
+		// clientauth.Middleware's request-scoped transaction, the same
+		// reasoning staffauth.FeedbackHandler's own nudge carries, so the
+		// nudge fires immediately rather than through tasknudge.Register.
+		tasknudge.Fire(enq, tasknudge.FeedbackIssue)(r.Context())
 
 		apierr.WriteJSON(w, http.StatusCreated, PortalFeedbackResponse{ID: id})
 	})

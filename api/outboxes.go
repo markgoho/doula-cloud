@@ -22,6 +22,10 @@ const (
 	// #871's Practice-deletion outbox, not nudged for the same reason as
 	// the two above.
 	practiceDeletionOutboxPath = "/api/internal/notifications/process-practice-deletion-outbox"
+	// #1524's private-GitHub-issue outbox, under /api/internal/feedback
+	// rather than /notifications because it notifies nobody -- it opens
+	// an issue in a private GitHub repo.
+	feedbackIssueOutboxPath = "/api/internal/feedback/process-issue-outbox"
 )
 
 // outboxRegistrations is every outbox the BFF serves (ADR-0010), in one
@@ -182,6 +186,16 @@ func outboxRegistrations(d Deps) []outbox.Registration {
 			Path:   practiceDeletionOutboxPath,
 			Door:   outbox.NotificationDoor,
 			Worker: d.PracticeDeletionWorker,
+		},
+		{
+			// #1524's private-GitHub-issue outbox, whose write sites are
+			// staffauth.FeedbackHandler and clientauth.FeedbackHandler.
+			// Nudged: a person just sent Feedback and the founder's own
+			// triage picks it up off GitHub, not off this database.
+			Path:   feedbackIssueOutboxPath,
+			Door:   outbox.NotificationDoor,
+			Nudge:  tasknudge.FeedbackIssue,
+			Worker: d.FeedbackIssueWorker,
 		},
 		{
 			// #443's site rebuild, under /api/internal/site for the same
