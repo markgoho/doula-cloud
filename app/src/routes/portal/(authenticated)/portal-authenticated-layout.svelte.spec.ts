@@ -2,6 +2,7 @@ import { createRawSnippet } from 'svelte';
 import { page } from 'vitest/browser';
 import { describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
+import { jsonResponse } from '#lib/testResponse.js';
 import type { SignOutOutcome } from '#lib/signOut.js';
 import Layout from './+layout.svelte';
 
@@ -12,6 +13,9 @@ import Layout from './+layout.svelte';
 // it itself, so a refusal there is the load's own responsibility, not
 // this component's -- see `still draws the bar when the Practice's
 // identity is not yet known` below for what this component still owns.
+// `route` is read by `FeedbackForm.svelte` via `#lib/appState.svelte.js`'s
+// route getter (#1528, matching #1527's own note) -- unused by anything
+// else this layout renders.
 const pageState = vi.hoisted(() => ({
 	params: { engagementId: 'engagement-1' },
 	url: new URL('http://localhost/portal/engagements/engagement-1'),
@@ -20,7 +24,8 @@ const pageState = vi.hoisted(() => ({
 		clientName?: string;
 		createdAt?: string;
 		offersBirthPlan?: boolean;
-	}
+	},
+	route: { id: '/portal/(authenticated)/engagements/[engagementId]' } as { id: string | null }
 }));
 vi.mock('$app/state', () => ({ page: pageState }));
 
@@ -32,8 +37,9 @@ const signOutOfSession = vi.hoisted(() => vi.fn<() => Promise<SignOutOutcome>>()
 vi.mock('#lib/signOut.js', () => ({ signOutOfSession }));
 
 const apiFetch = vi.hoisted(() => vi.fn());
+const apiFetchWithSession = vi.hoisted(() => vi.fn());
 const apiBaseURL = vi.hoisted(() => vi.fn(() => ''));
-vi.mock('#lib/api.js', () => ({ apiFetch, apiBaseURL }));
+vi.mock('#lib/api.js', () => ({ apiFetch, apiFetchWithSession, apiBaseURL }));
 
 // Push registration moved up here from the hub page, so a Client who lands
 // straight on her Contract is registered too. Mocked rather than exercised:
@@ -84,6 +90,8 @@ async function setup({
 	registerPushSubscriptionIfEnabled.mockReset();
 	signOutOfSession.mockReset();
 	signOutOfSession.mockResolvedValue(outcome);
+	apiFetchWithSession.mockReset();
+	apiFetchWithSession.mockResolvedValue(jsonResponse({ signInAddress: 'tasha.bell@example.test', engagements: [] }));
 	await render(Layout, {
 		children: createRawSnippet(() => ({ render: () => '<p>portal child content</p>' }))
 	});
@@ -113,7 +121,11 @@ describe('Client portal authenticated layout', () => {
 	it('names the Practice, which is the portal identity', async () => {
 		await setup();
 
-		await expect.element(page.getByText('Riverside Doula Collective')).toBeVisible();
+		// `.first()`: the Feedback drawer's own intro, destination and
+		// disclosure (#1528) also name the Practice, in DOM order after the
+		// bar's own switcher label -- the same reason
+		// practices-layout.svelte.spec.ts's equivalent test picks `.first()`.
+		await expect.element(page.getByText('Riverside Doula Collective').first()).toBeVisible();
 	});
 
 	/*
@@ -227,5 +239,69 @@ describe('Client portal authenticated layout', () => {
 
 		await expect.element(page.getByRole('banner')).toBeVisible();
 		await expect.element(page.getByRole('button', { name: /Your account/ })).not.toBeInTheDocument();
+	});
+});
+
+describe('the Pilot banner and Feedback drawer (#1528)', () => {
+	it('shows the Portal banner sentence on every screen this layout wraps', async () => {
+		await setup();
+
+		await expect.element(page.getByText('This care portal is new.', { exact: false })).toBeVisible();
+	});
+
+	it('names the Practice in the drawer intro once the identity is known', async () => {
+		await setup();
+
+		await page.getByRole('button', { name: 'Tell us what is not working or what you need.' }).click();
+
+		await expect
+			.element(
+				page.getByText(
+					'Riverside Doula Collective uses Doula Cloud to run this portal. The Doula Cloud team reads every piece of feedback.'
+				)
+			)
+			.toBeVisible();
+	});
+
+	// #1528's own AC: a Portal Account reaches Clients at more than one
+	// Practice (ADR-0015), so a screen with no single Practice to name --
+	// here, the brief window before the identity load resolves -- reads
+	// "your doula's Practice" in its place.
+	it("names \"your doula's Practice\" when the identity is not yet known", async () => {
+		await setup({ identityUnknown: true });
+
+		await page.getByRole('button', { name: 'Tell us what is not working or what you need.' }).click();
+
+		await expect
+			.element(
+				page.getByText(
+					"Your doula's Practice uses Doula Cloud to run this portal. The Doula Cloud team reads every piece of feedback."
+				)
+			)
+			.toBeVisible();
+	});
+
+	it("posts a send to /api/portal/feedback with the route's own engagementId, closes the drawer, and shows a Notice naming the sign-in address", async () => {
+		await setup();
+
+		await page.getByRole('button', { name: 'Tell us what is not working or what you need.' }).click();
+		await page.getByLabelText('Something is not working').click();
+		await page.getByRole('button', { name: 'Send feedback' }).click();
+
+		await expect
+			.poll(() => apiFetchWithSession.mock.calls.some((call: unknown[]) => call[0] === '/api/portal/feedback'))
+			.toBe(true);
+		const [, init] = apiFetchWithSession.mock.calls.find(
+			(call: unknown[]) => call[0] === '/api/portal/feedback'
+		) as [string, RequestInit];
+		expect(JSON.parse(init.body as string)).toMatchObject({ kind: 'not_working', engagementId: 'engagement-1' });
+		await expect.element(page.getByRole('dialog')).not.toBeInTheDocument();
+		await expect
+			.element(
+				page.getByText(
+					'Feedback sent. Thank you. If a reply would help, the Doula Cloud team will email you at tasha.bell@example.test.'
+				)
+			)
+			.toBeVisible();
 	});
 });

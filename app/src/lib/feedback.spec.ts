@@ -1,6 +1,13 @@
 import { describe, expect, it, vi } from 'vitest';
 import { RefusalError } from './formErrors.js';
-import { browserName, kindOptions, sendStaffFeedback, type StaffFeedbackInput } from './feedback.js';
+import {
+	browserName,
+	kindOptions,
+	sendPortalFeedback,
+	sendStaffFeedback,
+	type PortalFeedbackInput,
+	type StaffFeedbackInput
+} from './feedback.js';
 
 const input: StaffFeedbackInput = {
 	kind: 'not_working',
@@ -9,6 +16,18 @@ const input: StaffFeedbackInput = {
 	appBuild: 'dev',
 	screenWidth: 1280,
 	practiceId: 'practice-1'
+};
+
+const portalInput: PortalFeedbackInput = {
+	kind: 'idea_or_request',
+	text: 'A way to download the contract as a PDF.',
+	page: {
+		url: '/portal/engagements/engagement-1/contract',
+		route: { id: '/portal/(authenticated)/engagements/[engagementId]/contract' }
+	},
+	appBuild: 'dev',
+	screenWidth: 1024,
+	engagementId: 'engagement-1'
 };
 
 describe('kindOptions', () => {
@@ -40,6 +59,28 @@ describe('sendStaffFeedback', () => {
 			.mockResolvedValue(new Response('{"message":"Select the kind of feedback"}', { status: 400 }));
 
 		await expect(sendStaffFeedback(fetcher, input)).rejects.toThrow(RefusalError);
+	});
+});
+
+describe('sendPortalFeedback', () => {
+	it('posts the input as JSON to /api/portal/feedback', async () => {
+		const fetcher = vi.fn().mockResolvedValue(new Response('{"id":"f-2"}', { status: 201 }));
+
+		await sendPortalFeedback(fetcher, portalInput);
+
+		expect(fetcher).toHaveBeenCalledWith('/api/portal/feedback', {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify(portalInput)
+		});
+	});
+
+	it('throws a RefusalError carrying the refusal when the BFF refuses the send', async () => {
+		const fetcher = vi
+			.fn()
+			.mockResolvedValue(new Response('{"message":"Select the kind of feedback"}', { status: 400 }));
+
+		await expect(sendPortalFeedback(fetcher, portalInput)).rejects.toThrow(RefusalError);
 	});
 });
 

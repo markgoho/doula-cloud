@@ -82,6 +82,32 @@ export async function sendStaffFeedback(fetcher: Fetcher, input: StaffFeedbackIn
 }
 
 /**
+ * The Portal DTO (`api/internal/clientauth.PortalFeedbackRequest`,
+ * #1523): `ClientInput` plus the Engagement the screen under the drawer
+ * sits inside, when it sits inside one -- a screen with no single
+ * Engagement (#1528's own AC) sends none, and the BFF checks a given one
+ * against the caller's own Portal Account rather than trusting it.
+ */
+export interface PortalFeedbackInput extends ClientInput {
+	engagementId?: string;
+}
+
+/**
+ * Sends a piece of Feedback from a Portal screen (#1523, #1528). Same
+ * refusal shape as `sendStaffFeedback`.
+ */
+export async function sendPortalFeedback(fetcher: Fetcher, input: PortalFeedbackInput): Promise<void> {
+	const response = await fetcher('/api/portal/feedback', {
+		method: 'POST',
+		headers: { 'Content-Type': 'application/json' },
+		body: JSON.stringify(input)
+	});
+	if (!response.ok) {
+		throw await refusalError(response);
+	}
+}
+
+/**
  * The browser family shown in the Feedback disclosure (#1498 Q4) --
  * User-Agent sniffing is otherwise unheard of in this app, and it exists
  * here only because the founder reads it as a plain fact on the private
