@@ -60,6 +60,7 @@ var staffFamilyGroups = map[string]routeGroup{
 	"POST /api/staff/mfa-recovery/saved-codes/rotate": groupSession,
 	"DELETE /api/staff/mfa":                           groupSession,
 	"DELETE /api/staff/account":                       groupSession,
+	"POST /api/staff/feedback":                        groupSession,
 	"POST /api/staff/signup":                          groupBootstrap,
 	"POST /api/staff/accept-invite":                   groupBootstrap,
 	"POST /api/staff/mfa":                             groupBootstrap,

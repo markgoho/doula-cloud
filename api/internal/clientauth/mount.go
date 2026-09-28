@@ -40,6 +40,14 @@ var portalAddressChangeRequestRules = []ratelimit.Rule{
 	ratelimit.IPRule(20, time.Hour),
 }
 
+// feedbackRules is #1523's own sizing: 20 per hour, per sender. Same
+// choice staffauth's own feedbackRules makes -- SessionCookieRule is the
+// closest fit this toolkit offers to "per sender" for an
+// already-signed-in write.
+var feedbackRules = []ratelimit.Rule{
+	ratelimit.SessionCookieRule(20, time.Hour),
+}
+
 // Mount registers the Client's own session surface: #617's magic-link
 // sign-in, #619's sign-in-address change, the session read, and #618's
 // sign-out-everywhere. A different population with a different session,
@@ -74,4 +82,10 @@ func Mount(g *staffauth.GatedRouter, db *sql.DB, nudge tasknudge.Enqueuer) {
 	// so this carries no Idempotency-Key handling, and is gated by the
 	// live session it gets to act on rather than by a rate limit.
 	g.Write("DELETE /api/portal/sessions", EndAllSessionsHandler(db))
+	// #1523: any signed-in Client sends a piece of Feedback from any
+	// portal screen. Not Engagement-scoped -- most of this route's
+	// screens name no single Engagement -- so it sits beside the
+	// session-level routes above rather than in portal.Mount.
+	g.Write("POST /api/portal/feedback",
+		ratelimit.Wrap(db, "portal_feedback", feedbackRules)(FeedbackHandler(db)))
 }
