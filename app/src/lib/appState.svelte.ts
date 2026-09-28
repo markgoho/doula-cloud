@@ -101,5 +101,18 @@ export const page = {
 	},
 	get data(): RealPage['data'] {
 		return (override?.data ?? realPage.data) as RealPage['data'];
+	},
+	/**
+	 * The matched route pattern, e.g. `/practices/[practiceId]/clients`
+	 * (`organisms/FeedbackForm.svelte`, #1527, is the one reader). Never
+	 * overridden: `PageOverride` carries no `route` at all, because the
+	 * drag surface and the continuum sweep mount a route's own
+	 * `+page.svelte` in isolation (`routeFixture.ts`'s `component`), never
+	 * an ancestor layout -- and the Feedback drawer lives in a layout, so
+	 * no fixture this app writes is ever in a position to need this
+	 * overridden.
+	 */
+	get route(): RealPage['route'] {
+		return realPage.route;
 	}
 };

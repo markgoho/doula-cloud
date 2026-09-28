@@ -38,10 +38,16 @@
 		 * `ConfirmDialog.svelte` already uses for its title.
 		 */
 		heading: string;
+		/**
+		 * The id a caller's own control names via `aria-controls`
+		 * (`molecules/PilotBanner.svelte`'s `controlsId`, #1522) -- optional,
+		 * since a Drawer with no such control has nothing to be named for.
+		 */
+		id?: string;
 		children: Snippet;
 	}
 
-	let { open = $bindable(false), heading, children }: Properties = $props();
+	let { open = $bindable(false), heading, id, children }: Properties = $props();
 
 	let dialog = $state<HTMLDialogElement>();
 
@@ -131,7 +137,7 @@
 <svelte:window onkeydown={handleKeydown} />
 
 <div class="scope">
-	<dialog bind:this={dialog} aria-label={heading} tabindex="-1" onclose={handleClose}>
+	<dialog {id} bind:this={dialog} aria-label={heading} tabindex="-1" onclose={handleClose}>
 		<div class="head">
 			<Heading level={2} text={heading} />
 			<Button label="Close" variant="secondary" size="sm" onClick={() => (open = false)} />

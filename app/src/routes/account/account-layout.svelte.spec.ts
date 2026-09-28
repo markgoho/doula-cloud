@@ -175,3 +175,32 @@ describe('the account route layout', () => {
 		expect(goto).not.toHaveBeenCalled();
 	});
 });
+
+describe('the Pilot banner and Feedback drawer (#1527)', () => {
+	it('shows the Staff banner sentence on /account too', async () => {
+		await renderLayout();
+
+		await expect
+			.element(
+				testPage.getByText('Doula Cloud is new, and you are one of the first to use it.', { exact: false })
+			)
+			.toBeVisible();
+	});
+
+	it('posts a send to /api/staff/feedback with no practiceId, since /account carries none', async () => {
+		await renderLayout();
+
+		await testPage.getByRole('button', { name: 'Tell us what is not working or what you need.' }).click();
+		await testPage.getByLabelText('Something else').click();
+		await testPage.getByRole('button', { name: 'Send feedback' }).click();
+
+		await expect
+			.poll(() => apiFetchWithSession.mock.calls.some((call: unknown[]) => call[0] === '/api/staff/feedback'))
+			.toBe(true);
+		const [, init] = apiFetchWithSession.mock.calls.find(
+			(call: unknown[]) => call[0] === '/api/staff/feedback'
+		) as [string, RequestInit];
+		expect(JSON.parse(init.body as string)).toMatchObject({ kind: 'something_else' });
+		expect(JSON.parse(init.body as string).practiceId).toBeUndefined();
+	});
+});

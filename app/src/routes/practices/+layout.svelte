@@ -10,8 +10,10 @@
 	} from '#lib/pushRegistration.js';
 	import { signOutOfSession, type SignOutOutcome } from '#lib/signOut.js';
 	import { isOwnerOrAdmin } from '#lib/roles.js';
+	import { sendStaffFeedback } from '#lib/feedback.js';
 	import Link from '#lib/components/atoms/Link.svelte';
 	import type { PracticeOption } from '#lib/components/molecules/PracticeSwitcher.svelte';
+	import StaffFeedback from '#lib/components/organisms/StaffFeedback.svelte';
 	import StaffTopBar, { type NavItem } from '#lib/components/organisms/StaffTopBar.svelte';
 	import type { PracticeSession } from './[practiceId]/+layout.js';
 
@@ -149,6 +151,22 @@
 	accountHref={resolve('/account')}
 	signOut={handleSignOut}
 />
+<!--
+	Keyed on the path (#1527): this layout persists across every
+	navigation inside practices/[practiceId] (Clients to Schedule never
+	remounts it), so without this a Feedback draft, an open drawer or a
+	just-sent Notice would silently follow a person from one screen to
+	the next. A navigation is "leaving the screen", and StaffFeedback's
+	own doc comment is why remounting is what that AC asks for.
+-->
+{#key page.url.pathname}
+	<StaffFeedback
+		email={session?.email ?? ''}
+		practiceName={practiceSession?.practiceName}
+		roles={practiceSession?.roles}
+		onSend={(input) => sendStaffFeedback(apiFetchWithSession, { ...input, practiceId })}
+	/>
+{/key}
 <main id="main" tabindex="-1">
 	{@render children()}
 </main>

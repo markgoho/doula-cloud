@@ -20,7 +20,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const realPage = vi.hoisted(() => ({
 	params: { practiceId: 'the-real-practice' } as Record<string, string>,
 	url: new URL('https://example.test/practices/the-real-practice'),
-	data: { practiceName: 'The real Practice' } as Record<string, unknown>
+	data: { practiceName: 'The real Practice' } as Record<string, unknown>,
+	route: { id: '/practices/[practiceId]' } as { id: string | null }
 }));
 vi.mock('$app/state', () => ({ page: realPage }));
 
@@ -41,6 +42,18 @@ describe('the page a route reads', () => {
 		expect(page.params).toBe(realPage.params);
 		expect(page.url).toBe(realPage.url);
 		expect(page.data).toBe(realPage.data);
+	});
+
+	/*
+	 * route carries no override (see the getter's own comment): a fixture
+	 * environment leaves it reading the real $app/state either way.
+	 */
+	it('reads route straight off $app/state, overridden or not', () => {
+		expect(page.route).toBe(realPage.route);
+
+		overridePage(fixtureEnvironment);
+
+		expect(page.route).toBe(realPage.route);
 	});
 
 	it('is the fixture environment once one is installed', () => {
