@@ -44,6 +44,8 @@ Both were considered, and both were answered no rather than left for a reader to
 
 **No `staff_data_keys`.** ADR-0027 seals a Client's `activity` diffs under a per-Client key and destroys the key on erasure, because those diffs carry her identifying data. Nothing equivalent exists for a Staff person: the `membership` subject kind records roles and employment type, `staff_auth_events` a reason and an actor, `staff_work_state_events` a work state. There is nothing sealed and nothing to shred, so this act builds no analog.
 
+**Amended, 2026-09-27 ([#1494](https://github.com/markgoho/doula-cloud/issues/1494)):** one Staff diff now carries a datum about the person. The `terms_accepted` row on a Practice holds the IP address its Owner agreed from ([ADR-0053](0053-a-practice-agrees-through-its-owner-and-a-change-that-matters-asks-again.md)). It is kept in plain text after her login is deleted, on purpose: it is the evidence of the Practice's agreement, and it is needed most after she has left. The decision above stands, and no key is built for it.
+
 **No refusal over an unsettled Invoice.** ADR-0027 refuses a Client's erasure while any of her invoices is `draft` or `open`, because deleting her Stripe Customer underneath an unpaid invoice would leave the Practice unable to collect. Nothing in `payments` or `invoices` makes a Staff person a billing party — an Invoice runs from a Practice to a Client — so the condition has nothing to attach to. #892's own hedge ("an unsettled Invoice she's tied to, *if that turns out to matter*") resolves to no.
 
 ## The act is recorded in `staff_auth_events`, not in `activity`
