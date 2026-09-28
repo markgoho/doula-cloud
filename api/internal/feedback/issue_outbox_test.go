@@ -58,6 +58,23 @@ func seedStaffFeedbackRowWithRoles(t *testing.T, db *testdb.DB, staffID, practic
 	return id
 }
 
+// seedStaffFeedbackRowZeroRoles inserts a feedback row sent from under a
+// real Practice by a Staff member whose membership carries zero roles --
+// staffauth.staffRolesAt's own "a membership can start with zero roles"
+// case, distinct from no Practice in context at all.
+func seedStaffFeedbackRowZeroRoles(t *testing.T, db *testdb.DB, staffID, practiceID string) string {
+	t.Helper()
+	id := uuid.NewString()
+	if _, err := db.Admin.ExecContext(t.Context(),
+		`INSERT INTO feedback (id, kind, text, page_url, route_id, app_build, screen_width, browser, staff_id, practice_id, roles, sent_at)
+		 VALUES ($1, 'not_working', '', '/practices/x', '/practices/[practiceId]', 'abc1234', 390, 'Safari 18', $2, $3, '{}', now())`,
+		id, staffID, practiceID,
+	); err != nil {
+		t.Fatalf("seed feedback row: %v", err)
+	}
+	return id
+}
+
 // seedPortalFeedbackRow inserts a feedback row sent by a Portal Account.
 func seedPortalFeedbackRow(t *testing.T, db *testdb.DB, portalAccount, kind, routeID string) string {
 	t.Helper()
@@ -326,6 +343,32 @@ func TestIssueWorker_StaffSenderWithRolesReportsThem(t *testing.T) {
 	issue := creator.Issues[int(number.Int64)]
 	if !strings.Contains(issue.Body, "Role: owner, admin") {
 		t.Errorf("body = %q, want Role: owner, admin", issue.Body)
+	}
+}
+
+// TestIssueWorker_ZeroRoleMembershipReportsNoRoleName is the fifth
+// shape, distinct from both "Staff" (no Practice in context, roles
+// NULL) and a real role list: a Staff sender at a real Practice whose
+// membership carries zero roles reports no role name at all, per
+// feedbackRole's own doc comment -- "Staff" would misstate that a
+// Practice is in context.
+func TestIssueWorker_ZeroRoleMembershipReportsNoRoleName(t *testing.T) {
+	db := testdb.New(t)
+	practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, "feedback-worker-zero-role", nil, "employee")
+	feedbackID := seedStaffFeedbackRowZeroRoles(t, db, staffID, practiceID)
+	enqueueIssueOutbox(t, db, feedbackID)
+
+	creator := feedback.NewFakeIssueCreator()
+	worker := feedback.IssueWorker{Creator: creator, AppBaseURL: testIssueAppBaseURL, Now: time.Now}
+	runIssueWorker(t, db, worker)
+
+	number := readIssueNumber(t, db, feedbackID)
+	issue := creator.Issues[int(number.Int64)]
+	if !strings.Contains(issue.Body, "Role: \n") {
+		t.Errorf("body = %q, want an empty Role: line -- a zero-role membership names no role, and must not read as \"Staff\"", issue.Body)
+	}
+	if strings.Contains(issue.Body, "Role: Staff") {
+		t.Error("body reports Role: Staff for a zero-role membership -- that misstates that a Practice is in context")
 	}
 }
 
