@@ -2,6 +2,7 @@ import type { ComponentProps } from 'svelte';
 import { page as browserPage } from 'vitest/browser';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
+import { appBuild } from '#lib/build.js';
 import { RefusalError } from '#lib/formErrors.js';
 import { browserName } from '#lib/feedback.js';
 import FeedbackForm from './FeedbackForm.svelte';
@@ -83,7 +84,7 @@ describe('FeedbackForm', () => {
 		await expect
 			.element(browserPage.getByText(`your screen width and browser: 1024px, ${browserName(navigator.userAgent)}`))
 			.toBeVisible();
-		await expect.element(browserPage.getByText('the version of Doula Cloud: dev')).toBeVisible();
+		await expect.element(browserPage.getByText(`the version of Doula Cloud: ${appBuild()}`)).toBeVisible();
 		expect(browserPage.getByText('your role and Practice', { exact: false }).elements()).toHaveLength(0);
 	});
 
@@ -126,7 +127,7 @@ describe('FeedbackForm', () => {
 			kind: 'idea_or_request',
 			text: 'Add a way to export invoices.',
 			page: { url: '/practices/practice-1/clients', route: { id: '/practices/[practiceId]/clients' } },
-			appBuild: 'dev',
+			appBuild: appBuild(),
 			screenWidth: 1280
 		});
 	});

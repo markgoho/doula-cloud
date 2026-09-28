@@ -15,7 +15,7 @@
 	<h1>Feedback form</h1>
 
 	<section>
-		<h2>Staff copy, with a role and Practice in the disclosure</h2>
+		<h2>Staff copy</h2>
 		<FeedbackForm
 			legend="What kind of feedback is it?"
 			errorKind="Select what kind of feedback it is"
