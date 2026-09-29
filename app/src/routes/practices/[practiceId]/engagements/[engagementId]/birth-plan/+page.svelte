@@ -90,14 +90,18 @@
 			     never reaches this snippet, so the route keeps its own (#1576),
 			     the same as the portal Birth Plan (#1574). -->
 			<div class="no-print">
-				<Button label="Print" onClick={() => print()} />
-				<Button
-					label="Download Birth Plan (PDF)"
-					icon="file-text"
-					variant="secondary"
-					onClick={handleDownloadPdf}
-					loading={isDownloadingPdf}
-				/>
+				<!-- A cluster, so the two buttons keep a gap between them when
+				     they wrap onto two rows at a narrow width. -->
+				<cluster-l space="var(--space-3)">
+					<Button label="Print" onClick={() => print()} />
+					<Button
+						label="Download Birth Plan (PDF)"
+						icon="file-text"
+						variant="secondary"
+						onClick={handleDownloadPdf}
+						loading={isDownloadingPdf}
+					/>
+				</cluster-l>
 				{#if downloadError}
 					<Notice variant="error" message={downloadError} />
 				{/if}
