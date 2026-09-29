@@ -54,22 +54,25 @@ test('no signed-in portal screen scrolls sideways at 320px', async ({ page, requ
 	}
 	expect(reached).toEqual(new Set(NAV_LABELS));
 
-	const routes = [
-		hub,
-		`${hub}/messages`,
-		`${hub}/birth-plan`,
-		`${hub}/contract`,
-		`${hub}/notifications`,
-		`${hub}/invoices`,
-		`${hub}/invoices/${invoiceId}`,
-		`${hub}/sign-in-address`
+	// Each route beside the read its own mount ends on, named rather than
+	// waited out with `networkidle` (mountSettled.ts says why): the loaded
+	// screen is the one that has to fit, not the shell before its content.
+	const api = `/api/portal/engagements/${engagementId}`;
+	const routes: Array<{ path: string; read: string }> = [
+		{ path: hub, read: `${api}/visits` },
+		{ path: `${hub}/messages`, read: `${api}/messages` },
+		{ path: `${hub}/birth-plan`, read: `${api}/birth-plan` },
+		{ path: `${hub}/contract`, read: `${api}/contract` },
+		{ path: `${hub}/notifications`, read: `${api}/notification-preference` },
+		{ path: `${hub}/invoices`, read: `${api}/invoices` },
+		{ path: `${hub}/invoices/${invoiceId}`, read: `${api}/invoices/${invoiceId}` },
+		{ path: `${hub}/sign-in-address`, read: '/api/portal/session' }
 	];
-	for (const path of routes) {
+	for (const { path, read } of routes) {
+		const settled = page.waitForResponse((response) => new URL(response.url()).pathname === read);
 		await page.goto(path);
-		// Settled before measuring: a route's own content loads after the
-		// shell, and it is the loaded screen that has to fit.
-		await page.waitForLoadState('networkidle');
-		await expect(page.getByRole('main')).not.toBeEmpty();
+		await settled;
+		await expect(page.getByText('Loading...')).toHaveCount(0);
 		await expect(page.locator('[aria-busy="true"]')).toHaveCount(0);
 		await expectNoSidewaysScroll(page);
 	}
