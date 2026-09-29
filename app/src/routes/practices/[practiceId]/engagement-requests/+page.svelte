@@ -17,9 +17,9 @@
 	 * decision is what this screen is for, and her record is one click
 	 * further on from there.
 	 *
-	 * This screen writes no layout of its own. It composes PageTitle,
-	 * DataTable and Skeleton, each of which owns how it behaves in the
-	 * space it is given.
+	 * This screen writes no layout of its own. The frame, the heading and
+	 * the loading and load-error states are `ListPage`'s (#1576), and
+	 * DataTable owns how the list behaves in the space it is given.
 	 */
 	import { page } from '#lib/appState.svelte.js';
 	import { resolve } from '$app/paths';
@@ -32,10 +32,7 @@
 	} from '#lib/engagementRequest.js';
 	import { PaginatedList } from '#lib/paginatedList.svelte.js';
 	import DataTable from '#lib/components/organisms/DataTable.svelte';
-	import Heading from '#lib/components/atoms/Heading.svelte';
-	import Notice from '#lib/components/atoms/Notice.svelte';
-	import PageTitle from '#lib/components/PageTitle.svelte';
-	import Skeleton from '#lib/components/atoms/Skeleton.svelte';
+	import ListPage from '#lib/components/templates/ListPage.svelte';
 
 	const requests = new PaginatedList<PendingRequestItem>({
 		first: { items: [], hasMore: false },
@@ -83,12 +80,7 @@
 	}
 </script>
 
-<PageTitle page="Requests awaiting approval" />
-<Heading level={1} text="Requests awaiting approval" />
-
-{#if error}
-	<Notice message={error} variant="error" />
-{:else if isLoaded}
+{#snippet content()}
 	<DataTable
 		{columns}
 		rows={requests.items}
@@ -99,6 +91,11 @@
 		loadMoreError={requests.loadMoreError}
 		emptyMessage="No requests are waiting for a decision."
 	/>
-{:else}
-	<Skeleton variant="row" lines={8} label="Loading pending requests" />
-{/if}
+{/snippet}
+
+<ListPage
+	title="Requests awaiting approval"
+	loadError={error || undefined}
+	loading={isLoaded ? undefined : 'Loading pending requests'}
+	{content}
+/>

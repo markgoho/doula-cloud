@@ -3,9 +3,13 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import { jsonResponse } from '#lib/testResponse.js';
 import type { PendingRequestItem } from '#lib/engagementRequest.js';
+import { registerLayoutPrimitives } from '#lib/primitives/index.js';
 // DataTable's frame needs stack-l's display:block default (primitives.css)
-// to work as a container-query context -- see DataTable.svelte.spec.ts.
+// to work as a container-query context -- see DataTable.svelte.spec.ts. This
+// route's ListPage (#1576) also needs the primitives registered, not just
+// their CSS -- see staff-list.svelte.spec.ts for why.
 import '#lib/styles/app.css';
+import { expectOneFramedHeading } from '#lib/components/templates/pageFrame.testing.js';
 import Page from './+page.svelte';
 import { toPageState } from '../../../routeFixture.js';
 import { fixture, requests } from './page.fixture.js';
@@ -23,6 +27,7 @@ const pageState = vi.hoisted(() => ({
 	data: {} as Record<string, unknown>
 }));
 vi.mock('$app/state', () => ({ page: pageState }));
+if (!customElements.get('center-l')) registerLayoutPrimitives();
 Object.assign(pageState, toPageState(fixture));
 
 const apiFetchWithSession = vi.hoisted(() => vi.fn());
@@ -126,5 +131,36 @@ describe('the pending-Request inbox', () => {
 		await testPage.getByRole('button', { name: 'Load more' }).click();
 
 		await expect.element(testPage.getByRole('alert')).toHaveTextContent('service problem');
+	});
+});
+
+// #1576: the inbox sat straight in the layout's <main>, with no gutter,
+// until it moved onto ListPage. The frame has to hold in every state, so
+// each is checked.
+const title = 'Requests awaiting approval';
+
+describe('the page frame (#1576)', () => {
+	it('frames the loaded list', async () => {
+		mockPages({ items: requests, hasMore: false });
+		render(Page);
+
+		await expect.element(testPage.getByRole('link', { name: birthRequest.clientName })).toBeVisible();
+		await expectOneFramedHeading(title);
+	});
+
+	it('frames the loading state', async () => {
+		apiFetchWithSession.mockReturnValueOnce(new Promise(() => {}));
+		render(Page);
+
+		await expect.element(testPage.getByRole('status', { name: 'Loading pending requests' })).toBeVisible();
+		await expectOneFramedHeading(title);
+	});
+
+	it('frames a failed load', async () => {
+		apiFetchWithSession.mockResolvedValueOnce(jsonResponse('forbidden', 403));
+		render(Page);
+
+		await expect.element(testPage.getByRole('alert')).toHaveTextContent('forbidden');
+		await expectOneFramedHeading(title);
 	});
 });

@@ -95,14 +95,18 @@
 			     so `instance` is a loaded Birth Plan here. -->
 			{#if instance}
 				<div class="no-print">
-					<Button label="Print" onClick={() => print()} />
-					<Button
-						label="Download Birth Plan (PDF)"
-						icon="file-text"
-						variant="secondary"
-						onClick={handleDownloadPdf}
-						loading={isDownloadingPdf}
-					/>
+					<!-- A cluster, so the two buttons keep a gap between them when
+					     they wrap onto two rows at a narrow width (#1576). -->
+					<cluster-l space="var(--space-3)">
+						<Button label="Print" onClick={() => print()} />
+						<Button
+							label="Download Birth Plan (PDF)"
+							icon="file-text"
+							variant="secondary"
+							onClick={handleDownloadPdf}
+							loading={isDownloadingPdf}
+						/>
+					</cluster-l>
 					{#if downloadError}
 						<p role="alert">{downloadError}</p>
 					{/if}

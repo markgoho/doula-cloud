@@ -5,9 +5,10 @@
 	 * "who owes us money" meant opening every Engagement in turn.
 	 *
 	 * This page composes existing components only and writes no CSS of its
-	 * own: the totals are a `DescriptionList`, the book is a `DataTable`,
-	 * and both already adapt to the space they are given. That is also
-	 * what keeps it inside CLAUDE.md's no-new-components block.
+	 * own: the frame is `ListPage`'s (#1576), the totals are a
+	 * `DescriptionList`, the book is a `DataTable`, and each already adapts
+	 * to the space it is given. That is also what keeps it inside
+	 * CLAUDE.md's no-new-components block.
 	 */
 	import { untrack } from 'svelte';
 	import { page } from '#lib/appState.svelte.js';
@@ -25,10 +26,9 @@
 	import { PaginatedList } from '#lib/paginatedList.svelte.js';
 	import DataTable from '#lib/components/organisms/DataTable.svelte';
 	import DescriptionList from '#lib/components/molecules/DescriptionList.svelte';
-	import Heading from '#lib/components/atoms/Heading.svelte';
 	import Notice from '#lib/components/atoms/Notice.svelte';
 	import Text from '#lib/components/atoms/Text.svelte';
-	import PageTitle from '#lib/components/PageTitle.svelte';
+	import ListPage from '#lib/components/templates/ListPage.svelte';
 	import type { PageProps as PageProperties } from './$types';
 
 	let { data }: PageProperties = $props();
@@ -135,49 +135,56 @@
 			engagementId: invoice.engagementId
 		});
 	}
-
 </script>
 
-<PageTitle page="Invoices" />
-<Heading level={1} text="Invoices" />
-<Text
-	text="Every invoice this practice has billed, newest first. Open one to reach the engagement it belongs to."
-	tone="muted"
-/>
+{#snippet intro()}
+	<Text
+		text="Every invoice this practice has billed, newest first. Open one to reach the engagement it belongs to."
+		tone="muted"
+	/>
+{/snippet}
 
-<DescriptionList items={summary} />
+{#snippet content()}
+	<DescriptionList items={summary} />
 
-<Link href={invoicesHref} label="All invoices" variant="chip" current={!data.isNarrowedToOverdue} />
-<Link
-	href="{invoicesHref}?overdue=true"
-	label="Overdue ({data.overdueCount})"
-	variant="chip"
-	current={data.isNarrowedToOverdue}
-/>
+	<!-- One cluster, so the two filters sit side by side as one control
+	     rather than as two rows of ListPage's stack. -->
+	<cluster-l space="var(--space-3)">
+		<Link href={invoicesHref} label="All invoices" variant="chip" current={!data.isNarrowedToOverdue} />
+		<Link
+			href="{invoicesHref}?overdue=true"
+			label="Overdue ({data.overdueCount})"
+			variant="chip"
+			current={data.isNarrowedToOverdue}
+		/>
+	</cluster-l>
 
-<!--
-	#270: a standing fact about the Practice, from the same aggregate
-	field the totals above already carry -- an empty book looks identical
-	whether nobody has billed anything yet or Clients cannot pay this
-	Practice at all, so this is the only thing on the page that tells the
-	two apart.
--->
-{#if !data.clientsCanPay}
-	<Notice variant="info" message={clientsCannotPayMessage} />
-{/if}
+	<!--
+		#270: a standing fact about the Practice, from the same aggregate
+		field the totals above already carry -- an empty book looks identical
+		whether nobody has billed anything yet or Clients cannot pay this
+		Practice at all, so this is the only thing on the page that tells the
+		two apart.
+	-->
+	{#if !data.clientsCanPay}
+		<Notice variant="info" message={clientsCannotPayMessage} />
+	{/if}
 
-<DataTable
-	{columns}
-	rows={invoices.items}
-	rowHref={engagementHref}
-	hasMore={invoices.hasMore}
-	onLoadMore={() => invoices.loadMore()}
-	isLoadingMore={invoices.isLoadingMore}
-	emptyMessage={data.isNarrowedToOverdue
-		? 'Nothing is overdue. Every unpaid invoice is still within its payment terms.'
-		: 'No invoices yet. One appears here as soon as a contract is billed.'}
-/>
+	<DataTable
+		{columns}
+		rows={invoices.items}
+		rowHref={engagementHref}
+		hasMore={invoices.hasMore}
+		onLoadMore={() => invoices.loadMore()}
+		isLoadingMore={invoices.isLoadingMore}
+		emptyMessage={data.isNarrowedToOverdue
+			? 'Nothing is overdue. Every unpaid invoice is still within its payment terms.'
+			: 'No invoices yet. One appears here as soon as a contract is billed.'}
+	/>
 
-{#if invoices.loadMoreError}
-	<Notice message={invoices.loadMoreError} variant="error" />
-{/if}
+	{#if invoices.loadMoreError}
+		<Notice message={invoices.loadMoreError} variant="error" />
+	{/if}
+{/snippet}
+
+<ListPage title="Invoices" {intro} {content} />
