@@ -90,8 +90,9 @@
 <Link href="#main" label="Skip to main content" variant="skip" />
 <!--
 	Rendered before the session lands, same as practices/+layout.svelte's
-	own bar: it is a fixed 60px whatever it holds, so painting it
-	immediately means the page below never moves.
+	own bar: it is 60px whatever it holds until a long Practice name wraps
+	(#1573), and this bar names no Practice, so painting it immediately
+	means the page below never moves.
 -->
 <StaffTopBar
 	navItems={[]}

@@ -16,7 +16,12 @@
  * `@container` mentioned in a markup comment -- DataTable.svelte carries
  * exactly one -- is never mistaken for a rule.
  */
-import { CONFORMANCE_COMMITMENT, openDisclosures } from './continuum.js';
+import {
+	CONFORMANCE_COMMITMENT,
+	findBlockSpill,
+	openDisclosures,
+	type BlockSpill
+} from './continuum.js';
 import { styleLines } from '#lib/styles/styleLines.js';
 
 // No `layout:ignore`-style marker applies here, so this sentinel -- which
@@ -307,9 +312,17 @@ export function scopeClasses(root: Element): string[] {
  * decision, not this module's.
  */
 
+/*
+ * `spill` is the block criterion (#1573), read in the same measurement:
+ * a box that holds its content inside the inline size it was given but
+ * lets it draw out of its own height. The wide tree of a top bar is only
+ * ever mounted above the continuum sweep's ceiling, here, so this is the
+ * one instrument that can see a Practice name spilling out of it there.
+ */
 export interface OverflowMeasurement {
 	readonly given: number;
 	readonly needed: number;
+	readonly spill?: BlockSpill;
 }
 
 /*
@@ -368,14 +381,18 @@ export interface OverflowMeasurement {
 export function measureOverflow(frame: HTMLElement, given: number): OverflowMeasurement {
 	const close = openDisclosures(frame);
 	try {
-		return { given, needed: frame.scrollWidth };
+		return { given, needed: frame.scrollWidth, spill: findBlockSpill(frame) };
 	} finally {
 		close();
 	}
 }
 
 export function overflowFloorReport(name: string, measurement: OverflowMeasurement): string {
-	return `${name}: given ${measurement.given}px, needed ${measurement.needed}px (overflow criterion).`;
+	const { spill } = measurement;
+	const blockClause = spill
+		? `, and its ${spill.element} needed ${spill.needed}px of height inside ${spill.given}px`
+		: '';
+	return `${name}: given ${measurement.given}px, needed ${measurement.needed}px${blockClause} (overflow criterion).`;
 }
 
 export interface CapMeasurement {

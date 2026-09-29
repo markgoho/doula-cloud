@@ -136,9 +136,11 @@
 
 <Link href="#main" label="Skip to main content" variant="skip" />
 <!--
-	Rendered before the session lands, not after: the bar is a fixed 60px
-	whatever it holds, so painting it immediately means the page below never
-	moves. The parts that need an answer from the BFF -- the person's
+	Rendered before the session lands, not after: the bar is 60px whatever
+	it holds, so painting it immediately means the page below barely moves.
+	The one exception is a Practice name long enough to wrap in the
+	switcher, which grows the bar when it arrives (#1573) -- a name drawn
+	over the page would be worse than the page moving down once. The parts that need an answer from the BFF -- the person's
 	avatar, the Practice switcher, and the three admin-only nav items --
 	arrive into a bar that is already there.
 -->

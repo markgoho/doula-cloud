@@ -32,6 +32,7 @@ import '#lib/styles/app.css';
 import { atomPages, moleculePages, organismPages, templatePages } from './components.js';
 import {
 	afterQueuedToggles,
+	barMarkup,
 	frameHolding,
 	frameHoldingLoadingLedger,
 	ledgerMarkup,
@@ -329,6 +330,69 @@ describe('the sweep, over a disclosure that loads on open (#1126)', () => {
 			);
 		} finally {
 			clearInterval(restless);
+			remove();
+		}
+	});
+});
+
+/*
+ * The block criterion (#1573). Both top bars held a fixed `block-size`, so a
+ * long Practice name wrapped onto several lines and drew out of the bar and
+ * over the page under it -- while the frame's `scrollWidth` stayed exactly
+ * the frame's own, which is all the sweep read. `barMarkup` is that shape in
+ * miniature.
+ */
+describe('the sweep, over a box whose content is taller than the box (#1573)', () => {
+	it('finds content drawn outside a fixed-height box', () => {
+		const { run, frame, remove } = frameHolding(barMarkup('visible'));
+		try {
+			const found = sweep(frame, run.clientWidth);
+
+			expect(found).toMatchObject({ axis: 'block', width: 320, element: 'div.bar' });
+			expect(overflowReport('The bar', found!)).toContain('div.bar needed');
+		} finally {
+			remove();
+		}
+	});
+
+	it.each(['auto', 'scroll', 'hidden', 'clip'])(
+		'does not read a box that sets overflow-y: %s as a failure',
+		(overflow) => {
+			const { run, frame, remove } = frameHolding(barMarkup(overflow));
+			try {
+				expect(sweep(frame, run.clientWidth)).toBeUndefined();
+			} finally {
+				remove();
+			}
+		}
+	);
+
+	it('does not read a box that grows to its content as a failure', () => {
+		const { run, frame, remove } = frameHolding(barMarkup('visible', 'min-block-size'));
+		try {
+			expect(sweep(frame, run.clientWidth)).toBeUndefined();
+		} finally {
+			remove();
+		}
+	});
+
+	/*
+	 * A heading set tighter than its glyphs overhangs its own box by a few
+	 * pixels at every width, and `scrollHeight` counts that. It is the
+	 * typeface, not a box too small for what it holds, so the criterion
+	 * reads child boxes and never text -- the page headings in the registry
+	 * were the ones that said so when it did not.
+	 */
+	it('does not read glyphs taller than their line-height as a failure', () => {
+		const { run, frame, remove } = frameHolding(
+			'<h1 style="margin: 0; font-size: 3rem; line-height: 0.5">A <span>tight</span> heading</h1>'
+		);
+		try {
+			const heading = frame.querySelector('h1')!;
+			expect(heading.scrollHeight).toBeGreaterThan(heading.clientHeight + 1);
+
+			expect(sweep(frame, run.clientWidth)).toBeUndefined();
+		} finally {
 			remove();
 		}
 	});

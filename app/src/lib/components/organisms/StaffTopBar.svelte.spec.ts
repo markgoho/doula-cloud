@@ -3,6 +3,12 @@ import { describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import type { PracticeOption } from '#lib/components/molecules/PracticeSwitcher.svelte';
 import type { SignOutOutcome } from '#lib/signOut.js';
+import {
+	contentBottom,
+	panelHolding,
+	withoutAnchorPositioning
+} from '#lib/components/molecules/MenuButton.testing.js';
+import { CONFORMANCE_COMMITMENT, findBlockSpill } from '../../../routes/style-guide/continuum.js';
 import StaffTopBar from './StaffTopBar.svelte';
 import '#lib/styles/tokens.css';
 
@@ -125,6 +131,28 @@ describe('the narrow sheet', () => {
 	});
 
 	/*
+	 * #1573 anchors a menu's panel to the box around its button, which a top
+	 * bar stretches to the bar's height. The sheet lays its switcher out in
+	 * a column, which would stretch that box across the whole sheet and hang
+	 * the panel off the sheet's far edge rather than off the button.
+	 */
+	it('opens the switcher panel from the switcher, not from the far edge', async () => {
+		const { hamburger } = await setupNarrow();
+		await hamburger.click();
+
+		const sheet = page.getByRole('dialog');
+		const switcher = sheet.getByRole('button', { name: 'Riverside Doula Collective' });
+		await switcher.click();
+
+		const other = sheet.getByRole('link', { name: 'Finger Lakes Birth Support' });
+		await expect.element(other).toBeVisible();
+		const buttonBox = switcher.element().getBoundingClientRect();
+		// The panel is wider than the button and the switcher sits at the
+		// sheet's start edge, so it flips to open from the button's start.
+		expect(panelHolding(other).getBoundingClientRect().left).toBeCloseTo(buttonBox.left, 0);
+	});
+
+	/*
 	 * #673: a route scoped to the person rather than to a Practice
 	 * (/account, #484) hands the bar no Practice at all, and the switcher
 	 * renders nothing. The heading and the divider above it go too --
@@ -207,4 +235,97 @@ describe('the narrow sheet', () => {
 
 		await expect.element(page.getByRole('link', { name: 'More' })).not.toBeInTheDocument();
 	});
+});
+
+/*
+ * #1573: the bar held a fixed 3.75rem, so a long Practice name wrapped in
+ * the switcher and drew out of the bar, above and below it. The bar is a
+ * minimum now, and grows. 320px is the narrow tree at the conformance
+ * commitment; 840px puts the bar's content box (the header less its two
+ * gutters, which is what the container query reads) just above its
+ * 49.25rem floor, where the wide tree leaves the name the least room it
+ * ever gets. The names are the style-guide demo's own.
+ */
+const LONG_NAME = 'Highland Midwifery & Birth Support Collective of Western New York';
+const LONG_PRACTICES: PracticeOption[] = [
+	{ practiceId: 'p1', practiceName: LONG_NAME, roles: ['owner', 'admin'], href: '/p1' },
+	{
+		practiceId: 'p2',
+		practiceName: 'Finger Lakes Birth Support and Postpartum Care Cooperative',
+		roles: ['doula'],
+		href: '/p2'
+	}
+];
+const JUST_ABOVE_THE_FLOOR = 840;
+
+// Each panel the bar opens, by its trigger, and something only that panel
+// holds -- the other Practice's link, or the avatar menu's sign-out.
+const PANELS = [
+	[LONG_NAME, 'link', LONG_PRACTICES[1].practiceName],
+	['Your account, Mark Goho', 'button', 'Sign out']
+] as const;
+
+async function setupLong(width: number) {
+	const result = await setup({ practices: LONG_PRACTICES });
+	await page.viewport(width, 900);
+	// Geometry, which the accessible tree does not carry: the banner is the
+	// box the name has to stay inside.
+	const header = page.getByRole('banner').element() as HTMLElement;
+	return { ...result, header };
+}
+
+describe('StaffTopBar, with a Practice name long enough to wrap (#1573)', () => {
+	it.each([CONFORMANCE_COMMITMENT, JUST_ABOVE_THE_FLOOR])(
+		'grows to hold the whole name at %ipx',
+		async (width) => {
+			const { header } = await setupLong(width);
+
+			const switcher = page.getByRole('button', { name: LONG_NAME });
+			await expect.element(switcher).toBeVisible();
+			const switcherBox = switcher.element().getBoundingClientRect();
+			const headerBox = header.getBoundingClientRect();
+			expect(switcherBox.top).toBeGreaterThanOrEqual(headerBox.top);
+			expect(switcherBox.bottom).toBeLessThanOrEqual(headerBox.bottom);
+			expect(findBlockSpill(header)).toBeUndefined();
+		}
+	);
+
+	it('keeps the current section’s accent rule on the bar’s own bottom edge', async () => {
+		const { header } = await setupLong(JUST_ABOVE_THE_FLOOR);
+
+		const current = page.getByRole('link', { name: 'Overview' });
+		await expect.element(current).toBeVisible();
+		expect(current.element().getBoundingClientRect().bottom).toBeCloseTo(contentBottom(header), 0);
+	});
+
+	it.each(PANELS)('opens the %s panel below the bar', async (trigger, role, inside) => {
+		const { header } = await setupLong(JUST_ABOVE_THE_FLOOR);
+
+		await page.getByRole('button', { name: trigger }).click();
+
+		const content = page.getByRole(role, { name: inside });
+		await expect.element(content).toBeVisible();
+		expect(panelHolding(content).getBoundingClientRect().top).toBeGreaterThanOrEqual(
+			contentBottom(header)
+		);
+	});
+
+	it.each(PANELS)(
+		'opens the %s panel below the bar where there is no anchor positioning',
+		async (trigger, role, inside) => {
+			const { header } = await setupLong(JUST_ABOVE_THE_FLOOR);
+			const withoutAnchors = withoutAnchorPositioning();
+			try {
+				await page.getByRole('button', { name: trigger }).click();
+
+				const content = page.getByRole(role, { name: inside });
+				await expect.element(content).toBeVisible();
+				expect(panelHolding(content).getBoundingClientRect().top).toBeCloseTo(
+					contentBottom(header), 0
+				);
+			} finally {
+				withoutAnchors.remove();
+			}
+		}
+	);
 });
