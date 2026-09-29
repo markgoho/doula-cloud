@@ -48,6 +48,7 @@
 		"vitest-browser-svelte": "^3.0.0"
 	},
 	"dependencies": {
+		"@stripe/stripe-js": "^9.17.0",
 		"firebase": "^12.17.1",
 		"qrcode": "^1.5.4"
 	},

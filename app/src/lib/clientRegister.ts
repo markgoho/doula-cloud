@@ -311,3 +311,15 @@ export function returnedToYouSentence(money: string): string {
 export function byHandPaymentNotice(reference: string): string {
 	return `Your Practice collects this Invoice directly. Quote Invoice ${reference} when you pay.`;
 }
+
+/** The primary action on a payable Invoice (#983): the figure is in the
+ * label, never a bare "Pay". `amount` arrives already formatted. */
+export function payButtonLabel(amount: string): string {
+	return `Pay ${amount}`;
+}
+
+/** What she reads once her payment has been sent (#1020). It claims only
+ * what the product holds: the label stays "Not yet paid" until Stripe's
+ * `invoice.paid` arrives, so this says the payment was sent and that the
+ * Invoice will change, and never that it is paid. */
+export const PAYMENT_SENT_MESSAGE = 'Your payment was sent. This Invoice will show as Paid once it is confirmed.';

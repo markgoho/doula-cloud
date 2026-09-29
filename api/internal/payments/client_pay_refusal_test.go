@@ -136,7 +136,7 @@ func TestClientGetPayment_AStripeFailureIsARetryableRefusalNotACredential(t *tes
 	w.stripe.ClientSecretErr = errors.New("stripe: boom")
 
 	status, body := w.get(t, invoiceID)
-	if status != http.StatusBadGateway || !strings.Contains(body, "Please try again") {
+	if status != http.StatusBadGateway || !strings.Contains(body, "Try again") {
 		t.Fatalf("status %d body %s, want 502 and a retry sentence", status, body)
 	}
 	if strings.Contains(body, "boom") || strings.Contains(body, "clientSecret") {

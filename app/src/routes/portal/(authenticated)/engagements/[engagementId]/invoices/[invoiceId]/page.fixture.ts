@@ -12,6 +12,7 @@
  */
 import { jsonResponse } from '#lib/testResponse.js';
 import type { ClientInvoice } from '#lib/clientInvoice.js';
+import type { ClientPayment } from '#lib/clientPayment.js';
 import type { RouteFixture, RouteVariant } from '../../../../../../routeFixture.js';
 import Page from './+page.svelte';
 
@@ -27,6 +28,23 @@ export const invoice: ClientInvoice = {
 	createdAt: '2027-02-01T15:00:00Z',
 	refundedCents: 0
 };
+
+export const payment: ClientPayment = {
+	clientSecret: 'pi_fixture_secret_fixture',
+	stripeAccountId: 'acct_fixture',
+	publishableKey: 'pk_test_fixture'
+};
+
+/*
+ * The Stripe-rail base tree answers the pay-secret read with the server's
+ * own refusal rather than a secret, on purpose: with a secret the route
+ * would load Stripe.js from js.stripe.com, and a layout sweep that waits on
+ * a third party's script measures the network, not the screen. The Element
+ * is Stripe's own iframe either way -- what the sweep can measure is our
+ * container and the sentence, and the spec drives the mounted path with a
+ * Stripe double.
+ */
+export const paymentRefusal = 'Your Practice cannot take this payment yet.';
 
 export const byHandInvoice: ClientInvoice = { ...invoice, billingMode: 'by_hand' };
 
@@ -55,7 +73,8 @@ export const fixture: RouteFixture = {
 	params: { engagementId: 'engagement-1', invoiceId: 'invoice-1' },
 	url: 'https://example.test/portal/engagements/engagement-1/invoices/invoice-1',
 	pageData: { practiceName },
-	respond: () => jsonResponse(invoice),
+	respond: (path) =>
+		path.endsWith('/payment') ? new Response(paymentRefusal, { status: 409 }) : jsonResponse(invoice),
 	readyText: 'Invoice INV-2027-Persephone-Ochieng-Whitfield-0011',
 	variants: [asByHand, asPaidAndReturned]
 };

@@ -32,7 +32,7 @@ const (
 	msgClientCannotPayYet = "Your Practice cannot take this payment yet."
 	// msgClientPaymentUnavailable is the answer when Stripe itself could not
 	// be reached or would not give the Invoice a payment. She can try again.
-	msgClientPaymentUnavailable = "We could not start this payment. Please try again."
+	msgClientPaymentUnavailable = "We could not start this payment. Try again."
 )
 
 // clientPaymentRules limits the pay-secret endpoint as a heavy one
