@@ -521,3 +521,20 @@ func StaffingActions() []EngagementAction {
 	slices.Sort(out)
 	return out
 }
+
+// AmountDiff is the activity diff shape for a Contract's amount changing:
+// ActionContractPriced, ActionContractAmountOverridden and
+// ActionContractAmountRepriced all carry it (#1030).
+//
+// It lives here, beside the actions whose diffs use it, rather than as a
+// helper local to contracts_test: contracts and practicerate both write
+// this shape and both test it, and practicerate cannot import contracts
+// (see practicerate/reprice.go), so activity is the one package all four
+// sites already share. The JSON keys are declared once, so a typo reads
+// as a compile error rather than a silent zero. practicerate's rateDiff
+// is a different shape (a nullable AmountCentsBefore plus a Kind) and
+// stays its own type.
+type AmountDiff struct {
+	AmountCentsBefore int64 `json:"amountCentsBefore"`
+	AmountCentsAfter  int64 `json:"amountCentsAfter"`
+}

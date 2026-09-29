@@ -249,10 +249,7 @@ func TestPostContractHandler_RecordsCreatedAndPricedSeparately(t *testing.T) {
 	}
 
 	pricedDiff := assertActivityActor(t, db, engagementID, activity.ActionContractPriced, staffID)
-	var parsedDiff struct {
-		AmountCentsBefore int64 `json:"amountCentsBefore"`
-		AmountCentsAfter  int64 `json:"amountCentsAfter"`
-	}
+	var parsedDiff activity.AmountDiff
 	if err := json.Unmarshal(pricedDiff, &parsedDiff); err != nil {
 		t.Fatalf("unmarshal contract_priced diff: %v", err)
 	}
