@@ -30,6 +30,7 @@ The account now holds, and holds nothing beyond: `roles/cloudsql.client` and a t
 | `EXPECTED_ORIGINS` | `http://localhost:5173` | `http://localhost:4173` | `https://doula-cloud-app.web.app`, set in `ci.yml` |
 | `APP_BASE_URL` | defaults to `EXPECTED_ORIGINS` | same | `https://doula-cloud-app.web.app` |
 | `STRIPE_API_KEY` | `sk_test_…` in `.env.local` | unset | Secret Manager `doula-cloud-stripe-api-key` |
+| `STRIPE_PUBLISHABLE_KEY` | `pk_test_…` in `.env.local` (`stripe config --list` shows it as `test_mode_pub_key`) | unset | plain env var, set out of band: `gcloud run services update doula-api --update-env-vars STRIPE_PUBLISHABLE_KEY=pk_…` |
 | `STRIPE_CREDIT_PRICE_ID` | `price_…` in `.env.local` | unset | plain env var |
 | `STRIPE_WEBHOOK_SECRET` | the `stripe listen` secret | unset | Secret Manager `doula-cloud-stripe-webhook-secret` |
 | `STRIPE_CONNECT_WEBHOOK_SECRET` | the same `stripe listen` secret | unset | Secret Manager `doula-cloud-stripe-connect-webhook-secret` |

@@ -14,6 +14,8 @@
 	import { resolve } from '$app/paths';
 	import { apiFetchWithSession } from '#lib/api.js';
 	import { invoiceFacts, loadClientInvoice, type ClientInvoice } from '#lib/clientInvoice.js';
+	import { loadClientPayment, type ClientPayment } from '#lib/clientPayment.js';
+	import { formatMoney } from '#lib/money.js';
 	import { byHandPaymentNotice, INVOICES_HEADING } from '#lib/clientRegister.js';
 	import BackLink from '#lib/components/molecules/BackLink.svelte';
 	import DescriptionList from '#lib/components/molecules/DescriptionList.svelte';
@@ -21,15 +23,31 @@
 	import Notice from '#lib/components/atoms/Notice.svelte';
 	import Text from '#lib/components/atoms/Text.svelte';
 	import PageTitle from '#lib/components/PageTitle.svelte';
+	import PayInvoice from './PayInvoice.svelte';
 
 	let invoice = $state<ClientInvoice | undefined>();
 	let error = $state('');
+	// What the Payment Element mounts with, or the server's own sentence
+	// for why this Invoice cannot be paid here. Read fresh on every visit:
+	// the secret is a credential for one payment and is never kept.
+	let payment = $state<ClientPayment | undefined>();
+	let paymentError = $state('');
 
 	onMount(async () => {
 		try {
 			invoice = await loadClientInvoice(apiFetchWithSession, page.params.engagementId!, page.params.invoiceId!);
 		} catch (error_) {
 			error = error_ instanceof Error ? error_.message : 'Failed to load Invoice';
+			return;
+		}
+		// Only an open Stripe-rail Invoice can be paid here; asking for any
+		// other would be refused, and the by-hand rail has nothing to ask.
+		if (invoice.status === 'open' && invoice.billingMode === 'stripe') {
+			try {
+				payment = await loadClientPayment(apiFetchWithSession, page.params.engagementId!, page.params.invoiceId!);
+			} catch (error_) {
+				paymentError = error_ instanceof Error ? error_.message : 'We could not start this payment. Try again.';
+			}
 		}
 	});
 </script>
@@ -57,12 +75,19 @@
 				{#if invoice.status === 'open'}
 					{#if invoice.billingMode === 'stripe'}
 						<!--
-							#1020 mounts the Payment Element and the pay action here. Empty
-							on purpose: nothing a Client can read or press exists until
-							that lands, and placeholder text would tell her something is
-							coming that the product cannot promise.
+							The Payment Element and the pay action (#1020). When the server
+							refuses the secret -- the Practice cannot take a card yet, say --
+							she reads its own sentence and nothing pay-like appears.
 						-->
-						<div data-payment-element-mount></div>
+						{#if payment}
+							<PayInvoice
+								{payment}
+								amount={formatMoney(invoice.amountCents, invoice.currency)}
+								returnUrl={page.url.href}
+							/>
+						{:else if paymentError}
+							<Notice variant="error" message={paymentError} />
+						{/if}
 					{:else}
 						<Text text={byHandPaymentNotice(invoice.reference)} />
 					{/if}

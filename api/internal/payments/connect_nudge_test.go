@@ -37,7 +37,7 @@ func newConnectNudgeServer(t *testing.T, db *testdb.DB, uid string) (srv *httpte
 	// The nudge never calls Stripe -- not_connected is a null column, not
 	// a retrieve -- so the fake client is here only because Mount asks
 	// for one.
-	payments.Mount(g, ir, payments.NewFakeClient(), enq, db.App)
+	payments.Mount(g, ir, payments.NewFakeClient(), enq, db.App, testPublishableKey)
 	return httptest.NewServer(mux), authntest.SeedSession(t, db.App, uid), enq
 }
 

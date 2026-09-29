@@ -5,6 +5,7 @@ import (
 
 	"doula-cloud/api/internal/clientauth"
 	"doula-cloud/api/internal/idempotency"
+	"doula-cloud/api/internal/ratelimit"
 	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/tasknudge"
 )
@@ -12,7 +13,7 @@ import (
 // Mount registers Stripe Connect account creation and status, per-Engagement
 // Invoice creation and history, the Practice-wide Invoice list (#265), and
 // the Client portal's own Invoice reads (#1011).
-func Mount(g *staffauth.GatedRouter, ir *idempotency.Router, client Client, enq tasknudge.Enqueuer, db *sql.DB) {
+func Mount(g *staffauth.GatedRouter, ir *idempotency.Router, client Client, enq tasknudge.Enqueuer, db *sql.DB, publishableKey string) {
 	// Owner-only declared here rather than checked in PostConnectHandler
 	// (#1028, following #970, #990 and #1016): connecting the rail the
 	// Practice is paid on is the Owner's act outright, not a reach
@@ -159,4 +160,11 @@ func Mount(g *staffauth.GatedRouter, ir *idempotency.Router, client Client, enq 
 		clientauth.Middleware(db)(ClientListInvoicesHandler()))
 	g.OpenGet("/api/portal/engagements/{engagementId}/invoices/{invoiceId}", clientauth.PortalPopulation,
 		clientauth.Middleware(db)(ClientGetInvoiceHandler()))
+	// What the Payment Element mounts with (#1020): a live Stripe call per
+	// use and a credential for one payment, so it is its own route, rate
+	// limited as a heavy endpoint, and outside the Invoice read above.
+	// Rate limited outermost so a refusal costs no session lookup.
+	g.OpenGet("/api/portal/engagements/{engagementId}/invoices/{invoiceId}/payment", clientauth.PortalPopulation,
+		ratelimit.Wrap(db, "portal_invoice_payment", clientPaymentRules)(
+			clientauth.Middleware(db)(ClientGetPaymentHandler(client, publishableKey))))
 }

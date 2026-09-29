@@ -250,6 +250,19 @@ type Client interface {
 	// error, if Stripe reports no payment for the invoice -- a missing
 	// reference must not fail an otherwise good webhook.
 	RetrieveInvoicePaymentReference(ctx context.Context, accountID, invoiceID string) (reference string, err error)
+	// RetrieveInvoiceClientSecret reads the Payment Element's client secret
+	// for a finalized invoiceID on accountID's connected account: the
+	// PaymentIntent's `client_secret`, exposed on the Invoice as
+	// `confirmation_secret` when it is retrieved with that field expanded
+	// (#980, #1020). Mounting the Element with this secret and
+	// `stripeAccount` pays the Invoice as a direct charge, and the same
+	// `invoice.paid` event follows as when it is paid on Stripe's hosted page.
+	//
+	// It is a live call on every use and its result is a bearer credential
+	// for one payment, so it is never stored and never part of the Invoice
+	// read (#1011). An empty secret is an error: an Invoice that carries none
+	// is not payable, and the caller must not hand the browser a blank one.
+	RetrieveInvoiceClientSecret(ctx context.Context, accountID, invoiceID string) (clientSecret string, err error)
 	// VerifyWebhookSignature verifies payload was sent by Stripe using
 	// secret and the Stripe-Signature header value sigHeader, returning
 	// the decoded event's raw JSON on success. This is the v1 *snapshot*

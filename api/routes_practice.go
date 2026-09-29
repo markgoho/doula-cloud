@@ -44,7 +44,7 @@ import (
 func registerPracticeRoutes(g *staffauth.GatedRouter, ir *idempotency.Router, d Deps) {
 	activityfeed.Mount(g)
 	billing.Mount(g, ir, d.StripeClient)
-	payments.Mount(g, ir, d.PaymentsClient, d.NudgeEnqueuer, d.DB)
+	payments.Mount(g, ir, d.PaymentsClient, d.NudgeEnqueuer, d.DB, d.StripePublishableKey)
 	website.Mount(g, ir, d.NudgeEnqueuer)
 	client.Mount(g, ir, d.NudgeEnqueuer)
 	engagementrequest.Mount(g, ir, d.DB, d.NudgeEnqueuer)

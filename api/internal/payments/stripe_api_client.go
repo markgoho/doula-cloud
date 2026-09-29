@@ -470,6 +470,33 @@ func (c *StripeAPIClient) RetrieveInvoicePaymentReference(ctx context.Context, a
 	return "", nil
 }
 
+// RetrieveInvoiceClientSecret retrieves invoiceID with `confirmation_secret`
+// expanded and returns its client secret -- the one thing the Payment
+// Element needs to pay the Invoice (#1020). Verified against the Sandbox in
+// docs/research/client-in-chrome-payment-connect-standard.md.
+func (c *StripeAPIClient) RetrieveInvoiceClientSecret(ctx context.Context, accountID, invoiceID string) (string, error) {
+	// coverage:ignore reason: requires a real Stripe API key and network access, not exercised by unit tests
+	params := &stripe.InvoiceRetrieveParams{}
+	params.StripeAccount = stripe.String(accountID)
+	params.AddExpand("confirmation_secret")
+	// coverage:ignore reason: requires a real Stripe API key and network access, not exercised by unit tests
+	inv, err := c.client.V1Invoices.Retrieve(ctx, invoiceID, params)
+	// coverage:ignore reason: requires a real Stripe API key and network access, not exercised by unit tests
+	if err != nil {
+		return "", fmt.Errorf("payments: retrieve stripe invoice confirmation secret: %w", err)
+	}
+	// coverage:ignore reason: requires a real Stripe API key and network access, not exercised by unit tests
+	if inv.ConfirmationSecret == nil || inv.ConfirmationSecret.ClientSecret == "" {
+		return "", errNoClientSecret
+	}
+	// coverage:ignore reason: requires a real Stripe API key and network access, not exercised by unit tests
+	return inv.ConfirmationSecret.ClientSecret, nil
+}
+
+// errNoClientSecret is what a Stripe Invoice with no confirmation secret
+// reads as: it is not payable through the Element.
+var errNoClientSecret = errors.New("payments: stripe invoice has no confirmation secret")
+
 // DeleteCustomer deletes customerID on accountID's connected account.
 // Verified against the Sandbox on #394: DELETE /v1/customers/:id with the
 // Stripe-Account header works on a connected account, and answers with

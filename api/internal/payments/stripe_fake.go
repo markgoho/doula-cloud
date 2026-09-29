@@ -107,6 +107,12 @@ type FakeClient struct {
 	DeleteCustomerCalls []FakeCustomerCall
 	RedactionJobCalls   []FakeCustomerCall
 
+	// ClientSecretCalls records every RetrieveInvoiceClientSecret call as a
+	// (connected account, Stripe Invoice) pair, so a test can prove the
+	// secret was fetched for the right Invoice on the right Practice's
+	// account -- and, for a refusal, that Stripe was never reached.
+	ClientSecretCalls []FakeClientSecretCall
+
 	// Statuses, keyed by account id, is what RetrieveAccount returns --
 	// tests set this to control the "not connected / onboarding
 	// incomplete / active" status GetConnectStatusHandler reports.
@@ -125,6 +131,7 @@ type FakeClient struct {
 	RedactionJobErr      error
 	FinalizeInvoiceErr   error
 	PaymentReferenceErr  error
+	ClientSecretErr      error
 	PayOutOfBandErr      error
 	RefundCreditNoteErr  error
 
@@ -335,6 +342,30 @@ func (f *FakeClient) RetrieveInvoicePaymentReference(_ context.Context, _, invoi
 	}
 	// coverage:ignore reason: PostConnectWebhookHandler's tests inject referenceClient rather than FakeClient, so this double's implementation is never called
 	return f.PaymentReferences[invoiceID], nil
+}
+
+// FakeClientSecretCall is one RetrieveInvoiceClientSecret call.
+type FakeClientSecretCall struct {
+	AccountID, InvoiceID string
+}
+
+// FakeClientSecret is the deterministic secret the fake returns for a
+// Stripe invoice id, so a test can assert the browser was handed exactly
+// this Invoice's secret and no other.
+func FakeClientSecret(invoiceID string) string {
+	return "pi_fake_secret_" + invoiceID
+}
+
+// RetrieveInvoiceClientSecret records the call and returns
+// FakeClientSecret(invoiceID), or ClientSecretErr if a test set one.
+func (f *FakeClient) RetrieveInvoiceClientSecret(_ context.Context, accountID, invoiceID string) (string, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.ClientSecretCalls = append(f.ClientSecretCalls, FakeClientSecretCall{AccountID: accountID, InvoiceID: invoiceID})
+	if f.ClientSecretErr != nil {
+		return "", f.ClientSecretErr
+	}
+	return FakeClientSecret(invoiceID), nil
 }
 
 // AccountCallCount returns how many times CreateAccount has been called so
