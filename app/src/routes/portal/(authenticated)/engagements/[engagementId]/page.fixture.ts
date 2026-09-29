@@ -36,7 +36,8 @@ export const detail = {
 	clientName: 'Anne-Marie Ochieng-Whitfield',
 	status: 'active',
 	dueDate: '2027-03-01',
-	offersBirthPlan: true
+	offersBirthPlan: true,
+	totalToPayCents: 335_000
 };
 
 /*

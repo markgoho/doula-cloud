@@ -8,7 +8,7 @@ import {
 	signInPortalClient,
 	PORTAL_CLIENT_PASSWORD
 } from './portalClient';
-import { seedEngagement, seedEngagementRequest } from './stack';
+import { seedEngagement, seedEngagementRequest, seedInvoice } from './stack';
 import { enterPracticeAsEnrolled } from './mfa';
 import { seedAccountWithNoPractice } from './staffSignup';
 import { stubTotpFactor } from './totpStub';
@@ -720,6 +720,10 @@ test('Archetypes D, G -- the Client portal', async ({ page, request }) => {
 	const sent = await request.post(`${engagementURL}/contract/send`, { headers: staffHeaders });
 	expect(sent.ok(), `send contract failed: ${sent.status()} ${await sent.text()}`).toBe(true);
 
+	// #1564: the money screens read nothing until an Invoice exists.
+	const invoiceId = seedInvoice(practiceId, engagementId, { reference: 'A4B2-0011', stripeInvoiceId: 'in_a11y' });
+	seedInvoice(practiceId, engagementId, { status: 'paid', reference: 'INV-0002' });
+
 	await signInPortalClient(page, request, seeded.clientEmail);
 	await expect(page).toHaveURL(new RegExp(`/portal/engagements/${engagementId}$`));
 
@@ -757,6 +761,21 @@ test('Archetypes D, G -- the Client portal', async ({ page, request }) => {
 			archetype: 'G',
 			url: `/portal/engagements/${engagementId}/notifications`,
 			h1: 'Notifications'
+		},
+		// #1564: the Client's money -- an index of Invoices (archetype D,
+		// like the hub) and a page per Invoice (archetype G, like the
+		// Contract it bills).
+		{
+			key: 'portal/engagements/[engagementId]/invoices',
+			archetype: 'D',
+			url: `/portal/engagements/${engagementId}/invoices`,
+			h1: 'Invoices'
+		},
+		{
+			key: 'portal/engagements/[engagementId]/invoices/[invoiceId]',
+			archetype: 'G',
+			url: `/portal/engagements/${engagementId}/invoices/${invoiceId}`,
+			h1: 'Invoice A4B2-0011'
 		}
 	];
 

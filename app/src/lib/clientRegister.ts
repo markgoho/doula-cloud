@@ -249,3 +249,65 @@ export function clientActivityPhrase(action: string): string {
 export function clientActivityPhrasedActions(): string[] {
 	return Object.keys(CLIENT_ACTIVITY_PHRASES).toSorted((a, b) => a.localeCompare(b));
 }
+
+/** `invoice_status` as a Client reads it (#981): one fixed label per
+ * value, never conditional on circumstance (ADR-0005). `draft` is absent
+ * on purpose -- it never reaches her, so a `draft` here would be a lookup
+ * failure rather than a word. `void` and `uncollectible` share a label
+ * because they differ only in the Practice's own accounting, and "written
+ * off" would narrate her Practice's loss to her. */
+const INVOICE_STATUS_LABELS: Record<string, string> = {
+	open: 'Not yet paid',
+	paid: 'Paid',
+	void: 'No longer owed',
+	uncollectible: 'No longer owed'
+};
+
+export function clientInvoiceStatusLabel(status: string): string {
+	return fixedWording(INVOICE_STATUS_LABELS, status, 'invoice status');
+}
+
+/** The method of a manually recorded Payment, in plain words (#981). There
+ * is no "Card": the model records no card-versus-bank fact about a Stripe
+ * payment, so `paidMethod` is absent there and nothing here claims one. */
+const PAYMENT_METHOD_LABELS: Record<string, string> = {
+	check: 'Check',
+	bank_transfer: 'Bank transfer',
+	cash: 'Cash',
+	other: 'Other'
+};
+
+export function clientPaymentMethodLabel(method: string): string {
+	return fixedWording(PAYMENT_METHOD_LABELS, method, 'payment method');
+}
+
+/** The money surface's headings (#981). "Balance" is banned in every form:
+ * Credit is the Practice's own platform-billing unit. */
+export const INVOICES_HEADING = 'Invoices';
+export const OWED_HEADING = 'What you still owe';
+export const TOTAL_TO_PAY_LABEL = 'Total to pay';
+export const PAID_HEADING = 'What you have paid';
+export const NO_LONGER_OWED_HEADING = 'No longer owed';
+
+/** The three empty-state sentences (#982): each states the product's own
+ * record and nothing about anyone's conduct. */
+export const ALL_INVOICES_PAID_MESSAGE = 'You have paid every Invoice for this care.';
+export const NO_INVOICES_MESSAGE = 'There are no Invoices for this care.';
+export const NO_PAYMENTS_MESSAGE = 'There are no Payments for this care.';
+
+/** Money that went back to her (#1009, ruled on #333). Never "refunded":
+ * she hears a store's word for something going wrong. `money` arrives
+ * already formatted. */
+export function paidAndReturnedLabel(money: string): string {
+	return `Paid — ${money} returned to you`;
+}
+
+export function returnedToYouSentence(money: string): string {
+	return `${money} of it was returned to you.`;
+}
+
+/** What stands where a pay button would be on the by-hand rail (#983):
+ * nothing to click, and the one thing she can act on. */
+export function byHandPaymentNotice(reference: string): string {
+	return `Your Practice collects this Invoice directly. Quote Invoice ${reference} when you pay.`;
+}
