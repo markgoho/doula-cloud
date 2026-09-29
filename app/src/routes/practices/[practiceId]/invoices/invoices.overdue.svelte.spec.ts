@@ -11,6 +11,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import { jsonResponse } from '#lib/testResponse.js';
 import type { PracticeInvoiceListData } from '#lib/invoice.js';
+import { registerLayoutPrimitives } from '#lib/primitives/index.js';
+// See invoices.svelte.spec.ts: ListPage's frame (#1576) needs both the
+// primitives' CSS and their registration for the table to get its room.
 import '#lib/styles/app.css';
 import Page from './+page.svelte';
 import { toPageState } from '../../../routeFixture.js';
@@ -22,6 +25,7 @@ const pageState = vi.hoisted(() => ({
 	data: {} as Record<string, unknown>
 }));
 vi.mock('$app/state', () => ({ page: pageState }));
+if (!customElements.get('center-l')) registerLayoutPrimitives();
 Object.assign(pageState, toPageState(fixture));
 
 const apiFetchWithSession = vi.hoisted(() => vi.fn());

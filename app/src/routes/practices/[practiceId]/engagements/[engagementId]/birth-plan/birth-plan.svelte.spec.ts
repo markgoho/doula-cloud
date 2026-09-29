@@ -1,6 +1,9 @@
 import { page } from 'vitest/browser';
 import { describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
+// The loading Skeleton has no size of its own without the app's CSS, so
+// the frame test's loading state could not be seen without it (#1576).
+import '#lib/styles/app.css';
 import { toApiResponder, toPageState } from '../../../../../routeFixture.js';
 import { fixture } from './page.fixture.js';
 import Page from './+page.svelte';
@@ -76,6 +79,66 @@ describe('The Practice-side Birth Plan (#280)', () => {
 		);
 
 		await expect.element(page.getByRole('alert')).toHaveTextContent('plan read failed');
+	});
+});
+
+/*
+ * #1576: this page sat straight in the layout's <main>, with no gutter,
+ * until it moved onto DocumentPage. The frame and the print wrapper are
+ * both layout facts with no role, so these reach for `closest` -- a fact
+ * about the tree's structure (svelte-tests.md's named exceptions).
+ */
+const heading = "Anne-Marie Ochieng-Whitfield's Birth Plan";
+
+async function expectOneFramedHeading() {
+	const title = page.getByRole('heading', { level: 1, name: heading });
+	await expect.element(title).toBeVisible();
+	expect(page.getByRole('heading', { level: 1 }).elements()).toHaveLength(1);
+	expect(title.element().closest('center-l')).not.toBeNull();
+}
+
+describe('the page frame (#1576)', () => {
+	it('frames the loaded plan', async () => {
+		await setup();
+
+		await expect.element(page.getByRole('button', { name: 'Print' })).toBeVisible();
+		await expectOneFramedHeading();
+	});
+
+	it('frames the loading state', async () => {
+		await setup(() => new Promise<Response>(() => {}));
+
+		await expect.element(page.getByRole('status', { name: 'Loading Birth Plan' })).toBeVisible();
+		await expectOneFramedHeading();
+	});
+
+	it('frames the not-yet-created state', async () => {
+		await setup(() => ({ status: 404, ok: false, text: () => Promise.resolve('none') }) as Response);
+
+		await expect
+			.element(page.getByText('No Birth Plan has been created for this Engagement yet.'))
+			.toBeVisible();
+		await expectOneFramedHeading();
+	});
+
+	it('frames a failed load', async () => {
+		await setup(() => ({ status: 500, ok: false, text: () => Promise.resolve('plan read failed') }) as Response);
+
+		await expect.element(page.getByRole('alert')).toHaveTextContent('plan read failed');
+		await expectOneFramedHeading();
+	});
+
+	// DocumentPage's own `.no-print` is scoped to that component and never
+	// reaches markup in the route's `content` snippet, so the route keeps
+	// its own wrapper around the controls a sheet of paper cannot press.
+	it('keeps the Print and Download controls off paper, and the plan on it', async () => {
+		await setup();
+
+		const print = page.getByRole('button', { name: 'Print' });
+		await expect.element(print).toBeVisible();
+		expect(print.element().closest('.no-print')).not.toBeNull();
+		expect(page.getByRole('button', { name: 'Download Birth Plan (PDF)' }).element().closest('.no-print')).not.toBeNull();
+		expect(page.getByText('Who do you want with you, and what should we know about them?').element().closest('.no-print')).toBeNull();
 	});
 });
 

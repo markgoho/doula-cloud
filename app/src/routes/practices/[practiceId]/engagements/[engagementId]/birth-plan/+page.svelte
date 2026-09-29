@@ -7,13 +7,10 @@
 	import { triggerBlobDownload } from '#lib/blobDownload.js';
 	import { formatInstant } from '#lib/dates.js';
 	import BirthPlanView from '#lib/components/molecules/BirthPlanView.svelte';
-	import Heading from '#lib/components/atoms/Heading.svelte';
 	import Text from '#lib/components/atoms/Text.svelte';
 	import Button from '#lib/components/atoms/Button.svelte';
 	import Notice from '#lib/components/atoms/Notice.svelte';
-	import Skeleton from '#lib/components/atoms/Skeleton.svelte';
-	import BackLink from '#lib/components/molecules/BackLink.svelte';
-	import PageTitle from '#lib/components/PageTitle.svelte';
+	import DocumentPage from '#lib/components/templates/DocumentPage.svelte';
 	import type { PageProps as PageProperties } from './$types';
 
 	let { data }: PageProperties = $props();
@@ -76,37 +73,39 @@
 	}
 </script>
 
-<div class="no-print">
-	<BackLink href={engagementHref} label="Back to {data.clientName}" />
-</div>
-
-<PageTitle page={heading} />
-
-<Heading level={1} text={heading} />
-<Text text="Engagement created {formatInstant(data.createdAt)}" tone="muted" />
-
-{#if error}
-	<div class="no-print"><Notice variant="error" message={error} /></div>
-{:else if !isLoaded}
-	<div class="no-print"><Skeleton label="Loading Birth Plan" variant="text" lines={4} /></div>
-{:else if instance === undefined}
-	<Notice variant="info" message="No Birth Plan has been created for this Engagement yet." />
-{:else}
-	<div class="no-print">
-		<Button label="Print" onClick={() => print()} />
-		<Button
-			label="Download Birth Plan (PDF)"
-			icon="file-text"
-			variant="secondary"
-			onClick={handleDownloadPdf}
-			loading={isDownloadingPdf}
-		/>
-		{#if downloadError}
-			<Notice variant="error" message={downloadError} />
+<DocumentPage
+	title={heading}
+	backHref={engagementHref}
+	backLabel="Back to {data.clientName}"
+	loadError={error || undefined}
+	loading={isLoaded ? undefined : 'Loading Birth Plan'}
+	empty={instance === undefined ? 'No Birth Plan has been created for this Engagement yet.' : undefined}
+>
+	{#snippet content()}
+		<!-- `content` renders only once the Template's own states are past,
+		     so `instance` is a loaded Birth Plan here. -->
+		{#if instance}
+			<Text text="Engagement created {formatInstant(data.createdAt)}" tone="muted" />
+			<!-- DocumentPage's own `.no-print` is scoped to that component and
+			     never reaches this snippet, so the route keeps its own (#1576),
+			     the same as the portal Birth Plan (#1574). -->
+			<div class="no-print">
+				<Button label="Print" onClick={() => print()} />
+				<Button
+					label="Download Birth Plan (PDF)"
+					icon="file-text"
+					variant="secondary"
+					onClick={handleDownloadPdf}
+					loading={isDownloadingPdf}
+				/>
+				{#if downloadError}
+					<Notice variant="error" message={downloadError} />
+				{/if}
+			</div>
+			<BirthPlanView fields={instance.fields} answers={instance.answers} />
 		{/if}
-	</div>
-	<BirthPlanView fields={instance.fields} answers={instance.answers} />
-{/if}
+	{/snippet}
+</DocumentPage>
 
 <style>
 	@media print {

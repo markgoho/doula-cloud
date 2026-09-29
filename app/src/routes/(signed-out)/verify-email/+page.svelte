@@ -5,10 +5,9 @@
 	import { getFirebaseAuth } from '#lib/firebase.js';
 	import { apiBaseURL } from '#lib/api.js';
 	import { refusalMessage, SERVICE_PROBLEM } from '#lib/formErrors.js';
-	import Heading from '#lib/components/atoms/Heading.svelte';
 	import Notice from '#lib/components/atoms/Notice.svelte';
 	import Link from '#lib/components/atoms/Link.svelte';
-	import PageTitle from '#lib/components/PageTitle.svelte';
+	import EntryPage from '#lib/components/templates/EntryPage.svelte';
 
 	const token = page.url.searchParams.get('token') ?? '';
 
@@ -53,15 +52,20 @@
 	});
 </script>
 
-<PageTitle page="Verify your email" isError={status === 'failed'} />
-
-<Heading level={1} variant="page" text="Verify your email" />
-
-{#if status === 'checking'}
-	<Notice variant="info" message="Checking your link…" />
-{:else if status === 'verified'}
-	<Notice variant="status" message="Your email address is verified." />
-	<Link href={resolve('/(signed-out)/login')} label="Continue to log in" />
-{:else}
-	<Notice variant="error" message={errorMessage} />
-{/if}
+<!--
+	No `errorSummary`, so no "Error: " title prefix when the link fails
+	(#1576): a failed link is not a refused form, and govuk-alignment.md's
+	title-format rule keeps that prefix for refused forms only.
+-->
+<EntryPage title="Verify your email">
+	{#snippet content()}
+		{#if status === 'checking'}
+			<Notice variant="info" message="Checking your link…" />
+		{:else if status === 'verified'}
+			<Notice variant="status" message="Your email address is verified." />
+			<Link href={resolve('/(signed-out)/login')} label="Continue to log in" />
+		{:else}
+			<Notice variant="error" message={errorMessage} />
+		{/if}
+	{/snippet}
+</EntryPage>

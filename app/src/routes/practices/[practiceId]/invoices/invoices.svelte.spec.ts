@@ -3,8 +3,11 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import { jsonResponse } from '#lib/testResponse.js';
 import type { PracticeInvoiceListData } from '#lib/invoice.js';
+import { registerLayoutPrimitives } from '#lib/primitives/index.js';
 // DataTable's frame needs stack-l's display:block default (primitives.css)
-// to work as a container-query context -- see DataTable.svelte.spec.ts.
+// to work as a container-query context -- see DataTable.svelte.spec.ts. This
+// route's ListPage (#1576) also needs the primitives registered, not just
+// their CSS -- see staff-list.svelte.spec.ts for why.
 import '#lib/styles/app.css';
 import Page from './+page.svelte';
 import { toPageState } from '../../../routeFixture.js';
@@ -27,6 +30,7 @@ const pageState = vi.hoisted(() => ({
 	data: {} as Record<string, unknown>
 }));
 vi.mock('$app/state', () => ({ page: pageState }));
+if (!customElements.get('center-l')) registerLayoutPrimitives();
 Object.assign(pageState, toPageState(fixture));
 
 const apiFetchWithSession = vi.hoisted(() => vi.fn());
@@ -181,5 +185,23 @@ describe('the Practice-wide invoice list (#265)', () => {
 		await expect
 			.element(testPage.getByRole('link', { name: openInvoice.clientName }))
 			.toBeVisible();
+	});
+});
+
+/*
+ * #1576: this list sat straight in the layout's <main>, with no gutter,
+ * until it moved onto ListPage. The frame is a layout primitive with no
+ * role, so `closest('center-l')` is the one way to ask whether the
+ * heading is inside it -- a fact about the tree's structure, not about
+ * any accessible element (svelte-tests.md's named exceptions).
+ */
+describe('the page frame (#1576)', () => {
+	it('renders its one heading inside the page frame', async () => {
+		await setup();
+
+		const heading = testPage.getByRole('heading', { level: 1, name: fixture.readyText });
+		await expect.element(heading).toBeVisible();
+		expect(testPage.getByRole('heading', { level: 1 }).elements()).toHaveLength(1);
+		expect(heading.element().closest('center-l')).not.toBeNull();
 	});
 });

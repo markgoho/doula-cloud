@@ -6,8 +6,8 @@
 	 * before this screen did, and this page is its first caller.
 	 *
 	 * Composes existing components only, the same as the Invoice list this
-	 * follows (#265): the book is a `DataTable`, which already adapts to
-	 * the space it is given.
+	 * follows (#265): the frame is `ListPage`'s (#1576), and each book is
+	 * a `DataTable`, which already adapts to the space it is given.
 	 */
 	import { untrack } from 'svelte';
 	import { page } from '#lib/appState.svelte.js';
@@ -26,7 +26,7 @@
 	import Heading from '#lib/components/atoms/Heading.svelte';
 	import Notice from '#lib/components/atoms/Notice.svelte';
 	import Text from '#lib/components/atoms/Text.svelte';
-	import PageTitle from '#lib/components/PageTitle.svelte';
+	import ListPage from '#lib/components/templates/ListPage.svelte';
 	import type { PageProps as PageProperties } from './$types';
 
 	let { data }: PageProperties = $props();
@@ -96,43 +96,47 @@
 	}
 </script>
 
-<PageTitle page="Contracts" />
-<Heading level={1} text="Contracts" />
-<Text
-	text="Every Contract this practice is still waiting on, oldest first. Open one to reach the engagement it belongs to and send, void or invoice it there."
-	tone="muted"
-/>
+{#snippet intro()}
+	<Text
+		text="Every Contract this practice is still waiting on, oldest first. Open one to reach the engagement it belongs to and send, void or invoice it there."
+		tone="muted"
+	/>
+{/snippet}
 
-<DataTable
-	{columns}
-	rows={contracts.items}
-	rowHref={engagementHref}
-	hasMore={contracts.hasMore}
-	onLoadMore={() => contracts.loadMore()}
-	isLoadingMore={contracts.isLoadingMore}
-	emptyMessage="Nothing is waiting. Every contract has been signed or voided."
-/>
+{#snippet content()}
+	<DataTable
+		{columns}
+		rows={contracts.items}
+		rowHref={engagementHref}
+		hasMore={contracts.hasMore}
+		onLoadMore={() => contracts.loadMore()}
+		isLoadingMore={contracts.isLoadingMore}
+		emptyMessage="Nothing is waiting. Every contract has been signed or voided."
+	/>
 
-{#if contracts.loadMoreError}
-	<Notice message={contracts.loadMoreError} variant="error" />
-{/if}
+	{#if contracts.loadMoreError}
+		<Notice message={contracts.loadMoreError} variant="error" />
+	{/if}
 
-<Heading level={2} text="Void requests" />
-<Text
-	text="Every void a Doula has asked for and nobody has decided yet, oldest first. Open one to reach the engagement it belongs to and void or decline it there."
-	tone="muted"
-/>
+	<Heading level={2} text="Void requests" />
+	<Text
+		text="Every void a Doula has asked for and nobody has decided yet, oldest first. Open one to reach the engagement it belongs to and void or decline it there."
+		tone="muted"
+	/>
 
-<DataTable
-	columns={voidRequestColumns}
-	rows={voidRequests.items}
-	rowHref={voidRequestEngagementHref}
-	hasMore={voidRequests.hasMore}
-	onLoadMore={() => voidRequests.loadMore()}
-	isLoadingMore={voidRequests.isLoadingMore}
-	emptyMessage="No void request is waiting on you."
-/>
+	<DataTable
+		columns={voidRequestColumns}
+		rows={voidRequests.items}
+		rowHref={voidRequestEngagementHref}
+		hasMore={voidRequests.hasMore}
+		onLoadMore={() => voidRequests.loadMore()}
+		isLoadingMore={voidRequests.isLoadingMore}
+		emptyMessage="No void request is waiting on you."
+	/>
 
-{#if voidRequests.loadMoreError}
-	<Notice message={voidRequests.loadMoreError} variant="error" />
-{/if}
+	{#if voidRequests.loadMoreError}
+		<Notice message={voidRequests.loadMoreError} variant="error" />
+	{/if}
+{/snippet}
+
+<ListPage title="Contracts" {intro} {content} />
