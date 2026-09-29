@@ -17,12 +17,10 @@
 	import { loadClientPayment, type ClientPayment } from '#lib/clientPayment.js';
 	import { formatMoney } from '#lib/money.js';
 	import { byHandPaymentNotice, INVOICES_HEADING } from '#lib/clientRegister.js';
-	import BackLink from '#lib/components/molecules/BackLink.svelte';
 	import DescriptionList from '#lib/components/molecules/DescriptionList.svelte';
-	import Heading from '#lib/components/atoms/Heading.svelte';
 	import Notice from '#lib/components/atoms/Notice.svelte';
 	import Text from '#lib/components/atoms/Text.svelte';
-	import PageTitle from '#lib/components/PageTitle.svelte';
+	import DocumentPage from '#lib/components/templates/DocumentPage.svelte';
 	import PayInvoice from './PayInvoice.svelte';
 
 	let invoice = $state<ClientInvoice | undefined>();
@@ -52,47 +50,46 @@
 	});
 </script>
 
-<container-l>
-	<center-l max="var(--measure)" gutters="var(--page-gutter)">
-		<stack-l space="var(--space-5)">
-			<BackLink
-				href={resolve('/portal/(authenticated)/engagements/[engagementId]/invoices', {
-					engagementId: page.params.engagementId!
-				})}
-				label="Back to {INVOICES_HEADING}"
-			/>
-
-			{#if error}
-				<PageTitle page={INVOICES_HEADING} serviceName={page.data.practiceName} />
-				<Notice variant="error" message={error} />
-			{:else if invoice === undefined}
-				<PageTitle page={INVOICES_HEADING} serviceName={page.data.practiceName} />
-				<Text text="Loading..." />
-			{:else}
-				<PageTitle page="Invoice {invoice.reference}" serviceName={page.data.practiceName} />
-				<Heading level={1} text="Invoice {invoice.reference}" />
-				<DescriptionList items={invoiceFacts(invoice)} />
-				{#if invoice.status === 'open'}
-					{#if invoice.billingMode === 'stripe'}
-						<!--
-							The Payment Element and the pay action (#1020). When the server
-							refuses the secret -- the Practice cannot take a card yet, say --
-							she reads its own sentence and nothing pay-like appears.
-						-->
-						{#if payment}
-							<PayInvoice
-								{payment}
-								amount={formatMoney(invoice.amountCents, invoice.currency)}
-								returnUrl={page.url.href}
-							/>
-						{:else if paymentError}
-							<Notice variant="error" message={paymentError} />
-						{/if}
-					{:else}
-						<Text text={byHandPaymentNotice(invoice.reference)} />
+<!--
+	No empty state: a missing Invoice is a load error, not a "none yet".
+	The title is the Invoices heading until the Invoice arrives, so the
+	<h1> and the tab title always name the screen.
+-->
+<DocumentPage
+	title={invoice ? `Invoice ${invoice.reference}` : INVOICES_HEADING}
+	serviceName={page.data.practiceName}
+	backHref={resolve('/portal/(authenticated)/engagements/[engagementId]/invoices', {
+		engagementId: page.params.engagementId!
+	})}
+	backLabel="Back to {INVOICES_HEADING}"
+	loadError={error || undefined}
+	loading={invoice === undefined ? 'Loading Invoice' : undefined}
+>
+	{#snippet content()}
+		<!-- `content` renders only once the Template's own states are past,
+		     so `invoice` is a loaded Invoice here. -->
+		{#if invoice}
+			<DescriptionList items={invoiceFacts(invoice)} />
+			{#if invoice.status === 'open'}
+				{#if invoice.billingMode === 'stripe'}
+					<!--
+						The Payment Element and the pay action (#1020). When the server
+						refuses the secret -- the Practice cannot take a card yet, say --
+						she reads its own sentence and nothing pay-like appears.
+					-->
+					{#if payment}
+						<PayInvoice
+							{payment}
+							amount={formatMoney(invoice.amountCents, invoice.currency)}
+							returnUrl={page.url.href}
+						/>
+					{:else if paymentError}
+						<Notice variant="error" message={paymentError} />
 					{/if}
+				{:else}
+					<Text text={byHandPaymentNotice(invoice.reference)} />
 				{/if}
 			{/if}
-		</stack-l>
-	</center-l>
-</container-l>
+		{/if}
+	{/snippet}
+</DocumentPage>

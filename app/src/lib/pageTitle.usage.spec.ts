@@ -35,7 +35,8 @@ const TEMPLATES_WITH_PAGE_TITLE = [
 	'QuestionPage',
 	'CheckAnswers',
 	'EntryPage',
-	'ListPage'
+	'ListPage',
+	'DocumentPage'
 ];
 
 const appRoot = fileURLToPath(new URL('../../', import.meta.url));

@@ -675,15 +675,41 @@ test('Archetype E -- the contractor Doula door onto clients/search', async ({ pa
 	});
 });
 
-// Archetypes D and G, behind a Client-portal session. Both G routes
-// render nothing but a "none yet" line until the record exists, so the
-// Birth Plan and the Contract are provisioned through the API first --
-// scanning the empty state would prove nothing about the document view,
-// which is the whole point of archetype G.
+// Archetypes D and G, behind a Client-portal session. The Birth Plan and
+// the Contract are each scanned twice: first empty, before the API
+// provisions them, and then loaded. The empty state is a screen of its own
+// (#1574): it sits in DocumentPage's frame with its own <h1>, and that is
+// what a Client meets for as long as her Practice has not made one. The
+// Invoice page has no empty state -- a missing Invoice is a load error --
+// so it is scanned loaded only.
 test('Archetypes D, G -- the Client portal', async ({ page, request }) => {
 	const seeded = await seedPortalClient(request, 'Riverside Doulas');
 	const { practiceId, engagementId, staffHeaders } = seeded;
 	const engagementURL = `${API_URL}/api/practices/${practiceId}/engagements/${engagementId}`;
+
+	await signInPortalClient(page, request, seeded.clientEmail);
+	await expect(page).toHaveURL(new RegExp(`/portal/engagements/${engagementId}$`));
+
+	const emptyRoutes: Route[] = [
+		{
+			key: 'portal/engagements/[engagementId]/birth-plan (empty)',
+			archetype: 'G',
+			url: `/portal/engagements/${engagementId}/birth-plan`,
+			h1: 'Birth Plan',
+			reach: (p) => expect(p.getByText('No Birth Plan has been created for your care yet.')).toBeVisible()
+		},
+		{
+			key: 'portal/engagements/[engagementId]/contract (empty)',
+			archetype: 'G',
+			url: `/portal/engagements/${engagementId}/contract`,
+			h1: 'Contract',
+			reach: (p) => expect(p.getByText('No Contract has been sent for your care yet.')).toBeVisible()
+		}
+	];
+
+	for (const route of emptyRoutes) {
+		await scan(page, route);
+	}
 
 	const plan = await request.post(`${engagementURL}/plans/birth_plan`, { headers: staffHeaders });
 	expect(plan.ok(), `create birth plan failed: ${plan.status()} ${await plan.text()}`).toBe(true);
@@ -723,9 +749,6 @@ test('Archetypes D, G -- the Client portal', async ({ page, request }) => {
 	// #1564: the money screens read nothing until an Invoice exists.
 	const invoiceId = seedInvoice(practiceId, engagementId, { reference: 'A4B2-0011', stripeInvoiceId: 'in_a11y' });
 	seedInvoice(practiceId, engagementId, { status: 'paid', reference: 'INV-0002' });
-
-	await signInPortalClient(page, request, seeded.clientEmail);
-	await expect(page).toHaveURL(new RegExp(`/portal/engagements/${engagementId}$`));
 
 	const routes: Route[] = [
 		{

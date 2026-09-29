@@ -4,6 +4,10 @@ import { render } from 'vitest-browser-svelte';
 import { toApiResponder, toPageState } from '../../../../../routeFixture.js';
 import { contract, fixture } from './page.fixture.js';
 import Page from './+page.svelte';
+// The loading Skeleton reserves space with `var(--text-body-size)`, which
+// only exists once the tokens are loaded -- the real app loads them in the
+// root layout. See invoices.svelte.spec.ts's identical import.
+import '#lib/styles/app.css';
 
 /*
  * NH-G5 (#212): the portal Contract view reads `clientRegister.ts` for its
@@ -118,5 +122,49 @@ describe('Client-portal signed Contract download (#302)', () => {
 		await page.getByRole('button', { name: 'Download signed Contract (PDF)' }).click();
 
 		await expect.element(page.getByRole('alert')).toHaveTextContent('signed PDF not found');
+	});
+});
+
+// #1574: the page sits in DocumentPage's frame in every state, and each
+// state has exactly one <h1> naming the screen -- not only the loaded one.
+describe('Client-portal Contract names the screen in every state (#1574)', () => {
+	it('while it loads', async () => {
+		await setup(() => new Promise<Response>(() => {}));
+
+		await expect.element(page.getByRole('status', { name: 'Loading Contract' })).toBeVisible();
+		await expect.element(page.getByRole('heading', { level: 1, name: 'Contract' })).toBeVisible();
+		expect(page.getByRole('heading', { level: 1 }).elements()).toHaveLength(1);
+	});
+
+	it('when it cannot be read', async () => {
+		await setup(() => new Response('the Contract could not be read', { status: 500 }));
+
+		await expect.element(page.getByText('the Contract could not be read')).toBeVisible();
+		await expect.element(page.getByRole('heading', { level: 1, name: 'Contract' })).toBeVisible();
+		expect(page.getByRole('heading', { level: 1 }).elements()).toHaveLength(1);
+	});
+
+	it('falls back to a generic sentence when the failure is not an Error', async () => {
+		await setup(() => Promise.reject('nope'));
+
+		await expect.element(page.getByText('Failed to load Contract')).toBeVisible();
+	});
+
+	it('when none has been sent yet', async () => {
+		await setup(() => new Response('none', { status: 404 }));
+
+		await expect.element(page.getByText('No Contract has been sent for your care yet.')).toBeVisible();
+		await expect.element(page.getByRole('heading', { level: 1, name: 'Contract' })).toBeVisible();
+		expect(page.getByRole('heading', { level: 1 }).elements()).toHaveLength(1);
+	});
+
+	it('once loaded, with the back link above the h1', async () => {
+		await setup();
+
+		await expect.element(page.getByRole('heading', { level: 1, name: 'Contract' })).toBeVisible();
+		expect(page.getByRole('heading', { level: 1 }).elements()).toHaveLength(1);
+		await expect
+			.element(page.getByRole('link', { name: 'Back' }))
+			.toHaveAttribute('href', '/portal/engagements/engagement-1');
 	});
 });

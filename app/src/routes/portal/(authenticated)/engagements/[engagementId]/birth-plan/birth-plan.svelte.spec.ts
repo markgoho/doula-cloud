@@ -4,6 +4,10 @@ import { render } from 'vitest-browser-svelte';
 import { toApiResponder, toPageState } from '../../../../../routeFixture.js';
 import { fixture } from './page.fixture.js';
 import Page from './+page.svelte';
+// The loading Skeleton reserves space with `var(--text-body-size)`, which
+// only exists once the tokens are loaded -- the real app loads them in the
+// root layout. See invoices.svelte.spec.ts's identical import.
+import '#lib/styles/app.css';
 
 /*
  * #311: a Birth Plan is offered only where the Engagement's kind calls
@@ -111,5 +115,49 @@ describe('Client-portal Birth Plan PDF download (#306)', () => {
 		await page.getByRole('button', { name: 'Download Birth Plan (PDF)' }).click();
 
 		await expect.element(page.getByRole('alert')).toHaveTextContent('no birth plan found for this engagement');
+	});
+});
+
+// #1574: the page sits in DocumentPage's frame in every state, and each
+// state has exactly one <h1> naming the screen -- not only the loaded one.
+describe('Client-portal Birth Plan names the screen in every state (#1574)', () => {
+	it('while it loads', async () => {
+		await setup({ respond: () => new Promise<Response>(() => {}) });
+
+		await expect.element(page.getByRole('status', { name: 'Loading Birth Plan' })).toBeVisible();
+		await expect.element(page.getByRole('heading', { level: 1, name: 'Birth Plan' })).toBeVisible();
+		expect(page.getByRole('heading', { level: 1 }).elements()).toHaveLength(1);
+	});
+
+	it('when it cannot be read', async () => {
+		await setup({ respond: () => new Response('the plan could not be read', { status: 500 }) });
+
+		await expect.element(page.getByText('the plan could not be read')).toBeVisible();
+		await expect.element(page.getByRole('heading', { level: 1, name: 'Birth Plan' })).toBeVisible();
+		expect(page.getByRole('heading', { level: 1 }).elements()).toHaveLength(1);
+	});
+
+	it('falls back to a generic sentence when the failure is not an Error', async () => {
+		await setup({ respond: () => Promise.reject('nope') });
+
+		await expect.element(page.getByText('Failed to load Birth Plan')).toBeVisible();
+	});
+
+	it('when none has been created yet', async () => {
+		await setup({ respond: () => new Response('none', { status: 404 }) });
+
+		await expect.element(page.getByText('No Birth Plan has been created for your care yet.')).toBeVisible();
+		await expect.element(page.getByRole('heading', { level: 1, name: 'Birth Plan' })).toBeVisible();
+		expect(page.getByRole('heading', { level: 1 }).elements()).toHaveLength(1);
+	});
+
+	it('once loaded, with the back link above the h1', async () => {
+		await setup();
+
+		await expect.element(page.getByRole('button', { name: 'Print' })).toBeVisible();
+		expect(page.getByRole('heading', { level: 1 }).elements()).toHaveLength(1);
+		await expect
+			.element(page.getByRole('link', { name: 'Back' }))
+			.toHaveAttribute('href', '/portal/engagements/engagement-1');
 	});
 });

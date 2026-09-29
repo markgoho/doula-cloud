@@ -4,6 +4,10 @@ import { render } from 'vitest-browser-svelte';
 import { toApiResponder, toPageState } from '../../../../../../routeFixture.js';
 import { asByHand, asPaidAndReturned, byHandInvoice, fixture, invoice, payment, paymentRefusal } from './page.fixture.js';
 import Page from './+page.svelte';
+// The loading Skeleton reserves space with `var(--text-body-size)`, which
+// only exists once the tokens are loaded -- the real app loads them in the
+// root layout. See invoices.svelte.spec.ts's identical import.
+import '#lib/styles/app.css';
 
 /*
  * One Client-portal Invoice (#1564, #1020). Each branch is the fixture's
@@ -119,6 +123,32 @@ describe('Client-portal Invoice (#1564)', () => {
 		await setupInvoice(() => Promise.reject('nope'));
 
 		await expect.element(page.getByText('Failed to load Invoice')).toBeVisible();
+	});
+
+	// #1574: the Invoice has no empty state -- a missing Invoice is a load
+	// error -- so its states are loading, error and loaded. Until it arrives
+	// the one <h1> is the Invoices heading, the same name the tab carries.
+	it('names the screen with one h1 while it loads', async () => {
+		await setupInvoice(() => new Promise<Response>(() => {}));
+
+		await expect.element(page.getByRole('status', { name: 'Loading Invoice' })).toBeVisible();
+		await expect.element(page.getByRole('heading', { level: 1, name: 'Invoices' })).toBeVisible();
+		expect(page.getByRole('heading', { level: 1 }).elements()).toHaveLength(1);
+	});
+
+	it('names the screen with one h1 when the Invoice cannot be read', async () => {
+		await setupInvoice(() => Promise.reject('nope'));
+
+		await expect.element(page.getByText('Failed to load Invoice')).toBeVisible();
+		await expect.element(page.getByRole('heading', { level: 1, name: 'Invoices' })).toBeVisible();
+		expect(page.getByRole('heading', { level: 1 }).elements()).toHaveLength(1);
+	});
+
+	it('names the screen with one h1 once loaded', async () => {
+		await setupInvoice();
+
+		await expect.element(page.getByRole('heading', { level: 1, name: `Invoice ${invoice.reference}` })).toBeVisible();
+		expect(page.getByRole('heading', { level: 1 }).elements()).toHaveLength(1);
 	});
 });
 

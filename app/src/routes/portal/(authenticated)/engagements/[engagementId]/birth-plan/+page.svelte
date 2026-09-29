@@ -7,12 +7,9 @@
 	import { triggerBlobDownload } from '#lib/blobDownload.js';
 	import { formatInstant } from '#lib/dates.js';
 	import BirthPlanView from '#lib/components/molecules/BirthPlanView.svelte';
-	import Heading from '#lib/components/atoms/Heading.svelte';
-	import Text from '#lib/components/atoms/Text.svelte';
 	import Button from '#lib/components/atoms/Button.svelte';
 	import Notice from '#lib/components/atoms/Notice.svelte';
-	import BackLink from '#lib/components/molecules/BackLink.svelte';
-	import PageTitle from '#lib/components/PageTitle.svelte';
+	import DocumentPage from '#lib/components/templates/DocumentPage.svelte';
 	import ErrorPage from '#lib/components/templates/ErrorPage.svelte';
 
 	let instance = $state<Instance | null | undefined>();
@@ -85,45 +82,43 @@
 		wayOutLabel="Go to your care"
 	/>
 {:else}
-	<div class="no-print">
-		<BackLink
-			href={resolve('/portal/(authenticated)/engagements/[engagementId]', { engagementId: page.params.engagementId! })}
-		/>
-	</div>
-
-	<PageTitle page="Birth Plan" serviceName={page.data.practiceName} />
-
-	{#if error}
-		<div class="no-print"><Notice variant="error" message={error} /></div>
-	{:else if instance === undefined}
-		<div class="no-print"><Text text="Loading..." /></div>
-	{:else if instance === null}
-		<div class="no-print"><Text text="No Birth Plan has been created for your care yet." /></div>
-	{:else}
-		<Heading level={1} text="Birth Plan" />
-		<div class="no-print">
-			<Button label="Print" onClick={() => print()} />
-			<Button
-				label="Download Birth Plan (PDF)"
-				icon="file-text"
-				variant="secondary"
-				onClick={handleDownloadPdf}
-				loading={isDownloadingPdf}
-			/>
-			{#if downloadError}
-				<p role="alert">{downloadError}</p>
+	<DocumentPage
+		title="Birth Plan"
+		serviceName={page.data.practiceName}
+		backHref={resolve('/portal/(authenticated)/engagements/[engagementId]', { engagementId: page.params.engagementId! })}
+		loadError={error || undefined}
+		loading={instance === undefined ? 'Loading Birth Plan' : undefined}
+		empty={instance === null ? 'No Birth Plan has been created for your care yet.' : undefined}
+	>
+		{#snippet content()}
+			<!-- `content` renders only once the Template's own states are past,
+			     so `instance` is a loaded Birth Plan here. -->
+			{#if instance}
+				<div class="no-print">
+					<Button label="Print" onClick={() => print()} />
+					<Button
+						label="Download Birth Plan (PDF)"
+						icon="file-text"
+						variant="secondary"
+						onClick={handleDownloadPdf}
+						loading={isDownloadingPdf}
+					/>
+					{#if downloadError}
+						<p role="alert">{downloadError}</p>
+					{/if}
+					{#if instance.clientAcknowledgedAt}
+						<Notice variant="status" message="You confirmed you've read this on {formatInstant(instance.clientAcknowledgedAt)}." />
+					{:else}
+						<Button label="I've read this" onClick={handleAcknowledge} loading={isAcknowledging} />
+					{/if}
+					{#if acknowledgeError}
+						<Notice variant="error" message={acknowledgeError} />
+					{/if}
+				</div>
+				<BirthPlanView fields={instance.fields} answers={instance.answers} />
 			{/if}
-			{#if instance.clientAcknowledgedAt}
-				<Notice variant="status" message="You confirmed you've read this on {formatInstant(instance.clientAcknowledgedAt)}." />
-			{:else}
-				<Button label="I've read this" onClick={handleAcknowledge} loading={isAcknowledging} />
-			{/if}
-			{#if acknowledgeError}
-				<Notice variant="error" message={acknowledgeError} />
-			{/if}
-		</div>
-		<BirthPlanView fields={instance.fields} answers={instance.answers} />
-	{/if}
+		{/snippet}
+	</DocumentPage>
 {/if}
 
 <style>
