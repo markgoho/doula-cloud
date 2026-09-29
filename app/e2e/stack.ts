@@ -397,6 +397,41 @@ export function seedEngagement(clientId: string, practiceId: string, status = 'i
 }
 
 /**
+ * Seeds an Invoice on an Engagement directly (#1564): the e2e stack has no
+ * Stripe, so nothing can raise one through the API. It hangs off the
+ * Engagement's existing Contract, or a signed one it inserts when there is
+ * none, so a spec that already created a Contract through the API and one
+ * that did not both work. A `stripeInvoiceId` puts the Invoice on the Stripe
+ * rail; leaving it out is a by-hand Invoice (a NULL is the flag). The
+ * reference is her Invoice number. Returns the Invoice's id.
+ */
+export function seedInvoice(
+	practiceId: string,
+	engagementId: string,
+	{
+		status = 'open',
+		amountCents = 335_000,
+		reference,
+		stripeInvoiceId
+	}: { status?: string; amountCents?: number; reference: string; stripeInvoiceId?: string }
+): string {
+	const invoiceId = randomUUID();
+	const engagement = sqlLiteral(engagementId);
+	execSQL(
+		`WITH existing AS (SELECT id FROM contracts WHERE engagement_id = ${engagement} LIMIT 1),
+		 made AS (
+		   INSERT INTO contracts (engagement_id, status, prose, amount_cents)
+		   SELECT ${engagement}, 'signed', 'Test prose', ${amountCents} WHERE NOT EXISTS (SELECT 1 FROM existing) RETURNING id
+		 )
+		 INSERT INTO invoices (id, practice_id, contract_id, stripe_invoice_id, status, amount_cents, currency, reference, due_at)
+		 SELECT ${sqlLiteral(invoiceId)}::uuid, ${sqlLiteral(practiceId)}, (SELECT id FROM existing UNION ALL SELECT id FROM made LIMIT 1),
+		   ${stripeInvoiceId === undefined ? 'NULL' : sqlLiteral(stripeInvoiceId)}, ${sqlLiteral(status)}::invoice_status,
+		   ${amountCents}, 'usd', ${sqlLiteral(reference)}, now() + interval '30 days'`
+	);
+	return invoiceId;
+}
+
+/**
  * Clears every rate-limit counter the BFF is holding (#1138), so a
  * repeated batch can keep spending budgets a person never would.
  *

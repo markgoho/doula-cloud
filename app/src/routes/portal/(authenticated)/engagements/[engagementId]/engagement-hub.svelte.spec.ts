@@ -118,6 +118,22 @@ describe('Client portal Engagement hub', () => {
 		await expect.element(page.getByText('Created')).not.toBeInTheDocument();
 	});
 
+	// #983: the hub's one line for money -- the figure, and a way through.
+	it('carries one money line: the total to pay and a link to the Invoices route (#983)', async () => {
+		await setupHub();
+
+		await expect.element(page.getByText('Total to pay $3,350.00')).toBeVisible();
+		await expect
+			.element(page.getByRole('link', { name: 'Invoices' }))
+			.toHaveAttribute('href', '/portal/engagements/engagement-1/invoices');
+	});
+
+	it('writes the figure even when nothing is owed, so the line consults no history (#982)', async () => {
+		await setupHub({ record: { ...detail, totalToPayCents: 0 } });
+
+		await expect.element(page.getByText('Total to pay $0.00')).toBeVisible();
+	});
+
 	// #310's own "a change of Engagement is announced" AC: SvelteKit's
 	// built-in navigation announcer reads `document.title` aloud after a
 	// client-side route change, so the title has to carry the same

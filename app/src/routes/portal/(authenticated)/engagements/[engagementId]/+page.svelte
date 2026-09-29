@@ -28,7 +28,13 @@
 		portalVisitColumns,
 		type PortalVisit
 	} from '#lib/portalVisits.js';
-	import { engagementLabel, engagementStatusLabel } from '#lib/clientRegister.js';
+	import {
+		INVOICES_HEADING,
+		TOTAL_TO_PAY_LABEL,
+		engagementLabel,
+		engagementStatusLabel
+	} from '#lib/clientRegister.js';
+	import { formatMoney } from '#lib/money.js';
 	import Link from '#lib/components/atoms/Link.svelte';
 	import DescriptionList from '#lib/components/molecules/DescriptionList.svelte';
 	import DataTable from '#lib/components/organisms/DataTable.svelte';
@@ -42,6 +48,9 @@
 		status: string;
 		dueDate?: string;
 		offersBirthPlan: boolean;
+		/** What she still owes on this care -- the one figure the hub carries
+		 * (#983); the Invoices route holds the rest. */
+		totalToPayCents: number;
 	};
 
 	let detail = $state<Detail | undefined>();
@@ -118,6 +127,23 @@
 
 {#snippet summary()}
 	<DescriptionList items={summaryItems(detail!)} />
+	<!--
+		#983: the hub keeps one line for money -- the amount and a way
+		through. The figure is always written, $0.00 included: it is true
+		on every Engagement however it ended (#982), so the line consults
+		nothing about her history. Currency is USD: an Engagement's
+		Invoices are all in the Practice's one currency and the hub holds
+		no Invoice to read it from.
+	-->
+	<p class="money">
+		<Link
+			href={resolve('/portal/(authenticated)/engagements/[engagementId]/invoices', {
+				engagementId: page.params.engagementId!
+			})}
+			label={INVOICES_HEADING}
+		/>
+		<span>{TOTAL_TO_PAY_LABEL} {formatMoney(detail!.totalToPayCents, 'usd')}</span>
+	</p>
 {/snippet}
 
 {#snippet actions()}
@@ -259,3 +285,16 @@
 	loading={detail || error ? undefined : 'Loading your care'}
 	loadError={error || undefined}
 />
+
+<style>
+	@layer components {
+		/* Wraps: the link and the figure share a line when there is room
+		   and stack when there is not. */
+		.money {
+			display: flex;
+			flex-wrap: wrap;
+			gap: var(--space-1) var(--space-4);
+			margin: var(--space-4) 0 var(--space-6);
+		}
+	}
+</style>
