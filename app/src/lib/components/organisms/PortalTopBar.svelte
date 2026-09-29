@@ -107,32 +107,42 @@
 			font-size: var(--text-body-size);
 		}
 
+		/* A minimum, never a fixed height (#1573). The Practice's name is
+		   her own data of any length, and wrapping it is the correct outcome
+		   (CONTEXT.md's Content floor entry), so a long one makes the bar
+		   taller rather than drawing out of it over the page. The groups
+		   inside stretch to the bar rather than taking a percentage of it,
+		   which against a height the bar no longer fixes would resolve to
+		   auto -- and a single-line flex container still stretches them to
+		   its minimum, so a one-line name keeps the 3.75rem band. */
 		.bar {
 			display: flex;
 			align-items: center;
 			justify-content: space-between;
-			block-size: var(--top-bar-height);
+			min-block-size: var(--top-bar-height);
 			padding-inline: var(--page-gutter);
 		}
 
 		.brand-and-nav {
 			display: flex;
+			align-self: stretch;
 			align-items: center;
 			gap: var(--space-10);
-			block-size: 100%;
 		}
 
 		nav {
 			display: flex;
-			block-size: 100%;
 		}
 
 		/* The same destinations, in the bar where there is room beside
 		   the Practice's name and on their own row where there is not. One is
 		   always display:none, so neither the tab order nor a screen reader
-		   ever meets the pair. */
+		   ever meets the pair. Stretched, so the current item's accent rule
+		   sits on the bar's own bottom edge however many lines the name
+		   beside it took. */
 		.wide {
 			display: none;
+			align-self: stretch;
 		}
 
 		/* Wraps rather than scrolls (#1568): each item keeps its own label
@@ -144,7 +154,6 @@
 		   own edge -- still the item's own marker, beside aria-current. */
 		.narrow {
 			flex-wrap: wrap;
-			block-size: auto;
 		}
 
 		.narrow :global(a) {
@@ -183,7 +192,11 @@
 		   It is the bar's own inline size that is measured, never a device
 		   width (ADR-0024). Below the floor the
 		   same items are in the narrow row, which is why both trees are
-		   in the document and one is display:none. */
+		   in the document and one is display:none.
+
+		   Unchanged by #1573, which let the bar grow to a wrapped name: the
+		   floor is an inline measurement, and a taller bar needs no more
+		   inline room than a fixed one did. */
 		@container portal-top-bar (min-width: 44.5rem) {
 			.wide {
 				display: flex;

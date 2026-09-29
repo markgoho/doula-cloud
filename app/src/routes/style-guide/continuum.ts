@@ -48,9 +48,86 @@ export function isCanonicalEnvironment(): boolean {
 	return environment.VITE_FLOOR_CANONICAL === 'true';
 }
 
-export interface Break {
-	width: number;
+/*
+ * What a sweep found at the first width that broke. `inline` is the
+ * original criterion: the frame's content needs more inline room than the
+ * frame has. `block` is the one #1573 added: some box under the frame holds
+ * content taller than itself and lets it draw outside, over whatever is
+ * beside it -- `width` is where that was seen, `needed` and `given` are that
+ * box's own heights, and `element` names it.
+ */
+export type Break =
+	| { axis: 'inline'; width: number; needed: number }
+	| ({ axis: 'block'; width: number } & BlockSpill);
+
+export interface BlockSpill {
+	element: string;
+	given: number;
 	needed: number;
+}
+
+/*
+ * The block criterion (#1573): the first box under `frame` whose content is
+ * taller than the box and is drawn outside it rather than clipped or
+ * scrolled.
+ *
+ * Why the inline criterion alone could not see this. Both top bars held a
+ * fixed `block-size`, and a long Practice name wraps rather than widening
+ * anything, so at every width the frame's `scrollWidth` was exactly the
+ * frame's own -- while the wrapped name ran out of the bar and over the
+ * page under it. A frame-level `scrollHeight` read would not do either: it
+ * sees a spill only if the spill reaches past the frame's own bottom edge,
+ * and a bar with a page below it spills into that page, not past the frame.
+ * So this asks every box.
+ *
+ * A deliberate scroll region is not a failure, and is not read as one: a
+ * box whose `overflow-y` is anything but `visible` clips or scrolls what it
+ * holds, which is that box doing its job. An inline box has no client
+ * height at all and is skipped. `scrollHeight` is read first and the
+ * computed style only for a box that already exceeds its height, because
+ * this runs at every width of every sweep.
+ *
+ * The box it names is the innermost one. A spill that runs past a bar's
+ * bottom edge runs past every ancestor that ends there too, and a report
+ * naming the Svelte wrapper `render` made would point at nothing in the
+ * component's source.
+ */
+export function findBlockSpill(frame: HTMLElement): BlockSpill | undefined {
+	let found: { box: HTMLElement; spill: BlockSpill } | undefined;
+	for (const element of frame.querySelectorAll<HTMLElement>('*')) {
+		if (found && !found.box.contains(element)) break;
+		const given = element.clientHeight;
+		if (given === 0) continue;
+		const needed = element.scrollHeight;
+		if (needed - given <= TOLERANCE) continue;
+		if (getComputedStyle(element).overflowY !== 'visible') continue;
+		if (!hasChildBoxPast(element, given)) continue;
+		found = { box: element, spill: { element: describeElement(element), given, needed } };
+	}
+	return found?.spill;
+}
+
+/*
+ * Whether one of the element's own child BOXES ends below its padding box.
+ * `scrollHeight` alone also counts a line of text whose glyphs are taller
+ * than its `line-height` -- a page heading set tight overhangs its box by
+ * two or three pixels at every width, and that is the typeface, not a box
+ * too small for what it holds. An inline child is text for the same reason.
+ */
+function hasChildBoxPast(element: HTMLElement, given: number): boolean {
+	const bottom = element.getBoundingClientRect().top + element.clientTop + given;
+	return [...element.children].some((child) => {
+		const display = getComputedStyle(child).display;
+		if (display === 'inline' || display === 'contents') return false;
+		return child.getBoundingClientRect().bottom - bottom > TOLERANCE;
+	});
+}
+
+// A tag and its own classes, without Svelte's scoping hash -- enough to find
+// the box in the component's source from a CI log.
+function describeElement(element: Element): string {
+	const classes = [...element.classList].filter((name) => !name.startsWith('svelte-'));
+	return [element.tagName.toLowerCase(), ...classes].join('.');
 }
 
 /*
@@ -112,8 +189,10 @@ export function sweep(frame: HTMLElement, availableSpace: number): Break | undef
 			frame.style.inlineSize = `${width}px`;
 			void frame.offsetWidth;
 			if (frame.scrollWidth - width > TOLERANCE) {
-				return { width, needed: frame.scrollWidth };
+				return { axis: 'inline', width, needed: frame.scrollWidth };
 			}
+			const spill = findBlockSpill(frame);
+			if (spill) return { axis: 'block', width, ...spill };
 		}
 		return undefined;
 	} finally {
@@ -386,6 +465,26 @@ export function ledgerMarkup(isOpen = false): string {
 }
 
 /*
+ * A top bar in miniature (#1573): a 3.75rem box holding content far taller
+ * than itself, with a page under it -- so a spill lands on that page, inside
+ * the frame, rather than past the frame's own bottom edge, which is the case
+ * a frame-level height read could not see. `overflow` is what the box does
+ * with the excess, and `height` whether the 3.75rem is fixed or a minimum.
+ * It lives here beside `ledgerMarkup` because both checks measure it: the
+ * sweep and the floor check's `measureOverflow` (`floor.ts`).
+ */
+export function barMarkup(
+	overflow = 'visible',
+	height: 'block-size' | 'min-block-size' = 'block-size'
+): string {
+	return (
+		`<div class="bar" style="${height}: 3.75rem; overflow-y: ${overflow}">` +
+		'<p style="margin: 0; block-size: 10rem">A name that wrapped</p></div>' +
+		'<p style="block-size: 20rem">The page under the bar</p>'
+	);
+}
+
+/*
  * The Staff roster's work-state history in miniature (#1126): a closed
  * disclosure holding nothing but the word `Loading...`, which asks for its
  * own content the first time it is opened and lays out something far wider
@@ -563,6 +662,15 @@ export async function mountInFrame(
 }
 
 export function overflowReport(name: string, found: Break): string {
+	if (found.axis === 'block') {
+		return [
+			`${name}: its ${found.element} needed ${found.needed}px of height and holds`,
+			`${found.given}px at ${found.width}px, so what is inside it draws outside it.`,
+			'A box with a fixed block-size cannot hold content that wraps, and the content of a',
+			"Practice's own data wraps (CONTEXT.md's Content floor entry). Make the height a",
+			'min-block-size so the box grows, or scroll the region deliberately with overflow.'
+		].join(' ');
+	}
 	return [
 		`${name} needed ${found.needed}px inside the ${found.width}px it was given.`,
 		'A component that needs more room than it is given has one configuration at every',

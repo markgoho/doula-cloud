@@ -42,7 +42,8 @@
 	<h1>Staff top bar</h1>
 
 	<p>
-		A 60px band that does not grow. Narrow the window past 60rem and the nav and the Practice
+		A 60px band at its smallest, which grows when a long Practice name wraps rather than letting the
+		name spill over the page. Narrow the bar past 49.25rem and the nav and the Practice
 		switcher move into a full-screen sheet behind a hamburger — a bottom tab bar was drawn and
 		rejected, because five slots cannot carry six sections without a <code>More</code>, and
 		<code>More</code> is not a noun this domain has.

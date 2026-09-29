@@ -2,6 +2,12 @@ import { page } from 'vitest/browser';
 import { describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import type { SignOutOutcome } from '#lib/signOut.js';
+import {
+	contentBottom,
+	openPanel,
+	withoutAnchorPositioning
+} from '#lib/components/molecules/MenuButton.testing.js';
+import { CONFORMANCE_COMMITMENT, findBlockSpill } from '../../../routes/style-guide/continuum.js';
 import PortalTopBar from './PortalTopBar.svelte';
 import '#lib/styles/tokens.css';
 
@@ -132,6 +138,75 @@ describe('PortalTopBar', () => {
 		expect(header.scrollWidth).toBeLessThanOrEqual(header.clientWidth);
 		for (const { label } of NAV_ITEMS) {
 			await expect.element(page.getByRole('link', { name: label, exact: true })).toBeVisible();
+		}
+	});
+});
+
+/*
+ * #1573: the bar held a fixed 3.75rem, so a long Practice name wrapped onto
+ * several lines and drew out of it over the page under it. The bar is a
+ * minimum now, and grows. 320px is the narrow tree at the conformance
+ * commitment; 740px puts the bar (the header is the container, and its
+ * gutters sit on the row inside it) just above its 44.5rem floor, where the
+ * wide tree leaves the name the least room it ever gets.
+ */
+describe('PortalTopBar, with a Practice name long enough to wrap (#1573)', () => {
+	const LONG_NAME = 'Highland Midwifery & Birth Support Collective of Western New York';
+	const JUST_ABOVE_THE_FLOOR = 740;
+
+	async function setupLong(width: number) {
+		const result = await setup({
+			practiceName: LONG_NAME,
+			switcherLabel: `${LONG_NAME}, started Mar 12, 2026`,
+			width
+		});
+		// Geometry, which the accessible tree does not carry: the banner is
+		// the box the name has to stay inside.
+		const header = page.getByRole('banner').element() as HTMLElement;
+		return { ...result, header };
+	}
+
+	it.each([CONFORMANCE_COMMITMENT, JUST_ABOVE_THE_FLOOR])(
+		'grows to hold the whole name at %ipx',
+		async (width) => {
+			const { header } = await setupLong(width);
+
+			const name = page.getByRole('link', { name: `${LONG_NAME}, started Mar 12, 2026` });
+			const nameBox = name.element().getBoundingClientRect();
+			const headerBox = header.getBoundingClientRect();
+			expect(nameBox.top).toBeGreaterThanOrEqual(headerBox.top);
+			expect(nameBox.bottom).toBeLessThanOrEqual(headerBox.bottom);
+			expect(findBlockSpill(header)).toBeUndefined();
+		}
+	);
+
+	it('keeps the current item’s accent rule on the bar’s own bottom edge', async () => {
+		const { header } = await setupLong(JUST_ABOVE_THE_FLOOR);
+
+		const current = page.getByRole('link', { name: 'Your care', exact: true });
+		await expect.element(current).toBeVisible();
+		expect(current.element().getBoundingClientRect().bottom).toBeCloseTo(contentBottom(header), 0);
+	});
+
+	it('opens the account menu below the bar', async () => {
+		const { header } = await setupLong(JUST_ABOVE_THE_FLOOR);
+
+		await page.getByRole('button', { name: 'Your account, Tasha Bell' }).click();
+
+		await expect.element(page.getByRole('button', { name: 'Sign out' })).toBeVisible();
+		expect(openPanel().getBoundingClientRect().top).toBeGreaterThanOrEqual(contentBottom(header));
+	});
+
+	it('opens the account menu below the bar where there is no anchor positioning', async () => {
+		const { header } = await setupLong(JUST_ABOVE_THE_FLOOR);
+		const withoutAnchors = withoutAnchorPositioning();
+		try {
+			await page.getByRole('button', { name: 'Your account, Tasha Bell' }).click();
+
+			await expect.element(page.getByRole('button', { name: 'Sign out' })).toBeVisible();
+			expect(openPanel().getBoundingClientRect().top).toBeCloseTo(contentBottom(header), 0);
+		} finally {
+			withoutAnchors.remove();
 		}
 	});
 });

@@ -67,6 +67,7 @@ import '#lib/styles/app.css';
 import { atomPages, moleculePages, organismPages, templatePages, toSlug } from './components.js';
 import {
 	afterQueuedToggles,
+	barMarkup,
 	CONFORMANCE_COMMITMENT,
 	frameHolding,
 	frameHoldingLoadingLedger,
@@ -280,7 +281,7 @@ function atWidth(frame: HTMLElement, px: number) {
 }
 
 function isOverflowAcceptable(measurement: OverflowMeasurement): boolean {
-	return measurement.needed - measurement.given <= TOLERANCE;
+	return measurement.needed - measurement.given <= TOLERANCE && measurement.spill === undefined;
 }
 
 /*
@@ -763,6 +764,47 @@ describe("the floor check's overflow measurement, over a disclosure that loads o
 			expect(measurement.needed).toBeGreaterThanOrEqual(OVERFLOWING);
 			expect(isOverflowAcceptable(measurement)).toBe(false);
 			expect(loads()).toBe(1);
+		} finally {
+			remove();
+		}
+	});
+});
+
+/*
+ * The block half of the overflow criterion (#1573). A top bar's wide tree
+ * is only ever mounted here, above the continuum sweep's ceiling, so this
+ * is the measurement that has to see a Practice name drawing out of a
+ * fixed-height bar there -- a spill that leaves `scrollWidth` exactly the
+ * width the frame was given.
+ */
+describe("the floor check's overflow measurement, over a box too short for its content (#1573)", () => {
+	const AT_WIDTH = CONFORMANCE_COMMITMENT;
+
+	it('finds the spill at a width where nothing overflows inline', () => {
+		const { frame, remove } = frameHolding(barMarkup());
+		try {
+			atWidth(frame, AT_WIDTH);
+
+			const measurement = measureOverflow(frame, AT_WIDTH);
+
+			expect(measurement.needed).toBe(AT_WIDTH);
+			expect(measurement.spill?.element).toBe('div.bar');
+			expect(isOverflowAcceptable(measurement)).toBe(false);
+			expect(overflowFloorReport('The bar', measurement)).toContain('div.bar needed');
+		} finally {
+			remove();
+		}
+	});
+
+	it('accepts the same content in a box that grows to it', () => {
+		const { frame, remove } = frameHolding(barMarkup('visible', 'min-block-size'));
+		try {
+			atWidth(frame, AT_WIDTH);
+
+			const measurement = measureOverflow(frame, AT_WIDTH);
+
+			expect(measurement.spill).toBeUndefined();
+			expect(isOverflowAcceptable(measurement)).toBe(true);
 		} finally {
 			remove();
 		}

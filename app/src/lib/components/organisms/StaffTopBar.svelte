@@ -18,9 +18,10 @@
 	import type { SignOutOutcome } from '#lib/signOut.js';
 
 	/*
-	 * The Staff shell's bar (#431, #452). A 60px band that does not grow:
-	 * the lockup, a six-item flat nav, then the Practice switcher and the
-	 * avatar at the far end.
+	 * The Staff shell's bar (#431, #452). A 60px band at its smallest: the
+	 * lockup, a six-item flat nav, then the Practice switcher and the avatar
+	 * at the far end. It grows when the Practice's name wraps (#1573) rather
+	 * than letting the name draw out of it over the page.
 	 *
 	 * Narrow, the nav and the switcher move into a full-screen sheet behind
 	 * a hamburger. A bottom tab bar was drawn and rejected -- five slots
@@ -127,11 +128,15 @@
 		   query that failed to find this declaration would silently
 		   resolve against the page and be a viewport query again, and no
 		   test could tell. */
+		/* A minimum, never a fixed height (#1573): the Practice's name in
+		   the switcher is her own data of any length, and wrapping it is the
+		   correct outcome (CONTEXT.md's Content floor entry), so a long one
+		   makes the bar taller. */
 		header {
 			container: staff-top-bar / inline-size;
 			display: flex;
 			align-items: center;
-			block-size: var(--top-bar-height);
+			min-block-size: var(--top-bar-height);
 			padding-inline: var(--page-gutter);
 			border-block-end: var(--border-thin) solid var(--color-outline-variant);
 			background-color: var(--color-surface-bright);
@@ -155,11 +160,14 @@
 			font-size: var(--text-body-size);
 		}
 
+		/* Stretched to the bar rather than a percentage of it, which against
+		   a height the bar no longer fixes would resolve to auto. A
+		   single-line flex container still stretches them to its minimum. */
 		.wide,
 		.narrow {
+			align-self: stretch;
 			align-items: center;
 			inline-size: 100%;
-			block-size: 100%;
 		}
 
 		.wide {
@@ -201,7 +209,11 @@
 		   (ADR-0024). Below the floor the same items are in the sheet,
 		   which is why both trees are in the document and one is
 		   display:none -- a hidden subtree is out of the accessibility
-		   tree too, so nothing is announced twice. */
+		   tree too, so nothing is announced twice.
+
+		   Unchanged by #1573, which let the bar grow to a wrapped Practice
+		   name: the floor is an inline measurement, and a taller bar needs
+		   no more inline room than a fixed one did. */
 		@container staff-top-bar (min-width: 49.25rem) {
 			.wide {
 				display: flex;
@@ -214,22 +226,27 @@
 
 		.brand-and-nav {
 			display: flex;
+			align-self: stretch;
 			align-items: center;
 			gap: var(--space-10);
-			block-size: 100%;
 		}
 
 		/* No gap: each item carries its own padding, and only one of them is
 		   ever current, so two accent rules never meet. The canvas's 2px was
 		   drawing the space between two boxes, which CSS gets from the
-		   padding instead. */
+		   padding instead. Stretched, so the current item's accent rule sits
+		   on the bar's own bottom edge whatever height the bar took. */
 		nav {
 			display: flex;
-			block-size: 100%;
+			align-self: stretch;
 		}
 
+		/* Stretched, so the switcher's and the avatar's menus -- which stretch
+		   to the row holding them -- open below the bar's bottom edge rather
+		   than below a centered group (#1573). */
 		.account {
 			display: flex;
+			align-self: stretch;
 			align-items: center;
 			gap: var(--space-4);
 		}
@@ -264,7 +281,6 @@
 			display: flex;
 			flex-direction: column;
 			gap: 0;
-			block-size: auto;
 			padding-block: var(--space-2);
 		}
 

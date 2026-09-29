@@ -58,14 +58,38 @@
 	// check the gate can never satisfy for a prop that has a default.
 	const panelClasses = $derived(`panel align-${align}`);
 
+	/*
+	 * The box the panel opens under (#1573). It is the wrapper rather than
+	 * the button because a top bar stretches the wrapper to its own height,
+	 * so the wrapper's bottom edge is the bar's -- and a bar grows when a
+	 * long Practice name wraps. Named per instance, for the same reason as
+	 * the panel id above.
+	 */
+	const anchorName = `--menu-${instanceId}`;
+	let menu = $state<HTMLDivElement>();
+
 	let isOpen = $state(false);
+
+	/*
+	 * Where the fallback below pins the panel, read as it opens: the bar's
+	 * height is no longer a constant a stylesheet can name. Set whether or
+	 * not the engine has anchor positioning -- where it has, the rule that
+	 * reads this is overridden and the number is simply unused.
+	 */
+	let fallbackTop = $state<string>();
+
+	function handleBeforeToggle(event: ToggleEvent) {
+		if (menu && event.newState === 'open') {
+			fallbackTop = `${menu.getBoundingClientRect().bottom}px`;
+		}
+	}
 
 	function handleToggle(event: ToggleEvent) {
 		isOpen = event.newState === 'open';
 	}
 </script>
 
-<div class="menu">
+<div class="menu" bind:this={menu} style:anchor-name={anchorName}>
 	<Button
 		{label}
 		{icon}
@@ -76,15 +100,28 @@
 		popoverTarget={panelId}
 		expanded={isOpen}
 	/>
-	<div id={panelId} popover="auto" class={panelClasses} ontoggle={handleToggle}>
+	<div
+		id={panelId}
+		popover="auto"
+		class={panelClasses}
+		style:position-anchor={anchorName}
+		style:--menu-fallback-top={fallbackTop}
+		onbeforetoggle={handleBeforeToggle}
+		ontoggle={handleToggle}
+	>
 		{@render children()}
 	</div>
 </div>
 
 <style>
 	@layer components {
+		/* Stretched to whatever row holds it, with the button centered
+		   inside, so in a top bar this box's bottom edge is the bar's own
+		   and the panel opens below the bar however tall it grew (#1573). */
 		.menu {
 			display: inline-flex;
+			align-self: stretch;
+			align-items: center;
 		}
 
 		.panel {
@@ -103,16 +140,20 @@
 			/* Without anchor positioning a popover is centered in the viewport,
 			   which for a top-bar menu reads as a modal that never opened.
 			   Pin it under the bar at the inline end instead: not tethered to
-			   the trigger, but in the place a person is already looking. */
+			   the trigger, but in the place a person is already looking.
+			   Under the bar's real bottom edge, read as the panel opens, since
+			   a wrapped Practice name makes the bar taller than
+			   `--top-bar-height` (#1573). */
 			position: fixed;
 			inset: auto;
-			inset-block-start: var(--top-bar-height);
+			inset-block-start: var(--menu-fallback-top, var(--top-bar-height));
 			inset-inline-end: var(--page-gutter);
 		}
 
 		@supports (position-area: block-end span-inline-start) {
 			.panel {
-				/* Implicit anchor: the button that invoked it. */
+				/* Anchored to the wrapper named above rather than to the button
+				   that invoked it: the wrapper spans the bar's height. */
 				position: absolute;
 				inset: auto;
 				margin-block-start: var(--space-1);
