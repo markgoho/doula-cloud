@@ -178,8 +178,8 @@
 		   Measured again 2026-09-29 (#1568), because 36.5rem was what FOUR
 		   items cost and the layout had passed five since Notifications
 		   joined (#716): the demo now carries all five. Five need 702px on
-		   macOS/Chromium and 712px, 44.5rem, in CI's Linux/Chromium --
-		   again the canonical number, with no margin.
+		   macOS/Chromium; in CI's Linux/Chromium 702px read 9px short and
+		   712px, 44.5rem, holds -- the canonical number, with no margin.
 		   It is the bar's own inline size that is measured, never a device
 		   width (ADR-0024). Below the floor the
 		   same items are in the narrow row, which is why both trees are
