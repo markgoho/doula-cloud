@@ -243,3 +243,54 @@ func TestDetailHandler_NotLinkedToClient(t *testing.T) {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusForbidden)
 	}
 }
+
+// TestDetailHandler_TotalToPayCents proves the hub's one line (#1011): the
+// sum of the Engagement's open Invoices, and nothing else -- not a paid,
+// void or draft one.
+func TestDetailHandler_TotalToPayCents(t *testing.T) {
+	db := testdb.New(t)
+	const identityUID = "portal-detail-owes"
+	engagementID, _ := seedClientAtPracticeWithDueDate(t, db, identityUID, "Riverside Doulas", "2027-06-15")
+
+	var practiceID, contractID string
+	if err := db.Admin.QueryRowContext(t.Context(), `SELECT practice_id FROM engagements WHERE id = $1`, engagementID).Scan(&practiceID); err != nil {
+		t.Fatalf("read practice: %v", err)
+	}
+	if err := db.Admin.QueryRowContext(t.Context(),
+		`INSERT INTO contracts (engagement_id, status, prose, amount_cents) VALUES ($1, 'signed', 'Test prose', 15000) RETURNING id`,
+		engagementID).Scan(&contractID); err != nil {
+		t.Fatalf("seed contract: %v", err)
+	}
+	for i, inv := range []struct {
+		status string
+		amount int64
+	}{{"open", 4000}, {"open", 5000}, {"paid", 7000}, {"void", 8000}, {"draft", 9000}} {
+		ref := "in_detail_" + string(rune('a'+i))
+		if _, err := db.Admin.ExecContext(t.Context(),
+			`INSERT INTO invoices (practice_id, contract_id, stripe_invoice_id, status, amount_cents, currency, reference, due_at)
+			 VALUES ($1, $2, $3, $4::invoice_status, $5, 'usd', $3, now())`,
+			practiceID, contractID, ref, inv.status, inv.amount); err != nil {
+			t.Fatalf("seed invoice: %v", err)
+		}
+	}
+
+	srv, session := newServer(t, db, identityUID)
+	defer srv.Close()
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, srv.URL+"/api/portal/engagements/"+engagementID, nil)
+	if err != nil {
+		t.Fatalf("build request: %v", err)
+	}
+	authntest.AddSessionCookie(req, session)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer resp.Body.Close()
+	var out portal.Detail
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if out.TotalToPayCents != 9000 {
+		t.Fatalf("totalToPayCents = %d, want 9000", out.TotalToPayCents)
+	}
+}

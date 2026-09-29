@@ -1,14 +1,18 @@
 package payments
 
 import (
+	"database/sql"
+
+	"doula-cloud/api/internal/clientauth"
 	"doula-cloud/api/internal/idempotency"
 	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/tasknudge"
 )
 
 // Mount registers Stripe Connect account creation and status, per-Engagement
-// Invoice creation and history, and the Practice-wide Invoice list (#265).
-func Mount(g *staffauth.GatedRouter, ir *idempotency.Router, client Client, enq tasknudge.Enqueuer) {
+// Invoice creation and history, the Practice-wide Invoice list (#265), and
+// the Client portal's own Invoice reads (#1011).
+func Mount(g *staffauth.GatedRouter, ir *idempotency.Router, client Client, enq tasknudge.Enqueuer, db *sql.DB) {
 	// Owner-only declared here rather than checked in PostConnectHandler
 	// (#1028, following #970, #990 and #1016): connecting the rail the
 	// Practice is paid on is the Owner's act outright, not a reach
@@ -147,4 +151,12 @@ func Mount(g *staffauth.GatedRouter, ir *idempotency.Router, client Client, enq 
 	ir.ExemptGated("POST /api/practices/{practiceId}/invoices/{invoiceId}/write-off",
 		"refuses unless the Invoice is open and by-hand, so a retry 409s instead of writing off twice",
 		false, staffauth.OwnerAndAdmin, PostWriteOffInvoiceHandler())
+
+	// The Client's own money read (#1011): her Invoices on the one
+	// Engagement her session resolved, behind clientauth.Middleware and
+	// never a Staff role. Reads only, so no idempotency.Router applies.
+	g.OpenGet("/api/portal/engagements/{engagementId}/invoices", clientauth.PortalPopulation,
+		clientauth.Middleware(db)(ClientListInvoicesHandler()))
+	g.OpenGet("/api/portal/engagements/{engagementId}/invoices/{invoiceId}", clientauth.PortalPopulation,
+		clientauth.Middleware(db)(ClientGetInvoiceHandler()))
 }

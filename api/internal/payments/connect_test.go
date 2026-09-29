@@ -94,7 +94,7 @@ func newConnectServer(t *testing.T, db *testdb.DB, uid string, client payments.C
 	mux := http.NewServeMux()
 	g := staffauth.NewGatedRouter(mux, db.App)
 	ir := idempotency.NewRouter(g, db.App)
-	payments.Mount(g, ir, client, tasknudge.NoOpEnqueuer{})
+	payments.Mount(g, ir, client, tasknudge.NoOpEnqueuer{}, db.App)
 	return httptest.NewServer(mux), authntest.SeedSession(t, db.App, uid)
 }
 
