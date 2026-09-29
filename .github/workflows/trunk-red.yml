@@ -21,6 +21,10 @@ on:
 permissions:
   contents: read
   issues: write
+  # The canceled-run step comments on the pull request named in the
+  # commit subject, and `gh issue comment` on a pull request is refused
+  # without this (#1565).
+  pull-requests: write
 
 concurrency:
   group: trunk-red
