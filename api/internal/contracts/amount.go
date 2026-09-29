@@ -23,13 +23,6 @@ type ContractAmountResponse struct {
 	AmountCents int64 `json:"amountCents"`
 }
 
-// contractAmountDiff is PutContractAmountHandler's activity diff shape,
-// mirroring practicerate.rateDiff.
-type contractAmountDiff struct {
-	AmountCentsBefore int64 `json:"amountCentsBefore"`
-	AmountCentsAfter  int64 `json:"amountCentsAfter"`
-}
-
 // PutContractAmountHandler lets a Practice Owner or Admin override the
 // amount a Contract carries -- #967's AC: "An Owner or an Admin may
 // override a Contract's amount for a Client whose situation is unusual.
@@ -109,7 +102,7 @@ func PutContractAmountHandler() http.Handler {
 				return
 			}
 
-			diffJSON, err := json.Marshal(contractAmountDiff{AmountCentsBefore: before, AmountCentsAfter: req.AmountCents})
+			diffJSON, err := json.Marshal(activity.AmountDiff{AmountCentsBefore: before, AmountCentsAfter: req.AmountCents})
 			if err != nil {
 				// coverage:ignore reason: marshal of a fixed, always-serializable struct never fails
 				apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)

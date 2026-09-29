@@ -165,10 +165,7 @@ func TestPutContractAmountHandler_Success(t *testing.T) {
 	}
 
 	diff := assertActivityActor(t, db, engagementID, activity.ActionContractAmountOverridden, staffID)
-	var parsedDiff struct {
-		AmountCentsBefore int64 `json:"amountCentsBefore"`
-		AmountCentsAfter  int64 `json:"amountCentsAfter"`
-	}
+	var parsedDiff activity.AmountDiff
 	if err := json.Unmarshal(diff, &parsedDiff); err != nil {
 		t.Fatalf("unmarshal diff: %v", err)
 	}

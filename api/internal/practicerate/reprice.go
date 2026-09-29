@@ -9,19 +9,6 @@ import (
 	"doula-cloud/api/internal/activity"
 )
 
-// contractAmountRepriceDiff is a reprice pass's per-Contract activity
-// diff, the same shape contracts.contractAmountDiff uses for an
-// Owner/Admin override -- kept as its own unexported type here rather
-// than importing contracts (practicerate has no other dependency on that
-// package, and #966/#967 already established the convention of one
-// package reaching another's table directly via SQL rather than a
-// function call -- see contracts/price.go's own join against
-// practice_rates).
-type contractAmountRepriceDiff struct {
-	AmountCentsBefore int64 `json:"amountCentsBefore"`
-	AmountCentsAfter  int64 `json:"amountCentsAfter"`
-}
-
 // repriceUnsignedContracts is PutRateHandler's side effect (#968): every
 // Contract at practiceID for kind that has not yet been signed --
 // status 'draft' or 'sent', never 'signed' or 'voided' (a voided
@@ -89,7 +76,7 @@ func repriceUnsignedContracts(ctx context.Context, tx *sql.Tx, practiceID, kind 
 	// query the same tx, and a *sql.Rows left open blocks a second
 	// query on the same connection.
 	for _, r := range affected {
-		diffJSON, err := json.Marshal(contractAmountRepriceDiff{AmountCentsBefore: r.before, AmountCentsAfter: newAmountCents})
+		diffJSON, err := json.Marshal(activity.AmountDiff{AmountCentsBefore: r.before, AmountCentsAfter: newAmountCents})
 		if err != nil {
 			// coverage:ignore reason: marshal of a fixed, always-serializable struct never fails
 			return fmt.Errorf("practicerate: marshal reprice diff: %w", err)

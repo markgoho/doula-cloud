@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"doula-cloud/api/internal/activity"
 	"doula-cloud/api/internal/testdb"
 )
 
@@ -69,10 +70,7 @@ func repriceActivityDiff(t *testing.T, db *testdb.DB, engagementID string) (foun
 	if actorKind != "system" {
 		t.Fatalf("actor_kind = %q, want %q (ADR-0022: nobody performed a reprice)", actorKind, "system")
 	}
-	var parsed struct {
-		AmountCentsBefore int64 `json:"amountCentsBefore"`
-		AmountCentsAfter  int64 `json:"amountCentsAfter"`
-	}
+	var parsed activity.AmountDiff
 	if err := json.Unmarshal(diff, &parsed); err != nil {
 		t.Fatalf("unmarshal reprice diff: %v", err)
 	}

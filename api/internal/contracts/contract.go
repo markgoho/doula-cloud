@@ -227,8 +227,8 @@ func PostContractHandler() http.Handler {
 		// ActionContractPriced: amountCentsBefore is always 0 here --
 		// nothing existed to have carried a price before this Contract
 		// did -- mirroring the shape PutContractAmountHandler's own
-		// contractAmountDiff already uses for an override.
-		pricedDiff, err := json.Marshal(contractAmountDiff{AmountCentsBefore: 0, AmountCentsAfter: amountCents})
+		// activity.AmountDiff already uses for an override.
+		pricedDiff, err := json.Marshal(activity.AmountDiff{AmountCentsBefore: 0, AmountCentsAfter: amountCents})
 		if err != nil {
 			// coverage:ignore reason: marshal of a fixed, always-serializable struct never fails
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
