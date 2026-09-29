@@ -3,6 +3,7 @@ package staffauth
 import (
 	"database/sql"
 	"net/http"
+	"slices"
 
 	"doula-cloud/api/internal/apierr"
 )
@@ -11,6 +12,36 @@ import (
 // mirrored here so role-assignment requests can be validated before they
 // ever reach Postgres.
 var validRoles = map[string]bool{roleOwner: true, roleAdmin: true, "doula": true}
+
+// The 403 sentences a role refusal writes, named once so the in-handler
+// RequireOwner/RequireOwnerOrAdmin and the mount-level requireAnyRole can
+// never drift onto two wordings for the same refusal (#1031).
+const (
+	msgOwnerOnlyRefused    = "only a Practice Owner can do that"
+	msgOwnerOrAdminRefused = "only a Practice Owner or Admin can do that"
+	// msgRoleRefusedFallback is what refusalMessage says for a role list
+	// it has no seat-naming sentence for. It names no seat, so it stays
+	// true for any list, including one a future route declares -- a
+	// wrong seat in the sentence would be worse than none.
+	msgRoleRefusedFallback = "not permitted to do this"
+)
+
+// refusalMessage is the 403 sentence for a caller who holds none of roles.
+// OwnerOnly and OwnerAndAdmin -- the only two declarations the mount-gated
+// routes use -- get the sentence naming the seat, matching what
+// RequireOwner and RequireOwnerOrAdmin write; anything else gets
+// msgRoleRefusedFallback. Order in roles does not matter.
+func refusalMessage(roles []string) string {
+	hasOwner, hasAdmin := slices.Contains(roles, roleOwner), slices.Contains(roles, roleAdmin)
+	switch {
+	case len(roles) == 1 && hasOwner:
+		return msgOwnerOnlyRefused
+	case len(roles) == 2 && hasOwner && hasAdmin:
+		return msgOwnerOrAdminRefused
+	default:
+		return msgRoleRefusedFallback
+	}
+}
 
 // RequireOwner resolves the caller's Reader and request-scoped tx from
 // context (both set by staffauth.Middleware) and confirms the caller
@@ -45,7 +76,7 @@ func RequireOwner(w http.ResponseWriter, r *http.Request) (tx *sql.Tx, practiceI
 		return nil, "", false
 	}
 	if !reader.Has(roleOwner) {
-		apierr.WriteError(w, "only a Practice Owner can do that", http.StatusForbidden)
+		apierr.WriteError(w, msgOwnerOnlyRefused, http.StatusForbidden)
 		return nil, "", false
 	}
 	return tx, practiceID, true
@@ -115,7 +146,7 @@ func RequireOwnerOrAdmin(w http.ResponseWriter, r *http.Request) (tx *sql.Tx, pr
 		return nil, "", false
 	}
 	if !reader.IsOwnerOrAdmin() {
-		apierr.WriteError(w, "only a Practice Owner or Admin can do that", http.StatusForbidden)
+		apierr.WriteError(w, msgOwnerOrAdminRefused, http.StatusForbidden)
 		return nil, "", false
 	}
 	return tx, practiceID, true
