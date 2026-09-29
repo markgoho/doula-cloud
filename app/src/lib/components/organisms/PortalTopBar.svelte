@@ -177,14 +177,14 @@
 
 		   Measured again 2026-09-29 (#1568), because 36.5rem was what FOUR
 		   items cost and the layout had passed five since Notifications
-		   joined (#716): the demo now carries all five, and five need
-		   702px, 43.875rem, on macOS/Chromium -- PENDING CI's Linux/Chromium
-		   measurement, which replaces this sentence before merge.
+		   joined (#716): the demo now carries all five. Five need 702px on
+		   macOS/Chromium and 712px, 44.5rem, in CI's Linux/Chromium --
+		   again the canonical number, with no margin.
 		   It is the bar's own inline size that is measured, never a device
 		   width (ADR-0024). Below the floor the
 		   same items are in the narrow row, which is why both trees are
 		   in the document and one is display:none. */
-		@container portal-top-bar (min-width: 43.875rem) {
+		@container portal-top-bar (min-width: 44.5rem) {
 			.wide {
 				display: flex;
 			}
