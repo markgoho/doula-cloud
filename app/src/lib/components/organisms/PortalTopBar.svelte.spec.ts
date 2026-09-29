@@ -9,17 +9,19 @@ const NAV_ITEMS = [
 	{ label: 'Your care', href: '/care', current: true },
 	{ label: 'Messages', href: '/messages', current: false },
 	{ label: 'Birth plan', href: '/birth-plan', current: false },
-	{ label: 'Contract', href: '/contract', current: false }
+	{ label: 'Contract', href: '/contract', current: false },
+	{ label: 'Notifications', href: '/notifications', current: false }
 ];
 
 async function setup({
 	practiceName = 'Riverside Doula Collective',
-	switcherLabel = 'Riverside Doula Collective, started Mar 12, 2026'
+	switcherLabel = 'Riverside Doula Collective, started Mar 12, 2026',
+	width = 1440
 } = {}) {
 	// Pinned rather than left to the runner's default: the nav renders twice
 	// with one copy display:none, so which one is visible is a fact about
 	// the viewport and should be stated by the test.
-	await page.viewport(1440, 900);
+	await page.viewport(width, 900);
 	const signOut = vi.fn<() => Promise<SignOutOutcome>>().mockResolvedValue({ ok: true });
 	await render(PortalTopBar, {
 		practiceName,
@@ -44,7 +46,7 @@ describe('PortalTopBar', () => {
 		await expect.element(page.getByText('Doula Cloud')).not.toBeInTheDocument();
 	});
 
-	it.each(['Your care', 'Messages', 'Birth plan', 'Contract'])('offers %s', async (label) => {
+	it.each(['Your care', 'Messages', 'Birth plan', 'Contract', 'Notifications'])('offers %s', async (label) => {
 		await setup();
 
 		await expect.element(page.getByRole('link', { name: label }).first()).toBeVisible();
@@ -105,7 +107,7 @@ describe('PortalTopBar', () => {
 	});
 
 	/*
-	 * The same four destinations render twice, one set always display:none.
+	 * The same destinations render twice, one set always display:none.
 	 * A hidden subtree is out of the accessibility tree too, so neither the
 	 * tab order nor a screen reader ever meets the pair -- but only one of
 	 * the two navigations is ever visible at a width.
@@ -116,5 +118,20 @@ describe('PortalTopBar', () => {
 		const navigations = page.getByRole('navigation').all();
 		const visible = navigations.filter((nav) => nav.element().checkVisibility());
 		expect(visible).toHaveLength(1);
+	});
+
+	/*
+	 * #1568: five items on one line ended near 396px, so every signed-in
+	 * portal screen scrolled sideways at 320px. The narrow row wraps
+	 * instead, and every item stays visible -- no menu, nothing hidden.
+	 */
+	it('wraps its narrow row rather than overflowing at 320px', async () => {
+		await setup({ width: 320 });
+
+		const header = page.getByRole('banner').element();
+		expect(header.scrollWidth).toBeLessThanOrEqual(header.clientWidth);
+		for (const { label } of NAV_ITEMS) {
+			await expect.element(page.getByRole('link', { name: label, exact: true })).toBeVisible();
+		}
 	});
 });

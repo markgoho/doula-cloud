@@ -18,9 +18,12 @@
 	 * move between her Engagements -- a real address, not a dropdown that
 	 * reimplements navigation.
 	 *
-	 * Narrow, the four nav items become a full-width second row rather than
-	 * a hamburger: four items need no container, so the portal does not
-	 * inherit the Staff sheet.
+	 * Narrow, the nav items become a full-width second row rather than a
+	 * hamburger: a handful of items need no container, so the portal does
+	 * not inherit the Staff sheet. That row wraps (#1568) rather than
+	 * holding one line, because the count is not fixed -- Birth plan is
+	 * conditional, and a fifth item, Notifications, already pushed a
+	 * one-line row past a 320px screen.
 	 */
 	interface Properties {
 		practiceName: string;
@@ -41,7 +44,7 @@
 		screen (#619's sign-in address), the same slot the Staff bar already
 		fills. It belongs here rather than in `navItems`: the nav names the
 		care she is receiving, an account setting is not one of those, and
-		the measured floor below is what four destinations cost. Absent
+		the measured floor below is what five destinations cost. Absent
 		means the menu shows Sign out alone, which is what the bar did
 		before there was such a screen.
 		*/
@@ -124,7 +127,7 @@
 			block-size: 100%;
 		}
 
-		/* The same four destinations, in the bar where there is room beside
+		/* The same destinations, in the bar where there is room beside
 		   the Practice's name and on their own row where there is not. One is
 		   always display:none, so neither the tab order nor a screen reader
 		   ever meets the pair. */
@@ -132,13 +135,22 @@
 			display: none;
 		}
 
+		/* Wraps rather than scrolls (#1568): each item keeps its own label
+		   on one line, so an item is what moves to the next line, never a
+		   word. The row's height comes from its items, and each item keeps
+		   the row's full height as its own target size, so a wrapped line
+		   is as easy to hit as the first. On a wrapped row the current
+		   item's accent rule sits under that item rather than on the bar's
+		   own edge -- still the item's own marker, beside aria-current. */
 		.narrow {
-			block-size: var(--nav-row-height);
+			flex-wrap: wrap;
+			block-size: auto;
 		}
 
 		.narrow :global(a) {
-			flex: 1;
+			flex: 1 1 auto;
 			justify-content: center;
+			min-block-size: var(--nav-row-height);
 			padding-inline: var(--space-2);
 		}
 
@@ -161,11 +173,18 @@
 		   overflowing. 36.5rem is that fixed point, measured in CI's own
 		   Linux/Chromium, the one named environment a floor's minimality
 		   is judged against (CONTEXT.md's Content floor entry), with no
-		   margin added beyond it. It is the bar's own inline size that is
-		   measured, never a device width (ADR-0024). Below the floor the
+		   margin added beyond it.
+
+		   Measured again 2026-09-29 (#1568), because 36.5rem was what FOUR
+		   items cost and the layout had passed five since Notifications
+		   joined (#716): the demo now carries all five. Five need 702px on
+		   macOS/Chromium; in CI's Linux/Chromium 702px read 9px short and
+		   712px, 44.5rem, holds -- the canonical number, with no margin.
+		   It is the bar's own inline size that is measured, never a device
+		   width (ADR-0024). Below the floor the
 		   same items are in the narrow row, which is why both trees are
 		   in the document and one is display:none. */
-		@container portal-top-bar (min-width: 36.5rem) {
+		@container portal-top-bar (min-width: 44.5rem) {
 			.wide {
 				display: flex;
 			}
