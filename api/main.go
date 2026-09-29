@@ -281,6 +281,7 @@ func main() {
 		StripeWebhookSecret: os.Getenv("STRIPE_WEBHOOK_SECRET"),
 
 		PaymentsClient:               paymentsClient,
+		StripePublishableKey:         os.Getenv("STRIPE_PUBLISHABLE_KEY"),
 		PaymentsWebhookSecret:        os.Getenv("STRIPE_CONNECT_WEBHOOK_SECRET"),
 		PaymentsAccountWebhookSecret: os.Getenv("STRIPE_ACCOUNT_WEBHOOK_SECRET"),
 

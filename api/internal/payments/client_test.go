@@ -19,6 +19,9 @@ import (
 // These tests drive the Client-portal Invoice reads (#1011) through
 // payments.Mount, the same call main.go makes, with a Client session.
 
+// testPublishableKey is the public key the mounted routes hand a browser.
+const testPublishableKey = "pk_test_fixture"
+
 // methodCheck is the manual Payment method these tests seed and read back.
 const methodCheck = "check"
 
@@ -37,10 +40,24 @@ func seedClientMoney(t *testing.T, db *testdb.DB, uid, name, email string) clien
 
 func newClientMoneyServer(t *testing.T, db *testdb.DB) *httptest.Server {
 	t.Helper()
+	return newClientMoneyServerWith(t, db, payments.NewFakeClient())
+}
+
+// newClientMoneyServerWith mounts the same surface over a Stripe fake the
+// test keeps hold of, to assert what did and did not reach Stripe.
+func newClientMoneyServerWith(t *testing.T, db *testdb.DB, client payments.Client) *httptest.Server {
+	t.Helper()
+	return newClientMoneyServerKeyed(t, db, client, testPublishableKey)
+}
+
+// newClientMoneyServerKeyed is newClientMoneyServerWith over an explicit
+// publishable key, for the deployment that has none.
+func newClientMoneyServerKeyed(t *testing.T, db *testdb.DB, client payments.Client, publishableKey string) *httptest.Server {
+	t.Helper()
 	mux := http.NewServeMux()
 	g := staffauth.NewGatedRouter(mux, db.App)
 	ir := idempotency.NewRouter(g, db.App)
-	payments.Mount(g, ir, payments.NewFakeClient(), tasknudge.NoOpEnqueuer{}, db.App)
+	payments.Mount(g, ir, client, tasknudge.NoOpEnqueuer{}, db.App, publishableKey)
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
 	return srv

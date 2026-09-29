@@ -70,7 +70,12 @@ type Deps struct {
 	StripeClient        billing.StripeClient
 	StripeWebhookSecret string
 
-	PaymentsClient               payments.Client
+	PaymentsClient payments.Client
+	// StripePublishableKey is the platform's public Stripe key, handed to the
+	// portal so the Payment Element can be constructed (#1020). Public by
+	// design; empty locally until set, which the Element cannot mount
+	// without.
+	StripePublishableKey         string
 	PaymentsWebhookSecret        string
 	PaymentsAccountWebhookSecret string
 
