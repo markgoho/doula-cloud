@@ -127,8 +127,9 @@
 		   because `body` is a containment context too (#540): an unnamed
 		   query that failed to find this declaration would silently
 		   resolve against the page and be a viewport query again, and no
-		   test could tell. */
-		/* A minimum, never a fixed height (#1573): the Practice's name in
+		   test could tell.
+
+		   A minimum, never a fixed height (#1573): the Practice's name in
 		   the switcher is her own data of any length, and wrapping it is the
 		   correct outcome (CONTEXT.md's Content floor entry), so a long one
 		   makes the bar taller. */

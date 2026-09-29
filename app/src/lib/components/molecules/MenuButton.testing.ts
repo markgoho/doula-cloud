@@ -1,3 +1,5 @@
+import type { Locator } from 'vitest/browser';
+
 /**
 Where `MenuButton`'s panel lands, for a spec that asserts it opens below a
 top bar however tall the bar grew (#1573).
@@ -7,12 +9,13 @@ outside a spec imports it, so the production bundle never meets it.
 */
 
 /**
-The one open panel. Read by `:popover-open` rather than by an accessible
-query because what a caller asserts is its geometry, which the accessible
-tree does not carry, and a panel has no role of its own to be asked by.
+The panel holding `inside`, found from something in it an accessible query
+reached. The panel itself is a plain popover container with no role of its
+own, so there is nothing to ask for it by name; what a caller asserts is its
+geometry, which the accessible tree does not carry.
 */
-export function openPanel(): HTMLElement {
-	return document.querySelector<HTMLElement>(':popover-open')!;
+export function panelHolding(inside: Locator): HTMLElement {
+	return inside.element().closest<HTMLElement>('[popover]')!;
 }
 
 /**
@@ -20,8 +23,9 @@ Makes the panel take `MenuButton`'s fallback path in an engine that has
 anchor positioning, so the path an engine without it takes can be measured
 here at all. `@supports` cannot be switched off, so this undoes what that
 block sets -- the anchored position and the margin -- and restores the
-fallback's own pin, which that block's `inset: auto` overrode. Remove it
-when done.
+fallback's own pin, which that block's `inset: auto` overrode. It restates
+that pin, so a change to the fallback rule in `MenuButton.svelte` has to be
+made here too. Remove it when done.
 */
 export function withoutAnchorPositioning(): HTMLStyleElement {
 	const style = document.createElement('style');

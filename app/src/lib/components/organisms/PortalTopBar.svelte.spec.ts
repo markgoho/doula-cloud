@@ -4,7 +4,7 @@ import { render } from 'vitest-browser-svelte';
 import type { SignOutOutcome } from '#lib/signOut.js';
 import {
 	contentBottom,
-	openPanel,
+	panelHolding,
 	withoutAnchorPositioning
 } from '#lib/components/molecules/MenuButton.testing.js';
 import { CONFORMANCE_COMMITMENT, findBlockSpill } from '../../../routes/style-guide/continuum.js';
@@ -193,8 +193,11 @@ describe('PortalTopBar, with a Practice name long enough to wrap (#1573)', () =>
 
 		await page.getByRole('button', { name: 'Your account, Tasha Bell' }).click();
 
-		await expect.element(page.getByRole('button', { name: 'Sign out' })).toBeVisible();
-		expect(openPanel().getBoundingClientRect().top).toBeGreaterThanOrEqual(contentBottom(header));
+		const signOutButton = page.getByRole('button', { name: 'Sign out' });
+		await expect.element(signOutButton).toBeVisible();
+		expect(panelHolding(signOutButton).getBoundingClientRect().top).toBeGreaterThanOrEqual(
+			contentBottom(header)
+		);
 	});
 
 	it('opens the account menu below the bar where there is no anchor positioning', async () => {
@@ -203,8 +206,11 @@ describe('PortalTopBar, with a Practice name long enough to wrap (#1573)', () =>
 		try {
 			await page.getByRole('button', { name: 'Your account, Tasha Bell' }).click();
 
-			await expect.element(page.getByRole('button', { name: 'Sign out' })).toBeVisible();
-			expect(openPanel().getBoundingClientRect().top).toBeCloseTo(contentBottom(header), 0);
+			const signOutButton = page.getByRole('button', { name: 'Sign out' });
+			await expect.element(signOutButton).toBeVisible();
+			expect(panelHolding(signOutButton).getBoundingClientRect().top).toBeCloseTo(
+				contentBottom(header), 0
+			);
 		} finally {
 			withoutAnchors.remove();
 		}

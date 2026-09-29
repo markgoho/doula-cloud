@@ -5,7 +5,7 @@ import type { PracticeOption } from '#lib/components/molecules/PracticeSwitcher.
 import type { SignOutOutcome } from '#lib/signOut.js';
 import {
 	contentBottom,
-	openPanel,
+	panelHolding,
 	withoutAnchorPositioning
 } from '#lib/components/molecules/MenuButton.testing.js';
 import { CONFORMANCE_COMMITMENT, findBlockSpill } from '../../../routes/style-guide/continuum.js';
@@ -281,8 +281,11 @@ describe('StaffTopBar, with a Practice name long enough to wrap (#1573)', () => 
 
 		await page.getByRole('button', { name: trigger }).click();
 
-		await expect.element(page.getByRole(role, { name: inside })).toBeVisible();
-		expect(openPanel().getBoundingClientRect().top).toBeGreaterThanOrEqual(contentBottom(header));
+		const content = page.getByRole(role, { name: inside });
+		await expect.element(content).toBeVisible();
+		expect(panelHolding(content).getBoundingClientRect().top).toBeGreaterThanOrEqual(
+			contentBottom(header)
+		);
 	});
 
 	it.each(PANELS)(
@@ -293,8 +296,11 @@ describe('StaffTopBar, with a Practice name long enough to wrap (#1573)', () => 
 			try {
 				await page.getByRole('button', { name: trigger }).click();
 
-				await expect.element(page.getByRole(role, { name: inside })).toBeVisible();
-				expect(openPanel().getBoundingClientRect().top).toBeCloseTo(contentBottom(header), 0);
+				const content = page.getByRole(role, { name: inside });
+				await expect.element(content).toBeVisible();
+				expect(panelHolding(content).getBoundingClientRect().top).toBeCloseTo(
+					contentBottom(header), 0
+				);
 			} finally {
 				withoutAnchors.remove();
 			}
