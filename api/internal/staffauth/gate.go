@@ -215,7 +215,9 @@ func (g *GatedRouter) Routes() []GatedRoute {
 // reads the Reader Middleware already resolved rather than querying
 // practice_memberships again. Shared by Get and GatedWrite, so its
 // refusal names no verb -- "read" would be wrong the half of the time
-// this guards a write.
+// this guards a write -- but it does name the seat, through
+// refusalMessage, the same sentence RequireOwner and RequireOwnerOrAdmin
+// write (#1031).
 func requireAnyRole(roles []string, h http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if len(roles) == 1 && roles[0] == "*" {
@@ -232,6 +234,6 @@ func requireAnyRole(roles []string, h http.Handler) http.Handler {
 			h.ServeHTTP(w, r)
 			return
 		}
-		apierr.WriteError(w, "not permitted to do this", http.StatusForbidden)
+		apierr.WriteError(w, refusalMessage(roles), http.StatusForbidden)
 	})
 }

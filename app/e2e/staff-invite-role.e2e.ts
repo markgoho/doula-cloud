@@ -70,10 +70,11 @@ test('A Doula invited via the Staff invite route is refused an Owner-only action
 	// worked for Jamie refuses Robin outright -- the role rule PR-B2 names
 	// in employed-doula.md's permission boundary. Since #1028 that refusal
 	// comes from the route's own staffauth.OwnerOnly declaration at the
-	// mount rather than a RequireOwner call inside InviteHandler, so the
-	// body is requireAnyRole's wording, not RequireOwner's.
+	// mount rather than a RequireOwner call inside InviteHandler, and
+	// requireAnyRole names the seat from that declaration (#1031), so the
+	// sentence is the one RequireOwner wrote before the move.
 	await page.goto(`/practices/${practiceId}/invite`);
 	await page.getByLabel('Their email').fill(uniqueEmail('someone-else'));
 	await page.getByRole('button', { name: 'Send invite' }).click();
-	await expect(page.getByText('not permitted to do this')).toBeVisible();
+	await expect(page.getByText('only a Practice Owner can do that')).toBeVisible();
 });
