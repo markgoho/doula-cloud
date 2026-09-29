@@ -15,6 +15,7 @@ import (
 	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/clientauth"
 	"doula-cloud/api/internal/engagement"
+	"doula-cloud/api/internal/payments"
 )
 
 // Detail is an Engagement's basic detail as seen from the Client portal:
@@ -53,6 +54,12 @@ type Detail struct {
 	// it is derived on every read a corrected outcome restores the Birth
 	// Plan with no separate act.
 	OffersBirthPlan bool `json:"offersBirthPlan"`
+	// TotalToPayCents is the sum of this Engagement's open Invoices, for
+	// the hub's one line (#983, ruled on #1011). Computed by
+	// payments.ClientTotalToPay, the same helper the Invoice list's own
+	// total comes from, so the hub and the money screen cannot disagree.
+	// Additive: 0 when nothing is owed.
+	TotalToPayCents int64 `json:"totalToPayCents"`
 }
 
 // DetailHandler views the caller's Engagement's basic detail. Must be
@@ -102,6 +109,13 @@ func DetailHandler() http.Handler {
 		d.OffersBirthPlan = engagement.OffersBirthPlan(engagement.BirthPlanInputs{
 			Kind: engagement.Kind(kind), BirthOutcome: birthOutcome,
 		})
+
+		d.TotalToPayCents, _, err = payments.ClientTotalToPay(r.Context(), tx, engagementID)
+		if err != nil {
+			// coverage:ignore reason: DB query failure, not exercised by unit tests
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+			return
+		}
 
 		apierr.WriteJSON(w, http.StatusOK, d)
 	})
