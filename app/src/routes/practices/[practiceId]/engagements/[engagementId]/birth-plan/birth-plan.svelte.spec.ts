@@ -6,6 +6,7 @@ import { render } from 'vitest-browser-svelte';
 import '#lib/styles/app.css';
 import { toApiResponder, toPageState } from '../../../../../routeFixture.js';
 import { fixture } from './page.fixture.js';
+import { expectOneFramedHeading } from '#lib/components/templates/pageFrame.testing.js';
 import Page from './+page.svelte';
 import type { PageProps as PageProperties } from './$types';
 
@@ -84,32 +85,26 @@ describe('The Practice-side Birth Plan (#280)', () => {
 
 /*
  * #1576: this page sat straight in the layout's <main>, with no gutter,
- * until it moved onto DocumentPage. The frame and the print wrapper are
- * both layout facts with no role, so these reach for `closest` -- a fact
- * about the tree's structure (svelte-tests.md's named exceptions).
+ * until it moved onto DocumentPage. The print wrapper below is, like the
+ * frame, a layout fact with no role, so it too reaches for `closest` --
+ * svelte-tests.md's third named exception, a fact about the document's
+ * structure rather than about any one accessible element.
  */
-const heading = "Anne-Marie Ochieng-Whitfield's Birth Plan";
-
-async function expectOneFramedHeading() {
-	const title = page.getByRole('heading', { level: 1, name: heading });
-	await expect.element(title).toBeVisible();
-	expect(page.getByRole('heading', { level: 1 }).elements()).toHaveLength(1);
-	expect(title.element().closest('center-l')).not.toBeNull();
-}
+const clientBirthPlan = "Anne-Marie Ochieng-Whitfield's Birth Plan";
 
 describe('the page frame (#1576)', () => {
 	it('frames the loaded plan', async () => {
 		await setup();
 
 		await expect.element(page.getByRole('button', { name: 'Print' })).toBeVisible();
-		await expectOneFramedHeading();
+		await expectOneFramedHeading(clientBirthPlan);
 	});
 
 	it('frames the loading state', async () => {
 		await setup(() => new Promise<Response>(() => {}));
 
 		await expect.element(page.getByRole('status', { name: 'Loading Birth Plan' })).toBeVisible();
-		await expectOneFramedHeading();
+		await expectOneFramedHeading(clientBirthPlan);
 	});
 
 	it('frames the not-yet-created state', async () => {
@@ -118,14 +113,14 @@ describe('the page frame (#1576)', () => {
 		await expect
 			.element(page.getByText('No Birth Plan has been created for this Engagement yet.'))
 			.toBeVisible();
-		await expectOneFramedHeading();
+		await expectOneFramedHeading(clientBirthPlan);
 	});
 
 	it('frames a failed load', async () => {
 		await setup(() => ({ status: 500, ok: false, text: () => Promise.resolve('plan read failed') }) as Response);
 
 		await expect.element(page.getByRole('alert')).toHaveTextContent('plan read failed');
-		await expectOneFramedHeading();
+		await expectOneFramedHeading(clientBirthPlan);
 	});
 
 	// DocumentPage's own `.no-print` is scoped to that component and never

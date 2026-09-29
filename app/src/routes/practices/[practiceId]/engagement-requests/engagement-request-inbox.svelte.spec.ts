@@ -9,6 +9,7 @@ import { registerLayoutPrimitives } from '#lib/primitives/index.js';
 // route's ListPage (#1576) also needs the primitives registered, not just
 // their CSS -- see staff-list.svelte.spec.ts for why.
 import '#lib/styles/app.css';
+import { expectOneFramedHeading } from '#lib/components/templates/pageFrame.testing.js';
 import Page from './+page.svelte';
 import { toPageState } from '../../../routeFixture.js';
 import { fixture, requests } from './page.fixture.js';
@@ -133,18 +134,10 @@ describe('the pending-Request inbox', () => {
 	});
 });
 
-/*
- * #1576: the inbox sat straight in the layout's <main>, with no gutter,
- * until it moved onto ListPage. The frame has to hold in every state, so
- * each is checked. See invoices.svelte.spec.ts for why this reaches for
- * `closest` -- the frame is a layout primitive with no role.
- */
-async function expectOneFramedHeading() {
-	const heading = testPage.getByRole('heading', { level: 1, name: 'Requests awaiting approval' });
-	await expect.element(heading).toBeVisible();
-	expect(testPage.getByRole('heading', { level: 1 }).elements()).toHaveLength(1);
-	expect(heading.element().closest('center-l')).not.toBeNull();
-}
+// #1576: the inbox sat straight in the layout's <main>, with no gutter,
+// until it moved onto ListPage. The frame has to hold in every state, so
+// each is checked.
+const title = 'Requests awaiting approval';
 
 describe('the page frame (#1576)', () => {
 	it('frames the loaded list', async () => {
@@ -152,7 +145,7 @@ describe('the page frame (#1576)', () => {
 		render(Page);
 
 		await expect.element(testPage.getByRole('link', { name: birthRequest.clientName })).toBeVisible();
-		await expectOneFramedHeading();
+		await expectOneFramedHeading(title);
 	});
 
 	it('frames the loading state', async () => {
@@ -160,7 +153,7 @@ describe('the page frame (#1576)', () => {
 		render(Page);
 
 		await expect.element(testPage.getByRole('status', { name: 'Loading pending requests' })).toBeVisible();
-		await expectOneFramedHeading();
+		await expectOneFramedHeading(title);
 	});
 
 	it('frames a failed load', async () => {
@@ -168,6 +161,6 @@ describe('the page frame (#1576)', () => {
 		render(Page);
 
 		await expect.element(testPage.getByRole('alert')).toHaveTextContent('forbidden');
-		await expectOneFramedHeading();
+		await expectOneFramedHeading(title);
 	});
 });

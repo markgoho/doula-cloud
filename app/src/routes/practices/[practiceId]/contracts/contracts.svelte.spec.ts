@@ -8,6 +8,7 @@ import { registerLayoutPrimitives } from '#lib/primitives/index.js';
 // route's ListPage (#1576) also needs the primitives registered, not just
 // their CSS -- see staff-list.svelte.spec.ts for why.
 import '#lib/styles/app.css';
+import { expectOneFramedHeading } from '#lib/components/templates/pageFrame.testing.js';
 import Page from './+page.svelte';
 import type { ContractsPageData } from './+page.js';
 import { toPageState } from '../../../routeFixture.js';
@@ -167,15 +168,12 @@ describe('the Practice-wide void requests waiting list (#971)', () => {
 	});
 });
 
-// #1576: the same frame check as the Invoice list's own, for the same
-// reason -- see invoices.svelte.spec.ts for why it reaches for `closest`.
+// #1576: this list sat straight in the layout's <main>, with no gutter,
+// until it moved onto ListPage.
 describe('the page frame (#1576)', () => {
 	it('renders its one heading inside the page frame', async () => {
 		await setup();
 
-		const heading = testPage.getByRole('heading', { level: 1, name: fixture.readyText });
-		await expect.element(heading).toBeVisible();
-		expect(testPage.getByRole('heading', { level: 1 }).elements()).toHaveLength(1);
-		expect(heading.element().closest('center-l')).not.toBeNull();
+		await expectOneFramedHeading(fixture.readyText);
 	});
 });
