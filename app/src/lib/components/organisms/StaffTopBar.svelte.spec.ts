@@ -131,6 +131,28 @@ describe('the narrow sheet', () => {
 	});
 
 	/*
+	 * #1573 anchors a menu's panel to the box around its button, which a top
+	 * bar stretches to the bar's height. The sheet lays its switcher out in
+	 * a column, which would stretch that box across the whole sheet and hang
+	 * the panel off the sheet's far edge rather than off the button.
+	 */
+	it('opens the switcher panel from the switcher, not from the far edge', async () => {
+		const { hamburger } = await setupNarrow();
+		await hamburger.click();
+
+		const sheet = page.getByRole('dialog');
+		const switcher = sheet.getByRole('button', { name: 'Riverside Doula Collective' });
+		await switcher.click();
+
+		const other = sheet.getByRole('link', { name: 'Finger Lakes Birth Support' });
+		await expect.element(other).toBeVisible();
+		const buttonBox = switcher.element().getBoundingClientRect();
+		// The panel is wider than the button and the switcher sits at the
+		// sheet's start edge, so it flips to open from the button's start.
+		expect(panelHolding(other).getBoundingClientRect().left).toBeCloseTo(buttonBox.left, 0);
+	});
+
+	/*
 	 * #673: a route scoped to the person rather than to a Practice
 	 * (/account, #484) hands the bar no Practice at all, and the switcher
 	 * renders nothing. The heading and the divider above it go too --

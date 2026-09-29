@@ -285,9 +285,15 @@
 			padding-block: var(--space-2);
 		}
 
+		/* A grid whose items start at the inline start, so the switcher's
+		   menu box keeps its button's width rather than spanning the sheet:
+		   its panel hangs off that box (#1573), and a full-width box would
+		   hang it off the sheet's far edge. Not a column flex, where the
+		   box's own `align-self: stretch` -- which makes it fill a top bar's
+		   height -- would stretch it across the sheet instead. */
 		.sheet-switcher {
-			display: flex;
-			flex-direction: column;
+			display: grid;
+			justify-items: start;
 			gap: var(--space-2);
 			padding: var(--space-3) var(--space-5) 0;
 			border-block-start: var(--border-thin) solid var(--color-outline-variant);
