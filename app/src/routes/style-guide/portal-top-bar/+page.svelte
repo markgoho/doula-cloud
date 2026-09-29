@@ -6,13 +6,17 @@
 	 * The longest realistic value, not a representative one (ADR-0025): the
 	 * nav labels are the product's own and cannot grow, but the Practice
 	 * name and the Client's name are hers, and they are what decide whether
-	 * the four items still fit beside them.
+	 * the items still fit beside them. All five items, the most the
+	 * authenticated layout ever passes (#1568): the floor below is
+	 * measured against this demo, so a demo with fewer items measures a
+	 * floor the real bar cannot keep.
 	 */
 	const navItems = [
 		{ label: 'Your care', href: '#care', current: true },
 		{ label: 'Messages', href: '#messages', current: false },
 		{ label: 'Birth plan', href: '#birth-plan', current: false },
-		{ label: 'Contract', href: '#contract', current: false }
+		{ label: 'Contract', href: '#contract', current: false },
+		{ label: 'Notifications', href: '#notifications', current: false }
 	];
 
 	function signOut(): Promise<SignOutOutcome> {
@@ -29,8 +33,8 @@
 		not with the software it runs on; there is no Practice switcher dropdown, because a Client's own
 		Client record belongs to exactly one Practice. The Practice name is instead a plain link to the
 		portal root, the Client's way between Engagements when the Client's Portal Account reaches more
-		than one. Narrow, the four items become a full-width second row rather than a hamburger — four
-		items need no container.
+		than one. Narrow, the items become a full-width second row rather than a hamburger, and that row
+		wraps when they do not fit on one line — a handful of items need no container.
 	</p>
 
 	<PortalTopBar
