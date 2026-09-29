@@ -96,6 +96,7 @@ What the suite covers today, as the marks below were assigned from:
 | `push-notification.e2e.ts` | A push event waking an open thread tab, which refetches the message |
 | `signup-form.e2e.ts` | The `/signup` form itself: fill, submit, land on `/practices/[practiceId]` |
 | `staff-invite-role.e2e.ts` | The Staff invite flow end to end (send through `/invite`, accept through `/accept-invite`) for a Doula who is not the Owner, then a `403` on an Owner-only action from her session |
+| `admin-invite-role.e2e.ts` | The same invite flow for an Admin (`admin` without `owner` or `doula`, selected on the invite form): her roster row, the Credits screen ADR-0008 grants her, and the Owner-only invite send refused (#965) |
 | `contract-lifecycle.e2e.ts` | A Contract's full lifecycle: build and send on the Practice side, the Client signing it in the portal, and the Signed PDF coming back |
 | `add-client-visits.e2e.ts` | The Add Client intake form (#497) and an Engagement's Visits section: add a Visit, read it back |
 
@@ -126,13 +127,13 @@ Every plan has been executed once ([#209](https://github.com/markgoho/doula-clou
 | [evaluator-doula.md](evaluator-doula.md) | Tasha Bell | 5 | 11 | 0 | 4 |
 | [solo-birth-doula.md](solo-birth-doula.md) | Maya Okonkwo | 13 | 20 | 0 | 3 |
 | [practice-owner.md](practice-owner.md) | Renata Alvarez | 5 | 17 | 0 | 6 |
-| [non-doula-admin.md](non-doula-admin.md) | Dee Whitlock | 0 | 21 | 0 | 3 |
+| [non-doula-admin.md](non-doula-admin.md) | Dee Whitlock | 2 | 19 | 0 | 3 |
 | [employed-doula.md](employed-doula.md) | Priya Raman | 3 | 21 | 0 | 5 |
 | [contractor-doula.md](contractor-doula.md) | Lena Vasquez | 1 | 18 | 0 | 8 |
 | [loss-client.md](loss-client.md) | Nadia Haddad | 5 | 14 | 0 | 8 |
 | [first-time-client.md](first-time-client.md) | Hannah Sorensen | 8 | 17 | 0 | 6 |
 | [returning-postpartum-client.md](returning-postpartum-client.md) | Camille Boyd | 0 | 19 | 0 | 0 |
-| **Total** | | **40** | **158** | **0** | **43** |
+| **Total** | | **42** | **156** | **0** | **43** |
 
 Every `automated` step passed. **No plan carries a `blocked` step any more** — Stripe was the last holdout and [#242](https://github.com/markgoho/doula-cloud/issues/242) opened the Sandbox, after which Connect, Checkout and Invoices were all walked for real.
 

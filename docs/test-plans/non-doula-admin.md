@@ -16,7 +16,7 @@
 
 | Step | Action | Expected result | Mark |
 | --- | --- | --- | --- |
-| 1.1 | Open the invite link at `/accept-invite` | The accept form renders | `manual` |
+| 1.1 | Open the invite link at `/accept-invite` | The accept form renders | `automated (admin-invite-role.e2e.ts)` |
 | 1.2 | Set email and password, press **Accept invite** | `POST /api/staff/accept-invite` creates the membership with zero roles | `manual` |
 | 1.3 | Choose the Practice from the membership list | **Nothing to choose** — one membership, so `decideLanding` redirects straight to `/practices/[practiceId]` (`app/src/lib/landing.ts:24-26`) and the picker never renders. The picker needs a second membership, which only Lena Vasquez's journey gives a Persona | `manual` |
 
@@ -32,7 +32,7 @@
 | --- | --- | --- | --- |
 | 3.1 | Land on `/practices/[practiceId]` | **Three** tiles: Clients, Billing and **Payments**. Four tiles are owner-gated; Payments sits outside the block ([RA-G9](https://github.com/markgoho/doula-cloud/issues/267)) | `manual` |
 | 3.1-a | Compare this run against the zero-role run | **No longer identical.** [DW-G1](https://github.com/markgoho/doula-cloud/issues/269) is closed: `admin` is read now for the Practice's Stripe Connect state (`staffauth.OwnerAndAdmin`, [#267](https://github.com/markgoho/doula-cloud/issues/267)) — see the journey map's Stage 3 note | `manual` |
-| 3.2 | Open Credits | The Practice's credit balance and purchase ledger render for an Admin — the balance read is `staffauth.OwnerAndAdmin` since [DW-G4](https://github.com/markgoho/doula-cloud/issues/272), so an Admin is inside the seat and a Doula meets the refusal screen instead | `manual` |
+| 3.2 | Open Credits | The Practice's credit balance and purchase ledger render for an Admin — the balance read is `staffauth.OwnerAndAdmin` since [DW-G4](https://github.com/markgoho/doula-cloud/issues/272), so an Admin is inside the seat and a Doula meets the refusal screen instead | `automated (admin-invite-role.e2e.ts)` |
 | 3.2-a | Buy credits | **Not refused.** The purchase declares the same Owner-and-Admin seat the balance does ([#257](https://github.com/markgoho/doula-cloud/issues/257), [#910](https://github.com/markgoho/doula-cloud/issues/910)), and the button is drawn plainly enabled for every session that reaches the screen ([#1162](https://github.com/markgoho/doula-cloud/issues/1162)) | `manual` |
 
 The Billing screen is automated for an *Owner* (`billing.e2e.ts`); no spec reads it as a non-owner, which is the case that matters here.
@@ -105,16 +105,20 @@ A live Stripe account would not fix this step. It is not the out-of-scope Stripe
 
 | Mark | Steps |
 | --- | --- |
-| `automated` | 0 |
-| `manual` | 21 |
+| `automated` | 2 |
+| `manual` | 19 |
 | `blocked` | 0 (8.1 cleared on the walk — Connect completed) |
 | `missing-feature` | 3 ([RA-G4](https://github.com/markgoho/doula-cloud/issues/225), [DW-G3](https://github.com/markgoho/doula-cloud/issues/271), [DW-G5](https://github.com/markgoho/doula-cloud/issues/273)) |
 
 Stages 8 and 9 sat either side of the `blocked` / `missing-feature` line, and the walk proved the line was drawn in the right place: connecting a live Stripe account **did** clear 8.1 and did **not** touch 9.1, because recording a bank transfer has no code path at all. This plan now has no `blocked` step.
 
-Dee's is the only practice-side plan with **no automated step**. Every spec in the suite runs as an Owner who signed up, and the Admin exists only past the invite route, which no spec walks.
+`admin-invite-role.e2e.ts` ([#965](https://github.com/markgoho/doula-cloud/issues/965)) reaches the app as an Admin who holds neither `owner` nor `doula`, invited and accepted through the real invite and accept screens. It drives 1.1 and 3.2, and asserts two things no step here names: her roster row reads `Admin` and nothing else, and the Owner-only invite send refuses her with `only a Practice Owner can do that`. Every other spec in the suite still runs as an Owner who signed up.
 
 ## Run log
+
+### 2026-09-28 — the first Admin spec ([#965](https://github.com/markgoho/doula-cloud/issues/965))
+
+`admin-invite-role.e2e.ts` added. Steps 1.1 and 3.2 move from `manual` to `automated`: the spec opens the invite link on `/accept-invite` as the invited Admin, and opens Credits as her to read the balance and the `Welcome credits` ledger row. 1.2 stays `manual`, because its Expected result ("zero roles") predates the role riding the Invitation; the spec asserts the accepted membership reads `Admin` instead, which is a different claim. Nothing else moved. Counts go from 0 automated / 21 manual to 2 / 19. No step is renumbered.
 
 ### 2026-08-22 — automated steps ([#209](https://github.com/markgoho/doula-cloud/issues/209))
 
