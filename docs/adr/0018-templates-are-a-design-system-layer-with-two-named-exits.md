@@ -35,6 +35,7 @@ The shape is hybrid, and the hybrid is forced by a real page: the staff Engageme
 | **E** Long form | `templates/FormPage.svelte` | `title`, `intro?`, `fieldsets: { legend, content }[]`, `error?`, `actions` |
 | **E** Question page | `templates/QuestionPage.svelte` | `journey`, `steps`, `allStepsHref?`, `backHref`, `errorSummary?`, `caption?`, `question`, `hint?`, `content`, `actions` — see the second amendment below |
 | **E** Check answers | `templates/CheckAnswers.svelte` | `journey`, `steps`, `allStepsHref?`, `backHref`, `title`, `caption?`, `errorSummary?`, `sections`, `isWide?`, `actions` — same amendment |
+| **G** Document | `templates/DocumentPage.svelte` | `title`, `backHref`, `backLabel?`, `content`, `empty?` — see the 2026-09-29 amendment below |
 
 `FormPage.fieldsets` is ADR-0017's shape: the twelve-column structural core is one fieldset and each Practice-defined section is another appended below it — the pattern the [#406](https://github.com/markgoho/doula-cloud/issues/406) survey found in Cliniko and endorsed as the one matching ADR-0017.
 
@@ -176,3 +177,21 @@ Filed as [#1222](https://github.com/markgoho/doula-cloud/issues/1222), found the
 **It adopted `EntryPage`, and the extraction bar did not apply.** The bar above governs building a *new* Template or variant for a shape that does not already fit one; it does not govern reusing an existing Template whose region is already generic enough. `content` was never named or shaped around "a form" — it is one Snippet standing in for whatever a route's own steps are — and `accept-invite`'s already-shipped `existing` branch (a credential step, then a read-only summary of a name and a work state, with a link out) already proved that shape fits inside it. The Offer read's access-code step followed by a `dl` summary and decision controls is one more branch of the same kind, not a shape `EntryPage` had never met. Hand-rolling `container-l`/`center-l max="var(--form-max)"`/`stack-l` beside a Template that already encapsulates exactly those three lines would have been the near-duplicate the extraction bar exists to catch, not the raw exception it licenses for a genuine one-off.
 
 All three routes now import `EntryPage` and pass `title`, `errorSummary` and `content`; none renders a bare `<h1>` and `<form>` (or `<dl>`) any more. Eight routes share the archetype now, not five.
+
+## Amendment, 2026-09-29 — archetype G gets a Template, `DocumentPage`
+
+Filed as [#1574](https://github.com/markgoho/doula-cloud/issues/1574), found while driving the signed-in portal at 320px for [#1568](https://github.com/markgoho/doula-cloud/issues/1568). #405 named archetype G, *"Document / print view — portal `birth-plan`, `contract`"*, and the *Scope* section above left it without a Template. Two routes of that shape rendered with no frame at all: on the portal Birth Plan and Contract, "Back" and the text sat against the screen edge, and the loading, error and "none yet" states had no `<h1>`. A third route of the same shape, the portal Invoice page ([#1564](https://github.com/markgoho/doula-cloud/issues/1564)), had gutters, but only because it hand-wrote `<container-l><center-l>` on the route. The 2026-08-30 amendment above forbids that: a frame lives only on a Template. Its loading and error states had no `<h1>` either. This closes G alone, the same way #490 closed A and #491 closed C and F.
+
+**Three consumers is past the extraction bar, so G gets its own Template.** No existing Template fits. `RecordDetail` has `<h2>` sections and a contents rail, and a document has neither. `ListPage` and `OverviewHub` are uncapped, and a document is prose. `FormPage` has the right cap in spirit but owns fieldsets and a form column.
+
+`templates/DocumentPage.svelte` takes `title`, `serviceName?`, `backHref`, `backLabel?`, `content`, and the three state props `loadError?`, `loading?` and `empty?`, in that order of precedence. Its decisions:
+
+- **`title` is the one `<h1>` in every state**, and the tab title through `PageTitle`. A route whose title depends on its data passes a generic name until the data arrives: the Invoice page passes "Invoices" while it loads or fails, and "Invoice {reference}" once loaded.
+- **The cap is `--measure`.** A document is read, not scanned: a Contract's prose, a Birth Plan's answers, an Invoice's facts and its one payment sentence. The Invoice page already spent `--measure` in its hand-written frame, so no new width enters the app.
+- **`empty` is a string, not `OverviewHub`'s `isEmpty`/`empty` Snippet pair.** A document that does not exist yet is one sentence: "No Contract has been sent for your care yet." A hub's empty state is a whole body. Presence-is-state also keeps `empty` the same shape as `loading` and `loadError` beside it. The Invoice page passes no `empty`, because a missing Invoice is a load error, not a "none yet".
+- **The back link is `backHref`/`backLabel`, `QuestionPage`'s shape, not a Snippet.** The Template owns `BackLink`, so it also owns hiding it in print: a printed Birth Plan is the document, not the way out of it. It sits inside the frame, above the `<h1>`, in every state.
+- **Print keeps working, and gets no layout of its own.** The Birth Plan's own `.no-print` controls stay the route's. A print-specific or full-bleed frame is still out of scope; the *Scope* section's "G can opt out later" stands.
+
+The three routes now render `DocumentPage` once, unconditionally, and let its props carry the state. None contains `container-l`/`center-l` or calls `PageTitle` directly. The Birth Plan's not-offered branch still renders `ErrorPage` (`kind="notFound"`) in place of the Template; that is the portal's own not-found screen, not a state of this one.
+
+The Staff Birth Plan (`practices/[practiceId]/engagements/[engagementId]/birth-plan`) is the same archetype and still has no frame. It was outside this ticket's scope and is filed as its own ticket.
