@@ -194,4 +194,4 @@ Filed as [#1574](https://github.com/markgoho/doula-cloud/issues/1574), found whi
 
 The three routes now render `DocumentPage` once, unconditionally, and let its props carry the state. None contains `container-l`/`center-l` or calls `PageTitle` directly. The Birth Plan's not-offered branch still renders `ErrorPage` (`kind="notFound"`) in place of the Template; that is the portal's own not-found screen, not a state of this one.
 
-The Staff Birth Plan (`practices/[practiceId]/engagements/[engagementId]/birth-plan`) is the same archetype and still has no frame. It was outside this ticket's scope and is filed as its own ticket.
+The Staff Birth Plan (`practices/[practiceId]/engagements/[engagementId]/birth-plan`) is the same archetype and still has no frame. It was outside this ticket's scope and is filed, with four other routes that still have no frame, as [#1576](https://github.com/markgoho/doula-cloud/issues/1576).

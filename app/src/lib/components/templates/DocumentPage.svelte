@@ -75,6 +75,8 @@
 			{:else if loading}
 				<stack-l space="var(--space-7)">
 					<Heading level={1} variant="page" text={title} />
+					<!-- `text`, not ListPage's `row`: what is coming is prose and
+					     a list of facts, not table rows. -->
 					<Skeleton variant="text" lines={6} label={loading} />
 				</stack-l>
 			{:else if empty}
@@ -98,6 +100,8 @@
 			padding-block: var(--space-8);
 		}
 
+		/* A print query, not a width one (ADR-0024 allows it): on paper the
+		   back link is a way out of nothing. */
 		@media print {
 			.no-print {
 				display: none;

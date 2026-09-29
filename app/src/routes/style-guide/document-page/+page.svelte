@@ -17,7 +17,7 @@
 		{ label: 'Billed to', value: 'Persephone Adeyemi-Wollstonecraft' }
 	];
 
-	let state = $state<'content' | 'empty' | 'loading' | 'loadError'>('content');
+	let shown = $state<'content' | 'empty' | 'loading' | 'loadError'>('content');
 </script>
 
 {#snippet content()}
@@ -28,26 +28,24 @@
 {/snippet}
 
 <div class="controls">
-	<Button label="Content" variant="secondary" size="sm" onClick={() => (state = 'content')} />
-	<Button label="Empty" variant="secondary" size="sm" onClick={() => (state = 'empty')} />
-	<Button label="Loading" variant="secondary" size="sm" onClick={() => (state = 'loading')} />
-	<Button label="Load error" variant="secondary" size="sm" onClick={() => (state = 'loadError')} />
+	<Button label="Content" variant="secondary" size="sm" onClick={() => (shown = 'content')} />
+	<Button label="Empty" variant="secondary" size="sm" onClick={() => (shown = 'empty')} />
+	<Button label="Loading" variant="secondary" size="sm" onClick={() => (shown = 'loading')} />
+	<Button label="Load error" variant="secondary" size="sm" onClick={() => (shown = 'loadError')} />
 </div>
 
-{#if state === 'empty'}
-	<DocumentPage
-		title="Contract"
-		backHref="#"
-		{content}
-		empty="No Contract has been sent for your care yet."
-	/>
-{:else if state === 'loading'}
-	<DocumentPage title="Invoices" backHref="#" backLabel="Back to Invoices" {content} loading="Loading Invoice" />
-{:else if state === 'loadError'}
-	<DocumentPage title="Invoices" backHref="#" backLabel="Back to Invoices" {content} loadError="Failed to load Invoice" />
-{:else}
-	<DocumentPage {title} backHref="#" backLabel="Back to Invoices" {content} />
-{/if}
+<!-- The title is the Invoices heading until the Invoice "arrives", the way
+     the portal Invoice route passes it. An Invoice has no empty state, so
+     the Empty switch shows the Contract's instead. -->
+<DocumentPage
+	title={{ content: title, empty: 'Contract', loading: 'Invoices', loadError: 'Invoices' }[shown]}
+	backHref="#"
+	backLabel="Back to Invoices"
+	{content}
+	loading={shown === 'loading' ? 'Loading Invoice' : undefined}
+	loadError={shown === 'loadError' ? 'Failed to load Invoice' : undefined}
+	empty={shown === 'empty' ? 'No Contract has been sent for your care yet.' : undefined}
+/>
 
 <style>
 	@layer components {
