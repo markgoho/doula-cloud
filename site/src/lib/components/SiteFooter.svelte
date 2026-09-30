@@ -1,7 +1,8 @@
 <!--
 @component
 The foot of every page on the site, and its one `contentinfo` landmark: a
-link to the Terms of Service and a link to the Privacy Policy (#1556).
+link to the Terms of Service and a link to the Privacy Policy (#1556), and
+a link to /support, which Stripe reads (#390, #358).
 
 It lives in the root layout rather than in ReadingPage because the home
 page is not a ReadingPage, and each indexed page has to reach both
@@ -14,13 +15,15 @@ narrow for both, so nothing here needs a media query (ADR-0024).
 -->
 <script lang="ts">
 	import { PRIVACY, TERMS } from '#lib/legal.js';
+
+	const links = [TERMS, PRIVACY, { name: 'Support', path: '/support' }];
 </script>
 
 <footer>
 	<center-l>
 		<cluster-l>
-			{#each [TERMS, PRIVACY] as legalDocument (legalDocument.path)}
-				<a href={legalDocument.path}>{legalDocument.name}</a>
+			{#each links as link (link.path)}
+				<a href={link.path}>{link.name}</a>
 			{/each}
 		</cluster-l>
 	</center-l>
@@ -33,11 +36,11 @@ narrow for both, so nothing here needs a media query (ADR-0024).
 		border-block-start: var(--border-thin) solid var(--color-outline-variant);
 	}
 
-	/* The meta type is set here, not on the footer: center-l's measure is
-	   counted in the font it inherits, so a smaller font on the footer
-	   would narrow the column and pull the links off the left edge of the
-	   page's text above them. */
+	/* Centered, because the pages above do not share one column: a
+	   ReadingPage is a measure wide and the teaser is a letter beside a
+	   card, so a left edge that matched one would miss the other. */
 	cluster-l {
+		justify-content: center;
 		column-gap: var(--space-6);
 		color: var(--color-on-surface-muted);
 		font-size: var(--text-meta-size);

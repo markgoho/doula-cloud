@@ -4,7 +4,7 @@ import { SITE_ORIGIN } from '#lib/product.js';
 
 /**
  * sitemap.xml for the site: the home page, the Terms of Service and the
- * Privacy Policy (#1556), and every Practice page.
+ * Privacy Policy (#1556), /support (#358), and every Practice page.
  *
  * Listed explicitly rather than discovered, so what a crawler is pointed
  * at is a decision in one place. /pilot-terms is left out on purpose
@@ -18,6 +18,7 @@ export function renderSitemap(pages: PracticePage[]): string {
 	const urls = [
 		`<url><loc>${SITE_ORIGIN}/</loc></url>`,
 		...[TERMS, PRIVACY].map((legalDocument) => `<url><loc>${SITE_ORIGIN}${legalDocument.path}</loc></url>`),
+		`<url><loc>${SITE_ORIGIN}/support</loc></url>`,
 		...pages.map(
 			(page) =>
 				`<url><loc>${SITE_ORIGIN}/p/${encodeURIComponent(page.slug)}</loc><lastmod>${new Date(page.publishedAt).toISOString()}</lastmod></url>`

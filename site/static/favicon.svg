@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+	<!--
+		The DoulaCloud icon: the mark on a plum tile. For each square slot
+		(browser tab, home screen, social avatar). See docs/marketing/brand.md.
+
+		The tile is `color-primary` and the strokes are `color-on-primary`,
+		the light theme's values from app/src/lib/styles/tokens.css. The tile
+		carries its own ground, so it does not change with the theme.
+		The stroke is 18, not 14, so the two strokes stay apart at 16px.
+	-->
+	<rect width="64" height="64" rx="14" fill="oklch(41.2% 0.119 339)" />
+	<svg x="9" y="9" width="46" height="46" viewBox="46 22 202 202" fill="none" stroke="oklch(99% 0.005 339)" stroke-width="18" stroke-linecap="round">
+		<path d="M100 160a32 32 0 0 1 64 0" />
+		<path d="M56 160a76 76 0 0 1 137.97-44 44 44 0 0 1 44.03 44" />
+	</svg>
+</svg>

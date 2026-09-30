@@ -1,0 +1,113 @@
+<!doctype html>
+<!--
+	The teaser's social card (#358): the 1200x630 image behind og:image,
+	exported to site/static/social-card.png by a screenshot of this page at
+	exactly 1200x630.
+
+	Card A's copy, final on #358: "Doula. / Scheduler. / Bookkeeper. /
+	Contract writer.", the lower three struck through, and "I'm building
+	the other three." Set type, never model-rendered; no people.
+
+	Literal colors, as in mark.svg, because an exported image can reach no
+	custom property. Each is a token from app/src/lib/styles/tokens.css:
+	the ground is `color-primary` and the type `color-on-primary`, from the
+	light theme. The strike is the dark theme's `color-primary`, the one
+	plum light enough to read on the plum ground, so the card spends one
+	hue (docs/marketing/brand.md). A plum ground, not a light one, because
+	#362's feed test found that a light card dissolves into a white feed.
+-->
+<html lang="en">
+	<head>
+		<meta charset="utf-8" />
+		<style>
+			@font-face {
+				font-family: 'Hanken Grotesk';
+				src: url('../../../app/src/lib/styles/fonts/hanken-grotesk-latin.woff2') format('woff2');
+				font-weight: 400 600;
+			}
+
+			:root {
+				--plum: oklch(41.2% 0.119 339);
+				--on-plum: oklch(99% 0.005 339);
+				--strike: oklch(84% 0.116 341);
+			}
+
+			* {
+				margin: 0;
+				box-sizing: border-box;
+			}
+
+			body {
+				inline-size: 1200px;
+				block-size: 630px;
+				padding: 72px 88px;
+				display: flex;
+				flex-direction: column;
+				justify-content: space-between;
+				background: var(--plum);
+				color: var(--on-plum);
+				font-family: 'Hanken Grotesk', sans-serif;
+			}
+
+			ul {
+				list-style: none;
+				padding: 0;
+				font-size: 64px;
+				font-weight: 600;
+				line-height: 1.12;
+				letter-spacing: -0.01em;
+			}
+
+			s {
+				text-decoration-color: var(--strike);
+				text-decoration-thickness: 7px;
+				opacity: 0.72;
+			}
+
+			.building {
+				font-size: 40px;
+				font-weight: 500;
+			}
+
+			footer {
+				display: flex;
+				align-items: center;
+				justify-content: space-between;
+			}
+
+			.lockup {
+				display: flex;
+				align-items: center;
+				gap: 20px;
+				font-size: 36px;
+				font-weight: 600;
+			}
+
+			.date {
+				font-size: 28px;
+				font-weight: 500;
+			}
+		</style>
+	</head>
+	<body>
+		<div>
+			<ul>
+				<li>Doula.</li>
+				<li><s>Scheduler.</s></li>
+				<li><s>Bookkeeper.</s></li>
+				<li><s>Contract writer.</s></li>
+			</ul>
+			<p class="building">I'm building the other three.</p>
+		</div>
+		<footer>
+			<p class="lockup">
+				<svg viewBox="48 76 202 94" width="103" height="48" fill="none" stroke="currentColor" stroke-width="14" stroke-linecap="round" aria-hidden="true">
+					<path d="M100 160a32 32 0 0 1 64 0" />
+					<path d="M56 160a76 76 0 0 1 137.97-44 44 44 0 0 1 44.03 44" />
+				</svg>
+				Doula Cloud
+			</p>
+			<p class="date">Coming January 2027</p>
+		</footer>
+	</body>
+</html>

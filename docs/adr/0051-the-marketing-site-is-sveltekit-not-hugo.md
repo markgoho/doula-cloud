@@ -18,3 +18,4 @@ The marketing site at `doula.cloud` is a SvelteKit package, `site/`, that preren
 - A build with no Practice pages is a correct build (local, PR preview). So `site/vite.config.ts` lets `/p/[slug]` go unbuilt, and refuses any other route that does.
 - A change to `app/src/lib/styles/` also deploys the site, because the site is built from it.
 - The site has about 250 npm packages to keep current, where Hugo had none.
+- The teaser at `/` ([#358](https://github.com/markgoho/doula-cloud/issues/358)) is the one exception to "ships no JavaScript", as [ADR-0016](0016-teaser-analytics-are-cookieless-and-the-channel-rides-on-the-form.md) requires: once the waitlist form is on, it carries one inline script of ours that copies the `utm_*` parameters into the form's hidden inputs, and Pirsch's tag once [#392](https://github.com/markgoho/doula-cloud/issues/392) confirms it. `csr = false` stays on every page, so neither is SvelteKit's.

@@ -23,9 +23,9 @@ The founder decided this on 2026-09-28, on #1556. The reason on record is ADR-00
 
 ## The Terms are the binding home of the refund rule
 
-The refund rule is in three texts: the `/support` copy ([#390](https://github.com/markgoho/doula-cloud/issues/390)), `/pilot-terms` ([#444](https://github.com/markgoho/doula-cloud/issues/444)), and now the Terms. The Terms are the one a Practice agrees to, so they are the binding home. The three say the same thing in the same words, and a change to one is a change to all three.
+The refund rule is in three texts: the `/support` copy ([#390](https://github.com/markgoho/doula-cloud/issues/390)), `/pilot-terms` ([#444](https://github.com/markgoho/doula-cloud/issues/444)), and now the Terms. The Terms are the one a Practice agrees to, so they are the binding home. The three say the same thing, and a change to one is a change to all three. `/terms` and `/pilot-terms` say it in the same words. `/support` says it in words of its own, fixed on #390 so that each sentence answers a Stripe or New York requirement, and its copy document is final.
 
-The Refunds section of `/terms` is word for word the Refunds section of `/pilot-terms`, and `site/src/routes/terms/terms.svelte.spec.ts` fails when the two differ. `/support` is not built yet ([#358](https://github.com/markgoho/doula-cloud/issues/358), [#419](https://github.com/markgoho/doula-cloud/issues/419)); when it is, its spec joins that check.
+The Refunds section of `/terms` is word for word the Refunds section of `/pilot-terms`, and `site/src/routes/terms/terms.svelte.spec.ts` fails when the two differ. `/support` ([#358](https://github.com/markgoho/doula-cloud/issues/358)) has its own words, so no test compares it word for word; its spec asserts the three-year window and "We do not need a reason" by their words, and a reader of the three copy documents checks that they agree in substance.
 
 The rule has no precedent in the field: eight of nine surveyed products refuse a refund on an unspent prepaid balance. It is [ADR-0042](0042-a-practice-pays-per-engagement-and-doula-cloud-is-paid-when-the-doula-is.md)'s one guarantee, and the Terms state it as it is.
 

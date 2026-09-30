@@ -28,6 +28,10 @@ describe('renderSitemap', () => {
 		expect(xml).toContain('<url><loc>https://doula.cloud/privacy</loc></url>');
 	});
 
+	it('lists /support, which Stripe reads (#358)', () => {
+		expect(renderSitemap([])).toContain('<url><loc>https://doula.cloud/support</loc></url>');
+	});
+
 	it('never lists the unlisted pilot terms, or a /p/ index (#444)', () => {
 		const xml = renderSitemap([page]);
 		expect(xml).not.toContain('pilot-terms');
