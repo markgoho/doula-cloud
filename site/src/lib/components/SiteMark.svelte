@@ -1,30 +1,18 @@
 <!--
 @component
 The mark, as docs/marketing/brand.md draws it: two strokes, the outer line
-in `--color-primary` and the inner arch in `--color-primary-hover`. The
-site shows it at 28px tall or more, which is where the sheet asks for two
-tones, so this component has no one-color size.
+in `--color-primary` and the inner arch in `--color-primary-hover`. It is
+40px tall, above the 28px where the sheet asks for two tones, and 86px
+wide, the viewBox's own ratio.
 
 The app's CloudMark still draws the three-arc mark until #1486 lands.
 When it does, this component can go and the teaser can use CloudMark.
 Decorative by default, since the name is beside it.
 -->
-<script lang="ts">
-	interface Properties {
-		// The height in pixels. The sheet's two tones need 28 or more.
-		height?: number;
-	}
-
-	let { height = 40 }: Properties = $props();
-
-	// The viewBox is 202 by 94 units.
-	const width = $derived(Math.round((height * 202) / 94));
-</script>
-
 <svg
 	viewBox="48 76 202 94"
-	{width}
-	{height}
+	width="86"
+	height="40"
 	fill="none"
 	stroke-width="14"
 	stroke-linecap="round"

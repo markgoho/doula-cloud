@@ -7,6 +7,9 @@ The letter comes first in the source, so a screen reader meets the note
 before the form. The card sits beside it while there is room for both and
 drops under it when there is not; nothing here measures the viewport
 (ADR-0024).
+
+No canonical tag: #368 set the teaser root's posture as indexable with
+none, and docs/copy/support-page.md follows it.
 -->
 <script lang="ts">
 	import SiteMark from '#lib/components/SiteMark.svelte';
@@ -21,7 +24,6 @@ drops under it when there is not; nothing here measures the viewport
 <svelte:head>
 	<title>{PRODUCT_NAME}: coming January 2027</title>
 	<meta name="description" content={description} />
-	<link rel="canonical" href="{SITE_ORIGIN}/" />
 	<meta property="og:type" content="website" />
 	<meta property="og:url" content="{SITE_ORIGIN}/" />
 	<meta property="og:title" content={headline} />
@@ -40,7 +42,7 @@ drops under it when there is not; nothing here measures the viewport
 	<div class="teaser">
 		<article class="letter">
 			<stack-l>
-				<SiteMark height={40} />
+				<SiteMark />
 				<p class="eyebrow">Coming January 2027</p>
 				<h1>{headline}</h1>
 				<p>
@@ -91,8 +93,6 @@ drops under it when there is not; nothing here measures the viewport
 	.aside {
 		flex-basis: 20rem;
 		flex-grow: 1;
-		position: sticky;
-		inset-block-start: var(--space-8);
 	}
 
 	.eyebrow {

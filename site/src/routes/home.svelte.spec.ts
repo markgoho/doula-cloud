@@ -33,13 +33,13 @@ describe('the teaser at / (#358)', () => {
 		expect(heading.compareDocumentPosition(card)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
 	});
 
-	it('is found and shared: a title, a description, a canonical address and the social card', async () => {
+	it('is found and shared: a title, a description and the social card, with no canonical tag (#368)', async () => {
 		await render(Page);
 		expect(document.title).toBe('Doula Cloud: coming January 2027');
 		expect(document.head.querySelector('meta[name="description"]')?.getAttribute('content')).toContain(
 			'opens in January 2027'
 		);
-		expect(document.head.querySelector('link[rel="canonical"]')?.getAttribute('href')).toBe('https://doula.cloud/');
+		expect(document.head.querySelector('link[rel="canonical"]')).toBeNull();
 		expect(document.head.querySelector('meta[property="og:image"]')?.getAttribute('content')).toBe(
 			'https://doula.cloud/social-card.png'
 		);
