@@ -12,12 +12,12 @@ and #1549 read the same facts from the BFF's copy of this history.
 	import PageSection from './PageSection.svelte';
 
 	interface Properties {
-		document: LegalDocument;
+		legalDocument: LegalDocument;
 	}
 
-	let { document }: Properties = $props();
+	let { legalDocument }: Properties = $props();
 
-	const newestFirst = $derived(document.versions.toReversed());
+	const newestFirst = $derived(legalDocument.versions.toReversed());
 </script>
 
 <PageSection heading="Version history">
@@ -26,6 +26,9 @@ and #1549 read the same facts from the BFF's copy of this history.
 			{@const date = formatUpdated(version.effective)}
 			<li>
 				<time datetime={date.datetime}>{date.text}</time>.
+				<!-- One string, not two expressions: Svelte compiles each bare
+				     expression with a `?? ''` fallback that no version can reach,
+				     which the coverage gate reads as an untested branch. -->
 				{`${version.material ? 'A material change.' : 'Not a material change.'} ${version.change}`}
 			</li>
 		{/each}

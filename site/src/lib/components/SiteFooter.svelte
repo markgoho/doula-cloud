@@ -19,8 +19,8 @@ narrow for both, so nothing here needs a media query (ADR-0024).
 <footer>
 	<center-l>
 		<cluster-l>
-			{#each [TERMS, PRIVACY] as document (document.path)}
-				<a href={document.path}>{document.name}</a>
+			{#each [TERMS, PRIVACY] as legalDocument (legalDocument.path)}
+				<a href={legalDocument.path}>{legalDocument.name}</a>
 			{/each}
 		</cluster-l>
 	</center-l>

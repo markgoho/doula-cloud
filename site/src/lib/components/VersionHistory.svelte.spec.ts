@@ -6,7 +6,7 @@ import VersionHistory from './VersionHistory.svelte';
 describe('VersionHistory', () => {
 	it('lists every version newest first, each with its material flag and what changed', async () => {
 		await render(VersionHistory, {
-			document: {
+			legalDocument: {
 				name: 'Terms of Service',
 				path: '/terms',
 				versions: [

@@ -17,7 +17,7 @@ import { SITE_ORIGIN } from '#lib/product.js';
 export function renderSitemap(pages: PracticePage[]): string {
 	const urls = [
 		`<url><loc>${SITE_ORIGIN}/</loc></url>`,
-		...[TERMS, PRIVACY].map((document) => `<url><loc>${SITE_ORIGIN}${document.path}</loc></url>`),
+		...[TERMS, PRIVACY].map((legalDocument) => `<url><loc>${SITE_ORIGIN}${legalDocument.path}</loc></url>`),
 		...pages.map(
 			(page) =>
 				`<url><loc>${SITE_ORIGIN}/p/${encodeURIComponent(page.slug)}</loc><lastmod>${new Date(page.publishedAt).toISOString()}</lastmod></url>`

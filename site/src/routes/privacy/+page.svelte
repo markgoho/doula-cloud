@@ -308,7 +308,7 @@ site footer on every page links here.
 		</p>
 	</PageSection>
 
-	<VersionHistory document={PRIVACY} />
+	<VersionHistory legalDocument={PRIVACY} />
 </ReadingPage>
 
 <style>

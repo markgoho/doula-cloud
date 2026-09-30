@@ -267,7 +267,7 @@ spec beside this file fails when the two drift (ADR-0054).
 		</p>
 	</PageSection>
 
-	<VersionHistory document={TERMS} />
+	<VersionHistory legalDocument={TERMS} />
 </ReadingPage>
 
 <style>

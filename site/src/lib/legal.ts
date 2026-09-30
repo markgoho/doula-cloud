@@ -38,6 +38,6 @@ export const PRIVACY: LegalDocument = {
 };
 
 // The version in force: the newest one.
-export function currentVersion(document: LegalDocument): LegalVersion {
-	return document.versions.at(-1)!;
+export function currentVersion(legalDocument: LegalDocument): LegalVersion {
+	return legalDocument.versions.at(-1)!;
 }

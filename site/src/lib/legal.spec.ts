@@ -30,10 +30,10 @@ describe('the version of each document, on the site and in the BFF', () => {
 	it.each([
 		['Terms', TERMS],
 		['Privacy', PRIVACY]
-	] as const)('%s: both hold the same history', (variable, document: LegalDocument) => {
+	] as const)('%s: both hold the same history', (variable, legalDocument: LegalDocument) => {
 		const bff = goHistory(variable);
 		expect(bff.length).toBeGreaterThan(0);
-		expect(document.versions).toEqual(bff);
+		expect(legalDocument.versions).toEqual(bff);
 	});
 
 	it('finds nothing to compare for a variable the Go file does not declare', () => {
@@ -43,7 +43,7 @@ describe('the version of each document, on the site and in the BFF', () => {
 
 describe('currentVersion', () => {
 	it('is the newest version', () => {
-		const document: LegalDocument = {
+		const legalDocument: LegalDocument = {
 			name: 'Terms of Service',
 			path: '/terms',
 			versions: [
@@ -51,6 +51,6 @@ describe('currentVersion', () => {
 				{ effective: '2026-11-01', material: true, change: 'The price of a Credit changes.' }
 			]
 		};
-		expect(currentVersion(document).effective).toBe('2026-11-01');
+		expect(currentVersion(legalDocument).effective).toBe('2026-11-01');
 	});
 });
