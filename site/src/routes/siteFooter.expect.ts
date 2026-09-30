@@ -3,8 +3,8 @@ import { expect } from 'vitest';
 
 /**
  * What every page of the site owes a reader at its foot (#1556): one
- * `contentinfo` landmark, and in it a link to the Terms of Service and a
- * link to the Privacy Policy. Two `contentinfo` landmarks on one page
+ * `contentinfo` landmark, and in it a link to the Terms of Service, a
+ * link to the Privacy Policy, and a link to /support (#358). Two `contentinfo` landmarks on one page
  * make each of them ambiguous to a screen reader, so the count is part
  * of the assertion. Call it after rendering the page through
  * PageInLayout.svelte, since the footer is the layout's.
@@ -18,4 +18,5 @@ export async function expectTheSiteFooter(): Promise<void> {
 	await expect
 		.element(footer.getByRole('link', { name: 'Privacy Policy' }))
 		.toHaveAttribute('href', '/privacy');
+	await expect.element(footer.getByRole('link', { name: 'Support' })).toHaveAttribute('href', '/support');
 }
