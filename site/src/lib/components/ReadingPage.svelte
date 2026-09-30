@@ -1,7 +1,7 @@
 <!--
 @component
 One page of prose on the site: a titled column capped at a reading
-measure, and a footer that says when the page last changed.
+measure, and a closing line that says when the page last changed.
 
 Every page on the site is this today -- /pilot-terms and each Practice
 page at /p/<slug> -- which is what the Hugo site's two layouts each
@@ -12,6 +12,10 @@ The column is `center-l` and `stack-l` from app/'s own layout primitives
 ships no JavaScript, and a primitive left at its defaults needs none. No
 media query anywhere: the measure is what makes it a column on a wide
 screen and the gutter is what makes it fit a 320px one (ADR-0024).
+
+The closing line is a `div`, not a `footer`: the root layout's site footer
+is the page's one `contentinfo` landmark (#1556), and a second one would
+make each of them ambiguous to a screen reader.
 -->
 <script lang="ts">
 	import type { Snippet } from 'svelte';
@@ -22,7 +26,7 @@ screen and the gutter is what makes it fit a 320px one (ADR-0024).
 		title: string;
 		// When the page last changed, RFC 3339 or a bare date.
 		updated: string;
-		// Printed after the date, inside the same footer line.
+		// Printed after the date, inside the same closing line.
 		footnote?: Snippet;
 		// Extra attributes on `<main>`, such as the #443 probe marker.
 		mainAttributes?: Record<string, string>;
@@ -44,12 +48,12 @@ screen and the gutter is what makes it fit a 320px one (ADR-0024).
 				</stack-l>
 			</main>
 
-			<footer>
+			<div class="updated">
 				<p>
 					Last updated <time datetime={date.datetime}>{date.text}</time>.
 					{#if footnote}{@render footnote()}{/if}
 				</p>
-			</footer>
+			</div>
 		</stack-l>
 	</center-l>
 </div>
@@ -73,7 +77,7 @@ screen and the gutter is what makes it fit a 320px one (ADR-0024).
 		letter-spacing: var(--text-display-tracking);
 	}
 
-	footer {
+	.updated {
 		padding-block-start: var(--space-4);
 		border-block-start: var(--border-thin) solid var(--color-outline-variant);
 		color: var(--color-on-surface-muted);

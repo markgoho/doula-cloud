@@ -22,6 +22,12 @@ describe('renderSitemap', () => {
 		);
 	});
 
+	it('lists the Terms of Service and the Privacy Policy (#1556)', () => {
+		const xml = renderSitemap([]);
+		expect(xml).toContain('<url><loc>https://doula.cloud/terms</loc></url>');
+		expect(xml).toContain('<url><loc>https://doula.cloud/privacy</loc></url>');
+	});
+
 	it('never lists the unlisted pilot terms, or a /p/ index (#444)', () => {
 		const xml = renderSitemap([page]);
 		expect(xml).not.toContain('pilot-terms');
@@ -29,7 +35,9 @@ describe('renderSitemap', () => {
 	});
 
 	it('is still a valid sitemap with no Practice pages at all', () => {
-		expect(renderSitemap([])).toMatch(/<urlset[^>]*>\n<url><loc>https:\/\/doula.cloud\/<\/loc><\/url>\n<\/urlset>/);
+		expect(renderSitemap([])).toMatch(
+			/<urlset[^>]*>\n<url><loc>https:\/\/doula.cloud\/<\/loc><\/url>\n(?:<url>.*<\/url>\n)*<\/urlset>/
+		);
 	});
 });
 

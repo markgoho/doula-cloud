@@ -1,6 +1,8 @@
 import { page as testPage } from 'vitest/browser';
 import { describe, expect, it } from 'vitest';
 import { render } from 'vitest-browser-svelte';
+import PageInLayout from '../PageInLayout.svelte';
+import { expectTheSiteFooter } from '../siteFooter.expect.js';
 import Page from './+page.svelte';
 
 describe('the pilot terms at /pilot-terms (#444)', () => {
@@ -21,9 +23,19 @@ describe('the pilot terms at /pilot-terms (#444)', () => {
 		await expect.element(testPage.getByRole('heading', { level: 2, name: 'Refunds' })).toBeVisible();
 	});
 
-	it('says when the terms last changed, and nothing else in its footer', async () => {
+	it('says when the terms last changed, under its main content', async () => {
 		await render(Page);
-		const footer = testPage.getByRole('contentinfo');
-		await expect.element(footer).toHaveTextContent(/^\s*Last updated August 29, 2026\.\s*$/);
+		await expect.element(testPage.getByText('Last updated August 29, 2026.')).toBeVisible();
+		await expect.element(testPage.getByText('August 29, 2026')).toHaveAttribute('datetime', '2026-08-29');
+	});
+
+	it('carries the site footer, and no second contentinfo of its own (#1556)', async () => {
+		await render(PageInLayout, { page: Page });
+		await expectTheSiteFooter();
+	});
+
+	it('is linked from nothing on its own page, the site footer included (#444)', async () => {
+		await render(PageInLayout, { page: Page });
+		expect(document.querySelector('a[href*="pilot-terms"]')).toBeNull();
 	});
 });
