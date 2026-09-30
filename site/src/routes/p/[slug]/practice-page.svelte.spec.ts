@@ -2,6 +2,8 @@ import { page as testPage } from 'vitest/browser';
 import { describe, expect, it } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import type { PracticePage } from '#lib/practicePage.js';
+import PageInLayout from '../../PageInLayout.svelte';
+import { expectTheSiteFooter } from '../../siteFooter.expect.js';
 import Page from './+page.svelte';
 
 const hostile: PracticePage = {
@@ -68,5 +70,13 @@ describe('a Practice page at /p/<slug>', () => {
 		expect(document.head.querySelector('meta[name="description"]')?.getAttribute('content')).toBe(
 			'Birth support. Postpartum <script>window.pwned = true</script> *care*.'
 		);
+	});
+
+	it('carries the site footer, and no second contentinfo of its own (#1556)', async () => {
+		await render(PageInLayout, {
+			page: Page,
+			pageProperties: { data: { page: hostile }, params: { slug: hostile.slug } }
+		} as never);
+		await expectTheSiteFooter();
 	});
 });
