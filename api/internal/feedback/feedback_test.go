@@ -205,9 +205,9 @@ func TestRLS_FeedbackRefusesAForeignPortalSender(t *testing.T) {
 	}
 }
 
-// TestGrant_FeedbackSelectIsRLSGatedToTheTrustedWorker proves 00119's own
+// TestGrant_FeedbackSelectIsRLSGatedToTheTrustedWorker proves 00120's own
 // grant: SELECT on feedback exists for app_runtime (#1524's outbox needs
-// it to build an issue), but feedback_notification_worker_select (00119)
+// it to build an issue), but feedback_notification_worker_select (00120)
 // admits no row at all outside the trusted-worker door -- so neither a
 // Staff member nor a Client can read a piece of Feedback back through an
 // ordinary session (#1523's own AC), even though the privilege check
