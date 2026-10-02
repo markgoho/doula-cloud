@@ -1,33 +1,75 @@
-# Trunk red alarm (#1021).
+# Trunk red alarm (#1021, #1639).
 #
-# CI on trunk runs jobs no pull request ever runs -- `migrate` against the
-# real doula-cloud-pg, then `deploy-api` and `deploy-app`. A PR cannot go
-# red on any of them, so trunk is the only place those failures appear,
-# and nothing used to announce them. #967 broke `migrate` and trunk stayed
+# Some work runs only on trunk, so a pull request cannot go red on it:
+# `CI`'s `migrate`, `deploy-api` and `deploy-app` jobs, and the whole of
+# the marketing site's deploy workflow, which also runs when a Practice
+# page is published (a `repository_dispatch` with no commit and no pull
+# request at all). Trunk is the only place those failures appear, and
+# nothing used to announce them. #967 broke `migrate` and trunk stayed
 # red across seven merges with no deploy, because every PR in that window
 # was green and nobody looked past it.
 #
-# This turns that silence into an assigned, labelled issue within a minute
-# of the failure, and closes it again the moment trunk goes green, so the
-# open issue is always the live state rather than a backlog to sift.
+# This turns that silence into an assigned, labeled issue within a minute
+# of the failure, and closes it again the moment the same workflow goes
+# green, so an open issue is always the live state and not a backlog to
+# sift. Each watched workflow has its own issue: `CI` going green does
+# not close the one a failed site deploy opened.
+#
+# The logic is in scripts/trunk-red.ts, with scripts/trunk-red.test.ts
+# beside it, and not in this file. `workflow_run` runs from the default
+# branch only, so a green pull request proves nothing about this file;
+# the `scripts` job, a required check, runs that test.
 name: Trunk red
 
 on:
   workflow_run:
-    workflows: [CI]
+    # Matched by each workflow's `name:`. To watch one more workflow that
+    # runs on trunk, add its name here; scripts/trunk-red.test.ts fails
+    # on a name that no workflow file holds.
+    workflows:
+      - CI
+      - Deploy the marketing site to Firebase Hosting on merge
     types: [completed]
+    # A `repository_dispatch` run of a watched workflow has `trunk` as
+    # its head branch too, so this filter lets it through.
     branches: [trunk]
+  # A replay, which writes nothing: it reads the run with this id from
+  # the API and prints to the log what the alarm would do for it. This is
+  # how to check the alarm against a real run without a red trunk:
+  #   gh workflow run trunk-red.yml -f run_id=<id>
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: The id of a completed workflow run to replay. Nothing is written.
+        required: true
+        type: string
 
 permissions:
   contents: read
+  # The jobs of the watched run, for the failed job and step.
+  actions: read
   issues: write
-  # The canceled-run step comments on the pull request named in the
-  # commit subject, and `gh issue comment` on a pull request is refused
-  # without this (#1565).
+  # A canceled run gets a comment on the pull request named in the commit
+  # subject, and a comment on a pull request is refused without this
+  # (#1565).
   pull-requests: write
 
+# One group per watched workflow, and a canceled run outside it.
+#
+# A group holds one run in progress and one queued; a third cancels the
+# queued one (#1207). A burst of trunk merges produces a burst of
+# canceled `CI` runs, and each of them fires this workflow. In one shared
+# group, the queued run that would open the alarm for a real failure
+# could be canceled by the event behind it -- a silent red trunk again.
+# So a canceled run, which never touches an alarm issue, gets a group of
+# its own (its run id). What is left in a workflow's group is its runs
+# that passed or failed, in order, and those are minutes apart because
+# the watched workflow is itself serialized on trunk.
+#
+# Two watched workflows are not serialized against each other, and do
+# not need to be: they never write to the same issue.
 concurrency:
-  group: trunk-red
+  group: trunk-red-${{ github.event.workflow_run.workflow_id || github.run_id }}-${{ github.event.workflow_run.conclusion == 'cancelled' && github.event.workflow_run.id || 'alarm' }} # spelling:ignore: the value GitHub's API sends
   cancel-in-progress: false
 
 jobs:
@@ -35,101 +77,17 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Open or update the trunk-red issue
-        if: github.event.workflow_run.conclusion == 'failure'
+      # On `workflow_run` this is the default branch's head, never the
+      # code of the run that is watched.
+      - uses: actions/checkout@v7
+        with:
+          sparse-checkout: scripts
+
+      - uses: oven-sh/setup-bun@v2
+
+      - name: Open, update or close the alarm of the workflow that completed
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
-          RUN_ID: ${{ github.event.workflow_run.id }}
-          RUN_URL: ${{ github.event.workflow_run.html_url }}
-          SHA: ${{ github.event.workflow_run.head_sha }}
-          TITLE: ${{ github.event.workflow_run.head_commit.message }}
-        run: |
-          set -euo pipefail
-          # Which jobs actually failed, and which step inside each. This is
-          # the part that is expensive to reconstruct by hand later, so it
-          # goes in the issue body rather than a link to go read.
-          failed=$(gh api "repos/${REPO}/actions/runs/${RUN_ID}/jobs" \
-            --jq '.jobs[] | select(.conclusion=="failure") | "- **\(.name)** - failed at step _\(.steps[] | select(.conclusion=="failure") | .name)_"' \
-            | sort -u)
-          [ -n "$failed" ] || failed="- (no job reported a failure conclusion; see the run)"
-
-          subject=$(printf '%s' "$TITLE" | head -1)
-          short=$(printf '%s' "$SHA" | cut -c1-8)
-
-          {
-            printf 'Trunk CI failed on **%s**.\n\n' "$short"
-            printf '%s\n\n' "$failed"
-            printf '**Commit:** %s\n\n' "$subject"
-            printf '**Run:** %s\n\n' "$RUN_URL"
-            printf 'The migrate, deploy-api and deploy-app jobs run ONLY on trunk, so a green pull request says nothing about them. While this issue is open, **no deploy is reaching the environment** and trunk is not a safe base to branch from.\n\n'
-            printf 'This issue is opened automatically by .github/workflows/trunk-red.yml and closes itself when trunk goes green again. Do not close it by hand while trunk is still failing - it will reopen on the next run.\n'
-          } > body.md
-
-          existing=$(gh issue list --repo "$REPO" --label trunk-red --state open \
-            --json number --jq '.[0].number // empty')
-
-          if [ -n "$existing" ]; then
-            gh issue comment "$existing" --repo "$REPO" --body-file body.md
-            echo "commented on existing #${existing}"
-          else
-            gh issue create --repo "$REPO" \
-              --title "Trunk is red: CI failed on ${short}" \
-              --label trunk-red \
-              --assignee markgoho \
-              --body-file body.md
-          fi
-
-      - name: Flag the commit a canceled run never verified
-        # A run queued behind two others in the same push concurrency
-        # group is canceled outright, before any job starts -- see
-        # ci.yml's concurrency comment (#1207). That is expected under a
-        # burst of trunk merges, not a failure, so it does not open or
-        # touch the trunk-red issue; the migration/deploy risk is real
-        # but the *next* trunk run that does complete is evidence for
-        # this commit too, so nothing is actually unverified forever --
-        # only unverified under this commit's own name until then. This
-        # step is what stops that gap from being silent.
-        if: github.event.workflow_run.conclusion == 'cancelled'
-        env:
-          GH_TOKEN: ${{ github.token }}
-          REPO: ${{ github.repository }}
-          RUN_URL: ${{ github.event.workflow_run.html_url }}
-          SHA: ${{ github.event.workflow_run.head_sha }}
-          TITLE: ${{ github.event.workflow_run.head_commit.message }}
-        run: |
-          set -euo pipefail
-          short=$(printf '%s' "$SHA" | cut -c1-8)
-          subject=$(printf '%s' "$TITLE" | head -1)
-
-          {
-            printf 'Trunk CI on **%s** was canceled before any job ran, so **migrate, deploy-api and deploy-app have no evidence for this commit.**\n\n' "$short"
-            printf 'This is expected under a burst of trunk merges (see the concurrency comment in ci.yml), not a failure -- it does not open a trunk-red issue.\n\n'
-            printf 'What to check instead: the next trunk CI push run whose head has this commit as an ancestor (git merge-base --is-ancestor %s <later-sha>), read by its conclusion field. "gh run watch --exit-status" exits 0 on a canceled run, so it cannot tell a canceled run from a passing one -- only conclusion can.\n\n' "$SHA"
-            printf '**Commit:** %s\n\n' "$subject"
-            printf '**Canceled run:** %s\n' "$RUN_URL"
-          } > body.md
-
-          pr=$(printf '%s' "$subject" | grep -oE '\(#[0-9]+\)' | tail -1 | tr -d '(#)')
-
-          if [ -n "$pr" ]; then
-            gh issue comment "$pr" --repo "$REPO" --body-file body.md
-            echo "commented on #${pr}"
-          else
-            echo "::warning::Canceled trunk run ${RUN_URL} for ${short} has no (#NNNN) in its commit subject to comment on: ${subject}"
-          fi
-
-      - name: Close the trunk-red issue
-        if: github.event.workflow_run.conclusion == 'success'
-        env:
-          GH_TOKEN: ${{ github.token }}
-          REPO: ${{ github.repository }}
-          RUN_URL: ${{ github.event.workflow_run.html_url }}
-          SHA: ${{ github.event.workflow_run.head_sha }}
-        run: |
-          set -euo pipefail
-          short=$(printf '%s' "$SHA" | cut -c1-8)
-          for n in $(gh issue list --repo "$REPO" --label trunk-red --state open --json number --jq '.[].number'); do
-            gh issue close "$n" --repo "$REPO" --reason completed \
-              --comment "Trunk is green again as of ${short} - ${RUN_URL}. Closed automatically by .github/workflows/trunk-red.yml."
-          done
+          REPLAY_RUN_ID: ${{ inputs.run_id }}
+        run: bun scripts/trunk-red.ts

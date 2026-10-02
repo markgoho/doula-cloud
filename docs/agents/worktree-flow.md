@@ -22,6 +22,19 @@ Trunk-based development still applies: short-lived branches, squash merge, linea
 
 `migrate`, `deploy-api` and `deploy-app` run only on a push to `trunk` — never on a pull request — so a green PR proves nothing about them (#1022). What's easy to miss is that even a *push to trunk* often doesn't prove them either: `ci.yml`'s concurrency group holds one in-progress run and one queued run per push; a third push arriving while a second is still queued cancels that second run outright, with zero jobs ever started (#1207). This is routine under a burst of back-to-back merges, not a failure — `.github/workflows/trunk-red.yml` does not open a `trunk-red` issue for it, because the jobs never ran to fail. It instead comments on the merge's own PR naming the gap.
 
+The marketing site's deploy is the same kind of work, in its own workflow: `.github/workflows/firebase-hosting-merge.yml` runs only on a push to `trunk` that touches the site's paths, and on the `practice-page-published` dispatch that the BFF sends when a Practice page is published. A green PR proves nothing about it either.
+
+**The alarm watches both ([#1639](https://github.com/markgoho/doula-cloud/issues/1639)).** `trunk-red.yml` fires when a trunk run of `CI` or of the site deploy completes. A red run opens an assigned `trunk-red` issue that names the workflow, the failed job and the failed step, or comments on the issue that is already open for that workflow. A passing run closes it. Each watched workflow has its own issue, found by a marker in the issue body that holds the workflow file's path, so `CI` going green does not close the alarm of a failed site deploy, and the reverse. A dispatched run has no commit and no pull request of its own; its alarm says so, and a canceled dispatched run comments on no pull request.
+
+To watch one more trunk workflow, add its `name:` to the `workflows:` list in `trunk-red.yml`. That is the whole change; an entry in `MEANING` in `scripts/trunk-red.ts` gives its alarm more exact words.
+
+**`trunk-red.yml` itself cannot be tested by a PR.** A `workflow_run` trigger runs from the default branch only. So its logic is in `scripts/trunk-red.ts`, and `scripts/trunk-red.test.ts` spawns that script with crafted `workflow_run` payloads against a stand-in `gh`; the `scripts` job is a required check. To check the alarm against a real run after a change, replay the run. A replay reads the run from the API and prints what the alarm would do, and writes nothing:
+
+```sh
+gh workflow run trunk-red.yml -f run_id=<id of a completed run>
+REPO=markgoho/doula-cloud REPLAY_RUN_ID=<id> bun scripts/trunk-red.ts   # the same, locally
+```
+
 **What to check instead:** the next trunk `CI` push run whose head has your merge as an ancestor —
 
 ```sh
