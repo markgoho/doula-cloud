@@ -20,8 +20,8 @@ import (
 // DoulaStaffID is the one Doula the asker names (#1596, ADR-0017's
 // amendment on #1515): a person attachment.Membership.WhyNotAttachable
 // admits, which is an employee Doula or a Doula who holds Owner or Admin
-// (#1625). Absent, null or blank is "No Doula
-// yet": the Request names nobody and approval attaches nobody.
+// (#1625). Absent, null or blank is "No Doula yet": the Request names
+// nobody and approval attaches nobody.
 type RequestBody struct {
 	Kind         string  `json:"kind"`
 	DueDate      string  `json:"dueDate"`

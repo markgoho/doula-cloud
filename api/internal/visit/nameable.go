@@ -76,6 +76,7 @@ func decideNameable(m attachment.Membership, attached bool) string {
 			return ReasonContractorWithoutAcceptedOffer
 		}
 	case attachment.Attachable:
+		// Nothing is in her way. Named so the switch is whole.
 	}
 	return ""
 }

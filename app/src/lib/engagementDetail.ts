@@ -92,9 +92,9 @@ export interface EngagementSummary {
 	/** Whether the BFF would put this reader on the Engagement now
 	 * (#1598): she is a Doula whom no Offer has to attach (an employee, or
 	 * a holder of Owner or Admin under each Employment type, #1625), the
-	 * Engagement has not completed, and she is not on it. The hub draws "Put me on this Engagement" off
-	 * this and holds no copy of the rule, the arrangement `statusMoves`
-	 * has with the status endpoint. */
+	 * Engagement has not completed, and she is not on it. The hub draws
+	 * "Put me on this Engagement" off this and holds no copy of the rule,
+	 * the arrangement `statusMoves` has with the status endpoint. */
 	canAttachSelf: boolean;
 }
 

@@ -15,8 +15,8 @@ import { refusalError } from './formErrors.js';
  * amend it". Mirrors the Go BFF's RequestBody.
  *
  * `doulaStaffId` is the one Doula she names (#1596): an employee, or a
- * Doula who holds Owner or Admin under each Employment type (#1625). It is
- * left out for "No Doula yet", which the BFF reads as nobody named. The
+ * Doula who holds Owner or Admin under each Employment type (#1625). It
+ * is left out for "No Doula yet", which the BFF reads as nobody named. The
  * form refuses the submit until she has answered, so leaving it out is
  * always her answer and never a question she skipped. */
 export interface NewEngagementRequest {

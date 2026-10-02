@@ -327,7 +327,7 @@ describe('the Engagement Request screen', () => {
 			expect(postedBody().doulaStaffId).toBeUndefined();
 		});
 
-		it('lists every employee Doula for an Owner, herself first and No Doula yet last, with nothing selected', async () => {
+		it('lists every Doula the BFF answers for an Owner, herself first and No Doula yet last, with nothing selected', async () => {
 			await setup({ roles: ['owner', 'admin', 'doula'], doulas: agencyRoster });
 
 			const group = testPage.getByRole('group', { name: 'Who is the Doula?' });
