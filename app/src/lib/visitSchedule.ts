@@ -50,8 +50,6 @@ export interface ScheduleFilters {
  * cannot silently disagree about what "no filter" shows. */
 export const DEFAULT_SCHEDULE_DAYS = 30;
 
-const DAY_MS = 24 * 60 * 60 * 1000;
-
 function padTwoDigits(n: number): string {
 	return n.toString().padStart(2, '0');
 }
@@ -64,10 +62,14 @@ export function toDateInputValue(date: Date): string {
 }
 
 /** The calendar day `days` after the given one, as another
- * `YYYY-MM-DD`. Built through a local Date so month and year ends carry
- * correctly. */
+ * `YYYY-MM-DD`. Calendar arithmetic on a local Date, not milliseconds: a
+ * local day is 25 hours long when daylight saving ends and 23 when it
+ * starts, so adding fixed 24-hour blocks to a midnight lands a day off.
+ * `setDate` also carries month and year ends correctly. */
 export function addDays(day: string, days: number): string {
-	return toDateInputValue(new Date(startOfLocalDay(day).getTime() + days * DAY_MS));
+	const date = startOfLocalDay(day);
+	date.setDate(date.getDate() + days);
+	return toDateInputValue(date);
 }
 
 /** The days the screen shows when the URL names none: today through
