@@ -33,8 +33,8 @@ describe('proposedChanges', () => {
 		const absorbed = fields({ phone: '555-0100', familyName: 'Okafor-Reid' });
 
 		expect(proposedChanges(fields(), absorbed)).toEqual([
-			{ label: 'Family name', onFile: 'Okafor', typed: 'Okafor-Reid' },
-			{ label: 'Phone number', onFile: 'Not answered', typed: '555-0100' }
+			{ label: 'Family name', before: 'Okafor', after: 'Okafor-Reid' },
+			{ label: 'Phone number', before: 'Not answered', after: '555-0100' }
 		]);
 	});
 
@@ -52,7 +52,7 @@ describe('proposedMergeChanges', () => {
 		const typed = fields({ familyName: 'Okafor-Reid' });
 
 		expect(proposedMergeChanges(typed, match({ wouldSurvive: true }))).toEqual([
-			{ label: 'Family name', onFile: 'Okafor', typed: 'Okafor-Reid' }
+			{ label: 'Family name', before: 'Okafor', after: 'Okafor-Reid' }
 		]);
 	});
 
@@ -60,7 +60,7 @@ describe('proposedMergeChanges', () => {
 		const absorbed = match({ wouldSurvive: false, familyName: 'Okafor-Reid' });
 
 		expect(proposedMergeChanges(fields(), absorbed)).toEqual([
-			{ label: 'Family name', onFile: 'Okafor', typed: 'Okafor-Reid' }
+			{ label: 'Family name', before: 'Okafor', after: 'Okafor-Reid' }
 		]);
 	});
 });

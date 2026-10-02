@@ -22,8 +22,8 @@ import { STRUCTURAL_QUESTIONS, type TextColumn } from './intakeJourney.js';
  * side holds, and what the absorbed side contributes instead. */
 export interface ProposedChange {
 	label: string;
-	onFile: string;
-	typed: string;
+	before: string;
+	after: string;
 }
 
 /** One side of a merge: the structural columns, whichever shape carries
@@ -41,10 +41,10 @@ type Side = Readonly<Record<TextColumn, string>>;
 export function proposedChanges(survivor: Side, absorbed: Side): ProposedChange[] {
 	const rows: ProposedChange[] = [];
 	for (const { key, label } of STRUCTURAL_QUESTIONS) {
-		const onFile = survivor[key].trim();
-		const typed = absorbed[key].trim();
-		if (typed !== '' && typed !== onFile) {
-			rows.push({ label, onFile: onFile === '' ? NOT_ANSWERED : onFile, typed });
+		const before = survivor[key].trim();
+		const after = absorbed[key].trim();
+		if (after !== '' && after !== before) {
+			rows.push({ label, before: before === '' ? NOT_ANSWERED : before, after });
 		}
 	}
 	return rows;

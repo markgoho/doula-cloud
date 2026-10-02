@@ -206,7 +206,7 @@
 			<DescriptionList
 				items={changes.map((change) => ({
 					label: change.label,
-					value: `${change.onFile} → ${change.typed}`
+					value: `${change.before} → ${change.after}`
 				}))}
 			/>
 		{/snippet}
