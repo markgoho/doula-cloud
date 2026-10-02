@@ -60,7 +60,65 @@ print_version() {
   echo "firebase-tools version: ${version} (the root bun.lock pin)"
 }
 
+# What a failed attempt shows, and why it takes a hard link.
+#
+# `firebase-tools` hides the cause of an authentication failure: it
+# prints `Failed to authenticate, have you run firebase login?` for every
+# one, and writes the error it caught (`error.original.stack`) at debug
+# level only. Debug lines go to `firebase-debug.log` in the working
+# directory on every run, but the CLI deletes that file when it exits
+# with a status below 2, and its own errors exit with 1. So the one
+# record of the cause is gone before the step ends. (Read in the 15.30.2
+# source: lib/requireAuth.js, lib/logError.js, lib/error.js, lib/logger.js
+# and lib/bin/cli.js.)
+#
+# The CLI opens a `firebase-debug.log` that is already there and appends
+# to it, and its delete removes that one name. So this script makes the
+# file before each attempt and gives it a second name; the second name
+# keeps the content. `--debug` would keep the file too, but it also sends
+# every debug line of a passing deploy to a public log.
+debug_log="${PWD}/firebase-debug.log"
+kept_log="${PWD}/firebase-debug.kept.log"
+kept_lines=80
+
+keep_debug_log() {
+  rm -f "${debug_log}" "${kept_log}"
+  : > "${debug_log}" && ln "${debug_log}" "${kept_log}" 2> /dev/null
+}
+
+# The repository is public and so are its logs. The debug log holds no
+# credential on the hosting path: the CLI logs no Authorization header,
+# and the token exchange is google-auth-library's own request, of which
+# only the error's stack reaches the log. This filter is the boundary
+# that enforces it whatever a later release writes.
+redact() {
+  sed -E \
+    -e 's/ya29\.[A-Za-z0-9._-]+/[redacted]/g' \
+    -e 's/eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+(\.[A-Za-z0-9_-]*)?/[redacted]/g' \
+    -e 's/([Bb]earer) +[A-Za-z0-9._~+\/=-]+/\1 [redacted]/g' \
+    -e 's/("?[A-Za-z_]*([Tt]oken|[Ss]ecret|[Pp]assword|private_key)[A-Za-z_]*"?[:=] *"?)[^",} ]+/\1[redacted]/g'
+}
+
+kept_count() {
+  if [ -f "${kept_log}" ]; then
+    wc -l < "${kept_log}" | tr -d ' '
+  else
+    echo 0
+  fi
+}
+
+show_debug_log() {
+  if [ -s "${kept_log}" ]; then
+    echo "::group::firebase-tools debug log of the failed attempt (last ${kept_lines} lines, credentials redacted)"
+    tail -n "${kept_lines}" "${kept_log}" | cut -c1-2000 | redact
+    echo "::endgroup::"
+  else
+    echo "firebase-tools left no debug log for this attempt."
+  fi
+}
+
 run_attempt() {
+  keep_debug_log
   if [ -n "${FIREBASE_TOOLS_STDOUT_FILE:-}" ]; then
     "${bin}" "$@" > "${FIREBASE_TOOLS_STDOUT_FILE}"
   else
@@ -74,6 +132,7 @@ show_failure() {
     cat "${FIREBASE_TOOLS_STDOUT_FILE}"
     echo
   fi
+  show_debug_log
 }
 
 retry() {
@@ -85,10 +144,15 @@ retry() {
     run_attempt "$@"
     status=$?
     if [ "${status}" -eq 0 ]; then
+      # Evidence in every passing log that the kept name still works: a
+      # release that changes how the CLI opens its log shows 0 here.
+      echo "firebase-tools debug log kept for this attempt: $(kept_count) lines (printed only when an attempt fails)"
+      rm -f "${debug_log}" "${kept_log}"
       echo "${label} passed on attempt ${attempt} of ${attempts}"
       return 0
     fi
     show_failure
+    rm -f "${debug_log}" "${kept_log}"
     if [ "${attempt}" -lt "${attempts}" ]; then
       wait=$((backoff * attempt))
       echo "::warning::${label} attempt ${attempt} of ${attempts} failed (exit ${status}); retrying in ${wait}s"
