@@ -35,13 +35,20 @@ export default defineConfig({
 			// requires. `200.html` (not `index.html`) per adapter-static's
 			// own guidance, since it's the name Firebase Hosting's
 			// SPA-rewrite convention expects for a catch-all fallback.
-			adapter: adapter({ fallback: '200.html' })
+			adapter: adapter({ fallback: '200.html' }),
+			// PROTOTYPE (#1496) artifact build: one self-contained HTML file
+			// that routes on the hash, so it runs as a claude.ai artifact.
+			output: { bundleStrategy: 'inline' },
+			router: { type: 'hash' },
+			serviceWorker: { register: false }
 		})
 	],
 	// `vite dev` (server) and Playwright's webServer (`vite preview`) each
 	// need their own proxy entry to reach the Go BFF container without
 	// hitting CORS -- see e2e/ports.ts for where the port (and, for a
 	// worktree, the offset) comes from.
+	// PROTOTYPE (#1496) artifact build: the fonts go into the one file.
+	build: { assetsInlineLimit: 50_000_000 },
 	server: {
 		port: DEV_SERVER_PORT,
 		proxy: {
