@@ -10,7 +10,7 @@ import Page from './+page.svelte';
 // root layout.
 import '#lib/styles/app.css';
 import { toApiResponder, toPageState } from '../../routeFixture.js';
-import { asOwner, fixture, offers, practiceName } from './page.fixture.js';
+import { asOwner, asOwnerWithNoClient, fixture, offers, practiceName } from './page.fixture.js';
 
 // Rendering `+page.svelte` directly bypasses `+layout.svelte`, which is the
 // only place that calls this in the real app -- without it every layout
@@ -31,7 +31,10 @@ if (!customElements.get('center-l')) registerLayoutPrimitives();
  * fixture's own `respond` answers the Owner's four `secondary` blocks as
  * well as what a Doula fetches, since #928 gave this route an Owner
  * variant and `block()` swallows an unanswered path into a "Could not
- * load" rail. `setup()` below still installs its own answers rather than
+ * load" rail. The variant for an Owner with no Client (#1621) has a
+ * `respond` of its own, which answers `/clients` with no items and hands
+ * each other path to that same function, so those answers are still
+ * written once. `setup()` below still installs its own answers rather than
  * the fixture's, because most of these tests are about a *particular*
  * one of those blocks failing or arriving empty -- content that is not
  * the happy path, which svelte-tests.md leaves to the spec (#596).
@@ -263,6 +266,43 @@ describe('the Practice landing page', () => {
 		await expect
 			.element(testPage.getByText('Stripe is waiting on 3 more details.'))
 			.toBeVisible();
+	});
+
+	/*
+	 * The third subject, and the same guard for it (#1621). The sweep mounts
+	 * `asOwnerWithNoClient` and measures it, but it cannot tell an empty
+	 * Practice from a populated one: the two fit, so a variant that drew
+	 * the populated hub under the empty Practice's name would stay green
+	 * there. This asserts which tree the fixture's own answers draw.
+	 *
+	 * The realized fixture goes to `toApiResponder` as well as to
+	 * `toPageState`. The Owner test above hands `fixture` to
+	 * `toApiResponder`, which is correct there because `asOwner` inherits
+	 * `respond`. This variant restates it, so the base's `respond` here
+	 * would answer `/clients` with a Client and mount the populated hub.
+	 */
+	it('draws the empty Practice for an Owner with no Client from the fixture that sweeps her', async () => {
+		const realized = { ...fixture, ...asOwnerWithNoClient };
+		Object.assign(pageState, toPageState(realized));
+		apiFetchWithSession.mockImplementation(toApiResponder(realized));
+		await render(Page, {});
+
+		await expect
+			.element(testPage.getByRole('heading', { level: 1, name: `Welcome to ${practiceName}` }))
+			.toBeVisible();
+		await expect
+			.element(
+				testPage.getByText(
+					"Nothing is here yet, because no Client is. Add one and this becomes the Client's birth plan, the visits with the Client, and the contract and invoices between the Client and your Practice.",
+					{ exact: true }
+				)
+			)
+			.toBeVisible();
+		await expect
+			.element(testPage.getByRole('link', { name: 'Add your first Client' }))
+			.toBeVisible();
+		expect(testPage.getByRole('heading', { name: 'Offers awaiting your answer' }).elements()).toHaveLength(0);
+		expect(testPage.getByRole('heading', { name: 'Your people' }).elements()).toHaveLength(0);
 	});
 
 	it('says so when a rail block fails, rather than letting it vanish', async () => {
