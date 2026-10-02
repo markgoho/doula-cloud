@@ -432,7 +432,7 @@
 					(#437). Pointing at it here rather than reopening the field
 					keeps that true.
 				-->
-				<Link href={resolve('/account')} label="Change where you work" variant="secondary" />
+				<Link href={resolve('/(person)/account')} label="Change where you work" variant="secondary" />
 			{:else}
 				<LabeledField id={nameId} label="Your name" error={submission.errorFor(nameId)}>
 					{#snippet children({ id, describedBy, invalid })}

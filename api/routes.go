@@ -134,6 +134,12 @@ type Deps struct {
 	NudgeEnqueuer   tasknudge.Enqueuer
 	ExpectedOrigins []string
 
+	// Founder is #1526's FOUNDER_STAFF_ID and GITHUB_FEEDBACK_REPO: who
+	// the founder read page serves, and where its issue links point. The
+	// zero value refuses everybody, which is what every test's route
+	// table gets unless it sets one.
+	Founder staffauth.FounderConfig
+
 	// Now is #773's Clock seam: every handler that needs the current
 	// instant reads clock.Now(r.Context()) rather than calling
 	// time.Now() directly, and routes() below is the one place that

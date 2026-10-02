@@ -12,6 +12,7 @@ import { seedEngagement, seedEngagementRequest, seedInvoice } from './stack';
 import { enterPracticeAsEnrolled } from './mfa';
 import { seedAccountWithNoPractice } from './staffSignup';
 import { stubTotpFactor } from './totpStub';
+import { WCAG_TAGS } from './wcag';
 
 /**
  * The automated half of the accessibility gate (#447). Everything about
@@ -19,15 +20,14 @@ import { stubTotpFactor } from './totpStub';
  * in docs/testing.md -- read that before adding an assertion here.
  */
 
-// WCAG 2.2 AA, which is the bar GDS holds its own services to, and this
-// repo has already adopted the GOV.UK Design System as its reference for
-// service patterns (ADR-0021) -- so the level is pre-argued rather than
-// picked here. axe's `best-practice` tag is deliberately off: those are
-// opinions, not conformance failures, and a gate that blocks on an
-// opinion is a gate people learn to route around.
-const WCAG_TAGS = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'];
-
 /*
+ * Scanned elsewhere, against the same WCAG_TAGS (wcag.ts):
+ *
+ * - `/feedback` and `/feedback/[feedbackId]`, the founder read page
+ *   (#1526), in founder-feedback.e2e.ts. One `staff` row is the founder,
+ *   and seeding it re-points that row, so two spec files that each held
+ *   the founder would take him from each other mid-test.
+ *
  * Not scanned, and each is a decision rather than an oversight:
  *
  * - `style-guide/*` -- sixty-odd component demo pages. They are not

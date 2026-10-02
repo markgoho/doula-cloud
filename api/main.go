@@ -38,6 +38,7 @@ import (
 	"doula-cloud/api/internal/push"
 	"doula-cloud/api/internal/sessionnotice"
 	"doula-cloud/api/internal/sitebuild"
+	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/staffinvite"
 	"doula-cloud/api/internal/tasknudge"
 	"doula-cloud/api/internal/website"
@@ -48,6 +49,19 @@ func resolvePort() string {
 		return port
 	}
 	return "8080"
+}
+
+// founderConfig reads what the founder read page needs (#1526):
+// FOUNDER_STAFF_ID, the `staff.id` of the one person it serves, and
+// GITHUB_FEEDBACK_REPO, which its link to a piece's issue is built from.
+// Both may be unset. With no FOUNDER_STAFF_ID every founder route refuses
+// everybody, so a service that was never told who the founder is serves
+// the page to nobody rather than to anybody.
+func founderConfig(getenv func(string) string) staffauth.FounderConfig {
+	return staffauth.FounderConfig{
+		StaffID:      strings.TrimSpace(getenv("FOUNDER_STAFF_ID")),
+		FeedbackRepo: strings.TrimSpace(getenv("GITHUB_FEEDBACK_REPO")),
+	}
 }
 
 // resolveExpectedOrigins reads the comma-separated EXPECTED_ORIGINS env
@@ -347,6 +361,7 @@ func main() {
 		FeedbackIssueWorker:    feedbackIssueWorker,
 
 		ExpectedOrigins: resolveExpectedOrigins(),
+		Founder:         founderConfig(os.Getenv),
 		Now:             now,
 	}
 

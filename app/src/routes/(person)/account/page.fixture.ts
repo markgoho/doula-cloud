@@ -9,7 +9,7 @@
  */
 import { jsonResponse } from '#lib/testResponse.js';
 import type { SessionInfo } from '#lib/landing.js';
-import type { RouteFixture, RouteVariant } from '../routeFixture.js';
+import type { RouteFixture, RouteVariant } from '../../routeFixture.js';
 import Page from './+page.svelte';
 
 export const session: SessionInfo = {

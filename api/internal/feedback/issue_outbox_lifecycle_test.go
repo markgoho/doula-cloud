@@ -323,6 +323,14 @@ func TestProcessIssueOutboxHandler_RetentionAndCloseRunBehindTheDoor(t *testing.
 	staffID := testdb.SeedStaff(t, db, "feedback-worker-door-retention")
 	expired := seedStaffFeedbackRowSentAt(t, db, staffID, time.Now().AddDate(0, -25, 0))
 	kept := seedStaffFeedbackRowSentAt(t, db, staffID, time.Now().AddDate(0, -23, 0))
+	// #1526: the founder read the expired piece once. app_runtime holds no
+	// DELETE grant on feedback_reads, so this row going is the cascade's
+	// work (00122), not the worker's.
+	if _, err := db.Admin.ExecContext(t.Context(),
+		`INSERT INTO feedback_reads (feedback_id, staff_id, read_at) VALUES ($1, $2, now())`, expired, staffID,
+	); err != nil {
+		t.Fatalf("seed read row: %v", err)
+	}
 
 	creator := feedback.NewFakeIssueCreator()
 	number := seedOpenedIssue(t, creator, "body")
@@ -335,6 +343,13 @@ func TestProcessIssueOutboxHandler_RetentionAndCloseRunBehindTheDoor(t *testing.
 	}
 	if !feedbackRowExists(t, db, kept) {
 		t.Fatal("a piece at 23 months is gone, want it kept")
+	}
+	var readRows int
+	if err := db.Admin.QueryRowContext(t.Context(), `SELECT count(*) FROM feedback_reads`).Scan(&readRows); err != nil {
+		t.Fatalf("count read rows: %v", err)
+	}
+	if readRows != 0 {
+		t.Fatalf("read rows = %d, want the expired piece's read deleted with it", readRows)
 	}
 	if status := readOutboxStatusByID(t, db, outboxID); status != statusSent {
 		t.Fatalf("close job status = %q, want sent", status)

@@ -1,5 +1,12 @@
 <script lang="ts">
 	/*
+	 * The shell for a signed-in Staff screen that belongs to the person
+	 * and to no Practice: `/account`, and the founder read page under
+	 * `/feedback` (#1526). It was `account/+layout.svelte` until that
+	 * second consumer arrived; the `(person)` group is how the two share
+	 * it without either URL changing. Everything below was written about
+	 * `/account` and holds for both.
+	 *
 	 * The account route's own shell (#484). It sits above the
 	 * Practice-scoped tree and inherits only the bare root layout, so
 	 * before this it was the one authenticated Staff screen with no skip
@@ -100,7 +107,7 @@
 	currentPracticeId=""
 	{name}
 	{email}
-	accountHref={resolve('/account')}
+	accountHref={resolve('/(person)/account')}
 	signOut={handleSignOut}
 />
 <!-- Keyed on the path, matching practices/+layout.svelte's own reason
@@ -115,13 +122,15 @@
 <main id="main" tabindex="-1">
 	{@render children()}
 
-	{#if isLoaded}
+	{#if isLoaded && memberships.length > 0}
 		<!--
 			A way back. The session response already carries every Practice she
 			belongs to, so this screen can return her to the one she came from
 			without a second read -- and a top-level route outside the Practice
 			layout would otherwise be a place with no exit but the back button.
-			One Practice, one link; several, several.
+			One Practice, one link; several, several. None, and there is no
+			nav at all (#1526): the founder holds no Membership, and a heading
+			over an empty list is a way back to nowhere.
 		-->
 		<nav aria-label="Your practices">
 			<Heading level={2} variant="section" text="Back to your practices" />

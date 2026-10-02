@@ -64,7 +64,7 @@ func TestBuildRolesLiteral(t *testing.T) {
 	if got := feedback.BuildRolesLiteral([]string{}); got == nil || *got != "{}" {
 		t.Errorf("BuildRolesLiteral([]string{}) = %v, want \"{}\"", got)
 	}
-	if got := feedback.BuildRolesLiteral([]string{"owner", "admin"}); got == nil || *got != "{owner,admin}" {
+	if got := feedback.BuildRolesLiteral([]string{testOwnerRole, testAdminRole}); got == nil || *got != "{owner,admin}" {
 		t.Errorf("BuildRolesLiteral([owner admin]) = %v, want \"{owner,admin}\"", got)
 	}
 }

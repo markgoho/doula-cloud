@@ -51,6 +51,11 @@ var selfResolvingRoutes = map[string]selfRoute{
 	"DELETE /api/staff/mfa":                           {},
 	"DELETE /api/staff/account":                       {},
 	"POST /api/staff/feedback":                        {body: `{"kind":"idea_or_request"}`},
+	// #1526: FounderOnly resolves the caller's own row before it compares
+	// it with FOUNDER_STAFF_ID, so a stranded session meets this family's
+	// answer and not the founder gate's.
+	"GET /api/staff/feedback":              {},
+	"GET /api/staff/feedback/{feedbackId}": {},
 }
 
 // notSelfResolving is the other half of the registry: a pre-Practice
@@ -81,6 +86,7 @@ func TestEveryPrePracticeRouteRefusesAStrandedSession(t *testing.T) {
 	// stranded uid the session cookie names.
 	staffauth.Mount(g, ir, db.App, authntest.Verifier{UID: strandedUID, SecondFactor: true},
 		authntest.NewFakeAccountManager(), tasknudge.NoOpEnqueuer{}, neverSuppressed)
+	staffauth.MountFounderRoutes(g, db.App, staffauth.FounderConfig{StaffID: absentFeedbackID})
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
 

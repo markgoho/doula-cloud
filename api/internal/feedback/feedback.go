@@ -2,8 +2,9 @@
 // #1523): the row every Staff member and every Portal Client can send
 // from inside the product. It owns the shape both send routes share --
 // the client-sent DTO, kind and length validation, and the insert -- and
-// nothing else. Opening a private GitHub issue for a row is #1524's
-// outbox; the founder read page is #1499; neither is built here.
+// nothing else in this file. Opening a private GitHub issue for a row is
+// #1524's outbox (issue_outbox.go), and the founder's read of one is
+// #1526's (read.go).
 package feedback
 
 import (

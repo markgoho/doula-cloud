@@ -303,6 +303,8 @@ func TestRoutes_MissingTokenPaths(t *testing.T) {
 	}{
 		{http.MethodPost, "/api/staff/signup"},
 		{http.MethodGet, "/api/staff/session"},
+		{http.MethodGet, "/api/staff/feedback"},
+		{http.MethodGet, "/api/staff/feedback/00000000-0000-4000-8000-000000000000"},
 		{http.MethodGet, "/api/practices/00000000-0000-0000-0000-000000000000/session"},
 	}
 	for _, c := range cases {
@@ -516,6 +518,25 @@ func TestResolveExpectedOrigins(t *testing.T) {
 	want := []string{"https://a.example", "https://b.example"}
 	if len(got) != len(want) || got[0] != want[0] || got[1] != want[1] {
 		t.Fatalf("resolveExpectedOrigins() = %v, want %v", got, want)
+	}
+}
+
+// TestFounderConfig: FOUNDER_STAFF_ID and GITHUB_FEEDBACK_REPO are read
+// with stray whitespace trimmed, and both unset is the zero value -- the
+// configuration that refuses everybody (#1526).
+func TestFounderConfig(t *testing.T) {
+	env := map[string]string{
+		"FOUNDER_STAFF_ID":     " 6f1c2c0e-58c5-4d39-9c2b-0e7c1f0a9b11\n",
+		"GITHUB_FEEDBACK_REPO": " markgoho/doula-cloud-feedback ",
+	}
+	got := founderConfig(func(key string) string { return env[key] })
+	want := staffauth.FounderConfig{StaffID: "6f1c2c0e-58c5-4d39-9c2b-0e7c1f0a9b11", FeedbackRepo: "markgoho/doula-cloud-feedback"}
+	if got != want {
+		t.Fatalf("founderConfig() = %+v, want %+v", got, want)
+	}
+
+	if got := founderConfig(func(string) string { return "" }); got != (staffauth.FounderConfig{}) {
+		t.Fatalf("founderConfig() with nothing set = %+v, want the zero value", got)
 	}
 }
 
