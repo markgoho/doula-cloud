@@ -28,6 +28,41 @@ import (
 // number.
 const DefaultPaymentTermsDays = 30
 
+// paymentTermsDay is what one day of payment terms is: 24 hours, a
+// duration, and never a calendar day in anybody's timezone (#1626).
+const paymentTermsDay = 24 * time.Hour
+
+// DueAfterTerms is the rule for when an Invoice falls due, stated once:
+// netDays x 24 hours after the instant it was raised, to the second.
+// netDays is the Practice's payment terms, or DefaultPaymentTermsDays at
+// a Practice that has set none.
+//
+// It is a duration and not netDays calendar days, so the answer does not
+// depend on a timezone -- not the Practice's, not the Postgres session's,
+// not this process's. Across a daylight-saving change the two readings
+// differ by an hour, and three records settle which one this is:
+//
+//   - ADR-0038 makes the due date an instant, and derives Overdue from an
+//     instant comparison (due_at < now()). There is no calendar day in
+//     it. ADR-0036's calendar day is about date columns and names its own
+//     scope; due_at is a timestamptz.
+//   - ADR-0038 took 30 days from what the Stripe rail already applied as
+//     days_until_due, and Stripe counts that day as 86,400 seconds:
+//     measured on the Sandbox on 2026-10-02, days_until_due=30 gave a
+//     due_date exactly 2,592,000 seconds after created, across the
+//     25-hour day of 2026-11-01.
+//   - The app counts days late the same way, in whole 24-hour periods
+//     from the due instant.
+//
+// The second is the resolution Stripe's own due_date carries: the value
+// sent to Stripe as a Unix timestamp and the value stored on the row are
+// then literally the same instant, rather than the same instant to within
+// a microsecond. Truncate works on absolute time, so the cut does not
+// depend on raisedAt's Location either.
+func DueAfterTerms(raisedAt time.Time, netDays int) time.Time {
+	return raisedAt.Truncate(time.Second).Add(time.Duration(netDays) * paymentTermsDay)
+}
+
 // MsgNetDaysOutOfRange is what a person reads when the terms she typed
 // are not a usable number of days -- docs/api-design.md section 7 rule 4:
 // a 4xx she can cause by filling in a form names the field at fault,
@@ -99,6 +134,13 @@ func fetchPaymentTerms(ctx context.Context, tx *sql.Tx, practiceID string) (netD
 // database's clock, which is also the clock simclock shifts when a
 // sandbox runs compressed time (docs/research/simulated-clock-compression.md).
 //
+// Postgres supplies the instant and nothing else. The terms are added in
+// Go, by DueAfterTerms, because Postgres adds a days interval to a
+// timestamptz as calendar days in the session's TimeZone: the same
+// statement gives an instant one hour different on a connection whose
+// zone has daylight saving time, and nothing in this repo sets that zone
+// (#1626).
+//
 // One value, computed once: the Stripe rail sends this exact timestamp to
 // Stripe as its due_date and stores the same one, rather than letting
 // Stripe derive a second date of its own from a day count.
@@ -108,18 +150,12 @@ func invoiceDueAt(ctx context.Context, tx *sql.Tx, practiceID string) (time.Time
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		return time.Time{}, err
 	}
-	var dueAt time.Time
-	if err := tx.QueryRowContext(ctx,
-		// Truncated to the second, which is the resolution Stripe's own
-		// due_date carries: the value sent as a Unix timestamp and the
-		// value stored on the row are then literally the same instant,
-		// rather than the same instant to within a microsecond.
-		`SELECT date_trunc('second', now() + make_interval(days => $1))`, netDays,
-	).Scan(&dueAt); err != nil {
+	var raisedAt time.Time
+	if err := tx.QueryRowContext(ctx, `SELECT now()`).Scan(&raisedAt); err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		return time.Time{}, fmt.Errorf("payments: compute invoice due date: %w", err)
+		return time.Time{}, fmt.Errorf("payments: read the instant an invoice is raised: %w", err)
 	}
-	return dueAt, nil
+	return DueAfterTerms(raisedAt, netDays), nil
 }
 
 // GetPaymentTermsHandler lets any Staff member at the current Practice
