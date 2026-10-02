@@ -104,13 +104,21 @@ func issueBody(r pendingIssueRow, appBaseURL string) string {
 // produces, which is the empty string: she holds no role a reader could
 // name, and "Staff" would misstate that a Practice is in context.
 func feedbackRole(r pendingIssueRow) string {
-	if r.portalAccount.Valid {
+	return roleText(r.portalAccount.Valid, r.roles)
+}
+
+// roleText is feedbackRole's rule on the two facts it reads, so the
+// founder read page (#1526) prints the same sentence the issue carries.
+// roles is array_to_string(feedback.roles, ','): NULL where the piece
+// has no Practice in context.
+func roleText(portal bool, roles sql.NullString) string {
+	if portal {
 		return "Client"
 	}
-	if !r.roles.Valid {
+	if !roles.Valid {
 		return "Staff"
 	}
-	return strings.ReplaceAll(r.roles.String, ",", ", ")
+	return strings.ReplaceAll(roles.String, ",", ", ")
 }
 
 // IssueWorker performs every due feedback_issue_outbox row -- opening a

@@ -38,4 +38,8 @@ func registerSessionRoutes(g *staffauth.GatedRouter, ir *idempotency.Router, d D
 		func(ctx context.Context, tx *sql.Tx, address string) (bool, error) {
 			return mailsuppress.Active(ctx, tx, address)
 		})
+	// #1526: the founder read page. Mounted beside staffauth.Mount rather
+	// than inside it because it is the one part of that package that
+	// reads configuration.
+	staffauth.MountFounderRoutes(g, d.DB, d.Founder)
 }

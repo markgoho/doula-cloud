@@ -450,7 +450,7 @@ func TestIssueWorker_PortalSenderReportsClientAsTheRole(t *testing.T) {
 // a Staff sender at a real Practice reports her actual roles.
 func TestIssueWorker_StaffSenderWithRolesReportsThem(t *testing.T) {
 	db := testdb.New(t)
-	practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, "feedback-worker-roles", []string{"owner", "admin"}, "employee")
+	practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, "feedback-worker-roles", []string{testOwnerRole, testAdminRole}, "employee")
 	feedbackID := seedStaffFeedbackRowWithRoles(t, db, staffID, practiceID, feedback.KindNotWorking, "/practices/[practiceId]")
 	enqueueIssueOutbox(t, db, feedbackID)
 

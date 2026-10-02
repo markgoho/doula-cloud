@@ -128,8 +128,23 @@ func TestEraseHandler_DestroysHerFeedbackAndQueuesACloseForEachIssue(t *testing.
 	}
 	loginOnly := seedPortalFeedback(t, db, portalUID, "", "", 12)
 	staffPiece := seedStaffFeedback(t, db, staffID, practiceID, 13)
+	// #1526: the founder read one of her pieces. The record of that read
+	// goes with the piece (00122's ON DELETE CASCADE).
+	if _, err := db.Admin.ExecContext(t.Context(),
+		`INSERT INTO feedback_reads (feedback_id, staff_id, read_at) VALUES ($1, $2, now())`, withIssue, staffID,
+	); err != nil {
+		t.Fatalf("seed read row: %v", err)
+	}
 
 	eraseOK(t, db, uid, practiceID, clientID)
+
+	var readRows int
+	if err := db.Admin.QueryRowContext(t.Context(), `SELECT count(*) FROM feedback_reads`).Scan(&readRows); err != nil {
+		t.Fatalf("count read rows: %v", err)
+	}
+	if readRows != 0 {
+		t.Fatalf("read rows = %d, want the read of her piece destroyed with it", readRows)
+	}
 
 	for name, id := range map[string]string{"with an issue": withIssue, "not yet opened": notYetOpened, "keyed only to the login": loginOnly} {
 		if feedbackExists(t, db, id) {
