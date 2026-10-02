@@ -298,7 +298,7 @@ Each ticket that a decision of the map filed, with its state and its blocking ed
 | [A Client's other details are added from her record: the question pages become one journey that saves as one edit (#1610)](https://github.com/markgoho/doula-cloud/issues/1610) | No, but it gates #1611 | Open | None |
 | [A new Client is the name, then Start work: the save continues to the Start work form and the flow ends on the Engagement (#1611)](https://github.com/markgoho/doula-cloud/issues/1611) | Yes, screens 3 to 5 | Open | #1610, #1609, and #1596 (closed) |
 | [She is told what uses a Credit, and how many the Practice has, before she starts (#1612)](https://github.com/markgoho/doula-cloud/issues/1612) | Yes, screens 2 and 4 | Open | #1599 and #1596, the two closed |
-| [On the empty Practice a long Practice name pushes the one action below the first screen at 320px (#1632)](https://github.com/markgoho/doula-cloud/issues/1632) | Yes, screen 2 | Open | None |
+| [On the empty Practice a long Practice name pushes the one action below the first screen at 320px (#1632)](https://github.com/markgoho/doula-cloud/issues/1632) | Yes, screen 2 | Open | #1612 |
 | [RadioGroup draws the browser's small native circle, off-center from its label (#1518)](https://github.com/markgoho/doula-cloud/issues/1518) | Yes, screen 4 | Open | None |
 | [Start work tells an Owner to write a note for an approver who is herself (#1512)](https://github.com/markgoho/doula-cloud/issues/1512) | Yes, screen 4 | Open | None |
 
@@ -306,13 +306,14 @@ Each ticket that a decision of the map filed, with its state and its blocking ed
 
 | Ticket | On the route | State | Blocked by |
 | --- | --- | --- | --- |
-| [An agency Owner's journey starts at /signup: Renata's map and plan gain the route, and the built route is walked against the spec (#1649)](https://github.com/markgoho/doula-cloud/issues/1649) | It checks the route | Open | #1531, #1536, #1537, #1538, #1539, #1547, #1609, #1611, #1612, #1512 |
+| [An agency Owner's journey starts at /signup: Renata's map and plan gain the route, and the built route is walked against the spec (#1649)](https://github.com/markgoho/doula-cloud/issues/1649) | It checks the route | Open | #1531, #1536, #1537, #1538, #1539, #1547, #1609, #1611, #1612, #1632, #1518, #1512 |
 
 ### What the check of the tickets changed
 
-The check for this spec, on 2026-10-02, read each ticket's parent and each blocking edge against the resolution that filed it. It made three changes:
+The check for this spec, on 2026-10-02, read each ticket's parent and each blocking edge against the resolution that filed it. It made four changes:
 
 - **One edge added: #1611 is blocked by #1609.** #1611 has the criterion "An e2e spec shows the first Client in three presses from the empty Practice to the Engagement's page", and its body says "The count of three presses needs the two tickets". The criterion cannot pass while the search is in front of the first Client.
+- **One edge added: #1632 is blocked by #1612.** #1632 measures where the link "Add your first Client" starts, and #1612 puts one more sentence above that link. The measure is true only with the sentence on the screen.
 - **Two links added: #1512 and #1518 are sub-issues of the map.** Each had no parent. Screen 4 does not match this document until the two land: #1512 owns the Note's hint, and #1518 owns one of "the two" that Mark asked to fix at 320px.
 - **One ticket filed with its edges: #1649.**
 
