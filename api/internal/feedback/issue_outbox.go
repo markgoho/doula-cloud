@@ -209,9 +209,26 @@ func (w IssueWorker) ProcessPending(ctx context.Context, tx *sql.Tx) error {
 // clock, so a simulation Run that moves the clock ages Feedback with it.
 // It is compared against sent_at, which the send handlers also took from
 // that seam. Nothing is queued for the piece's issue: it stays as it is.
+//
+// A piece whose open job is still pending is passed over, and goes on
+// the first run after that job settles. Without that, the same run would
+// then find the job's piece gone and take it for an erased one --
+// performGone cannot tell an aged-out piece from an erased one -- and
+// would close its issue as erased, which is exactly what retention must
+// not do. A real job settles within a day (outbox.BackoffSchedule), so
+// only a Run that jumps the clock across the whole 24 months reaches
+// this. The NOT EXISTS reads feedback_issue_outbox_one_pending (00120).
 func (w IssueWorker) deleteExpired(ctx context.Context, tx *sql.Tx) error {
 	cutoff := w.Now().AddDate(0, -RetentionMonths, 0)
-	if _, err := tx.ExecContext(ctx, `DELETE FROM feedback WHERE sent_at < $1`, cutoff); err != nil {
+	if _, err := tx.ExecContext(ctx,
+		`DELETE FROM feedback f
+		  WHERE f.sent_at < $1
+		    AND NOT EXISTS (
+		        SELECT 1 FROM feedback_issue_outbox o
+		         WHERE o.feedback_id = f.id AND o.status = 'pending'
+		    )`,
+		cutoff,
+	); err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		return fmt.Errorf("feedback: delete expired feedback: %w", err)
 	}

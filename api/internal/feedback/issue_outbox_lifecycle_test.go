@@ -250,6 +250,43 @@ func TestIssueWorker_RetentionDeletesAPieceAfter24Months(t *testing.T) {
 	}
 }
 
+// TestIssueWorker_RetentionWaitsForAPendingOpenJob is the one case where
+// retention and the gone-piece path could meet: the clock jumps past 24
+// months while a piece's open job is still pending. Deleting the piece
+// first would make the same run read it as erased and close its issue
+// with the erased label. So the piece waits for its job, the issue is
+// opened as usual, and the next run deletes the piece and leaves that
+// issue as it is.
+func TestIssueWorker_RetentionWaitsForAPendingOpenJob(t *testing.T) {
+	db := testdb.New(t)
+	staffID := testdb.SeedStaff(t, db, "feedback-worker-retention-pending")
+	sentAt := time.Date(2026, time.November, 3, 14, 30, 0, 0, time.UTC)
+	feedbackID := seedStaffFeedbackRowSentAt(t, db, staffID, sentAt)
+	enqueueIssueOutbox(t, db, feedbackID)
+
+	creator := feedback.NewFakeIssueCreator()
+	now := sentAt.AddDate(0, 25, 0)
+	worker := feedback.IssueWorker{Creator: creator, AppBaseURL: testIssueAppBaseURL, Now: func() time.Time { return now }}
+
+	runIssueWorker(t, db, worker)
+	if !feedbackRowExists(t, db, feedbackID) {
+		t.Fatal("piece is gone while its open job was pending, want it kept until the job settles")
+	}
+	number := readIssueNumber(t, db, feedbackID)
+	if !number.Valid {
+		t.Fatal("issue_number is NULL, want the pending job to have opened the issue")
+	}
+
+	runIssueWorker(t, db, worker)
+	if feedbackRowExists(t, db, feedbackID) {
+		t.Fatal("piece is still there on the run after its job settled, want it deleted")
+	}
+	issue := creator.Issues[int(number.Int64)]
+	if issue.Closed || hasLabel(issue, testErasedLabel) {
+		t.Fatalf("issue closed = %v, labels = %v; want retention to leave the issue open and unlabeled as erased", issue.Closed, issue.Labels)
+	}
+}
+
 // postProcessIssueOutbox runs worker once through outbox.ProcessHandler
 // against db.App, the app_runtime role -- the door every RLS claim in
 // 00120 and 00121 is actually proved through.
