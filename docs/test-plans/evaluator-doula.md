@@ -46,7 +46,7 @@ None, and that is the test. Tasha arrives from outside with no account and no fi
 | Step | Action | Expected result | Mark |
 | --- | --- | --- | --- |
 | 4.1 | Land on `/practices/[practiceId]` | `Welcome to {practice name}`. The old seven-link menu is gone ([#452](https://github.com/markgoho/doula-cloud/issues/452), closed): Clients, Billing and Staff moved into the shell's persistent, role-scoped top bar, Plan Templates, Contract Template and Payments moved under **Settings**, and this screen is `OverviewHub`'s own content | `manual` |
-| 4.1-a | Search the screen for the words "birth plan" and "visit" | With no Client yet, `OverviewHub`'s empty state reads: "Nothing is here yet, because no Client is. Add one and this becomes the Client's birth plan, your visits to the Client, and the contract and invoices between you." Both words appear, naming the work rather than administration | `manual` |
+| 4.1-a | Search the screen for the words "birth plan" and "visit" | With no Client yet, `OverviewHub`'s empty state reads: "Nothing is here yet, because no Client is. Add one and this becomes the Client's birth plan, the visits with the Client, and the contract and invoices between the Client and your Practice." Both words appear, naming the work rather than administration | `manual` |
 | 4.2 | Choose where to go first | One action, **Add your first Client**, not a menu | `manual` |
 
 **Abandon check**: none remaining. TB-G4 is closed by [#287](https://github.com/markgoho/doula-cloud/issues/287).
