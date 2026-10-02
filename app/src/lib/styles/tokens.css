@@ -264,6 +264,13 @@
 	   drawing put there, and three consumers is past the bar at which a
 	   number copied into three stylesheets stops being one decision. */
 	--page-rail: 16.25rem;
+	/* The signed-out landing (#1645): the narrowest a panel of its
+	   two-panel split may be before the two stack, and the narrowest one of
+	   its two bordered doors may be before those two stack. Floors for a
+	   wrapping grid, not breakpoints -- each is the space its content needs,
+	   read where it is used (`grid-l`'s `min`), never against the window. */
+	--landing-panel-min: 25rem;
+	--door-min: 13.75rem;
 
 	/* The application shell (#452), for the same reason as the page frame
 	   above: the brief fixes the 60px bar and --hit-target-min, and leaves
