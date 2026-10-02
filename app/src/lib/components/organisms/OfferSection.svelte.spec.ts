@@ -359,7 +359,7 @@ describe('OfferSection.svelte', () => {
 			await expect
 				.element(
 					page.getByText(
-						'Nobody else at this practice is a Doula, so this work can only be offered to someone new, by email.'
+						'There is no one at this practice to offer this work to, so it can only be offered to someone new, by email.'
 					)
 				)
 				.toBeVisible();
@@ -406,7 +406,7 @@ describe('OfferSection.svelte', () => {
 			});
 		});
 
-		it('does not say nobody is a Doula when the roster could not be read', async () => {
+		it('does not say there is no one when the roster could not be read', async () => {
 			const { container } = await setup({ doulas: undefined });
 
 			await expect
@@ -416,7 +416,7 @@ describe('OfferSection.svelte', () => {
 					)
 				)
 				.toBeVisible();
-			expect(page.getByText(/Nobody else at this practice is a Doula/).elements()).toHaveLength(0);
+			expect(page.getByText(/There is no one at this practice/).elements()).toHaveLength(0);
 			expect(page.getByRole('radio').elements()).toHaveLength(0);
 
 			await page.getByRole('button', { name: 'Send Offer' }).click();

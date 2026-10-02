@@ -52,6 +52,9 @@
 		onWithdraw: (offerId: string) => Promise<void>;
 	} = $props();
 
+	// What was last chosen, not what the form acts on: `isByEmail` below
+	// is, because an empty roster leaves "email" as the only answer
+	// whatever this holds (#1432).
 	let target = $state<'staff' | 'email'>('staff');
 	let staffId = $state('');
 	let email = $state('');
@@ -228,7 +231,10 @@
 			pick someone already here, reload the page.
 		</p>
 	{:else if firstDoula === undefined}
-		<p>Nobody else at this practice is a Doula, so this work can only be offered to someone new, by email.</p>
+		<!-- True for a Practice with no Doula, and for a reader who is its
+		     only Doula once #1598 takes the sender out of the list: the words
+		     say nothing about whether the person at the screen is a Doula. -->
+		<p>There is no one at this practice to offer this work to, so it can only be offered to someone new, by email.</p>
 	{:else}
 		<RadioGroup
 			legend="Offer this work to"
