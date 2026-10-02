@@ -274,14 +274,27 @@ describe('the Practice landing page', () => {
 	it('names doula work and offers one action on a Practice with no Clients', async () => {
 		await setup({ clients: [] });
 
+		// #1599: the whole sentence, not a fragment of it. Signup gives a
+		// solo Owner and an agency Owner the same three roles and nothing
+		// asks her which she is before this screen, so the words must be
+		// true for the two of them -- "your visits" was not, for an Owner
+		// who attends no births.
 		await expect
-			.element(testPage.getByText(/the Client's birth plan, your visits to the Client/))
+			.element(
+				testPage.getByText(
+					"Nothing is here yet, because no Client is. Add one and this becomes the Client's birth plan, the visits with the Client, and the contract and invoices between the Client and your Practice.",
+					{ exact: true }
+				)
+			)
 			.toBeVisible();
 		await expect
 			.element(testPage.getByRole('link', { name: 'Add your first Client' }))
 			.toBeVisible();
-		// The abandon point was a menu of administration. One action, not eight.
+		// The abandon point was a menu of administration. One action, not
+		// eight (ADR-0048: the empty Practice asks for one act and nothing
+		// else) -- and an action is a link or a button, so both are counted.
 		expect(testPage.getByRole('link').elements()).toHaveLength(1);
+		expect(testPage.getByRole('button').elements()).toHaveLength(0);
 	});
 
 	it('reserves the page while it loads, rather than flashing empty', async () => {

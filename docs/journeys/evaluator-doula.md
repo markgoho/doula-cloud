@@ -63,7 +63,7 @@ This stage is genuinely cheap and is the strongest leg of her journey. One scree
 **Thinking**: "Show me the thing I came for." **Pain points**: none remaining. The old seven-link menu is gone ([#452](https://github.com/markgoho/doula-cloud/issues/452), closed): Clients, Billing and Staff moved into the shell's persistent, role-scoped top bar, Plan Templates, Contract Template and Payments moved under **Settings**, and this screen is now `OverviewHub`'s zero-Client state, which names the work rather than the filing cabinet and offers one action.
 
 - **4.1** — Land on `/practices/[practiceId]`.
-- **4.2** — Read "Nothing is here yet, because no Client is. Add one and this becomes the Client's birth plan, your visits to the Client, and the contract and invoices between you." and follow **Add your first Client**.
+- **4.2** — Read "Nothing is here yet, because no Client is. Add one and this becomes the Client's birth plan, the visits with the Client, and the contract and invoices between the Client and your Practice." and follow **Add your first Client**.
 
 **Abandon point**: none remaining (TB-G4, closed by [#287](https://github.com/markgoho/doula-cloud/issues/287)).
 

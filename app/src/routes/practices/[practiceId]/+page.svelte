@@ -343,10 +343,16 @@
 		prop. It names the work rather than the filing cabinet, and it offers
 		one action, not a menu -- a menu is what made this page the abandon
 		point in the first place.
+
+		The words name nobody as the Doula (#1599). Signup gives a solo Owner
+		and an agency Owner the same three roles and nothing asks her which
+		she is before this screen, so "your visits" and "between you" were
+		untrue for an Owner who attends no births. One set of words is true
+		for the two of them.
 	-->
 	<stack-l space="var(--space-4)">
 		<Text
-			text="Nothing is here yet, because no Client is. Add one and this becomes the Client's birth plan, your visits to the Client, and the contract and invoices between you."
+			text="Nothing is here yet, because no Client is. Add one and this becomes the Client's birth plan, the visits with the Client, and the contract and invoices between the Client and your Practice."
 		/>
 		<!--
 			Through search, not straight into intake (#466). ADR-0017 makes
