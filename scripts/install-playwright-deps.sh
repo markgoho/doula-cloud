@@ -35,8 +35,8 @@
 #   3. After a failed attempt the script waits (bounded) until no apt-get or
 #      dpkg process is left, then retries with an uncontended lock.
 #
-# The whole step is capped at TOTAL_BUDGET (540s): worst case 180s + wait +
-# 180s would otherwise be unbounded. The three calling jobs carry a
+# The whole step is capped at TOTAL_BUDGET (540s), so the waits between
+# attempts cannot add up to more than that. The three calling jobs carry a
 # 20-minute timeout, which holds this budget plus the browser download's
 # worst case (3 x 120s + 2 x 30s); the arithmetic is on ci.yml's `app` job.
 #
