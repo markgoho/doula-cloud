@@ -21,7 +21,7 @@ Renata is a domain expert. Her language and `CONTEXT.md` mostly agree, which is 
 | Engagement | "a client", "a birth" | She counts her year in births, not Engagements |
 | Admin | "the office" | |
 | Visit | "a prenatal", "the birth" | She distinguishes types the model does not |
-| Attachment | "the assignment", "who is assigned to whom" | `CONTEXT.md` avoids "Assignment" for an Attachment, the record that a Doula is on an Engagement, and keeps the word for a Visit, whose `staff_id` is assigned. Renata says it of both |
+| Attachment | "the assignment", "who is assigned to whom" | `CONTEXT.md` avoids "Assignment" for an Attachment, the record that a Doula is on an Engagement, and keeps the word for a Visit, whose `staff_id` is assigned |
 
 ## Stages
 
