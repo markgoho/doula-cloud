@@ -29,12 +29,13 @@ type RequestDoula struct {
 // CallerIsOnlyDoula is true where the caller is in Items and no other
 // Member of the Practice holds the Doula role. ADR-0017's amendment on
 // #1515: "where the asker is the only Doula at the Practice, she is
-// selected already". A contractor Doula counts as another Doula, although
-// she is never in Items: with her at the Practice, "the Doula is me" is no
-// longer the only answer that work can have, and the departure recorded in
-// docs/design/govuk-alignment.md stops "the moment a second Doula joins
-// the Practice". The fact is computed here and not on the screen, because
-// a plain Doula's Items holds herself alone at a Practice of any size.
+// selected already". A contractor Doula who holds neither Owner nor Admin
+// counts as another Doula, although she is never in Items: with her at
+// the Practice, "the Doula is me" is no longer the only answer that work
+// can have, and the departure recorded in docs/design/govuk-alignment.md
+// stops "the moment a second Doula joins the Practice". The fact is
+// computed here and not on the screen, because a plain Doula's Items
+// holds herself alone at a Practice of any size.
 //
 // It is the one fact about the roster a plain Doula reads here: whether
 // any other Doula is at her Practice, and nothing about who. ADR-0008
@@ -53,12 +54,15 @@ const msgContractorOriginates = "a contractor doula does not request an engageme
 // DoulasHandler answers "who may this person name as the Doula on a new
 // Request" for the Start work form (#1596).
 //
-// For an Owner or an Admin: each employee Doula at the Practice. For any
-// other Staff member: herself, where she is an employee Doula, and nobody
-// else, because ADR-0008 gives a plain Doula no read of the roster. A
-// contractor is never listed, and a person whose Invitation is pending
-// holds no Membership and so is not in the read at all. The caller is
-// first, and the rest are in name order.
+// For an Owner or an Admin: each Doula at the Practice who can be
+// attached without an Offer, which is each employee Doula and each Doula
+// who holds Owner or Admin, herself included (ADR-0008's amendment on
+// #1625). For any other Staff member: herself, where she is an employee
+// Doula, and nobody else, because ADR-0008 gives a plain Doula no read of
+// the roster. A contractor who holds neither Owner nor Admin is never
+// listed, and a person whose Invitation is pending holds no Membership
+// and so is not in the read at all. The caller is first, and the rest
+// are in name order.
 //
 // Any Staff member may call it but a contractor Doula, who originates
 // nothing (ADR-0017) and is refused here as RequestHandler refuses her.
@@ -101,8 +105,9 @@ const doulaRole = "doula"
 // doulaRosterQuery reads every Member of the Practice who holds the Doula
 // role, the caller first and the rest by name. s.id breaks the tie,
 // because two Doulas at one agency can share a name. One query for the
-// whole roster, whatever its size.
-const doulaRosterQuery = `SELECT s.id, s.name, m.employment_type::text
+// whole roster, whatever its size. It reads the three facts the
+// attachment rule needs of a Member who holds the Doula role.
+const doulaRosterQuery = `SELECT s.id, s.name, m.employment_type::text, ` + attachment.OwnerOrAdminSQL + `
 	  FROM practice_memberships m
 	  JOIN staff s ON s.id = m.staff_id
 	 WHERE m.practice_id = $1 AND $2 = ANY(m.roles)
@@ -122,16 +127,16 @@ func listRequestDoulas(ctx context.Context, tx *sql.Tx, practiceID, callerStaffI
 	doulas, callerListed := 0, false
 	for rows.Next() {
 		var row RequestDoula
-		var employmentType string
-		if err := rows.Scan(&row.StaffID, &row.Name, &employmentType); err != nil {
+		// Every row the query returns is a Member who holds the Doula
+		// role, so the rule has her Employment type and her Owner-or-Admin
+		// fact left to read.
+		listed := attachment.Membership{Exists: true, IsDoula: true}
+		if err := rows.Scan(&row.StaffID, &row.Name, &listed.EmploymentType, &listed.IsOwnerOrAdmin); err != nil {
 			// coverage:ignore reason: row scan failure, not exercised by unit tests
 			return DoulasResponse{}, fmt.Errorf("engagementrequest: scan doula roster row: %w", err)
 		}
 		doulas++
 		isCaller := row.StaffID == callerStaffID
-		// Every row the query returns is a Member who holds the Doula
-		// role, so the rule has only her Employment type left to read.
-		listed := attachment.Membership{Exists: true, IsDoula: true, EmploymentType: employmentType}
 		if listed.WhyNotAttachable() != attachment.Attachable || (!isCaller && !readsRoster) {
 			continue
 		}

@@ -66,9 +66,11 @@ func blockedDetails() (string, map[string]string) {
 // The two sentences an Offer to its own sender is refused with (#1598),
 // each beside the control that named her: the Doula pick, or the email
 // address. "Nobody offers herself work" is ADR-0008's amendment on #1515:
-// an Offer is one person asking another, and an employee Doula who wants
-// to be on an Engagement puts herself on it
-// (engagement.AttachSelfHandler).
+// an Offer is one person asking another, and a Doula who wants to be on
+// an Engagement puts herself on it (engagement.AttachSelfHandler). That
+// holds for each person who can send an Offer, because the sender holds
+// Owner or Admin and so is attachable under each Employment type
+// (#1625).
 const (
 	MsgTargetIsSender        = "Select another Doula. You cannot offer work to yourself."
 	MsgTargetAddressIsSender = "Enter the email address of another person. You cannot offer work to yourself."

@@ -199,9 +199,12 @@ export const detail = {
 	// #1598: who is on this Engagement. Two Doulas, the on-call panel's
 	// own primary and backup, so the summary's row holds its busiest
 	// state: the plural label and two names on one line, the first of
-	// them the longest name on this screen. The reader is one of them, so
-	// the BFF offers her no "Put me on this Engagement" -- the empty state
-	// and the control are `asDoula`'s, below.
+	// them the longest name on this screen. The reader is one of them
+	// (`staff-1`), so the BFF answers `canAttachSelf: false`: she is on
+	// it already. That is the only reason. She is an Owner who is a
+	// contractor Doula, and the BFF offers that reader the control on an
+	// Engagement she is not on (#1625). The empty state and the control
+	// are `asDoula`'s, below.
 	doulas: [
 		{ staffId: 'staff-1', name: 'Persephone Vandermeulen-Achterberg, CD(DONA)' },
 		{ staffId: 'staff-2', name: 'Bo Ng' }
@@ -319,7 +322,9 @@ export const session = {
 	// `staffId` made the old `false` a contradiction rather than an
 	// omission. It changes nothing the screen draws: `isAmbientContractor`
 	// is `isContractor && !isOwnerOrAdmin`, so an Owner who contracts is
-	// never the ambient contractor ADR-0008 confines.
+	// never the ambient contractor ADR-0008 confines. The rule for who is
+	// attached without an Offer confines that same contractor and no
+	// other (#1625), so this reader may put herself on an Engagement.
 	isContractor: true
 };
 
@@ -364,8 +369,10 @@ export const asDoula: RouteVariant<RouteParameters> = {
 	// #1598: the other state of the summary's Doula row, and the control
 	// that goes with it -- nobody is on the Engagement, so the row reads
 	// "No Doula yet" and an employee Doula is offered "Put me on this
-	// Engagement". It rides this variant because she is the reader the
-	// BFF offers it to; the base's Owner is a contractor, who never is.
+	// Engagement". It rides this variant because the base has its Doulas
+	// on it, the reader among them, and the sweep needs the empty row.
+	// The base's Owner, a contractor Doula, is offered the control too on
+	// an Engagement she is not on (#1625).
 	props: {
 		data: {
 			...detail,

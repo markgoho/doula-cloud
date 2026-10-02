@@ -95,7 +95,7 @@ func CreateHandler() http.Handler {
 		if !ok {
 			return
 		}
-		staffID, isEmployee, ok := resolveAssignee(w, r, c, engagementID, req.StaffID)
+		staffID, grants, ok := resolveAssignee(w, r, c, engagementID, req.StaffID)
 		if !ok {
 			return
 		}
@@ -133,11 +133,11 @@ func CreateHandler() http.Handler {
 			return
 		}
 
-		// The attachment a named employee gets is grantAssignee's rule,
+		// The attachment the Visit's assignee gets is grantAssignee's rule,
 		// shared with the reassign path. It runs here, after the row and
 		// the activity entry, so nothing is attached on a write that
 		// failed.
-		if !grantAssignee(w, r, c, engagementID, staffID, isEmployee) {
+		if !grantAssignee(w, r, c, engagementID, staffID, grants) {
 			// coverage:ignore reason: grantAssignee only reports false on a DB write failure, not exercised by unit tests
 			return
 		}

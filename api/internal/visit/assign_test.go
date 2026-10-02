@@ -388,6 +388,105 @@ func TestCreateHandler_GrantsTheNamedEmployee(t *testing.T) {
 	}
 }
 
+// #1625: the Visit is one of the writers of a granted Attachment that
+// needs no Offer, and it reads the one rule the others read. A Doula who
+// holds Owner or Admin is attached by a Visit under each Employment
+// type: where she logs it for herself she is attached_by herself, and
+// where an Owner or an Admin names her the person who named her is.
+// "Only her own acceptance of an Offer" is the rule for a contractor who
+// holds neither role, and TestCreateHandler_RefusesAnIneligibleAssignee
+// and TestCreateHandler_GrantsNothingToAContractorWhoLoggedAVisit still
+// hold her to it.
+func TestCreateHandler_GrantsAnOwnerOrAdminWhoIsAContractorDoula(t *testing.T) {
+	for _, role := range []string{ownerRole, adminRole} {
+		t.Run(role+" logs a Visit for herself", func(t *testing.T) {
+			db := testdb.New(t)
+			identityUID := "contractor-" + role + "-logging-her-own"
+			practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{role, doulaRole}, "contractor")
+			_, engagementID := testdb.SeedEngagement(t, db, practiceID)
+
+			srv, session := newServer(t, db, identityUID)
+			defer srv.Close()
+
+			resp := createVisit(t, session, visitsURL(srv.URL, practiceID, engagementID), "", visit.CreateRequest{})
+			defer resp.Body.Close()
+			if out := decodeCreate(t, resp); out.StaffID != staffID {
+				t.Fatalf("staffId = %q, want her own %q", out.StaffID, staffID)
+			}
+
+			origin, attachedBy, exists := attachment(t, db, engagementID, staffID)
+			if !exists {
+				t.Fatal("no attachment for a Doula who holds " + role + " and logged her own Visit")
+			}
+			if origin != grantedOrigin || attachedBy != staffID {
+				t.Fatalf("attachment = %s by %s, want granted by herself", origin, attachedBy)
+			}
+		})
+
+		t.Run(role+" is named by an Owner", func(t *testing.T) {
+			db := testdb.New(t)
+			identityUID := "owner-naming-contractor-" + role
+			practiceID, namerStaffID := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{ownerRole}, "employee")
+			targetStaffID := testdb.SeedStaffAtPractice(t, db, practiceID, "named-contractor-"+role, []string{role, doulaRole}, "contractor")
+			_, engagementID := testdb.SeedEngagement(t, db, practiceID)
+
+			srv, session := newServer(t, db, identityUID)
+			defer srv.Close()
+
+			resp := createVisit(t, session, visitsURL(srv.URL, practiceID, engagementID), "", visit.CreateRequest{StaffID: &targetStaffID})
+			defer resp.Body.Close()
+			if out := decodeCreate(t, resp); out.StaffID != targetStaffID {
+				t.Fatalf("staffId = %q, want %q", out.StaffID, targetStaffID)
+			}
+
+			origin, attachedBy, exists := attachment(t, db, engagementID, targetStaffID)
+			if !exists {
+				t.Fatal("no attachment for the named Doula who holds " + role)
+			}
+			if origin != grantedOrigin || attachedBy != namerStaffID {
+				t.Fatalf("attachment = %s by %s, want granted by the person who named her", origin, attachedBy)
+			}
+		})
+	}
+}
+
+// The reassign path is the same act at a second moment, so it gives the
+// same answer: an Admin who is a contractor Doula is handed a Visit with
+// no Offer, and is attached by the person who handed it to her.
+func TestReassignHandler_GrantsAnAdminWhoIsAContractorDoula(t *testing.T) {
+	db := testdb.New(t)
+	const identityUID = "owner-reassigning-to-contractor-admin"
+	practiceID, ownerStaffID := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{ownerRole, doulaRole}, "employee")
+	targetStaffID := testdb.SeedStaffAtPractice(t, db, practiceID, "contractor-admin-target", []string{adminRole, doulaRole}, "contractor")
+	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
+
+	srv, session := newServer(t, db, identityUID)
+	defer srv.Close()
+	url := visitsURL(srv.URL, practiceID, engagementID)
+
+	created := createVisit(t, session, url, "", visit.CreateRequest{})
+	defer created.Body.Close()
+	out := decodeCreate(t, created)
+
+	body, err := json.Marshal(visit.ReassignRequest{StaffID: targetStaffID})
+	if err != nil {
+		t.Fatalf("marshal body: %v", err)
+	}
+	reassigned := authedPatch(t, session, url+"/"+out.VisitID, body)
+	defer reassigned.Body.Close()
+	if reassigned.StatusCode != http.StatusOK {
+		t.Fatalf("reassign status = %d, want %d", reassigned.StatusCode, http.StatusOK)
+	}
+
+	origin, attachedBy, exists := attachment(t, db, engagementID, targetStaffID)
+	if !exists {
+		t.Fatal("no attachment for the Admin who is a contractor Doula")
+	}
+	if origin != grantedOrigin || attachedBy != ownerStaffID {
+		t.Fatalf("attachment = %s by %s, want granted by the person who handed her the Visit", origin, attachedBy)
+	}
+}
+
 // Both halves of the audit trail: who acted, who it went to, and when.
 func TestVisitWrites_RecordTheAssignee(t *testing.T) {
 	db := testdb.New(t)

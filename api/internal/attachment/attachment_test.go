@@ -12,13 +12,17 @@ import (
 const (
 	doulaRole      = "doula"
 	ownerRole      = "owner"
+	adminRole      = "admin"
 	employeeType   = "employee"
 	contractorType = "contractor"
 )
 
 // TestWhyNotAttachable is the whole rule: a Member here, with the Doula
-// role, an employee. The checks run in that order, so a person who is
-// neither a Doula nor an employee is told about the role.
+// role, who is not a contractor that holds neither Owner nor Admin. The
+// checks run in that order, so a person who is neither a Doula nor an
+// employee is told about the role. A contractor who holds Owner or Admin
+// is attachable (#1625), and that role does not stand in for the Doula
+// role.
 func TestWhyNotAttachable(t *testing.T) {
 	cases := []struct {
 		name string
@@ -30,6 +34,8 @@ func TestWhyNotAttachable(t *testing.T) {
 		{"staff with no doula role", attachment.Membership{Exists: true, EmploymentType: employeeType}, attachment.NotADoula},
 		{"a contractor doula", attachment.Membership{Exists: true, IsDoula: true, EmploymentType: contractorType}, attachment.IsContractor},
 		{"a contractor with no doula role", attachment.Membership{Exists: true, EmploymentType: contractorType}, attachment.NotADoula},
+		{"an owner or admin who is a contractor doula", attachment.Membership{Exists: true, IsDoula: true, IsOwnerOrAdmin: true, EmploymentType: contractorType}, attachment.Attachable},
+		{"an owner or admin who is a contractor with no doula role", attachment.Membership{Exists: true, IsOwnerOrAdmin: true, EmploymentType: contractorType}, attachment.NotADoula},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -41,9 +47,10 @@ func TestWhyNotAttachable(t *testing.T) {
 }
 
 // TestOfReader reads the caller's own Membership off the Reader the
-// middleware resolved: the role and the Employment type, with no query.
-// An Owner who is also an employee Doula is attachable, and an Owner who
-// is a contractor Doula is not.
+// middleware resolved: the roles and the Employment type, with no query.
+// An Owner or an Admin who is also a Doula is attachable under each
+// Employment type (#1625), and a contractor Doula who holds neither role
+// is not.
 func TestOfReader(t *testing.T) {
 	cases := []struct {
 		name           string
@@ -53,7 +60,10 @@ func TestOfReader(t *testing.T) {
 	}{
 		{"owner who is an employee doula", []string{ownerRole, doulaRole}, employeeType, attachment.Attachable},
 		{"owner with no doula role", []string{ownerRole}, employeeType, attachment.NotADoula},
-		{"owner who is a contractor doula", []string{ownerRole, doulaRole}, contractorType, attachment.IsContractor},
+		{"owner who is a contractor doula", []string{ownerRole, doulaRole}, contractorType, attachment.Attachable},
+		{"admin who is a contractor doula", []string{adminRole, doulaRole}, contractorType, attachment.Attachable},
+		{"owner who is a contractor with no doula role", []string{ownerRole}, contractorType, attachment.NotADoula},
+		{"contractor doula who holds neither owner nor admin", []string{doulaRole}, contractorType, attachment.IsContractor},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -87,7 +97,9 @@ func beginPracticeTx(t *testing.T, db *testdb.DB, practiceID string) *sql.Tx {
 
 // TestReadMembership reads another person's Membership, and answers the
 // zero Membership (no name, not attachable) for a person who holds none
-// at this Practice.
+// at this Practice. It reads the Owner-or-Admin fact for each of the two
+// roles, so a contractor Doula who holds one is attachable and one who
+// holds neither is not.
 func TestReadMembership(t *testing.T) {
 	db := testdb.New(t)
 	practiceID := testdb.SeedPractice(t, db, "Read Membership")
@@ -103,6 +115,25 @@ func TestReadMembership(t *testing.T) {
 	want := attachment.Membership{Exists: true, IsDoula: true, EmploymentType: contractorType, Name: "Hana Kim"}
 	if got != want {
 		t.Fatalf("membership = %+v, want %+v", got, want)
+	}
+
+	if reason := got.WhyNotAttachable(); reason != attachment.IsContractor {
+		t.Fatalf("contractor doula reason = %q, want %q", reason, attachment.IsContractor)
+	}
+
+	for _, role := range []string{ownerRole, adminRole} {
+		staffID := testdb.SeedNamedStaffAtPractice(t, db, practiceID, "read-membership-"+role, "Renata Alvarez", []string{role, doulaRole}, contractorType)
+		got, err := attachment.ReadMembership(t.Context(), tx, practiceID, staffID)
+		if err != nil {
+			t.Fatalf("ReadMembership (%s): %v", role, err)
+		}
+		want := attachment.Membership{Exists: true, IsDoula: true, IsOwnerOrAdmin: true, EmploymentType: contractorType, Name: "Renata Alvarez"}
+		if got != want {
+			t.Fatalf("%s membership = %+v, want %+v", role, got, want)
+		}
+		if reason := got.WhyNotAttachable(); reason != attachment.Attachable {
+			t.Fatalf("%s reason = %q, want attachable", role, reason)
+		}
 	}
 
 	stranger, err := attachment.ReadMembership(t.Context(), tx, practiceID, strangerID)

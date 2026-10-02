@@ -68,7 +68,7 @@ func TestApproveHandler_AttachesTheNamedDoula(t *testing.T) {
 		t.Fatalf("attachments = %d, want exactly 1", len(got))
 	}
 	a := got[0]
-	if a.staffID != doulaID || a.origin != "granted" || a.attachedBy != adminID || !a.open {
+	if a.staffID != doulaID || a.origin != grantedOrigin || a.attachedBy != adminID || !a.open {
 		t.Fatalf("attachment = %+v, want an open granted one for the Doula, attached by the approver", a)
 	}
 	if a.feeAmountCents != nil || a.feeTerms != nil {
@@ -78,6 +78,44 @@ func TestApproveHandler_AttachesTheNamedDoula(t *testing.T) {
 	actors, doulas := doulaAttachedRows(t, db, out.EngagementID)
 	if len(actors) != 1 || actors[0] != adminID || doulas[0] != doulaID {
 		t.Fatalf("doula_attached rows = actors %v doulas %v, want one by the approver naming the Doula", actors, doulas)
+	}
+}
+
+// TestApproveHandler_AttachesAnOwnerOrAdminWhoIsAContractorDoula is
+// #1625 at approval, the check that runs again when the decision is
+// made: a Request that names an Owner or an Admin who is a contractor
+// Doula is approved, and she is attached with no fee, attached_by the
+// approver, and one activity row that says who attached her.
+func TestApproveHandler_AttachesAnOwnerOrAdminWhoIsAContractorDoula(t *testing.T) {
+	for _, role := range []string{ownerRole, adminRole} {
+		t.Run(role, func(t *testing.T) {
+			db := testdb.New(t)
+			practiceID := testdb.SeedPractice(t, db, "Test Practice")
+			namedID := testdb.SeedStaffAtPractice(t, db, practiceID, "named-1", []string{role, doulaRole}, contractorType)
+			approverID := testdb.SeedStaffAtPractice(t, db, practiceID, "approver-1", []string{adminRole}, employeeType)
+			seedCredits(t, db, practiceID)
+			clientID := testdb.SeedNamedClient(t, db, practiceID, "Test Client", "client.com")
+			requestID := pendingRequest(t, db, practiceID, clientID, testKindBirth, namedID)
+			nameDoula(t, db, requestID, namedID)
+
+			srv, session := newServer(t, db, "approver-1", &tasknudge.FakeEnqueuer{})
+			defer srv.Close()
+
+			var out engagementrequest.ApproveResponse
+			decode(t, do(t, approveURL(srv.URL, practiceID, requestID), session, nil), http.StatusOK, &out)
+
+			got := attachmentsOn(t, db, out.EngagementID)
+			if len(got) != 1 || got[0].staffID != namedID || got[0].origin != grantedOrigin || got[0].attachedBy != approverID || !got[0].open {
+				t.Fatalf("attachments = %+v, want one open granted one for the named Doula, attached by the approver", got)
+			}
+			if got[0].feeAmountCents != nil || got[0].feeTerms != nil {
+				t.Fatalf("attachment fee = %v / %v, want none: a fee is only ever copied from an Offer", got[0].feeAmountCents, got[0].feeTerms)
+			}
+			actors, doulas := doulaAttachedRows(t, db, out.EngagementID)
+			if len(actors) != 1 || actors[0] != approverID || doulas[0] != namedID {
+				t.Fatalf("doula_attached rows = actors %v doulas %v, want one by the approver naming the Doula", actors, doulas)
+			}
+		})
 	}
 }
 

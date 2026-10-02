@@ -8,6 +8,7 @@ import (
 	"net/http"
 
 	"doula-cloud/api/internal/apierr"
+	"doula-cloud/api/internal/attachment"
 	"doula-cloud/api/internal/staffauth"
 )
 
@@ -22,10 +23,11 @@ const (
 	// ReasonNotADoula: she is a Staff member here, but her Membership does
 	// not carry the Doula role.
 	ReasonNotADoula = "not_a_doula"
-	// ReasonContractorWithoutAcceptedOffer: she is a contractor with no
-	// open, granted attachment to this Engagement. CONTEXT.md's Attachment
-	// entry: a contractor is put on a birth by her own acceptance of an
-	// Offer and by nothing else, so sending her one is what changes this.
+	// ReasonContractorWithoutAcceptedOffer: she is a contractor who holds
+	// neither Owner nor Admin, with no open, granted attachment to this
+	// Engagement. CONTEXT.md's Attachment entry: that contractor is put on
+	// a birth by her own acceptance of an Offer and by nothing else, so
+	// sending her one is what changes this.
 	ReasonContractorWithoutAcceptedOffer = "contractor_without_accepted_offer"
 )
 
@@ -39,10 +41,18 @@ const (
 const grantedAttachmentPredicate = `origin = 'granted' AND ended_at IS NULL`
 
 // decideNameable is the whole rule for whether a *named* Staff member may
-// be put on a Visit at one Engagement, in one place: she is a Member here,
-// her Membership carries the Doula role, and -- if she is a contractor --
-// she already holds the attachment her own acceptance of an Offer opened.
-// The empty string means she may be named.
+// be put on a Visit at one Engagement, in one place: she is a person the
+// attachment rule admits, or the one thing in her way is that she is a
+// contractor who holds neither Owner nor Admin and she already holds the
+// attachment her own acceptance of an Offer opened. The empty string
+// means she may be named.
+//
+// Who is attached without an Offer is not decided here. That is
+// attachment.Membership.WhyNotAttachable, the rule the Engagement Request
+// and "Put me on this Engagement" read too, so a Doula who holds Owner or
+// Admin is nameable under each Employment type (#1625). What this
+// function adds is the Visit's own exception: a person who has agreed
+// already may be handed a Visit.
 //
 // This is the single copy. requireEligibleAssignee (roles.go) calls it on
 // the write and turns each reason into the refusal it has always written;
@@ -55,14 +65,18 @@ const grantedAttachmentPredicate = `origin = 'granted' AND ended_at IS NULL`
 // Deliberately not given the caller's own identity: naming yourself is a
 // different act with a different rule (see resolveAssignee in roles.go, and
 // listVisitAssignees below).
-func decideNameable(hasMembership, isDoula bool, employmentType string, attached bool) string {
-	switch {
-	case !hasMembership:
+func decideNameable(m attachment.Membership, attached bool) string {
+	switch m.WhyNotAttachable() {
+	case attachment.NotAtPractice:
 		return ReasonNotAtPractice
-	case !isDoula:
+	case attachment.NotADoula:
 		return ReasonNotADoula
-	case employmentType != employeeType && !attached:
-		return ReasonContractorWithoutAcceptedOffer
+	case attachment.IsContractor:
+		if !attached {
+			return ReasonContractorWithoutAcceptedOffer
+		}
+	case attachment.Attachable:
+		// Nothing is in her way. Named so the switch is whole.
 	}
 	return ""
 }
@@ -166,8 +180,9 @@ func AssigneesHandler() http.Handler {
 // doulaRosterQuery reads the Practice's Doulas, by name. Ordered so the
 // picker's own order is decided here rather than by whatever order the
 // heap gave back; s.id breaks the tie, because two Doulas at one agency
-// can share a name.
-const doulaRosterQuery = `SELECT s.id, s.name, m.employment_type::text
+// can share a name. The Owner-or-Admin fact is the third thing the
+// attachment rule reads of a Member who holds the Doula role.
+const doulaRosterQuery = `SELECT s.id, s.name, m.employment_type::text, ` + attachment.OwnerOrAdminSQL + `
 	  FROM practice_memberships m
 	  JOIN staff s ON s.id = m.staff_id
 	 WHERE m.practice_id = $1 AND $2 = ANY(m.roles)
@@ -188,13 +203,13 @@ const grantedAttachmentsQuery = `SELECT staff_id FROM engagement_attachments
 // The caller's own row is answered by the rule that actually applies to
 // her, which is not the named-colleague rule. resolveAssignee (roles.go)
 // takes the self path whenever the requested id equals the caller's, and
-// requireEligibleAssignee never runs on it -- so a contractor Doula who
-// owns or administers the Practice is accepted by the write when she
-// names herself, and this read says so. Nameable-as-self is "she holds the
-// Doula role", which the roster query above has already established for
-// every row it returned. One rule for all rows would recreate the
-// read/write disagreement this endpoint exists to close, pointing the
-// other way.
+// requireEligibleAssignee never runs on it. Nameable-as-self is "she
+// holds the Doula role", which the roster query above has already
+// established for every row it returned. Since #1625 the named-colleague
+// rule gives a caller of this read the same answer, because she holds
+// Owner or Admin and so is no contractor that the attachment rule
+// refuses. Her row still takes the self rule by name, so the read agrees
+// with the write whoever the route's gate admits.
 func listVisitAssignees(
 	ctx context.Context,
 	tx *sql.Tx,
@@ -216,14 +231,18 @@ func listVisitAssignees(
 	list := []Assignee{}
 	for rows.Next() {
 		var row Assignee
-		if err := rows.Scan(&row.StaffID, &row.Name, &row.EmploymentType); err != nil {
+		var isOwnerOrAdmin bool
+		if err := rows.Scan(&row.StaffID, &row.Name, &row.EmploymentType, &isOwnerOrAdmin); err != nil {
 			// coverage:ignore reason: row scan failure, not exercised by unit tests
 			return nil, fmt.Errorf("visit: scan doula roster row: %w", err)
 		}
 		if row.StaffID == callerStaffID {
 			row.Nameable = true
 		} else {
-			row.Reason = decideNameable(true, true, row.EmploymentType, attached[row.StaffID])
+			// Every row the query returns is a Member who holds the Doula
+			// role.
+			member := attachment.Membership{Exists: true, IsDoula: true, IsOwnerOrAdmin: isOwnerOrAdmin, EmploymentType: row.EmploymentType}
+			row.Reason = decideNameable(member, attached[row.StaffID])
 			row.Nameable = row.Reason == ""
 		}
 		list = append(list, row)

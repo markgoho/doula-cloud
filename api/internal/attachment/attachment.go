@@ -4,11 +4,12 @@
 //
 // It is a package of its own because two packages need it and neither
 // may own it: engagementrequest names a Doula when an Engagement starts
-// (#1596), and engagement lets an employee Doula put herself on one
-// (#1598). ADR-0008's amendments on #1515 name them as the third and the
-// fourth writer of a granted Attachment. One rule and one write, so the
-// two cannot come to disagree about who is attachable or about what the
-// Engagement's ledger says afterward.
+// (#1596), and engagement lets a Doula put herself on one (#1598).
+// ADR-0008's amendments on #1515 name them as the third and the fourth
+// writer of a granted Attachment. One rule and one write, so the two
+// cannot come to disagree about who is attachable or about what the
+// Engagement's ledger says afterward. visit reads the rule too (#1625),
+// for the Visit that names a Doula, and keeps its own write.
 package attachment
 
 import (
@@ -22,11 +23,16 @@ import (
 	"doula-cloud/api/internal/staffauth"
 )
 
-// doulaRole is the practice_role a person must hold to be attached, and
-// employeeType is the Employment type she must work under. ADR-0017's
-// amendment on #1515: "one employee Doula at the Practice".
+// doulaRole is the practice_role a person must hold to be attached.
+// employeeType is the Employment type that needs no more than that role.
+// ownerRole and adminRole are the two roles that make a person a part of
+// the Practice whatever her Employment type is: ADR-0008's amendment on
+// #1625 says "attached only by her own acceptance of an Offer" is the
+// rule for a contractor who holds neither.
 const (
 	doulaRole    = "doula"
+	ownerRole    = "owner"
+	adminRole    = "admin"
 	employeeType = "employee"
 )
 
@@ -41,8 +47,12 @@ const (
 	// NotADoula is the person who is Staff here with a Membership that does not carry
 	// the Doula role. Attachment is for Doulas only (CONTEXT.md).
 	NotADoula NotAttachable = "not_a_doula"
-	// IsContractor is the contractor, who is attached by her own acceptance of an
-	// Offer and by nothing else (CONTEXT.md's Attachment entry).
+	// IsContractor is the contractor who holds neither the Owner role nor
+	// the Admin role, who is attached by her own acceptance of an Offer and
+	// by nothing else (CONTEXT.md's Attachment entry). It is the population
+	// staffauth.Reader.IsAmbientContractor confines for reach. A contractor
+	// who holds Owner or Admin is not this person, and never gets this
+	// answer (#1625).
 	IsContractor NotAttachable = "contractor"
 )
 
@@ -51,32 +61,45 @@ const Attachable NotAttachable = ""
 
 // Membership is what the rule reads about one person at one Practice:
 // whether she is a Member here at all, whether that Membership carries
-// the Doula role, and the Employment type she works under. Name is hers
-// where the reader can see it, for a sentence that refuses her by name.
+// the Doula role, whether it carries the Owner role or the Admin role,
+// and the Employment type she works under. Name is hers where the reader
+// can see it, for a sentence that refuses her by name.
 type Membership struct {
 	Exists         bool
 	IsDoula        bool
+	IsOwnerOrAdmin bool
 	EmploymentType string
 	Name           string
 }
 
 // WhyNotAttachable is the whole rule, in one place: she is a Member
-// here, her Membership carries the Doula role, and she is an employee.
-// It answers Attachable where she may be attached.
+// here, her Membership carries the Doula role, and she is not a
+// contractor who holds neither the Owner role nor the Admin role. It
+// answers Attachable where she may be attached.
 //
-// Four readers call it and none owns a second copy: the request write,
-// approval (which asks again because days can pass between the ask and
-// the decision), the Start work form's own list, and the Engagement's
-// "Put me on this Engagement" control with the write behind it. So no
-// screen can offer what its write refuses, the same reason
-// visit.decideNameable is one function (#911).
+// The contractor rule exists because "nobody can put an outsider on a
+// Client's birth without her agreement" (CONTEXT.md's Attachment entry).
+// A person who holds Owner or Admin is not an outsider: she starts
+// Engagements, approves Requests, and names Doulas. So the rule confines
+// the same contractor that each reach rule confines
+// (staffauth.Reader.IsAmbientContractor), and an Owner or an Admin who is
+// a contractor Doula is attachable (ADR-0008's amendment on #1625).
+//
+// Each writer of a granted Attachment that needs no Offer calls it, and
+// none owns a second copy: the request write, approval (which asks again
+// because days can pass between the ask and the decision), the Start
+// work form's own list, the Engagement's "Put me on this Engagement"
+// control with the write behind it, and the Visit that names a Doula
+// (visit.decideNameable and visit.resolveAssignee). So no screen can
+// offer what its write refuses, and no two writers can disagree about
+// who is attachable.
 func (m Membership) WhyNotAttachable() NotAttachable {
 	switch {
 	case !m.Exists:
 		return NotAtPractice
 	case !m.IsDoula:
 		return NotADoula
-	case m.EmploymentType != employeeType:
+	case m.EmploymentType != employeeType && !m.IsOwnerOrAdmin:
 		return IsContractor
 	}
 	return Attachable
@@ -90,9 +113,18 @@ func OfReader(reader staffauth.Reader) Membership {
 	return Membership{
 		Exists:         true,
 		IsDoula:        reader.Has(doulaRole),
+		IsOwnerOrAdmin: reader.IsOwnerOrAdmin(),
 		EmploymentType: reader.EmploymentType(),
 	}
 }
+
+// OwnerOrAdminSQL is Membership.IsOwnerOrAdmin as a SQL expression over a
+// practice_memberships row aliased m. ReadMembership and the two roster
+// reads that build a Membership for each row (the Start work form's list
+// and the Visit pickers') share it, so the fact has one spelling. A
+// const of literals, with no parameter, so each query built from it stays
+// a constant expression.
+const OwnerOrAdminSQL = `('` + ownerRole + `' = ANY(m.roles) OR '` + adminRole + `' = ANY(m.roles))`
 
 // ReadMembership reads what the rule needs about one person who is not
 // the caller. A person with no Membership here is a normal answer and
@@ -102,12 +134,12 @@ func OfReader(reader staffauth.Reader) Membership {
 func ReadMembership(ctx context.Context, tx *sql.Tx, practiceID, staffID string) (Membership, error) {
 	m := Membership{Exists: true}
 	err := tx.QueryRowContext(ctx,
-		`SELECT $1 = ANY(m.roles), m.employment_type::text, s.name
+		`SELECT $1 = ANY(m.roles), `+OwnerOrAdminSQL+`, m.employment_type::text, s.name
 		   FROM practice_memberships m
 		   JOIN staff s ON s.id = m.staff_id
 		  WHERE m.practice_id = $2 AND m.staff_id = $3`,
 		doulaRole, practiceID, staffID,
-	).Scan(&m.IsDoula, &m.EmploymentType, &m.Name)
+	).Scan(&m.IsDoula, &m.IsOwnerOrAdmin, &m.EmploymentType, &m.Name)
 	if errors.Is(err, sql.ErrNoRows) {
 		return Membership{}, nil
 	}

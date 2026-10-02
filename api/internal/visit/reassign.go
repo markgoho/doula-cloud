@@ -64,7 +64,7 @@ func ReassignHandler() http.Handler {
 		if !staffauth.ParseUUID(w, "staff", req.StaffID) {
 			return
 		}
-		staffID, isEmployee, ok := resolveAssignee(w, r, c, engagementID, &req.StaffID)
+		staffID, grants, ok := resolveAssignee(w, r, c, engagementID, &req.StaffID)
 		if !ok {
 			return
 		}
@@ -132,11 +132,11 @@ func ReassignHandler() http.Handler {
 			return
 		}
 
-		// The attachment the employee handed this Visit gets is
+		// The attachment the person handed this Visit gets is
 		// grantAssignee's rule, shared with the create path. It runs
 		// only here, below the locking read's own sql.ErrNoRows 404, so a
 		// reassign that matched no Visit attaches nobody.
-		if !grantAssignee(w, r, c, engagementID, staffID, isEmployee) {
+		if !grantAssignee(w, r, c, engagementID, staffID, grants) {
 			// coverage:ignore reason: grantAssignee only reports false on a DB write failure, not exercised by unit tests
 			return
 		}

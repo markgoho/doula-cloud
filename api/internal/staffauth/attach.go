@@ -137,9 +137,12 @@ func attachActor(ctx context.Context, tx *sql.Tx, engagementID, staffID string, 
 // upgrades an open accrued one in place. Granted is the only origin that
 // reaches (see CanAccessEngagement), so it is written explicitly -- by
 // Offer acceptance, by the Visit handlers, which put a named Doula on a
-// birth, and by approval of an Engagement Request that names an employee
-// Doula (engagementrequest.approve, #1596, ADR-0008's amendment on #1515)
-// -- never by AttachingWrite's seam.
+// birth, by approval of an Engagement Request that names a Doula
+// (engagementrequest.approve, #1596, ADR-0008's amendment on #1515), and
+// by "Put me on this Engagement" (engagement.AttachSelfHandler, #1598)
+// -- never by AttachingWrite's seam. Who each of the writers that need no
+// Offer may attach is one rule, attachment.Membership.WhyNotAttachable
+// (#1625).
 //
 // feeAmountCents and feeTerms are the Offer's own, copied at acceptance
 // so nothing can later rewrite what she agreed to; both are nil

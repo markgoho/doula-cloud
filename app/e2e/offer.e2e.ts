@@ -96,6 +96,85 @@ test('Owner offers an Engagement to a Doula, who accepts it from her own inbox',
 	await expect(page.getByText('Casey Contractor', { exact: true }).first()).toBeVisible();
 });
 
+// #1625: the Practice of one whose only Owner is a contractor Doula. The
+// Staff screen's Membership edit makes her one, and that state is legal
+// (CONTEXT.md, Employment type: either value may pair with any roles).
+// Nobody can send her an Offer and she cannot send one to herself, so
+// her two ways on are the two each solo Owner has: the Start work form
+// names her, and one press puts her on an Engagement that has no Doula.
+test('A solo Owner who is a contractor Doula is named on the Start work form, and puts herself on an Engagement', async ({
+	page,
+	request,
+	context
+}) => {
+	const { idToken, localId, practiceId, staffId } = await seedFoundingOwner(request);
+	const headers = await signInEnrolled(request, idToken, localId);
+
+	const editMembership = await request.patch(`${API_URL}/api/practices/${practiceId}/staff/${staffId}/membership`, {
+		headers,
+		data: { roles: ['owner', 'admin', 'doula'], employmentType: 'contractor' }
+	});
+	const editMembershipBody = await editMembership.text();
+	expect(editMembership.ok(), `edit membership failed: ${editMembership.status()} ${editMembershipBody}`).toBe(true);
+
+	const createClient = await request.post(`${API_URL}/api/practices/${practiceId}/clients`, {
+		headers,
+		data: { givenName: 'Rosa', familyName: 'Martinez', email: uniqueEmail('client') }
+	});
+	const createClientBody = await createClient.text();
+	expect(createClient.ok(), `create client failed: ${createClient.status()} ${createClientBody}`).toBe(true);
+	const { id: clientId } = JSON.parse(createClientBody);
+	const engagementId = seedEngagement(clientId, practiceId);
+
+	await enterPracticeAsEnrolled(context, page, headers, practiceId);
+	await page.goto(`/practices/${practiceId}/engagements/${engagementId}`);
+
+	await expect(page.getByText('No Doula yet', { exact: true })).toBeVisible();
+	await page.getByRole('button', { name: 'Put me on this Engagement' }).click();
+
+	await expect(page.getByText('You are on this Engagement.')).toBeVisible();
+	await expect(page.getByRole('button', { name: 'Put me on this Engagement' })).toHaveCount(0);
+	// The audit trail: who, in the ledger's own sentence. .first() because
+	// DataTable draws the row in both of its trees.
+	await expect(page.getByText('Put on this Engagement as the Doula: Jamie Owner').first()).toBeVisible();
+
+	// And it holds on a fresh read: she is the Doula, and there is no control.
+	await page.reload();
+	await expect(page.getByText('Put on this Engagement as the Doula: Jamie Owner').first()).toBeVisible();
+	await expect(page.getByRole('button', { name: 'Put me on this Engagement' })).toHaveCount(0);
+	await expect(page.getByText('No Doula yet', { exact: true })).toHaveCount(0);
+
+	// The Start work form, for a second Client: she is the only Doula at
+	// the Practice, so her option is there and is selected when the form
+	// opens, and the submit attaches her.
+	const createSecond = await request.post(`${API_URL}/api/practices/${practiceId}/clients`, {
+		headers,
+		data: { givenName: 'Ines', familyName: 'Duarte', email: uniqueEmail('client') }
+	});
+	const createSecondBody = await createSecond.text();
+	expect(createSecond.ok(), `create client failed: ${createSecond.status()} ${createSecondBody}`).toBe(true);
+	const { id: secondClientId } = JSON.parse(createSecondBody);
+
+	await page.goto(`/practices/${practiceId}/clients/${secondClientId}/engagement-requests/new`);
+	await expect(page.getByRole('radio', { name: 'Jamie Owner (you)' })).toBeChecked();
+	await page.getByRole('radio', { name: 'Postpartum', exact: true }).check();
+	// The form's own write answers with the Engagement it started, which
+	// is how this walk finds the page that names her.
+	const written = page.waitForResponse(
+		(response) =>
+			response.request().method() === 'POST' &&
+			response.url().endsWith(`/clients/${secondClientId}/engagement-requests`)
+	);
+	await page.getByRole('button', { name: 'Start work with Ines Duarte' }).click();
+	const writtenResponse = await written;
+	const { engagementId: startedEngagementId } = await writtenResponse.json();
+	await expect(page).toHaveURL(new RegExp(`/practices/${practiceId}/clients/${secondClientId}$`));
+
+	await page.goto(`/practices/${practiceId}/engagements/${startedEngagementId}`);
+	await expect(page.getByText('Put on this Engagement as the Doula: Jamie Owner').first()).toBeVisible();
+	await expect(page.getByText('No Doula yet', { exact: true })).toHaveCount(0);
+});
+
 // #1598: the path that is not an Offer. A solo Owner (Owner, Admin and
 // employee Doula from signup) opens an Engagement that started with No
 // Doula yet. The Offers form has nobody to list, because its only Doula

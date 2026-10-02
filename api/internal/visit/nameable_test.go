@@ -153,6 +153,42 @@ func TestVisitAssignees_CallerIsNameableAsHerself(t *testing.T) {
 	}
 }
 
+// TestVisitAssignees_AnOwnerOrAdminWhoIsAContractorDoulaIsNameable is
+// #1625 on the pickers: a colleague who is a contractor Doula and holds
+// Owner or Admin is nameable with no attachment, because the write
+// accepts her name and attaches her. The contractor Doula who holds
+// neither role is beside her and is still marked with the reason.
+func TestVisitAssignees_AnOwnerOrAdminWhoIsAContractorDoulaIsNameable(t *testing.T) {
+	db := testdb.New(t)
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, "assignees-1625-caller", []string{ownerRole}, "employee")
+	ownerID := testdb.SeedStaffAtPractice(t, db, practiceID, "assignees-1625-owner", []string{ownerRole, doulaRole}, "contractor")
+	adminID := testdb.SeedStaffAtPractice(t, db, practiceID, "assignees-1625-admin", []string{adminRole, doulaRole}, "contractor")
+	plainID := testdb.SeedContractorAtPractice(t, db, practiceID, "assignees-1625-plain")
+	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
+
+	srv, session := newServer(t, db, "assignees-1625-caller")
+	defer srv.Close()
+
+	rows := decodeAssignees(t, session, assigneesURL(srv.URL, practiceID, engagementID))
+
+	for label, staffID := range map[string]string{"an Owner who is a contractor Doula": ownerID, "an Admin who is a contractor Doula": adminID} {
+		row, listed := rows[staffID]
+		if !listed {
+			t.Fatalf("%s: not listed", label)
+		}
+		if !row.Nameable || row.Reason != "" {
+			t.Errorf("%s: nameable = %v, reason = %q; want true, \"\"", label, row.Nameable, row.Reason)
+		}
+		if row.EmploymentType != "contractor" {
+			t.Errorf("%s: employmentType = %q, want contractor -- the row still says what she is to the business", label, row.EmploymentType)
+		}
+	}
+	if plain := rows[plainID]; plain.Nameable || plain.Reason != visit.ReasonContractorWithoutAcceptedOffer {
+		t.Errorf("a contractor Doula who holds neither role: nameable = %v, reason = %q; want false, %q",
+			plain.Nameable, plain.Reason, visit.ReasonContractorWithoutAcceptedOffer)
+	}
+}
+
 // TestVisitAssignees_RefusesAnEngagementAtAnotherPractice proves the
 // Engagement is confirmed to be this Practice's before any roster is
 // answered -- otherwise a guessed id would answer 200 with a whole
