@@ -533,8 +533,12 @@ jobs:
       #  - that `timeout` runs as `runner` and cannot signal the root
       #    `apt-get` Playwright starts through `sudo`, so the orphan kept the
       #    dpkg lock and retries 2 and 3 failed in about a second on it (run
-      #    37025325343). The script now waits for the orphan to finish, and
-      #    apt's own DPkg::Lock::Timeout (120s) backs that up;
+      #    37025325343). The script now waits up to 240s between attempts
+      #    for the orphan to finish (the orphan in that run needed about
+      #    220s past the 180s bound), and apt's own DPkg::Lock::Timeout
+      #    (120s) backs that up. The worst case is therefore 3 x 180s +
+      #    2 x 240s + sleeps, about 17.5 minutes; that fits this job's 20
+      #    minutes and only arises when every attempt fails;
       #  - apt bounds itself too: Acquire::http(s)::Timeout 30s (idle
       #    connection) and Acquire::Retries 3 (per file).
       - name: Install Playwright OS dependencies only

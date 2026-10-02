@@ -1,5 +1,7 @@
-# TEMPORARY (#1655): forces the dpkg lock condition to prove the retry
-# recovers. Removed before merge.
+# TEMPORARY (#1655): forces the real condition to prove the retry recovers.
+# Attempt 1 starts a root apt-get that outlives the attempt's `timeout` and
+# holds the dpkg lock (the 2026-10-02 incident); attempt 2 is the real
+# `playwright install-deps`. Removed before merge.
 name: tmp-1655-forced-lock
 on:
   push:
@@ -7,7 +9,7 @@ on:
 permissions:
   contents: read
 jobs:
-  forced-lock:
+  new-script:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -16,18 +18,62 @@ jobs:
       - name: Install app dependencies
         working-directory: app
         run: bun install --frozen-lockfile
-      - name: Hold the dpkg lock as root for 75s
+      - name: Write the forced scenario
         run: |
-          sudo nohup python3 -c "import fcntl,time; f=open('/var/lib/dpkg/lock-frontend','w'); fcntl.lockf(f, fcntl.LOCK_EX); time.sleep(75)" >/dev/null 2>&1 &
-          sleep 2
-          sudo fuser -v /var/lib/dpkg/lock-frontend || true
-      - name: Run the script with attempt 1 forced to time out
+          cat > "$RUNNER_TEMP/forced.sh" <<'EOF'
+          #!/usr/bin/env bash
+          marker="$RUNNER_TEMP/attempt1-started"
+          if [ ! -e "$marker" ]; then
+            touch "$marker"
+            # A root apt-get that holds the dpkg lock for ~60s and is not in
+            # the attempt's process group, as the real orphan was not killable.
+            sudo setsid nohup apt-get install -y --no-install-recommends -o 'DPkg::Pre-Invoke::=sleep 60' fonts-ipafont-gothic >"$RUNNER_TEMP/orphan.log" 2>&1 &
+            sleep 600
+          fi
+          exec bunx playwright install-deps chromium
+          EOF
+          chmod +x "$RUNNER_TEMP/forced.sh"
+      - name: Run the script (attempt 1 times out holding the lock)
         working-directory: app
         env:
-          ATTEMPT_TIMEOUT: "20"
-          INSTALL_CMD: "sudo apt-get install -y --no-install-recommends fonts-ipafont-gothic && bunx playwright install-deps chromium"
-        run: bash ../scripts/install-playwright-deps.sh
-      - name: Show that no apt process or lock is left
+          ATTEMPT_TIMEOUT: "120"
+        run: INSTALL_CMD="$RUNNER_TEMP/forced.sh" bash ../scripts/install-playwright-deps.sh
+      - name: Show the end state
         run: |
           pgrep -a -x 'apt-get|apt|dpkg' || echo "no apt process left"
           dpkg -s fonts-ipafont-gothic | head -3
+          cat "$RUNNER_TEMP/orphan.log" | tail -5
+  old-loop:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: oven-sh/setup-bun@v2
+      - name: Install app dependencies
+        working-directory: app
+        run: bun install --frozen-lockfile
+      - name: Write the forced scenario
+        run: |
+          cat > "$RUNNER_TEMP/forced.sh" <<'EOF'
+          #!/usr/bin/env bash
+          marker="$RUNNER_TEMP/attempt1-started"
+          if [ ! -e "$marker" ]; then
+            touch "$marker"
+            sudo setsid nohup apt-get install -y --no-install-recommends -o 'DPkg::Pre-Invoke::=sleep 60' fonts-ipafont-gothic >"$RUNNER_TEMP/orphan.log" 2>&1 &
+            sleep 600
+          fi
+          exec bunx playwright install-deps chromium
+          EOF
+          chmod +x "$RUNNER_TEMP/forced.sh"
+      - name: Run the OLD loop (expected to fail on the lock)
+        working-directory: app
+        continue-on-error: true
+        run: |
+          for attempt in 1 2 3; do
+            if timeout 120 "$RUNNER_TEMP/forced.sh"; then
+              exit 0
+            fi
+            echo "OS dependency install attempt ${attempt} failed; retrying in 10s..."
+            sleep 10
+          done
+          exit 1
