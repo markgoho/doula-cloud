@@ -2,11 +2,11 @@
 
 - **Journey**: [non-doula-admin.md](../journeys/non-doula-admin.md)
 - **Persona**: [non-doula-admin.md](../personas/non-doula-admin.md)
-- **A pass means**: an Engagement with a Doula assigned, a signed Contract, and an Invoice with a recorded Payment — reached without Dee opening a Care Plan or logging a Visit.
+- **A pass means**: an Engagement with a Doula on it, a signed Contract, and an Invoice with a recorded Payment — reached without Dee opening a Care Plan or logging a Visit.
 
 ## Preconditions
 
-- A Practice with an Owner (Renata) and at least one other Staff member holding `doula`, so there is somebody for Dee to assign.
+- A Practice with an Owner (Renata) and at least one other Staff member holding `doula`, so there is somebody for Dee to put on the Engagement.
 - An invitation issued by the Owner. The link is emailed to the invited address and is not printed on the invite screen (#316), so read it from the mailbox.
 - Dee's role rides that Invitation, and **Edit membership** on the Staff screen changes it afterwards (#316). The zero-role membership DW-G1's second run needed is no longer reachable, so run the plan once, with `admin`.
 
@@ -44,11 +44,11 @@ The Billing screen is automated for an *Owner* (`billing.e2e.ts`); no spec reads
 | 4.1 | Open `/practices/[practiceId]/clients/new` | Intake is a sequence now, one question per page — name, date of birth, email, phone, address, then whatever sections the Practice put on its own Client Field Template — with **Save and come back later** offered on every one of them. She reaches it from **Find or add a Client** on the Clients list, because a Client is found before she is created (ADR-0017). Her page of notes from the call has somewhere to go ([MO-G3](https://github.com/markgoho/doula-cloud/issues/252) closed) | `manual` |
 | 4.2 | Press **Save this Client** on the check-answers page | `client.CreateHandler` refuses only a contractor doula, so it **passes** for Dee — and the save is **free**: a Client, no Engagement, no credit. She lands on the Client's own detail hub. Asking for paid work with her is a separate act, the Engagement Request, whose approval is what creates the Engagement and locks the Credit (ADR-0017) | `manual` |
 
-### Stage 5 — Assign a Doula
+### Stage 5 — Put a Doula on the Engagement
 
 | Step | Action | Expected result | Mark |
 | --- | --- | --- | --- |
-| 5.1 | Open the Engagement and look for an assignment control | None exists | `missing-feature (RA-G4)` [#225](https://github.com/markgoho/doula-cloud/issues/225) |
+| 5.1 | Open the Engagement and look for a control that puts a Doula on it | None exists | `missing-feature (RA-G4)` [#225](https://github.com/markgoho/doula-cloud/issues/225) |
 | 5.2 | Create a Visit naming the Doula instead | **It works, and it is her act.** The form asks **Who is this Visit for?** and `resolveAssignee` (`api/internal/visit/roles.go`) puts naming a colleague with the Owner and the Admin — a plain Doula cannot read the roster, so she has nobody to pick from. What Dee cannot do is log a Visit for *herself*, holding no Doula role, and the screen offers her no control for that rather than a button that 403s ([DW-G6](https://github.com/markgoho/doula-cloud/issues/274) closed) | `manual` |
 
 ### Stage 6 — Send the Contract

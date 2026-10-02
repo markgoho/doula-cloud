@@ -18,11 +18,11 @@ To do the paperwork end of an Engagement without waiting on a doula who is at a 
 
 ## Primary journey
 
-Take a new Client from first call to signed and billed: create the Client and Engagement, assign a Doula, send the Contract, track signature, raise the Invoice, and record the Payment.
+Take a new Client from first call to signed and billed: create the Client and Engagement, put a Doula on the Engagement, send the Contract, track signature, raise the Invoice, and record the Payment.
 
 ## Done looks like
 
-An Engagement exists with a Doula assigned, a signed Contract, and an Invoice with a recorded Payment — all without Dee ever opening a Care Plan or logging a Visit.
+An Engagement exists with a Doula on it, a signed Contract, and an Invoice with a recorded Payment — all without Dee ever opening a Care Plan or logging a Visit.
 
 ## Watch for
 
@@ -32,6 +32,6 @@ An Engagement exists with a Doula assigned, a signed Contract, and an Invoice wi
 - Their permissions are the mirror image of Priya's: business screens yes, care records arguably no. Two separate questions, and only one is open:
   - **Editing Plan Templates is already settled** — `plans/template.go:220` gates on `owner`, so Dee cannot. Assert it; do not re-litigate it.
   - **Reading a Client's filled Care Plan or Birth Plan is genuinely undecided.** No role check guards the Plan Instance read path. This journey must answer it.
-- They act on Engagements they are not assigned to, so any mine-only scoping breaks them.
+- They are on no Engagement and act on each one, so any mine-only scoping breaks them.
 - Raising an Invoice is **not** owner-gated. `payments/invoice.go` computes `isOwner` only to choose which message to show when Stripe Connect is missing, so Dee is stopped by infrastructure wearing the costume of a permission error.
 - There is no way to record a Payment by hand at all — Payments are written only by the Stripe webhook, so a cheque or a bank transfer cannot be entered. This is separate from the missing Stripe account, and it is the make-or-break moment of [their journey map](../journeys/non-doula-admin.md).

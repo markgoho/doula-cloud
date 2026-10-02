@@ -3,7 +3,7 @@
 - **Persona**: [non-doula-admin.md](../personas/non-doula-admin.md)
 - **Goal**: do the paperwork end of an Engagement without waiting on a doula who is at a birth
 - **Entry point**: an invitation from Renata, accepted at `/accept-invite`
-- **Done looks like**: an Engagement with a Doula assigned, a signed Contract, and an Invoice with a recorded Payment — all without Dee ever opening a Care Plan or logging a Visit.
+- **Done looks like**: an Engagement with a Doula on it, a signed Contract, and an Invoice with a recorded Payment — all without Dee ever opening a Care Plan or logging a Visit.
 
 ## Moment of truth
 
@@ -11,7 +11,7 @@
 
 This is **not** the out-of-scope Stripe gap. A live Stripe account would not fix it. The missing capability is manual Payment recording (DW-G3).
 
-The competing candidate was Stage 5, assigning the Doula (RA-G4).
+The competing candidate was Stage 5, putting a Doula on the Engagement (RA-G4).
 
 **The walk broke the original argument and it is re-stated here.** It read: stage 5 loses because Dee can create a Visit naming the doula instead. They cannot — `POST .../visits` is Doula-gated and refuses them (**DW-G6**). The *product* workaround never existed.
 
@@ -61,11 +61,11 @@ Dee is a domain expert on the business half and a stranger to the care half.
 - **4.1** — **Find or add a Client** on the Clients list, search, then **Add a new Client**: intake is one question per page from there — name, date of birth, email, phone, address, then the Practice's own Client Field Template sections.
 - **4.2** — Press **Save this Client**. The save is **free** — a Client, no Engagement, no credit — and it is not owner-gated, so it **passes** for Dee. Asking for paid work with the Client is the separate act at `POST .../engagement-requests`, and its approval is what creates the Engagement and locks the Credit.
 
-### Stage 5 — Assign a Doula
+### Stage 5 — Put a Doula on the Engagement
 
-**Thinking**: "Priya has room in March." **Pain points**: there is no assignment. See RA-G4.
+**Thinking**: "Priya has room in March." **Pain points**: an Engagement has no Doula on it, and nothing puts one there. See RA-G4.
 
-- **5.1** — Open the Engagement and look for an assignment control. There is none.
+- **5.1** — Open the Engagement and look for a control that puts a Doula on it. There is none.
 - **5.2** — ~~The nearest act is to create a Visit naming a Staff member.~~ **There is no nearest act.** `POST .../visits` requires the Doula role (`api/internal/visit/roles.go:41`), which Dee does not hold, so the button is on her screen and answers `403 only a Staff member with the Doula role can do that`. Stage 5 has no in-product act for her at all (**DW-G6**).
 
 ### Stage 6 — Send the Contract

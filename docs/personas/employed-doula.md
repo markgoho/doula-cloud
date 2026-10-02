@@ -29,7 +29,7 @@ She has an active membership with the `doula` role, has opened her Client's Enga
 - She is the negative-permission persona. Every owner-only and admin-only surface — Staff management, billing, Plan Template settings, invitations — must be absent for her, not merely unlinked.
 - **Expect this to fail.** The permission model is binary owner / non-owner: `owner` is checked in four places (`payments/invoice.go`, `plans/template.go`, `contracts/template.go`, `staffauth/roles.go`), and the Doula role is never checked at all. Those four surfaces will correctly refuse her. Everything else that is not owner-gated, she can probably reach by URL if not by link.
 - She is reachable as a distinct persona only through the invite route: `invite.go` creates the membership with zero roles (`'{}'`) and an Owner then assigns just Doula. Signup grants all three roles at once, so a self-signed-up account can never be her.
-- **Her Engagements are not marked as hers.** `engagements` has no staff column (`00005_client_engagement.sql`), so "the Engagement assigned to her" does not exist as a thing the app can express.
+- **Her Engagements are not marked as hers.** `engagements` has no staff column (`00005_client_engagement.sql`), so "the Engagement she is on" does not exist as a thing the app can express.
 - Her scope is meant to be her own Clients, and it is not: `engagement.ListHandler` returns every Client at the Practice "regardless of which Staff member created it -- v1 has no restricted-visibility model". Confirmed, not suspected.
 - Invitation acceptance is her first impression, and it happens on whatever device the email opened on.
 - She reads Care Plans and Birth Plans far more often than she writes them.

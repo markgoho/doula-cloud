@@ -34,7 +34,7 @@ The act inherits `removesLastOwner`'s refusal and nothing else. It is refused, 4
 
 ## Her authored work keeps resolving, unredacted
 
-ADR-0027's rule for a Client applies to a Staff person unchanged: redact the identity, keep the record. Every `actor_staff_id`, `staff_id`, `offered_by`, `decided_by`, `attached_by`, `ended_by`, `requested_by`, `invited_by`, `revoked_by` and `cleared_by` still resolves — to the redacted row. Messages she sent, Contracts she is named on, Engagements she was assigned, Visits she worked, Offers she made and Attachments she ended all keep their content.
+ADR-0027's rule for a Client applies to a Staff person unchanged: redact the identity, keep the record. Every `actor_staff_id`, `staff_id`, `offered_by`, `decided_by`, `attached_by`, `ended_by`, `requested_by`, `invited_by`, `revoked_by` and `cleared_by` still resolves — to the redacted row. Messages she sent, Contracts she is named on, Engagements she was on, Visits she worked, Offers she made and Attachments she ended all keep their content.
 
 Free text that happens to name her by hand is not scrubbed. That is ADR-0027's existing stated limitation, inherited here rather than re-argued.
 
