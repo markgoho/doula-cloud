@@ -73,26 +73,28 @@ const CLIENT_READ = [
 	'src/lib/{clientRegister,clientInvoice,clientPayment,portalLanding,portalVisits}.ts'
 ];
 
-const RULES: readonly Rule[] = [
-	{
-		id: 'impersonal "owed"',
-		pattern: /\bowed\b/,
-		globs: CLIENT_READ,
-		instead: 'say "you owe" ("What you still owe", "You no longer owe this")'
-	},
-	{
-		id: 'the Client named as a noun on a screen the Client reads',
-		pattern: /\bClients?\b/,
-		globs: CLIENT_READ,
-		instead: 'say "you" and "your" ("your Contract", not "the Client\'s Contract")'
-	},
-	{
-		id: 'a Staff member named as a noun on their own account screen',
-		pattern: /\bStaff members?\b/,
-		globs: ['src/routes/(person)/account/**/*.svelte'],
-		instead: 'say "you" and "your" ("your login", not "the Staff member\'s login")'
-	}
-];
+const OWED: Rule = {
+	id: 'impersonal "owed"',
+	pattern: /\bowed\b/,
+	globs: CLIENT_READ,
+	instead: 'say "you owe" ("What you still owe", "You no longer owe this")'
+};
+
+const CLIENT_NOUN: Rule = {
+	id: 'the Client named as a noun on a screen the Client reads',
+	pattern: /\bClients?\b/,
+	globs: CLIENT_READ,
+	instead: 'say "you" and "your" ("your Contract", not "the Client\'s Contract")'
+};
+
+const STAFF_NOUN: Rule = {
+	id: 'a Staff member named as a noun on their own account screen',
+	pattern: /\bStaff members?\b/,
+	globs: ['src/routes/(person)/account/**/*.svelte'],
+	instead: 'say "you" and "your" ("your login", not "the Staff member\'s login")'
+};
+
+const RULES: readonly Rule[] = [OWED, CLIENT_NOUN, STAFF_NOUN];
 
 interface Offense {
 	file: string;
@@ -173,8 +175,8 @@ describe('product copy speaks to its reader as "you"', () => {
 });
 
 describe('findOffensesInSource', () => {
-	const owed = RULES[0]!;
-	const client = RULES[1]!;
+	const owed = OWED;
+	const client = CLIENT_NOUN;
 
 	it('flags "owed" in markup text', () => {
 		const found = findOffensesInSource('fixture.svelte', '<p>What is owed</p>', [owed]);
@@ -243,12 +245,16 @@ describe('findOffensesInSource', () => {
 	});
 });
 
-describe('the rules are scoped by who reads the file', () => {
-	it('keeps the Staff-screen rule off the Client portal and the reverse', () => {
-		const staffRule = RULES[2]!;
-		const staffFiles = scanned.find(({ rule }) => rule === staffRule)!.files;
+const filesOf = (target: Rule) => scanned.find(({ rule }) => rule === target)!.files;
 
-		expect(staffFiles.every((file) => file.startsWith('src/routes/(person)/account/'))).toBe(true);
-		expect(scanned[0]!.files.some((file) => file.startsWith('src/routes/practices/'))).toBe(false);
+describe('the rules are scoped by who reads the file', () => {
+	it('keeps the Staff-screen rule on the account screen alone', () => {
+		expect(filesOf(STAFF_NOUN).every((file) => file.startsWith('src/routes/(person)/account/'))).toBe(true);
+	});
+
+	it('keeps the Client rules off every Staff route', () => {
+		for (const rule of [OWED, CLIENT_NOUN]) {
+			expect(filesOf(rule).some((file) => /^src\/routes\/(practices|\(person\))\//.test(file))).toBe(false);
+		}
 	});
 });
