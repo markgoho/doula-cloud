@@ -40,7 +40,8 @@
 	import { intakeDraft } from '#lib/intakeDraft.svelte.js';
 	import { intakeFlow } from '#lib/intakeFlow.svelte.js';
 	import { journeySteps } from '#lib/intakeJourney.js';
-	import { mergedEditFields, proposedChanges } from '#lib/intakeMerge.js';
+	import { mergedEditFields } from '#lib/intakeMerge.js';
+	import { proposedChanges } from '#lib/proposedChanges.js';
 	import { JOURNEY, basePath, detailHref, knownAs, saveIntake } from '../intake.js';
 
 	const DIFFERENT_PERSON = 'different';
@@ -56,7 +57,8 @@
 	const reviewing = $derived<ClientMatch | undefined>(
 		intakeDraft.matches.find((match) => match.id === chosenId)
 	);
-	const changes = $derived(reviewing ? proposedChanges(intakeDraft.answers, reviewing) : []);
+	// The match always survives here; what was typed is absorbed into it.
+	const changes = $derived(reviewing ? proposedChanges(reviewing, intakeDraft.answers) : []);
 
 	let answer = $state('');
 	const submission = new FormSubmission();
@@ -136,7 +138,7 @@
 			const match = intakeDraft.matches.find((entry) => entry.id === answer);
 			// Nothing typed differs from what is on file, so there is nothing
 			// to confirm and nothing to write. Straight to the record.
-			if (match && proposedChanges(intakeDraft.answers, match).length === 0) {
+			if (match && proposedChanges(match, intakeDraft.answers).length === 0) {
 				intakeDraft.clear();
 				await goto(detailHref(practiceId, answer));
 				return;

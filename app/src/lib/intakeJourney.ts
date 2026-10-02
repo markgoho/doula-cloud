@@ -22,7 +22,7 @@
  * `STRUCTURAL_STEPS` below is the only place a structural step's slug,
  * its name and the columns it asks are written down. The rail reads it
  * for labels and hrefs, `intakeAnswers.ts` reads it for the summary's
- * section headings, rows and Change links, `intakeMerge.ts` reads it for
+ * section headings, rows and Change links, `proposedChanges.ts` reads it for
  * what to call a proposed change, and each route names its own step by
  * the same slug. They were three separate lists until a review of this
  * ticket pointed out that "Email address" was typed out in two of them
@@ -142,7 +142,7 @@ export const STRUCTURAL_STEPS: StructuralStep[] = [
 	}
 ];
 
-/** Every structural column a reader types, flat -- what `intakeMerge.ts`
+/** Every structural column a reader types, flat -- what `proposedChanges.ts`
  * walks to say what a save to an existing Client would change. */
 export const STRUCTURAL_QUESTIONS: StructuralQuestion[] = STRUCTURAL_STEPS.flatMap(
 	(step) => step.questions
