@@ -12,6 +12,8 @@ The name is set by [ADR-0050](../adr/0050-the-product-is-named-doulacloud-one-wo
 
 The sizes are the app's. `BrandLockup` pairs the `sm`, `md`, and `lg` sizes of `CloudMark` with the `subheading`, `heading`, and `display` steps of the type scale, with a gap of `--space-3`. This sheet changes none of them.
 
+`CloudMark` has one more size, `xl`, which is not part of a lockup: 200px wide and 93px tall, the same 202:94 proportion. It is the mark alone on the left panel of the app's signed-out landing ([#1645](https://github.com/markgoho/doula-cloud/issues/1645)), where the bar above already carries the name. It is never wider than about 55% of its panel, so in a narrow panel it scales down and keeps its proportion. It is two-tone, by the 28px rule below, and its geometry is the same.
+
 ## Mark
 
 The mark is **two strokes**.

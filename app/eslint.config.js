@@ -80,6 +80,10 @@ export default defineConfig(
 		ignores: [
 			'src/lib/components/atoms/Button.svelte',
 			'src/lib/components/atoms/Link.svelte',
+			// A door (#1645) is one anchor holding a name and a line, with the
+			// name alone as its accessible name -- a shape `Link`'s one label
+			// cannot draw. It is the second atom that owns a raw <a>.
+			'src/lib/components/atoms/DoorLink.svelte',
 			'src/lib/components/atoms/Select.svelte',
 			'src/lib/components/atoms/Textarea.svelte',
 			'src/lib/components/atoms/TextInput.svelte',

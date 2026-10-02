@@ -7,8 +7,9 @@
 	 *
 	 * The brief's `display` step is deliberately unreachable here: it is
 	 * allowed on "the one page title on a hub", so the OverviewHub Template
-	 * (#422) owns it. A one-per-app rule that depends on everyone
-	 * remembering it is not a rule.
+	 * (#422) owns it, and the signed-out landing's greeting -- a paragraph,
+	 * not a heading -- is the one other use, owned by `LandingPage` (#1645).
+	 * A rule that depends on everyone remembering it is not a rule.
 	 */
 	interface Properties {
 		level: 1 | 2 | 3 | 4 | 5 | 6;

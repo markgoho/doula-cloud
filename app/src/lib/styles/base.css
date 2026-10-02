@@ -26,6 +26,17 @@
  * containing block whatever an ancestor declares. Add a fixed element
  * outside the top layer and this comment stops being true.
  */
+/*
+ * The page ground on the root, too. A browser paints the canvas with the
+ * body's background only when the body has no containment, and the
+ * `container-type` below gives it some: without this, every page shorter
+ * than the window showed the canvas's default white under its content in
+ * the light theme -- a pure white the brief rules out (#1645).
+ */
+html {
+	background-color: var(--color-surface);
+}
+
 body {
 	container-type: inline-size;
 	font-family: var(--font-family-base);

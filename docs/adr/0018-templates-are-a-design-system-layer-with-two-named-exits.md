@@ -36,6 +36,7 @@ The shape is hybrid, and the hybrid is forced by a real page: the staff Engageme
 | **E** Question page | `templates/QuestionPage.svelte` | `journey`, `steps`, `allStepsHref?`, `backHref`, `errorSummary?`, `caption?`, `question`, `hint?`, `content`, `actions` — see the second amendment below |
 | **E** Check answers | `templates/CheckAnswers.svelte` | `journey`, `steps`, `allStepsHref?`, `backHref`, `title`, `caption?`, `errorSummary?`, `sections`, `isWide?`, `actions` — same amendment |
 | **G** Document | `templates/DocumentPage.svelte` | `title`, `backHref`, `backLabel?`, `content`, `empty?` — see the 2026-09-29 amendment below |
+| **A** Signed-out landing | `templates/LandingPage.svelte` | `title`, `greeting`, `lede`, `content` — see the 2026-10-02 amendment below |
 
 `FormPage.fieldsets` is ADR-0017's shape: the twelve-column structural core is one fieldset and each Practice-defined section is another appended below it — the pattern the [#406](https://github.com/markgoho/doula-cloud/issues/406) survey found in Cliniko and endorsed as the one matching ADR-0017.
 
@@ -195,3 +196,19 @@ Filed as [#1574](https://github.com/markgoho/doula-cloud/issues/1574), found whi
 The three routes now render `DocumentPage` once, unconditionally, and let its props carry the state. None contains `container-l`/`center-l` or calls `PageTitle` directly. The Birth Plan's not-offered branch still renders `ErrorPage` (`kind="notFound"`) in place of the Template; that is the portal's own not-found screen, not a state of this one.
 
 The Staff Birth Plan (`practices/[practiceId]/engagements/[engagementId]/birth-plan`) is the same archetype and still has no frame. It was outside this ticket's scope and is filed, with four other routes that still have no frame, as [#1576](https://github.com/markgoho/doula-cloud/issues/1576).
+
+## Amendment, 2026-10-02 — the signed-out landing gets a Template, `LandingPage`
+
+Filed as [#1645](https://github.com/markgoho/doula-cloud/issues/1645). The signed-out state of `/` was `EntryPage` with a heading and a list of three links. Mark chose a new design for it on 2026-10-02: two panels, a welcome with the mark and a time-of-day greeting, and three large doors. The other three states of `/` (the Staff picker, the portal picker, and the no-care state) keep `EntryPage`.
+
+**`EntryPage` cannot hold it.** `EntryPage` is one column capped at `--form-max`. This design is two panels, each with its own ground, that sit side by side or stack. That is page-level arrangement, which is a Template's job, and a different tree, not a different attribute.
+
+**One consumer clears the bar here, and the reason is not a new exit.** The *Two named exits* rule says one consumer stays a raw exception. Two later rules mean a raw route cannot draw this page. The 2026-08-30 amendment says a frame lives only on a Template, so a route that writes its own `container-l` and its own split is the thing that amendment removed from six routes. And the greeting is at the brief's `display` step, which `Heading` cannot reach and a route must not name: until now only `OverviewHub` spent it, as its title. So the frame and the display step both have to be in a Template, and this page is that Template's one consumer.
+
+`templates/LandingPage.svelte` takes `title`, `greeting`, `lede` and `content`. Its decisions:
+
+- **`title` is the `<h1>` and the tab title**, on the doors panel. The greeting is a paragraph, so the heading still names what the page is for (ADR-0021).
+- **`greeting` is a string, and the Template reads no clock.** The route calls `greetingFor()` (`#lib/greeting.ts`) once, as a plain constant, before the first paint. The app is `ssr = false`, so there is no server HTML to show one greeting and then swap it.
+- **The two panels are a `grid-l` with `--landing-panel-min` as its floor**, so they go to one column where two do not fit, read off the space the page has (ADR-0024). No `@container` query. The edge between the panels is the grid's one-pixel gap over an `outline-variant` ground, so it is vertical beside and horizontal above, with nothing to choose between the two.
+- **The mark is `CloudMark`'s new `xl` size**, capped at about 55% of its panel. It is decorative, because the bar above already names the product.
+- **The doors are the route's own content**, built from the `DoorLink` atom. The Template does not know there are three.

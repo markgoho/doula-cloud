@@ -10,7 +10,7 @@
  */
 import { NO_CARE_HEADING } from '#lib/clientRegister.js';
 import type { RootLanding } from './+page.js';
-import type { RouteFixture } from '../routeFixture.js';
+import type { RouteFixture, RouteVariant } from '../routeFixture.js';
 import Page from './+page.svelte';
 
 // Narrowed to the one shape this fixture describes, rather than the full
@@ -27,6 +27,20 @@ export const data: Extract<RootLanding, { type: 'staff-picker' }> = {
 		}
 	]
 };
+
+/*
+ * #1645: the signed-out state is a different Template from the other
+ * three (`LandingPage`, two panels and three doors), so it is its own
+ * screen to sweep. Every word on it is fixed product copy and none is a
+ * Practice's own, so there is no hostile value to choose; the greeting is
+ * whichever the clock gives when the sweep runs, and the four differ in
+ * length by less than the space the display step already wraps in.
+ */
+export const signedOut = {
+	name: 'The root landing screen (signed out)',
+	props: { data: { type: 'signed-out' } satisfies RootLanding },
+	readyText: 'Sign in or set up a Practice'
+} as const satisfies RouteVariant;
 
 export const fixture: RouteFixture = {
 	name: 'The root landing screen (staff picker)',
@@ -45,6 +59,7 @@ export const fixture: RouteFixture = {
 			name: 'The root landing screen (a Portal Account with no care set up)',
 			props: { data: { type: 'portal-picker', engagements: [] } satisfies RootLanding },
 			readyText: NO_CARE_HEADING
-		}
+		},
+		signedOut
 	]
 };

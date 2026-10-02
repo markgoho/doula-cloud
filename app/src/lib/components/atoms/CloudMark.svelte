@@ -12,9 +12,15 @@
 	 * strokes do scale, so one `stroke-width` of 14 in a 202-unit viewBox
 	 * renders as ~8.3/4.2/2.8 device pixels at the three sizes -- the ramp
 	 * the drawing had to state by hand.
+	 *
+	 * `xl` is the signed-out landing's mark (#1645), standing alone on its
+	 * own panel rather than beside a wordmark, so it is larger than any
+	 * lockup step. It is the one size drawn into a space that may be
+	 * narrower than it: its height follows its width, so a container that
+	 * caps the mark scales it rather than squeezing it.
 	 */
 	interface Properties {
-		size?: 'sm' | 'md' | 'lg';
+		size?: 'sm' | 'md' | 'lg' | 'xl';
 		/*
 		 * Decorative by default: the mark always sits beside the wordmark in
 		 * BrandLockup, so naming it here would make a screen reader say
@@ -28,7 +34,9 @@
 	const dimensions = {
 		sm: { width: 40, height: 19 },
 		md: { width: 60, height: 28 },
-		lg: { width: 120, height: 56 }
+		lg: { width: 120, height: 56 },
+		// 200 wide keeps the viewBox's 202:94 proportion at 93 tall.
+		xl: { width: 200, height: 93 }
 	} as const;
 
 	/*
@@ -41,13 +49,14 @@
 
 	const { width, height } = $derived(dimensions[size]);
 	const tones = $derived(height >= TWO_TONE_MIN_HEIGHT ? 'two-tone' : 'one-color');
+	const classes = $derived(`${tones} size-${size}`);
 </script>
 
 <svg
 	viewBox="48 76 202 94"
 	{width}
 	{height}
-	class={tones}
+	class={classes}
 	fill="none"
 	stroke-width="14"
 	stroke-linecap="round"
@@ -65,6 +74,13 @@
 		svg {
 			display: inline-block;
 			vertical-align: middle;
+		}
+
+		/* reset.css caps every svg at `max-width: 100%` but leaves the height
+		   attribute alone, so a capped mark would sit letterboxed in a 93px
+		   box. `auto` takes the height from the viewBox's proportion instead. */
+		.size-xl {
+			block-size: auto;
 		}
 
 		/* The inner arch is drawn first, so the outer line is painted last
