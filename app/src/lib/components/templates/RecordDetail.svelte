@@ -6,7 +6,7 @@
 	 * the page that forced this Template has a *variable* number of them: the
 	 * staff Engagement detail is Visits, then N Plan sections, then Contract,
 	 * Invoices, Offers and Messages. Named regions cannot express N. It is
-	 * `DataTable.rowActions`'s shape generalised -- the third confirmed use of
+	 * `DataTable.rowActions`'s shape generalized -- the third confirmed use of
 	 * Snippets as an API, after `LabeledField` and `DataTable`.
 	 */
 	import type { Snippet } from 'svelte';

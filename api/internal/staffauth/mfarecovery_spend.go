@@ -39,7 +39,7 @@ type SpendMFARecoveryRequest struct {
 // per-account rate limit (#602) has something to key on before the code
 // itself is ever looked at -- it is not cross-checked against which
 // identity the code actually names, the same way a password-reset link
-// is honoured for whoever holds it, not for whoever the request happened
+// is honored for whoever holds it, not for whoever the request happened
 // to come from.
 //
 // Tries the Owner-vouched issued code first (authtoken, purpose

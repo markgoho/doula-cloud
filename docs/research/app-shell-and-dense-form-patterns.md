@@ -120,7 +120,7 @@ Clio matters because it is the only product in the survey that has thought about
 
 So Clio gives three answers Cliniko does not: fields are **grouped into named sets**, sets are **bound to a kind of work** rather than applied globally, and the whole custom layer gets **its own tab** rather than being appended to the structural form.
 
-That third choice is the one to argue with. ADR-0017 is explicit that a Client's Practice-defined values are read **live** and are part of her record, not an annexe to it. A separate tab makes the custom layer feel optional. Cliniko's append-below-the-core placement matches the ADR better; Clio's field-set grouping is what to steal.
+That third choice is the one to argue with. ADR-0017 is explicit that a Client's Practice-defined values are read **live** and are part of her record, not an annex to it. A separate tab makes the custom layer feel optional. Cliniko's append-below-the-core placement matches the ADR better; Clio's field-set grouping is what to steal.
 
 ### 5. Doulado — the only doula-specific product with a public UI
 

@@ -447,7 +447,7 @@ func TestRefund_ARetriedRefundIsTheSameRefund(t *testing.T) {
 
 // TestRefund_ADifferentRequestIsADifferentRefund proves the key is not so
 // blunt that it blocks a Practice asking for the rest of her money: a
-// second, deliberate request carries its own name and is honoured.
+// second, deliberate request carries its own name and is honored.
 func TestRefund_ADifferentRequestIsADifferentRefund(t *testing.T) {
 	db := testdb.New(t)
 	practiceID := testdb.SeedPractice(t, db, "Twice Over")

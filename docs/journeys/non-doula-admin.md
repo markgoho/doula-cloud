@@ -7,7 +7,7 @@
 
 ## Moment of truth
 
-**Stage 9 — recording the Payment.** Their journey is named "first call to signed and **billed**", and their "Done looks like" requires an Invoice with a recorded Payment. Payments are written only by the Stripe webhook, so a cheque, a bank transfer, or a cash deposit — the normal case for a small practice — cannot be recorded at all. There is no workaround.
+**Stage 9 — recording the Payment.** Their journey is named "first call to signed and **billed**", and their "Done looks like" requires an Invoice with a recorded Payment. Payments are written only by the Stripe webhook, so a check, a bank transfer, or a cash deposit — the normal case for a small practice — cannot be recorded at all. There is no workaround.
 
 This is **not** the out-of-scope Stripe gap. A live Stripe account would not fix it. The missing capability is manual Payment recording (DW-G3).
 
@@ -95,7 +95,7 @@ Dee is a domain expert on the business half and a stranger to the care half.
 
 ### Stage 9 — Record the Payment — moment of truth
 
-**Thinking**: "She paid by bank transfer. Mark it paid." **Pain points**: there is no way to. Payments are written only by the Stripe webhook. A cheque, a transfer, or a cash deposit — the normal case for a small practice — cannot be recorded at all, and no Stripe account exists either.
+**Thinking**: "She paid by bank transfer. Mark it paid." **Pain points**: there is no way to. Payments are written only by the Stripe webhook. A check, a transfer, or a cash deposit — the normal case for a small practice — cannot be recorded at all, and no Stripe account exists either.
 
 - **9.1** — Look for a way to mark an Invoice paid. There is none.
 
@@ -113,7 +113,7 @@ Record it as an open decision, not as a pass or a failure.
 | --- | --- | --- | --- | --- |
 | DW-G1 | 3 | Both | **Closed.** The Admin role granted nothing when this map was drawn; `admin` is read now for the Practice's Stripe Connect state ([#267](https://github.com/markgoho/doula-cloud/issues/267)) — see the Stage 3 note above. | [#269](https://github.com/markgoho/doula-cloud/issues/269) |
 | DW-G2 | 8 | Experience | Missing Stripe infrastructure surfaces to a non-owner as "ask a Practice Owner" — an infrastructure gap that reads as a permission error. | [#270](https://github.com/markgoho/doula-cloud/issues/270) |
-| DW-G3 | 9 | Interaction | No manual Payment recording. Payments are written only by the Stripe webhook, so a cheque or bank transfer cannot be recorded. | [#271](https://github.com/markgoho/doula-cloud/issues/271) |
+| DW-G3 | 9 | Interaction | No manual Payment recording. Payments are written only by the Stripe webhook, so a check or bank transfer cannot be recorded. | [#271](https://github.com/markgoho/doula-cloud/issues/271) |
 | DW-G4 | 3 | Interaction | The Billing balance and ledger are not owner-gated in the UI or the API (`billing/balance.go:86` takes any Staff member), so any non-owner sees the Practice's spending. Buying credits is correctly owner-gated (`billing/purchase.go:33`). | [#272](https://github.com/markgoho/doula-cloud/issues/272) |
 | DW-G5 | 7 | Both | No unsigned-contract or outstanding-work list. Chasing signatures means opening every Engagement in turn. | [#273](https://github.com/markgoho/doula-cloud/issues/273) |
 | DW-G6 | 5 | Interaction | The Admin cannot record anything about care, not even as a proxy. `owner` and `doula` are the only roles the codebase reads, and Dee holds neither, so the one assignment-shaped act in the product — `POST .../visits` — refuses them (`api/internal/visit/roles.go:41`). **Add a Visit** renders on their screen and 403s. This is the other half of DW-G1: the Admin role grants nothing, *and* the two roles that do grant something both exclude them. | [#274](https://github.com/markgoho/doula-cloud/issues/274) |

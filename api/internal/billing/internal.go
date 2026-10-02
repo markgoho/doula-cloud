@@ -25,7 +25,7 @@ type RefundRequest struct {
 // missing feature: a refund the platform initiates itself inherits the
 // original balance's dormancy date, while one issued on the Practice's
 // recorded request restarts the clock (APL 1315). The request is the
-// email; this endpoint is how it is honoured.
+// email; this endpoint is how it is honored.
 //
 // The refusal rules live in Refund, not here, so they hold however the
 // operation is reached.

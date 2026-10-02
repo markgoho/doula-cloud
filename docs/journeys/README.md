@@ -41,7 +41,7 @@ Every gap now carries an **Issue** column in its map's `## Gaps found` table, po
 | --- | --- | --- |
 | [evaluator-doula.md](evaluator-doula.md) | Tasha Bell | The first screen after she creates a Practice |
 | [solo-birth-doula.md](solo-birth-doula.md) | Maya Okonkwo | The Contract comes back signed without leaving the app |
-| [practice-owner.md](practice-owner.md) | Renata Alvarez | Two Clients in labour the same night — who is free? |
+| [practice-owner.md](practice-owner.md) | Renata Alvarez | Two Clients in labor the same night — who is free? |
 | [non-doula-admin.md](non-doula-admin.md) | Dee Whitlock | Finishing the paperwork without the doula |
 | [employed-doula.md](employed-doula.md) | Priya Raman | The Birth Plan, on a phone, in a hospital corridor |
 | [contractor-doula.md](contractor-doula.md) | Lena Vasquez | The offer, before she has said yes |

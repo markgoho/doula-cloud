@@ -258,6 +258,10 @@ jobs:
   # never runs it. `scripts/design-export.test.ts` also reads `docs/design/`,
   # and is already covered: the `scripts` job runs on every PR.
   #
+  # `spelling.usage.spec.ts` is on the list since #1644. It reads the source
+  # trees too, with the same word list, and that half runs here as well: one
+  # spec, so the documents and the code cannot be held to two lists.
+  #
   # The same specs also run inside `app`'s full suite whenever `app` runs.
   # No --coverage: the 100% gate is measured over the whole suite, and a
   # partial run would fail it.
@@ -287,6 +291,7 @@ jobs:
           src/lib/prose.usage.spec.ts
           src/lib/adrNumbers.usage.spec.ts
           src/lib/testPlans.usage.spec.ts
+          src/lib/spelling.usage.spec.ts
 
   # `api` and `app` skip on a docs-only PR (#1466). GitHub reads a skipped
   # required check as passed, which is why this is a job-level `if:` and not

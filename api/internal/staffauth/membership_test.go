@@ -132,7 +132,7 @@ func TestUpdateMembershipHandler_EditsBothHalvesAtOnce(t *testing.T) {
 		t.Fatalf("read membership: %v", err)
 	}
 	// Immediately, with no grandfathering: ADR-0008 gates ambient reach
-	// on employment type, and a gate honouring the old answer is not one.
+	// on employment type, and a gate honoring the old answer is not one.
 	if roles != "admin,doula" || employmentType != contractorType {
 		t.Fatalf("membership = %q/%q", roles, employmentType)
 	}

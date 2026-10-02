@@ -33,7 +33,7 @@ const instance: Instance = {
 		'support-people':
 			'https://portal.highland-midwifery-group.example.org/referrals/2027/persephone?source=intake',
 		'people-present': [
-			'My partner, for the whole labour',
+			'My partner, for the whole labor',
 			'https://portal.highland-midwifery-group.example.org/referrals/2027/persephone?source=intake'
 		]
 	}

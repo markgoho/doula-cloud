@@ -342,7 +342,7 @@ The map assumed "weak" and accepted it. The truth is sharper and stranger: the *
 
 with the standing advice to *"make one major change at a time."*
 
-**And the model honours it precisely.** My `edit_screens` call used exactly that formula and got back five correct, minimal `dom_operations` targeting `div:nth-child(3)` and its siblings. Stitch understood "emphasize the third card, de-emphasize the other two" and expressed it as a diff rather than a rewrite. That is genuinely good.
+**And the model honors it precisely.** My `edit_screens` call used exactly that formula and got back five correct, minimal `dom_operations` targeting `div:nth-child(3)` and its siblings. Stitch understood "emphasize the third card, de-emphasize the other two" and expressed it as a diff rather than a rewrite. That is genuinely good.
 
 **But it did not stick.** See §3. The precise edit vanished between the response and every readable artifact.
 

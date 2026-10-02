@@ -177,7 +177,7 @@ type UpdateMembershipResponse struct {
 // UpdateMembershipHandler lets a Practice Owner edit another Staff
 // member's Membership at the same Practice. The change takes effect at
 // once, with no grandfathering: ADR-0008 makes employment type the gate
-// on ambient reach, and a gate that keeps honouring the old answer is
+// on ambient reach, and a gate that keeps honoring the old answer is
 // not a gate. Both halves of the change are recorded with actor and
 // timestamp. Must be mounted behind staffauth.Middleware.
 //

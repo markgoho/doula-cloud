@@ -11,9 +11,9 @@
 	 */
 	const fields: Field[] = [
 		{
-			id: 'labour',
+			id: 'labor',
 			type: 'section_header',
-			label: 'During labour and immediately after the birth',
+			label: 'During labor and immediately after the birth',
 			order: 1
 		},
 		{
@@ -27,10 +27,10 @@
 			id: 'people',
 			type: 'multi_select',
 			label: 'Who do you want in the room with you?',
-			options: ['My partner, for the whole labour', 'My Doula from Highland Midwifery'],
+			options: ['My partner, for the whole labor', 'My Doula from Highland Midwifery'],
 			order: 3
 		},
-		{ id: 'music', type: 'checkbox', label: 'Music playing throughout the labour', order: 4 },
+		{ id: 'music', type: 'checkbox', label: 'Music playing throughout the labor', order: 4 },
 		{
 			id: 'notes',
 			type: 'long_text',
@@ -49,7 +49,7 @@
 			{fields}
 			answers={{
 				pain: 'Epidural, as early as it can be given',
-				people: ['My partner, for the whole labour', 'My Doula from Highland Midwifery'],
+				people: ['My partner, for the whole labor', 'My Doula from Highland Midwifery'],
 				music: true,
 				notes:
 					'Lights low, and the playlist is at https://portal.highland-midwifery-group.example.org/referrals/2027/persephone?source=intake'

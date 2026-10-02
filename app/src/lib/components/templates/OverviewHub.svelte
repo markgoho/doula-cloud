@@ -140,7 +140,7 @@
 		 * different `--measure` on a different platform. `sidebar-l`
 		 * side-steps the whole question: it reads `--measure` itself, on
 		 * whichever machine is rendering, and wraps the moment that
-		 * machine's own column can no longer honour it. No number is
+		 * machine's own column can no longer honor it. No number is
 		 * authored here for any environment to disagree about.
 		 */
 	}

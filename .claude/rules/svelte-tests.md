@@ -232,7 +232,7 @@ second time under the variant's name, and nothing says so: the check
 goes green, the drag surface offers two entries that draw the same
 screen, and the branch is still swept never (#928).
 
-**Where a branch's extra answers go is a judgement, and it turns on
+**Where a branch's extra answers go is a judgment, and it turns on
 whether an unanswered path is loud.** A variant that needs a read the
 base never makes can carry its own `respond`, or the base's can answer
 that path harmlessly for a branch that never asks. Prefer the base's

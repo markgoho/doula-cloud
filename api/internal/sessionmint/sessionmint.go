@@ -47,7 +47,7 @@ type Adapter struct {
 	// when that session turns out to share Tier with the mint (a
 	// cross-tier one is #610's own concern, asked about and evicted
 	// there, never here). False for every adapter except mfaenroll's
-	// own: see Issue's own doc comment for why generalising this to
+	// own: see Issue's own doc comment for why generalizing this to
 	// every seam is exactly the mistake it looks like it is not.
 	ReplaceSameTier bool
 }
@@ -141,7 +141,7 @@ type Finish func(ctx context.Context, tx *sql.Tx) error
 // two Staff members trading a shared birth-center laptop) must not have
 // the first person's still-valid session deleted out from under her by
 // the second person's unrelated sign-in. An earlier version of this
-// function generalised mfaenroll's own "replace, don't leave in place"
+// function generalized mfaenroll's own "replace, don't leave in place"
 // habit to every seam on exactly that reasoning, and #837's own CI
 // caught the regression: mail-delivery.e2e.ts signs in as an Owner, then
 // as a Doula accepting an invitation in the same browser context, then

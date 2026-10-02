@@ -84,6 +84,26 @@ interface Rule {
 	readonly american: string;
 }
 
+// A stem whose bare British "-is" form is also the start of an American
+// word -- "generalist", "finalist", "optimistic", "realistic",
+// "characteristic", "nationalist", "harmonist", "systematist" -- so the
+// stem alone is no rule. Each one becomes three rules that name the suffix:
+// the verb (which holds "-ed" and "-es"), the "-ing" form, and the noun.
+// All three, not only the form the tree held, because a half-listed pair
+// is how #1154 followed #921.
+const ISE_STEMS = [
+	'generali',
+	'finali',
+	'optimi',
+	'reali',
+	'characteri',
+	'nationali',
+	'memori',
+	'harmoni',
+	'containeri',
+	'systemati'
+] as const;
+
 const RULES: readonly Rule[] = [
 	{ british: '\u{66}fence', american: 'offense' },
 	{ british: 'olo\u{75}r', american: 'color' },
@@ -131,10 +151,12 @@ const RULES: readonly Rule[] = [
 	// (both prose, both outside app/src and api/) were fixed by hand.
 	{ british: 'seriali\u{73}es', american: 'serializes' },
 	{ british: 'model\u{6C}ing', american: 'modeling' },
-	{ british: 'favo\u{75}rite', american: 'favorite' },
+	// #921 named the "-ite" form of this one alone. #1644 widened it to the
+	// stem, which holds that form and "favo\u{75}rable" and the verb too; two
+	// rules would report one line twice.
+	{ british: 'favo\u{75}r', american: 'favor' },
 	{ british: 'emphasi\u{73}e', american: 'emphasize' },
 	{ british: 'summari\u{73}es', american: 'summarizes' },
-	{ british: 'reali\u{73}ed', american: 'realized' },
 	// No rule for "programme" -> "program": the plain substring collides
 	// with "programmer"/"programmers", an ordinary, dialect-invariant
 	// English word -- the same failure mode as "tyres" above. Its one real
@@ -152,7 +174,36 @@ const RULES: readonly Rule[] = [
 	// unruled and its occurrences were fixed by hand alongside the other
 	// two.
 	{ british: 'enro\u{6C}ment', american: 'enrollment' },
-	{ british: 'enro\u{6C}s', american: 'enrolls' }
+	{ british: 'enro\u{6C}s', american: 'enrolls' },
+	// #1644, the wave the hand-written documents held. The sweep reached
+	// `docs/` for the first time and most of what it met was not in this
+	// list at all, the "-our" words first. Each is a whole stem, so it also
+	// holds the "-ed", "-ing", "-able" and "-hood" forms.
+	{ british: 'labo\u{75}r', american: 'labor' },
+	{ british: 'hono\u{75}r', american: 'honor' },
+	{ british: 'neighbo\u{75}r', american: 'neighbor' },
+	{ british: 'harbo\u{75}r', american: 'harbor' },
+	// Also "misdemeano\u{75}r".
+	{ british: 'demeano\u{75}r', american: 'demeanor' },
+	{ british: 'che\u{71}ue', american: 'check' },
+	// The American spelling doubles the L, so this is not a substring of it.
+	{ british: 'insta\u{6C}ment', american: 'installment' },
+	{ british: 'calib\u{72}e', american: 'caliber' },
+	{ british: 'theat\u{72}e', american: 'theater' },
+	// The precedent is `judg\u{65}ment` above: Merriam-Webster lists both
+	// spellings of each word and puts the one without the "e" first, and
+	// the tree held both, which is the thing this spec exists to stop.
+	{ british: 'acknowledg\u{65}ment', american: 'acknowledgment' },
+	...ISE_STEMS.flatMap((stem) => [
+		{ british: `${stem}\u{73}e`, american: `${stem}ze` },
+		{ british: `${stem}\u{73}ing`, american: `${stem}zing` },
+		{ british: `${stem}\u{73}ation`, american: `${stem}zation` }
+	])
+	// No rule for three forms #1644 met, each fixed by hand: "per cent" is a
+	// substring of "per centimeter", the British "annex" with a final "e"
+	// is a substring of "annexed" and "annexes", and the bare "enrol" is
+	// the collision recorded above. "analogue", "burnt", "towards" and
+	// "afterwards" are standard American variants and were left.
 ];
 
 // One word of the `-alled`/`-elled`/`-alling`/`-elling` family, matched
@@ -230,9 +281,13 @@ const KEEPS_ITS_DOUBLE_L: ReadonlySet<string> = new Set([
 	'malling',
 	'miscalled',
 	'miscalling',
+	'mothballed',
+	'mothballing',
 	'overselling',
 	'palled',
 	'palling',
+	'paywalled',
+	'paywalling',
 	'preinstalled',
 	'preinstalling',
 	'recalled',
@@ -356,6 +411,42 @@ const e2eFiles = globFiles('app/e2e/**/*.{ts,js}', { cwd: repoRoot });
 // app/src, and the same repoRoot-relative paths as the two trees above.
 const siteFiles = globFiles('site/src/**/*.{svelte,ts,js,css,svg,html,md}', { cwd: repoRoot });
 
+// #1644: the hand-written documents. `CLAUDE.md` says documentation is
+// American English too, and #899, #921, #1154 and #1218 each swept the code
+// and left `docs/` to the next reader's eye, which is how an ADR kept the
+// British spelling of "enrollment" after the code dropped it. The file set
+// is the one `prose.usage.spec.ts` reads, and the two exclusions are that
+// spec's own:
+//
+//   - `docs/research/transcripts/` is verbatim auto-generated captions.
+//   - `docs/design/doula-cloud.export.md` is generated from the `.pen` file
+//     by `bun run design:export`, and `scripts/design-export.test.ts` fails
+//     when the two disagree, so a line in it can be neither fixed by hand
+//     nor marked. A spelling there is fixed on the canvas.
+//
+// Nothing else is exempt by where it sits. A book read-back, a GOV.UK
+// quotation, a `>` blockquote and a dated Run log entry are all read. A
+// verbatim line of somebody else's, a proper noun, or a third party's
+// identifier stays by carrying the marker on its own line, which in
+// Markdown is an HTML comment: `<!-- spelling:ignore: the reason -->`. A
+// blockquote gets no exemption of its own because a `>` line here is as
+// often this repo's own prose (a GitHub Alert, a callout) as a quotation,
+// and an exemption a reader cannot see is not a deliberate override.
+//
+// This spec is named in `.github/workflows/ci.yml`'s `docs` job for the
+// reason `adrNumbers.usage.spec.ts` gives: the `app` job skips a docs-only
+// PR (#1466), and a docs-only PR is the likeliest kind to add a spelling
+// here.
+const documentFiles = [
+	...globFiles('docs/**/*.md', { cwd: repoRoot }).filter(
+		(file) =>
+			!file.startsWith('docs/research/transcripts/') && file !== 'docs/design/doula-cloud.export.md'
+	),
+	'CONTEXT.md',
+	'README.md',
+	'CLAUDE.md'
+];
+
 // Read and scanned once, at module scope, so the cost of walking roughly
 // 640 files in app/src, 650 in api/, and 56 in app/e2e is paid on import
 // rather than charged against one `it`'s 5-second `testTimeout`. Under a quiet
@@ -375,10 +466,13 @@ const offenses = [
 	),
 	...siteFiles.flatMap((file) =>
 		findOffensesInLines(file, readFileSync(path.join(repoRoot, file), 'utf8'))
+	),
+	...documentFiles.flatMap((file) =>
+		findOffensesInLines(file, readFileSync(path.join(repoRoot, file), 'utf8'))
 	)
 ];
 
-describe('app/src, app/e2e and api/ spell every word the American way', () => {
+describe('the source trees and the hand-written documents spell every word the American way', () => {
 	it('reads the whole app source tree', () => {
 		// A glob that silently matched nothing would make the assertion
 		// below pass while checking no source at all.
@@ -398,6 +492,10 @@ describe('app/src, app/e2e and api/ spell every word the American way', () => {
 
 	it('reads the whole site/src tree', () => {
 		expect(siteFiles.length).toBeGreaterThan(5);
+	});
+
+	it('reads the hand-written documents under docs/ and at the repo root', () => {
+		expect(documentFiles.length).toBeGreaterThan(100);
 	});
 
 	// The family rule is the one rule here that can be wrong in both
@@ -437,6 +535,35 @@ describe('app/src, app/e2e and api/ spell every word the American way', () => {
 		expect(findOffensesInLines('fixture.ts', `a mode\u{6C}led row ${IGNORE_MARKER}: fixture`)).toEqual(
 			[]
 		);
+	});
+
+	// ISE_STEMS is the other place a rule could fire on an American word:
+	// each stem is the start of one. Both directions again, and the form
+	// the marker takes in a Markdown document.
+	it('reads an "-is" stem as British only with the suffix that makes it so', () => {
+		const american =
+			'a generalist and a finalist, optimistic and realistic, a characteristic nationalist';
+		expect(findOffensesInLines('fixture.md', american)).toEqual([]);
+
+		const british = [
+			`the amendment generali\u{73}es it`,
+			`not optimi\u{73}ed for small screens`,
+			`without even reali\u{73}ing`,
+			`an alternative characteri\u{73}ation`
+		].join('\n');
+		expect(findOffensesInLines('fixture.md', british).map((offense) => offense.american)).toEqual([
+			'generalize',
+			'optimize',
+			'realizing',
+			'characterization'
+		]);
+
+		expect(
+			findOffensesInLines(
+				'fixture.md',
+				`"not optimi\u{73}ed for small screens" <!-- ${IGNORE_MARKER}: verbatim quotation of the source -->`
+			)
+		).toEqual([]);
 	});
 
 	it('finds no British spelling of a word the repo already spells one way', () => {

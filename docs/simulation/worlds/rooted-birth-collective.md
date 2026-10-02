@@ -186,7 +186,7 @@ The smallest set that still produces real collisions is most of the model, becau
 | Client, Client Field Template, Portal Account | Three client-side Personas, one of whom (Camille) reaches two Practices' worth of history that is not there. |
 | Engagement Request, Engagement (kind, due date, status) | Every piece of live work moved in on day zero, and everything that arrives during six months. |
 | Visit, Care Plan, Birth Plan, Plan Template, Plan Instance | Maya's seeded defaults, Renata's Practice-wide template edits, and Nadia's filled Birth Plan after a loss. |
-| Contract, Invoice, Payment | Paper Contracts re-signed, money already owed, and Dee's cheque that has nowhere to be recorded. |
+| Contract, Invoice, Payment | Paper Contracts re-signed, money already owed, and Dee's check that has nowhere to be recorded. |
 | Message, Notification, Email Suppression | Every Engagement's thread, and the mail that is the *only* way several journeys start. |
 | Activity | `CLAUDE.md`'s standing expectation, and the only way a run can answer "how did this come to be?" about its own world. |
 | Credit | The paywall Renata and Maya both meet, the pilot founding grant, and the purchase itself. |

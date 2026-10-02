@@ -208,7 +208,7 @@ func TestClientAcknowledgeBirthPlanHandler_Success(t *testing.T) {
 		t.Fatalf("decode GET response: %v", err)
 	}
 	if getOut.ClientAcknowledgedAt == nil {
-		t.Fatalf("a subsequent GET clientAcknowledgedAt = nil, want the acknowledgement to persist")
+		t.Fatalf("a subsequent GET clientAcknowledgedAt = nil, want the acknowledgment to persist")
 	}
 
 	var action, actorKind, actorClientID string

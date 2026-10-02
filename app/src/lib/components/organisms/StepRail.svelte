@@ -222,7 +222,7 @@
 			list-style: none;
 		}
 
-		/* No gap: each step's 2px leading bar meets its neighbour's, so the
+		/* No gap: each step's 2px leading bar meets its neighbor's, so the
 		   column of transparent bars reads as one track down the list and
 		   the active one lights a segment of it. That is the same reason
 		   RecordDetail's contents list carries no gap. */

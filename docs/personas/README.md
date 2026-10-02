@@ -11,7 +11,7 @@ They are built from the founder's own knowledge of the work, which is not resear
 Two consequences:
 
 - A test plan or a friction log is heuristic evaluation, never user research (#760). The first real evidence is a call in `docs/research/pilot-agency-interviews.md` or a Practice's act on the product. Where a persona is contradicted by it, the persona is wrong, not the finding ([ADR-0045](../adr/0045-a-doula-is-heard-before-she-is-chosen.md)).
-- Nadia Haddad ([loss-client.md](loss-client.md)) is the persona most likely to be wrong and most costly if she is. Her journey map should not be finalised on assumption alone — it wants input from a doula who has supported a client through a loss.
+- Nadia Haddad ([loss-client.md](loss-client.md)) is the persona most likely to be wrong and most costly if she is. Her journey map should not be finalized on assumption alone — it wants input from a doula who has supported a client through a loss.
 
 Every file answers four questions the journey maps need:
 
