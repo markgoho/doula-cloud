@@ -1418,12 +1418,12 @@ describe('who is on the Engagement, and putting yourself on it (#1598)', () => {
 	});
 
 	it('shows the refusal and keeps the control when the BFF refuses the press', async () => {
-		await setupWhoIsOn(nobodyOnIt, () => jsonResponse('that engagement has completed', 409));
+		await setupWhoIsOn(nobodyOnIt, () => jsonResponse('This Engagement has completed, so nobody can be put on it.', 409));
 		await expect.element(putMeOnIt()).toBeVisible();
 
 		await putMeOnIt().click();
 
-		await expect.element(testPage.getByText('that engagement has completed')).toBeVisible();
+		await expect.element(testPage.getByText('This Engagement has completed, so nobody can be put on it.')).toBeVisible();
 		await expect.element(putMeOnIt()).toBeVisible();
 		await expect.element(testPage.getByText('No Doula yet', { exact: true })).toBeVisible();
 	});

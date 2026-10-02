@@ -33,12 +33,14 @@ type AttachSelfResponse struct {
 	CanAttachSelf bool            `json:"canAttachSelf"`
 }
 
-// The two refusals a person reads where the rule does not admit her.
-// Each names the reason and the path that is open to her instead.
+// The three refusals. The Engagement hub prints the message of a refused
+// press as it is (app/src/lib/engagementDetail.ts's attachSelf), so each
+// is a whole sentence a person can read, and each names the reason. The
+// first two also name the path that is open to her.
 const (
-	msgAttachSelfNotADoula   = "only a Staff member who holds the Doula role can be put on an Engagement"
-	msgAttachSelfContractor  = "a contractor Doula goes on an Engagement when she accepts an Offer"
-	msgAttachSelfIsCompleted = "that engagement has completed"
+	msgAttachSelfNotADoula   = "Only a Staff member who holds the Doula role can be put on an Engagement."
+	msgAttachSelfContractor  = "A contractor Doula goes on an Engagement when she accepts an Offer."
+	msgAttachSelfIsCompleted = "This Engagement has completed, so nobody can be put on it."
 )
 
 // readAttachedDoulas reads the Doulas on engagementID, in the order they

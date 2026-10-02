@@ -379,6 +379,10 @@
 				reference
 			);
 			whoIsOnOverride = { doulas: refreshedDoulas, canAttachSelf: refreshedCanAttach };
+			// "You are on this Engagement." was true when it was said. A
+			// later write can end her Attachment (completion), so the
+			// message goes when who is on it is read again.
+			selfAttachedMessage = '';
 		} catch {
 			// Left as it was; a reload reads who is on it.
 		}
