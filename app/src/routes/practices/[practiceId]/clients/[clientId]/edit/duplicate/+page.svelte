@@ -51,7 +51,7 @@
 	import Text from '#lib/components/atoms/Text.svelte';
 	import { FormSubmission, orThrownMessage } from '#lib/formSubmission.svelte.js';
 	import { editMergeDraft } from '#lib/editMergeDraft.svelte.js';
-	import { proposedMergeChanges } from '#lib/editMerge.js';
+	import { proposedMergeChanges } from '#lib/proposedChanges.js';
 
 	const JOURNEY = 'Editing a Client';
 	const DIFFERENT_PERSON = 'different';
@@ -206,7 +206,7 @@
 			<DescriptionList
 				items={changes.map((change) => ({
 					label: change.label,
-					value: `${change.onFile} → ${change.typed}`
+					value: `${change.before} → ${change.after}`
 				}))}
 			/>
 		{/snippet}

@@ -1,6 +1,6 @@
 /**
- * What happens when the save-time duplicate check finds the Client
- * already on file (ADR-0017's "This is her").
+ * What is written when the save-time duplicate check finds the Client
+ * already on file (ADR-0017's "This is her") and the reader confirms.
  *
  * Carried forward from #497 rather than re-decided -- its match copy and
  * match behavior are settled -- and moved out of the route on #466,
@@ -8,45 +8,15 @@
  * good place to keep the rule.
  *
  * The rule itself: nothing typed on a blank field overwrites what is
- * already on file, and a field typed the same as what is on file is not
- * a change worth showing anyone. Only a non-blank, genuinely different
- * value becomes a proposed edit.
- *
- * What each column is called comes from `intakeJourney.ts`'s own table,
- * the same one the summary's rows read, so a change proposed here is
- * named the way the reader was asked for it.
+ * already on file. `proposedChanges.ts` holds the same rule for the
+ * rows shown before this write.
  */
 
 import type { ClientEditFields, ClientMatch } from './client.js';
-import { NOT_ANSWERED } from './intakeAnswers.js';
 import type { IntakeAnswers } from './intakeDraft.svelte.js';
-import { STRUCTURAL_QUESTIONS } from './intakeJourney.js';
-
-/** One row of "what saving this would change" -- what is on file, and
- * what intake was told instead. */
-export interface ProposedChange {
-	label: string;
-	onFile: string;
-	typed: string;
-}
 
 function text(value: string): string {
 	return value.trim();
-}
-
-/** Every structural column intake was told something new about. An
- * empty list means what was typed is already on file, so there is
- * nothing to confirm and nothing to save. */
-export function proposedChanges(answers: IntakeAnswers, match: ClientMatch): ProposedChange[] {
-	const rows: ProposedChange[] = [];
-	for (const { key, label } of STRUCTURAL_QUESTIONS) {
-		const typed = text(answers[key]);
-		const onFile = text(match[key]);
-		if (typed !== '' && typed !== onFile) {
-			rows.push({ label, onFile: onFile === '' ? NOT_ANSWERED : onFile, typed });
-		}
-	}
-	return rows;
 }
 
 /**

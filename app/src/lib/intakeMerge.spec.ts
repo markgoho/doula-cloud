@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { ClientMatch } from './client.js';
 import { blankAnswers } from './intakeDraft.svelte.js';
-import { mergedEditFields, proposedChanges } from './intakeMerge.js';
+import { mergedEditFields } from './intakeMerge.js';
 
 function match(partial: Partial<ClientMatch> = {}): ClientMatch {
 	return {
@@ -21,27 +21,6 @@ function match(partial: Partial<ClientMatch> = {}): ClientMatch {
 		...partial
 	};
 }
-
-describe('proposedChanges', () => {
-	it('has nothing to propose when what was typed is already on file', () => {
-		const answers = { ...blankAnswers(), givenName: 'Sarah', email: 'sarah@example.com' };
-
-		expect(proposedChanges(answers, match())).toEqual([]);
-	});
-
-	it('never proposes overwriting what is on file with a blank', () => {
-		expect(proposedChanges(blankAnswers(), match())).toEqual([]);
-	});
-
-	it('proposes a genuinely different value, naming what is there now', () => {
-		const answers = { ...blankAnswers(), phone: '555-0100', familyName: 'Okafor-Reid' };
-
-		expect(proposedChanges(answers, match())).toEqual([
-			{ label: 'Family name', onFile: 'Okafor', typed: 'Okafor-Reid' },
-			{ label: 'Phone number', onFile: 'Not answered', typed: '555-0100' }
-		]);
-	});
-});
 
 describe('mergedEditFields', () => {
 	it('keeps what is on file where intake typed nothing', () => {
