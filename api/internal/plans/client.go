@@ -63,7 +63,7 @@ func ClientGetBirthPlanHandler() http.Handler {
 }
 
 // ClientAcknowledgeBirthPlanHandler records that the Client-portal
-// caller has read her Birth Plan (#301, v1: acknowledgement only -- she
+// caller has read her Birth Plan (#301, v1: acknowledgment only -- she
 // cannot edit a field or suggest a change through this endpoint or any
 // other). Repeatable: acknowledging again after already having
 // acknowledged just refreshes client_acknowledged_at, and there is no
@@ -138,7 +138,7 @@ func ClientAcknowledgeBirthPlanHandler() http.Handler {
 }
 
 // recordBirthPlanAcknowledged writes #301's activity row for the
-// Client's own acknowledgement -- actor_kind 'client' (ADR-0022), same
+// Client's own acknowledgment -- actor_kind 'client' (ADR-0022), same
 // shape as contracts.recordContractSigned. clientauth.Middleware sets
 // only app.current_client_id, never app.current_practice_id, so
 // activity.ScopedTo widens tx to the resolved Practice as part of the
@@ -167,7 +167,7 @@ func recordBirthPlanAcknowledged(ctx context.Context, tx *sql.Tx, engagementID, 
 // refuseUnlessBirthPlanOffered applies ADR-0015's suppression rule to a
 // Client-portal request, writing the refusal itself and reporting
 // whether the request was refused -- the one place all three
-// Client-facing Birth Plan endpoints (read, PDF, acknowledgement) ask
+// Client-facing Birth Plan endpoints (read, PDF, acknowledgment) ask
 // the question, so none of them can drift from the others or from the
 // portal's own nav and hub gating. It is asked at the API rather than
 // left to the UI, so a direct request never sees an empty "not yet"

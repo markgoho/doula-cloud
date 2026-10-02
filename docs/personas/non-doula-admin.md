@@ -34,4 +34,4 @@ An Engagement exists with a Doula on it, a signed Contract, and an Invoice with 
   - **Reading a Client's filled Care Plan or Birth Plan is genuinely undecided.** No role check guards the Plan Instance read path. This journey must answer it.
 - They are on no Engagement and act on each one, so any mine-only scoping breaks them.
 - Raising an Invoice is **not** owner-gated. `payments/invoice.go` computes `isOwner` only to choose which message to show when Stripe Connect is missing, so Dee is stopped by infrastructure wearing the costume of a permission error.
-- There is no way to record a Payment by hand at all — Payments are written only by the Stripe webhook, so a cheque or a bank transfer cannot be entered. This is separate from the missing Stripe account, and it is the make-or-break moment of [their journey map](../journeys/non-doula-admin.md).
+- There is no way to record a Payment by hand at all — Payments are written only by the Stripe webhook, so a check or a bank transfer cannot be entered. This is separate from the missing Stripe account, and it is the make-or-break moment of [their journey map](../journeys/non-doula-admin.md).

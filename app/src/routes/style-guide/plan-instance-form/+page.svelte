@@ -11,9 +11,9 @@
 	 */
 	const fields: Field[] = [
 		{
-			id: 'labour',
+			id: 'labor',
 			type: 'section_header',
-			label: 'During labour and immediately after the birth',
+			label: 'During labor and immediately after the birth',
 			order: 1
 		},
 		{
@@ -42,10 +42,10 @@
 			id: 'people',
 			type: 'multi_select',
 			label: 'Who do you want in the room with you?',
-			options: ['My partner, for the whole labour', 'My Doula from Highland Midwifery'],
+			options: ['My partner, for the whole labor', 'My Doula from Highland Midwifery'],
 			order: 5
 		},
-		{ id: 'music', type: 'checkbox', label: 'Music playing throughout the labour', order: 6 }
+		{ id: 'music', type: 'checkbox', label: 'Music playing throughout the labor', order: 6 }
 	];
 
 	let answers = $state<Answers>({

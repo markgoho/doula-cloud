@@ -556,11 +556,11 @@ func TestPlanTemplateEditDoesNotMutateExistingInstance(t *testing.T) {
 	}
 }
 
-// TestPutInstanceHandler_AnswersChangeClearsClientAcknowledgement is
+// TestPutInstanceHandler_AnswersChangeClearsClientAcknowledgment is
 // #301's decision for the build: a Staff edit that actually changes the
-// stored answers resets the Client's acknowledgement, so Staff see
+// stored answers resets the Client's acknowledgment, so Staff see
 // "not reviewed since last edit" until she confirms again.
-func TestPutInstanceHandler_AnswersChangeClearsClientAcknowledgement(t *testing.T) {
+func TestPutInstanceHandler_AnswersChangeClearsClientAcknowledgment(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "put-instance-clears-ack"
 	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
@@ -589,12 +589,12 @@ func TestPutInstanceHandler_AnswersChangeClearsClientAcknowledgement(t *testing.
 	}
 }
 
-// TestPutInstanceHandler_UnchangedAnswersKeepsClientAcknowledgement
+// TestPutInstanceHandler_UnchangedAnswersKeepsClientAcknowledgment
 // proves the reset is conditioned on the answers actually differing, not
 // on the PUT event itself -- re-sending the same answers (a retry, or
 // Staff saving without changing anything) leaves an existing
-// acknowledgement in place.
-func TestPutInstanceHandler_UnchangedAnswersKeepsClientAcknowledgement(t *testing.T) {
+// acknowledgment in place.
+func TestPutInstanceHandler_UnchangedAnswersKeepsClientAcknowledgment(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "put-instance-keeps-ack"
 	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
@@ -619,14 +619,14 @@ func TestPutInstanceHandler_UnchangedAnswersKeepsClientAcknowledgement(t *testin
 		t.Fatalf("decode response: %v", err)
 	}
 	if out.ClientAcknowledgedAt == nil {
-		t.Fatalf("clientAcknowledgedAt = nil, want the pre-existing acknowledgement kept since answers didn't change")
+		t.Fatalf("clientAcknowledgedAt = nil, want the pre-existing acknowledgment kept since answers didn't change")
 	}
 }
 
-// TestGetInstanceHandler_ReflectsClientAcknowledgement is the Staff
+// TestGetInstanceHandler_ReflectsClientAcknowledgment is the Staff
 // visibility half of #301's AC4: Staff can see, on their own read, that
 // the Client has reviewed her Birth Plan.
-func TestGetInstanceHandler_ReflectsClientAcknowledgement(t *testing.T) {
+func TestGetInstanceHandler_ReflectsClientAcknowledgment(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "get-instance-shows-ack"
 	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
@@ -644,6 +644,6 @@ func TestGetInstanceHandler_ReflectsClientAcknowledgement(t *testing.T) {
 		t.Fatalf("decode response: %v", err)
 	}
 	if out.ClientAcknowledgedAt == nil {
-		t.Fatalf("clientAcknowledgedAt = nil, want Staff's own read to show the Client's acknowledgement")
+		t.Fatalf("clientAcknowledgedAt = nil, want Staff's own read to show the Client's acknowledgment")
 	}
 }

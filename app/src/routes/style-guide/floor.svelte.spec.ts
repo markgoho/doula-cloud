@@ -2,7 +2,7 @@
  * The floor check (#564): for every `@container (min-width: …)` condition
  * under `src/lib/components`, asserts that its literal is a fixed point --
  * CONTEXT.md's Content floor entry -- rather than a value chosen with a
- * margin or copied from a neighbour.
+ * margin or copied from a neighbor.
  *
  *   Sufficiency: forced permanently live (`floor.ts`'s `forceLive`), the
  *   wide configuration is acceptable, by the condition's own criterion,

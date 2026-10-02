@@ -75,7 +75,7 @@ Nothing switches this on while there are no employees. It is the line that moves
 
 The map already treats the EIN as in scope for other reasons — a bank account and Stripe both ask for one — so this changes nothing about the plan. It only means the EIN is a banking and platform requirement, not an IRS one, at this stage.
 
-**Quarterly estimated payments.** There is no employer withholding on Schedule C profit, so the tax is paid in four instalments during the year.
+**Quarterly estimated payments.** There is no employer withholding on Schedule C profit, so the tax is paid in four installments during the year.
 
 Who has to:
 
@@ -100,13 +100,13 @@ The dates, for the 2026 tax year, from the form itself:
 
 - If the business earns nothing in 2026 (formation year, launch in January 2027), there is no 2026 estimated-tax obligation, and the first payment that could be required is **15 April 2027**, for the first quarter of 2027.
 - If 2026 somehow produces net self-employment income large enough to push the owner's total expected tax $1,000 over withholding, the obligation attaches to whichever 2026 quarter the income lands in, and the last chance to cure it is **15 January 2027**.
-- The safe harbour is the escape hatch either way: penalties are generally avoided if the owner pays "at least 90% of the tax for the current year, or 100% of the tax shown on the return for the prior year, whichever is smaller" (IRS, *Estimated taxes*). With W-2 withholding already in the picture on a personal return, increasing withholding is an alternative to writing quarterly cheques.
+- The safe harbor is the escape hatch either way: penalties are generally avoided if the owner pays "at least 90% of the tax for the current year, or 100% of the tax shown on the return for the prior year, whichever is smaller" (IRS, *Estimated taxes*). With W-2 withholding already in the picture on a personal return, increasing withholding is an alternative to writing quarterly checks.
 
 ## 3. New York State — personal income tax and the MCTMT
 
 Disregarded federally means disregarded by New York too: the LLC's profit lands on the owner's **Form IT-201** resident return, on the same 15 April calendar as the federal return.
 
-**Estimated tax.** New York runs its own quarterly instalments, with a much lower entry threshold than the IRS:
+**Estimated tax.** New York runs its own quarterly installments, with a much lower entry threshold than the IRS:
 
 > **Who must make estimated income tax payments** – Generally you must pay estimated income tax if you expect to owe, after subtracting your withholding [...] and credits, at least **$300** of either New York State, New York City, or Yonkers tax for 2026.
 
@@ -272,7 +272,7 @@ All retrieved 25 August 2026.
 
 **IRS**
 - [Single member limited liability companies](https://www.irs.gov/businesses/small-businesses-self-employed/single-member-limited-liability-companies) — disregarded-entity treatment, Schedule C, employment tax, EIN
-- [Estimated taxes](https://www.irs.gov/businesses/small-businesses-self-employed/estimated-taxes) — $1,000 threshold, 90%/100% safe harbour
+- [Estimated taxes](https://www.irs.gov/businesses/small-businesses-self-employed/estimated-taxes) — $1,000 threshold, 90%/100% safe harbor
 - [Form 1040-ES (2026)](https://www.irs.gov/pub/irs-pdf/f1040es.pdf) — the four payment due dates
 
 **NY Department of State**

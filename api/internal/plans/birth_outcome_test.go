@@ -53,7 +53,7 @@ func seedBirthPlanClient(t *testing.T, db *testdb.DB, identityUID string) string
 // TestClientBirthPlan_SuppressionIsDerivedNotStored is #294's whole
 // claim in one walk. Nadia Haddad's pregnancy ends in a loss, and the
 // Birth Plan stops being offered to her at the API -- read, PDF and
-// acknowledgement alike -- with nothing on the Plan Instance changed to
+// acknowledgment alike -- with nothing on the Plan Instance changed to
 // make that happen. The outcome is then corrected, as ADR-0015's own
 // motivating typo requires, and the plan comes back with the same
 // answers it always had: no retirement to reverse, because nothing was
@@ -135,7 +135,7 @@ func TestClientBirthPlan_UnknownOutcomeRefused(t *testing.T) {
 }
 
 // TestClientAcknowledgeBirthPlan_PostpartumEngagementRefused closes the
-// gap #311 left on the write side: the acknowledgement endpoint carries
+// gap #311 left on the write side: the acknowledgment endpoint carries
 // the same gate the read does, so a Client who is not offered a Birth
 // Plan cannot stamp client_acknowledged_at on one from a stale tab.
 func TestClientAcknowledgeBirthPlan_PostpartumEngagementRefused(t *testing.T) {

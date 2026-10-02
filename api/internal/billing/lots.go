@@ -32,7 +32,7 @@ type lot struct {
 // (#390). Oldest-first is what makes a grant reach the Practice it was
 // given to before anything she paid for is touched, and it drains the
 // lots nearest their three-year refund window first, which is the
-// direction that favours the Practice.
+// direction that favors the Practice.
 //
 // remaining subtracts every draw already made against the lot --
 // consumption rows and refund rows both point at it through drawn_lot_id,

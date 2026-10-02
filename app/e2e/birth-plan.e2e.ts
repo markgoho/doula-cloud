@@ -97,5 +97,5 @@ test('Staff fills a Birth Plan, and the Client portal shows the matching read-on
 	);
 	expect(staffPlanResponse.ok(), `Staff birth plan read failed: ${staffPlanResponse.status()}`).toBe(true);
 	const staffPlanBody = await staffPlanResponse.json();
-	expect(staffPlanBody.clientAcknowledgedAt, 'Staff read should show the Client acknowledgement').toBeTruthy();
+	expect(staffPlanBody.clientAcknowledgedAt, 'Staff read should show the Client acknowledgment').toBeTruthy();
 });

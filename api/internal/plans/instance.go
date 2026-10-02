@@ -212,7 +212,7 @@ func PutInstanceHandler() http.Handler {
 		}
 
 		// A Staff edit that actually changes the stored answers resets
-		// the Client's acknowledgement (#301's decision): the CASE
+		// the Client's acknowledgment (#301's decision): the CASE
 		// compares the row's pre-update `answers` -- every SET expression
 		// in one UPDATE statement sees the same pre-update row -- against
 		// the incoming value, atomically, rather than a separate read-then-
@@ -257,7 +257,7 @@ func PutInstanceHandler() http.Handler {
 }
 
 // fetchInstance reads the field snapshot, answers, and Client
-// acknowledgement (#301) stored for engagementID + planType, reporting
+// acknowledgment (#301) stored for engagementID + planType, reporting
 // sql.ErrNoRows (wrapped, so errors.Is still matches) if no Plan Instance
 // exists yet -- callers
 // translate that into a 404.

@@ -92,7 +92,7 @@ No Stripe account exists yet, so this leg is **blocked rather than broken**. The
 
 ### Stage 8 — Message the Client
 
-**Thinking**: "Now everything about her is in one thread." **Pain points**: none identified. Messages are Engagement-scoped, immutable, and delivered by push-triggered fetch (ADR-0002), which she must not treat as a substitute for a phone call in labour.
+**Thinking**: "Now everything about her is in one thread." **Pain points**: none identified. Messages are Engagement-scoped, immutable, and delivered by push-triggered fetch (ADR-0002), which she must not treat as a substitute for a phone call in labor.
 
 - **8.1** — Send a message from the Engagement page (`POST /api/practices/{id}/engagements/{id}/messages`).
 - **8.2** — The Client replies from the portal; the thread is continuous.

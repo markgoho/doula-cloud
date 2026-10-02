@@ -347,7 +347,7 @@ Two observations from the run that the docs do not spell out:
 
 That means each of the following produces a Stripe tax report that claims the seller owes New York more than it does:
 
-- Paying the customer back **outside Stripe** — a bank transfer, a cheque, a credit applied elsewhere.
+- Paying the customer back **outside Stripe** — a bank transfer, a check, a credit applied elsewhere.
 - Refunding a **PaymentIntent-based** charge without calling `create_reversal`.
 - Refunding a charge whose sale was recorded through the **standalone Tax API**, again without the reversal.
 

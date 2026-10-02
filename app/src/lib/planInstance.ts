@@ -146,7 +146,7 @@ export async function loadClientBirthPlan(fetcher: Fetcher, engagementId: string
 }
 
 /** Confirms the Client-portal caller has read her Birth Plan for
- * engagementId (#301, v1: acknowledgement only). Repeatable -- calling it
+ * engagementId (#301, v1: acknowledgment only). Repeatable -- calling it
  * again after already acknowledging just refreshes clientAcknowledgedAt.
  * Throws with the response body text on a non-2xx response. */
 export async function acknowledgeClientBirthPlan(fetcher: Fetcher, engagementId: string): Promise<Instance> {

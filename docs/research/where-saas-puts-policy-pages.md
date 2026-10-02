@@ -32,7 +32,7 @@ Two things follow, and the rest of this document tests both against what real si
 
 **Stripe says "on its website", never "on one page".** The word "page" does not appear in the requirement. Stripe reviews a *site*. Nothing in the first-party text asks for consolidation onto a single URL. Consolidation is our own convenience, not a Stripe demand — which is a large part of why, as it turns out, nobody else has built one.
 
-**Stripe explicitly disfavours a contact form on its own.** "something besides contact forms" is Stripe's own parenthetical, not a paraphrase. A published email address satisfies it; a form by itself does not. Every site in this sample that plainly clears the requirement publishes a direct email address, a phone number, or both.
+**Stripe explicitly disfavors a contact form on its own.** "something besides contact forms" is Stripe's own parenthetical, not a paraphrase. A published email address satisfies it; a form by itself does not. Every site in this sample that plainly clears the requirement publishes a direct email address, a phone number, or both.
 
 ## 1. The direct competitors — practice management for solo practitioners
 
@@ -308,7 +308,7 @@ Twilio's **expiry** rule is **unverified**. The help-center articles that would 
 
 **On expiry, three years is generous but not unique.** The field has two poles and nothing in between: four businesses expire credits at **twelve months** (Anthropic, OpenAI, ElevenLabs, Replicate) and two never expire them at all (Bunny.net, legacy Postmark). Three years is three times the finite-expiry norm, and still less generous than the never-expire pole. No business in the sample used a multi-year window — 24 or 36 months appear nowhere.
 
-**The pairing is what has no precedent.** Every business here either keeps the money and eventually voids the credit (12-month expiry), or keeps the money and honours the credit forever (never expires). Ours does neither: it gives the money back on request for three years, and then voids what is left. It is the most customer-favourable position in the sample on both axes at once. Given a doula practice buying credits it may not spend for a season, that is defensible on its own terms — but it should be chosen, not assumed to be normal, because it is not.
+**The pairing is what has no precedent.** Every business here either keeps the money and eventually voids the credit (12-month expiry), or keeps the money and honors the credit forever (never expires). Ours does neither: it gives the money back on request for three years, and then voids what is left. It is the most customer-favorable position in the sample on both axes at once. Given a doula practice buying credits it may not spend for a season, that is defensible on its own terms — but it should be chosen, not assumed to be normal, because it is not.
 
 ## 4. The URL distribution, counted
 

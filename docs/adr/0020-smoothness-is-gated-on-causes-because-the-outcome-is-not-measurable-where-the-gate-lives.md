@@ -40,7 +40,7 @@ Concretely:
 Named here so the gap is a decision and not an oversight.
 
 - **Frame rate.** No automated check asserts 60fps anywhere. The instrument lies in headless. Scroll feel is confirmed by a person, on a real display, when a ticket touches a list.
-- **The 100ms acknowledgement floor and the 400ms Doherty completion budget.** Both are dominated by network and BFF latency, which is not what the brief's smoothness requirement is about, and neither can be read honestly on a shared runner.
+- **The 100ms acknowledgment floor and the 400ms Doherty completion budget.** Both are dominated by network and BFF latency, which is not what the brief's smoothness requirement is about, and neither can be read honestly on a shared runner.
 - **Route-level Cumulative Layout Shift.** A route needs the SvelteKit runtime that browser-mode tests do not have, and route pop-in is fixed by giving each route a loading state rather than by observing that it lacks one.
 - **The blank first frame.** The app is a client-rendered SPA — `adapter-static` with a `200.html` fallback and `ssr = false` — so every route paints blank before JS boots. No skeleton removes that. The intended answer is a service-worker precache rather than server rendering, and the groundwork is already paid for: `app/src/service-worker.ts` ships and is auto-registered, scoped to push only. It is fog on [#405](https://github.com/markgoho/doula-cloud/issues/405), not this ADR.
 - **Mount wall-clock time itself.** [#489](https://github.com/markgoho/doula-cloud/issues/489) removed it: nothing here measures how long a mount takes in milliseconds, at all, on any machine. See the 2026-09-03 amendment below for why the ratio it used to be checked as could not survive a contended runner either.

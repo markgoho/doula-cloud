@@ -49,7 +49,7 @@ type PurchaseSplit struct {
 // remainder, by newYorkStaff over totalStaff.
 //
 // The New York share rounds *up*, so a fraction of a cent is always
-// resolved in New York's favour. Under-collecting is what Tax Law §1145
+// resolved in New York's favor. Under-collecting is what Tax Law §1145
 // penalises; over-collecting by at most one cent on a purchase is not,
 // and a fixed direction makes the number reproducible years later when an
 // ST-100 has to be substantiated. The two shares always sum to

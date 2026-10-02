@@ -89,7 +89,7 @@ describe('styleLines', () => {
 			]);
 		});
 
-		it('honours the marker there too', () => {
+		it('honors the marker there too', () => {
 			const source = `/* ${MARKER} -- a reason */\n.x {\n\tcolor: red;\n}\n.y {\n\tcolor: blue;\n}`;
 			expect(styleLines(source, MARKER, 'css').map(({ text }) => text.trim())).toEqual([
 				'.y {',

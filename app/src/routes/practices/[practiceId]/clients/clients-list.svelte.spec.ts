@@ -409,7 +409,7 @@ describe('a pending Request on the row', () => {
 	it('leaves the cell blank for a Client with no pending Request', async () => {
 		// The fixture's second Client has no pending Request. Only she is
 		// listed, because this asserts the absence of the text anywhere on
-		// the page and her neighbour has one.
+		// the page and her neighbor has one.
 		await setup(jsonResponse({ items: [clients[1]], hasMore: false }));
 
 		await expect

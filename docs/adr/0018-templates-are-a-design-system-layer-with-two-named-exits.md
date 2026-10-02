@@ -24,7 +24,7 @@ A Template owns **page-level arrangement, and nothing else**.
 
 [#97](https://github.com/markgoho/doula-cloud/issues/97) fixed typed Svelte props as the sole external configuration surface: no `class` or `style` passthrough, no general CSS-variable escape hatch. A Template is nothing but regions of markup passed in from outside, so it makes **Snippets** central where they had been incidental. This is an extension, not a reversal — #97 governs *styling* escape hatches, and a Snippet is content. It is the third confirmed use, after `LabeledField`'s typed `children` and `DataTable`'s `rowActions`, which [#199](https://github.com/markgoho/doula-cloud/issues/199) already called a confirmed second.
 
-The shape is hybrid, and the hybrid is forced by a real page: the staff Engagement detail is an `h1`, a `DescriptionList`, then **a variable number** of `<h2>`-headed sections — Visits, N Plan sections, Contract, Invoices, Offers, Messages — which named region props cannot express. So fixed regions are named Snippet props and the repeatable part is a typed array, `DataTable.rowActions`'s shape generalised.
+The shape is hybrid, and the hybrid is forced by a real page: the staff Engagement detail is an `h1`, a `DescriptionList`, then **a variable number** of `<h2>`-headed sections — Visits, N Plan sections, Contract, Invoices, Offers, Messages — which named region props cannot express. So fixed regions are named Snippet props and the repeatable part is a typed array, `DataTable.rowActions`'s shape generalized.
 
 | Archetype | Component | Regions |
 |---|---|---|

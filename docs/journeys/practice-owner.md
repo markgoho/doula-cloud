@@ -9,7 +9,7 @@
 
 ## Moment of truth
 
-**Stage 8 — two Clients go into labour the same night, and she needs to know within a minute who is free.** Coverage is her stated anxiety, and it is the one thing that cannot wait until morning. Today no screen in the product answers it, and the underlying data to answer it does not exist either.
+**Stage 8 — two Clients go into labor the same night, and she needs to know within a minute who is free.** Coverage is her stated anxiety, and it is the one thing that cannot wait until morning. Today no screen in the product answers it, and the underlying data to answer it does not exist either.
 
 ## Words
 

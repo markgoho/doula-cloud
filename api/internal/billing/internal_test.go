@@ -53,7 +53,7 @@ func internalRequest(t *testing.T, srv *httptest.Server, method, path, secret, b
 }
 
 // TestRefundHandler_IssuesTheRefundAndRecordsIt proves the endpoint that
-// honours a refund request: Stripe is called against the original
+// honors a refund request: Stripe is called against the original
 // payment, and the ledger keeps the receipt.
 func TestRefundHandler_IssuesTheRefundAndRecordsIt(t *testing.T) {
 	db := testdb.New(t)

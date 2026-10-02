@@ -1008,7 +1008,7 @@ func TestPostConnectWebhookHandler_InvoicePaidAlreadyPaidGuardSkipsSecondWrite(t
 // ADR-0013's correctness constraint proven at this write site: the
 // handler's own tx already committed the payments row and the
 // payment_received_outbox row by the time commitAndAck runs, so a Cloud
-// Tasks enqueue failure afterward must never turn the acknowledgement
+// Tasks enqueue failure afterward must never turn the acknowledgment
 // into anything but 200 -- a non-2xx here would make Stripe redeliver an
 // event whose payment already recorded.
 func TestPostConnectWebhookHandler_InvoicePaidSurvivesNudgeEnqueueFailure(t *testing.T) {

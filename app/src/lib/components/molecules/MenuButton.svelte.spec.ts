@@ -79,7 +79,7 @@ describe('MenuButton', () => {
 	 * these panels hold ordinary links and buttons that Tab already reaches.
 	 * `aria-haspopup` would be the same promise on the trigger.
 	 */
-	it('claims neither a menu role nor a popup relationship it does not honour', async () => {
+	it('claims neither a menu role nor a popup relationship it does not honor', async () => {
 		const { trigger } = await setup();
 
 		await expect.element(trigger).not.toHaveAttribute('aria-haspopup');

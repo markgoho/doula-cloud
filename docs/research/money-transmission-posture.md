@@ -218,7 +218,7 @@ That is the licensed party in this flow, by name, in New York specifically. It i
 
 ### 4.6 What Stripe demands of the platform in return
 
-This is the half a favourable read tends to skip. The obligations are real and ongoing.
+This is the half a favorable read tends to skip. The obligations are real and ongoing.
 
 **Joint-and-several liability for connected accounts.** Stripe Connect Terms §3.1:
 
@@ -331,7 +331,7 @@ The earlier **Letter of 10 January 2000** ([lo000110.htm](https://www.dfs.ny.gov
 
 And the **Letter of 20 July 2007** ([lo070720b.htm](https://www.dfs.ny.gov/legal/interpret/lo070720b.htm)) reaches the same place: "the Client would have to be licensed as a money transmitter, unless there is an agency agreement with each of the merchants and no risk to the payor."
 
-**Why this is encouraging and still not an answer.** The 2007 letter's favourable branch turns on funds going "directly … to an account owned by the intended payee". Doula Cloud's funds go directly to a Stripe balance *owned by the Practice under the Practice's own Connected Account Agreement with Stripe* (section 4.4), and from there to the Practice's own linked bank account. Whether a Stripe connected-account balance is "an account owned by the intended payee" for this purpose is a construction question. It is a good-faith reading, and it is a reading, not a holding.
+**Why this is encouraging and still not an answer.** The 2007 letter's favorable branch turns on funds going "directly … to an account owned by the intended payee". Doula Cloud's funds go directly to a Stripe balance *owned by the Practice under the Practice's own Connected Account Agreement with Stripe* (section 4.4), and from there to the Practice's own linked bank account. Whether a Stripe connected-account balance is "an account owned by the intended payee" for this purpose is a construction question. It is a good-faith reading, and it is a reading, not a holding.
 
 ### 5.5 What NYDFS has *not* said — recorded honestly
 
@@ -346,7 +346,7 @@ The controlling authority on the branch that matters is a **2007 opinion letter 
 
 ## 6. Whether the answer constrains what the LLC may do
 
-Yes, and this is the part that outlives the memo. The favourable facts in sections 2 and 3 are **not properties of Doula Cloud**; they are properties of one specific integration shape. Each of the following would put the question back on the table, and several are things a 14-doula pilot agency will plausibly ask for.
+Yes, and this is the part that outlives the memo. The favorable facts in sections 2 and 3 are **not properties of Doula Cloud**; they are properties of one specific integration shape. Each of the following would put the question back on the table, and several are things a 14-doula pilot agency will plausibly ask for.
 
 ### 6.1 Guardrails — what must stay true
 
@@ -436,7 +436,7 @@ We read our facts as falling inside that exception. **Is a Stripe connected-acco
 
 We expect (a), (c) and (d) to be the dangerous ones. Please tell us if (b) or (e) is worse than we think.
 
-**Q7 — Consequences, and other states.** If a license *were* required: we understand section 643 sets a surety bond of "no less than five hundred thousand dollars", and section 650(2)(a) makes unlicensed transmission a Class A misdemeanour with no minimum threshold. Is that the correct read of the exposure? And since Practices will eventually be outside New York — does the answer here generalise, or should we expect a state-by-state analysis before selling across state lines? We note New York has **not** adopted the Money Transmission Modernization Act, so its exemption architecture differs from the 31 states that have.
+**Q7 — Consequences, and other states.** If a license *were* required: we understand section 643 sets a surety bond of "no less than five hundred thousand dollars", and section 650(2)(a) makes unlicensed transmission a Class A misdemeanor with no minimum threshold. Is that the correct read of the exposure? And since Practices will eventually be outside New York — does the answer here generalize, or should we expect a state-by-state analysis before selling across state lines? We note New York has **not** adopted the Money Transmission Modernization Act, so its exemption architecture differs from the 31 states that have.
 
 **Q8 — What we should write down.** If the conclusion is that no license is required, is there anything we should put in our Practice agreement, our Client-facing invoice, or our marketing copy to *keep* it true? Stripe's own contract forbids us to "act as or hold itself out as a payment facilitator, intermediary or aggregator", and we would like our copy checked against the same standard a regulator would apply.
 
@@ -457,7 +457,7 @@ We are not asking whether the integration is well built, and we are not asking f
 - Stripe Payments Company is the NYDFS-licensed money transmitter in this flow, by name.
 - Stripe nowhere asserts that a platform is exempt, and no contractual clause says so.
 - New York has no payment-processor exemption, has not adopted the MTMA, and imposes no de minimis threshold on section 641(1).
-- The nearest NYDFS authority — the 2007 payment-processor letter — describes this fact pattern in its favourable branch.
+- The nearest NYDFS authority — the 2007 payment-processor letter — describes this fact pattern in its favorable branch.
 
 **Awaiting a New York attorney:**
 

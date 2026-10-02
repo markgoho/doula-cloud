@@ -42,7 +42,7 @@ No app/ file needed a reformat for indentation — it was already uniformly tab-
 
 ## `docs/`: the specs that read it run in their own CI job
 
-A PR that changes only `docs/` or a root `*.md` file skips CI's `api` and `app` jobs ([#1466](https://github.com/markgoho/doula-cloud/issues/1466)), so the specs that read `docs/` cannot live only inside `app`'s suite. CI's `docs` job runs them on every PR: `app/src/lib/prose.usage.spec.ts`, `adrNumbers.usage.spec.ts` and `testPlans.usage.spec.ts`. To run the same set locally, from `app/`: `bunx vitest --run --project server src/lib/prose.usage.spec.ts src/lib/adrNumbers.usage.spec.ts src/lib/testPlans.usage.spec.ts`. A new spec that reads `docs/` goes on that job's list in `.github/workflows/ci.yml`; the rules for the skip itself are in `docs/agents/worktree-flow.md`, "Enforcement".
+A PR that changes only `docs/` or a root `*.md` file skips CI's `api` and `app` jobs ([#1466](https://github.com/markgoho/doula-cloud/issues/1466)), so the specs that read `docs/` cannot live only inside `app`'s suite. CI's `docs` job runs them on every PR: `app/src/lib/prose.usage.spec.ts`, `adrNumbers.usage.spec.ts`, `testPlans.usage.spec.ts` and `spelling.usage.spec.ts`. To run the same set locally, from `app/`: `bunx vitest --run --project server src/lib/prose.usage.spec.ts src/lib/adrNumbers.usage.spec.ts src/lib/testPlans.usage.spec.ts src/lib/spelling.usage.spec.ts`. A new spec that reads `docs/` goes on that job's list in `.github/workflows/ci.yml`; the rules for the skip itself are in `docs/agents/worktree-flow.md`, "Enforcement".
 
 ## The memory this gate costs, and why the browser pool is capped
 

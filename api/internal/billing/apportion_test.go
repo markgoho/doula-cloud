@@ -3,7 +3,7 @@ package billing
 import "testing"
 
 // TestSplitPurchase_ApportionsAndAlwaysSumsToTheTotal proves the New York
-// share is the headcount ratio, that it rounds in New York's favour, and
+// share is the headcount ratio, that it rounds in New York's favor, and
 // that the two shares never lose or invent a cent.
 func TestSplitPurchase_ApportionsAndAlwaysSumsToTheTotal(t *testing.T) {
 	cases := []struct {
