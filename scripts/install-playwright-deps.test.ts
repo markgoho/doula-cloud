@@ -97,8 +97,19 @@ describe('install-playwright-deps.sh', () => {
   });
 
   test('exits 0 on the first success and does not retry', () => {
-    const { code } = run('true');
+    const counter = join(dir, 'count');
+    const { code } = run(`echo x >> ${counter}`);
     expect(code).toBe(0);
+    expect(readFileSync(counter, 'utf8').trim().split('\n')).toHaveLength(1);
+  });
+
+  test('stops retrying when the total budget is spent', () => {
+    const { code, out } = run('sleep 2; exit 1', {
+      TOTAL_BUDGET: '1',
+      ATTEMPTS: '5',
+    });
+    expect(code).toBe(1);
+    expect(out).toContain('budget for this step is spent');
   });
 
   test('exits 1 after the last failed attempt', () => {

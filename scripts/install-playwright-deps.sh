@@ -30,6 +30,9 @@
 #   3. After a failed attempt the script waits (bounded) until no apt-get or
 #      dpkg process is left, then retries with an uncontended lock.
 #
+# The whole step is capped at TOTAL_BUDGET (540s): worst case 180s + wait +
+# 180s would otherwise exceed the 10-minute gcp-dashboard job.
+#
 # Every knob below can be overridden by an environment variable; the spec in
 # scripts/install-playwright-deps.test.ts uses that to run the loop against
 # fake commands.
@@ -40,6 +43,9 @@ attempts="${ATTEMPTS:-3}"
 attempt_timeout="${ATTEMPT_TIMEOUT:-180}"
 retry_sleep="${RETRY_SLEEP:-10}"
 settle_timeout="${SETTLE_TIMEOUT:-240}"
+# The whole script gives up after this many seconds, so the worst case fits
+# the shortest job that calls it (gcp-dashboard-ci.yml, 10 minutes).
+total_budget="${TOTAL_BUDGET:-540}"
 poll_interval="${POLL_INTERVAL:-5}"
 apt_conf="${APT_CONF:-/etc/apt/apt.conf.d/99-ci-bounds}"
 timeout_cmd="${TIMEOUT_CMD:-timeout}"
@@ -58,7 +64,11 @@ apt_busy() {
   if [ -n "${APT_BUSY_CMD:-}" ]; then
     bash -c "$APT_BUSY_CMD"
   else
-    pgrep -x 'apt-get|apt|dpkg'
+    # The lock probe covers the gap between `apt-get update` and
+    # `apt-get install` inside Playwright's one root `sh -c`, when no apt
+    # process exists but the orphan is about to take the lock again.
+    pgrep -x 'apt-get|apt|dpkg' ||
+      $as_root fuser /var/lib/dpkg/lock-frontend /var/lib/apt/lists/lock
   fi
 }
 
@@ -67,7 +77,7 @@ apt_busy() {
 wait_for_apt_idle() {
   local waited=0
   while apt_busy >/dev/null 2>&1; do
-    if [ "$waited" -ge "$settle_timeout" ]; then
+    if [ "$waited" -ge "$settle_timeout" ] || [ "$SECONDS" -ge "$total_budget" ]; then
       echo "apt was still busy after ${settle_timeout}s."
       return 1
     fi
@@ -82,7 +92,14 @@ wait_for_apt_idle() {
 
 attempt=1
 while [ "$attempt" -le "$attempts" ]; do
-  if "$timeout_cmd" "$attempt_timeout" bash -c "$install_cmd"; then
+  remaining=$((total_budget - SECONDS))
+  if [ "$remaining" -le 0 ]; then
+    echo "The ${total_budget}s budget for this step is spent."
+    break
+  fi
+  this_timeout=$attempt_timeout
+  [ "$remaining" -lt "$this_timeout" ] && this_timeout=$remaining
+  if "$timeout_cmd" "$this_timeout" bash -c "$install_cmd"; then
     exit 0
   fi
   echo "OS dependency install attempt ${attempt} failed."
