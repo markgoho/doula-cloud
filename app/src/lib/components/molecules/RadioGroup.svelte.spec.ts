@@ -2,6 +2,13 @@ import { page } from 'vitest/browser';
 import { describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import RadioGroup from './RadioGroup.svelte';
+/*
+ * The real stylesheet, so the layout regression below measures the row a
+ * person sees: without it `cluster-l` is an unstyled inline element and
+ * the defect it had cannot be reproduced. Global, so it reaches every
+ * test in this file, none of which asserts on what it changes.
+ */
+import '#lib/styles/app.css';
 
 type Mode = 'signup' | 'login';
 
@@ -166,5 +173,38 @@ describe('RadioGroup.svelte', () => {
 		});
 
 		await expect.element(page.getByRole('alert')).toHaveTextContent('Choose one');
+	});
+
+	/*
+	 * Regression, #1596: an option was a `cluster-l`, which is flex-wrap,
+	 * so a label that could not share a line with its radio dropped whole
+	 * onto the next line -- a bare radio, then a name with no control
+	 * beside it. Found by looking at the Start work form's fourteen-Doula
+	 * roster at 320px (ADR-0024): "Marguerite Throckmorton-Balasubramanian"
+	 * sat under a radio that read as belonging to nobody. The same defect
+	 * `LabeledField` had in #510, and asserted the same way: on the
+	 * label's own top edge, because the label staying beside its control
+	 * is the thing that was broken. The continuum sweep cannot see it --
+	 * a dropped label makes the row narrower, not wider.
+	 */
+	it('keeps a long label beside its radio instead of dropping it to its own line, at 320px', async () => {
+		await page.viewport(320, 600);
+		const longName = 'Marguerite Throckmorton-Balasubramanian';
+		await render(RadioGroup<string>, {
+			legend: 'Who is the Doula?',
+			options: [
+				{ value: 'staff-1', label: 'Jo Li' },
+				{ value: 'staff-2', label: longName }
+			],
+			value: '',
+			onChange: vi.fn()
+		});
+
+		const radio = page.getByLabelText(longName).element();
+		const label = page.getByText(longName).element();
+
+		expect(label.getBoundingClientRect().top).toBeLessThan(radio.getBoundingClientRect().bottom);
+		// And it wraps inside its own column rather than pushing past the edge.
+		expect(label.getBoundingClientRect().right).toBeLessThanOrEqual(320);
 	});
 });
