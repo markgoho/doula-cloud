@@ -208,6 +208,8 @@ func TestStaffingActions_ContainsExactlyTheRosterSet(t *testing.T) {
 		activity.ActionCoverageGapCleared,
 		activity.ActionOnCallNarrowingChanged,
 		activity.ActionOnCallRuleChanged,
+		// #1596: who the Practice put on the birth.
+		activity.ActionDoulaAttached,
 		// #1423: engagement_events' three facts, folded in, stay staff-only.
 		activity.ActionEngagementReopened,
 		activity.ActionKindChanged,

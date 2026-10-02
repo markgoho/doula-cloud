@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"time"
 
+	"doula-cloud/api/internal/activity"
 	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/billing"
 	"doula-cloud/api/internal/client"
@@ -49,11 +50,18 @@ type ClientIdentity struct {
 // balance this approval would leave, and an approval into an empty
 // balance does not happen.
 type DetailResponse struct {
-	RequestID       string                     `json:"requestId"`
-	State           string                     `json:"state"`
-	Kind            string                     `json:"kind"`
-	DueDate         *string                    `json:"dueDate,omitempty"`
-	Note            *string                    `json:"note,omitempty"`
+	RequestID string  `json:"requestId"`
+	State     string  `json:"state"`
+	Kind      string  `json:"kind"`
+	DueDate   *string `json:"dueDate,omitempty"`
+	Note      *string `json:"note,omitempty"`
+	// DoulaStaffID and DoulaName are the Doula the Request names (#1596).
+	// Both are absent where the asker said "No Doula yet". DoulaName is
+	// activity.DepartedStaffName where her staff row no longer reads for
+	// this Practice. Whether she can still be attached is not read here:
+	// approval asks that, and refuses with the reason.
+	DoulaStaffID    *string                    `json:"doulaStaffId,omitempty"`
+	DoulaName       *string                    `json:"doulaName,omitempty"`
 	RequestedBy     string                     `json:"requestedBy"`
 	RequestedByName string                     `json:"requestedByName"`
 	RequestedAt     time.Time                  `json:"requestedAt"`
@@ -158,19 +166,25 @@ func loadDetail(ctx context.Context, tx *sql.Tx, practiceID, requestID string) (
 // the Client's three name columns joined in, and refuses anything but a
 // pending Request.
 func scanRequest(ctx context.Context, tx *sql.Tx, requestID string) (resp DetailResponse, clientID string, err error) {
-	var dueDate, note sql.NullString
+	var dueDate, note, doulaStaffID, doulaName sql.NullString
+	// The named Doula's staff row is a LEFT JOIN, and not the plain JOIN
+	// the requester gets: "No Doula yet" has no row to join, and a Doula
+	// who has left since is one RLS no longer shows this reader.
 	err = tx.QueryRowContext(ctx,
 		`SELECT r.id, r.state::text, r.kind::text, r.due_date::text, r.note,
 		        r.requested_by, rs.name, r.requested_at,
-		        c.id, c.given_name, coalesce(c.family_name, ''), coalesce(c.preferred_name, '')
+		        c.id, c.given_name, coalesce(c.family_name, ''), coalesce(c.preferred_name, ''),
+		        r.doula_staff_id, ds.name
 		   FROM engagement_requests r
 		   JOIN staff rs ON rs.id = r.requested_by
 		   JOIN clients c ON c.id = r.client_id
+		   LEFT JOIN staff ds ON ds.id = r.doula_staff_id
 		  WHERE r.id = $1`,
 		requestID,
 	).Scan(&resp.RequestID, &resp.State, &resp.Kind, &dueDate, &note,
 		&resp.RequestedBy, &resp.RequestedByName, &resp.RequestedAt,
-		&resp.Client.ClientID, &resp.Client.GivenName, &resp.Client.FamilyName, &resp.Client.PreferredName)
+		&resp.Client.ClientID, &resp.Client.GivenName, &resp.Client.FamilyName, &resp.Client.PreferredName,
+		&doulaStaffID, &doulaName)
 	if errors.Is(err, sql.ErrNoRows) {
 		return DetailResponse{}, "", err //nolint:wrapcheck // sql.ErrNoRows is the sentinel DetailHandler errors.Is against, per loadDetail's doc comment
 	}
@@ -186,6 +200,14 @@ func scanRequest(ctx context.Context, tx *sql.Tx, requestID string) (resp Detail
 	}
 	if note.Valid {
 		resp.Note = &note.String
+	}
+	if doulaStaffID.Valid {
+		resp.DoulaStaffID = &doulaStaffID.String
+		name := activity.DepartedStaffName
+		if doulaName.Valid {
+			name = doulaName.String
+		}
+		resp.DoulaName = &name
 	}
 	return resp, resp.Client.ClientID, nil
 }

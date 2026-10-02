@@ -136,12 +136,15 @@ func attachActor(ctx context.Context, tx *sql.Tx, engagementID, staffID string, 
 // Grant opens a granted attachment for staffID on engagementID, or
 // upgrades an open accrued one in place. Granted is the only origin that
 // reaches (see CanAccessEngagement), so it is written explicitly -- by
-// Offer acceptance and by the Visit handlers, which put a named Doula on
-// a birth -- never by AttachingWrite's seam.
+// Offer acceptance, by the Visit handlers, which put a named Doula on a
+// birth, and by approval of an Engagement Request that names an employee
+// Doula (engagementrequest.approve, #1596, ADR-0008's amendment on #1515)
+// -- never by AttachingWrite's seam.
 //
 // feeAmountCents and feeTerms are the Offer's own, copied at acceptance
 // so nothing can later rewrite what she agreed to; both are nil
-// everywhere else. On an upgrade they are COALESCEd rather than assigned:
+// everywhere else, a Request's approval included. On an upgrade they are
+// COALESCEd rather than assigned:
 // an acceptance over an existing accrued row still copies its fee on,
 // while a later Visit-create granting the same pair -- which carries no
 // fee -- cannot blank the fee an Offer already copied.

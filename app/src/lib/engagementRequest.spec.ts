@@ -1,9 +1,12 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
 	approveRequest,
+	doulaOptions,
+	initialDoulaAnswer,
 	kindLabel,
 	loadApprovalDetail,
 	loadPendingRequests,
+	loadRequestDoulas,
 	refuseRequest,
 	requestEngagement,
 	withdrawRequest,
@@ -11,10 +14,15 @@ import {
 } from './engagementRequest.js';
 import { jsonResponse as response } from './testResponse.js';
 
-const body: NewEngagementRequest = { kind: 'birth', dueDate: '2027-03-01', note: 'Referred by the hospital' };
+const body: NewEngagementRequest = {
+	kind: 'birth',
+	dueDate: '2027-03-01',
+	note: 'Referred by the hospital',
+	doulaStaffId: 'staff-1'
+};
 
 describe('requestEngagement', () => {
-	it('posts the kind, due date and note to the client engagement-requests path', async () => {
+	it('posts the kind, due date, note and named Doula to the client engagement-requests path', async () => {
 		const outcome = { requestId: 'request-1', state: 'pending' };
 		const fetcher = vi.fn().mockResolvedValue(response(outcome));
 
@@ -70,6 +78,61 @@ describe('requestEngagement', () => {
 		await expect(requestEngagement(fetcher, 'practice-1', 'client-1', body)).rejects.toThrow(
 			'a pending request for this client and kind already exists'
 		);
+	});
+});
+
+describe('loadRequestDoulas', () => {
+	const doulas = { items: [{ staffId: 'staff-1', name: 'Renata Alvarez' }], callerIsOnlyDoula: true };
+
+	it('reads who this reader may name, from the Practice-scoped path', async () => {
+		const fetcher = vi.fn().mockResolvedValue(response(doulas));
+
+		await expect(loadRequestDoulas(fetcher, 'practice-1')).resolves.toEqual(doulas);
+
+		expect(fetcher).toHaveBeenCalledWith('/api/practices/practice-1/engagement-request-doulas');
+	});
+
+	it('throws with the response body text on a refusal', async () => {
+		const fetcher = vi.fn().mockResolvedValue(response('work reaches her as an offer', 403));
+
+		await expect(loadRequestDoulas(fetcher, 'practice-1')).rejects.toThrow('work reaches her as an offer');
+	});
+});
+
+describe('doulaOptions', () => {
+	const roster = [
+		{ staffId: 'staff-1', name: 'Renata Alvarez' },
+		{ staffId: 'staff-2', name: 'Amara Okafor' }
+	];
+
+	it('marks the person at the form "(you)" and ends on No Doula yet', () => {
+		expect(doulaOptions(roster, 'staff-1')).toEqual([
+			{ value: 'staff-1', label: 'Renata Alvarez (you)' },
+			{ value: 'staff-2', label: 'Amara Okafor' },
+			{ value: 'none', label: 'No Doula yet' }
+		]);
+	});
+
+	it('marks nobody where the person at the form is not in the list', () => {
+		expect(doulaOptions(roster, 'staff-9').map((option) => option.label)).toEqual([
+			'Renata Alvarez',
+			'Amara Okafor',
+			'No Doula yet'
+		]);
+	});
+
+	it('still offers No Doula yet at a Practice with nobody to name', () => {
+		expect(doulaOptions([], 'staff-1')).toEqual([{ value: 'none', label: 'No Doula yet' }]);
+	});
+});
+
+describe('initialDoulaAnswer', () => {
+	it('selects the person at the form where she is the only Doula at the Practice', () => {
+		expect(initialDoulaAnswer({ items: [], callerIsOnlyDoula: true }, 'staff-1')).toBe('staff-1');
+	});
+
+	it('selects nothing in every other case', () => {
+		expect(initialDoulaAnswer({ items: [], callerIsOnlyDoula: false }, 'staff-1')).toBe('');
 	});
 });
 

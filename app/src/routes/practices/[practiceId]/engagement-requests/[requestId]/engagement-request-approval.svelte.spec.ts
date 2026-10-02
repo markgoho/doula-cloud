@@ -138,11 +138,40 @@ describe('the approval screen', () => {
 			.toHaveAttribute('href', `/practices/${practiceId}/engagements/engagement-1`);
 	});
 
-	it('draws no control that amends the kind or the due date', async () => {
+	it('shows the Doula the Request names, beside the kind and the due date', async () => {
+		await setup();
+
+		await expect.element(testPage.getByText('Doula', { exact: true })).toBeVisible();
+		await expect.element(testPage.getByText('Marguerite Throckmorton-Balasubramanian')).toBeVisible();
+		await expect.element(testPage.getByText('No Doula yet')).not.toBeInTheDocument();
+	});
+
+	it('says "No Doula yet" for a Request that names nobody', async () => {
+		await setup({ detail: { ...baseDetail, doulaStaffId: undefined, doulaName: undefined } });
+
+		await expect.element(testPage.getByText('No Doula yet')).toBeVisible();
+	});
+
+	it('draws no control that amends the kind, the due date or the Doula', async () => {
 		await setup();
 
 		await expect.element(testPage.getByLabelText('Kind of work')).not.toBeInTheDocument();
 		await expect.element(testPage.getByLabelText('Due date')).not.toBeInTheDocument();
+		await expect.element(testPage.getByRole('radio')).not.toBeInTheDocument();
+		await expect.element(testPage.getByRole('combobox')).not.toBeInTheDocument();
+	});
+
+	it('shows why approval was refused when the named Doula can no longer be attached', async () => {
+		const reason =
+			'Marguerite Throckmorton-Balasubramanian is now a contractor, and a contractor goes on an Engagement when she accepts an Offer. Refuse this request, then start the work again and name another Doula or no Doula yet.';
+		await setup({ approveStatus: 409, approveBody: reason });
+
+		await testPage.getByRole('button', { name: 'Approve and start the work' }).click();
+
+		await expect.element(testPage.getByText(reason)).toBeVisible();
+		// The Request stays pending, so both decisions are still on screen.
+		await expect.element(testPage.getByRole('button', { name: 'Refuse this request' })).toBeVisible();
+		expect(goto).not.toHaveBeenCalled();
 	});
 
 	it('warns on a second live Engagement without blocking the decision', async () => {

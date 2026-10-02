@@ -142,7 +142,16 @@ func ListActivityHandler() http.Handler {
 var activityProjection = activitypage.Projection[ActivityEntry]{
 	Joins: []string{
 		fmt.Sprintf(`LEFT JOIN staff before_staff ON before_staff.id = (a.diff ->> '%s')::uuid`, activity.DiffKeyAssignedStaffIDBefore), //nolint:gosec // a package-internal constant, not request input
-		fmt.Sprintf(`LEFT JOIN staff after_staff  ON after_staff.id  = (a.diff ->> '%s')::uuid`, activity.DiffKeyAssignedStaffIDAfter),  //nolint:gosec // a package-internal constant, not request input
+		// One join resolves the person an entry leaves in place: the Doula
+		// a visit_reassigned entry moved the Visit to, or the Doula a
+		// doula_attached entry put on the Engagement (#1596). No diff
+		// carries both keys, so the COALESCE never has to choose. It is
+		// one join and not a third, because each join to staff inlines
+		// that table's RLS policies again, and a third took this query
+		// past jit_above_cost (measured: 115761 against 100000) -- the
+		// cliff TestListEngagementActivityQuery_StaysOffTheJITCliff guards.
+		fmt.Sprintf(`LEFT JOIN staff after_staff  ON after_staff.id  = COALESCE(a.diff ->> '%s', a.diff ->> '%s')::uuid`, //nolint:gosec // package-internal constants, not request input
+			activity.DiffKeyAssignedStaffIDAfter, activity.DiffKeyAttachedStaffID),
 	},
 	Columns: []string{"a.diff", "before_staff.name", "after_staff.name"},
 	Row: func() ([]any, func(activitypage.Row) ActivityEntry) {
@@ -202,12 +211,27 @@ func listEngagementActivity(ctx context.Context, tx *sql.Tx, practiceID, engagem
 }
 
 // entryDetail picks the one-sentence Detail an entry carries, if any.
-// Two actions have something to add beyond their own name today.
+// Three actions have something to add beyond their own name today.
 func entryDetail(action string, diff []byte, before, after sql.NullString) string {
-	if action == string(activity.ActionPaymentRefunded) {
+	switch action {
+	case string(activity.ActionPaymentRefunded):
 		return refundDetail(diff)
+	case string(activity.ActionDoulaAttached):
+		return attachmentDetail(after)
 	}
 	return reassignmentDetail(action, before, after)
+}
+
+// attachmentDetail says which Doula a doula_attached entry put on the
+// Engagement (#1596). The Who column beside it already names the person
+// who decided it and the When column the instant, so the three together
+// answer "who attached the Doula, and when". Where one person is both --
+// a solo Owner who started her own work -- her name is in both columns,
+// which is the true record: she put herself on it. The name comes last,
+// so a Doula who has since left ("a former colleague") never opens the
+// sentence in lower case.
+func attachmentDetail(attached sql.NullString) string {
+	return "Put on this Engagement as the Doula: " + staffDisplayName(attached)
 }
 
 // refundDetail says where a Refund came from when nobody in Doula Cloud

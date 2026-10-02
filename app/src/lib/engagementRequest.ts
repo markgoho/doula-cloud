@@ -10,13 +10,77 @@ import type { Fetcher } from './fetcher.js';
 import { refusalError } from './formErrors.js';
 
 /** The body a new Request submits: the kind and due date the requester
- * states as part of the ask, and an optional note -- ADR-0017's "the
- * requester describes the work; the approver does not amend it". Mirrors
- * the Go BFF's RequestBody. */
+ * states as part of the ask, an optional note, and who the Doula is --
+ * ADR-0017's "the requester describes the work; the approver does not
+ * amend it". Mirrors the Go BFF's RequestBody.
+ *
+ * `doulaStaffId` is the one employee Doula she names (#1596). It is
+ * left out for "No Doula yet", which the BFF reads as nobody named. The
+ * form refuses the submit until she has answered, so leaving it out is
+ * always her answer and never a question she skipped. */
 export interface NewEngagementRequest {
 	kind: 'birth' | 'postpartum';
 	dueDate: string;
 	note: string;
+	doulaStaffId?: string;
+}
+
+/** One answer the Start work form offers to "Who is the Doula?",
+ * mirroring the Go BFF's engagementrequest.RequestDoula. */
+export interface RequestDoula {
+	staffId: string;
+	name: string;
+}
+
+/** The form's whole list (engagementrequest.DoulasResponse): each person
+ * this reader may name, herself first, and whether she is the only Doula
+ * at the Practice -- the one case in which her answer is selected when
+ * the form opens (ADR-0017's amendment on #1515). The server computes
+ * that fact, because a plain Doula's list holds herself alone at a
+ * Practice of any size. */
+export interface RequestDoulas {
+	items: RequestDoula[];
+	callerIsOnlyDoula: boolean;
+}
+
+/** Loads who this reader may name as the Doula on a new Request
+ * (engagementrequest.DoulasHandler). Throws with the response body text
+ * on a refusal, mirroring loadApprovalDetail. */
+export async function loadRequestDoulas(fetcher: Fetcher, practiceId: string): Promise<RequestDoulas> {
+	const response = await fetcher(`/api/practices/${practiceId}/engagement-request-doulas`);
+	if (!response.ok) {
+		throw await refusalError(response);
+	}
+	return response.json();
+}
+
+/** The value the "No Doula yet" option carries on the form. A staff id
+ * is a UUID, so this can never be one. */
+export const NO_DOULA_YET = 'none';
+
+/** The label of the "No Doula yet" answer, on the form and on the
+ * approval screen. CONTEXT.md lists "Assignment" under Avoid for an
+ * Attachment, so it is never "No Doula assigned". */
+export const NO_DOULA_YET_LABEL = 'No Doula yet';
+
+/** The options of "Who is the Doula?", in the order ADR-0017 gives them:
+ * the person at the form first, her label ending "(you)"; then the rest
+ * in the order the server sent them; "No Doula yet" last. The server
+ * already puts the reader first, so this marks her and reorders nothing. */
+export function doulaOptions(doulas: RequestDoula[], selfStaffId: string): { value: string; label: string }[] {
+	return [
+		...doulas.map(({ staffId, name }) => ({
+			value: staffId,
+			label: staffId === selfStaffId ? `${name} (you)` : name
+		})),
+		{ value: NO_DOULA_YET, label: NO_DOULA_YET_LABEL }
+	];
+}
+
+/** The answer selected when the form opens: the reader herself where she
+ * is the only Doula at the Practice, and nothing in every other case. */
+export function initialDoulaAnswer(doulas: RequestDoulas, selfStaffId: string): string {
+	return doulas.callerIsOnlyDoula ? selfStaffId : '';
 }
 
 /** RequestResponse, mirrored. `state` is "pending" for the ordinary path,
@@ -82,6 +146,10 @@ export interface ApprovalDetail {
 	kind: 'birth' | 'postpartum';
 	dueDate?: string;
 	note?: string;
+	/** The Doula the Request names (#1596). Both are absent where the
+	 * asker said "No Doula yet". */
+	doulaStaffId?: string;
+	doulaName?: string;
 	requestedBy: string;
 	requestedByName: string;
 	requestedAt: string;

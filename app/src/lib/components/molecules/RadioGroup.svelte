@@ -81,7 +81,16 @@
 		     RadioGroup.svelte.spec.ts -->
 		{#each options as option (option.value)}
 			<div>
-				<cluster-l>
+				<!--
+					A two-track grid, not cluster-l (#1596): cluster-l is
+					flex-wrap, and a flex row that cannot hold both items drops
+					the whole label to a line of its own, under a radio that
+					then reads as belonging to nobody. The same defect and the
+					same answer as LabeledField's inline orientation (#510).
+					Found on the Start work form at 320px, where a Doula's
+					double-barreled name is the label.
+				-->
+				<div class="option">
 					<input
 						type="radio"
 						id="{name}-{option.value}"
@@ -92,7 +101,7 @@
 						onchange={() => onChange(option.value)}
 					/>
 					<label for="{name}-{option.value}">{option.label}</label>
-				</cluster-l>
+				</div>
 				{#if option.description}
 					<p id="{name}-{option.value}-hint" class="description">{option.description}</p>
 				{/if}
@@ -139,6 +148,25 @@
 			margin: 0 0 var(--space-3);
 			color: var(--color-error);
 			font-size: var(--text-body-sm-size);
+		}
+
+		/*
+		 * The control takes its own width and the label takes the rest,
+		 * wrapping inside its column. `minmax(0, 1fr)` and not `1fr`: a
+		 * bare `1fr` has an automatic minimum of the label's longest word,
+		 * which is what would push a long unbroken name past the edge.
+		 * The gap and the top alignment are what `cluster-l` gave this row
+		 * before, so a short label sits exactly where it did.
+		 */
+		.option {
+			display: grid;
+			grid-template-columns: auto minmax(0, 1fr);
+			gap: var(--space-4);
+			align-items: start;
+		}
+
+		label {
+			overflow-wrap: anywhere;
 		}
 
 		input {

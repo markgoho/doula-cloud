@@ -5,9 +5,10 @@
 	 * themselves. Addressed by the Request's own id and nothing else, so it
 	 * is reachable before an inbox exists to list them (#503).
 	 *
-	 * There is no control that amends the kind or the due date. ADR-0017:
-	 * "the requester describes the work; the approver does not amend it" --
-	 * so both are rendered as facts in a DescriptionList, never as inputs.
+	 * There is no control that amends the kind, the due date or the named
+	 * Doula (#1596). ADR-0017: "the requester describes the work; the
+	 * approver does not amend it" -- so all three are rendered as facts in
+	 * a DescriptionList, never as inputs.
 	 * An approver who disagrees with the ask refuses it and says why.
 	 *
 	 * Refuse demands a reason, and this screen refuses an empty one before
@@ -37,6 +38,7 @@
 	import { apiFetchWithSession } from '#lib/api.js';
 	import { formatCalendarDay, formatInstant } from '#lib/dates.js';
 	import {
+		NO_DOULA_YET_LABEL,
 		approveRequest,
 		kindLabel,
 		loadApprovalDetail,
@@ -99,6 +101,9 @@
 			{ label: 'Asked by', value: `${request.requestedByName} on ${formatInstant(request.requestedAt)}` },
 			{ label: 'Kind of work', value: kindLabel(request.kind) },
 			{ label: 'Due date', value: request.dueDate ? formatCalendarDay(request.dueDate) : 'Not given' },
+			// #1596: the third fact the asker states. A fact and never a
+			// control, like the kind and the due date beside it.
+			{ label: 'Doula', value: request.doulaName ?? NO_DOULA_YET_LABEL },
 			{ label: 'Note', value: request.note ?? 'None' },
 			{ label: 'Credit cost', value: `${request.creditCost} credit` }
 		];

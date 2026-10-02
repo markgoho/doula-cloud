@@ -29,6 +29,11 @@ export const detail: ApprovalDetail = {
 	kind: 'birth',
 	dueDate: '2027-03-01',
 	note: 'https://portal.highland-midwifery-group.example.org/referrals/2027/persephone?source=intake',
+	// #1596: the busier of the fact's two states -- a named Doula, and the
+	// widest name on the agency roster. "No Doula yet" is the shorter
+	// state and the spec's own departure from this.
+	doulaStaffId: 'staff-10',
+	doulaName: 'Marguerite Throckmorton-Balasubramanian',
 	requestedBy: 'staff-1',
 	requestedByName: 'Anne-Marie Ochieng-Whitfield',
 	requestedAt: '2026-08-01T10:00:00Z',
