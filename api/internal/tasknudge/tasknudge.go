@@ -52,6 +52,12 @@ const (
 	// nobody covering it. Nudged: a hole in tonight's cover is exactly
 	// the latency ADR-0013 exists to remove.
 	CoverageGap OutboxType = "coverage-gap"
+	// FeedbackIssue is #1524's private-GitHub-issue outbox, queued by
+	// staffauth.FeedbackHandler and clientauth.FeedbackHandler. Nudged
+	// like ClientErasure above: no mail, but a person is standing at the
+	// screen, and Cloud Scheduler's five-minute cadence is exactly the
+	// latency ADR-0013 exists to remove.
+	FeedbackIssue OutboxType = "feedback-issue"
 )
 
 // delay is how long a nudge waits before it fires, per outbox type.

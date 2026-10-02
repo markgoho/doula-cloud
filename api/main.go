@@ -23,6 +23,7 @@ import (
 	"doula-cloud/api/internal/clientauth"
 	"doula-cloud/api/internal/clock"
 	"doula-cloud/api/internal/engagementrequest"
+	"doula-cloud/api/internal/feedback"
 	"doula-cloud/api/internal/internalauth"
 	"doula-cloud/api/internal/mail"
 	"doula-cloud/api/internal/mailsuppress"
@@ -267,6 +268,29 @@ func main() {
 		Now:    now,
 	}
 
+	// #1524, #1500's resolution: a fake IssueCreator wherever
+	// GITHUB_FEEDBACK_TOKEN is unset -- locally and in CI alike, since
+	// neither carries this credential (docs/environment.md) -- so the
+	// worker never reaches the real GitHub API without one. The real
+	// GitHubIssueCreator is otherwise wired unconditionally, the same
+	// shape sitebuild.GitHubDispatcher takes for GITHUB_DISPATCH_TOKEN,
+	// once a human has attached the token on Deployed.
+	var issueCreator feedback.IssueCreator = feedback.NewFakeIssueCreator()
+	if token := strings.TrimSpace(os.Getenv("GITHUB_FEEDBACK_TOKEN")); token != "" {
+		// coverage:ignore reason: constructs the real GitHub-backed issue creator, not exercised by unit tests
+		issueCreator = feedback.GitHubIssueCreator{
+			Client: siteHTTP,
+			Token:  token,
+			Repo:   os.Getenv("GITHUB_FEEDBACK_REPO"),
+		}
+	}
+	// coverage:ignore reason: wires the real Deps struct main() serves from, not exercised by unit tests -- routes()/testDeps() in main_test.go exercise the route table itself
+	feedbackIssueWorker := feedback.IssueWorker{
+		Creator:    issueCreator,
+		AppBaseURL: appBaseURL,
+		Now:        now,
+	}
+
 	// Built before the nudge enqueuer, because the enqueuer is told where
 	// every nudged outbox is served and that comes from this value's own
 	// registrations. NudgeEnqueuer is the one field filled in afterwards.
@@ -320,6 +344,7 @@ func main() {
 			Now:    now,
 		},
 		PracticeDeletionWorker: practiceDeletionOutboxWorker,
+		FeedbackIssueWorker:    feedbackIssueWorker,
 
 		ExpectedOrigins: resolveExpectedOrigins(),
 		Now:             now,

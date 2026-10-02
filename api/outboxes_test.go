@@ -19,6 +19,7 @@ import (
 // provisioning that made every one of these a console entry.
 var wantOutboxPaths = []string{
 	"/api/internal/clients/process-erasure-outbox",
+	feedbackIssueOutboxPath,
 	"/api/internal/notifications/process-connect-nudge-outbox",
 	"/api/internal/notifications/process-coverage-gap-outbox",
 	"/api/internal/notifications/process-engagement-request-outbox",
@@ -140,6 +141,7 @@ func TestNudgePaths_CoversEveryNudgeTypeTasknudgeDeclares(t *testing.T) {
 		tasknudge.SiteBuild,
 		tasknudge.MFARecoveryCode,
 		tasknudge.ClientErasure,
+		tasknudge.FeedbackIssue,
 	} {
 		if paths[outboxType] == "" {
 			t.Errorf("nudge type %q has no endpoint", outboxType)

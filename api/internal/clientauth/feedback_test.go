@@ -207,6 +207,36 @@ func TestPortalFeedback_NoEngagementLeavesClientAndPracticeNull(t *testing.T) {
 	}
 }
 
+// TestPortalFeedback_QueuesTheIssueOutboxRow is #1524's own AC: both
+// send handlers enqueue the outbox row in the same transaction that
+// saves the piece of Feedback.
+func TestPortalFeedback_QueuesTheIssueOutboxRow(t *testing.T) {
+	db := testdb.New(t)
+	_, session := seedSignedInPortalAccount(t, db)
+	srv := newPortalFeedbackServer(db)
+	defer srv.Close()
+
+	resp := postPortalFeedback(t, srv, session, `{"kind":"idea_or_request"}`)
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusCreated {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusCreated)
+	}
+	var out clientauth.PortalFeedbackResponse
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+
+	var status string
+	if err := db.Admin.QueryRowContext(t.Context(),
+		`SELECT status::text FROM feedback_issue_outbox WHERE feedback_id = $1`, out.ID,
+	).Scan(&status); err != nil {
+		t.Fatalf("read outbox row: %v", err)
+	}
+	if status != "pending" {
+		t.Errorf("outbox status = %q, want pending", status)
+	}
+}
+
 func TestPortalFeedback_RejectsMalformedEngagementID(t *testing.T) {
 	db := testdb.New(t)
 	_, session := seedSignedInPortalAccount(t, db)

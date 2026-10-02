@@ -87,5 +87,5 @@ func Mount(g *staffauth.GatedRouter, db *sql.DB, nudge tasknudge.Enqueuer) {
 	// screens name no single Engagement -- so it sits beside the
 	// session-level routes above rather than in portal.Mount.
 	g.Write("POST /api/portal/feedback",
-		ratelimit.Wrap(db, "portal_feedback", feedbackRules)(FeedbackHandler(db)))
+		ratelimit.Wrap(db, "portal_feedback", feedbackRules)(FeedbackHandler(db, nudge)))
 }

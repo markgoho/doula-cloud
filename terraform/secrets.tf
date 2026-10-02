@@ -53,10 +53,11 @@
 # account held over everything else in the project, deliberately excludes
 # `secretmanager.versions.access`, so a secret without a grant here was
 # unreadable to the container no matter what else it could do. #743 walked
-# exactly that failure. There are nine, one per `secret_key_ref` environment
+# exactly that failure. There are ten, one per `secret_key_ref` environment
 # variable the live service declares (cloud_run.tf) — that count, not the
-# number of secrets in the project, is what decides this list. Ten until
-# #1183 took `NOTIFICATION_WORKER_SECRET` off the service.
+# number of secrets in the project, is what decides this list. Eleven until
+# #1183 took `NOTIFICATION_WORKER_SECRET` off the service, nine after that
+# until #1524 added `GITHUB_FEEDBACK_TOKEN`.
 
 resource "google_secret_manager_secret" "github_dispatch_token" {
   annotations         = {}
@@ -84,6 +85,43 @@ resource "google_secret_manager_secret_iam_member" "github_dispatch_token_runtim
   project   = "doula-cloud"
   role      = "roles/secretmanager.secretAccessor"
   secret_id = google_secret_manager_secret.github_dispatch_token.id
+}
+
+# #1524's private-GitHub-issue outbox (#1500's resolution). The shell
+# only: `terraform apply` stays off CI (ADR-0034), so this secret has no
+# version until a human creates the fine-grained PAT by hand and adds it
+# -- the same by-hand step github_dispatch_token above still waits on
+# (docs/environment.md, "Still outstanding: the token itself"). Until
+# then, main.go's own fallback (an unset GITHUB_FEEDBACK_TOKEN wires a
+# fake IssueCreator) means the deploy is never blocked on this secret
+# holding a version -- unlike DATABASE_URL, `deploy-api` in ci.yml never
+# names this secret, so a missing version cannot fail a trunk push.
+resource "google_secret_manager_secret" "github_feedback_token" {
+  annotations         = {}
+  deletion_policy     = "DELETE"
+  deletion_protection = false
+  labels              = {}
+  project             = "doula-cloud"
+  secret_id           = "doula-cloud-github-feedback-token"
+  tags                = null
+  ttl                 = null
+  version_aliases     = {}
+  version_destroy_ttl = null
+
+  replication {
+    auto {}
+  }
+
+  lifecycle {
+    prevent_destroy = true
+  }
+}
+
+resource "google_secret_manager_secret_iam_member" "github_feedback_token_runtime_accessor" {
+  member    = google_service_account.doula_api_runtime.member
+  project   = "doula-cloud"
+  role      = "roles/secretmanager.secretAccessor"
+  secret_id = google_secret_manager_secret.github_feedback_token.id
 }
 
 resource "google_secret_manager_secret" "mailgun_api_key" {

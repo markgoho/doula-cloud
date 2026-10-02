@@ -136,6 +136,31 @@ resource "google_cloud_run_v2_service" "doula_api" {
           }
         }
       }
+      # #1524: the private repo the feedback-issue outbox opens an issue
+      # in -- a plain env var, not a secret, the same reasoning
+      # STRIPE_CREDIT_PRICE_ID below rests on: a repository name is not
+      # a credential.
+      env {
+        name  = "GITHUB_FEEDBACK_REPO"
+        value = "markgoho/doula-cloud-feedback"
+      }
+      # #1524, #1500's resolution: a second fine-grained PAT, scoped to
+      # the private feedback repo alone, Issues: write. Declared here as
+      # the target shape; attached out of band the same way
+      # GITHUB_DISPATCH_TOKEN above was, once a human has created the
+      # token (docs/environment.md) -- naming it here does not make a
+      # green `deploy-api` depend on it, since ci.yml never lists this
+      # secret and `secrets`/`env_vars` merge rather than replace.
+      env {
+        name  = "GITHUB_FEEDBACK_TOKEN"
+        value = null
+        value_source {
+          secret_key_ref {
+            secret  = "doula-cloud-github-feedback-token"
+            version = "latest"
+          }
+        }
+      }
       # ADR-0037's three, set here by #1183. `internalauth.Guard` needs all
       # three of audience, allowlist and validator before it will accept a
       # token at all — a half-configured service refuses rather than waving a
