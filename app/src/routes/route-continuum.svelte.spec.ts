@@ -223,7 +223,8 @@ const fixtures = new Map(
  * with the app.
  */
 const UNSWEPT_ON = '#595';
-const UNSWEPT: readonly string[] = [];
+// PROTOTYPE (#1496): the throwaway route has no fixture. This branch never lands.
+const UNSWEPT: readonly string[] = ['prototype-onboarding'];
 
 /*
  * Known-broken today, named rather than suppressed -- the same shape and
