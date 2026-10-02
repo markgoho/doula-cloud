@@ -1,10 +1,10 @@
 // Package personname holds the two rules for turning a Client's stored
 // name columns into the name a reader is shown. They live here, below
 // every package that spells one, rather than in client, because
-// activitypage has to spell a Client actor's name exactly as client
-// does and cannot import client without a cycle (client reads its own
-// history through activitypage). client re-exports both, so every
-// existing caller still reads client.PreferredName.
+// activitypage has to spell a Client actor's name exactly as every
+// other reader does and cannot import client without a cycle (client
+// reads its own history through activitypage). Every caller reaches the
+// rules here directly.
 package personname
 
 // Legal is the document name ADR-0017's read table gives Stripe

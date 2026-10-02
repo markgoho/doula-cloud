@@ -57,8 +57,7 @@ const apiFetchWithSession = vi.hoisted(() => vi.fn());
 vi.mock('#lib/api.js', () => ({
 	apiFetch,
 	apiFetchWithSession,
-	apiBaseURL: () => '',
-	apiErrorMessage: (response: Response) => response.text()
+	apiBaseURL: () => ''
 }));
 
 const REPORTED_AT = '2026-08-28T14:02:11Z';

@@ -172,7 +172,6 @@ vi.mock('#lib/api.js', () => ({
 	apiFetch,
 	apiFetchWithSession,
 	apiBaseURL: () => 'https://api.example.test',
-	apiErrorMessage: (response: Response) => Promise.resolve(`HTTP ${response.status}`),
 	// `/` and both login screens call this directly (#lib/api.js's own
 	// doc comment) rather than through apiFetchWithSession -- mirrored
 	// here rather than re-exported from the real module, since the real

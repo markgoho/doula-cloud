@@ -13,7 +13,7 @@ import (
 
 	"doula-cloud/api/internal/activity"
 	"doula-cloud/api/internal/apierr"
-	"doula-cloud/api/internal/client"
+	"doula-cloud/api/internal/personname"
 	"doula-cloud/api/internal/pgerr"
 	"doula-cloud/api/internal/staffauth"
 )
@@ -520,7 +520,7 @@ func resolveMergeFieldValues(ctx context.Context, tx *sql.Tx, engagementID strin
 
 	values := MergeFieldValues{}
 	if wantsClientName {
-		values[clientNameMergeKey] = client.LegalName(givenName, familyName.String)
+		values[clientNameMergeKey] = personname.Legal(givenName, familyName.String)
 	}
 	if wantsPracticeName {
 		values[practiceNameMergeKey] = practiceName

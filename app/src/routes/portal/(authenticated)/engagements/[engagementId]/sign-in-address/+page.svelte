@@ -24,7 +24,8 @@
 	import { goto, invalidateAll } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
-	import { apiErrorMessage, apiFetch, apiFetchWithSession } from '#lib/api.js';
+	import { apiFetch, apiFetchWithSession } from '#lib/api.js';
+	import { apiErrorMessage } from '#lib/apiErrorMessage.js';
 	import { emailFormatError, refusalErrors, SERVICE_PROBLEM } from '#lib/formErrors.js';
 	import { FormSubmission, orServiceProblem } from '#lib/formSubmission.svelte.js';
 	import { portalPushSubscriptionsPath, unregisterPushSubscription } from '#lib/pushRegistration.js';

@@ -17,6 +17,7 @@ import (
 	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/client"
 	"doula-cloud/api/internal/payments"
+	"doula-cloud/api/internal/personname"
 	"doula-cloud/api/internal/staffauth"
 )
 
@@ -130,7 +131,7 @@ func DetailHandler() http.Handler {
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
-		d.ClientName = client.PreferredName(givenName, preferredName.String)
+		d.ClientName = personname.Preferred(givenName, preferredName.String)
 		if dueDate.Valid {
 			d.DueDate = &dueDate.String
 		}

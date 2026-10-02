@@ -26,8 +26,7 @@ vi.mock('$app/navigation', () => ({ goto, invalidateAll }));
 const apiFetchWithSession = vi.hoisted(() => vi.fn());
 vi.mock('#lib/api.js', () => ({
 	apiFetchWithSession,
-	apiFetch: vi.fn(),
-	apiErrorMessage: (response: Response) => response.text()
+	apiFetch: vi.fn()
 }));
 
 // Push unregister is #618's own borrowing of signOut.ts's bounded

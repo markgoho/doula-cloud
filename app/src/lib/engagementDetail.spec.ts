@@ -28,8 +28,7 @@ import {
 } from './engagementDetail.js';
 
 vi.mock('./api.js', () => ({
-	apiFetchWithSession: vi.fn(),
-	apiErrorMessage: (response: Response) => response.text()
+	apiFetchWithSession: vi.fn()
 }));
 
 const reference: EngagementReference = { practiceId: 'practice-1', engagementId: 'engagement-1' };

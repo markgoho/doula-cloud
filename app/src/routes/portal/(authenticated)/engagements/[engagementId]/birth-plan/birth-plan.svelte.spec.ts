@@ -26,8 +26,7 @@ Object.assign(pageState, toPageState(fixture));
 
 const apiFetchWithSession = vi.hoisted(() => vi.fn());
 vi.mock('#lib/api.js', () => ({
-	apiFetchWithSession,
-	apiErrorMessage: (response: Response) => response.text()
+	apiFetchWithSession
 }));
 
 interface SetupOptions {

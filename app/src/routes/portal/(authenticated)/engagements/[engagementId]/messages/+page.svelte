@@ -9,7 +9,8 @@
 	 */
 	import { onDestroy, onMount } from 'svelte';
 	import { page } from '#lib/appState.svelte.js';
-	import { apiErrorMessage, apiFetchWithSession } from '#lib/api.js';
+	import { apiFetchWithSession } from '#lib/api.js';
+	import { apiErrorMessage } from '#lib/apiErrorMessage.js';
 	import { subscribeToThreadPushMessages } from '#lib/pushRefresh.js';
 	import MessageThread, { type Message } from '#lib/components/organisms/MessageThread.svelte';
 	import RecordDetail from '#lib/components/templates/RecordDetail.svelte';

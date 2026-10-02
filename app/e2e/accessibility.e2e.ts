@@ -459,8 +459,8 @@ test('Archetypes B, C, D, E, F, G -- the Staff side', async ({ page, request, co
 			key: 'practices/[practiceId]/engagements/[engagementId]/birth-plan',
 			archetype: 'G',
 			url: `/practices/${practiceId}/engagements/${engagementId}/birth-plan`,
-			// clientName is PreferredName(givenName, preferredName)
-			// (api/internal/client/name.go) -- this seed sets no preferred
+			// clientName is personname.Preferred(givenName, preferredName)
+			// (api/internal/personname) -- this seed sets no preferred
 			// name, so it resolves to the given name alone, the same as the
 			// hub's own 'Pat' row above.
 			h1: "Pat's Birth Plan"

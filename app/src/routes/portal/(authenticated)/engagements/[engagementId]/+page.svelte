@@ -13,7 +13,8 @@
 	import { onMount } from 'svelte';
 	import { page } from '#lib/appState.svelte.js';
 	import { resolve } from '$app/paths';
-	import { apiErrorMessage, apiFetchWithSession } from '#lib/api.js';
+	import { apiFetchWithSession } from '#lib/api.js';
+	import { apiErrorMessage } from '#lib/apiErrorMessage.js';
 	import { formatCalendarDay } from '#lib/dates.js';
 	import { PaginatedList } from '#lib/paginatedList.svelte.js';
 	import {

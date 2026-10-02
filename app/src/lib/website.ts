@@ -11,7 +11,7 @@
 
 import type { Fetcher } from './fetcher.js';
 
-import { apiErrorMessage } from './api.js';
+import { apiErrorMessage } from './apiErrorMessage.js';
 
 /** `undeclared` is a Practice that has not answered yet. It is a shape
  * the API reports, never one the app sends. */

@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"doula-cloud/api/internal/client"
+	"doula-cloud/api/internal/personname"
 )
 
 // ClockCapacity is how many Stripe Customers one test clock will hold.
@@ -315,7 +315,7 @@ func (r Runner) clientContact(ctx context.Context, clientID string) (name, email
 	if !clientEmail.Valid || clientEmail.String == "" {
 		return "", "", fmt.Errorf("simclock: client %s has no email", clientID)
 	}
-	return client.LegalName(givenName, familyName.String), clientEmail.String, nil
+	return personname.Legal(givenName, familyName.String), clientEmail.String, nil
 }
 
 // simNow is the run's current simulated instant: real now, shifted by the

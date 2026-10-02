@@ -9,7 +9,7 @@
 
 import type { Fetcher } from './fetcher.js';
 
-import { apiErrorMessage } from './api.js';
+import { apiErrorMessage } from './apiErrorMessage.js';
 
 export type ConnectStatus =
 	| 'not_connected'

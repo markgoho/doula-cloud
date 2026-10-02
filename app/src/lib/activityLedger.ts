@@ -14,7 +14,7 @@
 
 import type { Fetcher } from './fetcher.js';
 
-import { apiErrorMessage } from './api.js';
+import { apiErrorMessage } from './apiErrorMessage.js';
 import { clientActivityPhrase } from './clientRegister.js';
 import { formatActivityTimestamp, formatCalendarDay } from './dates.js';
 import type { CursorPage } from './paginatedList.svelte.js';

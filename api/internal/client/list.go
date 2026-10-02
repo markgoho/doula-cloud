@@ -10,6 +10,7 @@ import (
 
 	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/pagecursor"
+	"doula-cloud/api/internal/personname"
 	"doula-cloud/api/internal/staffauth"
 )
 
@@ -527,7 +528,7 @@ func scanListItems(rows *sql.Rows) ([]ListItem, error) {
 			// coverage:ignore reason: row scan failure, not exercised by unit tests
 			return nil, fmt.Errorf("client: scan list item: %w", err)
 		}
-		item.Name = PreferredName(givenName, preferredName.String)
+		item.Name = personname.Preferred(givenName, preferredName.String)
 		item.PortalInviteStatus = PortalInviteStatus(hasPortalUser, accepted, outboxStatus)
 		if pendingKinds.Valid {
 			item.PendingRequestKinds = strings.Split(pendingKinds.String, ",")

@@ -132,7 +132,3 @@ export async function probeSession<Session>(path: string): Promise<Session | und
 		return undefined;
 	}
 }
-
-// Re-exported for this module's own callers; see apiErrorMessage.ts for
-// why its definition lives there instead of here.
-export { apiErrorMessage } from './apiErrorMessage.js';
