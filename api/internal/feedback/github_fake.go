@@ -10,12 +10,13 @@ import (
 // FakeIssue is one issue FakeIssueCreator holds -- Issue's two fields
 // plus the two a test needs to assert the rest of what #1524's AC asks
 // for: the title (kind + route pattern, never free text) and the labels
-// AddLabels attached.
+// AddLabels attached. Closed is #1525's: whether CloseIssue reached it.
 type FakeIssue struct {
 	Number int
 	Title  string
 	Body   string
 	Labels []string
+	Closed bool
 }
 
 // FakeLabelCall records one AddLabels call, in the order it happened.
@@ -47,6 +48,13 @@ type FakeIssueCreator struct {
 	CreateIssueErr error
 	AddLabelsErr   error
 	ListIssuesErr  error
+	CloseIssueErr  error
+
+	// AfterCreate, when set, runs once CreateIssue has minted number and
+	// before it returns -- the seam a test uses to change the database
+	// while the worker is mid-call to GitHub, which is the only way to
+	// stand an Erasure inside that window (#1525).
+	AfterCreate func(number int)
 
 	nextNumber int
 }
@@ -60,13 +68,36 @@ func NewFakeIssueCreator() *FakeIssueCreator {
 // returns CreateIssueErr if a test set one.
 func (f *FakeIssueCreator) CreateIssue(_ context.Context, title, body string) (int, error) {
 	f.mu.Lock()
-	defer f.mu.Unlock()
 	if f.CreateIssueErr != nil {
+		f.mu.Unlock()
 		return 0, f.CreateIssueErr
 	}
 	f.nextNumber++
-	f.Issues[f.nextNumber] = FakeIssue{Number: f.nextNumber, Title: title, Body: body}
-	return f.nextNumber, nil
+	number := f.nextNumber
+	f.Issues[number] = FakeIssue{Number: number, Title: title, Body: body}
+	afterCreate := f.AfterCreate
+	f.mu.Unlock()
+
+	// Outside the lock: the hook is a test's own code, and may call back
+	// into this fake.
+	if afterCreate != nil {
+		afterCreate(number)
+	}
+	return number, nil
+}
+
+// CloseIssue marks the issue it names closed, or returns CloseIssueErr
+// if a test set one.
+func (f *FakeIssueCreator) CloseIssue(_ context.Context, issueNumber int) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.CloseIssueErr != nil {
+		return f.CloseIssueErr
+	}
+	issue := f.Issues[issueNumber]
+	issue.Closed = true
+	f.Issues[issueNumber] = issue
+	return nil
 }
 
 // AddLabels records the call and attaches labels to the issue it names,

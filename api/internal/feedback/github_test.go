@@ -199,3 +199,45 @@ func TestGitHubIssueCreator_ListIssuesMalformedResponseIsAnError(t *testing.T) {
 		t.Fatal("ListIssues err = nil, want an error for a malformed response body")
 	}
 }
+
+func TestGitHubIssueCreator_CloseIssuePatchesTheStateToClosed(t *testing.T) {
+	doer := &stubDoer{status: http.StatusOK, body: `{"number": 42, "state": "closed"}`}
+	creator := feedback.GitHubIssueCreator{Client: doer, Token: testGitHubToken, Repo: testRepo}
+
+	if err := creator.CloseIssue(t.Context(), 42); err != nil {
+		t.Fatalf("CloseIssue: %v", err)
+	}
+
+	req := doer.requests[0]
+	if req.Method != http.MethodPatch {
+		t.Errorf("method = %q, want PATCH", req.Method)
+	}
+	if want := "https://api.github.com/repos/" + testRepo + "/issues/42"; req.URL.String() != want {
+		t.Errorf("url = %q, want %q", req.URL, want)
+	}
+	body, err := io.ReadAll(req.Body)
+	if err != nil {
+		t.Fatalf("read request body: %v", err)
+	}
+	if !strings.Contains(string(body), `"state":"closed"`) {
+		t.Errorf("request body = %s, want state closed", body)
+	}
+}
+
+func TestGitHubIssueCreator_CloseIssueNetworkErrorPropagates(t *testing.T) {
+	doer := &stubDoer{err: errors.New("connection refused")}
+	creator := feedback.GitHubIssueCreator{Client: doer, Token: testGitHubToken, Repo: testRepo}
+
+	if err := creator.CloseIssue(t.Context(), 42); err == nil {
+		t.Fatal("CloseIssue err = nil, want the network error")
+	}
+}
+
+func TestGitHubIssueCreator_CloseIssueNon2xxIsAnError(t *testing.T) {
+	doer := &stubDoer{status: http.StatusNotFound, body: `{"message":"Not Found"}`}
+	creator := feedback.GitHubIssueCreator{Client: doer, Token: testGitHubToken, Repo: testRepo}
+
+	if err := creator.CloseIssue(t.Context(), 42); err == nil {
+		t.Fatal("CloseIssue err = nil, want an error for a 404")
+	}
+}

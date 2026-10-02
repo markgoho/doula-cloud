@@ -532,3 +532,96 @@ func TestProcessIssueOutboxHandler_RunsBehindTheDoor(t *testing.T) {
 		t.Fatal("issue_number is NULL, want set through the door's UPDATE policy")
 	}
 }
+
+// testErasedLabel is the label #1519 names for an erased piece
+// (issue_outbox.go's unexported erasedLabel), repeated here for the same
+// reason testNotWorkingLabel is.
+const testErasedLabel = "erased"
+
+// seedStaffFeedbackRowSentAt inserts a bare Staff feedback row with a
+// chosen sent_at -- what the retention tests move the clock against.
+func seedStaffFeedbackRowSentAt(t *testing.T, db *testdb.DB, staffID string, sentAt time.Time) string {
+	t.Helper()
+	id := uuid.NewString()
+	if _, err := db.Admin.ExecContext(t.Context(),
+		`INSERT INTO feedback (id, kind, text, page_url, route_id, app_build, screen_width, browser, staff_id, sent_at)
+		 VALUES ($1, 'not_working', '', '/account', '/account', 'abc1234', 390, 'Safari 18', $2, $3)`,
+		id, staffID, sentAt,
+	); err != nil {
+		t.Fatalf("seed feedback row: %v", err)
+	}
+	return id
+}
+
+// seedCloseJob inserts a pending "close as erased" job for issueNumber,
+// the row erase_client_feedback (00121) writes inside a Client's
+// Erasure. Seeded directly because the Erasure's own coverage is the
+// client package's, not this worker's.
+func seedCloseJob(t *testing.T, db *testdb.DB, issueNumber int) (outboxID string) {
+	t.Helper()
+	if err := db.Admin.QueryRowContext(t.Context(),
+		`INSERT INTO feedback_issue_outbox (act, issue_number) VALUES ('close_erased', $1) RETURNING id`,
+		issueNumber,
+	).Scan(&outboxID); err != nil {
+		t.Fatalf("seed close job: %v", err)
+	}
+	return outboxID
+}
+
+func readOutboxStatusByID(t *testing.T, db *testdb.DB, outboxID string) string {
+	t.Helper()
+	var status string
+	if err := db.Admin.QueryRowContext(t.Context(),
+		`SELECT status::text FROM feedback_issue_outbox WHERE id = $1`, outboxID,
+	).Scan(&status); err != nil {
+		t.Fatalf("read outbox status: %v", err)
+	}
+	return status
+}
+
+func feedbackRowExists(t *testing.T, db *testdb.DB, feedbackID string) bool {
+	t.Helper()
+	var exists bool
+	if err := db.Admin.QueryRowContext(t.Context(),
+		`SELECT EXISTS (SELECT 1 FROM feedback WHERE id = $1)`, feedbackID,
+	).Scan(&exists); err != nil {
+		t.Fatalf("read feedback row: %v", err)
+	}
+	return exists
+}
+
+func deleteFeedbackRow(t *testing.T, db *testdb.DB, feedbackID string) {
+	t.Helper()
+	if _, err := db.Admin.ExecContext(t.Context(), `DELETE FROM feedback WHERE id = $1`, feedbackID); err != nil {
+		t.Fatalf("delete feedback row: %v", err)
+	}
+}
+
+// seedOpenedIssue stands in for an issue the worker opened on an earlier
+// run: created and labeled on the fake, its number returned.
+func seedOpenedIssue(t *testing.T, creator *feedback.FakeIssueCreator, body string) int {
+	t.Helper()
+	number, err := creator.CreateIssue(t.Context(), "Something is not working: /account", body)
+	if err != nil {
+		t.Fatalf("seed issue: %v", err)
+	}
+	if err := creator.AddLabels(t.Context(), number, []string{testNotWorkingLabel}); err != nil {
+		t.Fatalf("seed issue label: %v", err)
+	}
+	return number
+}
+
+func hasLabel(issue feedback.FakeIssue, label string) bool {
+	for _, l := range issue.Labels {
+		if l == label {
+			return true
+		}
+	}
+	return false
+}
+
+// markerBody is an issue body carrying feedbackID's hidden marker, the
+// way issueBody writes it.
+func markerBody(feedbackID string) string {
+	return "body\n\n<!-- doula-cloud-feedback-id: " + feedbackID + " -->\n"
+}

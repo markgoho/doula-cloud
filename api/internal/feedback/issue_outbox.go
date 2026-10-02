@@ -35,13 +35,29 @@ var kindTitle = map[string]string{
 }
 
 // kindLabel is the GitHub label name for each kind, one of the three
-// #1519's parent issue names (a fourth, "erased", is #1501 Q3's
-// follow-up, not written here).
+// #1519's parent issue names. The fourth, erasedLabel, is below.
 var kindLabel = map[string]string{
 	KindNotWorking:    "not working",
 	KindIdeaOrRequest: "idea or request",
 	KindSomethingElse: "something else",
 }
+
+// erasedLabel is #1519's fourth label: what the issue of an erased
+// piece carries once it is closed (#1501 Q3). The issue never held
+// anything the Erasure had to remove, so it stays, closed and labeled.
+const erasedLabel = "erased"
+
+// The two acts a feedback_issue_outbox row carries -- the Go side of the
+// feedback_issue_act enum (00121).
+const (
+	actOpen        = "open"
+	actCloseErased = "close_erased"
+)
+
+// RetentionMonths is how long a piece of Feedback nothing destroys is
+// kept, counted from when it was sent (#1501 Q4, CONTEXT.md's Feedback
+// entry). Its GitHub issue is not touched when it goes.
+const RetentionMonths = 24
 
 // issueMarker is the hidden marker embedded in an issue's body, carrying
 // a piece of Feedback's own id -- #1500's research: the fix for GitHub's
@@ -97,10 +113,13 @@ func feedbackRole(r pendingIssueRow) string {
 	return strings.ReplaceAll(r.roles.String, ",", ", ")
 }
 
-// IssueWorker opens a private GitHub issue for every due
-// feedback_issue_outbox row -- the Cloud-Scheduler-driven half of
-// ADR-0010's outbox, in the client.ErasureWorker shape rather than
-// outbox.MailWorker: this worker mails nobody.
+// IssueWorker performs every due feedback_issue_outbox row -- opening a
+// private GitHub issue for a piece of Feedback, or closing the issue of
+// a piece an Erasure destroyed (#1525) -- and, at the start of each run,
+// deletes every piece past RetentionMonths. It is the
+// Cloud-Scheduler-driven half of ADR-0010's outbox, in the
+// client.ErasureWorker shape rather than outbox.MailWorker: this worker
+// mails nobody.
 type IssueWorker struct {
 	Creator IssueCreator
 	// AppBaseURL is prefixed onto /feedback/<id> for the link an issue's
@@ -113,14 +132,21 @@ func (w IssueWorker) inner() outbox.Worker {
 	return outbox.Worker{Now: w.Now, Table: "feedback_issue_outbox"}
 }
 
-// pendingIssueRow is one due outbox row joined to the piece of Feedback
-// it is for -- every field an issue's title and body need, and nothing
-// else: text is deliberately not selected, so an issue's body cannot
-// hold it no matter what issueBody does with the row.
+// pendingIssueRow is one due outbox row. For an open job it is joined to
+// the piece of Feedback it is for -- every field an issue's title and
+// body need, and nothing else: text is deliberately not selected, so an
+// issue's body cannot hold it no matter what issueBody does with the
+// row. pieceGone says that join found nothing: the piece was erased, or
+// aged out, after the job was queued. A close job names no piece at all
+// and carries issueNumber instead.
 type pendingIssueRow struct {
 	id            string
 	attemptCount  int
+	act           string
+	issueNumber   int
 	feedbackID    string
+	queuedAt      time.Time
+	pieceGone     bool
 	kind          string
 	routeID       string
 	appBuild      string
@@ -131,10 +157,18 @@ type pendingIssueRow struct {
 	portalAccount sql.NullString
 }
 
-const issueClaimQuery = `SELECT o.id, o.attempt_count, f.id, f.kind::text, f.route_id, f.app_build,
-	        f.screen_width, f.browser, f.sent_at, array_to_string(f.roles, ','), f.portal_account
+// issueClaimQuery LEFT JOINs feedback, where #1524's version JOINed it:
+// a close job has no piece, and an open job's piece can be gone. The
+// COALESCEs exist only so one row shape scans both -- no value they
+// supply is ever read, because perform branches on act and pieceGone
+// before anything reads a piece's own field.
+const issueClaimQuery = `SELECT o.id, o.attempt_count, o.act::text, COALESCE(o.issue_number, 0),
+	        COALESCE(o.feedback_id::text, ''), o.created_at, f.id IS NULL,
+	        COALESCE(f.kind::text, ''), COALESCE(f.route_id, ''), COALESCE(f.app_build, ''),
+	        COALESCE(f.screen_width, 0), COALESCE(f.browser, ''), COALESCE(f.sent_at, o.created_at),
+	        array_to_string(f.roles, ','), f.portal_account
 	   FROM feedback_issue_outbox o
-	   JOIN feedback f ON f.id = o.feedback_id
+	   LEFT JOIN feedback f ON f.id = o.feedback_id
 	  WHERE o.status = 'pending' AND o.next_attempt_at <= now()
 	  ORDER BY o.next_attempt_at
 	  LIMIT $1
@@ -142,8 +176,8 @@ const issueClaimQuery = `SELECT o.id, o.attempt_count, f.id, f.kind::text, f.rou
 
 func scanIssueRow(rows *sql.Rows) (pendingIssueRow, error) {
 	var r pendingIssueRow
-	err := rows.Scan(&r.id, &r.attemptCount, &r.feedbackID, &r.kind, &r.routeID, &r.appBuild,
-		&r.screenWidth, &r.browser, &r.sentAt, &r.roles, &r.portalAccount)
+	err := rows.Scan(&r.id, &r.attemptCount, &r.act, &r.issueNumber, &r.feedbackID, &r.queuedAt, &r.pieceGone,
+		&r.kind, &r.routeID, &r.appBuild, &r.screenWidth, &r.browser, &r.sentAt, &r.roles, &r.portalAccount)
 	if err != nil {
 		// coverage:ignore reason: DB scan failure, not exercised by unit tests
 		return r, fmt.Errorf("feedback: scan issue outbox row: %w", err)
@@ -151,8 +185,13 @@ func scanIssueRow(rows *sql.Rows) (pendingIssueRow, error) {
 	return r, nil
 }
 
-// ProcessPending opens an issue for every due row within tx.
+// ProcessPending deletes every piece of Feedback past its retention,
+// then performs every due row, all within tx.
 func (w IssueWorker) ProcessPending(ctx context.Context, tx *sql.Tx) error {
+	if err := w.deleteExpired(ctx, tx); err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		return err
+	}
 	if err := w.inner().HandlePending(ctx, tx, issueClaimQuery, scanIssueRow, w.perform); err != nil {
 		// coverage:ignore reason: only reached by a DB failure inside the outbox package, not exercised by unit tests
 		return fmt.Errorf("feedback: %w", err)
@@ -160,24 +199,113 @@ func (w IssueWorker) ProcessPending(ctx context.Context, tx *sql.Tx) error {
 	return nil
 }
 
-// perform resolves one pending row: adopts an already-open issue found
+// deleteExpired is #1501 Q4's retention: one indexed DELETE
+// (feedback_sent_at, 00121) at the start of each run, the way
+// authn.MintSession sweeps expired sessions in line. It rides this
+// worker because the drain that runs it is the only scheduled tick there
+// is (ADR-0010 as amended by #481) -- no new Scheduler job.
+//
+// The instant is w.Now, #773's seam for a struct that already carries a
+// clock, so a simulation Run that moves the clock ages Feedback with it.
+// It is compared against sent_at, which the send handlers also took from
+// that seam. Nothing is queued for the piece's issue: it stays as it is.
+func (w IssueWorker) deleteExpired(ctx context.Context, tx *sql.Tx) error {
+	cutoff := w.Now().AddDate(0, -RetentionMonths, 0)
+	if _, err := tx.ExecContext(ctx, `DELETE FROM feedback WHERE sent_at < $1`, cutoff); err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		return fmt.Errorf("feedback: delete expired feedback: %w", err)
+	}
+	return nil
+}
+
+// perform resolves one pending row by its act.
+func (w IssueWorker) perform(ctx context.Context, tx *sql.Tx, inner outbox.Worker, r pendingIssueRow, now time.Time) error {
+	switch {
+	case r.act == actCloseErased:
+		return w.finishClose(ctx, tx, inner, r, r.issueNumber, now)
+	case r.pieceGone:
+		return w.performGone(ctx, tx, inner, r, now)
+	default:
+		return w.performOpen(ctx, tx, inner, r, now)
+	}
+}
+
+// findIssueByMarker returns the number of the issue whose body carries
+// feedbackID's marker, or 0 when there is none.
+func (w IssueWorker) findIssueByMarker(ctx context.Context, feedbackID string, since time.Time) (int, error) {
+	existing, err := w.Creator.ListIssues(ctx, since)
+	if err != nil {
+		return 0, fmt.Errorf("feedback: list issues: %w", err)
+	}
+	marker := issueMarker(feedbackID)
+	for _, issue := range existing {
+		if strings.Contains(issue.Body, marker) {
+			return issue.Number, nil
+		}
+	}
+	return 0, nil
+}
+
+// finishClose closes issue number as erased and marks the row done. The
+// label goes on first and on every attempt: both calls are safe to
+// repeat, so a retry after either one failed finishes the job rather
+// than leaving a closed issue with no label saying why.
+func (w IssueWorker) finishClose(ctx context.Context, tx *sql.Tx, inner outbox.Worker, r pendingIssueRow, number int, now time.Time) error {
+	if err := w.Creator.AddLabels(ctx, number, []string{erasedLabel}); err != nil {
+		return markIssueErr(inner.MarkFailed(ctx, tx, r.id, r.attemptCount, fmt.Errorf("feedback: add erased label: %w", err), now))
+	}
+	if err := w.Creator.CloseIssue(ctx, number); err != nil {
+		return markIssueErr(inner.MarkFailed(ctx, tx, r.id, r.attemptCount, fmt.Errorf("feedback: close issue: %w", err), now))
+	}
+	return markIssueErr(inner.MarkSent(ctx, tx, r.id, now))
+}
+
+// performGone resolves an open job whose piece no longer exists
+// (#1525): it opens no issue and marks the job done.
+//
+// It looks for the marker first, because "no issue was opened" is not
+// something the missing row can say. An earlier attempt may have opened
+// one and failed before the number reached the feedback row (#1500's
+// crash window); the Erasure then found no number to close, and this
+// retry is the only act left that can close that issue. The lookup
+// starts from when the job was queued -- the same transaction as the
+// send -- since the piece's own sent_at went with the row.
+func (w IssueWorker) performGone(ctx context.Context, tx *sql.Tx, inner outbox.Worker, r pendingIssueRow, now time.Time) error {
+	number, err := w.findIssueByMarker(ctx, r.feedbackID, r.queuedAt)
+	if err != nil {
+		return markIssueErr(inner.MarkFailed(ctx, tx, r.id, r.attemptCount, err, now))
+	}
+	if number == 0 {
+		return markIssueErr(inner.MarkSent(ctx, tx, r.id, now))
+	}
+	return w.finishClose(ctx, tx, inner, r, number, now)
+}
+
+// enqueueCloseErased queues a "close as erased" job for issueNumber. The
+// Erasure's own close jobs are written by erase_client_feedback and
+// erase_portal_account_feedback (00121), in the statement that deletes
+// the piece; this is the same row, written by the worker for the one
+// piece those functions could not see a number on.
+func enqueueCloseErased(ctx context.Context, tx *sql.Tx, issueNumber int) error {
+	if _, err := tx.ExecContext(ctx,
+		`INSERT INTO feedback_issue_outbox (act, issue_number) VALUES ('close_erased', $1)
+		 ON CONFLICT (issue_number) WHERE status = 'pending' AND act = 'close_erased' DO NOTHING`,
+		issueNumber,
+	); err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		return fmt.Errorf("feedback: enqueue close as erased: %w", err)
+	}
+	return nil
+}
+
+// performOpen resolves one open job: adopts an already-open issue found
 // by its marker, or opens a new one; labels it either way; then writes
 // the issue number onto the feedback row in the same transaction that
 // marks the outbox row sent (#1524's own AC).
-func (w IssueWorker) perform(ctx context.Context, tx *sql.Tx, inner outbox.Worker, r pendingIssueRow, now time.Time) error {
-	marker := issueMarker(r.feedbackID)
-
-	existing, err := w.Creator.ListIssues(ctx, r.sentAt)
+func (w IssueWorker) performOpen(ctx context.Context, tx *sql.Tx, inner outbox.Worker, r pendingIssueRow, now time.Time) error {
+	number, err := w.findIssueByMarker(ctx, r.feedbackID, r.sentAt)
 	if err != nil {
-		return markIssueErr(inner.MarkFailed(ctx, tx, r.id, r.attemptCount, fmt.Errorf("feedback: list issues: %w", err), now))
-	}
-
-	number := 0
-	for _, issue := range existing {
-		if strings.Contains(issue.Body, marker) {
-			number = issue.Number
-			break
-		}
+		return markIssueErr(inner.MarkFailed(ctx, tx, r.id, r.attemptCount, err, now))
 	}
 
 	if number == 0 {
@@ -195,9 +323,29 @@ func (w IssueWorker) perform(ctx context.Context, tx *sql.Tx, inner outbox.Worke
 		return markIssueErr(inner.MarkFailed(ctx, tx, r.id, r.attemptCount, fmt.Errorf("feedback: add labels: %w", err), now))
 	}
 
-	if _, err := tx.ExecContext(ctx, `UPDATE feedback SET issue_number = $1 WHERE id = $2`, number, r.feedbackID); err != nil {
+	res, err := tx.ExecContext(ctx, `UPDATE feedback SET issue_number = $1 WHERE id = $2`, number, r.feedbackID)
+	if err != nil {
 		// coverage:ignore reason: DB update failure, not exercised by unit tests
 		return fmt.Errorf("feedback: write issue number: %w", err)
+	}
+	written, err := res.RowsAffected()
+	if err != nil {
+		// coverage:ignore reason: pgx always reports a row count for an UPDATE, not exercised by unit tests
+		return fmt.Errorf("feedback: count issue number writes: %w", err)
+	}
+	if written == 0 {
+		// The piece was erased while this job was talking to GitHub: the
+		// claim read it, and it is gone now. The Erasure deleted a row
+		// with no issue number on it, so it queued no close, and the issue
+		// just opened would stay open forever. This UPDATE is where the
+		// two meet -- it waits on the Erasure's row lock if the delete is
+		// still in flight, and the Erasure's DELETE waits on this one and
+		// reads the number if this got there first -- so exactly one of
+		// them queues the close.
+		if err := enqueueCloseErased(ctx, tx, number); err != nil {
+			// coverage:ignore reason: DB query failure, not exercised by unit tests
+			return err
+		}
 	}
 
 	return markIssueErr(inner.MarkSent(ctx, tx, r.id, now))
