@@ -9,8 +9,8 @@ import { data as staffPickerData, fixture, signedOut } from './page.fixture.js';
 const SIGNED_OUT = signedOut.props.data;
 
 const goto = vi.hoisted(() => vi.fn());
-const invalidateAll = vi.hoisted(() => vi.fn());
-vi.mock('$app/navigation', () => ({ goto, invalidateAll }));
+const refreshAll = vi.hoisted(() => vi.fn());
+vi.mock('$app/navigation', () => ({ goto, refreshAll }));
 
 const signOutOfSession = vi.hoisted(() => vi.fn());
 vi.mock('#lib/signOut.js', async (importOriginal) => ({
@@ -21,7 +21,7 @@ vi.mock('#lib/signOut.js', async (importOriginal) => ({
 const NO_ENGAGEMENT: RootLanding = { type: 'portal-picker', engagements: [] };
 
 beforeEach(() => {
-	for (const mock of [goto, invalidateAll, signOutOfSession]) mock.mockReset();
+	for (const mock of [goto, refreshAll, signOutOfSession]) mock.mockReset();
 });
 
 afterEach(() => {
@@ -214,7 +214,7 @@ describe('/+page.svelte', () => {
 		// under.
 		await vi.waitFor(() => expect(goto).toHaveBeenCalledWith('/portal/login'));
 		expect(signOutOfSession).toHaveBeenCalledWith(expect.objectContaining({ unsubscribeURL: undefined }));
-		expect(invalidateAll).toHaveBeenCalled();
+		expect(refreshAll).toHaveBeenCalled();
 	});
 
 	it('keeps her here, told she is still signed in, when sign-out does not go through', async () => {

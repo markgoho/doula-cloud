@@ -267,6 +267,20 @@ describe('TOTP enrollment -- step two, the QR code and secret', () => {
 		await vi.waitFor(() => expect(goto).toHaveBeenCalledWith('/'));
 	});
 
+	// SvelteKit 3's `goto` rejects a path no route answers (#1657). A stale
+	// `returnTo` then lands on the root, not on a failure.
+	it('lands on / when no route answers the returnTo', async () => {
+		pageState.url = urlWith('/no-such-screen');
+		goto.mockRejectedValueOnce(new Error('no route'));
+		globalFetch.mockResolvedValue(jsonResponse({ ok: true }));
+		await goToSetupStep();
+
+		await confirmCode();
+
+		await vi.waitFor(() => expect(goto).toHaveBeenCalledWith('/'));
+		expect(goto).toHaveBeenCalledWith('/no-such-screen');
+	});
+
 	// Decision 4: the post-enrollment token turned out not to carry the
 	// claim yet. Fallback plumbing, not a form refusal.
 	it('routes to the ordinary sign-in flow when the fresh token still shows no second factor', async () => {

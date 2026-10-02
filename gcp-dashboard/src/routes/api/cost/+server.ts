@@ -1,4 +1,3 @@
-import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types.js';
 import { summarizeCost } from '#lib/costBreakdown.js';
 import { createBigQueryCostSource } from '#lib/server/bigQueryCostSource.js';
@@ -17,9 +16,9 @@ One fresh read of the billing export. Nothing is cached.
 */
 export const GET: RequestHandler = async () => {
 	try {
-		return json(summarizeCost(await costSource()));
+		return Response.json(summarizeCost(await costSource()));
 	} catch (error) {
 		const message = error instanceof Error ? error.message : String(error);
-		return json({ message }, { status: UPSTREAM_FAILURE });
+		return Response.json({ message }, { status: UPSTREAM_FAILURE });
 	}
 };

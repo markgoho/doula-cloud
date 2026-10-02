@@ -20,8 +20,8 @@ vi.mock('$app/state', () => ({ page: pageState }));
 Object.assign(pageState, toPageState(fixture));
 
 const goto = vi.hoisted(() => vi.fn());
-const invalidateAll = vi.hoisted(() => vi.fn());
-vi.mock('$app/navigation', () => ({ goto, invalidateAll }));
+const refreshAll = vi.hoisted(() => vi.fn());
+vi.mock('$app/navigation', () => ({ goto, refreshAll }));
 
 const apiFetchWithSession = vi.hoisted(() => vi.fn());
 vi.mock('#lib/api.js', () => ({
@@ -72,7 +72,7 @@ async function setup({
 }: SetupOptions = {}) {
 	apiFetchWithSession.mockReset();
 	goto.mockReset();
-	invalidateAll.mockReset();
+	refreshAll.mockReset();
 	unregisterPushSubscription.mockClear();
 	apiFetchWithSession.mockImplementation((path: string, init?: RequestInit) => {
 		if (init?.method === 'DELETE') {
@@ -219,7 +219,7 @@ describe('the Client-portal sign-out-everywhere control', () => {
 		expect(apiFetchWithSession).toHaveBeenCalledWith('/api/portal/sessions', { method: 'DELETE' });
 		// #487: a Back press to this exact URL must not reuse the
 		// still-signed-in load result instead of re-checking the session.
-		expect(invalidateAll).toHaveBeenCalled();
+		expect(refreshAll).toHaveBeenCalled();
 		expect(goto).toHaveBeenCalledWith('/portal/login');
 	});
 

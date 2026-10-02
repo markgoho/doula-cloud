@@ -113,8 +113,22 @@
 		return target && target.startsWith('/') && !target.startsWith('//') ? target : undefined;
 	}
 
+	// SvelteKit 3's `goto` rejects a path that no route answers, where
+	// SvelteKit 2 rendered the 404 page. `returnTo` comes off the URL, so a
+	// stale or hand-edited one must not leave a person who has just enrolled
+	// on this screen with a failure: it lands on the root, as no `returnTo`
+	// does.
 	async function landAfterEnrollment(): Promise<void> {
-		await goto(safeReturnTo() ?? resolve('/(signed-out)'));
+		const returnTo = safeReturnTo();
+		if (returnTo) {
+			try {
+				await goto(returnTo);
+				return;
+			} catch {
+				// Falls through to the root.
+			}
+		}
+		await goto(resolve('/(signed-out)'));
 	}
 
 	async function handlePasswordSubmit(event: SubmitEvent): Promise<void> {

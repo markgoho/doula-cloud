@@ -58,7 +58,7 @@
 	 * paints one greeting and swaps to another, and nothing moves on it
 	 * that the reader did not cause.
 	 */
-	import { goto, invalidateAll } from '$app/navigation';
+	import { goto, refreshAll } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { apiFetch } from '#lib/api.js';
 	import { unregisterPushSubscription } from '#lib/pushRegistration.js';
@@ -126,7 +126,7 @@
 			// `+page.ts`'s own load resolved this session; signing out changes
 			// nothing SvelteKit tracks, so without this a Back to `/` would
 			// redraw the still-signed-in answer it cached.
-			await invalidateAll();
+			await refreshAll();
 			await goto(resolve('/portal/(signed-out)/login'));
 		}
 		return outcome;

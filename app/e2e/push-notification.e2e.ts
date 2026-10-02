@@ -12,7 +12,7 @@ import { seedFoundingOwner, uniqueEmail } from './staffSignup';
 // dispatches a real `PushEvent` directly inside the registered service
 // worker's own execution context via Playwright's Worker.evaluate --
 // PushEvent is constructable per spec, so no CDP is needed. The service
-// worker (src/service-worker.ts) reacts by posting a content-free message
+// worker (src/service-worker/index.ts) reacts by posting a content-free message
 // to every open window client, which is what the Client-portal thread
 // page (src/routes/portal/(authenticated)/engagements/[engagementId]/+page.svelte) uses
 // to trigger its own authenticated refetch -- the service worker has no
@@ -60,7 +60,7 @@ test('a synthetic push event wakes the open thread tab and it refetches', async 
 	await expect(page.getByText('No messages yet.')).toBeVisible();
 
 	// Wait for the service worker to install and start controlling this
-	// tab (see service-worker.ts's activate handler -- without
+	// tab (see service-worker/index.ts's activate handler -- without
 	// clients.claim() there, a tab opened before the worker activates is
 	// never controlled, so it would never receive the push handler's
 	// postMessage below).
