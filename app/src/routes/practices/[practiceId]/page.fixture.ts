@@ -5,7 +5,8 @@
  * `undefined` (see `canReadRoster`/`canReadConnect` in
  * `practiceLanding.ts`), so on her branch only offers, the client-count
  * probe, the awaiting-reply roll-up and the activity feed ever fetch --
- * `respond` below answers the Owner's four blocks as well, for the reason
+ * `respondForPopulatedPractice` below answers the Owner's four blocks as
+ * well, for the reason
  * written beside them. The hub's title still carries #530's own URL as
  * the Practice's registered name, and an Offer's `terms` carries #537's
  * hyphenated double-barreled name where a Practice writes free text
@@ -150,7 +151,8 @@ function respondForPopulatedPractice(path: string): Response {
 	}
 	/*
 	 * The four blocks only an Owner or Admin reaches (#928). They are
-	 * answered on the base fixture rather than on the variant above,
+	 * answered here, in the function the base fixture uses as its
+	 * `respond`, rather than in a `respond` on the `asOwner` variant,
 	 * because `loadPracticeLanding` never asks for any of them under a
 	 * Doula's roles -- and because `block()` in `practiceLanding.ts`
 	 * SWALLOWS a throw and renders "Could not load ..." instead. A
