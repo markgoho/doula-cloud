@@ -336,6 +336,70 @@ func TestListActivityHandler_ReassignmentFromSomebodyGone(t *testing.T) {
 	}
 }
 
+// TestListActivityHandler_AttachmentNamesTheDoulaAndWhoAttachedHer is
+// #1596's read side: a doula_attached entry answers "who attached the
+// Doula, and when" in one row. The Who column is the person who decided
+// it, the sentence names the Doula out of the id in the diff, and
+// CreatedAt is the instant.
+func TestListActivityHandler_AttachmentNamesTheDoulaAndWhoAttachedHer(t *testing.T) {
+	db := testdb.New(t)
+	const identityUID = "owner-activity-attached"
+	practiceID := testdb.SeedPractice(t, db, "Attachment Names")
+	ownerID := testdb.SeedNamedStaffAtPractice(t, db, practiceID, identityUID, "Renata Alvarez", []string{ownerRole}, "employee")
+	doulaID := testdb.SeedNamedStaffAtPractice(t, db, practiceID, "attached-doula", "Hana Kim", []string{doulaRole}, "employee")
+	_, engagementID := testdb.SeedEngagementInStatus(t, db, practiceID, "Client", "attached-client@example.com", "intake")
+
+	testdb.SeedActivityWithDiff(t, db, practiceID, activity.SubjectEngagement, engagementID,
+		string(activity.ActionDoulaAttached), activity.StaffActor(ownerID), attachedDiff(t, doulaID))
+
+	got := readActivity(t, db, practiceID, engagementID, identityUID)
+	if len(got.Items) != 1 {
+		t.Fatalf("got %d items, want 1", len(got.Items))
+	}
+	entry := got.Items[0]
+	if want := "Put on this Engagement as the Doula: Hana Kim"; entry.Detail != want {
+		t.Fatalf("detail = %q, want %q", entry.Detail, want)
+	}
+	if entry.ActorName != "Renata Alvarez" {
+		t.Fatalf("actorName = %q, want the person who attached her", entry.ActorName)
+	}
+	if entry.CreatedAt.IsZero() {
+		t.Fatal("createdAt is zero, want the instant she was attached")
+	}
+}
+
+// TestListActivityHandler_AttachmentOfSomebodyGone holds the entry
+// readable once the Doula it names no longer resolves to a Staff row.
+func TestListActivityHandler_AttachmentOfSomebodyGone(t *testing.T) {
+	db := testdb.New(t)
+	const identityUID = "owner-activity-attached-gone"
+	const departedID = "11111111-2222-3333-4444-555555555555"
+	practiceID := testdb.SeedPractice(t, db, "Attachment Gone")
+	ownerID := testdb.SeedStaffAtPractice(t, db, practiceID, identityUID, []string{ownerRole}, "employee")
+	_, engagementID := testdb.SeedEngagementInStatus(t, db, practiceID, "Client", "attached-gone-client@example.com", "intake")
+
+	testdb.SeedActivityWithDiff(t, db, practiceID, activity.SubjectEngagement, engagementID,
+		string(activity.ActionDoulaAttached), activity.StaffActor(ownerID), attachedDiff(t, departedID))
+
+	got := readActivity(t, db, practiceID, engagementID, identityUID)
+	if len(got.Items) != 1 {
+		t.Fatalf("got %d items, want 1", len(got.Items))
+	}
+	if want := "Put on this Engagement as the Doula: a former colleague"; got.Items[0].Detail != want {
+		t.Fatalf("detail = %q, want %q", got.Items[0].Detail, want)
+	}
+}
+
+func attachedDiff(t *testing.T, staffID string) json.RawMessage {
+	t.Helper()
+	raw, err := json.Marshal(map[string]string{activity.DiffKeyAttachedStaffID: staffID})
+	if err != nil {
+		// coverage:ignore reason: a map of strings always marshals cleanly
+		t.Fatalf("marshal diff: %v", err)
+	}
+	return raw
+}
+
 // TestListActivityHandler_OtherActionsCarryNoDetail holds every other
 // action to the rendering it has today: no detail field at all, so the
 // app falls back to its own generic description (#887).

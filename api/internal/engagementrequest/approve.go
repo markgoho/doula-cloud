@@ -82,11 +82,24 @@ func ApproveHandler(db *sql.DB, enq tasknudge.Enqueuer) http.Handler {
 // Middleware's own deferred Commit would otherwise still persist the
 // Engagement row approve() already inserted before ConsumeCredit failed.
 func writeApproveErr(w http.ResponseWriter, r *http.Request, db *sql.DB, enq tasknudge.Enqueuer, tx *sql.Tx, practiceID string, err error) {
+	var refusal doulaNotAttachableError
 	switch {
 	case errors.Is(err, sql.ErrNoRows):
 		apierr.WriteError(w, "engagement request not found", http.StatusNotFound)
 	case errors.Is(err, errNotPending):
 		apierr.WriteError(w, "that request is no longer pending", http.StatusConflict)
+	case errors.As(err, &refusal):
+		// The Doula the Request names can no longer be attached (#1596).
+		// The reason names no control, because the approver amends nothing
+		// (ADR-0017), so it is the summary's own sentence and carries no
+		// Details. approve checks this before it writes, so on
+		// ApproveHandler's path the Request is untouched and stays
+		// pending. The rollback is for the collapsed path, where the
+		// pending row was inserted in this same transaction: a refusal
+		// there leaves nothing behind, the rule collapse states for an
+		// empty balance.
+		_ = tx.Rollback()
+		apierr.WriteError(w, refusal.Error(), http.StatusConflict)
 	case errors.Is(err, billing.ErrNoCreditsRemaining):
 		// Read while the request tx (and its app.current_practice_id) is
 		// still live -- credit_ledger is practice-tier RLS, and this is
@@ -122,18 +135,24 @@ func writeApproveErr(w http.ResponseWriter, r *http.Request, db *sql.DB, enq tas
 // signal, read before the new Engagement exists so it reflects only
 // what the Client already held.
 //
+// Where the Request names a Doula, the same transaction attaches her
+// (attachNamedDoula, #1596); where it says "No Doula yet", no Attachment
+// is written and the Engagement exists with nobody on it.
+//
 // Returns sql.ErrNoRows when requestID does not exist at this Practice,
-// errNotPending when it exists but is no longer pending, and
+// errNotPending when it exists but is no longer pending,
+// doulaNotAttachableError when the Doula it names can no longer be
+// attached (nothing has been written at that point), and
 // billing.ErrNoCreditsRemaining unchanged when the Practice's balance is
-// empty -- callers branch on all three.
+// empty -- callers branch on all four.
 func approve(ctx context.Context, tx *sql.Tx, practiceID, requestID, approverStaffID string) (engagementID string, warning bool, err error) {
 	var clientID, kind, state string
-	var dueDate sql.NullString
+	var dueDate, doula sql.NullString
 	err = tx.QueryRowContext(ctx,
-		`SELECT client_id, kind::text, due_date, state::text
+		`SELECT client_id, kind::text, due_date, state::text, doula_staff_id
 		   FROM engagement_requests WHERE id = $1 FOR UPDATE`,
 		requestID,
-	).Scan(&clientID, &kind, &dueDate, &state)
+	).Scan(&clientID, &kind, &dueDate, &state, &doula)
 	if errors.Is(err, sql.ErrNoRows) {
 		return "", false, err //nolint:wrapcheck // sql.ErrNoRows is the sentinel callers errors.Is against, per this func's own doc comment
 	}
@@ -143,6 +162,14 @@ func approve(ctx context.Context, tx *sql.Tx, practiceID, requestID, approverSta
 	}
 	if state != statePending {
 		return "", false, errNotPending
+	}
+	// Asked again here, and before any write: days can pass between the
+	// ask and the decision, and the named Doula's Membership can end or
+	// her Employment type can change in them (ADR-0017's amendment).
+	if doula.Valid {
+		if err := requireStillAttachable(ctx, tx, practiceID, doula.String); err != nil {
+			return "", false, err
+		}
 	}
 
 	warning, err = hasLiveEngagement(ctx, tx, clientID)
@@ -163,6 +190,12 @@ func approve(ctx context.Context, tx *sql.Tx, practiceID, requestID, approverSta
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		return "", warning, err
 	}
+	if doula.Valid {
+		if err := attachNamedDoula(ctx, tx, practiceID, engagementID, doula.String, approverStaffID); err != nil {
+			// coverage:ignore reason: DB query failure, not exercised by unit tests
+			return "", warning, err
+		}
+	}
 
 	if err := billing.ConsumeCredit(ctx, tx, practiceID, engagementID); err != nil {
 		return "", warning, err //nolint:wrapcheck // billing.ErrNoCreditsRemaining is the sentinel callers errors.Is against, per this func's own doc comment
@@ -179,6 +212,40 @@ func approve(ctx context.Context, tx *sql.Tx, practiceID, requestID, approverSta
 	}
 
 	return engagementID, warning, nil
+}
+
+// attachNamedDoula puts the Doula the Request names on the Engagement
+// approval just created (#1596): a granted Attachment through
+// staffauth.Grant, the third writer of one that ADR-0008's amendment on
+// #1515 names. No fee rides it, because a fee is only ever copied from
+// an Offer. attached_by is the approver, because approval is the act
+// that decides she is on it; the Request already records who asked.
+//
+// The activity row is what answers "who attached the Doula, and when"
+// on the Engagement's own ledger: the actor is the approver, the diff
+// names the Doula, and the row's created_at is the instant.
+func attachNamedDoula(ctx context.Context, tx *sql.Tx, practiceID, engagementID, doulaStaffID, approverStaffID string) error {
+	if err := staffauth.Grant(ctx, tx, engagementID, doulaStaffID, approverStaffID, nil, nil); err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		return fmt.Errorf("engagementrequest: attach named doula: %w", err)
+	}
+	diff, err := json.Marshal(map[string]string{activity.DiffKeyAttachedStaffID: doulaStaffID})
+	if err != nil {
+		// coverage:ignore reason: a map of strings always marshals cleanly, not exercised by unit tests
+		return fmt.Errorf("engagementrequest: marshal doula attached diff: %w", err)
+	}
+	if err := activity.Record(ctx, tx, activity.Entry{
+		PracticeID:  practiceID,
+		SubjectKind: activity.SubjectEngagement,
+		SubjectID:   engagementID,
+		Action:      string(activity.ActionDoulaAttached),
+		Diff:        diff,
+		Actor:       activity.StaffActor(approverStaffID),
+	}); err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		return fmt.Errorf("engagementrequest: record doula attached: %w", err)
+	}
+	return nil
 }
 
 // recordEngagementCreated writes #476's activity row for the one path

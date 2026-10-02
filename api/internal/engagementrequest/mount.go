@@ -18,6 +18,13 @@ import (
 // the requester alone, so it carries no role declaration.
 func Mount(g *staffauth.GatedRouter, ir *idempotency.Router, db *sql.DB, nudge tasknudge.Enqueuer) {
 	ir.Replayable("POST /api/practices/{practiceId}/clients/{clientId}/engagement-requests", false, RequestHandler(db, nudge))
+	// Who the Start work form may name as the Doula (#1596). AnyStaff,
+	// because any Staff member but a contractor may ask, and the handler
+	// answers each caller with her own list: the roster for an Owner or
+	// an Admin, herself for anybody else (ADR-0008). It hangs off the
+	// Practice and not off the Client, because the answer is the same
+	// for every Client.
+	g.Get("/api/practices/{practiceId}/engagement-request-doulas", staffauth.AnyStaff, DoulasHandler())
 	// Where pending Requests gather (#503) -- the same Owner/Admin seat,
 	// registered before the {requestId} read so the two paths read in the
 	// order a person meets them.

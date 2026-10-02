@@ -411,6 +411,24 @@ const (
 	ActionCoverageGapCleared     EngagementAction = "coverage_gap_cleared"
 	ActionOnCallNarrowingChanged EngagementAction = "on_call_narrowing_changed"
 	ActionOnCallRuleChanged      EngagementAction = "on_call_rule_changed"
+
+	// ActionDoulaAttached records a person deciding a Doula is on this
+	// Engagement, with no Offer and no Visit in between (#1596, ADR-0008's
+	// amendment on #1515): today, approval of an Engagement Request that
+	// names her. The actor is who decided it, the row's created_at is
+	// when, and the diff names the Doula, so "who attached her, and when"
+	// reads off the ledger. An Offer's acceptance and a Visit that names
+	// her write a granted Attachment too, and each already has its own
+	// action. In staffingActions below: who is on a birth is the roster.
+	ActionDoulaAttached EngagementAction = "doula_attached"
+
+	// DiffKeyAttachedStaffID is the one key an ActionDoulaAttached diff
+	// carries: the id of the Staff member who was attached. A reader
+	// resolves it to her name on the read, the way
+	// DiffKeyAssignedStaffIDAfter is resolved (#887). Here, and not in
+	// engagementrequest, because the write and the Engagement ledger's
+	// read both name it.
+	DiffKeyAttachedStaffID = "attachedStaffId"
 )
 
 // moneyActions is what ADR-0008's read table keeps off a contractor's
@@ -502,6 +520,8 @@ var staffingActions = map[EngagementAction]bool{
 	ActionCoverageGapCleared:     true,
 	ActionOnCallNarrowingChanged: true,
 	ActionOnCallRuleChanged:      true,
+	// #1596: who the Practice put on the birth is the roster.
+	ActionDoulaAttached: true,
 	// #1423: the Practice's own audit of an Engagement's mutable facts.
 	ActionEngagementReopened:   true,
 	ActionKindChanged:          true,

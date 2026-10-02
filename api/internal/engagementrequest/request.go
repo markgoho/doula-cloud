@@ -14,12 +14,17 @@ import (
 )
 
 // RequestBody is the body of a new Engagement Request: the Client, the
-// kind and due date, and an optional note -- ADR-0017's "the requester
-// describes the work; the approver does not amend it".
+// kind and due date, an optional note, and who the Doula is -- ADR-0017's
+// "the requester describes the work; the approver does not amend it".
+//
+// DoulaStaffID is the one employee Doula the asker names (#1596,
+// ADR-0017's amendment on #1515). Absent, null or blank is "No Doula
+// yet": the Request names nobody and approval attaches nobody.
 type RequestBody struct {
-	Kind    string `json:"kind"`
-	DueDate string `json:"dueDate"`
-	Note    string `json:"note"`
+	Kind         string  `json:"kind"`
+	DueDate      string  `json:"dueDate"`
+	Note         string  `json:"note"`
+	DoulaStaffID *string `json:"doulaStaffId"`
 }
 
 // RequestResponse reports the Request created. State is "pending" for
@@ -56,7 +61,7 @@ func RequestHandler(db *sql.DB, enq tasknudge.Enqueuer) http.Handler {
 			return
 		}
 		if isContractorOriginator(reader) {
-			apierr.WriteError(w, "a contractor doula does not request an engagement at a practice she contracts for -- work reaches her as an offer", http.StatusForbidden)
+			apierr.WriteError(w, msgContractorOriginates, http.StatusForbidden)
 			return
 		}
 
@@ -78,12 +83,16 @@ func RequestHandler(db *sql.DB, enq tasknudge.Enqueuer) http.Handler {
 			return
 		}
 		note := sql.NullString{String: strings.TrimSpace(body.Note), Valid: strings.TrimSpace(body.Note) != ""}
+		doula, ok := requireNameableDoula(w, r, tx, practiceID, staffID, reader, body.DoulaStaffID)
+		if !ok {
+			return
+		}
 
 		var requestID string
 		if err := tx.QueryRowContext(r.Context(),
-			`INSERT INTO engagement_requests (practice_id, client_id, kind, due_date, note, requested_by)
-			 VALUES ($1, $2, $3::engagement_kind, $4, $5, $6) RETURNING id`,
-			practiceID, clientID, kind, dueDate, note, staffID,
+			`INSERT INTO engagement_requests (practice_id, client_id, kind, due_date, note, requested_by, doula_staff_id)
+			 VALUES ($1, $2, $3::engagement_kind, $4, $5, $6, $7) RETURNING id`,
+			practiceID, clientID, kind, dueDate, note, staffID, doula,
 		).Scan(&requestID); err != nil {
 			if pgerr.IsUniqueViolation(err) {
 				// Named on the kind field, the same shape the staff
