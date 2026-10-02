@@ -2,8 +2,9 @@ import '#lib/styles/app.css';
 import type { ComponentProps } from 'svelte';
 import { createRawSnippet } from 'svelte';
 import { page } from 'vitest/browser';
-import { describe, expect, it } from 'vitest';
+import { beforeAll, describe, expect, it } from 'vitest';
 import { render } from 'vitest-browser-svelte';
+import { registerLayoutPrimitives } from '#lib/primitives/index.js';
 import LandingPage from './LandingPage.svelte';
 
 function textSnippet(text: string) {
@@ -107,6 +108,12 @@ async function setupInShell() {
 }
 
 describe('LandingPage.svelte in the shell', () => {
+	// The root layout registers these in the app. Without them `grid-l`
+	// ignores its `min`, and the panels split at a width the app never uses.
+	beforeAll(() => {
+		registerLayoutPrimitives();
+	});
+
 	it('reaches the bottom of a window taller than its content, with the content centered', async () => {
 		await page.viewport(1280, 1600);
 		const { main, welcome, greeting, lede } = await setupInShell();
@@ -119,6 +126,34 @@ describe('LandingPage.svelte in the shell', () => {
 		expect(spaceUnder).toBeGreaterThan(welcome.height / 4);
 		expect(spaceOver).toBeGreaterThan(welcome.height / 4);
 		expect(document.documentElement.scrollHeight).toBeLessThanOrEqual(window.innerHeight);
+		main.remove();
+	});
+
+	it('centers the welcome block side to side, with the mark at its full size', async () => {
+		await page.viewport(1600, 900);
+		const { main, welcome, greeting } = await setupInShell();
+
+		// querySelector, case 2 of svelte-tests.md: the block and the mark
+		// are layout boxes with no role (the mark is aria-hidden).
+		const block = main.querySelector(':scope .welcome > stack-l')!.getBoundingClientRect();
+		const mark = main.querySelector('svg')!.getBoundingClientRect();
+		const spaceBefore = block.left - welcome.left;
+		const spaceAfter = welcome.right - block.right;
+		expect(Math.abs(spaceBefore - spaceAfter)).toBeLessThanOrEqual(1);
+		expect(spaceBefore).toBeGreaterThan(100);
+		// One shared left edge inside the block.
+		expect(Math.round(greeting.left)).toBe(Math.round(mark.left));
+		expect(Math.round(mark.width)).toBe(200);
+		main.remove();
+	});
+
+	it('starts the welcome at the gutter where the panels stack, level with the doors', async () => {
+		await page.viewport(600, 900);
+		const { main, greeting } = await setupInShell();
+
+		const title = page.getByRole('heading', { level: 1 }).element().getBoundingClientRect();
+		expect(title.top).toBeGreaterThan(greeting.bottom);
+		expect(Math.round(greeting.left)).toBe(Math.round(title.left));
 		main.remove();
 	});
 

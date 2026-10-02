@@ -93,8 +93,32 @@
 			padding: var(--space-12) var(--page-gutter);
 		}
 
+		/* The welcome is one block, centered side to side in its panel
+		   (#1653): the mark and the two lines keep a shared left edge, and
+		   the block as a whole sits in the middle. On a wide window the
+		   panel is far wider than a greeting, and a block held to the left
+		   edge left most of it empty. The doors stay where they are: they
+		   are a column of controls with a width of their own. */
 		.welcome {
+			align-items: center;
 			background-color: var(--color-surface-bright);
+		}
+
+		/* Centered only where the panels sit side by side. Stacked, the
+		   welcome and the doors are one column and share a left edge, so
+		   the block takes the panel's whole width and its content starts at
+		   the gutter. The switch is the grid's own arithmetic, read off the
+		   same two tokens: two panels fit from `2 * --landing-panel-min`
+		   plus the one-pixel gap. Under that the difference is positive
+		   and the clamp lands on 100%; from it up, it is zero or less and
+		   the block shrinks to its content. No query, so there is no second
+		   copy of the threshold to drift from the grid's. */
+		.welcome > stack-l {
+			min-inline-size: clamp(
+				0%,
+				(2 * var(--landing-panel-min) + var(--border-thin) - 100cqi) * 9999,
+				100%
+			);
 		}
 
 		.doors {
@@ -106,9 +130,15 @@
 		}
 
 		/* About 200px, and never more than about 55% of the panel: the mark
-		   scales inside this box rather than overflowing it. */
+		   scales inside this box rather than overflowing it. The cap is
+		   `cqi`, measured against the page (`container-l`), and not a
+		   percentage: the welcome block shrinks to its content, so a
+		   percentage of it would size the mark off the greeting's length.
+		   Stacked, the panel is the page, so 55cqi is 55% of the panel.
+		   Side by side, each panel is at least `--landing-panel-min`, where
+		   the mark's own 200px is already under half. */
 		.mark {
-			max-inline-size: 55%;
+			max-inline-size: 55cqi;
 		}
 
 		p {
