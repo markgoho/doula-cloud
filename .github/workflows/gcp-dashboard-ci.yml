@@ -89,17 +89,10 @@ jobs:
           exit 1
         if: steps.playwright-cache.outputs.cache-hit != 'true'
 
+      # See the comment on the `app` job's step of the same name in ci.yml (#1655).
       - name: Install Playwright OS dependencies only
         working-directory: gcp-dashboard
-        run: |
-          for attempt in 1 2 3; do
-            if timeout 180 bunx playwright install-deps chromium; then
-              exit 0
-            fi
-            echo "OS dependency install attempt ${attempt} failed; retrying in 10s..."
-            sleep 10
-          done
-          exit 1
+        run: bash ../scripts/install-playwright-deps.sh
         if: steps.playwright-cache.outputs.cache-hit == 'true'
 
       - name: Unit test with coverage gate

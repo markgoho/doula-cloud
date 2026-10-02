@@ -114,17 +114,10 @@ jobs:
           exit 1
         if: steps.playwright-cache.outputs.cache-hit != 'true'
 
+      # See the comment on the `app` job's step of the same name (#1655).
       - name: Install Playwright OS dependencies only
         working-directory: site
-        run: |
-          for attempt in 1 2 3; do
-            if timeout 180 bunx playwright install-deps chromium; then
-              exit 0
-            fi
-            echo "OS dependency install attempt ${attempt} failed; retrying in 10s..."
-            sleep 10
-          done
-          exit 1
+        run: bash ../scripts/install-playwright-deps.sh
         if: steps.playwright-cache.outputs.cache-hit == 'true'
 
       - name: Unit test with coverage gate
@@ -531,24 +524,22 @@ jobs:
       # the OS-level libraries it links against live outside the cached
       # path and still need installing on every fresh runner.
       #
-      # Each attempt is bounded by `timeout`: confirmed on trunk that
-      # apt-get can hang indefinitely against an unresponsive mirror
-      # (azure.archive.ubuntu.com stalled for 17+ minutes and ate the
-      # whole 20-minute job budget) rather than failing fast the way the
-      # curl/npm flakes the retry loops elsewhere in this file guard
-      # against -- a retry loop alone doesn't help a hang, only a bounded
-      # attempt does.
+      # scripts/install-playwright-deps.sh is the one retry loop for this
+      # step (also used by the `site` job and gcp-dashboard-ci.yml, #1655).
+      # Its header holds the full reasoning; in short:
+      #  - apt can hang against an unresponsive mirror (azure.archive.
+      #    ubuntu.com stalled for 17+ minutes and ate the whole job budget),
+      #    so each attempt has an outer `timeout 180`;
+      #  - that `timeout` runs as `runner` and cannot signal the root
+      #    `apt-get` Playwright starts through `sudo`, so the orphan kept the
+      #    dpkg lock and retries 2 and 3 failed in about a second on it (run
+      #    37025325343). The script now waits for the orphan to finish, and
+      #    apt's own DPkg::Lock::Timeout (120s) backs that up;
+      #  - apt bounds itself too: Acquire::http(s)::Timeout 30s (idle
+      #    connection) and Acquire::Retries 3 (per file).
       - name: Install Playwright OS dependencies only
         working-directory: app
-        run: |
-          for attempt in 1 2 3; do
-            if timeout 180 bunx playwright install-deps chromium; then
-              exit 0
-            fi
-            echo "OS dependency install attempt ${attempt} failed; retrying in 10s..."
-            sleep 10
-          done
-          exit 1
+        run: bash ../scripts/install-playwright-deps.sh
         if: steps.playwright-cache.outputs.cache-hit == 'true'
 
       - name: Unit test with coverage gate

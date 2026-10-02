@@ -1,0 +1,33 @@
+# TEMPORARY (#1655): forces the dpkg lock condition to prove the retry
+# recovers. Removed before merge.
+name: tmp-1655-forced-lock
+on:
+  push:
+    branches: [fix/1655-playwright-deps-retry]
+permissions:
+  contents: read
+jobs:
+  forced-lock:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: oven-sh/setup-bun@v2
+      - name: Install app dependencies
+        working-directory: app
+        run: bun install --frozen-lockfile
+      - name: Hold the dpkg lock as root for 75s
+        run: |
+          sudo nohup python3 -c "import fcntl,time; f=open('/var/lib/dpkg/lock-frontend','w'); fcntl.lockf(f, fcntl.LOCK_EX); time.sleep(75)" >/dev/null 2>&1 &
+          sleep 2
+          sudo fuser -v /var/lib/dpkg/lock-frontend || true
+      - name: Run the script with attempt 1 forced to time out
+        working-directory: app
+        env:
+          ATTEMPT_TIMEOUT: "20"
+          INSTALL_CMD: "sudo apt-get install -y --no-install-recommends fonts-ipafont-gothic && bunx playwright install-deps chromium"
+        run: bash ../scripts/install-playwright-deps.sh
+      - name: Show that no apt process or lock is left
+        run: |
+          pgrep -a -x 'apt-get|apt|dpkg' || echo "no apt process left"
+          dpkg -s fonts-ipafont-gothic | head -3
