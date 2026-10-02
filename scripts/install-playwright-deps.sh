@@ -5,6 +5,11 @@
 # drift between them. Run it from the directory that holds the Playwright
 # dependency (`bunx playwright` resolves the version there).
 #
+# It runs on every job run, on a Playwright cache hit and on a miss alike
+# (#1661). The browser download that follows it on a miss passes no
+# `--with-deps`, because that flag starts a root `apt-get` through `sudo`
+# with none of the bounds below. The OS libraries are installed here, once.
+#
 # Why a bare `timeout ... bunx playwright install-deps` was not enough:
 # `timeout` runs as the unprivileged `runner` user, and Playwright starts
 # `apt-get` through `sudo`, so `apt-get` runs as root. After the timeout
@@ -30,8 +35,10 @@
 #   3. After a failed attempt the script waits (bounded) until no apt-get or
 #      dpkg process is left, then retries with an uncontended lock.
 #
-# The whole step is capped at TOTAL_BUDGET (540s): worst case 180s + wait +
-# 180s would otherwise exceed the 10-minute gcp-dashboard job.
+# The whole step is capped at TOTAL_BUDGET (540s), so the waits between
+# attempts cannot add up to more than that. The three calling jobs carry a
+# 20-minute timeout, which holds this budget plus the browser download's
+# worst case (3 x 120s + 2 x 30s); the arithmetic is on ci.yml's `app` job.
 #
 # Every knob below can be overridden by an environment variable; the spec in
 # scripts/install-playwright-deps.test.ts uses that to run the loop against
@@ -44,12 +51,15 @@ attempt_timeout="${ATTEMPT_TIMEOUT:-180}"
 retry_sleep="${RETRY_SLEEP:-10}"
 settle_timeout="${SETTLE_TIMEOUT:-240}"
 # The whole script gives up after this many seconds, so the worst case fits
-# the shortest job that calls it (gcp-dashboard-ci.yml, 10 minutes).
+# the 20-minute job timeout together with the browser download.
 total_budget="${TOTAL_BUDGET:-540}"
 poll_interval="${POLL_INTERVAL:-5}"
 apt_conf="${APT_CONF:-/etc/apt/apt.conf.d/99-ci-bounds}"
 timeout_cmd="${TIMEOUT_CMD:-timeout}"
 as_root="${AS_ROOT-sudo}"
+# The files `apt_busy` probes with `fuser`; the spec points them at a file it
+# holds open (the real path, #1661).
+lock_files="${APT_LOCK_FILES:-/var/lib/dpkg/lock-frontend /var/lib/apt/lists/lock}"
 
 # shellcheck disable=SC2086 # $as_root is "sudo" or empty on purpose
 printf '%s\n' \
@@ -68,7 +78,7 @@ apt_busy() {
     # `apt-get install` inside Playwright's one root `sh -c`, when no apt
     # process exists but the orphan is about to take the lock again.
     pgrep -x 'apt-get|apt|dpkg' ||
-      $as_root fuser /var/lib/dpkg/lock-frontend /var/lib/apt/lists/lock
+      $as_root fuser $lock_files
   fi
 }
 

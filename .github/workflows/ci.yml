@@ -63,7 +63,9 @@ jobs:
   # the `app` job below for why each one is shaped the way it is.
   site:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    # 20 minutes holds the Playwright install steps' worst case, 16 minutes;
+    # the arithmetic is on the `app` job's step (#1661).
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
 
@@ -101,11 +103,18 @@ jobs:
           path: ~/.cache/ms-playwright
           key: playwright-shell-${{ runner.os }}-${{ steps.playwright-version.outputs.version }}
 
+      # See the comment on the `app` job's step of the same name (#1655,
+      # #1661). It also holds the job-timeout arithmetic for both steps.
+      - name: Install Playwright OS dependencies
+        working-directory: site
+        run: bash ../scripts/install-playwright-deps.sh
+
+      # See the comment on the `app` job's step of the same name (#1661).
       - name: Install Playwright browsers
         working-directory: site
         run: |
           for attempt in 1 2 3; do
-            if bunx playwright install --with-deps --only-shell chromium; then
+            if timeout 120 bunx playwright install --only-shell chromium; then
               exit 0
             fi
             echo "Browser install attempt ${attempt} failed; retrying in 30s..."
@@ -113,12 +122,6 @@ jobs:
           done
           exit 1
         if: steps.playwright-cache.outputs.cache-hit != 'true'
-
-      # See the comment on the `app` job's step of the same name (#1655).
-      - name: Install Playwright OS dependencies only
-        working-directory: site
-        run: bash ../scripts/install-playwright-deps.sh
-        if: steps.playwright-cache.outputs.cache-hit == 'true'
 
       - name: Unit test with coverage gate
         working-directory: site
@@ -479,7 +482,7 @@ jobs:
       # hashFiles('app/bun.lock') -- any unrelated dep bump changes that
       # hash and throws away the cache entry for no reason. No
       # restore-keys fallback: a stale-version hit would pair old browser
-      # binaries with the install-deps-only branch below. The key carries
+      # binaries with the current OS libraries. The key carries
       # a "shell" tag because it caches chromium-headless-shell only (see
       # the install step below), not the full Chromium browser -- reusing
       # the old "playwright-" key would silently serve stale full-browser
@@ -498,31 +501,12 @@ jobs:
           path: ~/.cache/ms-playwright
           key: playwright-shell-${{ runner.os }}-${{ steps.playwright-version.outputs.version }}
 
-      # --only-shell installs chromium-headless-shell instead of full
-      # Chromium -- roughly half the download/cache size. Headless runs
-      # (both Playwright e2e and the vitest browser tests, see
-      # vite.config.ts) use the headless shell by default and neither
-      # pins a `channel:`, so the full browser is never actually needed.
-      # Retried with a 30s gap: cdn.playwright.dev intermittently 403s
-      # runner IPs with a geo-block ("not available in your location"),
-      # and Playwright's own 3 retries fire within seconds of each other,
-      # too fast for the CDN edge to recover.
-      - name: Install Playwright browsers
-        working-directory: app
-        run: |
-          for attempt in 1 2 3; do
-            if bunx playwright install --with-deps --only-shell chromium; then
-              exit 0
-            fi
-            echo "Browser install attempt ${attempt} failed; retrying in 30s..."
-            sleep 30
-          done
-          exit 1
-        if: steps.playwright-cache.outputs.cache-hit != 'true'
-
-      # On a cache hit the headless shell binary is already restored, but
-      # the OS-level libraries it links against live outside the cached
-      # path and still need installing on every fresh runner.
+      # The OS libraries Chromium links against live outside the cached
+      # path, so every fresh runner needs them, on a cache hit and on a
+      # miss alike. This step runs before the download below, and runs
+      # every time (#1661). The download step passes no `--with-deps`:
+      # that flag starts a root `apt-get` through `sudo` with none of the
+      # bounds below, so the apt work goes only through this script.
       #
       # scripts/install-playwright-deps.sh is the one retry loop for this
       # step (also used by the `site` job and gcp-dashboard-ci.yml, #1655).
@@ -540,12 +524,45 @@ jobs:
       #  - apt bounds itself too: Acquire::http(s)::Timeout 30s (idle
       #    connection) and Acquire::Retries 3 (per file). The idle timeout
       #    does not end a slow but live download; the 180s `timeout` does;
-      #  - the whole step stops after 540s (TOTAL_BUDGET), so even a total
-      #    failure fits the shortest calling job (10 minutes).
-      - name: Install Playwright OS dependencies only
+      #  - the whole step stops after 540s (TOTAL_BUDGET).
+      #
+      # The job timeout holds the worst case of both install steps: 540s
+      # for this step, plus 3 download attempts of 120s, plus 2 gaps of 30s
+      # (540 + 360 + 60 = 960s, 16 minutes). `site`, `app` and
+      # gcp-dashboard-ci.yml all carry a 20-minute job timeout, which
+      # leaves four minutes for the steps before these two.
+      - name: Install Playwright OS dependencies
         working-directory: app
         run: bash ../scripts/install-playwright-deps.sh
-        if: steps.playwright-cache.outputs.cache-hit == 'true'
+
+      # --only-shell installs chromium-headless-shell instead of full
+      # Chromium -- roughly half the download/cache size. Headless runs
+      # (both Playwright e2e and the vitest browser tests, see
+      # vite.config.ts) use the headless shell by default and neither
+      # pins a `channel:`, so the full browser is never actually needed.
+      # Retried with a 30s gap: cdn.playwright.dev intermittently 403s
+      # runner IPs with a geo-block ("not available in your location"),
+      # and Playwright's own 3 retries fire within seconds of each other,
+      # too fast for the CDN edge to recover.
+      #
+      # Each attempt is capped at `timeout 120`, so a stalled CDN ends
+      # inside the attempt, not at the job timeout. That cap is safe here
+      # because nothing in this command runs under `sudo`: without
+      # `--with-deps` the download is one unprivileged process, so
+      # `timeout` can stop all of it, and no root `apt-get` is left behind
+      # (the orphan problem the OS dependency script exists to handle).
+      - name: Install Playwright browsers
+        working-directory: app
+        run: |
+          for attempt in 1 2 3; do
+            if timeout 120 bunx playwright install --only-shell chromium; then
+              exit 0
+            fi
+            echo "Browser install attempt ${attempt} failed; retrying in 30s..."
+            sleep 30
+          done
+          exit 1
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
 
       - name: Unit test with coverage gate
         working-directory: app
