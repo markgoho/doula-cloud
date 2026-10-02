@@ -22,6 +22,9 @@
 	 * The edge between them is the grid's own one-pixel gap over an
 	 * `outline-variant` ground, so it is a vertical rule beside and a
 	 * horizontal rule above, with no query to pick which.
+	 *
+	 * The panels fill the window below the bar (#1653). The shell owns that
+	 * height and hands it down; this Template only asks for it.
 	 */
 	import type { Snippet } from 'svelte';
 	import CloudMark from '#lib/components/atoms/CloudMark.svelte';
@@ -49,7 +52,7 @@
 
 <PageTitle page={title} />
 
-<container-l>
+<container-l data-fills-main>
 	<grid-l min="var(--landing-panel-min)" space="var(--border-thin)">
 		<div class="panel welcome">
 			<stack-l space="var(--space-8)">
@@ -71,6 +74,13 @@
 
 <style>
 	@layer components {
+		/* The shell gives this Template the window's remaining height
+		   (`data-fills-main`, base.css, #1653). A grid here passes that
+		   height to the panels, whose own centering then has room to work. */
+		container-l {
+			display: grid;
+		}
+
 		grid-l {
 			border-block-end: var(--border-thin) solid var(--color-outline-variant);
 			background-color: var(--color-outline-variant);

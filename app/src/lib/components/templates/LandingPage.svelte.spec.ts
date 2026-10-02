@@ -78,3 +78,57 @@ describe('LandingPage.svelte', () => {
 		expect(container.querySelector('svg')!.getBoundingClientRect().width).toBeLessThan(200);
 	});
 });
+
+/*
+ * #1653: the shell owns the window's height and this Template fills it.
+ * Mounted inside a real `<main>` in `<body>`, because the height comes
+ * from base.css's rules on those two elements and from nowhere else.
+ */
+async function setupInShell() {
+	const main = document.createElement('main');
+	document.body.append(main);
+	// `target`, so the Template's root is `main`'s own child, as it is in
+	// the app: base.css reads `main:has(> [data-fills-main])`.
+	await render(LandingPage, {
+		target: main,
+		props: {
+			title: 'Sign in or set up a Practice',
+			greeting: 'Good morning.',
+			lede: 'Welcome to DoulaCloud.',
+			content: textSnippet('The doors')
+		}
+	});
+	// querySelector, case 2 of svelte-tests.md: a panel is a layout box
+	// with no role of its own.
+	const welcome = main.querySelector('.welcome')!.getBoundingClientRect();
+	const greeting = page.getByText('Good morning.').element().getBoundingClientRect();
+	const lede = page.getByText('Welcome to DoulaCloud.').element().getBoundingClientRect();
+	return { main, welcome, greeting, lede };
+}
+
+describe('LandingPage.svelte in the shell', () => {
+	it('reaches the bottom of a window taller than its content, with the content centered', async () => {
+		await page.viewport(1280, 1600);
+		const { main, welcome, greeting, lede } = await setupInShell();
+
+		expect(Math.round(welcome.bottom)).toBeGreaterThanOrEqual(window.innerHeight - 1);
+		// Centered: free space both under the last line and over the
+		// greeting. Top-aligned content would leave almost none over it.
+		const spaceUnder = welcome.bottom - lede.bottom;
+		const spaceOver = greeting.top - welcome.top;
+		expect(spaceUnder).toBeGreaterThan(welcome.height / 4);
+		expect(spaceOver).toBeGreaterThan(welcome.height / 4);
+		expect(document.documentElement.scrollHeight).toBeLessThanOrEqual(window.innerHeight);
+		main.remove();
+	});
+
+	it('scrolls in a window shorter than its content, with nothing cut off', async () => {
+		await page.viewport(320, 300);
+		const { main, welcome, lede } = await setupInShell();
+
+		expect(document.documentElement.scrollHeight).toBeGreaterThan(window.innerHeight);
+		expect(welcome.bottom).toBeGreaterThan(lede.bottom);
+		expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(320);
+		main.remove();
+	});
+});
