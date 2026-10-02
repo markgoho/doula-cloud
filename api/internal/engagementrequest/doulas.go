@@ -34,6 +34,12 @@ type RequestDoula struct {
 // docs/design/govuk-alignment.md stops "the moment a second Doula joins
 // the Practice". The fact is computed here and not on the screen, because
 // a plain Doula's Items holds herself alone at a Practice of any size.
+//
+// It is the one fact about the roster a plain Doula reads here: whether
+// any other Doula is at her Practice, and nothing about who. ADR-0008
+// gives her no read of the roster, and ADR-0017's amendment asks for
+// this fact for every asker, so it is one bit and no more -- never a
+// count, and never a name.
 type DoulasResponse struct {
 	Items             []RequestDoula `json:"items"`
 	CallerIsOnlyDoula bool           `json:"callerIsOnlyDoula"`
@@ -57,7 +63,7 @@ const msgContractorOriginates = "a contractor doula does not request an engageme
 // nothing (ADR-0017) and is refused here as RequestHandler refuses her.
 // A read only: it changes no state, so the audit trail has nothing to
 // record. It is drawing only, too: RequestHandler refuses the same names
-// whatever this answered, and the two share decideAttachable. Must be
+// whatever this answered, and the two share membership.whyNotAttachable. Must be
 // mounted behind staffauth.Middleware.
 func DoulasHandler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -119,7 +125,10 @@ func listRequestDoulas(ctx context.Context, tx *sql.Tx, practiceID, callerStaffI
 		}
 		doulas++
 		isCaller := row.StaffID == callerStaffID
-		if decideAttachable(true, true, employmentType) != "" || (!isCaller && !readsRoster) {
+		// Every row the query returns is a Member who holds the Doula
+		// role, so the rule has only her Employment type left to read.
+		listed := membership{exists: true, isDoula: true, employmentType: employmentType}
+		if listed.whyNotAttachable() != attachable || (!isCaller && !readsRoster) {
 			continue
 		}
 		callerListed = callerListed || isCaller

@@ -140,7 +140,7 @@ func TestRequestHandler_APlainDoulaNamesHerself(t *testing.T) {
 }
 
 // TestRequestHandler_NoDoulaYetNamesNobody proves the other answer: an
-// absent doulaStaffId and a blank one both store no Doula, and the
+// absent doulaStaffId and a blank one (spaces alone) both store no Doula, and the
 // approval screen's read carries neither field.
 func TestRequestHandler_NoDoulaYetNamesNobody(t *testing.T) {
 	db := testdb.New(t)
@@ -152,7 +152,7 @@ func TestRequestHandler_NoDoulaYetNamesNobody(t *testing.T) {
 	srv, session := newServer(t, db, "doula-1", &tasknudge.FakeEnqueuer{})
 	defer srv.Close()
 
-	blank := ""
+	blank := "  "
 	var absent, blanked engagementrequest.RequestResponse
 	decode(t, do(t, requestsURL(srv.URL, practiceID, clientID), session,
 		engagementrequest.RequestBody{Kind: testKindBirth, DueDate: testDueDate}), http.StatusCreated, &absent)
