@@ -43,6 +43,18 @@ describe('addDays', () => {
 	it('goes backwards for a negative count', () => {
 		expect(addDays('2026-03-01', -1)).toBe('2026-02-28');
 	});
+
+	// These two only fail in a zone that observes daylight saving (for
+	// example TZ=America/New_York); in UTC every day is 24 hours long.
+	it('counts calendar days across the end of daylight saving (a 25-hour day)', () => {
+		expect(addDays('2026-10-02', 30)).toBe('2026-11-01');
+		expect(addDays('2026-11-01', 1)).toBe('2026-11-02');
+	});
+
+	it('counts calendar days across the start of daylight saving (a 23-hour day)', () => {
+		expect(addDays('2026-03-07', 1)).toBe('2026-03-08');
+		expect(addDays('2026-03-08', 1)).toBe('2026-03-09');
+	});
 });
 
 describe('defaultScheduleRange', () => {
