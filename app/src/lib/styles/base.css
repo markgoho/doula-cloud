@@ -37,7 +37,27 @@ html {
 	background-color: var(--color-surface);
 }
 
+/*
+ * The shell owns the window's height (#1653, ADR-0018's amendment of the
+ * same number). `body` is a column at least as tall as the window, and
+ * `main` takes what the chrome above it leaves. `dvh`, so a phone
+ * browser's own toolbars never hide the end of a page.
+ *
+ * This moves nothing on a page that does not ask for the height: `main`
+ * stays a block, so a Template in normal flow sits where it sat, with
+ * empty ground under it. A Template that wants the height marks its root
+ * `data-fills-main`, and only then is `main` a grid whose one row
+ * stretches. The Template never learns how tall the bar is; it fills the
+ * box it is given.
+ *
+ * The skip link is absolutely positioned and so is not a flex item. The
+ * mount point is `display: contents`, so the bar, the feedback drawer and
+ * `main` are `body`'s own items.
+ */
 body {
+	display: flex;
+	flex-direction: column;
+	min-block-size: 100dvh;
 	container-type: inline-size;
 	font-family: var(--font-family-base);
 	font-weight: var(--text-body-weight);
@@ -45,6 +65,14 @@ body {
 	letter-spacing: var(--text-body-tracking);
 	color: var(--color-on-surface);
 	background-color: var(--color-surface);
+}
+
+main {
+	flex: 1 0 auto;
+}
+
+main:has(> [data-fills-main]) {
+	display: grid;
 }
 
 /*

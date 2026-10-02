@@ -78,3 +78,38 @@ describe('LandingPage.svelte', () => {
 		expect(container.querySelector('svg')!.getBoundingClientRect().width).toBeLessThan(200);
 	});
 });
+
+/*
+ * #1653: the shell owns the window's height and this Template fills it.
+ * That is a contract between two files with nothing else to hold it: this
+ * Template marks its root `data-fills-main`, and base.css answers
+ * `main:has(> [data-fills-main])`. Rename either side and no type, lint
+ * rule or other spec notices; the panels just stop short of the window
+ * again. So the Template is mounted in a real `<main>` in `<body>`, as its
+ * own child, which is where the app puts it.
+ *
+ * What the rules then do with that height is CSS's business and is not
+ * asserted here.
+ */
+describe('LandingPage.svelte in the shell', () => {
+	it('is given the height of a window taller than its content', async () => {
+		await page.viewport(1280, 1600);
+		const main = document.createElement('main');
+		document.body.append(main);
+		await render(LandingPage, {
+			target: main,
+			props: {
+				title: 'Sign in or set up a Practice',
+				greeting: 'Good morning.',
+				lede: 'Welcome to DoulaCloud.',
+				content: textSnippet('The doors')
+			}
+		});
+
+		// querySelector, case 2 of svelte-tests.md: a panel is a layout box
+		// with no role of its own.
+		const welcome = main.querySelector('.welcome')!.getBoundingClientRect();
+		expect(Math.round(welcome.bottom)).toBeGreaterThanOrEqual(window.innerHeight - 1);
+		main.remove();
+	});
+});

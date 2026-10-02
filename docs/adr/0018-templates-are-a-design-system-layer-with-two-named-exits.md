@@ -212,3 +212,19 @@ Filed as [#1645](https://github.com/markgoho/doula-cloud/issues/1645). The signe
 - **The two panels are a `grid-l` with `--landing-panel-min` as its floor**, so they go to one column where two do not fit, read off the space the page has (ADR-0024). No `@container` query. The edge between the panels is the grid's one-pixel gap over an `outline-variant` ground, so it is vertical beside and horizontal above, with nothing to choose between the two.
 - **The mark is `CloudMark`'s new `xl` size**, capped at about 55% of its panel. It is decorative, because the bar above already names the product.
 - **The doors are the route's own content**, built from the `DoorLink` atom. The Template does not know there are three.
+
+## Amendment, 2026-10-02 — the shell owns the window's height
+
+Filed as [#1653](https://github.com/markgoho/doula-cloud/issues/1653), found by Mark on a 4K monitor the day `LandingPage` shipped: its two panels ended about 610px down and the remainder of the window was empty ground under their bottom border. `LandingPage` centers each panel's content, but a panel was only as tall as its own content, so there was nothing to center in.
+
+The cause was the sentence in the 2026-09-02 amendment above: no Template "owns the viewport's own height". That sentence was right about Templates and silent about the shell, so nothing owned the height at all — `html`, `body` and `<main>` were each as tall as their content.
+
+**The shell owns it now.** `base.css` makes `body` a column at least `100dvh` tall, and `<main>` takes what the bar above it leaves. One rule serves every shell. `dvh` and not `vh`, so a phone browser's own toolbars never hide the end of a page.
+
+**A Template asks for the height; it does not measure it.** A Template that wants the height puts `data-fills-main` on its root, and `main:has(> [data-fills-main])` becomes a grid whose one row stretches. The 2026-09-02 objection was that centering would be "sized against a bar whose height a Template has no business knowing". That still holds, and it is why the mechanism is this one: the Template fills the box it is handed and knows nothing about the bar.
+
+**Every other Template is unchanged, on purpose.** `<main>` stays a block unless a Template asks, so `EntryPage`, `FormPage` and the others sit top-aligned in normal flow exactly where they sat. A form that began at a different height on each monitor would be worse, and the 2026-09-02 decision that `EntryPage` is top-aligned stands. `LandingPage` is the one Template that asks today.
+
+**The welcome block is centered side to side in its panel, at every width.** Mark asked for this the same day, on seeing the page at 4K: a greeting held to the left edge of a 1000px panel left most of the panel empty. The mark and the two lines keep one shared left edge, and the block as a whole sits in the middle. A first build centered it only where the panels sit side by side and started it at the gutter where they stack, to keep one left edge with the doors; Mark saw that on a phone-width window and rejected it, because a welcome that is centered on a large screen and not on a small one reads as a defect. So it is one rule with no switch. The mark's cap moved from a percentage of the block to `55cqi` of the page: a block that shrinks to its content would otherwise size the mark off the greeting's length.
+
+`<main>` is not made a flex column for every page, which would have been the shorter rule. A flex column changes how its children's margins collapse and how an auto-margined child sizes, on every route, to serve one Template. The opt-in changes `<main>` only on the page that asks.
