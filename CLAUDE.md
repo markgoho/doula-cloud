@@ -58,6 +58,10 @@ A book is evidence, and only the founder's recorded decision turns it into a rul
 
 The GOV.UK Design System is the default reference for any screen that asks a person for something or reports a failure — the decision, never the markup or the look. See `docs/adr/0021-govuk-is-the-reference-for-service-patterns.md` for the rule and `docs/design/govuk-alignment.md` for the pattern-by-pattern table. Check the table before building such a screen; a departure needs a recorded reason.
 
+### Copy
+
+The Voice section of `docs/design/brief.md` is the rule for every line a person reads on screen. Read it before writing or changing one. In short: no third-person pronoun for anyone, "you" and "your" for the reader, a clear label with at most one short line under it, a line a person would say aloud, and the words a doula or a Client has said in place of ours. `app/src/lib/copy.pronoun.usage.spec.ts` enforces the pronoun rule; the remainder is checked in review.
+
 ### Testing
 
 100% line coverage gate (with justified inline exceptions), the Podman-based test infra for `api/` and `app/`, and goose migrations. See `docs/testing.md`.
