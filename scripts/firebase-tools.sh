@@ -30,12 +30,14 @@
 #       caller can read the `--json` result of the attempt that passed.
 #       A failed attempt's file is printed to the log, because `--json`
 #       sends the command's error to stdout too (#736).
-#   FIREBASE_TOOLS_BIN, FIREBASE_TOOLS_BACKOFF_SECONDS  test seams: the
-#       binary to run and the backoff unit. No workflow sets them.
+#   FIREBASE_TOOLS_BIN, FIREBASE_TOOLS_LOCKFILE, FIREBASE_TOOLS_BACKOFF_SECONDS
+#       test seams: the binary to run, the lockfile that holds the pin,
+#       and the backoff unit. No workflow sets them.
 set -uo pipefail
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 bin="${FIREBASE_TOOLS_BIN:-${root}/node_modules/.bin/firebase}"
+lockfile="${FIREBASE_TOOLS_LOCKFILE:-${root}/bun.lock}"
 backoff="${FIREBASE_TOOLS_BACKOFF_SECONDS:-10}"
 attempts=3
 
@@ -51,10 +53,18 @@ require_install() {
   fi
 }
 
+# The version line, checked against the root bun.lock and not only
+# labeled with it: an install that holds any other version (a stale
+# cache, an install without the frozen lockfile) fails here.
 print_version() {
-  local version
+  local version pinned
   if ! version="$("${bin}" --version)"; then
     echo "::error::firebase-tools did not print its version"
+    exit 1
+  fi
+  pinned="$(grep -o '"firebase-tools@[^"]*"' "${lockfile}" | head -n 1 | tr -d '"')"
+  if [ "firebase-tools@${version}" != "${pinned}" ]; then
+    echo "::error::firebase-tools ${version} is installed, but the root bun.lock holds ${pinned:-no firebase-tools}. Run \`bun install --frozen-lockfile\` at the repository root."
     exit 1
   fi
   echo "firebase-tools version: ${version} (the root bun.lock pin)"
@@ -81,8 +91,12 @@ debug_log="${PWD}/firebase-debug.log"
 kept_log="${PWD}/firebase-debug.kept.log"
 kept_lines=80
 
-keep_debug_log() {
+drop_debug_log() {
   rm -f "${debug_log}" "${kept_log}"
+}
+
+keep_debug_log() {
+  drop_debug_log
   : > "${debug_log}" && ln "${debug_log}" "${kept_log}" 2> /dev/null
 }
 
@@ -95,8 +109,8 @@ redact() {
   sed -E \
     -e 's/ya29\.[A-Za-z0-9._-]+/[redacted]/g' \
     -e 's/eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+(\.[A-Za-z0-9_-]*)?/[redacted]/g' \
-    -e 's/([Bb]earer) +[A-Za-z0-9._~+\/=-]+/\1 [redacted]/g' \
-    -e 's/("?[A-Za-z_]*([Tt]oken|[Ss]ecret|[Pp]assword|private_key)[A-Za-z_]*"?[:=] *"?)[^",} ]+/\1[redacted]/g'
+    -e 's/([Bb]earer|[Bb]asic) +[A-Za-z0-9._~+\/=-]+/\1 [redacted]/g' \
+    -e 's/("?[A-Za-z_-]*([Tt]oken|[Ss]ecret|[Pp]assword|private_key|[Aa]pi[_-]?[Kk]ey)[A-Za-z_-]*"?[:=] *"?)[^",} ]+/\1[redacted]/g'
 }
 
 kept_count() {
@@ -128,8 +142,8 @@ run_attempt() {
 
 show_failure() {
   if [ -n "${FIREBASE_TOOLS_STDOUT_FILE:-}" ] && [ -s "${FIREBASE_TOOLS_STDOUT_FILE}" ]; then
-    echo "The command's output follows."
-    cat "${FIREBASE_TOOLS_STDOUT_FILE}"
+    echo "The command's output follows (credentials redacted)."
+    redact < "${FIREBASE_TOOLS_STDOUT_FILE}"
     echo
   fi
   show_debug_log
@@ -137,7 +151,7 @@ show_failure() {
 
 retry() {
   local label="firebase-tools $1"
-  local attempt status wait
+  local attempt status delay
   print_version
   for attempt in $(seq 1 "${attempts}"); do
     echo "${label}: attempt ${attempt} of ${attempts}"
@@ -146,17 +160,17 @@ retry() {
     if [ "${status}" -eq 0 ]; then
       # Evidence in every passing log that the kept name still works: a
       # release that changes how the CLI opens its log shows 0 here.
-      echo "firebase-tools debug log kept for this attempt: $(kept_count) lines (printed only when an attempt fails)"
-      rm -f "${debug_log}" "${kept_log}"
+      echo "firebase-tools debug log kept for this attempt, line count: $(kept_count) (printed only when an attempt fails)"
+      drop_debug_log
       echo "${label} passed on attempt ${attempt} of ${attempts}"
       return 0
     fi
     show_failure
-    rm -f "${debug_log}" "${kept_log}"
+    drop_debug_log
     if [ "${attempt}" -lt "${attempts}" ]; then
-      wait=$((backoff * attempt))
-      echo "::warning::${label} attempt ${attempt} of ${attempts} failed (exit ${status}); retrying in ${wait}s"
-      sleep "${wait}"
+      delay=$((backoff * attempt))
+      echo "::warning::${label} attempt ${attempt} of ${attempts} failed (exit ${status}); retrying in ${delay}s"
+      sleep "${delay}"
     else
       echo "::warning::${label} attempt ${attempt} of ${attempts} failed (exit ${status})"
     fi

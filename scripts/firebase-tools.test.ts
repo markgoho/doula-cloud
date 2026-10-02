@@ -20,17 +20,18 @@ let dir: string;
 
 beforeEach(() => {
   dir = fs.mkdtempSync(path.join(os.tmpdir(), 'firebase-tools-test-'));
+  // A lockfile of this test's own, in the shape of the root bun.lock's
+  // entry, so a bump of the real pin does not change these tests.
+  fs.writeFileSync(
+    path.join(dir, 'bun.lock'),
+    '    "firebase-tools": ["firebase-tools@15.30.2", "", { "bin": { "firebase": "lib/bin/firebase.js" } }, "sha512-stand-in"],\n'
+  );
 });
 
 afterEach(() => {
   fs.rmSync(dir, { recursive: true, force: true });
 });
 
-/**
- * A stand-in `firebase` binary. It answers `--version`, and for any other
- * command it fails its first `failures` calls and passes after them. It
- * counts its calls in a file, because each attempt is a new process.
- */
 // The error the CLI catches and prints at debug level only.
 const CAUSE =
   'GaxiosError: request to https://sts.googleapis.com/v1/token failed, reason: read ECONNRESET';
@@ -42,21 +43,26 @@ const LEAKS = [
   'client_secret=stand-in-secret-value',
 ];
 
-function standIn(failures: number): string {
+/**
+ * A stand-in `firebase` binary. It answers `--version`, and for any other
+ * command it fails its first `failures` calls and passes after them. It
+ * counts its calls in a file, because each attempt is a new process.
+ */
+function standIn(failures: number, version = '15.30.2'): string {
   const bin = path.join(dir, 'firebase');
   const calls = path.join(dir, 'calls');
   fs.writeFileSync(
     bin,
     [
       '#!/usr/bin/env bash',
-      'if [ "$1" = "--version" ]; then echo "15.30.2"; exit 0; fi',
+      `if [ "$1" = "--version" ]; then echo "${version}"; exit 0; fi`,
       `n=$(( $(cat "${calls}" 2>/dev/null || echo 0) + 1 ))`,
       `echo "$n" > "${calls}"`,
       // As the real CLI does: append debug lines to the log in the working
       // directory, and delete that log before an exit below 2.
       'echo "[debug] Command: firebase $*" >> firebase-debug.log',
       `if [ "$n" -le ${failures} ]; then`,
-      '  echo "{\\"status\\":\\"error\\",\\"call\\":$n}"',
+      '  echo "{\\"status\\":\\"error\\",\\"call\\":$n,\\"id_token\\":\\"stand-in-opaque-value\\"}"',
       `  echo "[debug] ${CAUSE} (call $n)" >> firebase-debug.log`,
       `  echo '[debug] ${LEAKS.join(' ')}' >> firebase-debug.log`,
       '  echo "Error: Failed to authenticate, have you run firebase login?" >&2',
@@ -77,7 +83,12 @@ function run(args: string[], env: Record<string, string> = {}) {
     encoding: 'utf8',
     // The CLI writes its debug log in the working directory.
     cwd: dir,
-    env: { ...process.env, FIREBASE_TOOLS_BACKOFF_SECONDS: '0', ...env },
+    env: {
+      ...process.env,
+      FIREBASE_TOOLS_BACKOFF_SECONDS: '0',
+      FIREBASE_TOOLS_LOCKFILE: path.join(dir, 'bun.lock'),
+      ...env,
+    },
   });
   return {
     status: result.status,
@@ -100,7 +111,7 @@ describe('retry', () => {
       'firebase-tools version: 15.30.2 (the root bun.lock pin)',
       'firebase-tools deploy: attempt 1 of 3',
       '{"status":"success","call":1,"args":"deploy --only hosting:app"}',
-      'firebase-tools debug log kept for this attempt: 1 lines (printed only when an attempt fails)',
+      'firebase-tools debug log kept for this attempt, line count: 1 (printed only when an attempt fails)',
       'firebase-tools deploy passed on attempt 1 of 3',
     ]);
   });
@@ -179,8 +190,12 @@ describe('retry', () => {
       args: 'hosting:channel:deploy pr-1 --json',
     });
     // The failed attempt's `--json` error is in the log, not lost in the file.
-    expect(result.stdout).toContain("The command's output follows.");
-    expect(result.stdout).toContain('{"status":"error","call":1}');
+    expect(result.stdout).toContain(
+      "The command's output follows (credentials redacted)."
+    );
+    expect(result.stdout).toContain(
+      '{"status":"error","call":1,"id_token":"[redacted]"}'
+    );
     expect(result.stdout).not.toContain('"status":"success"');
   });
 });
@@ -208,11 +223,13 @@ describe('what a failed attempt shows', () => {
     }
   });
 
-  test('no credential reaches the log', () => {
-    const result = run(['retry', 'deploy'], {
+  test('no credential reaches the log, from the debug log or the stdout file', () => {
+    const result = run(['retry', 'deploy', '--json'], {
       FIREBASE_TOOLS_BIN: standIn(99),
+      FIREBASE_TOOLS_STDOUT_FILE: path.join(dir, 'deploy-output.json'),
     });
 
+    expect(result.stdout).toContain('"id_token":"[redacted]"');
     expect(result.stdout).toContain('Authorization: Bearer [redacted]');
     expect(result.stdout).toContain('"subject_token":"[redacted]"');
     expect(result.stdout).toContain('"access_token":"[redacted]"');
@@ -230,14 +247,18 @@ describe('what a failed attempt shows', () => {
   test('leaves no debug log behind', () => {
     run(['retry', 'deploy'], { FIREBASE_TOOLS_BIN: standIn(1) });
 
-    expect(fs.readdirSync(dir).sort()).toEqual(['calls', 'firebase']);
+    expect(fs.readdirSync(dir).sort()).toEqual([
+      'bun.lock',
+      'calls',
+      'firebase',
+    ]);
   });
 
   test('says so when the CLI wrote no debug log', () => {
     const bin = path.join(dir, 'silent');
     fs.writeFileSync(
       bin,
-      '#!/usr/bin/env bash\n[ "$1" = "--version" ] && echo 1.0.0 && exit 0\nexit 1\n',
+      '#!/usr/bin/env bash\n[ "$1" = "--version" ] && echo 15.30.2 && exit 0\nexit 1\n',
       {
         mode: 0o755,
       }
@@ -260,7 +281,9 @@ describe('once', () => {
 
     expect(result.status).toBe(1);
     expect(fs.readFileSync(path.join(dir, 'calls'), 'utf8').trim()).toBe('1');
-    expect(result.stdout).toBe('{"status":"error","call":1}\n');
+    expect(result.stdout).toBe(
+      '{"status":"error","call":1,"id_token":"stand-in-opaque-value"}\n'
+    );
     expect(result.stdout).not.toContain('::warning::');
   });
 });
@@ -272,6 +295,35 @@ describe('version', () => {
     expect(result.status).toBe(0);
     expect(result.stdout).toBe(
       'firebase-tools version: 15.30.2 (the root bun.lock pin)\n'
+    );
+  });
+});
+
+describe('an install that is not the pin', () => {
+  test.each(['version', 'retry'])(
+    '%s fails and names both versions',
+    (mode) => {
+      const result = run([mode, 'deploy'], {
+        FIREBASE_TOOLS_BIN: standIn(0, '15.32.1'),
+      });
+
+      expect(result.status).toBe(1);
+      expect(result.stdout).toContain(
+        '::error::firebase-tools 15.32.1 is installed, but the root bun.lock holds firebase-tools@15.30.2.'
+      );
+      // No attempt was made on the wrong version.
+      expect(fs.existsSync(path.join(dir, 'calls'))).toBe(false);
+    }
+  );
+
+  test('a lockfile with no firebase-tools entry fails', () => {
+    fs.writeFileSync(path.join(dir, 'bun.lock'), '{}\n');
+
+    const result = run(['version'], { FIREBASE_TOOLS_BIN: standIn(0) });
+
+    expect(result.status).toBe(1);
+    expect(result.stdout).toContain(
+      'the root bun.lock holds no firebase-tools'
     );
   });
 });
