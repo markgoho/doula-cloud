@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"net/http"
 
 	"github.com/google/uuid"
@@ -62,6 +63,20 @@ func blockedDetails() (string, map[string]string) {
 	return apierr.FieldDetails("email", staffauth.MsgAddressBlocked)
 }
 
+// The two sentences an Offer to its own sender is refused with (#1598),
+// each beside the control that named her: the Doula pick, or the email
+// address. "Nobody offers herself work" is ADR-0008's amendment on #1515:
+// an Offer is one person asking another, and an employee Doula who wants
+// to be on an Engagement puts herself on it
+// (engagement.AttachSelfHandler).
+const (
+	MsgTargetIsSender        = "Select another Doula. You cannot offer work to yourself."
+	MsgTargetAddressIsSender = "Enter the email address of another person. You cannot offer work to yourself."
+)
+
+// msgOfferToSelf is the summary both refusals above share.
+const msgOfferToSelf = "an offer goes to another person -- the sender cannot be its target"
+
 // resolveTarget turns the request's staffId-or-email into an offerTarget,
 // minting an Invitation for the email path. Exactly one of the two must
 // be named -- an Offer with both would leave 00030's offer_target_named
@@ -72,7 +87,7 @@ func resolveTarget(ctx context.Context, tx *sql.Tx, practiceID, actorStaffID str
 	case req.StaffID != "" && address != "":
 		return offerTarget{}, http.StatusBadRequest, apierr.CodeInvalidArgument, "name either a staff member or an email address, not both", nil
 	case req.StaffID != "":
-		return resolveStaffTarget(ctx, tx, practiceID, req.StaffID)
+		return resolveStaffTarget(ctx, tx, practiceID, actorStaffID, req.StaffID)
 	case address != "":
 		return resolveEmailTarget(ctx, tx, practiceID, actorStaffID, address)
 	default:
@@ -86,14 +101,23 @@ func resolveTarget(ctx context.Context, tx *sql.Tx, practiceID, actorStaffID str
 // fee the CHECK constraint exists to require, and an address the request
 // asserted rather than read off her own row could not be trusted for the
 // suppression check below.
-func resolveStaffTarget(ctx context.Context, tx *sql.Tx, practiceID, staffID string) (offerTarget, int, apierr.Code, string, map[string]string) {
-	if _, err := uuid.Parse(staffID); err != nil {
+func resolveStaffTarget(ctx context.Context, tx *sql.Tx, practiceID, actorStaffID, staffID string) (offerTarget, int, apierr.Code, string, map[string]string) {
+	parsed, err := uuid.Parse(staffID)
+	if err != nil {
 		return offerTarget{}, http.StatusBadRequest, apierr.CodeInvalidArgument, "invalid staff id", nil
+	}
+	// Asked before her Membership is read, and whatever it holds: no role
+	// and no Employment type makes an Offer to herself mean anything
+	// (#1598). The parsed id is compared, in the one spelling the session
+	// carries, so her own id in upper case does not pass the check.
+	if parsed.String() == actorStaffID {
+		return offerTarget{}, http.StatusBadRequest, apierr.CodeInvalidArgument, msgOfferToSelf,
+			map[string]string{"staffId": MsgTargetIsSender}
 	}
 
 	var isDoula bool
 	var employmentType, address string
-	err := tx.QueryRowContext(ctx,
+	err = tx.QueryRowContext(ctx,
 		`SELECT $1 = ANY(pm.roles), pm.employment_type::text, s.email
 		   FROM practice_memberships pm
 		   JOIN staff s ON s.id = pm.staff_id
@@ -145,6 +169,20 @@ func resolveStaffTarget(ctx context.Context, tx *sql.Tx, practiceID, staffID str
 // her Membership afterwards.
 func resolveEmailTarget(ctx context.Context, tx *sql.Tx, practiceID, actorStaffID, address string) (offerTarget, int, apierr.Code, string, map[string]string) {
 	const employmentType = contractorType
+
+	// Her own address is an Offer to herself by another door (#1598), and
+	// it is refused in the same words. It is asked before the Membership
+	// check below, whose 409 would tell her to offer the work to "that
+	// staff member" -- the person she is.
+	own, err := isOwnAddress(ctx, tx, actorStaffID, address)
+	if err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		return offerTarget{}, http.StatusInternalServerError, apierr.CodeInternal, apierr.MsgInternalError, nil
+	}
+	if own {
+		return offerTarget{}, http.StatusBadRequest, apierr.CodeInvalidArgument, msgOfferToSelf,
+			map[string]string{"email": MsgTargetAddressIsSender}
+	}
 
 	// Someone who is already at this Practice is offered work through her
 	// Membership, not through a second front door: a fresh Invitation for
@@ -205,6 +243,20 @@ func resolveEmailTarget(ctx context.Context, tx *sql.Tx, practiceID, actorStaffI
 		accessCode:       code,
 		accessCodeDigest: sql.NullString{String: staffauth.TokenDigest(code), Valid: true},
 	}, http.StatusOK, "", "", nil
+}
+
+// isOwnAddress reports whether address, already normalized, is the
+// address on the actor's own staff row.
+func isOwnAddress(ctx context.Context, tx *sql.Tx, actorStaffID, address string) (bool, error) {
+	var own bool
+	if err := tx.QueryRowContext(ctx,
+		`SELECT EXISTS(SELECT 1 FROM staff WHERE id = $1 AND lower(email) = $2)`,
+		actorStaffID, address,
+	).Scan(&own); err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		return false, fmt.Errorf("offer: read the sender's address: %w", err)
+	}
+	return own, nil
 }
 
 // reissueOpenOffers gives every Offer still open on invitationID a fresh

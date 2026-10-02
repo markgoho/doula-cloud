@@ -40,6 +40,15 @@ func (r Reader) Roles() []string {
 	return r.roles
 }
 
+// EmploymentType reports the Employment type on the caller's Membership
+// at the resolved Practice, as the column holds it. It is for a rule that
+// reads the type as a value and shares that rule with a read of another
+// person's Membership (attachment.Membership, #1598); a caller that asks
+// only "is she a contractor" uses IsContractor.
+func (r Reader) EmploymentType() string {
+	return r.employmentType
+}
+
 // IsContractor reports whether the Reader's caller's membership at the
 // resolved Practice is employment_type = 'contractor' -- the axis
 // ADR-0008 gates ambient reach on. False for 'employee', including every

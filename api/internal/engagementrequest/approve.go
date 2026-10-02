@@ -10,6 +10,7 @@ import (
 
 	"doula-cloud/api/internal/activity"
 	"doula-cloud/api/internal/apierr"
+	"doula-cloud/api/internal/attachment"
 	"doula-cloud/api/internal/billing"
 	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/tasknudge"
@@ -136,7 +137,7 @@ func writeApproveErr(w http.ResponseWriter, r *http.Request, db *sql.DB, enq tas
 // what the Client already held.
 //
 // Where the Request names a Doula, the same transaction attaches her
-// (attachNamedDoula, #1596); where it says "No Doula yet", no Attachment
+// (attachment.Grant, #1596); where it says "No Doula yet", no Attachment
 // is written and the Engagement exists with nobody on it.
 //
 // Returns sql.ErrNoRows when requestID does not exist at this Practice,
@@ -191,9 +192,11 @@ func approve(ctx context.Context, tx *sql.Tx, practiceID, requestID, approverSta
 		return "", warning, err
 	}
 	if doula.Valid {
-		if err := attachNamedDoula(ctx, tx, practiceID, engagementID, doula.String, approverStaffID); err != nil {
+		// attached_by is the approver, because approval is the act that
+		// decides she is on it; the Request already records who asked.
+		if err := attachment.Grant(ctx, tx, practiceID, engagementID, doula.String, approverStaffID); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			return "", warning, err
+			return "", warning, fmt.Errorf("engagementrequest: attach named doula: %w", err)
 		}
 	}
 
@@ -212,40 +215,6 @@ func approve(ctx context.Context, tx *sql.Tx, practiceID, requestID, approverSta
 	}
 
 	return engagementID, warning, nil
-}
-
-// attachNamedDoula puts the Doula the Request names on the Engagement
-// approval just created (#1596): a granted Attachment through
-// staffauth.Grant, the third writer of one that ADR-0008's amendment on
-// #1515 names. No fee rides it, because a fee is only ever copied from
-// an Offer. attached_by is the approver, because approval is the act
-// that decides she is on it; the Request already records who asked.
-//
-// The activity row is what answers "who attached the Doula, and when"
-// on the Engagement's own ledger: the actor is the approver, the diff
-// names the Doula, and the row's created_at is the instant.
-func attachNamedDoula(ctx context.Context, tx *sql.Tx, practiceID, engagementID, doulaStaffID, approverStaffID string) error {
-	if err := staffauth.Grant(ctx, tx, engagementID, doulaStaffID, approverStaffID, nil, nil); err != nil {
-		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		return fmt.Errorf("engagementrequest: attach named doula: %w", err)
-	}
-	diff, err := json.Marshal(map[string]string{activity.DiffKeyAttachedStaffID: doulaStaffID})
-	if err != nil {
-		// coverage:ignore reason: a map of strings always marshals cleanly, not exercised by unit tests
-		return fmt.Errorf("engagementrequest: marshal doula attached diff: %w", err)
-	}
-	if err := activity.Record(ctx, tx, activity.Entry{
-		PracticeID:  practiceID,
-		SubjectKind: activity.SubjectEngagement,
-		SubjectID:   engagementID,
-		Action:      string(activity.ActionDoulaAttached),
-		Diff:        diff,
-		Actor:       activity.StaffActor(approverStaffID),
-	}); err != nil {
-		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		return fmt.Errorf("engagementrequest: record doula attached: %w", err)
-	}
-	return nil
 }
 
 // recordEngagementCreated writes #476's activity row for the one path
