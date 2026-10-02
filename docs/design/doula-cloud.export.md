@@ -241,9 +241,13 @@ Generated from `docs/design/doula-cloud.pen`. Do not hand-edit this file: run `b
 
 - frame "Large"
   - ref "Mark lg" -> component "CloudMark" (theme: size=lg)
+    - override Inner arch (path): width: 120; height: 56
+    - override Outer line (path): width: 120; height: 56
   - text: "lg  120x56" [fill: $color-on-surface-muted; fontFamily: $font-family-base]
 - frame "Medium"
   - ref "Mark md" -> component "CloudMark" (theme: size=md)
+    - override Inner arch (path): width: 60; height: 28
+    - override Outer line (path): width: 60; height: 28
   - text: "md  60x28" [fill: $color-on-surface-muted; fontFamily: $font-family-base]
 - frame "Small"
   - ref "Mark sm" -> component "CloudMark" (theme: size=sm)
@@ -276,9 +280,8 @@ Generated from `docs/design/doula-cloud.pen`. Do not hand-edit this file: run `b
 
 ## CloudMark (reusable) (theme: size=sm)
 
-- path "Arc 1" [stroke: $color-primary; strokeWidth: $mark-stroke]
-- path "Arc 2" [stroke: $color-primary-hover; strokeWidth: $mark-stroke]
-- path "Arc 3" [stroke: $color-outline-variant; strokeWidth: $mark-stroke]
+- path "Inner arch" [stroke: $mark-arch; strokeWidth: $mark-stroke]
+- path "Outer line" [stroke: $color-primary; strokeWidth: $mark-stroke]
 
 ## BrandLockup (reusable)
 

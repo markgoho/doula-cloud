@@ -216,6 +216,41 @@ describe.each(themes)('%s', (_name, palette) => {
 });
 
 /*
+ * The web app manifest -- #1486.
+ *
+ * A manifest is JSON, read by the browser before any stylesheet, so it
+ * can reach no custom property and can carry no comment. Its two colors
+ * are also the one place the repo holds sRGB hex, because the manifest
+ * format's support for other color syntaxes is not dependable. So this is
+ * where the tokens they come from are named: `theme_color` is
+ * `--color-primary` and `background_color` is `--color-surface`, the
+ * light theme's values, since a manifest has one value for the two
+ * themes. Change a token and this fails until the manifest follows.
+ */
+function toHex(value: string): string {
+	const channels = toSrgb(parseOklch(value)).map((channel) =>
+		Math.round(channel * 255)
+			.toString(16)
+			.padStart(2, '0')
+	);
+	return `#${channels.join('')}`;
+}
+
+describe('the manifest colors are the sRGB equivalents of two tokens', () => {
+	const manifest = JSON.parse(
+		readFileSync(new URL('../../../static/manifest.webmanifest', import.meta.url), 'utf8')
+	) as { theme_color: string; background_color: string };
+
+	it('theme_color is --color-primary', () => {
+		expect(manifest.theme_color).toBe(toHex(light.get('--color-primary')!));
+	});
+
+	it('background_color is --color-surface', () => {
+		expect(manifest.background_color).toBe(toHex(light.get('--color-surface')!));
+	});
+});
+
+/*
  * The fluid scale -- #531, written in #540.
  *
  * Every type size and every spacing step is a `clamp()` that climbs the

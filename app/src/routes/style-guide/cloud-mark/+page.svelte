@@ -8,7 +8,7 @@
 	<h1>Cloud mark</h1>
 
 	<section>
-		<h2>Three sizes, one stroke</h2>
+		<h2>Three sizes, one stroke width</h2>
 		<p>
 			Only the width and height vary. An SVG stroke is in viewBox units and scales with the frame,
 			so one <code>stroke-width</code> produces the weight ramp the canvas has to state by hand —
@@ -22,6 +22,18 @@
 				</stack-l>
 			{/each}
 		</cluster-l>
+	</section>
+
+	<section>
+		<h2>Two strokes, and two tones from 28px</h2>
+		<p>
+			The mark is the outer two-lobe line and the inner arch, as <code>docs/marketing/brand.md</code>
+			sets it. At <code>md</code> and <code>lg</code> the mark is 28px tall or more, so the outer line
+			is <code>--color-primary</code> and the inner arch is <code>--color-primary-hover</code>. At
+			<code>sm</code> the two tones are too near to each other to read as two, so the two strokes are
+			<code>--color-primary</code>. The mark takes the tokens of its theme with no other change: use
+			the Dark mode toggle above to see each size in the dark theme.
+		</p>
 	</section>
 
 	<section>

@@ -31,7 +31,7 @@ The second reading is design intent. It is the reason for each rule below, and i
 | [`brand/mark-one-color.svg`](brand/mark-one-color.svg) | The mark in one color. For a mark that is less than 28px tall, and for one-color print.       |
 | [`brand/icon.svg`](brand/icon.svg)                     | The mark on a plum tile. For each square slot: a browser tab, a home screen, a social avatar. |
 
-These files are the reference drawings. The app draws the mark in `CloudMark.svelte` and the lockup in `BrandLockup.svelte`. The change that brings the app, its icons, and the design canvas in step with this sheet is [#1486](https://github.com/markgoho/doula-cloud/issues/1486).
+These files are the reference drawings. The app draws the mark in `CloudMark.svelte` and the lockup in `BrandLockup.svelte`. [#1486](https://github.com/markgoho/doula-cloud/issues/1486) brought the app, its icons, and the design canvas in step with this sheet. The icon that the app and the site serve is a byte-for-byte copy of `brand/icon.svg`, and `scripts/brand-mark.test.ts` fails when a copy is different or when a file holds the path data and does not name this sheet.
 
 ### Rules
 
@@ -110,7 +110,7 @@ The rules:
 
 The sheet adds no color and no typeface that the app does not carry.
 
-Two things are different from the app as it is today, and the two are changes to the app, not departures from it. The mark has two strokes and not three, and a square slot uses the tile. [#1486](https://github.com/markgoho/doula-cloud/issues/1486) makes those changes.
+Two things were different from the app when this sheet was settled, and the two were changes to the app, not departures from it. The mark has two strokes and not three, and a square slot uses the tile. [#1486](https://github.com/markgoho/doula-cloud/issues/1486) made those changes.
 
 One thing is superseded. The teaser prototype on [#362](https://github.com/markgoho/doula-cloud/issues/362) used indigo `#474bb5`, Schibsted Grotesk, and Newsreader, before the app had a design brief. The map ruled one identity, so the teaser build ([#358](https://github.com/markgoho/doula-cloud/issues/358)) takes the tokens, the typeface, and the mark on this sheet.
 
