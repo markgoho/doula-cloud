@@ -5,8 +5,8 @@
 	 * the person at the form selected when she is the only Doula; the
 	 * Credits sentence in place of "Credit cost / Balance after" (#1612);
 	 * a second action that opens her record and does not say "Cancel"
-	 * (#1611). #1611 gives no words for it: "Start work later" is this
-	 * prototype's proposal. The Note has no hint about an approver, because
+	 * (#1611). #1611 gives no words for it. This prototype's proposal says
+	 * where the link goes and what does not occur, GOV.UK's rule for a link. The Note has no hint about an approver, because
 	 * an Owner's request is approved at once (#1512).
 	 */
 	import FormPage from '#lib/components/templates/FormPage.svelte';
@@ -124,7 +124,7 @@
 
 {#snippet formActions()}
 	<Button type="submit" label={submitLabel} />
-	<Link href={to('client')} label="Start work later" variant="secondary" />
+	<Link href={to('client')} label={`Go to ${name}'s record without starting work`} variant="secondary" />
 {/snippet}
 
 <!-- stacked-form:ignore: #1108 -- this form wraps a Template, which stacks its own regions; the `<form>` owns the submit and arranges nothing. -->
