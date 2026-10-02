@@ -5,7 +5,8 @@ import { jsonResponse } from '#lib/testResponse.js';
 import { displayName, type ClientDetail, type EngagementSummary } from '#lib/clientDetail.js';
 import Page from './+page.svelte';
 import { toPageState } from '../../../../../../routeFixture.js';
-import { detail as baseDetail, fixture } from './page.fixture.js';
+import type { RequestDoulas } from '#lib/engagementRequest.js';
+import { agencyRoster, detail as baseDetail, fixture, ownDoula, soloRoster } from './page.fixture.js';
 
 /*
  * The Client this Request is about, and the `page` it reads, both come
@@ -42,6 +43,11 @@ const liveEngagement: EngagementSummary = {
 
 const draftKey = `engagement-request-draft:${clientId}`;
 
+// The person at the form in every fixture session: the first entry of
+// each of the fixture's Doula lists, and `practiceSession`'s own staffId.
+const self = ownDoula.items[0]!;
+const selfLabel = `${self.name} (you)`;
+
 beforeEach(() => {
 	apiFetchWithSession.mockReset();
 	goto.mockReset();
@@ -52,6 +58,7 @@ interface MockOptions {
 	detail?: ClientDetail;
 	roles?: string[];
 	balance?: number;
+	doulas?: RequestDoulas;
 	requestOutcome?: unknown;
 	requestStatus?: number;
 }
@@ -60,16 +67,24 @@ function mockFetches({
 	detail = baseDetail,
 	roles = ['doula'],
 	balance = 3,
+	doulas = ownDoula,
 	requestOutcome,
 	requestStatus = 201
 }: MockOptions = {}) {
 	// The Membership (roles) comes off page.data.session (#835), not a
 	// fetch this mock has to answer.
 	pageState.data = {
-		session: { practiceId, practiceName: 'Riverside Doula Collective', roles, isContractor: false }
+		session: {
+			practiceId,
+			staffId: self.staffId,
+			practiceName: 'Riverside Doula Collective',
+			roles,
+			isContractor: false
+		}
 	};
 	apiFetchWithSession.mockImplementation((path: string) => {
 		if (path.endsWith('/billing')) return Promise.resolve(jsonResponse({ balance, ledger: { items: [], hasMore: false } }));
+		if (path.endsWith('/engagement-request-doulas')) return Promise.resolve(jsonResponse(doulas));
 		if (path.endsWith('/engagement-requests')) {
 			return Promise.resolve(jsonResponse(requestOutcome ?? { requestId: 'request-1', state: 'pending' }, requestStatus));
 		}
@@ -82,6 +97,14 @@ async function setup(options: MockOptions = {}) {
 	await render(Page, {});
 	await expect.element(testPage.getByRole('heading', { level: 1 })).toBeVisible();
 	return options;
+}
+
+/**
+ * The body the form posted to the Request endpoint.
+ */
+function postedBody(): { kind: string; dueDate: string; note: string; doulaStaffId?: string } {
+	const call = apiFetchWithSession.mock.calls.find(([path]) => (path as string).endsWith('/engagement-requests'));
+	return JSON.parse((call![1] as RequestInit).body as string);
 }
 
 describe('the Engagement Request screen', () => {
@@ -130,6 +153,7 @@ describe('the Engagement Request screen', () => {
 	it('refuses a submit with no kind chosen, client-side, before any request', async () => {
 		await setup();
 
+		await testPage.getByLabelText('No Doula yet').click();
 		await testPage.getByRole('button', { name: `Ask to start work with ${clientName}` }).click();
 
 		await expect
@@ -168,14 +192,13 @@ describe('the Engagement Request screen', () => {
 
 		await testPage.getByLabelText('Postpartum').click();
 		await expect.element(testPage.getByText('Optional for postpartum work')).toBeVisible();
+		await testPage.getByLabelText('No Doula yet').click();
 		await testPage.getByRole('button', { name: `Ask to start work with ${clientName}` }).click();
 
 		await expect.poll(() => goto.mock.calls.length).toBeGreaterThan(0);
-		const body: { kind: string; dueDate: string } = JSON.parse(
-			(apiFetchWithSession.mock.calls.find(([path]) => (path as string).endsWith('/engagement-requests'))![1] as RequestInit)
-				.body as string
-		);
-		expect(body).toEqual({ kind: 'postpartum', dueDate: '', note: '' });
+		// "No Doula yet" travels as no doulaStaffId at all, which the BFF reads
+		// as nobody named.
+		expect(postedBody()).toStrictEqual({ kind: 'postpartum', dueDate: '', note: '' });
 	});
 
 	it('warns on a second live Engagement without blocking the submit', async () => {
@@ -185,6 +208,7 @@ describe('the Engagement Request screen', () => {
 
 		await testPage.getByLabelText('Birth').click();
 		await testPage.getByLabelText('Due date').fill('2027-03-01');
+		await testPage.getByLabelText(selfLabel).click();
 		await testPage.getByRole('button', { name: `Ask to start work with ${clientName}` }).click();
 
 		await expect.poll(() => goto.mock.calls.length).toBeGreaterThan(0);
@@ -196,16 +220,18 @@ describe('the Engagement Request screen', () => {
 		await testPage.getByLabelText('Postpartum').click();
 		await testPage.getByLabelText('Due date').fill('2027-03-01');
 		await testPage.getByLabelText('Note').fill('Referred by the hospital');
+		await testPage.getByLabelText(selfLabel).click();
 		await testPage.getByRole('button', { name: `Ask to start work with ${clientName}` }).click();
 
 		await expect.poll(() => goto.mock.calls.length).toBeGreaterThan(0);
 		expect(goto).toHaveBeenCalledWith(clientDetailHref);
 
-		const body: { kind: string; dueDate: string; note: string } = JSON.parse(
-			(apiFetchWithSession.mock.calls.find(([path]) => (path as string).endsWith('/engagement-requests'))![1] as RequestInit)
-				.body as string
-		);
-		expect(body).toEqual({ kind: 'postpartum', dueDate: '2027-03-01', note: 'Referred by the hospital' });
+		expect(postedBody()).toEqual({
+			kind: 'postpartum',
+			dueDate: '2027-03-01',
+			note: 'Referred by the hospital',
+			doulaStaffId: self.staffId
+		});
 	});
 
 	it('surfaces an empty balance with an inline Buy credits path, leaving the typed form in place', async () => {
@@ -213,6 +239,7 @@ describe('the Engagement Request screen', () => {
 
 		await testPage.getByLabelText('Birth').click();
 		await testPage.getByLabelText('Due date').fill('2027-03-01');
+		await testPage.getByLabelText('No Doula yet').click();
 		await testPage.getByRole('button', { name: `Start work with ${clientName}` }).click();
 
 		await expect.element(testPage.getByRole('link', { name: 'Buy credits' })).toBeVisible();
@@ -238,6 +265,7 @@ describe('the Engagement Request screen', () => {
 
 		await testPage.getByLabelText('Birth').click();
 		await testPage.getByLabelText('Due date').fill('2027-03-01');
+		await testPage.getByLabelText('No Doula yet').click();
 		await testPage.getByRole('button', { name: `Ask to start work with ${clientName}` }).click();
 
 		await expect
@@ -257,5 +285,165 @@ describe('the Engagement Request screen', () => {
 		await expect
 			.element(testPage.getByRole('link', { name: 'Cancel' }))
 			.toHaveAttribute('href', clientDetailHref);
+	});
+
+	/*
+	 * "Who is the Doula?" (#1596, ADR-0017's amendment on #1515). The
+	 * three lists are the route fixture's own: the one-Doula Practice, the
+	 * fourteen-Doula agency as its Owner reads it, and a plain Doula's.
+	 */
+	describe('Who is the Doula?', () => {
+		it('opens answered where the person at the form is the only Doula at the Practice', async () => {
+			await setup({ roles: ['owner', 'admin', 'doula'], doulas: soloRoster });
+
+			await expect.element(testPage.getByRole('group', { name: 'Who is the Doula?' })).toBeVisible();
+			await expect.element(testPage.getByLabelText(selfLabel)).toBeChecked();
+			await expect.element(testPage.getByLabelText('No Doula yet')).not.toBeChecked();
+		});
+
+		it('sends the solo Owner herself with no press on the question', async () => {
+			await setup({
+				roles: ['owner', 'admin', 'doula'],
+				doulas: soloRoster,
+				requestOutcome: { requestId: 'request-1', state: 'approved', engagementId: 'engagement-1' }
+			});
+
+			await testPage.getByLabelText('Birth').click();
+			await testPage.getByLabelText('Due date').fill('2027-03-01');
+			await testPage.getByRole('button', { name: `Start work with ${clientName}` }).click();
+
+			await expect.poll(() => goto.mock.calls.length).toBeGreaterThan(0);
+			expect(postedBody().doulaStaffId).toBe(self.staffId);
+		});
+
+		it('lets the only Doula say No Doula yet in one press', async () => {
+			await setup({ roles: ['owner', 'admin', 'doula'], doulas: soloRoster });
+
+			await testPage.getByLabelText('Postpartum').click();
+			await testPage.getByLabelText('No Doula yet').click();
+			await testPage.getByRole('button', { name: `Start work with ${clientName}` }).click();
+
+			await expect.poll(() => goto.mock.calls.length).toBeGreaterThan(0);
+			expect(postedBody().doulaStaffId).toBeUndefined();
+		});
+
+		it('lists every employee Doula for an Owner, herself first and No Doula yet last, with nothing selected', async () => {
+			await setup({ roles: ['owner', 'admin', 'doula'], doulas: agencyRoster });
+
+			const group = testPage.getByRole('group', { name: 'Who is the Doula?' });
+			const radios = group.getByRole('radio');
+			await expect.element(radios.first()).toHaveAccessibleName(selfLabel);
+			await expect.element(radios.last()).toHaveAccessibleName('No Doula yet');
+			expect(radios.elements()).toHaveLength(agencyRoster.items.length + 1);
+			for (const radio of radios.elements()) {
+				expect((radio as HTMLInputElement).checked).toBe(false);
+			}
+			// A colleague carries her name alone: "(you)" marks one person.
+			await expect.element(group.getByLabelText('Hana Kim', { exact: true })).toBeVisible();
+		});
+
+		it('refuses the submit until she chooses, at a Practice with several Doulas', async () => {
+			await setup({ roles: ['owner', 'admin', 'doula'], doulas: agencyRoster });
+
+			await testPage.getByLabelText('Postpartum').click();
+			await testPage.getByRole('button', { name: `Start work with ${clientName}` }).click();
+
+			// GOV.UK's two places: the summary link, and the question itself.
+			await expect
+				.element(testPage.getByRole('link', { name: 'Select who the Doula is, or select No Doula yet' }))
+				.toBeVisible();
+			await expect
+				.element(testPage.getByRole('alert').last())
+				.toHaveTextContent('Select who the Doula is, or select No Doula yet');
+			expect(apiFetchWithSession).not.toHaveBeenCalledWith(
+				expect.stringContaining('/engagement-requests'),
+				expect.anything()
+			);
+		});
+
+		it('sends the colleague an Owner names', async () => {
+			await setup({ roles: ['owner', 'admin', 'doula'], doulas: agencyRoster });
+
+			await testPage.getByLabelText('Postpartum').click();
+			await testPage.getByLabelText('Hana Kim', { exact: true }).click();
+			await testPage.getByRole('button', { name: `Start work with ${clientName}` }).click();
+
+			await expect.poll(() => goto.mock.calls.length).toBeGreaterThan(0);
+			expect(postedBody().doulaStaffId).toBe('staff-7');
+		});
+
+		it('offers a plain Doula herself and No Doula yet, and nobody else, with nothing selected', async () => {
+			await setup({ roles: ['doula'] });
+
+			const radios = testPage.getByRole('group', { name: 'Who is the Doula?' }).getByRole('radio');
+			expect(radios.elements()).toHaveLength(2);
+			await expect.element(testPage.getByLabelText(selfLabel)).not.toBeChecked();
+			await expect.element(testPage.getByLabelText('No Doula yet')).not.toBeChecked();
+		});
+
+		it('offers No Doula yet alone at a Practice with nobody to name', async () => {
+			await setup({ roles: ['owner'], doulas: { items: [], callerIsOnlyDoula: false } });
+
+			const radios = testPage.getByRole('group', { name: 'Who is the Doula?' }).getByRole('radio');
+			expect(radios.elements()).toHaveLength(1);
+			await expect.element(testPage.getByLabelText('No Doula yet')).not.toBeChecked();
+		});
+
+		it('puts a refusal the endpoint names on doulaStaffId against the question', async () => {
+			await setup({
+				roles: ['owner', 'admin', 'doula'],
+				doulas: agencyRoster,
+				requestStatus: 400,
+				requestOutcome: {
+					code: 'INVALID_ARGUMENT',
+					message: 'the named staff member cannot be the Doula on this request: contractor',
+					details: { doulaStaffId: 'Select an employee Doula, or select No Doula yet.' }
+				}
+			});
+
+			await testPage.getByLabelText('Postpartum').click();
+			await testPage.getByLabelText('Hana Kim', { exact: true }).click();
+			await testPage.getByRole('button', { name: `Start work with ${clientName}` }).click();
+
+			await expect
+				.element(testPage.getByRole('link', { name: 'Select an employee Doula, or select No Doula yet.' }))
+				.toHaveAttribute('href', '#engagement-request-doula-staff-1');
+			expect(goto).not.toHaveBeenCalled();
+		});
+
+		it('restores the answer a saved draft holds', async () => {
+			sessionStorage.setItem(
+				draftKey,
+				JSON.stringify({ kind: 'postpartum', dueDate: '', note: '', doula: 'staff-7' })
+			);
+
+			await setup({ roles: ['owner', 'admin', 'doula'], doulas: agencyRoster });
+
+			await expect.element(testPage.getByLabelText('Hana Kim', { exact: true })).toBeChecked();
+		});
+
+		it('drops a saved answer the list no longer offers, and opens as it would with no draft', async () => {
+			sessionStorage.setItem(
+				draftKey,
+				JSON.stringify({ kind: 'postpartum', dueDate: '', note: '', doula: 'staff-gone' })
+			);
+
+			await setup({ roles: ['owner', 'admin', 'doula'], doulas: soloRoster });
+
+			await expect.element(testPage.getByLabelText(selfLabel)).toBeChecked();
+		});
+
+		it('says so when the Doula list cannot be read, rather than drawing a form with no question', async () => {
+			mockFetches();
+			apiFetchWithSession.mockImplementation((path: string) =>
+				path.endsWith('/engagement-request-doulas')
+					? Promise.resolve(jsonResponse('work reaches her as an offer', 403))
+					: Promise.resolve(jsonResponse(baseDetail))
+			);
+			await render(Page, {});
+
+			await expect.element(testPage.getByText('work reaches her as an offer')).toBeVisible();
+			await expect.element(testPage.getByRole('group', { name: 'Kind of work' })).not.toBeInTheDocument();
+		});
 	});
 });
