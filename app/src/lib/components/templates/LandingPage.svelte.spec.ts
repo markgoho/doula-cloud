@@ -147,13 +147,19 @@ describe('LandingPage.svelte in the shell', () => {
 		main.remove();
 	});
 
-	it('starts the welcome at the gutter where the panels stack, level with the doors', async () => {
+	it('centers the welcome block where the panels stack, too', async () => {
 		await page.viewport(600, 900);
-		const { main, greeting } = await setupInShell();
+		const { main, welcome, greeting } = await setupInShell();
 
 		const title = page.getByRole('heading', { level: 1 }).element().getBoundingClientRect();
 		expect(title.top).toBeGreaterThan(greeting.bottom);
-		expect(Math.round(greeting.left)).toBe(Math.round(title.left));
+		// querySelector, case 2 of svelte-tests.md: the block is a layout box
+		// with no role.
+		const block = main.querySelector(':scope .welcome > stack-l')!.getBoundingClientRect();
+		const spaceBefore = block.left - welcome.left;
+		const spaceAfter = welcome.right - block.right;
+		expect(Math.abs(spaceBefore - spaceAfter)).toBeLessThanOrEqual(1);
+		expect(spaceBefore).toBeGreaterThan(100);
 		main.remove();
 	});
 

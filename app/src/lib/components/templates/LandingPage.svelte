@@ -97,28 +97,13 @@
 		   (#1653): the mark and the two lines keep a shared left edge, and
 		   the block as a whole sits in the middle. On a wide window the
 		   panel is far wider than a greeting, and a block held to the left
-		   edge left most of it empty. The doors stay where they are: they
-		   are a column of controls with a width of their own. */
+		   edge left most of it empty. It is centered at every width,
+		   stacked or side by side: one rule, so the welcome reads the same
+		   on a phone as on a wide monitor. The doors stay where they are:
+		   they are a column of controls with a width of their own. */
 		.welcome {
 			align-items: center;
 			background-color: var(--color-surface-bright);
-		}
-
-		/* Centered only where the panels sit side by side. Stacked, the
-		   welcome and the doors are one column and share a left edge, so
-		   the block takes the panel's whole width and its content starts at
-		   the gutter. The switch is the grid's own arithmetic, read off the
-		   same two tokens: two panels fit from `2 * --landing-panel-min`
-		   plus the one-pixel gap. Under that the difference is positive
-		   and the clamp lands on 100%; from it up, it is zero or less and
-		   the block shrinks to its content. No query, so there is no second
-		   copy of the threshold to drift from the grid's. */
-		.welcome > stack-l {
-			min-inline-size: clamp(
-				0%,
-				(2 * var(--landing-panel-min) + var(--border-thin) - 100cqi) * 9999,
-				100%
-			);
 		}
 
 		.doors {
