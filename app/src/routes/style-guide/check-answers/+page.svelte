@@ -1,3 +1,20 @@
+<script module lang="ts">
+	import type { DemoVariant } from '../drag-surface/dragSurface.js';
+
+	interface Properties {
+		isWide?: boolean;
+	}
+
+	/*
+	 * The other state this page renders (#1638, ADR-0025): the answer
+	 * column at the wide cap and not the form-width one. Its own subject
+	 * for the continuum check and the drag surface.
+	 */
+	export const variants: readonly DemoVariant<Properties>[] = [
+		{ name: 'Check answers, with the wide column', props: { isWide: true } }
+	];
+</script>
+
 <script lang="ts">
 	import CheckAnswers, { type AnswerSection } from '#lib/components/templates/CheckAnswers.svelte';
 	import type { JourneyStep } from '#lib/components/organisms/StepRail.svelte';
@@ -90,7 +107,7 @@
 		}
 	];
 
-	let isWide = $state(false);
+	let { isWide = false }: Properties = $props();
 
 	const noop = () => {};
 </script>
@@ -99,15 +116,6 @@
 	<Button label="Save this Client and send the portal invite" type="submit" onClick={noop} />
 	<Link href={here} label="Save and come back later" />
 {/snippet}
-
-<div class="controls">
-	<Button
-		label={isWide ? 'Show the form-width column' : 'Show the wide column'}
-		variant="secondary"
-		size="sm"
-		onClick={() => (isWide = !isWide)}
-	/>
-</div>
 
 <CheckAnswers
 	journey="Adding a Client to Highland Midwifery"
@@ -119,15 +127,3 @@
 	{isWide}
 	{actions}
 />
-
-<style>
-	@layer components {
-		/* Not part of the Template -- a switch so both column widths can be
-		   seen without editing this file. */
-		.controls {
-			padding: var(--space-3) var(--space-4);
-			border-block-end: var(--border-thin) solid var(--color-outline-variant);
-			background-color: var(--color-surface-container);
-		}
-	}
-</style>

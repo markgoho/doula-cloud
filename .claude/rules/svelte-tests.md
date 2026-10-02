@@ -275,6 +275,35 @@ A `+layout.svelte` or `+error.svelte` spec sitting in a directory that
 happens to hold a `page.fixture.ts` is not covered by this rule: its
 subject is not the route the fixture describes.
 
+## A component demo declares its other states as `variants`, and has no switch of its own
+
+A component's fixture is its style-guide page (`CONTEXT.md`). The continuum check mounts that page and never clicks, so a state the page keeps behind a button of its own is swept never ([#1638](https://github.com/markgoho/doula-cloud/issues/1638), ADR-0025's Fixtures section). A page that renders more than one state declares each other one the way a route fixture declares a session: the state is a prop of the page, the default value is the page as it stands, and the page exports `variants` from its `<script module>`.
+
+```svelte
+<script module lang="ts">
+  import type { DemoVariant } from '../drag-surface/dragSurface.js';
+
+  interface Properties {
+    isEmpty?: boolean;
+  }
+
+  export const variants: readonly DemoVariant<Properties>[] = [
+    { name: 'Overview hub, empty', props: { isEmpty: true } }
+  ];
+</script>
+
+<script lang="ts">
+  let { isEmpty = false }: Properties = $props();
+</script>
+```
+
+- **`name` is the whole name of the subject**, unique across every subject, route and component: the check titles its `it` with it, `KNOWN_BROKEN` is keyed on it, and the drag surface's picker offers it. Name what varies.
+- **Type the variants against the page's own props type.** `DemoVariant` has no default for that type on purpose. Svelte drops a prop a component does not declare and says nothing, so a mistyped key would mount the page as it stands a second time under a new name, the check would stay green, and the state would still be swept never (the route form of this is #928).
+- **No button.** A page with two switches has four states and would declare three. Delete the switch; the picker on the drag surface is where a person selects a state. `demoStates.spec.ts` fails the build on a style-guide page whose own `onClick` writes the page's state, unless `CLICK_ONLY` in that spec names the page with a reason, and it fails on a stale entry too.
+- **Declare the states that render differently, not each value.** A state whose tree is a strict subset of another's, or the same tree with a shorter string in it, realizes nothing new. That is the reason the Landing page's greeting switch is in `CLICK_ONLY` and not in `variants`.
+- **`toDemos` is the one reader of the export**, called by `continuum.svelte.spec.ts`, `floor.svelte.spec.ts` and the drag surface. It gives the page as it stands first, then one subject per variant, each with the page's slug. Nothing else walks `variants`.
+- **A modal cannot be a variant.** A `<dialog>` opened with `showModal()` is in the top layer and is sized by the window, not by the frame ([#1674](https://github.com/markgoho/doula-cloud/issues/1674)).
+
 ## A fixture's row set must hold every state a field renders differently
 
 #537's hostile-value rule picks what to put inside one state — the

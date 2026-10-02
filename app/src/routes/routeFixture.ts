@@ -1,10 +1,10 @@
 /*
  * What a route needs to be put in front of the continuum check (#570).
  *
- * A component demo needs nothing: it is a Svelte component with no props,
- * so `toDemos` can hand the sweep a whole style-guide page as it stands.
- * A route is not that. It reads `page.params` out of `$app/state`, it
- * takes `data` from its own `load`, and it fetches through
+ * A component demo needs almost nothing: it is a Svelte component whose
+ * only props select one of its own states (#1638), so `toDemos` can hand
+ * the sweep a whole style-guide page. A route is not that. It reads
+ * `page.params` out of `$app/state`, it takes `data` from its own `load`, and it fetches through
  * `#lib/api.js` in `onMount` -- the reach trial on #551 needed a
  * hand-written harness for exactly this reason, and the harness it needed
  * was written for one route.
@@ -282,7 +282,30 @@ returned as itself, unchanged and identical.
 export function toSweptFixtures<RouteParameters extends Record<string, string>>(
 	fixture: RouteFixture<RouteParameters>
 ): readonly RouteFixture<RouteParameters>[] {
-	if (!fixture.variants) return [fixture];
-	const { variants, ...base } = fixture;
+	return toSweptSubjects(fixture);
+}
+
+/**
+What a variant does to the declaration it sits on, for both tiers of the
+check ([#1638](https://github.com/markgoho/doula-cloud/issues/1638)): the
+declaration itself first, then one shallow override of it per variant.
+
+A component demo declares `variants` too -- its style-guide page is its
+fixture (CONTEXT.md), and a page that renders an empty state and an error
+state is several subjects behind one page the same way a route is several
+behind one path. It cannot be a `RouteFixture`: it has no `params`, no
+`url` and no `readyText` to state. What the two tiers do share is this
+spread, so it is written once rather than once in `toSweptFixtures` and
+again in the drag surface's `toDemos`, where the second copy would be free
+to merge where this one replaces.
+
+Each tier still has one reader of its own -- `toSweptFixtures` for a
+route, `toDemos` for a component -- and nothing else calls this.
+*/
+export function toSweptSubjects<Declared extends { readonly variants?: readonly object[] }>(
+	declared: Declared
+): readonly Omit<Declared, 'variants'>[] {
+	if (!declared.variants) return [declared];
+	const { variants, ...base } = declared;
 	return [base, ...variants.map((variant) => ({ ...base, ...variant }))];
 }

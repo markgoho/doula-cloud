@@ -58,6 +58,34 @@ describe('toDemos', () => {
 	it('drops a registered page that has no module', () => {
 		expect(toDemos({}, [{ name: 'Button', slug: 'button' }])).toEqual([]);
 	});
+
+	/*
+	 * A demo page that renders more than one state declares each other one
+	 * as a variant (#1638), and `toDemos` is the one reader of that export:
+	 * the continuum check, the floor check and the picker all call it, so a
+	 * state that is swept is a state a person can drag, under one name.
+	 */
+	it('offers one entry per state a page declares, the page as it stands first', () => {
+		const demoList = toDemos(
+			{
+				'../overview-hub/+page.svelte': {
+					default: stub,
+					variants: [{ name: 'Overview hub, empty', props: { isEmpty: true } }]
+				}
+			},
+			[{ name: 'Overview hub', slug: 'overview-hub' }]
+		);
+
+		expect(demoList).toEqual([
+			{ name: 'Overview hub', slug: 'overview-hub', component: stub },
+			{
+				name: 'Overview hub, empty',
+				slug: 'overview-hub',
+				component: stub,
+				props: { isEmpty: true }
+			}
+		]);
+	});
 });
 
 describe('toRouteDemos', () => {
@@ -128,6 +156,17 @@ describe('toRouteDemos', () => {
 		});
 
 		expect(doula.fixture).toMatchObject({ readyText: 'Your account' });
+	});
+
+	// One field for both tiers: the surface spreads `demo.props` and never
+	// asks whether the subject is a route.
+	it("hands each entry its own fixture's props", () => {
+		const data = { invoices: [] };
+		const [demo] = toRouteDemos({
+			'../../account/page.fixture.ts': { fixture: routeFixture({ props: { data } }) }
+		});
+
+		expect(demo.props).toEqual({ data });
 	});
 });
 

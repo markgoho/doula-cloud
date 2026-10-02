@@ -1,5 +1,10 @@
 import type { Component } from 'svelte';
-import { toRoutePath, toSweptFixtures, type RouteFixture } from '../../routeFixture.js';
+import {
+	toRoutePath,
+	toSweptFixtures,
+	toSweptSubjects,
+	type RouteFixture
+} from '../../routeFixture.js';
 
 /*
  * The demo half of the drag surface (CONTEXT.md): the list of components a
@@ -22,16 +27,47 @@ export interface Demo {
 	slug: string;
 	component: Component;
 	/*
-	 * Present only for a route. A component demo needs nothing: it is a
-	 * Svelte component with no props. A route needs the environment its
-	 * fixture describes -- props its `load` would have returned, the
+	 * What the subject is mounted with, for both tiers: the props a route's
+	 * `load` would have returned, or the props that select one state of a
+	 * component demo (#1638). The page as it stands has none.
+	 */
+	props?: Readonly<Record<string, unknown>>;
+	/*
+	 * Present only for a route. A component demo needs nothing more than
+	 * `props`. A route needs the environment its fixture describes -- the
 	 * `page` its own code reads, and answers to the fetches it makes.
 	 */
 	fixture?: RouteFixture;
 }
 
+/**
+One other state a component demo renders, named as its own subject
+([#1638](https://github.com/markgoho/doula-cloud/issues/1638)) -- a
+`RouteVariant` (`routeFixture.ts`) cut down to the two fields a component
+has.
+
+`name` is the whole name, not a suffix, and unique across every subject:
+the check titles its `it` with it and the picker keys on it. Name what
+varies -- "Overview hub, empty".
+
+`Properties` is the demo page's own props type and has no default, so a
+variant is checked against the props its page really declares. Svelte
+drops a prop a component does not declare without a word, and a variant
+with a mistyped key would mount the page as it stands a second time under
+a new name -- the silent failure #928 recorded for a route.
+*/
+export interface DemoVariant<Properties> {
+	readonly name: string;
+	readonly props: Readonly<Properties>;
+}
+
 export interface PageModule {
 	default: Component;
+	/**
+	The other states this page renders, exported from its `<script module>`.
+	Read through `toDemos` and nowhere else.
+	*/
+	variants?: readonly DemoVariant<Record<string, unknown>>[];
 }
 
 /**
@@ -45,12 +81,27 @@ export function toDemos(
 	modules: Record<string, PageModule>,
 	pages: readonly { name: string; slug: string }[]
 ): Demo[] {
-	const componentBySlug = new Map(
-		Object.entries(modules).map(([modulePath, module]) => [toSlug(modulePath), module.default])
+	const moduleBySlug = new Map(
+		Object.entries(modules).map(([modulePath, module]) => [toSlug(modulePath), module])
 	);
+	/*
+	 * A page that renders more than one state offers one entry per state
+	 * (#1638), the page as it stands first -- `floor.svelte.spec.ts` finds a
+	 * demo by slug and must keep getting that one. Every state of a page
+	 * keeps the page's slug, as every branch of a route keeps its path.
+	 *
+	 * This is the one reader of a page's `variants`, as `toSweptFixtures` is
+	 * of a route's, and the two share the expansion itself.
+	 */
 	return pages.flatMap((page) => {
-		const component = componentBySlug.get(page.slug);
-		return component ? [{ name: page.name, slug: page.slug, component }] : [];
+		const module = moduleBySlug.get(page.slug);
+		if (!module) return [];
+		return toSweptSubjects({
+			name: page.name,
+			slug: page.slug,
+			component: module.default,
+			variants: module.variants ?? []
+		});
 	});
 }
 
@@ -77,6 +128,7 @@ export function toRouteDemos(modules: Record<string, { fixture: RouteFixture }>)
 				name: fixture.name,
 				slug: toRoutePath(modulePath),
 				component: fixture.component as Component,
+				props: fixture.props,
 				fixture
 			}))
 		)

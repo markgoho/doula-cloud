@@ -1,6 +1,23 @@
+<script module lang="ts">
+	import type { DemoVariant } from '../drag-surface/dragSurface.js';
+
+	interface Properties {
+		shown?: 'content' | 'loading' | 'loadError';
+	}
+
+	/*
+	 * The other states this page renders (#1638, ADR-0025), each its own
+	 * subject for the continuum check and the drag surface. Each one
+	 * replaces the content, so one mount cannot hold two of them.
+	 */
+	export const variants: readonly DemoVariant<Properties>[] = [
+		{ name: 'List page, loading', props: { shown: 'loading' } },
+		{ name: 'List page, with a load error', props: { shown: 'loadError' } }
+	];
+</script>
+
 <script lang="ts">
 	import ListPage from '#lib/components/templates/ListPage.svelte';
-	import Button from '#lib/components/atoms/Button.svelte';
 	import DataTable from '#lib/components/organisms/DataTable.svelte';
 	import Link from '#lib/components/atoms/Link.svelte';
 	import Text from '#lib/components/atoms/Text.svelte';
@@ -36,7 +53,7 @@
 		}
 	];
 
-	let state = $state<'content' | 'loading' | 'loadError'>('content');
+	let { shown = 'content' }: Properties = $props();
 </script>
 
 {#snippet intro()}
@@ -53,28 +70,10 @@
 	<DataTable {columns} {rows} emptyMessage="No Staff yet." />
 {/snippet}
 
-<div class="controls">
-	<Button label="Content" variant="secondary" size="sm" onClick={() => (state = 'content')} />
-	<Button label="Loading" variant="secondary" size="sm" onClick={() => (state = 'loading')} />
-	<Button label="Load error" variant="secondary" size="sm" onClick={() => (state = 'loadError')} />
-</div>
-
-{#if state === 'loading'}
+{#if shown === 'loading'}
 	<ListPage title="Staff" {intro} {actions} {content} loading="Loading Staff" />
-{:else if state === 'loadError'}
+{:else if shown === 'loadError'}
 	<ListPage title="Staff" {intro} {actions} {content} loadError="Failed to load Staff" />
 {:else}
 	<ListPage title="Staff" {intro} {actions} {content} />
 {/if}
-
-<style>
-	@layer components {
-		/* Not part of the Template -- a switch so all three states of the
-		   page can be seen without editing this file. */
-		.controls {
-			padding: var(--space-3) var(--space-4);
-			border-block-end: var(--border-thin) solid var(--color-outline-variant);
-			background-color: var(--color-surface-container);
-		}
-	}
-</style>

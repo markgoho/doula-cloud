@@ -151,7 +151,7 @@
 			     in place would keep the first one's data on screen. -->
 			{#key selectedName}
 				{#if selected}
-					<selected.component {...selected.fixture?.props ?? {}} />
+					<selected.component {...selected.props ?? {}} />
 				{/if}
 			{/key}
 		</div>

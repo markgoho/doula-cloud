@@ -1,3 +1,23 @@
+<script module lang="ts">
+	import type { DemoVariant } from '../drag-surface/dragSurface.js';
+
+	interface Properties {
+		hasError?: boolean;
+		isPickerShown?: boolean;
+	}
+
+	/*
+	 * The other states this page renders (#1638, ADR-0025), each its own
+	 * subject for the continuum check and the drag surface. The error state
+	 * adds the summary and a message below each field; the picker adds the
+	 * list `content` carries after a sign-in with more than one Membership.
+	 */
+	export const variants: readonly DemoVariant<Properties>[] = [
+		{ name: 'Entry page, with errors', props: { hasError: true } },
+		{ name: 'Entry page, with the Practice picker', props: { isPickerShown: true } }
+	];
+</script>
+
 <script lang="ts">
 	/*
 	 * Modeled on `(signed-out)/login`, the plainest of the five real
@@ -20,8 +40,8 @@
 
 	let email = $state('anne-marie.ochieng-whitfield@highland-midwifery-group.example.org');
 	let password = $state('');
-	let hasError = $state(false);
-	let isPickerShown = $state(false);
+
+	let { hasError = false, isPickerShown = false }: Properties = $props();
 
 	const noop = () => {};
 </script>
@@ -83,33 +103,4 @@
 	{/if}
 {/snippet}
 
-<div class="controls">
-	<Button
-		label={hasError ? 'Hide the error state' : 'Show the error state'}
-		variant="secondary"
-		size="sm"
-		onClick={() => (hasError = !hasError)}
-	/>
-	<Button
-		label={isPickerShown ? 'Hide the picker' : 'Show the picker'}
-		variant="secondary"
-		size="sm"
-		onClick={() => (isPickerShown = !isPickerShown)}
-	/>
-</div>
-
 <EntryPage title="Log in" errorSummary={hasError ? errorSummary : undefined} {content} />
-
-<style>
-	@layer components {
-		/* Not part of the Template -- switches so the two states can be seen
-		   without editing this file. */
-		.controls {
-			display: flex;
-			gap: var(--space-3);
-			padding: var(--space-3) var(--space-4);
-			border-block-end: var(--border-thin) solid var(--color-outline-variant);
-			background-color: var(--color-surface-container);
-		}
-	}
-</style>
