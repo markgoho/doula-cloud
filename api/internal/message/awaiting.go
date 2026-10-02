@@ -41,7 +41,12 @@ type AwaitingReplyResponse struct {
 // per-person while this roll-up is Practice-scoped. Narrowed by the same
 // attachment rule staffauth.Reader.CanAccessEngagement enforces for
 // ListHandler above -- a contractor Doula sees only an Engagement she holds
-// an open, granted attachment on -- expressed here as the same
+// an open, granted attachment on -- and for the same person: the
+// contractor who holds neither the Owner role nor the Admin role
+// (staffauth.Reader.IsAmbientContractor). An Owner or an Admin whose
+// Employment type is contractor reaches the whole Practice, so she reads
+// the whole list (#1635; #742 is the same rule on the Clients list). The
+// narrowing is expressed here as the same
 // engagement_attachments predicate that check runs, following
 // client.listAttachedClients' own two-query-branch shape for a
 // Practice-wide, single-subject-kind list narrowed for a contractor,
@@ -76,7 +81,7 @@ func AwaitingReplyHandler() http.Handler {
 
 		var items []AwaitingReplyItem
 		var err error
-		if reader.IsContractor() {
+		if reader.IsAmbientContractor() {
 			items, err = listAttachedAwaitingReply(r.Context(), tx, practiceID, staffID, after)
 		} else {
 			items, err = listAwaitingReply(r.Context(), tx, practiceID, after)

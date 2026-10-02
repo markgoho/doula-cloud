@@ -504,7 +504,12 @@ func shapeOpenEngagement(reader staffauth.Reader, raw rawOpenEngagement) OpenEng
 			oe.InvoiceAmountCents = &amount
 		}
 	}
-	if reader.IsContractor() && raw.feeCents.Valid {
+	// Bare IsContractor on purpose (#1635). This decides whose fee is
+	// shown, and it decides no reach: an Owner or an Admin who is a
+	// contractor has an agreed fee of her own on an Engagement she holds a
+	// granted attachment on, and she reads it (fetchOpenEngagements'
+	// comment, #742). IsAmbientContractor here would hide her own fee.
+	if reader.IsContractor() && raw.feeCents.Valid { //nolint:forbidigo // her own fee, not reach: an Owner or an Admin who is a contractor reads it too
 		fee := raw.feeCents.Int64
 		oe.FeeCents = &fee
 	}

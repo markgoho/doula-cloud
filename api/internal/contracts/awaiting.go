@@ -67,6 +67,13 @@ type AwaitingResponse struct {
 // sends a Contract and then waits on the signature, so she needs this
 // list of what she is waiting on.
 //
+// The contractor the list narrows for is the one who holds neither the
+// Owner role nor the Admin role: staffauth.Reader.IsAmbientContractor,
+// the same predicate staffauth.Reader.CanAccessEngagement uses. An Owner
+// or an Admin whose Employment type is contractor reaches the whole
+// Practice, so she reads the whole list (#1635; #742 is the same rule on
+// the Clients list).
+//
 // Ordered oldest first, which is what makes it a work list rather than a
 // feed: the Contract that has been waiting longest is the one that has
 // cost the most, and it belongs at the top.
@@ -97,7 +104,7 @@ func AwaitingSignatureHandler() http.Handler {
 
 		var list []AwaitingItem
 		var err error
-		if reader.IsContractor() {
+		if reader.IsAmbientContractor() {
 			list, err = listAttachedAwaiting(r.Context(), tx, practiceID, staffID, after)
 		} else {
 			list, err = listAwaiting(r.Context(), tx, practiceID, after)

@@ -50,10 +50,15 @@ func (r Reader) EmploymentType() string {
 }
 
 // IsContractor reports whether the Reader's caller's membership at the
-// resolved Practice is employment_type = 'contractor' -- the axis
-// ADR-0008 gates ambient reach on. False for 'employee', including every
-// Owner and Admin membership today (#227: employee means inside the
-// business, not on a payroll).
+// resolved Practice is employment_type = 'contractor'. It is the
+// Employment type as a fact, and it is NOT a reach rule: Employment type
+// is independent of roles (CONTEXT.md), so an Owner or an Admin may be a
+// contractor, and she reaches the whole Practice. A caller that decides
+// what a person reaches (a narrowed list, a refused read or write) uses
+// IsAmbientContractor. A bare call here has narrowed an Owner to her own
+// Attachments two times (#742, #1635), so api/.golangci.yml's forbidigo
+// rule refuses a new one: a caller that reads the fact on purpose
+// carries //nolint:forbidigo and says what it decides.
 func (r Reader) IsContractor() bool {
 	return r.employmentType == "contractor"
 }
@@ -74,5 +79,5 @@ func (r Reader) IsOwnerOrAdmin() bool {
 // not owner and not admin" predicate that used to be copied at each call
 // site that needed it.
 func (r Reader) IsAmbientContractor() bool {
-	return r.IsContractor() && !r.IsOwnerOrAdmin()
+	return r.IsContractor() && !r.IsOwnerOrAdmin() //nolint:forbidigo // this is the reach predicate itself: the Employment type fact, joined with the roles
 }

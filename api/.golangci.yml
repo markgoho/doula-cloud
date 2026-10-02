@@ -53,9 +53,24 @@ linters:
     # inline reason, the same shape the coverage gate's own exceptions
     # take.
     forbidigo:
+      analyze-types: true
       forbid:
         - pattern: '^time\.Now$'
           msg: "read time through clock.Now(ctx) or an injected clock.Clock (api/internal/clock) instead of calling time.Now() directly -- see issue #773"
+        # #1635: a bare staffauth.Reader.IsContractor() narrowed an Owner
+        # who is a contractor to her own Attachments two times (#742 on
+        # the Clients list, #1635 on the two awaiting lists). Employment
+        # type is independent of roles, so reach is decided by
+        # IsAmbientContractor. A call that reads the Employment type as a
+        # fact on purpose (the session's isContractor field, the reader's
+        # own fee) carries //nolint:forbidigo and says what it decides.
+        # analyze-types below is what lets this name the method by its
+        # type, whatever the variable is called; attachment.IsContractor
+        # (a constant) and a response's IsContractor field are other
+        # things and do not match.
+        - pattern: '^staffauth\.Reader\.IsContractor$'
+          pkg: '^doula-cloud/api/internal/staffauth$'
+          msg: "decide reach with staffauth.Reader.IsAmbientContractor(): an Owner or an Admin may be a contractor and reaches the whole Practice. If this call reads the Employment type as a fact, add //nolint:forbidigo with the reason -- see issue #1635"
   exclusions:
     rules:
       # Deferred Close()/Rollback() on response bodies, rows, and
