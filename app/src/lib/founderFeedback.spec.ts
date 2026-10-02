@@ -64,6 +64,10 @@ describe('kindLabel', () => {
 	] as const)('reads %s as the sentence the sender chose: %s', (kind, expected) => {
 		expect(kindLabel(kind)).toBe(expected);
 	});
+
+	it('prints a kind this build does not know as its own value', () => {
+		expect(kindLabel('a_newer_kind' as Parameters<typeof kindLabel>[0])).toBe('a_newer_kind');
+	});
 });
 
 describe('issueLabel', () => {
@@ -124,10 +128,11 @@ describe('pieceFacts', () => {
 			...piece,
 			role: '',
 			practiceName: undefined,
-			sender: { kind: 'staff', email: 'anne-marie@example.test' }
+			sender: { kind: 'staff', email: '' }
 		});
 
 		expect(valueOf(facts, 'Sender')).toBe('No name on record');
+		expect(valueOf(facts, 'Email')).toBe('No address on record');
 
 		expect(valueOf(facts, 'Practice')).toBe('None: sent from a screen outside any Practice');
 		expect(valueOf(facts, 'Role')).toBe('No role assigned');

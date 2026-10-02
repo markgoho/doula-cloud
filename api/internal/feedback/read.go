@@ -83,6 +83,12 @@ type Sender struct {
 
 // Piece is every stored field of one piece of Feedback (#1526's own AC),
 // as the founder read page shows it.
+//
+// One column is left out on purpose: client_id. #1526 names the fields
+// and names a Portal sender by her Portal Account's sign-in address, not
+// by her Client record. The id alone tells the founder nothing, and
+// resolving it to her name would put more of a Practice's record in
+// front of him than the read needs.
 type Piece struct {
 	ID          string    `json:"id"`
 	Kind        string    `json:"kind"`

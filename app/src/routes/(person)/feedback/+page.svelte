@@ -86,7 +86,13 @@
 {/snippet}
 
 {#snippet content()}
-	<stack-l space="var(--space-4)">
+	<!--
+		data-sveltekit-preload-data="off" on both lists. app.html preloads a
+		link's data on hover, and a row's link loads a piece -- the request
+		the BFF records as a read. A hover is not a read, so no link here
+		may load ahead of the click.
+	-->
+	<stack-l space="var(--space-4)" data-sveltekit-preload-data="off">
 		<Heading level={2} variant="section" text="Issue not opened" />
 		<DataTable
 			columns={unopenedColumns}
@@ -102,7 +108,7 @@
 		{/if}
 	</stack-l>
 
-	<stack-l space="var(--space-4)">
+	<stack-l space="var(--space-4)" data-sveltekit-preload-data="off">
 		<Heading level={2} variant="section" text="All feedback" />
 		<DataTable
 			{columns}

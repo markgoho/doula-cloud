@@ -97,10 +97,12 @@ export async function loadFeedbackPage(fetcher: Fetcher, cursor?: string, isUnop
 }
 
 /**
-The sentence the sender chose, exactly as the form offered it.
+The sentence the sender chose, exactly as the form offered it. A kind
+this build does not know -- the BFF gained one first -- prints as its own
+value, so one new piece cannot take the whole list down.
 */
 export function kindLabel(kind: Kind): string {
-	return kindOptions.find((option) => option.value === kind)!.label;
+	return kindOptions.find((option) => option.value === kind)?.label ?? kind;
 }
 
 /**
@@ -147,7 +149,7 @@ export function pieceFacts(piece: FeedbackPiece): { label: string; value: string
 			label: 'Sender',
 			value: piece.sender.kind === 'client' ? 'A Client, named by her sign-in address' : (piece.sender.name ?? 'No name on record')
 		},
-		{ label: 'Email', value: piece.sender.email },
+		{ label: 'Email', value: piece.sender.email || 'No address on record' },
 		{ label: 'Role', value: piece.role || 'No role assigned' },
 		{ label: 'Practice', value: piece.practiceName ?? 'None: sent from a screen outside any Practice' },
 		{ label: 'Page', value: piece.pageUrl },

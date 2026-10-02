@@ -63,7 +63,7 @@ RETURNS TABLE (sender_name text, sender_email text, practice_name text)
 LANGUAGE sql
 STABLE
 SECURITY DEFINER
-SET search_path = public
+SET search_path = public, pg_temp
 AS $$
     SELECT s.name, COALESCE(s.email, pa.sign_in_address), p.name
       FROM feedback f

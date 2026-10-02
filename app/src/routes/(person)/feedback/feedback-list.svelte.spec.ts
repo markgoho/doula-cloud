@@ -80,6 +80,25 @@ describe('the founder feedback list (#1526)', () => {
 			.toHaveAttribute('href', '/feedback/feedback-1');
 	});
 
+	/*
+	 * The app preloads a link's data on hover (app.html), and loading a
+	 * piece is the request the BFF records as a read. A hover is not a
+	 * read, so every row link in both tables has to sit under an opt-out.
+	 *
+	 * `closest` on a data attribute: the querySelector exception for a
+	 * fact with no accessible signal. Preloading is plumbing SvelteKit
+	 * reads off the DOM; no role or name carries it.
+	 */
+	it('never preloads a piece on hover, because loading one is what records the read', async () => {
+		await setup();
+
+		const links = testPage.getByRole('link').elements();
+		expect(links).toHaveLength(6);
+		for (const link of links) {
+			expect(link.closest<HTMLElement>('[data-sveltekit-preload-data]')?.dataset.sveltekitPreloadData).toBe('off');
+		}
+	});
+
 	it('says so in both tables when nothing has been sent', async () => {
 		await setup(empty.props!.data as FeedbackListData);
 

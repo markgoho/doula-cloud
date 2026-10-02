@@ -5,8 +5,10 @@ import type { PageLoad } from './$types';
 
 /**
  * One piece of Feedback (#1526). This request is the read: the BFF
- * writes its `feedback_reads` row before it answers, so the page makes
- * it exactly once per open and never again to refresh.
+ * writes its `feedback_reads` row before it answers, every time this
+ * `load` runs. So nothing may run it but an open of the page -- the
+ * list's links opt out of SvelteKit's hover preload for that reason
+ * (`feedback/+page.svelte`), and this page never re-fetches to refresh.
  */
 export const load: PageLoad = async ({ params, url }): Promise<{ piece: FeedbackPiece }> => {
 	const response = await apiFetch(feedbackPiecePath(params.feedbackId));
