@@ -28,7 +28,7 @@
 
 import type { Fetcher } from './fetcher.js';
 
-import { apiErrorMessage } from './api.js';
+import { apiErrorMessage } from './apiErrorMessage.js';
 import { refusalOrConfirmable, type Refusal } from './formErrors.js';
 import type { CursorPage } from './paginatedList.svelte.js';
 

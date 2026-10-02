@@ -7,8 +7,8 @@ import (
 	"time"
 
 	"doula-cloud/api/internal/activity"
-	"doula-cloud/api/internal/client"
 	"doula-cloud/api/internal/ianazone"
+	"doula-cloud/api/internal/personname"
 )
 
 // practiceSettings is everything the Practice itself contributes to a
@@ -149,7 +149,7 @@ func loadEngagements(ctx context.Context, tx *sql.Tx, practiceID string, setting
 			}
 			out = append(out, engagementOnCall{
 				id:         id,
-				clientName: client.PreferredName(givenName, preferredName.String),
+				clientName: personname.Preferred(givenName, preferredName.String),
 				dueDate:    nullString(dueDate),
 				rule:       settings.rule.Resolve(nullString(overrideRule), week),
 			})

@@ -1,5 +1,6 @@
 import { redirect, error } from '@sveltejs/kit';
-import { apiFetch, apiErrorMessage } from '#lib/api.js';
+import { apiFetch } from '#lib/api.js';
+import { apiErrorMessage } from '#lib/apiErrorMessage.js';
 import { portalLoginAfterSessionEnded } from '#lib/sessionEnded.js';
 import type { LayoutLoad } from './$types';
 

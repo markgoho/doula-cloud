@@ -8,9 +8,9 @@ import (
 	"time"
 
 	"doula-cloud/api/internal/apierr"
-	"doula-cloud/api/internal/client"
 	"doula-cloud/api/internal/clock"
 	"doula-cloud/api/internal/pagecursor"
+	"doula-cloud/api/internal/personname"
 	"doula-cloud/api/internal/staffauth"
 )
 
@@ -305,7 +305,7 @@ func listScheduledVisits(
 			// coverage:ignore reason: row scan failure, not exercised by unit tests
 			return nil, fmt.Errorf("visit: scan practice schedule row: %w", err)
 		}
-		item.ClientName = client.PreferredName(givenName, preferredName.String)
+		item.ClientName = personname.Preferred(givenName, preferredName.String)
 		list = append(list, item)
 	}
 	if err := rows.Err(); err != nil {

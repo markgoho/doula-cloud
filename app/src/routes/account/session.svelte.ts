@@ -1,4 +1,5 @@
-import { apiErrorMessage, apiFetchWithSession } from '#lib/api.js';
+import { apiFetchWithSession } from '#lib/api.js';
+import { apiErrorMessage } from '#lib/apiErrorMessage.js';
 import type { SessionInfo } from '#lib/landing.js';
 
 export type AccountSessionResult = { ok: true; session: SessionInfo } | { ok: false; message: string };

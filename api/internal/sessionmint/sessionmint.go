@@ -12,24 +12,25 @@
 // (ADR-0026).
 //
 // It could not live in authn (authn importing sessionnotice, which
-// sessionevict needs, would cycle back through authn) or in session
+// eviction needs, would cycle back through authn) or in session
 // (session already imports staffauth for staffauth.GatedRouter, and
-// three of the seven callers live in staffauth). sessionevict already
-// imports exactly what eviction needs and is imported by every one of
-// the seven callers' packages without looping back, so this package
-// sits beside it rather than inside authn or session, and composes it
-// rather than duplicating it.
+// three of the seven callers live in staffauth). This package imports
+// exactly what eviction needs and is imported by every one of the seven
+// callers' packages without looping back, so eviction's own join of
+// authn and sessionnotice -- evict, below -- lives here too: Issue is
+// its only caller.
 package sessionmint
 
 import (
 	"context"
 	"database/sql"
 	"net/http"
+	"time"
 
 	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/authn"
 	"doula-cloud/api/internal/clock"
-	"doula-cloud/api/internal/sessionevict"
+	"doula-cloud/api/internal/sessionnotice"
 	"doula-cloud/api/internal/tasknudge"
 )
 
@@ -168,7 +169,7 @@ func Issue(w http.ResponseWriter, r *http.Request, tx *sql.Tx, enq tasknudge.Enq
 		return writeRefusal(w, tx, result.Refusal)
 	}
 
-	queued, ok := sessionevict.Apply(w, r, tx, adapter.Tier, now)
+	queued, ok := evict(w, r, tx, adapter.Tier, now)
 	if !ok {
 		return false
 	}
@@ -240,6 +241,56 @@ func IssueFromDB(w http.ResponseWriter, r *http.Request, db *sql.DB, enq tasknud
 	}()
 	committed = Issue(w, r, tx, enq, adapter, step, finish)
 	return committed
+}
+
+// evict is #610's cross-population eviction: it refuses, or evicts, the
+// live session in the population other than minting. The order is
+// refuse, then delete, then queue, and neither package that owns half of
+// it can host the whole. authn owns the session store and the tier test
+// but must not queue mail; sessionnotice owns the outbox but must not
+// write HTTP refusals. See authn/eviction.go for why an eviction is
+// disclosed rather than prevented, and what the refusal is allowed to
+// say.
+//
+// ok=false means evict has already written the response and Issue must
+// return without minting: either the caller holds a session in the other
+// population and has not confirmed losing it (409, see
+// authn.RefuseUnconfirmed), or the database could not be read.
+//
+// ok=true with queued=true means a session was evicted and a notice for
+// it is now pending, so Issue nudges the session-notice outbox once its
+// own commit succeeds. queued=false means either nothing was evicted or
+// the evicted session was a Client's, which sends no mail --
+// sessionnotice.QueueSessionEvicted records why.
+func evict(w http.ResponseWriter, r *http.Request, tx *sql.Tx, minting authn.Tier, now time.Time) (queued bool, ok bool) {
+	ev, found, err := authn.EvictionFor(r.Context(), tx, r, minting, now)
+	if err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+		return false, false
+	}
+	if !authn.RefuseUnconfirmed(w, r, ev, found) {
+		return false, false
+	}
+	if !found {
+		return false, true
+	}
+
+	// Deleted, not left to expire: the cookie is being overwritten
+	// either way, and a live row behind it is a token that still
+	// verifies (#610's own AC).
+	if err := authn.EndSession(r.Context(), tx, ev.Token); err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+		return false, false
+	}
+	queued, err = sessionnotice.QueueSessionEvicted(r.Context(), tx, ev)
+	if err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+		return false, false
+	}
+	return queued, true
 }
 
 // writeRefusal writes ref's response, committing tx first when ref.Keep

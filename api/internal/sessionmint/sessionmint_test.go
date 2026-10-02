@@ -78,6 +78,18 @@ func countSessions(t *testing.T, db *testdb.DB, identityUID string) int {
 	return count
 }
 
+func countEvictionNotices(t *testing.T, db *testdb.DB, identityUID string) int {
+	t.Helper()
+	var count int
+	if err := db.Admin.QueryRowContext(t.Context(),
+		`SELECT count(*) FROM session_notice_outbox WHERE identity_uid = $1 AND kind = 'session_evicted'`,
+		identityUID,
+	).Scan(&count); err != nil {
+		t.Fatalf("count notices: %v", err)
+	}
+	return count
+}
+
 func TestIssue_MintsForBothTiers(t *testing.T) {
 	for _, tc := range []struct {
 		name    string
@@ -162,6 +174,34 @@ func TestIssue_CrossPopulationConfirmedEvictsAndMints(t *testing.T) {
 	}
 	if len(enq.Calls()) != 1 {
 		t.Errorf("nudges fired = %d, want 1 -- an evicted Staff session is notified", len(enq.Calls()))
+	}
+	if got := countEvictionNotices(t, db, staffUID); got != 1 {
+		t.Errorf("eviction notices for %s = %d, want 1", staffUID, got)
+	}
+}
+
+// An evicted Client is deleted like any other, and sends no mail --
+// sessionnotice.QueueSessionEvicted records why.
+func TestIssue_CrossPopulationConfirmedPortalEvictionQueuesNoNotice(t *testing.T) {
+	db := testdb.New(t)
+	portalUID := portalaccount.NewIdentifier()
+	token := authntest.SeedSession(t, db.App, portalUID)
+	const staffUID = "staff-new"
+	adapter := sessionmint.Staff(authn.VerifiedToken{UID: staffUID, SecondFactor: true})
+
+	_, enq, committed := issue(t, db, token, true, adapter, okStep(staffUID), nil)
+
+	if !committed {
+		t.Fatal("committed = false, want true once confirmed")
+	}
+	if got := countSessions(t, db, portalUID); got != 0 {
+		t.Errorf("session rows for %s = %d, want 0 -- evicted", portalUID, got)
+	}
+	if len(enq.Calls()) != 0 {
+		t.Errorf("nudges fired = %d, want 0 for an evicted Client", len(enq.Calls()))
+	}
+	if got := countEvictionNotices(t, db, portalUID); got != 0 {
+		t.Errorf("eviction notices for %s = %d, want 0", portalUID, got)
 	}
 }
 

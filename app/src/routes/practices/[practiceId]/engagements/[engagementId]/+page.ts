@@ -1,5 +1,6 @@
 import { error, redirect } from '@sveltejs/kit';
-import { apiErrorMessage, apiFetch } from '#lib/api.js';
+import { apiFetch } from '#lib/api.js';
+import { apiErrorMessage } from '#lib/apiErrorMessage.js';
 import { refuseRead } from '#lib/errorPage.js';
 import { staffLoginAfterSessionEnded } from '#lib/sessionEnded.js';
 import { engagementURL, type EngagementSummary } from '#lib/engagementDetail.js';

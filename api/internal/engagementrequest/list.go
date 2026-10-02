@@ -8,8 +8,8 @@ import (
 	"time"
 
 	"doula-cloud/api/internal/apierr"
-	"doula-cloud/api/internal/client"
 	"doula-cloud/api/internal/pagecursor"
+	"doula-cloud/api/internal/personname"
 	"doula-cloud/api/internal/staffauth"
 )
 
@@ -139,7 +139,7 @@ func listPending(ctx context.Context, tx *sql.Tx, practiceID string, after *page
 			// coverage:ignore reason: row scan failure, not exercised by unit tests
 			return nil, fmt.Errorf("engagementrequest: scan pending: %w", err)
 		}
-		item.ClientName = client.PreferredName(givenName, preferredName.String)
+		item.ClientName = personname.Preferred(givenName, preferredName.String)
 		if dueDate.Valid {
 			item.DueDate = &dueDate.String
 		}

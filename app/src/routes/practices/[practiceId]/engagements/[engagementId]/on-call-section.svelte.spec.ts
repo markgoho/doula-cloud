@@ -25,8 +25,7 @@ Object.assign(pageState, toPageState(fixture));
 const apiFetchWithSession = vi.hoisted(() => vi.fn());
 vi.mock('#lib/api.js', () => ({
 	apiFetchWithSession,
-	apiBaseURL: () => '',
-	apiErrorMessage: (response: Response) => response.text()
+	apiBaseURL: () => ''
 }));
 
 if (!customElements.get('center-l')) registerLayoutPrimitives();

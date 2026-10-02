@@ -39,8 +39,7 @@ Object.assign(pageState, toPageState(fixture));
 
 const apiFetchWithSession = vi.hoisted(() => vi.fn());
 vi.mock('#lib/api.js', () => ({
-	apiFetchWithSession,
-	apiErrorMessage: vi.fn(async (response: Response) => await response.text())
+	apiFetchWithSession
 }));
 
 // A real service-worker push subscription would fail in headless Chromium

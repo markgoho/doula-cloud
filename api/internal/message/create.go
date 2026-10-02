@@ -13,8 +13,8 @@ import (
 	"github.com/google/uuid"
 
 	"doula-cloud/api/internal/apierr"
-	"doula-cloud/api/internal/client"
 	"doula-cloud/api/internal/objectstore"
+	"doula-cloud/api/internal/personname"
 	"doula-cloud/api/internal/push"
 	"doula-cloud/api/internal/staffauth"
 )
@@ -293,7 +293,7 @@ func insertMessage(ctx context.Context, tx *sql.Tx, messageID, engagementID, sen
 // resolveSenderName looks up the display name of the Staff or Client that
 // sent a Message. A Client's is her preferred name -- the conversation
 // name every Message thread reads, per ADR-0017's read table -- computed
-// by client.PreferredName rather than a second inline COALESCE.
+// by personname.Preferred rather than a second inline COALESCE.
 func resolveSenderName(ctx context.Context, tx *sql.Tx, senderType, senderID string) (string, error) {
 	if senderType == senderTypeClient {
 		var givenName string
@@ -304,7 +304,7 @@ func resolveSenderName(ctx context.Context, tx *sql.Tx, senderType, senderID str
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			return "", fmt.Errorf("message: resolve sender name: %w", err)
 		}
-		return client.PreferredName(givenName, preferredName.String), nil
+		return personname.Preferred(givenName, preferredName.String), nil
 	}
 
 	var name string

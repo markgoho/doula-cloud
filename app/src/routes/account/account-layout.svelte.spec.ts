@@ -16,8 +16,7 @@ const apiFetchWithSession = vi.hoisted(() => vi.fn());
 const apiFetch = vi.hoisted(() => vi.fn());
 vi.mock('#lib/api.js', () => ({
 	apiFetchWithSession,
-	apiFetch,
-	apiErrorMessage: (response: Response) => response.text()
+	apiFetch
 }));
 
 const goto = vi.hoisted(() => vi.fn());

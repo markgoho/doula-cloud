@@ -1,6 +1,7 @@
 import { redirect, error } from '@sveltejs/kit';
 import { resolve } from '$app/paths';
-import { apiFetch, apiErrorMessage, isMFARequired } from '#lib/api.js';
+import { apiFetch, isMFARequired } from '#lib/api.js';
+import { apiErrorMessage } from '#lib/apiErrorMessage.js';
 import { decideLanding, type SessionInfo } from '#lib/landing.js';
 import { staffLoginAfterSessionEnded } from '#lib/sessionEnded.js';
 import type { LayoutLoad } from './$types';

@@ -1,8 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { loadClientPayment } from './clientPayment.js';
 
-vi.mock('./api.js', () => ({ apiErrorMessage: (response: Response) => response.text() }));
-
 describe('loadClientPayment', () => {
 	it("asks for this Invoice's own payment and returns what the Element mounts with", async () => {
 		const body = { clientSecret: 's', stripeAccountId: 'acct_1', publishableKey: 'pk_1' };

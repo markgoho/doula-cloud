@@ -8,8 +8,8 @@ import (
 	"time"
 
 	"doula-cloud/api/internal/apierr"
-	"doula-cloud/api/internal/client"
 	"doula-cloud/api/internal/pagecursor"
+	"doula-cloud/api/internal/personname"
 	"doula-cloud/api/internal/staffauth"
 )
 
@@ -190,7 +190,7 @@ func scanAwaitingReplyItems(rows *sql.Rows) ([]AwaitingReplyItem, error) {
 			// coverage:ignore reason: row scan failure, not exercised by unit tests
 			return nil, fmt.Errorf("message: scan awaiting reply item: %w", err)
 		}
-		item.ClientName = client.PreferredName(givenName, preferredName.String)
+		item.ClientName = personname.Preferred(givenName, preferredName.String)
 		items = append(items, item)
 	}
 	if err := rows.Err(); err != nil {

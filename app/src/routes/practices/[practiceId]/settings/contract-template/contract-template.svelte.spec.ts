@@ -27,8 +27,7 @@ vi.mock('$app/state', () => ({ page: pageState }));
 
 const apiFetchWithSession = vi.hoisted(() => vi.fn());
 vi.mock('#lib/api.js', () => ({
-	apiFetchWithSession,
-	apiErrorMessage: (response: Response) => response.text()
+	apiFetchWithSession
 }));
 
 /*

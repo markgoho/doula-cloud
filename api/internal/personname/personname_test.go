@@ -6,12 +6,8 @@ import (
 	"doula-cloud/api/internal/personname"
 )
 
-// These two rules are reached through client.LegalName and
-// client.PreferredName by most of the codebase, and directly by
-// activitypage, which cannot import client. A package with no test file
-// of its own contributes no blocks to the coverage profile at all, so it
-// would pass the gate without ever being measured -- which is why these
-// live here rather than only in client's own suite.
+// Every reader of a Client's name reaches these two rules here, so this
+// is the one suite that holds them.
 
 const (
 	givenName   = "Renata"

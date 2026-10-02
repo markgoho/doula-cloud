@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"doula-cloud/api/internal/apierr"
-	"doula-cloud/api/internal/client"
+	"doula-cloud/api/internal/personname"
 	"doula-cloud/api/internal/staffauth"
 )
 
@@ -21,7 +21,7 @@ import (
 // "who owes us money" -- ClientName says who, and EngagementID is the way
 // in to her Contract.
 //
-// ClientName is client.PreferredName, the conversation name every screen
+// ClientName is personname.Preferred, the conversation name every screen
 // uses (ADR-0017's read table). The legal name belongs to the documents
 // -- the Contract's merge field and the Stripe Invoice itself -- not to a
 // staff-facing list.
@@ -284,7 +284,7 @@ func listPracticeInvoices(ctx context.Context, tx *sql.Tx, practiceID string, af
 			// coverage:ignore reason: row scan failure, not exercised by unit tests
 			return nil, false, fmt.Errorf("payments: scan practice invoice row: %w", err)
 		}
-		it.ClientName = client.PreferredName(givenName, preferredName.String)
+		it.ClientName = personname.Preferred(givenName, preferredName.String)
 		if paidAt.Valid {
 			it.PaidAt = &paidAt.Time
 		}

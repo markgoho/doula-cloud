@@ -10,7 +10,7 @@
 
 import type { Fetcher } from './fetcher.js';
 
-import { apiErrorMessage } from './api.js';
+import { apiErrorMessage } from './apiErrorMessage.js';
 
 export interface ClientPayment {
 	clientSecret: string;

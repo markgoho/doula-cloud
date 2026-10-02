@@ -28,8 +28,7 @@ const fixtureData = fixture.props?.data as PageProperties['data'];
 
 const apiFetchWithSession = vi.hoisted(() => vi.fn());
 vi.mock('#lib/api.js', () => ({
-	apiFetchWithSession,
-	apiErrorMessage: (response: Response) => response.text()
+	apiFetchWithSession
 }));
 
 async function setup(respond: (path: string) => Promise<Response> | Response = toApiResponder(fixture)) {

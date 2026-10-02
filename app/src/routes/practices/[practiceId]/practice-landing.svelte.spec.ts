@@ -48,10 +48,7 @@ const apiFetch = vi.hoisted(() => vi.fn());
 const apiFetchWithSession = vi.hoisted(() => vi.fn());
 vi.mock('#lib/api.js', () => ({
 	apiFetch,
-	apiFetchWithSession,
-	// payments.ts reads a failure through this; the mock has to carry
-	// every export the module tree imports, not only the ones used here.
-	apiErrorMessage: (response: Response) => response.text()
+	apiFetchWithSession
 }));
 
 const registerPushSubscription = vi.hoisted(() => vi.fn());

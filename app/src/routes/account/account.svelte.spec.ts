@@ -11,11 +11,7 @@ import { session, soleOwnerSession } from './page.fixture.js';
 const apiFetchWithSession = vi.hoisted(() => vi.fn());
 vi.mock('#lib/api.js', () => ({
 	apiFetchWithSession,
-	apiBaseURL: () => '',
-	// The real one reads a plain-text body or a {code, message} JSON body
-	// without the caller knowing which; the screen's job is only to show
-	// whatever it says, so the mock is the plain-text half.
-	apiErrorMessage: (response: Response) => response.text()
+	apiBaseURL: () => ''
 }));
 
 /*

@@ -35,11 +35,7 @@ function returnedFromStripe(parameter: 'return' | 'refresh') {
 
 const apiFetchWithSession = vi.hoisted(() => vi.fn());
 vi.mock('#lib/api.js', () => ({
-	apiFetchWithSession,
-	// website.ts reads a failure through this; the screen only ever hits
-	// the happy path here, but the mock has to carry every export the
-	// module tree imports.
-	apiErrorMessage: (response: Response) => response.text()
+	apiFetchWithSession
 }));
 
 interface MockOptions {

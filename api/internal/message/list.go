@@ -10,8 +10,8 @@ import (
 
 	"doula-cloud/api/internal/activity"
 	"doula-cloud/api/internal/apierr"
-	"doula-cloud/api/internal/client"
 	"doula-cloud/api/internal/pagecursor"
+	"doula-cloud/api/internal/personname"
 	"doula-cloud/api/internal/staffauth"
 )
 
@@ -211,7 +211,7 @@ func listMessages(ctx context.Context, tx *sql.Tx, engagementID string, after *m
 		case it.SenderType == senderTypeStaff:
 			it.SenderName = unresolvedStaffSenderName
 		default:
-			it.SenderName = client.PreferredName(clientGivenName.String, clientPreferredName.String)
+			it.SenderName = personname.Preferred(clientGivenName.String, clientPreferredName.String)
 		}
 		items = append(items, it)
 	}

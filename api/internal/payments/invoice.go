@@ -11,9 +11,9 @@ import (
 
 	"doula-cloud/api/internal/activity"
 	"doula-cloud/api/internal/apierr"
-	"doula-cloud/api/internal/client"
 	"doula-cloud/api/internal/contracts"
 	"doula-cloud/api/internal/pagecursor"
+	"doula-cloud/api/internal/personname"
 	"doula-cloud/api/internal/staffauth"
 )
 
@@ -560,7 +560,7 @@ var errClientNoEmail = errors.New("payments: client has no email on file")
 // fetchClientContact resolves engagementID's Client legal name and email
 // -- the only Client-identifying fields an Invoice ever carries, per
 // #78's no-PHI-to-Stripe rule (no visit, Care Plan, Birth Plan, or other
-// clinical content). name uses client.LegalName -- the document name
+// clinical content). name uses personname.Legal -- the document name
 // Stripe invoicing reads, per ADR-0017's read table.
 func fetchClientContact(ctx context.Context, tx *sql.Tx, engagementID string) (clientID, name, email string, err error) {
 	var givenName string
@@ -577,7 +577,7 @@ func fetchClientContact(ctx context.Context, tx *sql.Tx, engagementID string) (c
 	if !clientEmail.Valid || clientEmail.String == "" {
 		return "", "", "", errClientNoEmail
 	}
-	return clientID, client.LegalName(givenName, familyName.String), clientEmail.String, nil
+	return clientID, personname.Legal(givenName, familyName.String), clientEmail.String, nil
 }
 
 // stripeCustomerFor is everything resolveStripeCustomer needs to find, or

@@ -31,7 +31,8 @@
 	import type { User } from 'firebase/auth';
 	import { page } from '#lib/appState.svelte.js';
 	import { resolve } from '$app/paths';
-	import { apiErrorMessage, apiFetch, apiFetchWithSession } from '#lib/api.js';
+	import { apiFetch, apiFetchWithSession } from '#lib/api.js';
+	import { apiErrorMessage } from '#lib/apiErrorMessage.js';
 	import { isOwner as checkIsOwner } from '#lib/roles.js';
 	import { loadStaff, type StaffSummary } from '#lib/staff.js';
 	import { vouchForStaff } from '#lib/mfaRecovery.js';

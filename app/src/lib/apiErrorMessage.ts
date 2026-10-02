@@ -18,8 +18,8 @@ and others) deliberately avoid importing api.ts, since api.ts
 pulls in SvelteKit's `$app` modules and firebase/auth and those modules
 are unit-tested without either -- see their own "decoupled from
 SvelteKit" doc comments. formErrors.ts carries no such import either (its
-only import is a type), so importing from it costs nothing here. api.ts
-re-exports this in turn, for its own callers.
+only import is a type), so importing from it costs nothing here. Every
+caller imports it from this module, a route included.
 */
 export async function apiErrorMessage(response: Response): Promise<string> {
 	const parsed = await parseRefusal(response, { opaque5xx: false });

@@ -10,8 +10,6 @@ import {
 	type ClientInvoice
 } from './clientInvoice.js';
 
-vi.mock('./api.js', () => ({ apiErrorMessage: (response: Response) => response.text() }));
-
 const base: ClientInvoice = {
 	id: 'i',
 	status: 'open',

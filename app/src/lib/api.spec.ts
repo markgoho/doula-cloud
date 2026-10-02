@@ -255,8 +255,3 @@ describe('probeSession', () => {
 		await expect(probeSession('/api/staff/session')).resolves.toBeUndefined();
 	});
 });
-
-// apiErrorMessage's own cases live in formErrors.spec.ts now (#840) --
-// api.ts only re-exports it (see apiErrorMessage.ts's doc comment for
-// why its definition lives there), so a second describe block here would
-// be the second reader of the envelope the issue existed to remove.

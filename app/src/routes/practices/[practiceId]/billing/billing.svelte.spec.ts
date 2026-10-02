@@ -34,12 +34,8 @@ vi.mock('$app/state', () => ({ page: pageState }));
 Object.assign(pageState, toPageState(fixture));
 
 const apiFetchWithSession = vi.hoisted(() => vi.fn());
-// apiErrorMessage is the real one's behavior for a plain-text body, which
-// is what this screen's refusals are: the ledger loader reads a failure
-// through it rather than calling response.text() itself.
 vi.mock('#lib/api.js', () => ({
-	apiFetchWithSession,
-	apiErrorMessage: (response: Response) => response.text()
+	apiFetchWithSession
 }));
 
 // apiFetchWithSession is mocked only for the ledger's own reads (the
