@@ -1403,7 +1403,8 @@ describe('who is on the Engagement, and putting yourself on it (#1598)', () => {
 		await putMeOnIt().click();
 
 		expect(apiFetchWithSession).toHaveBeenCalledWith(attachSelfPath, { method: 'PUT' });
-		await expect.element(testPage.getByText('You are on this Engagement.')).toBeVisible();
+		// The result takes focus: the button she pressed is gone.
+		await expect.element(testPage.getByText('You are on this Engagement.')).toHaveFocus();
 		expect(testPage.getByText('No Doula yet', { exact: true }).elements()).toHaveLength(0);
 		expect(putMeOnIt().elements()).toHaveLength(0);
 		// The ledger has a new entry and the birth can now have an On-call

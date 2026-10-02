@@ -1348,6 +1348,8 @@
 			endpoint refuses each of them whatever this page drew. The
 			status Notice outlives the button, so a screen reader hears
 			the result of the press, and the Doula row above now names her.
+			It takes focus too: the button she pressed is gone, and focus
+			would otherwise fall to the document (seen on the 320px walk).
 		-->
 		{#if canAttachSelf}
 			<cluster-l space="var(--space-3)">
@@ -1363,7 +1365,7 @@
 		{#if selfAttach.error}
 			<Notice variant="error" message={selfAttach.error} />
 		{:else if selfAttachedMessage}
-			<Notice variant="status" message={selfAttachedMessage} />
+			<Notice variant="status" message={selfAttachedMessage} isFocusedOnAppear />
 		{/if}
 
 		<!--

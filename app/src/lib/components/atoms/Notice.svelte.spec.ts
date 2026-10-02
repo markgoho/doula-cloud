@@ -119,6 +119,22 @@ describe('Notice.svelte', () => {
 		expect(container.querySelector('.status')).toBeInTheDocument();
 	});
 
+	// For a Notice that reports the result of a control which is gone once
+	// pressed (#1598's "Put me on this Engagement", the Feedback drawer):
+	// focus lands on the result and not on the document.
+	it('takes focus when it appears, where it is asked to', async () => {
+		await setup({ message: 'You are on this Engagement.', variant: 'status', isFocusedOnAppear: true });
+
+		await expect.element(page.getByRole('status')).toHaveFocus();
+	});
+
+	it('takes no focus and adds no stop to the tab order unless it is asked to', async () => {
+		const { container } = await setup({ variant: 'status' });
+
+		expect(document.activeElement).toBe(document.body);
+		expect(container.querySelector('[tabindex]')).toBeNull();
+	});
+
 	it('renders a decorative icon for each variant', async () => {
 		for (const variant of variants) {
 			const { container } = await setup({ variant });
