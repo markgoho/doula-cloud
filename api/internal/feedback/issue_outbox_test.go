@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -612,12 +613,7 @@ func seedOpenedIssue(t *testing.T, creator *feedback.FakeIssueCreator, body stri
 }
 
 func hasLabel(issue feedback.FakeIssue, label string) bool {
-	for _, l := range issue.Labels {
-		if l == label {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(issue.Labels, label)
 }
 
 // markerBody is an issue body carrying feedbackID's hidden marker, the
