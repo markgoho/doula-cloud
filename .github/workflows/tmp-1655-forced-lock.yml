@@ -25,9 +25,9 @@ jobs:
           marker="$RUNNER_TEMP/attempt1-started"
           if [ ! -e "$marker" ]; then
             touch "$marker"
-            # A root apt-get that holds the dpkg lock for ~60s and is not in
+            # A root apt-get that holds the dpkg lock for ~200s and is not in
             # the attempt's process group, as the real orphan was not killable.
-            sudo setsid nohup apt-get install -y --no-install-recommends -o 'DPkg::Pre-Invoke::=sleep 60' fonts-ipafont-gothic >"$RUNNER_TEMP/orphan.log" 2>&1 &
+            sudo setsid nohup apt-get install -y --no-install-recommends -o 'DPkg::Pre-Invoke::=sleep 200' fonts-ipafont-gothic >"$RUNNER_TEMP/orphan.log" 2>&1 &
             sleep 600
           fi
           exec bunx playwright install-deps chromium
@@ -59,7 +59,7 @@ jobs:
           marker="$RUNNER_TEMP/attempt1-started"
           if [ ! -e "$marker" ]; then
             touch "$marker"
-            sudo setsid nohup apt-get install -y --no-install-recommends -o 'DPkg::Pre-Invoke::=sleep 60' fonts-ipafont-gothic >"$RUNNER_TEMP/orphan.log" 2>&1 &
+            sudo setsid nohup apt-get install -y --no-install-recommends -o 'DPkg::Pre-Invoke::=sleep 200' fonts-ipafont-gothic >"$RUNNER_TEMP/orphan.log" 2>&1 &
             sleep 600
           fi
           exec bunx playwright install-deps chromium
