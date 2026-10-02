@@ -142,7 +142,7 @@ These are struck on sight, however well written, and no anchor rescues them. The
 
 Silence is therefore load-bearing, and it has one failure mode: an unremarkable stage and a stage the agent skipped look identical. So **every stage closes with one line** saying which it was:
 
-> **Stage 4 — Assign the Doula to Engagements.** 11 acts, 0 with friction. Nothing to report.
+> **Stage 4 — Put the Doula on Engagements.** 11 acts, 0 with friction. Nothing to report.
 
 That line is mandatory, it is written per stage per persona, and it carries the act count so the reader can see the stage was actually walked. Nine lines a run, against four hundred that would otherwise be there.
 

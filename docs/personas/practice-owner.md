@@ -8,7 +8,7 @@
 
 ## Who she is
 
-Renata built Rooted Birth Collective over nine years. Fourteen doulas — nine of them employed, four contracted, and herself — plus one office manager, and a book of live Clients large enough that she can no longer hold it in her head. She spends her week on assignment, coverage, and money, and she is the person clients escalate to when something goes wrong.
+Renata built Rooted Birth Collective over nine years. Fourteen doulas — nine of them employed, four contracted, and herself — plus one office manager, and a book of live Clients large enough that she can no longer hold it in her head. She spends her week on which Doula is on which Engagement, on coverage, and on money, and she is the person clients escalate to when something goes wrong.
 
 Rooted is sized to the pilot's fourteen-doula agency, not to a small practice: nothing smaller can show what `CLAUDE.md` means by a real Practice's data. The agency she brings with her is written down in [the World](../simulation/worlds/rooted-birth-collective.md) ([#761](https://github.com/markgoho/doula-cloud/issues/761)).
 
@@ -16,7 +16,7 @@ Her real anxiety is coverage. If two Clients go into labor the same night, she n
 
 ## Why she comes to Doula Cloud
 
-To see the whole Practice at once — who is assigned to whom, which Contracts are unsigned, which Invoices are unpaid — without asking four people.
+To see the whole Practice at once — who is on which Engagement, which Contracts are unsigned, which Invoices are unpaid — without asking four people.
 
 ## Primary journey
 
@@ -30,6 +30,6 @@ A new Doula has accepted an invitation, holds the Doula role, and Renata can tel
 
 - She needs a Practice-wide view, not a mine-only view. Any screen scoped to "my Engagements" fails her.
 - Invite, accept, and role assignment span two people and two sessions. This journey cannot be walked by one browser context alone.
-- **An Engagement has no assigned Doula.** `engagements` holds no staff column (`00005_client_engagement.sql`); only `visits.staff_id` exists, and a Visit carries no date. The need above is real; the capability is absent. See [her journey map](../journeys/practice-owner.md), RA-G4.
-- Reassigning an Engagement from one Doula to another is a normal event for her (leave, illness, a Client who asks). Today `PATCH .../visits/{visitId}` reassigns a Visit, which is the only form of it that exists.
+- **An Engagement has no Doula on it.** `engagements` holds no staff column (`00005_client_engagement.sql`); only `visits.staff_id` exists, and a Visit carries no date. The need above is real; the capability is absent. See [her journey map](../journeys/practice-owner.md), RA-G4.
+- Moving an Engagement from one Doula to another is a normal event for her (leave, illness, a Client who asks). Today `PATCH .../visits/{visitId}` reassigns a Visit, which is the only form of it that exists.
 - She edits Plan Templates for the whole Practice, which changes what every new Plan Instance looks like — but must not alter plans already filled in.

@@ -2,7 +2,7 @@
 
 - **Journey**: [practice-owner.md](../journeys/practice-owner.md)
 - **Persona**: [practice-owner.md](../personas/practice-owner.md)
-- **A pass means**: a new Doula has accepted an invitation, holds the Doula role, and appears as the assigned Doula on a live Engagement; and one screen shows every Engagement in the Practice with its Contract and Invoice state.
+- **A pass means**: a new Doula has accepted an invitation, holds the Doula role, and is on a live Engagement; and one screen shows every Engagement in the Practice with its Contract and Invoice state.
 
 ## Preconditions
 
@@ -41,12 +41,12 @@ The membership picker (1.2) is exercised by no spec — every spec's Staff membe
 | 3.3 | Change a member's roles from the screen | **Edit membership** opens roles and employment type on one form and saves both (#316). No staff id is needed and no terminal is involved, so a roster can be built in the product | `manual` |
 | 3.4 | Read the Pending invitations group | Addresses asked but not answered, each with its roles, employment type, expiry and a **Revoke** action — a second group, not a row in the members list | `manual` |
 
-### Stage 4 — Assign the Doula to Engagements
+### Stage 4 — Put the Doula on Engagements
 
 | Step | Action | Expected result | Mark |
 | --- | --- | --- | --- |
 | 4.1 | Open an Engagement from the Clients list | The single-page Engagement view renders | `automated (birth-plan.e2e.ts)` |
-| 4.2 | Look for an assignment control | No field, no endpoint, no screen. An Engagement carries no Doula | `missing-feature (RA-G4)` [#225](https://github.com/markgoho/doula-cloud/issues/225) |
+| 4.2 | Look for a control that puts a Doula on the Engagement | No field, no endpoint, no screen. An Engagement carries no Doula | `missing-feature (RA-G4)` [#225](https://github.com/markgoho/doula-cloud/issues/225) |
 | 4.3 | Add a Visit naming the new Doula as `staffId` | **The Visit names her.** Create carries its own assignee now, and the Engagement page asks **Who is this Visit for?** as a picker of the Doulas this Engagement can admit — no UUID, no free-text box ([RA-G10](https://github.com/markgoho/doula-cloud/issues/268) closed). `resolveAssignee` (`api/internal/visit/roles.go`) keeps naming a colleague with the Owner and the Admin, and logging your own Visit with the Doula, so Renata reaches it from either seat. The row she writes carries a scheduled date and time, a type and notes. Assignment still exists at Visit level; whether an Engagement itself names a Doula is 4.2's question, not this one | `manual` |
 
 ### Stage 5 — Reassign when someone is sick

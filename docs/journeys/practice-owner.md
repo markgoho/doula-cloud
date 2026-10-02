@@ -1,11 +1,11 @@
 # Renata Alvarez — grow and run the roster
 
 - **Persona**: [practice-owner.md](../personas/practice-owner.md)
-- **Goal**: see the whole Practice at once — who is assigned to whom, which Contracts are unsigned, which Invoices are unpaid — without asking four people
+- **Goal**: see the whole Practice at once — who is on which Engagement, which Contracts are unsigned, which Invoices are unpaid — without asking four people
 - **Entry point**: already has a Practice; signs in at `/login`
-- **Done looks like**: a new Doula has accepted an invitation, holds the Doula role, and appears as the assigned Doula on a live Engagement. Renata can see, in one place, every Engagement in the Practice and its Contract and Invoice state.
+- **Done looks like**: a new Doula has accepted an invitation, holds the Doula role, and is on a live Engagement. Renata can see, in one place, every Engagement in the Practice and its Contract and Invoice state.
 
-> **This persona is contradicted by the schema.** Her file states that she assigns a Doula to an Engagement and that the Doula "appears as the assigned Doula on a live Engagement". The `engagements` table has no staff column (`00005_client_engagement.sql`); only `visits.staff_id` exists. The need is real and stays in this map as Stage 4. The persona sentence asserting the capability exists should be revised. See RA-G4.
+> **This persona is contradicted by the schema.** Her file once stated that she puts a Doula on an Engagement and that the new Doula is then on a live Engagement. The `engagements` table has no staff column (`00005_client_engagement.sql`); only `visits.staff_id` exists. The need is real and stays in this map as Stage 4. The persona sentence that asserted the capability exists has since been revised. See RA-G4.
 
 ## Moment of truth
 
@@ -21,6 +21,7 @@ Renata is a domain expert. Her language and `CONTEXT.md` mostly agree, which is 
 | Engagement | "a client", "a birth" | She counts her year in births, not Engagements |
 | Admin | "the office" | |
 | Visit | "a prenatal", "the birth" | She distinguishes types the model does not |
+| Attachment | "the assignment", "who is assigned to whom" | `CONTEXT.md` avoids "Assignment" for an Attachment, the record that a Doula is on an Engagement, and keeps the word for a Visit, whose `staff_id` is assigned |
 
 ## Stages
 
@@ -51,12 +52,12 @@ Renata is a domain expert. Her language and `CONTEXT.md` mostly agree, which is 
 
 Until this is built, the whole roster is unbuildable through the UI, and every Persona reachable only through the invite route (Priya, Dee) starts with no roles at all.
 
-### Stage 4 — Assign the Doula to Engagements
+### Stage 4 — Put the Doula on Engagements
 
-**Thinking**: "Priya takes the two October clients." **Pain points**: an Engagement has no Doula. There is no field, no endpoint, and no screen. The assignment she thinks in terms of does not exist in the model.
+**Thinking**: "Priya takes the two October clients." **Pain points**: an Engagement has no Doula. There is no field, no endpoint, and no screen. What she has in mind, Priya on those two Engagements, does not exist in the model.
 
 - **4.1** — Open an Engagement.
-- **4.2** — Look for an assignment control. There is none.
+- **4.2** — Look for a control that puts a Doula on the Engagement. There is none.
 - **4.3** — The nearest available act is to add a Visit — but **it cannot name anyone**. `POST .../visits` takes no body and assigns the caller (`api/internal/visit/create.go:32,47`); handing the Visit to a colleague is a second act through the **Reassign to Staff id** free-text box, which wants a staff UUID no screen prints (RA-G10). It also requires the **Doula** role (`api/internal/visit/roles.go:40`), which an Owner holds only because signup grants all three. Assignment exists at Visit level only, and a Visit has no date, so this cannot express "Priya covers this birth".
 
 ### Stage 5 — Reassign when someone is sick
@@ -100,7 +101,7 @@ Until this is built, the whole roster is unbuildable through the UI, and every P
 | RA-G1 | 2 | Both | Invitations send no email. The Owner must copy a link and deliver it out of band. | [#260](https://github.com/markgoho/doula-cloud/issues/260) |
 | RA-G2 | 3 | Interaction | No role-assignment UI. The `PATCH .../roles` endpoint exists but nothing calls it, so the roster cannot be built in the product. | [#261](https://github.com/markgoho/doula-cloud/issues/261) |
 | RA-G3 | 3 | Both | **Closed.** The Staff list rendered raw enum values, so an Admin showed on screen as `office_manager` (later `admin`) rather than the word `CONTEXT.md` prescribes; `rolesLabel` now renders `Admin`. | [#262](https://github.com/markgoho/doula-cloud/issues/262) |
-| RA-G4 | 4 | Interaction | An Engagement has no assigned Doula. No column, no endpoint, no screen. Assignment exists only per Visit. | [#225](https://github.com/markgoho/doula-cloud/issues/225) |
+| RA-G4 | 4 | Interaction | An Engagement has no Doula on it. No column, no endpoint, no screen. Assignment exists only per Visit. | [#225](https://github.com/markgoho/doula-cloud/issues/225) |
 | RA-G5 | 8 | Experience | No coverage or availability view, and no dated Visits to build one from. Her stated anxiety has no surface at all. | [#263](https://github.com/markgoho/doula-cloud/issues/263) |
 | RA-G6 | 6 | Both | The Clients list shows Name and Status only. No Contract state, Invoice state, or Doula — so "see the whole Practice" needs one Engagement page per Client. | [#264](https://github.com/markgoho/doula-cloud/issues/264) |
 | RA-G7 | 7 | Interaction | No Practice-wide Invoice or unpaid list. Invoices are reachable only inside a single Engagement's Contract. | [#265](https://github.com/markgoho/doula-cloud/issues/265) |
