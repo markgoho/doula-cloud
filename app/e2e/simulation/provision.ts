@@ -134,7 +134,7 @@ export interface ProvisionedClient extends SeededClient {
 // an Engagement Request that collapses into an approved Engagement in
 // the same call (ADR-0017's solo-approval collapse, since an Owner or
 // Admin session always holds approval authority), and one Visit by the
-// assigned doula to attach her (staffauth.AttachingWrite's accrual --
+// Client's own Doula to attach her (staffauth.AttachingWrite's accrual --
 // the only mechanism that reaches an Engagement for an employee Doula
 // without a granted Offer). Deliberately never called with the whole 43
 // at once: each approval spends a Credit
@@ -158,10 +158,10 @@ export async function provisionTail(
 	const provisioned: ProvisionedClient[] = [];
 
 	for (const client of clients) {
-		const doula = doulaSessions[client.assignedDoulaSlug];
+		const doula = doulaSessions[client.attachedDoulaSlug];
 		if (!doula) {
 			throw new Error(
-				`provisionTail: no session supplied for doula '${client.assignedDoulaSlug}' -- her Invitation must be walked and accepted before ${client.slug} can be provisioned`
+				`provisionTail: no session supplied for doula '${client.attachedDoulaSlug}' -- her Invitation must be walked and accepted before ${client.slug} can be provisioned`
 			);
 		}
 
@@ -187,7 +187,7 @@ export async function provisionTail(
 			headers: doula.headers,
 			data: {}
 		});
-		await readBody(visit, `provisionTail: attaching ${client.assignedDoulaSlug} to ${client.slug}'s Engagement`);
+		await readBody(visit, `provisionTail: attaching ${client.attachedDoulaSlug} to ${client.slug}'s Engagement`);
 
 		provisioned.push({ ...client, clientId, engagementId });
 	}
@@ -214,7 +214,7 @@ export function writeWorldRecord(runsRoot: string, runId: string, description: W
 			familyName: client.familyName,
 			kind: client.kind,
 			dueDate: client.dueDate,
-			assignedDoulaSlug: client.assignedDoulaSlug,
+			attachedDoulaSlug: client.attachedDoulaSlug,
 			clientId: client.clientId,
 			engagementId: client.engagementId
 		}))

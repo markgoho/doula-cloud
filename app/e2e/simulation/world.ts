@@ -150,7 +150,7 @@ export interface SeededClient {
 	// YYYY-MM-DD. Empty for a postpartum Engagement, which the product's
 	// own engagement_requests.due_date column leaves null for that kind.
 	dueDate: string;
-	assignedDoulaSlug: string;
+	attachedDoulaSlug: string;
 }
 
 export interface WorldSummary {
@@ -219,7 +219,7 @@ function monthDueDate(rng: () => number, monthIndex: number): string {
 // split (birth vs. postpartum) and which individual tail Clients land
 // in which month is this module's own estimate -- the calendar gives
 // Rooted's overall 32-birth/26-postpartum split and its month-by-month
-// birth counts, not a per-Client assignment, so a seeded draw is the
+// birth counts, not a kind or a month per Client, so a seeded draw is the
 // closest reproducible reading of an already-estimated document.
 function dueDate(rng: () => number): string {
 	const total = BIRTH_MONTH_COUNTS.reduce((sum, count) => sum + count, 0);
@@ -266,7 +266,7 @@ export function describeWorld(seed: number): WorldDescription {
 				familyName,
 				kind,
 				dueDate: kind === 'birth' ? dueDate(rng) : '',
-				assignedDoulaSlug: allocation.slug
+				attachedDoulaSlug: allocation.slug
 			});
 		}
 	}
