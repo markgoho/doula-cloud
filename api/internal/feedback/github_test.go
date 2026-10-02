@@ -48,6 +48,10 @@ const testGitHubToken = "a-token"
 // that map is this package's own and not exported for a test to read.
 const testNotWorkingLabel = "not working"
 
+// testIdeaOrRequestLabel is feedback.KindIdeaOrRequest's own label name,
+// repeated here for the same reason.
+const testIdeaOrRequestLabel = "idea or request"
+
 func TestGitHubIssueCreator_CreateIssueSendsNoLabelsAndParsesTheNumber(t *testing.T) {
 	doer := &stubDoer{status: http.StatusCreated, body: `{"number": 42}`}
 	creator := feedback.GitHubIssueCreator{Client: doer, Token: " a-token \n", Repo: testRepo}

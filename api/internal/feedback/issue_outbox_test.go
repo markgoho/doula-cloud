@@ -215,6 +215,124 @@ func TestIssueWorker_RetryAdoptsAnIssueFoundByItsMarker(t *testing.T) {
 	if len(creator.Issues) != 1 {
 		t.Fatalf("issues = %d, want 1 -- no second issue opened", len(creator.Issues))
 	}
+	if labels := creator.Issues[existingNumber].Labels; len(labels) != 1 || labels[0] != testIdeaOrRequestLabel {
+		t.Errorf("labels = %v, want [%q] -- an adopted issue gets its kind label too (#1587)", labels, testIdeaOrRequestLabel)
+	}
+}
+
+// makeIssueOutboxRowDue pulls a row's next_attempt_at back to now, the
+// same statement the offer outbox tests run inline:
+// outbox.Worker.MarkFailed schedules the retry a backoff step out, and
+// issueClaimQuery compares against Postgres's now(), so a second pass
+// would otherwise claim nothing.
+func makeIssueOutboxRowDue(t *testing.T, db *testdb.DB, feedbackID string) {
+	t.Helper()
+	if _, err := db.Admin.ExecContext(t.Context(),
+		`UPDATE feedback_issue_outbox SET next_attempt_at = now() WHERE feedback_id = $1`, feedbackID,
+	); err != nil {
+		t.Fatalf("make outbox row due: %v", err)
+	}
+}
+
+// TestIssueWorker_RetryAfterAFailedAddLabelsAdoptsAndLabels is #1587's
+// own sequence, end to end: the create succeeds, the labels call fails,
+// and the retry adopts the issue by its marker. That retry must add the
+// kind label -- before #1587 it marked the row sent and left the issue
+// with no label for good.
+func TestIssueWorker_RetryAfterAFailedAddLabelsAdoptsAndLabels(t *testing.T) {
+	db := testdb.New(t)
+	staffID := testdb.SeedStaff(t, db, "feedback-worker-labels-retry")
+	feedbackID := seedStaffFeedbackRow(t, db, staffID, feedback.KindNotWorking, "/account", "")
+	enqueueIssueOutbox(t, db, feedbackID)
+
+	creator := feedback.NewFakeIssueCreator()
+	creator.AddLabelsErr = errors.New("github is down")
+	worker := feedback.IssueWorker{Creator: creator, AppBaseURL: testIssueAppBaseURL, Now: time.Now}
+	runIssueWorker(t, db, worker)
+
+	if status := readIssueOutboxStatus(t, db, feedbackID); status != statusPending {
+		t.Fatalf("outbox status = %q, want pending after the failed labels call", status)
+	}
+	if len(creator.Issues) != 1 {
+		t.Fatalf("issues = %d, want 1 -- the create itself succeeded", len(creator.Issues))
+	}
+
+	creator.AddLabelsErr = nil
+	makeIssueOutboxRowDue(t, db, feedbackID)
+	runIssueWorker(t, db, worker)
+
+	if status := readIssueOutboxStatus(t, db, feedbackID); status != statusSent {
+		t.Fatalf("outbox status = %q, want sent after the retry", status)
+	}
+	if len(creator.Issues) != 1 {
+		t.Fatalf("issues = %d, want 1 -- the retry adopts, it opens no second issue", len(creator.Issues))
+	}
+	number := readIssueNumber(t, db, feedbackID)
+	if !number.Valid {
+		t.Fatal("issue_number is NULL, want the adopted issue's number")
+	}
+	issue, ok := creator.Issues[int(number.Int64)]
+	if !ok {
+		t.Fatalf("no fake issue #%d", number.Int64)
+	}
+	if len(issue.Labels) != 1 || issue.Labels[0] != testNotWorkingLabel {
+		t.Errorf("labels = %v, want [%q] -- the retry adds the label the first attempt could not", issue.Labels, testNotWorkingLabel)
+	}
+}
+
+// TestIssueWorker_GitHubErrorOnAddLabelsWhileAdoptingLeavesTheRowPending
+// is the adopt path's own half of the labels-call failure: the row stays
+// pending and the issue number is not written, the same as on the create
+// path, so a later retry still owns the label.
+func TestIssueWorker_GitHubErrorOnAddLabelsWhileAdoptingLeavesTheRowPending(t *testing.T) {
+	db := testdb.New(t)
+	staffID := testdb.SeedStaff(t, db, "feedback-worker-adopt-labels-error")
+	feedbackID := seedStaffFeedbackRow(t, db, staffID, feedback.KindSomethingElse, "/account", "")
+	enqueueIssueOutbox(t, db, feedbackID)
+
+	creator := feedback.NewFakeIssueCreator()
+	if _, err := creator.CreateIssue(t.Context(), "stale title",
+		"stale body\n\n<!-- doula-cloud-feedback-id: "+feedbackID+" -->\n"); err != nil {
+		t.Fatalf("seed existing issue: %v", err)
+	}
+	creator.AddLabelsErr = errors.New("github is down")
+
+	worker := feedback.IssueWorker{Creator: creator, AppBaseURL: testIssueAppBaseURL, Now: time.Now}
+	runIssueWorker(t, db, worker)
+
+	if status := readIssueOutboxStatus(t, db, feedbackID); status != statusPending {
+		t.Fatalf("outbox status = %q, want pending after a GitHub error", status)
+	}
+	if number := readIssueNumber(t, db, feedbackID); number.Valid {
+		t.Fatalf("issue_number = %v, want NULL", number)
+	}
+	if len(creator.Issues) != 1 {
+		t.Fatalf("issues = %d, want 1 -- no second issue opened", len(creator.Issues))
+	}
+}
+
+// TestFakeIssueCreator_AddLabelsDoesNotRepeatALabel holds the fake to
+// the real add-labels endpoint's own behavior: a label an issue already
+// has is not added a second time. The worker labels on every attempt
+// (#1587), so a retry that adopts an already-labeled issue must leave
+// the fake showing what GitHub would show.
+func TestFakeIssueCreator_AddLabelsDoesNotRepeatALabel(t *testing.T) {
+	creator := feedback.NewFakeIssueCreator()
+	number, err := creator.CreateIssue(t.Context(), "title", "body")
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	for range 2 {
+		if err := creator.AddLabels(t.Context(), number, []string{testNotWorkingLabel}); err != nil {
+			t.Fatalf("add labels: %v", err)
+		}
+	}
+	if labels := creator.Issues[number].Labels; len(labels) != 1 || labels[0] != testNotWorkingLabel {
+		t.Errorf("labels = %v, want [%q] exactly once", labels, testNotWorkingLabel)
+	}
+	if len(creator.LabelCalls) != 2 {
+		t.Errorf("label calls = %d, want 2 -- every call is still recorded", len(creator.LabelCalls))
+	}
 }
 
 // TestIssueWorker_GitHubErrorOnCreateLeavesTheRowPending is #1524's own
