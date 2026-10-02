@@ -4,6 +4,7 @@
 	import { resolve } from '$app/paths';
 	import { apiFetchWithSession } from '#lib/api.js';
 	import { loadClients, type ClientListItem, type OpenEngagement } from '#lib/client.js';
+	import { NO_DOULA_YET_LABEL } from '#lib/engagementRequest.js';
 	import { isBlockedInvite, portalInviteStatusText } from '#lib/portalInvite.js';
 	import { formatAmount, invoiceStatusLabel } from '#lib/invoice.js';
 	import { PaginatedList } from '#lib/paginatedList.svelte.js';
@@ -100,8 +101,9 @@
 	};
 
 	// #264: one line of a Client's open-Engagement rollup -- Contract
-	// status, assigned Doula (an explicit "no Doula" state, the same
-	// pattern as portalInviteStatusText's own "Never invited"), Engagement
+	// status, the Doula on it (an explicit state for none, the same
+	// pattern as portalInviteStatusText's own "Never invited";
+	// NO_DOULA_YET_LABEL says why the words are shared, #1597), Engagement
 	// status, and Invoice status/money or her own fee wherever the BFF's
 	// role gate let the field through the wire at all (ADR-0006/ADR-0008).
 	// A field this Reader may not see is absent from `line` entirely, not
@@ -119,7 +121,7 @@
 	function engagementLineText(line: OpenEngagement): string {
 		const parts = [
 			`Contract: ${line.contractStatus ? contractStatusLabel[line.contractStatus] : 'No contract yet'}`,
-			`Doula: ${line.doulaName ?? 'No Doula assigned'}`,
+			`Doula: ${line.doulaName ?? NO_DOULA_YET_LABEL}`,
 			engagementStatusLabel[line.engagementStatus] ?? line.engagementStatus
 		];
 		if (line.invoiceStatus) {
