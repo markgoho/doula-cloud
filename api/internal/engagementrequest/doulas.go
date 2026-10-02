@@ -7,6 +7,7 @@ import (
 	"net/http"
 
 	"doula-cloud/api/internal/apierr"
+	"doula-cloud/api/internal/attachment"
 	"doula-cloud/api/internal/staffauth"
 )
 
@@ -63,7 +64,7 @@ const msgContractorOriginates = "a contractor doula does not request an engageme
 // nothing (ADR-0017) and is refused here as RequestHandler refuses her.
 // A read only: it changes no state, so the audit trail has nothing to
 // record. It is drawing only, too: RequestHandler refuses the same names
-// whatever this answered, and the two share membership.whyNotAttachable. Must be
+// whatever this answered, and the two share attachment.Membership.WhyNotAttachable. Must be
 // mounted behind staffauth.Middleware.
 func DoulasHandler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -93,6 +94,9 @@ func DoulasHandler() http.Handler {
 		apierr.WriteJSON(w, http.StatusOK, resp)
 	})
 }
+
+// doulaRole is the practice_role the roster read below selects on.
+const doulaRole = "doula"
 
 // doulaRosterQuery reads every Member of the Practice who holds the Doula
 // role, the caller first and the rest by name. s.id breaks the tie,
@@ -127,8 +131,8 @@ func listRequestDoulas(ctx context.Context, tx *sql.Tx, practiceID, callerStaffI
 		isCaller := row.StaffID == callerStaffID
 		// Every row the query returns is a Member who holds the Doula
 		// role, so the rule has only her Employment type left to read.
-		listed := membership{exists: true, isDoula: true, employmentType: employmentType}
-		if listed.whyNotAttachable() != attachable || (!isCaller && !readsRoster) {
+		listed := attachment.Membership{Exists: true, IsDoula: true, EmploymentType: employmentType}
+		if listed.WhyNotAttachable() != attachment.Attachable || (!isCaller && !readsRoster) {
 			continue
 		}
 		callerListed = callerListed || isCaller

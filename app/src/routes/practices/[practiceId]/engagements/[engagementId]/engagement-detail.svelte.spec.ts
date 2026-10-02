@@ -61,6 +61,8 @@ interface Detail {
 	clientPortalInviteStatus?: string;
 	clientEmailSuppressed?: boolean;
 	clientHasEmail?: boolean;
+	doulas: { staffId: string; name: string }[];
+	canAttachSelf: boolean;
 }
 
 // The Engagement is handed in as `data` rather than stubbed out of a
@@ -1294,6 +1296,176 @@ describe('what the Offers form says when the roster holds nobody (#1432)', () =>
 		await expect.element(testPage.getByText(/^There is no one at this practice to offer this work to/)).toBeVisible();
 		expect(testPage.getByRole('group', { name: 'Offer this work to' }).elements()).toHaveLength(0);
 		await expect.element(testPage.getByLabelText('Email address')).toBeVisible();
+	});
+});
+
+// #1598: nobody offers herself work. The Offers form reads the roster the
+// Visit pickers read, minus the person at the screen; the pickers keep her.
+describe('the Offers form does not list the person at the screen (#1598)', () => {
+	it('leaves the reader out of the Doula pick, and keeps her in the Visit picker', async () => {
+		// The fixture's reader is `staff-1`, the roster's first Doula.
+		await setupWithRoster();
+
+		const doulaPick = testPage.getByRole('group', { name: 'Doula', exact: true });
+		await expect.element(doulaPick.getByLabelText('Jordan Reyes')).toBeVisible();
+		expect(doulaPick.getByLabelText('Anne-Marie Ochieng-Whitfield').elements()).toHaveLength(0);
+
+		const visitPicker = testPage.getByLabelText('Who is this Visit for?');
+		expect(visitPicker.getByRole('option', { name: 'Anne-Marie Ochieng-Whitfield (you)' }).elements()).toHaveLength(1);
+	});
+
+	it('says there is no one to offer the work to when the reader is the only Doula at the Practice', async () => {
+		await setupWithRoster(
+			jsonResponse({
+				items: [{ staffId: 'staff-1', name: 'Anne-Marie Ochieng-Whitfield', employmentType: 'employee', nameable: true }]
+			})
+		);
+
+		await expect.element(testPage.getByText(/^There is no one at this practice to offer this work to/)).toBeVisible();
+		expect(testPage.getByRole('group', { name: 'Offer this work to' }).elements()).toHaveLength(0);
+		await expect.element(testPage.getByLabelText('Email address')).toBeVisible();
+		// The same roster still gives her own Visit its standing answer.
+		await expect.element(testPage.getByLabelText('Who is this Visit for?')).toHaveValue('staff-1');
+	});
+
+	it('still says the roster could not be read, and not that nobody is there, when the read fails', async () => {
+		await setupWithRoster(jsonResponse('the roster is unavailable', 500));
+
+		await expect.element(testPage.getByText(/^We could not load who is at this practice/)).toBeVisible();
+		expect(testPage.getByText(/^There is no one at this practice to offer this work to/).elements()).toHaveLength(0);
+	});
+});
+
+// #1598: who is on the Engagement, and the one press that puts an
+// employee Doula on it. The BFF decides who is offered the control
+// (Detail.canAttachSelf); this page draws what it is told.
+const attachSelfPath = '/api/practices/practice-1/engagements/engagement-1/attachments/me';
+const putMeOnIt = () => testPage.getByRole('button', { name: 'Put me on this Engagement' });
+
+async function setupWhoIsOn(detail: Detail, attachResponse?: () => Response) {
+	await testPage.viewport(1440, 900);
+	apiFetchWithSession.mockImplementation((path: string) =>
+		Promise.resolve(
+			attachResponse && path.endsWith('/attachments/me') ? attachResponse() : jsonResponse('not available', 403)
+		)
+	);
+	await render(Page, {
+		data: { ...detail, session: sessionFor(['owner', 'doula']) },
+		params: fixture.params
+	});
+}
+
+describe('who is on the Engagement, and putting yourself on it (#1598)', () => {
+	const nobodyOnIt: Detail = { ...fixtureDetail, doulas: [], canAttachSelf: true };
+
+	beforeEach(() => {
+		apiFetchWithSession.mockReset();
+	});
+
+	it('names each Doula on the Engagement in the summary, and offers no control to a reader the BFF does not offer it to', async () => {
+		await setupWhoIsOn(fixtureDetail);
+
+		await expect.element(testPage.getByText('Doulas', { exact: true })).toBeVisible();
+		await expect
+			.element(testPage.getByText('Persephone Vandermeulen-Achterberg, CD(DONA), Bo Ng', { exact: true }))
+			.toBeVisible();
+		expect(putMeOnIt().elements()).toHaveLength(0);
+	});
+
+	it('says "No Doula yet" and offers the control where the BFF says the press would be accepted', async () => {
+		await setupWhoIsOn(nobodyOnIt);
+
+		await expect.element(testPage.getByText('No Doula yet', { exact: true })).toBeVisible();
+		await expect.element(putMeOnIt()).toBeVisible();
+	});
+
+	// A contractor Doula, and an Owner or an Admin who holds no Doula role,
+	// read `canAttachSelf: false` from the BFF. The control is drawn off
+	// that one field, so nobody is on it and there is still no button.
+	it('offers no control with nobody on the Engagement, where the BFF says the reader may not attach herself', async () => {
+		await setupWhoIsOn({ ...nobodyOnIt, canAttachSelf: false });
+
+		await expect.element(testPage.getByText('No Doula yet', { exact: true })).toBeVisible();
+		expect(putMeOnIt().elements()).toHaveLength(0);
+	});
+
+	it('puts the reader on the Engagement with one press, names her, says so, and takes the control away', async () => {
+		await setupWhoIsOn(nobodyOnIt, () =>
+			jsonResponse({
+				engagementId: 'engagement-1',
+				doulas: [{ staffId: 'staff-1', name: 'Anne-Marie Ochieng-Whitfield' }],
+				canAttachSelf: false
+			})
+		);
+		await expect.element(putMeOnIt()).toBeVisible();
+		apiFetchWithSession.mockClear();
+
+		await putMeOnIt().click();
+
+		expect(apiFetchWithSession).toHaveBeenCalledWith(attachSelfPath, { method: 'PUT' });
+		// The result takes focus: the button she pressed is gone.
+		await expect.element(testPage.getByText('You are on this Engagement.')).toHaveFocus();
+		expect(testPage.getByText('No Doula yet', { exact: true }).elements()).toHaveLength(0);
+		expect(putMeOnIt().elements()).toHaveLength(0);
+		// The ledger has a new entry and the birth can now have an On-call
+		// window, so both sections are read again.
+		await vi.waitFor(() => {
+			expect(apiFetchWithSession).toHaveBeenCalledWith('/api/practices/practice-1/engagements/engagement-1/on-call');
+			expect(apiFetchWithSession).toHaveBeenCalledWith(
+				'/api/practices/practice-1/engagements/engagement-1/activity'
+			);
+		});
+	});
+
+	it('shows the refusal and keeps the control when the BFF refuses the press', async () => {
+		await setupWhoIsOn(nobodyOnIt, () => jsonResponse('This Engagement has completed, so nobody can be put on it.', 409));
+		await expect.element(putMeOnIt()).toBeVisible();
+
+		await putMeOnIt().click();
+
+		await expect.element(testPage.getByText('This Engagement has completed, so nobody can be put on it.')).toBeVisible();
+		await expect.element(putMeOnIt()).toBeVisible();
+		await expect.element(testPage.getByText('No Doula yet', { exact: true })).toBeVisible();
+	});
+
+	// A Visit that names an employee grants her an Attachment, so the
+	// Engagement is read again after the write: the reader who logs her own
+	// Visit is on the Engagement, and the control goes.
+	it('reads who is on the Engagement again after a Visit is added', async () => {
+		await testPage.viewport(1440, 900);
+		const respond = toApiResponder(fixture);
+		let isVisitAdded = false;
+		apiFetchWithSession.mockImplementation((path: string, init?: RequestInit) => {
+			if (path.endsWith('/visits') && init?.method === 'POST') {
+				isVisitAdded = true;
+				return Promise.resolve(jsonResponse({ visitId: 'visit-3' }, 201));
+			}
+			if (/\/engagements\/engagement-1$/.test(path)) {
+				return Promise.resolve(
+					jsonResponse(
+						isVisitAdded
+							? {
+									...nobodyOnIt,
+									doulas: [{ staffId: 'staff-1', name: 'Anne-Marie Ochieng-Whitfield' }],
+									canAttachSelf: false
+								}
+							: nobodyOnIt
+					)
+				);
+			}
+			return respond(path);
+		});
+		await render(Page, {
+			data: { ...nobodyOnIt, session: sessionFor(['owner', 'doula']) },
+			params: fixture.params
+		});
+		await expect.element(putMeOnIt()).toBeVisible();
+		await expect.element(testPage.getByLabelText('Who is this Visit for?')).toHaveValue('staff-1');
+
+		await testPage.getByRole('button', { name: 'Add a Visit' }).click();
+
+		await expect.element(putMeOnIt()).not.toBeInTheDocument();
+		expect(testPage.getByText('No Doula yet', { exact: true }).elements()).toHaveLength(0);
 	});
 });
 

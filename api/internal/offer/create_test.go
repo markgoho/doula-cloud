@@ -295,6 +295,67 @@ func TestCreateHandler_RefusesInvalidBodyAndNonPrivilegedCaller(t *testing.T) {
 		http.StatusForbidden)
 }
 
+// TestCreateHandler_RefusesAnOfferToTheSender is #1598: nobody offers
+// herself work (ADR-0008's amendment on #1515). The Owner here also holds
+// the Doula role, so every other check on a Staff target would admit her
+// -- the refusal is the comparison with the actor and nothing else. It
+// names the field and the reason (docs/api-design.md section 7 rule 4),
+// and it writes nothing: no Offer, and no offer_sent entry on the
+// Engagement's ledger.
+func TestCreateHandler_RefusesAnOfferToTheSender(t *testing.T) {
+	db := testdb.New(t)
+	practiceID := testdb.SeedPractice(t, db, "Solo Practice")
+	ownerID := testdb.SeedStaffAtPractice(t, db, practiceID, "uid-owner", []string{ownerRole, doulaRole}, employeeType)
+	srv, session := newServer(t, db, "uid-owner", &tasknudge.FakeEnqueuer{})
+	t.Cleanup(srv.Close)
+	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
+	url := srv.URL + "/api/practices/" + practiceID + "/engagements/" + engagementID + "/offers"
+	fee := int64(45000)
+	byStaffID := offerBody(ownerID, 0)
+	byStaffID.AmountCents = nil
+
+	cases := []struct {
+		name  string
+		body  offer.CreateRequest
+		field string
+		want  string
+	}{
+		{"by staff id", byStaffID, "staffId", offer.MsgTargetIsSender},
+		// Her own address, in another case: the email path compares the
+		// normalized address, so it is the same refusal and not the
+		// "already holds a membership" 409, which would tell her to offer
+		// the work to that Staff member -- herself.
+		{"by her own email address", emailOfferBody("UID-Owner@example.com", &fee), "email", offer.MsgTargetAddressIsSender},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			resp := do(t, http.MethodPost, url, session, tc.body)
+			expectStatus(t, resp, http.StatusBadRequest)
+			refusal := decodeRefusal(t, resp)
+			if refusal.Code != apierr.CodeInvalidArgument {
+				t.Fatalf("code = %q, want %q", refusal.Code, apierr.CodeInvalidArgument)
+			}
+			if got := refusal.Details[tc.field]; got != tc.want {
+				t.Fatalf("details[%q] = %q, want %q", tc.field, got, tc.want)
+			}
+
+			offers, invitations, outbox := offerRowCounts(t, db, engagementID, "uid-owner@example.com")
+			if offers != 0 || invitations != 0 || outbox != 0 {
+				t.Fatalf("a refused offer wrote rows: offers=%d invitations=%d outbox=%d", offers, invitations, outbox)
+			}
+			var entries int
+			if err := db.Admin.QueryRowContext(t.Context(),
+				`SELECT count(*) FROM activity WHERE subject_id = $1 AND action = 'offer_sent'`, engagementID,
+			).Scan(&entries); err != nil {
+				t.Fatalf("count offer_sent entries: %v", err)
+			}
+			if entries != 0 {
+				t.Fatalf("offer_sent entries = %d, want 0", entries)
+			}
+		})
+	}
+}
+
 // offerRowCounts reads back the three things #862's AC says a refused
 // Offer must never write: the engagement_offers row, a
 // practice_invitations row for address (email-target path only), and the

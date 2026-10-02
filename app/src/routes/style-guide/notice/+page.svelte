@@ -24,4 +24,14 @@
 			/>
 		</stack-l>
 	</section>
+
+	<section>
+		<h2>Focused when it appears</h2>
+		<!--
+			For the result of a control that is gone once it has been
+			pressed: the Notice takes focus, so it shows its focus ring here
+			on load. It is not in the tab order.
+		-->
+		<Notice variant="status" message="You are on this Engagement." isFocusedOnAppear />
+	</section>
 </stack-l>

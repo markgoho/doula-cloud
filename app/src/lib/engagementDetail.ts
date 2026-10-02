@@ -29,6 +29,7 @@
 import type { Fetcher } from './fetcher.js';
 
 import { apiErrorMessage } from './apiErrorMessage.js';
+import { NO_DOULA_YET_LABEL } from './engagementRequest.js';
 import { refusalOrConfirmable, type Refusal } from './formErrors.js';
 import type { CursorPage } from './paginatedList.svelte.js';
 
@@ -84,6 +85,66 @@ export interface EngagementSummary {
 	 * "can pay" so a stale cache never manufactures a block that isn't
 	 * real. */
 	clientsCanPay?: boolean;
+	/** Who is on this Engagement (#1598): each Doula who holds an open,
+	 * granted Attachment on it, in the order they were attached. Always
+	 * present, and empty where nobody is on it yet. */
+	doulas: AttachedDoula[];
+	/** Whether the BFF would put this reader on the Engagement now
+	 * (#1598): she is an employee Doula, the Engagement has not completed,
+	 * and she is not on it. The hub draws "Put me on this Engagement" off
+	 * this and holds no copy of the rule, the arrangement `statusMoves`
+	 * has with the status endpoint. */
+	canAttachSelf: boolean;
+}
+
+/** One Doula on an Engagement. Mirrors the Go BFF's
+ * engagement.AttachedDoula. */
+export interface AttachedDoula {
+	staffId: string;
+	name: string;
+}
+
+/** Who is on an Engagement, as both the Engagement read and the
+ * self-attach write answer it. */
+export type WhoIsOn = Pick<EngagementSummary, 'doulas' | 'canAttachSelf'>;
+
+/**
+ * The summary row that says who is on an Engagement, or `undefined`
+ * where there is nothing true to say: a completed Engagement holds no
+ * Attachment (completion ends each one), and "No Doula yet" promises a
+ * Doula that a completed Engagement will not get. The words are
+ * engagementRequest.ts's own, so the Start work form (#1596), the Clients
+ * list (#1597) and this row say one thing.
+ */
+export function doulaSummaryItem(
+	doulas: AttachedDoula[],
+	status: string
+): { label: string; value: string } | undefined {
+	if (doulas.length === 0) {
+		return status === 'completed' ? undefined : { label: 'Doula', value: NO_DOULA_YET_LABEL };
+	}
+	return {
+		label: doulas.length === 1 ? 'Doula' : 'Doulas',
+		value: doulas.map((doula) => doula.name).join(', ')
+	};
+}
+
+export function ownAttachmentURL(reference: EngagementReference): string {
+	return `${engagementURL(reference)}/attachments/me`;
+}
+
+/**
+ * Puts the reader on the Engagement (#1598): "Put me on this
+ * Engagement". `PUT`, no body and no `Idempotency-Key`: the only person
+ * it can attach is the person who pressed, and a second press by a person
+ * already on it writes nothing and answers the same 200
+ * (docs/api-design.md rule 4).
+ */
+export async function attachSelf(fetcher: Fetcher, reference: EngagementReference): Promise<WhoIsOn> {
+	const response = await fetcher(ownAttachmentURL(reference), { method: 'PUT' });
+	if (!response.ok) throw new Error(await apiErrorMessage(response));
+	const { doulas, canAttachSelf } = (await response.json()) as WhoIsOn;
+	return { doulas, canAttachSelf };
 }
 
 /** ADR-0015's six named reasons a completed Engagement may carry, in the

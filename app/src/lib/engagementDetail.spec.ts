@@ -2,11 +2,13 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { jsonResponse } from './testResponse.js';
 import {
+	attachSelf,
 	birthOutcomeLabel,
 	birthOutcomeURL,
 	changeEngagementKind,
 	changeEngagementStatus,
 	createVisit,
+	doulaSummaryItem,
 	downloadAttachment,
 	loadAttachmentPreviews,
 	loadEngagement,
@@ -262,6 +264,58 @@ describe('changeEngagementKind', () => {
 		await expect(changeEngagementKind(fetcher, reference, 'postpartum')).rejects.toThrow(
 			'only a Practice Owner, Admin or Doula can do that'
 		);
+	});
+});
+
+// #1598: the reader puts herself on the Engagement.
+describe('attachSelf', () => {
+	it('puts with no body, and answers who is on the Engagement', async () => {
+		const answer = {
+			engagementId: 'engagement-1',
+			doulas: [{ staffId: 'staff-1', name: 'Hana Kim' }],
+			canAttachSelf: false
+		};
+		const fetcher = vi.fn().mockResolvedValue(jsonResponse(answer));
+
+		const result = await attachSelf(fetcher, reference);
+
+		expect(fetcher).toHaveBeenCalledWith(`${base}/attachments/me`, { method: 'PUT' });
+		expect(result).toEqual({ doulas: answer.doulas, canAttachSelf: false });
+	});
+
+	it('throws a refusal', async () => {
+		const fetcher = vi
+			.fn()
+			.mockResolvedValue(jsonResponse('A contractor Doula goes on an Engagement when she accepts an Offer.', 403));
+
+		await expect(attachSelf(fetcher, reference)).rejects.toThrow(
+			'A contractor Doula goes on an Engagement when she accepts an Offer.'
+		);
+	});
+});
+
+describe('doulaSummaryItem', () => {
+	const hana = { staffId: 'staff-1', name: 'Hana Kim' };
+	const renata = { staffId: 'staff-2', name: 'Renata Alvarez' };
+
+	it('says "No Doula yet" for a live Engagement nobody is on', () => {
+		expect(doulaSummaryItem([], 'intake')).toEqual({ label: 'Doula', value: 'No Doula yet' });
+		expect(doulaSummaryItem([], 'active')).toEqual({ label: 'Doula', value: 'No Doula yet' });
+	});
+
+	it('names the one Doula', () => {
+		expect(doulaSummaryItem([hana], 'active')).toEqual({ label: 'Doula', value: 'Hana Kim' });
+	});
+
+	it('names each Doula, in the order they were attached, under a plural label', () => {
+		expect(doulaSummaryItem([hana, renata], 'active')).toEqual({
+			label: 'Doulas',
+			value: 'Hana Kim, Renata Alvarez'
+		});
+	});
+
+	it('has no row for a completed Engagement, which holds no Attachment and will get no Doula', () => {
+		expect(doulaSummaryItem([], 'completed')).toBeUndefined();
 	});
 });
 

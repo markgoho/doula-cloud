@@ -175,6 +175,9 @@ func TestReader_RoleAndEmploymentTypePredicates(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			reader := staffauth.NewReader("staff-id", tc.roles, tc.employmentType)
+			if got := reader.EmploymentType(); got != tc.employmentType {
+				t.Errorf("EmploymentType() = %q, want %q", got, tc.employmentType)
+			}
 			if got := reader.IsContractor(); got != tc.wantContractor {
 				t.Errorf("IsContractor() = %v, want %v", got, tc.wantContractor)
 			}

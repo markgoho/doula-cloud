@@ -349,9 +349,10 @@ describe('OfferSection.svelte', () => {
 		await expect.element(page.getByText('Enter a fee').first()).toBeVisible();
 	});
 
-	// #1432: a Practice with nobody to pick from. Today that is a Practice
-	// with no Doula at all; once #1598 takes the sender out of the list it
-	// is also every solo Owner, whose only Doula is the person at the screen.
+	// #1432: a Practice with nobody to pick from. That is a Practice with
+	// no Doula at all, and, since #1598 took the sender out of the list the
+	// Engagement page hands this form, every solo Owner, whose only Doula is
+	// the person at the screen.
 	describe('with nobody else at the Practice to pick', () => {
 		it('asks no question that has one answer, and says in words why', async () => {
 			await setup({ doulas: [] });

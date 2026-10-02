@@ -81,7 +81,7 @@
 
 	// #1432: "Someone already at this practice" is a question only while
 	// there is somebody to pick. With nobody -- a Practice with no Doula,
-	// or (after #1598 takes the sender out of the list) a solo Owner whose
+	// or (since #1598 took the sender out of the list) a solo Owner whose
 	// only Doula is the person at the screen -- the form has one answer
 	// left, so it does not ask: GOV.UK's radios are for a choice, and an
 	// option with nothing behind it is a refusal waiting for a submit.
@@ -232,7 +232,7 @@
 		</p>
 	{:else if firstDoula === undefined}
 		<!-- True for a Practice with no Doula, and for a reader who is its
-		     only Doula once #1598 takes the sender out of the list: the words
+		     only Doula, whom the Engagement page leaves out (#1598): the words
 		     say nothing about whether the person at the screen is a Doula. -->
 		<p>There is no one at this practice to offer this work to, so it can only be offered to someone new, by email.</p>
 	{:else}

@@ -6,7 +6,8 @@ import (
 )
 
 // Mount registers the Engagement detail read, its activity ledger, its
-// status transition, and its birth-outcome write. AnyStaff mirrors
+// status transition, its birth-outcome write, its kind change, and the
+// caller's own Attachment (#1598). AnyStaff mirrors
 // visit.ListHandler: the money
 // filter (Owner/Admin see every entry, everyone else never sees a
 // Contract-price or Invoice/payment one, per ADR-0008) runs inside the
@@ -34,4 +35,12 @@ func Mount(g *staffauth.GatedRouter, ir *idempotency.Router) {
 	ir.Exempt("PUT /api/practices/{practiceId}/engagements/{engagementId}/kind",
 		"naturally idempotent (docs/api-design.md rule 4): a PUT of the kind the Engagement already holds writes nothing and returns the same 200",
 		false, ChangeKindHandler())
+	// AttachSelfHandler (#1598) carries no staffauth.AttachingWrite: it
+	// mints a granted Attachment itself, which that seam must never do,
+	// and the seam attaches nobody who holds Owner or Admin. No role list
+	// either: the rule is a role and an Employment type together, so the
+	// handler asks it of the Reader (refuseSelfAttach).
+	ir.Exempt("PUT /api/practices/{practiceId}/engagements/{engagementId}/attachments/me",
+		"naturally idempotent (docs/api-design.md rule 4): a PUT by a caller who is already on the Engagement writes nothing and returns the same 200",
+		false, AttachSelfHandler())
 }
