@@ -86,11 +86,23 @@ interface Rule {
 
 // A stem whose bare British "-is" form is also the start of an American
 // word -- "generalist", "finalist", "optimistic", "realistic",
-// "characteristic", "nationalist" -- so the stem alone is no rule. Each one
-// becomes three rules that name the suffix: the verb (which holds "-ed" and
-// "-es"), the "-ing" form, and the noun. All three, not only the form the
-// tree held, because a half-listed pair is how #1154 followed #921.
-const ISE_STEMS = ['generali', 'finali', 'optimi', 'reali', 'characteri', 'nationali'] as const;
+// "characteristic", "nationalist", "harmonist", "systematist" -- so the
+// stem alone is no rule. Each one becomes three rules that name the suffix:
+// the verb (which holds "-ed" and "-es"), the "-ing" form, and the noun.
+// All three, not only the form the tree held, because a half-listed pair
+// is how #1154 followed #921.
+const ISE_STEMS = [
+	'generali',
+	'finali',
+	'optimi',
+	'reali',
+	'characteri',
+	'nationali',
+	'memori',
+	'harmoni',
+	'containeri',
+	'systemati'
+] as const;
 
 const RULES: readonly Rule[] = [
 	{ british: '\u{66}fence', american: 'offense' },
@@ -182,10 +194,6 @@ const RULES: readonly Rule[] = [
 	// spellings of each word and puts the one without the "e" first, and
 	// the tree held both, which is the thing this spec exists to stop.
 	{ british: 'acknowledg\u{65}ment', american: 'acknowledgment' },
-	{ british: 'memori\u{73}', american: 'memorize' },
-	{ british: 'harmoni\u{73}', american: 'harmonize' },
-	{ british: 'containeri\u{73}', american: 'containerize' },
-	{ british: 'systemati\u{73}', american: 'systematize' },
 	...ISE_STEMS.flatMap((stem) => [
 		{ british: `${stem}\u{73}e`, american: `${stem}ze` },
 		{ british: `${stem}\u{73}ing`, american: `${stem}zing` },
@@ -405,9 +413,10 @@ const siteFiles = globFiles('site/src/**/*.{svelte,ts,js,css,svg,html,md}', { cw
 
 // #1644: the hand-written documents. `CLAUDE.md` says documentation is
 // American English too, and #899, #921, #1154 and #1218 each swept the code
-// and left `docs/` to the next reader's eye, which is how an ADR came to
-// say "enrolment" a year after the code stopped. The file set is the one
-// `prose.usage.spec.ts` reads, and the two exclusions are that spec's own:
+// and left `docs/` to the next reader's eye, which is how an ADR kept the
+// British spelling of "enrollment" after the code dropped it. The file set
+// is the one `prose.usage.spec.ts` reads, and the two exclusions are that
+// spec's own:
 //
 //   - `docs/research/transcripts/` is verbatim auto-generated captions.
 //   - `docs/design/doula-cloud.export.md` is generated from the `.pen` file
