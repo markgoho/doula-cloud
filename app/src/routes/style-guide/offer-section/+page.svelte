@@ -62,4 +62,20 @@
 		<h2>Nobody asked yet</h2>
 		<OfferSection offers={[]} {doulas} onCreate={async () => {}} onWithdraw={async () => {}} />
 	</section>
+
+	<!--
+		#1432: the two states with nobody to pick, drawn here so the
+		continuum sweep (ADR-0025) measures each at 320px. The first is a
+		Practice with no Doula other than the reader; the second is a
+		roster read that failed, which is not said in the same words.
+	-->
+	<section>
+		<h2>No one at the practice to pick</h2>
+		<OfferSection offers={[]} doulas={[]} onCreate={async () => {}} onWithdraw={async () => {}} />
+	</section>
+
+	<section>
+		<h2>The roster could not be read</h2>
+		<OfferSection offers={[]} doulas={undefined} onCreate={async () => {}} onWithdraw={async () => {}} />
+	</section>
 </stack-l>

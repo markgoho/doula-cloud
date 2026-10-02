@@ -1277,6 +1277,26 @@ describe('choosing who a Visit is for (#268, #274)', () => {
 	});
 });
 
+// #1432: the Offers form reads the same roster the Visit pickers do, and
+// "nobody is there" and "we could not find out" are two facts. A failed
+// read must not be told to an Owner as a Practice with no Doula on it.
+describe('what the Offers form says when the roster holds nobody (#1432)', () => {
+	it('does not tell an Owner that there is no one to offer the work to when the roster read fails', async () => {
+		await setupWithRoster(jsonResponse('the roster is unavailable', 500), ['owner']);
+
+		await expect.element(testPage.getByText(/^We could not load who is at this practice/)).toBeVisible();
+		expect(testPage.getByText(/^There is no one at this practice to offer this work to/).elements()).toHaveLength(0);
+	});
+
+	it('says that there is no one to offer the work to when the roster holds nobody, and asks for an email address', async () => {
+		await setupWithRoster(jsonResponse({ items: [] }), ['owner']);
+
+		await expect.element(testPage.getByText(/^There is no one at this practice to offer this work to/)).toBeVisible();
+		expect(testPage.getByRole('group', { name: 'Offer this work to' }).elements()).toHaveLength(0);
+		await expect.element(testPage.getByLabelText('Email address')).toBeVisible();
+	});
+});
+
 /*
  * #911: the pickers were drawn from the Practice-wide roster, which
  * cannot know anything about *this* Engagement -- so an Owner or Admin

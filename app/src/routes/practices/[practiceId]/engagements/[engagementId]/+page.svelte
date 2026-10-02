@@ -1783,9 +1783,20 @@
 {/snippet}
 
 {#snippet offersSection()}
+	<!--
+		The roster as it is, not `doulas ?? []` (#1432): an empty list
+		tells the form that there is no one to offer the work to, and
+		`undefined` tells it that the read failed. The other two meanings of
+		`undefined` do not reach this section. A refused read is a reader
+		who is not an Owner or Admin, and the Offers read refuses her at
+		the same gate (`staffauth.OwnerAndAdmin` on both), so the section
+		is not drawn. A read still in flight cannot be seen here either:
+		onMount awaits loadRoster before loadOffersSection, and this
+		section is drawn only once the Offers have landed.
+	-->
 	<OfferSection
 		{offers}
-		doulas={doulas ?? []}
+		{doulas}
 		clientName={detail!.clientName}
 		onCreate={handleCreateOffer}
 		onWithdraw={handleWithdrawOffer}
