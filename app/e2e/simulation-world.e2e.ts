@@ -92,8 +92,8 @@ test.describe.serial('The World stands up: description, Ridgeline, the tail', ()
 		const { staffId: doulaStaffId } = JSON.parse(await accepted.text());
 
 		const clients: SeededClient[] = [
-			{ slug: 'rehearsal-tail-1', givenName: 'Rehearsal', familyName: 'Tailone', kind: 'postpartum', dueDate: '', assignedDoulaSlug: 'test-doula' },
-			{ slug: 'rehearsal-tail-2', givenName: 'Rehearsal', familyName: 'Tailtwo', kind: 'birth', dueDate: '2027-03-15', assignedDoulaSlug: 'test-doula' }
+			{ slug: 'rehearsal-tail-1', givenName: 'Rehearsal', familyName: 'Tailone', kind: 'postpartum', dueDate: '', attachedDoulaSlug: 'test-doula' },
+			{ slug: 'rehearsal-tail-2', givenName: 'Rehearsal', familyName: 'Tailtwo', kind: 'birth', dueDate: '2027-03-15', attachedDoulaSlug: 'test-doula' }
 		];
 
 		const provisioned = await provisionTail(

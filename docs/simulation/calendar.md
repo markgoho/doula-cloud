@@ -98,9 +98,9 @@ Twenty-six weeks, Monday 4 January to Friday 2 July 2027, in simulated time. (Th
 
 **Month 2 — the first ordinary month.** Six births. Month 1's Invoices go out, and the first of them passes its due date with the clock actually running. The first Offer goes to a contractor — Fern Okada, one overflow birth. The first inquiry vanishes after its Request is filed. **A Client's address is typed wrong and hard-bounces**, which writes an `email_suppressions` row that then silently refuses every later message to her; nobody at Rooted is told. Dee Whitlock is handed a cheque and has nowhere to record it.
 
-**Month 3 — the week that hurts.** Week 11 carries **four births in five days**, two of them overlapping on one night, against a roster where three doulas are already working postpartum nights. One of the four is **three weeks early, at 02:00, and the assigned doula is already at another birth**. This is the week the run exists for, and it holds four of the five named probes. Renata's second Credit purchase. Mid-month, Tasha Bell signs up cold at `/signup` in fifteen minutes she does not have.
+**Month 3 — the week that hurts.** Week 11 carries **four births in five days**, two of them overlapping on one night, against a roster where three doulas are already working postpartum nights. One of the four is **three weeks early, at 02:00, and the doula on that Engagement is already at another birth**. This is the week the run exists for, and it holds four of the five named probes. Renata's second Credit purchase. Mid-month, Tasha Bell signs up cold at `/signup` in fifteen minutes she does not have.
 
-**Month 4 — the loss, and the departure.** Week 14: Nadia Haddad's pregnancy ends in stillbirth at 31 weeks. Also this month, **Bethany Kroll resigns with three open Engagements**, which have to be reassigned and whose Membership has to become something other than active. Camille Boyd calls Priya. Six births.
+**Month 4 — the loss, and the departure.** Week 14: Nadia Haddad's pregnancy ends in stillbirth at 31 weeks. Also this month, **Bethany Kroll resigns with three open Engagements**, each of which needs another doula on it, and her Membership has to become something other than active. Camille Boyd calls Priya. Six births.
 
 **Month 5 — money goes wrong.** An Invoice is disputed. A Client marks a notification as spam, suppressing herself, and her doula goes on believing she was told. A Client ghosts mid-Engagement and the enum has no state that describes her. **Kimiko Nakashima moves from employee to contractor** — a Membership change on a person with live work. Renata's third Credit purchase, on a roster whose New York share has changed. Five births.
 
@@ -144,7 +144,7 @@ What the schedule does cost is sign-ins. A jump longer than twelve simulated hou
 | | When | Who | The object they contend for |
 | --- | --- | --- | --- |
 | **P1 — Two labors, one night** | Week 11, Tuesday 02:00 | Priya Raman and Lena Vasquez at two births; Renata reading coverage | The Practice's coverage view, read while two Engagements change under it. This is Renata's own moment of truth, walked while it is actually true |
-| **P2 — Reassigned twice** | Week 11, Wednesday 09:15 | Renata and Dee Whitlock | One Engagement's assignment. Both open it to move it off a doula who is already at a birth, and both submit |
+| **P2 — Moved twice** | Week 11, Wednesday 09:15 | Renata and Dee Whitlock | Who is on one Engagement. Both open it to move it off a doula who is already at a birth, and both submit |
 | **P3 — One birth, two contractors** | Week 11, Thursday | Fern Okada and Yolanda Prieto | One overflow birth offered to both, accepted by both within a simulated minute. Whether that is one Offer or two is what the run finds out |
 | **P4 — The paywall and the purchase** | Week 2 | Renata creating Engagement 46, Dee buying Credits | The Practice's Credit balance, at zero, from two sessions |
 | **P5 — Both ends of a thread** | Week 16 | Hannah Sorensen and Maya Okonkwo | One Message thread, two posts in one simulated minute |
@@ -159,13 +159,13 @@ A world where every Client converts, every Invoice is paid and every doula stays
 | --- | --- | --- | --- |
 | An inquiry vanishes after the Request is filed | 4 walked; the provisioned tail carries the rest of the 60% that does not convert | Rooted | A refusal is durable and carries a reason; what the Practice sees afterwards has never been walked |
 | A Client ghosts mid-Engagement | 2 | Rooted, Okonkwo | `engagement_status` has no state that describes her — Nadia's problem in a milder form, and reached by a different road |
-| A doula resigns with open work | 1 — Bethany Kroll, month 4, three open Engagements | Rooted | Reassignment at volume, and what a Membership becomes when the person leaves |
+| A doula resigns with open work | 1 — Bethany Kroll, month 4, three open Engagements | Rooted | Putting another doula on several Engagements at once, and what a Membership becomes when the person leaves |
 | A contractor used once and never again | Already seeded — Trish Halvorsen, looked at in month 6 | Rooted | An Attachment that ended without being deleted |
 | Employment type changes mid-run | 1 — Kimiko Nakashima, employee to contractor, month 5 | Rooted | Fixed by the World. A Membership change on a person holding live work |
 | An Invoice is disputed | 1, month 5 | Rooted | |
 | An Invoice is simply never paid | 3 across the run | Rooted | Overdue behavior over genuinely elapsed time is this map's headline claim |
 | An Invoice is paid off-platform, by cheque | 1, month 2 | Rooted | Dee's known problem: money that arrives with nowhere to be recorded |
-| A birth three weeks early, at 02:00, assigned doula elsewhere | 1 — week 11 | Rooted | P1 |
+| A birth three weeks early, at 02:00, the doula on it elsewhere | 1 — week 11 | Rooted | P1 |
 | Four births in five days | 1 — week 11 | Rooted | The week meant to hurt |
 | A Client changes her mind about her plan after signing | 2 | Rooted, Okonkwo (Hannah) | Plan Instance edits after a Contract is signed |
 | A pregnancy ends in loss | 1 — Nadia, week 14 | Okonkwo | Fixed by the World |
@@ -178,7 +178,7 @@ A world where every Client converts, every Invoice is paid and every doula stays
 
 - **Erasure.** Confirmed out of run one on 2026-09-05, agreeing with [#761](https://github.com/markgoho/doula-cloud/issues/761) rather than overriding it. It is the one act that ends a Client's observability for everything after it, so it costs a Client whose later journey somebody is reading. It belongs to a run that has something to erase.
 - **A second loss.** One is the finding. A second is repeating the cruelest walk in the map for no new information.
-- **A doula who is dismissed rather than resigning.** One departure walks reassignment and Membership end; a second buys a different reason, not a different path.
+- **A doula who is dismissed rather than resigning.** One departure walks moving her Engagements to another doula and the end of her Membership; a second buys a different reason, not a different path.
 - **A Practice that hits the paywall and refuses to buy.** Both Practices that hit it, buy. A Practice that stops generating work spends months of run on one screen.
 - **A Credit refund, TOTP across the cast, and a Connected account at Ridgeline or Bell & Ortiz.** All three are [#761](https://github.com/markgoho/doula-cloud/issues/761)'s, each with its reason recorded there.
 - **Deliberate load testing.** The map's own out-of-scope. Observed slowness under this book is an ordinary friction entry with a number on it; synthetic concurrency beyond the five named probes is a different effort.
