@@ -1,6 +1,7 @@
 import { error, redirect } from '@sveltejs/kit';
 import { resolve } from '$app/paths';
-import { apiErrorMessage, isMFARequired } from '#lib/api.js';
+import { isMFARequired } from '#lib/api.js';
+import { apiErrorMessage } from '#lib/apiErrorMessage.js';
 import { staffLoginAfterSessionEnded } from '#lib/sessionEnded.js';
 
 /**
