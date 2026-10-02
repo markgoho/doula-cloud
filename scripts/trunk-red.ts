@@ -178,7 +178,7 @@ function failedJobs(run: Run): string {
     .filter((job) => job.conclusion !== null && RED.has(job.conclusion))
     .flatMap((job) => {
       const steps = (job.steps ?? []).filter(
-        (step) => step.conclusion === 'failure'
+        (step) => step.conclusion !== null && RED.has(step.conclusion)
       );
       return steps.length > 0
         ? steps.map(
@@ -215,7 +215,7 @@ function openOrUpdate(): void {
       ? 'failed'
       : `ended with \`${run.conclusion}\``;
   const trigger = isPush
-    ? `**Commit:** ${subject || '(no commit message in the event)'}`
+    ? `**Commit:** ${subject || '(no commit message in the event)'} (${run.head_sha})`
     : `**Trigger:** a \`${run.event}\` event, not a push. This run has no commit and no pull request of its own. It built trunk at **${short}**, and that commit did not cause the run.`;
   const body = [
     `**${run.name}** ${how} on trunk at **${short}**.`,

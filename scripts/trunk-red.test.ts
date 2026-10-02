@@ -227,6 +227,7 @@ describe('a red run', () => {
       '**Commit:** The three SvelteKit packages move to 3.0.0 stable (#1657) (#1660)'
     );
     expect(input.body).not.toContain('#9999');
+    expect(input.body).toContain(`(${SHA})`);
     expect(input.body).toContain(`**Run:** ${RUN_URL}`);
     expect(input.body).toContain('marketing site');
     expect(input.body).toContain(marker(SITE));
