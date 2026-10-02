@@ -6,7 +6,7 @@
  * `dependencyManifestsChanged` hardcoded its `package.json`/`bun.lock`
  * paths, and `ensureNodeModulesReal` (formerly `ensureAppNodeModulesReal`)
  * targeted `app/node_modules` by name. `gcp-dashboard/` -- a second
- * package on the same `@sveltejs/kit: "next"` line -- got no `bun install`
+ * package on the same SvelteKit 3 line -- got no `bun install`
  * at all in a fresh worktree.
  *
  * `sveltekitPackages` detects the package list by scanning for a

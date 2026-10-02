@@ -6,7 +6,7 @@ import { asPushMessage } from '#lib/push.js';
  * PUSH_MESSAGE_TYPE) arrives for engagementId -- the "already-open tab"
  * half of #61's "push wakes the client, which fetches the real content"
  * delivery; a closed/backgrounded tab instead relies on the
- * Notification's tap (service-worker.ts's notificationclick handler).
+ * Notification's tap (service-worker/index.ts's notificationclick handler).
  * Shared by both thread pages (Staff and Client-portal) rather than each
  * defining its own identical listener. Returns a cleanup function callers
  * must invoke in onDestroy.

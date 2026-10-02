@@ -1,8 +1,3 @@
-/// <reference types="@sveltejs/kit" />
-/// <reference no-default-lib="true"/>
-/// <reference lib="esnext" />
-/// <reference lib="webworker" />
-
 // #61's minimal PWA layer: a service worker scoped only to push events --
 // no offline caching, no asset precaching, per the ticket's explicit
 // scope. SvelteKit auto-detects and registers this file (see
@@ -14,12 +9,14 @@
 // The payload-parsing/notification-building logic lives in #lib/push.ts,
 // not here, so it's unit-testable via Vitest without a browser (per #61's
 // AC) -- this file only wires that logic to the two ServiceWorker events.
+//
+// This directory is its own TypeScript project (tsconfig.json beside this
+// file): a service worker has `WebWorker` types where the app has `DOM`,
+// so the root tsconfig.json excludes it and `bun run check` checks the two
+// separately.
 
+import { self as worker } from '$app/service-worker';
 import { notificationFor, parsePushPayload, pushMessageFor, threadURLFor } from '#lib/push.js';
-
-const worker = /** @type {ServiceWorkerGlobalScope} */ (
-	/** @type {unknown} */ (globalThis)
-);
 
 // A page open before this service worker activates is otherwise never
 // "controlled" by it (the browser only starts controlling a client on

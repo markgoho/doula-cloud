@@ -30,8 +30,8 @@ const pageState = vi.hoisted(() => ({
 vi.mock('$app/state', () => ({ page: pageState }));
 
 const goto = vi.hoisted(() => vi.fn());
-const invalidateAll = vi.hoisted(() => vi.fn());
-vi.mock('$app/navigation', () => ({ goto, invalidateAll }));
+const refreshAll = vi.hoisted(() => vi.fn());
+vi.mock('$app/navigation', () => ({ goto, refreshAll }));
 
 const signOutOfSession = vi.hoisted(() => vi.fn<() => Promise<SignOutOutcome>>());
 vi.mock('#lib/signOut.js', () => ({ signOutOfSession }));
@@ -86,7 +86,7 @@ async function setup({
 				offersBirthPlan
 			};
 	goto.mockReset();
-	invalidateAll.mockReset();
+	refreshAll.mockReset();
 	registerPushSubscriptionIfEnabled.mockReset();
 	signOutOfSession.mockReset();
 	signOutOfSession.mockResolvedValue(outcome);
@@ -212,7 +212,7 @@ describe('Client portal authenticated layout', () => {
 		// Otherwise a Back press to the Engagement URL would reuse the
 		// still-signed-in load result instead of re-checking the session
 		// (#487).
-		expect(invalidateAll).toHaveBeenCalled();
+		expect(refreshAll).toHaveBeenCalled();
 	});
 
 	it('stays put and reports a sign-out that failed', async () => {

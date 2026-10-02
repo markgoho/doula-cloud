@@ -187,7 +187,7 @@ function installReal(
 // empirically for app/: reproduces on a bare trunk checkout with zero
 // other changes, in every symlinked worktree, absent under a real install
 // (which is what CI already does, and CI is green). gcp-dashboard/ is on
-// the same @sveltejs/kit "next" line, so it gets the same treatment
+// the same SvelteKit 3 line, so it gets the same treatment
 // (#950), and so does any future sibling sveltekitPackages() finds. A
 // live symlink here is also a write hazard independent of that bug:
 // svelte-kit sync mutates node_modules/$app/* in place, so two worktrees

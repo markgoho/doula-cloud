@@ -21,7 +21,7 @@
 	 * mistyped the address.
 	 */
 	import { onMount } from 'svelte';
-	import { goto, invalidateAll } from '$app/navigation';
+	import { goto, refreshAll } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
 	import { apiFetch, apiFetchWithSession } from '#lib/api.js';
@@ -134,7 +134,7 @@
 			// otherwise reuse the still-signed-in load instead of
 			// re-checking the session (#487) -- the same reason the portal
 			// layout's own sign-out invalidates before it navigates.
-			await invalidateAll();
+			await refreshAll();
 			await goto(resolve('/portal/(signed-out)/login'));
 		} catch (error_) {
 			// Rethrown so ConfirmDialog stays open and renders this inside

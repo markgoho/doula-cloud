@@ -95,7 +95,7 @@ describe('the founder feedback list (#1526)', () => {
 		const links = testPage.getByRole('link').elements();
 		expect(links).toHaveLength(6);
 		for (const link of links) {
-			expect(link.closest<HTMLElement>('[data-sveltekit-preload-data]')?.dataset.sveltekitPreloadData).toBe('off');
+			expect(link.closest<HTMLElement>('[data-sveltekit-preload-data]')?.dataset.sveltekitPreloadData).toBe('false');
 		}
 	});
 

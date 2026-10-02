@@ -6,5 +6,5 @@
 		"strict": true
 	},
 	"include": ["src"],
-	"exclude": ["src/service-worker.ts"]
+	"exclude": ["src/service-worker"]
 }
