@@ -5,7 +5,7 @@ import { render } from 'vitest-browser-svelte';
 import CloudMark from './CloudMark.svelte';
 
 interface SetupOptions {
-	size?: 'sm' | 'md' | 'lg';
+	size?: 'sm' | 'md' | 'lg' | 'xl';
 	label?: string;
 }
 
@@ -56,12 +56,25 @@ describe('CloudMark', () => {
 	it.each([
 		['sm', '40', '19'],
 		['md', '60', '28'],
-		['lg', '120', '56']
+		['lg', '120', '56'],
+		['xl', '200', '93']
 	] as const)('draws %s at %sx%s', async (size, width, height) => {
 		const { svg } = await setup({ size });
 
 		expect(svg.getAttribute('width')).toBe(width);
 		expect(svg.getAttribute('height')).toBe(height);
+	});
+
+	// The landing's panel caps the xl mark at about 55% of its width
+	// (#1645), so in a narrow panel the mark is drawn smaller than 200px:
+	// its height must follow, or the strokes sit letterboxed in a 93px box.
+	it('keeps its proportion at xl when the space it is given is narrower than it', async () => {
+		const { svg } = await setup({ size: 'xl' });
+		svg.parentElement!.style.inlineSize = '100px';
+
+		const { width, height } = svg.getBoundingClientRect();
+		expect(width).toBe(100);
+		expect(height).toBeCloseTo((100 * 94) / 202, 0);
 	});
 
 	/*
@@ -95,7 +108,7 @@ describe('CloudMark', () => {
 	describe.each(themes)('in the %s theme', (theme) => {
 		// 28px tall or more: the outer line in --color-primary and the inner
 		// arch in --color-primary-hover.
-		it.each(['md', 'lg'] as const)('draws %s in two tones', async (size) => {
+		it.each(['md', 'lg', 'xl'] as const)('draws %s in two tones', async (size) => {
 			await withTheme(theme, async () => {
 				const { arch, outline } = await setup({ size });
 

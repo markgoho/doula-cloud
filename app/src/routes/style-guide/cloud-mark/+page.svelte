@@ -1,18 +1,20 @@
 <script lang="ts">
 	import CloudMark from '#lib/components/atoms/CloudMark.svelte';
 
-	const sizes = ['sm', 'md', 'lg'] as const;
+	const sizes = ['sm', 'md', 'lg', 'xl'] as const;
 </script>
 
 <stack-l space="var(--space-6)">
 	<h1>Cloud mark</h1>
 
 	<section>
-		<h2>Three sizes, one stroke width</h2>
+		<h2>Four sizes, one stroke width</h2>
 		<p>
 			Only the width and height vary. An SVG stroke is in viewBox units and scales with the frame,
 			so one <code>stroke-width</code> produces the weight ramp the canvas has to state by hand —
-			pen.dev's <code>strokeWidth</code> is node pixels and does not scale (#411).
+			pen.dev's <code>strokeWidth</code> is node pixels and does not scale (#411). <code>xl</code> is
+			the signed-out landing's mark, alone on its own panel (#1645); in a space narrower than 200px
+			it scales down and keeps its proportion.
 		</p>
 		<cluster-l space="var(--space-8)" align="center">
 			{#each sizes as size (size)}
@@ -28,7 +30,7 @@
 		<h2>Two strokes, and two tones from 28px</h2>
 		<p>
 			The mark is the outer two-lobe line and the inner arch, as <code>docs/marketing/brand.md</code>
-			sets it. At <code>md</code> and <code>lg</code> the mark is 28px tall or more, so the outer line
+			sets it. At <code>md</code>, <code>lg</code> and <code>xl</code> the mark is 28px tall or more, so the outer line
 			is <code>--color-primary</code> and the inner arch is <code>--color-primary-hover</code>. At
 			<code>sm</code> the two tones are too near to each other to read as two, so the two strokes are
 			<code>--color-primary</code>. The mark takes the tokens of its theme with no other change: use
