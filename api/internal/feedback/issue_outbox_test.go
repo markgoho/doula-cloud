@@ -221,9 +221,10 @@ func TestIssueWorker_RetryAdoptsAnIssueFoundByItsMarker(t *testing.T) {
 }
 
 // makeIssueOutboxRowDue pulls a row's next_attempt_at back to now, the
-// offer outbox tests' own convention: outbox.Worker.MarkFailed schedules
-// the retry a backoff step out, and issueClaimQuery compares against
-// Postgres's now(), so a second pass would otherwise claim nothing.
+// same statement the offer outbox tests run inline:
+// outbox.Worker.MarkFailed schedules the retry a backoff step out, and
+// issueClaimQuery compares against Postgres's now(), so a second pass
+// would otherwise claim nothing.
 func makeIssueOutboxRowDue(t *testing.T, db *testdb.DB, feedbackID string) {
 	t.Helper()
 	if _, err := db.Admin.ExecContext(t.Context(),
