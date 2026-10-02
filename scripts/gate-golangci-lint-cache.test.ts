@@ -20,6 +20,7 @@ import {
   mkdtempSync,
   realpathSync,
   rmSync,
+  symlinkSync,
   writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -72,20 +73,22 @@ function fixture(localVersion: string | null): {
     writeFileSync(fake, `#!/bin/sh\necho "${localVersion}"\n`);
     chmodSync(fake, 0o755);
   }
-  // Only the fixture's bin plus the system dirs the hook needs (jq, git,
-  // grep, awk): a real golangci-lint elsewhere on the developer's PATH
-  // must not answer for the fake one.
-  const jqDir = path.dirname(
-    execFileSync('which', ['jq'], { encoding: 'utf8' }).trim()
-  );
-  const gitDir = path.dirname(
-    execFileSync('which', ['git'], { encoding: 'utf8' }).trim()
-  );
+  // Only the fixture's bin plus the system dirs the hook needs (grep,
+  // awk): a real golangci-lint elsewhere on the developer's PATH must not
+  // answer for the fake one, or for a missing one. jq and git are linked
+  // into the fixture's bin one by one, and their own directories stay off
+  // PATH: Homebrew keeps jq beside the real golangci-lint, so that
+  // directory on PATH made "no golangci-lint" untrue on a developer's
+  // machine while CI stayed green (#1585).
+  for (const tool of ['jq', 'git']) {
+    const real = execFileSync('which', [tool], { encoding: 'utf8' }).trim();
+    symlinkSync(real, path.join(bin, tool));
+  }
   return {
     repo,
     env: {
       ...process.env,
-      PATH: [bin, jqDir, gitDir, '/usr/bin', '/bin'].join(':'),
+      PATH: [bin, '/usr/bin', '/bin'].join(':'),
     },
   };
 }
@@ -127,6 +130,13 @@ describe('the version ci.yml pins', () => {
   test('an older local golangci-lint is refused too', () => {
     const { repo, env } = fixture('2.12.2');
     expect(gate(LINT, repo, env).decision).toBe('deny');
+  });
+
+  // The case below means nothing unless the fixture's PATH really holds
+  // no golangci-lint, whatever the developer's own PATH holds (#1585).
+  test('the fixture PATH reaches no golangci-lint but its own fake', () => {
+    const { env } = fixture(null);
+    expect(spawnSync('which', ['golangci-lint'], { env }).status).not.toBe(0);
   });
 
   test('no golangci-lint on PATH is left to fail on its own', () => {
