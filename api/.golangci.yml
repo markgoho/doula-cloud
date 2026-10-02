@@ -64,7 +64,7 @@ linters:
         # IsAmbientContractor. A call that reads the Employment type as a
         # fact on purpose (the session's isContractor field, the reader's
         # own fee) carries //nolint:forbidigo and says what it decides.
-        # analyze-types below is what lets this name the method by its
+        # analyze-types above is what lets this name the method by its
         # type, whatever the variable is called; attachment.IsContractor
         # (a constant) and a response's IsContractor field are other
         # things and do not match.
