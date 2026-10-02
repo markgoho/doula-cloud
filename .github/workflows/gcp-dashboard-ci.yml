@@ -76,7 +76,7 @@ jobs:
         uses: actions/cache@v6
         with:
           path: ~/.cache/ms-playwright
-          key: playwright-shell-gcp-dashboard-${{ runner.os }}-${{ steps.playwright-version.outputs.version }}-miss1661
+          key: playwright-shell-gcp-dashboard-${{ runner.os }}-${{ steps.playwright-version.outputs.version }}
 
       # See the comment on the `app` job's step of the same name in ci.yml
       # (#1655, #1661). It also holds the job-timeout arithmetic for both steps.

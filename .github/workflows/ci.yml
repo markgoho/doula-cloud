@@ -101,7 +101,7 @@ jobs:
         uses: actions/cache@v6
         with:
           path: ~/.cache/ms-playwright
-          key: playwright-shell-${{ runner.os }}-${{ steps.playwright-version.outputs.version }}-miss1661
+          key: playwright-shell-${{ runner.os }}-${{ steps.playwright-version.outputs.version }}
 
       # See the comment on the `app` job's step of the same name (#1655,
       # #1661). It also holds the job-timeout arithmetic for both steps.
@@ -499,7 +499,7 @@ jobs:
         uses: actions/cache@v6
         with:
           path: ~/.cache/ms-playwright
-          key: playwright-shell-${{ runner.os }}-${{ steps.playwright-version.outputs.version }}-miss1661
+          key: playwright-shell-${{ runner.os }}-${{ steps.playwright-version.outputs.version }}
 
       # The OS libraries Chromium links against live outside the cached
       # path, so every fresh runner needs them, on a cache hit and on a
