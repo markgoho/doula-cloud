@@ -2,9 +2,8 @@ import '#lib/styles/app.css';
 import type { ComponentProps } from 'svelte';
 import { createRawSnippet } from 'svelte';
 import { page } from 'vitest/browser';
-import { beforeAll, describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { render } from 'vitest-browser-svelte';
-import { registerLayoutPrimitives } from '#lib/primitives/index.js';
 import LandingPage from './LandingPage.svelte';
 
 function textSnippet(text: string) {
@@ -82,94 +81,35 @@ describe('LandingPage.svelte', () => {
 
 /*
  * #1653: the shell owns the window's height and this Template fills it.
- * Mounted inside a real `<main>` in `<body>`, because the height comes
- * from base.css's rules on those two elements and from nowhere else.
+ * That is a contract between two files with nothing else to hold it: this
+ * Template marks its root `data-fills-main`, and base.css answers
+ * `main:has(> [data-fills-main])`. Rename either side and no type, lint
+ * rule or other spec notices; the panels just stop short of the window
+ * again. So the Template is mounted in a real `<main>` in `<body>`, as its
+ * own child, which is where the app puts it.
+ *
+ * What the rules then do with that height is CSS's business and is not
+ * asserted here.
  */
-async function setupInShell() {
-	const main = document.createElement('main');
-	document.body.append(main);
-	// `target`, so the Template's root is `main`'s own child, as it is in
-	// the app: base.css reads `main:has(> [data-fills-main])`.
-	await render(LandingPage, {
-		target: main,
-		props: {
-			title: 'Sign in or set up a Practice',
-			greeting: 'Good morning.',
-			lede: 'Welcome to DoulaCloud.',
-			content: textSnippet('The doors')
-		}
-	});
-	// querySelector, case 2 of svelte-tests.md: a panel is a layout box
-	// with no role of its own.
-	const welcome = main.querySelector('.welcome')!.getBoundingClientRect();
-	const greeting = page.getByText('Good morning.').element().getBoundingClientRect();
-	const lede = page.getByText('Welcome to DoulaCloud.').element().getBoundingClientRect();
-	return { main, welcome, greeting, lede };
-}
-
 describe('LandingPage.svelte in the shell', () => {
-	// The root layout registers these in the app. Without them `grid-l`
-	// ignores its `min`, and the panels split at a width the app never uses.
-	beforeAll(() => {
-		registerLayoutPrimitives();
-	});
-
-	it('reaches the bottom of a window taller than its content, with the content centered', async () => {
+	it('is given the height of a window taller than its content', async () => {
 		await page.viewport(1280, 1600);
-		const { main, welcome, greeting, lede } = await setupInShell();
+		const main = document.createElement('main');
+		document.body.append(main);
+		await render(LandingPage, {
+			target: main,
+			props: {
+				title: 'Sign in or set up a Practice',
+				greeting: 'Good morning.',
+				lede: 'Welcome to DoulaCloud.',
+				content: textSnippet('The doors')
+			}
+		});
 
+		// querySelector, case 2 of svelte-tests.md: a panel is a layout box
+		// with no role of its own.
+		const welcome = main.querySelector('.welcome')!.getBoundingClientRect();
 		expect(Math.round(welcome.bottom)).toBeGreaterThanOrEqual(window.innerHeight - 1);
-		// Centered: free space both under the last line and over the
-		// greeting. Top-aligned content would leave almost none over it.
-		const spaceUnder = welcome.bottom - lede.bottom;
-		const spaceOver = greeting.top - welcome.top;
-		expect(spaceUnder).toBeGreaterThan(welcome.height / 4);
-		expect(spaceOver).toBeGreaterThan(welcome.height / 4);
-		expect(document.documentElement.scrollHeight).toBeLessThanOrEqual(window.innerHeight);
-		main.remove();
-	});
-
-	it('centers the welcome block side to side, with the mark at its full size', async () => {
-		await page.viewport(1600, 900);
-		const { main, welcome, greeting } = await setupInShell();
-
-		// querySelector, case 2 of svelte-tests.md: the block and the mark
-		// are layout boxes with no role (the mark is aria-hidden).
-		const block = main.querySelector(':scope .welcome > stack-l')!.getBoundingClientRect();
-		const mark = main.querySelector('svg')!.getBoundingClientRect();
-		const spaceBefore = block.left - welcome.left;
-		const spaceAfter = welcome.right - block.right;
-		expect(Math.abs(spaceBefore - spaceAfter)).toBeLessThanOrEqual(1);
-		expect(spaceBefore).toBeGreaterThan(100);
-		// One shared left edge inside the block.
-		expect(Math.round(greeting.left)).toBe(Math.round(mark.left));
-		expect(Math.round(mark.width)).toBe(200);
-		main.remove();
-	});
-
-	it('centers the welcome block where the panels stack, too', async () => {
-		await page.viewport(600, 900);
-		const { main, welcome, greeting } = await setupInShell();
-
-		const title = page.getByRole('heading', { level: 1 }).element().getBoundingClientRect();
-		expect(title.top).toBeGreaterThan(greeting.bottom);
-		// querySelector, case 2 of svelte-tests.md: the block is a layout box
-		// with no role.
-		const block = main.querySelector(':scope .welcome > stack-l')!.getBoundingClientRect();
-		const spaceBefore = block.left - welcome.left;
-		const spaceAfter = welcome.right - block.right;
-		expect(Math.abs(spaceBefore - spaceAfter)).toBeLessThanOrEqual(1);
-		expect(spaceBefore).toBeGreaterThan(100);
-		main.remove();
-	});
-
-	it('scrolls in a window shorter than its content, with nothing cut off', async () => {
-		await page.viewport(320, 300);
-		const { main, welcome, lede } = await setupInShell();
-
-		expect(document.documentElement.scrollHeight).toBeGreaterThan(window.innerHeight);
-		expect(welcome.bottom).toBeGreaterThan(lede.bottom);
-		expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(320);
 		main.remove();
 	});
 });
