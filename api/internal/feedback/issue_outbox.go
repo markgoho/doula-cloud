@@ -161,9 +161,9 @@ func (w IssueWorker) ProcessPending(ctx context.Context, tx *sql.Tx) error {
 }
 
 // perform resolves one pending row: adopts an already-open issue found
-// by its marker, or opens a new one and labels it, then writes the
-// issue number onto the feedback row in the same transaction that marks
-// the outbox row sent (#1524's own AC).
+// by its marker, or opens a new one; labels it either way; then writes
+// the issue number onto the feedback row in the same transaction that
+// marks the outbox row sent (#1524's own AC).
 func (w IssueWorker) perform(ctx context.Context, tx *sql.Tx, inner outbox.Worker, r pendingIssueRow, now time.Time) error {
 	marker := issueMarker(r.feedbackID)
 
@@ -185,9 +185,14 @@ func (w IssueWorker) perform(ctx context.Context, tx *sql.Tx, inner outbox.Worke
 		if err != nil {
 			return markIssueErr(inner.MarkFailed(ctx, tx, r.id, r.attemptCount, fmt.Errorf("feedback: create issue: %w", err), now))
 		}
-		if err := w.Creator.AddLabels(ctx, number, []string{kindLabel[r.kind]}); err != nil {
-			return markIssueErr(inner.MarkFailed(ctx, tx, r.id, r.attemptCount, fmt.Errorf("feedback: add labels: %w", err), now))
-		}
+	}
+
+	// Outside the create branch on purpose (#1587): a retry that adopts
+	// an issue cannot tell whether the attempt that opened it got as far
+	// as labeling it, and GitHub's add-labels endpoint does not add a
+	// label an issue already has, so every attempt makes the call.
+	if err := w.Creator.AddLabels(ctx, number, []string{kindLabel[r.kind]}); err != nil {
+		return markIssueErr(inner.MarkFailed(ctx, tx, r.id, r.attemptCount, fmt.Errorf("feedback: add labels: %w", err), now))
 	}
 
 	if _, err := tx.ExecContext(ctx, `UPDATE feedback SET issue_number = $1 WHERE id = $2`, number, r.feedbackID); err != nil {

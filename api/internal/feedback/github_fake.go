@@ -2,6 +2,7 @@ package feedback
 
 import (
 	"context"
+	"slices"
 	"sync"
 	"time"
 )
@@ -69,7 +70,9 @@ func (f *FakeIssueCreator) CreateIssue(_ context.Context, title, body string) (i
 }
 
 // AddLabels records the call and attaches labels to the issue it names,
-// or returns AddLabelsErr if a test set one.
+// or returns AddLabelsErr if a test set one. A label the issue already
+// has is not attached a second time, the real endpoint's own behavior
+// (#1587: the worker labels on every attempt, an adopted issue included).
 func (f *FakeIssueCreator) AddLabels(_ context.Context, issueNumber int, labels []string) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -78,7 +81,11 @@ func (f *FakeIssueCreator) AddLabels(_ context.Context, issueNumber int, labels 
 		return f.AddLabelsErr
 	}
 	issue := f.Issues[issueNumber]
-	issue.Labels = append(issue.Labels, labels...)
+	for _, label := range labels {
+		if !slices.Contains(issue.Labels, label) {
+			issue.Labels = append(issue.Labels, label)
+		}
+	}
 	f.Issues[issueNumber] = issue
 	return nil
 }
