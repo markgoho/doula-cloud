@@ -105,10 +105,11 @@ export function emptyPracticeCredits(balance: number): string {
 	return `Adding a Client is free. Starting work with a Client uses 1 Credit, and this Practice has ${balance} Welcome credits.`;
 }
 
-// #1612, the Start work form. As #1612 wrote it: "Credits", not "Welcome
-// credits", although the balance here is still the signup bonus alone.
+// #1612, the Start work form. The rule of #1612 holds on the two screens
+// (#1496's resolution): "Welcome credits" while the balance is the signup
+// bonus alone, which it always is in this prototype; "N Credits" otherwise.
 export function startWorkCredits(name: string, balance: number): string {
-	return `Starting work with ${name} uses 1 Credit. This Practice has ${balance} Credits. After this, it has ${balance - 1}.`;
+	return `Starting work with ${name} uses 1 Credit. This Practice has ${balance} Welcome credits. After this, it has ${balance - 1}.`;
 }
 
 // #1539: a list shipped to the browser stands in for the real check.

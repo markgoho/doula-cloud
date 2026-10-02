@@ -17,7 +17,7 @@ export const SCREENS: { key: Screen; label: string }[] = [
 ];
 
 export const CREDITS_PLACES: { key: CreditsPlace; name: string }[] = [
-	{ key: 'A', name: 'Own paragraph, before the link (as decided)' },
+	{ key: 'A', name: 'Own paragraph, before the link (chosen by Mark, 2026-10-02)' },
 	{ key: 'B', name: 'In the same paragraph as the words' },
 	{ key: 'C', name: 'After the link, smaller' }
 ];
