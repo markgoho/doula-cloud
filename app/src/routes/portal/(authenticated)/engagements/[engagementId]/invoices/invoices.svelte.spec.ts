@@ -48,7 +48,7 @@ describe('Client-portal Invoices (#1564)', () => {
 		await expect.element(page.getByRole('heading', { level: 1, name: 'Invoices' })).toBeVisible();
 		await expect.element(page.getByRole('heading', { name: 'What you still owe' })).toBeVisible();
 		await expect.element(page.getByRole('heading', { name: 'What you have paid' })).toBeVisible();
-		await expect.element(page.getByRole('heading', { name: 'No longer owed' })).toBeVisible();
+		await expect.element(page.getByRole('heading', { name: 'What you no longer owe' })).toBeVisible();
 	});
 
 	it("writes the server's total, not a sum of the page", async () => {
@@ -64,7 +64,7 @@ describe('Client-portal Invoices (#1564)', () => {
 		await expect.element(page.getByText('Not yet paid').last()).toBeVisible();
 		await expect.element(page.getByText('Paid', { exact: true }).last()).toBeVisible();
 		await expect.element(page.getByText('Paid — $250.00 returned to you').last()).toBeVisible();
-		await expect.element(page.getByText('No longer owed', { exact: true }).last()).toBeVisible();
+		await expect.element(page.getByText('You no longer owe this', { exact: true }).last()).toBeVisible();
 	});
 
 	it('links each row to its own page by Invoice number', async () => {
@@ -95,7 +95,7 @@ describe('Client-portal Invoices (#1564)', () => {
 
 		await expect.element(page.getByText('There are no Invoices for this care.').last()).toBeVisible();
 		await expect.element(page.getByText('There are no Payments for this care.').last()).toBeVisible();
-		await expect.element(page.getByRole('heading', { name: 'No longer owed' })).not.toBeInTheDocument();
+		await expect.element(page.getByRole('heading', { name: 'What you no longer owe' })).not.toBeInTheDocument();
 	});
 
 	it('says there are no Payments while she still owes and has paid nothing', async () => {
@@ -107,7 +107,7 @@ describe('Client-portal Invoices (#1564)', () => {
 	it('claims no sentence when every Invoice is void, and shows no "balance" anywhere', async () => {
 		await setupInvoices(() => pageOf([voided]));
 
-		await expect.element(page.getByRole('heading', { name: 'No longer owed' })).toBeVisible();
+		await expect.element(page.getByRole('heading', { name: 'What you no longer owe' })).toBeVisible();
 		expect(page.getByText(/every Invoice|no Invoices/i).elements()).toHaveLength(0);
 		expect(document.body.textContent).not.toMatch(/balance/i);
 	});

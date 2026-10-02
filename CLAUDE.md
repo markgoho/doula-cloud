@@ -60,7 +60,7 @@ The GOV.UK Design System is the default reference for any screen that asks a per
 
 ### Copy
 
-The Voice section of `docs/design/brief.md` is the rule for every line a person reads on screen. Read it before writing or changing one. In short: no third-person pronoun for anyone, "you" and "your" for the reader, a clear label with at most one short line under it, a line a person would say aloud, and the words a doula or a Client has said in place of ours. `app/src/lib/copy.pronoun.usage.spec.ts` enforces the pronoun rule; the remainder is checked in review.
+The Voice section of `docs/design/brief.md` is the rule for every line a person reads on screen. Read it before writing or changing one. In short: no third-person pronoun for anyone, "you" and "your" for the reader, a clear label with at most one short line under it, a line a person would say aloud, and the words a doula or a Client has said in place of ours. `app/src/lib/copy.pronoun.usage.spec.ts` enforces the pronoun rule; `app/src/lib/copy.secondPerson.usage.spec.ts` enforces the narrow set of impersonal forms it can find where the reader is known ("owed" and "the Client" on a screen the Client reads, "Staff member" on the signed-in person's own account screen), with `voice:ignore` and a reason on the line as the deliberate override; the remainder is checked in review.
 
 ### Testing
 

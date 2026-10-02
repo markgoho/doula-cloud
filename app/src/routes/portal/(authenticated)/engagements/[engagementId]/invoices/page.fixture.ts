@@ -6,7 +6,7 @@
  * Invoice with the busiest amount, a paid by-hand Invoice that was
  * partly returned to her and carries the longest reference a Practice
  * could type (#537's hostile value), a paid Stripe Invoice with nothing
- * returned, and a void one so the "No longer owed" section is swept too.
+ * returned, and a void one so the "What you no longer owe" section is swept too.
  * The settled-state sentences and the refund sentence are the spec's,
  * where the content departs from this one.
  */
