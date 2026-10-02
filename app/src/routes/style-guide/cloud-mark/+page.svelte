@@ -8,7 +8,7 @@
 	<h1>Cloud mark</h1>
 
 	<section>
-		<h2>Three sizes, one stroke</h2>
+		<h2>Three sizes, one stroke width</h2>
 		<p>
 			Only the width and height vary. An SVG stroke is in viewBox units and scales with the frame,
 			so one <code>stroke-width</code> produces the weight ramp the canvas has to state by hand —
