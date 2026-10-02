@@ -59,6 +59,10 @@ const demos = toDemos(pageModules, [
  * here (ADR-0025's own instruction). `it.fails` turns red, not green, the
  * day either issue closes without this file changing -- that is what
  * forces the entry out once the retrofit actually lands.
+ *
+ * Keyed by the subject's name, not the page's slug (#1638): a page that
+ * declares `variants` is several subjects behind one slug, and an entry
+ * must be able to say which state of it is the broken one.
  */
 const KNOWN_BROKEN: Readonly<Record<string, string>> = {};
 
@@ -78,7 +82,7 @@ describe('the continuum check', () => {
 			 * `floor.svelte.spec.ts`, and #570's route sweep would have been
 			 * the third copy -- so it moved next to `sweep`.
 			 */
-			const { run, frame, remove } = await mountInFrame(demo.component);
+			const { run, frame, remove } = await mountInFrame(demo.component, demo.props);
 			try {
 				const found = sweep(frame, run.clientWidth);
 				/*
@@ -94,7 +98,7 @@ describe('the continuum check', () => {
 			}
 		}
 
-		const brokenOn = KNOWN_BROKEN[demo.slug];
+		const brokenOn = KNOWN_BROKEN[demo.name];
 		if (brokenOn) {
 			it.fails(`${demo.name} (${brokenOn}) still needs more room than it is given`, assertion);
 		} else {
