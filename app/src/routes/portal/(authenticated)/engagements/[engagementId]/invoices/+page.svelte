@@ -8,7 +8,7 @@
 	 *
 	 * Every section renders, empty or not (#982): a missing section and a
 	 * section that failed to load look alike to her, and this is the screen
-	 * she visits to be reassured. A third section, "No longer owed", holds
+	 * she visits to be reassured. A third section, "What you no longer owe", holds
 	 * the void and written-off Invoices and appears only when there is one:
 	 * #981 gave those Invoices a label but no heading, and a heading over
 	 * nothing would say something about a Client who has none.

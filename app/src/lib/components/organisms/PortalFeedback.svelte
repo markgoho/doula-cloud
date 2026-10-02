@@ -56,7 +56,7 @@
 	// "Client, {Practice name}" mirrors StaffFeedback's own "{roles},
 	// {practiceName}" line; omitted entirely with no Practice to name,
 	// the same as StaffFeedback does under /account.
-	const roleAndPractice = $derived(practiceName === undefined ? undefined : `Client, ${practiceName}`);
+	const roleAndPractice = $derived(practiceName === undefined ? undefined : `Client, ${practiceName}`); // voice:ignore: the team reads this label, not the Client
 
 	const intro = $derived(
 		practiceName === undefined

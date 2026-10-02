@@ -29,7 +29,7 @@ import { formatInstant } from './dates.js';
  */
 function fixedWording(table: Record<string, string>, value: string, what: string): string {
 	const wording = table[value];
-	if (!wording) throw new Error(`clientRegister: no Client wording for ${what} "${value}"`);
+	if (!wording) throw new Error(`clientRegister: no Client wording for ${what} "${value}"`); // voice:ignore: a developer-facing error, never rendered
 	return wording;
 }
 
@@ -170,7 +170,7 @@ const CLIENT_ACTIVITY_PHRASES: Record<string, string> = {
 	// moved underneath it) share one phrase on purpose: the difference
 	// between them is the Practice's own bookkeeping, and to a Client both
 	// mean her price changed -- the same reasoning CONTEXT.md's Invoice
-	// entry gives for `void` and `uncollectible` sharing "No longer owed".
+	// entry gives for `void` and `uncollectible` sharing "You no longer owe this".
 	contract_priced: "Your Contract's price was set.",
 	contract_amount_overridden: "Your Contract's price changed.",
 	contract_amount_repriced: "Your Contract's price changed.",
@@ -223,8 +223,8 @@ const CLIENT_ACTIVITY_PHRASES: Record<string, string> = {
 	// about the money and silent on why, the same restraint the voided
 	// and written-off phrase below keeps.
 	payment_refunded: 'Money was returned to you.',
-	invoice_voided: 'An Invoice is no longer owed.',
-	invoice_written_off: 'An Invoice is no longer owed.',
+	invoice_voided: 'You no longer owe an Invoice.',
+	invoice_written_off: 'You no longer owe an Invoice.',
 
 	// Her way in. Never "portal": CONTEXT.md's Portal Account entry says
 	// she meets a login and never the term, and no Client-facing copy in
@@ -259,8 +259,8 @@ export function clientActivityPhrasedActions(): string[] {
 const INVOICE_STATUS_LABELS: Record<string, string> = {
 	open: 'Not yet paid',
 	paid: 'Paid',
-	void: 'No longer owed',
-	uncollectible: 'No longer owed'
+	void: 'You no longer owe this',
+	uncollectible: 'You no longer owe this'
 };
 
 export function clientInvoiceStatusLabel(status: string): string {
@@ -287,7 +287,7 @@ export const INVOICES_HEADING = 'Invoices';
 export const OWED_HEADING = 'What you still owe';
 export const TOTAL_TO_PAY_LABEL = 'Total to pay';
 export const PAID_HEADING = 'What you have paid';
-export const NO_LONGER_OWED_HEADING = 'No longer owed';
+export const NO_LONGER_OWED_HEADING = 'What you no longer owe';
 
 /** The three empty-state sentences (#982): each states the product's own
  * record and nothing about anyone's conduct. */
