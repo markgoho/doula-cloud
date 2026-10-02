@@ -25,6 +25,18 @@
 	</section>
 
 	<section>
+		<h2>Two strokes, and two tones from 28px</h2>
+		<p>
+			The mark is the outer two-lobe line and the inner arch, as <code>docs/marketing/brand.md</code>
+			sets it. At <code>md</code> and <code>lg</code> the mark is 28px tall or more, so the outer line
+			is <code>--color-primary</code> and the inner arch is <code>--color-primary-hover</code>. At
+			<code>sm</code> the two tones are too near to each other to read as two, so the two strokes are
+			<code>--color-primary</code>. The mark takes the tokens of its theme with no other change: use
+			the Dark mode toggle above to see each size in the dark theme.
+		</p>
+	</section>
+
+	<section>
 		<h2>Named, when it stands alone</h2>
 		<p>
 			Decorative by default, because it almost always sits beside the wordmark and naming it there

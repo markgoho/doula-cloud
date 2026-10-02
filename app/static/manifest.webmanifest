@@ -3,7 +3,7 @@
 	"short_name": "Doula Cloud",
 	"start_url": "/",
 	"display": "standalone",
-	"background_color": "#ffffff",
-	"theme_color": "#ff3e00",
+	"background_color": "#fbf1f4",
+	"theme_color": "#722c60",
 	"icons": [{ "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml" }]
 }

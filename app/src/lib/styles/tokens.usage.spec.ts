@@ -162,22 +162,33 @@ describe('components spend tokens, not raw values', () => {
  * without anything noticing -- which is why it is still authored in OKLCH,
  * and why every value in it has to be one that tokens.css actually
  * declares.
+ *
+ * The favicon is the plum tile of docs/marketing/brand.md (#1486): the
+ * two strokes in `--color-on-primary` on a `--color-primary` square. The
+ * tile carries its own ground, so it keeps the light theme's values in
+ * the two themes and has no dark block.
  */
 describe('the favicon holds no color tokens.css does not', () => {
 	const favicon = readFileSync(new URL('src/lib/assets/favicon.svg', appRoot), 'utf8');
 	const tokens = readFileSync(new URL('src/lib/styles/tokens.css', appRoot), 'utf8');
-	const colors = favicon
-		.matchAll(/oklch\([^)]+\)/g)
-		.map((match) => match[0])
-		.toArray();
+	// Everything above the first dark block is the light theme.
+	const lightTokens = tokens.slice(0, tokens.indexOf('@media (prefers-color-scheme: dark)'));
 
-	it('draws the mark in both themes', () => {
-		// Three arcs, light and dark.
-		expect(colors).toHaveLength(6);
+	function colorOf(attribute: 'fill' | 'stroke'): string | undefined {
+		return new RegExp(String.raw`${attribute}="(oklch\([^)]+\))"`).exec(favicon)?.[1];
+	}
+
+	it('is one tile and one stroke color, the same in the two themes', () => {
+		expect(favicon.match(/oklch\([^)]+\)/g)).toHaveLength(2);
+		expect(favicon).not.toContain('prefers-color-scheme');
 	});
 
-	it.each(colors)('spends %s, which tokens.css declares', (color) => {
-		expect(tokens).toContain(color);
+	it("fills the tile with the light theme's --color-primary", () => {
+		expect(lightTokens).toContain(`--color-primary: ${colorOf('fill')};`);
+	});
+
+	it("draws the strokes in the light theme's --color-on-primary", () => {
+		expect(lightTokens).toContain(`--color-on-primary: ${colorOf('stroke')};`);
 	});
 
 	it('names no color outside OKLCH', () => {

@@ -2331,7 +2331,17 @@
                 "size": "lg"
               },
               "width": 120,
-              "height": 56
+              "height": 56,
+              "descendants": {
+                "WyIQC": {
+                  "width": 120,
+                  "height": 56
+                },
+                "y4JFyd": {
+                  "width": 120,
+                  "height": 56
+                }
+              }
             },
             {
               "type": "text",
@@ -2362,7 +2372,17 @@
                 "size": "md"
               },
               "width": 60,
-              "height": 28
+              "height": 28,
+              "descendants": {
+                "WyIQC": {
+                  "width": 60,
+                  "height": 28
+                },
+                "y4JFyd": {
+                  "width": 60,
+                  "height": 28
+                }
+              }
             },
             {
               "type": "text",
@@ -2709,10 +2729,29 @@
       "children": [
         {
           "type": "path",
+          "id": "WyIQC",
+          "x": 0,
+          "y": 0,
+          "name": "Inner arch",
+          "geometry": "M100 160a32 32 0 0 1 64 0",
+          "viewBox": [
+            48,
+            76,
+            202,
+            94
+          ],
+          "width": 40,
+          "height": 19,
+          "stroke": "$mark-arch",
+          "strokeWidth": "$mark-stroke",
+          "strokeLinecap": "round"
+        },
+        {
+          "type": "path",
           "id": "y4JFyd",
           "x": 0,
           "y": 0,
-          "name": "Arc 1",
+          "name": "Outer line",
           "geometry": "M56 160a76 76 0 0 1 137.97-44 44 44 0 0 1 44.03 44",
           "viewBox": [
             48,
@@ -2723,44 +2762,6 @@
           "width": 40,
           "height": 19,
           "stroke": "$color-primary",
-          "strokeWidth": "$mark-stroke",
-          "strokeLinecap": "round"
-        },
-        {
-          "type": "path",
-          "id": "omDp6",
-          "x": 0,
-          "y": 0,
-          "name": "Arc 2",
-          "geometry": "M78 160a54 54 0 0 1 104.61-18.82 22 22 0 0 1 33.39 18.82",
-          "viewBox": [
-            48,
-            76,
-            202,
-            94
-          ],
-          "width": 40,
-          "height": 19,
-          "stroke": "$color-primary-hover",
-          "strokeWidth": "$mark-stroke",
-          "strokeLinecap": "round"
-        },
-        {
-          "type": "path",
-          "id": "WyIQC",
-          "x": 0,
-          "y": 0,
-          "name": "Arc 3",
-          "geometry": "M100 160a32 32 0 0 1 64 0",
-          "viewBox": [
-            48,
-            76,
-            202,
-            94
-          ],
-          "width": 40,
-          "height": 19,
-          "stroke": "$color-outline-variant",
           "strokeWidth": "$mark-stroke",
           "strokeLinecap": "round"
         }
@@ -25931,6 +25932,29 @@
         },
         {
           "value": 3,
+          "theme": {
+            "size": "sm"
+          }
+        }
+      ]
+    },
+    "mark-arch": {
+      "type": "color",
+      "value": [
+        {
+          "value": "$color-primary-hover",
+          "theme": {
+            "size": "lg"
+          }
+        },
+        {
+          "value": "$color-primary-hover",
+          "theme": {
+            "size": "md"
+          }
+        },
+        {
+          "value": "$color-primary",
           "theme": {
             "size": "sm"
           }

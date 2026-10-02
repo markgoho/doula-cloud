@@ -5,9 +5,10 @@ in `--color-primary` and the inner arch in `--color-primary-hover`. It is
 40px tall, above the 28px where the sheet asks for two tones, and 86px
 wide, the viewBox's own ratio.
 
-The app's CloudMark still draws the three-arc mark until #1486 lands.
-When it does, this component can go and the teaser can use CloudMark.
-Decorative by default, since the name is beside it.
+The app's CloudMark draws the same two strokes (#1486), at 19px, 28px and
+56px tall. The teaser's mark is 40px tall, which is none of those, so it
+is drawn here and not with CloudMark. Decorative, since the name is in the
+letter below it.
 -->
 <svg
 	viewBox="48 76 202 94"
