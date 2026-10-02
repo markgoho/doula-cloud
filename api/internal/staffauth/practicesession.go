@@ -16,6 +16,12 @@ import (
 // on employment type before ever calling client.SearchHandler -- the same
 // UX-only mirror of a BFF role gate this endpoint's Roles field already
 // is for the Owner/Admin screens that read it.
+//
+// It is the bare Reader.IsContractor on purpose, and never
+// IsAmbientContractor (#1635). The field reports the Employment type as a
+// fact and decides no reach in the BFF. The app joins it with Roles to
+// get its own isAmbientContractor (app/src/lib/roles.ts), so an Owner or
+// an Admin who is a contractor must still read true here.
 type PracticeSessionResponse struct {
 	PracticeID string `json:"practiceId"`
 	// StaffID is the caller's own Staff id at this Practice (#909).
@@ -73,7 +79,7 @@ func PracticeSessionHandler() http.Handler {
 			StaffID:         staffID,
 			PracticeName:    name,
 			Roles:           reader.Roles(),
-			IsContractor:    reader.IsContractor(),
+			IsContractor:    reader.IsContractor(), //nolint:forbidigo // the Employment type as a fact, not reach -- see PracticeSessionResponse
 			PendingDeletion: pendingDeletionFrom(r.Context()),
 		}
 		apierr.WriteJSON(w, http.StatusOK, resp)

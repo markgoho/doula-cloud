@@ -108,6 +108,65 @@ func TestAwaitingReplyHandler_ContractorSeesOnlyHerAttachedEngagements(t *testin
 	}
 }
 
+// TestAwaitingReplyHandler_OwnerOrAdminContractorSeesTheWholePractice is
+// #1635: the list narrows only for the contractor who holds neither the
+// Owner role nor the Admin role (staffauth.Reader.IsAmbientContractor,
+// the population ADR-0008 confines). Employment type is independent of
+// roles (CONTEXT.md), so an Owner or an Admin whose Membership reads
+// "contractor" is real, and she reaches the whole Practice. She reads
+// each Engagement whose thread awaits a reply, one she holds a granted
+// Attachment on and one she does not. The same defect on the Clients
+// list is #742.
+func TestAwaitingReplyHandler_OwnerOrAdminContractorSeesTheWholePractice(t *testing.T) {
+	db := testdb.New(t)
+
+	cases := []struct {
+		name     string
+		uid      string
+		roles    []string
+		attached bool
+	}{
+		{"an Owner who is a contractor, with no Attachment", "awaiting-reply-owner-contractor", []string{ownerRole}, false},
+		{"an Admin who is a contractor, with no Attachment", "awaiting-reply-admin-contractor", []string{adminRole}, false},
+		{"an Owner who is a contractor Doula, attached to one Engagement", "awaiting-reply-owner-contractor-doula", []string{ownerRole, doulaRole}, true},
+		{"an Admin who is a contractor Doula, attached to one Engagement", "awaiting-reply-admin-contractor-doula", []string{adminRole, doulaRole}, true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, tc.uid, tc.roles, "contractor")
+
+			firstClientID, first := testdb.SeedNamedEngagement(t, db, practiceID, "First Client", tc.uid+"-first@example.com")
+			seedMessage(t, db, first, "client", firstClientID, "Waiting on you.")
+			if tc.attached {
+				testdb.SeedGrantedAttachment(t, db, first, staffID)
+			}
+			secondClientID, second := testdb.SeedNamedEngagement(t, db, practiceID, "Second Client", tc.uid+"-second@example.com")
+			seedMessage(t, db, second, "client", secondClientID, "Also waiting.")
+
+			srv, session := newServer(t, db, tc.uid)
+			defer srv.Close()
+
+			resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/messages/awaiting-reply")
+			defer resp.Body.Close()
+			if resp.StatusCode != http.StatusOK {
+				t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
+			}
+			var out message.AwaitingReplyResponse
+			if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+				t.Fatalf("decode: %v", err)
+			}
+
+			got := map[string]bool{}
+			for _, item := range out.Items {
+				got[item.EngagementID] = true
+			}
+			if len(out.Items) != 2 || !got[first] || !got[second] {
+				t.Fatalf("Items = %+v, want both Engagements that await a reply at the Practice -- an Owner or an Admin is not narrowed to her own Attachments", out.Items)
+			}
+		})
+	}
+}
+
 // TestAwaitingReplyHandler_InvalidCursorRejected mirrors
 // activityfeed.TestPracticeHandler_InvalidCursorRejected.
 func TestAwaitingReplyHandler_InvalidCursorRejected(t *testing.T) {

@@ -266,6 +266,57 @@ func TestAwaitingSignatureHandler_ContractorWithNoAttachmentSeesNothing(t *testi
 	}
 }
 
+// TestAwaitingSignatureHandler_OwnerOrAdminContractorSeesTheWholePractice
+// is #1635: the list narrows only for the contractor who holds neither
+// the Owner role nor the Admin role (staffauth.Reader.IsAmbientContractor,
+// the population ADR-0008 confines). Employment type is independent of
+// roles (CONTEXT.md), so an Owner or an Admin whose Membership reads
+// "contractor" is real, and she reaches the whole Practice. She reads
+// each outstanding Contract, on an Engagement she holds a granted
+// Attachment on and on one she does not. The same defect on the Clients
+// list is #742.
+func TestAwaitingSignatureHandler_OwnerOrAdminContractorSeesTheWholePractice(t *testing.T) {
+	db := testdb.New(t)
+
+	cases := []struct {
+		name     string
+		uid      string
+		roles    []string
+		attached bool
+	}{
+		{"an Owner who is a contractor, with no Attachment", "awaiting-owner-contractor", []string{ownerRole}, false},
+		{"an Admin who is a contractor, with no Attachment", "awaiting-admin-contractor", []string{adminRole}, false},
+		{"an Owner who is a contractor Doula, attached to one Engagement", "awaiting-owner-contractor-doula", []string{ownerRole, doulaRole}, true},
+		{"an Admin who is a contractor Doula, attached to one Engagement", "awaiting-admin-contractor-doula", []string{adminRole, doulaRole}, true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, tc.uid, tc.roles, contractorType)
+
+			_, first := testdb.SeedEngagement(t, db, practiceID)
+			seedContract(t, db, first, statusSent, mergeFieldProse)
+			if tc.attached {
+				testdb.SeedGrantedAttachment(t, db, first, staffID)
+			}
+			_, second := testdb.SeedEngagement(t, db, practiceID)
+			seedContract(t, db, second, statusDraft, mergeFieldProse)
+
+			srv, session := newContractServer(t, db, tc.uid)
+			defer srv.Close()
+
+			out := decodeAwaiting(t, session, awaitingURL(srv, practiceID))
+
+			got := map[string]bool{}
+			for _, item := range out.Items {
+				got[item.EngagementID] = true
+			}
+			if len(out.Items) != 2 || !got[first] || !got[second] {
+				t.Fatalf("items = %+v, want both outstanding Contracts at the Practice -- an Owner or an Admin is not narrowed to her own Attachments", out.Items)
+			}
+		})
+	}
+}
+
 // TestAwaitingSignatureHandler_ContractorPaginatesAcrossPages exercises
 // listAttachedAwaiting's own cursor branch (the `after != nil` path),
 // the contractor mirror of
