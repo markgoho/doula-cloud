@@ -150,7 +150,7 @@
 	currentPracticeId={practiceId ?? ''}
 	name={session?.name ?? ''}
 	email={session?.email}
-	accountHref={resolve('/account')}
+	accountHref={resolve('/(person)/account')}
 	signOut={handleSignOut}
 />
 <!--

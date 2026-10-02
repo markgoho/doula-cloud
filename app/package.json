@@ -7,6 +7,7 @@
 		"dev": "vite dev",
 		"dev:full": "bun scripts/development-full.ts",
 		"seed:staff-session": "bun scripts/seed-staff-session.ts",
+		"seed:founder-session": "bun scripts/seed-founder-session.ts",
 		"sync-icons": "bun scripts/sync-icons.ts",
 		"sync-fonts": "bun scripts/sync-fonts.ts",
 		"build": "vite build",

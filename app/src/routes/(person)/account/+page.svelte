@@ -47,7 +47,7 @@
 	import ErrorSummary from '#lib/components/molecules/ErrorSummary.svelte';
 	import { deleteOwnLogin } from '#lib/loginDeletion.js';
 	import ConfirmDialog from '#lib/components/molecules/ConfirmDialog.svelte';
-	import { loadAccountSession } from './session.svelte.js';
+	import { loadAccountSession } from '../session.svelte.js';
 
 	const workStateId = 'account-work-state';
 
@@ -408,7 +408,7 @@
 			her back here once enrollment finishes (docs/design's link-text
 			rule is why the label matches /mfa/enroll's own title verbatim).
 		-->
-		<Link href={`${resolve('/(signed-out)/mfa/enroll')}?returnTo=${encodeURIComponent(resolve('/account'))}`} label="Set up two-factor authentication" />
+		<Link href={`${resolve('/(signed-out)/mfa/enroll')}?returnTo=${encodeURIComponent(resolve('/(person)/account'))}`} label="Set up two-factor authentication" />
 	{/if}
 	<!--
 		Field-targeted refusals (a wrong password, a wrong code) already

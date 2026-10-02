@@ -127,6 +127,16 @@ describe('the account route layout', () => {
 		await expect.element(back.getByRole('link', { name: 'Rochester Doulas' })).toBeVisible();
 	});
 
+	// #1526: the founder holds no Membership at all, and a heading over an
+	// empty list offers a way back to nowhere.
+	it('offers no way back to a person who belongs to no Practice', async () => {
+		await renderLayout({ sessionResponse: jsonResponse({ ...session, memberships: [] }) });
+
+		await expect.element(testPage.getByText('account page content')).toBeVisible();
+		await expect.element(testPage.getByRole('button', { name: 'Your account, Priya Sharma' })).toBeVisible();
+		await expect.element(testPage.getByRole('navigation', { name: 'Your practices' })).not.toBeInTheDocument();
+	});
+
 	it('lists one link per Practice when she works at several', async () => {
 		await renderLayout({
 			sessionResponse: jsonResponse({

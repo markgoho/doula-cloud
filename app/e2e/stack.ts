@@ -179,6 +179,12 @@ const MAILGUN_WEBHOOK_SIGNING_KEY = 'e2e-mailgun-signing-key';
 // every call, so a stack that never set it could not drain an outbox at
 // all -- which is how mail stayed unobservable here until now.
 const NOTIFICATION_WORKER_SECRET = 'e2e-worker-secret';
+// FOUNDER_STAFF_ID (#1526): the `staff.id` the founder read page serves.
+// A fixed id rather than one a signup mints, because the BFF reads it
+// once, at start, before any Staff row exists -- seedFounder below is
+// what puts a row behind it. Deployed, it is the founder's own id
+// (docs/environment.md).
+export const FOUNDER_STAFF_ID = '0f0a1d5e-5a17-4c0b-9d0f-f0de15260001';
 
 export const MAILBOX_URL = `http://${MAILBOX_HOST}:${MAILBOX_PORT}`;
 export const MAILBOX_DOMAIN = MAILGUN_SIM_DOMAIN;
@@ -381,6 +387,30 @@ export function seedClientPortalUser(signInAddress: string, clientID: string) {
 		`INSERT INTO portal_accounts (identifier, sign_in_address) VALUES (${sqlLiteral(identifier)}, ${sqlLiteral(signInAddress)})`
 	);
 	execSQL(`INSERT INTO client_portal_users (identity_uid, client_id) VALUES (${sqlLiteral(identifier)}, ${sqlLiteral(clientID)})`);
+}
+
+// Seeds the founder (#1526): the one `staff` row whose id is
+// FOUNDER_STAFF_ID, pointed at identityUID -- an Identity Platform
+// account the caller has already created. Direct SQL because no endpoint
+// can do this: a signup mints its own id, and the founder's is fixed by
+// configuration. He holds no Membership, which is what the read page is
+// built for -- the `staff` table has no Practice column.
+//
+// ON CONFLICT re-points the row, so a second run against a long-lived
+// `dev:full` stack takes the founder over rather than failing on the
+// primary key.
+//
+// That same re-pointing is why exactly one spec FILE may call this
+// (founder-feedback.e2e.ts). Playwright runs files in parallel and the
+// tests inside one in order: a second file seeding the founder would take
+// him from the first mid-test, and the first would see "Page not found".
+// A new founder test goes in that file.
+export function seedFounder(identityUID: string, email: string) {
+	execSQL(
+		`INSERT INTO staff (id, identity_uid, name, email, work_state)
+		 VALUES (${sqlLiteral(FOUNDER_STAFF_ID)}, ${sqlLiteral(identityUID)}, 'The Founder', ${sqlLiteral(email)}, 'NY')
+		 ON CONFLICT (id) DO UPDATE SET identity_uid = EXCLUDED.identity_uid, email = EXCLUDED.email`
+	);
 }
 
 // Seeds an Engagement directly: #397 decoupled Client creation from
@@ -775,6 +805,7 @@ async function startAPI(appOrigin: string) {
 			MAILGUN_DOMAIN: MAILGUN_SIM_DOMAIN,
 			MAILGUN_WEBHOOK_SIGNING_KEY,
 			NOTIFICATION_WORKER_SECRET,
+			FOUNDER_STAFF_ID,
 			PORT: String(E2E_API_PORT)
 		}
 	});

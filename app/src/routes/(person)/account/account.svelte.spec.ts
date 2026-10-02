@@ -5,7 +5,7 @@ import { workStateReportedOn } from '#lib/workStates.js';
 import { jsonResponse as buildResponse } from '#lib/testResponse.js';
 import { expectFieldError } from '#lib/components/molecules/LabeledField.testing.js';
 import Page from './+page.svelte';
-import { resetAccountSession } from './session.svelte.js';
+import { resetAccountSession } from '../session.svelte.js';
 import { session, soleOwnerSession } from './page.fixture.js';
 
 const apiFetchWithSession = vi.hoisted(() => vi.fn());
