@@ -3,8 +3,8 @@
  *
  * A component demo needs almost nothing: it is a Svelte component whose
  * only props select one of its own states (#1638), so `toDemos` can hand
- * the sweep a whole style-guide page. A route is not that. It reads `page.params` out of `$app/state`, it
- * takes `data` from its own `load`, and it fetches through
+ * the sweep a whole style-guide page. A route is not that. It reads
+ * `page.params` out of `$app/state`, it takes `data` from its own `load`, and it fetches through
  * `#lib/api.js` in `onMount` -- the reach trial on #551 needed a
  * hand-written harness for exactly this reason, and the harness it needed
  * was written for one route.

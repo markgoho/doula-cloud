@@ -69,6 +69,19 @@ const KNOWN_BROKEN: Readonly<Record<string, string>> = {};
 if (!customElements.get('stack-l')) registerLayoutPrimitives();
 
 describe('the continuum check', () => {
+	/*
+	 * A subject's name is what this file titles its `it` with, what
+	 * `KNOWN_BROKEN` is keyed on and what the drag surface's picker selects
+	 * by, so two states under one name would be one entry in the picker and
+	 * one key here (#1638). A page's `variants` are typed by hand, and
+	 * nothing else would say.
+	 */
+	it('gives every subject a name of its own', () => {
+		const names = demos.map((demo) => demo.name);
+
+		expect(names.filter((name, index) => names.indexOf(name) !== index)).toEqual([]);
+	});
+
 	for (const demo of demos) {
 		async function assertion() {
 			/*

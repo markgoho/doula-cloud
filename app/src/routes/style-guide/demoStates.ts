@@ -20,17 +20,25 @@
  * project and reads the pages from disk (#527).
  */
 
-// Everything `let name = $state(...)` declares, and everything a
-// `let { a, b = 1 } = $props()` destructures: the page's own state.
+/*
+ * Everything `let name = $state(...)` declares, and everything a
+ * `let { a, b = 1 } = $props()` destructures: the page's own state.
+ *
+ * Limits, named: a prop renamed in the destructure (`{ a: b }`) is read as
+ * `a`, and a default that is itself an object literal ends the list early.
+ * No demo page has either.
+ */
 function stateNames(source: string): string[] {
-	const declared = source.matchAll(/\blet\s+(\w+)\s*=\s*\$state\b/g).map(([, name]) => name);
+	const declared = source
+		.matchAll(/\blet\s+(\w+)\s*(?::[^=]+)?=\s*\$state\b/g)
+		.map(([, name]) => name);
 	const destructured = /\blet\s*\{([^}]*)\}[^;]*?=\s*\$props\(/.exec(source)?.[1] ?? '';
 	const properties = destructured.matchAll(/(?:^|,)\s*(\w+)/g).map(([, name]) => name);
 	return [...declared, ...properties];
 }
 
-// The text from `open` to the brace that closes it, without either brace.
-function balanced(source: string, open: number): string {
+// The text between the brace at `open` and the brace that closes it.
+function insideBraces(source: string, open: number): string {
 	let depth = 0;
 	for (let index = open; index < source.length; index += 1) {
 		if (source[index] === '{') depth += 1;
@@ -44,15 +52,21 @@ function balanced(source: string, open: number): string {
  * What a handler runs. An inline arrow is its own text. A bare name is
  * looked up one level -- `function toggle() { ... }` or `const toggle =
  * ...;` -- because `onClick={toggle}` is the same switch with a name on it.
+ * A handler the page imports, or one a second function calls for it, is
+ * not followed.
  */
 function handlerBody(source: string, expression: string): string {
 	const name = /^\s*(\w+)\s*$/.exec(expression)?.[1];
 	if (!name) return expression;
-	const declaration = new RegExp(String.raw`\bfunction\s+${name}\s*\([^)]*\)\s*\{`).exec(source);
+	const declaration = new RegExp(String.raw`\bfunction\s+${name}\s*\([^)]*\)[^{]*\{`).exec(source);
 	if (declaration) {
-		return balanced(source, declaration.index + declaration[0].length - 1);
+		return insideBraces(source, declaration.index + declaration[0].length - 1);
 	}
-	return new RegExp(String.raw`\bconst\s+${name}\s*=([^;]*);`).exec(source)?.[1] ?? '';
+	const constant = new RegExp(String.raw`\bconst\s+${name}\s*=`).exec(source);
+	if (!constant) return '';
+	const assigned = source.slice(constant.index + constant[0].length);
+	const block = /^[^;{]*=>\s*\{/.exec(assigned);
+	return block ? insideBraces(assigned, block[0].length - 1) : assigned.split(';', 1)[0];
 }
 
 /**
@@ -69,11 +83,11 @@ export function ownSwitches(source: string): string[] {
 	const names = stateNames(source);
 	const written = new Set<string>();
 	for (const handler of source.matchAll(/\bon[Cc]lick=\{/g)) {
-		const expression = balanced(source, handler.index + handler[0].length - 1);
+		const expression = insideBraces(source, handler.index + handler[0].length - 1);
 		const body = handlerBody(source, expression);
 		for (const name of names) {
 			const write = new RegExp(
-				String.raw`(?<![\w.$])${name}(?:\.\w+|\[[^\]]*\])*\s*(?:[-+*/%]?=(?![=>])|\+\+|--)`
+				String.raw`(?<![\w.$])${name}(?:\.\w+|\[[^\]]*\])*\s*(?:(?:[-+*/%]|\*\*|\|\||&&|\?\?)?=(?![=>])|\+\+|--)`
 			);
 			if (write.test(body)) written.add(name);
 		}

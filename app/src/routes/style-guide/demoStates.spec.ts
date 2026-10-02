@@ -83,7 +83,9 @@ describe('ownSwitches', () => {
 
 	it.each([
 		['a function', 'function toggle() {\n\tif (true) { hasError = !hasError; }\n}'],
-		['a const', 'const toggle = () => (hasError = !hasError);']
+		['a function with a return type', 'function toggle(): void {\n\thasError = !hasError;\n}'],
+		['a const', 'const toggle = () => (hasError = !hasError);'],
+		['a const with a block body', 'const toggle = () => {\n\tlog();\n\thasError = true;\n};']
 	])('follows a handler passed by name to %s', (_kind, declaration) => {
 		const source = demoPage(
 			['let hasError = $state(false);', declaration],
@@ -91,6 +93,15 @@ describe('ownSwitches', () => {
 		);
 
 		expect(ownSwitches(source)).toEqual(['hasError']);
+	});
+
+	it('reads a typed $state and a logical assignment', () => {
+		const source = demoPage(
+			['let isShown: boolean | undefined = $state();'],
+			['<Button label="Loading" onClick={() => (isShown ??= true)} />']
+		);
+
+		expect(ownSwitches(source)).toEqual(['isShown']);
 	});
 
 	it('reads a counter and a member write as writes', () => {
