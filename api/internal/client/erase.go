@@ -327,6 +327,10 @@ func Erase(ctx context.Context, tx *sql.Tx, practiceID, clientID string, actor a
 	if absorbedEligibleAt != nil && (eligibleAt == nil || absorbedEligibleAt.After(*eligibleAt)) {
 		eligibleAt = absorbedEligibleAt
 	}
+	if err := eraseFeedback(ctx, tx, clientID); err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		return ErasureResponse{}, err
+	}
 	portalQueued, err := enqueuePortalErasure(ctx, tx, clientID)
 	if err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
@@ -405,6 +409,13 @@ func eraseAbsorbedRecords(ctx context.Context, tx *sql.Tx, practiceID, survivorI
 			// coverage:ignore reason: the function's own refusal needs a caller that redacts a tombstone whose destination is not erased, which Erase's ordering and absorbedRecordIDs' own ordering make unreachable
 			return 0, 0, nil, fmt.Errorf("client: redact absorbed record: %w", err)
 		}
+		// A merge moves no Feedback (00112 lists what it does move), so a
+		// piece she sent from inside an Engagement that then belonged to
+		// this record still names it.
+		if err := eraseFeedback(ctx, tx, id); err != nil {
+			// coverage:ignore reason: DB query failure, not exercised by unit tests
+			return 0, 0, nil, err
+		}
 		absorbedCustomers, absorbedEligibleAt, err := enqueueStripeErasure(ctx, tx, practiceID, id, now)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
@@ -457,6 +468,37 @@ func absorbedRecordIDs(ctx context.Context, tx *sql.Tx, survivorID string) ([]st
 		return nil, fmt.Errorf("client: iterate absorbed records: %w", err)
 	}
 	return ids, nil
+}
+
+// eraseFeedback destroys every piece of Feedback that names clientID,
+// and queues a "close as erased" job for each one that has a GitHub
+// issue (#1525, #1501 Q3). Her Feedback is destroyed outright rather
+// than redacted in place, unlike her record: it is DoulaCloud's and not
+// the Practice's, and nothing else refers to it.
+//
+// The whole act is erase_client_feedback (00121), for two reasons. A
+// Staff transaction cannot read a piece of Feedback at all (00118), so
+// it could not learn the issue numbers a plain DELETE would have to
+// return. And the issue number lives on the row being deleted: the
+// function builds each close job from the DELETE's own RETURNING, in
+// one statement, so no number written a moment earlier by the feedback
+// issue worker can be missed.
+//
+// The function admits only a Client of this transaction's Practice who
+// is already erased, which redactRecord (or redact_absorbed_client) has
+// seen to by the time this runs.
+//
+// Deliberately absent from erasureScope: that row is the Practice's own
+// history, and a count of her Feedback would tell the Practice that she
+// wrote to DoulaCloud, which Feedback's own rule keeps from it ("it goes
+// to DoulaCloud only and never to her Practice"). What records the act
+// is the close job itself, and the closed, labeled issue it leaves.
+func eraseFeedback(ctx context.Context, tx *sql.Tx, clientID string) error {
+	if _, err := tx.ExecContext(ctx, `SELECT erase_client_feedback($1)`, clientID); err != nil {
+		// coverage:ignore reason: the function's own refusal needs a Client who is not erased or not this Practice's, which Erase's ordering makes unreachable; otherwise a DB query failure, not exercised by unit tests
+		return fmt.Errorf("client: erase feedback: %w", err)
+	}
+	return nil
 }
 
 // isErased reports whether clientID has already been erased -- the gate
@@ -913,6 +955,19 @@ func erasePortalAccount(ctx context.Context, tx *sql.Tx, identityUID string) err
 	}
 
 	if !reachedElsewhere {
+		// Her Feedback keyed only to the login -- sent from a screen with
+		// no single Engagement in it, so no Practice's erasure of a Client
+		// reaches it -- goes with the login, and before it (#1525):
+		// feedback.portal_account references this row, so the DELETE below
+		// would be refused while any piece still named it.
+		// erase_portal_account_feedback (00121) carries the same predicate
+		// as that DELETE's own policy and queues a close job for each
+		// piece that has an issue, the same way eraseFeedback does.
+		if _, err := tx.ExecContext(ctx, `SELECT erase_portal_account_feedback($1)`, identityUID); err != nil {
+			// coverage:ignore reason: the function's own refusal needs a concurrent invitation accept between two statements of one transaction, the same window the row count below guards; otherwise a DB query failure, not exercised by unit tests
+			return fmt.Errorf("client: erase portal account feedback: %w", err)
+		}
+
 		// The Portal Account itself (#616) is deleted here, synchronously,
 		// rather than through the outbox above: unlike the Identity Platform
 		// account, deleting it is a plain Postgres statement with no outside

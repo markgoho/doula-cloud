@@ -28,7 +28,9 @@ type Issue struct {
 // the create-issue endpoint's own labels field is silently dropped for
 // a caller without push access), and listing issues since a point in
 // time so a retry can find its own earlier issue by the marker embedded
-// in its body rather than opening a second one.
+// in its body rather than opening a second one. Closing an issue is
+// #1525's addition: what a Client's Erasure does to the issue of a piece
+// it destroyed.
 //
 // A narrow interface this package declares, satisfied by
 // GitHubIssueCreator for real and FakeIssueCreator in tests -- the same
@@ -37,6 +39,7 @@ type IssueCreator interface {
 	ListIssues(ctx context.Context, since time.Time) ([]Issue, error)
 	CreateIssue(ctx context.Context, title, body string) (number int, err error)
 	AddLabels(ctx context.Context, issueNumber int, labels []string) error
+	CloseIssue(ctx context.Context, issueNumber int) error
 }
 
 // HTTPDoer is the http.Client seam GitHubIssueCreator takes, the same
@@ -136,6 +139,23 @@ func (c GitHubIssueCreator) AddLabels(ctx context.Context, issueNumber int, labe
 
 	if resp.StatusCode < 200 || resp.StatusCode > 299 {
 		return fmt.Errorf("feedback: add labels: github returned %d", resp.StatusCode)
+	}
+	return nil
+}
+
+// CloseIssue closes an issue (#1525). Issues: write covers it, the same
+// permission CreateIssue and AddLabels already use, and closing an issue
+// that is already closed answers 200 -- so a retry after a failure
+// between this call and the outbox row being marked done is harmless.
+func (c GitHubIssueCreator) CloseIssue(ctx context.Context, issueNumber int) error {
+	resp, err := c.do(ctx, http.MethodPatch, "/issues/"+strconv.Itoa(issueNumber), map[string]string{"state": "closed"})
+	if err != nil {
+		return err
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode < 200 || resp.StatusCode > 299 {
+		return fmt.Errorf("feedback: close issue: github returned %d", resp.StatusCode)
 	}
 	return nil
 }

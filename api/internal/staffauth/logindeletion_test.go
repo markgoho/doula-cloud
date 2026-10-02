@@ -528,6 +528,50 @@ func TestDeleteLoginHandler_KeepsHerAuthoredWork(t *testing.T) {
 	}
 }
 
+// TestDeleteLoginHandler_LeavesHerFeedbackInPlace is #1525's Login
+// deletion AC, settled on #1501 from ADR-0033: her staff row is redacted
+// where it sits, so every piece of Feedback she sent remains, with its
+// text and its issue number, and names nobody -- the same as every other
+// row she left. Nothing queues a close for its issue. One piece is from
+// under her Practice and one is from /account, with no Practice at all.
+func TestDeleteLoginHandler_LeavesHerFeedbackInPlace(t *testing.T) {
+	db := testdb.New(t)
+	const uid = "doula-who-sent-feedback"
+	practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, employeeType)
+	seedCoOwner(t, db, practiceID, "owner-of-a-practice-with-feedback")
+	if _, err := db.Admin.ExecContext(t.Context(),
+		`INSERT INTO feedback (id, kind, text, page_url, route_id, app_build, screen_width, browser,
+		     staff_id, practice_id, roles, issue_number, sent_at)
+		 VALUES (gen_random_uuid(), 'not_working', 'the schedule will not save', '/practices/x', '/practices/[practiceId]',
+		         'abc1234', 390, 'Safari 18', $1, $2, '{doula}', 7, now()),
+		        (gen_random_uuid(), 'idea_or_request', 'a dark theme', '/account', '/account',
+		         'abc1234', 390, 'Safari 18', $1, NULL, NULL, 8, now())`,
+		staffID, practiceID,
+	); err != nil {
+		t.Fatalf("seed feedback: %v", err)
+	}
+
+	accounts := authntest.NewFakeAccountManager()
+	accounts.Seed(uid, "tasha@example.com", true)
+	srv := newDeleteLoginServer(t, db, accounts)
+	defer srv.Close()
+
+	resp := deleteLogin(t, srv, authntest.SeedSession(t, db.App, uid), true)
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusNoContent {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusNoContent)
+	}
+
+	if n := countRows(t, db,
+		`SELECT count(*) FROM feedback f JOIN staff s ON s.id = f.staff_id
+		  WHERE f.staff_id = $1 AND f.issue_number IN (7, 8) AND f.text <> ''`, staffID); n != 2 {
+		t.Fatalf("her pieces of Feedback = %d, want both still there and still resolving to her redacted row", n)
+	}
+	if n := countRows(t, db, `SELECT count(*) FROM feedback_issue_outbox WHERE act = 'close_erased'`); n != 0 {
+		t.Fatalf("close jobs = %d, want 0 -- a Login deletion closes no issue", n)
+	}
+}
+
 // TestDeleteLoginHandler_ResolvesQueuedMailAddressedToHer covers the four
 // outbox tables keyed on her Identity Platform uid. Each is resolved at
 // source, before the sentinel makes the row unfindable -- without it a

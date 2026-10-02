@@ -196,6 +196,89 @@ func TestWorker_FinalizeErasesClientsForfeitsCreditsAndStampsDeletedAt(t *testin
 	}
 }
 
+// TestWorker_FinalizeDestroysClientFeedbackAndLeavesStaffFeedback is
+// #1525's Practice Deletion AC, both halves in one finalization: a
+// Client's Feedback is reached through the same client.Erase cascade
+// that erases her, with a "close as erased" job for its issue, and a
+// Staff member's Feedback from under the deleted Practice stays exactly
+// as it was (#1501 Q3: "Staff items survive it"), with no close queued.
+func TestWorker_FinalizeDestroysClientFeedbackAndLeavesStaffFeedback(t *testing.T) {
+	db := testdb.New(t)
+	const portalUID = "portal-finalize-feedback"
+	practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, "owner-finalize-feedback", []string{ownerRole}, "employee")
+	markPendingDeletion(t, db, practiceID, time.Now())
+
+	var clientID string
+	if err := db.Admin.QueryRowContext(t.Context(),
+		`INSERT INTO clients (practice_id, given_name, email) VALUES ($1, 'Ada', 'ada@example.test') RETURNING id`,
+		practiceID,
+	).Scan(&clientID); err != nil {
+		t.Fatalf("seed client: %v", err)
+	}
+	testdb.SeedPortalAccount(t, db, portalUID, portalUID+"@example.test")
+	testdb.AttachPortalUser(t, db, portalUID, clientID)
+
+	const feedbackColumns = `id, kind, text, page_url, route_id, app_build, screen_width, browser`
+	const feedbackValues = `gen_random_uuid(), 'not_working', 'what she typed', '/x', '/x', 'abc1234', 390, 'Safari 18'`
+	if _, err := db.Admin.ExecContext(t.Context(),
+		`INSERT INTO feedback (`+feedbackColumns+`, portal_account, practice_id, client_id, issue_number, sent_at)
+		 VALUES (`+feedbackValues+`, $1, $2, $3, 61, now()),
+		        (`+feedbackValues+`, $1, NULL, NULL, 62, now())`,
+		portalUID, practiceID, clientID,
+	); err != nil {
+		t.Fatalf("seed client feedback: %v", err)
+	}
+	if _, err := db.Admin.ExecContext(t.Context(),
+		`INSERT INTO feedback (`+feedbackColumns+`, staff_id, practice_id, roles, issue_number, sent_at)
+		 VALUES (`+feedbackValues+`, $1, $2, '{owner}', 63, now())`,
+		staffID, practiceID,
+	); err != nil {
+		t.Fatalf("seed staff feedback: %v", err)
+	}
+
+	rowID := seedOutboxRow(t, db, practiceID, "finalize", time.Now().Add(-time.Minute))
+	runWorker(t, db, newTestWorker(&mail.FakeSender{}))
+
+	if status := outboxRowStatus(t, db, rowID); status != statusSent {
+		t.Fatalf("status = %s, want sent", status)
+	}
+
+	var clientPieces, staffPieces int
+	if err := db.Admin.QueryRowContext(t.Context(),
+		`SELECT count(*) FILTER (WHERE portal_account IS NOT NULL), count(*) FILTER (WHERE staff_id = $1 AND issue_number = 63)
+		   FROM feedback`, staffID,
+	).Scan(&clientPieces, &staffPieces); err != nil {
+		t.Fatalf("count feedback: %v", err)
+	}
+	if clientPieces != 0 {
+		t.Fatalf("the Client's pieces of Feedback = %d, want 0 -- the Deletion reaches them through her Erasure", clientPieces)
+	}
+	if staffPieces != 1 {
+		t.Fatalf("the Staff member's pieces of Feedback = %d, want 1 -- a Practice's Deletion leaves Staff Feedback in place", staffPieces)
+	}
+
+	var closes []int64
+	rows, err := db.Admin.QueryContext(t.Context(),
+		`SELECT issue_number FROM feedback_issue_outbox WHERE act = 'close_erased' AND status = 'pending' ORDER BY issue_number`)
+	if err != nil {
+		t.Fatalf("read close jobs: %v", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var n int64
+		if err := rows.Scan(&n); err != nil {
+			t.Fatalf("scan close job: %v", err)
+		}
+		closes = append(closes, n)
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatalf("iterate close jobs: %v", err)
+	}
+	if len(closes) != 2 || closes[0] != 61 || closes[1] != 62 {
+		t.Fatalf("close jobs = %v, want [61 62] -- one per Client piece, none for the Staff piece", closes)
+	}
+}
+
 func TestWorker_FinalizeSkipsWhenNoLongerPending(t *testing.T) {
 	db := testdb.New(t)
 	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, "owner-finalize-restored", []string{ownerRole}, "employee")
