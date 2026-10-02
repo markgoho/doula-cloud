@@ -34,14 +34,14 @@ const (
 type NotAttachable string
 
 const (
-	// NotAtPractice: she holds no Membership at this Practice. At
+	// NotAtPractice is the person who holds no Membership at this Practice. At
 	// approval of a Request this is "her Membership ended" (a Membership
 	// ends by a DELETE of the row, staffauth's removal).
 	NotAtPractice NotAttachable = "not_at_practice"
-	// NotADoula: she is Staff here, and her Membership does not carry
+	// NotADoula is the person who is Staff here with a Membership that does not carry
 	// the Doula role. Attachment is for Doulas only (CONTEXT.md).
 	NotADoula NotAttachable = "not_a_doula"
-	// IsContractor: a contractor is attached by her own acceptance of an
+	// IsContractor is the contractor, who is attached by her own acceptance of an
 	// Offer and by nothing else (CONTEXT.md's Attachment entry).
 	IsContractor NotAttachable = "contractor"
 )

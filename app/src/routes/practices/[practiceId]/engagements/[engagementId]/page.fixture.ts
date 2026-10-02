@@ -195,7 +195,18 @@ export const detail = {
 	// realizes nothing this fixture has not already measured, and
 	// BirthOutcomeSection's own style-guide page sweeps it directly.
 	birthOutcome: 'live_birth',
-	pregnancyEndedOn: '2026-08-14'
+	pregnancyEndedOn: '2026-08-14',
+	// #1598: who is on this Engagement. Two Doulas, the on-call panel's
+	// own primary and backup, so the summary's row holds its busiest
+	// state: the plural label and two names on one line, the first of
+	// them the longest name on this screen. The reader is one of them, so
+	// the BFF offers her no "Put me on this Engagement" -- the empty state
+	// and the control are `asDoula`'s, below.
+	doulas: [
+		{ staffId: 'staff-1', name: 'Persephone Vandermeulen-Achterberg, CD(DONA)' },
+		{ staffId: 'staff-2', name: 'Bo Ng' }
+	],
+	canAttachSelf: false
 };
 
 /*
@@ -350,7 +361,19 @@ export const session = {
  */
 export const asDoula: RouteVariant<RouteParameters> = {
 	name: 'The Staff-side Engagement detail hub, as a Doula',
-	props: { data: { ...detail, session: { ...session, roles: ['doula'], isContractor: false } } }
+	// #1598: the other state of the summary's Doula row, and the control
+	// that goes with it -- nobody is on the Engagement, so the row reads
+	// "No Doula yet" and an employee Doula is offered "Put me on this
+	// Engagement". It rides this variant because she is the reader the
+	// BFF offers it to; the base's Owner is a contractor, who never is.
+	props: {
+		data: {
+			...detail,
+			doulas: [],
+			canAttachSelf: true,
+			session: { ...session, roles: ['doula'], isContractor: false }
+		}
+	}
 };
 
 export const fixture: RouteFixture<RouteParameters> = {

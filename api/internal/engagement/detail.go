@@ -74,6 +74,19 @@ type Detail struct {
 	// section reads this to show the Create Invoice form or a Notice
 	// naming what is missing, before a Staff member ever presses Create.
 	ClientsCanPay bool `json:"clientsCanPay"`
+
+	// Doulas (#1598) is who is on this Engagement: each person who holds
+	// an open, granted Attachment on it, in the order they were attached.
+	// Never null -- an Engagement with nobody on it carries an empty
+	// list, and the hub says "No Doula yet". A reader who may read the
+	// Engagement may read who is on it: the on-call panel and the Clients
+	// list name the same people to the same readers.
+	Doulas []AttachedDoula `json:"doulas"`
+	// CanAttachSelf (#1598) is canAttachSelf -- whether AttachSelfHandler
+	// would put this caller on the Engagement now. The hub draws "Put me
+	// on this Engagement" off it and holds no copy of the rule, the same
+	// arrangement StatusMoves has with TransitionHandler.
+	CanAttachSelf bool `json:"canAttachSelf"`
 }
 
 // DetailHandler views one Engagement's basic detail: every Staff role
@@ -153,6 +166,15 @@ func DetailHandler() http.Handler {
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
+
+		d.Doulas, err = readAttachedDoulas(r.Context(), tx, engagementID)
+		if err != nil {
+			// coverage:ignore reason: DB query failure, not exercised by unit tests
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+			return
+		}
+		staffID, _ := staffauth.StaffID(r.Context())
+		d.CanAttachSelf = canAttachSelf(reader, staffID, d.Status, d.Doulas)
 
 		apierr.WriteJSON(w, http.StatusOK, d)
 	})

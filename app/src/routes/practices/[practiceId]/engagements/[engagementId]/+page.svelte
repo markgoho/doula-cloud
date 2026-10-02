@@ -7,9 +7,11 @@
 	import { FormSubmission, orThrownErrors } from '#lib/formSubmission.svelte.js';
 	import { triggerBlobDownload } from '#lib/blobDownload.js';
 	import {
+		attachSelf,
 		changeEngagementKind,
 		changeEngagementStatus,
 		createVisit,
+		doulaSummaryItem,
 		downloadAttachment,
 		endingReasons,
 		loadAttachmentPreviews,
@@ -24,9 +26,11 @@
 		sendMessage,
 		sendPortalInvite,
 		visitTypeLabel,
+		type AttachedDoula,
 		type BirthOutcomeFacts,
 		type BirthOutcomeRequest,
-		type Visit
+		type Visit,
+		type WhoIsOn
 	} from '#lib/engagementDetail.js';
 	import { kindLabel } from '#lib/engagementRequest.js';
 	import {
@@ -146,6 +150,10 @@
 		// fact InvoiceSection reads before ever showing the Create Invoice
 		// form, never a routed gate discovered after a submit attempt.
 		clientsCanPay?: boolean;
+		// #1598: who is on this Engagement, and whether the BFF would put
+		// the reader on it now.
+		doulas: AttachedDoula[];
+		canAttachSelf: boolean;
 	};
 
 	// The Engagement comes from +page.ts's load now, not an onMount fetch
@@ -212,9 +220,10 @@
 			return;
 		}
 		isCompleteFormShown = false;
-		await directMove.mutate(async () => {
+		const hasMoved = await directMove.mutate(async () => {
 			statusOverride = await changeEngagementStatus(apiFetchWithSession, reference, move);
 		}, 'Failed to change status');
+		if (hasMoved) await refreshWhoIsOn();
 	}
 
 	// Completing asks for a reason -- GOV.UK's question-page pattern
@@ -249,6 +258,7 @@
 			isCompleteFormShown = false;
 			completeReasonValue = '';
 			completeNoteValue = '';
+			await refreshWhoIsOn();
 		}, orThrownErrors(completeFieldIds));
 	}
 
@@ -320,6 +330,58 @@
 			kindOverride = result.kind;
 			kindChangedMessage = `Now set to ${kindLabel(result.kind)}.`;
 		}, 'Failed to change what the Practice sold');
+	}
+
+	// #1598: who is on this Engagement, overlaid on the load-time read the
+	// way statusOverride is. The BFF decides both halves -- the names, and
+	// whether "Put me on this Engagement" is hers to press
+	// (engagement.canAttachSelf, the function its own write asks) -- and
+	// this page only draws them. `undefined` means "nothing on this page
+	// view has changed who is on it".
+	let whoIsOnOverride = $state<WhoIsOn | undefined>();
+	const attachedDoulas = $derived(whoIsOnOverride?.doulas ?? detail.doulas);
+	const canAttachSelf = $derived(whoIsOnOverride?.canAttachSelf ?? detail.canAttachSelf);
+
+	// A bare command, the shape the kind change above has: nothing is
+	// asked of her, so it is one button, SectionState and a Notice, and
+	// not a form. One press is the whole act (Mark's decision on #1515,
+	// Q7), so there is no confirmation step either: she puts herself on
+	// work at her own Practice, and the ledger below records it.
+	const selfAttach = new SectionState<void>(undefined);
+	let selfAttachedMessage = $state('');
+
+	async function handleAttachSelf() {
+		selfAttachedMessage = '';
+		const isAttached = await selfAttach.mutate(async () => {
+			whoIsOnOverride = await attachSelf(apiFetchWithSession, reference);
+			selfAttachedMessage = 'You are on this Engagement.';
+		}, 'We could not put you on this Engagement. Try again.');
+		if (!isAttached) return;
+		// A birth with a Doula on it can have an On-call window, and the
+		// ledger has a new entry: both sections are re-read, each with its
+		// own error state.
+		await loadOnCall();
+		await loadActivity();
+	}
+
+	// Three other writes on this page change who is on the Engagement, and
+	// none of them answers with it: a Visit that names an employee grants
+	// her an Attachment (create and reassign), completion ends every
+	// Attachment, and a reopen leaves them ended. So the Engagement is read
+	// again after each. A failed re-read is swallowed for the reason
+	// refreshStatusAfterScheduling gives: the write succeeded and is
+	// reported, and a stale control corrects itself -- the press of a
+	// person already on it is a 200 that answers with the true list.
+	async function refreshWhoIsOn() {
+		try {
+			const { doulas: refreshedDoulas, canAttachSelf: refreshedCanAttach } = await loadEngagement(
+				apiFetchWithSession,
+				reference
+			);
+			whoIsOnOverride = { doulas: refreshedDoulas, canAttachSelf: refreshedCanAttach };
+		} catch {
+			// Left as it was; a reload reads who is on it.
+		}
 	}
 
 	/** The label a status-move button carries -- "Reopen" reads as a
@@ -602,6 +664,14 @@
 	// it, and it re-decides who may see Offers in a place that is not
 	// about Offers. Each section answers for its own read.
 	const isOffersVisible = $derived(offersState.value !== undefined);
+	// #1598: nobody offers herself work, so the Offers form does not list
+	// the person at the screen. The filter is on what the form is handed
+	// and not on the roster: the Visit pickers read the same roster and
+	// must keep her ("(you)", #909). `?.` keeps `undefined` as it is --
+	// a roster that could not be read is not a roster with nobody on it
+	// (#1432). Drawing only: the BFF refuses an Offer whose target is its
+	// sender (offer.resolveStaffTarget).
+	const offerDoulas = $derived(doulas?.filter((doula) => doula.staffId !== callerStaffId));
 
 	onDestroy(() => {
 		for (const url of Object.values(attachmentPreviewURLs)) {
@@ -644,10 +714,15 @@
 		status: string,
 		kind: string,
 		portalState: PortalInviteSubject,
-		hasClientEmail: boolean
+		hasClientEmail: boolean,
+		doulasOnIt: AttachedDoula[]
 	): { label: string; value: string }[] {
+		// #1598: who is on it, second only to whose it is. No row for a
+		// completed Engagement nobody is on (doulaSummaryItem).
+		const doulaItem = doulaSummaryItem(doulasOnIt, status);
 		const items = [
 			{ label: 'Client', value: d.clientName },
+			...(doulaItem ? [doulaItem] : []),
 			{ label: 'Status', value: status },
 			// #874: what the Practice sold, in the Staff-only word ADR-0015
 			// gives it -- this row and the Kind section's own control are the
@@ -1158,6 +1233,7 @@
 			newVisitStaffId = undefined;
 			await loadVisits();
 			await refreshStatusAfterScheduling(scheduledAt);
+			await refreshWhoIsOn();
 		}
 	}
 
@@ -1174,6 +1250,7 @@
 		if (wasReassigned) {
 			reassignStaffId[visitId] = '';
 			await loadVisits();
+			await refreshWhoIsOn();
 		}
 	}
 
@@ -1251,8 +1328,43 @@
 {#snippet summary()}
 	<stack-l space="var(--space-4)">
 		<DescriptionList
-			items={summaryItems(detail!, displayStatus, displayKind, clientPortalState, hasClientEmailOnFile)}
+			items={summaryItems(
+				detail!,
+				displayStatus,
+				displayKind,
+				clientPortalState,
+				hasClientEmailOnFile,
+				attachedDoulas
+			)}
 		/>
+
+		<!--
+			#1598: "Put me on this Engagement", directly under the row that
+			says who is on it, so the control sits beside the fact it
+			changes. Drawn where the BFF says the press would be accepted
+			and nowhere else: not for a contractor Doula, not for an Owner
+			or an Admin who holds no Doula role, not for a person already
+			on it, and not on a completed Engagement. Drawing only -- the
+			endpoint refuses each of them whatever this page drew. The
+			status Notice outlives the button, so a screen reader hears
+			the result of the press, and the Doula row above now names her.
+		-->
+		{#if canAttachSelf}
+			<cluster-l space="var(--space-3)">
+				<Button
+					label="Put me on this Engagement"
+					size="sm"
+					variant="secondary"
+					loading={selfAttach.isBusy}
+					onClick={handleAttachSelf}
+				/>
+			</cluster-l>
+		{/if}
+		{#if selfAttach.error}
+			<Notice variant="error" message={selfAttach.error} />
+		{:else if selfAttachedMessage}
+			<Notice variant="status" message={selfAttachedMessage} />
+		{/if}
 
 		<!--
 			#253: exactly the moves ADR-0015's role table admits from the
@@ -1784,7 +1896,8 @@
 
 {#snippet offersSection()}
 	<!--
-		The roster as it is, not `doulas ?? []` (#1432): an empty list
+		The roster without the reader (#1598, offerDoulas), and otherwise
+		as it is, not `doulas ?? []` (#1432): an empty list
 		tells the form that there is no one to offer the work to, and
 		`undefined` tells it that the read failed. The other two meanings of
 		`undefined` do not reach this section. A refused read is a reader
@@ -1796,7 +1909,7 @@
 	-->
 	<OfferSection
 		{offers}
-		{doulas}
+		doulas={offerDoulas}
 		clientName={detail!.clientName}
 		onCreate={handleCreateOffer}
 		onWithdraw={handleWithdrawOffer}

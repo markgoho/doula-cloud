@@ -3,6 +3,7 @@ package engagementrequest
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"net/http"
 	"strings"
 
@@ -130,7 +131,7 @@ func requireStillAttachable(ctx context.Context, tx *sql.Tx, practiceID, staffID
 	named, err := attachment.ReadMembership(ctx, tx, practiceID, staffID)
 	if err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		return err
+		return fmt.Errorf("engagementrequest: read named doula: %w", err)
 	}
 	if reason := named.WhyNotAttachable(); reason != attachment.Attachable {
 		return doulaNotAttachableError{message: refusalFor(reason, named.Name)}
