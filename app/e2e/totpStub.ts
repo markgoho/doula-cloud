@@ -11,8 +11,9 @@ import { EMULATOR_URL, enrollPhoneFactor, readVerificationCode } from './mfa';
  * newer release changes that. `totp` appears in exactly one file under
  * `lib/emulator/auth/` -- `apiSpec.js`, the generated OpenAPI schema --
  * in firebase-tools 15.27.0 (vendored in app/node_modules), 15.28.1
- * (pinned at the repo root) and 15.30.0 (the newest published release,
- * checked on 2026-09-10). `operations.js`, `state.js`, `handlers.js`,
+ * (what the repo root held on that date; the root package.json holds
+ * today's version) and 15.30.0 (the newest published release, checked
+ * on 2026-09-10). `operations.js`, `state.js`, `handlers.js`,
  * `server.js` and `errors.js` hold zero occurrences in all three. The
  * emulator answers, verbatim:
  *

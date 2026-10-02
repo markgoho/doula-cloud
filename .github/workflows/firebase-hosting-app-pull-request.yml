@@ -10,6 +10,13 @@ on:
       - "app/**"
       - "firebase.json"
       - ".firebaserc"
+      # The `firebase-tools` pin (the root manifest and its lockfile)
+      # and the retry the deploy step runs through, so a pull request
+      # that raises the version deploys a preview on it before it
+      # merges (#1624).
+      - "package.json"
+      - "bun.lock"
+      - "scripts/firebase-tools.sh"
       - ".github/workflows/firebase-hosting-app-pull-request.yml"
 
 permissions:
@@ -38,6 +45,13 @@ jobs:
         working-directory: app
         run: bun run build
 
+      # The root manifest and the root bun.lock hold the `firebase-tools`
+      # version every deploy runs (#1624). The install above is app/'s
+      # own, whose `firebase-tools` is the Auth emulator the e2e stack
+      # starts: a different consumer at a different version.
+      - name: Install firebase-tools from the root lockfile
+        run: bun install --frozen-lockfile
+
       - name: Authenticate to Google Cloud
         uses: ./.github/actions/gcp-auth
         with:
@@ -65,13 +79,15 @@ jobs:
         # channels, inside the cap of fifty, where seven days settled
         # near eighty-four -- past it, which is the failure this ticket
         # is about.
+        #
+        # scripts/firebase-tools.sh keeps the failure branch: it prints a
+        # failed attempt's stdout file to the log, and the file holds the
+        # passing attempt's result alone. It also prints the pinned
+        # version and makes up to three attempts (#1624).
         run: |
-          if ! bunx firebase-tools hosting:channel:deploy "pr-${PR_NUMBER}" \
-            --only app --expires 3d --non-interactive --json > deploy-output.json; then
-            echo "::error::firebase hosting:channel:deploy failed. Its output follows."
-            cat deploy-output.json
-            exit 1
-          fi
+          FIREBASE_TOOLS_STDOUT_FILE=deploy-output.json \
+            scripts/firebase-tools.sh retry hosting:channel:deploy "pr-${PR_NUMBER}" \
+            --only app --expires 3d --non-interactive --json
           url=$(bun -e "console.log(Object.values(require('./deploy-output.json').result)[0].url)")
           echo "url=$url" >> "$GITHUB_OUTPUT"
 

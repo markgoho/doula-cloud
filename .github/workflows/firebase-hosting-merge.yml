@@ -13,6 +13,10 @@ on:
       # the generator and the script that runs it are site sources too.
       - "scripts/sync-practice-pages.ts"
       - "package.json"
+      # The `firebase-tools` pin and the retry the deploy step runs
+      # through (#1624).
+      - "bun.lock"
+      - "scripts/firebase-tools.sh"
       - ".github/workflows/firebase-hosting-merge.yml"
   # A Practice publishing her page (#441) produces no commit, so no push
   # trigger can ever see it. The BFF fires this event instead, from a
@@ -165,8 +169,17 @@ jobs:
 
       - uses: oven-sh/setup-bun@v2
 
+      # The root manifest and the root bun.lock hold the `firebase-tools`
+      # version every deploy runs (#1624). With no install here, `bunx
+      # firebase-tools` downloaded the newest release on every run.
+      - name: Install firebase-tools from the root lockfile
+        run: bun install --frozen-lockfile
+
+      # Up to three attempts, with the version printed before the first;
+      # scripts/firebase-tools.sh holds the retry for every deploy call
+      # site (#1624).
       - name: Deploy to Firebase
-        run: bunx firebase-tools deploy --only hosting:site --non-interactive
+        run: scripts/firebase-tools.sh retry deploy --only hosting:site --non-interactive
 
       # #443: prove each published page resolves, and mark the Practice
       # when it does not.
