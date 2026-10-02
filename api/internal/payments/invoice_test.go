@@ -115,7 +115,7 @@ func seedConnectAccountWithCardStatus(t *testing.T, db *testdb.DB, practiceID, a
 func seedInvoice(t *testing.T, db *testdb.DB, practiceID, contractID, stripeInvoiceID, status string, amountCents int64, createdAt time.Time) (invoiceID string) {
 	t.Helper()
 	return seedInvoiceDue(t, db, practiceID, contractID, stripeInvoiceID, status, amountCents, createdAt,
-		createdAt.AddDate(0, 0, payments.DefaultPaymentTermsDays))
+		payments.DueAfterTerms(createdAt, payments.DefaultPaymentTermsDays))
 }
 
 // seedInvoiceDue is seedInvoice with the due date said out loud (#768) --

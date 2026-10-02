@@ -61,10 +61,13 @@ func TestPostInvoiceHandler_StripeRailSendsTheStoredDueDate(t *testing.T) {
 	if view.DueAt.Unix() != stored.Unix() {
 		t.Fatalf("returned dueAt = %v, stored = %v; want the same instant", view.DueAt, stored)
 	}
-	// And it is the default terms out from when the Invoice was raised.
-	wantDue := view.CreatedAt.AddDate(0, 0, payments.DefaultPaymentTermsDays)
-	if stored.Sub(wantDue).Abs() > time.Minute {
-		t.Fatalf("due date = %v, want about %v (%d days after it was raised)", stored, wantDue, payments.DefaultPaymentTermsDays)
+	// And it is the default terms out from when the Invoice was raised,
+	// by the one rule the handler itself spends (#1626) -- exactly, since
+	// created_at and the due date are read off the same transaction's
+	// now().
+	wantDue := payments.DueAfterTerms(view.CreatedAt, payments.DefaultPaymentTermsDays)
+	if !stored.Equal(wantDue) {
+		t.Fatalf("due date = %v, want %v (%d days of 24 hours after it was raised)", stored, wantDue, payments.DefaultPaymentTermsDays)
 	}
 }
 
@@ -93,9 +96,9 @@ func TestPostInvoiceHandler_ByHandRailStoresTheDueDate(t *testing.T) {
 	if len(client.CreateInvoiceCalls) != 0 {
 		t.Fatalf("CreateInvoice calls = %d, want 0 on the by-hand rail", len(client.CreateInvoiceCalls))
 	}
-	wantDue := view.CreatedAt.AddDate(0, 0, payments.DefaultPaymentTermsDays)
-	if stored.Sub(wantDue).Abs() > time.Minute {
-		t.Fatalf("due date = %v, want about %v", stored, wantDue)
+	wantDue := payments.DueAfterTerms(view.CreatedAt, payments.DefaultPaymentTermsDays)
+	if !stored.Equal(wantDue) {
+		t.Fatalf("due date = %v, want %v", stored, wantDue)
 	}
 }
 
@@ -117,9 +120,9 @@ func TestPostInvoiceHandler_UsesThePracticesOwnTerms(t *testing.T) {
 
 	view := raiseInvoice(t, srv, session, practiceID, engagementID)
 	stored := invoiceDueAtOf(t, db, view.ID)
-	wantDue := view.CreatedAt.AddDate(0, 0, 7)
-	if stored.Sub(wantDue).Abs() > time.Minute {
-		t.Fatalf("due date = %v, want about %v (the Practice's own net-7 terms)", stored, wantDue)
+	wantDue := payments.DueAfterTerms(view.CreatedAt, 7)
+	if !stored.Equal(wantDue) {
+		t.Fatalf("due date = %v, want %v (the Practice's own net-7 terms)", stored, wantDue)
 	}
 
 	// Changing the terms afterwards must not move an Invoice already
@@ -128,5 +131,87 @@ func TestPostInvoiceHandler_UsesThePracticesOwnTerms(t *testing.T) {
 	readPaymentTerms(t, srv, session, practiceID, http.MethodPut, `{"netDays":60}`)
 	if again := invoiceDueAtOf(t, db, view.ID); again.Unix() != stored.Unix() {
 		t.Fatalf("due date after a terms change = %v, want the unchanged %v", again, stored)
+	}
+}
+
+// TestDueAfterTerms_IsADurationAcrossADaylightSavingChange proves the
+// rule itself (#1626): an Invoice falls due N x 24 hours after the
+// instant it was raised, not N calendar days later in some zone. Each
+// raise instant is a fixed value whose terms reach across one of 2026's
+// two changes in America/New_York -- the 23-hour day of 2026-03-08 and
+// the 25-hour day of 2026-11-01 -- which is where a calendar-day reading
+// and a duration reading come apart by an hour. No wall clock and no
+// database are read, so the answer is the same on every date and in
+// every machine zone, which a handler test (it can only run now) is not.
+//
+// Each want is a literal instant worked out by hand in UTC, where there
+// is no change to cross, rather than the rule computed a second time.
+func TestDueAfterTerms_IsADurationAcrossADaylightSavingChange(t *testing.T) {
+	newYork, err := time.LoadLocation("America/New_York")
+	if err != nil {
+		t.Fatalf("load America/New_York: %v", err)
+	}
+
+	cases := []struct {
+		name     string
+		raisedAt time.Time
+		netDays  int
+		want     time.Time
+	}{
+		{
+			name:     "default terms across the fall-back night of 2026-11-01",
+			raisedAt: time.Date(2026, time.October, 2, 9, 35, 20, 0, newYork),
+			netDays:  payments.DefaultPaymentTermsDays,
+			want:     time.Date(2026, time.November, 1, 13, 35, 20, 0, time.UTC),
+		},
+		{
+			name:     "default terms across the spring-forward night of 2026-03-08",
+			raisedAt: time.Date(2026, time.February, 20, 9, 0, 0, 0, newYork),
+			netDays:  payments.DefaultPaymentTermsDays,
+			want:     time.Date(2026, time.March, 22, 14, 0, 0, 0, time.UTC),
+		},
+		{
+			name:     "net-7 terms across the fall-back night of 2026-11-01",
+			raisedAt: time.Date(2026, time.October, 28, 23, 30, 0, 0, newYork),
+			netDays:  7,
+			want:     time.Date(2026, time.November, 5, 3, 30, 0, 0, time.UTC),
+		},
+		{
+			name:     "net-7 terms across the spring-forward night of 2026-03-08",
+			raisedAt: time.Date(2026, time.March, 5, 12, 0, 0, 0, newYork),
+			netDays:  7,
+			want:     time.Date(2026, time.March, 12, 17, 0, 0, 0, time.UTC),
+		},
+		{
+			// The pair Stripe itself returned for days_until_due=30 on the
+			// Sandbox on 2026-10-02 (created, due_date), a span that holds
+			// the 25-hour day: the count ADR-0038 kept is this one.
+			name:     "the instants Stripe gave for days_until_due=30",
+			raisedAt: time.Unix(1790948207, 0),
+			netDays:  30,
+			want:     time.Unix(1793540207, 0),
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := payments.DueAfterTerms(tc.raisedAt, tc.netDays)
+			if !got.Equal(tc.want) {
+				t.Fatalf("due = %v, want %v", got.UTC(), tc.want.UTC())
+			}
+			if elapsed, want := got.Sub(tc.raisedAt), time.Duration(tc.netDays)*24*time.Hour; elapsed != want {
+				t.Fatalf("due is %v after the raise instant, want exactly %v", elapsed, want)
+			}
+		})
+	}
+}
+
+// TestDueAfterTerms_IsAWholeSecond pins the resolution: the instant sent
+// to Stripe is a Unix timestamp, so the stored one is cut to the same
+// second and the two are literally one value.
+func TestDueAfterTerms_IsAWholeSecond(t *testing.T) {
+	raisedAt := time.Date(2026, time.October, 2, 13, 35, 20, 999_999_000, time.UTC)
+	want := time.Date(2026, time.November, 1, 13, 35, 20, 0, time.UTC)
+	if got := payments.DueAfterTerms(raisedAt, payments.DefaultPaymentTermsDays); !got.Equal(want) {
+		t.Fatalf("due = %v, want %v", got, want)
 	}
 }
