@@ -9,10 +9,11 @@
 	 * case. A Template that cannot be instantiated without an empty state
 	 * makes forgetting it a type error.
 	 *
-	 * The title is the one place in the app the brief's `display` type step is
-	 * allowed, which is why `Heading` deliberately cannot reach it (#417): a
-	 * one-per-app rule that depends on everyone remembering it is not a rule,
-	 * so the step lives here and nowhere a route can pass it.
+	 * The title is set at the brief's `display` type step, which is why
+	 * `Heading` deliberately cannot reach it (#417): a rule that depends on
+	 * everyone remembering it is not a rule, so the step lives in Templates
+	 * and nowhere a route can pass it. This title and `LandingPage`'s
+	 * greeting (#1645) are the two places that spend it.
 	 */
 	import type { Snippet } from 'svelte';
 	import Notice from '#lib/components/atoms/Notice.svelte';

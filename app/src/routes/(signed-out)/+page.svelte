@@ -49,15 +49,26 @@
 	 * the page is for instead. `EntryPage` writes the tab title from the
 	 * same string, so the tab now names the page too rather than the
 	 * `Home` this route used to pass `PageTitle` directly.
+	 *
+	 * The signed-out state is the one that left `EntryPage` (#1645): it is
+	 * the `LandingPage` Template now, two panels -- a greeting and three
+	 * doors. The heading is unchanged. The greeting is read from the
+	 * device clock once, as a plain constant, before the first paint: not
+	 * in `onMount`, not `$derived`, and not on a timer, so the page never
+	 * paints one greeting and swaps to another, and nothing moves on it
+	 * that the reader did not cause.
 	 */
 	import { goto, invalidateAll } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { apiFetch } from '#lib/api.js';
 	import { unregisterPushSubscription } from '#lib/pushRegistration.js';
 	import { signOutOfSession, type SignOutOutcome } from '#lib/signOut.js';
+	import DoorLink from '#lib/components/atoms/DoorLink.svelte';
 	import Link from '#lib/components/atoms/Link.svelte';
 	import SignOutButton from '#lib/components/molecules/SignOutButton.svelte';
 	import EntryPage from '#lib/components/templates/EntryPage.svelte';
+	import LandingPage from '#lib/components/templates/LandingPage.svelte';
+	import { greetingFor } from '#lib/greeting.js';
 	import {
 		CARE_HEADING,
 		NO_CARE_HEADING,
@@ -83,6 +94,8 @@
 	// that is not there.
 	const hasNoCare = $derived(data.type === 'portal-picker' && data.engagements.length === 0);
 	const title = $derived(hasNoCare ? NO_CARE_HEADING : HEADINGS[data.type]);
+
+	const greeting = greetingFor();
 
 	/*
 	 * The door out of a session that leads nowhere (#1116). Not extracted
@@ -130,14 +143,38 @@
 	}
 </script>
 
+{#snippet doors()}
+	<!--
+		Staff log in is the primary door: the marketing site is where a new
+		person arrives (ADR-0044), so most people who reach `/` already have
+		an account. A judgment, not a measurement -- ADR-0046 counts nothing
+		about who visits.
+	-->
+	<stack-l space="var(--space-4)">
+		<DoorLink
+			href={resolve('/(signed-out)/login')}
+			label="Staff log in"
+			description="For doulas and practice owners."
+			variant="primary"
+		/>
+		<grid-l min="var(--door-min)" space="var(--space-4)">
+			<DoorLink
+				href={resolve('/portal/(signed-out)/login')}
+				label="Client portal log in"
+				description="Your contract, your birth plan, and your invoices."
+			/>
+			<!-- ADR-0042: signup grants three Credits with no card, one per Engagement. -->
+			<DoorLink
+				href={resolve('/(signed-out)/signup')}
+				label="Set up a Practice"
+				description="New here? Your first three clients are free."
+			/>
+		</grid-l>
+	</stack-l>
+{/snippet}
+
 {#snippet content()}
-	{#if data.type === 'signed-out'}
-		<ul>
-			<li><Link href={resolve('/(signed-out)/login')} label="Staff log in" /></li>
-			<li><Link href={resolve('/(signed-out)/signup')} label="Set up a Practice" /></li>
-			<li><Link href={resolve('/portal/(signed-out)/login')} label="Client portal log in" /></li>
-		</ul>
-	{:else if data.type === 'staff-picker'}
+	{#if data.type === 'staff-picker'}
 		<!--
 			Always at least one: `+page.ts` redirects a Staff member with no
 			Membership to `/no-practice` rather than handing this an empty list
@@ -192,7 +229,11 @@
 	{/if}
 {/snippet}
 
-<EntryPage {title} {content} />
+{#if data.type === 'signed-out'}
+	<LandingPage {title} {greeting} lede="Welcome to DoulaCloud." content={doors} />
+{:else}
+	<EntryPage {title} {content} />
+{/if}
 
 <style>
 	@layer components {
