@@ -327,7 +327,7 @@ describe('the Engagements rollup column (#264)', () => {
 			)
 			.toBeVisible();
 		await expect
-			.element(testPage.getByRole('cell', { name: 'Contract: No contract yet · Doula: No Doula assigned · Intake' }))
+			.element(testPage.getByRole('cell', { name: 'Contract: No contract yet · Doula: No Doula yet · Intake' }))
 			.toBeVisible();
 	});
 
@@ -342,7 +342,7 @@ describe('the Engagements rollup column (#264)', () => {
 		await expect
 			.element(
 				testPage.getByRole('cell', {
-					name: 'Contract: No contract yet · Doula: No Doula assigned · Active · Invoice: Paid ($1,000.00)'
+					name: 'Contract: No contract yet · Doula: No Doula yet · Active · Invoice: Paid ($1,000.00)'
 				})
 			)
 			.toBeVisible();
@@ -376,7 +376,7 @@ describe('the Engagements rollup column (#264)', () => {
 		await expect
 			.element(
 				testPage.getByRole('cell', {
-					name: 'Contract: No contract yet · Doula: No Doula assigned · Active · Your fee: $1,200.00'
+					name: 'Contract: No contract yet · Doula: No Doula yet · Active · Your fee: $1,200.00'
 				})
 			)
 			.toBeVisible();

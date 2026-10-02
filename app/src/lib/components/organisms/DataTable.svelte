@@ -72,7 +72,7 @@
 		datetimeAccessor?: (row: T) => string;
 		/*
 		 * #264: a Client row's Engagement rollup is more than one line per
-		 * row -- Contract status, assigned Doula, Engagement status, each on
+		 * row -- Contract status, the Doula on it, Engagement status, each on
 		 * its own line, none of it a single string `accessor` could return.
 		 * `rowActions`'s `content` is this component's only other row-level
 		 * custom-content seam, so this reuses its exact
