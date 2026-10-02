@@ -1097,6 +1097,24 @@ describe('choosing who a Visit is for (#268, #274)', () => {
 		expect(testPage.getByLabelText('Who is this Visit for?').elements()).toHaveLength(0);
 	});
 
+	// #1432: the Offers form reads the same roster, and "nobody is there"
+	// and "we could not find out" are two facts. A failed read must not be
+	// told to an Owner as a Practice with no Doula on it.
+	it('does not tell an Owner that nobody else is a Doula when the roster read fails', async () => {
+		await setupWithRoster(jsonResponse('the roster is unavailable', 500), ['owner']);
+
+		await expect.element(testPage.getByText(/^We could not load who is at this practice/)).toBeVisible();
+		expect(testPage.getByText(/^Nobody else at this practice is a Doula/).elements()).toHaveLength(0);
+	});
+
+	it('says that nobody else is a Doula when the roster holds nobody, and asks for an email address', async () => {
+		await setupWithRoster(jsonResponse({ items: [] }), ['owner']);
+
+		await expect.element(testPage.getByText(/^Nobody else at this practice is a Doula/)).toBeVisible();
+		expect(testPage.getByRole('group', { name: 'Offer this work to' }).elements()).toHaveLength(0);
+		await expect.element(testPage.getByLabelText('Email address')).toBeVisible();
+	});
+
 	// An Owner or Admin who is not a Doula has no self to log, so the
 	// picker is the only way in for her -- and it is there.
 	it('offers the picker to an Admin who holds no Doula role', async () => {

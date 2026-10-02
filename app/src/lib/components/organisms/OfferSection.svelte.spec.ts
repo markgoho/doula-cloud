@@ -25,19 +25,23 @@ const openOffer: Offer = {
 
 interface SetupOptions {
 	offers?: Offer[];
-	doulas?: { staffId: string; name: string; employmentType: string }[];
+	/** `undefined`, passed by name, is the roster that could not be read
+	 * (#1432) -- so the default roster is applied only when the key is
+	 * absent, which a destructuring default cannot tell apart. */
+	doulas?: { staffId: string; name: string; employmentType: string }[] | undefined;
 	clientName?: string;
 	onCreate?: (offer: NewOffer) => Promise<void>;
 	onWithdraw?: (offerId: string) => Promise<void>;
 }
 
-async function setup({
-	offers = [],
-	doulas = [contractor, employee],
-	clientName = 'Rosa Martinez',
-	onCreate = vi.fn().mockResolvedValue(undefined),
-	onWithdraw = vi.fn().mockResolvedValue(undefined)
-}: SetupOptions = {}) {
+async function setup(options: SetupOptions = {}) {
+	const {
+		offers = [],
+		clientName = 'Rosa Martinez',
+		onCreate = vi.fn().mockResolvedValue(undefined),
+		onWithdraw = vi.fn().mockResolvedValue(undefined)
+	} = options;
+	const doulas = 'doulas' in options ? options.doulas : [contractor, employee];
 	const { container } = await render(OfferSection, {
 		offers,
 		doulas,
@@ -55,6 +59,18 @@ async function setup({
 function describedByText(container: HTMLElement, button: ReturnType<typeof page.getByRole>): string {
 	const describedBy = button.element().getAttribute('aria-describedby') ?? '';
 	return container.querySelector(`#${describedBy}`)?.textContent ?? '';
+}
+
+/**
+ * The fragment of each error-summary link that no element on the page
+ * carries as its id (#1432). querySelector, as svelte-tests.md's case 3:
+ * an id is not in the accessible tree, and "every link has somewhere to
+ * go" is a fact about the document, not about any one element.
+ */
+function danglingSummaryTargets(container: HTMLElement): string[] {
+	return [...container.querySelectorAll<HTMLAnchorElement>('a[href^="#"]')]
+		.map((link) => link.getAttribute('href')!)
+		.filter((fragment) => container.querySelector(fragment) === null);
 }
 
 /**
@@ -331,5 +347,91 @@ describe('OfferSection.svelte', () => {
 
 		expect(onCreate).not.toHaveBeenCalled();
 		await expect.element(page.getByText('Enter a fee').first()).toBeVisible();
+	});
+
+	// #1432: a Practice with nobody to pick from. Today that is a Practice
+	// with no Doula at all; once #1598 takes the sender out of the list it
+	// is also every solo Owner, whose only Doula is the person at the screen.
+	describe('with nobody else at the Practice to pick', () => {
+		it('asks no question that has one answer, and says in words why', async () => {
+			await setup({ doulas: [] });
+
+			await expect
+				.element(
+					page.getByText(
+						'Nobody else at this practice is a Doula, so this work can only be offered to someone new, by email.'
+					)
+				)
+				.toBeVisible();
+			await expect.element(page.getByLabelText('Email address')).toBeVisible();
+			expect(page.getByRole('group', { name: 'Offer this work to' }).elements()).toHaveLength(0);
+			expect(page.getByRole('group', { name: 'Doula' }).elements()).toHaveLength(0);
+			expect(page.getByRole('radio').elements()).toHaveLength(0);
+		});
+
+		it('sends every refusal to a control that is on the page', async () => {
+			const { container, onCreate } = await setup({ doulas: [] });
+
+			await page.getByRole('button', { name: 'Send Offer' }).click();
+
+			expect(onCreate).not.toHaveBeenCalled();
+			await expect.element(page.getByRole('link', { name: 'Enter an email address' })).toBeVisible();
+			expect(page.getByRole('link', { name: 'Select a Doula' }).elements()).toHaveLength(0);
+			expect(danglingSummaryTargets(container)).toEqual([]);
+			// In the order the fields are on the page, which is the order
+			// a reader walking the summary top to bottom is led through.
+			expect(
+				page
+					.getByRole('link')
+					.elements()
+					.map((link) => link.textContent.trim())
+			).toEqual(['Enter an email address', 'Enter a fee', 'Enter the general area', 'Enter the due date']);
+		});
+
+		it('still sends an Offer to an email address, with the fee a contractor carries', async () => {
+			const { onCreate } = await setup({ doulas: [] });
+
+			await page.getByLabelText('Email address').fill('new@example.test');
+			await page.getByLabelText('Fee (USD)').fill('520');
+			await fillFacts();
+			await page.getByRole('button', { name: 'Send Offer' }).click();
+
+			expect(onCreate).toHaveBeenCalledWith({
+				email: 'new@example.test',
+				amountCents: 52_000,
+				terms: undefined,
+				clientFirstInitial: 'R',
+				clientArea: 'North side',
+				dueDate: '2027-01-04'
+			});
+		});
+
+		it('does not say nobody is a Doula when the roster could not be read', async () => {
+			const { container } = await setup({ doulas: undefined });
+
+			await expect
+				.element(
+					page.getByText(
+						'We could not load who is at this practice, so this work can only be offered to someone new, by email. To pick someone already here, reload the page.'
+					)
+				)
+				.toBeVisible();
+			expect(page.getByText(/Nobody else at this practice is a Doula/).elements()).toHaveLength(0);
+			expect(page.getByRole('radio').elements()).toHaveLength(0);
+
+			await page.getByRole('button', { name: 'Send Offer' }).click();
+
+			await expect.element(page.getByRole('link', { name: 'Enter an email address' })).toBeVisible();
+			expect(danglingSummaryTargets(container)).toEqual([]);
+		});
+	});
+
+	it('sends every refusal to a control that is on the page when there is a Doula to pick', async () => {
+		const { container } = await setup();
+
+		await page.getByRole('button', { name: 'Send Offer' }).click();
+
+		await expect.element(page.getByRole('link', { name: 'Select a Doula' })).toBeVisible();
+		expect(danglingSummaryTargets(container)).toEqual([]);
 	});
 });

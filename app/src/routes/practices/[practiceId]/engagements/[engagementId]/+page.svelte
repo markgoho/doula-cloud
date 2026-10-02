@@ -1785,7 +1785,7 @@
 {#snippet offersSection()}
 	<OfferSection
 		{offers}
-		doulas={doulas ?? []}
+		{doulas}
 		clientName={detail!.clientName}
 		onCreate={handleCreateOffer}
 		onWithdraw={handleWithdrawOffer}
