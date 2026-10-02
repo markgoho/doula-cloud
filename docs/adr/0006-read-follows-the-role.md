@@ -60,7 +60,7 @@ The person who does that is not a stranger. She is a Staff member with a real lo
 
 ## What cannot be tested yet
 
-The Owner, Admin, and employed-Doula columns are all expressible against the model as it stands. The contractor column is not, and depends on two gaps: a membership carries no employment type at all, and an Engagement carries no assigned Doula (**RA-G4**), so "the Engagements she is attached to" is not a set the product can compute. The practice-side test plan asserts the employed case, which is the only case the model can currently produce; the contractor case lands on her journey map.
+The Owner, Admin, and employed-Doula columns are all expressible against the model as it stands. The contractor column is not, and depends on two gaps: a membership carries no employment type at all, and an Engagement carries no Doula on it (**RA-G4**), so "the Engagements she is attached to" is not a set the product can compute. The practice-side test plan asserts the employed case, which is the only case the model can currently produce; the contractor case lands on her journey map.
 
 **A fifth state, added after this ADR was written.** This ADR left open how a contractor Doula becomes attached to an Engagement, and [Lena Vasquez's journey map](../journeys/contractor-doula.md) decided it: the Practice **offers** her the job and her acceptance is what attaches her. That puts a state in the model the table above does not describe — a Doula who has been offered an Engagement and has not yet accepted — and she must read enough to decide (Client, dates, on-call terms, fee) without the Practice being open to someone who has agreed to nothing. The column is **LV-G7**, and it amends this table.
 
