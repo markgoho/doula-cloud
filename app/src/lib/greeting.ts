@@ -10,7 +10,7 @@
  * built from local parts, so the answer does not depend on the time zone
  * the suite runs in.
  */
-const GREETINGS = {
+export const GREETINGS = {
 	morning: 'Good morning.',
 	afternoon: 'Good afternoon.',
 	evening: 'Good evening.',

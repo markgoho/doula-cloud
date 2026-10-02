@@ -6,11 +6,12 @@
 	 *
 	 * Not a `Link` variant: a `Link` draws one label, and a door draws two
 	 * pieces of text. So it is the second atom allowed a raw `<a>` (see
-	 * `eslint.config.js`). Put both inside an `<a>` and the link's accessible name
-	 * becomes both run together, so a screen reader would announce "Staff
-	 * log in For doulas and practice owners." as the name. Here the name is
-	 * the name alone (`aria-labelledby`, spelling:ignore: an ARIA attribute name) and the line is its description
-	 * (`aria-describedby`), so the line is still heard, after the name.
+	 * `eslint.config.js`). When an `<a>` holds both pieces, the browser
+	 * builds its accessible name from both, so a screen reader would
+	 * announce "Staff log in For doulas and practice owners." as the name.
+	 * Here the name points at the name span alone, and the line is the
+	 * link's description (`aria-describedby`), so the line is still heard,
+	 * after the name.
 	 *
 	 * Two looks. `primary` is the filled door, with the arrow, for the one
 	 * door most readers want; the accent is spent on it and nowhere else on

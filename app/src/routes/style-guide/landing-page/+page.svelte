@@ -10,7 +10,9 @@
 	import Button from '#lib/components/atoms/Button.svelte';
 	import DoorLink from '#lib/components/atoms/DoorLink.svelte';
 
-	const greetings = ['Up late? Welcome.', 'Good morning.', 'Good afternoon.', 'Good evening.'];
+	import { GREETINGS } from '#lib/greeting.js';
+
+	const greetings = [GREETINGS.night, GREETINGS.morning, GREETINGS.afternoon, GREETINGS.evening];
 	let index = $state(0);
 	const greeting = $derived(greetings[index]);
 </script>
