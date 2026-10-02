@@ -101,9 +101,9 @@
 	};
 
 	// #264: one line of a Client's open-Engagement rollup -- Contract
-	// status, the Doula on it (an explicit "No Doula yet" state, the same
-	// pattern as portalInviteStatusText's own "Never invited", and the same
-	// words as the Start work form's last answer, #1597), Engagement
+	// status, the Doula on it (an explicit state for none, the same
+	// pattern as portalInviteStatusText's own "Never invited";
+	// NO_DOULA_YET_LABEL says why the words are shared, #1597), Engagement
 	// status, and Invoice status/money or her own fee wherever the BFF's
 	// role gate let the field through the wire at all (ADR-0006/ADR-0008).
 	// A field this Reader may not see is absent from `line` entirely, not
