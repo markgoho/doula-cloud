@@ -1336,9 +1336,11 @@ describe('the Offers form does not list the person at the screen (#1598)', () =>
 	});
 });
 
-// #1598: who is on the Engagement, and the one press that puts an
-// employee Doula on it. The BFF decides who is offered the control
-// (Detail.canAttachSelf); this page draws what it is told.
+// #1598: who is on the Engagement, and the one press that puts a Doula
+// on it. The BFF decides who is offered the control
+// (Detail.canAttachSelf); this page draws what it is told. An employee
+// Doula is offered it, and so is a Doula who holds Owner or Admin
+// whatever her Employment type is (#1625).
 const attachSelfPath = '/api/practices/practice-1/engagements/engagement-1/attachments/me';
 const putMeOnIt = () => testPage.getByRole('button', { name: 'Put me on this Engagement' });
 
@@ -1379,8 +1381,22 @@ describe('who is on the Engagement, and putting yourself on it (#1598)', () => {
 		await expect.element(putMeOnIt()).toBeVisible();
 	});
 
-	// A contractor Doula, and an Owner or an Admin who holds no Doula role,
-	// read `canAttachSelf: false` from the BFF. The control is drawn off
+	// #1625: the fixture's own reader, an Owner who is a contractor Doula.
+	// The BFF offers her the control, and the page holds no rule of its
+	// own that takes it away for her Employment type.
+	it('offers the control to an Owner who is a contractor Doula, where the BFF says the press would be accepted', async () => {
+		await testPage.viewport(1440, 900);
+		apiFetchWithSession.mockImplementation(() => Promise.resolve(jsonResponse('not available', 403)));
+		expect(session).toMatchObject({ roles: ['owner', 'doula'], isContractor: true });
+		await render(Page, { data: { ...nobodyOnIt, session }, params: fixture.params });
+
+		await expect.element(testPage.getByText('No Doula yet', { exact: true })).toBeVisible();
+		await expect.element(putMeOnIt()).toBeVisible();
+	});
+
+	// A contractor Doula who holds neither Owner nor Admin, and an Owner or
+	// an Admin who holds no Doula role, read `canAttachSelf: false` from
+	// the BFF. The control is drawn off
 	// that one field, so nobody is on it and there is still no button.
 	it('offers no control with nobody on the Engagement, where the BFF says the reader may not attach herself', async () => {
 		await setupWhoIsOn({ ...nobodyOnIt, canAttachSelf: false });

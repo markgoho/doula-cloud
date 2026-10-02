@@ -12,9 +12,10 @@ import (
 	"doula-cloud/api/internal/testdb"
 )
 
-// The tests in this file are #1598: an employee Doula puts herself on an
+// The tests in this file are #1598: a Doula puts herself on an
 // Engagement with one press, the fourth writer of a granted Attachment
-// (ADR-0008's amendment on #1515).
+// (ADR-0008's amendment on #1515). #1625 added the Owner and the Admin
+// who are contractor Doulas to the people the press is for.
 
 // attachSelfBody decodes both shapes the endpoint answers with: the
 // success DTO, and apierr's own error envelope.
@@ -115,12 +116,14 @@ func newAttachSelfServer(t *testing.T, db *testdb.DB, uid, name string, roles []
 }
 
 // TestAttachSelfHandler_RoleTable is the whole rule, at the boundary
-// that enforces it: a Member with the Doula role who is an employee is
-// attached, whatever else she holds, and nobody else is. An Owner who is
-// also an employee Doula is attached: ADR-0008's "an Owner or Admin is
-// never attached" is about an accrued Attachment, and this one is
-// granted. The read agrees with the write in every row, so the screen
-// never draws a control the write refuses.
+// that enforces it: a Member with the Doula role is attached where she
+// is an employee, or where she holds Owner or Admin, and nobody else is.
+// An Owner who is also a Doula is attached: ADR-0008's "an Owner or Admin
+// is never attached" is about an accrued Attachment, and this one is
+// granted. An Owner or an Admin who is a contractor Doula is attached
+// too (#1625): "only her acceptance of an Offer" is the rule for a
+// contractor who holds neither role. The read agrees with the write in
+// every row, so the screen never draws a control the write refuses.
 func TestAttachSelfHandler_RoleTable(t *testing.T) {
 	cases := []struct {
 		name           string
@@ -134,7 +137,9 @@ func TestAttachSelfHandler_RoleTable(t *testing.T) {
 		{"owner with no doula role", []string{ownerRole}, employeeType, false},
 		{"admin with no doula role", []string{adminRole}, employeeType, false},
 		{"staff with no role", []string{}, employeeType, false},
-		{"owner who is a contractor doula", []string{ownerRole, doulaRole}, contractorType, false},
+		{"owner who is a contractor doula", []string{ownerRole, doulaRole}, contractorType, true},
+		{"admin who is a contractor doula", []string{adminRole, doulaRole}, contractorType, true},
+		{"owner who is a contractor with no doula role", []string{ownerRole}, contractorType, false},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

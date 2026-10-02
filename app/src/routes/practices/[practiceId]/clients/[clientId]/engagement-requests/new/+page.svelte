@@ -10,7 +10,7 @@
 	 * response's state to know which happened.
 	 *
 	 * She also answers "Who is the Doula?" (#1596, ADR-0017's amendment on
-	 * #1515): one employee Doula, or "No Doula yet". The list is the
+	 * #1515): one Doula from the list, or "No Doula yet". The list is the
 	 * server's (engagementrequest.DoulasHandler) -- the roster for an Owner
 	 * or an Admin, herself alone for anybody else -- and so is the one fact
 	 * that selects an answer when the form opens: she is the only Doula at

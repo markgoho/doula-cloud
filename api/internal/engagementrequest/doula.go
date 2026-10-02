@@ -34,8 +34,10 @@ const (
 	MsgDoulaMalformed     = "Select a Doula from the list, or select No Doula yet"
 	MsgDoulaNotAtPractice = "Select a Doula who is Staff at this Practice, or select No Doula yet"
 	MsgDoulaNotADoula     = "Select a person who holds the Doula role, or select No Doula yet"
-	MsgDoulaIsContractor  = "Select an employee Doula, or select No Doula yet. A contractor goes on an Engagement when she accepts an Offer."
-	MsgDoulaNotHerself    = "Select yourself, or select No Doula yet. An Owner or an Admin names another Doula."
+	// MsgDoulaIsContractor is for the contractor the rule refuses: one who
+	// holds neither Owner nor Admin (attachment.IsContractor).
+	MsgDoulaIsContractor = "Select an employee Doula, or select No Doula yet. A contractor goes on an Engagement when she accepts an Offer."
+	MsgDoulaNotHerself   = "Select yourself, or select No Doula yet. An Owner or an Admin names another Doula."
 )
 
 // detailFor is the Details sentence the request write answers reason

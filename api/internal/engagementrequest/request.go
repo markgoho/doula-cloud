@@ -17,8 +17,10 @@ import (
 // kind and due date, an optional note, and who the Doula is -- ADR-0017's
 // "the requester describes the work; the approver does not amend it".
 //
-// DoulaStaffID is the one employee Doula the asker names (#1596,
-// ADR-0017's amendment on #1515). Absent, null or blank is "No Doula
+// DoulaStaffID is the one Doula the asker names (#1596, ADR-0017's
+// amendment on #1515): a person attachment.Membership.WhyNotAttachable
+// admits, which is an employee Doula or a Doula who holds Owner or Admin
+// (#1625). Absent, null or blank is "No Doula
 // yet": the Request names nobody and approval attaches nobody.
 type RequestBody struct {
 	Kind         string  `json:"kind"`

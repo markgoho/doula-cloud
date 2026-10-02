@@ -85,8 +85,9 @@ func isOn(doulas []AttachedDoula, staffID string) bool {
 
 // canAttachSelf is whether the caller would be put on this Engagement by
 // AttachSelfHandler now: the rule admits her (attachment.Membership's
-// WhyNotAttachable -- a Member here, with the Doula role, an employee),
-// the Engagement has not completed, and she is not on it already.
+// WhyNotAttachable -- a Member here, with the Doula role, and not a
+// contractor who holds neither Owner nor Admin), the Engagement has not
+// completed, and she is not on it already.
 //
 // DetailHandler answers the Engagement hub with it and AttachSelfHandler
 // asks the same three things in the same order, so the hub draws "Put me
@@ -99,10 +100,10 @@ func canAttachSelf(reader staffauth.Reader, staffID, status string, doulas []Att
 }
 
 // refuseSelfAttach writes the 403 for a caller the rule does not admit,
-// and reports whether it did. A contractor is refused whatever the
-// Engagement is, before any read of it, so the answer tells her nothing
-// about an Engagement she cannot reach -- the order refuseFactWrite
-// gives ADR-0015's own role gate.
+// and reports whether it did. A contractor who holds neither Owner nor
+// Admin is refused whatever the Engagement is, before any read of it, so
+// the answer tells her nothing about an Engagement she cannot reach --
+// the order refuseFactWrite gives ADR-0015's own role gate.
 func refuseSelfAttach(w http.ResponseWriter, reader staffauth.Reader) bool {
 	switch attachment.OfReader(reader).WhyNotAttachable() {
 	case attachment.Attachable:
@@ -123,12 +124,13 @@ func refuseSelfAttach(w http.ResponseWriter, reader staffauth.Reader) bool {
 // ADR-0008's amendment on #1515 names. One press, and no body: the only
 // person it can attach is the person who pressed.
 //
-// For an employee Doula only, an Owner or an Admin who also holds the
-// Doula role included. ADR-0008's "an Owner or Admin acting on an
-// Engagement is never attached by it" is about an accrued Attachment;
-// this one is granted, because she decided it. A contractor is refused
-// (only her acceptance of an Offer attaches her), and so is a person with
-// no Doula role (Attachment is for Doulas only).
+// For an employee Doula, and for an Owner or an Admin who also holds the
+// Doula role, whatever her Employment type is (ADR-0008's amendment on
+// #1625). ADR-0008's "an Owner or Admin acting on an Engagement is never
+// attached by it" is about an accrued Attachment; this one is granted,
+// because she decided it. A contractor who holds neither Owner nor Admin
+// is refused (only her acceptance of an Offer attaches her), and so is a
+// person with no Doula role (Attachment is for Doulas only).
 //
 // The Attachment is granted, carries no fee, and names her as
 // attached_by; the doula_attached activity entry names her as the actor

@@ -56,7 +56,43 @@ func TestRequestHandler_ASoloOwnerIsOnHerOwnEngagementInOneAct(t *testing.T) {
 	}
 
 	got := attachmentsOn(t, db, out.EngagementID)
-	if len(got) != 1 || got[0].staffID != ownerID || got[0].origin != "granted" || got[0].attachedBy != ownerID || !got[0].open {
+	if len(got) != 1 || got[0].staffID != ownerID || got[0].origin != grantedOrigin || got[0].attachedBy != ownerID || !got[0].open {
+		t.Fatalf("attachments = %+v, want one open granted one for the Owner, attached by herself", got)
+	}
+	if got[0].feeAmountCents != nil || got[0].feeTerms != nil {
+		t.Fatalf("attachment fee = %v / %v, want none", got[0].feeAmountCents, got[0].feeTerms)
+	}
+	actors, doulas := doulaAttachedRows(t, db, out.EngagementID)
+	if len(actors) != 1 || actors[0] != ownerID || doulas[0] != ownerID {
+		t.Fatalf("doula_attached rows = actors %v doulas %v, want one where she attached herself", actors, doulas)
+	}
+}
+
+// TestRequestHandler_ASoloOwnerWhoIsAContractorIsOnHerOwnEngagement is
+// #1625. The only Owner of a Practice is a contractor Doula, so nobody
+// can send her an Offer and she cannot send one to herself. She starts
+// work and names herself, and the one act attaches her: granted, with no
+// fee, attached by herself, and one doula_attached entry that names her
+// as the actor.
+func TestRequestHandler_ASoloOwnerWhoIsAContractorIsOnHerOwnEngagement(t *testing.T) {
+	db := testdb.New(t)
+	practiceID, ownerID := testdb.SeedStaffAtNewPractice(t, db, "solo-owner", founderRoles, contractorType)
+	seedCredits(t, db, practiceID)
+	clientID := testdb.SeedNamedClient(t, db, practiceID, "Test Client", "client.com")
+
+	srv, session := newServer(t, db, "solo-owner", &tasknudge.FakeEnqueuer{})
+	defer srv.Close()
+
+	var out engagementrequest.RequestResponse
+	decode(t, do(t, requestsURL(srv.URL, practiceID, clientID), session,
+		engagementrequest.RequestBody{Kind: testKindBirth, DueDate: testDueDate, DoulaStaffID: &ownerID}),
+		http.StatusCreated, &out)
+	if out.State != testStateApproved || out.EngagementID == "" {
+		t.Fatalf("response = %+v, want approved with an engagementId", out)
+	}
+
+	got := attachmentsOn(t, db, out.EngagementID)
+	if len(got) != 1 || got[0].staffID != ownerID || got[0].origin != grantedOrigin || got[0].attachedBy != ownerID || !got[0].open {
 		t.Fatalf("attachments = %+v, want one open granted one for the Owner, attached by herself", got)
 	}
 	if got[0].feeAmountCents != nil || got[0].feeTerms != nil {

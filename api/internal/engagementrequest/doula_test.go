@@ -16,6 +16,10 @@ import (
 
 const unknownStaffID = "11111111-2222-3333-4444-555555555555"
 
+// grantedOrigin is the attachment_origin of an Attachment that somebody
+// decided, the only origin approval writes.
+const grantedOrigin = "granted"
+
 func requestsURL(base, practiceID, clientID string) string {
 	return base + "/api/practices/" + practiceID + "/clients/" + clientID + "/engagement-requests"
 }
