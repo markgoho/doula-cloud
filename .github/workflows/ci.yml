@@ -925,8 +925,22 @@ jobs:
           workload_identity_provider: projects/850855848778/locations/global/workloadIdentityPools/github-actions/providers/github
           service_account: github-action-733741680@doula-cloud.iam.gserviceaccount.com
 
+      # The deploy runs the `firebase-tools` that the ROOT manifest and the
+      # root bun.lock hold (#1624). The install above is app/'s own, whose
+      # `firebase-tools` is the Auth emulator the e2e stack starts, a
+      # different consumer at a different version. Before this step the
+      # job ran no root install, so `bunx firebase-tools` downloaded the
+      # newest release on every run.
+      - name: Install firebase-tools from the root lockfile
+        run: bun install --frozen-lockfile
+
+      # Up to three attempts, with the version printed before the first:
+      # the CLI exchanges the Workload Identity credential for an access
+      # token itself, and one failed exchange used to turn trunk red
+      # (#1624). scripts/firebase-tools.sh holds the retry for every
+      # deploy call site.
       - name: Deploy to Firebase
-        run: bunx firebase-tools deploy --only hosting:app --non-interactive
+        run: scripts/firebase-tools.sh retry deploy --only hosting:app --non-interactive
 
       # Reads the site ID from .firebaserc rather than hardcoding it, so a
       # future retarget (see ded8f60) can't leave this checking the old site

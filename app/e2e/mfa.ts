@@ -14,8 +14,9 @@ import { signIn } from './auth';
 // off the session row, and does not care which provider produced it.
 //
 // #1132 re-ran that check rather than inheriting it, across
-// firebase-tools 15.27.0 (vendored here), 15.28.1 (pinned at the repo
-// root) and 15.30.0 (the newest published release as of 2026-09-10):
+// firebase-tools 15.27.0 (vendored here), 15.28.1 (what the repo root
+// held on 2026-09-10; the root package.json holds today's version) and
+// 15.30.0 (the newest published release as of 2026-09-10):
 // `totp` appears in exactly one file under lib/emulator/auth/ in all
 // three -- apiSpec.js, the generated OpenAPI schema -- and in none of
 // operations.js, state.js, handlers.js, server.js or errors.js. The
@@ -54,7 +55,7 @@ import { signIn } from './auth';
 // reasoning live on ClearSecondFactors' own doc comment, which is the
 // one place to correct if this is ever re-probed. The schema was read in
 // both firebase-tools 15.27.0 (what app/node_modules holds) and 15.28.1
-// (what package.json pins): apiSpec.js's
+// (what the root package.json held on that date): apiSpec.js's
 // GoogleCloudIdentitytoolkitV1MfaInfo types `enrollments` as `array`,
 // with no null allowed, in each. The SDK side is
 // firebase.google.com/go/v4 v4.21.0, its newest release.
