@@ -24,7 +24,9 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    # 20 minutes holds the Playwright install steps' worst case, 16 minutes;
+    # the arithmetic is on ci.yml's `app` job (#1661).
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
 
@@ -61,7 +63,7 @@ jobs:
       # --only-shell installs chromium-headless-shell rather than full
       # Chromium, which this headless-only run never needs. Adds roughly
       # 30-60s to a cold job even with the cache below (~90MB download);
-      # a cache hit still pays the OS-dependency install step.
+      # every run, hit or miss, pays the OS-dependency install step.
       - name: Resolve Playwright version
         id: playwright-version
         working-directory: gcp-dashboard
@@ -76,11 +78,19 @@ jobs:
           path: ~/.cache/ms-playwright
           key: playwright-shell-gcp-dashboard-${{ runner.os }}-${{ steps.playwright-version.outputs.version }}
 
+      # See the comment on the `app` job's step of the same name in ci.yml
+      # (#1655, #1661). It also holds the job-timeout arithmetic for both steps.
+      - name: Install Playwright OS dependencies
+        working-directory: gcp-dashboard
+        run: bash ../scripts/install-playwright-deps.sh
+
+      # See the comment on the `app` job's step "Install Playwright browsers"
+      # in ci.yml (#1661).
       - name: Install Playwright browser
         working-directory: gcp-dashboard
         run: |
           for attempt in 1 2 3; do
-            if bunx playwright install --with-deps --only-shell chromium; then
+            if timeout 120 bunx playwright install --only-shell chromium; then
               exit 0
             fi
             echo "Browser install attempt ${attempt} failed; retrying in 30s..."
@@ -88,12 +98,6 @@ jobs:
           done
           exit 1
         if: steps.playwright-cache.outputs.cache-hit != 'true'
-
-      # See the comment on the `app` job's step of the same name in ci.yml (#1655).
-      - name: Install Playwright OS dependencies only
-        working-directory: gcp-dashboard
-        run: bash ../scripts/install-playwright-deps.sh
-        if: steps.playwright-cache.outputs.cache-hit == 'true'
 
       - name: Unit test with coverage gate
         working-directory: gcp-dashboard

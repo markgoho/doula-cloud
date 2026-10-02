@@ -6,8 +6,8 @@
  * started kept the dpkg lock, so every retry died in about a second on the
  * lock. These specs model that with a fake install command that fails the
  * way a locked dpkg does for as long as a "lock" file exists, and a fake
- * apt-busy check that watches the same file. The real lock is exercised by a
- * temporary CI run recorded on #1655.
+ * apt-busy check that watches the same file. The last describe block runs the
+ * real `apt_busy` probe instead (#1661), on Linux only.
  */
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import {
@@ -16,6 +16,7 @@ import {
   mkdtempSync,
   readFileSync,
   rmSync,
+  symlinkSync,
   writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -127,3 +128,60 @@ describe('install-playwright-deps.sh', () => {
     expect(conf).toContain('DPkg::Lock::Timeout "120"');
   });
 });
+
+// The real `apt_busy` path (#1661): the specs above always replace it with
+// APT_BUSY_CMD. These two run it for real, against a stand-in "apt-get" and a
+// held lock file, with the same first-attempt-fails-and-leaves-an-orphan
+// shape as `lockedInstall`. They need Linux's `pgrep -x` and `fuser`, the
+// tools the CI runner has; macOS has other versions of both.
+describe.skipIf(process.platform !== 'linux')(
+  'install-playwright-deps.sh real apt_busy path',
+  () => {
+    // The first run leaves $orphan running for two seconds and fails. Later
+    // runs fail for as long as $alive succeeds, and succeed once it does not.
+    function orphanInstall(orphan: string, alive: string): string {
+      const counter = join(dir, 'count');
+      const fake = join(dir, 'install');
+      writeFileSync(
+        fake,
+        `#!/usr/bin/env bash
+echo x >> ${counter}
+if [ "$(wc -l < ${counter})" -eq 1 ]; then
+  ( ${orphan} ) >/dev/null 2>&1 &
+  exit 124
+fi
+${alive} && { echo "E: Could not get lock"; exit 100; }
+exit 0
+`
+      );
+      chmodSync(fake, 0o755);
+      return fake;
+    }
+
+    const realProbe = { APT_BUSY_CMD: '', ATTEMPTS: '2' };
+
+    test('pgrep sees a process named apt-get', () => {
+      // comm is the name the process was started under, so a symlink named
+      // apt-get to sleep is "apt-get" to pgrep -x.
+      const aptGet = join(dir, 'apt-get');
+      symlinkSync('/bin/sleep', aptGet);
+      const { code, out } = run(
+        orphanInstall(`${aptGet} 2`, 'pgrep -x apt-get >/dev/null'),
+        { ...realProbe, APT_LOCK_FILES: join(dir, 'no-such-lock') }
+      );
+      expect(out).toContain('still running; waiting for it');
+      expect(code).toBe(0);
+    });
+
+    test('fuser sees a process holding the lock file', () => {
+      const lock = join(dir, 'lock-frontend');
+      writeFileSync(lock, '');
+      const { code, out } = run(
+        orphanInstall(`exec 3<${lock}; sleep 2`, `fuser -s ${lock}`),
+        { ...realProbe, APT_LOCK_FILES: lock }
+      );
+      expect(out).toContain('still running; waiting for it');
+      expect(code).toBe(0);
+    });
+  }
+);
