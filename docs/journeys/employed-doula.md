@@ -1,9 +1,9 @@
-# Priya Raman — from invitation to caring for an assigned Client
+# Priya Raman — from invitation to caring for a Client of her own
 
 - **Persona**: [employed-doula.md](../personas/employed-doula.md)
 - **Goal**: know where she has to be, what this Client wants, and what she was told last time — without texting Renata
 - **Entry point**: an emailed invitation from Renata, accepted at `/accept-invite`
-- **Done looks like**: an active membership holding the Doula role, an Engagement assigned to her opened, a Visit logged, and messages exchanged with the Client — **and she never saw a screen she had no right to see.**
+- **Done looks like**: an active membership holding the Doula role, an Engagement she is on opened, a Visit logged, and messages exchanged with the Client — **and she never saw a screen she had no right to see.**
 
 She is the negative-permission Persona. Half of this map is about what should be absent.
 

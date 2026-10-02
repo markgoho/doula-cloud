@@ -2,7 +2,7 @@
 
 - **Journey**: [employed-doula.md](../journeys/employed-doula.md)
 - **Persona**: [employed-doula.md](../personas/employed-doula.md)
-- **A pass means**: an active membership holding the Doula role, an Engagement assigned to her opened, a Visit logged, messages exchanged — **and she never saw a screen she had no right to see.**
+- **A pass means**: an active membership holding the Doula role, an Engagement she is on opened, a Visit logged, messages exchanged — **and she never saw a screen she had no right to see.**
 
 She is the negative-permission Persona, so half this plan is the [Permission boundary](#permission-boundary) matrix, which is tester work rather than anything Priya would do.
 
