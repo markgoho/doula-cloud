@@ -1,6 +1,24 @@
+<script module lang="ts">
+	import type { DemoVariant } from '../drag-surface/dragSurface.js';
+
+	interface Properties {
+		shown?: 'content' | 'empty' | 'loading' | 'loadError';
+	}
+
+	/*
+	 * The other states this page renders (#1638, ADR-0025), each its own
+	 * subject for the continuum check and the drag surface. Each one
+	 * replaces the content, so one mount cannot hold two of them.
+	 */
+	export const variants: readonly DemoVariant<Properties>[] = [
+		{ name: 'Document page, empty', props: { shown: 'empty' } },
+		{ name: 'Document page, loading', props: { shown: 'loading' } },
+		{ name: 'Document page, with a load error', props: { shown: 'loadError' } }
+	];
+</script>
+
 <script lang="ts">
 	import DocumentPage from '#lib/components/templates/DocumentPage.svelte';
-	import Button from '#lib/components/atoms/Button.svelte';
 	import DescriptionList from '#lib/components/molecules/DescriptionList.svelte';
 	import Text from '#lib/components/atoms/Text.svelte';
 
@@ -17,7 +35,7 @@
 		{ label: 'Billed to', value: 'Persephone Adeyemi-Wollstonecraft' }
 	];
 
-	let shown = $state<'content' | 'empty' | 'loading' | 'loadError'>('content');
+	let { shown = 'content' }: Properties = $props();
 </script>
 
 {#snippet content()}
@@ -27,16 +45,9 @@
 	/>
 {/snippet}
 
-<div class="controls">
-	<Button label="Content" variant="secondary" size="sm" onClick={() => (shown = 'content')} />
-	<Button label="Empty" variant="secondary" size="sm" onClick={() => (shown = 'empty')} />
-	<Button label="Loading" variant="secondary" size="sm" onClick={() => (shown = 'loading')} />
-	<Button label="Load error" variant="secondary" size="sm" onClick={() => (shown = 'loadError')} />
-</div>
-
 <!-- The title is the Invoices heading until the Invoice "arrives", the way
      the portal Invoice route passes it. An Invoice has no empty state, so
-     the Empty switch shows the Contract's instead. -->
+     the empty variant shows the Contract's instead. -->
 <DocumentPage
 	title={{ content: title, empty: 'Contract', loading: 'Invoices', loadError: 'Invoices' }[shown]}
 	backHref="#"
@@ -46,15 +57,3 @@
 	loadError={shown === 'loadError' ? 'Failed to load Invoice' : undefined}
 	empty={shown === 'empty' ? 'No Contract has been sent for your care yet.' : undefined}
 />
-
-<style>
-	@layer components {
-		/* Not part of the Template -- a switch so all four states of the
-		   page can be seen without editing this file. */
-		.controls {
-			padding: var(--space-3) var(--space-4);
-			border-block-end: var(--border-thin) solid var(--color-outline-variant);
-			background-color: var(--color-surface-container);
-		}
-	}
-</style>

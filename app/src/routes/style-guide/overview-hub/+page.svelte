@@ -1,3 +1,21 @@
+<script module lang="ts">
+	import type { DemoVariant } from '../drag-surface/dragSurface.js';
+
+	interface Properties {
+		isEmpty?: boolean;
+	}
+
+	/*
+	 * The other state this page renders (#1638, ADR-0025). The empty hub
+	 * replaces the populated one, so one mount cannot hold the two: it is
+	 * its own subject, swept by the continuum check and offered on the drag
+	 * surface under this name.
+	 */
+	export const variants: readonly DemoVariant<Properties>[] = [
+		{ name: 'Overview hub, empty', props: { isEmpty: true } }
+	];
+</script>
+
 <script lang="ts">
 	import OverviewHub from '#lib/components/templates/OverviewHub.svelte';
 	import Badge from '#lib/components/atoms/Badge.svelte';
@@ -47,7 +65,7 @@
 
 	const noop = () => {};
 
-	let isEmpty = $state(false);
+	let { isEmpty = false }: Properties = $props();
 </script>
 
 {#snippet primary()}
@@ -104,25 +122,4 @@
 	</stack-l>
 {/snippet}
 
-<div class="controls">
-	<Button
-		label={isEmpty ? 'Show the populated hub' : 'Show the empty hub'}
-		variant="secondary"
-		size="sm"
-		onClick={() => (isEmpty = !isEmpty)}
-	/>
-</div>
-
 <OverviewHub title="Highland Midwifery &amp; Birth Support Collective of Western New York" {primary} {secondary} {isEmpty} {empty} />
-
-<style>
-	@layer components {
-		/* Not part of the Template -- a switch so both required states of the
-		   page can be seen without editing this file. */
-		.controls {
-			padding: var(--space-3) var(--space-4);
-			border-block-end: var(--border-thin) solid var(--color-outline-variant);
-			background-color: var(--color-surface-container);
-		}
-	}
-</style>

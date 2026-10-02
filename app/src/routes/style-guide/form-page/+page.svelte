@@ -1,3 +1,21 @@
+<script module lang="ts">
+	import type { DemoVariant } from '../drag-surface/dragSurface.js';
+
+	interface Properties {
+		hasError?: boolean;
+	}
+
+	/*
+	 * The other state this page renders (#1638, ADR-0025): the error
+	 * summary and the message below the field, which is the longer and the
+	 * busier of the two. Its own subject for the continuum check and the
+	 * drag surface.
+	 */
+	export const variants: readonly DemoVariant<Properties>[] = [
+		{ name: 'Form page, with errors', props: { hasError: true } }
+	];
+</script>
+
 <script lang="ts">
 	import FormPage from '#lib/components/templates/FormPage.svelte';
 	import Button from '#lib/components/atoms/Button.svelte';
@@ -17,7 +35,7 @@
 	let dueDate = $state('');
 	let birthPlace = $state('');
 
-	let hasError = $state(false);
+	let { hasError = false }: Properties = $props();
 
 	const dueDateId = 'style-guide-form-page-due-date';
 
@@ -100,15 +118,6 @@
 	<Button label="Cancel" variant="secondary" onClick={noop} />
 {/snippet}
 
-<div class="controls">
-	<Button
-		label={hasError ? 'Hide the error state' : 'Show the error state'}
-		variant="secondary"
-		size="sm"
-		onClick={() => (hasError = !hasError)}
-	/>
-</div>
-
 <FormPage
 	title="Add a Client to Highland Midwifery"
 	{intro}
@@ -119,15 +128,3 @@
 	]}
 	{actions}
 />
-
-<style>
-	@layer components {
-		/* Not part of the Template -- a switch so the error region can be seen
-		   without editing this file. */
-		.controls {
-			padding: var(--space-3) var(--space-4);
-			border-block-end: var(--border-thin) solid var(--color-outline-variant);
-			background-color: var(--color-surface-container);
-		}
-	}
-</style>

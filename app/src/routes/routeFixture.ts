@@ -1,9 +1,9 @@
 /*
  * What a route needs to be put in front of the continuum check (#570).
  *
- * A component demo needs nothing: it is a Svelte component with no props,
- * so `toDemos` can hand the sweep a whole style-guide page as it stands.
- * A route is not that. It reads `page.params` out of `$app/state`, it
+ * A component demo needs almost nothing: it is a Svelte component whose
+ * only props select one of its own states (#1638), so `toDemos` can hand
+ * the sweep a whole style-guide page. A route is not that. It reads `page.params` out of `$app/state`, it
  * takes `data` from its own `load`, and it fetches through
  * `#lib/api.js` in `onMount` -- the reach trial on #551 needed a
  * hand-written harness for exactly this reason, and the harness it needed

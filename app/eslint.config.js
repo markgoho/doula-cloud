@@ -48,6 +48,21 @@ export default defineConfig(
 	},
 	{
 		/*
+		 * A style-guide page is mounted two ways. The router mounts it with
+		 * the props it gives every page. The continuum check and the drag
+		 * surface mount it as a plain component, with the props that select
+		 * one of the states the page declares as `variants` (#1638,
+		 * ADR-0025) -- `isEmpty`, `hasError`. Those are not props the router
+		 * can supply, which is what this rule guards against everywhere
+		 * else, so it is off for these pages and for no other route.
+		 */
+		files: ['src/routes/style-guide/*/+page.svelte'],
+		rules: {
+			'svelte/valid-prop-names-in-kit-pages': 'off'
+		}
+	},
+	{
+		/*
 		 * `app/scripts/**` is the only source in this package that Bun itself
 		 * runs (`bun scripts/sync-icons.ts`, `bun run dev:full`), so it is the
 		 * only source that must reach for Bun's APIs rather than Node's.

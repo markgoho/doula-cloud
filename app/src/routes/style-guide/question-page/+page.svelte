@@ -1,3 +1,23 @@
+<script module lang="ts">
+	import type { DemoVariant } from '../drag-surface/dragSurface.js';
+
+	interface Properties {
+		isLabelMode?: boolean;
+		hasError?: boolean;
+	}
+
+	/*
+	 * The other states this page renders (#1638, ADR-0025), each its own
+	 * subject for the continuum check and the drag surface: the second h1
+	 * shape, where the question is a fieldset's legend over three inputs,
+	 * and the error region above the question.
+	 */
+	export const variants: readonly DemoVariant<Properties>[] = [
+		{ name: 'Question page, with a legend as the heading', props: { isLabelMode: false } },
+		{ name: 'Question page, with errors', props: { hasError: true } }
+	];
+</script>
+
 <script lang="ts">
 	import QuestionPage from '#lib/components/templates/QuestionPage.svelte';
 	import type { JourneyStep } from '#lib/components/organisms/StepRail.svelte';
@@ -45,8 +65,7 @@
 	let day = $state('');
 	let year = $state('');
 
-	let isLabelMode = $state(true);
-	let hasError = $state(false);
+	let { isLabelMode = true, hasError = false }: Properties = $props();
 
 	const noop = () => {};
 </script>
@@ -98,23 +117,6 @@
 	<Link href="/style-guide/question-page" label="Save and come back later" />
 {/snippet}
 
-<div class="controls">
-	<cluster-l space="var(--space-3)">
-		<Button
-			label={isLabelMode ? 'Show the legend-as-h1 page' : 'Show the label-as-h1 page'}
-			variant="secondary"
-			size="sm"
-			onClick={() => (isLabelMode = !isLabelMode)}
-		/>
-		<Button
-			label={hasError ? 'Hide the error summary' : 'Show the error summary'}
-			variant="secondary"
-			size="sm"
-			onClick={() => (hasError = !hasError)}
-		/>
-	</cluster-l>
-</div>
-
 {#if isLabelMode}
 	<QuestionPage
 		journey="Adding a Client to Highland Midwifery"
@@ -147,15 +149,3 @@
 		{actions}
 	/>
 {/if}
-
-<style>
-	@layer components {
-		/* Not part of the Template -- switches so both h1 shapes and the
-		   error region can be seen without editing this file. */
-		.controls {
-			padding: var(--space-3) var(--space-4);
-			border-block-end: var(--border-thin) solid var(--color-outline-variant);
-			background-color: var(--color-surface-container);
-		}
-	}
-</style>
