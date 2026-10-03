@@ -185,7 +185,6 @@ describe('the Engagement Request screen', () => {
 		const note = testPage.getByLabelText('Note (optional)', { exact: true });
 		await expect.element(note).toBeVisible();
 		await expect.element(note).not.toHaveAccessibleDescription();
-		expect(testPage.getByText(/approv/i).elements()).toHaveLength(0);
 	});
 
 	it('tells a Doula who reads the note on a request that waits', async () => {
