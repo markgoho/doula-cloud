@@ -70,6 +70,7 @@ jobs:
         run: |
           version=$(grep -oP '"playwright@\K[0-9.]+(?=")' bun.lock | head -1)
           echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "image=${ImageOS}-${ImageVersion}" >> "$GITHUB_OUTPUT"
 
       - name: Cache Playwright browsers
         id: playwright-cache
@@ -77,6 +78,13 @@ jobs:
         with:
           path: ~/.cache/ms-playwright
           key: playwright-shell-gcp-dashboard-${{ runner.os }}-${{ steps.playwright-version.outputs.version }}
+
+      # See the comment on the step of the same name in ci.yml (#1667).
+      - name: Cache Playwright OS packages
+        uses: actions/cache@v6
+        with:
+          path: ~/.cache/playwright-debs
+          key: playwright-debs-${{ steps.playwright-version.outputs.image }}-${{ steps.playwright-version.outputs.version }}
 
       # See the comment on the `app` job's step of the same name in ci.yml
       # (#1655, #1661). It also holds the job-timeout arithmetic for both steps.
