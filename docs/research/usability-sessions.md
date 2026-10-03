@@ -1,6 +1,6 @@
 # Usability sessions with the pilot agency: the protocol
 
-The protocol for the five sessions [#1685](https://github.com/markgoho/doula-cloud/issues/1685) asks for, written before the first one. The founder runs the sessions. This file holds what he takes into each one: the recruiting note, the consent line, the seeded Practice, the five task cards, the observer sheet, and the debrief questions. It also says where each sheet is filed and how what the sessions find reaches the tracker.
+The protocol for the five sessions [#1685](https://github.com/markgoho/doula-cloud/issues/1685) asks for, written before the first one. The founder runs the sessions. This file holds what the founder takes into each one: the recruiting note, the consent line, the seeded Practice, the five task cards, the observer sheet, and the debrief questions. It also says where each sheet is filed and how what the sessions find reaches the tracker.
 
 ## Why this exists
 
@@ -11,7 +11,7 @@ The sessions run before the second walk ([#329](https://github.com/markgoho/doul
 ## The rules of a session
 
 - **Five sessions, five people, all from the pilot agency**: the owner, the non-doula admin, and three doulas, one of them a contractor. One person per session, never two at once.
-- **The founder observes.** He does not help, does not explain, and does not defend the product. When the person asks a question or stops, he says one line, and only that line: "What would you try next?"
+- **The founder observes.** The founder does not help, does not explain, and does not defend the product. When the person asks a question or stops, the founder says one line, and only that line: "What would you try next?"
 - **Under an hour**, in this order: the consent line, the opening script, the invitation (about 10 minutes), the card (up to 25 minutes), the debrief (about 15 minutes). A card ends when the person reaches the goal, or says they would give up, or has made no progress for five minutes. A card that ends without the goal is recorded as not reached; it is never rescued.
 - **The person's own device**: the phone or computer they would use for this work, in the browser they already use, signed in as themselves.
 - **The deployed app**, at its real address, in a Practice seeded for the sessions ([The seeded Practice](#the-seeded-practice)). Never the local stack, and never the pilot agency's real data.
@@ -38,7 +38,7 @@ Said aloud before the opening script, and the answer recorded on the sheet as ye
 
 > I'd like to record your screen and your voice while you try this, so I can check afterward what happened. Only I'll watch it, it won't go anywhere public, and I'll delete it once I've written up what I saw. Is that OK?
 
-The recording is the device's own screen recording with the microphone on. At the end of the session the person sends the file to the founder and deletes their copy. The founder keeps it in his private storage, never in the repo, and deletes it when every finding from that session is filed. A person who says no is still watched; the session runs without a recording, and every number on the sheet that needs one is written "not measured".
+The recording is the device's own screen recording with the microphone on. At the end of the session the person sends the file to the founder and deletes their copy. The founder keeps it in the founder's private storage, never in the repo, and deletes it when every finding from that session is filed. The founder confirmed this rule on 2026-10-03. A person who says no is still watched; the session runs without a recording, and every number on the sheet that needs one is written "not measured".
 
 ## The seeded Practice
 
@@ -60,7 +60,7 @@ The records each card touches are separate, so one Practice serves all five sess
 
 **How it is made.** There is no command for this yet. Every seed in the repo stops at the local stack: `bun run --cwd app seed:staff-session` (`app/scripts/seed-staff-session.ts`) signs up through the Firebase Auth emulator and inserts its Engagement with raw SQL (`seedEngagement`, `app/e2e/stack.ts`), and the World's provisioning (`app/e2e/simulation/provision.ts`) signs people in through the emulator and reads each invitation token from the local mailbox. None of those reaches Cloud Run, Identity Platform or Cloud SQL. [#1729](https://github.com/markgoho/doula-cloud/issues/1729) is the ticket for the deployed mechanism, and this paragraph names the command when it lands.
 
-**The participant's account.** Each participant gets a real invitation to the seeded Practice, carrying their role and employment type, and accepts it at the start of their own session, on their own device. Acceptance is Stage 1 of the admin's, the doula's and the contractor's maps (the owner's map starts after it), so it is observed and written on the sheet, but it is not the card. The owner also enrolls a second factor here, because an Owner cannot reach a Practice screen without one. Then the founder attaches the participant to the card's Engagement, or sends the card's Offer, from his own device, since neither can exist before the participant's membership does. Then the person closes the browser, and the card starts from the device's home screen.
+**The participant's account.** Each participant gets a real invitation to the seeded Practice, carrying their role and employment type, and accepts it at the start of their own session, on their own device. Acceptance is Stage 1 of the admin's, the doula's and the contractor's maps (the owner's map starts after it), so it is observed and written on the sheet, but it is not the card. The owner also enrolls a second factor here, because an Owner cannot reach a Practice screen without one. Then the founder attaches the participant to the card's Engagement, or sends the card's Offer, from the founder's own device, since neither can exist before the participant's membership does. Then the person closes the browser, and the card starts from the device's home screen.
 
 ## The five task cards
 
