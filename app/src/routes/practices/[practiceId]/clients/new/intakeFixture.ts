@@ -184,4 +184,7 @@ export function seedIntake(): void {
 	};
 	intakeDraft.visitedSteps = ['name', 'date-of-birth', 'email', 'phone', 'address'];
 	intakeDraft.matches = matches;
+	// Reached from the search, which is the way in at a Practice that
+	// holds Clients -- as this one does (#1609).
+	intakeDraft.origin = undefined;
 }

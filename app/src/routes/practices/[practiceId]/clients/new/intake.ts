@@ -14,7 +14,12 @@ import { createClient } from '#lib/client.js';
 import { errorsFromCause, type FormError } from '#lib/formErrors.js';
 import { dateFieldId } from '#lib/intakeDate.js';
 import { intakeDraft } from '#lib/intakeDraft.svelte.js';
-import { CHANGE_PARAMETER, CHANGE_VALUE } from '#lib/intakeJourney.js';
+import {
+	CHANGE_PARAMETER,
+	CHANGE_VALUE,
+	originQuery,
+	type IntakeOrigin
+} from '#lib/intakeJourney.js';
 
 /** What `page.url.searchParams` hands out: a `URLSearchParams` with its
  * mutators removed (`svelte/prefer-svelte-reactivity` bans the mutable
@@ -95,8 +100,34 @@ export function basePath(practiceId: string): string {
 	return resolve('/practices/[practiceId]/clients/new', { practiceId });
 }
 
-export function searchHref(practiceId: string): string {
-	return resolve('/practices/[practiceId]/clients/search', { practiceId });
+/**
+ * The link that opens the name question directly, with no search in front
+ * of it (#1609), naming the screen it is on so Back returns there. Only
+ * the overview and the Clients list of a Practice that holds no Client
+ * record show one.
+ */
+export function startHref(practiceId: string, origin: IntakeOrigin): string {
+	return `${basePath(practiceId)}?${originQuery(origin)}`;
+}
+
+/**
+ * Where the name question's Back goes: the screen that opened it (#1609).
+ * The overview and the Clients list open it directly while the Practice
+ * holds no Client record; from the first Client on, the search does, and
+ * the search is also where Back goes when the origin is not known.
+ */
+export function exitHref(practiceId: string, origin: IntakeOrigin | undefined): string {
+	switch (origin) {
+		case 'overview': {
+			return resolve('/practices/[practiceId]', { practiceId });
+		}
+		case 'clients': {
+			return resolve('/practices/[practiceId]/clients', { practiceId });
+		}
+		default: {
+			return resolve('/practices/[practiceId]/clients/search', { practiceId });
+		}
+	}
 }
 
 export function detailHref(practiceId: string, clientId: string): string {

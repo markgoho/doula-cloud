@@ -23,6 +23,7 @@
  */
 
 import type { ClientCreateFields, ClientMatch } from './client.js';
+import type { IntakeOrigin } from './intakeJourney.js';
 
 /** One answer to a Practice-defined question. The three shapes cover
  * the five field types intake collects: text and single-select are a
@@ -109,6 +110,14 @@ export class IntakeDraft {
 	 * shows them is a route of its own, reached by navigation.
 	 */
 	matches = $state<ClientMatch[]>([]);
+	/**
+	 * The screen that opened the name question directly (#1609), which
+	 * is where its Back goes. Undefined when intake was reached from the
+	 * search, which is then where Back goes. Module state only, not
+	 * mirrored: the name question's own URL carries it, so a reload of
+	 * that page reads it again.
+	 */
+	origin = $state<IntakeOrigin | undefined>();
 
 	/** Whether the one fact ADR-0017 requires is here. Read by `start`,
 	 * to decide whether the search's carried values are seeding an empty
@@ -164,6 +173,7 @@ export class IntakeDraft {
 		this.answers = blankAnswers();
 		this.visitedSteps = [];
 		this.matches = [];
+		this.origin = undefined;
 	}
 }
 

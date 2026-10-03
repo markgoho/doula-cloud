@@ -14,6 +14,7 @@
 import { isOpen, loadInbox, type Offer } from './offer.js';
 import { apiErrorMessage } from './apiErrorMessage.js';
 import { loadPendingRequests } from './engagementRequest.js';
+import { hasAnyClient } from './client.js';
 export type { Fetcher } from './fetcher.js';
 import { loadBalance } from './billing.js';
 import { loadConnectStatus, type ConnectStatus } from './payments.js';
@@ -150,27 +151,6 @@ async function readOpenOffers(fetcher: Fetcher, practiceId: string): Promise<Off
 	return offers.filter((offer) => isOpen(offer));
 }
 
-/*
- * `?all=true` matters, and it is not a detail: `client.ListHandler`
- * defaults to Clients who have work -- an Engagement, or a pending
- * Engagement Request -- so a Practice whose first Client has not been
- * engaged yet reads as having none. That puts the first-run empty state
- * in front of somebody who has already done the one thing it asks for,
- * which is the exact failure this page exists to stop. The question here
- * is whether the Practice has a Client at all, so it asks that.
- *
- * Now that #446 has the endpoint cursor-paginated, one page (at most 30
- * rows) answers the question -- items.length > 0 -- without ever needing
- * hasMore or a second request.
- */
-async function hasAnyClient(fetcher: Fetcher, practiceId: string): Promise<boolean> {
-	const response = await fetcher(`/api/practices/${practiceId}/clients?all=true`);
-	if (!response.ok) {
-		throw new Error(await apiErrorMessage(response));
-	}
-	const clients: { items: unknown[] } = await response.json();
-	return clients.items.length > 0;
-}
 
 // The pending/expired invitation counts are read off the roster's first
 // page only (#446 paginates invitations at 30/page): undercounting past

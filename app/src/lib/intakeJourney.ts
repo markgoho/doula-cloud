@@ -158,6 +158,31 @@ export const CHANGE_PARAMETER = 'from';
 export const CHANGE_VALUE = 'check';
 export const CHANGE_QUERY = `${CHANGE_PARAMETER}=${CHANGE_VALUE}`;
 
+/**
+ * The screens that open the name question directly, with no search in
+ * front of it (#1609, ADR-0017's amendment of 2026-10-02): the empty
+ * Practice's overview, and the Clients list of a Practice that holds no
+ * Client record. Anywhere else, intake is reached from the search.
+ */
+export type IntakeOrigin = 'overview' | 'clients';
+
+const INTAKE_ORIGINS: readonly IntakeOrigin[] = ['overview', 'clients'];
+
+/** The query a link that opens intake directly carries, so the name
+ * question's Back goes to the screen she came from. The same `from` a
+ * Change link uses, because it answers the same question. */
+export function originQuery(origin: IntakeOrigin): string {
+	return `${CHANGE_PARAMETER}=${origin}`;
+}
+
+/** Which screen opened intake, read off the query string. Only the two
+ * named values are accepted, so the URL can name a screen but can never
+ * name an address for Back to go to. */
+export function intakeOrigin(search: Pick<URLSearchParams, 'get'>): IntakeOrigin | undefined {
+	const value = search.get(CHANGE_PARAMETER);
+	return INTAKE_ORIGINS.find((origin) => origin === value);
+}
+
 /** Every step's own identity: the structural slugs, plus `section-0`,
  * `section-1` and so on for the Practice's own pages. */
 export type StepId = string;

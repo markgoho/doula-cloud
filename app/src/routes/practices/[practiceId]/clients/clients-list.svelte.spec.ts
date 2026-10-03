@@ -66,7 +66,13 @@ beforeEach(() => {
 // `toApiResponder` exists. A test that needs different content passes its
 // own `Response` and gets it on every call, which is what every "Load
 // more"/failure case below still wants.
-async function setup(response?: Response, isContractor = false) {
+interface Caller {
+	isContractor?: boolean;
+	// What `+page.ts` read with `all=true` (#1609).
+	hasAnyClient?: boolean;
+}
+
+async function setup(response?: Response, { isContractor = false, hasAnyClient = true }: Caller = {}) {
 	// DataTable's own content floor (#508) stacks it into a <dl> below
 	// 46rem, and this file's assertions are about the <table> specifically.
 	await testPage.viewport(1440, 900);
@@ -83,6 +89,7 @@ async function setup(response?: Response, isContractor = false) {
 		data: {
 			isContractor,
 			isOwner: false,
+			hasAnyClient,
 			session: { practiceId, staffId: 'staff-1', practiceName: 'Riverside Doula Collective', roles: [], isContractor }
 		}
 	});
@@ -91,6 +98,29 @@ async function setup(response?: Response, isContractor = false) {
 describe('clients list screen', () => {
 	it('sends "Find or add a Client" to the search that fronts intake, not straight to intake (#498, #539)', async () => {
 		await setup();
+
+		await expect
+			.element(testPage.getByRole('link', { name: 'Find or add a Client' }))
+			.toHaveAttribute('href', `/practices/${practiceId}/clients/search`);
+	});
+
+	// #1609: at a Practice that holds no Client record the search can find
+	// nobody, so the link opens the name question and names only that
+	// errand. Which one it is comes from +page.ts's `all=true` count; the
+	// rows here are the filtered list and decide nothing.
+	it('opens the name question as "Add a Client" at a Practice with no Client record', async () => {
+		await setup(jsonResponse({ items: [], hasMore: false }), { hasAnyClient: false });
+
+		await expect
+			.element(testPage.getByRole('link', { name: 'Add a Client', exact: true }))
+			.toHaveAttribute('href', `/practices/${practiceId}/clients/new?from=clients`);
+		await expect
+			.element(testPage.getByRole('link', { name: 'Find or add a Client' }))
+			.not.toBeInTheDocument();
+	});
+
+	it('keeps the search when the filtered list is empty but the Practice holds a Client with no work', async () => {
+		await setup(jsonResponse({ items: [], hasMore: false }), { hasAnyClient: true });
 
 		await expect
 			.element(testPage.getByRole('link', { name: 'Find or add a Client' }))
@@ -220,7 +250,7 @@ describe('clients list screen', () => {
 // to, so the control is gone rather than merely relabeled for her.
 describe('a contractor Doula without the owner or admin role', () => {
 	it('does not see "Find or add a Client" at all', async () => {
-		await setup(undefined, true);
+		await setup(undefined, { isContractor: true });
 
 		await expect
 			.element(testPage.getByRole('link', { name: 'Find or add a Client' }))
@@ -228,7 +258,7 @@ describe('a contractor Doula without the owner or admin role', () => {
 	});
 
 	it('names why her list is empty rather than reusing "No Clients yet."', async () => {
-		await setup(jsonResponse({ items: [], hasMore: false }), true);
+		await setup(jsonResponse({ items: [], hasMore: false }), { isContractor: true });
 
 		// getByRole, not getByText: the record view carries the same
 		// message in a hidden <p>, and only a role query excludes it.
@@ -242,7 +272,7 @@ describe('a contractor Doula without the owner or admin role', () => {
 	});
 
 	it('links her empty list to #501\'s explain-only door', async () => {
-		await setup(jsonResponse({ items: [], hasMore: false }), true);
+		await setup(jsonResponse({ items: [], hasMore: false }), { isContractor: true });
 
 		await expect
 			.element(testPage.getByRole('link', { name: 'How to add Clients of your own' }))
@@ -250,7 +280,7 @@ describe('a contractor Doula without the owner or admin role', () => {
 	});
 
 	it('does not show the explainer link once she has attached Clients', async () => {
-		await setup(undefined, true);
+		await setup(undefined, { isContractor: true });
 
 		await expect
 			.element(testPage.getByRole('link', { name: 'How to add Clients of your own' }))

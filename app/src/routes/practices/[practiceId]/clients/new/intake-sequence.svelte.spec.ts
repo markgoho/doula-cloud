@@ -4,6 +4,7 @@ import { render } from 'vitest-browser-svelte';
 import type { Component } from 'svelte';
 import { jsonResponse } from '#lib/testResponse.js';
 import { intakeDraft, type IntakeAnswers } from '#lib/intakeDraft.svelte.js';
+import type { IntakeOrigin } from '#lib/intakeJourney.js';
 import { toPageState, type RouteFixture } from '../../../../routeFixture.js';
 import { seedIntake } from './intakeFixture.js';
 import NamePage from './name/+page.svelte';
@@ -49,6 +50,9 @@ interface SetupOptions {
 	/** What has been typed, where a test needs it to differ from the
 	 * fixture's own Client. */
 	answers?: Partial<IntakeAnswers>;
+	/** The screen that opened intake directly (#1609); undefined is the
+	 * search. */
+	origin?: IntakeOrigin;
 }
 
 /*
@@ -63,10 +67,11 @@ function setupFor(fixture: RouteFixture, Page: Component<never>) {
 	// route's props are contravariant, so `Component<never>` is the only
 	// type that accepts every route and the mount is where it is undone.
 	const RoutePage = Page as Component;
-	return async ({ search = '', respond, answers }: SetupOptions = {}) => {
+	return async ({ search = '', respond, answers, origin }: SetupOptions = {}) => {
 		const state = toPageState(fixture);
 		Object.assign(pageState, { ...state, url: new URL(`${state.url.href}${search}`) });
 		if (answers) intakeDraft.update(answers);
+		intakeDraft.origin = origin;
 		if (respond) apiFetchWithSession.mockResolvedValue(respond);
 		await render(RoutePage);
 		/**
@@ -94,6 +99,21 @@ describe('the first question', () => {
 		await testPage.getByRole('button', { name: 'Continue' }).click();
 
 		expect(goto).toHaveBeenCalledWith(`${base}/date-of-birth`);
+	});
+
+	// #1609: Back goes to the screen that opened the name question -- the
+	// overview or the Clients list of an empty Practice open it directly,
+	// and the search opens it everywhere else.
+	it.each([
+		['the search', undefined, `/practices/${practiceId}/clients/search`],
+		['the overview', 'overview', `/practices/${practiceId}`],
+		['the Clients list', 'clients', `/practices/${practiceId}/clients`]
+	] as const)('sends Back to %s that opened it', async (_screen, origin, href) => {
+		await setup({ origin });
+
+		await expect
+			.element(testPage.getByRole('link', { name: 'Back', exact: true }))
+			.toHaveAttribute('href', href);
 	});
 
 	// The Change round trip: a question reached from the summary returns

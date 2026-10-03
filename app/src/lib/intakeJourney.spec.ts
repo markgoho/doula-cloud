@@ -5,7 +5,9 @@ import {
 	intakeStepList,
 	journeySteps,
 	nextStepHref,
-	previousStepHref
+	previousStepHref,
+	intakeOrigin,
+	originQuery
 } from './intakeJourney.js';
 
 function field(partial: Partial<Field> & { id: string }): Field {
@@ -173,5 +175,21 @@ describe('previousStepHref', () => {
 
 	it('is the search that fronts intake from the first step', () => {
 		expect(previousStepHref(steps, basePath, 'name', '/search')).toBe('/search');
+	});
+});
+
+describe('intakeOrigin (#1609)', () => {
+	it.each(['overview', 'clients'] as const)('reads %s as the screen that opened intake', (origin) => {
+		const search = new URLSearchParams(originQuery(origin));
+
+		expect(intakeOrigin(search)).toBe(origin);
+	});
+
+	it.each([
+		['no origin at all', ''],
+		['a Change round trip', 'from=check'],
+		['an address', 'from=https://example.test/']
+	])('names no screen for %s', (_case, query) => {
+		expect(intakeOrigin(new URLSearchParams(query))).toBeUndefined();
 	});
 });

@@ -27,6 +27,7 @@
 		type WaitingOnReply
 	} from '#lib/practiceLanding.js';
 	import { PaginatedList } from '#lib/paginatedList.svelte.js';
+	import { startHref } from './clients/new/intake.js';
 	import { activityLedgerColumns, loadPracticeActivityPage, type ActivityEntry } from '#lib/activityLedger.js';
 	import { formatActivityTimestamp } from '#lib/dates.js';
 	import type { PracticeSession } from './+layout.js';
@@ -355,19 +356,15 @@
 			text="Nothing is here yet, because no Client is. Add one and this becomes the Client's birth plan, the visits with the Client, and the contract and invoices between the Client and your Practice."
 		/>
 		<!--
-			Through search, not straight into intake (#466). ADR-0017 makes
-			search the first screen of intake and the only door to it, so a
-			link that jumped the queue here would be the top-level "Add a
-			Client" action the ADR rules out. The search's own empty state
-			carries whatever was typed into the new record, so nothing is
-			asked twice.
+			Straight to the name question, not through the search (#1609,
+			ADR-0017's amendment of 2026-10-02). This snippet only shows while
+			the Practice holds no Client record, and then the search can find
+			nobody: it would be two presses and a screen with no result. The
+			collision check at the save still runs. From the first Client on,
+			the search is the only door again. `from` sends the name
+			question's Back here.
 		-->
-		<Link
-			href={resolve('/practices/[practiceId]/clients/search', {
-				practiceId: page.params.practiceId!
-			})}
-			label="Add your first Client"
-		/>
+		<Link href={startHref(page.params.practiceId!, 'overview')} label="Add your first Client" />
 	</stack-l>
 {/snippet}
 

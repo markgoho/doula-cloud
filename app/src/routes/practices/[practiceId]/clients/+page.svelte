@@ -5,6 +5,7 @@
 	import { apiFetchWithSession } from '#lib/api.js';
 	import { loadClients, type ClientListItem, type OpenEngagement } from '#lib/client.js';
 	import { NO_DOULA_YET_LABEL } from '#lib/engagementRequest.js';
+	import { startHref } from './new/intake.js';
 	import { isBlockedInvite, portalInviteStatusText } from '#lib/portalInvite.js';
 	import { formatAmount, invoiceStatusLabel } from '#lib/invoice.js';
 	import { PaginatedList } from '#lib/paginatedList.svelte.js';
@@ -24,6 +25,10 @@
 	// real navigation always supplies it.
 	let { data }: { data?: PageProperties['data'] } = $props();
 	const isContractor = $derived(data?.isContractor ?? false);
+	// #1609: whether the Practice holds any Client record, which decides
+	// where the header link goes. Defaults to the search, which is right
+	// at a Practice of any size.
+	const hasAnyClient = $derived(data?.hasAnyClient ?? true);
 
 	// Starts empty: unlike Billing and Invoices this screen fetches its own
 	// first page in the effect below rather than through a load, so every
@@ -261,14 +266,24 @@
 
 {#snippet actions()}
 	<!--
-		The search that fronts intake (#498, #539, ADR-0017): there is no
-		top-level "Add a Client" action, so this link lands on the search
-		screen, not on intake directly. A miss there hands the reader on to
-		intake. Named for both errands it serves -- finding a returning
-		Client is the one a contractor Doula's own attached-Clients list
-		already covers, which is why she does not see this at all (#539).
+		Once the Practice holds a Client record, this link lands on the
+		search (#498, #539, ADR-0017), not on intake directly, so a
+		returning Client is found rather than typed a second time. A miss
+		there hands the reader on to intake. Named for both errands it
+		serves -- finding a returning Client is the one a contractor
+		Doula's own attached-Clients list already covers, which is why she
+		does not see this at all (#539).
+
+		While the Practice holds no Client record there is nobody to find,
+		so it opens the name question and says only what it does (#1609,
+		ADR-0017's amendment of 2026-10-02). +page.ts decides which, from
+		the count of records, not from the filtered rows below.
 	-->
-	<Link href={searchHref()} label="Find or add a Client" />
+	{#if hasAnyClient}
+		<Link href={searchHref()} label="Find or add a Client" />
+	{:else}
+		<Link href={startHref(page.params.practiceId!, 'clients')} label="Add a Client" />
+	{/if}
 {/snippet}
 
 {#snippet content()}

@@ -95,11 +95,13 @@ describe('IntakeDraft', () => {
 		draft.start('p1', { givenName: 'Sarah' });
 		draft.visit('name');
 		draft.matches = [];
+		draft.origin = 'overview';
 
 		draft.clear();
 
 		expect(draft.answers).toEqual(blankAnswers());
 		expect(draft.visitedSteps).toEqual([]);
+		expect(draft.origin).toBeUndefined();
 		expect(sessionStorage.getItem('doula-cloud:intake:p1')).toBeNull();
 	});
 

@@ -2,11 +2,13 @@
 	/*
 	 * The search that fronts intake (#498, #539, ADR-0017): "Clients ->
 	 * Find or add a Client -> search -> her record -> Request Engagement
-	 * start". There is no top-level "Add a Client" action anywhere else
-	 * in the product -- the Clients list's own link lands here for
-	 * everyone who has one, not on intake directly (`clients/+page.svelte`),
+	 * start". Once a Practice holds a Client record, the Clients list's
+	 * own link lands here, not on intake directly (`clients/+page.svelte`),
 	 * so a returning Client is found rather than retyped, and searching
-	 * costs nothing when she genuinely is new. A contractor Doula has no
+	 * costs nothing when she genuinely is new. While the Practice holds no
+	 * Client record there is nobody to find, so the overview and the
+	 * Clients list open the name question directly instead (#1609,
+	 * ADR-0017's amendment of 2026-10-02). A contractor Doula has no
 	 * such link (#539) -- her own attached-Clients list is already her
 	 * route to a Client, and an empty one links here instead.
 	 *
@@ -41,6 +43,7 @@
 		type DateParts
 	} from '#lib/intakeDate.js';
 	import { FormSubmission, orThrownMessage } from '#lib/formSubmission.svelte.js';
+	import ContractorDoor from '../ContractorDoor.svelte';
 	import type { PageProps as PageProperties } from './$types';
 
 	// #501 (ADR-0017): +page.ts's load already decided, before this
@@ -191,29 +194,10 @@
 
 {#if isContractorDoor}
 	<!--
-		#501 (ADR-0017): "a contractor originates nothing" -- a contractor
-		Doula's Add a Client is a door that only explains, in place of the
-		search screen SearchHandler would otherwise refuse her from with a
-		403. Every route below still exists, and this branch never calls
-		any of them.
+		#501 (ADR-0017): in place of the search screen SearchHandler would
+		otherwise refuse her from with a 403. This branch never calls it.
 	-->
-	<PageTitle page="Add a Client" />
-
-	<container-l>
-		<center-l max="var(--form-max)" gutters="var(--page-gutter)">
-			<stack-l space="var(--space-6)">
-				<Heading level={1} variant="page" text="Add a Client" />
-				<Text
-					tone="variant"
-					measure
-					text="Work at this Practice reaches you as an Offer, so there is no Client to search for or add here. To take on Clients of your own, set up a Practice."
-				/>
-				<cluster-l space="var(--space-3)" align="center">
-					<Link href={resolve('/(signed-out)/signup')} label="Set up a Practice" />
-				</cluster-l>
-			</stack-l>
-		</center-l>
-	</container-l>
+	<ContractorDoor />
 {:else}
 	<PageTitle page="Find a Client" isError={submission.errors.length > 0} />
 
