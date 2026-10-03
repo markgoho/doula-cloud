@@ -5,6 +5,7 @@
 	import { apiFetchWithSession } from '#lib/api.js';
 	import { loadClients, type ClientListItem, type OpenEngagement } from '#lib/client.js';
 	import { NO_DOULA_YET_LABEL } from '#lib/engagementRequest.js';
+	import { engagementStatusText } from '#lib/engagementDetail.js';
 	import { startHref } from './new/intake.js';
 	import { isBlockedInvite, portalInviteStatusText } from '#lib/portalInvite.js';
 	import { formatAmount, invoiceStatusLabel } from '#lib/invoice.js';
@@ -95,16 +96,6 @@
 		voided: 'Voided'
 	};
 
-	// #264: the Engagement's own status value, honestly displayed. MO-G4
-	// (#253, a separate, already-filed gap) is why most Engagements read
-	// "intake" regardless of real-world progress -- this label map does
-	// not work around that; it only renders whatever is actually stored.
-	const engagementStatusLabel: Record<string, string> = {
-		intake: 'Intake',
-		active: 'Active',
-		completed: 'Completed'
-	};
-
 	// #264: one line of a Client's open-Engagement rollup -- Contract
 	// status, the Doula on it (an explicit state for none, the same
 	// pattern as portalInviteStatusText's own "Never invited";
@@ -127,7 +118,9 @@
 		const parts = [
 			`Contract: ${line.contractStatus ? contractStatusLabel[line.contractStatus] : 'No contract yet'}`,
 			`Doula: ${line.doulaName ?? NO_DOULA_YET_LABEL}`,
-			engagementStatusLabel[line.engagementStatus] ?? line.engagementStatus
+			// #264: the Engagement's own status, as stored; #1512: in the
+			// word every Staff screen shows for it.
+			engagementStatusText(line.engagementStatus)
 		];
 		if (line.invoiceStatus) {
 			const amount =

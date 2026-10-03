@@ -373,7 +373,18 @@
 		value={doula}
 		onChange={(value: string) => (doula = value)}
 	/>
-	<LabeledField id={noteId} label="Note" hint="Anything the approver should know -- optional">
+	<!--
+		#1512: an Owner or an Admin approves her own request in the same
+		act, so nobody else reads the note and the field says nothing about
+		an approver. A request that waits says who reads it. "(optional)"
+		ends the label, the way every optional question in the app says it
+		(docs/design/govuk-alignment.md, Question pages).
+	-->
+	<LabeledField
+		id={noteId}
+		label="Note (optional)"
+		hint={isApprover ? undefined : 'An Owner or an Admin reads this with your request.'}
+	>
 		{#snippet children({ id, describedBy, invalid })}
 			<Textarea {id} {describedBy} {invalid} value={note} onInput={(v) => (note = v)} />
 		{/snippet}

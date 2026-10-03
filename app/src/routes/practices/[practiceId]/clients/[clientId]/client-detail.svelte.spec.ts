@@ -194,7 +194,7 @@ describe('client detail hub', () => {
 		});
 
 		await expect.element(testPage.getByRole('cell', { name: 'Birth' })).toBeVisible();
-		await expect.element(testPage.getByRole('cell', { name: 'active' })).toBeVisible();
+		await expect.element(testPage.getByRole('cell', { name: 'Active' })).toBeVisible();
 	});
 
 	it('renders client_events and engagement_requests as one merged timeline', async () => {
