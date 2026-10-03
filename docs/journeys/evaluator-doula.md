@@ -112,9 +112,9 @@ This stage is genuinely cheap and is the strongest leg of her journey. One scree
 * **Cold**: yes (Paradox of the Active User)
 * **320px**: yes (ADR-0024)
 
-- **5.1** — **Find or add a Client** on the Clients list, search, find nobody, follow **Add a new Client**. Intake is one question per page from there (ADR-0017): the name, then date of birth, email, phone, address, then whatever the Practice put on its own Client Field Template.
-- **5.2** — Answer the name question and press **Save and come back later**. The save is **free** and creates a Client and nothing else — no Engagement, no credit spent — and lands her on that Client's own detail hub.
-- **5.2-b** — **Start new work with {name}** from the hub. This is the act that costs, and it says so before she commits: `Credit cost 1 credit` and `Balance after 2`. She holds Owner, so asking and approving collapse into one act, and the Engagement is created and the Credit locked there. A trial still has a size — three Engagements, not three Clients — but it is now named on screen rather than discovered at a paywall.
+- **5.1** — On her empty Practice, press **Add your first Client**. Intake is one question (ADR-0017): the name. The date of birth, email, phone, address and whatever the Practice put on its own Client Field Template are added later from the Client's record.
+- **5.2** — Answer the name question and press **Save and continue**. The save is **free** and creates a Client and nothing else — no Engagement, no credit spent — and opens the Start work form for that Client.
+- **5.2-b** — **Start work with {name}** on that form. This is the act that costs, and it says so before she commits: `Credit cost 1 credit` and `Balance after 2`. She holds Owner, so asking and approving collapse into one act, and the Engagement is created and the Credit locked there; she lands on the Engagement's page, which says "Work with {name} started." A trial still has a size — three Engagements, not three Clients — but it is now named on screen rather than discovered at a paywall.
 - **5.3** — Open the Engagement from the Clients list.
 - **5.4** — See Visits, Care Plan, Birth Plan, Contract, Invoices, and Messages on one page. This is the first moment the product looks like doula work — and it is four clicks past the point where she was deciding whether to leave.
 

@@ -21,8 +21,8 @@
 
 	let { journey }: { journey: QuestionJourney } = $props();
 
-	// One literal, shared with intake's `intakeFieldIds` so the summary
-	// entry and the boxes it points at cannot drift apart.
+	// One literal, written in `questionJourney.ts`, so an error entry and
+	// the boxes it points at cannot drift apart.
 	const GROUP = DATE_OF_BIRTH_GROUP;
 
 	/*

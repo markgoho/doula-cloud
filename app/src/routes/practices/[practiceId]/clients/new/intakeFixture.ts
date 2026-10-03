@@ -2,17 +2,16 @@
  * The Practice intake is being walked for, as the continuum check and
  * the route specs both see it (#570, #596, ADR-0025).
  *
- * ## Why a shared seed rather than eight `respond()`s
+ * ## Why a shared seed rather than a `respond()`
  *
- * The sequence's shape -- the Practice's name and its Client Field
- * Template -- is read once by `clients/new/+layout.svelte` and held in
- * `intakeFlow`, precisely so a reader four questions in does not meet a
- * loading state on every navigation. The sweep mounts a `+page.svelte`
- * on its own, without that layout, so each fixture seeds the same module
- * state the layout would have filled. The draft is seeded the same way
- * and for the same reason: a question page shows what was typed on the
- * pages before it, and an empty draft measures a screen no doula ever
- * sees.
+ * Intake's draft is module state that `clients/new/+layout.svelte`
+ * opens, and the sweep mounts a `+page.svelte` on its own, without that
+ * layout, so each fixture seeds the state the layout would have filled.
+ *
+ * The Practice's name and its Client Field Template are seeded into
+ * `intakeFlow` here too. Intake no longer reads them (#1611); a Client's
+ * details journey does (#1610), and `detailsFixture.ts` seeds them
+ * through this function.
  *
  * ## Hostile, never polite (#537)
  *
@@ -24,17 +23,15 @@
  *
  * ## Two states, not one row (`.claude/rules/svelte-tests.md`)
  *
- * The draft carries one Client, so the rule's two-row shape is realized
- * inside it: every field that renders one way is at its longest, and the
- * two genuinely optional columns -- a second address line, a preferred
- * name that matches the given one -- are left blank, so the summary's
- * `Not answered` row is a state the sweep measures rather than one
- * nobody ever put in front of it. Same for the Practice-defined layer:
- * one field of the five is unanswered.
+ * The draft carries one Client with every key the search can carry, so
+ * the name question's list of carried values is in the screen the sweep
+ * measures, its long email address among them. A draft that carried
+ * none draws a strict subset of that tree -- no list -- so it is not a
+ * second state to seed.
  */
 import type { ClientMatch } from '#lib/client.js';
 import type { Field } from '#lib/clientFieldTemplate.js';
-import { intakeDraft } from '#lib/intakeDraft.svelte.js';
+import { blankAnswers, intakeDraft } from '#lib/intakeDraft.svelte.js';
 import { intakeFlow } from '#lib/intakeFlow.svelte.js';
 
 export const practiceId = 'practice-1';
@@ -160,29 +157,19 @@ export function seedIntake(): void {
 	intakeFlow.fields = fields;
 	intakeFlow.status = 'ready';
 
+	// The name, and every key the search can carry (#1611): intake asks
+	// nothing else, so an address or a Practice's own answer is never in
+	// its draft.
 	intakeDraft.scope = practiceId;
 	intakeDraft.answers = {
+		...blankAnswers(),
 		givenName: 'Anne-Marie',
 		familyName: 'Ochieng-Whitfield',
-		preferredName: '',
 		email: 'anne-marie.ochieng-whitfield@finger-lakes-midwifery.example.com',
 		phone: '+1 (585) 555-0142',
-		addressLine1: '4827 Pittsford-Mendon Center Road',
-		addressLine2: '',
-		addressLocality: 'Honeoye Falls',
-		addressRegion: 'NY',
-		addressPostalCode: '14472',
-		dateOfBirth: '1988-02-09',
-		fieldValues: {
-			referral: 'A sister who was a Client here in 2024',
-			birthplace: 'Strong Memorial Hospital',
-			attendees: ['Partner', 'Mother', 'Photographer'],
-			photos: true
-			// `hopes` is deliberately absent: one Practice-defined question
-			// left unanswered is the summary's other state.
-		}
+		dateOfBirth: '1988-02-09'
 	};
-	intakeDraft.visitedSteps = ['name', 'date-of-birth', 'email', 'phone', 'address'];
+	intakeDraft.visitedSteps = [];
 	intakeDraft.matches = matches;
 	// Reached from the search, which is the way in at a Practice that
 	// holds Clients -- as this one does (#1609).

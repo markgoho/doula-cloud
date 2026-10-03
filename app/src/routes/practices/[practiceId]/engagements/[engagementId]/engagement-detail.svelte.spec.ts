@@ -1,5 +1,5 @@
 import { page as testPage } from 'vitest/browser';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import { registerLayoutPrimitives } from '#lib/primitives/index.js';
 import { jsonResponse } from '#lib/testResponse.js';
@@ -215,6 +215,43 @@ describe('Staff Engagement detail summary', () => {
 
 		await expect.element(testPage.getByText('active')).toBeVisible();
 		await expect.element(testPage.getByText(/due date/i)).not.toBeInTheDocument();
+	});
+});
+
+// How the page was arrived at: the fixture's own URL with `search` on it.
+function arriveWith(search: string) {
+	pageState.url = new URL(`${toPageState(fixture).url.href}${search}`);
+}
+
+// #1611: the end of a new Client's flow. An approved start lands here
+// with `?started=true`, and the page says the work started.
+describe('the status message after an approved start (#1611)', () => {
+	beforeEach(() => {
+		apiFetchWithSession.mockReset();
+	});
+
+	// Every other block reads the fixture's own URL.
+	afterEach(() => {
+		pageState.url = toPageState(fixture).url;
+	});
+
+	it('says the work started, names the Client, and takes focus', async () => {
+		arriveWith('?started=true');
+
+		await setup(fixtureDetail);
+
+		const message = testPage.getByText(`Work with ${fixtureDetail.clientName} started.`);
+		await expect.element(message).toBeVisible();
+		await expect.element(message).toHaveFocus();
+	});
+
+	it('says nothing on any other visit', async () => {
+		arriveWith('');
+
+		await setup(fixtureDetail);
+
+		await expect.element(testPage.getByRole('heading', { level: 1 })).toBeVisible();
+		await expect.element(testPage.getByText(/started\.$/)).not.toBeInTheDocument();
 	});
 });
 

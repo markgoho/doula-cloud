@@ -35,7 +35,7 @@
 		type Visit,
 		type WhoIsOn
 	} from '#lib/engagementDetail.js';
-	import { kindLabel } from '#lib/engagementRequest.js';
+	import { isJustStarted, kindLabel } from '#lib/engagementRequest.js';
 	import {
 		assigneeBlock,
 		loadVisitAssigneesOrNone,
@@ -2172,8 +2172,19 @@
 	renders, and a refusal reaches practices/+error.svelte instead (#695).
 	The sections below still fill in after mount, each with its own state.
 -->
+<!--
+	#1611: the end of a new Client's flow. The Start work form lands an
+	approved start here with `?started=true`. The message takes focus, as
+	GOV.UK asks of a success banner on the page a form leads to. It names
+	the Client: product copy has no gendered pronoun.
+-->
+{#snippet startedNotice()}
+	<Notice variant="status" message="Work with {detail.clientName} started." isFocusedOnAppear />
+{/snippet}
+
 <RecordDetail
 	title={detail.clientName}
+	notice={isJustStarted(page.url.searchParams) ? startedNotice : undefined}
 	{summary}
 	{actions}
 	isContentsShown

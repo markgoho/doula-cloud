@@ -21,9 +21,9 @@ import { globFiles } from './globFiles';
 
 /*
  * `JourneyQuestion` is not a Template. It is the Client journeys' own
- * shared question page (#466, #1610): intake's name page composes it,
- * and so does each shared question in `clients/questions/`, which
- * intake and a Client's details journey both mount. It composes
+ * shared question page (#466, #1610): each shared question in
+ * `clients/questions/` composes it, and a Client's details journey
+ * mounts them. It composes
  * `QuestionPage`, so it renders the title exactly as a Template does --
  * one or two levels further out than this scan can read. Named here
  * rather than dropped from the glob, so the gate still asks the question

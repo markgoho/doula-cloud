@@ -1,22 +1,20 @@
 <script lang="ts">
 	/*
-	 * One question of a Client journey, as a page (#466, #1610).
+	 * One question of a Client's details journey, as a page (#466, #1610).
 	 *
-	 * Intake's name page and every shared question in this folder compose
-	 * this, in either journey: intake for a new Client, or her details
-	 * added from her record. What they share is everything except the
-	 * question and the controls under it: where the rail's data comes
-	 * from, where Back and Continue go, the Change round trip, the error
-	 * summary's position, and -- in intake only -- the free save. Which
-	 * journey it is comes in as `journey`, so the page never reaches for
-	 * the other journey's state.
+	 * Every shared question in this folder composes this. What they share
+	 * is everything except the question and the controls under it: where
+	 * the rail's data comes from, where Back and Continue go, the Change
+	 * round trip, and the error summary's position. The journey comes in
+	 * as `journey`, so the page reads no module state of its own. Intake
+	 * for a new Client is one question with its own save (#1611), so it
+	 * does not compose this.
 	 *
 	 * ## What a route still owns
 	 *
 	 * The question, the hint, the controls, and -- through `validate` --
-	 * whether Continue is allowed to happen. The name page refuses a blank
-	 * given name; the date page composes three boxes into one string and
-	 * refuses a date that is not real.
+	 * whether Continue is allowed to happen. The date page composes three
+	 * boxes into one string and refuses a date that is not real.
 	 *
 	 * ## Why the <form> is outside the Template
 	 *
@@ -29,11 +27,11 @@
 	import type { Snippet } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { page } from '#lib/appState.svelte.js';
+	import Button from '#lib/components/atoms/Button.svelte';
 	import ErrorSummary from '#lib/components/molecules/ErrorSummary.svelte';
 	import QuestionPage, { type Question } from '#lib/components/templates/QuestionPage.svelte';
 	import { journeySteps, nextStepHref, previousStepHref, type StepId } from '#lib/intakeJourney.js';
-	import { FormSubmission, orServiceProblem, type FormError } from '#lib/formSubmission.svelte.js';
-	import QuestionActions from './QuestionActions.svelte';
+	import type { FormError } from '#lib/formSubmission.svelte.js';
 	import { checkOr, type QuestionJourney } from './questionJourney.js';
 
 	interface Properties {
@@ -65,26 +63,17 @@
 	);
 
 	/*
-	 * One `FormSubmission`, but only `handleSaveForLater` drives it through
-	 * `run`: `QuestionActions`' own spinner belongs to that button alone,
-	 * and sharing `isSubmitting` with Continue's own (busy-free) navigation
-	 * would flip it on a click Continue never asked to be busy for.
-	 * `handleContinue` writes `submission.errors` directly instead -- the
-	 * same array, so the summary and the two actions never disagree about
-	 * what is wrong.
+	 * What the last `validate` said, so the error summary and the controls
+	 * both see the same refusals. Continue saves nothing -- the details
+	 * journey saves once, at its check page -- so there is no submission
+	 * to be busy for.
 	 */
-	const submission = new FormSubmission();
-
-	// Runs `validate` and keeps what it said, so the error summary and the
-	// controls both see the same refusals.
-	function isRefused(): boolean {
-		submission.errors = validate?.() ?? [];
-		return submission.errors.length > 0;
-	}
+	let errors = $state<FormError[]>([]);
 
 	async function handleContinue(event: SubmitEvent) {
 		event.preventDefault();
-		if (isRefused()) return;
+		errors = validate?.() ?? [];
+		if (errors.length > 0) return;
 		journey.draft.visit(stepId);
 		await goto(
 			checkOr(
@@ -95,13 +84,6 @@
 		);
 	}
 
-	// Only offered where the journey has one -- see `QuestionJourney`.
-	const saveForLater = $derived(journey.saveForLater);
-
-	async function handleSaveForLater(save: NonNullable<QuestionJourney['saveForLater']>) {
-		if (isRefused()) return;
-		await submission.run(() => save(stepId), orServiceProblem);
-	}
 </script>
 
 <!-- stacked-form:ignore: #1108 -- this form wraps a Template. `QuestionPage` renders the controls and the actions as two separate regions of one column and stacks each itself, so the `<form>` here exists to put the submit button inside the form that owns the inputs (see the note above), not to arrange anything. -->
@@ -118,20 +100,18 @@
 		{hint}
 	>
 		{#snippet errorSummary()}
-			{#if submission.errors.length > 0}
-				<ErrorSummary errors={submission.errors} />
+			{#if errors.length > 0}
+				<ErrorSummary {errors} />
 			{/if}
 		{/snippet}
 
 		{#snippet content({ describedBy })}
-			{@render controls({ describedBy, errors: submission.errors })}
+			{@render controls({ describedBy, errors })}
 		{/snippet}
 
 		{#snippet actions()}
-			<QuestionActions
-				isSaving={submission.isSubmitting}
-				onSaveForLater={saveForLater && (() => handleSaveForLater(saveForLater))}
-			/>
+			<!-- The submit, so the form submits on Enter from any field. -->
+			<Button type="submit" label="Continue" />
 		{/snippet}
 	</QuestionPage>
 </form>

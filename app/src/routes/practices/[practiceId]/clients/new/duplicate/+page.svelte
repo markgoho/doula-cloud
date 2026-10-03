@@ -18,7 +18,10 @@
 	 *   PUT `edit.go` expects.
 	 * - **A different person.** The one deliberate override on this path.
 	 *   It re-sends the create with `override: true`, which skips the
-	 *   match query entirely.
+	 *   match query entirely, and opens the Start work form (#1611).
+	 *
+	 * A match ends on her record, because she is a returning Client and
+	 * new work with her starts there (#1611).
 	 *
 	 * Nothing has been saved when this page appears, which is why the
 	 * first line says so.
@@ -38,11 +41,9 @@
 	import Text from '#lib/components/atoms/Text.svelte';
 	import { FormSubmission, orThrownMessage } from '#lib/formSubmission.svelte.js';
 	import { intakeDraft } from '#lib/intakeDraft.svelte.js';
-	import { intakeFlow } from '#lib/intakeFlow.svelte.js';
-	import { journeySteps } from '#lib/intakeJourney.js';
 	import { mergedEditFields } from '#lib/intakeMerge.js';
 	import { proposedChanges } from '#lib/proposedChanges.js';
-	import { JOURNEY, basePath, detailHref, knownAs, saveIntake } from '../intake.js';
+	import { JOURNEY, basePath, detailHref, intakeSteps, knownAs, saveIntake } from '../intake.js';
 
 	const DIFFERENT_PERSON = 'different';
 	// Named rather than generated, so the error summary can point an
@@ -51,7 +52,7 @@
 
 	const practiceId = $derived(page.params.practiceId ?? '');
 	const base = $derived(basePath(practiceId));
-	const steps = $derived(journeySteps(intakeFlow.steps, base, undefined, intakeDraft.visitedSteps));
+	const steps = $derived(intakeSteps(practiceId));
 
 	const chosenId = $derived(page.url.searchParams.get('match') ?? '');
 	const reviewing = $derived<ClientMatch | undefined>(
@@ -75,8 +76,8 @@
 	/*
 	 * A reader who reloads this page, or reaches it from a bookmark, has
 	 * no matches in the draft: they live in memory and the 409 that
-	 * produced them is not repeated by a page load. The summary is where
-	 * the sequence was, so that is where they go.
+	 * produced them is not repeated by a page load. The name question is
+	 * where the save was asked for, so that is where they go.
 	 *
 	 * `onMount`, deliberately, not an `$effect`. Every way OFF this page
 	 * clears the draft, which empties `matches` -- so a reactive check
@@ -87,7 +88,7 @@
 	 */
 	onMount(() => {
 		if (intakeDraft.matches.length === 0) {
-			void goto(`${base}/check`);
+			void goto(`${base}/name`);
 		}
 	});
 
@@ -206,7 +207,7 @@
 		<QuestionPage
 			journey={JOURNEY}
 			{steps}
-			backHref="{base}/check"
+			backHref="{base}/name"
 			question={{ as: 'legend', text: 'Is this the same person?' }}
 			hint="Nothing has been saved yet. What was typed matches a Client this Practice already has."
 		>

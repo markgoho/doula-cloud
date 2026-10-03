@@ -84,6 +84,16 @@ describe('QuestionPage.svelte', () => {
 		await expect.element(page.getByRole('navigation', { name: 'Adding a client' })).toBeVisible();
 	});
 
+	// #1611: a journey of one question has no position to report, and a
+	// rail would only say "Step 1 of 1".
+	it('draws no step rail when the journey has one step', async () => {
+		await setup({ steps: [{ label: 'Name', href: '/clients/new/name', status: 'current' }] });
+
+		await expect.element(page.getByRole('heading', { level: 1 })).toBeVisible();
+		await expect.element(page.getByRole('navigation', { name: 'Adding a client' })).not.toBeInTheDocument();
+		await expect.element(page.getByText(/Step 1 of 1/)).not.toBeInTheDocument();
+	});
+
 	it('renders a back link above everything else in the column', async () => {
 		const { container } = await setup();
 

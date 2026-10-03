@@ -27,8 +27,6 @@ interface SetupOptions {
 	search?: string;
 }
 
-// The fixture's seed leaves the template already read for this Practice,
-// so the layout renders its question without a fetch of its own.
 async function setup({ isContractor = false, search = '' }: SetupOptions = {}) {
 	Object.assign(pageState, {
 		params: { practiceId },
@@ -62,10 +60,28 @@ describe('intake for a contractor Doula (#1609)', () => {
 });
 
 describe('intake for everyone else', () => {
-	it('shows the question', async () => {
+	// #1611: the name question is the same at every Practice, so nothing
+	// is read before it is asked.
+	it('shows the question without a read of its own', async () => {
 		await setup();
 
 		await expect.element(testPage.getByText('the name question')).toBeVisible();
+		expect(apiFetchWithSession).not.toHaveBeenCalled();
+	});
+
+	it('seeds the draft with what the search carried', async () => {
+		// The door (`+page.ts`) clears the draft before the question opens.
+		intakeDraft.clear();
+
+		await setup({ search: '?name=Ana&email=ana%40example.com&dateOfBirth=1990-01-02&phone=' });
+
+		await expect.element(testPage.getByText('the name question')).toBeVisible();
+		expect(intakeDraft.answers).toMatchObject({
+			givenName: 'Ana',
+			email: 'ana@example.com',
+			dateOfBirth: '1990-01-02',
+			phone: ''
+		});
 	});
 
 	it('reads the screen that opened intake directly', async () => {
@@ -75,8 +91,8 @@ describe('intake for everyone else', () => {
 		expect(intakeDraft.origin).toBe('overview');
 	});
 
-	// A Change round trip carries `from=check`, which names no screen: the
-	// origin already read is kept, so Back still goes where it went.
+	// `from` with a value that names no screen is not read: the origin
+	// already read is kept, so Back still goes where it went.
 	it('keeps the origin it already read when the URL names none', async () => {
 		intakeDraft.origin = 'clients';
 

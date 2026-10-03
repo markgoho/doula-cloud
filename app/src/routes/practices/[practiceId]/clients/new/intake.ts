@@ -1,90 +1,61 @@
 /**
- * What every step of intake needs and none of them owns (#466).
+ * What intake's two pages share and neither owns (#466, #1611).
  *
- * The sequence is one question per route, so the things that are true of
- * the whole journey -- where it starts, what it is called, what the
- * Client is called on the page after the one that named her, and what
- * "save" means -- would otherwise be written out eight times.
+ * Intake for a new Client is one question, her name, and a save that
+ * opens the Start work form (#1611, ADR-0017's amendment of 2026-10-02).
+ * The duplicate page is the only other page, reached when the save finds
+ * a match. The other details are added later from her record (#1610).
  */
 
 import { goto } from '$app/navigation';
 import { resolve } from '$app/paths';
 import { apiFetchWithSession } from '#lib/api.js';
-import { page } from '#lib/appState.svelte.js';
 import { createClient } from '#lib/client.js';
+import type { JourneyStep } from '#lib/components/organisms/StepRail.svelte';
 import { errorsFromCause, type FormError } from '#lib/formErrors.js';
-import { dateFieldId } from '#lib/intakeDate.js';
 import { intakeDraft } from '#lib/intakeDraft.svelte.js';
-import { intakeFlow } from '#lib/intakeFlow.svelte.js';
 import { knownAsFrom, originQuery, type IntakeOrigin } from '#lib/intakeJourney.js';
-import { DATE_OF_BIRTH_GROUP, type QuestionJourney } from '../questions/questionJourney.js';
 
 /**
-Names the rail's landmark on every page of the sequence.
+Names the journey a question page is in.
 */
 export const JOURNEY = 'Adding a Client';
 
 /**
-The one control on the whole sequence a refusal can point at.
+The one control in intake a refusal can point at.
 */
 export const GIVEN_NAME_ID = 'intake-given-name';
 
 /**
- * ADR-0017's one requirement, asked wherever a save can start.
+ * The BFF's own field names (`client.Record`'s json tags) mapped onto
+ * the name question's controls (#488). The given name is the only
+ * column `CreateHandler` refuses on that has a control in intake.
+ */
+export const INTAKE_FIELD_IDS: Record<string, string> = { givenName: GIVEN_NAME_ID };
+
+/**
+ * ADR-0017's one requirement, asked before the save.
  *
  * A Client record needs a given name and nothing else, and
  * `CreateHandler` refuses without one -- so asking here is the
  * difference between a message beside the field and a message from the
- * server several pages later. It was written out in two routes with two
- * different wordings until a review of this ticket noticed.
- *
- * `askedFrom` decides whether the summary's entry is a link. On the name
- * page the field is right there; from the summary it is a page away, and
- * GOV.UK renders an entry with nowhere useful to send the reader as
- * plain text rather than as a link that goes nowhere.
+ * server.
  */
-export function givenNameRefusal(
-	askedFrom: 'this-page' | 'the-summary' = 'this-page'
-): FormError[] {
+export function givenNameRefusal(): FormError[] {
 	if (intakeDraft.hasGivenName) return [];
-	return askedFrom === 'this-page'
-		? [{ message: "Enter the Client's given name", targetId: GIVEN_NAME_ID }]
-		: [{ message: "Enter the Client's given name on the Name step" }];
-}
-
-/**
- * The BFF's own field names (`client.Record`'s json tags) mapped onto
- * the controls of the step being saved from (#488).
- *
- * Per-step, because intake is a sequence of pages and only one of them
- * is showing at a time: a `givenName` refusal saved from the name step
- * has a control right there, and the same refusal saved from the summary
- * is a page away. An entry with nowhere useful to send the reader is
- * rendered as plain text rather than as a link that goes nowhere, which
- * is what an empty map here produces -- the same rule `givenNameRefusal`
- * follows.
- *
- * The date group's first box is the target, which is GOV.UK's rule for a
- * group: the group itself is a `<fieldset>` and is not focusable. The
- * two ids are written here rather than in each page so the summary and
- * the control cannot drift apart.
- */
-export function intakeFieldIds(stepId: string): Record<string, string> {
-	switch (stepId) {
-		case 'name': {
-			return { givenName: GIVEN_NAME_ID };
-		}
-		case 'date-of-birth': {
-			return { dateOfBirth: dateFieldId(DATE_OF_BIRTH_GROUP, 'day') };
-		}
-		default: {
-			return {};
-		}
-	}
+	return [{ message: "Enter the Client's given name", targetId: GIVEN_NAME_ID }];
 }
 
 export function basePath(practiceId: string): string {
 	return resolve('/practices/[practiceId]/clients/new', { practiceId });
+}
+
+/**
+ * Intake as the journey `QuestionPage` is given: one step. The Template
+ * draws no rail for it (#1611), so no page says "Step 1 of 1".
+ */
+export function intakeSteps(practiceId: string): JourneyStep[] {
+	return [{ label: 'Name', href: `${basePath(practiceId)}/name`, status: 'current' }];
 }
 
 /**
@@ -122,24 +93,33 @@ export function detailHref(practiceId: string, clientId: string): string {
 }
 
 /**
+ * Where a saved new Client goes next: the Start work form (#1611). The
+ * save starts nothing (ADR-0017), so the form is the next act of the
+ * same flow, and its second action goes to her record instead.
+ */
+export function startWorkHref(practiceId: string, clientId: string): string {
+	return resolve('/practices/[practiceId]/clients/[clientId]/engagement-requests/new', {
+		practiceId,
+		clientId
+	});
+}
+
+/**
  * What the Client is called on this page.
  *
  * #463's rule with no pronoun in it: her preferred name if she has one,
- * her given name otherwise, and the domain noun before either exists --
- * which is only ever the first question, since that is the one that asks
- * for the name.
+ * her given name otherwise, and the domain noun before either exists.
  */
 export function knownAs(): string {
 	return knownAsFrom(intakeDraft.answers);
 }
 
 /**
- * Saves what has been typed, whenever it is asked for.
+ * Saves the new Client and opens the Start work form (#1611).
  *
- * ADR-0017 makes the save free: only a given name is required, and #466
- * removed #497's wait for all four match keys. So this is reachable from
- * every page's "Save and come back later" and from the summary's own
- * button, and does the same thing at each.
+ * ADR-0017 makes the save free: only a given name is required. What the
+ * search carried (date of birth, email, phone) is in the draft and is
+ * saved with the name, so the collision check has those keys too.
  *
  * A refused save with matches is not a failure -- it is the duplicate
  * check, which is a page of its own -- so it navigates there rather than
@@ -166,48 +146,15 @@ export async function saveIntake(
 		}
 		const clientId = result.record.id;
 		intakeDraft.clear();
-		await goto(detailHref(practiceId, clientId));
+		await goto(startWorkHref(practiceId, clientId));
 		return undefined;
 	} catch (error) {
 		// A server refusal that names fields becomes one entry each
 		// (#488), each pointed at the control the caller says holds it.
-		// Callers away from the field pass nothing, and those entries
-		// stay untargeted for the reason `givenNameRefusal` gives: GOV.UK
-		// renders an entry with nowhere useful to send the reader as
-		// plain text rather than as a link that goes nowhere.
+		// The duplicate page has no name field and passes nothing, so
+		// there the entries stay plain text: GOV.UK renders an entry with
+		// nowhere useful to send the reader as text rather than as a link
+		// that goes nowhere.
 		return errorsFromCause(error, fieldIds);
 	}
 }
-
-function currentPracticeId(): string {
-	return page.params.practiceId ?? '';
-}
-
-/**
- * Intake, as the shared question pages see it (#1610): its own draft,
- * the Practice's template, Back to whichever screen opened it, and the
- * free save on every page.
- */
-export const intakeQuestions: QuestionJourney = {
-	label: JOURNEY,
-	draft: intakeDraft,
-	get steps() {
-		return intakeFlow.steps;
-	},
-	get sections() {
-		return intakeFlow.sections;
-	},
-	get isReady() {
-		return intakeFlow.status === 'ready';
-	},
-	get basePath() {
-		return basePath(currentPracticeId());
-	},
-	get exitHref() {
-		return exitHref(currentPracticeId(), intakeDraft.origin);
-	},
-	get knownAs() {
-		return knownAs();
-	},
-	saveForLater: (stepId) => saveIntake(currentPracticeId(), false, intakeFieldIds(stepId))
-};

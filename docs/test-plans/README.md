@@ -120,7 +120,7 @@ What the suite covers today, as the marks below were assigned from:
 | `staff-invite-role.e2e.ts` | The Staff invite flow end to end (send through `/invite`, accept through `/accept-invite`) for a Doula who is not the Owner, then a `403` on an Owner-only action from her session |
 | `admin-invite-role.e2e.ts` | The same invite flow for an Admin (`admin` without `owner` or `doula`, selected on the invite form): her roster row, the Credits screen ADR-0008 grants her, and the Owner-only invite send refused (#965) |
 | `contract-lifecycle.e2e.ts` | A Contract's full lifecycle: build and send on the Practice side, the Client signing it in the portal, and the Signed PDF coming back |
-| `add-client-visits.e2e.ts` | The Add Client intake form (#497) and an Engagement's Visits section: add a Visit, read it back |
+| `add-client-visits.e2e.ts` | The first Client in three presses as the founding Owner, from the empty Practice through the name question and the Start work form to the Engagement's page (#497, #1611), and that Engagement's Visits section: add a Visit, read it back |
 | `portal-320.e2e.ts` | Every signed-in portal screen, shell and route together, at 320px with no sideways scroll — the 320px budget step on a signed-in portal stage |
 | `route-continuum.svelte.spec.ts` (unit suite) | Every route this repo ships, swept from 320px up — the 320px budget step on every other stage |
 

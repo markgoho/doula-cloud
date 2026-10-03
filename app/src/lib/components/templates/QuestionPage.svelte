@@ -79,7 +79,7 @@
 		 */
 		content: Snippet<[{ describedBy: string | undefined }]>;
 		/**
-		 * `Continue`, and `Save and come back later`.
+		 * `Continue`, or the one button that saves (`Save and continue`).
 		 */
 		actions: Snippet;
 	}
@@ -145,7 +145,11 @@
 				     are, and the question is what is being asked. Inside the
 				     stack, so it takes the same rhythm as everything else in
 				     the column rather than needing spacing of its own. -->
-				<StepRail {journey} {steps} expand="current" />
+				<!-- #1611: a journey of one question draws no rail. It
+				     would only say "Step 1 of 1", which locates nobody. -->
+				{#if steps.length > 1}
+					<StepRail {journey} {steps} expand="current" />
+				{/if}
 
 					{#if errorSummary}
 						{@render errorSummary()}

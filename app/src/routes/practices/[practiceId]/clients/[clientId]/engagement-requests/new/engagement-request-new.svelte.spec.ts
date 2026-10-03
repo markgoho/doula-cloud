@@ -214,7 +214,26 @@ describe('the Engagement Request screen', () => {
 		await expect.poll(() => goto.mock.calls.length).toBeGreaterThan(0);
 	});
 
-	it('lands back on the Client detail hub on a successful submit', async () => {
+	// #1611: an approved start has an Engagement, and the flow ends on it
+	// with a message that the work started.
+	it('lands on the Engagement it started when the start is approved', async () => {
+		await setup({
+			roles: ['owner', 'admin', 'doula'],
+			doulas: soloRoster,
+			requestOutcome: { requestId: 'request-1', state: 'approved', engagementId: 'engagement-1' }
+		});
+
+		await testPage.getByLabelText('Birth').click();
+		await testPage.getByLabelText('Due date').fill('2027-03-01');
+		await testPage.getByRole('button', { name: `Start work with ${clientName}` }).click();
+
+		await expect.poll(() => goto.mock.calls.length).toBeGreaterThan(0);
+		expect(goto).toHaveBeenCalledWith(`/practices/${practiceId}/engagements/engagement-1?started=true`);
+	});
+
+	// A request that waits for an approver has no Engagement yet, so it
+	// lands on her record, where the pending block is.
+	it('lands back on the Client detail hub when the request waits for an approver', async () => {
 		await setup();
 
 		await testPage.getByLabelText('Postpartum').click();
@@ -274,7 +293,9 @@ describe('the Engagement Request screen', () => {
 		expect(goto).not.toHaveBeenCalled();
 	});
 
-	it('exposes the kind options, due date, note, submit and Cancel as reachable, labeled controls', async () => {
+	// #1611: the second action leaves the Client saved and nothing
+	// started, so it says where it goes rather than "Cancel".
+	it('exposes the kind options, due date, note, submit and the way to her record as reachable, labeled controls', async () => {
 		await setup();
 
 		await expect.element(testPage.getByLabelText('Birth')).toBeVisible();
@@ -283,8 +304,9 @@ describe('the Engagement Request screen', () => {
 		await expect.element(testPage.getByLabelText('Note')).toBeVisible();
 		await expect.element(testPage.getByRole('button', { name: `Ask to start work with ${clientName}` })).toBeVisible();
 		await expect
-			.element(testPage.getByRole('link', { name: 'Cancel' }))
+			.element(testPage.getByRole('link', { name: `Go to ${clientName}'s record without starting work` }))
 			.toHaveAttribute('href', clientDetailHref);
+		await expect.element(testPage.getByRole('link', { name: 'Cancel' })).not.toBeInTheDocument();
 	});
 
 	/*

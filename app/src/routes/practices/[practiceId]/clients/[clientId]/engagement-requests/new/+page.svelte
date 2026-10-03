@@ -9,6 +9,10 @@
 	 * (engagementrequest.RequestHandler) -- this screen only reads the
 	 * response's state to know which happened.
 	 *
+	 * It is also the second screen of a new Client's flow (#1611): the
+	 * name question's save opens it. An approved start ends on the
+	 * Engagement's page; a request that waits ends on her record.
+	 *
 	 * She also answers "Who is the Doula?" (#1596, ADR-0017's amendment on
 	 * #1515): one Doula from the list, or "No Doula yet". The list is the
 	 * server's (engagementrequest.DoulasHandler) -- the roster for an Owner
@@ -54,6 +58,7 @@
 		initialDoulaAnswer,
 		loadRequestDoulas,
 		requestEngagement,
+		STARTED_QUERY,
 		type NewEngagementRequest,
 		type RequestDoulas
 	} from '#lib/engagementRequest.js';
@@ -278,7 +283,20 @@
 				return;
 			}
 			clearDraft();
-			await goto(detailHref());
+			// #1611: an approved start has an Engagement, and the flow ends
+			// on it with a message that the work started. A request that
+			// waits for an approver has none yet, so it lands on her record,
+			// where the pending block is. `engagementId` is set on an
+			// approved outcome and only there.
+			const { engagementId } = result.outcome;
+			await goto(
+				engagementId
+					?`${resolve('/practices/[practiceId]/engagements/[engagementId]', {
+							practiceId: page.params.practiceId!,
+							engagementId
+						})}?${STARTED_QUERY}`
+					: detailHref()
+			);
 		}, orThrownErrors(requestFieldIds));
 	}
 </script>
@@ -357,7 +375,17 @@
 
 {#snippet formActions()}
 	<Button type="submit" label={submitLabel || 'Continue'} loading={submission.isSubmitting} />
-	<Link href={detailHref()} label="Cancel" variant="secondary" />
+	<!--
+		#1611: leaving the form leaves the Client saved and nothing
+		started, so nothing is canceled. A link says where it goes
+		(ADR-0021). Before her record loads the name is not known, and the
+		words say "the Client".
+	-->
+	<Link
+		href={detailHref()}
+		label="Go to {detail ? `${displayName(detail)}'s` : "the Client's"} record without starting work"
+		variant="secondary"
+	/>
 {/snippet}
 
 <!-- stacked-form:ignore: #1108 -- this form wraps a Template. `FormPage` stacks each fieldset's content itself, so the `<form>` here owns the submit and arranges nothing; a `StackedForm` would put a second, empty stack around one child. -->
