@@ -1,0 +1,96 @@
+<script lang="ts">
+	/*
+	 * The address -- the five structural columns intake never reached
+	 * before #466. One <fieldset>, five inputs, and the field widths this
+	 * ticket makes the route's own business: the Templates guarantee a
+	 * --form-max column and set no widths, and a ZIP code narrower than
+	 * an address line is content sizing rather than page arrangement.
+	 *
+	 * The legend says "(optional)" (#1610, GOV.UK's Question pages
+	 * pattern), and it says it for every line under it: no line of an
+	 * address is required, so the second line no longer says it again on
+	 * its own, which read as if the other four were.
+	 */
+	import LabeledField from '#lib/components/molecules/LabeledField.svelte';
+	import TextInput from '#lib/components/atoms/TextInput.svelte';
+	import type { IntakeAnswers } from '#lib/intakeDraft.svelte.js';
+	import JourneyQuestion from './JourneyQuestion.svelte';
+	import type { QuestionJourney } from './questionJourney.js';
+
+	let { journey }: { journey: QuestionJourney } = $props();
+
+	/*
+	 * Five near-identical blocks became one snippet after a review of
+	 * #466: what actually differs between them is the column, its label
+	 * and how wide the box is. `width` is a class rather than a length so
+	 * the sizes stay together in one place in the stylesheet below, where
+	 * the reason for each is written once. It is optional because a
+	 * full-width row needs no class at all: `TextInput` fills whatever it
+	 * is given (#805), so the two address lines are already the column.
+	 */
+	const lines: { key: keyof IntakeAnswers; label: string; width?: 'town' | 'short' }[] = [
+		{ key: 'addressLine1', label: 'Address line 1' },
+		{ key: 'addressLine2', label: 'Address line 2' },
+		{ key: 'addressLocality', label: 'City', width: 'town' },
+		{ key: 'addressRegion', label: 'State', width: 'short' },
+		{ key: 'addressPostalCode', label: 'ZIP code', width: 'short' }
+	];
+
+	function idFor(key: string): string {
+		return `intake-${key.replaceAll(/([a-z0-9])([A-Z])/g, '$1-$2').toLowerCase()}`;
+	}
+</script>
+
+<JourneyQuestion
+	{journey}
+	stepId="address"
+	question={{ as: 'legend', text: `What is ${journey.knownAs}'s address? (optional)` }}
+	hint="Where a Practice sends anything on paper, and where a Doula drives to."
+>
+	{#snippet controls()}
+		<stack-l space="var(--space-5)">
+			{#each lines as line (line.key)}
+				<div class={line.width}>
+					<LabeledField id={idFor(line.key)} label={line.label}>
+						{#snippet children({ id, describedBy })}
+							<TextInput
+								{id}
+								{describedBy}
+								value={String(journey.draft.answers[line.key] ?? '')}
+								onInput={(value) => journey.draft.update({ [line.key]: value })}
+								autocomplete="off"
+							/>
+						{/snippet}
+					</LabeledField>
+				</div>
+			{/each}
+		</stack-l>
+	{/snippet}
+</JourneyQuestion>
+
+<style>
+	@layer components {
+		/*
+		 * Content sizing, which #466 makes this route's own business. A
+		 * ZIP code is five characters and a two-letter state is two, so a
+		 * box that could hold a street name tells the reader the wrong
+		 * thing about what goes in it -- GOV.UK's Text input sizing rule.
+		 * `ch` tracks the font rather than a canvas measurement, and
+		 * `max-inline-size` rather than a width, so at 320px each box
+		 * shrinks with the column instead of overflowing it (ADR-0024).
+		 *
+		 * A cap on the wrapper is all it takes, because `TextInput` fills
+		 * whatever it is given -- see that atom's own module comment for
+		 * why (#805). Three `:global(input)` rules stood here until then,
+		 * reaching past the atom to size a control that would otherwise
+		 * have painted straight out of a 12ch wrapper.
+		 */
+		.town {
+			max-inline-size: 24ch;
+		}
+
+		.short {
+			max-inline-size: 12ch;
+		}
+	}
+</style>

@@ -13,6 +13,7 @@
 		type EngagementSummary,
 		type HistoryEntry
 	} from '#lib/clientDetail.js';
+	import { canAddDetails, detailsLinkLabel } from '#lib/clientDetailsJourney.js';
 	import { kindLabel, withdrawRequest } from '#lib/engagementRequest.js';
 	import { eraseClient, loadEraseEligibility, type EraseEligibility, type UnsettledInvoice } from '#lib/clientErasure.js';
 	import { formatAmount } from '#lib/invoice.js';
@@ -26,6 +27,7 @@
 	import Link from '#lib/components/atoms/Link.svelte';
 	import Notice from '#lib/components/atoms/Notice.svelte';
 	import Text from '#lib/components/atoms/Text.svelte';
+	import { detailsHref } from './details/details.js';
 	import type { PageProps as PageProperties } from './$types';
 
 	// ADR-0017: a contractor Doula originates no Engagement Request, even
@@ -318,6 +320,19 @@
 	-->
 	<Link href={editHref()} label="Edit" describedBy="edit-client-name" />
 	<span class="visually-hidden" id="edit-client-name">{name}</span>
+	<!--
+		Her other details, as one journey of question pages (#1610). The
+		label names her, so it reads on its own. Absent for an erased
+		record, whose edit `edit.go` refuses; a merged one never renders
+		here at all. Not gated on the contractor flag: edit follows read
+		(ADR-0017), and `edit.go` refuses a Client she is not attached to.
+	-->
+	{#if detail && canAddDetails(detail)}
+		<Link
+			href={detailsHref(page.params.practiceId!, page.params.clientId!)}
+			label={detailsLinkLabel(detail)}
+		/>
+	{/if}
 	<!--
 		The hub is the only door to an Engagement Request (#496). The label
 		names her rather than saying "her", so it reads on its own out of

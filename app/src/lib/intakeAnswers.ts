@@ -29,7 +29,8 @@ import {
 	CHANGE_QUERY,
 	sectionSlug,
 	STRUCTURAL_STEPS,
-	type IntakeSection
+	type IntakeSection,
+	type StructuralStep
 } from './intakeJourney.js';
 import type { FieldValue, IntakeAnswers } from './intakeDraft.svelte.js';
 
@@ -77,9 +78,10 @@ function changeHref(basePath: string, slug: string): string {
 export function answerSections(
 	answers: IntakeAnswers,
 	sections: IntakeSection[],
-	basePath: string
+	basePath: string,
+	structuralSteps: readonly StructuralStep[] = STRUCTURAL_STEPS
 ): AnswerSection[] {
-	const structural: AnswerSection[] = STRUCTURAL_STEPS.map((step) => ({
+	const structural: AnswerSection[] = structuralSteps.map((step) => ({
 		heading: step.label,
 		answers: step.questions.map((question) => ({
 			label: question.label,

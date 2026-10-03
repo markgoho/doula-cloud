@@ -221,7 +221,7 @@
 		<QuestionPage
 			journey={JOURNEY}
 			{steps}
-			backHref={editHref()}
+			backHref={editMergeDraft.backHref ?? editHref()}
 			question={{ as: 'legend', text: 'Is this the same person?' }}
 			hint="Nothing has been saved yet. What was typed matches a Client this Practice already has."
 		>

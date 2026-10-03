@@ -123,6 +123,19 @@ describe('IntakeDraft and the browser it runs in', () => {
 		expect(second.answers.addressLocality).toBe('Rochester');
 	});
 
+	// #1610: a Client's details journey keeps its own copy, so it never
+	// reopens a half-typed new Client's answers, nor the reverse.
+	it('keeps the stored copy of a second journey apart', () => {
+		const intake = new IntakeDraft();
+		intake.start('p1');
+		intake.update({ givenName: 'Sarah' });
+
+		const details = new IntakeDraft('details');
+		details.start('p1');
+
+		expect(details.answers.givenName).toBe('');
+	});
+
 	it('fills in anything an older stored draft did not carry', () => {
 		sessionStorage.setItem('doula-cloud:intake:p1', JSON.stringify({ givenName: 'Sarah' }));
 

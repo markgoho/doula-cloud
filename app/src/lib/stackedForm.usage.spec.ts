@@ -64,8 +64,8 @@ function read(file: string): string {
 
 /*
  * Prose that says `<form>` is prose about a form, not a form, and on this
- * side of the app there is a lot of it: `FormPage`, `IntakeQuestion`,
- * `IntakeActions` and `ReauthPrompt` all explain in a `<script>` block
+ * side of the app there is a lot of it: `FormPage`, `JourneyQuestion`,
+ * `QuestionActions` and `ReauthPrompt` all explain in a `<script>` block
  * comment why their form is where it is, and `account/+page.svelte` has
  * three HTML comments that mention one. So `<script>` and `<style>` go
  * whole, and an HTML comment goes unless it carries the marker -- which is

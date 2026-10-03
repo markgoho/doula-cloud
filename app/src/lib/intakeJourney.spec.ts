@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import type { Field } from './clientFieldTemplate.js';
 import {
+	DETAILS_STEPS,
 	intakeSections,
+	knownAsFrom,
 	intakeStepList,
 	journeySteps,
 	nextStepHref,
@@ -91,7 +93,28 @@ describe('intakeSections', () => {
 	});
 });
 
+describe('knownAsFrom', () => {
+	it.each([
+		['her preferred name', { preferredName: ' Bex ', givenName: 'Rebecca' }, 'Bex'],
+		['her given name', { preferredName: '', givenName: 'Rebecca' }, 'Rebecca'],
+		['the Client before a name is given', { preferredName: '', givenName: '' }, 'the Client'],
+		['the Client before a record is read', undefined, 'the Client']
+	])('calls her %s', (_case, names, expected) => {
+		expect(knownAsFrom(names)).toBe(expected);
+	});
+});
+
 describe('intakeStepList', () => {
+	// #1610: a Client's details journey asks everything but the name.
+	it('is four steps for a details journey at a Practice with no added fields', () => {
+		expect(intakeStepList([], DETAILS_STEPS).map((step) => step.slug)).toEqual([
+			'date-of-birth',
+			'email',
+			'phone',
+			'address'
+		]);
+	});
+
 	it('is five steps for a Practice with no added fields', () => {
 		const steps = intakeStepList([]);
 

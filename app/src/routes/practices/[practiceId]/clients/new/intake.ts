@@ -10,21 +10,14 @@
 import { goto } from '$app/navigation';
 import { resolve } from '$app/paths';
 import { apiFetchWithSession } from '#lib/api.js';
+import { page } from '#lib/appState.svelte.js';
 import { createClient } from '#lib/client.js';
 import { errorsFromCause, type FormError } from '#lib/formErrors.js';
 import { dateFieldId } from '#lib/intakeDate.js';
 import { intakeDraft } from '#lib/intakeDraft.svelte.js';
-import {
-	CHANGE_PARAMETER,
-	CHANGE_VALUE,
-	originQuery,
-	type IntakeOrigin
-} from '#lib/intakeJourney.js';
-
-/** What `page.url.searchParams` hands out: a `URLSearchParams` with its
- * mutators removed (`svelte/prefer-svelte-reactivity` bans the mutable
- * one in reactive code). Read-only is all any of this needs. */
-type ReadonlyURLSearchParameters = Pick<URLSearchParams, 'get'>;
+import { intakeFlow } from '#lib/intakeFlow.svelte.js';
+import { knownAsFrom, originQuery, type IntakeOrigin } from '#lib/intakeJourney.js';
+import { DATE_OF_BIRTH_GROUP, type QuestionJourney } from '../questions/questionJourney.js';
 
 /**
 Names the rail's landmark on every page of the sequence.
@@ -90,12 +83,6 @@ export function intakeFieldIds(stepId: string): Record<string, string> {
 	}
 }
 
-/**
- * The `name` the date-of-birth step's three boxes share, which is also
- * what each box's id is built from (`<name>-day`).
- */
-export const DATE_OF_BIRTH_GROUP = 'intake-date-of-birth';
-
 export function basePath(practiceId: string): string {
 	return resolve('/practices/[practiceId]/clients/new', { practiceId });
 }
@@ -143,31 +130,7 @@ export function detailHref(practiceId: string, clientId: string): string {
  * for the name.
  */
 export function knownAs(): string {
-	const answers = intakeDraft.answers;
-	return answers.preferredName.trim() || answers.givenName.trim() || 'the Client';
-}
-
-/** Whether this page was reached by a Change link from check-answers,
- * which is what decides where both Back and Continue go. */
-export function isFromCheck(search: ReadonlyURLSearchParameters): boolean {
-	return search.get(CHANGE_PARAMETER) === CHANGE_VALUE;
-}
-
-/**
- * The summary, or wherever the reader would otherwise have gone.
- *
- * One function for both directions rather than a `continueHref` and a
- * `backHref` with identical bodies (a review of this ticket caught the
- * pair): on a Change round trip the reader came from the summary and is
- * going back to it, so BOTH ends of the page point there, and the only
- * thing that differs is the `otherwise` each caller passes.
- */
-export function checkOr(
-	search: ReadonlyURLSearchParameters,
-	practiceId: string,
-	otherwise: string
-): string {
-	return isFromCheck(search) ? `${basePath(practiceId)}/check` : otherwise;
+	return knownAsFrom(intakeDraft.answers);
 }
 
 /**
@@ -215,3 +178,36 @@ export async function saveIntake(
 		return errorsFromCause(error, fieldIds);
 	}
 }
+
+function currentPracticeId(): string {
+	return page.params.practiceId ?? '';
+}
+
+/**
+ * Intake, as the shared question pages see it (#1610): its own draft,
+ * the Practice's template, Back to whichever screen opened it, and the
+ * free save on every page.
+ */
+export const intakeQuestions: QuestionJourney = {
+	label: JOURNEY,
+	draft: intakeDraft,
+	get steps() {
+		return intakeFlow.steps;
+	},
+	get sections() {
+		return intakeFlow.sections;
+	},
+	get isReady() {
+		return intakeFlow.status === 'ready';
+	},
+	get basePath() {
+		return basePath(currentPracticeId());
+	},
+	get exitHref() {
+		return exitHref(currentPracticeId(), intakeDraft.origin);
+	},
+	get knownAs() {
+		return knownAs();
+	},
+	saveForLater: (stepId) => saveIntake(currentPracticeId(), false, intakeFieldIds(stepId))
+};

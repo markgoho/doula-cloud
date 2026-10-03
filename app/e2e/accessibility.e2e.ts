@@ -513,6 +513,20 @@ test('Archetypes B, C, D, E, F, G -- the Staff side', async ({ page, request, co
 			h1: /^Start work with Jane Smith$/
 		},
 		{
+			// #1610: her details journey, opened through its door the way
+			// her record's link opens it.
+			key: 'practices/[practiceId]/clients/[clientId]/details/date-of-birth',
+			archetype: 'E',
+			url: `/practices/${practiceId}/clients/${clientId}/details`,
+			h1: /date of birth\? \(optional\)$/
+		},
+		{
+			key: 'practices/[practiceId]/clients/[clientId]/details/check',
+			archetype: 'E',
+			url: `/practices/${practiceId}/clients/${clientId}/details/check`,
+			h1: /^Check Jane's details/
+		},
+		{
 			key: 'practices/[practiceId]/clients/search',
 			archetype: 'E',
 			url: `/practices/${practiceId}/clients/search`,
@@ -528,13 +542,13 @@ test('Archetypes B, C, D, E, F, G -- the Staff side', async ({ page, request, co
 			key: 'practices/[practiceId]/clients/new/date-of-birth',
 			archetype: 'E',
 			url: `/practices/${practiceId}/clients/new/date-of-birth`,
-			h1: /date of birth\?$/
+			h1: /date of birth\? \(optional\)$/
 		},
 		{
 			key: 'practices/[practiceId]/clients/new/address',
 			archetype: 'E',
 			url: `/practices/${practiceId}/clients/new/address`,
-			h1: /address\?$/
+			h1: /address\? \(optional\)$/
 		},
 		{
 			key: 'practices/[practiceId]/clients/new/check',

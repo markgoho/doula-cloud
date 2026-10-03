@@ -160,7 +160,7 @@ export function seedIntake(): void {
 	intakeFlow.fields = fields;
 	intakeFlow.status = 'ready';
 
-	intakeDraft.practiceId = practiceId;
+	intakeDraft.scope = practiceId;
 	intakeDraft.answers = {
 		givenName: 'Anne-Marie',
 		familyName: 'Ochieng-Whitfield',
