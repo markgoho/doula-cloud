@@ -40,6 +40,27 @@
 			line-height: 1.3;
 		}
 
+		/* The name is drawn as one unit, like the mark beside it (#1747).
+		   Free to wrap, it broke onto two lines whenever the row holding
+		   the lockup was short of room, so StaffTopBar's floor was measured
+		   with a two-line name in the bar. Kept on one line, the lockup's
+		   whole width is its min-content width, and a row that cannot hold
+		   it overflows where the floor check can see it. */
+		.wordmark {
+			white-space: nowrap;
+		}
+
+		/* The one size whose mark and name together are wider than the
+		   320px commitment: 120px of mark, the gap, and about 193px of name
+		   at the display step. Where the row cannot hold both, the name
+		   goes under the mark, whole, rather than either one shrinking.
+		   Only `lg`: `sm` and `md` fit at 320px, and a bar holding `sm`
+		   must overflow where it is short, not grow a second line the
+		   floor check cannot see. */
+		.size-lg {
+			flex-wrap: wrap;
+		}
+
 		/* The canvas drew 17px, which is between two steps of the brief's
 		   scale. The scale wins, the way the page frame's token won over
 		   the drawing's 1360px on #424 -- an off-scale size is fine-tuning,

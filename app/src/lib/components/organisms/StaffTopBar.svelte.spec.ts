@@ -241,9 +241,9 @@ describe('the narrow sheet', () => {
  * #1573: the bar held a fixed 3.75rem, so a long Practice name wrapped in
  * the switcher and drew out of the bar, above and below it. The bar is a
  * minimum now, and grows. 320px is the narrow tree at the conformance
- * commitment; 864px puts the bar's content box (the header less its two
+ * commitment; 964px puts the bar's content box (the header less its two
  * gutters, which is what the container query reads) just above its
- * 50.75rem floor, where the wide tree leaves the name the least room it
+ * 57rem floor, where the wide tree leaves the name the least room it
  * ever gets. The names are the style-guide demo's own.
  */
 const LONG_NAME = 'Highland Midwifery & Birth Support Collective of Western New York';
@@ -256,7 +256,7 @@ const LONG_PRACTICES: PracticeOption[] = [
 		href: '/p2'
 	}
 ];
-const JUST_ABOVE_THE_FLOOR = 864;
+const JUST_ABOVE_THE_FLOOR = 964;
 
 // Each panel the bar opens, by its trigger, and something only that panel
 // holds -- the other Practice's link, or the avatar menu's sign-out.
