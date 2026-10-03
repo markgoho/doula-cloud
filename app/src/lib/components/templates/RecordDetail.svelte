@@ -96,42 +96,52 @@
 	<center-l max="none" gutters="var(--page-gutter)">
 		{#snippet recordContent()}
 			<!--
-				A plain div, not <header>: a <header> outside article/aside/main/
-				nav/section maps to the `banner` landmark, and the banner is the
-				shell's (#431), not a page's. A Template renders no chrome.
+				The stack is the snippet's own, not each caller's (#1711): a
+				record with no contents rail used to render the header and the
+				sections as bare siblings, so the summary's last block touched
+				the first section heading. Every record now puts the same
+				--space-8 between its header and its first section as between
+				two sections.
 			-->
-			<div class="record-header">
-				{#if outcome}
-					<div class="notice"><Notice variant="status" message={outcome} isFocusedOnAppear /></div>
-				{/if}
-				<cluster-l space="var(--space-4)" justify="space-between" align="baseline">
-					<Heading level={1} variant="page" text={title} />
-					{#if actions}
-						<cluster-l space="var(--space-2)" align="center">{@render actions()}</cluster-l>
+			<stack-l space="var(--space-8)">
+				<!--
+					A plain div, not <header>: a <header> outside article/aside/main/
+					nav/section maps to the `banner` landmark, and the banner is the
+					shell's (#431), not a page's. A Template renders no chrome.
+				-->
+				<div class="record-header">
+					{#if outcome}
+						<div class="notice"><Notice variant="status" message={outcome} isFocusedOnAppear /></div>
 					{/if}
-				</cluster-l>
-				{#if summary}
-					<div class="summary">{@render summary()}</div>
-				{/if}
-			</div>
+					<cluster-l space="var(--space-4)" justify="space-between" align="baseline">
+						<Heading level={1} variant="page" text={title} />
+						{#if actions}
+							<cluster-l space="var(--space-2)" align="center">{@render actions()}</cluster-l>
+						{/if}
+					</cluster-l>
+					{#if summary}
+						<div class="summary">{@render summary()}</div>
+					{/if}
+				</div>
 
-			<div class="sections">
-				<stack-l space="var(--space-8)">
-					{#each sections as section (section.heading)}
-						<!-- v8 ignore start: Svelte-compiled attribute-diffing branch for the
-						     templated aria-labelledby/id pair below isn't reachable from -- spelling:ignore: aria-labelledby is an ARIA attribute name
-						     app-level interaction tests, only from Svelte's own reactivity
-						     internals -->
-						<section id={anchorId(section.heading)} aria-labelledby="{anchorId(section.heading)}-heading"> <!-- spelling:ignore: aria-labelledby is an ARIA attribute name -->
-							<stack-l space="var(--space-4)">
-								<Heading level={2} variant="section" text={section.heading} id="{anchorId(section.heading)}-heading" />
-								{@render section.content()}
-							</stack-l>
-						</section>
-						<!-- v8 ignore stop -->
-					{/each}
-				</stack-l>
-			</div>
+				<div class="sections">
+					<stack-l space="var(--space-8)">
+						{#each sections as section (section.heading)}
+							<!-- v8 ignore start: Svelte-compiled attribute-diffing branch for the
+							     templated aria-labelledby/id pair below isn't reachable from -- spelling:ignore: aria-labelledby is an ARIA attribute name
+							     app-level interaction tests, only from Svelte's own reactivity
+							     internals -->
+							<section id={anchorId(section.heading)} aria-labelledby="{anchorId(section.heading)}-heading"> <!-- spelling:ignore: aria-labelledby is an ARIA attribute name -->
+								<stack-l space="var(--space-4)">
+									<Heading level={2} variant="section" text={section.heading} id="{anchorId(section.heading)}-heading" />
+									{@render section.content()}
+								</stack-l>
+							</section>
+							<!-- v8 ignore stop -->
+						{/each}
+					</stack-l>
+				</div>
+			</stack-l>
 		{/snippet}
 
 		{#if loadError}
@@ -185,9 +195,7 @@
 				basis="var(--page-rail)"
 				content-min="min(var(--measure), 100%)"
 			>
-				<stack-l space="var(--space-8)">
-					{@render recordContent()}
-				</stack-l>
+				{@render recordContent()}
 
 				<!--
 					The same list twice, and exactly one of them rendered at a

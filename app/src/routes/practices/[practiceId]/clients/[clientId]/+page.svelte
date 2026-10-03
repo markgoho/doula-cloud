@@ -377,34 +377,6 @@
 					)} and have not been redacted yet."
 				/>
 			{/if}
-		{:else if isOwner && eligibility}
-			<!--
-				#691: an unsettled invoice blocks the confirmation from ever
-				opening, named the same way EraseHandler's own 409 would have --
-				so an Owner never reaches Erase only to see that 409 raw.
-			-->
-			{#if eligibility.unsettledInvoices.length > 0}
-				<Notice variant="info" message={unsettledInvoicesMessage(eligibility.unsettledInvoices)} />
-			{:else}
-				<!-- The trigger's own label stays generic ("this Client's") rather
-				     than repeating {name} -- ConfirmDialog's title and confirm
-				     button both name her, and an identical accessible name on
-				     both controls would make them indistinguishable by ear. -->
-				<Button
-					label="Erase this Client's data"
-					variant="destructive"
-					size="sm"
-					onClick={() => (isEraseConfirmOpen = true)}
-				/>
-				<ConfirmDialog
-					bind:open={isEraseConfirmOpen}
-					title="Erase {name}'s data"
-					consequence={eraseConsequence()}
-					confirmLabel="Erase {name}'s data"
-					error={eraseError}
-					onConfirm={handleErase}
-				/>
-			{/if}
 		{/if}
 
 		{#each pendingRequests(detail!.history) as request (request.requestId)}
@@ -552,6 +524,45 @@
 	/>
 {/snippet}
 
+{#snippet eraseSection()}
+	<!--
+		#691: an unsettled invoice blocks the confirmation from ever
+		opening, named the same way EraseHandler's own 409 would have -- so
+		an Owner never reaches Erase only to see that 409 raw.
+	-->
+	{#if eligibility!.unsettledInvoices.length > 0}
+		<Notice variant="info" message={unsettledInvoicesMessage(eligibility!.unsettledInvoices)} />
+	{:else}
+		<stack-l space="var(--space-4)">
+			<Text text="Erasing removes {name}'s name, contact details and date of birth for good. It cannot be undone." />
+			<!-- The trigger's own label stays generic ("this Client's") rather
+			     than repeating {name} -- ConfirmDialog's title and confirm
+			     button both name her, and an identical accessible name on
+			     both controls would make them indistinguishable by ear. -->
+			<Button label="Erase this Client's data" variant="destructive" onClick={() => (isEraseConfirmOpen = true)} />
+		</stack-l>
+		<ConfirmDialog
+			bind:open={isEraseConfirmOpen}
+			title="Erase {name}'s data"
+			consequence={eraseConsequence()}
+			confirmLabel="Erase {name}'s data"
+			error={eraseError}
+			onConfirm={handleErase}
+		/>
+	{/if}
+{/snippet}
+
+<!--
+	The erase control is the record's last section, not a line in the
+	summary (#1711). In the summary it sat one row under the header's
+	everyday links -- Edit, her details, Start new work -- and a
+	destructive control that near the controls used every day is the wrong
+	target to be near. GOV.UK keeps a warning button apart from the main
+	actions; the account screen's "Delete your login" is the same shape,
+	its own last block. Owner-only and absent until the eligibility read
+	answers, the same courtesy gate the control always had; an erased
+	record says so in the summary and offers nothing here.
+-->
 <RecordDetail
 	title={name}
 	{outcome}
@@ -563,7 +574,8 @@
 		{ heading: `Where ${name} lives`, content: addressSection },
 		{ heading: 'Practice-defined fields', content: practiceDefinedFieldsSection },
 		{ heading: 'Engagements', content: engagementsSection },
-		{ heading: 'History', content: historySection }
+		{ heading: 'History', content: historySection },
+		...(isOwner && eligibility && !detail?.erasedAt ? [{ heading: `Erase ${name}'s data`, content: eraseSection }] : [])
 	]}
 	loading={detail || error ? undefined : 'Loading the Client'}
 	loadError={error || undefined}
