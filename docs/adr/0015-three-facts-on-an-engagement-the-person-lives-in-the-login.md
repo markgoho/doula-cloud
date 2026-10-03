@@ -1,5 +1,25 @@
 # Three facts on an Engagement; the person lives in the login
 
+## Current rule
+
+_A summary of the decision as amended, added on [#1680](https://github.com/markgoho/doula-cloud/issues/1680) for lookup. It decides nothing; where it and the text below differ, the text below governs._
+
+- **Who is who.** A Portal Account is one person's login, a Client is one Practice's record of her, and an Engagement is one piece of work at one Practice. A Portal Account reaches many Clients, at most one per Practice (held in the schema by `UNIQUE (identity_uid, client_id)`). No Client fact crosses a Practice.
+- **Status** is `intake`, `active` or `completed`. `intake` is onboarding, never a lead. `intake` → `active` happens by itself at the first scheduled Visit; nothing completes by itself. `completed` → `active` is a correction only, and `active` or `completed` → `intake` is refused. An Owner, an Admin or an attached employee Doula moves a status; only an Owner or an Admin reopens; the contractor cell is ✗.
+- **Birth outcome** is `live_birth`, `loss`, `unknown` or not yet recorded, with the date the pregnancy ended. It is Staff-only and correctable until it freezes; then only an Owner corrects it.
+- **Ending reason** is required at completion, Staff-only, and clears on a reopen.
+- **Kind** is `birth` or `postpartum`, what the Practice sold. It is defaulted from whether the baby is here, mutable both ways, and never shown to the Client. A Birth Plan is offered when `kind = birth` and the birth outcome is not yet recorded.
+- **Completion ends reach only**: granted attachments and open Offers. Messages, Visits, the Contract, Invoices and the portal stay open.
+- **The freeze.** `client_id` is immutable except in a Client merge ([ADR-0040](0040-a-client-record-merges-and-the-engagement-moves-with-her.md)). Recording the birth outcome freezes it and its date. A different person or a different baby needs a new Engagement and a new Credit.
+- **Audit.** Each change to status, kind or birth outcome is an `activity` entry with both sides, the Staff member and the time.
+- **Standing rules.** A surface that presumes a living baby consults *does this Engagement have a living baby?*; an Engagement is editable in place; a status the product can infer is a candidate for automation.
+
+## Amendments
+
+- [#819](https://github.com/markgoho/doula-cloud/issues/819): [the cardinality stands, and the schema now holds it at the pair](#amendment-2026-09-10-the-cardinality-stands-and-the-schema-now-holds-it-at-the-pair-819).
+- [#1423](https://github.com/markgoho/doula-cloud/issues/1423): [the audit record lives in `activity`](#amendment-2026-09-27-the-audit-record-lives-in-activity-1423); `engagement_events` no longer exists.
+- [#813](https://github.com/markgoho/doula-cloud/issues/813), recorded in [ADR-0040](0040-a-client-record-merges-and-the-engagement-moves-with-her.md), not here: a merge moves an Engagement to the surviving Client, and a Client may be reached by more than one Portal Account.
+
 Supersedes one paragraph of [ADR-0005](0005-one-context-client-register-at-the-ui-edge.md) — the one fixing a `_Client says_:` label for each of four `engagement_status` values. There are three values now, and `postpartum` is not one of them. Everything else in ADR-0005 stands, including the rule that produced this change: *if a status cannot be labeled kindly for every Client, the status set is missing a value.* ADR-0005 named Nadia Haddad as the live instance and argued the status set was short a terminal state for a loss. This document answers that argument, and the answer turned out to be that the set was one value too **long**.
 
 It amends nothing in [ADR-0001](0001-practice-defined-plan-templates.md). A Plan Instance is still a snapshot per Engagement; this document adds only *when a Birth Plan is offered at all*, which ADR-0001 never spoke to. It restates rather than extends [ADR-0008](0008-employment-type-gates-the-practice-attachment-gates-the-engagement.md) on what a terminal state ends, and leaves ADR-0008's open axis open.

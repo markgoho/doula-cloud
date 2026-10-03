@@ -1,5 +1,27 @@
 # Two populations, two sign-in methods, and one token table
 
+## Current rule
+
+_A summary of the decision as amended, added on [#1680](https://github.com/markgoho/doula-cloud/issues/1680) for lookup. It decides nothing; where it and the text below differ, the text below governs._
+
+- **Staff** sign in with an email and a password in Identity Platform, with no federation and no magic link. A password is 15 characters or more, with no composition rule, a maximum of at least 64, and common passwords refused; the provider's password policy enforces the length.
+- **TOTP**, never SMS, is the second factor, and it is enforced in the BFF at the Practice-scoped boundary from the `firebase.sign_in_second_factor` claim. A Practice whose Owner turns on "require MFA for all staff" refuses any Membership with no second factor. An Owner is not refused for being an Owner: five acts need a second factor (archive download, starting Practice deletion, erasing a Client, vouching for a Staff member, and turning on the switch), and the product recommends one after her First Value, her first Staff Invitation, and Stripe connected.
+- **Clients** have no password and no Identity Platform account. They sign in with a BFF-minted magic link: 15 minutes, single use, spent on a POST behind **Continue**. The invitation is the first link and lasts 7 days. A Client session rolls for 30 days; a Staff session lasts 12 hours.
+- **A Portal Account** is a table holding the sign-in address; its identifier is a prefixed UUID, and the prefix is the namespace that tells the populations apart. `authn.Begin` takes a `Tier` and refuses a session issued in the other population with the same 401 as no session.
+- **One token table, four purposes**: the Client magic link, Staff verification (24 hours), Staff reset (1 hour), and MFA recovery. DoulaCloud sends the mail through the outbox; Identity Platform sends none. A spent reset or recovery token mints no session, and a reset ends every session for that identity.
+- **MFA recovery** is a code plus her password, never a mailbox alone: an Owner vouches with a code sent to her own mailbox, a sole Owner holds saved recovery codes, and an operator is the last resort. It is recorded in a person-scoped auth-events table.
+- **One browser holds one population at a time.** Signing into the other ends the live session after a warning, on every mint seam; a same-population sign-in replaces the old session.
+- **Passkeys are deferred** until the launch domain is settled.
+
+## Amendments
+
+Each is written into the section it changes.
+
+- [#1024](https://github.com/markgoho/doula-cloud/issues/1024): a session is a credential for its own population only, enforced in `authn.Begin`. In [The Portal Account becomes a table](#the-portal-account-becomes-a-table-and-the-prefix-is-the-namespace).
+- [#816](https://github.com/markgoho/doula-cloud/issues/816), landed in [#837](https://github.com/markgoho/doula-cloud/issues/837): the three Staff bootstrap paths warn before eviction, and a same-population mint replaces the old session. In [Two populations, one browser](#two-populations-one-browser-and-nothing-that-links-them).
+- [#1492](https://github.com/markgoho/doula-cloud/issues/1492): an Owner's second factor is recommended after three acts and required for five. In [TOTP, required for Owners](#totp-required-for-owners-and-enforced-at-the-practice-boundary).
+- [#1493](https://github.com/markgoho/doula-cloud/issues/1493): a Staff password is 15 characters or more. In [Staff keep a password](#staff-keep-a-password-and-there-is-no-federation-at-all).
+
 Nobody had decided how a person proves who they are to Doula Cloud. What existed was a default: email and password wired into `app/`, a provider with no federation configured, no password reset, no email verification and no second factor. That default was never argued for, and it had already leaked into a ticket — [#149](https://github.com/markgoho/doula-cloud/issues/149) carried an acceptance criterion migrating "the same Google sign-in" to session cookies, for a flow that did not exist at either end.
 
 This ADR records the decision. It was reached on the wayfinding map [Auth methods: what Doula Cloud supports, for whom, and why](https://github.com/markgoho/doula-cloud/issues/164) across one research ticket on the provider, one on passkeys, and five grilling tickets; each section below names the ticket that holds its full argument.
