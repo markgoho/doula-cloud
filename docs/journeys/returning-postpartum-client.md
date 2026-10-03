@@ -52,6 +52,13 @@ Her persona file calls `clients` having no `practice_id` a sign the schema suppo
 
 **Thinking**: "I already have a login for this." **Pain points**: none she meets. The refusal this stage was named for is gone: [#309](https://github.com/markgoho/doula-cloud/issues/309) dropped the table-wide `UNIQUE` on `client_portal_users.identity_uid` that `00006` gave it, and [#819](https://github.com/markgoho/doula-cloud/issues/819) put a narrower rule in its place in `00107_portal_account_client_pair_unique.sql` — one row per Portal Account per Client. ADR-0015's other half, at most one Client per Practice per Portal Account, crosses two tables and so is `acceptInvite`'s own check rather than a constraint. What she meets instead is that **Priya is stopped first, and correctly**: an invitation is raised per Client, not per Engagement (`invite()` reads `client_portal_users` by `client_id`), and after ADR-0017 Camille is one Client with a second Engagement, so `POST .../portal-invite` answers **409 "this client already has portal access"**. There is nothing to accept because she can already get in. The accept-side refusal that remains — **"you already have portal access at this practice -- sign in instead of accepting a new invitation"**, raised when the sign-in address's Portal Account already reaches a Client at this Practice — is reachable only down the branch where the Practice answered ADR-0017's duplicate screen with *a different person* and saved a second Client record for her (CB-G3, closed).
 
+**Budget**:
+
+* **Screens**: 2 (Hick's Law, Flow)
+* **Decisions**: 2 (Hick's Law, Miller's Law)
+* **Confirmation**: yes (Peak-End Rule)
+* **320px**: yes (ADR-0024)
+
 - **5.1** — Priya calls `POST .../portal-invite` on the new Engagement and is told Camille already has portal access. The Notification email carrying the link is the product's own now, not a hand-delivered copy (**RA-G1**, closed).
 - **5.2** — Camille signs in the way she always does — a sign-in link to the address she already uses — and reaches both Engagements. Accepting an invitation is one **Continue** button on `/portal/accept-invite?token=…` (ADR-0026: the invitation is the first sign-in link, and a Client has no password), so there is no "I already have an account" fork to choose any more.
 - **5.3** — Down the duplicate-Client branch only: she presses **Continue** on the second invitation and is refused with the one refusal left, told to sign in rather than accept.
@@ -60,6 +67,16 @@ Her persona file calls `clients` having no `practice_id` a sign the schema suppo
 
 **Thinking**: "Which one has the new thing in it?" **Pain points**: none. Her Portal Account reaches her Client, `engagements_identity_visibility` (`00082`) makes every Engagement that Client holds readable before any one of them is chosen, and `decidePortalLanding` sends a person with more than one to the portal root list rather than into one of them. The list names each Engagement with `engagementLabel` — **"{Practice}, started {date}"** — so two at Rooted Birth Collective are two distinguishable lines rather than two identical ones (CB-G4, closed with [#310](https://github.com/markgoho/doula-cloud/issues/310)). The chrome's own way back to that list carries the same label as its accessible name, but shows the Practice's name alone on screen, so the thing she reads inside one Engagement looks the same as inside the other — a smaller version of the old complaint, in the one place it survives.
 
+**Budget**:
+
+* **Screens**: 3 (Hick's Law, Flow)
+* **Decisions**: 2 (Hick's Law, Miller's Law)
+* **Memory**: yes (Working Memory)
+* **Time**: 400 ms, 100 ms (Doherty Threshold)
+* **Confirmation**: yes (Peak-End Rule)
+* **Cold**: yes (Paradox of the Active User)
+* **320px**: yes (ADR-0024)
+
 - **6.1** — Sign in → the root list, holding her 2024 birth Engagement and her postpartum one.
 - **6.2** — Open one, then use the chrome's way back to the list and open the other. No sign-out, and no second account.
 
@@ -67,12 +84,24 @@ Her persona file calls `clients` having no `practice_id` a sign the schema suppo
 
 **Thinking**: nothing — there is no link there to notice. **Pain points**: none. `OffersBirthPlan` (`engagement/kind.go`, #311/#294) answers `kind == birth && HasLivingOrExpectedBaby`, and Camille's Engagement carries `kind: postpartum`, so the authenticated portal layout leaves the **Birth plan** nav item out entirely rather than rendering it and hoping the page explains itself (**CB-G5**, closed). Navigating to the URL directly meets the portal's ordinary not-found page, not a "No Birth Plan has been created … yet" promise that one is coming — `CONTEXT.md`'s rule that where a Birth Plan does not apply, she meets no mention of it at all.
 
+**Budget**:
+
+* **Screens**: 1 (Hick's Law, Flow)
+* **Decisions**: 4 (Hick's Law, Miller's Law)
+* **320px**: yes (ADR-0024)
+
 - **7.1** — Open the portal home → **Contract** link only; no **Birth plan** item in the nav.
 - **7.2** — Navigate to the Birth Plan URL directly → the portal's ordinary "not found" page, with a way back to her care.
 
 ### Stage 8 — What came with her is the record, not a fresh start
 
 **Thinking**: "I'm explaining all of this again" — true of the message thread, false of the record itself. **Pain points**: none on "have I cared for this person before". Messages stay one continuous thread **per Engagement** (`CONTEXT.md`) and Plan Instances stay per Engagement (ADR-0001's snapshot rule) — that scoping is correct and unchanged, so a fresh Message thread is still what she meets on the new Engagement. But the question above it now has an answer on both sides: Priya's Client detail hub lists every Engagement Camille's Client record holds — kind, status, started — beside a merged History table of Engagement Requests and Client edits (**CB-G6**, closed, #494), and Camille's own portal root list is the same fact from her side (stage 6).
+
+**Budget**:
+
+* **Screens**: 1 (Hick's Law, Flow)
+* **Memory**: yes (Working Memory)
+* **320px**: yes (ADR-0024)
 
 - **8.1** — Read her new, empty message thread. Still empty — that scoping did not change.
 - **8.2** — Priya opens Camille's Client detail hub → the Engagements table lists both her Engagements, and History shows both Engagement Requests.

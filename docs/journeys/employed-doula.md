@@ -29,6 +29,14 @@ She is the negative-permission Persona. Half of this map is about what should be
 
 **Thinking**: "First impression of my new job's software." **Pain points**: no email is sent (RA-G1). Renata texts a raw URL, which is a poor first impression and an unverifiable one — Priya cannot tell it is genuine.
 
+**Budget**:
+
+* **Screens**: 2 (Hick's Law, Flow)
+* **Decisions**: 3 (Hick's Law, Miller's Law)
+* **Confirmation**: yes (Peak-End Rule)
+* **Cold**: yes (Paradox of the Active User)
+* **320px**: yes (ADR-0024)
+
 - **1.1** — Open the invite link at `/accept-invite`, on whatever device the message arrived on.
 - **1.2** — Set email and password; press **Accept invite** (`POST /api/staff/accept-invite`). The membership is created with zero roles (`invite.go` inserts `'{}'`).
 
@@ -40,6 +48,13 @@ She is the negative-permission Persona. Half of this map is about what should be
 
 ### Stage 3 — Sign in and choose the Practice
 
+**Budget**:
+
+* **Screens**: 2 (Hick's Law, Flow)
+* **Decisions**: 3 (Hick's Law, Miller's Law)
+* **Time**: 400 ms, 100 ms (Doherty Threshold)
+* **320px**: yes (ADR-0024)
+
 - **3.1** — `/login` (`POST /api/session`).
 - **3.2** — Choose Rooted Birth Collective.
 - **3.3** — Land on `/practices/[practiceId]`. The owner-only tiles (Invite, Staff, Plan Templates, Contract Template) are hidden by `{#if roles.includes('owner')}`. **Clients, Billing and Payments remain** — Payments is outside the owner block (RA-G9, corrected by the walk of [#235](https://github.com/markgoho/doula-cloud/issues/235)), and Billing is the Practice's credit spending (DW-G4).
@@ -48,12 +63,24 @@ She is the negative-permission Persona. Half of this map is about what should be
 
 **Thinking**: "Which ones are mine?" **Pain points**: **she sees all of them.** `GET /api/practices/{id}/clients` is Practice-scoped by design — the handler comment says so: "every Client with an Engagement at the current Practice, regardless of which Staff member created it — v1 has no restricted-visibility model." This is not a suspicion; it is the stated behavior. Her persona's scope requirement fails, and there is no column telling her which rows are hers, because Engagements carry no Doula (RA-G4).
 
+**Budget**:
+
+* **Screens**: 2 (Hick's Law, Flow)
+* **Time**: 400 ms, 100 ms (Doherty Threshold)
+* **320px**: yes (ADR-0024)
+
 - **4.1** — Open `/practices/[practiceId]/clients`.
 - **4.2** — Read a list of every Client in the Practice, including other doulas'.
 
 ### Stage 5 — Open the Engagement
 
 **Thinking**: "Right, her." **Pain points**: one long page holding Visits, Care Plan, Birth Plan, Contract, Invoices, and Messages. The Contract's amount and the Invoice history sit on the same page as the care record, for any Client — including ones that are not hers. None of the read paths are role-checked; owner checks live on write endpoints.
+
+**Budget**:
+
+* **Screens**: 2 (Hick's Law, Flow)
+* **Time**: 400 ms, 100 ms (Doherty Threshold)
+* **320px**: yes (ADR-0024)
 
 - **5.1** — Open `/practices/[practiceId]/engagements/[engagementId]`.
 - **5.2** — See the Contract section (`GET .../contract`) and the Invoices section (`GET .../contract/invoices`), neither of which she should need.
@@ -62,6 +89,16 @@ She is the negative-permission Persona. Half of this map is about what should be
 
 **Thinking**: "She did not want an epidural unless she asks twice." **Pain points**: the Birth Plan is a section partway down the page, on a phone, in a corridor, under time pressure. There is no deep link to it, no collapse of the sections she does not need, and no way to hand it to hospital staff from her side — the print stylesheet is on the Client's portal view. The walk of [#237](https://github.com/markgoho/doula-cloud/issues/237) confirmed all three and added the one that costs her most: there is no way to *reach* the page without a remembered URL (**PR-G9**).
 
+**Budget**:
+
+* **Screens**: 1 (Hick's Law, Flow)
+* **Decisions**: 1 (Hick's Law, Miller's Law)
+* **Memory**: yes (Working Memory)
+* **Time**: 400 ms, 100 ms (Doherty Threshold)
+* **Confirmation**: yes (Peak-End Rule)
+* **Cold**: yes (Paradox of the Active User)
+* **320px**: yes (ADR-0024)
+
 - **6.1** — Scroll to the Birth Plan section (`GET .../plans/birth`).
 - **6.2** — Read it.
 
@@ -69,12 +106,28 @@ She is the negative-permission Persona. Half of this map is about what should be
 
 **Thinking**: "Record what we covered so it is there next time." **Pain points**: this is the reason she came, and it does not work. A Visit is `(engagement_id, staff_id, created_at)`. She can record that a Visit happened, by her, now. She cannot record when it was, what kind it was, or what was said. Her stated need — "what was I told last time" — is unanswerable (MO-G1, MO-G2).
 
+**Budget**:
+
+* **Screens**: 1 (Hick's Law, Flow)
+* **Decisions**: 4 (Hick's Law, Miller's Law)
+* **Time**: 400 ms, 100 ms (Doherty Threshold)
+* **Confirmation**: yes (Peak-End Rule)
+* **320px**: yes (ADR-0024)
+
 - **7.1** — Add a Visit in the Visits section (`POST /api/practices/{id}/engagements/{id}/visits`).
 - **7.2** — See a row with a Staff name and a creation timestamp.
 
 ### Stage 8 — Message the Client
 
 **Thinking**: "Confirm Thursday." **Pain points**: none identified. Push-triggered fetch wakes the Client's device (ADR-0002); Priya must not treat it as a substitute for a phone call in labor.
+
+**Budget**:
+
+* **Screens**: 1 (Hick's Law, Flow)
+* **Decisions**: 2 (Hick's Law, Miller's Law)
+* **Time**: 400 ms, 100 ms (Doherty Threshold)
+* **Confirmation**: yes (Peak-End Rule)
+* **320px**: yes (ADR-0024)
 
 - **8.1** — Send a message (`POST .../messages`).
 - **8.2** — Receive the reply in the same continuous thread.

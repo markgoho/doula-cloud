@@ -21,6 +21,11 @@ She is the negative-permission Persona, so half this plan is the [Permission bou
 | --- | --- | --- | --- |
 | 1.1 | Open the invite link on the device the text arrived on | The accept form renders on a small viewport | `manual` |
 | 1.2 | Set email and password, press **Accept invite** | Membership created with `roles = '{}'` | `manual` |
+| 1.B-screens | Count the screens from the stage's entry to its end | **Screens**: 2 (Hick's Law, Flow). The accept form, then the Practice landing it signs her into | `manual` |
+| 1.B-decisions | On each screen, count the decisions visible at once; record the largest | **Decisions**: 3 (Hick's Law, Miller's Law) | `manual` |
+| 1.B-confirmation | Read the screen the stage ends on | **Confirmation**: yes (Peak-End Rule) | `manual` |
+| 1.B-cold | Walk the stage in a fresh browser profile, with nothing explained first | **Cold**: yes (Paradox of the Active User) | `manual` |
+| 1.B-320px | Sweep the stage's screens from 320px up | **320px**: yes (ADR-0024) | `automated (route-continuum.svelte.spec.ts)` |
 
 ### Stage 2 — Receive the Doula role
 
@@ -36,6 +41,10 @@ She is the negative-permission Persona, so half this plan is the [Permission bou
 | 3.1 | Sign in at `/login` | `POST /api/session` succeeds and lands on `/practices/[practiceId]` | `automated (staff-login.e2e.ts)` |
 | 3.2 | Choose Rooted Birth Collective | **There is nothing to choose.** One membership redirects straight to `/practices/[practiceId]`; no picker renders. Same as Renata's 1.2 and Dee's 1.3; the picker needs a second membership, which only Lena Vasquez's journey gives a Persona | `manual` |
 | 3.3 | Read the tiles | Invite, Staff, Plan Templates and Contract Template are hidden by `{#if roles.includes('owner')}`. **Clients, Billing and Payments remain** — Payments is outside the owner block ([RA-G9](https://github.com/markgoho/doula-cloud/issues/267)), as #235's walk found by landing a zero-role member on it | `manual` |
+| 3.B-screens | Count the screens from the stage's entry to its end | **Screens**: 2 (Hick's Law, Flow). `/login`, then the Practice landing; one membership needs no picker | `manual` |
+| 3.B-decisions | On each screen, count the decisions visible at once; record the largest | **Decisions**: 3 (Hick's Law, Miller's Law) | `manual` |
+| 3.B-time | Time each routine act on the stage's device, from the input to the result settled on screen | **Time**: 400 ms, 100 ms (Doherty Threshold) | `manual` |
+| 3.B-320px | Sweep the stage's screens from 320px up | **320px**: yes (ADR-0024) | `automated (route-continuum.svelte.spec.ts)` |
 
 ### Stage 4 — Find her Clients
 
@@ -44,6 +53,9 @@ She is the negative-permission Persona, so half this plan is the [Permission bou
 | 4.1 | Open `/practices/[practiceId]/clients` | The list renders for a non-owner | `manual` |
 | 4.2 | Count the rows | **Every Client in the Practice**, including other doulas'. The handler is Practice-scoped by design: "v1 has no restricted-visibility model" ([PR-G1](https://github.com/markgoho/doula-cloud/issues/225)) | `manual` |
 | 4.2-a | Look for a column saying which rows are hers | None — Engagements carry no Doula | `missing-feature (RA-G4)` [#225](https://github.com/markgoho/doula-cloud/issues/225) |
+| 4.B-screens | Count the screens from the stage's entry to its end | **Screens**: 2 (Hick's Law, Flow) | `manual` |
+| 4.B-time | Time each routine act on the stage's device, from the input to the result settled on screen | **Time**: 400 ms, 100 ms (Doherty Threshold) | `manual` |
+| 4.B-320px | Sweep the stage's screens from 320px up | **320px**: yes (ADR-0024) | `automated (route-continuum.svelte.spec.ts)` |
 
 ### Stage 5 — Open the Engagement
 
@@ -52,6 +64,9 @@ She is the negative-permission Persona, so half this plan is the [Permission bou
 | 5.1 | Open an Engagement that is **not** hers | It opens. No read path is role-checked | `manual` |
 | 5.2 | Read the Contract and Invoices sections | The merge values **including the amount** and the Invoice history render; the **prose does not** — the staff Engagement page shows `Status:` and the six filled merge-field inputs only, and the prose lives on the Contract Template screen and the Client's portal view. Per [ADR-0006](../adr/0006-read-follows-the-role.md) an employed Doula reads a Contract's scope but **not** its money ([PR-G2](https://github.com/markgoho/doula-cloud/issues/277)) | `manual` |
 | 5.2-a | Set the Price on a draft Contract, send it, and raise an Invoice | **All three succeed.** Only Contract *status* refuses (`409` on a non-draft), never the role; the Invoice reaches the Stripe gate (`connectRequired`), not a refusal ([PR-G8](https://github.com/markgoho/doula-cloud/issues/282)) | `manual` |
+| 5.B-screens | Count the screens from the stage's entry to its end | **Screens**: 2 (Hick's Law, Flow) | `manual` |
+| 5.B-time | Time each routine act on the stage's device, from the input to the result settled on screen | **Time**: 400 ms, 100 ms (Doherty Threshold) | `manual` |
+| 5.B-320px | Sweep the stage's screens from 320px up | **320px**: yes (ADR-0024) | `automated (route-continuum.svelte.spec.ts)` |
 
 ### Stage 6 — Read the Birth Plan (moment of truth)
 
@@ -60,6 +75,13 @@ She is the negative-permission Persona, so half this plan is the [Permission bou
 | 6.1 | On the phone, reach this Client's Birth Plan from a cold start, timed | It is a section partway down one long Engagement page holding Visits, Care Plan, Contract, Invoices and Messages | `manual` |
 | 6.2 | Read the filled values | `GET .../plans/birth_plan` renders the Plan Instance's snapshot | `manual` |
 | 6.2-a | Deep-link straight to it, collapse what she does not need, or print it for hospital staff from her side | None of the three exist; the print stylesheet lives on the Client's portal view | `missing-feature (PR-G5)` [#280](https://github.com/markgoho/doula-cloud/issues/280) |
+| 6.B-screens | Count the screens from the stage's entry to its end | **Screens**: 1 (Hick's Law, Flow). Measured from the Engagement page she opened at 5.1. The walk of [#237](https://github.com/markgoho/doula-cloud/issues/237) found the Birth Plan heading 0.83 screens down on a Pixel 7: one screen, scrolled | `manual` |
+| 6.B-decisions | On each screen, count the decisions visible at once; record the largest | **Decisions**: 1 (Hick's Law, Miller's Law) | `manual` |
+| 6.B-memory | Note every later step that needs an earlier answer, and whether that answer is still on screen | **Memory**: yes (Working Memory) | `manual` |
+| 6.B-time | Time each routine act on the stage's device, from the input to the result settled on screen | **Time**: 400 ms, 100 ms (Doherty Threshold). The walk of [#237](https://github.com/markgoho/doula-cloud/issues/237) took about 1.7 s across 2 clicks from the Practice landing to the Birth Plan in view; the budget holds each click | `manual` |
+| 6.B-confirmation | Read the screen the stage ends on | **Confirmation**: yes (Peak-End Rule). The Birth Plan names whose it is and when it last changed, so she knows she has the right one | `manual` |
+| 6.B-cold | Walk the stage in a fresh browser profile, with nothing explained first | **Cold**: yes (Paradox of the Active User). Measured from a cold start on the phone, the way 6.1 is timed | `manual` |
+| 6.B-320px | Sweep the stage's screens from 320px up | **320px**: yes (ADR-0024) | `automated (route-continuum.svelte.spec.ts)` |
 
 ### Stage 7 — Log a Visit
 
@@ -69,6 +91,11 @@ She is the negative-permission Persona, so half this plan is the [Permission bou
 | 7.1-a | Record when the Visit was | No date or time anywhere | `missing-feature (MO-G1)` [#250](https://github.com/markgoho/doula-cloud/issues/250) |
 | 7.1-b | Record which of the three kinds it was — prenatal, birth, postpartum | A Visit carries no type | `missing-feature (PR-G6)` [#281](https://github.com/markgoho/doula-cloud/issues/281) |
 | 7.1-c | Record what was covered, for "what was I told last time" | A Visit carries no notes | `missing-feature (MO-G2)` [#251](https://github.com/markgoho/doula-cloud/issues/251) |
+| 7.B-screens | Count the screens from the stage's entry to its end | **Screens**: 1 (Hick's Law, Flow) | `manual` |
+| 7.B-decisions | On each screen, count the decisions visible at once; record the largest | **Decisions**: 4 (Hick's Law, Miller's Law). When the Visit was, which kind, what was covered, and the save | `manual` |
+| 7.B-time | Time each routine act on the stage's device, from the input to the result settled on screen | **Time**: 400 ms, 100 ms (Doherty Threshold) | `manual` |
+| 7.B-confirmation | Read the screen the stage ends on | **Confirmation**: yes (Peak-End Rule) | `manual` |
+| 7.B-320px | Sweep the stage's screens from 320px up | **320px**: yes (ADR-0024) | `automated (route-continuum.svelte.spec.ts)` |
 
 ### Stage 8 — Message the Client
 
@@ -77,6 +104,11 @@ She is the negative-permission Persona, so half this plan is the [Permission bou
 | 8.1 | Send a message | `POST .../messages` appends to the one Engagement thread | `manual` |
 | 8.2 | Have the Client reply | One continuous thread, in order, immutable | `manual` |
 | 8.2-a | With the Client's thread open, deliver a push event | The tab refetches and shows the message; the push itself carries no content (ADR-0002) | `automated (push-notification.e2e.ts)` |
+| 8.B-screens | Count the screens from the stage's entry to its end | **Screens**: 1 (Hick's Law, Flow) | `manual` |
+| 8.B-decisions | On each screen, count the decisions visible at once; record the largest | **Decisions**: 2 (Hick's Law, Miller's Law) | `manual` |
+| 8.B-time | Time each routine act on the stage's device, from the input to the result settled on screen | **Time**: 400 ms, 100 ms (Doherty Threshold) | `manual` |
+| 8.B-confirmation | Read the screen the stage ends on | **Confirmation**: yes (Peak-End Rule) | `manual` |
+| 8.B-320px | Sweep the stage's screens from 320px up | **320px**: yes (ADR-0024) | `automated (route-continuum.svelte.spec.ts)` |
 
 **Nadia crossing, settled.** Stages 7 and 8 are where an Engagement ending in loss lands on the Doula's side — a bereavement Visit, and a thread that must not carry on unchanged. [Her plan](loss-client.md) now exists and **neither stage changes**: her 7.1 walks the bereavement Visit against **PR-G6**, **MO-G1** and **MO-G2**, already given steps here, and the thread with no way to mark that its subject has changed is hers to own (**NH-G7**). No step id here moves.
 
@@ -99,13 +131,17 @@ The pattern under test: protection sits on the write endpoint, never on the read
 
 | Mark | Steps |
 | --- | --- |
-| `automated` | 3 |
-| `manual` | 21 (five of them the permission boundary; 5.2-a added by the walk) |
+| `automated` | 10 (7 of them [budget steps](README.md#budget-steps)) |
+| `manual` | 46 (five of them the permission boundary; 5.2-a added by the walk; 25 of them [budget steps](README.md#budget-steps)) |
 | `missing-feature` | 5 ([RA-G4](https://github.com/markgoho/doula-cloud/issues/225), [PR-G5](https://github.com/markgoho/doula-cloud/issues/280), [PR-G6](https://github.com/markgoho/doula-cloud/issues/281), [MO-G1](https://github.com/markgoho/doula-cloud/issues/250), [MO-G2](https://github.com/markgoho/doula-cloud/issues/251)) |
 
 PR-G1, PR-G2, PR-G3, PR-G4 and PR-G8 are observed inside walkable steps (4.2, 5.2, 5.2-a, 2.1-b, PR-B3 to PR-B6) rather than given steps of their own: the step can be performed, and what it hands back is the finding. **PR-G9** is observed at 6.1, in what happens *before* the step rather than in the step itself.
 
 ## Run log
+
+### 2026-10-02 — budget steps added ([#1683](https://github.com/markgoho/doula-cloud/issues/1683))
+
+A desk pass, not a walk. The journey map's stages 1, 3, 4, 5, 6, 7, 8 each gained a **Budget**, and each budget line is a step here, last in its stage's table: **32 budget steps**, 7 `automated`, 25 `manual`. No existing step is re-marked and no cell is rewritten. Every `automated` budget step is a 320px line the continuum sweep or `portal-320.e2e.ts` already asserts; every `manual` one is measured on the second walk ([#329](https://github.com/markgoho/doula-cloud/issues/329)), and none has been measured yet. The Marks summary above and [README.md](README.md)'s run-status row move with them.
 
 ### 2026-08-22 — automated steps ([#209](https://github.com/markgoho/doula-cloud/issues/209))
 

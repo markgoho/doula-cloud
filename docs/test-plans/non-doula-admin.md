@@ -19,6 +19,11 @@
 | 1.1 | Open the invite link at `/accept-invite` | The accept form renders | `automated (admin-invite-role.e2e.ts)` |
 | 1.2 | Set email and password, press **Accept invite** | `POST /api/staff/accept-invite` creates the membership with zero roles | `manual` |
 | 1.3 | Choose the Practice from the membership list | **Nothing to choose** — one membership, so `decideLanding` redirects straight to `/practices/[practiceId]` (`app/src/lib/landing.ts:24-26`) and the picker never renders. The picker needs a second membership, which only Lena Vasquez's journey gives a Persona | `manual` |
+| 1.B-screens | Count the screens from the stage's entry to its end | **Screens**: 2 (Hick's Law, Flow). The accept form, then the Practice landing; one membership needs no picker | `manual` |
+| 1.B-decisions | On each screen, count the decisions visible at once; record the largest | **Decisions**: 3 (Hick's Law, Miller's Law) | `manual` |
+| 1.B-confirmation | Read the screen the stage ends on | **Confirmation**: yes (Peak-End Rule) | `manual` |
+| 1.B-cold | Walk the stage in a fresh browser profile, with nothing explained first | **Cold**: yes (Paradox of the Active User) | `manual` |
+| 1.B-320px | Sweep the stage's screens from 320px up | **320px**: yes (ADR-0024) | `automated (route-continuum.svelte.spec.ts)` |
 
 ### Stage 2 — Receive the Admin role
 
@@ -34,6 +39,9 @@
 | 3.1-a | Compare this run against the zero-role run | **No longer identical.** [DW-G1](https://github.com/markgoho/doula-cloud/issues/269) is closed: `admin` is read now for the Practice's Stripe Connect state (`staffauth.OwnerAndAdmin`, [#267](https://github.com/markgoho/doula-cloud/issues/267)) — see the journey map's Stage 3 note | `manual` |
 | 3.2 | Open Credits | The Practice's credit balance and purchase ledger render for an Admin — the balance read is `staffauth.OwnerAndAdmin` since [DW-G4](https://github.com/markgoho/doula-cloud/issues/272), so an Admin is inside the seat and a Doula meets the refusal screen instead | `automated (admin-invite-role.e2e.ts)` |
 | 3.2-a | Buy credits | **Not refused.** The purchase declares the same Owner-and-Admin seat the balance does ([#257](https://github.com/markgoho/doula-cloud/issues/257), [#910](https://github.com/markgoho/doula-cloud/issues/910)), and the button is drawn plainly enabled for every session that reaches the screen ([#1162](https://github.com/markgoho/doula-cloud/issues/1162)) | `manual` |
+| 3.B-screens | Count the screens from the stage's entry to its end | **Screens**: 2 (Hick's Law, Flow). The Practice landing, then Credits | `manual` |
+| 3.B-cold | Walk the stage in a fresh browser profile, with nothing explained first | **Cold**: yes (Paradox of the Active User) | `manual` |
+| 3.B-320px | Sweep the stage's screens from 320px up | **320px**: yes (ADR-0024) | `automated (route-continuum.svelte.spec.ts)` |
 
 The Billing screen is automated for an *Owner* (`billing.e2e.ts`); no spec reads it as a non-owner, which is the case that matters here.
 
@@ -43,6 +51,12 @@ The Billing screen is automated for an *Owner* (`billing.e2e.ts`); no spec reads
 | --- | --- | --- | --- |
 | 4.1 | Open `/practices/[practiceId]/clients/new` | Intake is a sequence now, one question per page — name, date of birth, email, phone, address, then whatever sections the Practice put on its own Client Field Template — with **Save and come back later** offered on every one of them. She reaches it from **Find or add a Client** on the Clients list, because a Client is found before she is created (ADR-0017). Her page of notes from the call has somewhere to go ([MO-G3](https://github.com/markgoho/doula-cloud/issues/252) closed) | `manual` |
 | 4.2 | Press **Save this Client** on the check-answers page | `client.CreateHandler` refuses only a contractor doula, so it **passes** for Dee — and the save is **free**: a Client, no Engagement, no credit. She lands on the Client's own detail hub. Asking for paid work with her is a separate act, the Engagement Request, whose approval is what creates the Engagement and locks the Credit (ADR-0017) | `manual` |
+| 4.B-screens | Count the screens from the stage's entry to its end | **Screens**: 8 (Hick's Law, Flow). The Clients list, five intake questions one per page, the check-answers page and the Client's hub; each Practice-defined section adds one | `manual` |
+| 4.B-decisions | On each screen, count the decisions visible at once; record the largest | **Decisions**: 3 (Hick's Law, Miller's Law). One intake question per page: the answer, **Continue**, **Save and come back later** | `manual` |
+| 4.B-memory | Note every later step that needs an earlier answer, and whether that answer is still on screen | **Memory**: yes (Working Memory). The check-answers page shows every answer from the call before **Save this Client** | `manual` |
+| 4.B-time | Time each routine act on the stage's device, from the input to the result settled on screen | **Time**: 400 ms, 100 ms (Doherty Threshold) | `manual` |
+| 4.B-confirmation | Read the screen the stage ends on | **Confirmation**: yes (Peak-End Rule) | `manual` |
+| 4.B-320px | Sweep the stage's screens from 320px up | **320px**: yes (ADR-0024) | `automated (route-continuum.svelte.spec.ts)` |
 
 ### Stage 5 — Put a Doula on the Engagement
 
@@ -50,6 +64,10 @@ The Billing screen is automated for an *Owner* (`billing.e2e.ts`); no spec reads
 | --- | --- | --- | --- |
 | 5.1 | Open the Engagement and look for a control that puts a Doula on it | None exists | `missing-feature (RA-G4)` [#225](https://github.com/markgoho/doula-cloud/issues/225) |
 | 5.2 | Create a Visit naming the Doula instead | **It works, and it is her act.** The form asks **Who is this Visit for?** and `resolveAssignee` (`api/internal/visit/roles.go`) puts naming a colleague with the Owner and the Admin — a plain Doula cannot read the roster, so she has nobody to pick from. What Dee cannot do is log a Visit for *herself*, holding no Doula role, and the screen offers her no control for that rather than a button that 403s ([DW-G6](https://github.com/markgoho/doula-cloud/issues/274) closed) | `manual` |
+| 5.B-screens | Count the screens from the stage's entry to its end | **Screens**: 1 (Hick's Law, Flow) | `manual` |
+| 5.B-decisions | On each screen, count the decisions visible at once; record the largest | **Decisions**: 2 (Hick's Law, Miller's Law). Which Doula, and the save | `manual` |
+| 5.B-confirmation | Read the screen the stage ends on | **Confirmation**: yes (Peak-End Rule) | `manual` |
+| 5.B-320px | Sweep the stage's screens from 320px up | **320px**: yes (ADR-0024) | `automated (route-continuum.svelte.spec.ts)` |
 
 ### Stage 6 — Send the Contract
 
@@ -59,6 +77,11 @@ The Billing screen is automated for an *Owner* (`billing.e2e.ts`); no spec reads
 | 6.2 | Build the Contract | `POST .../contract` creates it at `draft`, declared `AnyStaff` at the mount, so an Admin passes. The Client's name, the Practice's name and the price are resolved from data the product already holds rather than typed, and `price` is reserved outright — the form renders no input for it at all, and the other two arrive already filled | `manual` |
 | 6.3 | Send it | Status `sent` — but **Send Contract** is withheld until every remaining merge field is filled, and again until the Client has been sent a portal invite, each with the reason on screen rather than a refusal after the click | `manual` |
 | 6.3-a | Try to edit the Practice's **Contract Template** | Refused: the template write is declared Owner-only at the mount now, rather than checked inside the handler. The page still renders and shows the real template first ([PR-G4](https://github.com/markgoho/doula-cloud/issues/279)) | `manual` |
+| 6.B-screens | Count the screens from the stage's entry to its end | **Screens**: 2 (Hick's Law, Flow). The Engagement, then its Contract | `manual` |
+| 6.B-decisions | On each screen, count the decisions visible at once; record the largest | **Decisions**: 7 (Hick's Law, Miller's Law) | `manual` |
+| 6.B-memory | Note every later step that needs an earlier answer, and whether that answer is still on screen | **Memory**: yes (Working Memory) | `manual` |
+| 6.B-confirmation | Read the screen the stage ends on | **Confirmation**: yes (Peak-End Rule). Sending says what the Client receives next | `manual` |
+| 6.B-320px | Sweep the stage's screens from 320px up | **320px**: yes (ADR-0024) | `automated (route-continuum.svelte.spec.ts)` |
 
 ### Stage 7 — Track the signature
 
@@ -68,6 +91,9 @@ The Billing screen is automated for an *Owner* (`billing.e2e.ts`); no spec reads
 | 7.1-a | Void a **signed** Contract from the Engagement page | The **Void** button renders only on a `signed` Contract, and `POST .../contract/void` still succeeds for Dee — it is declared **Owner and Admin** at the mount now, rather than carrying no role check at all, and she is the Admin. A Doula in her place gets **Request a void** instead, which an Owner or Admin then grants or declines. `signed` is the only status the transition accepts; anything else 409s. The Contract becomes `voided`, terminal, and still renders in full | `manual` |
 | 7.2 | Find every Engagement whose Contract is unsigned | No such list; every Engagement must be opened in turn | `missing-feature (DW-G5)` [#273](https://github.com/markgoho/doula-cloud/issues/273) |
 | 7.2-a | Raise an Invoice against the Contract just voided | **It is not refused.** `POST .../contract/invoices` does not read the Contract's status and goes straight to the Connect gate, while **Create Invoice** keeps rendering on a `voided` Contract ([DW-G7](https://github.com/markgoho/doula-cloud/issues/275)) | `manual` |
+| 7.B-screens | Count the screens from the stage's entry to its end | **Screens**: 1 (Hick's Law, Flow). One list of every unsigned Contract, with no Engagement opened | `manual` |
+| 7.B-time | Time each routine act on the stage's device, from the input to the result settled on screen | **Time**: 400 ms, 100 ms (Doherty Threshold) | `manual` |
+| 7.B-320px | Sweep the stage's screens from 320px up | **320px**: yes (ADR-0024) | `automated (route-continuum.svelte.spec.ts)` |
 
 **Nadia crossing, settled.** `POST .../contract/void` had no step here. [Her plan](loss-client.md) needs a voided Contract for its stage 6, and the only control that produces one is on this screen — so **7.1-a is added** and the void path is walked once, on the Staff side that owns it. Stages 8 and 9 are **unchanged**: what she adds there is the Client's side of the same moment — the bare word `voided` (**NH-G5**) and the absence of any Invoice surface in the portal (**NH-G6**) — and both gaps are hers to own. The step ids here are otherwise untouched.
 
@@ -77,6 +103,10 @@ The Billing screen is automated for an *Owner* (`billing.e2e.ts`); no spec reads
 | --- | --- | --- | --- |
 | 8.1 | `POST .../contract/invoices` | **Creates the Invoice.** `201 {"connectRequired":false,"invoice":{…,"status":"open"}}` on a Practice whose Stripe account is connected, for Dee, who is not an Owner — the endpoint never was owner-gated. On a Practice that has *not* connected it answers `200 {"connectRequired":true}` instead; `IsOwner` carries `omitempty` (`api/internal/payments/invoice.go:51`), so for a non-owner the field is absent rather than `false`, and the client defaults it (`+page.svelte:311`) | `manual` |
 | 8.2 | Read the message the UI shows | On an unconnected Practice: "Ask a Practice Owner to connect Stripe" — an infrastructure gap wearing a permission error's costume ([DW-G2](https://github.com/markgoho/doula-cloud/issues/270)). The same sentence is on the **Payments** screen for a non-owner, so DW-G2 is not confined to this stage | `manual` |
+| 8.B-screens | Count the screens from the stage's entry to its end | **Screens**: 1 (Hick's Law, Flow) | `manual` |
+| 8.B-decisions | On each screen, count the decisions visible at once; record the largest | **Decisions**: 2 (Hick's Law, Miller's Law). The amount, and **Create Invoice** | `manual` |
+| 8.B-confirmation | Read the screen the stage ends on | **Confirmation**: yes (Peak-End Rule) | `manual` |
+| 8.B-320px | Sweep the stage's screens from 320px up | **320px**: yes (ADR-0024) | `automated (route-continuum.svelte.spec.ts)` |
 
 **8.1 was `blocked` for most of 2026-08-22, and cleared on Dee's own walk.** The reason changed four times in a day, which is worth keeping because each change was real work rather than a re-reading.
 
@@ -92,6 +122,13 @@ The Billing screen is automated for an *Owner* (`billing.e2e.ts`); no spec reads
 | Step | Action | Expected result | Mark |
 | --- | --- | --- | --- |
 | 9.1 | Mark an Invoice paid after a bank transfer | No screen, no endpoint. Payments are written only by the Stripe webhook, so the normal case for a small practice cannot be recorded at all | `missing-feature (DW-G3)` [#271](https://github.com/markgoho/doula-cloud/issues/271) |
+| 9.B-screens | Count the screens from the stage's entry to its end | **Screens**: 2 (Hick's Law, Flow). The Invoice, then the form that records the Payment | `manual` |
+| 9.B-decisions | On each screen, count the decisions visible at once; record the largest | **Decisions**: 4 (Hick's Law, Miller's Law). The amount, the date it arrived, how it was paid, and the save | `manual` |
+| 9.B-memory | Note every later step that needs an earlier answer, and whether that answer is still on screen | **Memory**: yes (Working Memory). The Invoice's amount and reference stay on screen while the Payment is recorded | `manual` |
+| 9.B-time | Time each routine act on the stage's device, from the input to the result settled on screen | **Time**: 400 ms, 100 ms (Doherty Threshold) | `manual` |
+| 9.B-confirmation | Read the screen the stage ends on | **Confirmation**: yes (Peak-End Rule). The Invoice reads paid, says by what and when, and the book is closed | `manual` |
+| 9.B-cold | Walk the stage in a fresh browser profile, with nothing explained first | **Cold**: yes (Paradox of the Active User) | `manual` |
+| 9.B-320px | Sweep the stage's screens from 320px up | **320px**: yes (ADR-0024) | `automated (route-continuum.svelte.spec.ts)` |
 
 A live Stripe account would not fix this step. It is not the out-of-scope Stripe gap; the missing capability is manual Payment recording.
 
@@ -100,13 +137,16 @@ A live Stripe account would not fix this step. It is not the out-of-scope Stripe
 | Step | Action | Expected result | Mark |
 | --- | --- | --- | --- |
 | 10.1 | Open an Engagement and read both plan sections | Both render. `GET .../plans/{planType}` has no role check, and per [ADR-0006](../adr/0006-read-follows-the-role.md) an Admin reading both is **correct**, not a leak | `manual` |
+| 10.B-screens | Count the screens from the stage's entry to its end | **Screens**: 1 (Hick's Law, Flow) | `manual` |
+| 10.B-time | Time each routine act on the stage's device, from the input to the result settled on screen | **Time**: 400 ms, 100 ms (Doherty Threshold) | `manual` |
+| 10.B-320px | Sweep the stage's screens from 320px up | **320px**: yes (ADR-0024) | `automated (route-continuum.svelte.spec.ts)` |
 
 ## Marks
 
 | Mark | Steps |
 | --- | --- |
-| `automated` | 2 |
-| `manual` | 19 |
+| `automated` | 11 (9 of them [budget steps](README.md#budget-steps)) |
+| `manual` | 50 (31 of them [budget steps](README.md#budget-steps)) |
 | `blocked` | 0 (8.1 cleared on the walk — Connect completed) |
 | `missing-feature` | 3 ([RA-G4](https://github.com/markgoho/doula-cloud/issues/225), [DW-G3](https://github.com/markgoho/doula-cloud/issues/271), [DW-G5](https://github.com/markgoho/doula-cloud/issues/273)) |
 
@@ -115,6 +155,10 @@ Stages 8 and 9 sat either side of the `blocked` / `missing-feature` line, and th
 `admin-invite-role.e2e.ts` ([#965](https://github.com/markgoho/doula-cloud/issues/965)) reaches the app as an Admin who holds neither `owner` nor `doula`, invited and accepted through the real invite and accept screens. It drives 1.1 and 3.2, and asserts two things no step here names: her roster row reads `Admin` and nothing else, and the Owner-only invite send refuses her with `only a Practice Owner can do that`. Every other spec in the suite still runs as an Owner who signed up.
 
 ## Run log
+
+### 2026-10-02 — budget steps added ([#1683](https://github.com/markgoho/doula-cloud/issues/1683))
+
+A desk pass, not a walk. The journey map's stages 1, 3, 4, 5, 6, 7, 8, 9, 10 each gained a **Budget**, and each budget line is a step here, last in its stage's table: **40 budget steps**, 9 `automated`, 31 `manual`. No existing step is re-marked and no cell is rewritten. Every `automated` budget step is a 320px line the continuum sweep or `portal-320.e2e.ts` already asserts; every `manual` one is measured on the second walk ([#329](https://github.com/markgoho/doula-cloud/issues/329)), and none has been measured yet. The Marks summary above and [README.md](README.md)'s run-status row move with them.
 
 ### 2026-09-28 — the first Admin spec ([#965](https://github.com/markgoho/doula-cloud/issues/965))
 

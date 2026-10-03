@@ -18,6 +18,12 @@ None. Maya's journey starts at a cold `/signup`, so this plan builds its own fix
 | 1.2 | Fill all four and press **Create Practice** | `POST /api/staff/signup` succeeds; a Practice, a Staff row, and a membership holding `owner`, `admin` and `doula` are created together | `automated (signup-form.e2e.ts)` |
 | 1.3 | Land on `/practices/[practiceId]` | `Welcome to {practice name}`, with all seven tiles including the five owner-only ones | `automated (signup-form.e2e.ts)` |
 | 1.3-a | Read the credit balance on **Billing** | `Credit balance: 3`, one `signup_bonus` ledger row of `+3` | `automated (billing.e2e.ts)` |
+| 1.B-screens | Count the screens from the stage's entry to its end | **Screens**: 2 (Hick's Law, Flow). `/signup`, then the Practice landing | `manual` |
+| 1.B-decisions | On each screen, count the decisions visible at once; record the largest | **Decisions**: 5 (Hick's Law, Miller's Law). Four fields and **Create Practice** | `manual` |
+| 1.B-memory | Note every later step that needs an earlier answer, and whether that answer is still on screen | **Memory**: yes (Working Memory) | `manual` |
+| 1.B-confirmation | Read the screen the stage ends on | **Confirmation**: yes (Peak-End Rule) | `manual` |
+| 1.B-cold | Walk the stage in a fresh browser profile, with nothing explained first | **Cold**: yes (Paradox of the Active User) | `manual` |
+| 1.B-320px | Sweep the stage's screens from 320px up | **320px**: yes (ADR-0024) | `automated (route-continuum.svelte.spec.ts)` |
 
 #318 closed the seam this note used to describe: `signup-form.e2e.ts` drives the `/signup` screen itself, rather than provisioning through `POST /api/staff/signup` directly the way every other spec still does.
 
@@ -29,6 +35,11 @@ None. Maya's journey starts at a cold `/signup`, so this plan builds its own fix
 | 2.2 | Switch to the Birth Plan tab | A separate seeded field set; edits to one plan type do not appear on the other | `automated (plan-templates.e2e.ts)` |
 | 2.3 | Add a field and **Save** | `PUT /api/practices/{id}/plan-templates/{planType}` succeeds for an Owner; `Saved.` appears and survives a reload | `automated (plan-templates.e2e.ts)` |
 | 2.4 | Open `/practices/[practiceId]/settings/contract-template`, edit the prose, **Save**, reload | The seeded prose renders with `{{client_name}}` visible; the edit persists | `automated (contract-template.e2e.ts)` |
+| 2.B-screens | Count the screens from the stage's entry to its end | **Screens**: 2 (Hick's Law, Flow). The Plan Templates screen, then the Contract Template screen | `manual` |
+| 2.B-decisions | On each screen, count the decisions visible at once; record the largest | **Decisions**: 7 (Hick's Law, Miller's Law) | `manual` |
+| 2.B-confirmation | Read the screen the stage ends on | **Confirmation**: yes (Peak-End Rule) | `manual` |
+| 2.B-cold | Walk the stage in a fresh browser profile, with nothing explained first | **Cold**: yes (Paradox of the Active User) | `manual` |
+| 2.B-320px | Sweep the stage's screens from 320px up | **320px**: yes (ADR-0024) | `automated (route-continuum.svelte.spec.ts)` |
 
 ### Stage 3 — Add the first Client (moment of truth)
 
@@ -42,6 +53,13 @@ None. Maya's journey starts at a cold `/signup`, so this plan builds its own fix
 | 3.3 | Open the Engagement from the Clients list | The Engagement page shows Visits, Care Plan, Birth Plan, Contract, Invoices and Messages on one page | `automated (birth-plan.e2e.ts)` |
 | 3.4 | Add a second and third Client, start work with all three, then attempt a fourth Engagement | Clients are free and unlimited; the wall is on Engagements. The fourth **Start work with {name}** returns `402 no credits remaining, ask a practice owner or admin to buy more` — to Maya, who *is* the Owner — and the whole act rolls back, leaving no half-written Request behind. The refusal offers **Buy credits** inline, on the same screen and with what she typed still on it. Before the click, the preview does **not** stop at zero: on an empty balance an approver reads `Balance after -1`, which is what the product does as built ([#1235](https://github.com/markgoho/doula-cloud/issues/1235)) | `manual` |
 | 3.4-a | Follow that instruction and try to buy credits | Stripe Checkout opens for the chosen quantity; paying credits the ledger | `manual` |
+| 3.B-screens | Count the screens from the stage's entry to its end | **Screens**: 5 (Hick's Law, Flow). The Clients list, the intake question, the Client's hub, the Engagement Request, the Engagement | `manual` |
+| 3.B-decisions | On each screen, count the decisions visible at once; record the largest | **Decisions**: 3 (Hick's Law, Miller's Law). One intake question per page: the answer, **Continue**, **Save and come back later** | `manual` |
+| 3.B-memory | Note every later step that needs an earlier answer, and whether that answer is still on screen | **Memory**: yes (Working Memory). Each folder fact she has already entered is on screen when a later question needs it | `manual` |
+| 3.B-time | Time each routine act on the stage's device, from the input to the result settled on screen | **Time**: 400 ms, 100 ms (Doherty Threshold) | `manual` |
+| 3.B-confirmation | Read the screen the stage ends on | **Confirmation**: yes (Peak-End Rule). The save names the Client and says nothing was spent; the Engagement Request names the credit it spent and the balance after | `manual` |
+| 3.B-cold | Walk the stage in a fresh browser profile, with nothing explained first | **Cold**: yes (Paradox of the Active User) | `manual` |
+| 3.B-320px | Sweep the stage's screens from 320px up | **320px**: yes (ADR-0024) | `automated (route-continuum.svelte.spec.ts)` |
 
 **The doula's card statement says `DOULA.CLOU`.** Found on Dee's walk ([#236](https://github.com/markgoho/doula-cloud/issues/236)) while tracing the Client-facing `DOULA.CLOU` that `7261a59` fixed. This is the *other* half of that bug and it is **not** fixed: the credits Checkout session sets no descriptor (`billing/purchase.go`), so the charge falls back to the platform account's, and the platform's `statement_descriptor` is `DOULA.CLOUD` — 11 characters. Stripe caps a card prefix at 10 and truncates, giving `DOULA.CLOU`. The Client never sees it, because a connected account now carries its own `display_name`; the **doula** sees it every time she buys credits.
 
@@ -55,6 +73,12 @@ None. Maya's journey starts at a cold `/signup`, so this plan builds its own fix
 | 4.1 | Create and fill the Care Plan section, save | `PUT .../plans/care` persists; the values survive a reload | `manual` |
 | 4.2 | Press **Create Birth Plan**, fill a field, **Save Birth Plan** | The value persists, and the Client's portal Birth Plan view shows the same text | `automated (birth-plan.e2e.ts)` |
 | 4.2-a | Edit the Birth Plan **template** afterwards, then reopen the filled plan | The filled Plan Instance is unchanged — it snapshots the field definitions at creation | `manual` |
+| 4.B-screens | Count the screens from the stage's entry to its end | **Screens**: 1 (Hick's Law, Flow) | `manual` |
+| 4.B-decisions | On each screen, count the decisions visible at once; record the largest | **Decisions**: 7 (Hick's Law, Miller's Law). A plan with more fields than this is grouped into sections, so no group shows more than seven at once | `manual` |
+| 4.B-memory | Note every later step that needs an earlier answer, and whether that answer is still on screen | **Memory**: yes (Working Memory) | `manual` |
+| 4.B-time | Time each routine act on the stage's device, from the input to the result settled on screen | **Time**: 400 ms, 100 ms (Doherty Threshold) | `manual` |
+| 4.B-confirmation | Read the screen the stage ends on | **Confirmation**: yes (Peak-End Rule) | `manual` |
+| 4.B-320px | Sweep the stage's screens from 320px up | **320px**: yes (ADR-0024) | `automated (route-continuum.svelte.spec.ts)` |
 
 ### Stage 5 — Contract and signature
 
@@ -67,6 +91,11 @@ None. Maya's journey starts at a cold `/signup`, so this plan builds its own fix
 | 5.4-a | Sign the Contract from the portal | `POST /api/portal/engagements/{id}/contract/sign` renders the signed PDF, puts it in the object store, **then** sets status `signed` | `manual` |
 | 5.5 | Back as Maya, reload the Engagement | The Contract reads `signed`, without leaving the app, and a **Void Contract** action appears | `manual` |
 | 5.5-a | Look for a way to move the Engagement past `intake` | No update path exists anywhere; the status is fixed for the Engagement's whole life | `missing-feature (MO-G4)` [#253](https://github.com/markgoho/doula-cloud/issues/253) |
+| 5.B-screens | Count the screens from the stage's entry to its end | **Screens**: 2 (Hick's Law, Flow). Her own screens only; the Client signs on hers | `manual` |
+| 5.B-decisions | On each screen, count the decisions visible at once; record the largest | **Decisions**: 7 (Hick's Law, Miller's Law) | `manual` |
+| 5.B-memory | Note every later step that needs an earlier answer, and whether that answer is still on screen | **Memory**: yes (Working Memory) | `manual` |
+| 5.B-confirmation | Read the screen the stage ends on | **Confirmation**: yes (Peak-End Rule). Sending says what the Client receives next, and `signed` reaches her without leaving the app | `manual` |
+| 5.B-320px | Sweep the stage's screens from 320px up | **320px**: yes (ADR-0024) | `automated (route-continuum.svelte.spec.ts)` |
 
 ### Stage 6 — Schedule Visits
 
@@ -76,6 +105,11 @@ None. Maya's journey starts at a cold `/signup`, so this plan builds its own fix
 | 6.2 | Add a Visit | `POST .../visits` records a row of Staff name plus creation timestamp | `manual` |
 | 6.2-a | Set a date and time for a future prenatal | No date field, no endpoint field, no column. A Visit can be recorded, never scheduled | `missing-feature (MO-G1)` [#250](https://github.com/markgoho/doula-cloud/issues/250) |
 | 6.2-b | Write what was covered on the Visit | Nowhere to put it | `missing-feature (MO-G2)` [#251](https://github.com/markgoho/doula-cloud/issues/251) |
+| 6.B-screens | Count the screens from the stage's entry to its end | **Screens**: 1 (Hick's Law, Flow) | `manual` |
+| 6.B-decisions | On each screen, count the decisions visible at once; record the largest | **Decisions**: 4 (Hick's Law, Miller's Law). When the Visit is, which kind, what was covered, and the save | `manual` |
+| 6.B-time | Time each routine act on the stage's device, from the input to the result settled on screen | **Time**: 400 ms, 100 ms (Doherty Threshold) | `manual` |
+| 6.B-confirmation | Read the screen the stage ends on | **Confirmation**: yes (Peak-End Rule) | `manual` |
+| 6.B-320px | Sweep the stage's screens from 320px up | **320px**: yes (ADR-0024) | `automated (route-continuum.svelte.spec.ts)` |
 
 ### Stage 7 — Get paid
 
@@ -84,6 +118,11 @@ None. Maya's journey starts at a cold `/signup`, so this plan builds its own fix
 | 7.1 | Open `/practices/[practiceId]/settings/payments` and start Connect onboarding | `POST .../payments/connect` is owner-gated and passes for Maya, returns a real v2 Account Link, and the hosted flow completes to an active account (#247, walked 2026-08-22) | `manual` |
 | 7.2 | Raise an Invoice against the signed Contract | An Invoice is created on the connected account and is payable (#247, walked 2026-08-22) | `manual` |
 | 7.2-a | Compare the **Billing** and **Settings → Payments** screens | Two money screens, neither explaining that one buys credits from Doula Cloud and the other takes money from Clients | `manual` |
+| 7.B-screens | Count the screens from the stage's entry to its end | **Screens**: 3 (Hick's Law, Flow). **Settings → Payments**, back from Stripe, then the Engagement's Invoice; Stripe's own pages do not count | `manual` |
+| 7.B-decisions | On each screen, count the decisions visible at once; record the largest | **Decisions**: 3 (Hick's Law, Miller's Law) | `manual` |
+| 7.B-confirmation | Read the screen the stage ends on | **Confirmation**: yes (Peak-End Rule) | `manual` |
+| 7.B-cold | Walk the stage in a fresh browser profile, with nothing explained first | **Cold**: yes (Paradox of the Active User) | `manual` |
+| 7.B-320px | Sweep the stage's screens from 320px up | **320px**: yes (ADR-0024) | `automated (route-continuum.svelte.spec.ts)` |
 
 ### Stage 8 — Message the Client
 
@@ -92,13 +131,18 @@ None. Maya's journey starts at a cold `/signup`, so this plan builds its own fix
 | 8.1 | Send a message from the Engagement page | `POST .../messages` appends to the one Engagement thread; it cannot be edited or deleted | `manual` |
 | 8.2 | Reply from the portal and reload Maya's view | One continuous thread, both sides in order | `manual` |
 | 8.2-a | With the portal thread open, deliver a push event | The open tab refetches and renders the new message | `automated (push-notification.e2e.ts)` |
+| 8.B-screens | Count the screens from the stage's entry to its end | **Screens**: 1 (Hick's Law, Flow) | `manual` |
+| 8.B-decisions | On each screen, count the decisions visible at once; record the largest | **Decisions**: 2 (Hick's Law, Miller's Law) | `manual` |
+| 8.B-time | Time each routine act on the stage's device, from the input to the result settled on screen | **Time**: 400 ms, 100 ms (Doherty Threshold) | `manual` |
+| 8.B-confirmation | Read the screen the stage ends on | **Confirmation**: yes (Peak-End Rule) | `manual` |
+| 8.B-320px | Sweep the stage's screens from 320px up | **320px**: yes (ADR-0024) | `automated (route-continuum.svelte.spec.ts)` |
 
 ## Marks
 
 | Mark | Steps |
 | --- | --- |
-| `automated` | 13 |
-| `manual` | 20 |
+| `automated` | 21 (8 of them [budget steps](README.md#budget-steps)) |
+| `manual` | 56 (36 of them [budget steps](README.md#budget-steps)) |
 | `blocked` | 0 |
 | `missing-feature` | 3 ([MO-G1](https://github.com/markgoho/doula-cloud/issues/250), [MO-G2](https://github.com/markgoho/doula-cloud/issues/251), [MO-G4](https://github.com/markgoho/doula-cloud/issues/253)) |
 
@@ -107,6 +151,10 @@ MO-G3 ([#252](https://github.com/markgoho/doula-cloud/issues/252)) is closed and
 MO-G5 to MO-G9 are experience-layer or infrastructure findings; they are observed inside the steps above (3.4, 7.1, 7.2-a) rather than given steps of their own. MO-G9 ([#257](https://github.com/markgoho/doula-cloud/issues/257)) is closed as well — 3.4 still meets a wall, but a paid one she can walk through, not the dead end that gap named.
 
 ## Run log
+
+### 2026-10-02 — budget steps added ([#1683](https://github.com/markgoho/doula-cloud/issues/1683))
+
+A desk pass, not a walk. The journey map's stages 1, 2, 3, 4, 5, 6, 7, 8 each gained a **Budget**, and each budget line is a step here, last in its stage's table: **44 budget steps**, 8 `automated`, 36 `manual`. No existing step is re-marked and no cell is rewritten. Every `automated` budget step is a 320px line the continuum sweep or `portal-320.e2e.ts` already asserts; every `manual` one is measured on the second walk ([#329](https://github.com/markgoho/doula-cloud/issues/329)), and none has been measured yet. The Marks summary above and [README.md](README.md)'s run-status row move with them.
 
 ### 2026-08-22 — automated steps ([#209](https://github.com/markgoho/doula-cloud/issues/209))
 

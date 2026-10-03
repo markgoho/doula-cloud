@@ -23,6 +23,11 @@ Step 1.2 no longer fails: accepting a second Practice's invitation on an account
 | 1.2 | Sign in as herself and submit | `staffauth`'s accept path (`resolveStaff`, `accept.go:306`) finds her existing `staff` row by `identity_uid` and reuses it: **`200`**, holding the same `staffId` her other agency already gave her and Rooted Birth Collective's `practiceId` | `manual` |
 | 1.2-a | Check for a second membership | **It exists.** The same request that succeeded inserted a `practice_memberships` row for Rooted Birth Collective on her existing `staff` row (`accept.go:226`), rather than a second `staff` row — LV-G2 is closed, and `InviteHandler` no longer writes a pending `staff` row at invite time either ([LV-G8](https://github.com/markgoho/doula-cloud/issues/291) closed) | `manual` |
 | 1.3 | Record that she is a contractor, not an employee | `practice_memberships` is `(practice_id, staff_id, roles, created_at)` — no column holds it | `missing-feature (LV-G1)` [#225](https://github.com/markgoho/doula-cloud/issues/225) |
+| 1.B-screens | Count the screens from the stage's entry to its end | **Screens**: 2 (Hick's Law, Flow). The accept form, then the Practice it joins her to | `manual` |
+| 1.B-decisions | On each screen, count the decisions visible at once; record the largest | **Decisions**: 2 (Hick's Law, Miller's Law) | `manual` |
+| 1.B-confirmation | Read the screen the stage ends on | **Confirmation**: yes (Peak-End Rule). The screen names the agency she has joined and that her other one is untouched | `manual` |
+| 1.B-cold | Walk the stage in a fresh browser profile, with nothing explained first | **Cold**: yes (Paradox of the Active User) | `manual` |
+| 1.B-320px | Sweep the stage's screens from 320px up | **320px**: yes (ADR-0024) | `automated (route-continuum.svelte.spec.ts)` |
 
 ### Stage 2 — Sign in and choose the agency
 
@@ -36,6 +41,11 @@ Reachable once stage 1 is walked — step 1.2 is what gives her the second membe
 | 2.3 | Read the tiles | Owner tiles hidden; **Clients, Billing and Payments remain** — three, not two, because Payments sits outside the owner block ([RA-G9](https://github.com/markgoho/doula-cloud/issues/267)). Billing is the agency's own credit spending and Payments its Stripe state — neither is her business at all, and she is not even the employee they were already wrong for ([DW-G4](https://github.com/markgoho/doula-cloud/issues/272)) | `manual` |
 | 2.3-a | Open **Billing** | The agency's whole credit ledger — balance, every purchase and every consumption with its date. **Buy credits** renders `disabled` for a non-owner ([DW-G4](https://github.com/markgoho/doula-cloud/issues/272)) | `manual` |
 | 2.3-b | Open **Payments** | The agency's Stripe Connect status, with `Ask a Practice Owner to connect Stripe.` in place of the button ([RA-G9](https://github.com/markgoho/doula-cloud/issues/267)) | `manual` |
+| 2.B-screens | Count the screens from the stage's entry to its end | **Screens**: 2 (Hick's Law, Flow). `/login` with its Practice picker, then the Practice landing | `manual` |
+| 2.B-decisions | On each screen, count the decisions visible at once; record the largest | **Decisions**: 3 (Hick's Law, Miller's Law) | `manual` |
+| 2.B-memory | Note every later step that needs an earlier answer, and whether that answer is still on screen | **Memory**: yes (Working Memory). The picker says what she is at each Practice, so she need not recall which agency is which | `manual` |
+| 2.B-time | Time each routine act on the stage's device, from the input to the result settled on screen | **Time**: 400 ms, 100 ms (Doherty Threshold) | `manual` |
+| 2.B-320px | Sweep the stage's screens from 320px up | **320px**: yes (ADR-0024) | `automated (route-continuum.svelte.spec.ts)` |
 
 ### Stage 3 — The offer (moment of truth)
 
@@ -44,6 +54,13 @@ Reachable once stage 1 is walked — step 1.2 is what gives her the second membe
 | 3.1 | Receive the offer of the February Engagement | Nothing offers an Engagement to anybody. There is no Offer, and no attachment for one to lead to | `missing-feature (LV-G6)` [#225](https://github.com/markgoho/doula-cloud/issues/225) |
 | 3.2 | Read enough to take or refuse it — Client, dates, on-call terms, fee — while still an outsider | No read rule covers *offered, not yet accepted*; ADR-0006's table has four columns and none is hers | `missing-feature (LV-G7)` [#225](https://github.com/markgoho/doula-cloud/issues/225) |
 | 3.3 | Decline, and have Renata see the refusal | A decline is not recorded anywhere, so silence and "no" are the same thing to the Practice | `missing-feature (LV-G6)` [#225](https://github.com/markgoho/doula-cloud/issues/225) |
+| 3.B-screens | Count the screens from the stage's entry to its end | **Screens**: 1 (Hick's Law, Flow). The offer itself: Client, dates, on-call terms and fee on one screen | `manual` |
+| 3.B-decisions | On each screen, count the decisions visible at once; record the largest | **Decisions**: 2 (Hick's Law, Miller's Law). Accept or decline | `manual` |
+| 3.B-memory | Note every later step that needs an earlier answer, and whether that answer is still on screen | **Memory**: yes (Working Memory). Nothing from the conversation with Renata has to be recalled; the terms are on the screen she decides on | `manual` |
+| 3.B-time | Time each routine act on the stage's device, from the input to the result settled on screen | **Time**: 400 ms, 100 ms (Doherty Threshold) | `manual` |
+| 3.B-confirmation | Read the screen the stage ends on | **Confirmation**: yes (Peak-End Rule). Accepting says the Engagement is now hers and where to find it; declining says Renata has been told | `manual` |
+| 3.B-cold | Walk the stage in a fresh browser profile, with nothing explained first | **Cold**: yes (Paradox of the Active User) | `manual` |
+| 3.B-320px | Sweep the stage's screens from 320px up | **320px**: yes (ADR-0024) | `automated (route-continuum.svelte.spec.ts)` |
 
 Every step of the stage her whole relationship with the product is built on is a hole. Nothing here degrades to a manual walk-through: there is no screen to open.
 
@@ -55,6 +72,10 @@ Every step of the stage her whole relationship with the product is built on is a
 | 4.2 | Count the rows | **Every Client at Rooted Birth Collective.** For Priya this is a scope failure inside one team; here it is one business reading another's book ([LV-G5](https://github.com/markgoho/doula-cloud/issues/225), same root as [PR-G1](https://github.com/markgoho/doula-cloud/issues/225)) | `manual` |
 | 4.2-a | Pick hers out | Only by remembering the name from the offer — no column marks it ([RA-G4](https://github.com/markgoho/doula-cloud/issues/225)) | `manual` |
 | 4.1-a | Add a Client to the agency's book | **She is refused, by name.** `client.CreateHandler` turns away a contractor doula outright — *"a contractor doula does not create clients at a practice she contracts for -- work reaches her as an offer"* — and the `clients_insert` RLS policy refuses the same write independently, so the refusal does not rest on the handler remembering to ask. Nor is there money on the other side of it to spend: saving a Client is free now, and the Credit locks when an Engagement Request is approved (ADR-0017) ([LV-G9](https://github.com/markgoho/doula-cloud/issues/292) closed) | `manual` |
+| 4.B-screens | Count the screens from the stage's entry to its end | **Screens**: 1 (Hick's Law, Flow) | `manual` |
+| 4.B-memory | Note every later step that needs an earlier answer, and whether that answer is still on screen | **Memory**: yes (Working Memory). Her Engagement is marked as hers, so she need not remember the Client's name from the offer | `manual` |
+| 4.B-time | Time each routine act on the stage's device, from the input to the result settled on screen | **Time**: 400 ms, 100 ms (Doherty Threshold) | `manual` |
+| 4.B-320px | Sweep the stage's screens from 320px up | **320px**: yes (ADR-0024) | `automated (route-continuum.svelte.spec.ts)` |
 
 ### Stage 5 — Check the terms and the fee
 
@@ -64,6 +85,9 @@ Every step of the stage her whole relationship with the product is built on is a
 | 5.2 | Read the Contract section | **She does not get the money, and she reaches only her own work.** ADR-0008 is the split ADR-0006 could not make: a contractor doula reaches an Engagement she holds an open, granted attachment on and no other, and every read on the page runs through `CanAccessEngagement` (`api/internal/staffauth/access.go`). On the February Engagement she reads the prose, the merge fields and their values — but `priceForReader` strips the one reserved `price` key for a contractor, so an Owner, an Admin and an *employed* Doula read the figure resolved and she never does ([PR-G2](https://github.com/markgoho/doula-cloud/issues/277)) | `manual` |
 | 5.2-a | Price and send a Contract on a Client who is not hers | **She never reaches the Engagement.** `CanAccessEngagement` answers false for a contractor holding no granted attachment on it, and the callers translate that into the same "not found" an Engagement at another Practice gets, so she cannot tell an Engagement she is not on from one that does not exist. [PR-G8](https://github.com/markgoho/doula-cloud/issues/282) stands as an *inside* the Practice finding — a Contract write is still declared `AnyStaff` — but the escalation this step recorded, an outside business pricing another's Client, is gone | `manual` |
 | 5.3 | Find what *she* is owed | Nothing holds it. The Contract prices the Client's care, and her rate lives in the phone call | `missing-feature (LV-G3)` [#225](https://github.com/markgoho/doula-cloud/issues/225) |
+| 5.B-screens | Count the screens from the stage's entry to its end | **Screens**: 1 (Hick's Law, Flow) | `manual` |
+| 5.B-memory | Note every later step that needs an earlier answer, and whether that answer is still on screen | **Memory**: yes (Working Memory). The terms and fee she accepted at the offer are on the Engagement she reads now | `manual` |
+| 5.B-320px | Sweep the stage's screens from 320px up | **320px**: yes (ADR-0024) | `automated (route-continuum.svelte.spec.ts)` |
 
 ### Stage 6 — Do the work
 
@@ -74,12 +98,19 @@ Identical to Priya's stages 6–8 and marked there; walk [employed-doula.md](emp
 | 6.1 | Read the Birth Plan | As Priya 6.1–6.2, including no deep link and no handoff from her side ([PR-G5](https://github.com/markgoho/doula-cloud/issues/280)) | `manual` |
 | 6.2 | Log a Visit | As Priya 7.1, and the row is a record now: a scheduled date and time, a type and notes ([MO-G1](https://github.com/markgoho/doula-cloud/issues/250), [MO-G2](https://github.com/markgoho/doula-cloud/issues/251) and [PR-G6](https://github.com/markgoho/doula-cloud/issues/281) all closed). She logs it for herself, holding the Doula role; she may name nobody else, and she reaches this Engagement at all only through the granted attachment her acceptance of the Offer opened | `manual` |
 | 6.3 | Message the Client | As Priya 8.1–8.2 | `manual` |
+| 6.B-screens | Count the screens from the stage's entry to its end | **Screens**: 1 (Hick's Law, Flow) | `manual` |
+| 6.B-decisions | On each screen, count the decisions visible at once; record the largest | **Decisions**: 4 (Hick's Law, Miller's Law). When the Visit was, which kind, what was covered, and the save | `manual` |
+| 6.B-time | Time each routine act on the stage's device, from the input to the result settled on screen | **Time**: 400 ms, 100 ms (Doherty Threshold) | `manual` |
+| 6.B-confirmation | Read the screen the stage ends on | **Confirmation**: yes (Peak-End Rule) | `manual` |
+| 6.B-320px | Sweep the stage's screens from 320px up | **320px**: yes (ADR-0024) | `automated (route-continuum.svelte.spec.ts)` |
 
 ### Stage 7 — Get paid
 
 | Step | Action | Expected result | Mark |
 | --- | --- | --- | --- |
 | 7.1 | Point to what she was paid for the February birth | No product step exists. `invoices` rows are `(practice_id, contract_id, …)` — the Practice billing the Client. Nothing records a Practice owing a doula, so the two sides keep separate books | `missing-feature (LV-G3)` [#225](https://github.com/markgoho/doula-cloud/issues/225) |
+| 7.B-screens | Count the screens from the stage's entry to its end | **Screens**: 1 (Hick's Law, Flow). One screen says what she was paid for the February birth | `manual` |
+| 7.B-320px | Sweep the stage's screens from 320px up | **320px**: yes (ADR-0024) | `automated (route-continuum.svelte.spec.ts)` |
 
 ### Stage 8 — The job ends
 
@@ -87,18 +118,25 @@ Identical to Priya's stages 6–8 and marked there; walk [employed-doula.md](emp
 | --- | --- | --- | --- |
 | 8.1 | End the attachment when the job is finished | Nothing expresses it, and **removing her membership is not a lever the product has** — `api/main.go` mounts no route that deletes a membership or a `staff` row. The only control on the Staff screen is **End sessions everywhere**, which ends a sign-in and not a read. Her read never lapses | `missing-feature (LV-G4)` [#225](https://github.com/markgoho/doula-cloud/issues/225) |
 | 8.1-a | Re-run step 4.1 afterwards | She still reads the agency's Clients | `manual` |
+| 8.B-screens | Count the screens from the stage's entry to its end | **Screens**: 1 (Hick's Law, Flow) | `manual` |
+| 8.B-confirmation | Read the screen the stage ends on | **Confirmation**: yes (Peak-End Rule). The ended Engagement says it ended, and when, and is no longer in her list | `manual` |
+| 8.B-320px | Sweep the stage's screens from 320px up | **320px**: yes (ADR-0024) | `automated (route-continuum.svelte.spec.ts)` |
 
 ## Marks
 
 | Mark | Steps |
 | --- | --- |
-| `automated` | 1 |
-| `manual` | 18 (13 on the plan as drafted, plus 2.3-a, 2.3-b, 4.1-a and 5.2-a appended by the walk, plus 1.2-a re-marked 2026-09-20) |
+| `automated` | 9 (8 of them [budget steps](README.md#budget-steps)) |
+| `manual` | 44 (13 on the plan as drafted, plus 2.3-a, 2.3-b, 4.1-a and 5.2-a appended by the walk, plus 1.2-a re-marked 2026-09-20; 26 of them [budget steps](README.md#budget-steps)) |
 | `missing-feature` | 8 steps over 5 gaps ([LV-G1](https://github.com/markgoho/doula-cloud/issues/225), [LV-G3](https://github.com/markgoho/doula-cloud/issues/225), [LV-G4](https://github.com/markgoho/doula-cloud/issues/225), [LV-G6](https://github.com/markgoho/doula-cloud/issues/225), [LV-G7](https://github.com/markgoho/doula-cloud/issues/225)) |
 
 LV-G5 is observed at 4.2 rather than given a step of its own: the list opens, and what it shows is the finding.
 
 ## Run log
+
+### 2026-10-02 — budget steps added ([#1683](https://github.com/markgoho/doula-cloud/issues/1683))
+
+A desk pass, not a walk. The journey map's stages 1, 2, 3, 4, 5, 6, 7, 8 each gained a **Budget**, and each budget line is a step here, last in its stage's table: **34 budget steps**, 8 `automated`, 26 `manual`. No existing step is re-marked and no cell is rewritten. Every `automated` budget step is a 320px line the continuum sweep or `portal-320.e2e.ts` already asserts; every `manual` one is measured on the second walk ([#329](https://github.com/markgoho/doula-cloud/issues/329)), and none has been measured yet. The Marks summary above and [README.md](README.md)'s run-status row move with them.
 
 ### 2026-08-22 — automated steps ([#209](https://github.com/markgoho/doula-cloud/issues/209))
 

@@ -29,6 +29,13 @@ Renata is a domain expert. Her language and `CONTEXT.md` mostly agree, which is 
 
 **Thinking**: routine. **Pain points**: the landing screen offers her whole Practice's Stripe state to anyone who is a member at all (RA-G9), which she will not notice until she invites someone.
 
+**Budget**:
+
+* **Screens**: 2 (Hick's Law, Flow)
+* **Decisions**: 3 (Hick's Law, Miller's Law)
+* **Time**: 400 ms, 100 ms (Doherty Threshold)
+* **320px**: yes (ADR-0024)
+
 - **1.1** — `/login`, sign in (`POST /api/session`).
 - **1.2** — Choose Rooted Birth Collective from her memberships. **There is nothing to choose**: `decideLanding` redirects a person with one membership straight to their Practice (`app/src/lib/landing.ts:24-26`), and her own journey gives her only the one — a second membership is Lena Vasquez's journey alone.
 - **1.3** — Land on `/practices/[practiceId]`. Because she holds `owner`, the page shows the Invite, Staff, Plan Templates and Contract Template tiles, gated by `{#if roles.includes('owner')}`. **Payments is not in that block** (`app/src/routes/practices/[practiceId]/+page.svelte:76-81`): it renders for every member, including one holding no roles at all. See RA-G9.
@@ -36,6 +43,14 @@ Renata is a domain expert. Her language and `CONTEXT.md` mostly agree, which is 
 ### Stage 2 — Invite a new Doula
 
 **Thinking**: "She starts in two weeks. Get her set up." **Pain points**: no email is sent. The screen says so and prints a link that Renata must deliver herself, by text or by her own email client. Her new hire's first impression of the Practice's software is a pasted URL.
+
+**Budget**:
+
+* **Screens**: 1 (Hick's Law, Flow)
+* **Decisions**: 4 (Hick's Law, Miller's Law)
+* **Confirmation**: yes (Peak-End Rule)
+* **Cold**: yes (Paradox of the Active User)
+* **320px**: yes (ADR-0024)
 
 - **2.1** — Open `/practices/[practiceId]/invite`.
 - **2.2** — Enter the new Doula's name and email; press **Send invite** (`POST /api/practices/{id}/invitations`, owner-gated).
@@ -45,6 +60,15 @@ Renata is a domain expert. Her language and `CONTEXT.md` mostly agree, which is 
 ### Stage 3 — Set the new Doula's roles
 
 **Thinking**: "Now make her a doula, not an owner." **Pain points**: this stage cannot be walked in the product. The API exists — `PATCH /api/practices/{id}/staff/{staffId}/roles`, owner-gated — but the Staff screen has no role control. Its only row action is **End sessions everywhere**.
+
+**Budget**:
+
+* **Screens**: 1 (Hick's Law, Flow)
+* **Decisions**: 5 (Hick's Law, Miller's Law)
+* **Memory**: yes (Working Memory)
+* **Confirmation**: yes (Peak-End Rule)
+* **Cold**: yes (Paradox of the Active User)
+* **320px**: yes (ADR-0024)
 
 - **3.1** — Open `/practices/[practiceId]/staff` (owner-gated at `staffauth/staff.go:25`).
 - **3.2** — Read the Roles column, which now renders the team's words via `rolesLabel` — Dee appears as `Admin`, not a raw enum ([#262](https://github.com/markgoho/doula-cloud/issues/262), closed).
@@ -56,6 +80,13 @@ Until this is built, the whole roster is unbuildable through the UI, and every P
 
 **Thinking**: "Priya takes the two October clients." **Pain points**: an Engagement has no Doula. There is no field, no endpoint, and no screen. What she has in mind, Priya on those two Engagements, does not exist in the model.
 
+**Budget**:
+
+* **Screens**: 1 (Hick's Law, Flow)
+* **Decisions**: 2 (Hick's Law, Miller's Law)
+* **Confirmation**: yes (Peak-End Rule)
+* **320px**: yes (ADR-0024)
+
 - **4.1** — Open an Engagement.
 - **4.2** — Look for a control that puts a Doula on the Engagement. There is none.
 - **4.3** — The nearest available act is to add a Visit — but **it cannot name anyone**. `POST .../visits` takes no body and assigns the caller (`api/internal/visit/create.go:32,47`); handing the Visit to a colleague is a second act through the **Reassign to Staff id** free-text box, which wants a staff UUID no screen prints (RA-G10). It also requires the **Doula** role (`api/internal/visit/roles.go:40`), which an Owner holds only because signup grants all three. Assignment exists at Visit level only, and a Visit has no date, so this cannot express "Priya covers this birth".
@@ -64,11 +95,25 @@ Until this is built, the whole roster is unbuildable through the UI, and every P
 
 **Thinking**: "Priya is ill. Move her Thursday to Jo." **Pain points**: reassignment works, but only over the Visit-level assignment from Stage 4, so it moves a dateless record rather than a booking.
 
+**Budget**:
+
+* **Screens**: 1 (Hick's Law, Flow)
+* **Decisions**: 2 (Hick's Law, Miller's Law)
+* **Time**: 400 ms, 100 ms (Doherty Threshold)
+* **Confirmation**: yes (Peak-End Rule)
+* **320px**: yes (ADR-0024)
+
 - **5.1** — `PATCH /api/practices/{id}/engagements/{id}/visits/{visitId}` with a new `staffId`.
 
 ### Stage 6 — See the whole Practice
 
 **Thinking**: "Show me everyone." **Pain points**: the list is Practice-wide, which is what she needs — but it has two columns, Name and Status, and Status is `intake` for every row forever (MO-G4). Nothing about Contracts, Invoices, or who is covering whom.
+
+**Budget**:
+
+* **Screens**: 1 (Hick's Law, Flow)
+* **Time**: 400 ms, 100 ms (Doherty Threshold)
+* **320px**: yes (ADR-0024)
 
 - **6.1** — Open `/practices/[practiceId]/clients` (`GET /api/practices/{id}/clients`). The handler is explicitly Practice-scoped: "every Client with an Engagement at the current Practice, regardless of which Staff member created it". **This half of her requirement passes.**
 - **6.2** — Open each Engagement one at a time to learn its Contract and Invoice state. There is no roll-up.
@@ -77,6 +122,12 @@ Until this is built, the whole roster is unbuildable through the UI, and every P
 
 **Thinking**: "Which invoices are unpaid?" **Pain points**: Invoices exist only inside one Engagement's Contract. There is no Practice-wide invoice list and no unpaid view. The screen named **Billing** is about credits she buys from Doula Cloud, not money her Clients owe her.
 
+**Budget**:
+
+* **Screens**: 1 (Hick's Law, Flow)
+* **Time**: 400 ms, 100 ms (Doherty Threshold)
+* **320px**: yes (ADR-0024)
+
 - **7.1** — Open `/practices/[practiceId]/billing` and find a credit balance and ledger.
 - **7.2** — Look for unpaid Client invoices. Find none, at any level above a single Engagement.
 
@@ -84,12 +135,29 @@ Until this is built, the whole roster is unbuildable through the UI, and every P
 
 **Thinking**: "Who is already at a birth?" **Pain points**: no screen shows availability, on-call state, or who is where. Because Visits carry no dates (MO-G1), the data a coverage view would read does not exist. This is the highest-value gap in the whole practice-side set, and it came from the experience layer — a click-by-click map would never have surfaced it, because there is no click to record.
 
+**Budget**:
+
+* **Screens**: 2 (Hick's Law, Flow)
+* **Decisions**: 2 (Hick's Law, Miller's Law)
+* **Memory**: yes (Working Memory)
+* **Time**: 400 ms, 100 ms (Doherty Threshold)
+* **Confirmation**: yes (Peak-End Rule)
+* **Cold**: yes (Paradox of the Active User)
+* **320px**: yes (ADR-0024)
+
 - **8.1** — Sign in on a phone.
 - **8.2** — Look for who is free. There is nowhere to look.
 
 ### Stage 9 — Edit Plan Templates for the whole Practice
 
 **Thinking**: "Add the hospital-transfer question to every birth plan." **Pain points**: none identified.
+
+**Budget**:
+
+* **Screens**: 1 (Hick's Law, Flow)
+* **Decisions**: 7 (Hick's Law, Miller's Law)
+* **Confirmation**: yes (Peak-End Rule)
+* **320px**: yes (ADR-0024)
 
 - **9.1** — `/practices/[practiceId]/settings/plan-templates`, `PUT /api/practices/{id}/plan-templates/{planType}` (owner-gated).
 - **9.2** — Confirm an already-filled Plan Instance is unchanged. It snapshots the field definitions at creation (`00012_plan_instances.sql`), so this **passes**.

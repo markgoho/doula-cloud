@@ -36,6 +36,14 @@ Joining is not taking a job. She becomes a member of Rooted Birth Collective onc
 
 **Thinking**: "I already sign in to this thing for the other agency." **Pain points**: none from the account collision this stage was named for — that refusal is gone. `staffauth`'s accept path resolves her existing `staff` row by `identity_uid` (`resolveStaff`, `accept.go:306`) instead of inserting a second one, and inserts a `practice_memberships` row for Rooted Birth Collective carrying the roles Renata's invitation set (`accept.go:226`) — the person the schema's own comment always described, one who "can work at more than one Practice via separate `practice_memberships` rows" (`00002_practice_staff_tenancy.sql`, lines 16–18), is exactly who this route now creates. `InviteHandler` no longer writes a `staff` row or a membership at invite time either (`invite.go:54`), so a failed acceptance leaves nothing behind to sweep up (LV-G8, closed); and where one does need sweeping, a membership can now be removed outright, through `DELETE .../staff/{staffId}/membership`, which the roster's own **Remove from practice** control reaches. What remains: no email carries the invite link (RA-G1), so Renata still pastes a URL into a text.
 
+**Budget**:
+
+* **Screens**: 2 (Hick's Law, Flow)
+* **Decisions**: 2 (Hick's Law, Miller's Law)
+* **Confirmation**: yes (Peak-End Rule)
+* **Cold**: yes (Paradox of the Active User)
+* **320px**: yes (ADR-0024)
+
 - **1.1** — Open the invite link at `/accept-invite`.
 - **1.2** — Sign in as herself and submit (`POST /api/staff/accept-invite`). Expected: a **200**, holding the same `staffId` her other agency already gave her and Rooted Birth Collective's `practiceId` — the accept path found her existing row rather than colliding with it.
 - **1.3** — The new membership carries the roles Renata's invitation set, not the empty roles a pending row used to carry before she ever pressed accept.
@@ -43,6 +51,14 @@ Joining is not taking a job. She becomes a member of Rooted Birth Collective onc
 ### Stage 2 — Sign in and choose the agency
 
 **Thinking**: "Which one is this — Renata's or the other one?" **Pain points**: she is the only Persona who meets the Practice picker as a real decision rather than a formality, and she meets it every time. Nothing on it says what she is at each Practice. The walk confirmed the picker renders — it is the only place in the effort where it ever has, since every other Persona holds one membership.
+
+**Budget**:
+
+* **Screens**: 2 (Hick's Law, Flow)
+* **Decisions**: 3 (Hick's Law, Miller's Law)
+* **Memory**: yes (Working Memory)
+* **Time**: 400 ms, 100 ms (Doherty Threshold)
+* **320px**: yes (ADR-0024)
 
 - **2.1** — `/login` (`POST /api/session`).
 - **2.2** — Choose Rooted Birth Collective from the list.
@@ -54,6 +70,16 @@ Joining is not taking a job. She becomes a member of Rooted Birth Collective onc
 
 The tension is the design problem, and it is not resolvable by leaving it to the phone call: an offer must say enough to be taken or refused — Client, dates, on-call terms, fee — while she is still an outsider with no claim on any of it. If she has to ring Renata to find out what she is being offered, the offer screen is a notification and the decision never left the phone.
 
+**Budget**:
+
+* **Screens**: 1 (Hick's Law, Flow)
+* **Decisions**: 2 (Hick's Law, Miller's Law)
+* **Memory**: yes (Working Memory)
+* **Time**: 400 ms, 100 ms (Doherty Threshold)
+* **Confirmation**: yes (Peak-End Rule)
+* **Cold**: yes (Paradox of the Active User)
+* **320px**: yes (ADR-0024)
+
 - **3.1** — Receive the offer of the February Engagement.
 - **3.2** — Read enough to decide.
 - **3.3** — Accept, which is what attaches her — or decline, which must be recorded, so Renata can see the refusal and offer the work on.
@@ -62,12 +88,25 @@ The tension is the design problem, and it is not resolvable by leaving it to the
 
 **Thinking**: "Just the February one." **Pain points**: **she sees the whole agency.** `GET /api/practices/{id}/clients` is Practice-scoped by design and says so in the handler ("v1 has no restricted-visibility model"), and there is no column marking which Engagement is hers, because Engagements carry no Doula (RA-G4). For Priya this is a scope failure. For Lena it is a confidentiality failure between two businesses: an outside contractor reading the agency's entire client list.
 
+**Budget**:
+
+* **Screens**: 1 (Hick's Law, Flow)
+* **Memory**: yes (Working Memory)
+* **Time**: 400 ms, 100 ms (Doherty Threshold)
+* **320px**: yes (ADR-0024)
+
 - **4.1** — Open `/practices/[practiceId]/clients`.
 - **4.2** — Read every Client at Rooted Birth Collective, and pick hers out by remembering the name from the offer.
 
 ### Stage 5 — Check the terms and the fee
 
 **Thinking**: "Three prenatals, on call from the 8th, and the number we said." **Pain points**: the Contract read hands back prose, merge fields and values in one object with no role check (`contract.go:136`), so today she gets the money — by accident, on every Engagement in the Practice, not only on hers. [ADR-0006](../adr/0006-read-follows-the-role.md) says she *should* read the money on her own work and Priya should not, which means the Contract read must be able to return scope without money and money with it. That single missing split is **PR-G2**, minted on Priya's map; Lena is the other half of it and does not re-mint. What she cannot get at all is the part that is hers: the Contract is between the Practice and the Client, and it records the Client's fee, not Lena's. Her rate lives in the phone call.
+
+**Budget**:
+
+* **Screens**: 1 (Hick's Law, Flow)
+* **Memory**: yes (Working Memory)
+* **320px**: yes (ADR-0024)
 
 - **5.1** — Open `/practices/[practiceId]/engagements/[engagementId]`.
 - **5.2** — Read the Contract section (`GET .../contract`): prose, merge fields, values.
@@ -77,6 +116,14 @@ The tension is the design problem, and it is not resolvable by leaving it to the
 
 **Thinking**: "Same as any of my own Clients." **Pain points**: identical to Priya's stages 6–8, and filed there. The Birth Plan is a section partway down a long page with no deep link (PR-G5); a Visit is `(engagement_id, staff_id, created_at)`, so it carries no date, no type and no note (MO-G1, MO-G2, PR-G6). Nothing here is different for a contractor, which is itself worth recording: the care work is the half of her journey the product already treats correctly.
 
+**Budget**:
+
+* **Screens**: 1 (Hick's Law, Flow)
+* **Decisions**: 4 (Hick's Law, Miller's Law)
+* **Time**: 400 ms, 100 ms (Doherty Threshold)
+* **Confirmation**: yes (Peak-End Rule)
+* **320px**: yes (ADR-0024)
+
 - **6.1** — Read the Birth Plan (`GET .../plans/birth`).
 - **6.2** — Log Visits (`POST .../visits`).
 - **6.3** — Message the Client (`POST .../messages`).
@@ -85,11 +132,22 @@ The tension is the design problem, and it is not resolvable by leaving it to the
 
 **Thinking**: "Invoice Renata, and check it against what we said in November." **Pain points**: this stage has no product in it. `invoices` rows carry a `practice_id` and a `contract_id` (`00024_invoices.sql:16`) — the Practice billing the Client. There is no record anywhere of a Practice owing a doula, so the second half of her "done looks like" — *point to what she was paid* — is unanswerable, and the Practice's record and hers are guaranteed to be separate documents (LV-G3). Credits do not help: they are Doula Cloud's own billing, bought only by an Owner, and what a Credit even buys is unsettled in code (TB-G3).
 
+**Budget**:
+
+* **Screens**: 1 (Hick's Law, Flow)
+* **320px**: yes (ADR-0024)
+
 - **7.1** — No product step. She invoices Renata by email, from her own books.
 
 ### Stage 8 — The job ends
 
 **Thinking**: "That one's done. Next." **Pain points**: nothing expresses an attachment ending. Whatever eventually grants her a read of "the Engagements she is attached to" has no modeled way to stop granting it, so a contractor who worked one birth in February still reads that Client in December — including, once the money split exists, the money. Removing her membership entirely is the only conceivable lever, it is wrong — it erases her from the Visits she worked — and **the product does not have it**: `api/main.go` mounts no route that deletes a membership or a `staff` row. What an Owner can actually press is **End sessions everywhere**, which ends a sign-in and not a read (confirmed on the walk: `204`, and Lena signed straight back in and read the book). This is the mirror of RA-G4 rather than a restatement of it — RA-G4 is that attachment cannot be *made*; LV-G4 is that it cannot be *ended* (LV-G4).
+
+**Budget**:
+
+* **Screens**: 1 (Hick's Law, Flow)
+* **Confirmation**: yes (Peak-End Rule)
+* **320px**: yes (ADR-0024)
 
 - **8.1** — No product step.
 
