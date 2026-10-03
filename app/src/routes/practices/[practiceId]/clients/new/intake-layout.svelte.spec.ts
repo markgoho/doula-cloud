@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import { intakeDraft } from '#lib/intakeDraft.svelte.js';
 import Layout from './+layout.svelte';
+import NamePage from './name/+page.svelte';
 import { practiceId, seedIntake } from './intakeFixture.js';
 
 /*
@@ -82,6 +83,33 @@ describe('intake for everyone else', () => {
 			dateOfBirth: '1990-01-02',
 			phone: ''
 		});
+	});
+
+	/*
+	 * #1716: a name is never split on a space, since GOV.UK (ADR-0021)
+	 * says not to guess a name's structure. One word carries into Given
+	 * name; two or more carry into neither field. The name question is
+	 * mounted after the layout, so these read the fields she sees.
+	 */
+	it('carries a one-word name into Given name', async () => {
+		intakeDraft.clear();
+
+		await setup({ search: '?name=Yar' });
+		await render(NamePage);
+
+		await expect.element(testPage.getByLabelText('Given name')).toHaveValue('Yar');
+		await expect.element(testPage.getByLabelText('Family name (optional)')).toHaveValue('');
+	});
+
+	it('carries a two-word name into neither name field, and still carries the rest', async () => {
+		intakeDraft.clear();
+
+		await setup({ search: '?name=Yar%20Pell&email=yar%40example.com' });
+		await render(NamePage);
+
+		await expect.element(testPage.getByLabelText('Given name')).toHaveValue('');
+		await expect.element(testPage.getByLabelText('Family name (optional)')).toHaveValue('');
+		expect(intakeDraft.answers).toMatchObject({ givenName: '', familyName: '', email: 'yar@example.com' });
 	});
 
 	it('reads the screen that opened intake directly', async () => {

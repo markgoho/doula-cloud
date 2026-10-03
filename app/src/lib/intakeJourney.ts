@@ -190,6 +190,19 @@ export function intakeOrigin(search: Pick<URLSearchParams, 'get'>): IntakeOrigin
 }
 
 /**
+ * The given name a search's Name value carries onto the name question
+ * (#498), or undefined when it carries none. One word carries; a value
+ * with any white space inside it carries nothing, because a name is
+ * never split on a space -- GOV.UK, the reference under ADR-0021, says
+ * not to guess a name's structure (#1716). The person types it into the
+ * fields she means.
+ */
+export function carriedGivenName(value: string | null | undefined): string | undefined {
+	const name = value?.trim();
+	return name && !/\s/u.test(name) ? name : undefined;
+}
+
+/**
  * The two names every line about her is made from.
  */
 export interface ClientNames {
