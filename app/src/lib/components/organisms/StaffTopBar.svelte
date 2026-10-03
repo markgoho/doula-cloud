@@ -232,9 +232,10 @@
 		   width, and the name "Doula Cloud" wrapped onto two lines in the
 		   bar, at 1440px as at the floor. With the mark at its full width
 		   and the name on one line, the wide tree needs 911px at 908px on
-		   macOS. 57rem (912px) is the next 4px step, again with no margin
-		   added beyond it. */
-		@container staff-top-bar (min-width: 57rem) {
+		   macOS; on CI's Linux/Chromium it needed 916px at 912px. 57.5rem
+		   (920px) is the next step of the sweep's 4px resolution, measured
+		   in CI, again with no margin added beyond it. */
+		@container staff-top-bar (min-width: 57.5rem) {
 			.wide {
 				display: flex;
 			}
