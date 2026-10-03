@@ -163,11 +163,9 @@ const eraseEligibility: EraseEligibility = {
  * needs its own `respond`. A variant's `respond` replaces rather than
  * merges, so the session and detail answers below are restated with it.
  *
- * The unsettled-invoice branch, not the clear one: an Owner with nothing
- * outstanding gets one short destructive Button whose ConfirmDialog is
- * closed at rest and takes no box, while an Owner who is blocked reads a
- * sentence naming every unsettled invoice on the record. The blocked
- * branch is the one with something to measure.
+ * The unsettled-invoice branch: an Owner who is blocked reads a sentence
+ * naming every unsettled invoice on the record. The clear branch, with
+ * the control itself, is `asOwnerWhoMayErase` below.
  *
  * Not declared beside it: the ambient contractor's screen. `isContractor`
  * withholds "Start new work with <name>" and changes nothing else -- the
@@ -186,6 +184,23 @@ export const asOwner: RouteVariant = {
 	}
 };
 
+/*
+ * The Owner's screen with nothing left to settle (#1711): the erase
+ * control itself, which the blocked branch above never draws. It earns a
+ * sweep of its own because where it sits is a layout decision -- it is
+ * the one destructive control on the record, and it has to stay apart
+ * from the everyday links in the header at every width.
+ */
+export const asOwnerWhoMayErase: RouteVariant = {
+	name: 'The Client detail hub, as an Owner who may erase it',
+	props: { data: { isContractor: false, isOwner: true } },
+	respond: (path) => {
+		if (path.endsWith('/api/staff/session')) return jsonResponse({ staffId: 'staff-1' });
+		if (path.endsWith('/erasure')) return jsonResponse({ unsettledInvoices: [] } satisfies EraseEligibility);
+		return jsonResponse(detail);
+	}
+};
+
 export const fixture: RouteFixture = {
 	name: 'The Client detail hub, as an employee Doula',
 	component: Page,
@@ -197,5 +212,5 @@ export const fixture: RouteFixture = {
 		return jsonResponse(detail);
 	},
 	readyText: 'Persephone Ochieng-Whitfield',
-	variants: [asOwner]
+	variants: [asOwner, asOwnerWhoMayErase]
 };

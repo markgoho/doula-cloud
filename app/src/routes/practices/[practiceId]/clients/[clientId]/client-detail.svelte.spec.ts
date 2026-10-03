@@ -608,6 +608,16 @@ describe('erasing a Client (#691, ADR-0027)', () => {
 			.toBeVisible();
 	});
 
+	// #1711: the control sits apart from the header's everyday links, in a
+	// section of its own that a screen reader reaches by its heading.
+	it("puts Erase in a section of its own, apart from the record's everyday links", async () => {
+		await setup({ isOwner: true });
+
+		const section = testPage.getByRole('region', { name: `Erase ${fixture.readyText}'s data` });
+		await expect.element(section.getByRole('button', { name: "Erase this Client's data" })).toBeVisible();
+		await expect.element(section.getByRole('link')).not.toBeInTheDocument();
+	});
+
 	it('shows no erase control when the precheck itself refuses', async () => {
 		await setup({ isOwner: true, eligibilityStatus: 403 });
 
