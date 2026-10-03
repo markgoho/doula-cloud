@@ -16,7 +16,7 @@ Otherwise `/code-review` skips it with a one-line note.
 
 1. Read [The Laws of UX](../design/brief.md#the-laws-of-ux) and [the Voice section](../design/brief.md#voice) of the brief, and [`docs/design/govuk-alignment.md`](../design/govuk-alignment.md).
 2. From the diff, list every screen the change reaches: each changed route, and each route that renders a changed component.
-3. Start the app (`bun run dev` at the repo root, per `docs/testing.md`; `site/` runs on its own `vite dev`). Use a real Practice's data where a fixture exists.
+3. Start the app with `bun run dev` at the repo root, with `DOCKER_HOST` and `TESTCONTAINERS_RYUK_DISABLED=true` exported in the same shell (`docs/testing.md`). In a worktree every port shifts by `.port-offset` × 100 (`app/e2e/ports.ts`), so read the URL from the Vite log. Use a real Practice's data where a fixture exists.
 4. Drive every listed screen with playwriter, at **320px** wide and at **desktop width** (1280px). Do the task the screen exists for, to its end. Read the rendered page, not the diff.
 
 ## What it reports
@@ -29,8 +29,4 @@ For each screen:
 
 A departure that the ticket, an ADR or the GOV.UK table records a reason for is not a finding ([ADR-0021](../adr/0021-govuk-is-the-reference-for-service-patterns.md)). Name it and the place the reason is recorded, and move on.
 
-The report is **under 400 words**, the same limit as the other two axes. A finding names the screen, the width, and the law or the GOV.UK row. Skip what tooling already enforces: the copy specs, axe, the keyboard walk, and the continuum sweep of [ADR-0025](../adr/0025-layout-is-verified-across-the-continuum.md).
-
-## What it does not do
-
-It adds no rule: every obligation it checks is already in the brief or the GOV.UK table. It does not replace looking at the page while building.
+The report is **under 400 words**, the same limit as the other two axes. A finding names the screen, the width, and the law or the GOV.UK row. Skip what tooling already enforces: the copy specs, axe, the keyboard walk, and the continuum sweep of [ADR-0025](../adr/0025-layout-is-verified-across-the-continuum.md). It adds no rule: every obligation it checks is already in the brief or the GOV.UK table.
