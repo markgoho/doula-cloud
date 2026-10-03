@@ -557,7 +557,7 @@ jobs:
       #    the holder: a retry would die on /var/lib/apt/lists/lock, which
       #    DPkg::Lock::Timeout does not cover (run 37031423643, #1667);
       #  - a hit on "Cache Playwright OS packages" installs from the cached
-      #    .deb files with --no-download and asks no mirror (#1667);
+      #    .deb files with `dpkg --install` and asks no mirror (#1667);
       #  - the whole step stops after 540s (TOTAL_BUDGET).
       #
       # The job timeout holds the worst case of both install steps: 540s

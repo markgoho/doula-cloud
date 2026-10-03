@@ -49,6 +49,8 @@ function run(installCmd: string, extra: Record<string, string> = {}) {
       APT_BUSY_CMD: `test -e ${join(dir, 'lock')}`,
       DEB_CACHE_DIR: join(dir, 'deb-cache'),
       APT_ARCHIVES: join(dir, 'archives'),
+      // No spec may run the real `apt-get install --fix-broken`.
+      REPAIR_CMD: 'true',
       ...extra,
     },
   });
@@ -163,16 +165,34 @@ describe('install-playwright-deps.sh package cache', () => {
     expect(existsSync(mirror)).toBe(false);
   });
 
-  test('goes on to the mirror when the cached install fails', () => {
+  test('repairs dpkg, then goes on to the mirror, when the cached install fails', () => {
+    // A failed `dpkg --install` leaves packages half-configured, and the
+    // mirror install refuses that state, so the repair comes first.
     cacheHolds('libnss3.deb');
-    const mirror = join(dir, 'mirror-ran');
-    const { code, out } = run(`touch ${mirror}`, {
-      CACHED_INSTALL_CMD: 'exit 100',
+    const order = join(dir, 'order');
+    const { code, out } = run(`echo mirror >> ${order}`, {
+      CACHED_INSTALL_CMD: 'exit 1',
+      REPAIR_CMD: `echo repair >> ${order}`,
     });
     expect(code).toBe(0);
     expect(out).toContain(
-      'The cached install failed; installing from the mirror.'
+      'The cached install failed; repairing dpkg, then installing from the mirror.'
     );
+    expect(readFileSync(order, 'utf8').trim().split('\n')).toEqual([
+      'repair',
+      'mirror',
+    ]);
+  });
+
+  test('still tries the mirror when the repair fails', () => {
+    cacheHolds('libnss3.deb');
+    const mirror = join(dir, 'mirror-ran');
+    const { code, out } = run(`touch ${mirror}`, {
+      CACHED_INSTALL_CMD: 'exit 1',
+      REPAIR_CMD: 'exit 100',
+    });
+    expect(code).toBe(0);
+    expect(out).toContain('The dpkg repair failed');
     expect(existsSync(mirror)).toBe(true);
   });
 

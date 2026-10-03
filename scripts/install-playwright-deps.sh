@@ -44,10 +44,10 @@
 # mirror install downloads are copied to DEB_CACHE_DIR, which the calling
 # job keeps in the Actions cache under the Playwright version and the runner
 # image version (#1667). When that directory holds packages, the script
-# installs from them with `--no-download` and asks no mirror. The runner
-# image version is in the key because a cached package can stop matching
-# the base packages when the image changes. If the cached install fails,
-# the script logs it and goes on to the mirror.
+# installs them with `dpkg --install` and asks no mirror. The runner image
+# version is in the key because a cached package can stop matching the base
+# packages when the image changes. If the cached install fails, the script
+# repairs dpkg, logs it, and goes on to the mirror.
 #
 # The whole step is capped at TOTAL_BUDGET (540s), so the waits between
 # attempts cannot add up to more than that. The three calling jobs carry a
@@ -78,7 +78,16 @@ lock_files="${APT_LOCK_FILES:-/var/lib/dpkg/lock-frontend /var/lib/apt/lists/loc
 # apt-get leaves the packages it downloads. The spec points both at temp dirs.
 deb_cache_dir="${DEB_CACHE_DIR:-$HOME/.cache/playwright-debs}"
 apt_archives="${APT_ARCHIVES:-/var/cache/apt/archives}"
-cached_install_cmd="${CACHED_INSTALL_CMD:-$as_root apt-get install --yes --no-download --no-install-recommends $deb_cache_dir/*.deb}"
+# `dpkg --install`, not `apt-get install --no-download`: the runner image
+# has its own package lists, and apt prefers the repository copy of a version
+# they name over the local file, so `--no-download` refused the install
+# ("Unable to fetch some archives", PR #1677's rerun). dpkg reads no lists.
+# The set is the exact transaction a mirror install on this runner image
+# made, so its dependencies are met. dpkg checks them anyway, and leaves the
+# packages half-configured when one is missing; repair_cmd undoes that
+# before the mirror install, which would otherwise refuse the broken state.
+cached_install_cmd="${CACHED_INSTALL_CMD:-$as_root dpkg --install $deb_cache_dir/*.deb}"
+repair_cmd="${REPAIR_CMD:-$as_root apt-get install --fix-broken --yes}"
 
 # shellcheck disable=SC2086 # $as_root is "sudo" or empty on purpose
 printf '%s\n' \
@@ -142,8 +151,11 @@ if [ -e "${cached_debs[0]}" ]; then
   if "$timeout_cmd" "$attempt_timeout" bash -c "$cached_install_cmd"; then
     exit 0
   fi
-  echo "The cached install failed; installing from the mirror."
+  echo "The cached install failed; repairing dpkg, then installing from the mirror."
   # A timed-out cached install can leave a root dpkg running too.
+  wait_for_apt_idle || exit 1
+  "$timeout_cmd" "$attempt_timeout" bash -c "$repair_cmd" ||
+    echo "The dpkg repair failed; the mirror install may refuse the broken state."
   wait_for_apt_idle || exit 1
 fi
 
