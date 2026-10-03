@@ -80,7 +80,7 @@
 		     "renders an option for each entry in options" in
 		     RadioGroup.svelte.spec.ts -->
 		{#each options as option (option.value)}
-			<div>
+			<div class="choice">
 				<!--
 					A two-track grid, not cluster-l (#1596): cluster-l is
 					flex-wrap, and a flex row that cannot hold both items drops
@@ -147,6 +147,12 @@
 			color: var(--color-on-surface);
 		}
 
+		/* A fieldset inside a disabled one is disabled too, so the
+		   question dims with its options rather than reading as live. */
+		fieldset:disabled > legend {
+			opacity: var(--opacity-disabled);
+		}
+
 		/* The same weight and color LabeledField gives a refusal, so one
 		   error reads the same as the next whichever control it belongs to. */
 		.error {
@@ -156,17 +162,31 @@
 		}
 
 		/*
-		 * The control takes its own width and the label takes the rest,
-		 * wrapping inside its column. `minmax(0, 1fr)` and not `1fr`: a
-		 * bare `1fr` has an automatic minimum of the label's longest word,
-		 * which is what would push a long unbroken name past the edge.
-		 * The gap and the top alignment are what `cluster-l` gave this row
-		 * before, so a short label sits exactly where it did.
+		 * The control takes its own width and the label takes what it
+		 * needs of the rest, wrapping inside its column. The `0` minimum:
+		 * a track's automatic minimum is the label's longest word, which
+		 * is what would push a long unbroken name past the edge. The
+		 * `max-content` maximum, not `1fr` (#1518): the label is the click
+		 * target, and on a wide screen a `1fr` track made the empty space
+		 * far to the right of "No Doula yet" select it too. GOV.UK ends
+		 * the target where the text ends.
 		 */
+		.choice {
+			display: grid;
+			grid-template-columns: auto minmax(0, max-content);
+			/* Or the free space goes to the `auto` track, and the text
+			   is pushed to the far edge. */
+			justify-content: start;
+			column-gap: var(--space-4);
+		}
+
+		/* The label takes both tracks of its choice through a subgrid, so
+		   the hint below can sit in the second track, under the label's
+		   text, with no arithmetic copied from the circle's size (#1518). */
 		.option {
 			display: grid;
-			grid-template-columns: auto minmax(0, 1fr);
-			gap: var(--space-4);
+			grid-column: 1 / -1;
+			grid-template-columns: subgrid;
 			align-items: start;
 			cursor: pointer;
 		}
@@ -219,7 +239,7 @@
 		/* GOV.UK's hover: a soft halo, so the row under the pointer is
 		   plain without borrowing the focus ring's or the error's color. */
 		.option:hover input:not(:disabled) {
-			box-shadow: 0 0 0 var(--space-2) var(--color-surface-container-highest);
+			box-shadow: 0 0 0 var(--space-2) var(--color-outline-variant);
 		}
 
 		/* The same ring every other control draws (#452). */
@@ -229,7 +249,9 @@
 		}
 
 		/* A refused group: each unchosen ring in the error color, the way
-		   TextInput turns its border, beside the message above. */
+		   TextInput turns its border, beside the message above. A chosen
+		   one keeps its own color: the refusal belongs to the question,
+		   as GOV.UK marks the group, and a choice is usually its answer. */
 		.invalid input:not(:checked) {
 			border-color: var(--color-error);
 		}
@@ -242,7 +264,7 @@
 		 */
 		.option:has(input:disabled) {
 			cursor: not-allowed;
-			opacity: 0.6;
+			opacity: var(--opacity-disabled);
 		}
 
 		input:disabled {
@@ -262,14 +284,14 @@
 		}
 
 		/*
-		 * Quieter than the label it belongs to, and indented to the label's
-		 * own text so it reads as part of that option rather than as the
+		 * Quieter than the label it belongs to, and in the label's own
+		 * track so it reads as part of that option rather than as the
 		 * next one -- the same treatment `LabeledField` gives a hint, which
 		 * is the same job.
 		 */
 		.description {
+			grid-column: 2;
 			margin: var(--space-1) 0 0;
-			padding-inline-start: calc(var(--control-height) + var(--space-4));
 			color: var(--color-on-surface-muted);
 			font-size: var(--text-body-sm-size);
 		}

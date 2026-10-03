@@ -226,7 +226,7 @@
 
 		input:disabled {
 			cursor: not-allowed;
-			opacity: 0.6;
+			opacity: var(--opacity-disabled);
 		}
 
 		input:focus-visible {
@@ -276,7 +276,7 @@
 
 		.reveal-toggle:disabled {
 			cursor: not-allowed;
-			opacity: 0.6;
+			opacity: var(--opacity-disabled);
 		}
 	}
 </style>

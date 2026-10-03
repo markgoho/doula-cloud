@@ -204,6 +204,11 @@
 	--focus-ring-width: 2px;
 	--focus-ring-offset: 2px;
 
+	/* A control that cannot be used, dimmed. The same 0.6 sat as a raw
+	   number in six controls before RadioGroup would have made a seventh
+	   (#1518), so it is one decision now, not seven copies of one. */
+	--opacity-disabled: 0.6;
+
 	/* Motion. Enforcement (including prefers-reduced-motion) is #418. */
 	--motion-state: 120ms;
 	--motion-enter: 180ms;

@@ -79,7 +79,7 @@
 
 		input:disabled {
 			cursor: not-allowed;
-			opacity: 0.6;
+			opacity: var(--opacity-disabled);
 		}
 
 		input:focus-visible {

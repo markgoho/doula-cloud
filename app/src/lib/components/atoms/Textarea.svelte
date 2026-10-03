@@ -192,7 +192,7 @@
 
 		textarea:disabled {
 			cursor: not-allowed;
-			opacity: 0.6;
+			opacity: var(--opacity-disabled);
 		}
 
 		textarea:focus-visible {

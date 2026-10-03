@@ -57,7 +57,7 @@
 	<section>
 		<h2>Disabled</h2>
 		<p>No caller disables a radio. A disabled fieldset around a form still reaches one, and this is how it looks.</p>
-		<fieldset disabled class="bare">
+		<fieldset disabled class="plain-fieldset">
 			<RadioGroup legend="Are you creating an account?" options={modeOptions} value="signup" onChange={() => {}} />
 		</fieldset>
 	</section>
@@ -70,7 +70,7 @@
 
 <style>
 	@layer components {
-		.bare {
+		.plain-fieldset {
 			margin: 0;
 			padding: 0;
 			border: none;
