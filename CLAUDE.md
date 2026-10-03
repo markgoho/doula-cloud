@@ -36,7 +36,7 @@ One family is checked the other way round. British English doubles a final `l` b
 
 ### Git flow: worktree + PR, not a direct push to trunk
 
-Default to one worktree per unit of work, landed via a PR with squash auto-merge — not a direct push to `trunk`. See `docs/agents/worktree-flow.md` for the exact commands, what gets provisioned automatically, and the cleanup pruner. Rollout note: the local edit-block hook and the GitHub ruleset that make this a hard requirement are rolling out in stages — until both are confirmed active, treat this as the default to follow by choice, not yet as something that will refuse a direct trunk push.
+Default to one worktree per unit of work, landed via a PR with squash auto-merge — not a direct push to `trunk`. See `docs/agents/worktree-flow.md` for the exact commands, and its sibling `docs/agents/worktree-flow-reference.md` for what gets provisioned automatically, what enforces the flow, and the cleanup pruner. Rollout note: the local edit-block hook and the GitHub ruleset that make this a hard requirement are rolling out in stages — until both are confirmed active, treat this as the default to follow by choice, not yet as something that will refuse a direct trunk push.
 
 ### Issue tracker
 

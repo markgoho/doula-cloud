@@ -4,7 +4,7 @@ One worktree per unit of work, landed by a squash-merged PR, never a direct push
 
 ## The procedure
 
-1. **Enter.** `EnterWorktree` (a hook provisions `app/.env.local`, `node_modules` and a `.port-offset`). To resume a branch that already exists, see the reference's "Resuming an existing branch".
+1. **Enter.** `EnterWorktree` (a hook provisions `app/.env.local`, `node_modules` and a `.port-offset`). To resume a branch that already exists, see the reference's "Resuming an existing branch". Every edit to a tracked file happens in the worktree: hooks refuse an `Edit`, `Write` or Bash write to one in the main checkout (the reference's "Enforcement").
 2. **Name the branch** `<type>/<issue>-<description>`, e.g. `fix/510-labeled-field-inline-row`: `git branch -m fix/510-labeled-field-inline-row`.
 3. **Work and commit** with explicit pathspecs; the pre-commit gate runs. `TZ=UTC git commit -F <message file> -- <paths>`. Running specs and the local stack: [`docs/testing/walk-a-screen-locally.md`](../testing/walk-a-screen-locally.md).
 4. **Rebase and push.** `git fetch origin trunk`, then `git rebase origin/trunk`, then `git push -u origin HEAD`.

@@ -105,7 +105,7 @@ describe('testdb-reap hook (subprocess, fail-open behavior)', () => {
   /*
    * DOCKER_HOST unset used to end this hook's run before it started, and
    * that is exactly the environment a SessionStart hook inherits --
-   * docs/testing/api.md exports the variable by hand into the shell that
+   * docs/testing/api.md sets the variable by hand on the command that
    * runs the tests, never from a login profile, so the reaper had never
    * once run (38-hour-old containers, observed live). It must now reach
    * the engine anyway, through its default connection, and still fail

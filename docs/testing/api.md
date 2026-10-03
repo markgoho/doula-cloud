@@ -43,7 +43,7 @@ CI runs this against Docker (preinstalled on the runner, no setup needed). Local
 DOCKER_HOST="unix://<socket>" TESTCONTAINERS_RYUK_DISABLED=true go -C api test ./...
 ```
 
-Set both variables on the command, as above, rather than exporting them: `export` is refused inside a worktree-isolated session, and a `DOCKER_HOST` your shell profile already exports may name another engine's socket (Colima's, on the founder's machine) rather than Podman's.
+Why the variables go on the command rather than through `export`, and which socket value to use, is in [`walk-a-screen-locally.md`](walk-a-screen-locally.md), steps 1 and 2.
 
 Ryuk being disabled locally is why `testdb.Main` exists: without an explicit `container.Terminate` at process exit, a full local `go test ./...` would leave one Postgres container running per package that calls `testdb.New`. CI leaves Ryuk enabled as a backstop, but relies on `testdb.Main` too, since Ryuk only reaps containers after they're already orphaned.
 

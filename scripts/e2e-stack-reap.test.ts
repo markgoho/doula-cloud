@@ -656,7 +656,7 @@ describe('e2e-stack-reap hook (subprocess, fail-open behavior)', () => {
 
   /*
    * DOCKER_HOST unset is the ordinary case for a hook, not an exotic
-   * one: docs/testing/api.md has it exported by hand into the shell that
+   * one: docs/testing/api.md has it set by hand on the command that
    * runs the tests, never from a login profile, so a SessionStart hook
    * never inherits it. It must still reach the engine (container-engine
    * .ts drops `--url` rather than giving up) and must still fail open
