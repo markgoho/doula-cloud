@@ -44,7 +44,7 @@
 		{journey}
 		stepId={sectionStepId(index)}
 		question={{ as: 'legend', text: `${section.heading} (optional)` }}
-		hint="These are the questions this Practice asks. Every one of them can be left for later."
+		hint="These are the questions your Practice asks. Every one of them can be left for later."
 	>
 		{#snippet controls()}
 			<ClientFieldAnswers

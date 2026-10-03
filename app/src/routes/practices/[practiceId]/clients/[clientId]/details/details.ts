@@ -10,7 +10,7 @@ import { page } from '#lib/appState.svelte.js';
 import { clientDetails } from '#lib/clientDetailsFlow.svelte.js';
 import { ENGAGEMENT_PARAMETER } from '#lib/clientDetailsJourney.js';
 import { intakeFlow } from '#lib/intakeFlow.svelte.js';
-import { DETAILS_STEPS, intakeStepList } from '#lib/intakeJourney.js';
+import { DETAILS_STEPS, intakeStepList, knownAsFrom } from '#lib/intakeJourney.js';
 import type { QuestionJourney } from '../../questions/questionJourney.js';
 
 export function detailsBasePath(practiceId: string, clientId: string): string {
@@ -45,8 +45,7 @@ function currentIds(): { practiceId: string; clientId: string } {
  * name.
  */
 export function knownAs(): string {
-	const record = clientDetails.record;
-	return record?.preferredName.trim() || record?.givenName.trim() || 'the Client';
+	return knownAsFrom(clientDetails.record);
 }
 
 /**

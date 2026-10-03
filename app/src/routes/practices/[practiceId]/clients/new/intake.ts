@@ -16,7 +16,7 @@ import { errorsFromCause, type FormError } from '#lib/formErrors.js';
 import { dateFieldId } from '#lib/intakeDate.js';
 import { intakeDraft } from '#lib/intakeDraft.svelte.js';
 import { intakeFlow } from '#lib/intakeFlow.svelte.js';
-import { originQuery, type IntakeOrigin } from '#lib/intakeJourney.js';
+import { knownAsFrom, originQuery, type IntakeOrigin } from '#lib/intakeJourney.js';
 import { DATE_OF_BIRTH_GROUP, type QuestionJourney } from '../questions/questionJourney.js';
 
 /**
@@ -130,8 +130,7 @@ export function detailHref(practiceId: string, clientId: string): string {
  * for the name.
  */
 export function knownAs(): string {
-	const answers = intakeDraft.answers;
-	return answers.preferredName.trim() || answers.givenName.trim() || 'the Client';
+	return knownAsFrom(intakeDraft.answers);
 }
 
 /**

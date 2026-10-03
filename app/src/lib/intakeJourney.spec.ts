@@ -3,6 +3,7 @@ import type { Field } from './clientFieldTemplate.js';
 import {
 	DETAILS_STEPS,
 	intakeSections,
+	knownAsFrom,
 	intakeStepList,
 	journeySteps,
 	nextStepHref,
@@ -89,6 +90,17 @@ describe('intakeSections', () => {
 		);
 
 		expect(sections[0].fields.map((entry) => entry.id)).toEqual(['a', 'b']);
+	});
+});
+
+describe('knownAsFrom', () => {
+	it.each([
+		['her preferred name', { preferredName: ' Bex ', givenName: 'Rebecca' }, 'Bex'],
+		['her given name', { preferredName: '', givenName: 'Rebecca' }, 'Rebecca'],
+		['the Client before a name is given', { preferredName: '', givenName: '' }, 'the Client'],
+		['the Client before a record is read', undefined, 'the Client']
+	])('calls her %s', (_case, names, expected) => {
+		expect(knownAsFrom(names)).toBe(expected);
 	});
 });
 

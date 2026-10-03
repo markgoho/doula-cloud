@@ -189,6 +189,16 @@ export function intakeOrigin(search: Pick<URLSearchParams, 'get'>): IntakeOrigin
 	return INTAKE_ORIGINS.find((origin) => origin === value);
 }
 
+/**
+ * What the Client is called on a question page: #463's rule with no
+ * pronoun in it. Her preferred name if she has one, her given name
+ * otherwise, and the domain noun before either is known. Both journeys
+ * ask it, each of its own names (#1610).
+ */
+export function knownAsFrom(names: { preferredName: string; givenName: string } | undefined): string {
+	return names?.preferredName.trim() || names?.givenName.trim() || 'the Client';
+}
+
 /** Every step's own identity: the structural slugs, plus `section-0`,
  * `section-1` and so on for the Practice's own pages. */
 export type StepId = string;

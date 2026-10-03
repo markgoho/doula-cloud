@@ -22,9 +22,9 @@
 import type { ClientDetail } from '#lib/clientDetail.js';
 import { clientDetails } from '#lib/clientDetailsFlow.svelte.js';
 import { answersOnFile } from '#lib/clientDetailsJourney.js';
-import {  seedIntake } from '../../new/intakeFixture.js';
+import { seedIntake } from '../../new/intakeFixture.js';
 
-
+export { practiceId } from '../../new/intakeFixture.js';
 
 export const clientId = 'client-1';
 
@@ -68,4 +68,3 @@ export function seedDetails(): void {
 	clientDetails.draft.visitedSteps = ['date-of-birth', 'email', 'phone'];
 }
 
-export {practiceId} from '../../new/intakeFixture.js';
