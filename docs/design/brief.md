@@ -288,7 +288,7 @@ Three real tensions. Each is resolved here so no ticket has to relitigate it.
 - **Von Restorff and Selective Attention against the Aesthetic-Usability Effect.** Restraint makes the one accent memorable; a richer surface is perceived as more usable. **Restraint wins, and the aesthetic budget is spent on typography, rhythm and smoothness instead of on color** — which is exactly what [Where the character comes from](#where-the-character-comes-from) already says.
 - **Goal-Gradient and Zeigarnik against "nothing moves that the user did not cause".** Progress indicators and unfinished-work cues are motion and attention the user did not ask for. **The Motion rule holds:** progress is *shown*, never animated at somebody; an unfinished Engagement appears in a list, never as a badge that pulses or a banner that follows a person around.
 
-**Standing instruction.** These laws are a checklist for review, not a vocabulary to sprinkle through tickets. Cite one when it decides something. If a design has to break one, say which and why in the ticket — that is a legitimate outcome, and an undocumented one is not.
+**Standing instruction.** These laws are a checklist for review, not a vocabulary to sprinkle through tickets. The reviewer is the Experience axis of `/code-review` ([#1682](https://github.com/markgoho/doula-cloud/issues/1682)): when a change touches a screen, it drives the rendered page at 320px and at desktop width and checks it against these tables and the GOV.UK table, per [`docs/agents/experience-review.md`](../agents/experience-review.md). Cite a law when it decides something. If a design has to break one, say which and why in the ticket — that is a legitimate outcome, and an undocumented one is not.
 
 ## Adopting this in `site/`
 
