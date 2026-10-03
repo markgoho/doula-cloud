@@ -641,10 +641,26 @@ describe('erasing a Client (#691, ADR-0027)', () => {
 
 		const dialog = testPage.getByRole('dialog', { name: `Erase ${fixture.readyText}'s data` });
 		await expect.element(dialog).toBeVisible();
-		await expect.element(dialog.getByText(/identifying data/)).toBeVisible();
-		await expect.element(dialog.getByText(/financial and clinical record/)).toBeVisible();
-		await expect.element(dialog.getByText(/90 days/)).toBeVisible();
-		await expect.element(dialog.getByText(/never scrubbed/)).toBeVisible();
+		await expect.element(dialog.getByText(/erases .*'s name, email, phone, address and date of birth\./)).toBeVisible();
+		await expect.element(dialog.getByText(/stay in your Practice's financial and clinical record\./)).toBeVisible();
+		await expect.element(dialog.getByText(/until 90 days after its invoice\./)).toBeVisible();
+		await expect.element(dialog.getByText(/Plan Instance answers keep their words as written/)).toBeVisible();
+	});
+
+	// #1744: the warning is read aloud, so it carries no typed double
+	// hyphen and names Stripe once per sentence.
+	it('words the erase warning as short sentences a person would say aloud', async () => {
+		await setup({ isOwner: true });
+
+		await testPage.getByRole('button', { name: "Erase this Client's data" }).click();
+
+		const dialog = testPage.getByRole('dialog', { name: `Erase ${fixture.readyText}'s data` });
+		await expect.element(dialog).toBeVisible();
+		const text = dialog.element().textContent ?? '';
+		expect(text).not.toContain('--');
+		for (const sentence of text.split('. ')) {
+			expect(sentence.match(/Stripe/g)?.length ?? 0).toBeLessThanOrEqual(1);
+		}
 	});
 
 	it("blocks the confirmation while an invoice is unsettled, naming it instead of the endpoint's 409", async () => {
