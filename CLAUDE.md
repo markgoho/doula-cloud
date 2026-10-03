@@ -1,8 +1,8 @@
-This is a project called Doula Cloud. It includes a Svelte application (`app/`) and a SvelteKit static marketing site (`site/`, ADR-0051).
+This is a project called DoulaCloud, one word (ADR-0050). It includes a Svelte application (`app/`), a SvelteKit static marketing site (`site/`, ADR-0051), and `gcp-dashboard/`, a local-only SvelteKit tool that shows the GCP project's spend and usage and is never deployed (see its `README.md`).
 
 ## Status: pre-launch
 
-**Doula Cloud has not launched. It has no users, and no production data.** The target launch is **January 2027**.
+**DoulaCloud has not launched. It has no users, and no production data.** The target launch is **January 2027**.
 
 This changes how findings are handled:
 
@@ -53,6 +53,10 @@ Single-context — `CONTEXT.md` + `docs/adr/` at the repo root. See `docs/agents
 ### Literature
 
 A book is evidence, and only the founder's recorded decision turns it into a rule. Until a book's read-back is on trunk, nothing cites it; until a value ADR or an adopt-or-not ADR names it, no book is the reason for anything. See `docs/adr/0041-a-book-enters-the-repo-as-evidence-and-becomes-a-rule-only-through-a-decision.md` for the decision and `docs/agents/literature.md` for the book table, the read-back template, and the review.
+
+### Prototypes
+
+A throwaway UI prototype for the founder to review: where its route lives, the single-file hash build that makes it an artifact, and the gates it trips with their overrides. See `docs/agents/prototype.md`.
 
 ### Service patterns
 
