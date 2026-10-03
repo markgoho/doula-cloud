@@ -112,7 +112,7 @@ func TestWrap_RunsHandlerAgainAndRefreshesRowPastTTL(t *testing.T) {
 	// deliberately, since there is no other way to prove "refreshed" from
 	// outside. A 1-minute margin absorbs any host-vs-container clock skew
 	// a VM-backed engine (Podman/Docker Desktop on macOS) can produce; see
-	// "A due-time fixture must not compare two clocks" in docs/testing.md.
+	// "A due-time fixture must not compare two clocks" in docs/testing/api.md.
 	if time.Since(createdAt) > time.Minute {
 		t.Fatalf("created_at = %v, want refreshed to roughly now", createdAt)
 	}

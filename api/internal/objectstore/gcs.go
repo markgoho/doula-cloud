@@ -71,7 +71,7 @@ func (s *GCSStore) Get(ctx context.Context, path string) (io.ReadCloser, error) 
 //
 // #305: app/e2e/message-attachment.e2e.ts's "attachment object is
 // missing from the store" spec drives this against the local e2e stack's
-// fake-gcs-server (see docs/testing.md) and confirms it does return
+// fake-gcs-server (see docs/testing/e2e.md) and confirms it does return
 // storage.ErrObjectNotExist for a missing object -- but that is the
 // emulator, not real GCS. Whether real GCS agrees stays unverified: no
 // test anywhere in this repo reaches a real bucket. If the two ever

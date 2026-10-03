@@ -31,12 +31,19 @@
 //
 // What this does NOT exercise: the login form, the TOTP QR/secret screen,
 // or code entry -- those still need a real Identity Platform project (see
-// docs/testing.md's "Logging in as Staff locally" section) or the
+// docs/testing/e2e.md's "Logging in as Staff locally" section) or the
 // deployed app. Everything downstream of authentication -- every
 // Practice-scoped screen and API route -- runs for real.
+//
+// SEED_CLIENT=1 also gives the Practice one Client and one Engagement for
+// her, through the same seedClient/seedEngagement helpers the e2e specs
+// use, and prints their URLs -- the walk most screens past the Overview
+// need, which agents used to write a throwaway script for (#1679).
 import { request } from '@playwright/test';
 import { seedFoundingOwner } from '../e2e/staffSignup';
 import { signInEnrolled } from '../e2e/mfa';
+import { seedClient } from '../e2e/portalClient';
+import { seedEngagement } from '../e2e/stack';
 import { DEV_SERVER_ORIGIN } from '../e2e/ports';
 
 const practiceName = process.env.SEED_PRACTICE_NAME;
@@ -48,6 +55,18 @@ try {
 	const owner = await seedFoundingOwner(context, { practiceName, staffName, workState });
 	const headers = await signInEnrolled(context, owner.idToken, owner.localId);
 	const cookieValue = headers.Cookie.replace('__session=', '');
+	const practiceUrl = `${DEV_SERVER_ORIGIN}/practices/${owner.practiceId}`;
+	let walk = {};
+	if (process.env.SEED_CLIENT === '1') {
+		const clientId = await seedClient(context, owner.practiceId, headers, { givenName: 'Ada', familyName: 'Walker' });
+		const engagementId = seedEngagement(clientId, owner.practiceId);
+		walk = {
+			clientId,
+			clientUrl: `${practiceUrl}/clients/${clientId}`,
+			engagementId,
+			engagementUrl: `${practiceUrl}/engagements/${engagementId}`
+		};
+	}
 
 	console.log(
 		JSON.stringify(
@@ -55,10 +74,11 @@ try {
 				cookieName: '__session',
 				cookieValue,
 				origin: DEV_SERVER_ORIGIN,
-				practiceUrl: `${DEV_SERVER_ORIGIN}/practices/${owner.practiceId}`,
+				practiceUrl,
 				practiceId: owner.practiceId,
 				staffId: owner.staffId,
-				email: owner.email
+				email: owner.email,
+				...walk
 			},
 			undefined,
 			2

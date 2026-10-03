@@ -5,7 +5,7 @@
 # run is neither a pass nor a fail to the shell, but the exit code alone
 # can't say which, and every close-out that trusted it has reported a
 # cancellation as a pass. This happened repeatedly enough (see
-# docs/agents/worktree-flow.md's "What a green PR does not prove") that
+# docs/agents/worktree-flow-reference.md's "What a green PR does not prove") that
 # it's now enforced rather than left to be remembered: `gh run watch` is
 # refused outright, in favor of reading a run's `conclusion` field
 # directly.

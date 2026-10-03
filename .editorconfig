@@ -23,6 +23,6 @@ indent_style = tab
 # to (they were split against themselves, 7 of 29 files already matching).
 # Zero of app/'s files match the bare [*] block, so this tree gets an
 # override instead -- indent.usage.spec.ts (app/src/lib/) is the check
-# behind it. See docs/testing.md's "Formatting" section.
+# behind it. See docs/testing/gates.md's "Formatting" section.
 [app/**]
 indent_style = tab

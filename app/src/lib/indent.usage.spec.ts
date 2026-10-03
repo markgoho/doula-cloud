@@ -19,7 +19,7 @@ import { globFiles } from './globFiles';
  * several of those hand-aligned lines rather than finding a real
  * space-indented file; app/ has no Prettier of its own either (#1120
  * gave that to the two tooling trees only), so this narrow spec is the
- * gate instead. See docs/testing.md's "Formatting" section for the
+ * gate instead. See docs/testing/gates.md's "Formatting" section for the
  * decision.
  *
  * The one thing that legitimately starts a line with spaces today is a

@@ -74,10 +74,10 @@ Thumbs.db
 # #1212) -- written at provision; nothing removes a worktree while it is alive.
 .worktree-owner.json
 # golangci-lint's own results cache, scoped per worktree via GOLANGCI_LINT_CACHE
-# (docs/testing.md) so a pruned worktree's stale results can never leak into
+# (docs/testing/api.md) so a pruned worktree's stale results can never leak into
 # another worktree's `golangci-lint run` (#587).
 #
-# Both spellings, because the invocation docs/testing.md gives resolves to the
+# Both spellings, because the invocation docs/testing/api.md gives resolves to the
 # worktree root -- `git rev-parse --show-toplevel` answers the same path
 # whatever directory it is run from -- while only the `api/` one was listed
 # here. Following the documented command left an untracked directory behind in

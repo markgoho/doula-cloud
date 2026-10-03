@@ -7,7 +7,7 @@
 // `tee`, `sed -i`, `cp`/`mv`/`install`/`rsync`, `dd of=`). A command that
 // writes some other way -- an opaque pipeline, a script invoked by name, a
 // scripting-language one-liner, a compiled binary -- is not caught. That
-// gap is accepted on purpose; see docs/agents/worktree-flow.md's
+// gap is accepted on purpose; see docs/agents/worktree-flow-reference.md's
 // Enforcement section.
 //
 // Decision (#702): a target holding an unexpanded shell variable or command
@@ -24,7 +24,7 @@
 // incomplete-by-construction posture and costs nothing extra. What it gives
 // up: a caller that deliberately hides a tracked-checkout path behind a
 // variable to dodge the gate goes undetected -- accepted, the same as the
-// gaps above, because the GitHub trunk ruleset (docs/agents/worktree-flow.md)
+// gaps above, because the GitHub trunk ruleset (docs/agents/worktree-flow-reference.md)
 // is the real, unconditional boundary; this hook is a local nudge on top of
 // it, not a substitute for it.
 //

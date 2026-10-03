@@ -3,7 +3,7 @@ name: gcp-dashboard CI
 # gcp-dashboard/ is a personal, local-only tool -- never deployed anywhere
 # -- so this workflow only ever lints, typechecks, builds and tests it. It
 # stays out of ci.yml (and off the trunk ruleset's required-checks list,
-# per docs/agents/worktree-flow.md) the same way the Firebase preview
+# per docs/agents/worktree-flow-reference.md) the same way the Firebase preview
 # workflows do: a standalone workflow gated by its own `paths:` filter, so
 # it runs only when this directory actually changes.
 on:

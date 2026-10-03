@@ -28,7 +28,7 @@ func newTestWorker(sender mail.Sender) practicedeletion.Worker {
 // throughout this file -- rather than a bare time.Now(), which a VM-backed
 // container engine (Podman/Docker Desktop on macOS) can read as not yet
 // due. See "A due-time fixture must not compare two clocks" in
-// docs/testing.md.
+// docs/testing/api.md.
 func seedOutboxRow(t *testing.T, db *testdb.DB, practiceID, act string, nextAttemptAt time.Time) string {
 	t.Helper()
 	var id string

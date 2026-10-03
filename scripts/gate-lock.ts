@@ -9,12 +9,12 @@
 // browser mode, so the gate's `test:unit:coverage` step starts headless
 // Chromium and peaks at ~4.9 GB after #935 capped the browser pool.
 // Several Claude Code sessions work this repo at once (up to 9
-// worktrees, see docs/agents/worktree-flow.md), each free to commit
+// worktrees, see docs/agents/worktree-flow-reference.md), each free to commit
 // whenever it likes. Two of those gates fit on a 24 GB machine whose
 // non-repo residents already come to ~10.5 GB; three do not, and about
 // 3.5 GB of each gate is fixed cost that no worker count removes. So
 // capping one run cannot buy the third concurrent run -- only admission
-// control can. See docs/testing.md, "The memory this gate costs".
+// control can. See docs/testing/gates.md, "The memory this gate costs".
 //
 // The rule this is built around: a gate that wedges every commit is
 // worse than the memory pressure it prevents. Every path through the
@@ -64,7 +64,7 @@ const LOCK_DIR_NAME = 'pre-commit-gate.lock';
 const OWNER_FILE_NAME = 'owner.json';
 
 // Set this to any non-empty value to run the command with no lock at
-// all. Documented in docs/testing.md next to the memory section.
+// all. Documented in docs/testing/gates.md next to the memory section.
 const SKIP_ENV_VAR = 'SKIP_GATE_LOCK';
 
 // Test seam only: relocates the lock so a spec never touches the real

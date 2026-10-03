@@ -73,7 +73,7 @@ The line between `blocked` and `missing-feature` is **is a product decision miss
 
 ## Running
 
-- **Automated steps**: `bun run test:e2e` in `app/`. The stack — Postgres in compose, migrate, the BFF, and the Firebase Auth emulator — is started and stopped by `app/e2e/stack.ts`; see [docs/testing.md](../testing.md).
+- **Automated steps**: `bun run test:e2e` in `app/`. The stack — Postgres in compose, migrate, the BFF, and the Firebase Auth emulator — is started and stopped by `app/e2e/stack.ts`; see [docs/testing/e2e.md](../testing/e2e.md).
 - **Manual steps**: `bun run dev:full` in `app/`, walked in a browser as the Persona, on the device the journey names (Priya's stage 6 is a phone).
 
 ## Spec inventory

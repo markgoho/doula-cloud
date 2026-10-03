@@ -4,7 +4,7 @@
  *
  * The regression this pins down: testdb-reap.ts used to return early when
  * DOCKER_HOST was unset, on the reading that an unset variable meant "no
- * container engine here". docs/testing.md has DOCKER_HOST exported by
+ * container engine here". docs/testing/api.md has DOCKER_HOST exported by
  * hand into the shell that runs the tests, never from a login profile, so
  * a hook -- which inherits the login environment -- never saw it and the
  * reaper had never once run. Confirmed live: 38-hour-old

@@ -6,7 +6,7 @@ import { quotedStringsInSource, withoutComments } from './quotedCopy';
  * walk incidentally, against every real component and route -- but neither
  * happens to write a file with an unterminated block comment, or two
  * comment markers racing on one line, so those branches need a synthetic
- * case of their own to reach 100% (docs/testing.md).
+ * case of their own to reach 100% (docs/testing/gates.md).
  */
 describe('withoutComments', () => {
 	it('drops a line-comment line entirely', () => {

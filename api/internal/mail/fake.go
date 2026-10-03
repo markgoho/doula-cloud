@@ -6,7 +6,7 @@ import (
 )
 
 // FakeSender is the in-memory Sender tests inject instead of the real
-// Mailgun-backed one -- see docs/testing.md's "no real vendor reachable
+// Mailgun-backed one -- see docs/testing/api.md's "no real vendor reachable
 // from api/ tests" rule, mirroring push.FakePusher.
 type FakeSender struct {
 	mu   sync.Mutex

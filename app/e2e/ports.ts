@@ -16,7 +16,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 // Every port below shifts by PORT_OFFSET * PORT_STEP so two worktrees can
-// run the full stack at once (see docs/agents/worktree-flow.md). The
+// run the full stack at once (see docs/agents/worktree-flow-reference.md). The
 // offset comes from a `.port-offset` file at the worktree root, written by
 // the worktree provisioning hook; walking up from this file's own
 // directory finds it regardless of which script imports ports.ts. No file

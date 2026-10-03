@@ -2,7 +2,7 @@
  * `scripts/gate-lock.ts` -- the exclusive lock the pre-commit gate's
  * heavy step runs under, so that several concurrent sessions cannot all
  * start headless Chromium at once (#936). See that file's header and
- * docs/testing.md's "The memory this gate costs" section.
+ * docs/testing/gates.md's "The memory this gate costs" section.
  *
  * `inspectLock` and `isProcessAlive` are pure enough to import and test
  * directly. Everything that matters about the wrapper, though, is a

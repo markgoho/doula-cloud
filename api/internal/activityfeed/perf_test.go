@@ -42,7 +42,7 @@ func TestListPracticeActivityQuery_ComposesTheSharedActorJoin(t *testing.T) {
 
 // TestPracticeQueryPlanAtScale is not part of the coverage gate's normal
 // run -- it seeds several thousand rows, which is disproportionate to run
-// on every `go test ./...` (docs/testing.md's own Podman infra is shared
+// on every `go test ./...` (docs/testing/api.md's own Podman infra is shared
 // with other worktrees). Run it deliberately:
 //
 //	RUN_PERF_TEST=1 go test ./internal/activityfeed/... -run TestPracticeQueryPlanAtScale -v

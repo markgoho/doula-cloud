@@ -89,7 +89,7 @@ const BUILD_TIMEOUT_MS = 120_000;
 // `docker compose` and `podman compose` share the same v2 CLI syntax, so
 // this doubles as the binary to exec for the db-only compose stack
 // (compose.e2e.yaml) and for the `compose exec` calls below that run SQL
-// against it. Local dev defaults to Podman (see docs/testing.md); CI sets
+// against it. Local dev defaults to Podman (see docs/testing/e2e.md); CI sets
 // CONTAINER_ENGINE=docker, since GH-hosted runners ship Docker natively
 // with no rootless-socket setup and no docker-compose-as-external
 // -provider translation layer required.
@@ -633,7 +633,7 @@ async function readInviteTokenFromMailbox(
 // which does not reopen #1141's drain-and-read race: this function never
 // drains anything itself, and the "sends before it marks" invariant two
 // paragraphs up already means the mail read above is guaranteed present
-// by construction rather than by timing. See docs/testing.md's
+// by construction rather than by timing. See docs/testing/e2e.md's
 // "Confirming a flake fixed" section for the repeat-batch count that
 // proves it.
 export async function readStaffInviteToken(

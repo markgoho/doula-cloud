@@ -269,7 +269,7 @@ const proseFiles = [...documentFiles, ...rootProseFiles].toSorted((a, b) => a.lo
 
 // Read and swept once, at module scope, rather than inside each `it.each`
 // case -- the same reason `spelling.usage.spec.ts` and `layout.usage.
-// spec.ts` do theirs (#1211, docs/testing.md's "whole-tree scan" note): a
+// spec.ts` do theirs (#1211, docs/testing/app-unit.md's "whole-tree scan" note): a
 // per-file read charged against each generated test's own 5s
 // `testTimeout` is fine quiet, but a scan repeated this many times is the
 // shape that timed out under the full suite's contention for disk and CPU

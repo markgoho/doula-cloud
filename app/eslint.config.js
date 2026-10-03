@@ -133,7 +133,7 @@ export default defineConfig(
 		}
 	},
 	{
-		// #1232: app/ is single-quoted (see docs/testing.md's "Formatting"
+		// #1232: app/ is single-quoted (see docs/testing/gates.md's "Formatting"
 		// section for the decision and why indentation is gated by
 		// indent.usage.spec.ts instead of an ESLint rule). Icon/generated/
 		// is machine-written by scripts/sync-icons.ts from raw SVG markup,

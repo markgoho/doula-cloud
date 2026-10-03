@@ -4,7 +4,7 @@
 // work land. Ported from cx-platform-ui's cx-platform-pre-tool-use.ts.
 //
 // Registered LAST, and only with explicit go-ahead -- see
-// docs/agents/worktree-flow.md. Until it is registered, this file has no
+// docs/agents/worktree-flow-reference.md. Until it is registered, this file has no
 // effect.
 import path from 'node:path';
 import { isTrackedInMainCheckout, readStdin } from './tracked-path.ts';

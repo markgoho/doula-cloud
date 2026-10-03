@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 // SessionStart hook: reaps the podman-compose e2e stack, and the
 // host-process pidfiles beside it, that a killed worktree session leaves
-// running. See docs/testing.md's "Reaping orphaned e2e stacks" section
+// running. See docs/testing/e2e.md's "Reaping orphaned e2e stacks" section
 // for the full story; the short version is below.
 //
 // app/e2e/stack.ts brings up app/compose.e2e.yaml under a per-worktree

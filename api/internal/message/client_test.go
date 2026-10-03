@@ -26,7 +26,7 @@ import (
 // Client-portal side of this package, behind clientauth.Middleware,
 // backed by a fresh in-memory ObjectStore and a fresh in-memory Pusher --
 // no real GCS bucket or VAPID/push service reachable from api/ tests, per
-// docs/testing.md.
+// docs/testing/api.md.
 func newPortalServer(t *testing.T, db *testdb.DB, uid string) (srv *httptest.Server, session string) {
 	t.Helper()
 	return newPortalServerWithPusher(t, db, uid, push.NewFakePusher())

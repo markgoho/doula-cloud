@@ -316,7 +316,7 @@ export function quiescence(sample: () => number): () => boolean {
  * which is the one shape a guard must not have. Two macrotask turns is
  * where a handler that was going to run has run.
  *
- * Turns, not a duration -- `docs/testing.md`'s "a read count, never a
+ * Turns, not a duration -- `docs/testing/app-unit.md`'s "a read count, never a
  * millisecond budget", and the same reason `awaitSettled` counts them: a
  * sleep long enough to be safe is slow on every subject that did not need
  * it and still wrong on the one that did.
