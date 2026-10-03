@@ -80,6 +80,13 @@
 	// RecordDetail's template is actually showing.
 	const name = $derived(detail ? displayName(detail) : '');
 
+	// The record's last section, and the one guard `eraseSection` relies on
+	// (#1711): Owner-only, absent until the eligibility read answers, and
+	// absent on a record already erased.
+	const eraseSections = $derived(
+		isOwner && eligibility && !detail?.erasedAt ? [{ heading: `Erase ${name}'s data`, content: eraseSection }] : []
+	);
+
 	function editHref(): string {
 		return `/practices/${page.params.practiceId}/clients/${page.params.clientId}/edit`;
 	}
@@ -528,7 +535,8 @@
 	<!--
 		#691: an unsettled invoice blocks the confirmation from ever
 		opening, named the same way EraseHandler's own 409 would have -- so
-		an Owner never reaches Erase only to see that 409 raw.
+		an Owner never reaches Erase only to see that 409 raw. Rendered only
+		through `eraseSections`, which holds the guard on `eligibility`.
 	-->
 	{#if eligibility!.unsettledInvoices.length > 0}
 		<Notice variant="info" message={unsettledInvoicesMessage(eligibility!.unsettledInvoices)} />
@@ -575,7 +583,7 @@
 		{ heading: 'Practice-defined fields', content: practiceDefinedFieldsSection },
 		{ heading: 'Engagements', content: engagementsSection },
 		{ heading: 'History', content: historySection },
-		...(isOwner && eligibility && !detail?.erasedAt ? [{ heading: `Erase ${name}'s data`, content: eraseSection }] : [])
+		...eraseSections
 	]}
 	loading={detail || error ? undefined : 'Loading the Client'}
 	loadError={error || undefined}
