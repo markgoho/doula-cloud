@@ -168,9 +168,10 @@ test('A solo Owner who is a contractor Doula is named on the Start work form, an
 	await page.getByRole('button', { name: 'Start work with Ines Duarte' }).click();
 	const writtenResponse = await written;
 	const { engagementId: startedEngagementId } = await writtenResponse.json();
-	await expect(page).toHaveURL(new RegExp(`/practices/${practiceId}/clients/${secondClientId}$`));
-
-	await page.goto(`/practices/${practiceId}/engagements/${startedEngagementId}`);
+	// #1611: an approved start lands on the Engagement it started.
+	await expect(page).toHaveURL(
+		new RegExp(`/practices/${practiceId}/engagements/${startedEngagementId}[?]started=true$`)
+	);
 	await expect(page.getByText('Put on this Engagement as the Doula: Jamie Owner').first()).toBeVisible();
 	await expect(page.getByText('No Doula yet', { exact: true })).toHaveCount(0);
 });

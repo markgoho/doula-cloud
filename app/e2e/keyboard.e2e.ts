@@ -255,15 +255,17 @@ test('A doula edits a Client and starts new work, with no pointer at any step', 
 	await expect(page.getByRole('radio', { name: 'Postpartum', exact: true })).toBeChecked();
 
 	// An Owner holds approval authority, so her ask and its approval
-	// collapse into one act -- the button says so, and the walk ends back
-	// on the hub with a credit spent.
+	// collapse into one act -- the button says so, and the walk ends on
+	// the Engagement it started, with a credit spent (#1611). The status
+	// message there takes focus, so a keyboard user starts from it.
 	await tabTo(
 		page,
 		page.getByRole('button', { name: 'Start work with Jane Client' }),
 		'the submit button on the Engagement Request form'
 	);
 	await page.keyboard.press('Enter');
-	await expect(page).toHaveURL(new RegExp(`${hubURL}$`));
+	await expect(page).toHaveURL(new RegExp(`/practices/${practiceId}/engagements/[^/?]+[?]started=true$`));
+	await expect(page.getByText('Work with Jane started.')).toBeFocused();
 });
 
 /*
