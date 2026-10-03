@@ -90,6 +90,19 @@ cluster-l {
 	justify-content: flex-start;
 	align-items: flex-start;
 }
+/*
+ * `align` is also an old HTML presentational attribute, and Chromium maps
+ * `left`, `center`, `right`, `justify` and `middle` to `text-align` on the
+ * element that carries it -- a custom element included (#1738). Every
+ * child inherited it, so a wrapped link's second line was centered under
+ * its first. The attribute's job here is `align-items` only; `inherit`
+ * gives the children whatever text alignment the cluster's own parent
+ * has, exactly as if the attribute were absent. A presentational hint
+ * sits below every author layer, so this rule wins without specificity.
+ */
+cluster-l[align] {
+	text-align: inherit;
+}
 
 /* Sidebar */
 sidebar-l {

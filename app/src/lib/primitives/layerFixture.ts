@@ -1,8 +1,8 @@
 /*
  * Shared by the primitives' render specs (`stack.spec.ts`,
- * `cover.spec.ts`): a component's own root-element reset, written in the
- * layer a component's scoped `<style>` compiles into, and the cleanup for
- * everything a test mounts. `mountForTest` registers an element for
+ * `cover.spec.ts`, `cluster.spec.ts`): a component's own root-element
+ * reset, written in the layer a component's scoped `<style>` compiles
+ * into, and the cleanup for everything a test mounts. `mountForTest` registers an element for
  * removal; `removeMounted` runs in each spec's `afterEach`.
  */
 
