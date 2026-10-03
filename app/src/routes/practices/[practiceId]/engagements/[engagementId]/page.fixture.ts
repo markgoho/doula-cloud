@@ -40,10 +40,25 @@ import type { Contract } from '#lib/contract.js';
 import { jsonResponse } from '#lib/testResponse.js';
 import type { EngagementOnCall } from '#lib/onCall.js';
 import type { RouteFixture, RouteVariant } from '../../../../routeFixture.js';
+import { detail as clientDetail } from '../../clients/[clientId]/page.fixture.js';
 import type { RouteParams as RouteParameters } from './$types';
 import Page from './+page.svelte';
 
 const clientName = 'Anne-Marie Ochieng-Whitfield';
+
+/*
+ * Her record (#1610), read only to word the link to her details journey.
+ * The Client detail hub's own record, renamed to the Client this
+ * Engagement is for and with no phone number on file, so the link reads
+ * "Add", the longer of its two wordings.
+ */
+const clientRecord = {
+	...clientDetail,
+	id: 'client-1',
+	givenName: 'Anne-Marie',
+	familyName: 'Ochieng-Whitfield',
+	phone: ''
+};
 
 /*
  * A roster the size of the pilot's own agency -- fourteen Doulas, plus a
@@ -399,6 +414,7 @@ export const fixture: RouteFixture<RouteParameters> = {
 	props: { data: { ...detail, session } },
 	respond: (path) => {
 		if (/\/engagements\/engagement-1$/.test(path)) return jsonResponse(detail);
+		if (/\/clients\/client-1$/.test(path)) return jsonResponse(clientRecord);
 		if (path.endsWith('/visit-assignees')) return jsonResponse({ items: visitAssignees });
 		// #1093's panel: a live window with a primary and a narrowed
 		// backup, one gap nobody is covering and one somebody is. Both

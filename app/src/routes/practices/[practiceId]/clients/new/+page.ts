@@ -27,7 +27,7 @@ import { intakeDraft } from '#lib/intakeDraft.svelte.js';
 import type { PageLoad } from './$types';
 
 export const load: PageLoad = ({ params, url }) => {
-	intakeDraft.practiceId = params.practiceId;
+	intakeDraft.scope = params.practiceId;
 	intakeDraft.clear();
 	redirect(
 		307,

@@ -142,6 +142,12 @@ export const STRUCTURAL_STEPS: StructuralStep[] = [
 	}
 ];
 
+/** The structural steps a Client's details journey asks (#1610): every
+ * one but the name, which intake asked and the Edit form corrects. */
+export const DETAILS_STEPS: StructuralStep[] = STRUCTURAL_STEPS.filter(
+	(step) => step.slug !== 'name'
+);
+
 /** Every structural column a reader types, flat -- what `proposedChanges.ts`
  * walks to say what a save to an existing Client would change. */
 export const STRUCTURAL_QUESTIONS: StructuralQuestion[] = STRUCTURAL_STEPS.flatMap(
@@ -210,8 +216,11 @@ export function sectionStepId(index: number): StepId {
 /** The whole journey as identities, before any reader has been anywhere
  * -- the list the rail, the Change links and the Continue button all
  * index into. */
-export function intakeStepList(sections: IntakeSection[]): IntakeStep[] {
-	const structural = STRUCTURAL_STEPS.map((step) => ({
+export function intakeStepList(
+	sections: IntakeSection[],
+	structuralSteps: readonly StructuralStep[] = STRUCTURAL_STEPS
+): IntakeStep[] {
+	const structural = structuralSteps.map((step) => ({
 		id: step.slug,
 		label: step.label,
 		slug: step.slug
@@ -254,16 +263,15 @@ export function nextStepHref(steps: IntakeStep[], basePath: string, currentId: S
 	return next ? `${basePath}/${next.slug}` : `${basePath}/check`;
 }
 
-/** Where the back link goes: the previous step, or the search that
- * fronts intake once there is no previous one (ADR-0017 makes search
- * the only door in). */
+/** Where the back link goes: the previous step, or the screen the
+ * journey was opened from once there is no previous one. */
 export function previousStepHref(
 	steps: IntakeStep[],
 	basePath: string,
 	currentId: StepId,
-	searchHref: string
+	exitHref: string
 ): string {
 	const index = steps.findIndex((step) => step.id === currentId);
-	if (index <= 0) return searchHref;
+	if (index <= 0) return exitHref;
 	return `${basePath}/${steps[index - 1]!.slug}`;
 }

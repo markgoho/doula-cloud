@@ -1011,6 +1011,42 @@ describe("the Birth Plan section's link to its own page (#280)", () => {
 	});
 });
 
+describe("the link to the Client's details journey (#1610)", () => {
+	const clientPath = `/api/practices/${fixture.params.practiceId}/clients/${fixtureDetail.clientId}`;
+
+	it('offers to add her details, returning here', async () => {
+		await renderWithFixtureResponder();
+
+		await expect
+			.element(testPage.getByRole('link', { name: `Add ${fixtureDetail.clientName}'s details` }))
+			.toHaveAttribute(
+				'href',
+				`/practices/${fixture.params.practiceId}/clients/${fixtureDetail.clientId}/details?engagement=${fixture.params.engagementId}`
+			);
+	});
+
+	it('offers none for an erased record', async () => {
+		await renderWithFixtureResponder((path) =>
+			path === clientPath
+				? Promise.resolve(jsonResponse({ id: fixtureDetail.clientId, erasedAt: '2026-03-01T00:00:00Z' }))
+				: undefined
+		);
+
+		await expect.element(testPage.getByRole('link', { name: 'View Client' })).toBeVisible();
+		await expect.element(testPage.getByRole('link', { name: /details$/ })).not.toBeInTheDocument();
+	});
+
+	// Best-effort: a lost read costs the link, never the page.
+	it('offers none when her record could not be read', async () => {
+		await renderWithFixtureResponder((path) =>
+			path === clientPath ? Promise.resolve(jsonResponse('forbidden', 403)) : undefined
+		);
+
+		await expect.element(testPage.getByRole('link', { name: 'View Client' })).toBeVisible();
+		await expect.element(testPage.getByRole('link', { name: /details$/ })).not.toBeInTheDocument();
+	});
+});
+
 /*
  * #268/#274: choosing who a Visit is for is picking a person by name, at
  * create and at reassign alike, and the control is only ever drawn for a

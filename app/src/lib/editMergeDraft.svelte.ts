@@ -46,6 +46,12 @@ export class EditMergeDraft {
 	 */
 	matches = $state<CollisionMatch[]>([]);
 	/**
+	 * Where the duplicate page's Back goes: the screen the refused save was
+	 * made from. Undefined for the Edit form, which is the default; her
+	 * details journey (#1610) names its own check page.
+	 */
+	backHref = $state<string | undefined>();
+	/**
 	 * Opens the draft with one edit's refused attempt.
 	 *
 	 * There was a `mergeOffered` flag here until #813 (ADR-0040), saying
@@ -54,10 +60,16 @@ export class EditMergeDraft {
 	 * which of them survives -- which each match's own `wouldSurvive`
 	 * already says.
 	 */
-	open(clientId: string, fields: ClientEditFields, matches: CollisionMatch[]): void {
+	open(
+		clientId: string,
+		fields: ClientEditFields,
+		matches: CollisionMatch[],
+		backHref?: string
+	): void {
 		this.clientId = clientId;
 		this.fields = fields;
 		this.matches = matches;
+		this.backHref = backHref;
 	}
 
 	/** Everything the draft holds, gone -- what a save that went through,
@@ -66,6 +78,7 @@ export class EditMergeDraft {
 		this.clientId = '';
 		this.fields = blankEditFields();
 		this.matches = [];
+		this.backHref = undefined;
 	}
 }
 

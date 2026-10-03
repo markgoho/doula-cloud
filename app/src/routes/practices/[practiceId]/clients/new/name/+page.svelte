@@ -13,8 +13,8 @@
 	import TextInput from '#lib/components/atoms/TextInput.svelte';
 	import { intakeDraft } from '#lib/intakeDraft.svelte.js';
 	import type { FormError } from '#lib/formErrors.js';
-	import IntakeQuestion from '../IntakeQuestion.svelte';
-	import { GIVEN_NAME_ID, givenNameRefusal } from '../intake.js';
+	import JourneyQuestion from '../../questions/JourneyQuestion.svelte';
+	import { GIVEN_NAME_ID, givenNameRefusal, intakeQuestions } from '../intake.js';
 
 	const FAMILY_NAME_ID = 'intake-family-name';
 	const PREFERRED_NAME_ID = 'intake-preferred-name';
@@ -24,7 +24,8 @@
 	}
 </script>
 
-<IntakeQuestion
+<JourneyQuestion
+	journey={intakeQuestions}
 	stepId="name"
 	question={{ as: 'legend', text: "What is the Client's name?" }}
 	hint="Only the given name is needed to save the record. The rest can be added at any time."
@@ -76,4 +77,4 @@
 			</LabeledField>
 		</stack-l>
 	{/snippet}
-</IntakeQuestion>
+</JourneyQuestion>

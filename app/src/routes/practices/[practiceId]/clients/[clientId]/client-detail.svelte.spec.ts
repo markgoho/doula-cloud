@@ -381,6 +381,41 @@ describe('client detail hub', () => {
 			.toHaveAttribute('href', `/practices/${practiceId}/clients/${clientId}/engagement-requests/new`);
 	});
 
+	// #1610: her other details are added from here, as one journey.
+	it('offers to add her details while a fact is missing', async () => {
+		await setup({ overrides: { phone: '' } });
+
+		await expect
+			.element(testPage.getByRole('link', { name: `Add ${fixture.readyText}'s details` }))
+			.toHaveAttribute('href', `/practices/${practiceId}/clients/${clientId}/details`);
+	});
+
+	it('offers to change her details once each fact is given', async () => {
+		await setup({
+			overrides: {
+				email: 'given@example.com',
+				phone: '585 555 0142',
+				addressLine1: '1 Main Street',
+				addressLocality: 'Rochester',
+				addressRegion: 'NY',
+				addressPostalCode: '14607',
+				dateOfBirth: '1988-02-09',
+				resolvedFields: []
+			}
+		});
+
+		await expect
+			.element(testPage.getByRole('link', { name: `Change ${fixture.readyText}'s details` }))
+			.toBeVisible();
+	});
+
+	it('offers no details journey on an erased record', async () => {
+		await setup({ overrides: { erasedAt: '2026-03-01T00:00:00Z' } });
+
+		await expect.element(testPage.getByText(/This client's data was erased on request/)).toBeVisible();
+		await expect.element(testPage.getByRole('link', { name: /details$/ })).not.toBeInTheDocument();
+	});
+
 	it('withholds Start new work from a contractor Doula (ADR-0017: she originates nothing)', async () => {
 		await setup({ isContractor: true });
 

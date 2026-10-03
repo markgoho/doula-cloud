@@ -2,6 +2,9 @@
 	import { onDestroy, onMount } from 'svelte';
 	import { page } from '#lib/appState.svelte.js';
 	import { apiFetchWithSession } from '#lib/api.js';
+	import { loadClientDetail, type ClientDetail } from '#lib/clientDetail.js';
+	import { canAddDetails, detailsLinkLabel } from '#lib/clientDetailsJourney.js';
+	import { detailsHref } from '../../clients/[clientId]/details/details.js';
 	import { PaginatedList } from '#lib/paginatedList.svelte.js';
 	import { SectionState } from '#lib/sectionState.svelte.js';
 	import { FormSubmission, orThrownErrors } from '#lib/formSubmission.svelte.js';
@@ -1178,7 +1181,25 @@
 		if (offersState.value) offersState.value = updated;
 	}
 
+	/*
+	 * #1610: her record, read only to word the link to her details
+	 * journey ("Add" or "Change") and to leave it off an erased record.
+	 * Best-effort, and not awaited by the sections below: a lost read
+	 * costs one link for one page load, and her record is one click away
+	 * through "View Client".
+	 */
+	let clientRecord = $state<ClientDetail | undefined>();
+
+	async function loadClientRecord() {
+		try {
+			clientRecord = await loadClientDetail(apiFetchWithSession, page.params.practiceId!, detail.clientId);
+		} catch {
+			// The link stays off; see above.
+		}
+	}
+
 	onMount(async () => {
+		void loadClientRecord();
 		// The Engagement is already here, from load. What remains is the
 		// seven sections that fill in behind it, each rendering as it lands.
 		await loadVisits();
@@ -1473,6 +1494,18 @@
 		-->
 		<Link href={clientDetailHref()} label="View Client" describedBy="engagement-client-name" />
 		<span class="visually-hidden" id="engagement-client-name">{detail!.clientName}</span>
+		<!--
+			Her other details, added from here as well as from her record
+			(#1610). The journey's first Back and its save return to this
+			page. Absent until her record is read, and for an erased record,
+			whose edit `edit.go` refuses.
+		-->
+		{#if clientRecord && canAddDetails(clientRecord)}
+			<Link
+				href={detailsHref(page.params.practiceId!, detail!.clientId, page.params.engagementId!)}
+				label={detailsLinkLabel(clientRecord)}
+			/>
+		{/if}
 
 		<!--
 			The outcome of the header's own action, and the only block-level

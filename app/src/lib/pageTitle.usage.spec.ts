@@ -20,15 +20,23 @@ import { globFiles } from './globFiles';
  */
 
 /*
- * `IntakeQuestion` is not a Template. It is `clients/new`'s own shared
- * question page (#466): six routes compose it, and it composes
+ * `JourneyQuestion` is not a Template. It is the Client journeys' own
+ * shared question page (#466, #1610): intake's name page composes it,
+ * and so does each shared question in `clients/questions/`, which
+ * intake and a Client's details journey both mount. It composes
  * `QuestionPage`, so it renders the title exactly as a Template does --
- * one level further out than this scan can read. Named here rather than
- * dropped from the glob, so the gate still asks the question of all six
- * and the answer is that something they compose calls the primitive.
+ * one or two levels further out than this scan can read. Named here
+ * rather than dropped from the glob, so the gate still asks the question
+ * of every route and the answer is that something they compose calls the
+ * primitive.
  */
 const TEMPLATES_WITH_PAGE_TITLE = [
-	'IntakeQuestion',
+	'JourneyQuestion',
+	'DateOfBirthQuestion',
+	'EmailQuestion',
+	'PhoneQuestion',
+	'AddressQuestion',
+	'SectionQuestion',
 	'OverviewHub',
 	'RecordDetail',
 	'FormPage',

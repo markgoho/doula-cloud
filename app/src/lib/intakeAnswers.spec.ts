@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { Field } from './clientFieldTemplate.js';
 import { answerSections, fieldValueText, NOT_ANSWERED } from './intakeAnswers.js';
 import { blankAnswers } from './intakeDraft.svelte.js';
+import { DETAILS_STEPS } from './intakeJourney.js';
 
 const basePath = '/practices/p1/clients/new';
 
@@ -54,6 +55,14 @@ describe('answerSections', () => {
 			changeHref: `${basePath}/name?from=check`
 		});
 		expect(sections[0].answers[1].value).toBe(NOT_ANSWERED);
+	});
+
+	// #1610: the details journey never asks the name, so it has no row.
+	it('lists only the steps a details journey asks', () => {
+		const sections = answerSections(blankAnswers(), [], basePath, DETAILS_STEPS);
+
+		expect(sections.map((section) => section.heading)).not.toContain('Name');
+		expect(sections[0].answers[0].changeHref).toBe(`${basePath}/date-of-birth?from=check`);
 	});
 
 	it('reaches all twelve structural columns but the id', () => {

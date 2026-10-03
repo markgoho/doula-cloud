@@ -215,6 +215,29 @@ describe('editClient', () => {
 		expect(result).toEqual({ conflict: true, matches, substitution: false });
 	});
 
+	// #1610: edit.go answers 409 for an erased or a merged record too, with
+	// a message and no matches. That is a refusal, not a gate.
+	it('throws a 409 that names no match, with its own message', async () => {
+		const fetcher = vi.fn().mockResolvedValue(
+			response(
+				{ code: 'ALREADY_EXISTS', message: "this client's data has been erased and cannot be edited" },
+				409
+			)
+		);
+
+		await expect(editClient(fetcher, 'practice-1', 'client-1', editFields, false)).rejects.toThrow(
+			"this client's data has been erased and cannot be edited"
+		);
+	});
+
+	it('says the record could not be saved where a 409 names nothing at all', async () => {
+		const fetcher = vi.fn().mockResolvedValue(response({}, 409));
+
+		await expect(editClient(fetcher, 'practice-1', 'client-1', editFields, false)).rejects.toThrow(
+			'The Client record could not be saved.'
+		);
+	});
+
 	it('decodes gate one (substitution: true, which offers no merge)', async () => {
 		const matches = [{ id: 'client-2', ...editFields, givenName: 'Ada', engagements: [], wouldSurvive: false }];
 		const fetcher = vi

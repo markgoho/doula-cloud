@@ -8,7 +8,7 @@
 import type { Fetcher } from './fetcher.js';
 
 import type { ClientRecord, EngagementSummary } from './clientDetail.js';
-import { refusalError } from './formErrors.js';
+import { RefusalError, refusalError } from './formErrors.js';
 
 /** One row of the Clients list, Client-shaped: one row per Client, never
  * one per Client+Engagement pair (ADR-0017) -- mirrors the Go BFF's
@@ -306,7 +306,13 @@ export async function editClient(
 		body: JSON.stringify({ ...fields, override: shouldOverride })
 	});
 	if (response.status === 409) {
-		const body: { matches: CollisionMatch[]; substitution: boolean } = await response.json();
+		const body: { matches?: CollisionMatch[]; substitution: boolean; message?: string } =
+			await response.json();
+		// edit.go also answers 409 for an erased or a merged record, with a
+		// message and no matches (#1610): a refusal, not either gate.
+		if (!Array.isArray(body.matches)) {
+			throw new RefusalError(body.message ?? 'The Client record could not be saved.');
+		}
 		return {
 			conflict: true,
 			matches: body.matches,

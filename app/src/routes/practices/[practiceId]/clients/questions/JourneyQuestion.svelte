@@ -1,22 +1,22 @@
 <script lang="ts">
 	/*
-	 * One question of intake, as a page (#466).
+	 * One question of a Client journey, as a page (#466, #1610).
 	 *
-	 * Five routes compose this -- the name, the date of birth, the email
-	 * address, the phone number, the address, and one per Practice-named
-	 * section. What they share is everything except the question and the
-	 * controls under it: where the rail's data comes from, where Back and
-	 * Continue go, the Change round trip, the error summary's position,
-	 * and the free save every page offers. ADR-0018's bar for an
-	 * extraction is two identical consumers; this is six.
+	 * Intake's name page and every shared question in this folder compose
+	 * this, in either journey: intake for a new Client, or her details
+	 * added from her record. What they share is everything except the
+	 * question and the controls under it: where the rail's data comes
+	 * from, where Back and Continue go, the Change round trip, the error
+	 * summary's position, and -- in intake only -- the free save. Which
+	 * journey it is comes in as `journey`, so the page never reaches for
+	 * the other journey's state.
 	 *
 	 * ## What a route still owns
 	 *
 	 * The question, the hint, the controls, and -- through `validate` --
 	 * whether Continue is allowed to happen. The name page refuses a blank
 	 * given name; the date page composes three boxes into one string and
-	 * refuses a date that is not real. Everything else would be the same
-	 * code in six files, which is what it was.
+	 * refuses a date that is not real.
 	 *
 	 * ## Why the <form> is outside the Template
 	 *
@@ -31,14 +31,13 @@
 	import { page } from '#lib/appState.svelte.js';
 	import ErrorSummary from '#lib/components/molecules/ErrorSummary.svelte';
 	import QuestionPage, { type Question } from '#lib/components/templates/QuestionPage.svelte';
-	import { intakeDraft } from '#lib/intakeDraft.svelte.js';
-	import { intakeFlow } from '#lib/intakeFlow.svelte.js';
 	import { journeySteps, nextStepHref, previousStepHref, type StepId } from '#lib/intakeJourney.js';
 	import { FormSubmission, orServiceProblem, type FormError } from '#lib/formSubmission.svelte.js';
-	import IntakeActions from './IntakeActions.svelte';
-	import { JOURNEY, basePath, checkOr, exitHref, intakeFieldIds, saveIntake } from './intake.js';
+	import QuestionActions from './QuestionActions.svelte';
+	import { checkOr, type QuestionJourney } from './questionJourney.js';
 
 	interface Properties {
+		journey: QuestionJourney;
 		stepId: StepId;
 		question: Question;
 		hint?: string;
@@ -59,16 +58,16 @@
 		controls: Snippet<[{ describedBy: string | undefined; errors: FormError[] }]>;
 	}
 
-	let { stepId, question, hint, validate, controls }: Properties = $props();
+	let { journey, stepId, question, hint, validate, controls }: Properties = $props();
 
-	const practiceId = $derived(page.params.practiceId ?? '');
-	const base = $derived(basePath(practiceId));
-	const steps = $derived(journeySteps(intakeFlow.steps, base, stepId, intakeDraft.visitedSteps));
+	const steps = $derived(
+		journeySteps(journey.steps, journey.basePath, stepId, journey.draft.visitedSteps)
+	);
 
 	/*
 	 * One `FormSubmission`, but only `handleSaveForLater` drives it through
-	 * `run`: `IntakeActions`' own spinner belongs to that button alone, and
-	 * sharing `isSubmitting` with Continue's own (busy-free) navigation
+	 * `run`: `QuestionActions`' own spinner belongs to that button alone,
+	 * and sharing `isSubmitting` with Continue's own (busy-free) navigation
 	 * would flip it on a click Continue never asked to be busy for.
 	 * `handleContinue` writes `submission.errors` directly instead -- the
 	 * same array, so the summary and the two actions never disagree about
@@ -86,37 +85,34 @@
 	async function handleContinue(event: SubmitEvent) {
 		event.preventDefault();
 		if (isRefused()) return;
-		intakeDraft.visit(stepId);
+		journey.draft.visit(stepId);
 		await goto(
 			checkOr(
 				page.url.searchParams,
-				practiceId,
-				nextStepHref(intakeFlow.steps, base, stepId)
+				journey.basePath,
+				nextStepHref(journey.steps, journey.basePath, stepId)
 			)
 		);
 	}
 
-	async function handleSaveForLater() {
+	// Only offered where the journey has one -- see `QuestionJourney`.
+	const saveForLater = $derived(journey.saveForLater);
+
+	async function handleSaveForLater(save: NonNullable<QuestionJourney['saveForLater']>) {
 		if (isRefused()) return;
-		// Which of the BFF's field names this step has a control for
-		// (#488) -- an empty map on the steps that have none, whose
-		// entries then render as plain text rather than dead links.
-		await submission.run(
-			() => saveIntake(practiceId, false, intakeFieldIds(stepId)),
-			orServiceProblem
-		);
+		await submission.run(() => save(stepId), orServiceProblem);
 	}
 </script>
 
 <!-- stacked-form:ignore: #1108 -- this form wraps a Template. `QuestionPage` renders the controls and the actions as two separate regions of one column and stacks each itself, so the `<form>` here exists to put the submit button inside the form that owns the inputs (see the note above), not to arrange anything. -->
 <form onsubmit={handleContinue} novalidate>
 	<QuestionPage
-		journey={JOURNEY}
+		journey={journey.label}
 		{steps}
 		backHref={checkOr(
 			page.url.searchParams,
-			practiceId,
-			previousStepHref(intakeFlow.steps, base, stepId, exitHref(practiceId, intakeDraft.origin))
+			journey.basePath,
+			previousStepHref(journey.steps, journey.basePath, stepId, journey.exitHref)
 		)}
 		{question}
 		{hint}
@@ -132,7 +128,10 @@
 		{/snippet}
 
 		{#snippet actions()}
-			<IntakeActions isSaving={submission.isSubmitting} onSaveForLater={handleSaveForLater} />
+			<QuestionActions
+				isSaving={submission.isSubmitting}
+				onSaveForLater={saveForLater && (() => handleSaveForLater(saveForLater))}
+			/>
 		{/snippet}
 	</QuestionPage>
 </form>

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Field } from './clientFieldTemplate.js';
 import {
+	DETAILS_STEPS,
 	intakeSections,
 	intakeStepList,
 	journeySteps,
@@ -92,6 +93,16 @@ describe('intakeSections', () => {
 });
 
 describe('intakeStepList', () => {
+	// #1610: a Client's details journey asks everything but the name.
+	it('is four steps for a details journey at a Practice with no added fields', () => {
+		expect(intakeStepList([], DETAILS_STEPS).map((step) => step.slug)).toEqual([
+			'date-of-birth',
+			'email',
+			'phone',
+			'address'
+		]);
+	});
+
 	it('is five steps for a Practice with no added fields', () => {
 		const steps = intakeStepList([]);
 

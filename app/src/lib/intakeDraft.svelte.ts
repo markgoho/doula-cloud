@@ -58,19 +58,15 @@ export function blankAnswers(): IntakeAnswers {
 	};
 }
 
-function storageKey(practiceId: string): string {
-	return `doula-cloud:intake:${practiceId}`;
-}
-
 /*
  * Storage is best-effort at every touch point. Private browsing, a
  * quota, and a browser configured to refuse site data all throw on
  * access rather than returning null, and none of them is a reason for
  * intake to stop working.
  */
-function readStored(practiceId: string): IntakeAnswers | undefined {
+function readStored(key: string): IntakeAnswers | undefined {
 	try {
-		const raw = sessionStorage.getItem(storageKey(practiceId));
+		const raw = sessionStorage.getItem(key);
 		if (raw === null) return undefined;
 		return { ...blankAnswers(), ...(JSON.parse(raw) as Partial<IntakeAnswers>) };
 	} catch {
@@ -78,24 +74,32 @@ function readStored(practiceId: string): IntakeAnswers | undefined {
 	}
 }
 
-function writeStored(practiceId: string, answers: IntakeAnswers): void {
+function writeStored(key: string, answers: IntakeAnswers): void {
 	try {
-		sessionStorage.setItem(storageKey(practiceId), JSON.stringify(answers));
+		sessionStorage.setItem(key, JSON.stringify(answers));
 	} catch {
 		// Nothing to recover: the draft still lives in module state.
 	}
 }
 
-function clearStored(practiceId: string): void {
+function clearStored(key: string): void {
 	try {
-		sessionStorage.removeItem(storageKey(practiceId));
+		sessionStorage.removeItem(key);
 	} catch {
 		// As above.
 	}
 }
 
 export class IntakeDraft {
-	practiceId = $state('');
+	/**
+	 * Which journey the draft belongs to, so two journeys' drafts never
+	 * share a stored copy: `intake` for a new Client, `details` for the
+	 * details added from her record (#1610).
+	 */
+	readonly #namespace: string;
+	/** What the draft is for: the Practice in intake, the Client in her
+	 * details journey. Half of the stored copy's key. */
+	scope = $state('');
 	answers = $state<IntakeAnswers>(blankAnswers());
 	/**
 	 * Which steps the reader has been through, in the order they were
@@ -119,6 +123,14 @@ export class IntakeDraft {
 	 */
 	origin = $state<IntakeOrigin | undefined>();
 
+	constructor(namespace = 'intake') {
+		this.#namespace = namespace;
+	}
+
+	get #storageKey(): string {
+		return `doula-cloud:${this.#namespace}:${this.scope}`;
+	}
+
 	/** Whether the one fact ADR-0017 requires is here. Read by `start`,
 	 * to decide whether the search's carried values are seeding an empty
 	 * draft or would overwrite a typed one, and by `givenNameRefusal`,
@@ -128,17 +140,18 @@ export class IntakeDraft {
 	}
 
 	/**
-	 * Opens the draft for a Practice.
+	 * Opens the draft for a Practice, or in the details journey for a
+	 * Client.
 	 *
 	 * `carried` is what the search that fronts intake put in the query
 	 * string (#498, ADR-0017): it seeds a draft that has nothing in it
 	 * yet, and never overwrites one that does -- a reader who walked back
 	 * to the first question keeps what was typed over what was searched.
 	 */
-	start(practiceId: string, carried: Partial<IntakeAnswers> = {}): void {
-		if (this.practiceId !== practiceId) {
-			this.practiceId = practiceId;
-			this.answers = readStored(practiceId) ?? blankAnswers();
+	start(scope: string, carried: Partial<IntakeAnswers> = {}): void {
+		if (this.scope !== scope) {
+			this.scope = scope;
+			this.answers = readStored(this.#storageKey) ?? blankAnswers();
 			this.visitedSteps = [];
 			this.matches = [];
 		}
@@ -151,7 +164,7 @@ export class IntakeDraft {
 	 * next page load both see it. */
 	update(changes: Partial<IntakeAnswers>): void {
 		this.answers = { ...this.answers, ...changes };
-		writeStored(this.practiceId, this.answers);
+		writeStored(this.#storageKey, this.answers);
 	}
 
 	setFieldValue(fieldId: string, value: FieldValue): void {
@@ -169,7 +182,7 @@ export class IntakeDraft {
 	/** Everything the draft holds, gone -- what a save that went through
 	 * leaves behind, so the next Client starts blank. */
 	clear(): void {
-		clearStored(this.practiceId);
+		clearStored(this.#storageKey);
 		this.answers = blankAnswers();
 		this.visitedSteps = [];
 		this.matches = [];
