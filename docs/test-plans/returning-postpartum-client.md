@@ -49,6 +49,10 @@ No step: the product is not involved, and **that is the finding**. Every fact sh
 | 5.1 | Priya opens the new Engagement and sends the portal invite from it | **`409`, and it is the right answer**: an invitation is raised per Client, not per Engagement, so `invite()` finds the accepted `client_portal_users` row Camille already holds and returns "this client already has portal access". There is nothing to send because she can already get in. Where an invitation *is* raised, the link now travels as a Practice-voice Notification email rather than by hand (**[RA-G1](https://github.com/markgoho/doula-cloud/issues/260)** closed) | `manual` |
 | 5.2 | Sign in as herself and reach the new Engagement | **She reaches it through the login she already has.** A sign-in link to her existing address lands her on the portal root list, holding both Engagements. There is no "I already have an account" fork to choose: accepting an invitation is one **Continue** button (ADR-0026 — the invitation is the first sign-in link, and a Client has no password), and the table-wide `UNIQUE` on `client_portal_users.identity_uid` that used to refuse her is gone ([CB-G3](https://github.com/markgoho/doula-cloud/issues/309) closed, [#819](https://github.com/markgoho/doula-cloud/issues/819) replaced it with `UNIQUE (identity_uid, client_id)` in `00107_portal_account_client_pair_unique.sql`) | `manual` |
 | 5.3 | Down the duplicate-Client branch only: press **Continue** on an invitation raised against a second Client record for her at this Practice | **`409`, and the page prints the string**: "you already have portal access at this practice -- sign in instead of accepting a new invitation". `portal_account_reuse_for_accept` (`00081`) answers the one question ADR-0015 makes the rule — does this sign-in address's Portal Account already reach a Client at this Practice — and accept refuses rather than silently merging. This is the only refusal left on her path, and it tells her what to do instead | `manual` |
+| 5.B-screens | Count the screens from the stage's entry to its end | **Screens**: 2 (Hick's Law, Flow). The sign-in she always uses, then the portal root list | `manual` |
+| 5.B-decisions | On each screen, count the decisions visible at once; record the largest | **Decisions**: 2 (Hick's Law, Miller's Law) | `manual` |
+| 5.B-confirmation | Read the screen the stage ends on | **Confirmation**: yes (Peak-End Rule). She reaches the new Engagement under the login she already has, and the screen says so | `manual` |
+| 5.B-320px | Sweep the stage's screens from 320px up | **320px**: yes (ADR-0024) | `automated (route-continuum.svelte.spec.ts)` |
 
 ### Stage 6 — One account, two Engagements — moment of truth
 
@@ -58,6 +62,13 @@ No step: the product is not involved, and **that is the finding**. Every fact sh
 | 6.2 | Open her 2024 birth Engagement, then the postpartum one | Both open, from one login. Every Engagement her Portal Account reaches is readable under `engagements_identity_visibility` (`00082`), which is the identity-tier read the root list needs before any `app.current_client_id` is set | `manual` |
 | 6.2-a | Move between the two without signing out | **The chrome carries the way back.** The authenticated portal layout's top bar holds a link to the root list from every screen inside an Engagement, so the list is one press away and no sign-out is involved ([CB-G4](https://github.com/markgoho/doula-cloud/issues/310) closed). Watch what that link *reads*: its visible text is the Practice's name alone, and `engagementLabel` is only its accessible name (`PortalTopBar`), so a sighted Camille sees the same two words inside either Engagement | `manual` |
 | 6.2-b | Tell the two apart in the list | `engagementLabel` names each one **"{Practice}, started {date}"**, so two at Rooted Birth Collective differ by when each began — the one fact that is honest for every Client, including one whose care ended in loss | `manual` |
+| 6.B-screens | Count the screens from the stage's entry to its end | **Screens**: 3 (Hick's Law, Flow). The root list, one Engagement, then the other by way of the list | `manual` |
+| 6.B-decisions | On each screen, count the decisions visible at once; record the largest | **Decisions**: 2 (Hick's Law, Miller's Law). Her two Engagements | `manual` |
+| 6.B-memory | Note every later step that needs an earlier answer, and whether that answer is still on screen | **Memory**: yes (Working Memory). Each Engagement is named by Practice and start date, so she need not recall which is which | `manual` |
+| 6.B-time | Time each routine act on the stage's device, from the input to the result settled on screen | **Time**: 400 ms, 100 ms (Doherty Threshold) | `manual` |
+| 6.B-confirmation | Read the screen the stage ends on | **Confirmation**: yes (Peak-End Rule). The Engagement she opens names which one it is | `manual` |
+| 6.B-cold | Walk the stage in a fresh browser profile, with nothing explained first | **Cold**: yes (Paradox of the Active User). The root list is new to her; she has only ever had one Engagement | `manual` |
+| 6.B-320px | Sweep the stage's screens from 320px up | **320px**: yes (ADR-0024) | `automated (route-continuum.svelte.spec.ts)` |
 
 ### Stage 7 — Offered a Birth Plan she does not need
 
@@ -66,6 +77,9 @@ No step: the product is not involved, and **that is the finding**. Every fact sh
 | 7.1 | Open the portal home on the postpartum Engagement | **Contract** link only. `offersBirthPlan` is false (`kind == postpartum`), so the authenticated layout's nav leaves **Birth plan** out entirely | `manual` |
 | 7.2 | Open the Birth Plan URL directly | The portal's ordinary not-found page, with a way back to her care — not a "No Birth Plan has been created … yet" promise that one is coming | `manual` |
 | 7.2-a | Confirm nothing marks the Engagement "no Birth Plan" by hand | There is no separate control, and none is needed: `OffersBirthPlan` (`engagement/kind.go`) derives the suppression from `kind` and the birth outcome on every read, so nothing can drift out of sync with a stored flag ([CB-G5](https://github.com/markgoho/doula-cloud/issues/311), closed) | `manual` |
+| 7.B-screens | Count the screens from the stage's entry to its end | **Screens**: 1 (Hick's Law, Flow) | `manual` |
+| 7.B-decisions | On each screen, count the decisions visible at once; record the largest | **Decisions**: 4 (Hick's Law, Miller's Law). The four destinations a postpartum Engagement offers, with no Birth plan among them | `manual` |
+| 7.B-320px | Sweep the stage's screens from 320px up | **320px**: yes (ADR-0024) | `automated (portal-320.e2e.ts)` |
 
 ### Stage 8 — Nothing came with her
 
@@ -73,13 +87,16 @@ No step: the product is not involved, and **that is the finding**. Every fact sh
 | --- | --- | --- | --- |
 | 8.1 | Read her new message thread | Empty. Messages are one thread per Engagement and Plan Instances are per Engagement by ADR-0001's snapshot rule — correct scoping, unchanged, and it means her history does not travel | `manual` |
 | 8.1-a | See a person's Engagements over time, from her side or Priya's | **Both sides answer it now.** Priya's Client detail hub lists every Engagement Camille's Client record holds (kind, status, started) beside a merged History table of Engagement Requests and Client edits (`clientDetail.ts`'s `EngagementSummary`, #494); Camille's own portal root list is the same fact from her side (stage 6, `engagements_identity_visibility` / `00082`) | `manual` |
+| 8.B-screens | Count the screens from the stage's entry to its end | **Screens**: 1 (Hick's Law, Flow) | `manual` |
+| 8.B-memory | Note every later step that needs an earlier answer, and whether that answer is still on screen | **Memory**: yes (Working Memory). Nothing asks her to retell her first Engagement; the Practice already holds it | `manual` |
+| 8.B-320px | Sweep the stage's screens from 320px up | **320px**: yes (ADR-0024) | `automated (portal-320.e2e.ts)` |
 
 ## Marks
 
 | Mark | Steps |
 | --- | --- |
-| `automated` | 0 |
-| `manual` | 19 |
+| `automated` | 4 (4 of them [budget steps](README.md#budget-steps)) |
+| `manual` | 32 (13 of them [budget steps](README.md#budget-steps)) |
 | `missing-feature` | 0 |
 
 No step is `blocked`. Nothing on her path touches Stripe.
@@ -89,6 +106,10 @@ CB-G3, **MO-G9**, **RA-G1** and NH-G4 are observed inside walkable steps (5.2, 3
 **She has no automated step any more.** Every spec in the suite provisions a Client who has never been seen before, holding exactly one Engagement, so none of them drives the two-Engagement root list her whole path now ends in — which is the same reason her first login used to be her only automated step, read the other way round.
 
 ## Run log
+
+### 2026-10-02 — budget steps added ([#1683](https://github.com/markgoho/doula-cloud/issues/1683))
+
+A desk pass, not a walk. The journey map's stages 5, 6, 7, 8 each gained a **Budget**, and each budget line is a step here, last in its stage's table: **17 budget steps**, 4 `automated`, 13 `manual`. No existing step is re-marked and no cell is rewritten. Every `automated` budget step is a 320px line the continuum sweep or `portal-320.e2e.ts` already asserts; every `manual` one is measured on the second walk ([#329](https://github.com/markgoho/doula-cloud/issues/329)), and none has been measured yet. The Marks summary above and [README.md](README.md)'s run-status row move with them.
 
 ### 2026-08-22 — automated steps ([#209](https://github.com/markgoho/doula-cloud/issues/209))
 

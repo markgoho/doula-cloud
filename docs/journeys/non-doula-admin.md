@@ -35,6 +35,14 @@ Dee is a domain expert on the business half and a stranger to the care half.
 
 **Thinking**: "Renata said she'd send this." **Pain points**: no email arrives (RA-G1); Renata pastes a link into a text.
 
+**Budget**:
+
+* **Screens**: 2 (Hick's Law, Flow)
+* **Decisions**: 3 (Hick's Law, Miller's Law)
+* **Confirmation**: yes (Peak-End Rule)
+* **Cold**: yes (Paradox of the Active User)
+* **320px**: yes (ADR-0024)
+
 - **1.1** — Open the invite link at `/accept-invite`.
 - **1.2** — Set email and password; press **Accept invite** (`POST /api/staff/accept-invite`). The membership is created with zero roles.
 - **1.3** — ~~Choose the Practice from the membership list.~~ **There is nothing to choose**: acceptance leaves one membership, so `decideLanding` redirects straight to `/practices/{id}` (`app/src/lib/landing.ts:24-26`) and the picker never renders. Same root as Renata's 1.2 — the picker needs two memberships, which only Lena Vasquez's journey gives a Persona.
@@ -51,12 +59,27 @@ Dee is a domain expert on the business half and a stranger to the care half.
 
 > **Partly overtaken by the code.** The pain point above records the walk as it happened. `admin` is read on trunk now — ADR-0008's read table is enforced at the `staffauth.GatedRouter` mount seam, and [#267](https://github.com/markgoho/doula-cloud/issues/267) moved `GET .../payments/connect` onto `staffauth.OwnerAndAdmin`, so Dee sees this Practice's Stripe Connect state. Only the write in `payments/connect.go` stays Owner-only.
 
+**Budget**:
+
+* **Screens**: 2 (Hick's Law, Flow)
+* **Cold**: yes (Paradox of the Active User)
+* **320px**: yes (ADR-0024)
+
 - **3.1** — Land on `/practices/[practiceId]` and see the non-owner tiles: Clients, Billing **and Payments**. Payments sits outside `{#if roles.includes('owner')}` (**RA-G9**, found by [#235](https://github.com/markgoho/doula-cloud/issues/235) and confirmed here on a zero-role membership).
 - **3.2** — Open Billing and read the Practice's credit balance and purchase ledger. `billing/balance.go` takes any Staff member, so a non-owner sees what the Practice spends. Buying credits is correctly refused (`billing/purchase.go` requires Owner).
 
 ### Stage 4 — Take the call and create the Client
 
 **Thinking**: "She is due in March, wants a birth doula, heard about us from her midwife." **Pain points**: they take a page of notes on the call, and the form accepted two fields when this map was drawn — everything else went back into a notebook, which is the problem the product was meant to solve. **That is closed** ([MO-G3](https://github.com/markgoho/doula-cloud/issues/252), ADR-0017): the notes have somewhere to go.
+
+**Budget**:
+
+* **Screens**: 8 (Hick's Law, Flow)
+* **Decisions**: 3 (Hick's Law, Miller's Law)
+* **Memory**: yes (Working Memory)
+* **Time**: 400 ms, 100 ms (Doherty Threshold)
+* **Confirmation**: yes (Peak-End Rule)
+* **320px**: yes (ADR-0024)
 
 - **4.1** — **Find or add a Client** on the Clients list, search, then **Add a new Client**: intake is one question per page from there — name, date of birth, email, phone, address, then the Practice's own Client Field Template sections.
 - **4.2** — Press **Save this Client**. The save is **free** — a Client, no Engagement, no credit — and it is not owner-gated, so it **passes** for Dee. Asking for paid work with the Client is the separate act at `POST .../engagement-requests`, and its approval is what creates the Engagement and locks the Credit.
@@ -65,12 +88,27 @@ Dee is a domain expert on the business half and a stranger to the care half.
 
 **Thinking**: "Priya has room in March." **Pain points**: an Engagement has no Doula on it, and nothing puts one there. See RA-G4.
 
+**Budget**:
+
+* **Screens**: 1 (Hick's Law, Flow)
+* **Decisions**: 2 (Hick's Law, Miller's Law)
+* **Confirmation**: yes (Peak-End Rule)
+* **320px**: yes (ADR-0024)
+
 - **5.1** — Open the Engagement and look for a control that puts a Doula on it. There is none.
 - **5.2** — ~~The nearest act is to create a Visit naming a Staff member.~~ **There is no nearest act.** `POST .../visits` requires the Doula role (`api/internal/visit/roles.go:41`), which Dee does not hold, so the button is on her screen and answers `403 only a Staff member with the Doula role can do that`. Stage 5 has no in-product act for her at all (**DW-G6**).
 
 ### Stage 6 — Send the Contract
 
 **Thinking**: "Get it out today." **Pain points**: none identified. The Contract *template* is owner-gated (`contracts/template.go:75`), but building and sending a per-Engagement Contract is not, so Dee can do the whole thing.
+
+**Budget**:
+
+* **Screens**: 2 (Hick's Law, Flow)
+* **Decisions**: 7 (Hick's Law, Miller's Law)
+* **Memory**: yes (Working Memory)
+* **Confirmation**: yes (Peak-End Rule)
+* **320px**: yes (ADR-0024)
 
 - **6.1** — Send the portal invite (`POST /api/practices/{id}/engagements/{id}/portal-invite`) so the Client can sign in.
 - **6.2** — Build the Contract (`POST .../contract`), status `draft`.
@@ -80,6 +118,12 @@ Dee is a domain expert on the business half and a stranger to the care half.
 
 **Thinking**: "Has she signed yet?" **Pain points**: they must open each Engagement to check. There is no unsigned- contract list (RA-G6).
 
+**Budget**:
+
+* **Screens**: 1 (Hick's Law, Flow)
+* **Time**: 400 ms, 100 ms (Doherty Threshold)
+* **320px**: yes (ADR-0024)
+
 - **7.1** — Open the Engagement and read the Contract status (`draft` / `sent` / `signed` / `voided`).
 
 > **Nadia crossing.** `POST .../contract/void` exists and no stage in any practice-side map exercises it. Voiding a Contract is the practice-side surface of an Engagement that ends early — which is Nadia Haddad's path. The method standard says to walk her journey first where it overlaps another. Stages 7–9 here, and Priya's Stages 7–8, are the crossing points. [Her map](loss-client.md) now exists and **these stages are unchanged**: what she adds is what the void looks like from the Client's side — the bare word `voided` (**NH-G5**) — and the absence of any Invoice surface in the portal (**NH-G6**), both hers to own. The Staff steps here stand.
@@ -87,6 +131,13 @@ Dee is a domain expert on the business half and a stranger to the care half.
 ### Stage 8 — Raise the Invoice
 
 **Thinking**: "Bill the deposit." **Pain points**: the endpoint is **not** owner-gated, so the role is not the blocker — Stripe Connect is. Without a connected account the handler returns `connectRequired`. `IsOwner` carries `omitempty` (`api/internal/payments/invoice.go:51`), so for a non-owner the field is *absent* from the body rather than `false` — the wire response is `{"connectRequired":true}` and the client defaults it (`+page.svelte:311`, `result.isOwner ?? false`). Either way the UI shows "Ask a Practice Owner to connect Stripe." Dee is stopped by an infrastructure gap wearing the costume of a permission error.
+
+**Budget**:
+
+* **Screens**: 1 (Hick's Law, Flow)
+* **Decisions**: 2 (Hick's Law, Miller's Law)
+* **Confirmation**: yes (Peak-End Rule)
+* **320px**: yes (ADR-0024)
 
 - **8.1** — `POST /api/practices/{id}/engagements/{id}/contract/invoices`.
 - **8.2** — Read the "ask an Owner" message.
@@ -97,11 +148,27 @@ Dee is a domain expert on the business half and a stranger to the care half.
 
 **Thinking**: "She paid by bank transfer. Mark it paid." **Pain points**: there is no way to. Payments are written only by the Stripe webhook. A check, a transfer, or a cash deposit — the normal case for a small practice — cannot be recorded at all, and no Stripe account exists either.
 
+**Budget**:
+
+* **Screens**: 2 (Hick's Law, Flow)
+* **Decisions**: 4 (Hick's Law, Miller's Law)
+* **Memory**: yes (Working Memory)
+* **Time**: 400 ms, 100 ms (Doherty Threshold)
+* **Confirmation**: yes (Peak-End Rule)
+* **Cold**: yes (Paradox of the Active User)
+* **320px**: yes (ADR-0024)
+
 - **9.1** — Look for a way to mark an Invoice paid. There is none.
 
 ### Stage 10 — Read a filled Care Plan or Birth Plan
 
 **Thinking**: "I do not want to read this, but sometimes I have to check a date in it." **Pain points**: the question is genuinely open. `GET .../plans/{planType}` has no role check, so **Dee can read every filled Care Plan and Birth Plan today**. Whether they should is undecided and this journey cannot decide it alone — the Care Plan is defined in `CONTEXT.md` as staff-only internal notes, which does not by itself exclude an Admin.
+
+**Budget**:
+
+* **Screens**: 1 (Hick's Law, Flow)
+* **Time**: 400 ms, 100 ms (Doherty Threshold)
+* **320px**: yes (ADR-0024)
 
 - **10.1** — Open an Engagement and read both plan sections.
 

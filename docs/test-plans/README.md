@@ -46,11 +46,33 @@ A walk may **re-mark a step**. Tasha's 3.3-a went from `missing-feature (TB-G7)`
 
 A step keeps the id it has on the journey map (`3.2` is Maya 3.2), so a plan and a map can be read side by side. Where a test needs a check the map's step does not name, the check is appended as `3.2-a`. A plan never renumbers a map.
 
+A budget step takes its stage number and its term: `6.B-screens`, `6.B-decisions`, `6.B-memory`, `6.B-time`, `6.B-confirmation`, `6.B-cold`, `6.B-320px`. It sits last in its stage's table, after the numbered steps, in the order the map's Budget lists its lines.
+
+### Budget steps
+
+Every budget line on a journey map ([the Budget line](../journeys/README.md#the-budget-line), [#1683](https://github.com/markgoho/doula-cloud/issues/1683)) is one step here. Its Expected result opens with the budget line copied from the map, word for word, and may add one note after it saying what that number holds on this stage (which screens are counted, which decisions); the note never changes the number. Its Action names the measurement. It carries one of the four marks like any other step, and it counts in the Marks summary and the run-status table like any other step.
+
+| Term | Mark | How it is measured |
+| --- | --- | --- |
+| **Screens** | `manual` | Count each distinct screen from the stage's entry to its end, on the device the stage names. A screen outside the product does not count. |
+| **Decisions** | `manual` | On each screen, count the fields to fill, options to choose and buttons that change what happens next, all visible at once; record the largest count. |
+| **Memory** | `manual` | Walk the stage and note every later step that needs an earlier answer; `yes` if that answer is still on screen when it is needed. |
+| **Time** | `manual` | Time each routine act on the device the stage names, from the input to the result settled on screen, with DevTools' Performance panel (or the Network panel's request timing for a save), as [#237](https://github.com/markgoho/doula-cloud/issues/237) timed Priya Raman's Birth Plan; record the slowest act and whether an acknowledgment showed within 100 ms. |
+| **Confirmation** | `manual` | Read the screen the stage ends on; `yes` if it says what happened and what is next. |
+| **Cold** | `manual` | Walk the stage in a fresh browser profile with nothing explained first; `yes` if no step needs a tour, a tooltip or a person's help. |
+| **320px** | `automated (portal-320.e2e.ts)` on a stage whose screens are all signed-in portal screens, `automated (route-continuum.svelte.spec.ts)` on every other stage | The continuum sweep mounts every route this repo ships from 320px up and fails one that needs more room than it is given ([ADR-0025](../adr/0025-layout-is-verified-across-the-continuum.md)); the Staff shell is swept as a component demo by `continuum.svelte.spec.ts`. The portal shell is outside the route frame, so a signed-in portal stage is held by `portal-320.e2e.ts`, which walks the real authenticated layout at 320px. A stage whose only screen is one neither covers is `manual`, measured with the viewport at 320px. |
+
+**Why Time is `manual` everywhere.** [ADR-0020](../adr/0020-smoothness-is-gated-on-causes-because-the-outcome-is-not-measurable-where-the-gate-lives.md) gates smoothness on its causes — raw durations, unbounded lists, per-row cost, a skeleton that reserves its space ([`docs/testing/app-unit.md`](../testing/app-unit.md), "Smoothness") — and says outright that the 100 ms and 400 ms budgets themselves are not checked, because neither CI nor headless Chromium can read latency honestly. A spec that does not assert the step's own result does not cover it, so the causes gate makes a Time step likelier to pass and never marks it `automated`.
+
+**A stage that cannot be walked** — its screen not built, and the gap that says so still open — gives its budget steps that `missing-feature (<gap id>)`, since there is nothing to measure. The 320px step stays `automated` wherever a route already exists. A budget is a target for the stage as it is meant to be, so where the gap behind a stage is closed and only the plan's numbered steps still carry its old mark, waiting for the second walk ([#329](https://github.com/markgoho/doula-cloud/issues/329)) to re-mark them, the budget steps are `manual`.
+
+**A budget step that fails** becomes a `journey-gap` on the map that owns the stage, with the budget line quoted in the gap row (`**Screens**: 1 (Hick's Law, Flow)` — measured 3), the same way any finding is taken back to its map. A plan never mints the gap ID. A walk records the measured number or yes-or-no in its Run log beside the budget, so the next walk can see whether it moved.
+
 ## The four marks
 
 Every step carries exactly one mark.
 
-- **`automated (<spec>)`** — an existing Playwright spec drives this step and asserts its result. It counts only when the spec exercises the step the way the Persona would, through the UI, or asserts that behavior directly. **Fixture setup does not count.** `birth-plan.e2e.ts` creates its Client with `POST /api/practices/{id}/clients`; that automates nothing about the intake sequence, which `add-client-visits.e2e.ts` walks separately and on purpose. The `/signup` form was the same shape of hole until [#318](https://github.com/markgoho/doula-cloud/issues/318) wrote `signup-form.e2e.ts` for it: every other spec still provisions its Practice through `POST /api/staff/signup` directly, and that provisioning is still fixture setup rather than coverage.
+- **`automated (<spec>)`** — an existing Playwright spec drives this step and asserts its result, or, for a [budget step](#budget-steps) only, a unit-suite spec under `app/src/` asserts it (the continuum sweep for the 320px line), named by a filename only one file carries. It counts only when the spec exercises the step the way the Persona would, through the UI, or asserts that behavior directly. **Fixture setup does not count.** `birth-plan.e2e.ts` creates its Client with `POST /api/practices/{id}/clients`; that automates nothing about the intake sequence, which `add-client-visits.e2e.ts` walks separately and on purpose. The `/signup` form was the same shape of hole until [#318](https://github.com/markgoho/doula-cloud/issues/318) wrote `signup-form.e2e.ts` for it: every other spec still provisions its Practice through `POST /api/staff/signup` directly, and that provisioning is still fixture setup rather than coverage.
 - **`manual`** — a person can walk the step today against the running stack. The expected result is what the product does **as built**, which includes a refusal or an error where that is the honest answer (`connectRequired`, `402 no credits remaining`, a raw enum on screen). A step is `manual` when it can be performed and the result observed, whatever the result is.
 - **`blocked`** — the code path is complete and the step can be attempted, but it cannot finish because third-party infrastructure the walking stack does not have is absent.
 
@@ -99,6 +121,8 @@ What the suite covers today, as the marks below were assigned from:
 | `admin-invite-role.e2e.ts` | The same invite flow for an Admin (`admin` without `owner` or `doula`, selected on the invite form): her roster row, the Credits screen ADR-0008 grants her, and the Owner-only invite send refused (#965) |
 | `contract-lifecycle.e2e.ts` | A Contract's full lifecycle: build and send on the Practice side, the Client signing it in the portal, and the Signed PDF coming back |
 | `add-client-visits.e2e.ts` | The Add Client intake form (#497) and an Engagement's Visits section: add a Visit, read it back |
+| `portal-320.e2e.ts` | Every signed-in portal screen, shell and route together, at 320px with no sideways scroll — the 320px budget step on a signed-in portal stage |
+| `route-continuum.svelte.spec.ts` (unit suite) | Every route this repo ships, swept from 320px up — the 320px budget step on every other stage |
 
 Nothing in the suite exercises: Invoices, or the Staff roster screen (`/practices/[practiceId]/staff`).
 
@@ -124,16 +148,16 @@ Every plan has been executed once ([#209](https://github.com/markgoho/doula-clou
 
 | Plan | Persona | `automated` | `manual` | `blocked` | `missing-feature` |
 | --- | --- | --- | --- | --- | --- |
-| [evaluator-doula.md](evaluator-doula.md) | Tasha Bell | 5 | 11 | 0 | 4 |
-| [solo-birth-doula.md](solo-birth-doula.md) | Maya Okonkwo | 13 | 20 | 0 | 3 |
-| [practice-owner.md](practice-owner.md) | Renata Alvarez | 5 | 17 | 0 | 6 |
-| [non-doula-admin.md](non-doula-admin.md) | Dee Whitlock | 2 | 19 | 0 | 3 |
-| [employed-doula.md](employed-doula.md) | Priya Raman | 3 | 21 | 0 | 5 |
-| [contractor-doula.md](contractor-doula.md) | Lena Vasquez | 1 | 18 | 0 | 8 |
-| [loss-client.md](loss-client.md) | Nadia Haddad | 5 | 14 | 0 | 8 |
-| [first-time-client.md](first-time-client.md) | Hannah Sorensen | 8 | 17 | 0 | 6 |
-| [returning-postpartum-client.md](returning-postpartum-client.md) | Camille Boyd | 0 | 19 | 0 | 0 |
-| **Total** | | **42** | **156** | **0** | **43** |
+| [evaluator-doula.md](evaluator-doula.md) | Tasha Bell | 11 | 38 | 0 | 7 |
+| [solo-birth-doula.md](solo-birth-doula.md) | Maya Okonkwo | 21 | 56 | 0 | 3 |
+| [practice-owner.md](practice-owner.md) | Renata Alvarez | 14 | 49 | 0 | 6 |
+| [non-doula-admin.md](non-doula-admin.md) | Dee Whitlock | 11 | 50 | 0 | 3 |
+| [employed-doula.md](employed-doula.md) | Priya Raman | 10 | 46 | 0 | 5 |
+| [contractor-doula.md](contractor-doula.md) | Lena Vasquez | 9 | 44 | 0 | 8 |
+| [loss-client.md](loss-client.md) | Nadia Haddad | 11 | 34 | 0 | 8 |
+| [first-time-client.md](first-time-client.md) | Hannah Sorensen | 16 | 49 | 0 | 6 |
+| [returning-postpartum-client.md](returning-postpartum-client.md) | Camille Boyd | 4 | 32 | 0 | 0 |
+| **Total** | | **107** | **398** | **0** | **46** |
 
 Every `automated` step passed. **No plan carries a `blocked` step any more** — Stripe was the last holdout and [#242](https://github.com/markgoho/doula-cloud/issues/242) opened the Sandbox, after which Connect, Checkout and Invoices were all walked for real.
 
@@ -158,6 +182,8 @@ Every `automated` step passed. **No plan carries a `blocked` step any more** —
 **[#1244](https://github.com/markgoho/doula-cloud/issues/1244) corrected two stale claims on first-time-client.md's map and plan.** Stage 9's partner-access gap (HS-G5) named a schema rule that is gone: `client_portal_users`'s table-wide `UNIQUE` on `identity_uid` was dropped by #309 and replaced with `UNIQUE (identity_uid, client_id)` by #819, and what actually refuses a second invitation today is `invite()`'s handler-level check on an already-accepted Client (`portalinvite/invite.go`), not the schema. Both documents also described the supported partner-access path as sharing a password — a Client has none (ADR-0026: a sign-in link, not a password) — corrected to sharing the mailbox that receives it. HS-G1's own gap row closes with it: #617 (ADR-0026) removed the account-mode question it named, and the mode-radio step it exposed — the plan's 2.2-a — is gone with it. One mark moved, 2.2-a itself, dropping the plan's `manual` count by one; the run-status table above is recounted from the plan's own Steps table, Total with it, to 40 / 157 / 0 / 44.
 
 **[#1242](https://github.com/markgoho/doula-cloud/issues/1242) closed the `staff.identity_uid` drift #1135 held for it**, on contractor-doula.md: LV-G2 (a person cannot be Staff at two Practices) and its adjacent gap LV-G8 (a failed acceptance leaves a member behind) both closed 2026-08-25 against #225 and #291, and the plan, its journey map, its persona, and the two simulation documents that named Rooted Birth Collective's day zero still told the old refusal's story. Step 1.2's expected result is rewritten against what `staffauth`'s accept path does today — it resolves her existing `staff` row by `identity_uid` and succeeds — and the fixture bypass her Preconditions carried is removed, because step 1.2 now produces her second membership directly. One mark moved, 1.2-a from `missing-feature (LV-G2)` to `manual`, and the run-status table above is recounted with it, Total with it — landing on top of #1241's and #1244's own recounts above — to 40 / 158 / 0 / 43. Three other plans (practice-owner.md, non-doula-admin.md and employed-doula.md) cited LV-G2 as the reason their own Practice picker step is unwalkable for anyone; that prose is corrected to say why without citing a closed gap, and no mark on those plans moved. A wider drift on the same map — LV-G1, LV-G4, LV-G6, LV-G7 and RA-G8, all owned by #225 too — was spotted but not read closely enough to correct here, and is held at [#1434](https://github.com/markgoho/doula-cloud/issues/1434).
+
+**[#1683](https://github.com/markgoho/doula-cloud/issues/1683) added the [budget steps](#budget-steps)**, as a desk pass: every journey map's stages gained a **Budget**, and every budget line became a step in its plan — **310 of them**, 65 `automated`, 242 `manual` and 3 `missing-feature` (Tasha Bell's stage 1, which has no page to measure while [TB-G1](https://github.com/markgoho/doula-cloud/issues/284) is open). Every `automated` one is a 320px line, held by `route-continuum.svelte.spec.ts` or `portal-320.e2e.ts`; every `manual` one waits for the second walk ([#329](https://github.com/markgoho/doula-cloud/issues/329)) to measure it, and none has been measured. No existing step is re-marked. Each plan carries a dated Run-log section naming its budget steps, and the run-status table above is recounted with them, Total with it, to 107 / 398 / 0 / 46. The numbers jump because a step now asks what a stage cost as well as whether it can be done, and that is the point: the first run could only say whether a Persona got through.
 
 ### Gap issues
 

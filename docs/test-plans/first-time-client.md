@@ -30,6 +30,11 @@ She is the full-arc Client and the only Persona who walks every client-facing sc
 | 2.1-a | Open it with the token | A single **Continue** button — no email, password or account-mode choice. #617 (ADR-0026) closed [HS-G1](https://github.com/markgoho/doula-cloud/issues/300): a Client has no password | `automated (portal-invite-accept.e2e.ts)` |
 | 2.2 | Press **Continue** | `POST /api/portal/accept-invite` claims the pending row and sets the session cookie on its own response (#145). Nothing is asked of her — the Practice already holds her name, and there is no account-setup step to complete | `automated (portal-invite-accept.e2e.ts)` |
 | 2.3 | Watch where she lands | `GET /api/portal/session` resolves one Engagement, so she is redirected straight to it rather than shown a chooser | `automated (portal-invite-accept.e2e.ts)` |
+| 2.B-screens | Count the screens from the stage's entry to its end | **Screens**: 2 (Hick's Law, Flow). The accept page, then her Engagement | `manual` |
+| 2.B-decisions | On each screen, count the decisions visible at once; record the largest | **Decisions**: 1 (Hick's Law, Miller's Law). **Continue** | `manual` |
+| 2.B-confirmation | Read the screen the stage ends on | **Confirmation**: yes (Peak-End Rule). She lands on her own Engagement, which says whose care this is | `manual` |
+| 2.B-cold | Walk the stage in a fresh browser profile, with nothing explained first | **Cold**: yes (Paradox of the Active User) | `manual` |
+| 2.B-320px | Sweep the stage's screens from 320px up | **320px**: yes (ADR-0024) | `automated (route-continuum.svelte.spec.ts)` |
 
 ### Stage 3 — The first screen
 
@@ -40,6 +45,11 @@ She is the full-arc Client and the only Persona who walks every client-facing sc
 | 3.2 | Read what is offered below | **Birth Plan** and **Contract** links, then the thread. Nothing explains what either is for, or what she is meant to do first | `manual` |
 | 3.3 | Watch for anything asking about notifications | Nothing asks. A push subscription is registered once per device, fire-and-forget (#61), silently | `manual` |
 | 3.3-a | Review, mute, or explain that subscription afterwards | There is no notification setting anywhere in the portal | `missing-feature (HS-G4)` [#303](https://github.com/markgoho/doula-cloud/issues/303) |
+| 3.B-screens | Count the screens from the stage's entry to its end | **Screens**: 1 (Hick's Law, Flow) | `manual` |
+| 3.B-decisions | On each screen, count the decisions visible at once; record the largest | **Decisions**: 5 (Hick's Law, Miller's Law). The portal's five destinations | `manual` |
+| 3.B-time | Time each routine act on the stage's device, from the input to the result settled on screen | **Time**: 400 ms, 100 ms (Doherty Threshold) | `manual` |
+| 3.B-cold | Walk the stage in a fresh browser profile, with nothing explained first | **Cold**: yes (Paradox of the Active User) | `manual` |
+| 3.B-320px | Sweep the stage's screens from 320px up | **320px**: yes (ADR-0024) | `automated (portal-320.e2e.ts)` |
 
 ### Stage 4 — Signing the Contract
 
@@ -50,6 +60,12 @@ She is the full-arc Client and the only Persona who walks every client-facing sc
 | 4.1-b | As Maya, take a signature before sending the portal invite | **She is stopped before she can.** On a Client who has never been invited, a notice names the ordering and the way out of it — sending the portal invite, an action on the same page — and **Send Contract** renders disabled beneath it, rather than reporting a refusal after the click. The BFF enforces the same precondition itself ([MO-G6](https://github.com/markgoho/doula-cloud/issues/255) closed) | `manual` |
 | 4.2 | Type her full legal name, tick the attestation, submit | `POST .../contract/sign` succeeds and the page re-renders at **Signed**. **The strongest screen in the portal**, and a spec covers it now: `contract-lifecycle.e2e.ts` agrees to sign electronically, fills the full legal name, ticks the attestation and presses **Sign**, as the Client, in her own browser context | `automated (contract-lifecycle.e2e.ts)` |
 | 4.3 | Keep a copy of what she signed | **Download signed Contract (PDF)** sits under the signed prose and hands her the file ([HS-G3](https://github.com/markgoho/doula-cloud/issues/302) closed), and the BFF can read the object back out of the store to serve it ([HS-G6](https://github.com/markgoho/doula-cloud/issues/305) closed). The control is gated on the Contract read's own `hasSignedPdf` rather than on `status`, so it is offered here and stays offered if the Contract is ever voided ([#1119](https://github.com/markgoho/doula-cloud/issues/1119) closed) — that half is Nadia's plan, not this one | `manual` |
+| 4.B-screens | Count the screens from the stage's entry to its end | **Screens**: 1 (Hick's Law, Flow) | `manual` |
+| 4.B-decisions | On each screen, count the decisions visible at once; record the largest | **Decisions**: 3 (Hick's Law, Miller's Law). Her full legal name, the attestation, and the submit | `manual` |
+| 4.B-memory | Note every later step that needs an earlier answer, and whether that answer is still on screen | **Memory**: yes (Working Memory). The Contract's prose and values stay on screen while she signs | `manual` |
+| 4.B-confirmation | Read the screen the stage ends on | **Confirmation**: yes (Peak-End Rule). The page says it is signed, when, and how to keep a copy | `manual` |
+| 4.B-cold | Walk the stage in a fresh browser profile, with nothing explained first | **Cold**: yes (Paradox of the Active User) | `manual` |
+| 4.B-320px | Sweep the stage's screens from 320px up | **320px**: yes (ADR-0024) | `automated (portal-320.e2e.ts)` |
 
 ### Stage 5 — Reading the Birth Plan
 
@@ -59,6 +75,10 @@ She is the full-arc Client and the only Persona who walks every client-facing sc
 | 5.1-a | Open it once filled | The Plan Instance's snapshot renders read-only | `automated (birth-plan.e2e.ts)` |
 | 5.2 | Correct the two things she wants changed | She cannot. It is staff-drafted and read-only to her: no editable field, no comment, no suggested edit, no acknowledgment that she has read it (HS-G2) | `missing-feature (HS-G2)` [#301](https://github.com/markgoho/doula-cloud/issues/301) |
 | 5.2-a | Message Maya about them instead | Succeeds. Her only route to a correction is a re-type by Staff, and nothing links the message to the document | `manual` |
+| 5.B-screens | Count the screens from the stage's entry to its end | **Screens**: 1 (Hick's Law, Flow) | `manual` |
+| 5.B-decisions | On each screen, count the decisions visible at once; record the largest | **Decisions**: 2 (Hick's Law, Miller's Law). Correct what she wants changed, or tell Maya | `manual` |
+| 5.B-time | Time each routine act on the stage's device, from the input to the result settled on screen | **Time**: 400 ms, 100 ms (Doherty Threshold) | `manual` |
+| 5.B-320px | Sweep the stage's screens from 320px up | **320px**: yes (ADR-0024) | `automated (portal-320.e2e.ts)` |
 
 ### Stage 6 — Print it and hand it over — moment of truth
 
@@ -67,6 +87,13 @@ She is the full-arc Client and the only Persona who walks every client-facing sc
 | 6.1 | Open the Birth Plan on her phone and press **Print** | The mechanism works: a real print stylesheet hides the Back link, the Print button and the chrome (`birth-plan/+page.svelte`, `@media print`). **Print is the only export** — no PDF, no share link | `manual` |
 | 6.1-a | Have Maya hand it over on her behalf | No deep link, no print from the Doula's side; the print stylesheet lives only on the Client's portal view. The same moment from the Doula's side is **PR-G5** | `missing-feature (PR-G5)` [#280](https://github.com/markgoho/doula-cloud/issues/280) |
 | 6.2 | Hand the paper over | Leaves the product entirely. The last mile is paper she remembered to print in advance, handed to a stranger in scrubs | `manual` |
+| 6.B-screens | Count the screens from the stage's entry to its end | **Screens**: 1 (Hick's Law, Flow). The Birth Plan, then the browser's own print dialog, which does not count | `manual` |
+| 6.B-decisions | On each screen, count the decisions visible at once; record the largest | **Decisions**: 1 (Hick's Law, Miller's Law). **Print** | `manual` |
+| 6.B-memory | Note every later step that needs an earlier answer, and whether that answer is still on screen | **Memory**: yes (Working Memory). Nothing she must remember to print in advance; the Birth Plan is one tap from her Engagement | `manual` |
+| 6.B-time | Time each routine act on the stage's device, from the input to the result settled on screen | **Time**: 400 ms, 100 ms (Doherty Threshold) | `manual` |
+| 6.B-confirmation | Read the screen the stage ends on | **Confirmation**: yes (Peak-End Rule). The printed page names her, her Practice and when the plan last changed, so the stranger in scrubs knows whose it is | `manual` |
+| 6.B-cold | Walk the stage in a fresh browser profile, with nothing explained first | **Cold**: yes (Paradox of the Active User). A first print, in a hospital, with nothing explained | `manual` |
+| 6.B-320px | Sweep the stage's screens from 320px up | **320px**: yes (ADR-0024) | `automated (portal-320.e2e.ts)` |
 
 ### Stage 7 — Living in the thread
 
@@ -76,6 +103,11 @@ She is the full-arc Client and the only Persona who walks every client-facing sc
 | 7.2 | Receive Maya's reply with the tab open | The tab refetches on the push message and the reply appears without a reload. The push itself carries no content (ADR-0002) | `automated (push-notification.e2e.ts)` |
 | 7.3 | Press **Load older** and read back through the Engagement | Older messages page in on demand, in order, immutable | `manual` |
 | 7.3-a | Find out that a push is **not an alarm** | Nothing on screen says so. ADR-0002 is explicit that it is not a substitute for a phone call in a time-critical moment, and that fact reaches her nowhere | `missing-feature (HS-G4)` [#303](https://github.com/markgoho/doula-cloud/issues/303) |
+| 7.B-screens | Count the screens from the stage's entry to its end | **Screens**: 1 (Hick's Law, Flow) | `manual` |
+| 7.B-decisions | On each screen, count the decisions visible at once; record the largest | **Decisions**: 3 (Hick's Law, Miller's Law). The message, a photo, and **Send** | `manual` |
+| 7.B-time | Time each routine act on the stage's device, from the input to the result settled on screen | **Time**: 400 ms, 100 ms (Doherty Threshold) | `manual` |
+| 7.B-confirmation | Read the screen the stage ends on | **Confirmation**: yes (Peak-End Rule) | `manual` |
+| 7.B-320px | Sweep the stage's screens from 320px up | **320px**: yes (ADR-0024) | `automated (portal-320.e2e.ts)` |
 
 ### Stage 8 — Birth, and afterwards
 
@@ -84,19 +116,27 @@ She is the full-arc Client and the only Persona who walks every client-facing sc
 | 8.1 | Open the portal after the birth | It looks exactly as it did at 18 weeks. Same heading, same `intake`, same two links | `manual` |
 | 8.1-a | Have the status reflect where she actually is | No handler writes `UPDATE engagements`, so the status line on her home screen has been wrong since the day she signed | `missing-feature (MO-G4)` [#253](https://github.com/markgoho/doula-cloud/issues/253) |
 | 8.1-b | Find any record of the birth itself | Visits are invisible to the Client (`CONTEXT.md`), the birth included | `manual` |
+| 8.B-screens | Count the screens from the stage's entry to its end | **Screens**: 1 (Hick's Law, Flow) | `manual` |
+| 8.B-time | Time each routine act on the stage's device, from the input to the result settled on screen | **Time**: 400 ms, 100 ms (Doherty Threshold) | `manual` |
+| 8.B-320px | Sweep the stage's screens from 320px up | **320px**: yes (ADR-0024) | `automated (portal-320.e2e.ts)` |
 
 ### Stage 9 — Her partner asks for the login
 
 | Step | Action | Expected result | Mark |
 | --- | --- | --- | --- |
 | 9.1 | Give her partner access | No invite flow, no guest role, no read-only share of the Birth Plan. What refuses a second invitation today is `invite()` (`portalinvite/invite.go`), a handler-level check against the accepted Client, not the schema — `client_portal_users` now allows more than one `(identity_uid, client_id)` pair. The path nobody designed is sharing the mailbox that receives her sign-in links, not her password — she has none (ADR-0026) | `missing-feature (HS-G5)` [#304](https://github.com/markgoho/doula-cloud/issues/304) |
+| 9.B-screens | Count the screens from the stage's entry to its end | **Screens**: 2 (Hick's Law, Flow) | `manual` |
+| 9.B-decisions | On each screen, count the decisions visible at once; record the largest | **Decisions**: 3 (Hick's Law, Miller's Law) | `manual` |
+| 9.B-confirmation | Read the screen the stage ends on | **Confirmation**: yes (Peak-End Rule). The screen says her partner has been asked in, and what the partner does next | `manual` |
+| 9.B-cold | Walk the stage in a fresh browser profile, with nothing explained first | **Cold**: yes (Paradox of the Active User) | `manual` |
+| 9.B-320px | Sweep the stage's screens from 320px up | **320px**: yes (ADR-0024) | `automated (portal-320.e2e.ts)` |
 
 ## Marks
 
 | Mark | Steps |
 | --- | --- |
-| `automated` | 8 |
-| `manual` | 17 |
+| `automated` | 16 (8 of them [budget steps](README.md#budget-steps)) |
+| `manual` | 49 (32 of them [budget steps](README.md#budget-steps)) |
 | `missing-feature` | 6 ([HS-G4](https://github.com/markgoho/doula-cloud/issues/303) ×2, [HS-G2](https://github.com/markgoho/doula-cloud/issues/301), [PR-G5](https://github.com/markgoho/doula-cloud/issues/280), [MO-G4](https://github.com/markgoho/doula-cloud/issues/253), [HS-G5](https://github.com/markgoho/doula-cloud/issues/304)) |
 
 No step is `blocked`. She never reaches a Stripe surface — the portal has none — so the one thing she cannot see about money (**NH-G6**: no Invoice, balance or payment view anywhere in the portal) is a hole in the product, not a bill.
@@ -106,6 +146,10 @@ NH-G4, **RA-G1**, **PR-G7**, **MO-G3** and [#212](https://github.com/markgoho/do
 The Birth Plan's absent export is now [her map](../journeys/first-time-client.md)'s **HS-G7**, and 4.3's absent Contract copy sharpened into **HS-G6** — both minted at the run ([#240](https://github.com/markgoho/doula-cloud/issues/240)). The one fact this plan used to hand forward — **stage 4 is the strongest screen in the portal with no spec on it** — is answered: `contract-lifecycle.e2e.ts` signs the Contract as the Client, and 4.1 and 4.2 are `automated` on the strength of it.
 
 ## Run log
+
+### 2026-10-02 — budget steps added ([#1683](https://github.com/markgoho/doula-cloud/issues/1683))
+
+A desk pass, not a walk. The journey map's stages 2, 3, 4, 5, 6, 7, 8, 9 each gained a **Budget**, and each budget line is a step here, last in its stage's table: **40 budget steps**, 8 `automated`, 32 `manual`. No existing step is re-marked and no cell is rewritten. Every `automated` budget step is a 320px line the continuum sweep or `portal-320.e2e.ts` already asserts; every `manual` one is measured on the second walk ([#329](https://github.com/markgoho/doula-cloud/issues/329)), and none has been measured yet. The Marks summary above and [README.md](README.md)'s run-status row move with them.
 
 ### 2026-08-22 — automated steps ([#209](https://github.com/markgoho/doula-cloud/issues/209))
 

@@ -227,10 +227,39 @@ function readPlan(file: string, text: string): Plan | undefined {
 	return { file, tally, summary, automatedSpecs, missingFeatureGapIds, offenses };
 }
 
-function missingSpecOffenses(plan: Plan, e2eSpecs: ReadonlySet<string>): string[] {
-	return plan.automatedSpecs
-		.filter((spec) => !e2eSpecs.has(spec))
-		.map((spec) => `${plan.file}: \`automated (${spec})\` names a spec that does not exist under app/e2e/`);
+// #1683: a budget step's 320px line is asserted by the continuum sweep,
+// which lives in the unit suite under app/src/, not in app/e2e/. So an
+// `automated` mark resolves against both: an e2e spec by its filename, or a
+// unit spec by its basename -- and a basename two unit specs share names
+// neither, so it is refused rather than resolved to whichever came first.
+function missingSpecOffenses(
+	plan: Plan,
+	e2eSpecs: ReadonlySet<string>,
+	unitSpecCounts: ReadonlyMap<string, number>
+): string[] {
+	return plan.automatedSpecs.flatMap((spec) => {
+		if (e2eSpecs.has(spec)) return [];
+		const count = unitSpecCounts.get(spec) ?? 0;
+		if (count === 1) return [];
+		if (count > 1) {
+			return [
+				`${plan.file}: \`automated (${spec})\` names ${count} specs under app/src/; name a spec only one file carries`
+			];
+		}
+		return [
+			`${plan.file}: \`automated (${spec})\` names a spec that does not exist under app/e2e/ or app/src/`
+		];
+	});
+}
+
+// Basename -> how many spec files under app/src/ carry it.
+function countBasenames(files: readonly string[]): Map<string, number> {
+	const counts = new Map<string, number>();
+	for (const file of files) {
+		const name = path.basename(file);
+		counts.set(name, (counts.get(name) ?? 0) + 1);
+	}
+	return counts;
 }
 
 const GAP_ID = /^[A-Z]{2,3}-G\d+$/;
@@ -356,6 +385,7 @@ const plans = planFiles
 	.filter((plan): plan is Plan => plan !== undefined);
 
 const e2eSpecs = new Set(globFiles('*.e2e.ts', { cwd: e2eDir }));
+const unitSpecCounts = countBasenames(globFiles('**/*.spec.ts', { cwd: path.join(appRoot, 'src') }));
 
 const readmeText = readFileSync(path.join(testPlansDirectory, 'README.md'), 'utf8');
 const gapIds = recognizedGapIds(readmeText);
@@ -363,7 +393,7 @@ const runStatus = runStatusTable(readmeText);
 
 const offenses: string[] = [
 	...plans.flatMap((plan) => plan.offenses),
-	...plans.flatMap((plan) => missingSpecOffenses(plan, e2eSpecs)),
+	...plans.flatMap((plan) => missingSpecOffenses(plan, e2eSpecs, unitSpecCounts)),
 	...plans.flatMap((plan) => unrecognizedGapIdOffenses(plan, gapIds)),
 	...(runStatus === undefined
 		? ["README.md: no run-status table found under '## The run, and the gap issues'"]
@@ -590,13 +620,28 @@ describe('readPlan', () => {
 });
 
 describe('missingSpecOffenses', () => {
-	it('names a spec an automated mark cites that does not exist under app/e2e/', () => {
+	it('names a spec an automated mark cites that exists under neither app/e2e/ nor app/src/', () => {
 		const plan = readPlan('fixture.md', FIXTURE_PLAN);
 		if (plan === undefined) throw new Error('fixture plan failed to parse');
-		expect(missingSpecOffenses(plan, new Set())).toEqual([
-			'fixture.md: `automated (signup-form.e2e.ts)` names a spec that does not exist under app/e2e/'
+		expect(missingSpecOffenses(plan, new Set(), new Map())).toEqual([
+			'fixture.md: `automated (signup-form.e2e.ts)` names a spec that does not exist under app/e2e/ or app/src/'
 		]);
-		expect(missingSpecOffenses(plan, new Set(['signup-form.e2e.ts']))).toEqual([]);
+		expect(missingSpecOffenses(plan, new Set(['signup-form.e2e.ts']), new Map())).toEqual([]);
+	});
+
+	it('resolves a unit spec by a basename exactly one file under app/src/ carries (#1683)', () => {
+		const plan = readPlan('fixture.md', FIXTURE_PLAN.replace('signup-form.e2e.ts', 'sweep.svelte.spec.ts'));
+		if (plan === undefined) throw new Error('fixture plan failed to parse');
+		expect(missingSpecOffenses(plan, new Set(), countBasenames(['routes/sweep.svelte.spec.ts']))).toEqual([]);
+	});
+
+	it('refuses a basename two unit specs share, rather than picking one', () => {
+		const plan = readPlan('fixture.md', FIXTURE_PLAN.replace('signup-form.e2e.ts', 'sweep.svelte.spec.ts'));
+		if (plan === undefined) throw new Error('fixture plan failed to parse');
+		const counts = countBasenames(['a/sweep.svelte.spec.ts', 'b/sweep.svelte.spec.ts']);
+		expect(missingSpecOffenses(plan, new Set(), counts)).toEqual([
+			'fixture.md: `automated (sweep.svelte.spec.ts)` names 2 specs under app/src/; name a spec only one file carries'
+		]);
 	});
 });
 
@@ -740,6 +785,7 @@ describe('docs/test-plans/ arithmetic, read off the real tree (#1233)', () => {
 
 	it('reads the real app/e2e/ and README.md gap tables, so neither check is vacuous', () => {
 		expect(e2eSpecs.size).toBeGreaterThan(10);
+		expect(unitSpecCounts.get('route-continuum.svelte.spec.ts')).toBe(1);
 		expect(gapIds.size).toBeGreaterThan(10);
 	});
 
@@ -750,7 +796,7 @@ describe('docs/test-plans/ arithmetic, read off the real tree (#1233)', () => {
 	it(
 		"agrees with itself: every plan's Marks summary matches its own Steps table, README's run-status " +
 			'table and Total match the plans, every mark is one of the four, every automated spec exists ' +
-			'under app/e2e/, and every missing-feature gap ID is one README.md owns',
+			'under app/e2e/ or app/src/, and every missing-feature gap ID is one README.md owns',
 		() => {
 			expect(offenses).toEqual([]);
 		}

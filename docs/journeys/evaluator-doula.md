@@ -31,6 +31,12 @@ The divergence is the finding: the terms she arrives with are the terms `CONTEXT
 
 **Thinking**: "Is this another clinic tool wearing a doula costume?" **Pain points**: she has been burned by medical software before. Three other tabs are open. She wants to see "doula" and "birth plan" before she gives anyone an email address.
 
+**Budget**:
+
+* **Screens**: 1 (Hick's Law, Flow)
+* **Cold**: yes (Paradox of the Active User)
+* **320px**: yes (ADR-0024)
+
 - **1.1** — Follow a link from a search result or a Facebook group.
 - **1.2** — Read what the product is for.
 
@@ -40,6 +46,12 @@ The divergence is the finding: the terms she arrives with are the terms `CONTEXT
 
 **Thinking**: "What does this cost, per month, for two doulas?" **Pain points**: pricing is the second question she asks, and an unanswered one reads as expensive.
 
+**Budget**:
+
+* **Screens**: 1 (Hick's Law, Flow)
+* **Cold**: yes (Paradox of the Active User)
+* **320px**: yes (ADR-0024)
+
 - **2.1** — Look for a pricing page.
 
 **Abandon point**: no price is published on the marketing site. That half of TB-G2 moved to [#868](https://github.com/markgoho/doula-cloud/issues/868) (what the site says) and [#284](https://github.com/markgoho/doula-cloud/issues/284) (building it). The in-product half is closed: once signed up, **Billing** states `One Credit covers one Engagement`, `One Credit costs $20.00`, and runs every ledger row through a label instead of printing the raw enum (TB-G2's in-product half and TB-G3, both closed).
@@ -47,6 +59,15 @@ The divergence is the finding: the terms she arrives with are the terms `CONTEXT
 ### Stage 3 — Sign up
 
 **Thinking**: "Fine, I will spend one minute." **Pain points**: she has none of Maya's motivation. Every field costs her.
+
+**Budget**:
+
+* **Screens**: 2 (Hick's Law, Flow)
+* **Decisions**: 5 (Hick's Law, Miller's Law)
+* **Memory**: yes (Working Memory)
+* **Confirmation**: yes (Peak-End Rule)
+* **Cold**: yes (Paradox of the Active User)
+* **320px**: yes (ADR-0024)
 
 - **3.1** — Open `/signup`.
 - **3.2** — Fill four fields: Practice name, Your name, Email, Password.
@@ -62,6 +83,16 @@ This stage is genuinely cheap and is the strongest leg of her journey. One scree
 
 **Thinking**: "Show me the thing I came for." **Pain points**: none remaining. The old seven-link menu is gone ([#452](https://github.com/markgoho/doula-cloud/issues/452), closed): Clients, Billing and Staff moved into the shell's persistent, role-scoped top bar, Plan Templates, Contract Template and Payments moved under **Settings**, and this screen is now `OverviewHub`'s zero-Client state, which names the work rather than the filing cabinet and offers one action.
 
+**Budget**:
+
+* **Screens**: 1 (Hick's Law, Flow)
+* **Decisions**: 5 (Hick's Law, Miller's Law)
+* **Memory**: yes (Working Memory)
+* **Time**: 400 ms, 100 ms (Doherty Threshold)
+* **Confirmation**: yes (Peak-End Rule)
+* **Cold**: yes (Paradox of the Active User)
+* **320px**: yes (ADR-0024)
+
 - **4.1** — Land on `/practices/[practiceId]`.
 - **4.2** — Read "Nothing is here yet, because no Client is. Add one and this becomes the Client's birth plan, the visits with the Client, and the contract and invoices between the Client and your Practice." and follow **Add your first Client**.
 
@@ -70,6 +101,16 @@ This stage is genuinely cheap and is the strongest leg of her journey. One scree
 ### Stage 5 — Kick the tires
 
 **Thinking**: "Let me put a fake client in and see what happens." **Pain points**: she must invent a client to see any real screen.
+
+**Budget**:
+
+* **Screens**: 5 (Hick's Law, Flow)
+* **Decisions**: 3 (Hick's Law, Miller's Law)
+* **Memory**: yes (Working Memory)
+* **Time**: 400 ms, 100 ms (Doherty Threshold)
+* **Confirmation**: yes (Peak-End Rule)
+* **Cold**: yes (Paradox of the Active User)
+* **320px**: yes (ADR-0024)
 
 - **5.1** — **Find or add a Client** on the Clients list, search, find nobody, follow **Add a new Client**. Intake is one question per page from there (ADR-0017): the name, then date of birth, email, phone, address, then whatever the Practice put on its own Client Field Template.
 - **5.2** — Answer the name question and press **Save and come back later**. The save is **free** and creates a Client and nothing else — no Engagement, no credit spent — and lands her on that Client's own detail hub.
@@ -81,6 +122,14 @@ This stage is genuinely cheap and is the strongest leg of her journey. One scree
 
 **Thinking**: "If I hate this in six months, do I get my clients back?" **Pain points**: none remaining. Both halves of her stated question are now answered from **Settings**.
 
+**Budget**:
+
+* **Screens**: 2 (Hick's Law, Flow)
+* **Decisions**: 2 (Hick's Law, Miller's Law)
+* **Confirmation**: yes (Peak-End Rule)
+* **Cold**: yes (Paradox of the Active User)
+* **320px**: yes (ADR-0024)
+
 - **6.1** — Look for an export.
 
 **Abandon point**: none remaining. **Settings** offers a whole-Practice data export and **Delete this Practice**, a 30-day countdown before erasure (TB-G5, closed, split across [#288](https://github.com/markgoho/doula-cloud/issues/288) (export) and [#871](https://github.com/markgoho/doula-cloud/issues/871) (deletion)).
@@ -88,6 +137,14 @@ This stage is genuinely cheap and is the strongest leg of her journey. One scree
 ### Stage 7 — Judge the way in (migrating owner)
 
 **Thinking**: "I have two years of clients in a spreadsheet and a Drive folder." **Pain points**: Tasha *is* the migrating owner. Her existing data is the reason switching is expensive.
+
+**Budget**:
+
+* **Screens**: 2 (Hick's Law, Flow)
+* **Decisions**: 3 (Hick's Law, Miller's Law)
+* **Confirmation**: yes (Peak-End Rule)
+* **Cold**: yes (Paradox of the Active User)
+* **320px**: yes (ADR-0024)
 
 - **7.1** — Look for an import.
 

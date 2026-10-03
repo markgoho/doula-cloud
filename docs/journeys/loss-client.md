@@ -34,6 +34,13 @@ So every wound on this map is a **static** one: a word on a screen, a link that 
 
 **Thinking**: nothing about the software. It works. **Pain points**: none yet. This stage exists to fix what the record holds before the turn: a signed Contract, a filled Birth Plan Instance, eleven Visits, and a message thread.
 
+**Budget**:
+
+* **Screens**: 2 (Hick's Law, Flow)
+* **Decisions**: 2 (Hick's Law, Miller's Law)
+* **Time**: 400 ms, 100 ms (Doherty Threshold)
+* **320px**: yes (ADR-0024)
+
 - **1.1** — Sign in at `/portal/login`, land on `/portal/engagements/[engagementId]` (`GET /api/portal/session` → `decidePortalLanding`).
 - **1.2** — Read and send messages in the one continuous thread.
 
@@ -58,6 +65,16 @@ So every wound on this map is a **static** one: a word on a screen, a link that 
 2. **Status: `intake`** — the raw enum ([#212](https://github.com/markgoho/doula-cloud/issues/212)), and still `intake` because status never moves (**MO-G4**). The screen tells her her care is just getting started.
 3. The second link on the page is **Birth Plan** (NH-G2).
 
+**Budget**:
+
+* **Screens**: 1 (Hick's Law, Flow)
+* **Decisions**: 5 (Hick's Law, Miller's Law)
+* **Memory**: yes (Working Memory)
+* **Time**: 400 ms, 100 ms (Doherty Threshold)
+* **Confirmation**: yes (Peak-End Rule)
+* **Cold**: yes (Paradox of the Active User)
+* **320px**: yes (ADR-0024)
+
 - **4.1** — Open `/portal/engagements/[engagementId]` (`GET /api/portal/engagements/{id}` → `practiceName`, `status`, `createdAt`).
 - **4.2** — Read the heading, the status, and the created date. The created date is the only date the portal has — there is no due date anywhere (**MO-G3**), and after a loss the date her care began is a strange thing to be shown.
 - **4.3** — See the **Birth Plan** and **Contract** links, then the message thread.
@@ -66,12 +83,25 @@ So every wound on this map is a **static** one: a word on a screen, a link that 
 
 **Thinking**: "I don't want to see that." **Pain points**: the link is fixed in the page, second from the top, and nothing can retire it. The Plan Instance can be overwritten by Staff, never archived or hidden, and deletion is ruled out — the Engagement is a permanent record. Opening it renders the full document with a **Print** button.
 
+**Budget**:
+
+* **Screens**: 1 (Hick's Law, Flow)
+* **Decisions**: 2 (Hick's Law, Miller's Law)
+* **Confirmation**: yes (Peak-End Rule)
+* **320px**: yes (ADR-0024)
+
 - **5.1** — The link is present whether or not she taps it.
 - **5.2** — If she taps it: the filled Birth Plan, read-only, with **Print** (`GET .../birth-plan`). If no Instance exists the page says "No Birth Plan has been created for this Engagement yet" — which is the friendlier of the two outcomes here, by accident.
 
 ### Stage 6 — Money, and the word "voided"
 
 **Thinking**: "Am I still being charged for this?" **Pain points**: the portal has **no Invoice surface at all** (NH-G6), so the one question she is most likely to have has no answer on screen. And when Maya voids the Contract (Dee's stage 7), the portal shows her `Status: voided` plus "Voided — this Contract is no longer active." — the ledger's word, delivered with no human context, on the document she signed when she was pregnant (NH-G5).
+
+**Budget**:
+
+* **Screens**: 2 (Hick's Law, Flow)
+* **Memory**: yes (Working Memory)
+* **320px**: yes (ADR-0024)
 
 - **6.1** — Open the Contract page (`GET .../contract`).
 - **6.2** — Read the status. A `voided` Contract still renders in full; only the **Sign** form is withheld (`status === 'sent'`). The signed PDF endpoint exists (`main.go:226`) but is not linked from this page (HS-G3).
@@ -80,12 +110,26 @@ So every wound on this map is a **static** one: a word on a screen, a link that 
 
 **Thinking**: "Maya is still coming. That's the only part that's right." **Pain points**: the thing that works is the thing the model records least. A bereavement Visit is a row with a Staff name and a creation timestamp — no type (**PR-G6**), no date (**MO-G1**), no notes (**MO-G2**) — and the Client never sees Visits at all. The support is real; the record of it is empty.
 
+**Budget**:
+
+* **Screens**: 1 (Hick's Law, Flow)
+* **Decisions**: 2 (Hick's Law, Miller's Law)
+* **Time**: 400 ms, 100 ms (Doherty Threshold)
+* **Confirmation**: yes (Peak-End Rule)
+* **320px**: yes (ADR-0024)
+
 - **7.1** — Maya logs Visits after the loss. They are indistinguishable from the eleven prenatal ones.
 - **7.2** — The message thread continues, unchanged and unchangeable — immutable by design (`CONTEXT.md`, ADR-0002), which is correct, and with no way for either of them to mark that the thread's subject has changed.
 
 ### Stage 8 — The record closes without erasing her
 
 **Thinking**: she stops opening the portal. **Pain points**: nothing closes. The Engagement sits at `intake` forever; there is no terminal state that is true (NH-G1) and no transition machinery to reach one (**MO-G4**). "Done looks like" is unreachable today: the record is permanent, which is right, and permanently wrong, which is not.
+
+**Budget**:
+
+* **Screens**: 1 (Hick's Law, Flow)
+* **Confirmation**: yes (Peak-End Rule)
+* **320px**: yes (ADR-0024)
 
 - **8.1** — No step. There is nothing to click.
 

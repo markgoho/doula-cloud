@@ -18,6 +18,9 @@ None, and that is the test. Tasha arrives from outside with no account and no fi
 | --- | --- | --- | --- |
 | 1.1 | Follow a link from a search result or a Facebook group | There is nowhere to arrive. No marketing site exists | `missing-feature (TB-G1)` [#284](https://github.com/markgoho/doula-cloud/issues/284) |
 | 1.2 | Read what the product is for, looking for "doula" and "birth plan" before giving anyone an email address | No such page exists in or out of the product | `missing-feature (TB-G1)` [#284](https://github.com/markgoho/doula-cloud/issues/284) |
+| 1.B-screens | Count the screens from the stage's entry to its end | **Screens**: 1 (Hick's Law, Flow). One page that says what the product is for, "doula" and "birth plan" in it, before any email address is asked for | `missing-feature (TB-G1)` |
+| 1.B-cold | Walk the stage in a fresh browser profile, with nothing explained first | **Cold**: yes (Paradox of the Active User) | `missing-feature (TB-G1)` |
+| 1.B-320px | Sweep the stage's screens from 320px up | **320px**: yes (ADR-0024) | `missing-feature (TB-G1)` |
 
 **Abandon check**: she never arrives at all.
 
@@ -27,6 +30,9 @@ None, and that is the test. Tasha arrives from outside with no account and no fi
 | --- | --- | --- | --- |
 | 2.1 | Look for a price, per month, for two doulas | No price is published on the marketing site. TB-G2's in-product half is closed ([#285](https://github.com/markgoho/doula-cloud/issues/285)); the marketing-site half moved to [#868](https://github.com/markgoho/doula-cloud/issues/868) (what the site says) and [#284](https://github.com/markgoho/doula-cloud/issues/284) (building it) | `missing-feature (TB-G2)` [#868](https://github.com/markgoho/doula-cloud/issues/868) [#284](https://github.com/markgoho/doula-cloud/issues/284) |
 | 2.1-a | Open the only money surface that does exist, `/practices/[practiceId]/billing`, once signed up | `Billing` states `One Credit covers one Engagement` and `One Credit costs $20.00`, and the ledger's Origin column runs every value through a label instead of printing the raw enum (TB-G2's in-product half, closed by [#285](https://github.com/markgoho/doula-cloud/issues/285), and TB-G3, closed by [#286](https://github.com/markgoho/doula-cloud/issues/286)) | `manual` |
+| 2.B-screens | Count the screens from the stage's entry to its end | **Screens**: 1 (Hick's Law, Flow). The price for two doulas, one screen from where she judged the product | `manual` |
+| 2.B-cold | Walk the stage in a fresh browser profile, with nothing explained first | **Cold**: yes (Paradox of the Active User) | `manual` |
+| 2.B-320px | Sweep the stage's screens from 320px up | **320px**: yes (ADR-0024) | `automated (route-continuum.svelte.spec.ts)` |
 
 **Abandon check**: an unanswered price reads as expensive.
 
@@ -38,6 +44,12 @@ None, and that is the test. Tasha arrives from outside with no account and no fi
 | 3.2 | Fill Practice name, Your name, Email, Password | "Practice name" asks her to name a business she may not think of as one | `automated (signup-form.e2e.ts)` |
 | 3.3 | Press **Create Practice** | `POST /api/staff/signup` creates the Practice, the Staff row, and a membership holding Owner + Admin + Doula in one statement | `automated (signup-form.e2e.ts)` |
 | 3.3-a | Look for anything telling her roles exist, or that she now holds three | The signup screen itself now states it, before she commits: the account holds Owner, Admin and Doula, why, that an invited person gets only the roles chosen for her, and where roles are read and changed afterward ([#290](https://github.com/markgoho/doula-cloud/issues/290), closed). The role-scoped **Staff** nav item repeats it, and the roster reads `Owner, Admin, Doula`, the team's words, not the schema's ([#262](https://github.com/markgoho/doula-cloud/issues/262), closed) | `manual` |
+| 3.B-screens | Count the screens from the stage's entry to its end | **Screens**: 2 (Hick's Law, Flow). `/signup`, then the Practice landing | `manual` |
+| 3.B-decisions | On each screen, count the decisions visible at once; record the largest | **Decisions**: 5 (Hick's Law, Miller's Law). Four fields and **Create Practice** | `manual` |
+| 3.B-memory | Note every later step that needs an earlier answer, and whether that answer is still on screen | **Memory**: yes (Working Memory) | `manual` |
+| 3.B-confirmation | Read the screen the stage ends on | **Confirmation**: yes (Peak-End Rule) | `manual` |
+| 3.B-cold | Walk the stage in a fresh browser profile, with nothing explained first | **Cold**: yes (Paradox of the Active User) | `manual` |
+| 3.B-320px | Sweep the stage's screens from 320px up | **320px**: yes (ADR-0024) | `automated (route-continuum.svelte.spec.ts)` |
 
 **Abandon check**: low risk. Time the whole stage — under a minute is the claim.
 
@@ -48,6 +60,13 @@ None, and that is the test. Tasha arrives from outside with no account and no fi
 | 4.1 | Land on `/practices/[practiceId]` | `Welcome to {practice name}`. The old seven-link menu is gone ([#452](https://github.com/markgoho/doula-cloud/issues/452), closed): Clients, Billing and Staff moved into the shell's persistent, role-scoped top bar, Plan Templates, Contract Template and Payments moved under **Settings**, and this screen is `OverviewHub`'s own content | `manual` |
 | 4.1-a | Search the screen for the words "birth plan" and "visit" | With no Client yet, `OverviewHub`'s empty state reads: "Nothing is here yet, because no Client is. Add one and this becomes the Client's birth plan, the visits with the Client, and the contract and invoices between the Client and your Practice." Both words appear, naming the work rather than administration | `manual` |
 | 4.2 | Choose where to go first | One action, **Add your first Client**, not a menu | `manual` |
+| 4.B-screens | Count the screens from the stage's entry to its end | **Screens**: 1 (Hick's Law, Flow) | `manual` |
+| 4.B-decisions | On each screen, count the decisions visible at once; record the largest | **Decisions**: 5 (Hick's Law, Miller's Law). The top bar's destinations and the one way forward, **Add a Client** | `manual` |
+| 4.B-memory | Note every later step that needs an earlier answer, and whether that answer is still on screen | **Memory**: yes (Working Memory) | `manual` |
+| 4.B-time | Time each routine act on the stage's device, from the input to the result settled on screen | **Time**: 400 ms, 100 ms (Doherty Threshold) | `manual` |
+| 4.B-confirmation | Read the screen the stage ends on | **Confirmation**: yes (Peak-End Rule). The screen says her Practice exists and what to do next | `manual` |
+| 4.B-cold | Walk the stage in a fresh browser profile, with nothing explained first | **Cold**: yes (Paradox of the Active User) | `manual` |
+| 4.B-320px | Sweep the stage's screens from 320px up | **320px**: yes (ADR-0024) | `automated (route-continuum.svelte.spec.ts)` |
 
 **Abandon check**: none remaining. TB-G4 is closed by [#287](https://github.com/markgoho/doula-cloud/issues/287).
 
@@ -61,12 +80,24 @@ None, and that is the test. Tasha arrives from outside with no account and no fi
 | 5.2-b | Follow **Start new work with {name}** from the hub and ask for an Engagement | The form names the price before she commits: `Credit cost 1 credit` and `Balance after 2`, then **Start work with {name}**. She holds Owner, so ADR-0017's solo-Practice collapse fires and the request is created and approved in one act — this is where the Engagement is created and the Credit locks. On an empty balance the whole act fails with `402 no credits remaining, ask a practice owner or admin to buy more`, and the screen offers **Buy credits** inline | `manual` |
 | 5.3 | Open the Engagement from the Clients list | The Engagement page renders | `automated (birth-plan.e2e.ts)` |
 | 5.4 | Read the page | Visits, Care Plan, Birth Plan, Contract, Invoices and Messages. **The first moment the product looks like doula work** — four clicks past where she was deciding whether to leave | `manual` |
+| 5.B-screens | Count the screens from the stage's entry to its end | **Screens**: 5 (Hick's Law, Flow). The Clients list, the intake question, the Client's hub, the Engagement Request, the Engagement | `manual` |
+| 5.B-decisions | On each screen, count the decisions visible at once; record the largest | **Decisions**: 3 (Hick's Law, Miller's Law). One intake question per page: the answer, **Continue**, **Save and come back later** | `manual` |
+| 5.B-memory | Note every later step that needs an earlier answer, and whether that answer is still on screen | **Memory**: yes (Working Memory) | `manual` |
+| 5.B-time | Time each routine act on the stage's device, from the input to the result settled on screen | **Time**: 400 ms, 100 ms (Doherty Threshold) | `manual` |
+| 5.B-confirmation | Read the screen the stage ends on | **Confirmation**: yes (Peak-End Rule) | `manual` |
+| 5.B-cold | Walk the stage in a fresh browser profile, with nothing explained first | **Cold**: yes (Paradox of the Active User) | `manual` |
+| 5.B-320px | Sweep the stage's screens from 320px up | **320px**: yes (ADR-0024) | `automated (route-continuum.svelte.spec.ts)` |
 
 ### Stage 6 — Judge the exit
 
 | Step | Action | Expected result | Mark |
 | --- | --- | --- | --- |
 | 6.1 | Export her data — any format — or delete the account | **Settings** offers both, as two separate acts: a whole-Practice data export ([TB-G5](https://github.com/markgoho/doula-cloud/issues/288), closed) and **Delete this Practice**, a 30-day countdown before erasure ([#871](https://github.com/markgoho/doula-cloud/issues/871), closed, split out of #288) | `manual` |
+| 6.B-screens | Count the screens from the stage's entry to its end | **Screens**: 2 (Hick's Law, Flow). **Settings**, then the export or the account deletion | `manual` |
+| 6.B-decisions | On each screen, count the decisions visible at once; record the largest | **Decisions**: 2 (Hick's Law, Miller's Law) | `manual` |
+| 6.B-confirmation | Read the screen the stage ends on | **Confirmation**: yes (Peak-End Rule) | `manual` |
+| 6.B-cold | Walk the stage in a fresh browser profile, with nothing explained first | **Cold**: yes (Paradox of the Active User) | `manual` |
+| 6.B-320px | Sweep the stage's screens from 320px up | **320px**: yes (ADR-0024) | `automated (route-continuum.svelte.spec.ts)` |
 
 **Abandon check**: both halves of her stated question are now answered.
 
@@ -76,6 +107,11 @@ None, and that is the test. Tasha arrives from outside with no account and no fi
 | --- | --- | --- | --- |
 | 7.1 | Import two years of Clients from a spreadsheet | No import exists | `missing-feature (TB-G6)` [#289](https://github.com/markgoho/doula-cloud/issues/289) |
 | 7.1-a | Reproduce one spreadsheet row by hand instead | Possible now, one row at a time: intake asks given, family and preferred name, date of birth, email, phone and address, and a Practice adds the columns we did not think of to its own Client Field Template ([MO-G3](https://github.com/markgoho/doula-cloud/issues/252) is closed). What still cannot happen is two years of rows arriving together — that is [TB-G6](https://github.com/markgoho/doula-cloud/issues/289) at 7.1, and it is untouched. `manual`, because the claim is about the whole sequence and every Practice-defined field behind it, and no spec answers a question past the first one — `accessibility.e2e.ts` opens four of the routes to run axe over them, which tests the pages and not the transcription | `manual` |
+| 7.B-screens | Count the screens from the stage's entry to its end | **Screens**: 2 (Hick's Law, Flow). The import's own screen, then the Clients it made | `manual` |
+| 7.B-decisions | On each screen, count the decisions visible at once; record the largest | **Decisions**: 3 (Hick's Law, Miller's Law) | `manual` |
+| 7.B-confirmation | Read the screen the stage ends on | **Confirmation**: yes (Peak-End Rule) | `manual` |
+| 7.B-cold | Walk the stage in a fresh browser profile, with nothing explained first | **Cold**: yes (Paradox of the Active User) | `manual` |
+| 7.B-320px | Sweep the stage's screens from 320px up | **320px**: yes (ADR-0024) | `automated (route-continuum.svelte.spec.ts)` |
 
 **Abandon check**: her existing data is the reason switching is expensive, and it cannot come with her.
 
@@ -83,9 +119,9 @@ None, and that is the test. Tasha arrives from outside with no account and no fi
 
 | Mark | Steps |
 | --- | --- |
-| `automated` | 5 |
-| `manual` | 11 |
-| `missing-feature` | 4 steps over 3 gaps ([TB-G1](https://github.com/markgoho/doula-cloud/issues/284), [TB-G2](https://github.com/markgoho/doula-cloud/issues/868), [TB-G6](https://github.com/markgoho/doula-cloud/issues/289)) |
+| `automated` | 11 (6 of them [budget steps](README.md#budget-steps)) |
+| `manual` | 38 (27 of them [budget steps](README.md#budget-steps)) |
+| `missing-feature` | 7 steps over 3 gaps ([TB-G1](https://github.com/markgoho/doula-cloud/issues/284), [TB-G2](https://github.com/markgoho/doula-cloud/issues/868), [TB-G6](https://github.com/markgoho/doula-cloud/issues/289); 3 of them [budget steps](README.md#budget-steps)) |
 
 Five gaps are closed: TB-G2's in-product half and TB-G3 (unexplained credits) are both observed at 2.1-a; TB-G4 (the admin-menu first screen) at 4.1-a; TB-G7 (the unsignposted roster model) at 3.3-a; and TB-G5 (export and account deletion) at 6.1. All four steps now show the state that closed the gap rather than the gap itself. TB-G1 backs two steps.
 
@@ -96,6 +132,10 @@ Five gaps are closed: TB-G2's in-product half and TB-G3 (unexplained credits) ar
 Her plan is the least automatable of the six, and for a reason worth keeping: two of her seven stages happen before the product exists, and a Playwright spec cannot run against a marketing site that has not been written.
 
 ## Run log
+
+### 2026-10-02 — budget steps added ([#1683](https://github.com/markgoho/doula-cloud/issues/1683))
+
+A desk pass, not a walk. The journey map's stages 1, 2, 3, 4, 5, 6, 7 each gained a **Budget**, and each budget line is a step here, last in its stage's table: **36 budget steps**, 6 `automated`, 27 `manual`, 3 `missing-feature`. No existing step is re-marked and no cell is rewritten. Every `automated` budget step is a 320px line the continuum sweep or `portal-320.e2e.ts` already asserts; every `manual` one is measured on the second walk ([#329](https://github.com/markgoho/doula-cloud/issues/329)), and none has been measured yet. The Marks summary above and [README.md](README.md)'s run-status row move with them.
 
 ### 2026-08-22 — automated steps ([#209](https://github.com/markgoho/doula-cloud/issues/209))
 

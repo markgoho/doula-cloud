@@ -24,6 +24,10 @@ Her journey turns mid-way, so half this plan is walked as Maya on the staff side
 | 1.1 | Sign in at `/portal/login` | `GET /api/portal/session` resolves one Engagement and lands on `/portal/engagements/[engagementId]` | `automated (client-portal-login.e2e.ts)` |
 | 1.2 | Read the thread and send a message | One continuous thread, in order, immutable (ADR-0002). Attachments upload both ways | `manual` |
 | 1.2-a | Find anything on screen saying this care is four months old | `Status: intake` and a **Created** date. No due date, no gestation, no Client detail of any kind | `missing-feature (MO-G3)` [#252](https://github.com/markgoho/doula-cloud/issues/252) |
+| 1.B-screens | Count the screens from the stage's entry to its end | **Screens**: 2 (Hick's Law, Flow). `/portal/login`, then her Engagement | `manual` |
+| 1.B-decisions | On each screen, count the decisions visible at once; record the largest | **Decisions**: 2 (Hick's Law, Miller's Law) | `manual` |
+| 1.B-time | Time each routine act on the stage's device, from the input to the result settled on screen | **Time**: 400 ms, 100 ms (Doherty Threshold) | `manual` |
+| 1.B-320px | Sweep the stage's screens from 320px up | **320px**: yes (ADR-0024) | `automated (route-continuum.svelte.spec.ts)` |
 
 ### Stage 2 — The loss; the Practice tries to mark it
 
@@ -52,6 +56,13 @@ Walked as Maya. Nadia is not in the app.
 | 4.2-a | Confirm the greeting is not gated on a first visit | The spec re-asserts the same `<h1>` on a fresh page in the same session. That proves it is not visit-gated; it does not prove what three weeks look like, which is 4.2's job | `automated (client-portal-login.e2e.ts)` |
 | 4.2-b | Read the status line and the date under it | `Status: intake` — the raw enum ([#212](https://github.com/markgoho/doula-cloud/issues/212)), still `intake` because status never moves — and **Created**, the only date the portal holds (**[MO-G3](https://github.com/markgoho/doula-cloud/issues/252)**) | `manual` |
 | 4.3 | Read what is offered below | Two links, **Birth Plan** first, then **Contract**; then the thread | `manual` |
+| 4.B-screens | Count the screens from the stage's entry to its end | **Screens**: 1 (Hick's Law, Flow). The Engagement she lands on, with nothing to pass through first | `manual` |
+| 4.B-decisions | On each screen, count the decisions visible at once; record the largest | **Decisions**: 5 (Hick's Law, Miller's Law). The portal's five destinations; nothing on the screen asks her anything | `manual` |
+| 4.B-memory | Note every later step that needs an earlier answer, and whether that answer is still on screen | **Memory**: yes (Working Memory). Nothing asks her to recall a date or a stage of the pregnancy | `manual` |
+| 4.B-time | Time each routine act on the stage's device, from the input to the result settled on screen | **Time**: 400 ms, 100 ms (Doherty Threshold) | `manual` |
+| 4.B-confirmation | Read the screen the stage ends on | **Confirmation**: yes (Peak-End Rule). The screen says where her care stands now, in words that are true after a loss | `manual` |
+| 4.B-cold | Walk the stage in a fresh browser profile, with nothing explained first | **Cold**: yes (Paradox of the Active User). Three weeks away, she meets it as if for the first time | `manual` |
+| 4.B-320px | Sweep the stage's screens from 320px up | **320px**: yes (ADR-0024) | `automated (portal-320.e2e.ts)` |
 
 ### Stage 5 — The Birth Plan will not go away
 
@@ -61,6 +72,10 @@ Walked as Maya. Nadia is not in the app.
 | 5.1-a | Retire, hide, archive or dismiss it — from her side or Maya's | None of the four exist. A Plan Instance can be overwritten by Staff and nothing else; deletion is correctly ruled out | `missing-feature (NH-G2)` [#294](https://github.com/markgoho/doula-cloud/issues/294) |
 | 5.2 | Tap the link | The filled Instance renders read-only | `automated (birth-plan.e2e.ts)` |
 | 5.2-a | Press **Print** | The print stylesheet hides the Back link, the Print button and the chrome. The mechanism works | `manual` |
+| 5.B-screens | Count the screens from the stage's entry to its end | **Screens**: 1 (Hick's Law, Flow) | `manual` |
+| 5.B-decisions | On each screen, count the decisions visible at once; record the largest | **Decisions**: 2 (Hick's Law, Miller's Law). Put the Birth Plan away, or print it | `manual` |
+| 5.B-confirmation | Read the screen the stage ends on | **Confirmation**: yes (Peak-End Rule). Putting it away says it is kept, not deleted, and where it is if she wants it back | `manual` |
+| 5.B-320px | Sweep the stage's screens from 320px up | **320px**: yes (ADR-0024) | `automated (portal-320.e2e.ts)` |
 
 ### Stage 6 — Money, and the word "voided"
 
@@ -70,6 +85,9 @@ Walked as Maya. Nadia is not in the app.
 | 6.2 | Read the status | **No longer active**, then "Rooted Birth Collective ended this Contract." The portal stopped reusing the Staff component's raw enum: the label and the notice both come from the Client register (`app/src/lib/clientRegister.ts`), which is the one place either wording is decided, and the notice names the Practice rather than leaving her with the ledger's word ([NH-G5](https://github.com/markgoho/doula-cloud/issues/212) closed) | `manual` |
 | 6.2-a | Keep a copy of what she signed | **Download signed Contract (PDF)** is offered on her voided Contract, and pressing it fetches the signed-PDF route, which serves what she signed ([#299](https://github.com/markgoho/doula-cloud/issues/299)). Whether the downloaded file reads correctly is what the walk is for; the mark is about the step being performable at all. The control is gated on the Contract read's own `hasSignedPdf`, which the Go BFF fills from the same lookup the signed-PDF route streams from ([#1119](https://github.com/markgoho/doula-cloud/issues/1119) closed) — so the screen asks the endpoint's own question rather than a second reading of `status` that drifted away from it. A Contract that was never signed still offers nothing, and the endpoint still 404s for it ([HS-G3](https://github.com/markgoho/doula-cloud/issues/302), [NH-G8](https://github.com/markgoho/doula-cloud/issues/299) closed) | `manual` |
 | 6.2-b | Find what she still owes, or what was refunded | The portal has no Invoice, balance or payment surface at all. The question she is most likely to have cannot be asked on screen | `missing-feature (NH-G6)` [#297](https://github.com/markgoho/doula-cloud/issues/297) |
+| 6.B-screens | Count the screens from the stage's entry to its end | **Screens**: 2 (Hick's Law, Flow). The Contract, then what she still owes or was refunded | `manual` |
+| 6.B-memory | Note every later step that needs an earlier answer, and whether that answer is still on screen | **Memory**: yes (Working Memory). What she signed and what she owes are on screen together; nothing has to be carried from one page to the next | `manual` |
+| 6.B-320px | Sweep the stage's screens from 320px up | **320px**: yes (ADR-0024) | `automated (portal-320.e2e.ts)` |
 
 ### Stage 7 — Postpartum support continues anyway
 
@@ -79,12 +97,20 @@ Walked as Maya. Nadia is not in the app.
 | 7.1-a | As Nadia, find any trace of that Visit | None. There is no client-facing Visit surface (`CONTEXT.md`), by design. The support is real; the record of it is empty on both sides | `manual` |
 | 7.2 | Continue the thread both ways | Unchanged and unchangeable — immutable by design, which is correct here | `manual` |
 | 7.2-a | Mark that the thread's subject has changed, or pause push | Neither exists. Push unregistration happens only at sign-out, so her only mute is to leave | `missing-feature (NH-G7)` [#298](https://github.com/markgoho/doula-cloud/issues/298) |
+| 7.B-screens | Count the screens from the stage's entry to its end | **Screens**: 1 (Hick's Law, Flow) | `manual` |
+| 7.B-decisions | On each screen, count the decisions visible at once; record the largest | **Decisions**: 2 (Hick's Law, Miller's Law) | `manual` |
+| 7.B-time | Time each routine act on the stage's device, from the input to the result settled on screen | **Time**: 400 ms, 100 ms (Doherty Threshold) | `manual` |
+| 7.B-confirmation | Read the screen the stage ends on | **Confirmation**: yes (Peak-End Rule) | `manual` |
+| 7.B-320px | Sweep the stage's screens from 320px up | **320px**: yes (ADR-0024) | `automated (portal-320.e2e.ts)` |
 
 ### Stage 8 — The record closes without erasing her
 
 | Step | Action | Expected result | Mark |
 | --- | --- | --- | --- |
 | 8.1 | Close the Engagement truthfully | It sits at `intake` forever. "Done looks like" is unreachable: the record is permanent, which is right, and permanently wrong, which is not | `missing-feature (NH-G1)` [#293](https://github.com/markgoho/doula-cloud/issues/293) |
+| 8.B-screens | Count the screens from the stage's entry to its end | **Screens**: 1 (Hick's Law, Flow) | `manual` |
+| 8.B-confirmation | Read the screen the stage ends on | **Confirmation**: yes (Peak-End Rule). Her portal says her care has ended, in words that are true after a loss, and keeps the record | `manual` |
+| 8.B-320px | Sweep the stage's screens from 320px up | **320px**: yes (ADR-0024) | `automated (portal-320.e2e.ts)` |
 
 8.1 is 2.1-a and 2.1-b met a second time, from her side rather than Maya's. Both stages are kept because the map keeps both, and because the run should record that the same absence is hit twice by two different people.
 
@@ -92,8 +118,8 @@ Walked as Maya. Nadia is not in the app.
 
 | Mark | Steps |
 | --- | --- |
-| `automated` | 5 |
-| `manual` | 14 |
+| `automated` | 11 (6 of them [budget steps](README.md#budget-steps)) |
+| `manual` | 34 (20 of them [budget steps](README.md#budget-steps)) |
 | `missing-feature` | 8 ([MO-G3](https://github.com/markgoho/doula-cloud/issues/252), [NH-G3](https://github.com/markgoho/doula-cloud/issues/295), [NH-G1](https://github.com/markgoho/doula-cloud/issues/293) ×2, [MO-G4](https://github.com/markgoho/doula-cloud/issues/253), [NH-G2](https://github.com/markgoho/doula-cloud/issues/294), [NH-G6](https://github.com/markgoho/doula-cloud/issues/297), [NH-G7](https://github.com/markgoho/doula-cloud/issues/298)) |
 
 No step is `blocked`. Stripe never reaches the Client portal, so nothing here waits on an account nobody has opened — **NH-G6** is a hole in the product, not a bill.
@@ -103,6 +129,10 @@ NH-G4, NH-G5, **MO-G1**, **MO-G2**, **PR-G6** and [#212](https://github.com/mark
 Her five automated steps all come from specs written for a happy path. Every one of them passes on this journey, and passing is the problem: `client-portal-login` greets her, `push-notification` reaches her, `birth-plan` shows her the document. The suite cannot tell her journey from Hannah's.
 
 ## Run log
+
+### 2026-10-02 — budget steps added ([#1683](https://github.com/markgoho/doula-cloud/issues/1683))
+
+A desk pass, not a walk. The journey map's stages 1, 4, 5, 6, 7, 8 each gained a **Budget**, and each budget line is a step here, last in its stage's table: **26 budget steps**, 6 `automated`, 20 `manual`. No existing step is re-marked and no cell is rewritten. Every `automated` budget step is a 320px line the continuum sweep or `portal-320.e2e.ts` already asserts; every `manual` one is measured on the second walk ([#329](https://github.com/markgoho/doula-cloud/issues/329)), and none has been measured yet. The Marks summary above and [README.md](README.md)'s run-status row move with them.
 
 ### 2026-09-10 — 6.2-a re-marked ([#1119](https://github.com/markgoho/doula-cloud/issues/1119))
 

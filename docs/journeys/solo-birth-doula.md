@@ -30,6 +30,15 @@ Maya is close to a domain expert but not inside the model.
 
 **Thinking**: "I lost an intake form last spring. I am not doing that again." **Pain points**: none — she has the strongest motivation of any Persona.
 
+**Budget**:
+
+* **Screens**: 2 (Hick's Law, Flow)
+* **Decisions**: 5 (Hick's Law, Miller's Law)
+* **Memory**: yes (Working Memory)
+* **Confirmation**: yes (Peak-End Rule)
+* **Cold**: yes (Paradox of the Active User)
+* **320px**: yes (ADR-0024)
+
 - **1.1** — Open `/signup`.
 - **1.2** — Fill Practice name, Your name, Email, Password; press **Create Practice** (`POST /api/staff/signup`).
 - **1.3** — Land on `/practices/[practiceId]`. She now holds Owner, Admin, and Doula on one membership, granted in a single statement (`signup.go:152`).
@@ -40,6 +49,14 @@ She is **not** a test of role separation. Every permission boundary rides on Ren
 
 **Thinking**: "Is this form going to fit how I actually work?" **Pain points**: she is asked to evaluate an abstract form before she has a single Client to picture. This is the least motivating work in the journey, placed at the point where she is least invested.
 
+**Budget**:
+
+* **Screens**: 2 (Hick's Law, Flow)
+* **Decisions**: 7 (Hick's Law, Miller's Law)
+* **Confirmation**: yes (Peak-End Rule)
+* **Cold**: yes (Paradox of the Active User)
+* **320px**: yes (ADR-0024)
+
 - **2.1** — Open `/practices/[practiceId]/settings/plan-templates`.
 - **2.2** — Review the seeded default Care Plan and Birth Plan fields.
 - **2.3** — Edit and save (`PUT /api/practices/{id}/plan-templates/{planType}`), owner-gated at `plans/template.go:220`. She is Owner, so this passes.
@@ -48,6 +65,16 @@ She is **not** a test of role separation. Every permission boundary rides on Ren
 ### Stage 3 — Add the first Client — moment of truth
 
 **Thinking**: "Everything in the folder goes in here." **Pain points**: the folder holds a due date, a phone number, an address, a hospital, a partner's name, and a page of intake notes. The form took two fields when this map was drawn; intake now asks for all of it, the fixed facts as its own questions and the rest through the Practice's Client Field Template ([MO-G3](https://github.com/markgoho/doula-cloud/issues/252) is closed).
+
+**Budget**:
+
+* **Screens**: 5 (Hick's Law, Flow)
+* **Decisions**: 3 (Hick's Law, Miller's Law)
+* **Memory**: yes (Working Memory)
+* **Time**: 400 ms, 100 ms (Doherty Threshold)
+* **Confirmation**: yes (Peak-End Rule)
+* **Cold**: yes (Paradox of the Active User)
+* **320px**: yes (ADR-0024)
 
 - **3.1** — Reach intake through **Find or add a Client** on the Clients list: a Client is found before she is created (ADR-0017). Intake is one question per page from there.
 - **3.2** — Answer the name question; press **Save and come back later**. A Client is saved and **nothing else is** — no Engagement, no credit — and she lands on that Client's own detail hub.
@@ -59,12 +86,29 @@ She is **not** a test of role separation. Every permission boundary rides on Ren
 
 **Thinking**: "This is the part that actually helps me at 3 a.m." **Pain points**: long-form typing, on a phone, by someone who is on call. Anything needing a laptop and twenty quiet minutes will not get done.
 
+**Budget**:
+
+* **Screens**: 1 (Hick's Law, Flow)
+* **Decisions**: 7 (Hick's Law, Miller's Law)
+* **Memory**: yes (Working Memory)
+* **Time**: 400 ms, 100 ms (Doherty Threshold)
+* **Confirmation**: yes (Peak-End Rule)
+* **320px**: yes (ADR-0024)
+
 - **4.1** — On the Engagement page, fill the Care Plan section (`PUT /api/practices/{id}/engagements/{id}/plans/care`).
 - **4.2** — Fill the Birth Plan section (`.../plans/birth`). Each Plan Instance snapshots the template's field definitions at creation, so a later template edit cannot alter it.
 
 ### Stage 5 — Contract and signature
 
 **Thinking**: "If she can sign this on her phone tonight, I am sold." **Pain points**: the ordering is not obvious. The Client cannot sign anything until a portal invite has been sent, and nothing on the Contract section says so.
+
+**Budget**:
+
+* **Screens**: 2 (Hick's Law, Flow)
+* **Decisions**: 7 (Hick's Law, Miller's Law)
+* **Memory**: yes (Working Memory)
+* **Confirmation**: yes (Peak-End Rule)
+* **320px**: yes (ADR-0024)
 
 - **5.1** — Send the portal invite (`POST /api/practices/{id}/engagements/{id}/portal-invite`) so the Client has an account to sign in with.
 - **5.2** — Build the Contract from the Practice's contract template (`POST /api/practices/{id}/engagements/{id}/contract`), status `draft`.
@@ -76,6 +120,14 @@ She is **not** a test of role separation. Every permission boundary rides on Ren
 
 **Thinking**: "Prenatals at 32 and 36 weeks, then the birth." **Pain points**: this stage cannot be walked. A Visit is `(engagement_id, staff_id, created_at)` and nothing else — no date, no time, no type, no notes. `POST .../visits` records that a Visit *happened*, now, by somebody. It cannot schedule one, and the only edit is reassignment to another Staff member.
 
+**Budget**:
+
+* **Screens**: 1 (Hick's Law, Flow)
+* **Decisions**: 4 (Hick's Law, Miller's Law)
+* **Time**: 400 ms, 100 ms (Doherty Threshold)
+* **Confirmation**: yes (Peak-End Rule)
+* **320px**: yes (ADR-0024)
+
 - **6.1** — Open the Visits section on the Engagement page.
 - **6.2** — Add a Visit (`POST /api/practices/{id}/engagements/{id}/visits`) and get a row with a creation timestamp.
 
@@ -85,6 +137,14 @@ This is the largest single gap on the practice side. It also removes any possibi
 
 **Thinking**: "I am tired of chasing money by text." **Pain points**: two money screens with names that invite the wrong click. **Billing** is where the Practice *buys credits from Doula Cloud*. **Settings → Payments** is where the Practice *gets paid by Clients*. Nothing on either screen explains the difference.
 
+**Budget**:
+
+* **Screens**: 3 (Hick's Law, Flow)
+* **Decisions**: 3 (Hick's Law, Miller's Law)
+* **Confirmation**: yes (Peak-End Rule)
+* **Cold**: yes (Paradox of the Active User)
+* **320px**: yes (ADR-0024)
+
 - **7.1** — Open `/practices/[practiceId]/settings/payments` and start Stripe Connect onboarding (`POST /api/practices/{id}/payments/connect`, owner-gated). On return from Stripe the screen is **stale** (**MO-G11**).
 - **7.2** — Raise an Invoice against the signed Contract (`POST /api/practices/{id}/engagements/{id}/contract/invoices`).
 
@@ -93,6 +153,14 @@ No Stripe account exists yet, so this leg is **blocked rather than broken**. The
 ### Stage 8 — Message the Client
 
 **Thinking**: "Now everything about her is in one thread." **Pain points**: none identified. Messages are Engagement-scoped, immutable, and delivered by push-triggered fetch (ADR-0002), which she must not treat as a substitute for a phone call in labor.
+
+**Budget**:
+
+* **Screens**: 1 (Hick's Law, Flow)
+* **Decisions**: 2 (Hick's Law, Miller's Law)
+* **Time**: 400 ms, 100 ms (Doherty Threshold)
+* **Confirmation**: yes (Peak-End Rule)
+* **320px**: yes (ADR-0024)
 
 - **8.1** — Send a message from the Engagement page (`POST /api/practices/{id}/engagements/{id}/messages`).
 - **8.2** — The Client replies from the portal; the thread is continuous.
