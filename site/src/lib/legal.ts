@@ -34,7 +34,14 @@ export const TERMS: LegalDocument = {
 export const PRIVACY: LegalDocument = {
 	name: 'Privacy Policy',
 	path: '/privacy',
-	versions: [{ effective: '2026-09-29', material: false, change: 'First version.' }]
+	versions: [
+		{ effective: '2026-09-29', material: false, change: 'First version.' },
+		{
+			effective: '2026-10-02',
+			material: false,
+			change: 'Says how long Feedback is kept, what erases it, and that GitHub keeps a note of each piece.'
+		}
+	]
 };
 
 // The version in force: the newest one.

@@ -23,10 +23,34 @@ describe('the Privacy Policy at /privacy (#1556)', () => {
 
 	it('says when this version takes effect, and shows the version history', async () => {
 		await render(Page);
-		await expect.element(testPage.getByText('Last updated September 29, 2026.')).toBeVisible();
+		await expect.element(testPage.getByText('Last updated October 2, 2026.')).toBeVisible();
 		await expect.element(testPage.getByRole('heading', { level: 2, name: 'Version history' })).toBeVisible();
 		await expect
 			.element(testPage.getByRole('listitem').filter({ hasText: 'Not a material change. First version.' }))
+			.toBeVisible();
+		await expect
+			.element(
+				testPage.getByRole('listitem').filter({
+					hasText:
+						'Not a material change. Says how long Feedback is kept, what erases it, and that GitHub keeps a note of each piece.'
+				})
+			)
+			.toBeVisible();
+	});
+
+	it('says how long Feedback is kept, what erases it, and that GitHub never receives the words typed', async () => {
+		await render(Page);
+		await expect
+			.element(testPage.getByText('Feedback is deleted 24 months after it was sent', { exact: false }))
+			.toBeVisible();
+		await expect
+			.element(testPage.getByText('erase it when your practice erases your record or is deleted', { exact: false }))
+			.toBeVisible();
+		await expect
+			.element(testPage.getByText('The Feedback you sent us stays, and no longer names you.', { exact: false }))
+			.toBeVisible();
+		await expect
+			.element(testPage.getByText('It never holds the words a person typed', { exact: false }))
 			.toBeVisible();
 	});
 
@@ -56,7 +80,8 @@ describe('the Privacy Policy at /privacy (#1556)', () => {
 			'Firebase Hosting',
 			'Mailgun',
 			'Stripe',
-			"Your browser's push service"
+			"Your browser's push service",
+			'GitHub'
 		]) {
 			await expect.element(testPage.getByText(company, { exact: true })).toBeVisible();
 		}
