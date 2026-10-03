@@ -95,6 +95,7 @@ jobs:
         run: |
           version=$(grep -oP '"playwright@\K[0-9.]+(?=")' bun.lock | head -1)
           echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "image=${ImageOS}-${ImageVersion}" >> "$GITHUB_OUTPUT"
 
       - name: Cache Playwright browsers
         id: playwright-cache
@@ -102,6 +103,17 @@ jobs:
         with:
           path: ~/.cache/ms-playwright
           key: playwright-shell-${{ runner.os }}-${{ steps.playwright-version.outputs.version }}
+
+      # The .deb files of Chromium's OS libraries, so that the step below
+      # asks no Ubuntu mirror on a hit (#1667). Keyed on the runner image
+      # version too, because a cached package can stop matching the base
+      # packages when the image changes. The script fills the directory
+      # after a mirror install, and makes it only when apt left packages.
+      - name: Cache Playwright OS packages
+        uses: actions/cache@v6
+        with:
+          path: ~/.cache/playwright-debs
+          key: playwright-debs-${{ steps.playwright-version.outputs.image }}-${{ steps.playwright-version.outputs.version }}
 
       # See the comment on the `app` job's step of the same name (#1655,
       # #1661). It also holds the job-timeout arithmetic for both steps.
@@ -498,6 +510,7 @@ jobs:
         run: |
           version=$(grep -oP '"@playwright/test@\K[0-9.]+(?=")' bun.lock | head -1)
           echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "image=${ImageOS}-${ImageVersion}" >> "$GITHUB_OUTPUT"
 
       - name: Cache Playwright browsers
         id: playwright-cache
@@ -505,6 +518,17 @@ jobs:
         with:
           path: ~/.cache/ms-playwright
           key: playwright-shell-${{ runner.os }}-${{ steps.playwright-version.outputs.version }}
+
+      # The .deb files of Chromium's OS libraries, so that the step below
+      # asks no Ubuntu mirror on a hit (#1667). Keyed on the runner image
+      # version too, because a cached package can stop matching the base
+      # packages when the image changes. The script fills the directory
+      # after a mirror install, and makes it only when apt left packages.
+      - name: Cache Playwright OS packages
+        uses: actions/cache@v6
+        with:
+          path: ~/.cache/playwright-debs
+          key: playwright-debs-${{ steps.playwright-version.outputs.image }}-${{ steps.playwright-version.outputs.version }}
 
       # The OS libraries Chromium links against live outside the cached
       # path, so every fresh runner needs them, on a cache hit and on a
@@ -529,6 +553,11 @@ jobs:
       #  - apt bounds itself too: Acquire::http(s)::Timeout 30s (idle
       #    connection) and Acquire::Retries 3 (per file). The idle timeout
       #    does not end a slow but live download; the 180s `timeout` does;
+      #  - when the wait ends with apt still held, the step stops and names
+      #    the holder: a retry would die on /var/lib/apt/lists/lock, which
+      #    DPkg::Lock::Timeout does not cover (run 37031423643, #1667);
+      #  - a hit on "Cache Playwright OS packages" installs from the cached
+      #    .deb files with `dpkg --install` and asks no mirror (#1667);
       #  - the whole step stops after 540s (TOTAL_BUDGET).
       #
       # The job timeout holds the worst case of both install steps: 540s

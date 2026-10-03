@@ -13,7 +13,9 @@ import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import {
   chmodSync,
   existsSync,
+  mkdirSync,
   mkdtempSync,
+  readdirSync,
   readFileSync,
   rmSync,
   symlinkSync,
@@ -45,6 +47,10 @@ function run(installCmd: string, extra: Record<string, string> = {}) {
       RETRY_SLEEP: '0',
       POLL_INTERVAL: '1',
       APT_BUSY_CMD: `test -e ${join(dir, 'lock')}`,
+      DEB_CACHE_DIR: join(dir, 'deb-cache'),
+      APT_ARCHIVES: join(dir, 'archives'),
+      // No spec may run the real `apt-get install --fix-broken`.
+      REPAIR_CMD: 'true',
       ...extra,
     },
   });
@@ -87,14 +93,22 @@ describe('install-playwright-deps.sh', () => {
     expect(existsSync(join(dir, 'lock'))).toBe(false);
   });
 
-  test('without the wait the same retry sequence fails on the lock', () => {
-    // SETTLE_TIMEOUT=0 turns the wait off: the retry meets the held lock.
+  test('stops before a retry when the wait ends with apt still held, and names the holder', () => {
+    // SETTLE_TIMEOUT=0 ends the wait at once while the lock is held. A retry
+    // then would only meet the lock (#1667), so the step stops instead.
+    const lock = join(dir, 'lock');
     const { code, out } = run(lockedInstall(), {
       SETTLE_TIMEOUT: '0',
       ATTEMPTS: '2',
+      APT_BUSY_CMD: `test -e ${lock} && echo "5138 apt-get update"`,
     });
     expect(code).toBe(1);
-    expect(out).toContain('Could not get lock');
+    expect(out).toContain('still busy after 0s. It is held by:');
+    expect(out).toContain('5138 apt-get update');
+    expect(out).not.toContain('Could not get lock');
+    expect(
+      readFileSync(join(dir, 'count'), 'utf8').trim().split('\n')
+    ).toHaveLength(1);
   });
 
   test('exits 0 on the first success and does not retry', () => {
@@ -126,6 +140,83 @@ describe('install-playwright-deps.sh', () => {
     expect(conf).toContain('Acquire::https::Timeout "30"');
     expect(conf).toContain('Acquire::Retries "3"');
     expect(conf).toContain('DPkg::Lock::Timeout "120"');
+    expect(conf).toContain('APT::Keep-Downloaded-Packages "true"');
+  });
+});
+
+// The package cache (#1667): a cache hit installs with no mirror, and a
+// mirror install leaves its packages for the next run.
+describe('install-playwright-deps.sh package cache', () => {
+  function cacheHolds(...names: string[]) {
+    mkdirSync(join(dir, 'deb-cache'), { recursive: true });
+    for (const name of names) writeFileSync(join(dir, 'deb-cache', name), '');
+  }
+
+  test('installs from cached packages and never runs the mirror install', () => {
+    cacheHolds('libnss3.deb', 'libgbm1.deb');
+    const mirror = join(dir, 'mirror-ran');
+    const cached = join(dir, 'cached-ran');
+    const { code, out } = run(`touch ${mirror}`, {
+      CACHED_INSTALL_CMD: `touch ${cached}`,
+    });
+    expect(code).toBe(0);
+    expect(out).toContain('Installing 2 cached packages');
+    expect(existsSync(cached)).toBe(true);
+    expect(existsSync(mirror)).toBe(false);
+  });
+
+  test('repairs dpkg, then goes on to the mirror, when the cached install fails', () => {
+    // A failed `dpkg --install` leaves packages half-configured, and the
+    // mirror install refuses that state, so the repair comes first.
+    cacheHolds('libnss3.deb');
+    const order = join(dir, 'order');
+    const { code, out } = run(`echo mirror >> ${order}`, {
+      CACHED_INSTALL_CMD: 'exit 1',
+      REPAIR_CMD: `echo repair >> ${order}`,
+    });
+    expect(code).toBe(0);
+    expect(out).toContain(
+      'The cached install failed; repairing dpkg, then installing from the mirror.'
+    );
+    expect(readFileSync(order, 'utf8').trim().split('\n')).toEqual([
+      'repair',
+      'mirror',
+    ]);
+  });
+
+  test('still tries the mirror when the repair fails', () => {
+    cacheHolds('libnss3.deb');
+    const mirror = join(dir, 'mirror-ran');
+    const { code, out } = run(`touch ${mirror}`, {
+      CACHED_INSTALL_CMD: 'exit 1',
+      REPAIR_CMD: 'exit 100',
+    });
+    expect(code).toBe(0);
+    expect(out).toContain('The dpkg repair failed');
+    expect(existsSync(mirror)).toBe(true);
+  });
+
+  test('keeps the packages a mirror install downloaded', () => {
+    mkdirSync(join(dir, 'archives'));
+    writeFileSync(join(dir, 'archives', 'libnss3.deb'), 'nss');
+    writeFileSync(join(dir, 'archives', 'libgbm1.deb'), 'gbm');
+    const { code, out } = run('true');
+    expect(code).toBe(0);
+    expect(out).toContain('Kept 2 packages');
+    expect(readdirSync(join(dir, 'deb-cache')).sort()).toEqual([
+      'libgbm1.deb',
+      'libnss3.deb',
+    ]);
+  });
+
+  test('makes no cache directory when apt left no packages', () => {
+    // The Actions cache saves an empty directory, which would hold the key
+    // with nothing in it until the next runner image.
+    mkdirSync(join(dir, 'archives'));
+    const { code, out } = run('true');
+    expect(code).toBe(0);
+    expect(out).toContain('nothing to cache');
+    expect(existsSync(join(dir, 'deb-cache'))).toBe(false);
   });
 });
 
@@ -182,6 +273,23 @@ exit 0
       );
       expect(out).toContain('still running; waiting for it');
       expect(code).toBe(0);
+    });
+
+    // Run 37031423643 (#1667): the leftover `apt-get update` held
+    // /var/lib/apt/lists/lock past the wait, and the retry died on it in a
+    // second, because DPkg::Lock::Timeout covers only the dpkg lock. Now the
+    // step stops before that retry and names the holder.
+    test('a process holding the apt lists lock past the wait stops the step before a retry', () => {
+      const lock = join(dir, 'lists-lock');
+      writeFileSync(lock, '');
+      const { code, out } = run(
+        orphanInstall(`exec 3<${lock}; sleep 5`, `fuser -s ${lock}`),
+        { ...realProbe, APT_LOCK_FILES: lock, SETTLE_TIMEOUT: '1' }
+      );
+      expect(code).toBe(1);
+      expect(out).toContain('It is held by:');
+      expect(out).toContain(lock);
+      expect(out).not.toContain('Could not get lock');
     });
   }
 );
