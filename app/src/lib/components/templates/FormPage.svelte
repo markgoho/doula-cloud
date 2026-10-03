@@ -57,13 +57,13 @@
 		 */
 		intro?: Snippet;
 		/**
-		 * What a save that led here did, such as "Pat saved as a Client."
-		 * (#1710). Rendered before the <h1>, GOV.UK's position for a
-		 * notification banner, and only once the form is loaded, the same
-		 * as `RecordDetail`'s own region. The route builds the `Notice`;
-		 * this Template only places it.
+		 * What the save that led here did, such as "Pat saved as a
+		 * Client." (#1710): `takeOutcome`'s message. A status `Notice`
+		 * before the <h1>, GOV.UK's position for a notification banner,
+		 * focused on arrival, and only once the form is loaded, the same as
+		 * `RecordDetail`'s own `outcome`.
 		 */
-		notice?: Snippet;
+		outcome?: string;
 		fieldsets: Fieldset[];
 		/**
 		 * GOV.UK's error summary, positioned by this Template and built by
@@ -94,7 +94,7 @@
 		title,
 		serviceName,
 		intro,
-		notice,
+		outcome,
 		fieldsets,
 		errorSummary,
 		actions,
@@ -140,8 +140,8 @@
 					{@render errorSummary()}
 				{/if}
 
-				{#if notice}
-					{@render notice()}
+				{#if outcome}
+					<Notice variant="status" message={outcome} isFocusedOnAppear />
 				{/if}
 
 				<Heading level={1} variant="page" text={title} />

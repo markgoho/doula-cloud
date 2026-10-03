@@ -2179,18 +2179,11 @@
 	renders, and a refusal reaches practices/+error.svelte instead (#695).
 	The sections below still fill in after mount, each with its own state.
 -->
-<!--
-	#1611, #1710: a save that leads here says what it did, such as "Work
-	with Pat started." at the end of a new Client's flow. The message takes
-	focus, as GOV.UK asks of a success banner on the page a form leads to.
--->
-{#snippet outcomeNotice()}
-	<Notice variant="status" message={outcome!} isFocusedOnAppear />
-{/snippet}
-
+<!-- #1611, #1710: a save that leads here says what it did, such as
+     "Work with Pat started." at the end of a new Client's flow. -->
 <RecordDetail
 	title={detail.clientName}
-	notice={outcome ? outcomeNotice : undefined}
+	{outcome}
 	{summary}
 	{actions}
 	isContentsShown

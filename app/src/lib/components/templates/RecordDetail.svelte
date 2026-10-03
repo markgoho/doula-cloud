@@ -29,12 +29,14 @@
 		 */
 		serviceName?: string;
 		/**
-		 * A message about what just happened, such as "Work with Pat
-		 * started." (#1611). Rendered before the <h1>, which is GOV.UK's
-		 * position for a notification banner. The route builds the
-		 * `Notice`; this Template only places it.
+		 * What the save that led here did, such as "Work with Pat
+		 * started." (#1611, #1710): `takeOutcome`'s message. Rendered as a
+		 * status `Notice` before the <h1>, which is GOV.UK's position for a
+		 * notification banner, and focused on arrival, as GOV.UK asks of a
+		 * success banner on the page a form leads to. A string and not a
+		 * Snippet: every page a save leads to says it the same way.
 		 */
-		notice?: Snippet;
+		outcome?: string;
 		summary?: Snippet;
 		actions?: Snippet;
 		sections: Section[];
@@ -65,7 +67,7 @@
 	let {
 		title,
 		serviceName,
-		notice,
+		outcome,
 		summary,
 		actions,
 		sections,
@@ -99,8 +101,8 @@
 				shell's (#431), not a page's. A Template renders no chrome.
 			-->
 			<div class="record-header">
-				{#if notice}
-					<div class="notice">{@render notice()}</div>
+				{#if outcome}
+					<div class="notice"><Notice variant="status" message={outcome} isFocusedOnAppear /></div>
 				{/if}
 				<cluster-l space="var(--space-4)" justify="space-between" align="baseline">
 					<Heading level={1} variant="page" text={title} />

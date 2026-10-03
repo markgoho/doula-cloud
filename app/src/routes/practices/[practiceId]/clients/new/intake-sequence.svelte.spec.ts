@@ -4,7 +4,7 @@ import { render } from 'vitest-browser-svelte';
 import type { Component } from 'svelte';
 import { jsonResponse } from '#lib/testResponse.js';
 import { intakeDraft, type IntakeAnswers } from '#lib/intakeDraft.svelte.js';
-import { clientSavedMessage, detailsSavedMessage, type IntakeOrigin } from '#lib/intakeJourney.js';
+import { clientSavedMessage, detailsSavedMessage, type ClientNames, type IntakeOrigin } from '#lib/intakeJourney.js';
 import { captureLanding } from '#lib/testOutcome.js';
 import { toPageState, type RouteFixture } from '../../../../routeFixture.js';
 import { seedIntake } from './intakeFixture.js';
@@ -334,7 +334,7 @@ describe('the duplicate check', () => {
 
 		await expect.poll(() => landing.href).toBe(`/practices/${practiceId}/clients/client-1`);
 		expect(sent().phone).toBe('+1 (585) 555-0199');
-		expect(landing.message).toBe(detailsSavedMessage(sent() as { preferredName: string; givenName: string }));
+		expect(landing.message).toBe(detailsSavedMessage(sent() as unknown as ClientNames));
 	});
 
 	// ADR-0017's "This is her" with nothing to propose: what was typed is

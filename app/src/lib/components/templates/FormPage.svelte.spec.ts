@@ -45,14 +45,16 @@ describe('FormPage.svelte', () => {
 	// #1710: a save that lands on a form says what it did there, in
 	// GOV.UK's position for a notification banner, before the h1, and
 	// after an error summary, which comes first on any page that has one.
-	it('renders the notice before the title and after the error summary', async () => {
+	it('renders the outcome as a focused status, before the title and after the error summary', async () => {
 		await setup({
-			notice: textSnippet('Ada saved as a Client.'),
+			outcome: 'Ada saved as a Client.',
 			errorSummary: textSnippet('There is a problem')
 		});
 
+		const status = page.getByRole('status').filter({ hasText: 'Ada saved as a Client.' });
+		await expect.element(status).toHaveFocus();
 		const summary = page.getByText('There is a problem').element();
-		const notice = page.getByText('Ada saved as a Client.').element();
+		const notice = status.element();
 		const title = page.getByRole('heading', { level: 1, name: 'New client' }).element();
 		expect(summary.compareDocumentPosition(notice) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 		expect(notice.compareDocumentPosition(title) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
@@ -61,8 +63,8 @@ describe('FormPage.svelte', () => {
 	// The message belongs to the form once it is there to read; a
 	// Skeleton in its place would announce the message twice, once now and
 	// again when the form arrives and the region mounts a second time.
-	it('renders no notice while the form loads', async () => {
-		await setup({ notice: textSnippet('Ada saved as a Client.'), loading: 'Loading the Client' });
+	it('renders no outcome while the form loads', async () => {
+		await setup({ outcome: 'Ada saved as a Client.', loading: 'Loading the Client' });
 
 		await expect.element(page.getByText('Ada saved as a Client.')).not.toBeInTheDocument();
 	});

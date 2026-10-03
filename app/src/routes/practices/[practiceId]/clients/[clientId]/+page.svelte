@@ -552,15 +552,9 @@
 	/>
 {/snippet}
 
-<!-- Focused on arrival, as GOV.UK asks of a success banner on the page a
-     form leads to (#1710). -->
-{#snippet outcomeNotice()}
-	<Notice variant="status" message={outcome!} isFocusedOnAppear />
-{/snippet}
-
 <RecordDetail
 	title={name}
-	notice={outcome ? outcomeNotice : undefined}
+	{outcome}
 	{summary}
 	{actions}
 	sections={[

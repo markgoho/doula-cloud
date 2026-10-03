@@ -317,12 +317,6 @@
 	<ErrorSummary errors={submission.errors} />
 {/snippet}
 
-<!-- Focused on arrival, as GOV.UK asks of a success banner on the page a
-     form leads to (#1710). -->
-{#snippet outcomeNotice()}
-	<Notice variant="status" message={outcome!} isFocusedOnAppear />
-{/snippet}
-
 {#snippet formIntro()}
 	<stack-l space="var(--space-4)">
 		{#if hasLiveEngagement}
@@ -425,7 +419,7 @@
 	<FormPage
 		title={submitLabel || 'Start new work'}
 		intro={hasIntroContent ? formIntro : undefined}
-		notice={outcome ? outcomeNotice : undefined}
+		{outcome}
 		fieldsets={detail ? [{ content: requestFields }] : []}
 		errorSummary={submission.errors.length > 0 ? errorSummary : undefined}
 		actions={formActions}
