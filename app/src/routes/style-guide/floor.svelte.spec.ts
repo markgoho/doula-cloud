@@ -52,6 +52,16 @@
  * which is the one job no intrinsic mechanism can do: CSS rearranges a
  * tree, it does not swap one.
  *
+ * A second kind is admitted (#1632): a query that picks WHICH TYPE STEP a
+ * tree's text is set in, between two steps of the closed scale (#417).
+ * The scale has no fluid step between them, a component may not author a
+ * `clamp()` (`tokens.usage.spec.ts`), and nothing intrinsic reads a
+ * column's width into a choice between two tokens -- so this is a second
+ * job only a query can do. `OverviewHub`'s title is its one member: the
+ * display step where the column holds a reading measure, heading-lg
+ * below it. It is judged by the same criteria as a tree swap (`measure`,
+ * here) and carries its own justification like every other entry.
+ *
  * `StepRail` was the exception that proved the rule, in `UNDERIVABLE`
  * below rather than here. It is not any more: #585 replaced its query
  * with a `<details>` the reader opens, so it authors no condition at all
@@ -114,8 +124,9 @@ const conditions = findConditions(sources);
  *
  *   `overflow`     does the rendered content need more room than it is
  *                  given, with emergency wrapping neutralized
- *   `measure`      does the primary column beside a rail reach its own
- *                  cap, `--form-max` or `--measure`
+ *   `measure`      does a column -- the primary one beside a rail, or a
+ *                  hub title's own -- reach its cap, `--form-max` or
+ *                  `--measure`
  *   `no-wrap`      does a short, author-controlled string -- a label, an
  *                  action's name -- wrap onto more than one line. A value
  *                  is a Practice's own data of arbitrary length and is
@@ -188,6 +199,18 @@ const CRITERIA: Readonly<Record<string, Criterion>> = {
 			'at any width, so it is the chip row that earns its place, and it earns it by fitting on one ' +
 			'line. Answered entirely from this block own containment context, so it never has to know ' +
 			'whether sidebar-l put it beside the record or above it.'
+	},
+	'templates/OverviewHub.svelte#1': {
+		kind: 'measure',
+		target: 'container-l > center-l > stack-l > h1',
+		cap: 'measure',
+		justification:
+			'A type-step swap, not a DOM-tree swap (#1632): the hub title is the display step where its ' +
+			'column holds a reading measure and heading-lg below it. The closed type scale (#417) has no ' +
+			'fluid step between the two, a component may not author a clamp() (tokens.usage.spec.ts), and ' +
+			'no intrinsic mechanism reads the column width into a choice between two tokens -- so a query ' +
+			'is the only way to keep a 75-character Practice name from pushing the empty Practice one link ' +
+			'below the first screen of a phone.'
 	}
 };
 

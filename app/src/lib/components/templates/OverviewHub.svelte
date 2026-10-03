@@ -9,11 +9,12 @@
 	 * case. A Template that cannot be instantiated without an empty state
 	 * makes forgetting it a type error.
 	 *
-	 * The title is set at the brief's `display` type step, which is why
-	 * `Heading` deliberately cannot reach it (#417): a rule that depends on
-	 * everyone remembering it is not a rule, so the step lives in Templates
-	 * and nowhere a route can pass it. This title and `LandingPage`'s
-	 * greeting (#1645) are the two places that spend it.
+	 * The title is set at the brief's `display` type step where its column
+	 * holds a reading measure, and at `heading-lg` below that (#1632). The
+	 * display step is why `Heading` deliberately cannot reach it (#417): a
+	 * rule that depends on everyone remembering it is not a rule, so the
+	 * step lives in Templates and nowhere a route can pass it. This title
+	 * and `LandingPage`'s greeting (#1645) are the two places that spend it.
 	 */
 	import type { Snippet } from 'svelte';
 	import Notice from '#lib/components/atoms/Notice.svelte';
@@ -62,7 +63,7 @@
 
 <PageTitle page={title} {serviceName} />
 
-<container-l>
+<container-l name="overview-hub">
 	<!-- No cap: a hub is cards, tables and a rail rather than prose, and
 	     past the ramp's plateau more room buys more content (#531, #541).
 	     Anything inside that needs a measure asks for one itself. -->
@@ -119,20 +120,48 @@
 			padding-block: var(--space-8);
 		}
 
+		/*
+		 * The title is the heading-lg step until the column holds a reading
+		 * measure, and the display step from there up (#1632). A Practice
+		 * name runs to 75 characters, and at the display step on a phone it
+		 * wraps to seven lines and pushes the empty Practice's one link
+		 * below the first screen (ADR-0048 asks that screen for one act).
+		 * The same words, the same tree: only the type step changes, so
+		 * this query picks a step, not a DOM tree -- the second kind the
+		 * floor check admits (`floor.svelte.spec.ts`).
+		 */
 		h1 {
 			margin: 0;
 			font-family: var(--font-family-base);
-			font-size: var(--text-display-size);
-			font-weight: var(--text-display-weight);
-			line-height: var(--text-display-leading);
-			letter-spacing: var(--text-display-tracking);
+			font-size: var(--text-heading-lg-size);
+			font-weight: var(--text-heading-lg-weight);
+			line-height: var(--text-heading-lg-leading);
+			letter-spacing: var(--text-heading-lg-tracking);
 			color: var(--color-on-surface);
 		}
 
 		/*
-		 * No @container query, and no .body wrapper (#564): the rail split
-		 * is `sidebar-l`, Every Layout's own Sidebar, wired in the markup
-		 * above. #564's own map found the exact tension a measured
+		 * The floor is the container width at which the column inside
+		 * `center-l`'s gutters first reaches `--measure`, measured on
+		 * /style-guide/overview-hub (the measure criterion in
+		 * `floor.svelte.spec.ts`): measured 2026-10-03 at 596px, where the
+		 * column is 564px and `--measure` 564.6px. A wider gutter or a
+		 * wider `--measure` moves it.
+		 */
+		@container overview-hub (min-width: 37.25rem) {
+			h1 {
+				font-size: var(--text-display-size);
+				font-weight: var(--text-display-weight);
+				line-height: var(--text-display-leading);
+				letter-spacing: var(--text-display-tracking);
+			}
+		}
+
+		/*
+		 * No @container query for the rail split, and no .body wrapper
+		 * (#564). The one query above picks a type step, never the
+		 * arrangement. The rail split is `sidebar-l`, Every Layout's own
+		 * Sidebar, wired in the markup above. #564's own map found the exact tension a measured
 		 * threshold cannot resolve -- sufficiency (never less room than
 		 * promised) and minimality (the smallest space that still works)
 		 * disagreeing by exactly the check's own probe depth on this
@@ -141,7 +170,11 @@
 		 * side-steps the whole question: it reads `--measure` itself, on
 		 * whichever machine is rendering, and wraps the moment that
 		 * machine's own column can no longer honor it. No number is
-		 * authored here for any environment to disagree about.
+		 * authored for the split for any environment to disagree about.
+		 * The title's floor above does author one, and lives with that
+		 * spread: the floor check's minimality probe is 5% of the floor,
+		 * wider than any spread measured, and a title one step smaller
+		 * near the floor costs no content.
 		 */
 	}
 </style>
