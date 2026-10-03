@@ -243,7 +243,7 @@ describe('the narrow sheet', () => {
  * minimum now, and grows. 320px is the narrow tree at the conformance
  * commitment; 864px puts the bar's content box (the header less its two
  * gutters, which is what the container query reads) just above its
- * 50.5rem floor, where the wide tree leaves the name the least room it
+ * 50.75rem floor, where the wide tree leaves the name the least room it
  * ever gets. The names are the style-guide demo's own.
  */
 const LONG_NAME = 'Highland Midwifery & Birth Support Collective of Western New York';
