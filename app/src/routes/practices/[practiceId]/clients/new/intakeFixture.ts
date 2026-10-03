@@ -8,16 +8,11 @@
  * opens, and the sweep mounts a `+page.svelte` on its own, without that
  * layout, so each fixture seeds the state the layout would have filled.
  *
- * The Practice's name and its Client Field Template are seeded into
- * `intakeFlow` here too. Intake no longer reads them (#1611); a Client's
- * details journey does (#1610), and `detailsFixture.ts` seeds them
- * through this function.
- *
  * ## Hostile, never polite (#537)
  *
  * Every value here is the longest, busiest one a Practice could
- * plausibly produce: a hyphenated double-barreled name, a section a
- * Practice named in a sentence, a multi-select with five options. The
+ * plausibly produce: a hyphenated double-barreled name, an email
+ * address that runs past the column, two matches with one name. The
  * fixture's job is to find the width at which the screen breaks, and a
  * representative value never will.
  *
@@ -30,74 +25,9 @@
  * second state to seed.
  */
 import type { ClientMatch } from '#lib/client.js';
-import type { Field } from '#lib/clientFieldTemplate.js';
 import { blankAnswers, intakeDraft } from '#lib/intakeDraft.svelte.js';
-import { intakeFlow } from '#lib/intakeFlow.svelte.js';
 
 export const practiceId = 'practice-1';
-
-export const practiceName = 'Finger Lakes Midwifery & Doula Collective';
-
-/*
- * Two shapes in one template, which is `.claude/rules/svelte-tests.md`'s
- * row rule: a run of un-headed fields (which becomes a section named
- * after the Practice itself), and a Practice-named section holding every
- * field type the value renderer draws differently. The archived field is
- * here to be absent from the form.
- */
-export const fields: Field[] = [
-	{
-		id: 'referral',
-		type: 'short_text',
-		label: 'Who told this Client about the Practice?',
-		order: 0,
-		archived: false
-	},
-	{
-		id: 'section-care',
-		type: 'section_header',
-		label: 'What this Client wants from continuous labor support',
-		order: 1,
-		archived: false
-	},
-	{
-		id: 'hopes',
-		type: 'long_text',
-		label: 'In this Client’s own words, what would make this birth feel like a good one?',
-		order: 2,
-		archived: false
-	},
-	{
-		id: 'birthplace',
-		type: 'single_select',
-		label: 'Planned place of birth',
-		options: ['Home', 'Birth center', 'Strong Memorial Hospital', 'Rochester General Hospital'],
-		order: 3,
-		archived: false
-	},
-	{
-		id: 'attendees',
-		type: 'multi_select',
-		label: 'Who else is expected to be in the room',
-		options: ['Partner', 'Mother', 'Mother-in-law', 'Sibling', 'Photographer'],
-		order: 4,
-		archived: false
-	},
-	{
-		id: 'photos',
-		type: 'checkbox',
-		label: 'Consents to photographs being taken during labor and after the birth',
-		order: 5,
-		archived: false
-	},
-	{
-		id: 'retired',
-		type: 'short_text',
-		label: 'A question this Practice stopped asking',
-		order: 6,
-		archived: true
-	}
-];
 
 /*
  * The two Clients the save-time duplicate check offers. Two, not one,
@@ -152,11 +82,6 @@ const matches: ClientMatch[] = [
  * does not matter.
  */
 export function seedIntake(): void {
-	intakeFlow.practiceId = practiceId;
-	intakeFlow.practiceName = practiceName;
-	intakeFlow.fields = fields;
-	intakeFlow.status = 'ready';
-
 	// The name, and every key the search can carry (#1611): intake asks
 	// nothing else, so an address or a Practice's own answer is never in
 	// its draft.

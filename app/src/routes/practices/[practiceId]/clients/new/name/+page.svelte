@@ -55,7 +55,7 @@
 
 	// The search's keys that are saved with the name, in the order the
 	// search asks them. A key the search did not carry is not listed.
-	const carried = $derived(
+	const carriedAnswers = $derived(
 		[
 			{
 				label: 'Date of birth',
@@ -131,10 +131,10 @@
 						/>
 					{/snippet}
 				</LabeledField>
-				{#if carried.length > 0}
+				{#if carriedAnswers.length > 0}
 					<stack-l space="var(--space-2)">
 						<Text text="From your search, also saved with the name:" />
-						<DescriptionList items={carried} />
+						<DescriptionList items={carriedAnswers} />
 					</stack-l>
 				{/if}
 			</stack-l>
