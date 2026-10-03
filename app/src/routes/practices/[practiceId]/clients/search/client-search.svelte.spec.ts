@@ -129,6 +129,19 @@ describe('the search that fronts intake (#498)', () => {
 		await expect
 			.element(testPage.getByRole('link', { name: 'Add a new Client' }))
 			.toHaveAttribute('href', `/practices/${practiceId}/clients/new?name=Nadia%20Haddad`);
+		// #1716: a name of two words is not split, so it fills no name field
+		// and the page does not promise that it carries.
+		await expect.element(testPage.getByText(/carries onto intake/)).not.toBeInTheDocument();
+	});
+
+	it('says a one-word name carries onto the name question (#1716)', async () => {
+		apiFetchWithSession.mockResolvedValue(jsonResponse({ matches: [] }));
+		await setup();
+
+		await testPage.getByLabelText('Name').fill('Nadia');
+		await testPage.getByRole('button', { name: 'Search' }).click();
+
+		await expect.element(testPage.getByText(/the name typed here carries onto intake/)).toBeVisible();
 	});
 
 	/*
