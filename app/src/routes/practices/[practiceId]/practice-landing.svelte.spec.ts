@@ -330,6 +330,11 @@ describe('the Practice landing page', () => {
 		await expect
 			.element(testPage.getByRole('link', { name: 'Add your first Client' }))
 			.toBeVisible();
+		// #1609: a Practice with no Client record has nobody to search for,
+		// so the one action opens the name question, and its Back comes here.
+		await expect
+			.element(testPage.getByRole('link', { name: 'Add your first Client' }))
+			.toHaveAttribute('href', `/practices/${practiceId}/clients/new?from=overview`);
 		// The abandon point was a menu of administration. One action, not
 		// eight (ADR-0048: the empty Practice asks for one act and nothing
 		// else) -- and an action is a link or a button, so both are counted.

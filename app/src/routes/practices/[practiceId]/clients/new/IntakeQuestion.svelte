@@ -36,7 +36,7 @@
 	import { journeySteps, nextStepHref, previousStepHref, type StepId } from '#lib/intakeJourney.js';
 	import { FormSubmission, orServiceProblem, type FormError } from '#lib/formSubmission.svelte.js';
 	import IntakeActions from './IntakeActions.svelte';
-	import { JOURNEY, basePath, checkOr, intakeFieldIds, saveIntake, searchHref } from './intake.js';
+	import { JOURNEY, basePath, checkOr, exitHref, intakeFieldIds, saveIntake } from './intake.js';
 
 	interface Properties {
 		stepId: StepId;
@@ -116,7 +116,7 @@
 		backHref={checkOr(
 			page.url.searchParams,
 			practiceId,
-			previousStepHref(intakeFlow.steps, base, stepId, searchHref(practiceId))
+			previousStepHref(intakeFlow.steps, base, stepId, exitHref(practiceId, intakeDraft.origin))
 		)}
 		{question}
 		{hint}

@@ -16,8 +16,9 @@
 	 *
 	 * There is no server record until the save, so there is nothing for a
 	 * `load` to return. `intakeDraft.svelte.ts` holds what has been typed
-	 * and this layout opens it, seeded from what the search that fronts
-	 * intake carried in its query string (#498).
+	 * and this layout opens it, seeded from what the search carried in
+	 * its query string (#498). Its own `+layout.ts` is only the contractor
+	 * gate (#1609).
 	 *
 	 * ## What is deliberately not here
 	 *
@@ -33,8 +34,15 @@
 	import { intakeFlow } from '#lib/intakeFlow.svelte.js';
 	import Skeleton from '#lib/components/atoms/Skeleton.svelte';
 	import Notice from '#lib/components/atoms/Notice.svelte';
+	import { intakeOrigin } from '#lib/intakeJourney.js';
+	import ContractorDoor from '../ContractorDoor.svelte';
+	import type { LayoutProps as LayoutProperties } from './$types';
 
-	let { children }: { children: Snippet } = $props();
+	// #1609: `+layout.ts` decided whether she is a contractor Doula.
+	// `data` is optional for the same reason `clients/+page.svelte` gives:
+	// a spec that renders this directly bypasses SvelteKit's load.
+	let { data, children }: { data?: LayoutProperties['data']; children: Snippet } = $props();
+	const isContractor = $derived(data?.isContractor ?? false);
 
 	const practiceId = $derived(page.params.practiceId ?? '');
 
@@ -69,14 +77,24 @@
 	 */
 	$effect(() => {
 		void practiceId;
+		// The door asks nothing, so it reads nothing: the template read
+		// would only race it with an error notice.
+		if (isContractor) return;
 		untrack(() => {
 			intakeDraft.start(practiceId, carried());
+			// #1609: a link that opens the name question directly names the
+			// screen it is on, and the name question's Back goes there. A
+			// later visit that carries none -- a Change round trip, a reload
+			// further on -- keeps the one already read.
+			intakeDraft.origin = intakeOrigin(page.url.searchParams) ?? intakeDraft.origin;
 			void intakeFlow.load(apiFetchWithSession, practiceId);
 		});
 	});
 </script>
 
-{#if intakeFlow.status === 'ready'}
+{#if isContractor}
+	<ContractorDoor />
+{:else if intakeFlow.status === 'ready'}
 	{@render children()}
 {:else if intakeFlow.status === 'error'}
 	<container-l>
