@@ -8,6 +8,15 @@ How the engineering skills should consume this repo's domain documentation when 
 - **`CONTEXT-MAP.md`** at the repo root if it exists — it points at one `CONTEXT.md` per context. Read each one relevant to the topic.
 - **`docs/adr/`** — read ADRs that touch the area you're about to work in. In multi-context repos, also check `src/<context>/docs/adr/` for context-scoped decisions.
 
+**Look up one `CONTEXT.md` term instead of reading the file whole.** Each entry is one line that opens with the term in bold, and a line can run to 4,000 characters, so a plain `grep -n` returns tens of thousands. Match the exact bold name and cut the output to a width:
+
+```sh
+grep -n '^\*\*Engagement\*\*:' CONTEXT.md | cut -c1-600      # the entry itself
+command grep -no '.\{0,80\}Engagement Request.\{0,80\}' CONTEXT.md    # where other entries use the term
+```
+
+`command` matters on the second line: in a Claude Code shell `grep` is a function that runs `ugrep`, which refuses a bounded `.{0,80}` over UTF-8 text as too complex. Widen the `cut` only when the cut-off text is the part you need.
+
 If any of these files don't exist, **proceed silently**. Don't flag their absence; don't suggest creating them upfront. The `/domain-modeling` skill (reached via `/grill-with-docs` and `/improve-codebase-architecture`) creates them lazily when terms or decisions actually get resolved.
 
 ## Numbering a new ADR

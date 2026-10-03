@@ -1,5 +1,23 @@
 # Twelve columns, a Practice-defined layer, and an Engagement that is asked for
 
+## Current rule
+
+_A summary of the decision as amended, added on [#1680](https://github.com/markgoho/doula-cloud/issues/1680) for lookup. It decides nothing; where it and the text below differ, the text below governs._
+
+- **The record.** A Client is one Practice's record of a person: a structural core of twelve columns the product reads, and a Practice-defined layer it stores and never interprets. A Practice-defined field never restates a structural fact. Values are read live, not snapshotted, which departs from ADR-0001.
+- **Reads.** The whole record follows ADR-0008's Engagement row: Owner, Admin and employee Doula read every Client; the confined contractor reads her attached Clients. The portal shows the Client none of her own record in v1.
+- **Writes.** An Owner, an Admin or an employee Doula creates a Client; edit follows read; a contractor originates nothing. An Owner or an Admin starts an Engagement directly; an employee Doula requests one; an Owner or an Admin approves.
+- **Finding her.** The search is the only door to intake, except at a Practice that holds no Client record, where the name question opens directly. Intake asks the name, saves, and continues to the Start work form; her other details are a journey of question pages from her record.
+- **Edits.** Every edit is one `client_events` row with a diff and a named actor. Two gates share one collision predicate: a name change that equals another Client's full name is blocked (with one override); any other hit asks whether this is her. Saying yes merges the two records ([ADR-0040](0040-a-client-record-merges-and-the-engagement-moves-with-her.md)); the absorbed row becomes a tombstone with `merged_into`. No delete and no deactivate.
+- **The Engagement Request** is its own entity. Approval creates the Engagement and locks the Credit; a pending Request reserves no Credit, never expires, and may be withdrawn by its requester. The Request names the kind, the due date, and the Doula (one Doula the Practice can attach without an Offer, or *No Doula yet*). The approver approves or refuses all of it and amends nothing; approval writes the named Doula's granted attachment.
+
+## Amendments
+
+- [#727](https://github.com/markgoho/doula-cloud/issues/727): [two gates on the edit path, and an unattached record can be absorbed](#amendment-two-gates-on-the-edit-path-and-an-unattached-record-can-be-absorbed).
+- [#813](https://github.com/markgoho/doula-cloud/issues/813): [superseded in part by ADR-0040](#superseded-in-part-by-adr-0040-a-client-record-merges-and-the-engagement-moves-with-her); two attached records merge too.
+- [#1515](https://github.com/markgoho/doula-cloud/issues/1515): [the Request names the Doula, or says there is none yet](#amendment-the-request-names-the-doula-or-says-there-is-none-yet).
+- [#1516](https://github.com/markgoho/doula-cloud/issues/1516): [a Practice with no Client has no search, and a new Client is the name, then the work](#amendment-a-practice-with-no-client-has-no-search-and-a-new-client-is-the-name-then-the-work).
+
 A Client had a name and an email. This document gives her a record, gives a Practice a way to add the facts we did not think of, gives a returning Client a way to be found rather than retyped, and splits the one act that created her from the act that starts paid work.
 
 It was chartered on the wayfinder map [Client intake: a real client record, and reusing an existing Client for a new Engagement](https://github.com/markgoho/doula-cloud/issues/332), and collects six closed decisions — [#369](https://github.com/markgoho/doula-cloud/issues/369), [#370](https://github.com/markgoho/doula-cloud/issues/370), [#371](https://github.com/markgoho/doula-cloud/issues/371), [#373](https://github.com/markgoho/doula-cloud/issues/373), [#374](https://github.com/markgoho/doula-cloud/issues/374), [#393](https://github.com/markgoho/doula-cloud/issues/393) — into one buildable model. Nothing in the model sections is decided here; each is traceable to its ticket. Where a later ticket reversed an earlier one, this document says so rather than presenting the result as if it arrived in one pass.

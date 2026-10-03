@@ -83,6 +83,24 @@ A rendering test sees how a component *behaves*; it can never see which mechanis
 
 **It stops at `app/`, and that is a decision rather than an oversight.** The Hugo marketing site is in this map's scope, but it ships no stylesheet: its CSS is two inline `<style>` blocks in `hugo/layouts`, and neither holds a media query or a `vw` unit today, so widening the glob would gate nothing and would tie a Svelte-shaped scanner to a template language it does not parse. Hugo is covered when the map says how — its verification is generated from a component directory and Hugo has pages instead, which is the open question. Until then this document claims `app/` and says so, rather than implying coverage it does not have.
 
+## Where each part lives
+
+Added on [#1680](https://github.com/markgoho/doula-cloud/issues/1680) as an index; it decides nothing. All paths are under `app/src/`.
+
+| Part | File |
+| --- | --- |
+| A route's fixture and its `variants` (other sessions) | `page.fixture.ts` beside the route's `+page.svelte` |
+| The `RouteFixture` and `RouteVariant` types, `toSweptFixtures`, `toSweptSubjects`, `toPageState` | `routes/routeFixture.ts` |
+| A component demo's `variants` (other states) | the `<script module>` of its `routes/style-guide/<demo>/+page.svelte` |
+| `toDemos`, `toRouteDemos`: the one reader the component sweep, the floor check and the drag surface share | `routes/style-guide/drag-surface/dragSurface.ts` |
+| The sweep itself: `sweep`, `revealDisclosures`, `awaitSettled`, `mountInFrame` | `routes/style-guide/continuum.ts` |
+| The component sweep over every style-guide page | `routes/style-guide/continuum.svelte.spec.ts` |
+| The route sweep, its discovery of every `+page.svelte`, and `UNSWEPT` | `routes/route-continuum.svelte.spec.ts` |
+| The floor check and `measureOverflow` | `routes/style-guide/floor.svelte.spec.ts`, `routes/style-guide/floor.ts` |
+| The drag surface's page and its picker, fed by `toDemos` and `toRouteDemos` | `routes/style-guide/drag-surface/+page.svelte` |
+| The no-switch rule for a demo page, and `CLICK_ONLY` | `routes/style-guide/demoStates.spec.ts` |
+| The source gate | `lib/styles/layout.usage.spec.ts` |
+
 ## Consequences
 
 - The gate now matches this ADR, done on [#533](https://github.com/markgoho/doula-cloud/issues/533), which absorbed [#532](https://github.com/markgoho/doula-cloud/issues/532). The `SHELL_CHROME` allowlist is gone, a width media query fails anywhere with no `layout:ignore` path, and the scan covers `src/**/*.css` as well as the component and route files. Both top bars declare their own containment context and query it by name, so the exception the allowlist encoded has nothing left to hold.

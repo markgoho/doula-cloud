@@ -1,5 +1,30 @@
 # Employment type gates the Practice; Attachment gates the Engagement
 
+## Current rule
+
+_A summary of the decision as amended, added on [#1680](https://github.com/markgoho/doula-cloud/issues/1680) for lookup. It decides nothing; where it and the text below differ, the text below governs._
+
+- **Membership.** A Staff person is one row; what she is to one Practice is a Membership, which holds her roles and an Employment type, `employee` or `contractor`. Employment type is not a role.
+- **Reach.** An employee Doula reads and writes every Engagement at the Practice. A contractor who holds neither Owner nor Admin (`staffauth.Reader.IsAmbientContractor`) reads and writes only the Engagements she holds a granted attachment on. An Owner or an Admin has the reach of that role, whatever her Employment type.
+- **Attachment.** An accrued attachment is a record of work and never a key; only a granted one reaches. Four writers grant one: acceptance of an Offer, a Visit that names her, approval of an Engagement Request that names her, and *Put me on this Engagement*. A contractor who holds neither Owner nor Admin is attached only by accepting an Offer. Every writer reads one rule, `attachment.Membership.WhyNotAttachable`.
+- **Money.** `employment_type` is the one boundary. An Owner, an Admin and an employee Doula read Contract money and Invoice and payment history; the confined contractor reads only her own agreed fee. The Credit balance and ledger are Owner and Admin only. Everyone reads the rate card; an Owner or an Admin sets it.
+- **Money writes.** Recording, reversing, voiding and writing off by-hand money: Owner and Admin. Changing an established billing mode: Owner only. Raising an Invoice: any role, with the attaching-write reach test, at the amount on the Contract.
+- **Visits.** Naming a colleague on a Visit: Owner and Admin. A Doula names only herself.
+- **Enforcement.** Every GET mounts through `GatedRouter` with a role declaration; an Engagement write goes through `staffauth.AttachingWrite`; a read whose shape varies by role takes the `Reader` that `staffauth.Middleware` resolved, through `staffauth.ReaderFrom(ctx)` (the body below names the older `ResolveReader`, since removed).
+- **Provisional.** The employee's ambient write default ([#243](https://github.com/markgoho/doula-cloud/issues/243), [#244](https://github.com/markgoho/doula-cloud/issues/244)).
+
+## Amendments
+
+In the order they landed. Some are written into the section they change, and some are sections of their own at the end.
+
+- [#267](https://github.com/markgoho/doula-cloud/issues/267): an Admin reads Stripe Connect state. In [The read table](#the-read-table--five-columns-superseding-adr-0006s-four).
+- [#270](https://github.com/markgoho/doula-cloud/issues/270), [#271](https://github.com/markgoho/doula-cloud/issues/271): whether the Practice can raise an Invoice, and billing mode, are rows of their own. In [The read table](#the-read-table--five-columns-superseding-adr-0006s-four).
+- [#271](https://github.com/markgoho/doula-cloud/issues/271), [#947](https://github.com/markgoho/doula-cloud/issues/947), [#945](https://github.com/markgoho/doula-cloud/issues/945): the money writes and the reach test on raising an Invoice. In [Recording a Payment, voiding, writing off, and changing billing mode](#recording-a-payment-voiding-writing-off-and-changing-billing-mode).
+- [#268](https://github.com/markgoho/doula-cloud/issues/268), [#914](https://github.com/markgoho/doula-cloud/issues/914): who may name whom on a Visit, through one shared helper. In [Who may assign a Visit to whom](#who-may-assign-a-visit-to-whom).
+- [#282](https://github.com/markgoho/doula-cloud/issues/282): [a Client's money is not hidden from the people inside the business](#amendment-a-clients-money-is-not-hidden-from-the-people-inside-the-business).
+- [#1515](https://github.com/markgoho/doula-cloud/issues/1515): [a third path writes a granted attachment, the Doula named when the Engagement starts](#amendment-a-third-path-writes-a-granted-attachment-the-doula-named-when-the-engagement-starts), and a fourth, *Put me on this Engagement*.
+- [#1625](https://github.com/markgoho/doula-cloud/issues/1625): [an Owner or an Admin may be a contractor, and the Offer rule is for the contractor who holds neither role](#amendment-an-owner-or-an-admin-may-be-a-contractor-and-the-offer-rule-is-for-the-contractor-who-holds-neither-role).
+
 Supersedes [ADR-0006](0006-read-follows-the-role.md)'s read table. ADR-0006 keeps its own argument — why read-follows-write and one-practice-one-view both lost, and why the Staff roster and Templates cells fall where they do — and gains a pointer to this document. Only its table is superseded.
 
 This ADR was chartered as ADR-0007 on the wayfinder map [Who a Staff member is to a Practice, and which work is theirs](https://github.com/markgoho/doula-cloud/issues/225) and its tickets. It is numbered 0008 because [ADR-0007](0007-connect-account-state-is-two-capabilities-and-a-requirements-list.md) was committed first, for the Stripe Connect account model, while this map's tickets were still open. Every reference inside those tickets to "ADR-0007" means this document.

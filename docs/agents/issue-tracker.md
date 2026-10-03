@@ -5,7 +5,13 @@ Issues and specs for this repo live as GitHub issues. Use the `gh` CLI for all o
 ## Conventions
 
 - **Create an issue**: `gh issue create --title "..." --body "..."`. Use a heredoc for multi-line bodies.
-- **Read an issue**: `gh issue view <number> --comments`, filtering comments by `jq` and also fetching labels.
+- **Read an issue**: `gh issue view <number>` for the body and `gh issue view <number> --comments` for the thread. Both print normally, in the main checkout and in a worktree-isolated agent (checked 2026-10-02 by reading #1642 from the worktree-isolated agent that worked [#1680](https://github.com/markgoho/doula-cloud/issues/1680)). If either ever prints nothing, use the REST form: `gh api repos/markgoho/doula-cloud/issues/<number> --jq '.title, .body'` and `gh api repos/markgoho/doula-cloud/issues/<number>/comments --jq '.[].body'`.
+- **Post a Markdown body through REST** (an issue or PR body, or a comment): let `jq` encode the file, so no hand-written escaping is needed. This form runs in a worktree-isolated agent too:
+
+  ```sh
+  jq -n --rawfile body body.md '{body:$body}' | gh api --method PATCH repos/markgoho/doula-cloud/issues/<number> --input -
+  jq -n --rawfile body body.md '{body:$body}' | gh api repos/markgoho/doula-cloud/issues/<number>/comments --input -
+  ```
 - **List issues**: `gh issue list --state open --json number,title,body,labels,comments --jq '[.[] | {number, title, body, labels: [.labels[].name], comments: [.comments[].body]}]'` with appropriate `--label` and `--state` filters.
 - **Comment on an issue**: `gh issue comment <number> --body "..."`
 - **Apply / remove labels**: `gh issue edit <number> --add-label "..."` / `--remove-label "..."`
@@ -19,34 +25,16 @@ Infer the repo from `git remote -v` — `gh` does this automatically when run in
 
 Every open issue is an item on the **Doula Cloud Project** — https://github.com/users/markgoho/projects/5, project number `5`, owner `markgoho`. Its **Status** field replaced the four triage labels ([#621](https://github.com/markgoho/doula-cloud/issues/621)); the role-to-value mapping is in `docs/agents/triage-labels.md`.
 
-- **Read an item's Status**: `gh project item-list 5 --owner markgoho --format json --limit 400 --jq '.items[] | select(.content.number == {n}) | .status'` — `--limit` defaults to 30, well under the ~171-item project, so pass it explicitly or the query silently returns nothing. Or open the issue and check the Status column in the Table view.
-
-  **Call this once per session, never once per issue.** It costs 404 GraphQL points — 8% of the hourly budget — and the cost does not fall when you filter with `--jq`, because the filter runs after the whole board is fetched. Reading Status for nine issues costs 404 points if you fetch the board once and index it locally, and 3,636 points if you loop. Save the JSON to a variable or a file and read every issue out of that.
-- **Write an item's Status**: one field per invocation. **Use the node-id form** — it costs nothing, where the by-name form costs 103 points per write. Resolve the three ids once:
-
-  ```sh
-  PID=$(gh project view 5 --owner markgoho --format json --jq .id)
-  FJ=$(gh project field-list 5 --owner markgoho --format json --limit 50)
-  FID=$(echo "$FJ" | jq -r '.fields[]|select(.name=="Status")|.id')
-  OPT=$(echo "$FJ" | jq -r '.fields[]|select(.name=="Status")|.options[]|select(.name=="Ready for agent")|.id')
-  ```
-
-  Then every write is free, however many you do:
-
-  ```sh
-  gh project item-edit --id "$ITEM" --field-id "$FID" --project-id "$PID" --single-select-option-id "$OPT"
-  ```
-
-  `$ITEM` is the item's node id, which comes out of the one board fetch above (`.items[] | select(.content.number == {n}) | .id`) — not the issue number and not its URL.
-
-  The by-name form below is readable and correct, and fine for a single write when you are not already holding the ids. It is never right in a loop.
+- **Read or write one issue's Status**: the Project id, the Status field id, each option id, and the 1-point lookup of one issue's item id and Status are in `docs/agents/triage-labels.md` under "The ids". A write by node id costs nothing; one field per invocation.
+- **Read Status for many issues at once** (a bulk triage pass): `gh project item-list 5 --owner markgoho --format json --limit 400` — `--limit` defaults to 30, well under the ~171-item project, so pass it explicitly or the query silently returns nothing. **Call this once per session, never once per issue.** It costs 404 GraphQL points — 8% of the hourly budget — and the cost does not fall when you filter with `--jq`, because the filter runs after the whole board is fetched. Save the JSON to a file and read every issue's `.status` and item `.id` out of that.
+- **The by-name write form** below is readable and correct, and costs 103 points per write. The ids are written down, so the node-id form is always available; this one is never right in a loop.
 
   ```sh
   gh project item-edit 5 --owner markgoho --url https://github.com/markgoho/doula-cloud/issues/632 --field "Status" --value "In progress"
   ```
 
   `--value` must be one of the six option strings: `Needs triage`, `Needs info`, `Ready for agent`, `Ready for human`, `In progress`, `Done`. `--url` is the *issue's* URL, not the project's.
-- **Target date**: same command, `--field "Target date" --date "YYYY-MM-DD"` (see `gh project item-edit --help`; date fields take `--date`, not `--value`).
+- **Target date**: `gh project item-edit --id <item id> --project-id <project id> --field-id <Target date field id> --date "YYYY-MM-DD"`, with the ids from `docs/agents/triage-labels.md`. A date field takes `--date`, not `--value`.
 - **When Target date gets set, and by whom** ([#653](https://github.com/markgoho/doula-cloud/issues/653)): only an issue whose Status is `Ready for agent`, `Ready for human`, or `In progress` gets one — that's the earliest point a real deliverable and rough timing both exist, so a `Needs triage`/`Needs info` issue stays unset rather than carry a guessed date. Wayfinder maps, other `wayfinder:*` tickets, and the Capability parent issues are exempt outright: none has a natural single ship date. Use the first of the expected month (e.g. `2026-11-01`), never a specific day — nothing in this project's process supports day-level confidence. Whoever is triaging sets it at the same moment Status moves into an eligible value, the same way that session already sets Status; it's a proposal the maintainer can correct at any time, not a locked commitment.
 - **What these commands cost, and why it matters.** GitHub's GraphQL budget is **5,000 points per hour, per user** — shared by every session, subagent and background agent on the machine, because they all authenticate as the same `gh` OAuth app. Points are not requests: a query's cost rises with the number of nodes it asks for, so `gh project` commands are two to three orders of magnitude more expensive than everything else in this file. Measured on this project, 2026-09-08:
 
