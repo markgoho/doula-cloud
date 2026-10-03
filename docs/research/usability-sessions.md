@@ -30,7 +30,7 @@ The founder asks the owner first, in person or by text, and the owner introduces
 
 > Would you give me under an hour before the end of November to try DoulaCloud on your own phone or laptop while I watch? I'm testing it, not you, and the more it trips you up, the more useful your hour is.
 
-Each sheet records how the person came to the session: chosen by the owner, or offered themselves. People who opt in are the ones most likely to do well, and [ADR-0045](../adr/0045-a-doula-is-heard-before-she-is-chosen.md) names that selection bias beside each call rather than pretending it away.
+Each sheet records how the person came to the session: chosen by the owner, or offered themselves. People who opt in are the ones most likely to do well, which is the selection bias [ADR-0045](../adr/0045-a-doula-is-heard-before-she-is-chosen.md) weighs. The sheet records it so it is read beside each session rather than forgotten.
 
 ## The consent line
 
@@ -60,7 +60,7 @@ The records each card touches are separate, so one Practice serves all five sess
 
 **How it is made.** There is no command for this yet. Every seed in the repo stops at the local stack: `bun run --cwd app seed:staff-session` (`app/scripts/seed-staff-session.ts`) signs up through the Firebase Auth emulator and inserts its Engagement with raw SQL (`seedEngagement`, `app/e2e/stack.ts`), and the World's provisioning (`app/e2e/simulation/provision.ts`) signs people in through the emulator and reads each invitation token from the local mailbox. None of those reaches Cloud Run, Identity Platform or Cloud SQL. [#1729](https://github.com/markgoho/doula-cloud/issues/1729) is the ticket for the deployed mechanism, and this paragraph names the command when it lands.
 
-**The participant's account.** Each participant gets a real invitation to the seeded Practice, carrying their role and employment type, and accepts it at the start of their own session, on their own device. Acceptance is each map's Stage 1, so it is observed and written on the sheet, but it is not the card. The owner also enrolls a second factor here, because an Owner cannot reach a Practice screen without one. Then the founder attaches the participant to the card's Engagement, or sends the card's Offer, from his own device, since neither can exist before the participant's membership does. Then the person closes the browser, and the card starts from the device's home screen.
+**The participant's account.** Each participant gets a real invitation to the seeded Practice, carrying their role and employment type, and accepts it at the start of their own session, on their own device. Acceptance is Stage 1 of the admin's, the doula's and the contractor's maps (the owner's map starts after it), so it is observed and written on the sheet, but it is not the card. The owner also enrolls a second factor here, because an Owner cannot reach a Practice screen without one. Then the founder attaches the participant to the card's Engagement, or sends the card's Offer, from his own device, since neither can exist before the participant's membership does. Then the person closes the browser, and the card starts from the device's home screen.
 
 ## The five task cards
 
@@ -74,7 +74,7 @@ Each card lists the Budget of the stage it exercises, with the values its map gi
 
 - **Map**: [`practice-owner.md`](../journeys/practice-owner.md), Stage 8, "Coverage, at 2 a.m. — moment of truth"
 - **Moment of truth**: two Clients go into labor the same night, and the owner needs to know within a minute who is free.
-- **Reached when**: the person names, from what DoulaCloud shows, a doula who is free to go to Rosa Lindqvist's birth.
+- **Reached when**: the person names, from what DoulaCloud shows, a doula who is free to go to Rosa Lindqvist's birth, within a minute of opening DoulaCloud. The sheet's "Time to the goal" line holds the number; a right answer after the minute is recorded as not reached.
 
 > It's the middle of the night. June Ferris and Rosa Lindqvist have both gone into labor, and the doula on both births is already at June Ferris's. Find out who on your team is free to go to Rosa Lindqvist's birth.
 
@@ -126,7 +126,7 @@ Cards 1 to 5 are not an order. Sessions run in whatever order the five people ca
 
 One sheet per session, filled from the founder's notes and the recording on the day of the session, and filed at `docs/research/usability-sessions/<YYYY-MM-DD>-card-<n>.md`: the session's date and the card's number, and nothing that names the person.
 
-**Two columns, and they never mix.** *What the product did* is the evaluator's register: third person, past tense, what was on screen and what happened, with the path and the recording's time. *What the person said* is the person's own words, inside quotation marks, verbatim from the recording, or empty. A paraphrase goes in neither column, and the founder's own reading of a moment goes in neither column either. It is the same split the friction log holds between Observed and Narrated ([`docs/simulation/README.md`](../simulation/README.md#the-two-registers)): what the product did is the evidence, and what the person made of it interprets a row and never stands on its own. An opinion ("this is nice", "I'd use this") is written down, because it was said, and it is never a finding.
+**Two columns, and they never mix.** *What the product did* is the evaluator's register: third person, past tense, what was on screen and what happened, with the path and the recording's time. *What the person said* is the person's own words, inside quotation marks, verbatim from the recording, or empty. A paraphrase goes in neither column, and the founder's own reading of a moment goes in neither column either. It is the same split the friction log holds between Observed and Narrated ([`docs/simulation/README.md`](../simulation/README.md#the-two-registers)): what the product did is the evidence, and what the person made of it interprets a row and never stands on its own. A row does not carry the friction log's Outcome and Evidence fields: the card's outcome is the sheet's one "Moment of truth reached" line, and the evidence is re-made at filing ([below](#findings-go-through-the-766-pipeline)), because the recording that holds it is deleted. An opinion ("this is nice", "I'd use this") is written down, because it was said, and it is never a finding.
 
 The person's own words for things are worth the most. A doula who says "my client" where the screen says "Engagement" has given the map's Words table a row, and [Voice](../design/brief.md#voice) rule 7 puts the words a doula said in place of ours.
 
@@ -152,6 +152,7 @@ The person's own words for things are worth the most. A doula who says "my clien
 - **Recording**: yes / no
 - **Device**: phone / tablet / computer, <width> CSS px wide, <browser>
 - **Moment of truth reached**: yes / no
+- **Time to the goal**: <seconds from the first DoulaCloud screen to the goal, from the recording, or "not reached">
 
 ## Before the card
 
@@ -200,7 +201,7 @@ Every card exercises a moment-of-truth stage, and a moment-of-truth stage carrie
 
 After the card, with the recording still on. The questions follow [_The Mom Test_](books/the-mom-test.md), which is on the values track and synthesized in [`who-it-is-for-and-how-the-product-learns.md`](books/themes/who-it-is-for-and-how-the-product-learns.md): ask about the person's life and not about the product, ask for a specific past case and not an opinion about the future, and talk less than they do (ch. 1, p. 13). Three questions per card, in the same shape: what they did last time, what it cost, and what they tried.
 
-**Never asked**, in any form: whether they like it, whether they would use it, whether they would pay for it or how much, whether it is better than what they use now, or what they would add. Each one invites a polite answer, and a polite answer is narration, not evidence (ch. 1, p. 16; ch. 2, p. 25). When the person offers an opinion anyway, it goes on the sheet in quotation marks, and the next question asks for the last time it happened (ch. 2, pp. 30–31).
+**Never asked**, in any form: whether they like it, whether they would use it, whether they would pay for it or how much, whether it is better than what they use now, or what they would add. Each one invites a polite answer, and a polite answer is narration, not evidence (ch. 1, p. 16; ch. 2, p. 25). When the person offers an opinion anyway, it goes on the sheet in quotation marks, and the next question asks for the last time it happened (ch. 2, pp. 30–32).
 
 **Card 1, the owner**
 
