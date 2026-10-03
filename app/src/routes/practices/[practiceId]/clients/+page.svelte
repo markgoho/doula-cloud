@@ -220,14 +220,13 @@
 	// nobody exists -- and "No Clients yet." would contradict the "Find or
 	// add a Client" link above it. With "See everyone" on there is no
 	// filter left to point at, so the plain message stays.
-	function staffEmptyMessage(): string {
-		return hasAnyClient && !isShowingEveryone
-			? 'No Client has work yet. Turn on See everyone to list every Client.'
-			: 'No Clients yet.';
-	}
-	const emptyMessage = $derived(
-		isContractor ? 'Work reaches you as an Offer, so there are no Clients here yet.' : staffEmptyMessage()
-	);
+	const emptyMessage = $derived.by(() => {
+		if (isContractor) return 'Work reaches you as an Offer, so there are no Clients here yet.';
+		if (hasAnyClient && !isShowingEveryone) {
+			return 'No Client has work yet. Turn on See everyone to list every Client.';
+		}
+		return 'No Clients yet.';
+	});
 </script>
 
 {#snippet engagementRollup(client: ClientListItem)}

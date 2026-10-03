@@ -300,10 +300,7 @@ describe('a non-contractor with an empty list', () => {
 			.not.toBeInTheDocument();
 	});
 
-	// #1706: the default filter is "Clients with work" (ADR-0017), so a
-	// Practice whose Clients have no work yet reads an empty table while
-	// +page.ts's `all=true` count says it holds a Client. "No Clients yet."
-	// there would contradict the "Find or add a Client" link above it.
+	// #1706: why, beside `emptyMessage` in +page.svelte.
 	it('says no Client has work yet, and how to see everyone, at a Practice whose Clients have no work', async () => {
 		await setup(jsonResponse({ items: [], hasMore: false }), { hasAnyClient: true });
 
