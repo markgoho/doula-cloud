@@ -313,8 +313,11 @@
 			gap: var(--space-2) var(--space-4);
 		}
 
+		/* The badges wrap under a name too long to share their line
+		   (#1743), rather than taking the room out of their own icons. */
 		.doulas li {
 			display: flex;
+			flex-wrap: wrap;
 			align-items: center;
 			gap: var(--space-2);
 			flex: 1 1 14rem;

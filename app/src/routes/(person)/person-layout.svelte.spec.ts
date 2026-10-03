@@ -36,7 +36,7 @@ const session = {
 };
 
 /*
- * The two sides of StaffTopBar's 49.25rem content floor, named the way
+ * The two sides of StaffTopBar's 50.75rem content floor, named the way
  * StaffTopBar's own spec names them. Which one is pinned decides which of
  * the bar's two trees is the visible one, so it is never left to the
  * runner's default.
