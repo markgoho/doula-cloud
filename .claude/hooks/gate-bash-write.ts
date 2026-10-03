@@ -101,6 +101,7 @@
 // would have kept the directory -- a write blocked that need not have
 // been, which is this file's safe direction to err. It stays a textual
 // scanner, not a shell parser.
+import os from 'node:os';
 import path from 'node:path';
 import { isTrackedInMainCheckout, readStdin } from './tracked-path.ts';
 import { findMainCheckoutRoot } from './worktree-root.ts';
@@ -203,13 +204,22 @@ interface Stage {
 // gate-shared-index.sh's `tr '\n;|&'` -- that does tear `2>&1` into two
 // pieces, but the redirection regex below only needs a `>` with a target
 // after it, which survives the split intact either side.
+//
+// Decision (#1678): a separator inside a single- or double-quoted span is
+// not a separator. `grep -n "sleep\|sed -i" docs/agents/worktree-flow.md`
+// used to split at the quoted `|`, leaving a fake `sed -i" docs/...` stage
+// whose last token read as an in-place edit target, so a read-only grep was
+// refused as a write. Two cases fall back to the plain split, which
+// over-collects -- this file's safe direction: quotes that do not balance,
+// and any `$(` or backtick, because a command substitution runs its own
+// stages even inside double quotes (`echo "$(true; sed -i x f)"`).
 function segments(command: string): Stage[] {
-  // The capture group keeps each separator in the split output, so the
-  // parts alternate stage, separator, stage, separator, ..., stage. An
+  const quoted = /\$\(|`/.test(command) ? null : splitOutsideQuotes(command);
+  // The parts alternate stage, separator, stage, separator, ..., stage. An
   // empty stage is kept rather than filtered out, so the separator that
   // follows it is not lost with it; it contributes no write target and no
   // `cd` either way.
-  const parts = command.split(/(\r?\n|;|\|\||\||&&|&)/);
+  const parts = quoted ?? command.split(/(\r?\n|;|\|\||\||&&|&)/);
   const stages: Stage[] = [];
 
   for (let index = 0; index < parts.length; index += 2) {
@@ -220,6 +230,54 @@ function segments(command: string): Stage[] {
   }
 
   return stages;
+}
+
+// The same alternating stage/separator list as a plain split, but a
+// separator only counts outside quotes and when not backslash-escaped.
+// Returns `null` when a quote is left open at the end of the command.
+const SEPARATOR = /\r?\n|;|\|\||\||&&|&/y;
+
+function splitOutsideQuotes(command: string): string[] | null {
+  const parts: string[] = [];
+  let current = '';
+  let quote: '"' | "'" | null = null;
+
+  for (let index = 0; index < command.length; index++) {
+    const char = command[index] ?? '';
+
+    if (quote !== "'" && char === '\\' && index + 1 < command.length) {
+      current += char + command[index + 1];
+      index++;
+      continue;
+    }
+
+    if (quote !== null) {
+      if (char === quote) quote = null;
+      current += char;
+      continue;
+    }
+
+    if (char === "'" || char === '"') {
+      quote = char;
+      current += char;
+      continue;
+    }
+
+    SEPARATOR.lastIndex = index;
+    const separator = SEPARATOR.exec(command)?.[0];
+    if (separator) {
+      parts.push(current, separator);
+      current = '';
+      index += separator.length - 1;
+      continue;
+    }
+
+    current += char;
+  }
+
+  if (quote !== null) return null;
+  parts.push(current);
+  return parts;
 }
 
 // True when the command holds a `(` or `)` outside every quoted span, using
@@ -320,7 +378,22 @@ function writeTargets(segment: string): string[] {
 
   return targets
     .map(stripQuotes)
-    .filter((target) => !hasUnexpandedVariable(target));
+    .filter((target) => !hasUnexpandedVariable(target))
+    .flatMap(expandHome);
+}
+
+// A shell expands a leading `~` before the command runs, but this hook sees
+// the text first, so `path.resolve('~/.zshrc')` used to pin it under the
+// working directory -- inside the main checkout -- and call it tracked
+// (#1678). `~` and `~/...` become the home directory. `~user/...` names a
+// home this hook cannot look up without guessing, and is skipped, the same
+// as an unexpanded variable (#702).
+function expandHome(target: string): string[] {
+  if (target === '~') return [os.homedir()];
+  if (target.startsWith('~/'))
+    return [path.join(os.homedir(), target.slice(2))];
+  if (target.startsWith('~')) return [];
+  return [target];
 }
 
 // A write target together with the directory it should resolve against
