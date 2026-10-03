@@ -5,7 +5,7 @@ Issues and specs for this repo live as GitHub issues. Use the `gh` CLI for all o
 ## Conventions
 
 - **Create an issue**: `gh issue create --title "..." --body "..."`. Use a heredoc for multi-line bodies.
-- **Read an issue**: `gh issue view <number>` for the body and `gh issue view <number> --comments` for the thread. Both print normally, in the main checkout and in a worktree-isolated agent (checked from one on [#1680](https://github.com/markgoho/doula-cloud/issues/1680), 2026-10-02). If either ever prints nothing, use the REST form: `gh api repos/markgoho/doula-cloud/issues/<number> --jq '.title, .body'` and `gh api repos/markgoho/doula-cloud/issues/<number>/comments --jq '.[].body'`.
+- **Read an issue**: `gh issue view <number>` for the body and `gh issue view <number> --comments` for the thread. Both print normally, in the main checkout and in a worktree-isolated agent (checked 2026-10-02 by reading #1642 from the worktree-isolated agent that worked [#1680](https://github.com/markgoho/doula-cloud/issues/1680)). If either ever prints nothing, use the REST form: `gh api repos/markgoho/doula-cloud/issues/<number> --jq '.title, .body'` and `gh api repos/markgoho/doula-cloud/issues/<number>/comments --jq '.[].body'`.
 - **Post a Markdown body through REST** (an issue or PR body, or a comment): let `jq` encode the file, so no hand-written escaping is needed. This form runs in a worktree-isolated agent too:
 
   ```sh

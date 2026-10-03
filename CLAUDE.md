@@ -1,4 +1,4 @@
-This is a project called DoulaCloud, one word (ADR-0050). It includes a Svelte application (`app/`), a SvelteKit static marketing site (`site/`, ADR-0051), and `gcp-dashboard/`, a local-only SvelteKit tool that shows the GCP project's spend and usage and is never deployed (see its `README.md`).
+This is a project called DoulaCloud, one word (ADR-0050). It includes a Svelte application (`app/`), a SvelteKit static marketing site (`site/`, ADR-0051), and `gcp-dashboard/`, a local-only GCP spend tool that is never deployed (see its `README.md`).
 
 ## Status: pre-launch
 

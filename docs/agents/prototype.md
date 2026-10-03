@@ -12,7 +12,7 @@ That diff also shows trunk's later changes in reverse; the lines marked `PROTOTY
 
 ## Where it lives
 
-- **A branch, `prototype/<issue>-<slug>`, that never merges.** Use the worktree flow without the PR. The worktree pruner keeps an unmerged `prototype/*` branch (`docs/agents/worktree-flow.md`, Cleanup).
+- **A branch, `prototype/<issue>-<slug>`, that never merges**, so it gets no PR. The worktree pruner keeps an unmerged `prototype/*` branch (`docs/agents/worktree-flow.md`, Cleanup).
 - **A top-level route, `app/src/routes/prototype-<slug>/`.** The model holds `+page.svelte`, one component per variant, a state panel, and `fixtures.ts` with the copy and data. It mounts the real organisms (`StaffTopBar`, `PortalTopBar`) with fixture props.
 - **Every file says it is a prototype**, with a `PROTOTYPE (#<issue>)` comment.
 - **The route's `+layout.ts` has no DEV guard.** The style-guide's guard (`app/src/routes/style-guide/+layout.ts`) returns 404 unless `import.meta.env.DEV`, and `vite build` is a production build, so the guard would empty the artifact. The model's `+layout.ts` is `export {};` with a comment that says why.
@@ -36,5 +36,5 @@ The pre-commit hook (`scripts/hooks/pre-commit`) runs svelte-check, ESLint and t
 
 - **ESLint's production rules.** The model needed four off: `svelte/no-restricted-html-elements` (a raw `<button>` or `<select>` in the switcher bar), `svelte/no-unused-props`, `unicorn/consistent-boolean-name` and `unicorn/prefer-else-if`. The sanctioned override is one block at the end of `app/eslint.config.js`, scoped to `files: ['src/routes/prototype-<slug>/**']`, with a `PROTOTYPE` comment, so every exemption sits in one place.
 - **svelte-check.** The model passes it with no override.
-- **The route sweep.** `app/src/routes/route-continuum.svelte.spec.ts` discovers every `+page.svelte` outside `style-guide/` and fails one that has no `page.fixture.ts` and no entry in its `UNSWEPT` list. The model added neither, and its commit records only that lint and svelte-check passed, so it does not show how this gate was met. On a prototype branch, add the route to `UNSWEPT` there.
+- **The route sweep.** `app/src/routes/route-continuum.svelte.spec.ts` discovers every `+page.svelte` outside `style-guide/` and fails one that has no `page.fixture.ts` and no entry in its `UNSWEPT` list. The model added neither, and its commit records only that lint and svelte-check passed, so it does not show how this gate was met. The spec's own mechanism for a route with no fixture is an entry in `UNSWEPT`; on a prototype branch, that entry is the override.
 - **The usage specs that read `src/routes/**`.** `command grep -l routes app/src/lib/*.usage.spec.ts` lists them. Each one's failure message says what to change, and names its marker where it has one (`voice:ignore`, `spelling:ignore`). A prototype's copy is often the copy that ships, so fix a failure in the copy before reaching for a marker.

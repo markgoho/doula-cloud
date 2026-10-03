@@ -10,7 +10,7 @@ _A summary of the decision as amended, added on [#1680](https://github.com/markg
 - **Money.** `employment_type` is the one boundary. An Owner, an Admin and an employee Doula read Contract money and Invoice and payment history; the confined contractor reads only her own agreed fee. The Credit balance and ledger are Owner and Admin only. Everyone reads the rate card; an Owner or an Admin sets it.
 - **Money writes.** Recording, reversing, voiding and writing off by-hand money: Owner and Admin. Changing an established billing mode: Owner only. Raising an Invoice: any role, with the attaching-write reach test, at the amount on the Contract.
 - **Visits.** Naming a colleague on a Visit: Owner and Admin. A Doula names only herself.
-- **Enforcement.** Every GET mounts through `GatedRouter` with a role declaration; an Engagement write goes through `staffauth.AttachingWrite`; a read whose shape varies by role takes a `Reader` from `staffauth.ResolveReader`.
+- **Enforcement.** Every GET mounts through `GatedRouter` with a role declaration; an Engagement write goes through `staffauth.AttachingWrite`; a read whose shape varies by role takes the `Reader` that `staffauth.Middleware` resolved, through `staffauth.ReaderFrom(ctx)` (the body below names the older `ResolveReader`, since removed).
 - **Provisional.** The employee's ambient write default ([#243](https://github.com/markgoho/doula-cloud/issues/243), [#244](https://github.com/markgoho/doula-cloud/issues/244)).
 
 ## Amendments
