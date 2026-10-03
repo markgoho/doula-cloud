@@ -6,6 +6,8 @@ import { jsonResponse } from '#lib/testResponse.js';
 import { clientDetails } from '#lib/clientDetailsFlow.svelte.js';
 import { editMergeDraft } from '#lib/editMergeDraft.svelte.js';
 import type { IntakeAnswers } from '#lib/intakeDraft.svelte.js';
+import { knownAsFrom } from '#lib/intakeJourney.js';
+import { captureLanding } from '#lib/testOutcome.js';
 import { toPageState, type RouteFixture } from '../../../../../routeFixture.js';
 import { clientId, practiceId, record, seedDetails } from './detailsFixture.js';
 import DateOfBirthPage from './date-of-birth/+page.svelte';
@@ -41,6 +43,8 @@ const recordHref = `/practices/${practiceId}/clients/${clientId}`;
 const engagementHref = `/practices/${practiceId}/engagements/engagement-1`;
 
 const match = { ...record, id: 'client-2', engagements: [], wouldSurvive: true };
+// What the screen the save lands on says (#1710).
+const savedMessage = `${knownAsFrom(record)}'s details saved.`;
 
 interface SetupOptions {
 	/**
@@ -166,6 +170,7 @@ describe('the check page', () => {
 	it('saves one fact as one edit, with the record on file around it', async () => {
 		const { sent } = await setup({ responses: [jsonResponse(record)] });
 
+		const landing = captureLanding(goto);
 		await testPage.getByRole('button', { name: 'Save these details' }).click();
 
 		expect(apiFetchWithSession).toHaveBeenCalledTimes(1);
@@ -177,15 +182,17 @@ describe('the check page', () => {
 			phone: '+1 (585) 555-0142',
 			override: false
 		});
-		expect(goto).toHaveBeenCalledWith(recordHref);
+		// #1710: her record says the save happened.
+		expect(landing).toEqual({ href: recordHref, message: savedMessage });
 	});
 
-	it('returns to the Engagement page that opened the journey', async () => {
+	it('returns to the Engagement page that opened the journey, and says the save happened there', async () => {
 		await setup({ responses: [jsonResponse(record)], engagementId: 'engagement-1' });
 
+		const landing = captureLanding(goto);
 		await testPage.getByRole('button', { name: 'Save these details' }).click();
 
-		expect(goto).toHaveBeenCalledWith(engagementHref);
+		expect(landing).toEqual({ href: engagementHref, message: savedMessage });
 	});
 
 	// A blank never replaces a value on file: the row says what the save
@@ -234,9 +241,10 @@ describe('the check page', () => {
 
 		await testPage.getByRole('button', { name: 'Save these details' }).click();
 		await expect.element(testPage.getByRole('dialog')).toBeVisible();
+		const landing = captureLanding(goto);
 		await testPage.getByRole('button', { name: 'Yes, a different person' }).click();
 
-		await vi.waitFor(() => expect(goto).toHaveBeenCalledWith(recordHref));
+		await vi.waitFor(() => expect(landing).toEqual({ href: recordHref, message: savedMessage }));
 		expect(sent(1).override).toBe(true);
 	});
 

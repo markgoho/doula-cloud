@@ -36,7 +36,8 @@
 		type Visit,
 		type WhoIsOn
 	} from '#lib/engagementDetail.js';
-	import { isJustStarted, kindLabel } from '#lib/engagementRequest.js';
+	import { kindLabel } from '#lib/engagementRequest.js';
+	import { takeOutcome } from '#lib/outcome.js';
 	import {
 		assigneeBlock,
 		loadVisitAssigneesOrNone,
@@ -129,6 +130,11 @@
 		saveNarrowing,
 		type EngagementOnCall
 	} from '#lib/onCall.js';
+
+	// What the save that led here did, if one did (#1710): an approved
+	// start from the Start work form, or her details journey's save. Read
+	// once, while the page renders, so a reload says nothing.
+	const outcome = takeOutcome(page.url);
 
 	type Detail = {
 		engagementId: string;
@@ -2174,18 +2180,17 @@
 	The sections below still fill in after mount, each with its own state.
 -->
 <!--
-	#1611: the end of a new Client's flow. The Start work form lands an
-	approved start here with `?started=true`. The message takes focus, as
-	GOV.UK asks of a success banner on the page a form leads to. It names
-	the Client: product copy has no gendered pronoun.
+	#1611, #1710: a save that leads here says what it did, such as "Work
+	with Pat started." at the end of a new Client's flow. The message takes
+	focus, as GOV.UK asks of a success banner on the page a form leads to.
 -->
-{#snippet startedNotice()}
-	<Notice variant="status" message="Work with {detail.clientName} started." isFocusedOnAppear />
+{#snippet outcomeNotice()}
+	<Notice variant="status" message={outcome!} isFocusedOnAppear />
 {/snippet}
 
 <RecordDetail
 	title={detail.clientName}
-	notice={isJustStarted(page.url.searchParams) ? startedNotice : undefined}
+	notice={outcome ? outcomeNotice : undefined}
 	{summary}
 	{actions}
 	isContentsShown

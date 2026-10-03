@@ -56,6 +56,14 @@
 		 * Connect status has resolved.
 		 */
 		intro?: Snippet;
+		/**
+		 * What a save that led here did, such as "Pat saved as a Client."
+		 * (#1710). Rendered before the <h1>, GOV.UK's position for a
+		 * notification banner, and only once the form is loaded, the same
+		 * as `RecordDetail`'s own region. The route builds the `Notice`;
+		 * this Template only places it.
+		 */
+		notice?: Snippet;
 		fieldsets: Fieldset[];
 		/**
 		 * GOV.UK's error summary, positioned by this Template and built by
@@ -86,6 +94,7 @@
 		title,
 		serviceName,
 		intro,
+		notice,
 		fieldsets,
 		errorSummary,
 		actions,
@@ -129,6 +138,10 @@
 			<stack-l space="var(--space-7)">
 				{#if errorSummary}
 					{@render errorSummary()}
+				{/if}
+
+				{#if notice}
+					{@render notice()}
 				{/if}
 
 				<Heading level={1} variant="page" text={title} />

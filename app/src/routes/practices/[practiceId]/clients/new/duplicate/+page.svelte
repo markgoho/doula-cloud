@@ -41,7 +41,9 @@
 	import Text from '#lib/components/atoms/Text.svelte';
 	import { FormSubmission, orThrownMessage } from '#lib/formSubmission.svelte.js';
 	import { intakeDraft } from '#lib/intakeDraft.svelte.js';
+	import { detailsSavedMessage } from '#lib/intakeJourney.js';
 	import { mergedEditFields } from '#lib/intakeMerge.js';
+	import { gotoWithOutcome } from '#lib/outcome.js';
 	import { proposedChanges } from '#lib/proposedChanges.js';
 	import { JOURNEY, basePath, detailHref, intakeSteps, knownAs, saveIntake } from '../intake.js';
 
@@ -151,13 +153,8 @@
 	async function handleSaveChanges() {
 		if (!reviewing) return;
 		await submission.run(async () => {
-			const result = await editClient(
-				apiFetchWithSession,
-				practiceId,
-				reviewing.id,
-				mergedEditFields(intakeDraft.answers, reviewing),
-				true
-			);
+			const fields = mergedEditFields(intakeDraft.answers, reviewing);
+			const result = await editClient(apiFetchWithSession, practiceId, reviewing.id, fields, true);
 			// `override` is set, so `edit.go` runs no match query and a
 			// conflict here would mean something else refused the write.
 			if (result.conflict) {
@@ -165,7 +162,9 @@
 			}
 			const clientId = reviewing.id;
 			intakeDraft.clear();
-			await goto(detailHref(practiceId, clientId));
+			// #1710: the save leaves this page, so her record says it
+			// happened.
+			await gotoWithOutcome(detailHref(practiceId, clientId), detailsSavedMessage(fields));
 		}, orThrownMessage);
 	}
 </script>

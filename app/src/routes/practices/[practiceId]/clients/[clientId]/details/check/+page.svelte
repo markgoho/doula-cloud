@@ -43,7 +43,8 @@
 	import { errorsFromCause } from '#lib/formErrors.js';
 	import { FormSubmission, orThrownErrors } from '#lib/formSubmission.svelte.js';
 	import { answerSections } from '#lib/intakeAnswers.js';
-	import { DETAILS_STEPS, journeySteps } from '#lib/intakeJourney.js';
+	import { DETAILS_STEPS, detailsSavedMessage, journeySteps } from '#lib/intakeJourney.js';
+	import { gotoWithOutcome } from '#lib/outcome.js';
 	import { detailsQuestions, knownAs } from '../details.js';
 
 	/*
@@ -72,10 +73,13 @@
 	let isConflictOpen = $state(false);
 	let overrideError = $state('');
 
+	// The screen the journey was opened from says the save happened
+	// (#1710): this page is gone once the save leaves it.
 	async function finish() {
 		const href = detailsQuestions.exitHref;
+		const message = detailsSavedMessage(clientDetails.record!);
 		clientDetails.draft.clear();
-		await goto(href);
+		await gotoWithOutcome(href, message);
 	}
 
 	async function handleSave() {

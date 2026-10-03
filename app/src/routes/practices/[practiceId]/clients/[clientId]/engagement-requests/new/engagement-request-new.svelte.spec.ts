@@ -7,6 +7,9 @@ import Page from './+page.svelte';
 import { toPageState } from '../../../../../../routeFixture.js';
 import type { RequestDoulas } from '#lib/engagementRequest.js';
 import type { LedgerEntry } from '#lib/billing.js';
+import { knownAsFrom } from '#lib/intakeJourney.js';
+import { gotoWithOutcome } from '#lib/outcome.js';
+import { captureLanding } from '#lib/testOutcome.js';
 import { agencyRoster, detail as baseDetail, fixture, ownDoula, soloRoster } from './page.fixture.js';
 
 /*
@@ -34,6 +37,9 @@ vi.mock('#lib/api.js', () => ({ apiFetchWithSession }));
 const { practiceId, clientId } = fixture.params;
 const clientDetailHref = `/practices/${practiceId}/clients/${clientId}`;
 const clientName = displayName(baseDetail);
+// What every message about her calls her: her preferred name, or her
+// given name (#463).
+const knownAs = knownAsFrom(baseDetail);
 // #1612: the first sentence of what an approver reads about the Credit.
 const costSentence = `Starting work with ${clientName} uses 1 Credit.`;
 
@@ -112,6 +118,28 @@ function postedBody(): { kind: string; dueDate: string; note: string; doulaStaff
 	const call = apiFetchWithSession.mock.calls.find(([path]) => (path as string).endsWith('/engagement-requests'));
 	return JSON.parse((call![1] as RequestInit).body as string);
 }
+
+// #1710: intake's save lands here, and says so.
+describe('the status message after intake saves the Client (#1710)', () => {
+	it('says the Client is saved, as a status, and takes focus', async () => {
+		mockFetches();
+		goto.mockImplementationOnce(async () => {
+			await render(Page, {});
+		});
+
+		await gotoWithOutcome(fixture.url, `${knownAs} saved as a Client.`);
+
+		const message = testPage.getByRole('status').filter({ hasText: `${knownAs} saved as a Client.` });
+		await expect.element(message).toBeVisible();
+		await expect.element(message).toHaveFocus();
+	});
+
+	it('says nothing on a visit no save sent, such as a reload', async () => {
+		await setup();
+
+		await expect.element(testPage.getByText(/saved as a Client\.$/)).not.toBeInTheDocument();
+	});
+});
 
 describe('the Engagement Request screen', () => {
 	it('shows a Doula the "Ask to" phrasing and no Credit preview', async () => {
@@ -281,14 +309,16 @@ describe('the Engagement Request screen', () => {
 
 		await testPage.getByLabelText('Birth').click();
 		await testPage.getByLabelText('Due date').fill('2027-03-01');
+		const landing = captureLanding(goto);
 		await testPage.getByRole('button', { name: `Start work with ${clientName}` }).click();
 
-		await expect.poll(() => goto.mock.calls.length).toBeGreaterThan(0);
-		expect(goto).toHaveBeenCalledWith(`/practices/${practiceId}/engagements/engagement-1?started=true`);
+		await expect.poll(() => landing.href).toBe(`/practices/${practiceId}/engagements/engagement-1`);
+		expect(landing.message).toBe(`Work with ${knownAs} started.`);
 	});
 
 	// A request that waits for an approver has no Engagement yet, so it
-	// lands on her record, where the pending block is.
+	// lands on her record, where the pending block is, and says the
+	// request is sent (#1710).
 	it('lands back on the Client detail hub when the request waits for an approver', async () => {
 		await setup();
 
@@ -296,10 +326,11 @@ describe('the Engagement Request screen', () => {
 		await testPage.getByLabelText('Due date').fill('2027-03-01');
 		await testPage.getByLabelText('Note').fill('Referred by the hospital');
 		await testPage.getByLabelText(selfLabel).click();
+		const landing = captureLanding(goto);
 		await testPage.getByRole('button', { name: `Ask to start work with ${clientName}` }).click();
 
-		await expect.poll(() => goto.mock.calls.length).toBeGreaterThan(0);
-		expect(goto).toHaveBeenCalledWith(clientDetailHref);
+		await expect.poll(() => landing.href).toBe(clientDetailHref);
+		expect(landing.message).toBe(`Your request to start work with ${knownAs} is sent.`);
 
 		expect(postedBody()).toEqual({
 			kind: 'postpartum',

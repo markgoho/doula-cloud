@@ -5,6 +5,8 @@ import { jsonResponse } from '#lib/testResponse.js';
 import type { ClientDetail } from '#lib/clientDetail.js';
 import type { CollisionMatch } from '#lib/client.js';
 import { editMergeDraft } from '#lib/editMergeDraft.svelte.js';
+import { detailsSavedMessage } from '#lib/intakeJourney.js';
+import { captureLanding } from '#lib/testOutcome.js';
 import Page from './+page.svelte';
 import { toPageState } from '../../../../../routeFixture.js';
 import { detail as baseDetail, fixture } from './page.fixture.js';
@@ -34,6 +36,8 @@ vi.mock('#lib/api.js', () => ({ apiFetchWithSession }));
 const { practiceId, clientId } = fixture.params;
 const detailHref = `/practices/${practiceId}/clients/${clientId}`;
 const editDuplicateHref = `${detailHref}/edit/duplicate`;
+// What her record says after a save that changed no name (#1710).
+const savedMessage = detailsSavedMessage(baseDetail);
 
 const anotherClientMatch: CollisionMatch = {
 	id: 'client-2',
@@ -184,11 +188,12 @@ describe('client edit', () => {
 		await testPage.getByRole('button', { name: 'Save' }).click();
 		await expect.element(testPage.getByRole('dialog')).toBeVisible();
 
+		const landing = captureLanding(goto);
 		await testPage.getByRole('button', { name: 'Yes, a different person' }).click();
 
 		await expect.element(testPage.getByRole('dialog')).not.toBeInTheDocument();
 		expect(requestBody(2).override).toBe(true);
-		expect(goto).toHaveBeenCalledWith(detailHref);
+		expect(landing).toEqual({ href: detailHref, message: savedMessage });
 	});
 
 	/*
@@ -334,14 +339,16 @@ describe('client edit', () => {
 		expect(goto).not.toHaveBeenCalled();
 	});
 
-	it('returns to the Client detail hub after a successful save', async () => {
+	// #1710: the save leaves this form, so her record says it happened.
+	it('returns to the Client detail hub after a successful save, and says the save happened', async () => {
 		await setup();
 		apiFetchWithSession.mockResolvedValueOnce(jsonResponse(baseDetail));
 
+		const landing = captureLanding(goto);
 		await testPage.getByRole('button', { name: 'Save' }).click();
 
-		await expect.poll(() => goto.mock.calls.length).toBeGreaterThan(0);
-		expect(goto).toHaveBeenCalledWith(detailHref);
+		await expect.poll(() => landing.href).toBe(detailHref);
+		expect(landing.message).toBe(savedMessage);
 	});
 
 	it('shows that a changed email revokes any pending portal invite', async () => {

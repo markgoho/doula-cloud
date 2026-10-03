@@ -5,6 +5,8 @@ import { jsonResponse } from '#lib/testResponse.js';
 import type { CollisionMatch } from '#lib/client.js';
 import { displayName } from '#lib/clientDetail.js';
 import { editMergeDraft } from '#lib/editMergeDraft.svelte.js';
+import { detailsSavedMessage } from '#lib/intakeJourney.js';
+import { captureLanding } from '#lib/testOutcome.js';
 import { toPageState } from '../../../../../../routeFixture.js';
 import Page from './+page.svelte';
 import { clientId, fields, fixture, matches, practiceId, seedEditMergeDraft } from './page.fixture.js';
@@ -98,14 +100,17 @@ describe('when gate two names a possible duplicate', () => {
 		await expect.poll(() => document.title).toMatch(/^Error: Is this the same person\?/);
 	});
 
-	it('re-sends the edit with override when a different person is chosen', async () => {
+	// #1710: the save leaves this page, so her record says it happened.
+	it('re-sends the edit with override when a different person is chosen, and says the save happened', async () => {
 		await setup({ respond: jsonResponse({ id: clientId, ...fields }) });
 
 		await testPage.getByLabelText('No, a different person').click();
+		const landing = captureLanding(goto);
 		await testPage.getByRole('button', { name: 'Continue' }).click();
 
 		expect(requestBody(0).override).toBe(true);
-		expect(goto).toHaveBeenCalledWith(detailHref(clientId));
+		await expect.poll(() => landing.href).toBe(detailHref(clientId));
+		expect(landing.message).toBe(detailsSavedMessage(fields));
 	});
 
 	it('reviews the changes before writing them', async () => {
@@ -127,6 +132,7 @@ describe('when gate two names a possible duplicate', () => {
 			.element(testPage.getByText(`Save these changes to ${displayName(matches[0])}?`))
 			.toBeVisible();
 
+		const landing = captureLanding(goto);
 		await testPage.getByRole('button', { name: 'Save changes' }).click();
 
 		expect(apiFetchWithSession).toHaveBeenCalledWith(
@@ -134,7 +140,9 @@ describe('when gate two names a possible duplicate', () => {
 			expect.objectContaining({ method: 'POST' })
 		);
 		expect(requestBody(0).otherClientId).toBe(matches[0]!.id);
-		expect(goto).toHaveBeenCalledWith(detailHref(matches[0]!.id));
+		// #1710: the record the merge kept says the save happened.
+		await expect.poll(() => landing.href).toBe(detailHref(matches[0]!.id));
+		expect(landing.message).toBe(detailsSavedMessage(fields));
 	});
 
 	it('goes straight to the merge when nothing typed differs from the survivor', async () => {

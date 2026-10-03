@@ -19,6 +19,7 @@
 	import { eraseClient, loadEraseEligibility, type EraseEligibility, type UnsettledInvoice } from '#lib/clientErasure.js';
 	import { formatAmount } from '#lib/invoice.js';
 	import { formatActivityTimestamp } from '#lib/dates.js';
+	import { takeOutcome } from '#lib/outcome.js';
 	import RecordDetail from '#lib/components/templates/RecordDetail.svelte';
 	import DescriptionList from '#lib/components/molecules/DescriptionList.svelte';
 	import DataTable from '#lib/components/organisms/DataTable.svelte';
@@ -44,6 +45,12 @@
 	// from a genuine Owner for one page load, never a wider door than the
 	// server actually opens.
 	const isOwner = $derived(data?.isOwner ?? false);
+
+	// What the save that led here did, if one did (#1710): her details
+	// journey, the edit form, a duplicate page, or a request to start work
+	// that waits. Read once, while the page renders, so a reload says
+	// nothing.
+	const outcome = takeOutcome(page.url);
 
 	let detail = $state<ClientDetail | undefined>();
 	let error = $state('');
@@ -545,8 +552,15 @@
 	/>
 {/snippet}
 
+<!-- Focused on arrival, as GOV.UK asks of a success banner on the page a
+     form leads to (#1710). -->
+{#snippet outcomeNotice()}
+	<Notice variant="status" message={outcome!} isFocusedOnAppear />
+{/snippet}
+
 <RecordDetail
 	title={name}
+	notice={outcome ? outcomeNotice : undefined}
 	{summary}
 	{actions}
 	sections={[

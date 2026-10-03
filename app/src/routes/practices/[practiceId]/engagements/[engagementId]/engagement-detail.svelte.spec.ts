@@ -1,9 +1,11 @@
 import { page as testPage } from 'vitest/browser';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import { registerLayoutPrimitives } from '#lib/primitives/index.js';
 import { jsonResponse } from '#lib/testResponse.js';
 import { findDuplicateIds } from '#lib/duplicateIds.js';
+import { gotoWithOutcome } from '#lib/outcome.js';
+import { goto } from '$app/navigation';
 import Page from './+page.svelte';
 // Rendering `+page.svelte` directly bypasses `+layout.svelte`, the only
 // place the real app calls this -- without it a layout primitive like
@@ -36,6 +38,8 @@ const pageState = vi.hoisted(() => ({
 }));
 vi.mock('$app/state', () => ({ page: pageState }));
 Object.assign(pageState, toPageState(fixture));
+
+vi.mock('$app/navigation', () => ({ goto: vi.fn() }));
 
 const apiFetchWithSession = vi.hoisted(() => vi.fn());
 vi.mock('#lib/api.js', () => ({
@@ -218,36 +222,31 @@ describe('Staff Engagement detail summary', () => {
 	});
 });
 
-// How the page was arrived at: the fixture's own URL with `search` on it.
-function arriveWith(search: string) {
-	pageState.url = new URL(`${toPageState(fixture).url.href}${search}`);
+// Arrives the way a save sends the reader here (#1710): the save's own
+// navigation renders this page while it runs, with `goto` standing in.
+async function arriveFromSave(message: string) {
+	vi.mocked(goto).mockImplementationOnce(async () => {
+		await setup(fixtureDetail);
+	});
+	await gotoWithOutcome(fixture.url, message);
 }
 
-// #1611: the end of a new Client's flow. An approved start lands here
-// with `?started=true`, and the page says the work started.
-describe('the status message after an approved start (#1611)', () => {
+// #1611, #1710: a save that leads here says what it did, such as an
+// approved start at the end of a new Client's flow.
+describe('the status message after a save that leads here (#1611, #1710)', () => {
 	beforeEach(() => {
 		apiFetchWithSession.mockReset();
 	});
 
-	// Every other block reads the fixture's own URL.
-	afterEach(() => {
-		pageState.url = toPageState(fixture).url;
-	});
+	it('says what the save did, as a status, and takes focus', async () => {
+		await arriveFromSave(`Work with ${fixtureDetail.clientName} started.`);
 
-	it('says the work started, names the Client, and takes focus', async () => {
-		arriveWith('?started=true');
-
-		await setup(fixtureDetail);
-
-		const message = testPage.getByText(`Work with ${fixtureDetail.clientName} started.`);
+		const message = testPage.getByRole('status').filter({ hasText: `Work with ${fixtureDetail.clientName} started.` });
 		await expect.element(message).toBeVisible();
 		await expect.element(message).toHaveFocus();
 	});
 
-	it('says nothing on any other visit', async () => {
-		arriveWith('');
-
+	it('says nothing on a visit no save sent, such as a reload', async () => {
 		await setup(fixtureDetail);
 
 		await expect.element(testPage.getByRole('heading', { level: 1 })).toBeVisible();

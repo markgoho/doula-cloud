@@ -14,7 +14,8 @@ import { createClient } from '#lib/client.js';
 import type { JourneyStep } from '#lib/components/organisms/StepRail.svelte';
 import { errorsFromCause, type FormError } from '#lib/formErrors.js';
 import { intakeDraft } from '#lib/intakeDraft.svelte.js';
-import { knownAsFrom, originQuery, type IntakeOrigin } from '#lib/intakeJourney.js';
+import { clientSavedMessage, knownAsFrom, originQuery, type IntakeOrigin } from '#lib/intakeJourney.js';
+import { gotoWithOutcome } from '#lib/outcome.js';
 
 /**
 Names the journey a question page is in.
@@ -115,7 +116,8 @@ export function knownAs(): string {
 }
 
 /**
- * Saves the new Client and opens the Start work form (#1611).
+ * Saves the new Client and opens the Start work form (#1611), which says
+ * the Client is saved (#1710).
  *
  * ADR-0017 makes the save free: only a given name is required. What the
  * search carried (date of birth, email, phone) is in the draft and is
@@ -145,8 +147,9 @@ export async function saveIntake(
 			return undefined;
 		}
 		const clientId = result.record.id;
+		const message = clientSavedMessage(intakeDraft.answers);
 		intakeDraft.clear();
-		await goto(startWorkHref(practiceId, clientId));
+		await gotoWithOutcome(startWorkHref(practiceId, clientId), message);
 		return undefined;
 	} catch (error) {
 		// A server refusal that names fields becomes one entry each

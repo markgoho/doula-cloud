@@ -199,6 +199,28 @@ export function knownAsFrom(names: { preferredName: string; givenName: string } 
 	return names?.preferredName.trim() || names?.givenName.trim() || 'the Client';
 }
 
+type Names = { preferredName: string; givenName: string };
+
+function sentence(text: string): string {
+	return text.charAt(0).toUpperCase() + text.slice(1);
+}
+
+/**
+ * What the screen a save of her details lands on says (#1710): the
+ * details journey, the edit form and the duplicate pages.
+ */
+export function detailsSavedMessage(names: Names): string {
+	return sentence(`${knownAsFrom(names)}'s details saved.`);
+}
+
+/**
+ * What the screen intake's save lands on says (#1710). Intake always has
+ * a given name by then, so she is never "the Client" here.
+ */
+export function clientSavedMessage(names: Names): string {
+	return `${knownAsFrom(names)} saved as a Client.`;
+}
+
 /** Every step's own identity: the structural slugs, plus `section-0`,
  * `section-1` and so on for the Practice's own pages. */
 export type StepId = string;

@@ -42,6 +42,31 @@ describe('FormPage.svelte', () => {
 		await expect.element(page.getByRole('heading', { level: 1, name: 'New client' })).toBeVisible();
 	});
 
+	// #1710: a save that lands on a form says what it did there, in
+	// GOV.UK's position for a notification banner, before the h1, and
+	// after an error summary, which comes first on any page that has one.
+	it('renders the notice before the title and after the error summary', async () => {
+		await setup({
+			notice: textSnippet('Ada saved as a Client.'),
+			errorSummary: textSnippet('There is a problem')
+		});
+
+		const summary = page.getByText('There is a problem').element();
+		const notice = page.getByText('Ada saved as a Client.').element();
+		const title = page.getByRole('heading', { level: 1, name: 'New client' }).element();
+		expect(summary.compareDocumentPosition(notice) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+		expect(notice.compareDocumentPosition(title) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+	});
+
+	// The message belongs to the form once it is there to read; a
+	// Skeleton in its place would announce the message twice, once now and
+	// again when the form arrives and the region mounts a second time.
+	it('renders no notice while the form loads', async () => {
+		await setup({ notice: textSnippet('Ada saved as a Client.'), loading: 'Loading the Client' });
+
+		await expect.element(page.getByText('Ada saved as a Client.')).not.toBeInTheDocument();
+	});
+
 	it('renders each fieldset with its legend as a real fieldset element', async () => {
 		const { container } = await setup();
 

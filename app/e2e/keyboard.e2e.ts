@@ -232,6 +232,9 @@ test('A doula edits a Client and starts new work, with no pointer at any step', 
 	// hub is showing it.
 	await expect(page).toHaveURL(new RegExp(`${hubURL}$`));
 	await expect(page.getByRole('heading', { level: 1, name: 'Jane Client' })).toBeVisible();
+	// #1710: the hub says the save happened, and a keyboard user starts
+	// from that message.
+	await expect(page.getByText("Jane's details saved.")).toBeFocused();
 
 	// Stage 4 -- the Engagement Request, whose only door is this hub.
 	await tabTo(
@@ -264,7 +267,7 @@ test('A doula edits a Client and starts new work, with no pointer at any step', 
 		'the submit button on the Engagement Request form'
 	);
 	await page.keyboard.press('Enter');
-	await expect(page).toHaveURL(new RegExp(`/practices/${practiceId}/engagements/[^/?]+[?]started=true$`));
+	await expect(page).toHaveURL(new RegExp(`/practices/${practiceId}/engagements/[^/?]+$`));
 	await expect(page.getByText('Work with Jane started.')).toBeFocused();
 });
 

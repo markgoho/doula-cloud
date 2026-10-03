@@ -45,8 +45,9 @@
 	 * storage at all.
 	 */
 	import { onMount } from 'svelte';
-	import { goto } from '$app/navigation';
 	import { page } from '#lib/appState.svelte.js';
+	import { knownAsFrom } from '#lib/intakeJourney.js';
+	import { gotoWithOutcome, takeOutcome } from '#lib/outcome.js';
 	import { resolve } from '$app/paths';
 	import { apiFetchWithSession } from '#lib/api.js';
 	import { isOwnerOrAdmin } from '#lib/roles.js';
@@ -59,7 +60,6 @@
 		initialDoulaAnswer,
 		loadRequestDoulas,
 		requestEngagement,
-		STARTED_QUERY,
 		type NewEngagementRequest,
 		type RequestDoulas
 	} from '#lib/engagementRequest.js';
@@ -80,6 +80,10 @@
 	const dueDateId = 'engagement-request-due-date';
 	const DOULA_NAME = 'engagement-request-doula';
 	const noteId = 'engagement-request-note';
+
+	// What intake's save did, when a new Client's flow led here (#1710).
+	// Read once, while the page renders, so a reload says nothing.
+	const outcome = takeOutcome(page.url);
 
 	let detail = $state<ClientDetail | undefined>();
 	let doulas = $state<RequestDoulas | undefined>();
@@ -290,23 +294,33 @@
 			// #1611: an approved start has an Engagement, and the flow ends
 			// on it with a message that the work started. A request that
 			// waits for an approver has none yet, so it lands on her record,
-			// where the pending block is. `engagementId` is set on an
-			// approved outcome and only there.
+			// where the pending block is, with a message that the request
+			// is sent (#1710). `engagementId` is set on an approved outcome
+			// and only there. The form renders no fields before her record
+			// loads, so `detail` is here.
 			const { engagementId } = result.outcome;
-			await goto(
-				engagementId
-					?`${resolve('/practices/[practiceId]/engagements/[engagementId]', {
+			const name = knownAsFrom(detail!);
+			await (engagementId
+				? gotoWithOutcome(
+						resolve('/practices/[practiceId]/engagements/[engagementId]', {
 							practiceId: page.params.practiceId!,
 							engagementId
-						})}?${STARTED_QUERY}`
-					: detailHref()
-			);
+						}),
+						`Work with ${name} started.`
+					)
+				: gotoWithOutcome(detailHref(), `Your request to start work with ${name} is sent.`));
 		}, orThrownErrors(requestFieldIds));
 	}
 </script>
 
 {#snippet errorSummary()}
 	<ErrorSummary errors={submission.errors} />
+{/snippet}
+
+<!-- Focused on arrival, as GOV.UK asks of a success banner on the page a
+     form leads to (#1710). -->
+{#snippet outcomeNotice()}
+	<Notice variant="status" message={outcome!} isFocusedOnAppear />
 {/snippet}
 
 {#snippet formIntro()}
@@ -411,6 +425,7 @@
 	<FormPage
 		title={submitLabel || 'Start new work'}
 		intro={hasIntroContent ? formIntro : undefined}
+		notice={outcome ? outcomeNotice : undefined}
 		fieldsets={detail ? [{ content: requestFields }] : []}
 		errorSummary={submission.errors.length > 0 ? errorSummary : undefined}
 		actions={formActions}
