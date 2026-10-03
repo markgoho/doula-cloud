@@ -76,6 +76,13 @@
 	}
 </script>
 
+<!-- Passed only while there is a refusal, never declared as a child of
+     the Template: a declared snippet is always truthy, so the Template
+     would title a first visit "Error: " (#1705). -->
+{#snippet errorSummary()}
+	<ErrorSummary errors={submission.errors} />
+{/snippet}
+
 <!-- stacked-form:ignore: #1108 -- this form wraps a Template. `QuestionPage` renders the controls and the actions as two separate regions of one column and stacks each itself, so the `<form>` here exists to put the submit button inside the form that owns the inputs (see the note above), not to arrange anything. -->
 <form onsubmit={handleSave} novalidate>
 	<QuestionPage
@@ -84,13 +91,8 @@
 		backHref={exitHref(practiceId, intakeDraft.origin)}
 		question={{ as: 'legend', text: "What is the Client's name?" }}
 		hint="Only the given name is needed to save the record. The rest can be added at any time."
+		errorSummary={submission.errors.length > 0 ? errorSummary : undefined}
 	>
-		{#snippet errorSummary()}
-			{#if submission.errors.length > 0}
-				<ErrorSummary errors={submission.errors} />
-			{/if}
-		{/snippet}
-
 		{#snippet content()}
 			<stack-l space="var(--space-5)">
 				<LabeledField id={GIVEN_NAME_ID} label="Given name" error={submission.errorFor(GIVEN_NAME_ID)}>

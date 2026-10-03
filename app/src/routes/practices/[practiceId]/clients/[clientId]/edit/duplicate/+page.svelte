@@ -188,6 +188,14 @@
 	}
 </script>
 
+<!-- Passed only while there is a refusal, never declared as a child of
+     the Template: a declared snippet is always truthy, so the Template
+     would title a first visit "Error: " (#1705). Both questions below
+     read the one submission, so they share it. -->
+{#snippet errorSummary()}
+	<ErrorSummary errors={submission.errors} />
+{/snippet}
+
 {#if reviewing}
 	<QuestionPage
 		journey={JOURNEY}
@@ -195,13 +203,8 @@
 		backHref={base}
 		question={{ as: 'legend', text: `Save these changes to ${survivorName(reviewing)}?` }}
 		hint={`Nothing has been saved yet. No new record is created -- ${survivorName(reviewing)}'s record is kept and updated, and the other is closed as a duplicate.`}
+		errorSummary={submission.errors.length > 0 ? errorSummary : undefined}
 	>
-		{#snippet errorSummary()}
-			{#if submission.errors.length > 0}
-				<ErrorSummary errors={submission.errors} />
-			{/if}
-		{/snippet}
-
 		{#snippet content()}
 			<DescriptionList
 				items={changes.map((change) => ({
@@ -224,13 +227,8 @@
 			backHref={editMergeDraft.backHref ?? editHref()}
 			question={{ as: 'legend', text: 'Is this the same person?' }}
 			hint="Nothing has been saved yet. What was typed matches a Client this Practice already has."
+			errorSummary={submission.errors.length > 0 ? errorSummary : undefined}
 		>
-			{#snippet errorSummary()}
-				{#if submission.errors.length > 0}
-					<ErrorSummary errors={submission.errors} />
-				{/if}
-			{/snippet}
-
 			{#snippet content()}
 				<stack-l space="var(--space-5)">
 					<RadioGroup

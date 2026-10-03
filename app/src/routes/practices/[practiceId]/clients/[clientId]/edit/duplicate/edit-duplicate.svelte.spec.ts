@@ -87,12 +87,15 @@ describe('when gate two names a possible duplicate', () => {
 
 	it('refuses to go on until one of them is chosen', async () => {
 		await setup();
+		// #1705: no "Error: " title until the page is really refused.
+		expect(document.title).toMatch(/^Is this the same person\?/);
 
 		await testPage.getByRole('button', { name: 'Continue' }).click();
 
 		await expect
 			.element(testPage.getByRole('link', { name: 'Choose whether this is the same person' }))
 			.toBeVisible();
+		expect(document.title).toMatch(/^Error: Is this the same person\?/);
 	});
 
 	it('re-sends the edit with override when a different person is chosen', async () => {

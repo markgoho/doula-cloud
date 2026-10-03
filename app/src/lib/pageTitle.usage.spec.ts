@@ -58,6 +58,32 @@ function hasPageTitle(source: string): boolean {
 	return TEMPLATES_WITH_PAGE_TITLE.some((name) => source.includes(name));
 }
 
+/*
+ * #1705's static gate. Every Template titles its page "Error: " from
+ * `Boolean(errorSummary)`, and GOV.UK keeps that prefix for a page that
+ * was really refused. A snippet declared as a child of the Template is
+ * always passed and always truthy, so the page read "Error: " on a
+ * first visit however its body was guarded. The summary is declared
+ * beside the Template and passed as
+ * `errorSummary={errors.length > 0 ? errorSummary : undefined}`.
+ *
+ * Blunt on purpose: a file that declares the snippet must also pass it
+ * as an attribute. A file that does both once and also declares a
+ * second one as a child slips through; behavioral specs cover the
+ * titles themselves.
+ */
+const svelteFiles = globFiles('src/**/*.svelte', { cwd: appRoot });
+
+describe('an error summary is passed only while there is a refusal', () => {
+	for (const file of svelteFiles) {
+		const source = readFileSync(new URL(file, `file://${appRoot}`), 'utf8');
+		if (!source.includes('{#snippet errorSummary()}')) continue;
+		it(`${file} passes its errorSummary as an attribute, not as a child`, () => {
+			expect(source).toContain('errorSummary={');
+		});
+	}
+});
+
 describe('every route sets a page title', () => {
 	for (const file of routeFiles) {
 		it(`${file} calls the shared PageTitle primitive`, () => {
