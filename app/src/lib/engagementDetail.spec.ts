@@ -10,6 +10,7 @@ import {
 	createVisit,
 	doulaSummaryItem,
 	downloadAttachment,
+	engagementStatusText,
 	loadAttachmentPreviews,
 	loadEngagement,
 	loadEngagementOffersOrNone,
@@ -614,6 +615,17 @@ describe('URL builders', () => {
 		expect(messagesURL(reference)).toBe(`${base}/messages`);
 		expect(portalInviteURL(reference)).toBe(`${base}/portal-invite`);
 		expect(birthOutcomeURL(reference)).toBe(`${base}/birth-outcome`);
+	});
+});
+
+describe('engagementStatusText', () => {
+	it.each([
+		['intake', 'Intake'],
+		['active', 'Active'],
+		['completed', 'Completed'],
+		['something-new', 'something-new']
+	])('labels the %s status as %s', (status, expected) => {
+		expect(engagementStatusText(status)).toBe(expected);
 	});
 });
 

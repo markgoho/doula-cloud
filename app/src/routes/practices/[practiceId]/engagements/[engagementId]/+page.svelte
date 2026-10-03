@@ -29,6 +29,7 @@
 		sendMessage,
 		sendPortalInvite,
 		visitTypeLabel,
+		engagementStatusText,
 		type AttachedDoula,
 		type BirthOutcomeFacts,
 		type BirthOutcomeRequest,
@@ -730,7 +731,7 @@
 		const items = [
 			{ label: 'Client', value: d.clientName },
 			...(doulaItem ? [doulaItem] : []),
-			{ label: 'Status', value: status },
+			{ label: 'Status', value: engagementStatusText(status) },
 			// #874: what the Practice sold, in the Staff-only word ADR-0015
 			// gives it -- this row and the Kind section's own control are the
 			// one place the Engagement hub prints 'Birth'/'Postpartum' at all.

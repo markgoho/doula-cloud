@@ -179,6 +179,16 @@ export interface Visit {
 	type: 'prenatal' | 'birth' | 'postpartum';
 }
 
+/** The word a Staff screen shows for an Engagement's status (#1512): one
+ * table for the Clients list, the Client's page, the Engagement's page
+ * and the activity ledger, so the same status never reads "intake" on
+ * one screen and "Intake" on the next. A Client reads her own words
+ * instead (`clientRegister.engagementStatusLabel`). A status this build
+ * has not met yet prints as stored, `visitTypeLabel`'s fallback. */
+export function engagementStatusText(status: string): string {
+	return { intake: 'Intake', active: 'Active', completed: 'Completed' }[status] ?? status;
+}
+
 /** The label a Visit type reads as, falling back to the raw enum value so
  * an enum this build has not met yet still prints something -- the same
  * fallback `kindLabel` (engagementRequest.ts) uses, and #262's own rule:

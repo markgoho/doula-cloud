@@ -167,6 +167,14 @@ describe('activityLedgerColumns: an Engagement fact, from what to what (#1423)',
 		expect(what.accessor(entry({ action: 'care_phase_changed', diff: { statusBefore: 'intake', statusAfter: 'paused' } }))).toBe(
 			'Care phase changed: Intake to paused'
 		);
+		expect(
+			what.accessor(
+				entry({
+					action: 'engagement_completed',
+					diff: { statusBefore: 'active', statusAfter: 'completed', endingReasonAfter: 'moved_away' }
+				})
+			)
+		).toBe('Engagement completed: Active to Completed. Reason: moved_away');
 	});
 
 	it.each([

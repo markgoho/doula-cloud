@@ -176,6 +176,26 @@ describe('the Engagement Request screen', () => {
 		await expect.poll(() => sessionStorage.getItem(draftKey)).toContain('2027-03-01');
 	});
 
+	// #1512: an Owner or an Admin approves her own request in the same act,
+	// so nobody else reads the note and the field says nothing about an
+	// approver. A request that waits says who reads it.
+	it.each([['owner'], ['admin']])('asks an %s for an optional note with no word about an approver', async (role) => {
+		await setup({ roles: [role] });
+
+		const note = testPage.getByLabelText('Note (optional)', { exact: true });
+		await expect.element(note).toBeVisible();
+		await expect.element(note).not.toHaveAccessibleDescription();
+		expect(testPage.getByText(/approv/i).elements()).toHaveLength(0);
+	});
+
+	it('tells a Doula who reads the note on a request that waits', async () => {
+		await setup({ roles: ['doula'] });
+
+		await expect
+			.element(testPage.getByLabelText('Note (optional)', { exact: true }))
+			.toHaveAccessibleDescription('An Owner or an Admin reads this with your request.');
+	});
+
 	it('shows an Admin the same "Start work with" phrasing', async () => {
 		await setup({ roles: ['admin'], balance: 5 });
 

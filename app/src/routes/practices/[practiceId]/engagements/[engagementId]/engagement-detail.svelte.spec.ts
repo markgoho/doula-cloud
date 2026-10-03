@@ -213,7 +213,7 @@ describe('Staff Engagement detail summary', () => {
 	it('shows nothing for a null due date -- no blank label, no placeholder', async () => {
 		await setup({ ...fixtureDetail, dueDate: undefined });
 
-		await expect.element(testPage.getByText('active')).toBeVisible();
+		await expect.element(testPage.getByText('Active', { exact: true })).toBeVisible();
 		await expect.element(testPage.getByText(/due date/i)).not.toBeInTheDocument();
 	});
 });
@@ -284,7 +284,7 @@ describe('the status-move controls (#253)', () => {
 
 		await expect.poll(() => requests).toHaveLength(1);
 		expect(requests[0]!.body).toEqual({ status: 'active' });
-		await expect.element(testPage.getByText('active', { exact: true })).toBeVisible();
+		await expect.element(testPage.getByText('Active', { exact: true })).toBeVisible();
 	});
 
 	it('asks for a reason before completing, and refuses to submit without one', async () => {
@@ -330,7 +330,7 @@ describe('the status-move controls (#253)', () => {
 			endingReason: 'care_complete',
 			endingNote: 'Baby arrived safely.'
 		});
-		await expect.element(testPage.getByText('completed', { exact: true })).toBeVisible();
+		await expect.element(testPage.getByText('Completed', { exact: true })).toBeVisible();
 		await expect.element(testPage.getByRole('button', { name: 'Confirm completion' })).not.toBeInTheDocument();
 	});
 
@@ -516,13 +516,13 @@ describe('the Visits section Date column and schedule control (#250)', () => {
 			{ ...fixtureDetail, status: 'intake', statusMoves: ['active', 'completed'] }
 		);
 
-		await expect.element(testPage.getByText('intake', { exact: true })).toBeVisible();
+		await expect.element(testPage.getByText('Intake', { exact: true })).toBeVisible();
 
 		const field = testPage.getByLabelText('Scheduled date and time', { exact: true }).nth(1);
 		await field.fill('2027-04-01T09:00');
 		await testPage.getByRole('button', { name: 'Update schedule' }).nth(1).click();
 
-		await expect.element(testPage.getByText('active', { exact: true })).toBeVisible();
+		await expect.element(testPage.getByText('Active', { exact: true })).toBeVisible();
 	});
 
 	it('creates a Visit already scheduled from the Add a Visit form', async () => {

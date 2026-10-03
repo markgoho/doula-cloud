@@ -15,6 +15,7 @@
 	} from '#lib/clientDetail.js';
 	import { canAddDetails, detailsLinkLabel } from '#lib/clientDetailsJourney.js';
 	import { kindLabel, withdrawRequest } from '#lib/engagementRequest.js';
+	import { engagementStatusText } from '#lib/engagementDetail.js';
 	import { eraseClient, loadEraseEligibility, type EraseEligibility, type UnsettledInvoice } from '#lib/clientErasure.js';
 	import { formatAmount } from '#lib/invoice.js';
 	import { formatActivityTimestamp } from '#lib/dates.js';
@@ -505,7 +506,7 @@
 	<DataTable
 		columns={[
 			{ label: 'Kind', accessor: (row: EngagementSummary) => (row.kind === 'birth' ? 'Birth' : 'Postpartum') },
-			{ label: 'Status', accessor: (row: EngagementSummary) => row.status },
+			{ label: 'Status', accessor: (row: EngagementSummary) => engagementStatusText(row.status) },
 			{ label: 'Started', accessor: (row: EngagementSummary) => formattedDate(row.createdAt) }
 		]}
 		rows={detail!.engagements}

@@ -18,7 +18,7 @@ import { apiErrorMessage } from './apiErrorMessage.js';
 import { clientActivityPhrase } from './clientRegister.js';
 import { formatActivityTimestamp, formatCalendarDay } from './dates.js';
 import type { CursorPage } from './paginatedList.svelte.js';
-import { birthOutcomeLabel, endingReasons, type EngagementReference } from './engagementDetail.js';
+import { birthOutcomeLabel, endingReasons, engagementStatusText, type EngagementReference } from './engagementDetail.js';
 import { kindLabel } from './engagementRequest.js';
 
 /**
@@ -121,12 +121,6 @@ function labelFrom(options: readonly { value: string; label: string }[]): (value
 	return (value) => options.find((option) => option.value === value)?.label ?? value;
 }
 
-const statusLabel = labelFrom([
-	{ value: 'intake', label: 'Intake' },
-	{ value: 'active', label: 'Active' },
-	{ value: 'completed', label: 'Completed' }
-]);
-
 /** A birth outcome and the date the pregnancy ended read as one fact, the
  * way the Engagement page's own section shows them. */
 function outcomeLabel(endedOn: unknown): (outcome: string) => string {
@@ -153,10 +147,10 @@ function outcomeLabel(endedOn: unknown): (outcome: string) => string {
  * and the Engagement page is where it is read.
  */
 const factChanges: Record<string, (diff: Diff) => string | undefined> = {
-	care_phase_changed: (diff) => fromTo(diff, 'status', statusLabel),
-	engagement_reopened: (diff) => fromTo(diff, 'status', statusLabel),
+	care_phase_changed: (diff) => fromTo(diff, 'status', engagementStatusText),
+	engagement_reopened: (diff) => fromTo(diff, 'status', engagementStatusText),
 	engagement_completed: (diff) => {
-		const move = fromTo(diff, 'status', statusLabel);
+		const move = fromTo(diff, 'status', engagementStatusText);
 		const reason = side(diff.endingReasonAfter, labelFrom(endingReasons));
 		return move && reason ? `${move}. Reason: ${reason}` : move;
 	},
