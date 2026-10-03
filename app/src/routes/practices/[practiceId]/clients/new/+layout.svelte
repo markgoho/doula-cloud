@@ -19,7 +19,7 @@
 	import { untrack, type Snippet } from 'svelte';
 	import { page } from '#lib/appState.svelte.js';
 	import { intakeDraft, type IntakeAnswers } from '#lib/intakeDraft.svelte.js';
-	import { intakeOrigin } from '#lib/intakeJourney.js';
+	import { carriedGivenName, intakeOrigin } from '#lib/intakeJourney.js';
 	import ContractorDoor from '../ContractorDoor.svelte';
 	import type { LayoutProps as LayoutProperties } from './$types';
 
@@ -33,15 +33,17 @@
 
 	/*
 	 * The four keys the search hands over (#498). `name` is the given
-	 * name, since that is the one field search matches against all three
-	 * name columns, and the name question shows it in that field. The
-	 * other three are listed on the name question and saved with it
+	 * name when it is one word, and the name question shows it in that
+	 * field. A value of two or more words carries into neither name
+	 * field: it is never split on a space (#1716, `carriedGivenName`).
+	 * The other three are listed on the name question and saved with it
 	 * (#1611).
 	 */
 	function carried(): Partial<IntakeAnswers> {
 		const seeded: Partial<IntakeAnswers> = {};
+		const givenName = carriedGivenName(page.url.searchParams.get('name'));
+		if (givenName) seeded.givenName = givenName;
 		for (const [parameter, key] of [
-			['name', 'givenName'],
 			['phone', 'phone'],
 			['email', 'email'],
 			['dateOfBirth', 'dateOfBirth']

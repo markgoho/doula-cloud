@@ -13,17 +13,19 @@
 	 * route to a Client, and an empty one links here instead.
 	 *
 	 * A miss carries every key that was typed into intake as query params
-	 * -- `clients/new/+page.svelte` reads all four on mount and shows each
-	 * on the page that asks for it: the name on page one, phone and email
-	 * on page two, the date of birth on page three. All four, not only the
-	 * name, because a staff member holding nothing but a phone number
-	 * would otherwise lose the one thing she had.
+	 * -- `clients/new/+layout.svelte` reads all four and the name question
+	 * shows them (#1611): a one-word name in Given name, and the other
+	 * three listed under the fields. A name of two or more words fills
+	 * neither name field, since it is never split on a space (#1716). All
+	 * four, not only the name, because a staff member holding nothing but
+	 * a phone number would otherwise lose the one thing she had.
 	 */
 	import { page } from '#lib/appState.svelte.js';
 	import { resolve } from '$app/paths';
 	import { apiFetchWithSession } from '#lib/api.js';
 	import { searchClients, type ClientMatch, type ClientSearchFields } from '#lib/client.js';
 	import { displayName } from '#lib/clientDetail.js';
+	import { carriedGivenName } from '#lib/intakeJourney.js';
 	import PageTitle from '#lib/components/PageTitle.svelte';
 	import Heading from '#lib/components/atoms/Heading.svelte';
 	import Text from '#lib/components/atoms/Text.svelte';
@@ -315,7 +317,7 @@
 								<stack-l space="var(--space-4)">
 									<Text
 										tone="variant"
-										text={name.trim()
+										text={carriedGivenName(name)
 											? "Nothing at this Practice matches what was typed. Add a new Client instead — the name typed here carries onto intake's first page, so it does not have to be retyped."
 											: 'Nothing at this Practice matches what was typed. Add a new Client instead.'}
 									/>
