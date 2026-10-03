@@ -229,7 +229,7 @@ describe('clients list screen', () => {
 	});
 
 	it('shows the empty message when there are no Clients', async () => {
-		await setup(jsonResponse({ items: [], hasMore: false }));
+		await setup(jsonResponse({ items: [], hasMore: false }), { hasAnyClient: false });
 
 		// getByRole, not getByText: the record view carries the same
 		// message in a hidden <p>, and only a role query excludes it.
@@ -290,7 +290,7 @@ describe('a contractor Doula without the owner or admin role', () => {
 
 describe('a non-contractor with an empty list', () => {
 	it('shows the plain empty message with no explainer link', async () => {
-		await setup(jsonResponse({ items: [], hasMore: false }));
+		await setup(jsonResponse({ items: [], hasMore: false }), { hasAnyClient: false });
 
 		// getByRole, not getByText: the record view carries the same
 		// message in a hidden <p>, and only a role query excludes it.
@@ -298,6 +298,30 @@ describe('a non-contractor with an empty list', () => {
 		await expect
 			.element(testPage.getByRole('link', { name: 'How to add Clients of your own' }))
 			.not.toBeInTheDocument();
+	});
+
+	// #1706: why, beside `emptyMessage` in +page.svelte.
+	it('says no Client has work yet, and how to see everyone, at a Practice whose Clients have no work', async () => {
+		await setup(jsonResponse({ items: [], hasMore: false }), { hasAnyClient: true });
+
+		await expect
+			.element(
+				testPage.getByRole('cell', {
+					name: 'No Client has work yet. Turn on See everyone to list every Client.'
+				})
+			)
+			.toBeVisible();
+		await expect.element(testPage.getByRole('cell', { name: 'No Clients yet.' })).not.toBeInTheDocument();
+	});
+
+	// With "See everyone" on there is no filter left to point at, so an
+	// empty list there reads the plain message whatever the count said.
+	it('keeps the plain empty message while "See everyone" is on', async () => {
+		pageState.url.searchParams.set('all', 'true');
+
+		await setup(jsonResponse({ items: [], hasMore: false }), { hasAnyClient: true });
+
+		await expect.element(testPage.getByRole('cell', { name: 'No Clients yet.' })).toBeVisible();
 	});
 });
 
