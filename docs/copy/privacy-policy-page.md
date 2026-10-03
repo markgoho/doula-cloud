@@ -68,7 +68,7 @@ You are one person with one login, even if you work at more than one practice. E
 
 You can delete your login yourself. It is deleted at once, and your place at every practice ends. Your name and email address are replaced, and the work you did stays in each practice's records under “Deleted Staff Member”. If you are the last Owner of a practice, another person must become an Owner, or the practice must be deleted, first.
 
-The Feedback you sent us stays when your login is deleted, and when a practice you work at is deleted. Once your login is deleted, it no longer names you. It is deleted 24 months after you sent it.
+The Feedback you sent us stays when your login is deleted, and when a practice you work at is deleted. Once your login is deleted, your Feedback no longer names you. It is deleted 24 months after you sent it.
 
 ## If you are a client of a practice
 

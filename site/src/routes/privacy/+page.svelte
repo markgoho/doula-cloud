@@ -122,7 +122,7 @@ site footer on every page links here.
 		</p>
 		<p>
 			The Feedback you sent us stays when your login is deleted, and when a practice you work at is
-			deleted. Once your login is deleted, it no longer names you. It is deleted 24 months after you
+			deleted. Once your login is deleted, your Feedback no longer names you. It is deleted 24 months after you
 			sent it.
 		</p>
 	</PageSection>
