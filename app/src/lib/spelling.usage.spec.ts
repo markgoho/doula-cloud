@@ -444,7 +444,8 @@ const documentFiles = [
 	),
 	'CONTEXT.md',
 	'README.md',
-	'CLAUDE.md'
+	'CLAUDE.md',
+	'CONTRIBUTING.md'
 ];
 
 // Read and scanned once, at module scope, so the cost of walking roughly

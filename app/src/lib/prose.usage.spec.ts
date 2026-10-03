@@ -262,8 +262,9 @@ const documentFiles = globFiles('docs/**/*.md', { cwd: repoRoot }).filter(
 
 // CONTEXT.md and CLAUDE.md are prose read the same raw way an ADR is; both
 // carry the sixth AC's "any other root-level markdown carrying prose".
-// README.md is the third and only other root-level `.md` file.
-const rootProseFiles = ['CONTEXT.md', 'README.md', 'CLAUDE.md'];
+// README.md is the third, and CONTRIBUTING.md (#1682), the index of the
+// standards a reviewer reads, is the fourth root-level `.md` file.
+const rootProseFiles = ['CONTEXT.md', 'README.md', 'CLAUDE.md', 'CONTRIBUTING.md'];
 
 const proseFiles = [...documentFiles, ...rootProseFiles].toSorted((a, b) => a.localeCompare(b));
 
