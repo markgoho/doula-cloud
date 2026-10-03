@@ -65,6 +65,30 @@ export function originLabel(origin: string): string {
 	return ORIGIN_LABELS[origin] ?? origin;
 }
 
+/** Whether the balance is the signup bonus and nothing else (#1612).
+ *
+ * Only a lot adds Credits, and a lot is a positive row: the
+ * `credit_ledger_lot_or_draw` CHECK (00089) keeps `signup_bonus`,
+ * `founding_grant` and `purchase` positive and every draw (`consumption`,
+ * `refund`, `forfeit`) negative. So the balance is the bonus alone when
+ * the only positive rows are `signup_bonus`, and something of it is left.
+ * A ledger longer than one page answers no: a lot on a later page cannot
+ * be seen, and "N Credits" is true of any balance where "Welcome credits"
+ * is not. */
+function isSignupBonusAlone({ balance, ledger }: Pick<Balance, 'balance' | 'ledger'>): boolean {
+	const lots = ledger.items.filter((entry) => entry.quantity > 0);
+	return balance > 0 && !ledger.hasMore && lots.length > 0 && lots.every((entry) => entry.origin === 'signup_bonus');
+}
+
+/** The balance in words, for the two sentences that say it before a
+ * Credit is spent (#1612): "3 Welcome credits" where it is the signup
+ * bonus alone -- the name the ledger already gives that origin -- and
+ * "N Credits" in each other case. One Credit is singular. */
+export function creditCount(loaded: Pick<Balance, 'balance' | 'ledger'>): string {
+	const noun = isSignupBonusAlone(loaded) ? 'Welcome credit' : 'Credit';
+	return `${loaded.balance} ${noun}${loaded.balance === 1 ? '' : 's'}`;
+}
+
 /** A ledger quantity with its sign always shown -- a credit reads "+3", a
  * debit reads "-1" on its own, with nothing to compare it to in the same
  * cell (#509). */

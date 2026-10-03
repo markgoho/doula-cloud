@@ -298,6 +298,16 @@ describe('the Practice landing page', () => {
 				)
 			)
 			.toBeVisible();
+		// #1612: the fixture's Practice holds the signup bonus alone, so the
+		// sentence is in its "Welcome credits" form, the longer of the two.
+		await expect
+			.element(
+				testPage.getByText(
+					'Adding a Client is free. Starting work with a Client uses 1 Credit, and this Practice has 3 Welcome credits.',
+					{ exact: true }
+				)
+			)
+			.toBeVisible();
 		await expect
 			.element(testPage.getByRole('link', { name: 'Add your first Client' }))
 			.toBeVisible();
@@ -340,6 +350,70 @@ describe('the Practice landing page', () => {
 		// else) -- and an action is a link or a button, so both are counted.
 		expect(testPage.getByRole('link').elements()).toHaveLength(1);
 		expect(testPage.getByRole('button').elements()).toHaveLength(0);
+	});
+
+	/*
+	 * #1612: what uses a Credit, and how many the Practice has, said at the
+	 * start point -- its own paragraph below the words and before the one
+	 * link. The balance is the one on the ledger at that moment.
+	 */
+	const costSentence = 'Adding a Client is free. Starting work with a Client uses 1 Credit, and this Practice has';
+	const noNumberSentence = "Adding a Client is free. Starting work with a Client uses 1 of the Practice's Credits.";
+
+	it('tells an Owner on an empty Practice what uses a Credit, and how many the Practice has', async () => {
+		// `setup()`'s balance has no signup bonus on its ledger, so it reads
+		// "N Credits", the form for a founding grant or a purchase.
+		await setup({ clients: [] });
+
+		const sentence = testPage.getByText(`${costSentence} 12 Credits.`, { exact: true });
+		await expect.element(sentence).toBeVisible();
+		// Its own paragraph, after the words and before the link, and not
+		// a live region: it is a fact on the page, not an announcement.
+		// The DOM is read here because the order of siblings and the absence
+		// of a live region have no accessible query of their own.
+		const paragraph = sentence.element();
+		expect(paragraph.tagName).toBe('P');
+		expect(paragraph.previousElementSibling?.textContent).toContain('Nothing is here yet');
+		expect(paragraph.nextElementSibling?.textContent?.trim()).toBe('Add your first Client');
+		expect(paragraph.closest('[aria-live], [role="status"], [role="alert"]')).toBeNull();
+		// No price: the Credits screen is the one place that says one (#285).
+		expect(testPage.getByText(/costs|\$/).elements()).toHaveLength(0);
+	});
+
+	it('gives an Admin the same sentence', async () => {
+		await setup({ roles: ['admin'], clients: [] });
+
+		await expect.element(testPage.getByText(`${costSentence} 12 Credits.`, { exact: true })).toBeVisible();
+	});
+
+	it('says one Credit in the singular', async () => {
+		await setup({
+			clients: [],
+			overrides: { billing: jsonResponse({ balance: 1, ledger: { items: [], hasMore: false } }) }
+		});
+
+		await expect.element(testPage.getByText(`${costSentence} 1 Credit.`, { exact: true })).toBeVisible();
+	});
+
+	it('gives a Doula, who cannot read the balance, the sentence with no number', async () => {
+		await setup({ roles: ['doula'], clients: [] });
+
+		await expect.element(testPage.getByText(noNumberSentence, { exact: true })).toBeVisible();
+		expect(testPage.getByText(costSentence).elements()).toHaveLength(0);
+	});
+
+	it('leaves the balance out, and the link working, where the balance cannot be loaded', async () => {
+		await setup({ clients: [], overrides: { billing: refusal('nope') } });
+
+		await expect.element(testPage.getByText(noNumberSentence, { exact: true })).toBeVisible();
+		expect(testPage.getByText(costSentence).elements()).toHaveLength(0);
+		// The empty Practice keeps one action, and says nothing of a failed
+		// read: the rail that would say so is not drawn here.
+		expect(testPage.getByText('Could not load your credit balance just now.').elements()).toHaveLength(0);
+		await expect
+			.element(testPage.getByRole('link', { name: 'Add your first Client' }))
+			.toHaveAttribute('href', `/practices/${practiceId}/clients/new?from=overview`);
+		expect(testPage.getByRole('link').elements()).toHaveLength(1);
 	});
 
 	it('reserves the page while it loads, rather than flashing empty', async () => {

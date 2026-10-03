@@ -6,6 +6,7 @@ import { displayName, type ClientDetail, type EngagementSummary } from '#lib/cli
 import Page from './+page.svelte';
 import { toPageState } from '../../../../../../routeFixture.js';
 import type { RequestDoulas } from '#lib/engagementRequest.js';
+import type { LedgerEntry } from '#lib/billing.js';
 import { agencyRoster, detail as baseDetail, fixture, ownDoula, soloRoster } from './page.fixture.js';
 
 /*
@@ -33,6 +34,8 @@ vi.mock('#lib/api.js', () => ({ apiFetchWithSession }));
 const { practiceId, clientId } = fixture.params;
 const clientDetailHref = `/practices/${practiceId}/clients/${clientId}`;
 const clientName = displayName(baseDetail);
+// #1612: the first sentence of what an approver reads about the Credit.
+const costSentence = `Starting work with ${clientName} uses 1 Credit.`;
 
 const liveEngagement: EngagementSummary = {
 	engagementId: 'engagement-0',
@@ -58,6 +61,8 @@ interface MockOptions {
 	detail?: ClientDetail;
 	roles?: string[];
 	balance?: number;
+	// The ledger's rows. None by default, which reads as "N Credits".
+	ledger?: LedgerEntry[];
 	doulas?: RequestDoulas;
 	requestOutcome?: unknown;
 	requestStatus?: number;
@@ -67,6 +72,7 @@ function mockFetches({
 	detail = baseDetail,
 	roles = ['doula'],
 	balance = 3,
+	ledger = [],
 	doulas = ownDoula,
 	requestOutcome,
 	requestStatus = 201
@@ -83,7 +89,7 @@ function mockFetches({
 		}
 	};
 	apiFetchWithSession.mockImplementation((path: string) => {
-		if (path.endsWith('/billing')) return Promise.resolve(jsonResponse({ balance, ledger: { items: [], hasMore: false } }));
+		if (path.endsWith('/billing')) return Promise.resolve(jsonResponse({ balance, ledger: { items: ledger, hasMore: false } }));
 		if (path.endsWith('/engagement-request-doulas')) return Promise.resolve(jsonResponse(doulas));
 		if (path.endsWith('/engagement-requests')) {
 			return Promise.resolve(jsonResponse(requestOutcome ?? { requestId: 'request-1', state: 'pending' }, requestStatus));
@@ -112,27 +118,53 @@ describe('the Engagement Request screen', () => {
 		await setup({ roles: ['doula'] });
 
 		await expect.element(testPage.getByRole('button', { name: `Ask to start work with ${clientName}` })).toBeVisible();
-		await expect.element(testPage.getByText('Credit cost')).not.toBeInTheDocument();
+		expect(testPage.getByText(costSentence).elements()).toHaveLength(0);
 	});
 
-	it('shows an Owner the "Start work with" phrasing and the Credit cost and balance after', async () => {
-		await setup({ roles: ['owner'], balance: 3 });
+	it('tells an Owner on the signup bonus alone that it is Welcome credits, and what is left after', async () => {
+		await setup({
+			roles: ['owner'],
+			balance: 3,
+			ledger: [{ origin: 'signup_bonus', quantity: 3, createdAt: '2026-10-01T00:00:00Z' }]
+		});
 
 		await expect.element(testPage.getByRole('button', { name: `Start work with ${clientName}` })).toBeVisible();
-		await expect.element(testPage.getByText('Credit cost')).toBeVisible();
-		await expect.element(testPage.getByText('1 credit')).toBeVisible();
-		await expect.element(testPage.getByText('2', { exact: true })).toBeVisible();
+		const sentence = testPage.getByText(
+			`${costSentence} This Practice has 3 Welcome credits. After this, it has 2.`,
+			{ exact: true }
+		);
+		await expect.element(sentence).toBeVisible();
+		// A fact on the form, not an announcement: no live region holds it.
+		// Read off the DOM because the absence of a live region has no
+		// accessible query of its own.
+		expect(sentence.element().closest('[aria-live], [role="status"], [role="alert"]')).toBeNull();
+		// No price: the Credits screen is the one place that says one (#285).
+		expect(testPage.getByText(/costs|\$/).elements()).toHaveLength(0);
 	});
 
-	it('states a zero balance before any submit, never a negative Balance after', async () => {
+	it('says Credits where the balance is not the signup bonus alone, and one Credit in the singular', async () => {
+		await setup({
+			roles: ['owner'],
+			balance: 1,
+			ledger: [{ origin: 'purchase', quantity: 1, createdAt: '2026-10-01T00:00:00Z' }]
+		});
+
+		await expect
+			.element(
+				testPage.getByText(`${costSentence} This Practice has 1 Credit. After this, it has 0.`, { exact: true })
+			)
+			.toBeVisible();
+	});
+
+	it('states a zero balance before any submit, never a negative balance after', async () => {
 		await setup({ roles: ['owner'], balance: 0 });
 
 		await expect
 			.element(testPage.getByText("There are no credits left on this Practice's balance."))
 			.toBeVisible();
 		await expect.element(testPage.getByRole('link', { name: 'Buy credits' })).toBeVisible();
-		await expect.element(testPage.getByText('Credit cost')).not.toBeInTheDocument();
-		await expect.element(testPage.getByText('-1', { exact: true })).not.toBeInTheDocument();
+		expect(testPage.getByText(costSentence).elements()).toHaveLength(0);
+		expect(testPage.getByText(/-1/).elements()).toHaveLength(0);
 	});
 
 	it('saves what she typed while a zero balance is already on screen, before any submit', async () => {
@@ -148,6 +180,11 @@ describe('the Engagement Request screen', () => {
 		await setup({ roles: ['admin'], balance: 5 });
 
 		await expect.element(testPage.getByRole('button', { name: `Start work with ${clientName}` })).toBeVisible();
+		await expect
+			.element(
+				testPage.getByText(`${costSentence} This Practice has 5 Credits. After this, it has 4.`, { exact: true })
+			)
+			.toBeVisible();
 	});
 
 	it('refuses a submit with no kind chosen, client-side, before any request', async () => {

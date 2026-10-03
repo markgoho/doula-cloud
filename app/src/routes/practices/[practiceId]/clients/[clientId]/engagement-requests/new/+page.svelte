@@ -29,7 +29,8 @@
 	 * own roles -- practices/[practiceId]/+layout.ts's already-resolved
 	 * Membership (#835), the same UX-only mirror of the BFF's role gate
 	 * the billing and website settings screens already use.
-	 * The Credit cost and balance-after preview is Owner/Admin only,
+	 * The sentence that says what the start uses and what is left after it
+	 * (#1612) is Owner/Admin only,
 	 * because reading the balance at all is (billing.GetBalanceHandler is
 	 * ownerAndAdmin-gated, ADR-0008): a Doula's screen never attempts the
 	 * call.
@@ -49,7 +50,7 @@
 	import { resolve } from '$app/paths';
 	import { apiFetchWithSession } from '#lib/api.js';
 	import { isOwnerOrAdmin } from '#lib/roles.js';
-	import { loadBalance } from '#lib/billing.js';
+	import { creditCount, loadBalance } from '#lib/billing.js';
 	import { displayName, loadClientDetail, type ClientDetail } from '#lib/clientDetail.js';
 	import type { PracticeSession } from '../../../../+layout.js';
 	import {
@@ -70,7 +71,7 @@
 	import Textarea from '#lib/components/atoms/Textarea.svelte';
 	import LabeledField from '#lib/components/molecules/LabeledField.svelte';
 	import RadioGroup, { radioFieldId } from '#lib/components/molecules/RadioGroup.svelte';
-	import DescriptionList from '#lib/components/molecules/DescriptionList.svelte';
+	import Text from '#lib/components/atoms/Text.svelte';
 	import ErrorSummary from '#lib/components/molecules/ErrorSummary.svelte';
 	import { FormSubmission, orThrownErrors, type FormError } from '#lib/formSubmission.svelte.js';
 
@@ -86,6 +87,8 @@
 	// fetch of this page's own.
 	const session = $derived((page.data as { session: PracticeSession }).session);
 	let balance = $state<number | undefined>();
+	// The balance in words, "3 Welcome credits" or "N Credits" (#1612).
+	let balanceCount = $state('');
 	let loadError = $state('');
 
 	let kind = $state<'' | 'birth' | 'postpartum'>('');
@@ -111,10 +114,10 @@
 	// The empty-balance path is offered before the attempt as well as
 	// after it (#1235): the balance is already loaded, so an approver on
 	// an empty Practice is told she has nothing to spend rather than
-	// reading "Balance after -1" or discovering it by pressing submit.
+	// reading "it has -1" or discovering it by pressing submit.
 	// `balance <= 0` reads as "nothing to spend" because this request
-	// always costs exactly one Credit (the hardcoded 'Credit cost: 1
-	// credit' below) -- the same fixed cost the approval screen's own
+	// always uses exactly one Credit (the hardcoded "uses 1 Credit" in the
+	// sentence below) -- the same fixed cost the approval screen's own
 	// `isBalanceEmpty` bakes into `balanceAfter < 0`. `isApprover &&` is
 	// belt-and-braces: `balance` is only ever set for an approver below,
 	// but the empty check should not depend on that living two functions
@@ -246,6 +249,7 @@
 			if (isApprover) {
 				const balancePage = await loadBalance(apiFetchWithSession, page.params.practiceId!);
 				balance = balancePage.balance;
+				balanceCount = creditCount(balancePage);
 			}
 		} catch (error_) {
 			loadError = error_ instanceof Error ? error_.message : 'Failed to load Client';
@@ -318,11 +322,14 @@
 			<Notice variant="error" message="There are no credits left on this Practice's balance." />
 			<Link href={billingHref()} label="Buy credits" />
 		{:else if isApprover && balance !== undefined}
-			<DescriptionList
-				items={[
-					{ label: 'Credit cost', value: '1 credit' },
-					{ label: 'Balance after', value: String(balance - 1) }
-				]}
+			<!--
+				#1612: one sentence, where a list of "Credit cost" and "Balance
+				after" was. "Welcome credits" by the empty Practice's rule
+				(`creditCount`). A fact, not a live region; no price (#285).
+				The balance is read after the Client, so `detail` is here.
+			-->
+			<Text
+				text="Starting work with {displayName(detail!)} uses 1 Credit. This Practice has {balanceCount}. After this, it has {balance - 1}."
 			/>
 		{/if}
 	</stack-l>

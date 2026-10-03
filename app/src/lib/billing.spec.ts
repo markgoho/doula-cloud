@@ -1,5 +1,13 @@
 import { describe, expect, it, vi } from 'vitest';
-import { formatSignedQuantity, loadBalance, loadLedgerPage, originLabel, purchaseCredits } from './billing.js';
+import {
+	creditCount,
+	formatSignedQuantity,
+	loadBalance,
+	loadLedgerPage,
+	originLabel,
+	purchaseCredits,
+	type LedgerEntry
+} from './billing.js';
 import { jsonResponse } from './testResponse.js';
 
 describe('loadBalance', () => {
@@ -100,5 +108,37 @@ describe('formatSignedQuantity', () => {
 
 	it('adds no sign to zero', () => {
 		expect(formatSignedQuantity(0)).toBe('0');
+	});
+});
+
+describe('creditCount', () => {
+	const bonus: LedgerEntry = { origin: 'signup_bonus', quantity: 3, createdAt: '2026-10-01T00:00:00Z' };
+	const spent: LedgerEntry = { origin: 'consumption', quantity: -1, createdAt: '2026-10-02T00:00:00Z' };
+	const onePage = (items: LedgerEntry[]) => ({ items, hasMore: false });
+
+	it('calls the signup bonus alone Welcome credits', () => {
+		expect(creditCount({ balance: 3, ledger: onePage([bonus]) })).toBe('3 Welcome credits');
+	});
+
+	it('still calls it Welcome credits once some of it is spent', () => {
+		expect(creditCount({ balance: 2, ledger: onePage([spent, bonus]) })).toBe('2 Welcome credits');
+		expect(creditCount({ balance: 1, ledger: onePage([spent, spent, bonus]) })).toBe('1 Welcome credit');
+	});
+
+	it('says Credits once a founding grant or a purchase is in the balance', () => {
+		const grant: LedgerEntry = { origin: 'founding_grant', quantity: 3, createdAt: '2026-10-03T00:00:00Z' };
+		const purchase: LedgerEntry = { origin: 'purchase', quantity: 5, createdAt: '2026-10-03T00:00:00Z' };
+		expect(creditCount({ balance: 6, ledger: onePage([grant, bonus]) })).toBe('6 Credits');
+		expect(creditCount({ balance: 8, ledger: onePage([purchase, bonus]) })).toBe('8 Credits');
+	});
+
+	it('says Credits where the ledger is longer than its first page, rather than guess', () => {
+		expect(creditCount({ balance: 3, ledger: { items: [bonus], hasMore: true } })).toBe('3 Credits');
+	});
+
+	it('says Credits where no signup bonus is on the ledger, or nothing is left of it', () => {
+		expect(creditCount({ balance: 1284, ledger: onePage([]) })).toBe('1284 Credits');
+		expect(creditCount({ balance: 1, ledger: onePage([]) })).toBe('1 Credit');
+		expect(creditCount({ balance: 0, ledger: onePage([spent, spent, spent, bonus]) })).toBe('0 Credits');
 	});
 });

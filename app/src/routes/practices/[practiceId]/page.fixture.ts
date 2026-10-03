@@ -230,28 +230,44 @@ function respondForPopulatedPractice(path: string): Response {
  * reads for an Owner on an empty Practice too (`/offers`, `/staff`,
  * `/billing`, `/payments/connect`, `/engagement-requests`, `/activity`,
  * `/messages/awaiting-reply`, `/push-subscriptions`), and `block()`
- * swallows an unanswered one. The empty state draws none of them today.
- * #1612 puts the Credit balance into it, and hides that sentence when
- * `/billing` cannot be read; a narrower `respond` here would then mount a
- * shorter screen than the Owner's and the sweep would stay green (#928).
- * No second copy of the eight answers exists: a path that a later ticket
- * adds to the base is answered here with no second edit, and an unmatched
- * path still throws the base's error.
+ * swallows an unanswered one. The empty state draws one of them: the
+ * Credit balance, in the sentence #1612 puts above the link, which says
+ * no number when `/billing` cannot be read. A narrower `respond` here
+ * would mount that shorter sentence and the sweep would stay green
+ * (#928). No second copy of the other answers exists: a path that a
+ * later ticket adds to the base is answered here with no second edit, and
+ * an unmatched path still throws the base's error.
+ *
+ * `/billing` is the second path this variant answers itself. The base's
+ * balance has no signup bonus on its ledger, so the sentence would say
+ * "1284 Credits"; a Practice that has just signed up holds the bonus
+ * alone, and its "3 Welcome credits" is the longer of the two forms, so
+ * that is the one measured here (#1621's triage).
  *
  * The match is on the end of the path (`/clients`, then a query or
  * nothing), not on `includes('/clients')`, so a later path below
  * `/clients/` goes to the base and is not answered as an empty list.
  *
  * No variant for a Doula on an empty Practice, on purpose. The `empty`
- * snippet does not read the session, so her tree is this tree. After
- * #1612 her sentence has no balance, which makes her tree a strict subset
- * of this one.
+ * snippet reads the session only through the balance, and her sentence
+ * has no number, which makes her tree a strict subset of this one.
  */
 export const asOwnerWithNoClient: RouteVariant = {
 	name: 'The Practice landing hub, as an Owner with no Client yet',
 	pageData: practiceSession(['owner'], { practiceName }),
-	respond: (path) =>
-		/\/clients(\?|$)/.test(path) ? jsonResponse({ items: [] }) : respondForPopulatedPractice(path)
+	respond: (path) => {
+		if (/\/clients(\?|$)/.test(path)) return jsonResponse({ items: [] });
+		if (path.includes('/billing')) {
+			return jsonResponse({
+				balance: 3,
+				ledger: {
+					items: [{ origin: 'signup_bonus', quantity: 3, createdAt: '2026-10-01T00:00:00Z' }],
+					hasMore: false
+				}
+			});
+		}
+		return respondForPopulatedPractice(path);
+	}
 };
 
 export const fixture: RouteFixture = {

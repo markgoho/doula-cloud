@@ -70,6 +70,15 @@
 	// read off.
 	const session = $derived((page.data as { session: PracticeSession }).session);
 
+	// The empty Practice's sentence about Credits (#1612): with the
+	// balance where she may read it and the read worked, without it
+	// otherwise.
+	const creditSentence = $derived(
+		landing?.credit && landing.credit !== 'unavailable'
+			? `Adding a Client is free. Starting work with a Client uses 1 Credit, and this Practice has ${landing.credit.count}.`
+			: "Adding a Client is free. Starting work with a Client uses 1 of the Practice's Credits."
+	);
+
 	async function load() {
 		try {
 			landing = await loadPracticeLanding(apiFetchWithSession, page.params.practiceId!, session);
@@ -355,6 +364,16 @@
 		<Text
 			text="Nothing is here yet, because no Client is. Add one and this becomes the Client's birth plan, the visits with the Client, and the contract and invoices between the Client and your Practice."
 		/>
+		<!--
+			What uses a Credit, and how many the Practice has, said at the
+			start point (#1612, GOV.UK's "Start using a service"): its own
+			paragraph, before the link. A fact, not a link and not a live
+			region, so the screen keeps its one action (ADR-0048). A person
+			who cannot read the balance (ADR-0008), or whose read of it
+			failed, gets the sentence with no number. No price: the Credits
+			screen is the one place that says one (#285).
+		-->
+		<Text text={creditSentence} />
 		<!--
 			Straight to the name question, not through the search (#1609,
 			ADR-0017's amendment of 2026-10-02). This snippet only shows while
