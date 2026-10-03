@@ -12,8 +12,44 @@ As of [#621](https://github.com/markgoho/doula-cloud/issues/621), the mechanism 
 | `ready-for-human`           | `Ready for human`              | Requires human implementation            |
 | `wontfix`                   | *(no Status value)*            | Close the issue as "Not planned"; the `wontfix` label stays on the closed issue as the reason, it just doesn't route through Status |
 
-Status also carries two values with no skill role. `Done` is set automatically by a Project workflow when the issue closes. `In progress` has no workflow behind it — set it by hand (`gh project item-edit`, see `docs/agents/issue-tracker.md`) at the same time you assign yourself the issue; assigning alone does not move Status.
+Status also carries two values with no skill role. `Done` is set automatically by a Project workflow when the issue closes. `In progress` has no workflow behind it — set it by hand (`gh project item-edit`, with the ids under "The ids" below) at the same time you assign yourself the issue; assigning alone does not move Status.
 
 When a skill mentions a role (e.g. "apply the AFK-ready triage label"), set the corresponding Status value from this table — do not add a label.
+
+## The ids
+
+Verified 2026-10-02. These change only if the Project, its Status field, or an option is deleted and recreated; if a write fails with an unknown id, re-read them with the one-point query below.
+
+| What | Id |
+| --- | --- |
+| Project (number `5`, owner `markgoho`) | `PVT_kwHOAJTs0s4BiPeZ` |
+| Status field | `PVTSSF_lAHOAJTs0s4BiPeZzhhIPDg` |
+| `Needs triage` | `5377eb7b` |
+| `Needs info` | `cd14398b` |
+| `Ready for agent` | `64dc43c6` |
+| `Ready for human` | `10e1eaa3` |
+| `In progress` | `eaaccf1b` |
+| `Done` | `57a2c146` |
+| Target date field (a date: write it with `--date YYYY-MM-DD`) | `PVTF_lAHOAJTs0s4BiPeZzhhIPGU` |
+
+Re-read the options for 1 GraphQL point (not `gh project field-list`, which costs 101):
+
+```sh
+gh api graphql -f query='{ node(id:"PVTSSF_lAHOAJTs0s4BiPeZzhhIPDg") { ... on ProjectV2SingleSelectField { options { id name } } } }'
+```
+
+**The item id is per issue. Look it up for that one issue; do not list the board for it.** This returns the item id and the current Status for 1 point, where `gh project item-list --limit 400` costs 404:
+
+```sh
+gh api graphql -f query='{ repository(owner:"markgoho", name:"doula-cloud") { issue(number: 1680) { projectItems(first: 5) { nodes { id project { number } fieldValueByName(name: "Status") { ... on ProjectV2ItemFieldSingleSelectValue { name } } } } } } }'
+```
+
+Take the `id` of the node whose `project.number` is `5`. Then the write costs nothing:
+
+```sh
+gh project item-edit --id <item id> --project-id PVT_kwHOAJTs0s4BiPeZ --field-id PVTSSF_lAHOAJTs0s4BiPeZzhhIPDg --single-select-option-id eaaccf1b
+```
+
+An issue that is on no Project returns an empty `nodes` list. Add it first with `gh project item-add 5 --owner markgoho --url <issue url> --format json --jq .id`, which prints the new item's id.
 
 Edit the right-hand column to match whatever vocabulary you actually use.
