@@ -23,6 +23,16 @@ test('The first Client in three presses, then the Visits section', async ({ page
 	// press. The founding Owner is the only Doula at her Practice, so "Who
 	// is the Doula?" opens answered and adds no press.
 
+	// #1612: before she starts, the empty Practice says what uses a Credit
+	// and how many the Practice has. Signup wrote the signup bonus and
+	// nothing else, so the real ledger reads as Welcome credits.
+	await expect(
+		page.getByText(
+			'Adding a Client is free. Starting work with a Client uses 1 Credit, and this Practice has 3 Welcome credits.',
+			{ exact: true }
+		)
+	).toBeVisible();
+
 	// Press 1, on the empty Practice: it opens the name question, with no
 	// search in front of it (#1609).
 	await page.getByRole('link', { name: 'Add your first Client' }).click();
@@ -35,6 +45,12 @@ test('The first Client in three presses, then the Visits section', async ({ page
 	await page.getByRole('button', { name: 'Save and continue' }).click();
 	await expect(page).toHaveURL(new RegExp(`/practices/${practiceId}/clients/[^/]+/engagement-requests/new$`));
 	await expect(page.getByRole('link', { name: "Go to Pat Client's record without starting work" })).toBeVisible();
+	await expect(
+		page.getByText(
+			'Starting work with Pat Client uses 1 Credit. This Practice has 3 Welcome credits. After this, it has 2.',
+			{ exact: true }
+		)
+	).toBeVisible();
 	await page.getByLabel('Birth').check();
 	await page.getByLabel('Due date').fill('2027-03-01');
 

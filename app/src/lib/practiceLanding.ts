@@ -16,7 +16,7 @@ import { apiErrorMessage } from './apiErrorMessage.js';
 import { loadPendingRequests } from './engagementRequest.js';
 import { hasAnyClient } from './client.js';
 export type { Fetcher } from './fetcher.js';
-import { loadBalance } from './billing.js';
+import { creditCount, loadBalance } from './billing.js';
 import { loadConnectStatus, type ConnectStatus } from './payments.js';
 import type { Fetcher } from './fetcher.js';
 import type { CursorPage } from './paginatedList.svelte.js';
@@ -34,6 +34,9 @@ export interface RosterHealth {
 
 export interface CreditHealth {
 	balance: number;
+	/** The balance in words, "3 Welcome credits" or "N Credits"
+	 * (`creditCount`, #1612), for the empty Practice's sentence. */
+	count: string;
 }
 
 /*
@@ -194,7 +197,7 @@ export async function loadPracticeLanding(
 		canReadRoster(roles)
 			? block(async () => {
 					const balance = await loadBalance(fetcher, practiceId);
-					return { balance: balance.balance };
+					return { balance: balance.balance, count: creditCount(balance) };
 				})
 			: undefined,
 		canReadConnect(roles)

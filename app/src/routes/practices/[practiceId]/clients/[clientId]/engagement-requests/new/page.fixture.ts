@@ -89,8 +89,8 @@ export const soloRoster: RequestDoulas = {
  *
  * `isOwnerOrAdmin` decides both the verb -- "Start work with" against
  * "Ask to start work with", ADR-0017's solo-Practice collapse -- and
- * whether the Credit cost and the balance after it are drawn above the
- * form at all. That `DescriptionList` is content the base fixture has no
+ * whether the sentence about the Credit and the balance after it (#1612)
+ * is drawn above the form at all. That sentence is content the base fixture has no
  * way to reach, and it arrives through a read only an approver makes, so
  * this variant answers the balance endpoint as well as the Client. A
  * variant's `respond` replaces rather than merges, so the Client answer
@@ -123,13 +123,23 @@ export const asApprover: RouteVariant = {
  * nowhere else, and because it is the shortest form the screen has
  * beside the agency's longest. Its own `respond` for the reason
  * `asApprover` has one.
+ *
+ * Its balance is the signup bonus alone, which is a new solo Practice's,
+ * so the Credit sentence is drawn in its "Welcome credits" form here and
+ * in its "N Credits" form on `asApprover` (#1612).
  */
 export const asSoloOwner: RouteVariant = {
 	name: 'Requesting a new Engagement, as a solo Owner',
 	pageData: practiceSession(['owner', 'admin', 'doula']),
 	respond: (path) => {
 		if (path.includes('/billing')) {
-			return jsonResponse({ balance: 3, ledger: { items: [], hasMore: false } });
+			return jsonResponse({
+				balance: 3,
+				ledger: {
+					items: [{ origin: 'signup_bonus', quantity: 3, createdAt: '2026-10-01T00:00:00Z' }],
+					hasMore: false
+				}
+			});
 		}
 		if (path.includes(DOULAS_PATH)) return jsonResponse(soloRoster);
 		return jsonResponse(detail);

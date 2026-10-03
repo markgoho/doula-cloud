@@ -102,7 +102,7 @@ describe('loadPracticeLanding', () => {
 		const landing = await loadPracticeLanding(fetcherFor(), 'practice-1', session);
 
 		expect(landing.roster).toEqual({ members: 2, pendingInvitations: 2, expiredInvitations: 1 });
-		expect(landing.credit).toEqual({ balance: 7 });
+		expect(landing.credit).toEqual({ balance: 7, count: '7 Credits' });
 		expect(landing.connect).toEqual({
 			status: 'onboarding_incomplete',
 			requirementsDue: ['individual.dob']
