@@ -269,17 +269,19 @@
 		return `${name}'s data can't be erased yet -- settle or void ${list} first.`;
 	}
 
-	// ADR-0027's own wording: what is destroyed, what survives, and the
-	// two things that do not happen at once. The Stripe sentence
-	// deliberately doesn't name one date -- ADR-0027's eligibility date is
-	// per Stripe Customer, and a fresh Customer is made per invoice, so
-	// two of her invoices months apart come due for redaction on two
-	// different dates; naming a single "90 days from her newest invoice"
-	// would be exactly the Client-wide date the ADR rejects. Names {name}
-	// throughout rather than "her" -- #463's voice rule, checked by
-	// copy.pronoun.usage.spec.ts.
+	// ADR-0027's own content -- what is erased, what stays, Stripe's
+	// 90-day hold, and the free text left as written -- as one short
+	// sentence each, read aloud (#1744, the brief's Voice rules 4 and 6).
+	// The Stripe sentence states Stripe's floor and names no date: the
+	// eligibility date is per Stripe Customer (erase.go's stripeCustomer),
+	// so one Client can have several, and the detail read shows the last
+	// of them as stripeRedactionEligibleAt once the act has run. The free
+	// text sentence names its three surfaces rather than "anything typed",
+	// because erase.go does empty payment notes and reversal reasons.
+	// Names {name} throughout rather than "her" -- #463's voice rule,
+	// checked by copy.pronoun.usage.spec.ts.
 	function eraseConsequence(): string {
-		return `This permanently destroys ${name}'s identifying data: name, email, phone, address and date of birth. ${name}'s Engagements, Contracts, Invoices and Visits stay in the Practice's financial and clinical record. Stripe holds each Stripe payment record for 90 days from its own invoice before it can be redacted, so different invoices become eligible on different dates, and free text written by hand -- Messages, signed Contract wording, Plan Instance answers -- is never scrubbed. This cannot be undone.`;
+		return `This permanently erases ${name}'s name, email, phone, address and date of birth. ${name}'s Engagements, Contracts, Invoices and Visits stay in your Practice's financial and clinical record. Stripe can't erase a payment record until 90 days after its invoice. Messages, signed Contracts and Plan Instance answers keep their words as written, even where they name ${name}. This cannot be undone.`;
 	}
 
 	// Re-fetches the Client rather than merging ErasureResponse's own
