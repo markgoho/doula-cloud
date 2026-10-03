@@ -8,19 +8,15 @@ import type { IntakeOrigin } from '#lib/intakeJourney.js';
 import { toPageState, type RouteFixture } from '../../../../routeFixture.js';
 import { seedIntake } from './intakeFixture.js';
 import NamePage from './name/+page.svelte';
-import DateOfBirthPage from './date-of-birth/+page.svelte';
-import CheckPage from './check/+page.svelte';
 import DuplicatePage from './duplicate/+page.svelte';
 import { fixture as nameFixture } from './name/page.fixture.js';
-import { fixture as dateOfBirthFixture } from './date-of-birth/page.fixture.js';
-import { fixture as checkFixture } from './check/page.fixture.js';
 import { fixture as duplicateFixture } from './duplicate/page.fixture.js';
 
 /*
- * The sequence's own behavior (#466) -- the free save, the Change round
- * trip and the duplicate branch. The 320px conformance of each of its
- * eight pages is `route-continuum.svelte.spec.ts`'s, through the same
- * fixtures; this spec is only about what the pages DO.
+ * Intake's own behavior (#466, #1611) -- the save from the name question
+ * and the duplicate branch. The 320px conformance of its two pages is
+ * `route-continuum.svelte.spec.ts`'s, through the same fixtures; this
+ * spec is only about what the pages DO.
  */
 const pageState = vi.hoisted(() => ({
 	params: {} as Record<string, string>,
@@ -37,7 +33,7 @@ vi.mock('#lib/api.js', () => ({ apiFetchWithSession }));
 
 const practiceId = 'practice-1';
 const base = `/practices/${practiceId}/clients/new`;
-const detailHref = `/practices/${practiceId}/clients/client-9`;
+const startWorkHref = `/practices/${practiceId}/clients/client-9/engagement-requests/new`;
 
 interface SetupOptions {
 	/** How the page was reached -- a Change link's round trip carries a
@@ -90,15 +86,108 @@ beforeEach(() => {
 	seedIntake();
 });
 
-describe('the first question', () => {
+describe('the name question', () => {
 	const setup = setupFor(nameFixture, NamePage);
 
-	it('sends Continue on to the next question', async () => {
+	// #1611: one question, one button, and the save opens the Start work
+	// form for the Client it saved.
+	it('saves the Client and opens the Start work form', async () => {
+		await setup({ respond: jsonResponse({ id: 'client-9' }, 201) });
+
+		await testPage.getByRole('button', { name: 'Save and continue' }).click();
+
+		expect(goto).toHaveBeenCalledWith(startWorkHref);
+	});
+
+	it('offers no later steps and no save for later', async () => {
 		await setup();
 
-		await testPage.getByRole('button', { name: 'Continue' }).click();
+		await expect.element(testPage.getByRole('button', { name: 'Save and continue' })).toBeVisible();
+		await expect
+			.element(testPage.getByRole('button', { name: 'Save and come back later' }))
+			.not.toBeInTheDocument();
+		await expect.element(testPage.getByRole('button', { name: 'Continue', exact: true })).not.toBeInTheDocument();
+		await expect.element(testPage.getByText(/Step 1 of 1/)).not.toBeInTheDocument();
+	});
 
-		expect(goto).toHaveBeenCalledWith(`${base}/date-of-birth`);
+	it('says which names are optional', async () => {
+		await setup();
+
+		await expect.element(testPage.getByLabelText('Family name (optional)')).toBeVisible();
+		await expect.element(testPage.getByLabelText('Preferred name (optional)')).toBeVisible();
+	});
+
+	// What the search carried is saved with the name, so the page lists
+	// it before the save: nothing is saved that she cannot see.
+	it('lists what the search carried before the save', async () => {
+		await setup();
+
+		await expect.element(testPage.getByText('From your search, also saved with the name:')).toBeVisible();
+		await expect.element(testPage.getByText('Feb 9, 1988')).toBeVisible();
+		await expect
+			.element(testPage.getByText('anne-marie.ochieng-whitfield@finger-lakes-midwifery.example.com'))
+			.toBeVisible();
+		await expect.element(testPage.getByText('+1 (585) 555-0142')).toBeVisible();
+	});
+
+	it('lists only what the search carried', async () => {
+		await setup({ answers: { dateOfBirth: '', phone: '' } });
+
+		await expect.element(testPage.getByText('Email address')).toBeVisible();
+		await expect.element(testPage.getByText('Date of birth')).not.toBeInTheDocument();
+		await expect.element(testPage.getByText('Phone number')).not.toBeInTheDocument();
+	});
+
+	it('lists nothing when the search carried nothing', async () => {
+		await setup({ answers: { dateOfBirth: '', email: '', phone: '' } });
+
+		await expect.element(testPage.getByRole('button', { name: 'Save and continue' })).toBeVisible();
+		await expect
+			.element(testPage.getByText('From your search, also saved with the name:'))
+			.not.toBeInTheDocument();
+	});
+
+	it('saves the carried values with the name', async () => {
+		const { sent } = await setup({ respond: jsonResponse({ id: 'client-9' }, 201) });
+
+		await testPage.getByRole('button', { name: 'Save and continue' }).click();
+
+		expect(sent()).toMatchObject({
+			givenName: 'Anne-Marie',
+			familyName: 'Ochieng-Whitfield',
+			dateOfBirth: '1988-02-09',
+			email: 'anne-marie.ochieng-whitfield@finger-lakes-midwifery.example.com',
+			phone: '+1 (585) 555-0142',
+			override: false
+		});
+	});
+
+	it('sends a save with a match to the duplicate check rather than showing an error', async () => {
+		await setup({ respond: jsonResponse({ matches: [{ id: 'client-1' }] }, 409) });
+
+		await testPage.getByRole('button', { name: 'Save and continue' }).click();
+
+		expect(goto).toHaveBeenCalledWith(`${base}/duplicate`);
+	});
+
+	// #488: a refusal the server names lands on the field it is about.
+	it('points a refusal the server names at its field', async () => {
+		await setup({
+			respond: jsonResponse(
+				{
+					message: 'The Client record could not be saved.',
+					details: { givenName: 'Given name is too long' }
+				},
+				400
+			)
+		});
+
+		await testPage.getByRole('button', { name: 'Save and continue' }).click();
+
+		await expect
+			.element(testPage.getByRole('link', { name: 'Given name is too long' }))
+			.toHaveAttribute('href', '#intake-given-name');
+		expect(goto).not.toHaveBeenCalled();
 	});
 
 	// #1609: Back goes to the screen that opened the name question -- the
@@ -116,109 +205,30 @@ describe('the first question', () => {
 			.toHaveAttribute('href', href);
 	});
 
-	// The Change round trip: a question reached from the summary returns
-	// there rather than walking the rest of the sequence again.
-	it('sends Continue back to the summary on a Change round trip', async () => {
-		await setup({ search: '?from=check' });
-
-		await testPage.getByRole('button', { name: 'Continue' }).click();
-
-		expect(goto).toHaveBeenCalledWith(`${base}/check`);
-	});
-
 	// ADR-0017: only a given name is required, and a form that refuses to
 	// save without a surname is a form that loses the record.
 	it('refuses a Client with no given name, naming the field', async () => {
 		await setup({ answers: { givenName: '' } });
 
-		await testPage.getByRole('button', { name: 'Continue' }).click();
+		await testPage.getByRole('button', { name: 'Save and continue' }).click();
 
 		await expect.element(testPage.getByText('There is a problem')).toBeVisible();
 		await expect
 			.element(testPage.getByRole('link', { name: "Enter the Client's given name" }))
 			.toHaveAttribute('href', '#intake-given-name');
+		await expect.element(testPage.getByLabelText('Given name')).toHaveAttribute('aria-invalid', 'true');
+		expect(apiFetchWithSession).not.toHaveBeenCalled();
 		expect(goto).not.toHaveBeenCalled();
 	});
 
-	// #466 removed #497's wait for all four match keys: the save is free
-	// from every page of the sequence.
-	it('saves from the first question and lands on the Client', async () => {
-		await setup({ respond: jsonResponse({ id: 'client-9' }, 201) });
+	it('keeps what is typed in the draft', async () => {
+		await setup({ answers: { givenName: '', familyName: '', preferredName: '' } });
 
-		await testPage.getByRole('button', { name: 'Save and come back later' }).click();
+		await testPage.getByLabelText('Given name').fill('Pat');
+		await testPage.getByLabelText('Family name (optional)').fill('Client');
+		await testPage.getByLabelText('Preferred name (optional)').fill('P');
 
-		expect(goto).toHaveBeenCalledWith(detailHref);
-	});
-
-	it('sends the whole record, not only what this page asked', async () => {
-		const { sent } = await setup({ respond: jsonResponse({ id: 'client-9' }, 201) });
-
-		await testPage.getByRole('button', { name: 'Save and come back later' }).click();
-
-		expect(sent()).toMatchObject({
-			givenName: 'Anne-Marie',
-			addressPostalCode: '14472',
-			dateOfBirth: '1988-02-09',
-			override: false
-		});
-		expect((sent().fieldValues as Record<string, unknown>).birthplace).toBe(
-			'Strong Memorial Hospital'
-		);
-	});
-});
-
-describe('the date of birth question', () => {
-	const setup = setupFor(dateOfBirthFixture, DateOfBirthPage);
-
-	// #1214: the group's refusal is read back out of the summary's own
-	// array through `dateGroupRefusal`, so the box it marks and the link
-	// it renders can never drift from each other's wording.
-	it('refuses a date that is not one, linking to the box that has to change', async () => {
-		await setup();
-
-		await testPage.getByLabelText('Month').fill('2');
-		await testPage.getByLabelText('Day').fill('30');
-		await testPage.getByRole('button', { name: 'Continue' }).click();
-
-		await expect
-			.element(testPage.getByRole('link', { name: 'Date of birth must be a real date' }))
-			.toHaveAttribute('href', '#intake-date-of-birth-day');
-		await expect.element(testPage.getByLabelText('Day')).toHaveAttribute('aria-invalid', 'true');
-		await expect.element(testPage.getByLabelText('Month')).toHaveAttribute('aria-invalid', 'false');
-		expect(goto).not.toHaveBeenCalled();
-	});
-});
-
-describe('the summary', () => {
-	const setup = setupFor(checkFixture, CheckPage);
-
-	it('lists every question asked, with a way back to each', async () => {
-		await setup();
-
-		// The label and its Change link's visually-hidden text both say it.
-		await expect.element(testPage.getByText('ZIP code').first()).toBeVisible();
-		// Once as the summary's section heading, once as the rail's own
-		// step label -- the rail is the same journey, listed beside it.
-		await expect
-			.element(testPage.getByText('What this Client wants from continuous labor support').first())
-			.toBeVisible();
-	});
-
-	// The save is free, so a question nobody answered is still a row --
-	// its Change link is how the rest of the sequence stays reachable
-	// from the end of it.
-	it('says so where a question was not answered', async () => {
-		await setup();
-
-		await expect.element(testPage.getByText('Not answered').first()).toBeVisible();
-	});
-
-	it('sends a refused save to the duplicate check rather than showing an error', async () => {
-		await setup({ respond: jsonResponse({ matches: [{ id: 'client-1' }] }, 409) });
-
-		await testPage.getByRole('button', { name: 'Save this Client' }).click();
-
-		expect(goto).toHaveBeenCalledWith(`${base}/duplicate`);
+		expect(intakeDraft.answers).toMatchObject({ givenName: 'Pat', familyName: 'Client', preferredName: 'P' });
 	});
 });
 
@@ -251,8 +261,17 @@ describe('the duplicate check', () => {
 			.toBeVisible();
 	});
 
+	it('sends Back to the name question', async () => {
+		await setup();
+
+		await expect
+			.element(testPage.getByRole('link', { name: 'Back', exact: true }))
+			.toHaveAttribute('href', `${base}/name`);
+	});
+
 	// ADR-0017's one deliberate override: it skips the match query
-	// entirely rather than asking again.
+	// entirely rather than asking again, and opens the Start work form
+	// (#1611).
 	it('re-sends with override when a different person is chosen', async () => {
 		const { sent } = await setup({ respond: jsonResponse({ id: 'client-9' }, 201) });
 
@@ -263,8 +282,8 @@ describe('the duplicate check', () => {
 		// The LAST call, not merely one of them: clearing the draft empties
 		// `matches`, and a reactive empty-matches guard on this page would
 		// fire on the way out and send a reader who had just saved to the
-		// summary instead of to the Client.
-		expect(goto).toHaveBeenLastCalledWith(detailHref);
+		// name question instead of to the Start work form.
+		expect(goto).toHaveBeenLastCalledWith(startWorkHref);
 	});
 
 	it('reviews the changes before writing them to a Client already on file', async () => {

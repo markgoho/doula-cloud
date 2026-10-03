@@ -76,9 +76,9 @@ She is **not** a test of role separation. Every permission boundary rides on Ren
 * **Cold**: yes (Paradox of the Active User)
 * **320px**: yes (ADR-0024)
 
-- **3.1** — Reach intake through **Find or add a Client** on the Clients list: a Client is found before she is created (ADR-0017). Intake is one question per page from there.
-- **3.2** — Answer the name question; press **Save and come back later**. A Client is saved and **nothing else is** — no Engagement, no credit — and she lands on that Client's own detail hub.
-- **3.2-b** — **Start new work with {name}** from the hub. As the Owner she is her own approver, so asking and approving collapse into one act, and **that** act creates the Engagement and consumes the credit (`billing.ConsumeCredit`), after naming its cost and the balance after it on the form.
+- **3.1** — On her empty Practice, press **Add your first Client**: while the Practice holds no Client, there is nobody to search for, so intake opens directly (ADR-0017). Intake is one question, the name.
+- **3.2** — Answer the name question; press **Save and continue**. A Client is saved and **nothing else is** — no Engagement, no credit — and the Start work form for that Client opens.
+- **3.2-b** — **Start work with {name}** on that form. As the Owner she is her own approver, so asking and approving collapse into one act, and **that** act creates the Engagement and consumes the credit (`billing.ConsumeCredit`), after naming its cost and the balance after it on the form. She lands on the Engagement's page, which says "Work with {name} started."
 - **3.3** — Open the Engagement.
 - **3.4** — Repeat for her second and third Clients. Signup granted three credits (`api/internal/staffauth/signup.go`), so her **fourth Engagement** — not her fourth Client, which costs nothing — returns `402` with "no credits remaining, ask a practice owner or admin to buy more". She *is* the Practice Owner, and the refusal offers **Buy credits** on the same screen.
 

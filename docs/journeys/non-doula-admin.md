@@ -81,8 +81,8 @@ Dee is a domain expert on the business half and a stranger to the care half.
 * **Confirmation**: yes (Peak-End Rule)
 * **320px**: yes (ADR-0024)
 
-- **4.1** — **Find or add a Client** on the Clients list, search, then **Add a new Client**: intake is one question per page from there — name, date of birth, email, phone, address, then the Practice's own Client Field Template sections.
-- **4.2** — Press **Save this Client**. The save is **free** — a Client, no Engagement, no credit — and it is not owner-gated, so it **passes** for Dee. Asking for paid work with the Client is the separate act at `POST .../engagement-requests`, and its approval is what creates the Engagement and locks the Credit.
+- **4.1** — **Find or add a Client** on the Clients list, search, then **Add a new Client**: intake is one question from there, the name, and **Save and continue** opens the Start work form. The date of birth, email, phone, address and the Practice's own Client Field Template sections are added from the Client's record.
+- **4.2** — Press **Save and continue**. The save is **free** — a Client, no Engagement, no credit — and it is not owner-gated, so it **passes** for Dee. It opens the Start work form: asking for paid work with the Client is the separate act at `POST .../engagement-requests`, and its approval is what creates the Engagement and locks the Credit. **Go to {name}'s record without starting work** leaves the Client saved and nothing started.
 
 ### Stage 5 — Put a Doula on the Engagement
 

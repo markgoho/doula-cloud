@@ -2,19 +2,16 @@
  * What a question page needs to know about the journey it is in (#1610).
  *
  * The date of birth, the email address, the phone number, the address
- * and a Practice's own sections are asked by two journeys: intake, for a
- * new Client (#466), and her details, added afterward from her record
- * (#1610, ADR-0017's amendment of 2026-10-02). The questions are the
- * same; the journey around them is not. So each question is one
- * component in this folder, and each journey hands it one of these.
+ * and a Practice's own sections are a Client's details, added from her
+ * record (#1610, ADR-0017's amendment of 2026-10-02). Intake asked them
+ * too until #1611 made it one question, the name. Each question is one
+ * component in this folder, and the journey hands it one of these.
  *
- * Each journey's object reads its own module state, never the other's:
- * the continuum sweep mounts a route with no layout in front of it, so a
- * route's fixture seeds that state at import time, and two journeys that
- * shared one draft would measure whichever fixture was imported last.
+ * The journey's object reads its own module state: the continuum sweep
+ * mounts a route with no layout in front of it, so a route's fixture
+ * seeds that state at import time.
  */
 
-import type { FormError } from '#lib/formErrors.js';
 import type { IntakeDraft } from '#lib/intakeDraft.svelte.js';
 import { CHANGE_PARAMETER, CHANGE_VALUE, type IntakeSection, type IntakeStep } from '#lib/intakeJourney.js';
 
@@ -50,13 +47,6 @@ export interface QuestionJourney {
 	/** What the Client is called on this page (#463's rule, with no
 	 * pronoun in it). */
 	readonly knownAs: string;
-	/**
-	 * ADR-0017's free save, offered on every page of intake. Absent on
-	 * her details journey, which saves once, at the check page: the
-	 * record already exists, so there is nothing to keep for later that
-	 * the record does not already hold.
-	 */
-	readonly saveForLater?: (stepId: string) => Promise<FormError[] | undefined>;
 }
 
 /**

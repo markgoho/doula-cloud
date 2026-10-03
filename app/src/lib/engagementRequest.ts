@@ -98,6 +98,23 @@ export interface EngagementRequestOutcome {
 	warning?: string;
 }
 
+/*
+ * The query an approved start puts on the Engagement's page (#1611), so
+ * that page says the work started. Written once: the Start work form
+ * composes it as a string and the Engagement's page reads it as a name
+ * and a value, and those were two literals that had to agree.
+ */
+const STARTED_PARAMETER = 'started';
+const STARTED_VALUE = 'true';
+export const STARTED_QUERY = `${STARTED_PARAMETER}=${STARTED_VALUE}`;
+
+/**
+Whether the Engagement's page was reached by an approved start.
+*/
+export function isJustStarted(search: Pick<URLSearchParams, 'get'>): boolean {
+	return search.get(STARTED_PARAMETER) === STARTED_VALUE;
+}
+
 /** The two shapes `requestEngagement` can settle to. A 402 -- an empty
  * balance on the collapsed Owner/Admin path, `billing.ErrNoCreditsRemaining`
  * -- is not a thrown error: it is an expected outcome this screen has a

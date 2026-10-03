@@ -1,16 +1,7 @@
 <script lang="ts">
 	/*
-	 * Intake, as a sequence of routes (#466, ADR-0017).
-	 *
-	 * ## Why a layout at all
-	 *
-	 * Every step needs the same two facts -- the Practice's own name and
-	 * its Client Field Template -- because the journey's length is
-	 * derived from them (#432: a Practice that has added nothing gets
-	 * five steps, not six with an empty one). Reading them once here, and
-	 * showing the skeleton once here, is what stops a reader four
-	 * questions in from meeting a loading state on every navigation
-	 * (ADR-0020).
+	 * Intake (#466, #1611, ADR-0017): the name question, and the duplicate
+	 * page a save with a match opens.
 	 *
 	 * ## Why the draft lives outside SvelteKit's load
 	 *
@@ -20,20 +11,14 @@
 	 * its query string (#498). Its own `+layout.ts` is only the contractor
 	 * gate (#1609).
 	 *
-	 * ## What is deliberately not here
-	 *
-	 * #497's manual focus effect. It existed because a step change inside
-	 * one route moves no focus; a per-step route sequence gets
-	 * SvelteKit's own focus reset on navigation, and porting the
-	 * workaround would fight it.
+	 * Intake reads nothing from the server before it asks (#1611): the
+	 * name question is the same at every Practice, and the Practice's own
+	 * sections are asked from her record (#1610). So there is no skeleton
+	 * here.
 	 */
 	import { untrack, type Snippet } from 'svelte';
 	import { page } from '#lib/appState.svelte.js';
-	import { apiFetchWithSession } from '#lib/api.js';
 	import { intakeDraft, type IntakeAnswers } from '#lib/intakeDraft.svelte.js';
-	import { intakeFlow } from '#lib/intakeFlow.svelte.js';
-	import Skeleton from '#lib/components/atoms/Skeleton.svelte';
-	import Notice from '#lib/components/atoms/Notice.svelte';
 	import { intakeOrigin } from '#lib/intakeJourney.js';
 	import ContractorDoor from '../ContractorDoor.svelte';
 	import type { LayoutProps as LayoutProperties } from './$types';
@@ -47,10 +32,11 @@
 	const practiceId = $derived(page.params.practiceId ?? '');
 
 	/*
-	 * The four keys the search hands over (#498). Each lands on the page
-	 * that asks for it, so a carried value is still shown and still
-	 * editable before the save -- `name` is the given name, since that is
-	 * the one field search matches against all three name columns.
+	 * The four keys the search hands over (#498). `name` is the given
+	 * name, since that is the one field search matches against all three
+	 * name columns, and the name question shows it in that field. The
+	 * other three are listed on the name question and saved with it
+	 * (#1611).
 	 */
 	function carried(): Partial<IntakeAnswers> {
 		const seeded: Partial<IntakeAnswers> = {};
@@ -77,43 +63,21 @@
 	 */
 	$effect(() => {
 		void practiceId;
-		// The door asks nothing, so it reads nothing: the template read
-		// would only race it with an error notice.
+		// The door asks nothing, so it opens no draft.
 		if (isContractor) return;
 		untrack(() => {
 			intakeDraft.start(practiceId, carried());
 			// #1609: a link that opens the name question directly names the
 			// screen it is on, and the name question's Back goes there. A
-			// later visit that carries none -- a Change round trip, a reload
-			// further on -- keeps the one already read.
+			// later visit that carries none -- the duplicate page's Back, a
+			// reload -- keeps the one already read.
 			intakeDraft.origin = intakeOrigin(page.url.searchParams) ?? intakeDraft.origin;
-			void intakeFlow.load(apiFetchWithSession, practiceId);
 		});
 	});
 </script>
 
 {#if isContractor}
 	<ContractorDoor />
-{:else if intakeFlow.status === 'ready'}
-	{@render children()}
-{:else if intakeFlow.status === 'error'}
-	<container-l>
-		<center-l max="var(--form-max)" gutters="var(--page-gutter)">
-			<Notice variant="error" message={intakeFlow.loadError} />
-		</center-l>
-	</container-l>
 {:else}
-	<container-l>
-		<center-l max="var(--form-max)" gutters="var(--page-gutter)">
-			<Skeleton lines={6} variant="text" label="Loading the questions to ask" />
-		</center-l>
-	</container-l>
+	{@render children()}
 {/if}
-
-<style>
-	@layer components {
-		container-l {
-			padding-block: var(--space-8);
-		}
-	}
-</style>

@@ -28,6 +28,13 @@
 		 * Client portal passes its Practice's name (#431, #487).
 		 */
 		serviceName?: string;
+		/**
+		 * A message about what just happened, such as "Work with Pat
+		 * started." (#1611). Rendered before the <h1>, which is GOV.UK's
+		 * position for a notification banner. The route builds the
+		 * `Notice`; this Template only places it.
+		 */
+		notice?: Snippet;
 		summary?: Snippet;
 		actions?: Snippet;
 		sections: Section[];
@@ -58,6 +65,7 @@
 	let {
 		title,
 		serviceName,
+		notice,
 		summary,
 		actions,
 		sections,
@@ -91,6 +99,9 @@
 				shell's (#431), not a page's. A Template renders no chrome.
 			-->
 			<div class="record-header">
+				{#if notice}
+					<div class="notice">{@render notice()}</div>
+				{/if}
 				<cluster-l space="var(--space-4)" justify="space-between" align="baseline">
 					<Heading level={1} variant="page" text={title} />
 					{#if actions}
@@ -232,6 +243,10 @@
 		 */
 		.summary {
 			margin-block-start: var(--space-4);
+		}
+
+		.notice {
+			margin-block-end: var(--space-6);
 		}
 
 		.contents-heading {
