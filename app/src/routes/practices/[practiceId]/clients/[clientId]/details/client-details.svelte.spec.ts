@@ -108,6 +108,21 @@ describe('the first question', () => {
 			.toHaveAttribute('href', href);
 	});
 
+	// #1705: GOV.UK's "Error: " title prefix is for a page that was
+	// really refused, never for a first visit.
+	it('titles the page "Error: " only while a refusal is on it', async () => {
+		await setup();
+		expect(document.title).toMatch(/^What is .+'s date of birth\?/);
+
+		await testPage.getByLabelText('Day').fill('32');
+		await testPage.getByRole('button', { name: 'Continue' }).click();
+		await expect.poll(() => document.title).toMatch(/^Error: What is .+'s date of birth\?/);
+
+		await testPage.getByLabelText('Day').fill('3');
+		await testPage.getByRole('button', { name: 'Continue' }).click();
+		await expect.poll(() => document.title).toMatch(/^What is .+'s date of birth\?/);
+	});
+
 	// The journey saves once, at its check page: the record already
 	// exists, so there is nothing to keep for later.
 	it('offers Continue and no save of its own', async () => {
@@ -258,6 +273,8 @@ describe('the check page', () => {
 				jsonResponse({ code: 'ALREADY_EXISTS', message: "this client's data has been erased and cannot be edited" }, 409)
 			]
 		});
+		// #1705: no "Error: " title until the save is really refused.
+		expect(document.title).toMatch(/^Check /);
 
 		await testPage.getByRole('button', { name: 'Save these details' }).click();
 
@@ -265,6 +282,7 @@ describe('the check page', () => {
 		await expect
 			.element(testPage.getByText("this client's data has been erased and cannot be edited").first())
 			.toBeVisible();
+		await expect.poll(() => document.title).toMatch(/^Error: Check /);
 		expect(goto).not.toHaveBeenCalled();
 	});
 });

@@ -221,6 +221,21 @@ describe('the name question', () => {
 		expect(goto).not.toHaveBeenCalled();
 	});
 
+	// #1705: GOV.UK's "Error: " title prefix is for a page that was
+	// really refused, never for a first visit.
+	it('titles the page "Error: " only while a refusal is on it', async () => {
+		await setup({ answers: { givenName: '' }, respond: jsonResponse({ id: 'client-9' }, 201) });
+
+		expect(document.title).toMatch(/^What is the Client's name\?/);
+
+		await testPage.getByRole('button', { name: 'Save and continue' }).click();
+		await expect.poll(() => document.title).toMatch(/^Error: What is the Client's name\?/);
+
+		await testPage.getByLabelText('Given name').fill('Pat');
+		await testPage.getByRole('button', { name: 'Save and continue' }).click();
+		await expect.poll(() => document.title).toMatch(/^What is the Client's name\?/);
+	});
+
 	it('keeps what is typed in the draft', async () => {
 		await setup({ answers: { givenName: '', familyName: '', preferredName: '' } });
 
@@ -247,8 +262,11 @@ describe('the duplicate check', () => {
 
 	it('refuses to go on until one of them is chosen', async () => {
 		await setup();
+		// #1705: no "Error: " title until the page is really refused.
+		expect(document.title).toMatch(/^Is this the same person\?/);
 
 		await testPage.getByRole('button', { name: 'Continue' }).click();
+		await expect.poll(() => document.title).toMatch(/^Error: Is this the same person\?/);
 
 		// GOV.UK asks for the message twice -- once in the summary at the
 		// top of the page, again against the group itself -- and the

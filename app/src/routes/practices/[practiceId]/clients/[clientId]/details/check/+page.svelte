@@ -123,6 +123,13 @@
 	}
 </script>
 
+<!-- Passed only while there is a refusal, never declared as a child of
+     the Template: a declared snippet is always truthy, so the Template
+     would title the page "Error: " before any save (#1705). -->
+{#snippet errorSummary()}
+	<ErrorSummary errors={submission.errors} />
+{/snippet}
+
 <CheckAnswers
 	journey={detailsQuestions.label}
 	{steps}
@@ -130,13 +137,8 @@
 	title="Check {knownAs()}'s details before saving"
 	{sections}
 	isWide={rowCount >= WIDE_FROM_ROWS}
+	errorSummary={submission.errors.length > 0 ? errorSummary : undefined}
 >
-	{#snippet errorSummary()}
-		{#if submission.errors.length > 0}
-			<ErrorSummary errors={submission.errors} />
-		{/if}
-	{/snippet}
-
 	{#snippet actions()}
 		<Button label="Save these details" loading={submission.isSubmitting} onClick={handleSave} />
 	{/snippet}

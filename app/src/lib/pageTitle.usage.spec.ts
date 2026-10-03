@@ -58,6 +58,36 @@ function hasPageTitle(source: string): boolean {
 	return TEMPLATES_WITH_PAGE_TITLE.some((name) => source.includes(name));
 }
 
+/*
+ * #1705's static gate. Every Template titles its page "Error: " from
+ * `Boolean(errorSummary)`, and GOV.UK keeps that prefix for a page that
+ * was really refused. A snippet declared as a child of the Template is
+ * always passed and always truthy, so the page read "Error: " on a
+ * first visit however its body was guarded. The summary is declared at
+ * the top level of the markup, beside the Template, and passed as
+ * `errorSummary={<the refusals>.length > 0 ? errorSummary : undefined}`.
+ *
+ * Read from the source text, so it leans on the formatter: a snippet
+ * declared as a component's child is indented, and one declared beside
+ * it is not. Behavioral specs cover the titles themselves.
+ */
+const svelteFiles = globFiles('src/**/*.svelte', { cwd: appRoot });
+
+const CHILD_SUMMARY = /^[\t ]+\{#snippet errorSummary\(\)\}/m;
+const UNCONDITIONAL_SUMMARY = /errorSummary=\{(?![^}]*\?\s*errorSummary\s*:\s*undefined\})/;
+
+describe('an error summary is passed only while there is a refusal', () => {
+	for (const file of svelteFiles) {
+		const source = readFileSync(new URL(file, `file://${appRoot}`), 'utf8');
+		if (!source.includes('{#snippet errorSummary()}')) continue;
+		it(`${file} declares its errorSummary beside the Template and passes it conditionally`, () => {
+			expect(source).not.toMatch(CHILD_SUMMARY);
+			expect(source).toContain('errorSummary={');
+			expect(source).not.toMatch(UNCONDITIONAL_SUMMARY);
+		});
+	}
+});
+
 describe('every route sets a page title', () => {
 	for (const file of routeFiles) {
 		it(`${file} calls the shared PageTitle primitive`, () => {

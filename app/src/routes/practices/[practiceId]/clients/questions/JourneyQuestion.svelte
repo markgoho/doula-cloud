@@ -86,6 +86,13 @@
 
 </script>
 
+<!-- Passed only while there is a refusal, never declared as a child of
+     the Template: a declared snippet is always truthy, so the Template
+     would title a first visit "Error: " (#1705). -->
+{#snippet errorSummary()}
+	<ErrorSummary {errors} />
+{/snippet}
+
 <!-- stacked-form:ignore: #1108 -- this form wraps a Template. `QuestionPage` renders the controls and the actions as two separate regions of one column and stacks each itself, so the `<form>` here exists to put the submit button inside the form that owns the inputs (see the note above), not to arrange anything. -->
 <form onsubmit={handleContinue} novalidate>
 	<QuestionPage
@@ -98,13 +105,8 @@
 		)}
 		{question}
 		{hint}
+		errorSummary={errors.length > 0 ? errorSummary : undefined}
 	>
-		{#snippet errorSummary()}
-			{#if errors.length > 0}
-				<ErrorSummary {errors} />
-			{/if}
-		{/snippet}
-
 		{#snippet content({ describedBy })}
 			{@render controls({ describedBy, errors })}
 		{/snippet}
