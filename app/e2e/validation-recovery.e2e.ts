@@ -27,10 +27,6 @@ import { expect, test } from '@playwright/test';
 
 const WCAG_TAGS = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'];
 
-// #487, and the reason is on `accessibility.e2e.ts`'s own KNOWN list:
-// nothing in the application sets a <title> yet.
-const KNOWN_RULE_IDS = new Set(['document-title']);
-
 test('a refused form says what is wrong, takes focus, and leads to the field', async ({ page }) => {
 	await page.goto('/login');
 	await expect(page.getByRole('heading', { level: 1, name: 'Log in' })).toBeVisible();
@@ -39,6 +35,7 @@ test('a refused form says what is wrong, takes focus, and leads to the field', a
 	// stops it stealing focus from somebody who has not asked for anything
 	// yet.
 	await expect(page.getByRole('heading', { name: 'There is a problem' })).toBeHidden();
+	await expect(page).not.toHaveTitle(/^Error: /);
 
 	await page.getByRole('button', { name: 'Log in' }).click();
 
@@ -55,11 +52,15 @@ test('a refused form says what is wrong, takes focus, and leads to the field', a
 	// refusal and the first fix is one Tab away.
 	await expect(page.locator('div.summary')).toBeFocused();
 
+	// GOV.UK's rule (#467, #1705): the title names the refusal too, and
+	// only after one -- the clean form above carries no "Error: ".
+	await expect(page).toHaveTitle(/^Error: /);
+
+	// No rule is exempt: every route sets its <title> through `PageTitle`
+	// (#487), so axe's `document-title` holds here as everywhere else.
 	const { violations } = await new AxeBuilder({ page }).withTags(WCAG_TAGS).analyze();
 	expect(
-		violations
-			.filter((violation) => !KNOWN_RULE_IDS.has(violation.id))
-			.map((violation) => `${violation.id} (${violation.impact}) -- ${violation.help}`),
+		violations.map((violation) => `${violation.id} (${violation.impact}) -- ${violation.help}`),
 		'a refused form must be no less accessible than a clean one'
 	).toEqual([]);
 
