@@ -118,8 +118,12 @@ site footer on every page links here.
 			You can delete your login yourself. It is deleted at once, and your place at every practice ends.
 			Your name and email address are replaced, and the work you did stays in each practice's records
 			under “Deleted Staff Member”. If you are the last Owner of a practice, another person must become
-			an Owner, or the practice must be deleted, first. The Feedback you sent us stays, and no longer
-			names you.
+			an Owner, or the practice must be deleted, first.
+		</p>
+		<p>
+			The Feedback you sent us stays when your login is deleted, and when a practice you work at is
+			deleted. Once your login is deleted, it no longer names you. It is deleted 24 months after you
+			sent it.
 		</p>
 	</PageSection>
 
@@ -158,7 +162,7 @@ site footer on every page links here.
 			You can tell us what you think of {PRODUCT_NAME} through Feedback in the portal. It comes to us,
 			never to your practice. We keep what you send, with the name and version of your browser, and
 			erase it when your practice erases your record or is deleted. If more than one practice keeps a
-			record of you, Feedback you sent from a portal page that belongs to no one practice is erased when
+			record of you, Feedback you sent from a portal page that is not about one practice is erased when
 			the last of them erases your record.
 		</p>
 	</PageSection>
@@ -215,11 +219,17 @@ site footer on every page links here.
 			</li>
 			<li>
 				<strong>GitHub</strong> keeps a note of each piece of Feedback in a private repository, so that we
-				can sort it. The note holds only the kind of Feedback, the kind of page it was sent from but never
-				that page's address, the version of the app, the width of the screen, the name and version of the
-				browser, the time it was sent, the role of the person who sent it, such as Owner or Client, and a
-				link that only we can open. It never holds the words a person typed, a person's name, or a practice's
-				name. The note names nobody, so it stays after the Feedback is erased or deleted.
+				can sort it. The note holds only:
+				<ul>
+					<li>the kind of Feedback;</li>
+					<li>the kind of page it was sent from, never that page's address;</li>
+					<li>the version of the app, the width of the screen, and the name and version of the browser;</li>
+					<li>the time it was sent;</li>
+					<li>the role of the person who sent it, such as Owner or Client;</li>
+					<li>a link that only we can open.</li>
+				</ul>
+				It never holds the words a person typed, a person's name, or a practice's name. The note names
+				nobody, so it stays after the Feedback is erased or deleted.
 			</li>
 		</ul>
 		<p>

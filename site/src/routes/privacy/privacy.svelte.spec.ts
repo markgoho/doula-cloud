@@ -47,7 +47,7 @@ describe('the Privacy Policy at /privacy (#1556)', () => {
 			.element(testPage.getByText('erase it when your practice erases your record or is deleted', { exact: false }))
 			.toBeVisible();
 		await expect
-			.element(testPage.getByText('The Feedback you sent us stays, and no longer names you.', { exact: false }))
+			.element(testPage.getByText('Once your login is deleted, it no longer names you.', { exact: false }))
 			.toBeVisible();
 		await expect
 			.element(testPage.getByText('It never holds the words a person typed', { exact: false }))

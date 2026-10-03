@@ -66,7 +66,9 @@ When a practice invites you to work with it, we hold your name and email address
 
 You are one person with one login, even if you work at more than one practice. Each practice sees your name, your email address and the work you do for it. It does not see the other practices you work at, or what you do there.
 
-You can delete your login yourself. It is deleted at once, and your place at every practice ends. Your name and email address are replaced, and the work you did stays in each practice's records under “Deleted Staff Member”. If you are the last Owner of a practice, another person must become an Owner, or the practice must be deleted, first. The Feedback you sent us stays, and no longer names you.
+You can delete your login yourself. It is deleted at once, and your place at every practice ends. Your name and email address are replaced, and the work you did stays in each practice's records under “Deleted Staff Member”. If you are the last Owner of a practice, another person must become an Owner, or the practice must be deleted, first.
+
+The Feedback you sent us stays when your login is deleted, and when a practice you work at is deleted. Once your login is deleted, it no longer names you. It is deleted 24 months after you sent it.
 
 ## If you are a client of a practice
 
@@ -82,7 +84,7 @@ When you pay an invoice, the payment form comes from Stripe, and your card detai
 
 When your practice erases your record, your name, contact details, address, date of birth and the details it recorded about you in its own fields are removed, Stripe's customer record of you is deleted, and the history of changes to those details becomes unreadable. What was written in messages, contracts and notes stays, because those are your practice's own records of the care it gave and what it charged.
 
-You can tell us what you think of Doula Cloud through Feedback in the portal. It comes to us, never to your practice. We keep what you send, with the name and version of your browser, and erase it when your practice erases your record or is deleted. If more than one practice keeps a record of you, Feedback you sent from a portal page that belongs to no one practice is erased when the last of them erases your record.
+You can tell us what you think of Doula Cloud through Feedback in the portal. It comes to us, never to your practice. We keep what you send, with the name and version of your browser, and erase it when your practice erases your record or is deleted. If more than one practice keeps a record of you, Feedback you sent from a portal page that is not about one practice is erased when the last of them erases your record.
 
 ## If you visit this site
 
@@ -104,7 +106,15 @@ These companies receive data to run Doula Cloud, and each receives only what its
 - **Mailgun** sends Doula Cloud's email. It receives each address and message, and deletes its logs of them within 30 days.
 - **Stripe** takes payments: a practice's payment for Credits, and a client's payment of an invoice. It receives what each payment needs, including a client's name and email address with an invoice, and it holds each practice's own Stripe account. Stripe processes data as [Stripe's Privacy Policy](https://stripe.com/privacy) explains.
 - **Your browser's push service** — Google, Apple or Mozilla, depending on your browser — carries the signal that tells your device a new message is waiting. The signal says only that something is waiting, never what it is.
-- **GitHub** keeps a note of each piece of Feedback in a private repository, so that we can sort it. The note holds only the kind of Feedback, the kind of page it was sent from but never that page's address, the version of the app, the width of the screen, the name and version of the browser, the time it was sent, the role of the person who sent it, such as Owner or Client, and a link that only we can open. It never holds the words a person typed, a person's name, or a practice's name. The note names nobody, so it stays after the Feedback is erased or deleted.
+- **GitHub** keeps a note of each piece of Feedback in a private repository, so that we can sort it. The note holds only:
+  - the kind of Feedback;
+  - the kind of page it was sent from, never that page's address;
+  - the version of the app, the width of the screen, and the name and version of the browser;
+  - the time it was sent;
+  - the role of the person who sent it, such as Owner or Client;
+  - a link that only we can open.
+
+  It never holds the words a person typed, a person's name, or a practice's name. The note names nobody, so it stays after the Feedback is erased or deleted.
 
 A company is added to this list, in a new version of this policy, before it receives anyone's data.
 
@@ -188,7 +198,7 @@ One row per claim that names a company, a cookie, a store on the device, or how 
 | If you work at a practice | One person, one login across Practices; each Practice sees only its own work with her. | ADR-0008; ADR-0015; ADR-0033. The database refuses a read across Practices: row-level security on every Practice table, proved by `api/internal/rlsguardrail`. |
 | If you work at a practice | Login deletion is immediate, replaces the name and email, keeps the work under "Deleted Staff Member", and refuses the last Owner. | ADR-0033. Checked: `api/internal/staffauth/logindeletion.go`. |
 | If you work at a practice | A Staff member can send Feedback, kept with the browser's name and version. | `staffauth.FeedbackHandler`, mounted in `api/internal/staffauth/mount.go`; `CONTEXT.md` **Feedback** ("any Staff member at any role"); `api/internal/feedback/browser.go`, `ParseBrowser`. |
-| If you work at a practice | A Staff member's Feedback stays after her Login deletion and then names nobody. | `CONTEXT.md` **Feedback** ("A Staff member's Feedback survives her Login deletion and then names nobody"), decided on #1501 Q3. Checked: `api/internal/staffauth/logindeletion.go` touches no `feedback` row, and the `staff` row the piece points to has its name and email replaced. |
+| If you work at a practice | A Staff member's Feedback stays after her Login deletion and after a Practice's Deletion, names nobody once her login is deleted, and is deleted 24 months after it was sent. | `CONTEXT.md` **Feedback** ("A Staff member's Feedback survives her Login deletion and then names nobody"), decided on #1501 Q3. Checked: `api/internal/staffauth/logindeletion.go` touches no `feedback` row, and the `staff` row the piece points to has its name and email replaced; `api/internal/practicedeletion/outbox_test.go`, `TestWorker_FinalizeDestroysClientFeedbackAndLeavesStaffFeedback` ("Staff items survive it"); `feedback.RetentionMonths`. |
 | If you are a client of a practice | What a Practice can record about her. | `CONTEXT.md` **Client**, **Engagement**, **Visit**, **Birth Plan**, **Message**; ADR-0017 (the Practice-defined layer). |
 | If you are a client of a practice | A signed Contract records the time and the IP address. | ADR-0053 names `clientip.From` as the function a Contract signature already uses. |
 | If you are a client of a practice | The portal signs in by an emailed link, with no password. | ADR-0026, "Magic link, minted by the BFF". |
@@ -207,7 +217,7 @@ One row per claim that names a company, a cookie, a store on the device, or how 
 | Who else receives data | Mailgun sends every email and deletes its logs within 30 days. | ADR-0012; ADR-0030 (logs held 1 to 30 days by plan); ADR-0027 ("Mailgun self-purges within 3–30 days"). |
 | Who else receives data | Stripe takes both kinds of payment and holds each Practice's own account. | ADR-0007; ADR-0032; `docs/environment.md` "Stripe: two surfaces, one key". |
 | Who else receives data | The browser's push service carries a signal with no content. | ADR-0002 (a content-free Web Push wakes the service worker, which fetches the content from the BFF). |
-| Who else receives data | GitHub keeps a note of each piece of Feedback in a private repository: its kind, the route pattern, the app build, the screen width, the browser, the time sent, the role, and a link only we can open; never the words typed, the full address, the sender or the Practice. The note stays after the piece is erased or deleted. | The outbox that files it (#1524) is built: `api/internal/feedback/issue_outbox.go`, `issueTitle` (kind and route pattern only) and `issueBody` (the field list #1501 Q1 settled; `issueClaimQuery` never selects the free text). The link opens the founder read page, `/feedback/<id>`, which only the founder can read (00122, `feedback_reader()`). An Erasure closes the issue and labels it `erased` (`erasedLabel`, #1525); retention leaves it untouched (`deleteExpired`). This row replaced, in the version of October 2, 2026, the first version's row that said GitHub was not on the list because the outbox was not built. |
+| Who else receives data | GitHub keeps a note of each piece of Feedback in a private repository: its kind, the route pattern, the app build, the screen width, the browser, the time sent, the role, and a link only we can open; never the words typed, the full address, the sender or the Practice. The note stays after the piece is erased or deleted. | The outbox that files it (#1524) is built: `api/internal/feedback/issue_outbox.go`, `issueTitle` (kind and route pattern only) and `issueBody` (the field list #1501 Q1 settled; `issueClaimQuery` never selects the free text). The route pattern is SvelteKit's `route.id`, which the app sends and which never holds a resolved id; the BFF forwards it unchecked today, and [#1697](https://github.com/markgoho/doula-cloud/issues/1697) makes it refuse one that is not a pattern. The link opens the founder read page, `/feedback/<id>`, which only the founder can read (00122, `feedback_reader()`). An Erasure closes the issue and labels it `erased` (`erasedLabel`, #1525); retention leaves it untouched (`deleteExpired`). This row replaced, in the version of October 2, 2026, the first version's row that said GitHub was not on the list because the outbox was not built. |
 | Cookies and storage on your device | One cookie, `__session`, ending at sign-out or expiry. | ADR-0004; ADR-0026 ("the same `__session` cookie"); `api/internal/authn/authn.go` (the cookie's `MaxAge` is the session's lifetime). |
 | Cookies and storage on your device | Google's sign-in library keeps the sign-in in browser storage until sign-out. | `app/src/lib/firebase.ts` calls `getAuth`, whose default persistence is the browser's local storage; `signOut` clears it. |
 | Cookies and storage on your device | An unsent form stays in the tab's storage until the tab closes. | `app/src/lib/intakeDraft.svelte.ts` and `app/src/lib/engagementRequest.ts` use `sessionStorage`. |
