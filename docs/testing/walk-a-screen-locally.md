@@ -8,7 +8,7 @@ The recipe for running one spec, the local stack and a seeded Practice from a wo
    podman machine inspect --format '{{.ConnectionInfo.PodmanSocket.Path}}'
    ```
 
-   Use this value, not a `DOCKER_HOST` your shell profile already exports: on the founder's machine the profile names Colima's socket, which is not the engine this repo's containers run on.
+   Use this value even when your shell profile already exports a `DOCKER_HOST`: a profile value can name another engine's socket.
 
 2. **Container-backed commands** (`go test` against `api/internal/testdb`, `test:e2e`, `dev:full`) take both variables inline:
 
