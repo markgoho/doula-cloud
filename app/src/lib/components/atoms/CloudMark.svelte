@@ -83,6 +83,24 @@
 			block-size: auto;
 		}
 
+		/* The lockup sizes keep the width they declare (#1747). That same
+		   percentage cap makes an svg "compressible" (CSS Sizing 3, 5.2.2):
+		   its min-content contribution to the flex row holding it is zero,
+		   so BrandLockup's own width was computed without the mark, and the
+		   mark then drew in what was left -- 34.9px of its 40 in StaffTopBar,
+		   at every width. With the cap gone the mark counts toward the
+		   lockup's width. `flex: none` is the rule Icon carries (#1743): a
+		   flex item's automatic minimum alone did not hold it, and the `lg`
+		   mark still gave up 39px of its 120 beside a name too long for the
+		   row. Only `xl` stands alone in a space that may be narrower than
+		   it. */
+		.size-sm,
+		.size-md,
+		.size-lg {
+			flex: none;
+			max-inline-size: none;
+		}
+
 		/* The inner arch is drawn first, so the outer line is painted last
 		   and stays the strongest stroke in the two themes. */
 		.arch,

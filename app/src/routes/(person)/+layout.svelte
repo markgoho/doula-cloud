@@ -39,7 +39,7 @@
 	 * push-unregister scope here, the same no-Practice case
 	 * practices-layout.svelte.spec.ts already covers for that layout.
 	 *
-	 * Under the bar's 50.75rem floor, where the nav and the switcher move
+	 * Under the bar's 57.5rem floor, where the nav and the switcher move
 	 * into a sheet, the sheet drops its whole Practice block rather than
 	 * printing a heading over the empty switcher slot (#673) -- so an empty
 	 * `practices` here costs nothing on a narrow screen either.
