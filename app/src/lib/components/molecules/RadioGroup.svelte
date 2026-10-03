@@ -89,8 +89,13 @@
 					same answer as LabeledField's inline orientation (#510).
 					Found on the Start work form at 320px, where a Doula's
 					double-barreled name is the label.
+
+					The <label> wraps the radio rather than pointing at it
+					(#1518): the circle, the gap beside it and the text are
+					then one click target, the whole row, with no CSS to
+					stretch a hit area over the gap the way GOV.UK has to.
 				-->
-				<div class="option">
+				<label class="option" class:invalid={error !== undefined}>
 					<input
 						type="radio"
 						id="{name}-{option.value}"
@@ -100,8 +105,8 @@
 						aria-describedby={option.description ? `${name}-${option.value}-hint` : undefined}
 						onchange={() => onChange(option.value)}
 					/>
-					<label for="{name}-{option.value}">{option.label}</label>
-				</div>
+					<span class="text">{option.label}</span>
+				</label>
 				{#if option.description}
 					<p id="{name}-{option.value}-hint" class="description">{option.description}</p>
 				{/if}
@@ -163,31 +168,108 @@
 			grid-template-columns: auto minmax(0, 1fr);
 			gap: var(--space-4);
 			align-items: start;
-		}
-
-		label {
-			overflow-wrap: anywhere;
-		}
-
-		input {
-			accent-color: var(--color-primary);
 			cursor: pointer;
 		}
 
+		/*
+		 * Centered on the label's first line, whatever size the type scale
+		 * gives the text (#1518): the text is pushed down by half of what
+		 * the circle is taller than one line. A label that wraps keeps
+		 * its first line level with the circle and grows downward.
+		 */
+		.text {
+			padding-block: calc((var(--control-height) - 1lh) / 2);
+			overflow-wrap: anywhere;
+		}
+
+		/*
+		 * GOV.UK's radio, drawn on the real <input> (#1518). The browser's
+		 * own circle is about 13px whatever the text beside it, and sits
+		 * high against the line. This is GOV.UK's proportion: a circle the
+		 * height of a text input, a 2px ring, and a dot half the circle's
+		 * width. The dot is the content box painted in the ring's color,
+		 * with the padding as the gap between them, so no pseudo-element
+		 * is needed on an element that engines do not all give one to.
+		 */
+		input {
+			appearance: none;
+			inline-size: var(--control-height);
+			block-size: var(--control-height);
+			/* Never smaller than the text beside it. A radio with
+			   `appearance: none` has no size of its own, so a page that
+			   somehow lacked the tokens -- a unit spec mounting this
+			   without tokens.css is one -- would get a circle of nothing
+			   that nobody could see or press. */
+			min-inline-size: 1em;
+			min-block-size: 1em;
+			margin: 0;
+			padding: calc(var(--control-height) / 4 - var(--border-active));
+			border: var(--border-active) solid var(--color-on-surface);
+			border-radius: var(--radius-pill);
+			background-color: var(--color-surface);
+			background-clip: content-box;
+			cursor: pointer;
+		}
+
+		input:checked {
+			border-color: var(--color-primary);
+			background-color: var(--color-primary);
+		}
+
+		/* GOV.UK's hover: a soft halo, so the row under the pointer is
+		   plain without borrowing the focus ring's or the error's color. */
+		.option:hover input:not(:disabled) {
+			box-shadow: 0 0 0 var(--space-2) var(--color-surface-container-highest);
+		}
+
+		/* The same ring every other control draws (#452). */
 		input:focus-visible {
 			outline: var(--focus-ring-width) solid var(--color-primary);
 			outline-offset: var(--focus-ring-offset);
 		}
 
+		/* A refused group: each unchosen ring in the error color, the way
+		   TextInput turns its border, beside the message above. */
+		.invalid input:not(:checked) {
+			border-color: var(--color-error);
+		}
+
 		/*
-		 * Quieter than the label it belongs to, and indented past the
-		 * control so it reads as part of that option rather than as the
+		 * GOV.UK has no disabled radio, and no caller disables one (#1432
+		 * leaves out a question with one answer instead), so there is no
+		 * prop for it. A <fieldset disabled> around a form can still reach
+		 * these inputs, so they look it: dimmed the way TextInput is.
+		 */
+		.option:has(input:disabled) {
+			cursor: not-allowed;
+			opacity: 0.6;
+		}
+
+		input:disabled {
+			cursor: not-allowed;
+		}
+
+		/*
+		 * Windows High Contrast drops the painted background, which would
+		 * leave a checked radio without its dot. The system's own radio is
+		 * drawn in the system's own colors, so it is handed back there.
+		 */
+		@media (forced-colors: active) {
+			input {
+				appearance: auto;
+				padding: 0;
+			}
+		}
+
+		/*
+		 * Quieter than the label it belongs to, and indented to the label's
+		 * own text so it reads as part of that option rather than as the
 		 * next one -- the same treatment `LabeledField` gives a hint, which
 		 * is the same job.
 		 */
 		.description {
 			margin: var(--space-1) 0 0;
-			padding-inline-start: var(--space-6);
+			padding-inline-start: calc(var(--control-height) + var(--space-4));
 			color: var(--color-on-surface-muted);
 			font-size: var(--text-body-sm-size);
 		}
