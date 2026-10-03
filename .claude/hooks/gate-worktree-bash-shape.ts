@@ -29,26 +29,41 @@ interface Stage {
 
 // Replaces every character inside a single- or double-quoted span with a
 // space, keeping the quote characters and the length, so offsets into the
-// masked text are offsets into the raw text too.
+// masked text are offsets into the raw text too. A `$(...)` is a command
+// the shell runs even inside double quotes, so its text stays visible:
+// `git commit -m "$(cat <<'EOF' ...` still shows its heredoc.
 export function maskQuoted(command: string): string {
   let out = '';
-  let quote: '"' | "'" | null = null;
+  const stack: ('"' | "'" | '(')[] = [];
 
   for (let index = 0; index < command.length; index++) {
     const char = command[index] ?? '';
+    const next = command[index + 1];
+    const top = stack.at(-1);
 
-    if (quote === null && char === '\\' && index + 1 < command.length) {
-      out += char + command[index + 1];
+    if (top === "'") {
+      if (char === "'") stack.pop();
+      out += char === "'" ? char : ' ';
+    } else if (top === '"') {
+      if (char === '\\' && next !== undefined) {
+        out += '  ';
+        index++;
+      } else if (char === '$' && next === '(') {
+        stack.push('(');
+        out += '$(';
+        index++;
+      } else {
+        if (char === '"') stack.pop();
+        out += char === '"' ? char : ' ';
+      }
+    } else if (char === '\\' && next !== undefined) {
+      out += char + next;
       index++;
-    } else if (quote === '"' && char === '\\' && index + 1 < command.length) {
-      out += '  ';
-      index++;
-    } else if (quote !== null) {
-      const closes = char === quote;
-      if (closes) quote = null;
-      out += closes ? char : ' ';
     } else {
-      if (char === "'" || char === '"') quote = char;
+      if (char === "'" || char === '"') stack.push(char);
+      else if (char === '(' && (top === '(' || command[index - 1] === '$'))
+        stack.push('(');
+      else if (char === ')' && top === '(') stack.pop();
       out += char;
     }
   }
@@ -83,7 +98,11 @@ function commandWords(text: string): string[] {
 // Read on the masked text, where a quoted delimiter (`<<'EOF'`) is left as
 // its opening quote; `<<<` is a here-string, not a heredoc.
 const HEREDOC = /(^|[^<])<<-?\s*['"A-Za-z_\\]/;
-const JQ_FILTER = /(?:--jq|-q)(?:=|\s+)('[^']*'|"(?:[^"\\]|\\.)*")/g;
+// The flag is found on the masked text, so a `--jq` quoted inside another
+// argument is text; its filter is then read from the raw text at the same
+// offset.
+const JQ_FLAG = /(?:^|\s)(?:--jq|-q)(?:=|\s+)/g;
+const QUOTED_FILTER = /^('[^']*'|"(?:[^"\\]|\\.)*")/;
 const FILL = /^(--fill(-first|-verbose)?|-f)(=.*)?$/;
 
 export const MESSAGES = {
@@ -112,6 +131,7 @@ export function shapesOf(command: string, worktree: boolean): Shape[] {
   const masked = maskQuoted(command);
   const all = stages(masked).map((stage) => ({
     raw: command.slice(stage.start, stage.end),
+    text: masked.slice(stage.start, stage.end),
     words: commandWords(masked.slice(stage.start, stage.end)),
   }));
   const found = new Set<Shape>();
@@ -128,7 +148,7 @@ export function shapesOf(command: string, worktree: boolean): Shape[] {
 
   let sawCd = false;
   const nonEmpty = all.filter(({ words }) => words.length > 0);
-  for (const [index, { raw, words }] of nonEmpty.entries()) {
+  for (const [index, { raw, text, words }] of nonEmpty.entries()) {
     const verb = words[0];
 
     if (verb === 'export' && words.slice(1).some((word) => word.includes('=')))
@@ -138,8 +158,10 @@ export function shapesOf(command: string, worktree: boolean): Shape[] {
     if (verb === 'cd') sawCd = true;
 
     if (verb === 'gh') {
-      for (const match of raw.matchAll(JQ_FILTER)) {
-        if (/\\\(|\{/.test(match[1] ?? '')) found.add('jq');
+      for (const flag of text.matchAll(JQ_FLAG)) {
+        const offset = flag.index + flag[0].length;
+        const filter = QUOTED_FILTER.exec(raw.slice(offset))?.[1] ?? '';
+        if (/\\\(|\{/.test(filter)) found.add('jq');
       }
     }
 

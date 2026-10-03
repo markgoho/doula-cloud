@@ -46,6 +46,7 @@ function invoke(
 
 const SHAPES: [keyof typeof MESSAGES, string][] = [
   ['heredoc', "git commit -F - <<'EOF'\nA subject\nEOF"],
+  ['heredoc', `git commit -m "$(cat <<'EOF'\nA subject\n\nIt's here.\nEOF\n)"`],
   ['export', 'export DOCKER_HOST=$(podman machine inspect) && go test ./...'],
   ['export', 'export TZ=UTC; bun test'],
   ['jq', 'gh pr view 12 --jq \'"\\(.number) \\(.state)"\''],
@@ -84,6 +85,7 @@ describe('gate-worktree-bash-shape', () => {
       'git commit -m "explain why export X=1 and <<EOF are refused"',
       'grep -n "cd x && git -C y" docs/agents/worktree-flow.md',
       'cat <<<"a here-string is not a heredoc"',
+      `gh pr comment 12 --body "tip: use --jq '{a: .b}' sparingly"`,
     ];
     for (const command of PASSING) {
       test(`allows ${command}`, async () => {

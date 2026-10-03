@@ -209,12 +209,12 @@ interface Stage {
 // not a separator. `grep -n "sleep\|sed -i" docs/agents/worktree-flow.md`
 // used to split at the quoted `|`, leaving a fake `sed -i" docs/...` stage
 // whose last token read as an in-place edit target, so a read-only grep was
-// refused as a write. A command whose quotes do not balance falls back to
-// the plain split, which over-collects -- this file's safe direction.
-const SEPARATOR = /^(\r?\n|;|\|\||\||&&|&)/;
-
+// refused as a write. Two cases fall back to the plain split, which
+// over-collects -- this file's safe direction: quotes that do not balance,
+// and any `$(` or backtick, because a command substitution runs its own
+// stages even inside double quotes (`echo "$(true; sed -i x f)"`).
 function segments(command: string): Stage[] {
-  const quoted = splitOutsideQuotes(command);
+  const quoted = /\$\(|`/.test(command) ? null : splitOutsideQuotes(command);
   // The parts alternate stage, separator, stage, separator, ..., stage. An
   // empty stage is kept rather than filtered out, so the separator that
   // follows it is not lost with it; it contributes no write target and no
@@ -235,6 +235,8 @@ function segments(command: string): Stage[] {
 // The same alternating stage/separator list as a plain split, but a
 // separator only counts outside quotes and when not backslash-escaped.
 // Returns `null` when a quote is left open at the end of the command.
+const SEPARATOR = /\r?\n|;|\|\||\||&&|&/y;
+
 function splitOutsideQuotes(command: string): string[] | null {
   const parts: string[] = [];
   let current = '';
@@ -261,7 +263,8 @@ function splitOutsideQuotes(command: string): string[] | null {
       continue;
     }
 
-    const separator = SEPARATOR.exec(command.slice(index))?.[1];
+    SEPARATOR.lastIndex = index;
+    const separator = SEPARATOR.exec(command)?.[0];
     if (separator) {
       parts.push(current, separator);
       current = '';

@@ -464,6 +464,14 @@ describe('gate-bash-write', () => {
       expect(exitCode).toBe(2);
     });
 
+    test('a write inside a double-quoted command substitution is still caught', async () => {
+      const { exitCode } = await invoke(
+        `echo "$(true; sed -i '' 's/x/y/' ${TARGET})"`,
+        { cwd: SOURCE_ROOT }
+      );
+      expect(exitCode).toBe(2);
+    });
+
     test('an unbalanced quote falls back to the plain split and still blocks', async () => {
       const { exitCode } = await invoke(
         `echo it's && sed -i '' 's/x/y/' ${TARGET}`,
