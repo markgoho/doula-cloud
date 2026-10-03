@@ -213,8 +213,20 @@
 	// #539 (ADR-0017): "No Clients yet." is silent about *why* to a
 	// contractor Doula, who never gets to make one -- the same screen
 	// tells her plainly that work reaches her as an Offer instead.
+	//
+	// #1706: the default filter is "Clients with work" (ADR-0017), so an
+	// empty default view at a Practice that holds a Client record (the
+	// `all=true` count +page.ts read) means nobody has work yet, not that
+	// nobody exists -- and "No Clients yet." would contradict the "Find or
+	// add a Client" link above it. With "See everyone" on there is no
+	// filter left to point at, so the plain message stays.
+	function staffEmptyMessage(): string {
+		return hasAnyClient && !isShowingEveryone
+			? 'No Client has work yet. Turn on See everyone to list every Client.'
+			: 'No Clients yet.';
+	}
 	const emptyMessage = $derived(
-		isContractor ? 'Work reaches you as an Offer, so there are no Clients here yet.' : 'No Clients yet.'
+		isContractor ? 'Work reaches you as an Offer, so there are no Clients here yet.' : staffEmptyMessage()
 	);
 </script>
 
