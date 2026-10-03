@@ -116,13 +116,11 @@ describe('the first question', () => {
 
 		await testPage.getByLabelText('Day').fill('32');
 		await testPage.getByRole('button', { name: 'Continue' }).click();
-		await expect.element(testPage.getByText('There is a problem')).toBeVisible();
-		expect(document.title).toMatch(/^Error: What is .+'s date of birth\?/);
+		await expect.poll(() => document.title).toMatch(/^Error: What is .+'s date of birth\?/);
 
 		await testPage.getByLabelText('Day').fill('3');
 		await testPage.getByRole('button', { name: 'Continue' }).click();
-		await expect.element(testPage.getByText('There is a problem')).not.toBeInTheDocument();
-		expect(document.title).toMatch(/^What is .+'s date of birth\?/);
+		await expect.poll(() => document.title).toMatch(/^What is .+'s date of birth\?/);
 	});
 
 	// The journey saves once, at its check page: the record already
@@ -284,7 +282,7 @@ describe('the check page', () => {
 		await expect
 			.element(testPage.getByText("this client's data has been erased and cannot be edited").first())
 			.toBeVisible();
-		expect(document.title).toMatch(/^Error: Check /);
+		await expect.poll(() => document.title).toMatch(/^Error: Check /);
 		expect(goto).not.toHaveBeenCalled();
 	});
 });

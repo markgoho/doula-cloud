@@ -63,23 +63,27 @@ function hasPageTitle(source: string): boolean {
  * `Boolean(errorSummary)`, and GOV.UK keeps that prefix for a page that
  * was really refused. A snippet declared as a child of the Template is
  * always passed and always truthy, so the page read "Error: " on a
- * first visit however its body was guarded. The summary is declared
- * beside the Template and passed as
- * `errorSummary={errors.length > 0 ? errorSummary : undefined}`.
+ * first visit however its body was guarded. The summary is declared at
+ * the top level of the markup, beside the Template, and passed as
+ * `errorSummary={<the refusals>.length > 0 ? errorSummary : undefined}`.
  *
- * Blunt on purpose: a file that declares the snippet must also pass it
- * as an attribute. A file that does both once and also declares a
- * second one as a child slips through; behavioral specs cover the
- * titles themselves.
+ * Read from the source text, so it leans on the formatter: a snippet
+ * declared as a component's child is indented, and one declared beside
+ * it is not. Behavioral specs cover the titles themselves.
  */
 const svelteFiles = globFiles('src/**/*.svelte', { cwd: appRoot });
+
+const CHILD_SUMMARY = /^[\t ]+\{#snippet errorSummary\(\)\}/m;
+const UNCONDITIONAL_SUMMARY = /errorSummary=\{(?![^}]*\?\s*errorSummary\s*:\s*undefined\})/;
 
 describe('an error summary is passed only while there is a refusal', () => {
 	for (const file of svelteFiles) {
 		const source = readFileSync(new URL(file, `file://${appRoot}`), 'utf8');
 		if (!source.includes('{#snippet errorSummary()}')) continue;
-		it(`${file} passes its errorSummary as an attribute, not as a child`, () => {
+		it(`${file} declares its errorSummary beside the Template and passes it conditionally`, () => {
+			expect(source).not.toMatch(CHILD_SUMMARY);
 			expect(source).toContain('errorSummary={');
+			expect(source).not.toMatch(UNCONDITIONAL_SUMMARY);
 		});
 	}
 });

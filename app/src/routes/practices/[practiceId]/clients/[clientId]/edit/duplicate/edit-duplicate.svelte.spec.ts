@@ -95,7 +95,7 @@ describe('when gate two names a possible duplicate', () => {
 		await expect
 			.element(testPage.getByRole('link', { name: 'Choose whether this is the same person' }))
 			.toBeVisible();
-		expect(document.title).toMatch(/^Error: Is this the same person\?/);
+		await expect.poll(() => document.title).toMatch(/^Error: Is this the same person\?/);
 	});
 
 	it('re-sends the edit with override when a different person is chosen', async () => {
