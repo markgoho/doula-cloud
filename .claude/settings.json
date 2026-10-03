@@ -68,6 +68,12 @@
           },
           {
             "type": "command",
+            "command": "bun \"$(git rev-parse --show-toplevel)/.claude/hooks/gate-worktree-bash-shape.ts\"",
+            "statusMessage": "Checking this command has a shape the worktree isolation accepts",
+            "timeout": 10
+          },
+          {
+            "type": "command",
             "command": "bun \"$(git rev-parse --show-toplevel)/.claude/hooks/gate-bash-write.ts\"",
             "statusMessage": "Checking this command doesn't write to a tracked path in the main checkout",
             "timeout": 10

@@ -438,4 +438,52 @@ describe('gate-bash-write', () => {
       });
     });
   });
+
+  // #1678: two false positives found by a retro. Both run with cwd set to
+  // the main checkout, where a mislocated target lands on a tracked path.
+  describe('#1678: read-only commands and paths outside the repository', () => {
+    test('a path argument to a read-only command is not a write target', async () => {
+      const commands = [
+        // The reported case: the quoted `|` split off a fake `sed -i` stage.
+        `grep -n -i "sleep\\|heredoc\\|sed -i" ${TARGET} | head -20`,
+        `cat ${TARGET}`,
+        `wc -c ${TARGET}`,
+        `head -5 ${TARGET}`,
+        `sed -n '1,5p' ${TARGET}`,
+      ];
+      for (const command of commands) {
+        const { exitCode } = await invoke(command, { cwd: SOURCE_ROOT });
+        expect({ command, exitCode }).toEqual({ command, exitCode: 0 });
+      }
+    });
+
+    test('a write after a quoted separator is still caught', async () => {
+      const { exitCode } = await invoke(`echo "a|b" > ${TARGET}`, {
+        cwd: SOURCE_ROOT,
+      });
+      expect(exitCode).toBe(2);
+    });
+
+    test('an unbalanced quote falls back to the plain split and still blocks', async () => {
+      const { exitCode } = await invoke(
+        `echo it's && sed -i '' 's/x/y/' ${TARGET}`,
+        { cwd: SOURCE_ROOT }
+      );
+      expect(exitCode).toBe(2);
+    });
+
+    test('a `~/` path outside the repository is not a tracked path', async () => {
+      const { exitCode } = await invoke("printf 'export X=1\\n' >> ~/.zshrc", {
+        cwd: SOURCE_ROOT,
+      });
+      expect(exitCode).toBe(0);
+    });
+
+    test('a `~user/` path is skipped rather than resolved under the checkout', async () => {
+      const { exitCode } = await invoke('echo hi > ~someone/CLAUDE.md', {
+        cwd: SOURCE_ROOT,
+      });
+      expect(exitCode).toBe(0);
+    });
+  });
 });

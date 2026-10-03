@@ -102,6 +102,8 @@ The refusal message names its own concern: writing this section from inside a wo
 
 **Workaround:** split the compound command into several plain commands, or route it through a script interpreter (e.g. `python3 -c "..."`) instead of shell chaining. Two forms that come up often in this flow have a specific fix: for a `gh api` body edit, write the payload to a local JSON file and pass it with `gh api --input <file>` instead of `-f field="$(cat ...)"`; for a `--jq` template that uses `\(...)` interpolation, pipe the output through `python3 -c` to format it instead.
 
+`.claude/hooks/gate-worktree-bash-shape.ts` refuses the common shapes first in a worktree-isolated session — a heredoc, `export X=...`, a `--jq` template or object, `git -C` or `cd ... && git`, and a leading `sleep N` — and its message names the form that passes ([#1678](https://github.com/markgoho/doula-cloud/issues/1678)). It also refuses `gh pr create --fill` in every session.
+
 ## A live worktree is never removed
 
 On 2026-09-10 two agents lost all their uncommitted work in one hour (#1212). In one case, a session that needed a free port offset removed a worktree by hand. It looked like an abandoned spawn by every signal git gives: a bare `agent-<id>` branch, no commits past trunk, a clean `git status`, a `HEAD` at an old trunk. But that is also the state of a live agent twenty minutes into its task that has not made its first commit yet. Branch and tree state cannot tell the two apart. So "a clean tree with no commits of its own is abandoned" is not a rule here.
