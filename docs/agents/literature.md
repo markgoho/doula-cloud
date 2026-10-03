@@ -8,7 +8,7 @@ The one-line version: **a book is evidence, and only the founder's recorded deci
 
 The source files live in the founder's Google Drive, folder `eBooks`; some sit in a subfolder named for the book. Every book below has a PDF there. The PDFs are copied flat to `~/ebooks/doula-cloud/` on the machine that runs the agents, by the file name in the table, and never enter the repo. The copy needs a gcloud login with Drive scope (`gcloud auth login --enable-gdrive-access`) and then the Drive API's `alt=media` download by file id.
 
-Stage is one of: **shelf** (no read-back yet), **read-back** (on trunk in `docs/research/books/`), **synthesized** (values track: its claims sit in at least one theme synthesis), **decided** (a value ADR or an adopt-or-not ADR cites it).
+Stage is one of: **shelf** (no read-back yet), **read-back** (on trunk in `docs/research/books/`), **synthesized** (its claims sit in at least one theme synthesis in `docs/research/books/themes/`), **decided** (a value ADR or an adopt-or-not ADR cites it).
 
 ### Values track
 
@@ -48,18 +48,18 @@ Stage is one of: **shelf** (no read-back yet), **read-back** (on trunk in `docs/
 
 | Book | Author, year | Drive file | Stage |
 |---|---|---|---|
-| Form Design Patterns | Adam Silver, 2018 | `form-design-patterns.pdf` | read-back |
-| Inclusive Design Patterns | Heydon Pickering, 2016 | `inclusive-design-patterns.pdf` | read-back |
-| Inclusive Components | Heydon Pickering, 2019 | `Inclusive_Components_-_Heydon_Pickering.pdf` | read-back |
-| Design Systems | Alla Kholmatova, 2017 | `design-systems.pdf` | read-back |
-| Expressive Design Systems | Yesenia Perez-Cruz, 2019 | `expressive-design-systems.pdf` | read-back |
-| Laying the Foundations | Andrew Couldwell, 2019 | `laying-the-foundations-pdf.pdf` | read-back |
-| Atomic Design | Brad Frost, 2016 | `atomic-design.pdf` | read-back |
-| Refactoring UI | Adam Wathan and Steve Schoger, 2018 | `Refactoring UI v1.0.2.pdf` | read-back |
-| Flexible Typesetting | Tim Brown, 2018 | `flexible-typesetting.pdf` | read-back |
-| Giving a Damn About Accessibility | Sheri Byrne-Haber, 2021 | `Giving-a-damn-about-accessibility.pdf` | read-back |
-| Going Offline | Jeremy Keith, 2018 | `going-offline.pdf` | read-back |
-| Designing User Interfaces | Michal Malewicz and Diana Malewicz, 2020 | `DESIGNING_USER_INTERFACES_Eng_1.pdf` | read-back |
+| Form Design Patterns | Adam Silver, 2018 | `form-design-patterns.pdf` | synthesized |
+| Inclusive Design Patterns | Heydon Pickering, 2016 | `inclusive-design-patterns.pdf` | synthesized |
+| Inclusive Components | Heydon Pickering, 2019 | `Inclusive_Components_-_Heydon_Pickering.pdf` | synthesized |
+| Design Systems | Alla Kholmatova, 2017 | `design-systems.pdf` | synthesized |
+| Expressive Design Systems | Yesenia Perez-Cruz, 2019 | `expressive-design-systems.pdf` | synthesized |
+| Laying the Foundations | Andrew Couldwell, 2019 | `laying-the-foundations-pdf.pdf` | synthesized |
+| Atomic Design | Brad Frost, 2016 | `atomic-design.pdf` | synthesized |
+| Refactoring UI | Adam Wathan and Steve Schoger, 2018 | `Refactoring UI v1.0.2.pdf` | synthesized |
+| Flexible Typesetting | Tim Brown, 2018 | `flexible-typesetting.pdf` | synthesized |
+| Giving a Damn About Accessibility | Sheri Byrne-Haber, 2021 | `Giving-a-damn-about-accessibility.pdf` | synthesized |
+| Going Offline | Jeremy Keith, 2018 | `going-offline.pdf` | synthesized |
+| Designing User Interfaces | Michal Malewicz and Diana Malewicz, 2020 | `DESIGNING_USER_INTERFACES_Eng_1.pdf` | synthesized |
 
 Books in the folder that are on neither track, by the founder's decision of 2026-09-10: the engineering-craft titles (Accelerate, Clean Code, 97 Things, Infrastructure as Code, the database and Angular books) and the unrelated ones. They may join later; a book joins by a row in a table above.
 
