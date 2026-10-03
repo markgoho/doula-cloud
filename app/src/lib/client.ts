@@ -110,6 +110,27 @@ export async function loadClients(
 	return response.json();
 }
 
+/*
+ * Whether the Practice holds any Client record at all -- the test both
+ * the overview's empty state and the Clients list's header link decide
+ * from (#1609, ADR-0017's amendment of 2026-10-02).
+ *
+ * `?all=true` matters, and it is not a detail: `client.ListHandler`
+ * defaults to Clients who have work -- an Engagement, or a pending
+ * Engagement Request -- so a Practice whose first Client has not been
+ * engaged yet reads as having none. A Client with no work and an erased
+ * Client are records, and `all=true` returns both.
+ *
+ * Now that #446 has the endpoint cursor-paginated, one page (at most 30
+ * rows) answers the question -- items.length > 0 -- without ever needing
+ * hasMore or a second request. Throws as `loadClients` does; each caller
+ * chooses what a failed read means for it.
+ */
+export async function hasAnyClient(fetcher: Fetcher, practiceId: string): Promise<boolean> {
+	const first = await loadClients(fetcher, practiceId, { showAll: true });
+	return first.items.length > 0;
+}
+
 /** One Client ADR-0017's match query turned up against a create or an
  * edit's values -- her record plus her Engagement history, unrestricted
  * inside the Practice -- mirrors the Go BFF's client.Match. Declared

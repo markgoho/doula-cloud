@@ -14,7 +14,12 @@ import { createClient } from '#lib/client.js';
 import { errorsFromCause, type FormError } from '#lib/formErrors.js';
 import { dateFieldId } from '#lib/intakeDate.js';
 import { intakeDraft } from '#lib/intakeDraft.svelte.js';
-import { CHANGE_PARAMETER, CHANGE_VALUE, type IntakeOrigin } from '#lib/intakeJourney.js';
+import {
+	CHANGE_PARAMETER,
+	CHANGE_VALUE,
+	originQuery,
+	type IntakeOrigin
+} from '#lib/intakeJourney.js';
 
 /** What `page.url.searchParams` hands out: a `URLSearchParams` with its
  * mutators removed (`svelte/prefer-svelte-reactivity` bans the mutable
@@ -93,6 +98,16 @@ export const DATE_OF_BIRTH_GROUP = 'intake-date-of-birth';
 
 export function basePath(practiceId: string): string {
 	return resolve('/practices/[practiceId]/clients/new', { practiceId });
+}
+
+/**
+ * The link that opens the name question directly, with no search in front
+ * of it (#1609), naming the screen it is on so Back returns there. Only
+ * the overview and the Clients list of a Practice that holds no Client
+ * record show one.
+ */
+export function startHref(practiceId: string, origin: IntakeOrigin): string {
+	return `${basePath(practiceId)}?${originQuery(origin)}`;
 }
 
 /**

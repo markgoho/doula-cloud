@@ -15,7 +15,7 @@
  * header link goes. While the Practice holds no Client record there is
  * nobody to search for, so the link opens the name question; from the
  * first Client on it opens the search. The test is the count of records
- * read with `all=true` -- the same read the overview's `hasAnyClient`
+ * read with `all=true` -- `hasAnyClient`, the same read the overview
  * makes -- never the rows on the screen, because the list's default
  * filter is "Clients with work" and a Practice whose only Client has no
  * work, or was erased, still holds a record. Decided here rather than in
@@ -23,7 +23,7 @@
  * changing under her.
  */
 import { apiFetch } from '#lib/api.js';
-import { loadClients } from '#lib/client.js';
+import { hasAnyClient } from '#lib/client.js';
 import { isAmbientContractor, isOwner } from '#lib/roles.js';
 import type { PageLoad } from './$types';
 
@@ -42,8 +42,7 @@ export interface ClientsListGate {
  */
 async function hasAnyClientRecord(practiceId: string): Promise<boolean> {
 	try {
-		const first = await loadClients(apiFetch, practiceId, { showAll: true });
-		return first.items.length > 0;
+		return await hasAnyClient(apiFetch, practiceId);
 	} catch {
 		return true;
 	}

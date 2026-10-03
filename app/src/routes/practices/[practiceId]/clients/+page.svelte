@@ -5,7 +5,7 @@
 	import { apiFetchWithSession } from '#lib/api.js';
 	import { loadClients, type ClientListItem, type OpenEngagement } from '#lib/client.js';
 	import { NO_DOULA_YET_LABEL } from '#lib/engagementRequest.js';
-	import { originQuery } from '#lib/intakeJourney.js';
+	import { startHref } from './new/intake.js';
 	import { isBlockedInvite, portalInviteStatusText } from '#lib/portalInvite.js';
 	import { formatAmount, invoiceStatusLabel } from '#lib/invoice.js';
 	import { PaginatedList } from '#lib/paginatedList.svelte.js';
@@ -282,12 +282,7 @@
 	{#if hasAnyClient}
 		<Link href={searchHref()} label="Find or add a Client" />
 	{:else}
-		<Link
-			href={`${resolve('/practices/[practiceId]/clients/new', {
-				practiceId: page.params.practiceId!
-			})}?${originQuery('clients')}`}
-			label="Add a Client"
-		/>
+		<Link href={startHref(page.params.practiceId!, 'clients')} label="Add a Client" />
 	{/if}
 {/snippet}
 

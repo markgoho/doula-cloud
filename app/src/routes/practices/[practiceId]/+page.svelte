@@ -27,7 +27,7 @@
 		type WaitingOnReply
 	} from '#lib/practiceLanding.js';
 	import { PaginatedList } from '#lib/paginatedList.svelte.js';
-	import { originQuery } from '#lib/intakeJourney.js';
+	import { startHref } from './clients/new/intake.js';
 	import { activityLedgerColumns, loadPracticeActivityPage, type ActivityEntry } from '#lib/activityLedger.js';
 	import { formatActivityTimestamp } from '#lib/dates.js';
 	import type { PracticeSession } from './+layout.js';
@@ -364,12 +364,7 @@
 			the search is the only door again. `from` sends the name
 			question's Back here.
 		-->
-		<Link
-			href={`${resolve('/practices/[practiceId]/clients/new', {
-				practiceId: page.params.practiceId!
-			})}?${originQuery('overview')}`}
-			label="Add your first Client"
-		/>
+		<Link href={startHref(page.params.practiceId!, 'overview')} label="Add your first Client" />
 	</stack-l>
 {/snippet}
 
