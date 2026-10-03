@@ -144,11 +144,14 @@
 		 * The floor is the container width at which the column inside
 		 * `center-l`'s gutters first reaches `--measure`, measured on
 		 * /style-guide/overview-hub (the measure criterion in
-		 * `floor.svelte.spec.ts`): measured 2026-10-03 at 596px, where the
-		 * column is 564px and `--measure` 564.6px. A wider gutter or a
-		 * wider `--measure` moves it.
+		 * `floor.svelte.spec.ts`), measured 2026-10-03. It is the larger of
+		 * two environments' fixed points, because a floor has to be
+		 * sufficient in every one: on macOS the column reaches `--measure`
+		 * at 596px (564px against 564.6px), and on CI's Linux runner
+		 * `--measure` is 585px there, so the column reaches it only at
+		 * about 620px. A wider gutter or a wider `--measure` moves it.
 		 */
-		@container overview-hub (min-width: 37.25rem) {
+		@container overview-hub (min-width: 38.75rem) {
 			h1 {
 				font-size: var(--text-display-size);
 				font-weight: var(--text-display-weight);
