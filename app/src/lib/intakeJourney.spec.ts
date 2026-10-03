@@ -4,6 +4,8 @@ import {
 	DETAILS_STEPS,
 	intakeSections,
 	knownAsFrom,
+	detailsSavedMessage,
+	clientSavedMessage,
 	intakeStepList,
 	journeySteps,
 	nextStepHref,
@@ -101,6 +103,22 @@ describe('knownAsFrom', () => {
 		['the Client before a record is read', undefined, 'the Client']
 	])('calls her %s', (_case, names, expected) => {
 		expect(knownAsFrom(names)).toBe(expected);
+	});
+});
+
+// #1710: what the screen a save lands on says.
+describe('detailsSavedMessage and clientSavedMessage', () => {
+	it('names her the way every other line does', () => {
+		const names = { preferredName: 'Bex', givenName: 'Rebecca' };
+
+		expect(detailsSavedMessage(names)).toBe("Bex's details saved.");
+		expect(clientSavedMessage(names)).toBe('Bex saved as a Client.');
+	});
+
+	it('starts with a capital where she has no name to give', () => {
+		const names = { preferredName: '', givenName: '' };
+
+		expect(detailsSavedMessage(names)).toBe("The Client's details saved.");
 	});
 });
 

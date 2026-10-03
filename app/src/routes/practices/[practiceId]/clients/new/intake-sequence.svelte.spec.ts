@@ -4,7 +4,8 @@ import { render } from 'vitest-browser-svelte';
 import type { Component } from 'svelte';
 import { jsonResponse } from '#lib/testResponse.js';
 import { intakeDraft, type IntakeAnswers } from '#lib/intakeDraft.svelte.js';
-import type { IntakeOrigin } from '#lib/intakeJourney.js';
+import { clientSavedMessage, detailsSavedMessage, type ClientNames, type IntakeOrigin } from '#lib/intakeJourney.js';
+import { captureLanding } from '#lib/testOutcome.js';
 import { toPageState, type RouteFixture } from '../../../../routeFixture.js';
 import { seedIntake } from './intakeFixture.js';
 import NamePage from './name/+page.svelte';
@@ -91,12 +92,16 @@ describe('the name question', () => {
 
 	// #1611: one question, one button, and the save opens the Start work
 	// form for the Client it saved.
-	it('saves the Client and opens the Start work form', async () => {
+	// #1710: and the Start work form says the Client is saved.
+	it('saves the Client and opens the Start work form, which says the Client is saved', async () => {
 		await setup({ respond: jsonResponse({ id: 'client-9' }, 201) });
+		const message = clientSavedMessage(intakeDraft.answers);
 
+		const landing = captureLanding(goto);
 		await testPage.getByRole('button', { name: 'Save and continue' }).click();
 
-		expect(goto).toHaveBeenCalledWith(startWorkHref);
+		await expect.poll(() => landing.href).toBe(startWorkHref);
+		expect(landing.message).toBe(message);
 	});
 
 	it('offers no later steps and no save for later', async () => {
@@ -292,11 +297,14 @@ describe('the duplicate check', () => {
 	// (#1611).
 	it('re-sends with override when a different person is chosen', async () => {
 		const { sent } = await setup({ respond: jsonResponse({ id: 'client-9' }, 201) });
+		const message = clientSavedMessage(intakeDraft.answers);
 
 		await testPage.getByLabelText('No, this is a different person').click();
+		const landing = captureLanding(goto);
 		await testPage.getByRole('button', { name: 'Continue' }).click();
 
 		expect(sent().override).toBe(true);
+		await expect.poll(() => landing.message).toBe(message);
 		// The LAST call, not merely one of them: clearing the draft empties
 		// `matches`, and a reactive empty-matches guard on this page would
 		// fire on the way out and send a reader who had just saved to the
@@ -311,6 +319,22 @@ describe('the duplicate check', () => {
 		await testPage.getByRole('button', { name: 'Continue' }).click();
 
 		expect(goto).toHaveBeenCalledWith(`${base}/duplicate?match=client-1`);
+	});
+
+	// #1710: the save leaves this page, so her record says it happened.
+	it('writes the reviewed changes to the Client on file, and her record says so', async () => {
+		const { sent } = await setup({
+			search: '?match=client-1',
+			answers: { phone: '+1 (585) 555-0199' },
+			respond: jsonResponse({ id: 'client-1' })
+		});
+
+		const landing = captureLanding(goto);
+		await testPage.getByRole('button', { name: 'Save changes to this record' }).click();
+
+		await expect.poll(() => landing.href).toBe(`/practices/${practiceId}/clients/client-1`);
+		expect(sent().phone).toBe('+1 (585) 555-0199');
+		expect(landing.message).toBe(detailsSavedMessage(sent() as unknown as ClientNames));
 	});
 
 	// ADR-0017's "This is her" with nothing to propose: what was typed is

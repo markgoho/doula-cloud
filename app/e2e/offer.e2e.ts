@@ -170,7 +170,7 @@ test('A solo Owner who is a contractor Doula is named on the Start work form, an
 	const { engagementId: startedEngagementId } = await writtenResponse.json();
 	// #1611: an approved start lands on the Engagement it started.
 	await expect(page).toHaveURL(
-		new RegExp(`/practices/${practiceId}/engagements/${startedEngagementId}[?]started=true$`)
+		new RegExp(`/practices/${practiceId}/engagements/${startedEngagementId}$`)
 	);
 	await expect(page.getByText('Put on this Engagement as the Doula: Jamie Owner').first()).toBeVisible();
 	await expect(page.getByText('No Doula yet', { exact: true })).toHaveCount(0);

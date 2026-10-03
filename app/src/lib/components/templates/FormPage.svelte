@@ -56,6 +56,14 @@
 		 * Connect status has resolved.
 		 */
 		intro?: Snippet;
+		/**
+		 * What the save that led here did, such as "Pat saved as a
+		 * Client." (#1710): `takeOutcome`'s message. A status `Notice`
+		 * before the <h1>, GOV.UK's position for a notification banner,
+		 * focused on arrival, and only once the form is loaded, the same as
+		 * `RecordDetail`'s own `outcome`.
+		 */
+		outcome?: string;
 		fieldsets: Fieldset[];
 		/**
 		 * GOV.UK's error summary, positioned by this Template and built by
@@ -86,6 +94,7 @@
 		title,
 		serviceName,
 		intro,
+		outcome,
 		fieldsets,
 		errorSummary,
 		actions,
@@ -129,6 +138,10 @@
 			<stack-l space="var(--space-7)">
 				{#if errorSummary}
 					{@render errorSummary()}
+				{/if}
+
+				{#if outcome}
+					<Notice variant="status" message={outcome} isFocusedOnAppear />
 				{/if}
 
 				<Heading level={1} variant="page" text={title} />

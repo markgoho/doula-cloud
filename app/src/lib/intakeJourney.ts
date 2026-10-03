@@ -190,13 +190,41 @@ export function intakeOrigin(search: Pick<URLSearchParams, 'get'>): IntakeOrigin
 }
 
 /**
+ * The two names every line about her is made from.
+ */
+export interface ClientNames {
+	preferredName: string;
+	givenName: string;
+}
+
+/**
  * What the Client is called on a question page: #463's rule with no
  * pronoun in it. Her preferred name if she has one, her given name
  * otherwise, and the domain noun before either is known. Both journeys
  * ask it, each of its own names (#1610).
  */
-export function knownAsFrom(names: { preferredName: string; givenName: string } | undefined): string {
+export function knownAsFrom(names: ClientNames | undefined): string {
 	return names?.preferredName.trim() || names?.givenName.trim() || 'the Client';
+}
+
+function capitalizeFirst(text: string): string {
+	return text.charAt(0).toUpperCase() + text.slice(1);
+}
+
+/**
+ * What the screen a save of her details lands on says (#1710): the
+ * details journey, the edit form and the duplicate pages.
+ */
+export function detailsSavedMessage(names: ClientNames): string {
+	return capitalizeFirst(`${knownAsFrom(names)}'s details saved.`);
+}
+
+/**
+ * What the screen intake's save lands on says (#1710). Intake always has
+ * a given name by then, so she is never "the Client" here.
+ */
+export function clientSavedMessage(names: ClientNames): string {
+	return `${knownAsFrom(names)} saved as a Client.`;
 }
 
 /** Every step's own identity: the structural slugs, plus `section-0`,

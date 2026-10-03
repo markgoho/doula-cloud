@@ -81,12 +81,15 @@ describe('RecordDetail.svelte', () => {
 	});
 
 	// #1611: GOV.UK puts a notification banner immediately before the h1.
-	it('renders the notice before the title', async () => {
-		await setup({ notice: textSnippet('Work with Ada started.') });
+	// #1710: as a status, focused on arrival.
+	it('renders the outcome before the title, as a status that takes focus', async () => {
+		await setup({ outcome: 'Work with Ada started.' });
 
-		const notice = page.getByText('Work with Ada started.').element();
+		const status = page.getByRole('status').filter({ hasText: 'Work with Ada started.' });
+		await expect.element(status).toBeVisible();
+		await expect.element(status).toHaveFocus();
 		const title = page.getByRole('heading', { level: 1, name: 'Ada Lovelace' }).element();
-		expect(notice.compareDocumentPosition(title) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+		expect(status.element().compareDocumentPosition(title) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 	});
 
 	it('renders the actions alongside the title', async () => {

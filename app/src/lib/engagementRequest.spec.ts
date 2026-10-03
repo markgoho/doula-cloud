@@ -3,14 +3,12 @@ import {
 	approveRequest,
 	doulaOptions,
 	initialDoulaAnswer,
-	isJustStarted,
 	kindLabel,
 	loadApprovalDetail,
 	loadPendingRequests,
 	loadRequestDoulas,
 	refuseRequest,
 	requestEngagement,
-	STARTED_QUERY,
 	withdrawRequest,
 	type NewEngagementRequest
 } from './engagementRequest.js';
@@ -22,17 +20,6 @@ const body: NewEngagementRequest = {
 	note: 'Referred by the hospital',
 	doulaStaffId: 'staff-1'
 };
-
-describe('isJustStarted', () => {
-	it('reads the query an approved start composes', () => {
-		expect(isJustStarted(new URLSearchParams(STARTED_QUERY))).toBe(true);
-	});
-
-	it('reads nothing else as a start', () => {
-		expect(isJustStarted(new URLSearchParams(''))).toBe(false);
-		expect(isJustStarted(new URLSearchParams('started=false'))).toBe(false);
-	});
-});
 
 describe('requestEngagement', () => {
 	it('posts the kind, due date, note and named Doula to the client engagement-requests path', async () => {

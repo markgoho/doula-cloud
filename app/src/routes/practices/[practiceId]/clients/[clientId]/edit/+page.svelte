@@ -53,6 +53,9 @@
 	} from '#lib/intakeDate.js';
 	import { FormSubmission, orThrownErrors, type FormError } from '#lib/formSubmission.svelte.js';
 	import { editMergeDraft } from '#lib/editMergeDraft.svelte.js';
+	import { detailsSavedMessage } from '#lib/intakeJourney.js';
+	// #1710: a save leaves this form, so her record says it happened.
+	import { gotoWithOutcome } from '#lib/outcome.js';
 
 	const givenNameId = 'client-edit-given-name';
 	const familyNameId = 'client-edit-family-name';
@@ -226,7 +229,7 @@
 				await goto(`${editHref()}/duplicate`);
 				return;
 			}
-			await goto(detailHref());
+			await gotoWithOutcome(detailHref(), detailsSavedMessage(currentFields()));
 		}, orThrownErrors(editFieldIds));
 	}
 
@@ -277,7 +280,7 @@
 		}
 
 		if (refused === undefined) {
-			await goto(detailHref());
+			await gotoWithOutcome(detailHref(), detailsSavedMessage(currentFields()));
 			return;
 		}
 

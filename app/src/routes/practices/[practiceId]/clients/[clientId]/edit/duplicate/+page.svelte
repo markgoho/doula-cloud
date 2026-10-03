@@ -52,6 +52,9 @@
 	import { FormSubmission, orThrownMessage } from '#lib/formSubmission.svelte.js';
 	import { editMergeDraft } from '#lib/editMergeDraft.svelte.js';
 	import { proposedMergeChanges } from '#lib/proposedChanges.js';
+	import { detailsSavedMessage } from '#lib/intakeJourney.js';
+	// #1710: a save leaves this page, so her record says it happened.
+	import { gotoWithOutcome } from '#lib/outcome.js';
 
 	const JOURNEY = 'Editing a Client';
 	const DIFFERENT_PERSON = 'different';
@@ -139,8 +142,9 @@
 				return [{ message: 'The Client record could not be saved.' }];
 			}
 			const id = editMergeDraft.clientId;
+			const message = detailsSavedMessage(editMergeDraft.fields);
 			editMergeDraft.clear();
-			await goto(detailHref(id));
+			await gotoWithOutcome(detailHref(id), message);
 		}, orThrownMessage);
 	}
 
@@ -154,7 +158,7 @@
 				match.id
 			);
 			editMergeDraft.clear();
-			await goto(detailHref(record.id));
+			await gotoWithOutcome(detailHref(record.id), detailsSavedMessage(record));
 		}, orThrownMessage);
 	}
 

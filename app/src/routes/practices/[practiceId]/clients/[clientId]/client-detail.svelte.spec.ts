@@ -13,6 +13,7 @@ import { registerLayoutPrimitives } from '#lib/primitives/index.js';
 // the custom element's own attribute handling, and an unregistered
 // center-l never runs it, leaving every DataTable narrower than its floor.
 import '#lib/styles/app.css';
+import { gotoWithOutcome } from '#lib/outcome.js';
 import Page from './+page.svelte';
 import { toPageState } from '../../../../routeFixture.js';
 import { detail as baseDetail, fixture } from './page.fixture.js';
@@ -140,6 +141,30 @@ async function setup({
 	});
 	return render(Page, { data: { isContractor, isOwner, session: sessionStub } });
 }
+
+// #1710: a save made on another screen lands here, and says what it did.
+describe('the status message after a save that leads here (#1710)', () => {
+	it('says what the save did, as a status, before the title, and takes focus once her record loads', async () => {
+		goto.mockImplementationOnce(async () => {
+			await setup();
+		});
+
+		await gotoWithOutcome(fixture.url, "Pat's details saved.");
+
+		const message = testPage.getByRole('status').filter({ hasText: "Pat's details saved." });
+		await expect.element(message).toBeVisible();
+		await expect.element(message).toHaveFocus();
+		const title = testPage.getByRole('heading', { level: 1 }).element();
+		expect(message.element().compareDocumentPosition(title) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+	});
+
+	it('says nothing on a visit no save sent, such as a reload', async () => {
+		await setup();
+
+		await expect.element(testPage.getByRole('heading', { level: 1 })).toBeVisible();
+		await expect.element(testPage.getByText(/details saved\.$/)).not.toBeInTheDocument();
+	});
+});
 
 describe('client detail hub', () => {
 	it('renders the twelve structural columns fetched by id', async () => {
