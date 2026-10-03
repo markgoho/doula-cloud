@@ -28,12 +28,5 @@
 			font-size: var(--text-body-sm-size);
 			color: var(--color-on-surface);
 		}
-
-		/* The icon is the only visible sign this is a warning, so it keeps
-		   its size beside a message of any length (#1739). Local, like
-		   DoorLink's, until #1743 moves the rule into Icon itself. */
-		p > :global(svg) {
-			flex: none;
-		}
 	}
 </style>

@@ -214,8 +214,17 @@
 
 		   Unchanged by #1573, which let the bar grow to a wrapped Practice
 		   name: the floor is an inline measurement, and a taller bar needs
-		   no more inline room than a fixed one did. */
-		@container staff-top-bar (min-width: 49.25rem) {
+		   no more inline room than a fixed one did.
+
+		   Re-measured 2026-10-03 (#1743): 49.25rem was taken while the
+		   switcher's caret could shrink, and at 788px it gave up 15px of
+		   its own 20px to make the row fit. With every icon held at the
+		   size it declares, the same content needs 803px at 788px, and
+		   806px at 804px: the bar's text is sized against the bar itself
+		   (#544), so what it needs grows with the room it is given.
+		   50.5rem (808px) is the first step of the sweep's 4px resolution
+		   at which it fits, again with no margin added beyond it. */
+		@container staff-top-bar (min-width: 50.5rem) {
 			.wide {
 				display: flex;
 			}

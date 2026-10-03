@@ -73,10 +73,6 @@
 			outline-offset: var(--focus-ring-offset);
 		}
 
-		a > :global(svg) {
-			flex-shrink: 0;
-		}
-
 		.text {
 			display: flex;
 			flex-direction: column;

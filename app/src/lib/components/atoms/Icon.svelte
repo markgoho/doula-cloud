@@ -43,8 +43,14 @@
 
 <style>
 	@layer components {
+		/* `flex: none` (#1743): the caller asked for `size`, and an icon
+		   drawn narrower than that is a smudge, not a smaller icon. As a
+		   flex item it would otherwise give up its own width first beside
+		   content that needs more room, which also hid two layouts that did
+		   not fit from the continuum and floor sweeps. */
 		svg {
 			display: inline-block;
+			flex: none;
 			vertical-align: middle;
 		}
 
