@@ -205,3 +205,26 @@ When adding or modifying an HTTP endpoint in `api/`:
 | **Pagination** | Lists use cursor pagination with a standard `PaginatedResponse[T]` envelope. |
 | **Lean Payloads** | Expensive relations are opt-in via `?include=`. |
 | **Errors** | Refusals go through `apierr.Write`/`apierr.WriteError`, never `http.Error` or a package-local helper. A 4xx a form can cause carries `details` keyed by the DTO's `json:` tag, worded for a person. A 403 carries a code from `apierr.ForbiddenCodes`, so the reader is told which kind of refusal it is. |
+
+## 9. Where a route is registered
+
+`routes()` in `api/routes.go` builds the mux and hands it to `staffauth.GatedRouter`; no route file can reach the mux directly. It calls one function per file, and each file's doc comment says why its routes sit where they do:
+
+| File | Function | What it mounts |
+| :--- | :--- | :--- |
+| `api/routes_session.go` | `registerSessionRoutes` | The health probe and every route that belongs to no Practice, through `staffauth.Mount`: sign-up, sign-in, invitation acceptance, the person-level Staff facts (work state, email, MFA), and `staffauth`'s own Practice-scoped routes. |
+| `api/routes_practice.go` | `registerPracticeRoutes` | Everything under `/api/practices/{practiceId}/...`, as one `Mount(g, ir, ...)` call per feature package in `api/internal/`. A package whose record has a Client-side sibling also mounts that portal route from here. |
+| `api/routes_portal.go` | `registerPortalRoutes` | The Client's own surface behind `clientauth`: her session lifecycle, her Engagement read, and her push preference. |
+| `api/routes_internal.go` | `registerInternalRoutes` | Outboxes, the page verifier, and the operator endpoints, authenticated by caller identity (ADR-0037), not by a session. |
+| `api/routes_webhook.go` | `registerWebhookRoutes` | Stripe and Mailgun webhooks, each verified by a signature over the body. |
+
+### Adding a Staff route: the files to touch
+
+1. **The handler and its `Mount`** in the feature package under `api/internal/<package>/`. Register a read with `g.Get(pattern, roles, h)`; an empty role list panics at startup, and `staffauth.AnyStaff` is the deliberate open declaration. Register a write under `/api/practices/...` with `ir.ReplayableGated` or `ir.ExemptGated` (the second takes the reason it is not replayable) and its role list; the forms without a role list need step 3. Pass `attaching=true` when the write is on an Engagement, so `staffauth.AttachingWrite` checks reach.
+2. **A new feature package only:** add its `Mount` call to `registerPracticeRoutes` in `api/routes_practice.go`.
+3. **A write with no mount-level role list:** add it, with its reason, to `roleFreeWriteRoutes` in `api/write_role_guardrail_test.go`.
+4. **An Engagement-scoped write that is not attaching:** add it, with its reason, to `exemptEngagementWriteRoutes` in `api/write_gate_guardrail_test.go`.
+5. **A route that belongs to no Practice** (registered in `mountSessionRoutes`, `api/internal/staffauth/mount.go`): classify it in `staffFamilyGroups` in `api/internal/staffauth/population_test.go`, and in either `selfResolvingRoutes` or `notSelfResolving` (with its reason) in `api/internal/staffauth/self_gate_test.go`. Both tests walk the route registry, so a route left out of these tables fails the build.
+6. **A new internal route:** add it to `wantInternalRoutes` in `api/routes_internal_guardrail_test.go`.
+
+`api/gate_guardrail_test.go` and `api/idempotency_guardrail_test.go` walk the registry with no table to edit: they fail a GET with no role declaration and a Practice write that did not go through `idempotency.Router`.
