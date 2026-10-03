@@ -99,7 +99,7 @@ Her plan is the least automatable of the six, and for a reason worth keeping: tw
 
 ### 2026-08-22 — automated steps ([#209](https://github.com/markgoho/doula-cloud/issues/209))
 
-`bun run test:e2e` in `app/`, whole suite, one run: **16 passed, 0 failed** (20.5s). Stack per [docs/testing.md](../testing.md) — Postgres in compose, the goose migration, the Go BFF and the Firebase Auth emulator, all local.
+`bun run test:e2e` in `app/`, whole suite, one run: **16 passed, 0 failed** (20.5s). Stack per [docs/testing/e2e.md](../testing/e2e.md) — Postgres in compose, the goose migration, the Go BFF and the Firebase Auth emulator, all local.
 
 | Step | Spec | Result |
 | --- | --- | --- |
@@ -141,7 +141,7 @@ A desk pass, not a walk, over the cells [#685](https://github.com/markgoho/doula
 
 The Marks summary is recounted from the Steps table above — 5 / 10 / 0 / 5 — and [README.md](README.md)'s run-status row and Total move with it.
 
-`bun run test:e2e -- add-client-visits` in `app/`, one spec, one run: **1 passed** (51.5s), on the stack [docs/testing.md](../testing.md) describes. The re-marked step is the only one this pass moved onto a spec, so the whole suite was not re-run for a Markdown change; CI on the pull request is the run that covers the rest.
+`bun run test:e2e -- add-client-visits` in `app/`, one spec, one run: **1 passed** (51.5s), on the stack [docs/testing/e2e.md](../testing/e2e.md) describes. The re-marked step is the only one this pass moved onto a spec, so the whole suite was not re-run for a Markdown change; CI on the pull request is the run that covers the rest.
 
 | Step | Spec | Result |
 | --- | --- | --- |

@@ -2,7 +2,7 @@
 // #213) that portalinvite's outbox worker sends through instead of
 // calling Mailgun directly, mirroring push.Pusher's shape: a real,
 // Mailgun-backed implementation and a FakeSender injected by tests, per
-// docs/testing.md's "no real vendor reachable from api/ tests" rule.
+// docs/testing/api.md's "no real vendor reachable from api/ tests" rule.
 package mail
 
 import (

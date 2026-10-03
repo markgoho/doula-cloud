@@ -32,7 +32,7 @@ on:
 # to the `migrate-*`/`deploy-*` groups below at three times the CI cost,
 # with no coverage gained. What cancellation costs is attribution, not
 # verification, and `.github/workflows/trunk-red.yml` and
-# `docs/agents/worktree-flow.md` cover that: which commit a canceled
+# `docs/agents/worktree-flow-reference.md` cover that: which commit a canceled
 # run belonged to, and what to check instead.
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -146,7 +146,7 @@ jobs:
   # The formatting AND typecheck gates for the repo's own tooling trees,
   # `.claude/hooks/` and `scripts/` (#1120, #1335). Which tree is gated by
   # what, and why these two needed a gate of their own, is in
-  # docs/testing.md's "Formatting" and "Typecheck" sections -- this comment
+  # docs/testing/gates.md's "Formatting" and "Typecheck" sections -- this comment
   # covers only the shape of the job.
   #
   # A separate job from `scripts` above rather than another step in it. That
@@ -158,7 +158,7 @@ jobs:
   # job for the same reason: it needs the same root install this job
   # already pays for, and gates the same two trees.
   #
-  # It is a required status check on `trunk` (see docs/agents/worktree-flow.md).
+  # It is a required status check on `trunk` (see docs/agents/worktree-flow-reference.md).
   # It has to be: this repo lands work with `gh pr merge --squash --auto`,
   # and auto-merge does not wait on a job that is merely red -- an advisory
   # gate here would be the same silent drift the job exists to end.
@@ -263,7 +263,7 @@ jobs:
   # `app` skips -- is still gated on them (#1466). Runs on every PR and every
   # trunk push, never conditioned on `changes`, so the gate on `docs/` does
   # not depend on the classifier being right. A required status check on
-  # `trunk` (see docs/agents/worktree-flow.md).
+  # `trunk` (see docs/agents/worktree-flow-reference.md).
   #
   # The specs were found by grepping app/ for a read of `docs/`. A new spec
   # that reads `docs/` must be added to the list below, or a docs-only PR
@@ -332,7 +332,7 @@ jobs:
       # testcontainers-go (internal/testdb) needs no setup here -- it
       # falls back to Docker's default socket when DOCKER_HOST is unset.
       # Local dev instead points DOCKER_HOST at a Podman socket (see
-      # docs/testing.md); internal/testdb itself is engine-agnostic.
+      # docs/testing/api.md); internal/testdb itself is engine-agnostic.
 
       - name: Check formatting
         working-directory: api
@@ -433,7 +433,7 @@ jobs:
     # external compose provider, unlike this runner's Podman (see
     # e2e/stack.ts and compose.e2e.yaml for what that combination broke
     # back when the stack also built/ran Go images through it). Local dev
-    # keeps defaulting to Podman -- see docs/testing.md.
+    # keeps defaulting to Podman -- see docs/testing/e2e.md.
     #
     # VITE_FLOOR_CANONICAL names this runner the canonical environment a
     # content floor's minimality is measured against (#564): the same font

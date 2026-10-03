@@ -110,7 +110,7 @@ MO-G5 to MO-G9 are experience-layer or infrastructure findings; they are observe
 
 ### 2026-08-22 — automated steps ([#209](https://github.com/markgoho/doula-cloud/issues/209))
 
-`bun run test:e2e` in `app/`, whole suite, one run: **16 passed, 0 failed** (20.5s). Stack per [docs/testing.md](../testing.md) — Postgres in compose, the goose migration, the Go BFF and the Firebase Auth emulator, all local.
+`bun run test:e2e` in `app/`, whole suite, one run: **16 passed, 0 failed** (20.5s). Stack per [docs/testing/e2e.md](../testing/e2e.md) — Postgres in compose, the goose migration, the Go BFF and the Firebase Auth emulator, all local.
 
 | Step | Spec | Result |
 | --- | --- | --- |
@@ -149,7 +149,7 @@ A desk pass, not a walk, over 3.1, 3.1-a, 3.2, 3.2-a and 3.4 — the cells [#685
 
 The Marks summary is recounted from the Steps table above — 13 / 20 / 0 / 3 — and [README.md](README.md)'s run-status row and Total move with it. MO-G3 leaves the `missing-feature` row; MO-G9 ([#257](https://github.com/markgoho/doula-cloud/issues/257)) is noted as closed where the summary observes it at 3.4.
 
-`bun run test:e2e -- add-client-visits` in `app/`, one spec, one run: **1 passed** (51.5s), on the stack [docs/testing.md](../testing.md) describes. The re-marked step is the only one this pass moved onto a spec, so the whole suite was not re-run for a Markdown change; CI on the pull request is the run that covers the rest.
+`bun run test:e2e -- add-client-visits` in `app/`, one spec, one run: **1 passed** (51.5s), on the stack [docs/testing/e2e.md](../testing/e2e.md) describes. The re-marked step is the only one this pass moved onto a spec, so the whole suite was not re-run for a Markdown change; CI on the pull request is the run that covers the rest.
 
 | Step | Spec | Result |
 | --- | --- | --- |

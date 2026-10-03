@@ -10,7 +10,7 @@ import (
 
 // TestAwaitingReplyQueryPlanAtScale is not part of the coverage gate's
 // normal run -- it seeds a 14-doula agency's worth of Engagements and
-// Messages, disproportionate to run on every `go test ./...` (docs/testing.md's
+// Messages, disproportionate to run on every `go test ./...` (docs/testing/api.md's
 // own Podman infra is shared with other worktrees). Run it deliberately:
 //
 //	RUN_PERF_TEST=1 go test ./internal/message/... -run TestAwaitingReplyQueryPlanAtScale -v

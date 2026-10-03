@@ -2,7 +2,7 @@
 // #821 forbids a spec from calling a live model, so nothing here ever
 // reaches the network. Named *.e2e.ts, not a Vitest spec, because
 // vite.config.ts's unit-test projects only include src/** (app/e2e is
-// exercised by the Playwright suite instead, per docs/testing.md).
+// exercised by the Playwright suite instead, per docs/testing/gates.md).
 import { test, expect } from '@playwright/test';
 import type Anthropic from '@anthropic-ai/sdk';
 import { AnthropicPersonaConversation, type MessagesClient } from './simulation/persona-conversation';

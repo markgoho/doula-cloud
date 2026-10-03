@@ -33,7 +33,7 @@ export function parseContainers(json: string): ReapCandidate[] {
   }));
 }
 
-// Local dev defaults to Podman (docs/testing.md); CI sets
+// Local dev defaults to Podman (docs/testing/e2e.md); CI sets
 // CONTAINER_ENGINE=docker. Same variable app/e2e/stack.ts reads, so a
 // machine configured for one is configured for both.
 export function engineBinary(): string {
@@ -48,7 +48,7 @@ export function engineBinary(): string {
  * reading that an unset variable means "no local container engine
  * configured". That is not true of Podman, and the cost was not
  * theoretical: DOCKER_HOST is exported by hand into the shell that runs
- * `go test` (docs/testing.md says so), never from a login profile, so a
+ * `go test` (docs/testing/api.md says so), never from a login profile, so a
  * hook -- which inherits the login environment, not that shell's -- never
  * saw it and the reaper had never run. `podman ps` with no `--url` uses
  * the default `podman machine` connection, which is the same engine, so

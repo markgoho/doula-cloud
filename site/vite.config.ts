@@ -56,7 +56,7 @@ export default defineConfig({
 		coverage: {
 			provider: 'v8',
 			// src/routes/** stays out of this include, the same convention
-			// app/ and gcp-dashboard/ follow (docs/testing.md's Coverage
+			// app/ and gcp-dashboard/ follow (docs/testing/gates.md's Coverage
 			// section): route specs still run in the projects below, they
 			// are just not folded into the 100% requirement.
 			include: ['src/lib/**/*.{ts,svelte}'],

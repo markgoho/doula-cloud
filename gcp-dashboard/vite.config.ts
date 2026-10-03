@@ -23,7 +23,7 @@ export default defineConfig({
 		coverage: {
 			provider: 'v8',
 			// src/routes/** stays out of this include, same convention
-			// app/vite.config.ts documents (see docs/testing.md's Coverage
+			// app/vite.config.ts documents (see docs/testing/gates.md's Coverage
 			// section): it is exercised by the `client`/`server` projects
 			// below, just not folded into the 100% requirement. See
 			// README.md's Testing section for why.

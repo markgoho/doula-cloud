@@ -18,7 +18,7 @@ const playwrightDefaultWorkers = Math.max(Math.floor(cpus().length / 2), 1);
 // wall time is flat from 7 down to 4 and only starts rising at 3. Four is
 // the lowest count that costs nothing in speed, which is the same rule
 // #935 picked six by. The table, the method and the caveats live in
-// docs/testing.md, "What the e2e suite costs, and why its workers are
+// docs/testing/e2e.md, "What the e2e suite costs, and why its workers are
 // capped" -- one copy, so re-measuring cannot leave two that disagree.
 //
 // Clamped rather than constant so CI is untouched: Playwright's own '50%'

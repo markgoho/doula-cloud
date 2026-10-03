@@ -618,7 +618,7 @@ func postProcessErasure(t *testing.T, srv *httptest.Server, secret string) *http
 // same breath is exactly #987's shape (host clock ahead of a VM-backed
 // container's Postgres clock reads the row as not yet due) unless
 // something moves the row onto Postgres's own clock first. See "A
-// due-time fixture must not compare two clocks" in docs/testing.md.
+// due-time fixture must not compare two clocks" in docs/testing/api.md.
 func forceOutboxDueNow(t *testing.T, db *testdb.DB, clientID string) {
 	t.Helper()
 	if _, err := db.Admin.ExecContext(t.Context(),

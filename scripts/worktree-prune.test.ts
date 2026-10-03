@@ -1,6 +1,6 @@
 /**
  * `.claude/hooks/worktree-prune.ts` -- the cleanup pruner from
- * docs/agents/worktree-flow.md. Covers #1058: a registered worktree whose
+ * docs/agents/worktree-flow-reference.md. Covers #1058: a registered worktree whose
  * directory is gone (`rm -rf` instead of `git worktree remove`) used to
  * crash the whole run with an unhandled `execFileSync` failure the moment
  * `runGit` tried `git -C <that path> rev-parse HEAD`, taking the report

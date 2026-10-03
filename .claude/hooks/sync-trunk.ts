@@ -15,7 +15,7 @@
 // checkout is in a state this did not anticipate, most likely someone
 // working directly on trunk against convention, and it no-ops silently
 // rather than guess or force anything -- the same fail-open choice
-// gate-shared-index.sh makes for the same reason (worktree-flow.md's
+// gate-shared-index.sh makes for the same reason (worktree-flow-reference.md's
 // "A gate fails closed" section, which contrasts the two).
 import { execFileSync } from 'node:child_process';
 

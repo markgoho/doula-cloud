@@ -122,7 +122,7 @@ Stages 8 and 9 sat either side of the `blocked` / `missing-feature` line, and th
 
 ### 2026-08-22 — automated steps ([#209](https://github.com/markgoho/doula-cloud/issues/209))
 
-`bun run test:e2e` in `app/`, whole suite, one run: **16 passed, 0 failed** (20.5s). Stack per [docs/testing.md](../testing.md) — Postgres in compose, the goose migration, the Go BFF and the Firebase Auth emulator, all local.
+`bun run test:e2e` in `app/`, whole suite, one run: **16 passed, 0 failed** (20.5s). Stack per [docs/testing/e2e.md](../testing/e2e.md) — Postgres in compose, the goose migration, the Go BFF and the Firebase Auth emulator, all local.
 
 This plan has **no** `automated` step, so the suite says nothing about it. Every step below stage 1 waits on the walk.
 

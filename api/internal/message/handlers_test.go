@@ -24,7 +24,7 @@ import (
 // newServer mounts the same routes main.go wires up for this package,
 // behind staffauth.Middleware, backed by a fresh in-memory ObjectStore and
 // a fresh in-memory Pusher -- no real GCS bucket or VAPID/push service
-// reachable from api/ tests, per docs/testing.md.
+// reachable from api/ tests, per docs/testing/api.md.
 func newServer(t *testing.T, db *testdb.DB, uid string) (srv *httptest.Server, session string) {
 	t.Helper()
 	return newServerWithStoreAndPusher(t, db, uid, objectstore.NewMemoryStore(), push.NewFakePusher())

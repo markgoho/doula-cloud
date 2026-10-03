@@ -1,13 +1,13 @@
 #!/usr/bin/env bun
 // SessionStart hook: reaps orphaned testcontainers Postgres containers
-// left behind by a killed `go test` process. See docs/testing.md's
+// left behind by a killed `go test` process. See docs/testing/api.md's
 // "Reaping orphaned testcontainers" section for the full story; the
 // short version is below.
 //
 // api/internal/testdb starts one Postgres container per test *process*
 // and tears it down via testdb.Main at process exit (see
 // api/internal/testdb/setup.go). That teardown only runs on a clean
-// exit -- docs/testing.md sets TESTCONTAINERS_RYUK_DISABLED=true for
+// exit -- docs/testing/api.md sets TESTCONTAINERS_RYUK_DISABLED=true for
 // local Podman, so there is no other reaper. A killed process (an
 // interrupted agent, a timeout, a cut-short TDD loop) leaves its
 // container running forever. With several parallel Claude Code sessions

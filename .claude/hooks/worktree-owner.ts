@@ -35,7 +35,7 @@
 //   ps -o lstart= -p <pid>   # alive only if it prints the recorded time
 //
 // or, for every worktree at once, `bun .claude/hooks/worktree-prune.ts
-// --dry-run` (its `owner=` column). docs/agents/worktree-flow.md has the
+// --dry-run` (its `owner=` column). docs/agents/worktree-flow-reference.md has the
 // rule this serves.
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';

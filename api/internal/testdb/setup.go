@@ -63,7 +63,7 @@ var (
 // to terminate the container -- a mid-run t.Cleanup would pull it out
 // from under every other test in the package. CI's Ryuk reaper would
 // eventually catch a leaked container anyway, but local dev disables
-// Ryuk under Podman (docs/testing.md), so without this, every `go test
+// Ryuk under Podman (docs/testing/api.md), so without this, every `go test
 // ./...` run would leave one Postgres container behind per package.
 func Main(m *testing.M) int {
 	code := m.Run()

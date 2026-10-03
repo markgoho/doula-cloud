@@ -2,7 +2,7 @@
  * Blocking behavior for `.claude/hooks/gate-bash-write.ts` -- the
  * PreToolUse gate that blocks a Bash command writing to a tracked path
  * in the main checkout, the Bash-side counterpart to gate-worktree-edit.ts
- * (#573). See docs/agents/worktree-flow.md's Enforcement section for what
+ * (#573). See docs/agents/worktree-flow-reference.md's Enforcement section for what
  * write patterns this recognizes and what it deliberately does not.
  */
 import { describe, expect, test } from 'bun:test';

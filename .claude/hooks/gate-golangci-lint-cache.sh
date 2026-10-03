@@ -12,7 +12,7 @@
 # longer exists on disk -- or, worse, a stale "clean" result that masks a
 # real issue in the current worktree's own changed file (#587).
 #
-# The fix (docs/testing.md) is to always set GOLANGCI_LINT_CACHE to a path
+# The fix (docs/testing/api.md) is to always set GOLANGCI_LINT_CACHE to a path
 # under `git rev-parse --show-toplevel`, so the cache lives inside the
 # current worktree and is never shared with another one. This gate makes
 # that the only way to invoke `golangci-lint run` from a session: Bash
@@ -64,4 +64,4 @@ fi
 
 printf '%s' "$cmd" | grep -q 'GOLANGCI_LINT_CACHE' && allow
 
-deny "\`golangci-lint run\` without GOLANGCI_LINT_CACHE set shares its results cache with every worktree on the machine, including pruned ones -- see docs/testing.md. Run: GOLANGCI_LINT_CACHE=\"\$(git rev-parse --show-toplevel)/api/.golangci-cache\" golangci-lint run"
+deny "\`golangci-lint run\` without GOLANGCI_LINT_CACHE set shares its results cache with every worktree on the machine, including pruned ones -- see docs/testing/api.md. Run: GOLANGCI_LINT_CACHE=\"\$(git rev-parse --show-toplevel)/api/.golangci-cache\" golangci-lint run"

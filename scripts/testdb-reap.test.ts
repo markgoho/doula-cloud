@@ -1,7 +1,7 @@
 /**
  * `.claude/hooks/testdb-reap.ts` -- the SessionStart hook that reaps
  * orphaned testcontainers Postgres containers a killed `go test` process
- * leaves behind (#889). See that file's header and docs/testing.md's
+ * leaves behind (#889). See that file's header and docs/testing/api.md's
  * "Reaping orphaned testcontainers" section for the full story.
  *
  * The reap decision (pickReapCandidates) is pure, so it's imported and
@@ -105,7 +105,7 @@ describe('testdb-reap hook (subprocess, fail-open behavior)', () => {
   /*
    * DOCKER_HOST unset used to end this hook's run before it started, and
    * that is exactly the environment a SessionStart hook inherits --
-   * docs/testing.md exports the variable by hand into the shell that
+   * docs/testing/api.md exports the variable by hand into the shell that
    * runs the tests, never from a login profile, so the reaper had never
    * once run (38-hour-old containers, observed live). It must now reach
    * the engine anyway, through its default connection, and still fail

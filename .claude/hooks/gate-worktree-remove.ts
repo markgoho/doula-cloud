@@ -21,7 +21,7 @@
 // before #1212) is not refused on ownership; the dirty rule still holds.
 //
 // Fails closed, like gate-worktree-edit.ts: a gate that crashed has not
-// decided the removal is safe. docs/agents/worktree-flow.md has the rule.
+// decided the removal is safe. docs/agents/worktree-flow-reference.md has the rule.
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';

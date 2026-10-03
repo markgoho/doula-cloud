@@ -1,7 +1,7 @@
 #!/bin/sh
 # Pre-commit hook for doula-cloud. Enabled per-clone via:
 #   git config core.hooksPath scripts/hooks
-# See docs/testing.md for details.
+# See docs/testing/gates.md for details.
 
 # 1. Blocks a commit that stages unformatted Go files
 staged_go_files=$(git diff --cached --name-only --diff-filter=ACM -- '*.go')
@@ -39,7 +39,7 @@ if [ -n "$staged_app_files" ]; then
     #    fixed cost per gate that no worker count removes is why a third
     #    needs admission control instead. scripts/gate-lock.ts holds a
     #    machine-wide lock across every worktree and fails open on every
-    #    error path -- see docs/testing.md.
+    #    error path -- see docs/testing/gates.md.
     #
     #    $0 is this hook's absolute path in the MAIN checkout
     #    (core.hooksPath is absolute), while the working directory is the
@@ -59,7 +59,7 @@ fi
 # 4. Blocks a commit that stages an unformatted .ts file in either of the
 #    repo's own tooling trees, .claude/hooks/ and scripts/ (#1120). Same
 #    shape as step 1, and for the same reason. What the rule is and why
-#    these two trees needed a gate is in docs/testing.md's "Formatting"
+#    these two trees needed a gate is in docs/testing/gates.md's "Formatting"
 #    section; the CI `format` job is the backstop, and this is the fast
 #    local half of it, over staged files only.
 #
@@ -70,7 +70,7 @@ fi
 #    itself is the state this replaced -- and the message has to name the
 #    checkout to install in, which through a symlink is the main one:
 #    `bun install` inside a worktree with a live symlink would mutate the
-#    modules every other worktree is sharing (docs/agents/worktree-flow.md).
+#    modules every other worktree is sharing (docs/agents/worktree-flow-reference.md).
 staged_tooling_ts=$(git diff --cached --name-only --diff-filter=ACM -- '.claude/hooks/*.ts' 'scripts/*.ts')
 if [ -n "$staged_tooling_ts" ]; then
     repo_root=$(git rev-parse --show-toplevel)

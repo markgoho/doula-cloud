@@ -58,7 +58,7 @@ type SuppressionChecker func(ctx context.Context, tx *sql.Tx, address string) (b
 // a flake gets confirmed fixed -- spends this budget several times over
 // from that one address, which is #1138: the harness clears these
 // counters out of its own database when it trips them, and
-// docs/testing.md is where that is written down. Nothing about this
+// docs/testing/e2e.md is where that is written down. Nothing about this
 // endpoint's own sizing changed for it.
 var bootstrapRules = []ratelimit.Rule{
 	ratelimit.BearerTokenRule(5, time.Hour),

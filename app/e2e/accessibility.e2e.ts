@@ -17,7 +17,7 @@ import { WCAG_TAGS } from './wcag';
 /**
  * The automated half of the accessibility gate (#447). Everything about
  * why this exists, what it owns, and what it deliberately cannot see is
- * in docs/testing.md -- read that before adding an assertion here.
+ * in docs/testing/e2e.md -- read that before adding an assertion here.
  */
 
 /*
@@ -120,7 +120,7 @@ const KNOWN: Known[] = [];
  * what axe actually measured against a held Skeleton, and why this shape
  * was chosen over the other two candidates -- a node named per row, or
  * `FormPage` no longer rendering its title while loading, which it still
- * does -- are all in docs/testing.md, per this file's own header: the
+ * does -- are all in docs/testing/e2e.md, per this file's own header: the
  * argument lives there, and this file holds the assertion.
  *
  * It is a retrying `expect` rather than #1126's `awaitSettled` because
@@ -283,7 +283,7 @@ test('Archetype A -- the two screens behind a session with no Practice', async (
 	});
 
 	// `/api/staff/session` is answered here rather than left to the real
-	// endpoint, which 404s for this identity -- see docs/testing.md's own
+	// endpoint, which 404s for this identity -- see docs/testing/e2e.md's own
 	// account of the race that answer closes, ahead of this session's
 	// `mfa/enroll` scans below. Installed after the no-practice scan
 	// above, which depends on the real 404 for its own screen.

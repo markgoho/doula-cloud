@@ -4,7 +4,7 @@
 // from that template -- a file copy, not a migration replay. It's
 // container-engine-agnostic: testcontainers-go falls back to Docker's
 // default socket with no setup (what CI uses), or reads DOCKER_HOST from
-// the environment to target a Podman socket instead (see docs/testing.md
+// the environment to target a Podman socket instead (see docs/testing/api.md
 // for local dev) -- either way, no code change here.
 package testdb
 

@@ -3,7 +3,7 @@
  * `Stop` hook: a session must not park on a worktree whose work has
  * landed.
  *
- * `worktree-flow.md` says "ExitWorktree once a PR shows MERGED is the
+ * `worktree-flow-reference.md` says "ExitWorktree once a PR shows MERGED is the
  * normal path", and a habit with nothing to trigger it is not a path. The
  * pruner is the disk-level backstop and runs at `SessionStart`, but it
  * cannot move a live session out of a directory it is standing in -- only

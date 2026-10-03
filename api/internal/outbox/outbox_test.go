@@ -58,7 +58,7 @@ func createTestTable(t *testing.T, db *testdb.DB) {
 // host's clock is a comparison of two clocks nothing keeps in step, and
 // under a VM-backed container engine it decided these tests by the sign
 // of the drift -- see #987, and "A due-time fixture must not compare two
-// clocks" in docs/testing.md for the rule this follows.
+// clocks" in docs/testing/api.md for the rule this follows.
 func insertTestRow(t *testing.T, db *testdb.DB, id string, attemptCount int, dueIn time.Duration) {
 	t.Helper()
 	if _, err := db.Admin.ExecContext(t.Context(),
