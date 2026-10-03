@@ -130,8 +130,8 @@ The current `--text-*` ramp in `tokens.css` was never chosen — it is a placeho
 
 | Step | Size | Weight | Line height | Tracking | Used for |
 |---|---|---|---|---|---|
-| `display` | `2.25rem` / 36px | 600 | 1.15 | `-0.02em` | The one page title on a hub, and the greeting on the signed-out landing ([#1645](https://github.com/markgoho/doula-cloud/issues/1645)) |
-| `heading-lg` | `1.75rem` / 28px | 600 | 1.2 | `-0.018em` | Page titles elsewhere |
+| `display` | `2.25rem` / 36px | 600 | 1.15 | `-0.02em` | The one page title on a hub where its column holds a reading measure (`heading-lg` below that, [#1632](https://github.com/markgoho/doula-cloud/issues/1632)), and the greeting on the signed-out landing ([#1645](https://github.com/markgoho/doula-cloud/issues/1645)) |
+| `heading-lg` | `1.75rem` / 28px | 600 | 1.2 | `-0.018em` | Page titles elsewhere, and a hub title in a column narrower than a reading measure |
 | `heading` | `1.25rem` / 20px | 600 | 1.3 | `-0.012em` | Section headings |
 | `subheading` | `1rem` / 16px | 600 | 1.4 | `-0.006em` | Card and group titles |
 | `body` | `0.9375rem` / 15px | 400 | 1.55 | `0` | Prose, form values, list rows |
