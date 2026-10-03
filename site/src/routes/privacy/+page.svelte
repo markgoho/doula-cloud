@@ -106,7 +106,8 @@ site footer on every page links here.
 			When a practice invites you to work with it, we hold your name and email address, your password
 			and second sign-in factor as the section above says, the practices you work at and your role at
 			each, and what you do at each: the visits you are given, the messages you write, and the changes
-			you make, with when you made them.
+			you make, with when you made them. We also hold what you tell us through Feedback, with the name
+			and version of your browser.
 		</p>
 		<p>
 			You are one person with one login, even if you work at more than one practice. Each practice sees
@@ -118,6 +119,11 @@ site footer on every page links here.
 			Your name and email address are replaced, and the work you did stays in each practice's records
 			under “Deleted Staff Member”. If you are the last Owner of a practice, another person must become
 			an Owner, or the practice must be deleted, first.
+		</p>
+		<p>
+			The Feedback you sent us stays when your login is deleted, and when a practice you work at is
+			deleted. Once your login is deleted, your Feedback no longer names you. It is deleted 24 months after you
+			sent it.
 		</p>
 	</PageSection>
 
@@ -151,6 +157,13 @@ site footer on every page links here.
 			deleted, and the history of changes to those details becomes unreadable. What was written in
 			messages, contracts and notes stays, because those are your practice's own records of the care it
 			gave and what it charged.
+		</p>
+		<p>
+			You can tell us what you think of {PRODUCT_NAME} through Feedback in the portal. It comes to us,
+			never to your practice. We keep what you send, with the name and version of your browser, and
+			erase it when your practice erases your record or is deleted. If more than one practice keeps a
+			record of you, Feedback you sent from a portal page that is not about one practice is erased when
+			the last of them erases your record.
 		</p>
 	</PageSection>
 
@@ -204,6 +217,20 @@ site footer on every page links here.
 				browser — carries the signal that tells your device a new message is waiting. The signal says
 				only that something is waiting, never what it is.
 			</li>
+			<li>
+				<strong>GitHub</strong> keeps a note of each piece of Feedback in a private repository, so that we
+				can sort it. The note holds only:
+				<ul>
+					<li>the kind of Feedback;</li>
+					<li>the kind of page it was sent from, never that page's address;</li>
+					<li>the version of the app, the width of the screen, and the name and version of the browser;</li>
+					<li>the time it was sent;</li>
+					<li>the role of the person who sent it, such as Owner or Client;</li>
+					<li>a link that only we can open.</li>
+				</ul>
+				It never holds the words a person typed, a person's name, or a practice's name. The note names
+				nobody, so it stays after the Feedback is erased or deleted.
+			</li>
 		</ul>
 		<p>
 			A company is added to this list, in a new version of this policy, before it receives anyone's
@@ -240,6 +267,10 @@ site footer on every page links here.
 				stay in a backup for up to 7 days after it was erased, and is then gone.
 			</li>
 			<li>Mailgun deletes its logs of each email within 30 days.</li>
+			<li>
+				Feedback is deleted 24 months after it was sent, unless it is erased sooner as described above.
+				GitHub's note of it names nobody, and stays.
+			</li>
 		</ul>
 		<p>
 			Some records stay after a practice or a login is deleted: the practice's own name and details, the

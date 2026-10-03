@@ -56,5 +56,6 @@ var Privacy = Document{
 	Path: "/privacy",
 	Versions: []Version{
 		{Effective: "2026-09-29", Material: false, Change: "First version."},
+		{Effective: "2026-10-02", Material: false, Change: "Says how long Feedback is kept, what erases it, and that GitHub keeps a note of each piece."},
 	},
 }
