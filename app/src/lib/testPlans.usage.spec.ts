@@ -235,7 +235,7 @@ function readPlan(file: string, text: string): Plan | undefined {
 function missingSpecOffenses(
 	plan: Plan,
 	e2eSpecs: ReadonlySet<string>,
-	unitSpecCounts: ReadonlyMap<string, number> = new Map()
+	unitSpecCounts: ReadonlyMap<string, number>
 ): string[] {
 	return plan.automatedSpecs.flatMap((spec) => {
 		if (e2eSpecs.has(spec)) return [];
@@ -623,10 +623,10 @@ describe('missingSpecOffenses', () => {
 	it('names a spec an automated mark cites that exists under neither app/e2e/ nor app/src/', () => {
 		const plan = readPlan('fixture.md', FIXTURE_PLAN);
 		if (plan === undefined) throw new Error('fixture plan failed to parse');
-		expect(missingSpecOffenses(plan, new Set())).toEqual([
+		expect(missingSpecOffenses(plan, new Set(), new Map())).toEqual([
 			'fixture.md: `automated (signup-form.e2e.ts)` names a spec that does not exist under app/e2e/ or app/src/'
 		]);
-		expect(missingSpecOffenses(plan, new Set(['signup-form.e2e.ts']))).toEqual([]);
+		expect(missingSpecOffenses(plan, new Set(['signup-form.e2e.ts']), new Map())).toEqual([]);
 	});
 
 	it('resolves a unit spec by a basename exactly one file under app/src/ carries (#1683)', () => {
