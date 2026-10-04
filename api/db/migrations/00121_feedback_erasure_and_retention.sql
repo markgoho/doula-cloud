@@ -1,6 +1,6 @@
 -- +goose Up
 -- #1525: what happens to a piece of Feedback over its life, as #1501
--- (Q3, Q4) decided and CONTEXT.md's Feedback entry records. A Client's
+-- (Q3, Q4) decided and GLOSSARY.md's Feedback entry records. A Client's
 -- Erasure destroys her Feedback outright and closes its issues with the
 -- `erased` label; a piece nothing destroys is deleted 24 months after it
 -- was sent, and its issue stays as it is.

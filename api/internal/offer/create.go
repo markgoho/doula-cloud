@@ -24,7 +24,7 @@ import (
 //
 // Employment type is never sent: for a staffId target it is read off her
 // own Membership, and the email path always joins her as a contractor
-// (CONTEXT.md's Offer entry). It is what a person is to the business,
+// (GLOSSARY.md's Offer entry). It is what a person is to the business,
 // not something a request body gets to assert on her behalf.
 //
 // clientFirstInitial, clientArea, and dueDate are typed in by the sender,

@@ -174,7 +174,7 @@ func TestDetailHandler_NullDueDate(t *testing.T) {
 // TestDetailHandler_PostpartumEngagementDoesNotOfferBirthPlan proves
 // #311's own AC: the portal's Engagement read resolves the suppression
 // question for a postpartum-only Engagement to false, and the raw kind
-// never appears in the response at all -- CONTEXT.md's Engagement entry
+// never appears in the response at all -- GLOSSARY.md's Engagement entry
 // gives kind no Client word, so no key on this DTO may carry it.
 func TestDetailHandler_PostpartumEngagementDoesNotOfferBirthPlan(t *testing.T) {
 	db := testdb.New(t)

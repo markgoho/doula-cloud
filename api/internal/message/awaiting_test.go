@@ -112,7 +112,7 @@ func TestAwaitingReplyHandler_ContractorSeesOnlyHerAttachedEngagements(t *testin
 // #1635: the list narrows only for the contractor who holds neither the
 // Owner role nor the Admin role (staffauth.Reader.IsAmbientContractor,
 // the population ADR-0008 confines). Employment type is independent of
-// roles (CONTEXT.md), so an Owner or an Admin whose Membership reads
+// roles (GLOSSARY.md), so an Owner or an Admin whose Membership reads
 // "contractor" is real, and she reaches the whole Practice. She reads
 // each Engagement whose thread awaits a reply, one she holds a granted
 // Attachment on and one she does not. The same defect on the Clients

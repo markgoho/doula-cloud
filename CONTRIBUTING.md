@@ -16,4 +16,4 @@ This file is an index. It holds no rule of its own: every standard a change is h
 
 ## Where the rest lives
 
-The domain language is in [`CONTEXT.md`](CONTEXT.md), and the recorded decisions are in [`docs/adr/`](docs/adr/). How issues, triage and worktrees work is in [`docs/agents/`](docs/agents/).
+The domain language is in [`GLOSSARY.md`](GLOSSARY.md), and the recorded decisions are in [`docs/adr/`](docs/adr/). How issues, triage and worktrees work is in [`docs/agents/`](docs/agents/).

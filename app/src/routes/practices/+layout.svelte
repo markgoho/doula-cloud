@@ -87,7 +87,7 @@
 						{ label: 'Contracts', href: resolve('/practices/[practiceId]/contracts', { practiceId }) },
 						// Labeled Credits, not Billing (#256): the route stays
 						// `/billing` on purpose (ADR-0032), but the visible
-						// name is the domain term CONTEXT.md defines, so it
+						// name is the domain term GLOSSARY.md defines, so it
 						// reads as a different counterparty than Getting paid.
 						{ label: 'Credits', href: resolve('/practices/[practiceId]/billing', { practiceId }) },
 						{ label: 'Staff', href: resolve('/practices/[practiceId]/staff', { practiceId }) }

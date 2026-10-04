@@ -76,7 +76,7 @@ const repoFiles = [
 	...globFiles('docs/**/*.{md,html}', { cwd: repoRoot }).filter(
 		(file) => !file.startsWith('docs/research/')
 	),
-	'CONTEXT.md',
+	'GLOSSARY.md',
 	'README.md',
 	'CLAUDE.md',
 	'CONTRIBUTING.md',

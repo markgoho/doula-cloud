@@ -15,7 +15,7 @@ import (
 )
 
 // AttachedDoula is one Doula on an Engagement: a person who holds an
-// open, granted Attachment on it (CONTEXT.md's Attachment, "who is
+// open, granted Attachment on it (GLOSSARY.md's Attachment, "who is
 // working this birth"). An accrued Attachment names nobody here. It is a
 // record of work done, and no screen calls its holder the Doula.
 type AttachedDoula struct {

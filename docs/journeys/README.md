@@ -17,7 +17,7 @@ Every map uses the same five sections in the same order, so a test plan can cite
 
 1. **Header** — persona link, goal, entry point, done looks like.
 2. **Moment of truth** — the one make-or-break moment in this journey. This is the lead for prioritizing the gap backlog.
-3. **Words** — the domain term beside the Persona's own word for it. `CONTEXT.md` is the language of the model and of the team; it is not automatically the copy on screen. Where the two diverge sharply, that divergence is a finding.
+3. **Words** — the domain term beside the Persona's own word for it. `GLOSSARY.md` is the language of the model and of the team; it is not automatically the copy on screen. Where the two diverge sharply, that divergence is a finding.
 4. **Stages** — `Stage N — Title`, each with the experience layer first (**Thinking**, **Pain points**, **Budget**), then the interaction layer as numbered steps `N.1`, `N.2`.
 5. **Gaps found** — a table of `<initials>-G<n>` rows, each naming its stage and which layer it came from.
 

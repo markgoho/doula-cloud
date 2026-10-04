@@ -110,7 +110,7 @@
 	<!--
 		GOV.UK's rule for a consequence a person can still act on: it is
 		stated before the press, not reported after it. Changing the zone
-		is retroactive by construction -- CONTEXT.md's Visit entry derives
+		is retroactive by construction -- GLOSSARY.md's Visit entry derives
 		a Visit's type on every read, so nothing is stored to migrate and
 		every Visit already recorded is re-judged against the new day the
 		moment this is saved. No instant moves; what moves is which

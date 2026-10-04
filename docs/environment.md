@@ -243,7 +243,7 @@ gcloud run services update doula-api --region us-central1 \
 
 ## Say Sandbox, not test mode
 
-Stripe renamed it. What #242 and older tickets call test mode, the dashboard now calls a **Sandbox** (`CONTEXT.md`): a separate environment with its own data and its own API keys, rather than a toggle over one account. Keys from it still start `sk_test_`, so nothing the code expects changes.
+Stripe renamed it. What #242 and older tickets call test mode, the dashboard now calls a **Sandbox** (`GLOSSARY.md`): a separate environment with its own data and its own API keys, rather than a toggle over one account. Keys from it still start `sk_test_`, so nothing the code expects changes.
 
 What does change is where a key comes from. A key copied while the dashboard's environment switcher is on some other environment is a valid key for the wrong place, and it fails later as a signature error or a "no such price" — both of which read like code bugs and are not.
 

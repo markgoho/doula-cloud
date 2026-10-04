@@ -15,7 +15,7 @@
  *
  * ## This is the same sweep, not a third one
  *
- * `CONTEXT.md` defines the continuum check and the drag surface as one
+ * `GLOSSARY.md` defines the continuum check and the drag surface as one
  * artifact seen two ways, and #550 is what happens when the two halves
  * drift. So this file imports `sweep`, `mountInFrame` and
  * `overflowReport` from `style-guide/continuum.js` and adds nothing of its

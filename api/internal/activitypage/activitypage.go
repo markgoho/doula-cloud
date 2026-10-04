@@ -69,7 +69,7 @@ const Unbounded = 0
 // Query names one page of one subject's activity.
 //
 // ExcludedActions is the actions this read must not return -- ADR-0008's
-// money tier for a contractor, CONTEXT.md's Practice-roster actions for a
+// money tier for a contractor, GLOSSARY.md's Practice-roster actions for a
 // Client -- or empty to exclude nothing. They are bound as parameters,
 // so this is a list of action names and never a fragment of SQL: a
 // caller has no way to put anything but a value here.

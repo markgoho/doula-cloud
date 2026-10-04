@@ -5,7 +5,7 @@ import { QUOTED, regionLines, regionLinesInFile, type Region } from './quotedCop
 
 /*
  * #212 / #834's second added AC: a usage gate over `routes/portal/**` that
- * fails on a team word the Client register (ADR-0005, CONTEXT.md)
+ * fails on a team word the Client register (ADR-0005, GLOSSARY.md)
  * translates, the same mechanism `copy.pronoun.usage.spec.ts` (#463) and
  * `formErrors.usage.spec.ts` (#467) already use on the same `quotedCopy.ts`
  * walk.

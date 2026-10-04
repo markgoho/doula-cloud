@@ -100,7 +100,7 @@ func TestActivityHandler_ReturnsOwnEngagementActivity(t *testing.T) {
 	}
 }
 
-// TestActivityHandler_RedactsStaffActorNames proves CONTEXT.md's Activity
+// TestActivityHandler_RedactsStaffActorNames proves GLOSSARY.md's Activity
 // entry -- "she reads her own Activity ... never who inside the Practice
 // did what" -- for the half staffingActionsNotIn's own action exclusion
 // cannot cover: a Contract sent by a named Staff member is still hers to
@@ -138,7 +138,7 @@ func TestActivityHandler_RedactsStaffActorNames(t *testing.T) {
 	}
 }
 
-// TestActivityHandler_KeepsMoneyEntries proves CONTEXT.md's "her money"
+// TestActivityHandler_KeepsMoneyEntries proves GLOSSARY.md's "her money"
 // half: unlike a contractor Doula under ADR-0008's money tier, a Client
 // keeps every Contract and Invoice entry on her own Engagement -- this
 // reader applies no money filter at all.
@@ -164,7 +164,7 @@ func TestActivityHandler_KeepsMoneyEntries(t *testing.T) {
 	}
 }
 
-// TestActivityHandler_HidesStaffingEntries proves CONTEXT.md's Activity
+// TestActivityHandler_HidesStaffingEntries proves GLOSSARY.md's Activity
 // entry: "never who inside the Practice did what" -- an Offer is which
 // Doula was asked, accepted or bumped, a Practice-roster fact rather than
 // a fact about her.
@@ -194,7 +194,7 @@ func TestActivityHandler_HidesStaffingEntries(t *testing.T) {
 
 // TestActivityHandler_HidesVoidDeliberation proves #1096 at the reader
 // rather than only at the set -- the SQL clause staffingActionsNotIn
-// builds, for the two actions CONTEXT.md's Activity entry now names as
+// builds, for the two actions GLOSSARY.md's Activity entry now names as
 // the Practice deliberating with itself. contract_voided is seeded beside
 // them because it is the half that does not change: it is the outcome she
 // reads, so a granted ask still reaches her and her record stays complete.

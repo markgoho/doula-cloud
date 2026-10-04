@@ -176,7 +176,7 @@ func TestMoneyActions_Sorted(t *testing.T) {
 	}
 }
 
-// TestStaffingActions_ContainsExactlyTheRosterSet pins the set CONTEXT.md's
+// TestStaffingActions_ContainsExactlyTheRosterSet pins the set GLOSSARY.md's
 // Activity entry keeps off a Client's own portal ledger -- the whole of
 // "never who inside the Practice did what", not the roster alone. An
 // Offer is which Doula was asked, accepted or bumped, and a Visit
@@ -186,7 +186,7 @@ func TestMoneyActions_Sorted(t *testing.T) {
 // of hers changed either way. The three facts #1423 moved out of
 // engagement_events are here too, because ADR-0015 kept that audit off
 // the portal. Money actions are deliberately absent from
-// this set (CONTEXT.md: "her money" stays on her own ledger) -- a drift
+// this set (GLOSSARY.md: "her money" stays on her own ledger) -- a drift
 // here would either leak the Practice's own facts to a Client or hide a
 // fact she is owed.
 func TestStaffingActions_ContainsExactlyTheRosterSet(t *testing.T) {

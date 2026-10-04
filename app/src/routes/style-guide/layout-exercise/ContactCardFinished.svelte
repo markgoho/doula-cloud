@@ -36,7 +36,7 @@
 		.card {
 			display: grid;
 			/*
-			 * A quantum layout (CONTEXT.md): `auto-fit` resolves how many
+			 * A quantum layout (GLOSSARY.md): `auto-fit` resolves how many
 			 * columns exist from the room there is, so this card has many
 			 * configurations rather than one and nobody authored the moments
 			 * it changes between them.

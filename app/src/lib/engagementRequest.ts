@@ -62,7 +62,7 @@ export const NO_DOULA_YET = 'none';
 /** The label of the "No Doula yet" answer, on the form, on the approval
  * screen, and on the Clients list's line for an Engagement with no
  * Doula on it (#1597), so an Owner reads on the list what she answered
- * on the form. CONTEXT.md lists "Assignment" under Avoid for an
+ * on the form. GLOSSARY.md lists "Assignment" under Avoid for an
  * Attachment, so it is never "No Doula assigned". */
 export const NO_DOULA_YET_LABEL = 'No Doula yet';
 

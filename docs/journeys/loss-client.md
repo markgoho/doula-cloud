@@ -24,7 +24,7 @@ So every wound on this map is a **static** one: a word on a screen, a link that 
 | Engagement | "Maya", "the doula thing" | The register says **my care** / "Your care". She is unlikely to name it at all |
 | Engagement status | — | She has no word for it, and the portal shows her the raw enum (`intake`) — [#212](https://github.com/markgoho/doula-cloud/issues/212) |
 | Birth Plan | "the birth plan" | Unchanged, and that is the problem: the document is named for an event that produced no living baby |
-| Visit | "when Maya came" | No client-facing surface (`CONTEXT.md`), so nothing to name |
+| Visit | "when Maya came" | No client-facing surface (`GLOSSARY.md`), so nothing to name |
 | Contract | "what I signed" | The portal shows her the word **voided** |
 | Invoice | "what I still owe" | No client-facing surface at all — NH-G6 |
 
@@ -119,7 +119,7 @@ So every wound on this map is a **static** one: a word on a screen, a link that 
 * **320px**: yes (ADR-0024)
 
 - **7.1** — Maya logs Visits after the loss. They are indistinguishable from the eleven prenatal ones.
-- **7.2** — The message thread continues, unchanged and unchangeable — immutable by design (`CONTEXT.md`, ADR-0002), which is correct, and with no way for either of them to mark that the thread's subject has changed.
+- **7.2** — The message thread continues, unchanged and unchangeable — immutable by design (`GLOSSARY.md`, ADR-0002), which is correct, and with no way for either of them to mark that the thread's subject has changed.
 
 ### Stage 8 — The record closes without erasing her
 

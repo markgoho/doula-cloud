@@ -170,7 +170,7 @@
 {/snippet}
 
 <!--
-	#478: CONTEXT.md's Visit entry gives this section its heading -- the
+	#478: GLOSSARY.md's Visit entry gives this section its heading -- the
 	Client register's own "Your visits", her phrasing ("when she comes
 	over", "when Maya came"), never the team's "Visits".
 
@@ -187,7 +187,7 @@
 	for.
 
 	No Visit type is rendered, in any wording -- see portalVisits.ts, and
-	CONTEXT.md's Visit entry, for why.
+	GLOSSARY.md's Visit entry, for why.
 -->
 {#snippet visitsSection()}
 	{#if visitsError}
@@ -205,7 +205,7 @@
 {/snippet}
 
 <!--
-	#486 AC5: CONTEXT.md's own words for this to a Client -- "Everything
+	#486 AC5: GLOSSARY.md's own words for this to a Client -- "Everything
 	that has happened" -- as the section heading. GOV.UK's Details guidance
 	is that a summary names what it reveals rather than a bare "Show" with
 	no subject, so the disclosure's own toggle text repeats "what has
@@ -251,7 +251,7 @@
 	is read.
 -->
 <!--
-	#296: the heading is CONTEXT.md's own Client word for an Engagement --
+	#296: the heading is GLOSSARY.md's own Client word for an Engagement --
 	the Engagement entry's `_Client says_:` line reads `my care ("Your
 	care" as a heading)`. It was `Welcome to {practiceName}`, a first-visit
 	greeting rendered on every visit for the life of the Engagement, which

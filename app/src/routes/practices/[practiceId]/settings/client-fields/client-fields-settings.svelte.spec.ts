@@ -117,7 +117,7 @@ describe('client fields settings screen', () => {
  * #865 gave all three template-editing settings screens one voice. This
  * screen already had an intro; the ticket aligned its wording and added
  * the archive reassurance, which is this screen's own answer to "can
- * editing here damage work already done?" -- CONTEXT.md is explicit that a
+ * editing here damage work already done?" -- GLOSSARY.md is explicit that a
  * Client's values are read live, never snapshotted, so archiving is the
  * only thing protecting a recorded fact. Asserted for every caller, not
  * only an Owner: orientation is not a write control, and a Doula who can

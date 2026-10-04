@@ -6,7 +6,7 @@ Four files describe a run. [README.md](README.md) is the **instrument** — what
 
 ## Every number here is an estimate, and it is labeled one
 
-No real agency's book has ever been read. Every count below was reasoned from the World's fourteen-doula shape, from what `CONTEXT.md` says a Credit does, and from what the nine journey maps need in order to be walkable — not from an agency's records. Confirmed at the user's direction on 2026-09-05: the estimates stand, and they are corrected against reality once a real Practice is on the product, not before.
+No real agency's book has ever been read. Every count below was reasoned from the World's fourteen-doula shape, from what `GLOSSARY.md` says a Credit does, and from what the nine journey maps need in order to be walkable — not from an agency's records. Confirmed at the user's direction on 2026-09-05: the estimates stand, and they are corrected against reality once a real Practice is on the product, not before.
 
 That is not a hedge, it is a constraint on how these numbers may be cited. A run's findings are about **what the product did when it held this much work**. They are never about how much work a doula agency has. `docs/personas/README.md` forbids citing the nine proto-personas as user research; the same line holds here, one level down.
 
@@ -55,7 +55,7 @@ The run README states how many Clients, Requests and Invoices were provisioned r
 
 ### Rooted: fifty-eight live Engagements, against forty-five Credits
 
-The size is not chosen, it is forced. `CONTEXT.md` fixes that **one Credit covers one Engagement and locks when the Engagement is created**, and the World fixes that Renata must run out *while she is still moving in* — the paywall met mid-setup is one of the most consequential moments in the product, and it is unobservable if the grant covers the book. Fifteen Staff × three Credits is a founding grant of **45**. So the book has to exceed 45, and 58 is four Engagements per doula, which is what a fourteen-doula agency in its ninth year carries.
+The size is not chosen, it is forced. `GLOSSARY.md` fixes that **one Credit covers one Engagement and locks when the Engagement is created**, and the World fixes that Renata must run out *while she is still moving in* — the paywall met mid-setup is one of the most consequential moments in the product, and it is unobservable if the grant covers the book. Fifteen Staff × three Credits is a founding grant of **45**. So the book has to exceed 45, and 58 is four Engagements per doula, which is what a fourteen-doula agency in its ninth year carries.
 
 She therefore runs dry on the forty-sixth Engagement she moves in, with twelve still in her spreadsheet.
 

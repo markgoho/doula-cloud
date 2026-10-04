@@ -1,7 +1,7 @@
 -- +goose Up
 -- Second RLS policy on plan_instances (00012_plan_instances.sql), giving
 -- the Client-portal population narrowly-scoped read access: SELECT-only,
--- and restricted to plan_type = 'birth_plan' -- Care Plan (see CONTEXT.md)
+-- and restricted to plan_type = 'birth_plan' -- Care Plan (see GLOSSARY.md)
 -- is staff-only and must stay unreachable from a Client-portal session no
 -- matter what a future bug in the Go handler layer does. Mirrors
 -- plan_instances_practice_visibility's EXISTS-against-engagements shape,

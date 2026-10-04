@@ -60,7 +60,7 @@ func requireVisitWrite(w http.ResponseWriter, r *http.Request) (visitWriteContex
 // is the Doula's own act, and needs the Doula role -- an Owner or Admin
 // who is not also a Doula has no self to fall back on, so an absent
 // assignee is a refusal for her rather than a silent self-assignment.
-// Naming somebody else is scheduling, which CONTEXT.md's Attachment entry
+// Naming somebody else is scheduling, which GLOSSARY.md's Attachment entry
 // and ADR-0006 both put with the Owner and the Admin ("booking a Visit
 // means picking a Doula -- an Admin who cannot read the roster cannot do
 // the job the glossary gives her"), and never with a plain Doula: she
@@ -134,7 +134,7 @@ func requireEligibleAssignee(w http.ResponseWriter, r *http.Request, c visitWrit
 	}
 	why := named.WhyNotAttachable()
 	// A contractor who holds neither Owner nor Admin is put on a birth by
-	// her own acceptance of an Offer and by nothing else (CONTEXT.md's
+	// her own acceptance of an Offer and by nothing else (GLOSSARY.md's
 	// Attachment entry), so handing her a Visit is refused unless she
 	// already holds the attachment that says she agreed. Read only when
 	// that is the one thing in her way, so a Staff member who is not a
@@ -185,7 +185,7 @@ func hasGrantedAttachment(ctx context.Context, tx *sql.Tx, engagementID, staffID
 // colleague.
 //
 // Only for a person the attachment rule admits, though: grants is
-// resolveAssignee's answer. CONTEXT.md's Attachment entry gives a
+// resolveAssignee's answer. GLOSSARY.md's Attachment entry gives a
 // contractor who holds neither Owner nor Admin exactly one way onto a
 // birth -- her own acceptance of an Offer -- so granting here would let
 // her hand herself the reach an Offer exists to ask for. Logging her own

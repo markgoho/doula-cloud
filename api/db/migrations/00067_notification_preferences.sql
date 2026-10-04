@@ -5,7 +5,7 @@
 -- where muted.
 --
 -- Keyed on identity_uid -- ADR-0015's "the person lives in the login",
--- CONTEXT.md's Portal Account, not the Client row -- carrying an
+-- GLOSSARY.md's Portal Account, not the Client row -- carrying an
 -- engagement_id so muting one Engagement's thread never touches another,
 -- including one at a different Practice. No FK from identity_uid to
 -- client_portal_users(identity_uid): 00064_client_erasure.sql clears that

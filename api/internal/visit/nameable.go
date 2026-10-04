@@ -25,7 +25,7 @@ const (
 	ReasonNotADoula = "not_a_doula"
 	// ReasonContractorWithoutAcceptedOffer: she is a contractor who holds
 	// neither Owner nor Admin, with no open, granted attachment to this
-	// Engagement. CONTEXT.md's Attachment entry: that contractor is put on
+	// Engagement. GLOSSARY.md's Attachment entry: that contractor is put on
 	// a birth by her own acceptance of an Offer and by nothing else, so
 	// sending her one is what changes this.
 	ReasonContractorWithoutAcceptedOffer = "contractor_without_accepted_offer"

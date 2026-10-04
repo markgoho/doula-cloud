@@ -42,7 +42,7 @@
 	const demos = [...componentDemos, ...routeDemos];
 
 	/*
-	 * The drag surface (CONTEXT.md, ADR-0025): a component watched passing
+	 * The drag surface (GLOSSARY.md, ADR-0025): a component watched passing
 	 * through its configurations continuously, rather than inspected at
 	 * chosen sizes. Nothing here offers a width to pick -- the reader
 	 * sweeps the range and sees the stages nobody would have sampled.

@@ -72,7 +72,7 @@ The favored plan and the contrast effect: one price, every feature, no tiers (AD
 
 ## Consequences
 
-- `docs/manifesto.md` gains one line for this ADR, and nothing else. `CONTEXT.md` is unchanged.
+- `docs/manifesto.md` gains one line for this ADR, and nothing else. `GLOSSARY.md` is unchanged.
 - Every later surface is held to the test: a ticket that proposes a pop-up, an overlay, a sticky bar, a chat widget, a countdown, a stated cap, a suggested plan, a brighter button, a retargeting audience, or any technique that works only while unseen, on the site, in the app, in an email, or in a room, is tested against this ADR, and a change lands as a superseding ADR, not an edit here. When [#1001](https://github.com/markgoho/doula-cloud/issues/1001) writes `docs/marketing/message.md`, it carries a one-line pointer to this ADR at its head.
 - The founder names himself as the builder on the first mention, on every channel, his own Facebook profile and Doula Office Hours included; the channel plan on [#1003](https://github.com/markgoho/doula-cloud/issues/1003) writes that line beside each item.
 - The January site, written on #868 from #1001, states facts in verbs, what the product does on trunk, what it costs, who built it and where, the guarantee in the pilot terms' words, and how Client records are held; carries no adjective about itself outside a quoted doula's words; carries nothing time-shaped or supply-shaped; and carries a stakes sentence only in a doula's own words, unattributed by default, with her consent to the site on record, or no stakes section at all.

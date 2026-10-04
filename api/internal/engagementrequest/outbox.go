@@ -10,7 +10,7 @@ import (
 )
 
 // requestSubject and requestText are the Engagement Request email's fixed
-// copy. Content-free per CONTEXT.md/ADR-0017: no kind, due date, or
+// copy. Content-free per GLOSSARY.md/ADR-0017: no kind, due date, or
 // Client name, the same restraint engagement_offers_notification_worker
 // (00041) already observes -- only a pointer back to the dashboard.
 const requestSubject = "DoulaCloud: a new Engagement Request is waiting"

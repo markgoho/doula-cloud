@@ -1,6 +1,6 @@
 -- +goose Up
 -- A "Contract" row is a Client's Draft/Sent/Signed/Voided agreement for an
--- Engagement (see CONTEXT.md). `prose` is a point-in-time COPY of the
+-- Engagement (see GLOSSARY.md). `prose` is a point-in-time COPY of the
 -- Practice's Contract Template prose at the moment this row was created,
 -- never a live reference to contract_templates -- editing a template
 -- later must never rewrite or break an already-created Contract, the

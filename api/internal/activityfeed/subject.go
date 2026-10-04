@@ -55,7 +55,7 @@ var entryProjection = activitypage.Projection[Entry]{
 // concept activitygate.CanSeeAction/RestrictedActions already model, and
 // does not apply to every caller of this function
 // (portal.ActivityHandler's Client reads her own money in full, per
-// CONTEXT.md's Activity entry).
+// GLOSSARY.md's Activity entry).
 func ListForSubject(ctx context.Context, tx *sql.Tx, practiceID, subjectKind, subjectID string, excludedActions []string, after *pagecursor.Cursor, pageSize int) (ListResponse, error) {
 	page, err := activitypage.List(ctx, tx, activitypage.Query{
 		PracticeID:      practiceID,

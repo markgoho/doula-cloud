@@ -679,7 +679,7 @@ func TestReassignHandler_InvalidVisitID(t *testing.T) {
 	}
 }
 
-// CONTEXT.md's Attachment entry: "An Admin may attach an employee
+// GLOSSARY.md's Attachment entry: "An Admin may attach an employee
 // directly -- naming her on a Visit is granted, not accrued, because she
 // has done nothing." Handing an employee a Visit puts her on the birth.
 func TestReassignHandler_GrantsTheEmployeeItHandsTheVisitTo(t *testing.T) {

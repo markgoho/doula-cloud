@@ -562,7 +562,7 @@
 		hidden behind two similar-sounding names. FormPage now renders
 		`intro` in the loading and loadError branches too (#256), so this
 		sentence is on screen before the Stripe fetch resolves, not after.
-		"Stripe account" itself is on CONTEXT.md's Connected-account _Avoid_
+		"Stripe account" itself is on GLOSSARY.md's Connected-account _Avoid_
 		list, so this says "connects Stripe", matching the button copy.
 	-->
 	<Text text="This is where a Practice connects Stripe, so its Clients can pay it directly." />

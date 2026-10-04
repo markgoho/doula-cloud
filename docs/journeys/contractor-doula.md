@@ -22,11 +22,11 @@ Her second-hardest moment is stage 5, reading back the fee months later; it is t
 | Engagement | "a job", "the February birth" | Priya says "my client"; Lena says "a job". The same noun, two relationships to it |
 | Offer | "what Renata sent me", "the February one" | New to the model as of this map. She has no special word for it and does not need one — but she does need to tell an offer she has not answered from one she has taken |
 | Practice | "the agency", "Renata's" | She belongs to none of them |
-| Staff | — she rejects the word | "I'm not staff, I just work with them." `CONTEXT.md` calls every member Staff, and the roster screen will show her among the employees. The divergence is the finding, not the wording: the model has no way to say what she is |
+| Staff | — she rejects the word | "I'm not staff, I just work with them." `GLOSSARY.md` calls every member Staff, and the roster screen will show her among the employees. The divergence is the finding, not the wording: the model has no way to say what she is |
 | Employment type | "I'm a contractor", "I'm 1099" | A term she uses about herself daily and the schema cannot hold at all |
 | Contract | "the terms", "my rate" | The Contract is between the Practice and the Client. Lena reads it as the description of *her* job — a second, unmodeled reading of the same row |
 | Visit | "a prenatal", "the birth" | Same three kinds Priya names; the model still has one and it carries no type (MO-G1, MO-G2) |
-| Client | "her", "the mom" | As Priya. `CONTEXT.md` avoids "mom" deliberately |
+| Client | "her", "the mom" | As Priya. `GLOSSARY.md` avoids "mom" deliberately |
 
 ## Stages
 

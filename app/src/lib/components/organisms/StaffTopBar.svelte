@@ -131,7 +131,7 @@
 
 		   A minimum, never a fixed height (#1573): the Practice's name in
 		   the switcher is her own data of any length, and wrapping it is the
-		   correct outcome (CONTEXT.md's Content floor entry), so a long one
+		   correct outcome (GLOSSARY.md's Content floor entry), so a long one
 		   makes the bar taller. */
 		header {
 			container: staff-top-bar / inline-size;
@@ -204,7 +204,7 @@
 		   bytes rasterize wider on CI's Linux/Chromium, so the bar needs
 		   788px, not 784px, to stop overflowing. 49.25rem is that fixed
 		   point, measured in CI's own Linux/Chromium, the one named
-		   environment a floor's minimality is judged against (CONTEXT.md's
+		   environment a floor's minimality is judged against (GLOSSARY.md's
 		   Content floor entry), with no margin added beyond it. It is the
 		   bar's own inline size that is measured, never a device width
 		   (ADR-0024). Below the floor the same items are in the sheet,

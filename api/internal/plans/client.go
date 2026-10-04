@@ -22,7 +22,7 @@ const birthPlanType = "birth_plan"
 // msgNoBirthPlan is the one thing a Client-portal caller is ever told
 // about a Birth Plan she cannot have: whether the Plan Instance was
 // never created, or the Engagement's kind never called for one, or the
-// pregnancy ended, she gets the same words. CONTEXT.md's Birth Plan
+// pregnancy ended, she gets the same words. GLOSSARY.md's Birth Plan
 // entry: where it does not apply she meets no mention of it at all, so
 // the refusal must not distinguish the three cases for her.
 const msgNoBirthPlan = "no birth plan found for this engagement"

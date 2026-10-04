@@ -183,7 +183,7 @@ describe('Client portal Engagement hub', () => {
  * Engagement, which on the loss journey is the first thing the screen
  * says to a woman coming back three weeks after her pregnancy ended.
  *
- * It is now CONTEXT.md's own Client word for an Engagement: the entry's
+ * It is now GLOSSARY.md's own Client word for an Engagement: the entry's
  * `_Client says_:` line reads `my care ("Your care" as a heading)`.
  *
  * There is deliberately no first-visit-versus-returning test here,
@@ -215,7 +215,7 @@ describe("the hub's heading (#296)", () => {
 		expect(document.title).toContain(practiceName);
 	});
 
-	// The three values CONTEXT.md's Engagement entry defines, plus the
+	// The three values GLOSSARY.md's Engagement entry defines, plus the
 	// record a Client comes back to after a loss. That last one is a
 	// `completed` Engagement with no due date left to speak of and a Birth
 	// Plan she still owns -- shaped from the DTO alone, because this ticket
@@ -240,14 +240,14 @@ describe("the hub's heading (#296)", () => {
 	});
 });
 
-// #486 AC5: CONTEXT.md's own vocabulary for this to a Client -- "Everything
+// #486 AC5: GLOSSARY.md's own vocabulary for this to a Client -- "Everything
 // that has happened" -- behind a closed disclosure, per the design brief's
 // own #433 amendment for the Client portal.
 /** One ledger entry, named by the action whose wording the test is about
  * -- the only field any of the Activity tests varies. The actor is a
  * generic name, not a person's: portal.ActivityHandler (Go) already
  * replaces a staff actor's name before this response ever reaches the
- * browser (CONTEXT.md's Activity entry: "never who inside the Practice
+ * browser (GLOSSARY.md's Activity entry: "never who inside the Practice
  * did what"). This spec only proves the frontend renders whatever name it
  * is given, muted; the redaction itself has its own Go test. */
 function activityEntry(action: string) {
@@ -390,7 +390,7 @@ function visitsTableText(container: HTMLElement) {
 	return () => container.querySelector(':scope .table-view:not(details *)')?.textContent;
 }
 
-// #478: CONTEXT.md's Visit entry settles the Client register's word for
+// #478: GLOSSARY.md's Visit entry settles the Client register's word for
 // this section -- "visits", "Your visits" as a heading -- and settles
 // what a Client is told about one: when it is, and who is coming.
 /** The `#478` Your visits block's setup: the fixture's two Visits are the
@@ -455,7 +455,7 @@ describe('Your visits (#478)', () => {
 		);
 	});
 
-	// A Visit's derived type is staff-only (CONTEXT.md's Visit entry), and
+	// A Visit's derived type is staff-only (GLOSSARY.md's Visit entry), and
 	// naming a bereavement Visit `postpartum` in Nadia's own portal is the
 	// CB-G5 mistake this surface exists not to repeat. The server sends no
 	// type at all; this proves the screen renders none either, from a

@@ -1,11 +1,11 @@
 /*
- * The continuum check (CONTEXT.md, ADR-0025): for every component the
+ * The continuum check (GLOSSARY.md, ADR-0025): for every component the
  * style guide lists, asserts that its rendered content never needs more
  * inline room than the frame it is given, at any available space from
  * 320px (ADR-0024's conformance commitment) up. It runs against the same
  * artifact a person drags at /style-guide/drag-surface -- the frame
  * markup and the demo registry are copied from that page's own
- * `+page.svelte` rather than reimplemented, because CONTEXT.md defines
+ * `+page.svelte` rather than reimplemented, because GLOSSARY.md defines
  * the drag surface and this check as one artifact seen two ways. The
  * sweep itself lives in `continuum.ts`, shared with the layout exercise
  * (#534) so that exercise is marked by this instrument rather than by a

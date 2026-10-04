@@ -109,7 +109,7 @@ func markEnteredInError(t *testing.T, db *testdb.DB, engagementID string) {
 // everything that follows the woman moves to the survivor. It is also
 // the test that proves 00112's narrowed engagements_freeze_outcome
 // trigger admits the merge's central write -- before that migration the
-// database refused it outright, whatever CONTEXT.md said.
+// database refused it outright, whatever GLOSSARY.md said.
 func TestMergeHandler_MovesEngagementsRequestsAndPortalLinks(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "staff-merge-moves"

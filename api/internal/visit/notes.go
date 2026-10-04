@@ -111,7 +111,7 @@ func NotesHandler() http.Handler {
 			return
 		}
 
-		// The notes text itself never rides the Diff -- CONTEXT.md's
+		// The notes text itself never rides the Diff -- GLOSSARY.md's
 		// Erasure entry already names a Visit's notes among the hand-typed
 		// free text that is not redacted, and plans.PutInstanceHandler
 		// sets the precedent for a staff-only free-text field's own edit

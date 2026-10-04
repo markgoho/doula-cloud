@@ -2,7 +2,7 @@
  * Where a route reads its own params, URL and layout data (#597).
  *
  * This is `$app/state`'s `page` with one seam in it, and the seam exists
- * for exactly one caller: the drag surface. `CONTEXT.md` defines the
+ * for exactly one caller: the drag surface. `GLOSSARY.md` defines the
  * continuum check and the drag surface as one artifact seen two ways, and
  * #570 had to narrow that -- a route joined the automated half and could
  * not join the human half, because a route reads `page.params` out of

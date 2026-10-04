@@ -42,7 +42,7 @@ describe('engagementLabel', () => {
 		expect(first).not.toBe(second);
 	});
 
-	// The register is narrow on purpose (CONTEXT.md's Engagement entry):
+	// The register is narrow on purpose (GLOSSARY.md's Engagement entry):
 	// kind, the birth outcome and the ending reason have no Client word at
 	// all. The input type only holds what the register allows, so this
 	// asserts none of those staff-only facts, even passed in by a caller

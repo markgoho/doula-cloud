@@ -13,7 +13,7 @@
 
 ## Words
 
-Renata is a domain expert. Her language and `CONTEXT.md` mostly agree, which is itself worth recording: the divergences below are the exceptions, not the rule.
+Renata is a domain expert. Her language and `GLOSSARY.md` mostly agree, which is itself worth recording: the divergences below are the exceptions, not the rule.
 
 | Domain term | What Renata says | Note |
 | --- | --- | --- |
@@ -21,7 +21,7 @@ Renata is a domain expert. Her language and `CONTEXT.md` mostly agree, which is 
 | Engagement | "a client", "a birth" | She counts her year in births, not Engagements |
 | Admin | "the office" | |
 | Visit | "a prenatal", "the birth" | She distinguishes types the model does not |
-| Attachment | "the assignment", "who is assigned to whom" | `CONTEXT.md` avoids "Assignment" for an Attachment, the record that a Doula is on an Engagement, and keeps the word for a Visit, whose `staff_id` is assigned |
+| Attachment | "the assignment", "who is assigned to whom" | `GLOSSARY.md` avoids "Assignment" for an Attachment, the record that a Doula is on an Engagement, and keeps the word for a Visit, whose `staff_id` is assigned |
 
 ## Stages
 
@@ -168,7 +168,7 @@ Until this is built, the whole roster is unbuildable through the UI, and every P
 | --- | --- | --- | --- | --- |
 | RA-G1 | 2 | Both | Invitations send no email. The Owner must copy a link and deliver it out of band. | [#260](https://github.com/markgoho/doula-cloud/issues/260) |
 | RA-G2 | 3 | Interaction | No role-assignment UI. The `PATCH .../roles` endpoint exists but nothing calls it, so the roster cannot be built in the product. | [#261](https://github.com/markgoho/doula-cloud/issues/261) |
-| RA-G3 | 3 | Both | **Closed.** The Staff list rendered raw enum values, so an Admin showed on screen as `office_manager` (later `admin`) rather than the word `CONTEXT.md` prescribes; `rolesLabel` now renders `Admin`. | [#262](https://github.com/markgoho/doula-cloud/issues/262) |
+| RA-G3 | 3 | Both | **Closed.** The Staff list rendered raw enum values, so an Admin showed on screen as `office_manager` (later `admin`) rather than the word `GLOSSARY.md` prescribes; `rolesLabel` now renders `Admin`. | [#262](https://github.com/markgoho/doula-cloud/issues/262) |
 | RA-G4 | 4 | Interaction | An Engagement has no Doula on it. No column, no endpoint, no screen. Assignment exists only per Visit. | [#225](https://github.com/markgoho/doula-cloud/issues/225) |
 | RA-G5 | 8 | Experience | No coverage or availability view, and no dated Visits to build one from. Her stated anxiety has no surface at all. | [#263](https://github.com/markgoho/doula-cloud/issues/263) |
 | RA-G6 | 6 | Both | The Clients list shows Name and Status only. No Contract state, Invoice state, or Doula — so "see the whole Practice" needs one Engagement page per Client. | [#264](https://github.com/markgoho/doula-cloud/issues/264) |

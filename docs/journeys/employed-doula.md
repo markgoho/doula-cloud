@@ -18,7 +18,7 @@ She is the negative-permission Persona. Half of this map is about what should be
 | Domain term | What Priya says | Note |
 | --- | --- | --- |
 | Engagement | "my client", "the March one" | |
-| Client | "the mom", "she" | `CONTEXT.md` avoids "mom" deliberately. The Persona says it anyway — a real divergence between the model's language and a Doula's speech |
+| Client | "the mom", "she" | `GLOSSARY.md` avoids "mom" deliberately. The Persona says it anyway — a real divergence between the model's language and a Doula's speech |
 | Visit | "a prenatal", "the birth", "the postpartum" | She names three kinds; the model has one and it carries no type |
 | Care Plan | "Renata's notes" | She reads them far more than she writes them |
 | Birth Plan | "her birth plan" | Matches |

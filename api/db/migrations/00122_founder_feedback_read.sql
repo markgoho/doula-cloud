@@ -82,7 +82,7 @@ GRANT EXECUTE ON FUNCTION feedback_sender(uuid) TO app_runtime;
 -- feedback_reads: every open of a piece
 -- =====================================================================
 --
--- CONTEXT.md's Feedback entry: "every time the founder reads one is
+-- GLOSSARY.md's Feedback entry: "every time the founder reads one is
 -- recorded". One row per open of /feedback/[feedbackId]: who, and when
 -- (clock.Now(ctx), #773). ON DELETE CASCADE is "deleted with its piece":
 -- an Erasure (00121's two functions) and the retention DELETE both take

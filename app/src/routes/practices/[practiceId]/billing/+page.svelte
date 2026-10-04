@@ -114,7 +114,7 @@
 		naming who a Credit is bought from or what one costs -- so an Owner
 		could not tell it apart from Getting paid (Stripe Connect, a
 		different counterparty entirely) without opening both. The three
-		sentences below state that in CONTEXT.md's own words: Credit ("a
+		sentences below state that in GLOSSARY.md's own words: Credit ("a
 		unit of DoulaCloud's own billing... one costs $20.00") and
 		Connected account ("so Clients can pay that Practice directly").
 		"Stripe account" itself is on that entry's own _Avoid_ list, so the

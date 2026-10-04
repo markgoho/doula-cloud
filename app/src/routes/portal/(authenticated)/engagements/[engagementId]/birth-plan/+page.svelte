@@ -73,7 +73,7 @@
 	<!--
 		#311: an Engagement this does not apply to gets the portal's
 		ordinary not-found state -- the same one `+error.svelte` renders --
-		rather than a Birth-Plan-specific message. CONTEXT.md's Birth Plan
+		rather than a Birth-Plan-specific message. GLOSSARY.md's Birth Plan
 		entry: where it does not apply, she meets no mention of it at all.
 	-->
 	<ErrorPage

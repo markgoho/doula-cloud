@@ -2,7 +2,7 @@
 -- One Stripe Customer per (Client, connected account), rather than the
 -- fresh Customer every Invoice used to raise (#780). A Client billed six
 -- times by the same Practice had six Customers in that Practice's Stripe
--- account; CONTEXT.md's Erasure entry always described one. This table is
+-- account; GLOSSARY.md's Erasure entry always described one. This table is
 -- the mapping the invoice path resolves before it creates anything, so a
 -- second Invoice bills the Customer the first one made.
 --

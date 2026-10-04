@@ -5,7 +5,7 @@
 --
 -- The on-call window itself is NOT stored. It is derived on every read
 -- from the Engagement's due date, its pregnancy_ended_on and the rule
--- below, the same way a Visit's type is derived (CONTEXT.md, Visit):
+-- below, the same way a Visit's type is derived (GLOSSARY.md, Visit):
 -- correcting a due date must move the window at once, with no backfill.
 -- What is stored is only what a person states: the rule, a narrowing,
 -- and a coverage gap.

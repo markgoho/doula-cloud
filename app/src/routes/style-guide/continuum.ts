@@ -1,7 +1,7 @@
 /*
- * The instrument the continuum check sweeps with (CONTEXT.md, ADR-0025),
+ * The instrument the continuum check sweeps with (GLOSSARY.md, ADR-0025),
  * pulled out of `continuum.svelte.spec.ts` so the layout exercise can be
- * marked by the same sweep rather than by a second one. CONTEXT.md
+ * marked by the same sweep rather than by a second one. GLOSSARY.md
  * defines the drag surface and the continuum check as one artifact seen
  * two ways; an exercise graded by its own private overflow test would
  * have made that two artifacts seen three ways.
@@ -618,7 +618,7 @@ export async function ensureFontLoaded(): Promise<void> {
  * times. `continuum.svelte.spec.ts` had it inline in its own `it`;
  * `floor.svelte.spec.ts` carries a copy with a comment saying it is a copy
  * "because it is inline in that file's own `it`"; and #570's route sweep
- * would have been the third. CONTEXT.md calls the continuum check and the
+ * would have been the third. GLOSSARY.md calls the continuum check and the
  * drag surface one artifact seen two ways, and three private mount
  * procedures is how that stops being true -- #550 is what it looks like
  * when two halves of this instrument disagree, and each copy is another
@@ -667,14 +667,14 @@ export function overflowReport(name: string, found: Break): string {
 			`${name}: its ${found.element} needed ${found.needed}px of height and holds`,
 			`${found.given}px at ${found.width}px, so what is inside it draws outside it.`,
 			'A box with a fixed block-size cannot hold content that wraps, and the content of a',
-			"Practice's own data wraps (CONTEXT.md's Content floor entry). Make the height a",
+			"Practice's own data wraps (GLOSSARY.md's Content floor entry). Make the height a",
 			'min-block-size so the box grows, or scroll the region deliberately with overflow.'
 		].join(' ');
 	}
 	return [
 		`${name} needed ${found.needed}px inside the ${found.width}px it was given.`,
 		'A component that needs more room than it is given has one configuration at every',
-		'available space and no content floor to switch on (CONTEXT.md).',
+		'available space and no content floor to switch on (GLOSSARY.md).',
 		`The worked answer is the exercise at ${EXERCISE_ROUTE}: START breaks exactly this way`,
 		'on purpose, FINISHED does not, and the diff between the two is what to do here.'
 	].join(' ');

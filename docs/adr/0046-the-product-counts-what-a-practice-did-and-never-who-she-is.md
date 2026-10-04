@@ -78,7 +78,7 @@ Held: _The Voltage Effect_'s answer to the Make-A-Wish Foundation, that some thi
 
 ## Consequences
 
-- `docs/manifesto.md` gains one line for this ADR, and nothing else. `CONTEXT.md` is unchanged.
+- `docs/manifesto.md` gains one line for this ADR, and nothing else. `GLOSSARY.md` is unchanged.
 - The January marketing site carries Pirsch on ADR-0016's terms when [#284](https://github.com/markgoho/doula-cloud/issues/284) builds it, one site on the same account, with the same line on `/privacy`. The signed-in app carries no analytics script and no usage counter, and a ticket that proposes one is tested against this ADR.
 - #1394 builds the internal two-count read, one row per Practice per month, from `credit_ledger` alone. #1393 puts the four hidden UTM fields on the January signup and the source on the Practice, before the January site opens.
 - `staff.last_active_at` is read by the dormancy sweep and carried in the Practice's own data export, and by nothing else; a third reader is a change to this ADR.

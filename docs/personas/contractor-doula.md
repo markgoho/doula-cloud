@@ -4,7 +4,7 @@
 - **Pronouns**: she/her
 - **Surface**: staff app, at more than one Practice
 - **Roles**: **Doula** only — no Owner, no Admin
-- **Employment type**: **contractor** (see `CONTEXT.md`, "Employment type")
+- **Employment type**: **contractor** (see `GLOSSARY.md`, "Employment type")
 - **Entry point**: an emailed invitation to Rooted Birth Collective, accepted on an account she already holds at a different Practice — after which individual jobs are offered to her, one at a time
 
 ## Who she is

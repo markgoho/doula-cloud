@@ -2,7 +2,7 @@
 -- #477. engagement_status carries a stale fourth value: 'postpartum'
 -- duplicates the Engagement kind axis (birth/postpartum, what the Practice
 -- sold -- engagement_kind, added in 00042_client_intake_schema.sql, its own
--- column and its own enum). CONTEXT.md's Engagement entry and ADR-0005's
+-- column and its own enum). GLOSSARY.md's Engagement entry and ADR-0005's
 -- Client-facing labels only ever describe three phases: intake, active,
 -- completed. No code writes 'active' or 'postpartum' to this column today,
 -- so 'postpartum' as a status value is pure drift. Any row that has it

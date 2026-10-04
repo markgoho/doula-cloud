@@ -50,7 +50,7 @@ const source = readFileSync(actionsGo, 'utf8');
  * implicitly at every `activity.Record` call and in the `staffingActions`
  * map literal. A guard that only saw the typed form would let such an
  * action ship unphrased and throw in a Client's own render -- the exact
- * failure CONTEXT.md's Activity entry now says cannot happen. So an
+ * failure GLOSSARY.md's Activity entry now says cannot happen. So an
  * untyped one is a loud failure here rather than an invisible one. */
 const ACTION_CONSTANT = /^\s*(Action[A-Za-z0-9]+)(?:\s+([A-Za-z]+))?\s*=\s*"([a-z0-9_]+)"/gm;
 

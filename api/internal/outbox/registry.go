@@ -33,7 +33,7 @@ const NotificationDoor = "app.notification_worker_trusted"
 // rename could leave the nudge pointing at an endpoint the mux no longer
 // served.
 //
-// Deliberately not called a Kind: CONTEXT.md gives "kind" to an
+// Deliberately not called a Kind: GLOSSARY.md gives "kind" to an
 // Engagement (birth or postpartum), and a word the domain owns should not
 // also name a piece of dispatch machinery.
 type Registration struct {

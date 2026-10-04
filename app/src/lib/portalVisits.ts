@@ -7,7 +7,7 @@
  * one description of one read, and a route that builds its own column
  * literals is a route free to drift from the one this module tests.
  *
- * There is deliberately no Visit type here, and no notes. CONTEXT.md's
+ * There is deliberately no Visit type here, and no notes. GLOSSARY.md's
  * Visit entry keeps both staff-only, and the type carries no Client word
  * at all -- `postpartum` "still describes a birth with a baby at the end
  * of it" (docs/journeys/loss-client.md), so it is the wrong word in the
@@ -61,10 +61,10 @@ interface VisitColumn {
  * stays machine-readable for a screen reader, a hover and a copy-paste.
  *
  * The Who column carries the Doula's own name, not "Your practice". The
- * Activity ledger redacts a Staff actor's name because CONTEXT.md says a
+ * Activity ledger redacts a Staff actor's name because GLOSSARY.md says a
  * Client "never [reads] who inside the Practice did what" -- a fact about
  * the Practice's roster. Who is coming to her home is a fact about her
- * care, and CONTEXT.md's Visit entry settles it as part of this surface.
+ * care, and GLOSSARY.md's Visit entry settles it as part of this surface.
  * It takes the `muted` treatment the ledger's own Who column takes, which
  * is also the drawing's own fill for this cell (`$color-on-surface-variant`):
  * the answer she is scanning for is when, and the name reads beside it.

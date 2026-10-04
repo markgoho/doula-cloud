@@ -1,7 +1,7 @@
 /*
  * The floor check (#564): for every `@container (min-width: …)` condition
  * under `src/lib/components`, asserts that its literal is a fixed point --
- * CONTEXT.md's Content floor entry -- rather than a value chosen with a
+ * GLOSSARY.md's Content floor entry -- rather than a value chosen with a
  * margin or copied from a neighbor.
  *
  *   Sufficiency: forced permanently live (`floor.ts`'s `forceLive`), the
@@ -37,7 +37,7 @@
  * Rendering reuses the drag surface's own demo registry -- the same
  * `pageModules` glob and `toDemos` `continuum.svelte.spec.ts` uses -- so
  * this is the second half of one artifact, not a private instrument built
- * beside it (CONTEXT.md).
+ * beside it (GLOSSARY.md).
  *
  * The burden of proof inverted (#564, after #520's own reading of Every
  * Layout on container queries as "circuit breakers... I'd sooner not have
@@ -280,7 +280,7 @@ if (!customElements.get('stack-l')) registerLayoutPrimitives();
  * which this check measured the fallback face on CI (#550). It used to be
  * copied here with a note saying so, because it lived inline in
  * `continuum.svelte.spec.ts`'s own `it` and no check could call it. One
- * instrument, not two -- which is what CONTEXT.md's "one artifact seen two
+ * instrument, not two -- which is what GLOSSARY.md's "one artifact seen two
  * ways" asks of this file and that one.
  */
 
@@ -436,7 +436,7 @@ describe('the floor check (#564)', () => {
 		// which parses fine and looks like a plausible narrow floor, but
 		// fires across the WHOLE continuum this repo verifies -- the
 		// narrow branch it is meant to switch away from is unreachable,
-		// which is CONTEXT.md's own failure sentence (`overflowReport`'s
+		// which is GLOSSARY.md's own failure sentence (`overflowReport`'s
 		// "one configuration at every available space"). A floor this
 		// low is evidence the criterion was wrong, not evidence of a
 		// narrow floor, so it fails here rather than shipping quietly.

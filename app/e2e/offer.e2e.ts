@@ -98,7 +98,7 @@ test('Owner offers an Engagement to a Doula, who accepts it from her own inbox',
 
 // #1625: the Practice of one whose only Owner is a contractor Doula. The
 // Staff screen's Membership edit makes her one, and that state is legal
-// (CONTEXT.md, Employment type: either value may pair with any roles).
+// (GLOSSARY.md, Employment type: either value may pair with any roles).
 // Nobody can send her an Offer and she cannot send one to herself, so
 // her two ways on are the two each solo Owner has: the Start work form
 // names her, and one press puts her on an Engagement that has no Doula.

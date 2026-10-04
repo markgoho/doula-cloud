@@ -1,5 +1,5 @@
 -- +goose Up
--- A "Payment" is money received against an Invoice (see CONTEXT.md) --
+-- A "Payment" is money received against an Invoice (see GLOSSARY.md) --
 -- distinct from the Invoice itself, per the domain's Contract/Invoice/
 -- Payment split. Written only by #82's invoice.paid webhook handler,
 -- never by any client-initiated call, so "was this actually paid" stays

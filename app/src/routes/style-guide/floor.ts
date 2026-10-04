@@ -2,7 +2,7 @@
  * The floor check's own instrument (#564), pulled apart from
  * `floor.svelte.spec.ts` the same way `continuum.ts` is pulled apart from
  * `continuum.svelte.spec.ts`: discovery and the DOM-touching helpers here,
- * the `describe`/`it` blocks and the criteria registry there. CONTEXT.md
+ * the `describe`/`it` blocks and the criteria registry there. GLOSSARY.md
  * defines a content floor as a fixed point discovered from the content and
  * never chosen from a set; this module is what turns that sentence into an
  * assertion.
@@ -160,7 +160,7 @@ export function remToPx(rem: number): number {
  * Every discovered `(min-width: …rem)` condition whose literal resolves
  * BELOW `CONFORMANCE_COMMITMENT` (320px, ADR-0024) -- a floor that fires
  * across the whole continuum this repo verifies has no narrow branch left
- * to switch FROM, which is exactly CONTEXT.md's failure sentence: "one
+ * to switch FROM, which is exactly GLOSSARY.md's failure sentence: "one
  * configuration at every available space and no content floor to switch
  * on." A number this low is not evidence of a narrow floor; it is
  * evidence the criterion used to measure it was wrong (#564's own

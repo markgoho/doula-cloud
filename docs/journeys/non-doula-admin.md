@@ -23,10 +23,10 @@ Dee is a domain expert on the business half and a stranger to the care half.
 
 | Domain term | What Dee says | Note |
 | --- | --- | --- |
-| Admin | "office manager" | Dee's own word for themself is the word `CONTEXT.md` ruled out. The screen now agrees with `CONTEXT.md`, not with Dee: `rolesLabel` renders `Admin` (RA-G3, closed) |
+| Admin | "office manager" | Dee's own word for themself is the word `GLOSSARY.md` ruled out. The screen now agrees with `GLOSSARY.md`, not with Dee: `rolesLabel` renders `Admin` (RA-G3, closed) |
 | Engagement | "the file", "a booking" | |
-| Contract | "the agreement" | `CONTEXT.md` avoids "agreement" |
-| Invoice | "the bill" | `CONTEXT.md` avoids "bill" |
+| Contract | "the agreement" | `GLOSSARY.md` avoids "agreement" |
+| Invoice | "the bill" | `GLOSSARY.md` avoids "bill" |
 | Care Plan / Birth Plan | "the doula's stuff" | They do not want to read either, which is itself the answer to a live question — see Stage 10 |
 
 ## Stages
@@ -162,7 +162,7 @@ Dee is a domain expert on the business half and a stranger to the care half.
 
 ### Stage 10 — Read a filled Care Plan or Birth Plan
 
-**Thinking**: "I do not want to read this, but sometimes I have to check a date in it." **Pain points**: the question is genuinely open. `GET .../plans/{planType}` has no role check, so **Dee can read every filled Care Plan and Birth Plan today**. Whether they should is undecided and this journey cannot decide it alone — the Care Plan is defined in `CONTEXT.md` as staff-only internal notes, which does not by itself exclude an Admin.
+**Thinking**: "I do not want to read this, but sometimes I have to check a date in it." **Pain points**: the question is genuinely open. `GET .../plans/{planType}` has no role check, so **Dee can read every filled Care Plan and Birth Plan today**. Whether they should is undecided and this journey cannot decide it alone — the Care Plan is defined in `GLOSSARY.md` as staff-only internal notes, which does not by itself exclude an Admin.
 
 **Budget**:
 

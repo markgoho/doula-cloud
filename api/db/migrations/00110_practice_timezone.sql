@@ -8,7 +8,7 @@
 -- something has to say which day "the same day" means; this is it.
 --
 -- One zone per Practice rather than one per Visit or one per reader.
--- CONTEXT.md's Visit entry has one function compute the type on every
+-- GLOSSARY.md's Visit entry has one function compute the type on every
 -- read and forbids two surfaces disagreeing, which rules out a
 -- reader-local zone: two Staff in two zones would read two types for one
 -- Visit. A per-Visit zone belongs to the richer time model (#330), which

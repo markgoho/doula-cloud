@@ -1,6 +1,6 @@
 -- +goose Up
 -- A "Visit" is a scheduled meeting between a Doula and a Client within an
--- Engagement -- it may represent the birth itself (see CONTEXT.md).
+-- Engagement -- it may represent the birth itself (see GLOSSARY.md).
 -- Scheduling fields (date/time, location) are deliberately out of scope
 -- for this ticket and deferred to a later one; today a Visit only tracks
 -- which Engagement it belongs to and which Doula is assigned to it.

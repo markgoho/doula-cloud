@@ -7,7 +7,7 @@ Standards and architectural rules for designing and implementing HTTP APIs in Go
 ## 1. Core Philosophy: "Good APIs Are Boring"
 
 * **Familiarity Over Novelty**: An API consumer should understand how an endpoint behaves before reading documentation. Default to standard HTTP semantics, status codes, and clear JSON payloads over complex or idiosyncratic abstractions.
-* **Domain-Driven, Not Database-Driven**: Endpoints must model business entities and relationships defined in [`CONTEXT.md`](../CONTEXT.md) (e.g., `Practice`, `Staff`, `Client`, `Engagement`, `Visit`, `Invoice`). Never leak low-level database schemas, internal job queues, or storage mechanics into the public API contract.
+* **Domain-Driven, Not Database-Driven**: Endpoints must model business entities and relationships defined in [`GLOSSARY.md`](../GLOSSARY.md) (e.g., `Practice`, `Staff`, `Client`, `Engagement`, `Visit`, `Invoice`). Never leak low-level database schemas, internal job queues, or storage mechanics into the public API contract.
 * **Simple Integration**: Integrations frequently begin life as simple scripts or frontend fetch calls. Avoid forcing unnecessary complexity (e.g., GraphQL or multi-step handshakes) when a clean REST endpoint with query parameters suffices.
 
 ---
@@ -197,7 +197,7 @@ When adding or modifying an HTTP endpoint in `api/`:
 
 | Check | Requirement |
 | :--- | :--- |
-| **Domain Terms** | Uses exact vocabulary from [`CONTEXT.md`](../CONTEXT.md) (e.g., `Engagement`, `Visit`, `Care Plan`). |
+| **Domain Terms** | Uses exact vocabulary from [`GLOSSARY.md`](../GLOSSARY.md) (e.g., `Engagement`, `Visit`, `Care Plan`). |
 | **DTO Decoupling** | Handler accepts and returns dedicated DTO structs, not database models. |
 | **JSON Tags** | All DTO struct fields have explicit `json:"camelCase"` tags. |
 | **Contract Stability**| Edits to existing responses are purely additive (no deletions/renames). |

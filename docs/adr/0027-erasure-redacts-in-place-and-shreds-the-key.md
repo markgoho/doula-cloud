@@ -6,7 +6,7 @@ Decided on [#394](https://github.com/markgoho/doula-cloud/issues/394). GDPR and 
 
 ## Erasure is not ending
 
-`CONTEXT.md` already records that an Attachment *ends* but is never deleted, and that ending is not erasure. Erasure is the other act, and it is the only one in the model that destroys a fact rather than closing it. Every other terminal state in this product — a completed Engagement, an ended Attachment, a voided Contract — leaves the record more complete, not less. Erasure leaves it less complete on purpose, because a person asked, and it is the only act that does.
+`GLOSSARY.md` already records that an Attachment *ends* but is never deleted, and that ending is not erasure. Erasure is the other act, and it is the only one in the model that destroys a fact rather than closing it. Every other terminal state in this product — a completed Engagement, an ended Attachment, a voided Contract — leaves the record more complete, not less. Erasure leaves it less complete on purpose, because a person asked, and it is the only act that does.
 
 That is why erasure is Owner-only: not Owner-or-Admin, which is the gate for most things that reshape a Practice, but Owner alone, the same seat that throws the MFA switch ([#167](https://github.com/markgoho/doula-cloud/issues/167)) and vouches for a locked-out Staff member. There is one seat that can destroy a fact, and it is the seat that owns the Practice.
 

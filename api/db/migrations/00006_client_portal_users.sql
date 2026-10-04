@@ -3,7 +3,7 @@
 -- Client it belongs to -- the Client-portal population's equivalent of
 -- staff.identity_uid, pulled into its own link table (rather than a
 -- column on clients) because a future multi-login Client (a partner or
--- support person, per CONTEXT.md) will need more than one identity_uid
+-- support person, per GLOSSARY.md) will need more than one identity_uid
 -- per Client. v1 only ever creates one row per Client.
 
 CREATE TABLE client_portal_users (
@@ -34,7 +34,7 @@ CREATE POLICY client_portal_users_self_visibility ON client_portal_users
     );
 
 -- Client-tier visibility on engagements, the second of the two RLS tiers
--- named in #47/CONTEXT.md (the first, practice-tier, is
+-- named in #47/GLOSSARY.md (the first, practice-tier, is
 -- engagements_practice_visibility in 00005_client_engagement.sql).
 -- Postgres OR's multiple permissive policies on the same table together,
 -- so a Staff request (app.current_practice_id set, app.current_client_id

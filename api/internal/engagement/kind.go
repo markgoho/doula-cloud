@@ -11,13 +11,13 @@ import (
 )
 
 // Kind is an Engagement's kind -- birth or postpartum, what the Practice
-// sold (CONTEXT.md's Engagement entry). Landed by #308
+// sold (GLOSSARY.md's Engagement entry). Landed by #308
 // (00042_client_intake_schema.sql), mutable in both directions per
-// ADR-0015, and staff-only: CONTEXT.md gives it no Client word, so no
+// ADR-0015, and staff-only: GLOSSARY.md gives it no Client word, so no
 // value of this type may reach a Client-facing response.
 type Kind string
 
-// The two values Kind can hold, per CONTEXT.md's Engagement entry.
+// The two values Kind can hold, per GLOSSARY.md's Engagement entry.
 const (
 	KindBirth      Kind = "birth"
 	KindPostpartum Kind = "postpartum"

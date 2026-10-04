@@ -54,7 +54,7 @@ const dateLayout = "2006-01-02"
 //
 // Not the reader's own zone, and not a zone on the Visit. One function
 // computes this on every read and no two surfaces may disagree
-// (CONTEXT.md, Visit), which a reader-local zone breaks outright: two
+// (GLOSSARY.md, Visit), which a reader-local zone breaks outright: two
 // Staff in two zones would read two types for one Visit. A per-Visit
 // zone belongs to the richer time model parked on #330.
 //
