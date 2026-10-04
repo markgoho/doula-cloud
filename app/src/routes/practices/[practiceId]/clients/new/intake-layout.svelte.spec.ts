@@ -104,12 +104,14 @@ describe('intake for everyone else', () => {
 	it('carries a two-word name into neither name field, and still carries the rest', async () => {
 		intakeDraft.clear();
 
-		await setup({ search: '?name=Yar%20Pell&email=yar%40example.com' });
+		await setup({ search: '?name=Yar%20Pell&email=yar%40example.com&phone=555-0100&dateOfBirth=1990-01-02' });
 		await render(NamePage);
 
 		await expect.element(testPage.getByLabelText('Given name')).toHaveValue('');
 		await expect.element(testPage.getByLabelText('Family name (optional)')).toHaveValue('');
-		expect(intakeDraft.answers).toMatchObject({ givenName: '', familyName: '', email: 'yar@example.com' });
+		await expect.element(testPage.getByText('yar@example.com')).toBeVisible();
+		await expect.element(testPage.getByText('555-0100')).toBeVisible();
+		await expect.element(testPage.getByText('Jan 2, 1990')).toBeVisible();
 	});
 
 	it('reads the screen that opened intake directly', async () => {
