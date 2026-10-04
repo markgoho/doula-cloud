@@ -203,6 +203,17 @@ export function carriedGivenName(value: string | null | undefined): string | und
 }
 
 /**
+ * The name of two or more words a search typed, which `carriedGivenName`
+ * carries into no field, or undefined when there is none. The name
+ * question shows it, so the person does not have to remember what she
+ * typed one screen earlier (#1758). It fills no field and is not saved.
+ */
+export function searchedName(value: string | null | undefined): string | undefined {
+	const name = value?.trim();
+	return name && !carriedGivenName(name) ? name : undefined;
+}
+
+/**
  * The two names every line about her is made from.
  */
 export interface ClientNames {

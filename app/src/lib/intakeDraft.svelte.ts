@@ -122,6 +122,14 @@ export class IntakeDraft {
 	 * that page reads it again.
 	 */
 	origin = $state<IntakeOrigin | undefined>();
+	/**
+	 * A name of two or more words the search typed, which carries into
+	 * neither name field (#1716) and which the name question shows
+	 * (#1758). Outside `answers` on purpose: `answers` is what the save
+	 * sends, and this is never saved. Not mirrored, for the reason
+	 * `origin` gives.
+	 */
+	searchedName = $state<string | undefined>();
 
 	constructor(namespace = 'intake') {
 		this.#namespace = namespace;
@@ -187,6 +195,7 @@ export class IntakeDraft {
 		this.visitedSteps = [];
 		this.matches = [];
 		this.origin = undefined;
+		this.searchedName = undefined;
 	}
 }
 

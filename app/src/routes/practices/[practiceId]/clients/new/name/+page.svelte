@@ -17,6 +17,11 @@
 	 * collision check has those keys. The page lists each one before the
 	 * save, so nothing is saved that she cannot see.
 	 *
+	 * A name of two or more words carries into neither name field
+	 * (#1716). The page shows it above the fields instead, read-only, so
+	 * it does not have to be remembered (#1758). It is not saved, so it
+	 * is not in the list of what is saved with the name.
+	 *
 	 * ## Why the <form> is outside the Template
 	 *
 	 * `QuestionPage` renders the controls and the actions as two separate
@@ -95,6 +100,9 @@
 	>
 		{#snippet content()}
 			<stack-l space="var(--space-5)">
+				{#if intakeDraft.searchedName}
+					<Text text={`You searched for "${intakeDraft.searchedName}". Type the name into the fields below.`} />
+				{/if}
 				<LabeledField id={GIVEN_NAME_ID} label="Given name" error={submission.errorFor(GIVEN_NAME_ID)}>
 					{#snippet children({ id, describedBy, invalid })}
 						<TextInput
