@@ -91,8 +91,11 @@ describe('intake for everyone else', () => {
 	 * name; two or more carry into neither field. The name question is
 	 * mounted after the layout, so these read the fields she sees.
 	 */
+	// The draft still holds an earlier search's name: a URL that names
+	// one word replaces it, so no old line sits over "Yar".
 	it('carries a one-word name into Given name', async () => {
 		intakeDraft.clear();
+		intakeDraft.searchedName = 'Yar Pell';
 
 		await setup({ search: '?name=Yar' });
 		await render(NamePage);
@@ -117,6 +120,9 @@ describe('intake for everyone else', () => {
 		await expect.element(testPage.getByLabelText('Given name')).toHaveValue('');
 		await expect.element(testPage.getByLabelText('Family name (optional)')).toHaveValue('');
 		await expect.element(testPage.getByLabelText('Preferred name (optional)')).toHaveValue('');
+		// Not in the list of what is saved with the name.
+		await expect.element(testPage.getByText('yar@example.com')).toBeVisible();
+		await expect.element(testPage.getByText('Yar Pell', { exact: true })).not.toBeInTheDocument();
 		expect(intakeDraft.answers).not.toHaveProperty('searchedName');
 	});
 

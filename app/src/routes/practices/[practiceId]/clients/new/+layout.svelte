@@ -76,8 +76,11 @@
 			// reload -- keeps the one already read.
 			intakeDraft.origin = intakeOrigin(page.url.searchParams) ?? intakeDraft.origin;
 			// #1758: a name of two or more words carries into no field,
-			// and the name question shows it instead. Kept the same way.
-			intakeDraft.searchedName = searchedName(page.url.searchParams.get('name')) ?? intakeDraft.searchedName;
+			// and the name question shows it instead. A URL with no `name`
+			// keeps the one already read, as above; a URL with one replaces
+			// it, so a one-word name never sits under an old search's line.
+			const name = page.url.searchParams.get('name');
+			if (name !== null) intakeDraft.searchedName = searchedName(name);
 		});
 	});
 </script>
