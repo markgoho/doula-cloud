@@ -24,7 +24,7 @@
 		/*
 		 * Decorative by default: the mark always sits beside the wordmark in
 		 * BrandLockup, so naming it here would make a screen reader say
-		 * "Doula Cloud" twice. A caller using the mark alone passes a label.
+		 * "DoulaCloud" twice. A caller using the mark alone passes a label.
 		 */
 		label?: string;
 	}

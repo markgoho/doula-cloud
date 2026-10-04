@@ -63,7 +63,7 @@
     "providers": {
       "emailPassword": true,
       "googleSignIn": {
-        "oAuthBrandDisplayName": "Doula Cloud",
+        "oAuthBrandDisplayName": "DoulaCloud",
         "supportEmail": "admin@doula.cloud"
       }
     }

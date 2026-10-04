@@ -204,7 +204,7 @@ func main() {
 	// coverage:ignore reason: constructs the real Mailgun-backed sender, not exercised by unit tests
 	mailgunSender := mailsuppress.Sender{Inner: mailgunAPI, DB: db}
 	appBaseURL := os.Getenv("APP_BASE_URL")
-	notificationsFrom := "Doula Cloud <notifications@" + mailgunDomain + ">"
+	notificationsFrom := "DoulaCloud <notifications@" + mailgunDomain + ">"
 	// Platform voice (ADR-0011): a monitored inbox, not noreply -- every
 	// kind except the Client portal invite below, which is Practice
 	// voice.

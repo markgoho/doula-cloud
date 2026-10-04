@@ -10,7 +10,7 @@ import { STUB_TOTP_CODE, stubTotpFactor } from './totpStub';
 // The subject mfarecoverymail's Compose gives the vouched code. Named
 // once because both claims below are about it: that the Owner received
 // it, and that the locked-out doula did not.
-const RECOVERY_SUBJECT = 'Doula Cloud: account recovery code';
+const RECOVERY_SUBJECT = 'DoulaCloud: account recovery code';
 
 /*
  * #615's recovery path, walked as the two people who actually walk it

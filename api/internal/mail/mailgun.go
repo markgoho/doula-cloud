@@ -40,7 +40,7 @@ func NewMailgunSender(apiKey, domain string) *MailgunSender {
 
 // Send posts msg to Mailgun's /messages endpoint. Tracking (open/click)
 // is explicitly disabled, and stays that way: ADR-0030 (#734) rules out
-// third-party open and click tracking in every Doula Cloud email, in
+// third-party open and click tracking in every DoulaCloud email, in
 // either voice. mg.doula.cloud's domain settings already have all three
 // inactive; these three flags are the second guard, so a change in
 // Mailgun's dashboard cannot silently turn tracking on.
@@ -78,13 +78,13 @@ func (m *MailgunSender) Send(ctx context.Context, msg Message) error {
 }
 
 // DeleteBounce takes address off Mailgun's own bounce list, which is a
-// separate fact from Doula Cloud's own email_suppressions row: ADR-0029
+// separate fact from DoulaCloud's own email_suppressions row: ADR-0029
 // is explicit that clearing the local row alone is a lie, because
 // Mailgun keeps refusing the send server-side until this call runs too.
 //
 // A 404 is success, not a failure. Mailgun answers "Address not found in
 // bounces table" for an address it has never listed (verified live
-// against mg.doula.cloud on #744), and Doula Cloud records a suppression
+// against mg.doula.cloud on #744), and DoulaCloud records a suppression
 // from the webhook's own permanent_fail event -- which can arrive
 // without the address ever reaching Mailgun's list, and which a Staff
 // member may already have cleared there by hand. Treating that as an

@@ -15,7 +15,7 @@ import (
 // it). It deliberately does not name which Stripe fields are
 // outstanding -- some are personal (date of birth, SSN last 4) and none
 // of that belongs in an email body. payoutLink is the only variable.
-const payoutSubject = "Doula Cloud: your Practice's payout account needs more information" //nolint:gosec // payout-account copy, not a credential
+const payoutSubject = "DoulaCloud: your Practice's payout account needs more information" //nolint:gosec // payout-account copy, not a credential
 
 func payoutText(payoutLink string) string {
 	return "Hello,\n\n" +

@@ -117,7 +117,7 @@
 -->
 {#snippet intro()}
 	<Text
-		text="Every Care Plan and Birth Plan this Practice fills in starts from the questions set here, and the set Doula Cloud seeded is meant to be changed: add, remove and reorder them. A plan already filled in for a Client keeps the questions it was filled in against, so nothing changed here reaches a plan already written."
+		text="Every Care Plan and Birth Plan this Practice fills in starts from the questions set here, and the set DoulaCloud seeded is meant to be changed: add, remove and reorder them. A plan already filled in for a Client keeps the questions it was filled in against, so nothing changed here reaches a plan already written."
 	/>
 {/snippet}
 

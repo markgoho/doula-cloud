@@ -53,7 +53,7 @@
 			body: 'This Practice asks for a second sign-in factor before its screens open. Set one up from your Account screen, then try this page again.'
 		},
 		unavailable: {
-			title: 'Doula Cloud is unavailable',
+			title: 'DoulaCloud is unavailable',
 			body: 'This is planned, and does not mean anything went wrong. Try again shortly.'
 		},
 		problem: {

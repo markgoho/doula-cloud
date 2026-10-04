@@ -82,12 +82,12 @@
 		// async, best-effort session read can fail on either shell -- a
 		// graceful "Feedback sent. Thank you." rather than the broken
 		// sentence a bare template would interpolate nothing into.
-		sentMessage = feedbackSentNotice(email, 'Mark Goho, who builds Doula Cloud,');
+		sentMessage = feedbackSentNotice(email, 'Mark Goho, who builds DoulaCloud,');
 	}
 </script>
 
 <PilotBanner
-	sentence="Doula Cloud is new, and you are one of the first to use it."
+	sentence="DoulaCloud is new, and you are one of the first to use it."
 	controlText="Tell us what is not working or what you need"
 	open={isOpen}
 	controlsId={drawerId}
@@ -100,16 +100,16 @@
 	</div>
 {/if}
 
-<Drawer id={drawerId} bind:open={isOpen} heading="Send feedback to Doula Cloud">
+<Drawer id={drawerId} bind:open={isOpen} heading="Send feedback to DoulaCloud">
 	<Text
-		text="The Doula Cloud team reads every piece of feedback during the pilot. It is how we decide what to fix first."
+		text="The DoulaCloud team reads every piece of feedback during the pilot. It is how we decide what to fix first."
 	/>
 	<FeedbackForm
 		legend="What kind of feedback is it?"
 		errorKind="Select what kind of feedback it is"
 		textLabel="Tell us more"
 		textHint="What were you trying to do, and what happened?"
-		destination="This goes to the Doula Cloud team, not to your Practice."
+		destination="This goes to the DoulaCloud team, not to your Practice."
 		detailsSummary="What else we send with your feedback"
 		{roleAndPractice}
 		{onSend}

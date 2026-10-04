@@ -14,7 +14,7 @@ describe('SignedOutTopBar', () => {
 	it('carries the lockup and nothing else', async () => {
 		await setup();
 
-		await expect.element(page.getByText('Doula Cloud')).toBeVisible();
+		await expect.element(page.getByText('DoulaCloud')).toBeVisible();
 		await expect.element(page.getByRole('navigation')).not.toBeInTheDocument();
 		await expect.element(page.getByRole('button')).not.toBeInTheDocument();
 	});

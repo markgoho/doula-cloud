@@ -123,7 +123,7 @@ describe('plan-templates settings screen: it introduces itself (#865)', () => {
 		await setup();
 
 		await expect
-			.element(intro('the set Doula Cloud seeded is meant to be changed'))
+			.element(intro('the set DoulaCloud seeded is meant to be changed'))
 			.toBeVisible();
 	});
 

@@ -1,6 +1,6 @@
 # Go API Design Guidelines
 
-Standards and architectural rules for designing and implementing HTTP APIs in Go for Doula Cloud. These guidelines are distilled from proven production API practices (see [Sean Goedecke on Good API Design](https://www.seangoedecke.com/good-api-design/)) and adapted to modern Go 1.22+ idioms.
+Standards and architectural rules for designing and implementing HTTP APIs in Go for DoulaCloud. These guidelines are distilled from proven production API practices (see [Sean Goedecke on Good API Design](https://www.seangoedecke.com/good-api-design/)) and adapted to modern Go 1.22+ idioms.
 
 ---
 

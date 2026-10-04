@@ -12,7 +12,7 @@ Hannah is 29, 18 weeks along with her first, and reading everything. She hired M
 
 She has never used a client portal for anything except her dentist, and she disliked it.
 
-## Why she comes to Doula Cloud
+## Why she comes to DoulaCloud
 
 To keep one thread with her doula, and to have her birth preferences written down somewhere she can hand to the hospital.
 

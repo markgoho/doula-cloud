@@ -57,7 +57,7 @@ describe('a Practice page at /p/<slug>', () => {
 		await renderPage();
 		await expect.element(testPage.getByText('September 1, 2026')).toHaveAttribute('datetime', '2026-09-01');
 		await expect
-			.element(testPage.getByRole('link', { name: 'Doula Cloud' }))
+			.element(testPage.getByRole('link', { name: 'DoulaCloud' }))
 			.toHaveAttribute('href', 'https://doula.cloud/');
 	});
 

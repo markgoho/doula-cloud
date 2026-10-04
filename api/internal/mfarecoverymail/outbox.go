@@ -195,7 +195,7 @@ func recipientHasLiveLogin(ctx context.Context, tx *sql.Tx, recipientIdentityUID
 // Owner vouching for more than one person is not left guessing which
 // code is which.
 func vouchedCodeCopy(subjectName, code string) (subject, text string) {
-	return "Doula Cloud: account recovery code", "Hello,\n\n" +
+	return "DoulaCloud: account recovery code", "Hello,\n\n" +
 		"You approved an account-recovery request for " + subjectName + ".\n\n" +
 		"Recovery code: " + code + "\n\n" +
 		"Give this code to " + subjectName + " directly -- it lets her sign back in and set up a new authenticator. It expires in 24 hours and can be used once.\n\n" +

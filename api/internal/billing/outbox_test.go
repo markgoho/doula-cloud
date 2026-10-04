@@ -183,7 +183,7 @@ func TestLowCreditWorker_ProcessPending_MailsEveryOwnerAndMarksSent(t *testing.T
 	wantLink := testLowCreditAppBaseURL + "/practices/" + practiceID + "/billing"
 	wantRecipients := map[string]bool{"owner-one@example.com": false, "owner-two@example.com": false}
 	for _, msg := range sent {
-		if msg.Subject != "Doula Cloud: your Practice is out of Credits" {
+		if msg.Subject != "DoulaCloud: your Practice is out of Credits" {
 			t.Fatalf("subject = %q", msg.Subject)
 		}
 		if _, ok := wantRecipients[msg.To]; !ok {

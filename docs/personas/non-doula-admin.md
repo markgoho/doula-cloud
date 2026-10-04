@@ -12,7 +12,7 @@ Dee runs the back office at Rooted Birth Collective four days a week. They have 
 
 They are the fastest typist in the Practice and live in the app all day.
 
-## Why they come to Doula Cloud
+## Why they come to DoulaCloud
 
 To do the paperwork end of an Engagement without waiting on a doula who is at a birth.
 

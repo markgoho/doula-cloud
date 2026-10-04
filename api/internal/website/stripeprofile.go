@@ -14,8 +14,8 @@ import (
 // build is what makes something answer at it.
 //
 // A constant rather than an environment variable, because it is a fact
-// about the product and not about a deployment -- there is one Doula
-// Cloud website, at one address, and a per-environment value would only
+// about the product and not about a deployment -- there is one
+// DoulaCloud website, at one address, and a per-environment value would only
 // mean telling Stripe about a host that does not serve Practice pages.
 const SiteBaseURL = "https://doula.cloud"
 

@@ -143,7 +143,7 @@
 
 			const session = await multiFactor(enrollingUser).getSession();
 			totpSecret = await TotpMultiFactorGenerator.generateSecret(session);
-			qrCodeDataUrl = await QRCode.toDataURL(totpSecret.generateQrCodeUrl(email, 'Doula Cloud'));
+			qrCodeDataUrl = await QRCode.toDataURL(totpSecret.generateQrCodeUrl(email, 'DoulaCloud'));
 			secretKey = totpSecret.secretKey;
 			step = 'setup';
 		}, (refusal) => (Array.isArray(refusal) ? refusal : [passwordReauthRefusal(refusal, passwordId)]));

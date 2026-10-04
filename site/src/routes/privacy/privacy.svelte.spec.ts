@@ -23,7 +23,7 @@ describe('the Privacy Policy at /privacy (#1556)', () => {
 
 	it('says when this version takes effect, and shows the version history', async () => {
 		await render(Page);
-		await expect.element(testPage.getByText('Last updated October 2, 2026.')).toBeVisible();
+		await expect.element(testPage.getByText('Last updated October 3, 2026.')).toBeVisible();
 		await expect.element(testPage.getByRole('heading', { level: 2, name: 'Version history' })).toBeVisible();
 		await expect
 			.element(testPage.getByRole('listitem').filter({ hasText: 'Not a material change. First version.' }))

@@ -11,10 +11,9 @@
 	<section>
 		<h2>The product's name, drawn once</h2>
 		<p>
-			Every bar that says who we are renders this rather than its own mark-and-words pair, so
-			<Link href="https://github.com/markgoho/doula-cloud/issues/338" label="#338" /> can settle
-			<code>Doula Cloud</code> versus <code>DoulaCloud</code> by editing one string. This page ships
-			the current two-word form and decides nothing about it.
+			Every bar that says who we are renders this rather than its own mark-and-words pair. The name
+			is one word, <code>DoulaCloud</code>, capital D and capital C, as
+			<Link href="https://github.com/markgoho/doula-cloud/issues/338" label="#338" /> settled.
 		</p>
 		<!--
 			No hostile value exists for this component (ADR-0025): the lockup

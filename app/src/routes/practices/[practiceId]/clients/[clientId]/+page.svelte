@@ -106,7 +106,7 @@
 	function historyWho(entry: HistoryEntry): string {
 		if (entry.type === 'client_event') {
 			// Every actor kind arrives named (#1150). This screen used to
-			// spell two of those names itself -- "Doula Cloud" for a system
+			// spell two of those names itself -- "DoulaCloud" for a system
 			// actor, "Unknown staff" for a Staff member the join could no
 			// longer reach -- which put ADR-0022's word for the product in a
 			// second place and gave one Practice two words for one absence.

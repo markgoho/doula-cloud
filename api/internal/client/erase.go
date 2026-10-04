@@ -40,7 +40,7 @@ const (
 
 // StripeRedactionFloor is how long Stripe makes a platform wait before
 // most transactions can be redacted (ADR-0027). It is Stripe's number,
-// not a Doula Cloud policy, and erasure schedules the redaction job for
+// not a DoulaCloud policy, and erasure schedules the redaction job for
 // this far past the Client's newest invoice rather than issuing one it
 // already knows will fail validation.
 const StripeRedactionFloor = 90 * 24 * time.Hour

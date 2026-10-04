@@ -69,8 +69,8 @@ func composeAddressChange(mailer outbox.Mailer) func(context.Context, *sql.Tx, a
 // asked for it, and it must tell that person nothing.
 func addressChangeCopy(appBaseURL, token string) (subject, text string) {
 	link := appBaseURL + "/portal/confirm-sign-in-address?token=" + token
-	return "Confirm your Doula Cloud sign-in address", "Hello,\n\n" +
-		"Someone asked to use this address to sign in to Doula Cloud. Confirm it here:\n\n" +
+	return "Confirm your DoulaCloud sign-in address", "Hello,\n\n" +
+		"Someone asked to use this address to sign in to DoulaCloud. Confirm it here:\n\n" +
 		link + "\n\n" +
 		"This link expires in 24 hours. Until you use it, the old address keeps signing in. " +
 		"If you didn't ask for this, you can safely ignore this email.\n"

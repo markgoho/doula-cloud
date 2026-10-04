@@ -95,8 +95,8 @@ type Query struct {
 // a bare id a reader has to resolve itself: the acting Staff member's
 // name, activity.DepartedStaffName once her Membership has ended and
 // staff_practice_visibility (00002) stops admitting her staff row, the
-// acting Client's preferred name, or activity.SystemActorName ("Doula
-// Cloud", never "System" -- ADR-0022).
+// acting Client's preferred name, or activity.SystemActorName
+// ("DoulaCloud", never "System" -- ADR-0022).
 //
 // The Staff case is the one with a name to lose, and losing it is
 // answered above. A Client actor's own row is always reachable by the

@@ -11,13 +11,13 @@ describe('BrandLockup', () => {
 	it('writes the product name once, so #338 can change it in one place', async () => {
 		await setup();
 
-		await expect.element(page.getByText('Doula Cloud')).toBeVisible();
+		await expect.element(page.getByText('DoulaCloud')).toBeVisible();
 	});
 
 	it.each(['sm', 'md', 'lg'] as const)('renders at %s', async (size) => {
 		await setup({ size });
 
-		await expect.element(page.getByText('Doula Cloud')).toBeVisible();
+		await expect.element(page.getByText('DoulaCloud')).toBeVisible();
 	});
 
 	/*
@@ -27,6 +27,6 @@ describe('BrandLockup', () => {
 	it('names the product once between the mark and the words', async () => {
 		await setup();
 
-		await expect.element(page.getByRole('img', { name: 'Doula Cloud' })).not.toBeInTheDocument();
+		await expect.element(page.getByRole('img', { name: 'DoulaCloud' })).not.toBeInTheDocument();
 	});
 });

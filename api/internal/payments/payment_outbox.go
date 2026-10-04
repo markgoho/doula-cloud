@@ -17,7 +17,7 @@ import (
 // business data -- the ticket's own content-rule sketch hedged amount/
 // date with "if that", and this body takes the same link-only reading
 // rather than the permissive one, matching precedent.
-const paymentReceivedSubject = "Doula Cloud: a Payment arrived"
+const paymentReceivedSubject = "DoulaCloud: a Payment arrived"
 
 // link points at the Practice dashboard, not a payment list -- no
 // Practice-wide "all Payments" screen exists yet (a Payment renders only
@@ -26,7 +26,7 @@ const paymentReceivedSubject = "Doula Cloud: a Payment arrived"
 func paymentReceivedText(link string) string {
 	return "Hello,\n\n" +
 		"A Payment arrived for your Practice.\n\n" +
-		"Sign in to Doula Cloud to see the details:\n" +
+		"Sign in to DoulaCloud to see the details:\n" +
 		link + "\n"
 }
 

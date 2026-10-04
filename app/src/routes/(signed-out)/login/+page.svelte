@@ -244,7 +244,7 @@
 	/*
 	 * #610's press-through. The first exchange is refused when this
 	 * browser holds a live Client-portal session, because a browser holds
-	 * exactly one Doula Cloud session and minting this one would end that
+	 * exactly one DoulaCloud session and minting this one would end that
 	 * one silently. She is told what it costs and sends the same exchange
 	 * again, this time carrying `X-Confirmed`.
 	 */

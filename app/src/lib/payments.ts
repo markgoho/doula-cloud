@@ -193,7 +193,7 @@ export async function connect(fetcher: Fetcher, practiceId: string): Promise<str
  * three state the same weekly bound, and a bound restated in three
  * places has to be findable from one. */
 export const CONNECT_NUDGE_OFFER_MESSAGE =
-	'Doula Cloud can email every Practice Owner about this. It sends this reminder at most once a week.';
+	'DoulaCloud can email every Practice Owner about this. It sends this reminder at most once a week.';
 
 /** What the screen says once the nudge is queued (#917, ADR-0035).
  * Exported so the screen and its spec share one sentence rather than two
@@ -202,7 +202,7 @@ export const CONNECT_NUDGE_OFFER_MESSAGE =
  * arrived, because ADR-0010's outbox is exactly the difference between
  * those two claims. */
 export const CONNECT_NUDGE_SENT_MESSAGE =
-	'Every Practice Owner is being emailed about connecting Stripe. Doula Cloud sends this at most once a week.';
+	'Every Practice Owner is being emailed about connecting Stripe. DoulaCloud sends this at most once a week.';
 
 /** What the screen tells a non-Owner reader in the unconnected statuses
  * that are *not* `not_connected` (#917, ADR-0035). There is no control in
@@ -218,9 +218,9 @@ export const CONNECT_NUDGE_SENT_MESSAGE =
  * instant, which is the same standard ADR-0038 held its own derived
  * facts to. */
 export const CONNECT_OWNERS_ALREADY_EMAILED_MESSAGE =
-	'Doula Cloud emails every Practice Owner when Stripe asks for something, so there is nothing to send from here.';
+	'DoulaCloud emails every Practice Owner when Stripe asks for something, so there is nothing to send from here.';
 
-/** Asks Doula Cloud to email every Practice Owner that Stripe still has
+/** Asks DoulaCloud to email every Practice Owner that Stripe still has
  * to be connected (#917, ADR-0035).
  *
  * Offered only to a reader who may read Connect status and may not act

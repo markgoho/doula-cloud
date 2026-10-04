@@ -89,7 +89,7 @@ func TestWorker_ProcessPending_MailsSessionEvicted(t *testing.T) {
 	}
 	// Its own subject and body, not session_revoked's: an eviction ends
 	// one browser's session, and her other devices stay signed in.
-	if sent[0].Subject != "Doula Cloud: you were signed out in one browser" {
+	if sent[0].Subject != "DoulaCloud: you were signed out in one browser" {
 		t.Fatalf("subject = %q", sent[0].Subject)
 	}
 }

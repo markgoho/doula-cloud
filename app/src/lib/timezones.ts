@@ -32,7 +32,7 @@ import type { LabeledValue } from './roles.js';
  * Visit counts as birth or postpartum work.
  */
 export const TIMEZONE_HINT =
-	'Doula Cloud works out which day a Visit falls on in this timezone — which is what decides whether a Visit counts as birth or postpartum work.';
+	'DoulaCloud works out which day a Visit falls on in this timezone — which is what decides whether a Visit counts as birth or postpartum work.';
 
 /**
  * What a person reads when she has chosen no zone at all. GOV.UK's rule

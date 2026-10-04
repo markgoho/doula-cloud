@@ -13,7 +13,7 @@ Lena is nine years in and runs her own book. She is not employed by anybody. Two
 
 She is not "one of Renata's doulas". She is a business talking to another business, and the difference shows up in what she needs to know: the money on the job, and only the job.
 
-## Why she comes to Doula Cloud
+## Why she comes to DoulaCloud
 
 To carry a Practice's Client the way that Practice expects, without being handed the Practice's whole book — and to be able to check, months later, exactly what she agreed to and what she is owed.
 

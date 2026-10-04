@@ -1,7 +1,7 @@
 // Package practicedeletion is #871: a Practice deleting itself. It
 // follows ADR-0027's own template -- redact in place, never a hard
 // DELETE -- adapted for what a Practice carries that a Client does not:
-// other people's access (Staff, Clients) and Doula Cloud's own business
+// other people's access (Staff, Clients) and DoulaCloud's own business
 // records.
 //
 // The act has a middle a Client's erasure does not: a 30-day restore

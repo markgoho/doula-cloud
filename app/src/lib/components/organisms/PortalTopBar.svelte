@@ -8,7 +8,7 @@
 	/*
 	 * The Client portal's bar (#431, #452). Deliberately not the Staff
 	 * answer: the Practice's name is the portal's identity rather than
-	 * `Doula Cloud`, because a Client's relationship is with her doula's
+	 * `DoulaCloud`, because a Client's relationship is with her doula's
 	 * practice and not with the software it runs on. There is no Practice
 	 * switcher -- a Client's own Client record belongs to exactly one
 	 * Practice, so there is nothing to pick between the way Staff picks a

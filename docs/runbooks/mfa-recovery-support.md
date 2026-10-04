@@ -1,6 +1,6 @@
-# Runbook: MFA recovery, Doula Cloud support action
+# Runbook: MFA recovery, DoulaCloud support action
 
-[#615](https://github.com/markgoho/doula-cloud/issues/615)'s third recovery path: a Doula Cloud operator clears a person's TOTP enrollment by hand, after every other path has failed her. [#605](https://github.com/markgoho/doula-cloud/issues/605)'s resolution comment records why this exists and why it has no screen — read that first if you have not.
+[#615](https://github.com/markgoho/doula-cloud/issues/615)'s third recovery path: a DoulaCloud operator clears a person's TOTP enrollment by hand, after every other path has failed her. [#605](https://github.com/markgoho/doula-cloud/issues/605)'s resolution comment records why this exists and why it has no screen — read that first if you have not.
 
 **When this applies.** A Practice's sole Owner has lost both her phone (the TOTP enrollment) and her saved recovery codes ([#615](https://github.com/markgoho/doula-cloud/issues/615)'s second path). She has no Owner above her to vouch for her (the first path). Nothing else in the product can get her back in.
 

@@ -1097,7 +1097,7 @@ func TestPostConnectWebhookHandler_InvoicePaymentFailedReplayIsNoOp(t *testing.T
 
 // TestPostConnectWebhookHandler_InvoicePaymentFailedUnknownInvoiceDroppedButAcknowledged
 // proves an invoice.payment_failed event referencing a Stripe invoice id
-// Doula Cloud has no invoices row for is logged and dropped, not treated
+// DoulaCloud has no invoices row for is logged and dropped, not treated
 // as an error.
 func TestPostConnectWebhookHandler_InvoicePaymentFailedUnknownInvoiceDroppedButAcknowledged(t *testing.T) {
 	db := testdb.New(t)
@@ -1115,8 +1115,8 @@ func TestPostConnectWebhookHandler_InvoicePaymentFailedUnknownInvoiceDroppedButA
 }
 
 // TestPostConnectWebhookHandler_InvoicePaidUnknownInvoiceDroppedButAcknowledged
-// proves an invoice.paid event referencing a Stripe invoice id Doula
-// Cloud has no invoices row for is logged and dropped, not treated as an
+// proves an invoice.paid event referencing a Stripe invoice id
+// DoulaCloud has no invoices row for is logged and dropped, not treated as an
 // error.
 func TestPostConnectWebhookHandler_InvoicePaidUnknownInvoiceDroppedButAcknowledged(t *testing.T) {
 	db := testdb.New(t)

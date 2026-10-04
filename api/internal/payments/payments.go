@@ -1,6 +1,6 @@
 // Package payments owns a Practice's Stripe Connect linkage -- the
-// Client -> Practice side of Doula Cloud's Stripe integration, distinct
-// from billing's Practice -> Doula Cloud side. #79 establishes the schema
+// Client -> Practice side of DoulaCloud's Stripe integration, distinct
+// from billing's Practice -> DoulaCloud side. #79 establishes the schema
 // (columns on practices, mirroring billing's stripe_customer_id pattern),
 // the Client Stripe-client port, and Owner-only onboarding via a
 // Stripe-hosted Account Link. #80 adds the webhook that keeps the
@@ -108,7 +108,7 @@ func requirementsOrEmpty(requirements []string) []string {
 //
 // billing.StripeClient (#77) predates this ticket but covers a narrower,
 // non-overlapping set of calls (Customer + Checkout Session, for the
-// Practice -> Doula Cloud billing relationship) -- not an equivalent port,
+// Practice -> DoulaCloud billing relationship) -- not an equivalent port,
 // so this is a second, separate Stripe-client seam rather than a reuse of
 // billing's. Any later ticket needing this same shape of thing (an
 // outbound Stripe API port) should reuse this Client interface rather than
@@ -201,7 +201,7 @@ type Client interface {
 	// PayOutOfBand marks invoiceID paid on accountID's connected account
 	// with no charge, via Stripe's own paid_out_of_band flag (#271) -- how
 	// recording a manual Payment against a Stripe-backed Invoice keeps
-	// Stripe's own copy in step with Doula Cloud's rather than leaving a
+	// Stripe's own copy in step with DoulaCloud's rather than leaving a
 	// live hosted link a Client could still pay a second time. Firing this
 	// schedules Stripe's own invoice.paid webhook echo back at
 	// PostConnectWebhookHandler; handleInvoicePaid's already-paid guard is

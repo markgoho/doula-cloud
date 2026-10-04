@@ -19,7 +19,7 @@ const (
 	AuthEventOwnerVouched AuthEventReason = "owner_vouched"
 	// AuthEventSelfService is a sole Owner spending her own saved code.
 	AuthEventSelfService AuthEventReason = "self_service"
-	// AuthEventSupport is a Doula Cloud operator's last-resort action.
+	// AuthEventSupport is a DoulaCloud operator's last-resort action.
 	AuthEventSupport AuthEventReason = "support"
 	// AuthEventEnrolled is #606: a person enrolling her own TOTP factor,
 	// outside any of the three recovery paths above. Self-caused, like

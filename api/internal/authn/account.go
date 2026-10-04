@@ -27,7 +27,7 @@ var ErrAccountNotFound = errors.New("authn: no account for that identifier")
 // AccountManager is the Admin SDK surface #613 widens ADR-0004's
 // single-method Verifier into: reading and writing the account records
 // Identity Platform owns as credential store, never sending mail --
-// #169's decision moves the post office to Doula Cloud's own outbox and
+// #169's decision moves the post office to DoulaCloud's own outbox and
 // leaves Identity Platform exactly these four calls.
 type AccountManager interface {
 	// GetAccount reads uid's current address and verified flag. Used at

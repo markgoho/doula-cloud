@@ -1,7 +1,7 @@
 // Package authmail is ADR-0010's outbox for #613's three Staff auth
 // mail kinds -- email verification, password reset, and the email-change
 // notice -- built on #169's decision to keep Identity Platform as the
-// credential store while Doula Cloud's own outbox becomes the post
+// credential store while DoulaCloud's own outbox becomes the post
 // office.
 //
 // Two tables (00061), because the two kinds minted from auth_tokens
@@ -191,14 +191,14 @@ func tokenMailCopy(kind TokenMailKind, appBaseURL, token string) (subject, text 
 	switch kind {
 	case KindPasswordReset:
 		link := appBaseURL + "/reset-password?token=" + token
-		return "Reset your Doula Cloud password", "Hello,\n\n" +
-			"We received a request to reset your Doula Cloud password.\n\n" +
+		return "Reset your DoulaCloud password", "Hello,\n\n" +
+			"We received a request to reset your DoulaCloud password.\n\n" +
 			link + "\n\n" +
 			"This link expires in one hour. If you didn't request this, you can safely ignore this email -- your password has not been changed.\n"
 	case KindEmailVerification:
 		link := appBaseURL + "/verify-email?token=" + token
 		return "Verify your email address", "Hello,\n\n" +
-			"Please verify your email address for Doula Cloud.\n\n" +
+			"Please verify your email address for DoulaCloud.\n\n" +
 			link + "\n\n" +
 			"This link expires in 24 hours. If you didn't request this, you can safely ignore this email.\n"
 	}
@@ -265,10 +265,10 @@ func scanEmailChangeRow(rows *sql.Rows) (outbox.RowMeta, emailChangeRow, error) 
 // content-free copy. The new address is deliberately not named here:
 // the old address's owner only needs to know a change happened and
 // whether she recognizes it, not what it changed to.
-const emailChangeSubject = "The email on your Doula Cloud account was changed"
+const emailChangeSubject = "The email on your DoulaCloud account was changed"
 
 const emailChangeText = "Hello,\n\n" +
-	"The email address on your Doula Cloud account was changed.\n\n" +
+	"The email address on your DoulaCloud account was changed.\n\n" +
 	"If you made this change, no action is needed. If you did not, reply to this email right away.\n"
 
 // composeEmailChange carries no #892 skip-at-send recheck, and the

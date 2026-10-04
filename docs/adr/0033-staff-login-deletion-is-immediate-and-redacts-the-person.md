@@ -1,6 +1,6 @@
 # Staff login deletion is immediate, and redacts the person
 
-A Staff person — a doula, an Admin, an Owner — had no way to leave Doula Cloud. [ADR-0027](0027-erasure-redacts-in-place-and-shreds-the-key.md) answered this shape for a Client asking her Practice, and [ADR-0031](0031-practice-deletion-is-a-thirty-day-window-then-the-erasure-cascade.md) answered it for a Practice asking Doula Cloud. This is the third direction and the one neither of them reaches: a *person* asking Doula Cloud, whose reach runs across every Practice she works at rather than sitting inside one. An Owner's tool for ending someone's access is Membership removal, and it is correctly scoped to the one Practice that Owner owns; no Owner has, or should have, reach into the other Practices a contractor doula works at.
+A Staff person — a doula, an Admin, an Owner — had no way to leave DoulaCloud. [ADR-0027](0027-erasure-redacts-in-place-and-shreds-the-key.md) answered this shape for a Client asking her Practice, and [ADR-0031](0031-practice-deletion-is-a-thirty-day-window-then-the-erasure-cascade.md) answered it for a Practice asking DoulaCloud. This is the third direction and the one neither of them reaches: a *person* asking DoulaCloud, whose reach runs across every Practice she works at rather than sitting inside one. An Owner's tool for ending someone's access is Membership removal, and it is correctly scoped to the one Practice that Owner owns; no Owner has, or should have, reach into the other Practices a contractor doula works at.
 
 Decided on [#892](https://github.com/markgoho/doula-cloud/issues/892), split from [#871](https://github.com/markgoho/doula-cloud/issues/871) decision 6. GDPR and every non-US jurisdiction are out of scope, the same carve-out ADR-0027 and ADR-0031 both make.
 
@@ -12,7 +12,7 @@ ADR-0031 split the two words and this ADR holds the split. **Erasure** is what h
 
 ADR-0027's redact-in-place template applies here for its own reason and for a second one this ADR adds.
 
-The first reason is ADR-0027's: she is a natural person, and the point of the act is that Doula Cloud stops holding who she is.
+The first reason is ADR-0027's: she is a natural person, and the point of the act is that DoulaCloud stops holding who she is.
 
 The second is that a hard `DELETE FROM staff` is not merely unwise, it is impossible. Sixteen migrations carry a foreign key to `staff (id)`. `activity.actor_staff_id` is one of them, and `activity` holds `GRANT SELECT, INSERT` and no `DELETE` — by design, ADR-0022. A delete would have to unwrite an append-only log to succeed, and it cannot.
 
@@ -26,7 +26,7 @@ ADR-0031 gave Practice deletion a restore window and stated its reason plainly: 
 
 ## Every Membership ends, and the last-Owner rule refuses
 
-Deleting the login ends every Membership she holds, at every Practice, in the same transaction. An Owner does not have to remove her from each Practice first — that would make leaving Doula Cloud a negotiation with every Practice she ever worked at.
+Deleting the login ends every Membership she holds, at every Practice, in the same transaction. An Owner does not have to remove her from each Practice first — that would make leaving DoulaCloud a negotiation with every Practice she ever worked at.
 
 Each ended Membership records the same `removed` membership event `RemoveMembershipHandler` records, naming the roles and employment type it held, with her as her own actor. Losing her can leave a remaining co-Owner newly sole, so `reconcileOwnersAtPractice` runs per Practice afterwards, exactly as it does on the Owner-run path — [#615](https://github.com/markgoho/doula-cloud/issues/615)'s saved-recovery-code rule is inherited, not restated.
 
@@ -99,11 +99,11 @@ Two facts about that recheck, recorded because neither is obvious from the code:
 
 What that policy does and does not promise is worth stating, because the migration would otherwise read as promising more. It is what makes the redaction possible at all — 00044's `staff_self_update` refuses any write that walks the row away from the caller's own `identity_uid`, which is exactly the sentinel. It is *not* the only policy that can reach her row: 00044 is row-level by its own stated design, so stamping `deleted_at` while keeping her `identity_uid` is still admitted, by that policy. Narrowing 00044 to close that would take the work-state self-edit down with it, for a write no route exposes. So the pairing of the stamp and the sentinel is the handler's guarantee — one statement, checked to have affected exactly one row — and the policy's job is to make that statement possible.
 
-`staffauth.RequireConfirmed` gates it, the same `X-Confirmed` backstop `RemoveMembershipHandler` and Practice deletion use: a hard block with a deliberate override, per `CLAUDE.md`, not a dismissible warning. The confirmation names what is destroyed — her login, every Membership, her access to every Practice — and what is kept — every record she authored, and Doula Cloud's own logs — before it commits.
+`staffauth.RequireConfirmed` gates it, the same `X-Confirmed` backstop `RemoveMembershipHandler` and Practice deletion use: a hard block with a deliberate override, per `CLAUDE.md`, not a dismissible warning. The confirmation names what is destroyed — her login, every Membership, her access to every Practice — and what is kept — every record she authored, and DoulaCloud's own logs — before it commits.
 
 ## The Identity Platform call sits inside the transaction
 
-Every other split leaves a worse half-state. Account destroyed and row intact locks her out of a login she asked to delete and can no longer finish deleting. Row redacted and account intact leaves a live credential for a person Doula Cloud says is gone. Putting the call last inside the transaction makes a failure roll everything back, which is the one outcome that is honestly recoverable: she tries again.
+Every other split leaves a worse half-state. Account destroyed and row intact locks her out of a login she asked to delete and can no longer finish deleting. Row redacted and account intact leaves a live credential for a person DoulaCloud says is gone. Putting the call last inside the transaction makes a failure roll everything back, which is the one outcome that is honestly recoverable: she tries again.
 
 That a held-open Admin SDK round trip is acceptable at a once-per-person seam is `authn.BeginBootstrap`'s own recorded reasoning, and `ChangeEmailHandler`, `RemoveSecondFactorHandler` and `SpendResetHandler` already make Admin SDK calls inline. No outbox is introduced.
 

@@ -88,7 +88,7 @@ type invoicePaymentFailedObject struct {
 // resolve the matching invoices row (via its stored Stripe invoice id,
 // scoped by the event's account field) and update its status --
 // invoice.paid also creates exactly one payments row. An event for an
-// unrecognized account id, an Invoice not found in Doula Cloud, or any
+// unrecognized account id, an Invoice not found in DoulaCloud, or any
 // event type other than these two, is logged and dropped rather than
 // treated as an error -- Stripe retries indefinitely on anything but a
 // 2xx. Replays of the same Stripe event id are recorded in

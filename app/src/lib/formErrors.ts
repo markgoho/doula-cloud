@@ -262,7 +262,7 @@ export function errorsFromCause(
  *
  * Three screens sign a person in behind a Continue-style button, and all
  * three can be refused by #610's cross-population check -- a browser
- * holds exactly one Doula Cloud session, so signing into the second
+ * holds exactly one DoulaCloud session, so signing into the second
  * population evicts the first. That refusal is not a failure: nothing is
  * wrong with what she submitted, and the same submit sent again with
  * `X-Confirmed` goes through. It is announced as a `WarningText` above

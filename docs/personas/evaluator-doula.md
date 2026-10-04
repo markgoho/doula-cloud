@@ -1,6 +1,6 @@
 # Tasha Bell — evaluator doula
 
-- **Archetype**: Prospect deciding whether Doula Cloud is worth switching to
+- **Archetype**: Prospect deciding whether DoulaCloud is worth switching to
 - **Pronouns**: she/her
 - **Surface**: the marketing site first, then `/signup`
 - **Roles**: none yet — she has no Practice and no membership
@@ -8,11 +8,11 @@
 
 ## Who she is
 
-Tasha runs a two-doula practice in Tucson on a spreadsheet and a shared Google Drive. Someone in her certification cohort mentioned Doula Cloud. She has fifteen minutes between Clients and three other tabs open comparing tools.
+Tasha runs a two-doula practice in Tucson on a spreadsheet and a shared Google Drive. Someone in her certification cohort mentioned DoulaCloud. She has fifteen minutes between Clients and three other tabs open comparing tools.
 
 She has been burned before by software built for medical clinics and bent into a doula shape. She wants to see the word "doula" and the word "birth plan" before she gives anyone an email address.
 
-## Why she comes to Doula Cloud
+## Why she comes to DoulaCloud
 
 To answer one question fast: is this built for what I actually do, and can I get out again if it is not?
 

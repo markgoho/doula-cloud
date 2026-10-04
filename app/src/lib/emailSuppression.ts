@@ -1,7 +1,7 @@
 /**
  * A Practice's blocked email addresses (ADR-0029, #744).
  *
- * Doula Cloud stops sending to an address once mail to it hard-bounced,
+ * DoulaCloud stops sending to an address once mail to it hard-bounced,
  * or once the recipient marked the mail as spam. `loadEmailSuppressions`
  * reads the addresses one Practice is answerable for;
  * `clearEmailSuppression` lifts a bounce-caused block, which also deletes
@@ -44,7 +44,7 @@ function suppressionsPath(practiceId: string): string {
 }
 
 /**
- * Every address this Practice is answerable for that Doula Cloud has
+ * Every address this Practice is answerable for that DoulaCloud has
  * stopped writing to. Owner or Admin only, server-side (ADR-0008 keeps
  * this in the same hands as the roster it is drawn from), so a refusal
  * reaches the caller as the BFF's own sentence.

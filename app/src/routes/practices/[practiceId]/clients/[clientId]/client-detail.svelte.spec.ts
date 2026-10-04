@@ -349,13 +349,13 @@ describe('client detail hub', () => {
 					{
 						type: 'client_event',
 						at: '2026-01-01T00:00:00Z',
-						clientEvent: { eventType: 'updated', diff: {}, actorKind: 'system', actorName: 'Doula Cloud', createdAt: '2026-01-01T00:00:00Z' }
+						clientEvent: { eventType: 'updated', diff: {}, actorKind: 'system', actorName: 'DoulaCloud', createdAt: '2026-01-01T00:00:00Z' }
 					}
 				]
 			}
 		});
 
-		await expect.element(testPage.getByRole('cell', { name: 'Doula Cloud' })).toBeVisible();
+		await expect.element(testPage.getByRole('cell', { name: 'DoulaCloud' })).toBeVisible();
 		await expect.element(testPage.getByRole('cell', { name: 'System', exact: true })).not.toBeInTheDocument();
 	});
 

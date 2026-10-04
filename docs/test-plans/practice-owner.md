@@ -96,7 +96,7 @@ The membership picker (1.2) is exercised by no spec — every spec's Staff membe
 
 | Step | Action | Expected result | Mark |
 | --- | --- | --- | --- |
-| 7.1 | Open `/practices/[practiceId]/billing` | Credit balance and purchase ledger render — Doula Cloud's own billing, not Client money | `automated (billing.e2e.ts)` |
+| 7.1 | Open `/practices/[practiceId]/billing` | Credit balance and purchase ledger render — DoulaCloud's own billing, not Client money | `automated (billing.e2e.ts)` |
 | 7.2 | Look for unpaid Client Invoices | No Practice-wide Invoice list and no unpaid view exist | `missing-feature (RA-G7)` [#265](https://github.com/markgoho/doula-cloud/issues/265) |
 | 7.B-screens | Count the screens from the stage's entry to its end | **Screens**: 1 (Hick's Law, Flow). One list of unpaid Client Invoices across every Engagement | `manual` |
 | 7.B-time | Time each routine act on the stage's device, from the input to the result settled on screen | **Time**: 400 ms, 100 ms (Doherty Threshold) | `manual` |
@@ -198,7 +198,7 @@ A desk pass, not a walk. [#318](https://github.com/markgoho/doula-cloud/issues/3
 | 6.1-b | `manual` | as expected | Two columns, `Name` and `Status`. `intake` on all three rows (**[MO-G4](https://github.com/markgoho/doula-cloud/issues/253)**). Nothing about a Contract, an Invoice, or who is covering whom |
 | 6.2 | `manual` | as expected | One Engagement page at a time. Each showed `Contract / Create Draft Contract` and **no Invoice section at all** — Invoices only exist once a Contract does, so the answer to "which invoices are outstanding" is not merely unaggregated, it is absent on most Engagement pages too |
 | 6.2-a | `missing-feature (RA-G6)` [#264](https://github.com/markgoho/doula-cloud/issues/264) | as expected | Confirmed unwalkable. The Clients screen's complete link set is **Add a Client** and the three Client names |
-| 7.2 | `missing-feature (RA-G7)` [#265](https://github.com/markgoho/doula-cloud/issues/265) | as expected | Confirmed unwalkable. **Billing** is `Credit balance: 0`, a Date / Origin / Quantity ledger, `Quantity` and **Buy credits** — Doula Cloud's money, not her Clients'. The only invoice route in the whole API hangs off one Engagement's Contract (`api/main.go:210-213`) |
+| 7.2 | `missing-feature (RA-G7)` [#265](https://github.com/markgoho/doula-cloud/issues/265) | as expected | Confirmed unwalkable. **Billing** is `Credit balance: 0`, a Date / Origin / Quantity ledger, `Quantity` and **Buy credits** — DoulaCloud's money, not her Clients'. The only invoice route in the whole API hangs off one Engagement's Contract (`api/main.go:210-213`) |
 | 8.1 | `manual` | as expected | Signed in on a 390x844 iPhone context. The practice screen renders, the seven links stack, and `document.documentElement.scrollWidth === clientWidth === 390` — no horizontal overflow. The phone is not the problem |
 | 8.2 | `missing-feature (RA-G5)` [#263](https://github.com/markgoho/doula-cloud/issues/263) | as expected | Confirmed unwalkable. From the phone the only screens that exist are Clients (Name, Status) and Billing. No availability, no on-call, no coverage — and no route to build one from |
 | 9.2 | `manual` | as expected — **passes** | Filled the Birth Plan (`atmosphere: filled-0`), saved, then added `Hospital transfer wishes` to the Birth Plan template and saved that. Reopening the Engagement showed the original five fields and the kept answer; the new field is in the template response and **absent** from the instance. The snapshot holds |

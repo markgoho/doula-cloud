@@ -54,7 +54,7 @@ describe('ErrorPage.svelte', () => {
 	it('renders distinct copy for an unavailable page, and says trying again will help', async () => {
 		await setup({ kind: 'unavailable' });
 
-		await expect.element(page.getByRole('heading', { name: 'Doula Cloud is unavailable' })).toBeVisible();
+		await expect.element(page.getByRole('heading', { name: 'DoulaCloud is unavailable' })).toBeVisible();
 		await expect.element(page.getByText('Try again shortly.')).toBeVisible();
 	});
 

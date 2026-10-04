@@ -41,7 +41,7 @@ async function setup({
 
 describe('PortalTopBar', () => {
 	/*
-	 * The Practice's name is the portal's identity, not `Doula Cloud`: a
+	 * The Practice's name is the portal's identity, not `DoulaCloud`: a
 	 * Client's relationship is with her doula's practice and not with the
 	 * software it runs on.
 	 */
@@ -49,7 +49,7 @@ describe('PortalTopBar', () => {
 		await setup();
 
 		await expect.element(page.getByText('Riverside Doula Collective')).toBeVisible();
-		await expect.element(page.getByText('Doula Cloud')).not.toBeInTheDocument();
+		await expect.element(page.getByText('DoulaCloud')).not.toBeInTheDocument();
 	});
 
 	it.each(['Your care', 'Messages', 'Birth plan', 'Contract', 'Notifications'])('offers %s', async (label) => {

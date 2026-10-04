@@ -12,7 +12,7 @@ Maya is 34, certified six years, and works alone out of a spare room in Providen
 
 She is not afraid of software, but she is on call. Anything that needs a laptop and twenty quiet minutes will not get done.
 
-## Why she comes to Doula Cloud
+## Why she comes to DoulaCloud
 
 One place that holds the Client record, the Contract, the Birth Plan, and the messages, so that a 3 a.m. call does not start with hunting for a folder. She is also tired of chasing payment by text.
 

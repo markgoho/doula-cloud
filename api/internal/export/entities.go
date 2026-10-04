@@ -288,7 +288,7 @@ func entities() []entity {
 			// share one definition of "an address this Practice owns" and
 			// cannot drift into disagreeing about it.
 			file:        "email_suppression.csv",
-			description: "Addresses Doula Cloud has stopped writing to (a bounce or a complaint), and why.",
+			description: "Addresses DoulaCloud has stopped writing to (a bounce or a complaint), and why.",
 			header:      []string{"address", "cause", colCreatedAt, "cleared_at", "cleared_by_staff_id"},
 			query: `SELECT es.address, es.cause, es.created_at::text, es.cleared_at::text, es.cleared_by::text
 			          FROM email_suppressions es

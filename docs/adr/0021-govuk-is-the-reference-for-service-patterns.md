@@ -1,6 +1,6 @@
 # The GOV.UK Design System is our reference for service patterns, and never for markup or look
 
-Doula Cloud has been reaching for the [GOV.UK Design System](https://design-system.service.gov.uk/) without saying so. `FormPage.svelte:13` cites it for where the `<form>` element goes. `accept-invite/+page.svelte:155` cites it for a `tabindex="-1"` heading that takes focus. [#464](https://github.com/markgoho/doula-cloud/issues/464) is built from their question-page and error-summary guidance, and `b7e8ab7` asks for a date of birth in three boxes because their Dates pattern says a memorable date is never a picker.
+DoulaCloud has been reaching for the [GOV.UK Design System](https://design-system.service.gov.uk/) without saying so. `FormPage.svelte:13` cites it for where the `<form>` element goes. `accept-invite/+page.svelte:155` cites it for a `tabindex="-1"` heading that takes focus. [#464](https://github.com/markgoho/doula-cloud/issues/464) is built from their question-page and error-summary guidance, and `b7e8ab7` asks for a date of birth in three boxes because their Dates pattern says a memorable date is never a picker.
 
 Four citations, no decision. This records the decision, on the wayfinder map [Holistic application design](https://github.com/markgoho/doula-cloud/issues/405).
 
@@ -14,7 +14,7 @@ Four citations, no decision. This records the decision, on the wayfinder map [Ho
 
 Most design systems publish components. GOV.UK publishes decisions, and the research behind them. That is the part worth having, and it is the part a four-month runway cannot produce on its own.
 
-The fit is close for three reasons. Doula Cloud is a **service**, opened to complete a task and leave, not an app to browse. It is **form-heavy and low-frequency**, so nobody builds fluency in it. And some of the people using it are **mid-crisis** -- a client filling in a birth plan after a loss, a doula doing admin between two births -- which is precisely the person their whole posture is designed for.
+The fit is close for three reasons. DoulaCloud is a **service**, opened to complete a task and leave, not an app to browse. It is **form-heavy and low-frequency**, so nobody builds fluency in it. And some of the people using it are **mid-crisis** -- a client filling in a birth plan after a loss, a doula doing admin between two births -- which is precisely the person their whole posture is designed for.
 
 This does not conflict with [the design brief](../design/brief.md)'s appeal to Jakob's Law. The brief asks the product to behave the way software people already know; GOV.UK's patterns are what that looks like for the specific job of asking someone a question. The brief's own governing sentence -- *conventional in pattern and behavior, distinctive in execution* -- already draws this line. This ADR names which convention.
 

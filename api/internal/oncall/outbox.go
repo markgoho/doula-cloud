@@ -14,7 +14,7 @@ import (
 // exception: no Practice name, no Client, no Doula, no date -- nothing
 // identifying, in From, subject or body. Who cannot be reached, on which
 // birth and when, is behind the Practice's own sign-in, one link away.
-const gapNoticeSubject = "Doula Cloud: a birth needs on-call cover"
+const gapNoticeSubject = "DoulaCloud: a birth needs on-call cover"
 
 func gapNoticeText(link string) string {
 	return "Hello,\n\n" +

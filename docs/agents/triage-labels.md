@@ -2,7 +2,7 @@
 
 The skills speak in terms of five canonical triage roles. This file maps those roles to the mechanism this repo actually uses to record them.
 
-As of [#621](https://github.com/markgoho/doula-cloud/issues/621), the mechanism is the **Status** field on the [Doula Cloud Project](https://github.com/users/markgoho/projects/5), not a label. See `docs/agents/issue-tracker.md` for how to read and write it.
+As of [#621](https://github.com/markgoho/doula-cloud/issues/621), the mechanism is the **Status** field on the [DoulaCloud Project](https://github.com/users/markgoho/projects/5), not a label. See `docs/agents/issue-tracker.md` for how to read and write it.
 
 | Role in mattpocock/skills | Status value on the Project | Meaning                                  |
 | --------------------------- | ------------------------------ | ----------------------------------------- |

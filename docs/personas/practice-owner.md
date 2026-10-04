@@ -14,7 +14,7 @@ Rooted is sized to the pilot's fourteen-doula agency, not to a small practice: n
 
 Her real anxiety is coverage. If two Clients go into labor the same night, she needs to know within a minute who is free and who is already at a birth.
 
-## Why she comes to Doula Cloud
+## Why she comes to DoulaCloud
 
 To see the whole Practice at once — who is on which Engagement, which Contracts are unsigned, which Invoices are unpaid — without asking four people.
 

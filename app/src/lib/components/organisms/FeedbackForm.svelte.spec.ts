@@ -22,7 +22,7 @@ function setup({
 	errorKind = 'Select what kind of feedback it is',
 	textLabel = 'Tell us more',
 	textHint = 'What were you trying to do, and what happened?',
-	destination = 'This goes to the Doula Cloud team, not to your Practice.',
+	destination = 'This goes to the DoulaCloud team, not to your Practice.',
 	detailsSummary = 'What else we send with your feedback',
 	onSend = vi.fn().mockResolvedValue(undefined),
 	onSent = vi.fn(),
@@ -60,14 +60,14 @@ describe('FeedbackForm', () => {
 		await setup({
 			textLabel: 'Tell us more',
 			textHint: 'What were you trying to do, and what happened?',
-			destination: 'This goes to the Doula Cloud team, not to your Practice.',
+			destination: 'This goes to the DoulaCloud team, not to your Practice.',
 			detailsSummary: 'What else we send with your feedback'
 		});
 
 		await expect.element(browserPage.getByLabelText('Tell us more')).toBeVisible();
 		await expect.element(browserPage.getByText('What were you trying to do, and what happened?')).toBeVisible();
 		await expect
-			.element(browserPage.getByText('This goes to the Doula Cloud team, not to your Practice.'))
+			.element(browserPage.getByText('This goes to the DoulaCloud team, not to your Practice.'))
 			.toBeVisible();
 		await expect.element(browserPage.getByText('What else we send with your feedback')).toBeVisible();
 	});
@@ -84,7 +84,7 @@ describe('FeedbackForm', () => {
 		await expect
 			.element(browserPage.getByText(`your screen width and browser: 1024px, ${browserName(navigator.userAgent)}`))
 			.toBeVisible();
-		await expect.element(browserPage.getByText(`the version of Doula Cloud: ${appBuild()}`)).toBeVisible();
+		await expect.element(browserPage.getByText(`the version of DoulaCloud: ${appBuild()}`)).toBeVisible();
 		expect(browserPage.getByText('your role and Practice', { exact: false }).elements()).toHaveLength(0);
 	});
 

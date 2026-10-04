@@ -59,7 +59,7 @@ describe('StaffTopBar', () => {
 	it('carries the lockup', async () => {
 		await setup();
 
-		await expect.element(page.getByText('Doula Cloud').first()).toBeVisible();
+		await expect.element(page.getByText('DoulaCloud').first()).toBeVisible();
 	});
 
 	it.each(NAV_ITEMS.map((item) => item.label))('offers %s', async (label) => {

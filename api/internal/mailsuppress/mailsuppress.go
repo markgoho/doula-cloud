@@ -1,6 +1,6 @@
 // Package mailsuppress is ADR-0029's address-keyed email suppression:
 // the one fact that says "this address must receive no more mail from
-// Doula Cloud", shared by all eleven mail kinds because ADR-0011 puts
+// DoulaCloud", shared by all eleven mail kinds because ADR-0011 puts
 // them on one Mailgun domain and one reputation.
 //
 // It is deliberately not a notification_preferences channel (#303).
@@ -99,7 +99,7 @@ func Record(ctx context.Context, e Execer, address, cause, mailgunEventID string
 
 // Sender wraps the real mail.Sender and refuses a suppressed address
 // with mail.ErrSuppressed instead of handing it to Mailgun -- which
-// would refuse it server-side anyway, but without telling Doula Cloud's
+// would refuse it server-side anyway, but without telling DoulaCloud's
 // own outbox rows anything about why.
 type Sender struct {
 	Inner mail.Sender

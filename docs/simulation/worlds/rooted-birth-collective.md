@@ -6,13 +6,13 @@ Read this beside [the friction log format](../README.md), which says what a walk
 
 ## What a World is, and what it is not
 
-A **World** is a description of businesses that exist *in the world*, not a description of rows. Rooted Birth Collective is nine years old and none of it is in Doula Cloud. Its roster is in Renata's head and a shared calendar; its Contracts are on paper in a filing cabinet; the money it is owed is in a spreadsheet. **Day zero is the moment that agency meets the product** — Renata signs up into an empty tenancy and has to get nine years of reality into it while the work does not stop.
+A **World** is a description of businesses that exist *in the world*, not a description of rows. Rooted Birth Collective is nine years old and none of it is in DoulaCloud. Its roster is in Renata's head and a shared calendar; its Contracts are on paper in a filing cabinet; the money it is owed is in a spreadsheet. **Day zero is the moment that agency meets the product** — Renata signs up into an empty tenancy and has to get nine years of reality into it while the work does not stop.
 
 That is deliberate, and it is the single most expensive commitment in this map. Inserting the roster and the client book through SQL was rejected during charting because it skips the one path nobody has ever walked, and because it quietly assumes the answer to the question the run exists to ask: *can a real agency actually get itself in here?*
 
 Three things follow, and each one is a rule a later session will be tempted to break:
 
-- **Nothing in this file is a row.** Where it says a doula has been at Rooted seven years, that is a fact about the agency. Whether Doula Cloud can hold it is exactly what the run finds out — and where it cannot, that is a finding, not a defect in this document.
+- **Nothing in this file is a row.** Where it says a doula has been at Rooted seven years, that is a fact about the agency. Whether DoulaCloud can hold it is exactly what the run finds out — and where it cannot, that is a finding, not a defect in this document.
 - **This World is an input, not a constant.** The map is a *standing harness*: the shape of the world, the size of the cast and the span of time are parameters. This file is the setting for run one. A later run may change it, and its run README says which run it supersedes.
 - **The World is fiction, sized to reality.** It is not a portrait of any real agency, and no fact below was taken from one. It is sized to the pilot's 14-doula agency because `CLAUDE.md` makes performance under *a real Practice's data* a standing expectation, and a fixture-sized world cannot produce it.
 
@@ -110,7 +110,7 @@ Nine years old, Rochester, New York. Renata Alvarez started it alone in a rented
 
 **How the work is held today.** A shared Google Calendar that only Renata and Dee maintain. A filing cabinet of signed paper Contracts, one folder per Client, with the current year's folders on Dee's desk and everything older in a cupboard. A spreadsheet of who owes what, updated when Dee remembers. A group text thread for coverage, and Renata's phone for everything else. Nothing is wrong with any of it individually and all of it fails at once when two Clients labor on the same night.
 
-**What the agency is carrying on day zero.** A live book of Clients, some of them mid-pregnancy with due dates inside the six months the run walks, some of them in postpartum care, some of them owing money on work already finished. Every one of them signed a paper Contract that Doula Cloud has never seen. Every one of them has a doula who has been on the job for weeks or months and who is not recorded anywhere the product can read. The counts, the due-date distribution and the birth-against-postpartum split are settled at [the calendar](../calendar.md#the-book-on-day-zero) ([#765](https://github.com/markgoho/doula-cloud/issues/765)): **58 live Engagements, 32 birth and 26 postpartum**, with 15 of them walked and 43 provisioned, and birth due dates spread across all six months and past the end of the run.
+**What the agency is carrying on day zero.** A live book of Clients, some of them mid-pregnancy with due dates inside the six months the run walks, some of them in postpartum care, some of them owing money on work already finished. Every one of them signed a paper Contract that DoulaCloud has never seen. Every one of them has a doula who has been on the job for weeks or months and who is not recorded anywhere the product can read. The counts, the due-date distribution and the birth-against-postpartum split are settled at [the calendar](../calendar.md#the-book-on-day-zero) ([#765](https://github.com/markgoho/doula-cloud/issues/765)): **58 live Engagements, 32 birth and 26 postpartum**, with 15 of them walked and 43 provisioned, and birth due dates spread across all six months and past the end of the run.
 
 **What Renata is anxious about**, in her own order: coverage first — if two Clients go into labor tonight, who is free — then money, then whether her doulas will actually use the thing she is about to make them use. Nothing about software is in the first three.
 
@@ -143,7 +143,7 @@ Nadia's pregnancy ends in stillbirth at 31 weeks. **It falls in run week 14**, s
 
 Rochester, New York, across town from Rooted. Deborah Ridge owns it and Lena Vasquez contracts for it. It exists for one reason and does one thing.
 
-It is **already on the product** before the run's day zero, because the two-Practice membership this map wants to see requires Lena to hold an account first: Rooted's invitation must arrive at an address that Doula Cloud already knows. `staffauth`'s accept path resolves her existing `staff` row by `identity_uid` and inserts a second `practice_memberships` row on it, exactly what the same migration's own comment always said a person may do — the run walks it for real, at scale, for the first time.
+It is **already on the product** before the run's day zero, because the two-Practice membership this map wants to see requires Lena to hold an account first: Rooted's invitation must arrive at an address that DoulaCloud already knows. `staffauth`'s accept path resolves her existing `staff` row by `identity_uid` and inserts a second `practice_memberships` row on it, exactly what the same migration's own comment always said a person may do — the run walks it for real, at scale, for the first time.
 
 Beyond that, Ridgeline gives Lena somewhere else to be. She lands on the Practice picker more often than any other cast member, she must never see a Rooted Client from a Ridgeline session, and "what she is at each Practice" is two Memberships and must behave as two.
 
@@ -151,7 +151,7 @@ Deborah Ridge is walked exactly as far as creating the Practice and inviting Len
 
 ## Bell & Ortiz Birth Services
 
-Tucson, Arizona. Tasha Bell and Sofia Ortiz, two doulas on a spreadsheet and a shared Google Drive. It does not exist in Doula Cloud until Tasha creates it, mid-run, in fifteen minutes she does not really have, with three other tabs open.
+Tucson, Arizona. Tasha Bell and Sofia Ortiz, two doulas on a spreadsheet and a shared Google Drive. It does not exist in DoulaCloud until Tasha creates it, mid-run, in fifteen minutes she does not really have, with three other tabs open.
 
 Tasha's first leg — the marketing site — is out of scope for this map, so her walk starts at `/signup` cold, with none of Maya's motivation and none of Renata's commitment. She is the only cast member permitted to stop, and **where she stops is the entry**. Sofia Ortiz is instantiated only if Tasha gets as far as inviting her; if she does not, Sofia never exists, and that is a result rather than a gap in the World.
 

@@ -28,7 +28,10 @@ export interface LegalDocument {
 export const TERMS: LegalDocument = {
 	name: 'Terms of Service',
 	path: '/terms',
-	versions: [{ effective: '2026-09-29', material: false, change: 'First version.' }]
+	versions: [
+		{ effective: '2026-09-29', material: false, change: 'First version.' },
+		{ effective: '2026-10-03', material: false, change: 'Writes the name of the product as one word, DoulaCloud.' }
+	]
 };
 
 export const PRIVACY: LegalDocument = {
@@ -40,7 +43,8 @@ export const PRIVACY: LegalDocument = {
 			effective: '2026-10-02',
 			material: false,
 			change: 'Says how long Feedback is kept, what erases it, and that GitHub keeps a note of each piece.'
-		}
+		},
+		{ effective: '2026-10-03', material: false, change: 'Writes the name of the product as one word, DoulaCloud.' }
 	]
 };
 

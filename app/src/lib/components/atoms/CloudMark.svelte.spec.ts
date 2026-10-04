@@ -149,8 +149,8 @@ describe('CloudMark', () => {
 	});
 
 	it('is an image when it stands alone', async () => {
-		await setup({ label: 'Doula Cloud' });
+		await setup({ label: 'DoulaCloud' });
 
-		await expect.element(page.getByRole('img', { name: 'Doula Cloud' })).toBeVisible();
+		await expect.element(page.getByRole('img', { name: 'DoulaCloud' })).toBeVisible();
 	});
 });

@@ -1,6 +1,6 @@
 # Erasure redacts in place and shreds the key
 
-A Client asks her Practice to delete her data. US state right-to-delete law — CCPA/CPRA and the state statutes that copy it — obliges the Practice to honor that, while a separate body of law obliges the same Practice to keep the financial record of what it billed her. Doula Cloud has a third obligation of its own: `activity` is append-only, holds `GRANT SELECT, INSERT` and nothing else, and is the answer to `CLAUDE.md`'s standing audit expectation. All three have to hold at once.
+A Client asks her Practice to delete her data. US state right-to-delete law — CCPA/CPRA and the state statutes that copy it — obliges the Practice to honor that, while a separate body of law obliges the same Practice to keep the financial record of what it billed her. DoulaCloud has a third obligation of its own: `activity` is append-only, holds `GRANT SELECT, INSERT` and nothing else, and is the answer to `CLAUDE.md`'s standing audit expectation. All three have to hold at once.
 
 Decided on [#394](https://github.com/markgoho/doula-cloud/issues/394). GDPR and every non-US jurisdiction are out of scope; no pilot Practice crosses any state's applicability threshold yet, and this is built ahead of that trigger rather than in response to it.
 
@@ -43,7 +43,7 @@ What the Practice sees is the last of those dates, on her detail read as `stripe
 Two things were verified against the Sandbox rather than read from the docs, and both shaped this:
 
 - `DELETE /v1/customers/:id` with `Stripe-Account` works on a connected account. That leg is real.
-- `POST /v1/privacy/redaction_jobs` answers *Unrecognized request URL* on this account, under both `/v1` and `/v2` and under every preview `Stripe-Version` tried. Redaction Jobs is in public preview and is not enabled on the Doula Cloud account. The call is implemented against the documented endpoint through `stripe.RawRequest`, and until the preview is enabled it will dead-letter with that error rather than silently claiming success. Enabling it is an account request, not code.
+- `POST /v1/privacy/redaction_jobs` answers *Unrecognized request URL* on this account, under both `/v1` and `/v2` and under every preview `Stripe-Version` tried. Redaction Jobs is in public preview and is not enabled on the DoulaCloud account. The call is implemented against the documented endpoint through `stripe.RawRequest`, and until the preview is enabled it will dead-letter with that error rather than silently claiming success. Enabling it is an account request, not code.
 
 Erasure refuses, with a 409 naming the invoices, while any of her invoices is still `draft` or `open`. A non-terminal transaction cannot be redacted, and deleting the Customer under an open invoice leaves the Practice unable to collect on work it did. She is erased once the money is settled, one way or the other.
 
@@ -61,7 +61,7 @@ Camille is a Client at Rooted Birth Collective and at Ridgeline Doulas, behind o
 
 **The rule: erasure removes the erasing Practice's link to the login always, and deletes the login itself only when no un-erased Client anywhere still reaches it.** The last Practice out takes it; anyone before that takes only its own link. Three consequences, each decided here rather than left to the caller.
 
-**Her sign-in address stays while the login does.** It is the login's own fact — ADR-0015's *the person lives in the login* — not the erasing Practice's record of her, and she is still an active user of Doula Cloud through the other Practice. What Rooted's erasure destroys is Rooted's ability to reach her, which the cleared `identity_uid` on Rooted's own row already accomplishes.
+**Her sign-in address stays while the login does.** It is the login's own fact — ADR-0015's *the person lives in the login* — not the erasing Practice's record of her, and she is still an active user of DoulaCloud through the other Practice. What Rooted's erasure destroys is Rooted's ability to reach her, which the cleared `identity_uid` on Rooted's own row already accomplishes.
 
 **Her sessions survive while the login does.** A session is the person's, not a Practice's: one reaches every Client she has. `clientauth` recomputes her reachable set from `client_portal_users` on every request, so a row with no `identity_uid` is a Client she can no longer address, live cookie or not — the unlink is the enforcement, and ending every session would only be the same cross-Practice reach in a different form. When the login itself goes, the sessions go with it, unchanged from the section above.
 

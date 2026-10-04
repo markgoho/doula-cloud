@@ -263,7 +263,7 @@ describe('the Pilot banner and Feedback drawer (#1527)', () => {
 		await setup();
 
 		await expect
-			.element(page.getByText('Doula Cloud is new, and you are one of the first to use it.', { exact: false }))
+			.element(page.getByText('DoulaCloud is new, and you are one of the first to use it.', { exact: false }))
 			.toBeVisible();
 	});
 

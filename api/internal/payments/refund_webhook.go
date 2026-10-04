@@ -30,7 +30,7 @@ import (
 //     own Invoice record never learns of it.
 //
 // Listening to both is what makes a Refund the Practice issued anywhere
-// reach Doula Cloud's record. A card Refund therefore arrives twice, and
+// reach DoulaCloud's record. A card Refund therefore arrives twice, and
 // refundReference is what lets the second arrival find the first's row.
 const (
 	eventTypeCreditNoteCreated = string(stripe.EventTypeCreditNoteCreated)
@@ -96,8 +96,8 @@ var errRefundAlreadyRecorded = errors.New("payments: refund already recorded")
 // transaction commits, and then finds its Refund row.
 //
 // The Refund carries no method and no note: Stripe does not report how a
-// Practice returned out-of-band money, and nobody in Doula Cloud wrote a
-// note. Its actor is Doula Cloud, which is true in ADR-0022's own sense
+// Practice returned out-of-band money, and nobody in DoulaCloud wrote a
+// note. Its actor is DoulaCloud, which is true in ADR-0022's own sense
 // -- the product recorded it, with nobody here asking -- and the diff's
 // origin says the Practice issued it from her Stripe Dashboard, which is
 // what the Staff-facing sentence reads.
@@ -141,14 +141,14 @@ func finishRefundEvent(w http.ResponseWriter, tx *sql.Tx, committed *bool, event
 	case errors.Is(err, errRefundAlreadyRecorded):
 		log.Printf("payments: connect webhook: %s already recorded, skipping (event id %s)", event.Type, event.ID)
 	case errors.Is(err, sql.ErrNoRows), errors.Is(err, errPaymentReversedForRefund), errors.Is(err, errRefundExceedsPayment):
-		// Stripe returned money against a Payment Doula Cloud's record
+		// Stripe returned money against a Payment DoulaCloud's record
 		// cannot take it against. Stripe caps a refund at what it
 		// collected, which is what the Payment row recorded, so this means
 		// the two records already disagreed before this event arrived.
 		// Logged loudly rather than written: the local invariant that a
 		// Payment is never over-returned holds absolutely, and the log is
 		// what an operator reconciles from.
-		log.Printf("payments: connect webhook: %s cannot be recorded against Doula Cloud's Payment (event id %s): %v", event.Type, event.ID, err)
+		log.Printf("payments: connect webhook: %s cannot be recorded against DoulaCloud's Payment (event id %s): %v", event.Type, event.ID, err)
 	default:
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
@@ -262,7 +262,7 @@ func handleRefundCreated(w http.ResponseWriter, r *http.Request, db *sql.DB, eve
 	}
 	if errors.Is(err, sql.ErrNoRows) {
 		// Not every Refund on a Practice's account is against an Invoice
-		// Doula Cloud raised; one that is not has nothing to attach to.
+		// DoulaCloud raised; one that is not has nothing to attach to.
 		log.Printf("payments: connect webhook: dropping refund.created %s for unresolved payment %q (account %q, event id %s)", refund.ID, refund.PaymentIntent, event.Account, event.ID)
 		commitAndAck(w, tx, &committed)
 		return

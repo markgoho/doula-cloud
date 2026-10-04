@@ -191,7 +191,7 @@ describe('the Pilot banner and Feedback drawer (#1527)', () => {
 
 		await expect
 			.element(
-				testPage.getByText('Doula Cloud is new, and you are one of the first to use it.', { exact: false })
+				testPage.getByText('DoulaCloud is new, and you are one of the first to use it.', { exact: false })
 			)
 			.toBeVisible();
 	});

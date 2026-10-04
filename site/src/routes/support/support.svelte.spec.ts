@@ -22,7 +22,7 @@ describe('/support', () => {
 	it('says what the product is, and that it is not a payment service', async () => {
 		await render(Page);
 		await expect
-			.element(testPage.getByText('Doula Cloud is practice-management software for doulas and doula agencies.', { exact: false }))
+			.element(testPage.getByText('DoulaCloud is practice-management software for doulas and doula agencies.', { exact: false }))
 			.toBeVisible();
 		await expect
 			.element(testPage.getByText('never receives or holds a practice', { exact: false }))

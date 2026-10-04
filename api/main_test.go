@@ -36,7 +36,7 @@ import (
 )
 
 // testWorkerFrom is every routes() test worker's stand-in From identity.
-const testWorkerFrom = "Doula Cloud <notifications@mg.example.test>"
+const testWorkerFrom = "DoulaCloud <notifications@mg.example.test>"
 
 // roleDoula names the practice_role every routes() test that seeds a
 // plain roster member (not an Owner) uses, so goconst has one spelling

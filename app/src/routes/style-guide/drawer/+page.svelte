@@ -35,16 +35,16 @@
 			busiest -- the disclosure's role and Practice line included --
 			the same way the panel actually appears on a Staff screen.
 		-->
-		<Drawer bind:open={isOpen} heading="Send feedback to Doula Cloud">
+		<Drawer bind:open={isOpen} heading="Send feedback to DoulaCloud">
 			<Text
-				text="The Doula Cloud team reads every piece of feedback during the pilot. It is how we decide what to fix first."
+				text="The DoulaCloud team reads every piece of feedback during the pilot. It is how we decide what to fix first."
 			/>
 			<FeedbackForm
 				legend="What kind of feedback is it?"
 				errorKind="Select what kind of feedback it is"
 				textLabel="Tell us more"
 				textHint="What were you trying to do, and what happened?"
-				destination="This goes to the Doula Cloud team, not to your Practice."
+				destination="This goes to the DoulaCloud team, not to your Practice."
 				detailsSummary="What else we send with your feedback"
 				roleAndPractice="Owner, Finger Lakes Birth Collective"
 				onSend={async () => {}}

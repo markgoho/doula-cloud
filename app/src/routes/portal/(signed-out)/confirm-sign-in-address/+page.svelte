@@ -58,7 +58,7 @@
 		<Text text={`From now on you sign in with ${confirmedAddress}. Your old address no longer works.`} />
 		<Link href={resolve('/portal/(signed-out)/login')} label="Sign in" />
 	{:else}
-		<Text text="Confirm that you want to use this address to sign in to Doula Cloud." />
+		<Text text="Confirm that you want to use this address to sign in to DoulaCloud." />
 		<Button type="button" label="Continue" loading={submission.isSubmitting} onClick={handleContinue} />
 	{/if}
 {/snippet}

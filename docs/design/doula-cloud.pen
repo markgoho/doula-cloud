@@ -2793,7 +2793,7 @@
           "id": "QQm2H",
           "name": "Wordmark",
           "fill": "$color-on-surface",
-          "content": "Doula Cloud",
+          "content": "DoulaCloud",
           "fontFamily": "$font-family-base",
           "fontSize": 17,
           "fontWeight": "600",
@@ -16022,7 +16022,7 @@
                                   "content": "Invoice INV-2052 emailed to Amara Okafor"
                                 },
                                 "P3YAlV": {
-                                  "content": "Doula Cloud"
+                                  "content": "DoulaCloud"
                                 }
                               }
                             },
@@ -16148,7 +16148,7 @@
                                   "content": "Portal invite sent to amara.okafor@example.com"
                                 },
                                 "P3YAlV": {
-                                  "content": "Doula Cloud"
+                                  "content": "DoulaCloud"
                                 }
                               }
                             },
@@ -16190,7 +16190,7 @@
                                   "content": "Offer to Lena Vasquez superseded"
                                 },
                                 "P3YAlV": {
-                                  "content": "Doula Cloud"
+                                  "content": "DoulaCloud"
                                 }
                               }
                             },
@@ -16259,7 +16259,7 @@
                               "fill": "$color-on-surface-variant",
                               "textGrowth": "fixed-width",
                               "width": "fill_container",
-                              "content": "Two rules the drawing is asserting. Actors come in three kinds and only one is a staff member — a person did it, the Client did it (Amara signed, Amara paid), or Doula Cloud did it with nobody asking. And time is relative under seven days and absolute beyond it, on a 12-hour clock — “2 hours ago” is what a person reads and “14 Aug 2026, 8:12pm” is what an audit trail survives on; the exact instant is always carried underneath, never replaced. Only two of these eleven events are recorded at all today.",
+                              "content": "Two rules the drawing is asserting. Actors come in three kinds and only one is a staff member — a person did it, the Client did it (Amara signed, Amara paid), or DoulaCloud did it with nobody asking. And time is relative under seven days and absolute beyond it, on a 12-hour clock — “2 hours ago” is what a person reads and “14 Aug 2026, 8:12pm” is what an audit trail survives on; the exact instant is always carried underneath, never replaced. Only two of these eleven events are recorded at all today.",
                               "fontFamily": "$font-family-base",
                               "fontSize": "$text-meta-size",
                               "fontWeight": "normal"
@@ -18112,7 +18112,7 @@
                                   "content": "Portal invite sent to amara.okafor@example.com"
                                 },
                                 "P3YAlV": {
-                                  "content": "Doula Cloud"
+                                  "content": "DoulaCloud"
                                 }
                               }
                             },
@@ -18154,7 +18154,7 @@
                                   "content": "Offer to Lena Vasquez superseded"
                                 },
                                 "P3YAlV": {
-                                  "content": "Doula Cloud"
+                                  "content": "DoulaCloud"
                                 }
                               }
                             },
@@ -20110,7 +20110,7 @@
                                   "content": "Portal invite sent to amara.okafor@example.com"
                                 },
                                 "P3YAlV": {
-                                  "content": "Doula Cloud"
+                                  "content": "DoulaCloud"
                                 }
                               }
                             },
@@ -20152,7 +20152,7 @@
                                   "content": "Offer to Lena Vasquez superseded"
                                 },
                                 "P3YAlV": {
-                                  "content": "Doula Cloud"
+                                  "content": "DoulaCloud"
                                 }
                               }
                             },

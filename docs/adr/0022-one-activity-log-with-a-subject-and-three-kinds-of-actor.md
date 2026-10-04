@@ -23,9 +23,9 @@ The cost is honest and is accepted: `client_events` already has a writer from th
 
 - **A staff member did it.** Mark Goho raised the invoice; Tasha Lin edited the care plan.
 - **The Client did it.** Amara signed the Contract; Amara paid the invoice. This is not a system event with a staff actor missing — `contracts` already records `signer_full_name`, `signed_at` and `signer_ip`, so the product already knows the Client acted, it simply has nowhere to say so.
-- **Doula Cloud did it, with nobody asking.** An invite email went out; an Offer was superseded when another Doula accepted first.
+- **DoulaCloud did it, with nobody asking.** An invite email went out; an Offer was superseded when another Doula accepted first.
 
-So `actor_kind` is `staff | client | system`, and the third one **displays as "Doula Cloud"**, never as "System". The product acting on its own behalf has a name, and it is the product's name; "System" is an engineering word on a screen a doula reads at 3am.
+So `actor_kind` is `staff | client | system`, and the third one **displays as "DoulaCloud"**, never as "System". The product acting on its own behalf has a name, and it is the product's name; "System" is an engineering word on a screen a doula reads at 3am.
 
 ## The log is read through the same gate as the thing it describes
 

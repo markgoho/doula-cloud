@@ -87,16 +87,16 @@ describe('sendPortalFeedback', () => {
 
 describe('feedbackSentNotice', () => {
 	it('names the replier and the address when one is known', () => {
-		expect(feedbackSentNotice('jordan@fingerlakesbirth.example', 'Mark Goho, who builds Doula Cloud,')).toBe(
-			'Feedback sent. Thank you. If a reply would help, Mark Goho, who builds Doula Cloud, will email you at jordan@fingerlakesbirth.example.'
+		expect(feedbackSentNotice('jordan@fingerlakesbirth.example', 'Mark Goho, who builds DoulaCloud,')).toBe(
+			'Feedback sent. Thank you. If a reply would help, Mark Goho, who builds DoulaCloud, will email you at jordan@fingerlakesbirth.example.'
 		);
-		expect(feedbackSentNotice('alex.rivera@example.com', 'the Doula Cloud team')).toBe(
-			'Feedback sent. Thank you. If a reply would help, the Doula Cloud team will email you at alex.rivera@example.com.'
+		expect(feedbackSentNotice('alex.rivera@example.com', 'the DoulaCloud team')).toBe(
+			'Feedback sent. Thank you. If a reply would help, the DoulaCloud team will email you at alex.rivera@example.com.'
 		);
 	});
 
 	it('drops the "will email you at" clause rather than interpolating an empty address', () => {
-		expect(feedbackSentNotice('', 'the Doula Cloud team')).toBe('Feedback sent. Thank you.');
+		expect(feedbackSentNotice('', 'the DoulaCloud team')).toBe('Feedback sent. Thank you.');
 	});
 });
 

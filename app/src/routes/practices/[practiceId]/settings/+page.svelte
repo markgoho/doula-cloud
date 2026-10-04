@@ -122,7 +122,7 @@
 					{
 						label: 'Blocked email addresses',
 						description:
-							'The addresses Doula Cloud has stopped writing to, and why each one stopped.',
+							'The addresses DoulaCloud has stopped writing to, and why each one stopped.',
 						href: resolve('/practices/[practiceId]/settings/blocked-addresses', { practiceId })
 					}
 				]
@@ -136,7 +136,7 @@
 					},
 					// #288: a ZIP of every Client, Engagement, Contract, Invoice
 					// and the rest of what this Practice owns, as CSVs a
-					// spreadsheet opens without Doula Cloud. Owner-only, same
+					// spreadsheet opens without DoulaCloud. Owner-only, same
 					// seat as erasure -- a whole-Practice export is a bulk read
 					// across every attachment and role boundary ADR-0008 draws.
 					// Plain API href, not resolve(): this is not a page inside

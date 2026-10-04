@@ -23,7 +23,7 @@ describe('the teaser at / (#358)', () => {
 		await expect
 			.element(testPage.getByText("Put your name down and I'll write to you once, when it opens."))
 			.toBeVisible();
-		await expect.element(testPage.getByText('Building Doula Cloud')).toBeVisible();
+		await expect.element(testPage.getByText('Building DoulaCloud')).toBeVisible();
 	});
 
 	it('puts the letter before the card, so a screen reader meets the note first', async () => {
@@ -35,7 +35,7 @@ describe('the teaser at / (#358)', () => {
 
 	it('is found and shared: a title, a description and the social card, with no canonical tag (#368)', async () => {
 		await render(Page);
-		expect(document.title).toBe('Doula Cloud: coming January 2027');
+		expect(document.title).toBe('DoulaCloud: coming January 2027');
 		expect(document.head.querySelector('meta[name="description"]')?.getAttribute('content')).toContain(
 			'opens in January 2027'
 		);

@@ -1,4 +1,4 @@
-# Doula Cloud design brief
+# DoulaCloud design brief
 
 **Direction: _Plum Dusk, evolved_.** Chosen by Mark Goho on 2026-08-28 from four candidate directions generated for [#409](https://github.com/markgoho/doula-cloud/issues/409), a sub-ticket of the [Holistic application design](https://github.com/markgoho/doula-cloud/issues/405) map.
 
@@ -10,13 +10,13 @@ Three reasons were recorded, in the words given:
 
 1. **It looked the best** of the four.
 2. **Restraint is right for the job.** A form-heavy tool that a 14-doula agency reads all day should be quiet.
-3. **It looks most like a SaaS application — Jakob's Law of UX.** People spend most of their time in other software; Doula Cloud should work the way that software already works.
+3. **It looks most like a SaaS application — Jakob's Law of UX.** People spend most of their time in other software; DoulaCloud should work the way that software already works.
 
 The third reason governs the other two. A doula opening this product on her first morning should already know where the nav is, what a primary button looks like, and what happens when she clicks the avatar. Novelty in those places is a cost paid by every user, every day.
 
 A fourth thing was stipulated alongside the choice, and it is not a caveat:
 
-4. **Doula Cloud should still have something of its own** — not so radical that a person cannot work out how to use it, but genuinely there. **Smooth UX is a primary goal**, and it is the thing the product should be recognized for.
+4. **DoulaCloud should still have something of its own** — not so radical that a person cannot work out how to use it, but genuinely there. **Smooth UX is a primary goal**, and it is the thing the product should be recognized for.
 
 So the direction's stated weakness — that it was the safest and least memorable of the four — is *not* accepted as it stands. Familiarity is the floor, not the ceiling. What follows is how both are satisfied at once.
 
@@ -218,7 +218,7 @@ The direction is deliberately conventional in its patterns, so the whole distinc
 
 Jakob's Law decided the direction, and it is not adopted alone. **The thirty laws at [lawsofux.com](https://lawsofux.com/) are this product's standing reference for interaction design**, on the same footing as the palette and the type scale.
 
-They are listed here once each, grouped by what they actually decide, with **what each one demands in Doula Cloud** — not its definition, which the site already gives. A law with no concrete obligation here would be decoration, so every row names a real screen, a real number, or a real prohibition. Where two laws pull against each other, the conflict is named and resolved at the end rather than left for somebody to discover mid-ticket.
+They are listed here once each, grouped by what they actually decide, with **what each one demands in DoulaCloud** — not its definition, which the site already gives. A law with no concrete obligation here would be decoration, so every row names a real screen, a real number, or a real prohibition. Where two laws pull against each other, the conflict is named and resolved at the end rather than left for somebody to discover mid-ticket.
 
 ### The shell, navigation and controls
 

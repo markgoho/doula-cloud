@@ -442,7 +442,7 @@ describe('deleting your own login', () => {
 	it('names what deletion destroys and what it keeps, before she presses anything', async () => {
 		await setupDeleteLogin(new Response(undefined, { status: 204 }));
 
-		await expect.element(testPage.getByText(/ends your access to Doula Cloud everywhere/)).toBeVisible();
+		await expect.element(testPage.getByText(/ends your access to DoulaCloud everywhere/)).toBeVisible();
 		await expect.element(testPage.getByText(/membership of every practice you work at/).first()).toBeVisible();
 		await expect.element(testPage.getByText(/Everything you did stays with the practices/).first()).toBeVisible();
 	});

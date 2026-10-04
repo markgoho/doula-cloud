@@ -15,7 +15,7 @@ describe('+error.svelte (root catch-all)', () => {
 	it('renders its own signed-out bar, since no route matched and no layout is above it', async () => {
 		await setup();
 
-		await expect.element(page.getByText('Doula Cloud')).toBeVisible();
+		await expect.element(page.getByText('DoulaCloud')).toBeVisible();
 	});
 
 	it('renders the state matching page.status', async () => {

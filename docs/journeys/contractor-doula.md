@@ -11,7 +11,7 @@ She is the second negative-permission Persona and the tighter one. Priya Raman i
 
 ## Moment of truth
 
-**Stage 3 — the offer, before she has said yes.** This is the screen that decides whether Doula Cloud is worth anything to a contractor, and it is the hardest screen in her journey to get right: it must tell her enough to take or refuse the job — who the Client is, when, and for how much — while she is still an outsider with no claim on any of it. Too little and she goes back to the phone and the product is a notification service. Too much and the agency's book is open to someone who has not agreed to anything.
+**Stage 3 — the offer, before she has said yes.** This is the screen that decides whether DoulaCloud is worth anything to a contractor, and it is the hardest screen in her journey to get right: it must tell her enough to take or refuse the job — who the Client is, when, and for how much — while she is still an outsider with no claim on any of it. Too little and she goes back to the phone and the product is a notification service. Too much and the agency's book is open to someone who has not agreed to anything.
 
 Her second-hardest moment is stage 5, reading back the fee months later; it is the durable-record half of the same need. Both are design findings, not priority signals.
 
@@ -130,7 +130,7 @@ The tension is the design problem, and it is not resolvable by leaving it to the
 
 ### Stage 7 — Get paid
 
-**Thinking**: "Invoice Renata, and check it against what we said in November." **Pain points**: this stage has no product in it. `invoices` rows carry a `practice_id` and a `contract_id` (`00024_invoices.sql:16`) — the Practice billing the Client. There is no record anywhere of a Practice owing a doula, so the second half of her "done looks like" — *point to what she was paid* — is unanswerable, and the Practice's record and hers are guaranteed to be separate documents (LV-G3). Credits do not help: they are Doula Cloud's own billing, bought only by an Owner, and what a Credit even buys is unsettled in code (TB-G3).
+**Thinking**: "Invoice Renata, and check it against what we said in November." **Pain points**: this stage has no product in it. `invoices` rows carry a `practice_id` and a `contract_id` (`00024_invoices.sql:16`) — the Practice billing the Client. There is no record anywhere of a Practice owing a doula, so the second half of her "done looks like" — *point to what she was paid* — is unanswerable, and the Practice's record and hers are guaranteed to be separate documents (LV-G3). Credits do not help: they are DoulaCloud's own billing, bought only by an Owner, and what a Credit even buys is unsettled in code (TB-G3).
 
 **Budget**:
 

@@ -19,7 +19,7 @@ Only an Owner agrees, for the Practice, at signup and after a material change (A
 | A Staff member | The Invitation screen | [#1557](https://github.com/markgoho/doula-cloud/issues/1557) |
 | A Client | The Portal | [#1558](https://github.com/markgoho/doula-cloud/issues/1558) |
 
-The founder decided this on 2026-09-28, on #1556. The reason on record is ADR-0053's: a doula must never lose a Client's record during a birth because a different person did not press a button. A Staff member is not a party to the Practice's agreement, and a Client is not Doula Cloud's customer at all. A notice is what each is owed, and a link is a notice that stops nobody.
+The founder decided this on 2026-09-28, on #1556. The reason on record is ADR-0053's: a doula must never lose a Client's record during a birth because a different person did not press a button. A Staff member is not a party to the Practice's agreement, and a Client is not DoulaCloud's customer at all. A notice is what each is owed, and a link is a notice that stops nobody.
 
 ## The Terms are the binding home of the refund rule
 

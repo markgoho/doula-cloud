@@ -19,7 +19,7 @@
 		     longer than the Portal's, so this is the one the continuum sweep
 		     has to clear at 320px (#1502 Q4). -->
 		<PilotBanner
-			sentence="Doula Cloud is new, and you are one of the first to use it."
+			sentence="DoulaCloud is new, and you are one of the first to use it."
 			controlText="Tell us what is not working or what you need"
 			open={false}
 			controlsId="feedback-drawer-staff"

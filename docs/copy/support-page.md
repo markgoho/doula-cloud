@@ -27,7 +27,7 @@ Silently redesigning `/support` without doing either takes the live platform acc
 
 ## Constraints the copy is written under
 
-- **Connect Terms §3.4(b)** forbids holding ourselves out as a payment facilitator, intermediary or aggregator. A Practice *invoices its clients from* Doula Cloud; money never moves *through* it. See [#383](https://github.com/markgoho/doula-cloud/issues/383).
+- **Connect Terms §3.4(b)** forbids holding ourselves out as a payment facilitator, intermediary or aggregator. A Practice *invoices its clients from* DoulaCloud; money never moves *through* it. See [#383](https://github.com/markgoho/doula-cloud/issues/383).
 - **No price.** [#285](https://github.com/markgoho/doula-cloud/issues/285) owns the published price and is January work. Stripe does not require one.
 - **No feature detail** beyond what Stripe's requirement list forces.
 - **Refunds**: purchased Credits only, at the price paid, to the original payment method, on the Practice's own request, within three years.
@@ -36,13 +36,13 @@ Silently redesigning `/support` without doing either takes the live platform acc
 
 # Support and billing
 
-## What Doula Cloud is
+## What DoulaCloud is
 
-Doula Cloud is practice-management software for doulas and doula agencies. A practice uses it to keep its client records, plan and schedule visits, message its clients, send and sign its contracts, and invoice its own clients for its own services.
+DoulaCloud is practice-management software for doulas and doula agencies. A practice uses it to keep its client records, plan and schedule visits, message its clients, send and sign its contracts, and invoice its own clients for its own services.
 
-Doula Cloud is not a payment service. When a practice invoices a client, the practice is the merchant: it holds its own agreement with Stripe, the money is paid into its own account, and it is responsible for the care it provides and for what it charges. Doula Cloud never receives or holds a practice's money.
+DoulaCloud is not a payment service. When a practice invoices a client, the practice is the merchant: it holds its own agreement with Stripe, the money is paid into its own account, and it is responsible for the care it provides and for what it charges. DoulaCloud never receives or holds a practice's money.
 
-Doula Cloud is in a private pilot with a small number of practices, ahead of a public launch in January 2027.
+DoulaCloud is in a private pilot with a small number of practices, ahead of a public launch in January 2027.
 
 ## What we sell
 
@@ -52,7 +52,7 @@ Credits do not expire. There is no subscription and no recurring charge: a pract
 
 ## Refunds and cancellation
 
-There is nothing to cancel. Doula Cloud bills no recurring fee, so a practice that stops buying Credits is charged nothing further, and may close its account at any time.
+There is nothing to cancel. DoulaCloud bills no recurring fee, so a practice that stops buying Credits is charged nothing further, and may close its account at any time.
 
 Unspent Credits that a practice has purchased can be refunded within three years of the date they were bought, at the price paid for them and together with any sales tax charged on them, to the original payment method. Credits given free of charge are not refundable. A Credit already used to start an engagement has been spent, and is not refundable.
 
@@ -74,8 +74,8 @@ Email **hello@doula.cloud**. That address reaches a person, and it is also where
 
 | Sentence | What it is doing |
 | --- | --- |
-| *"Doula Cloud is practice-management software for doulas and doula agencies…"* | Stripe's minimum: the business name and a description of the goods or services. Without it the account cannot be activated at all. |
-| *"Doula Cloud is not a payment service… never receives or holds a practice's money."* | Connect Terms §3.4(b). Also puts [#383](https://github.com/markgoho/doula-cloud/issues/383)'s money-transmission ruling somewhere a regulator or a Practice's lawyer can read it without asking. |
+| *"DoulaCloud is practice-management software for doulas and doula agencies…"* | Stripe's minimum: the business name and a description of the goods or services. Without it the account cannot be activated at all. |
+| *"DoulaCloud is not a payment service… never receives or holds a practice's money."* | Connect Terms §3.4(b). Also puts [#383](https://github.com/markgoho/doula-cloud/issues/383)'s money-transmission ruling somewhere a regulator or a Practice's lawyer can read it without asking. |
 | *"…in a private pilot… ahead of a public launch in January 2027."* | Pre-empts the reviewer's real question — why does a product that is not available need live payments? |
 | *"One Credit covers one client engagement…"* | A refund policy must name what is being refunded. Publicly answers [#286](https://github.com/markgoho/doula-cloud/issues/286). |
 | *"…at the price paid for them…"* | Credits rise in price over time. Refunding at today's price would let a Practice profit on an unused balance. |

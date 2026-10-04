@@ -27,16 +27,19 @@ describe('the Terms of Service at /terms (#1556)', () => {
 		await expect
 			.element(testPage.getByText('Elephantine LLC, a New York limited liability company', { exact: false }))
 			.toBeVisible();
-		await expect.element(testPage.getByText('Last updated September 29, 2026.')).toBeVisible();
+		await expect.element(testPage.getByText('Last updated October 3, 2026.')).toBeVisible();
 		await expect.element(testPage.getByText('This version takes effect on', { exact: false })).toBeVisible();
 	});
 
 	it('shows the version history, with the material flag and what changed', async () => {
 		await render(Page);
 		await expect.element(testPage.getByRole('heading', { level: 2, name: 'Version history' })).toBeVisible();
-		expect(normalized(section('Version history').querySelector('li')?.textContent ?? undefined)).toBe(
+		expect(
+			[...section('Version history').querySelectorAll('li')].map((item) => normalized(item.textContent ?? undefined))
+		).toEqual([
+			'October 3, 2026. Not a material change. Writes the name of the product as one word, DoulaCloud.',
 			'September 29, 2026. Not a material change. First version.'
-		);
+		]);
 	});
 
 	it('states the price of a Credit, and that there is nothing else to pay', async () => {

@@ -44,7 +44,7 @@ Issues live in GitHub Issues for markgoho/doula-cloud, via the `gh` CLI. See `do
 
 ### Triage state
 
-Triage state lives on the Status field of the [Doula Cloud Project](https://github.com/users/markgoho/projects/5), not on a label. See `docs/agents/triage-labels.md` for the role-to-value mapping and `docs/agents/issue-tracker.md` for how to read and write it.
+Triage state lives on the Status field of the [DoulaCloud Project](https://github.com/users/markgoho/projects/5), not on a label. See `docs/agents/triage-labels.md` for the role-to-value mapping and `docs/agents/issue-tracker.md` for how to read and write it.
 
 ### Domain docs
 

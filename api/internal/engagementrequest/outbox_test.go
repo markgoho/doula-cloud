@@ -23,7 +23,7 @@ func newWorker(sender mail.Sender, now time.Time) engagementrequest.Worker {
 		Sender:     sender,
 		Now:        func() time.Time { return now },
 		AppBaseURL: "https://app.example.test",
-		From:       "Doula Cloud <notifications@mg.example.test>",
+		From:       "DoulaCloud <notifications@mg.example.test>",
 		ReplyTo:    "support@mg.example.test",
 	})
 }

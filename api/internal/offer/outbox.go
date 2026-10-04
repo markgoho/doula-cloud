@@ -12,15 +12,15 @@ import (
 
 // offerSubject and offerText are the Offer email's fixed copy. Platform
 // voice (ADR-0009): she is told she has been offered work at a practice
-// on Doula Cloud, never which practice, never the Client, never anything
+// on DoulaCloud, never which practice, never the Client, never anything
 // the Offer's own thin page will show her once she opens it with the
 // code. link and code are the only variables, and neither is a fact about
 // the work.
-const offerSubject = "You've been offered work on Doula Cloud"
+const offerSubject = "You've been offered work on DoulaCloud"
 
 func offerText(link, code string) string {
 	return "Hello,\n\n" +
-		"You've been offered work at a practice on Doula Cloud.\n\n" +
+		"You've been offered work at a practice on DoulaCloud.\n\n" +
 		link + "\n\n" +
 		"Your access code is " + code + ".\n\n" +
 		"If you weren't expecting this, you can safely ignore this email.\n"

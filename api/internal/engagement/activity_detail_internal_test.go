@@ -7,8 +7,8 @@ import (
 
 // TestEntryDetail_RefundSaysWhereItCameFrom pins #1009's sentence: a
 // Refund the Connect webhook recorded from the Practice's Stripe
-// Dashboard says so, because its Who column reads "Doula Cloud" and the
-// generic "Payment refunded" would read as Doula Cloud returning the
+// Dashboard says so, because its Who column reads "DoulaCloud" and the
+// generic "Payment refunded" would read as DoulaCloud returning the
 // money itself. A Refund an Owner or Admin issued here -- no origin --
 // gets no sentence; her name is already in the Who column.
 func TestEntryDetail_RefundSaysWhereItCameFrom(t *testing.T) {

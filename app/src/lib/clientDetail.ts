@@ -61,7 +61,7 @@ export interface EngagementSummary {
 /** One activity row on a Client's record -- mirrors client.Event.
  * `actorName` is always present. It used to be absent for a system actor
  * and absent again for a Staff member who had since left, and this screen
- * filled both in itself -- "Doula Cloud" for the first, "Unknown staff"
+ * filled both in itself -- "DoulaCloud" for the first, "Unknown staff"
  * for the second. #1150 resolves both in the one reader every
  * subject-scoped history goes through, so the product's own name is
  * spelled once (ADR-0022) and a departed colleague reads here exactly as

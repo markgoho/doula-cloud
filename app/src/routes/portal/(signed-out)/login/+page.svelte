@@ -43,7 +43,7 @@
 	// #312: with more than one Engagement (or none yet), that is `/` --
 	// the app root already probes both populations and renders the same
 	// picker `+page.ts` decides from, so this never renders one of its
-	// own. A browser holds exactly one Doula Cloud session (#610), so a
+	// own. A browser holds exactly one DoulaCloud session (#610), so a
 	// live portal session here means no Staff session survives to be
 	// misrouted by `/`'s own Staff-first probe.
 	onMount(async () => {

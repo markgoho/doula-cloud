@@ -20,7 +20,7 @@ test('sends a piece of Feedback from a Staff screen', async ({ page, request, co
 	await expect(page).toHaveURL(new RegExp(`/practices/${owner.practiceId}$`));
 
 	await page.getByRole('button', { name: 'Tell us what is not working or what you need.' }).click();
-	await expect(page.getByRole('dialog', { name: 'Send feedback to Doula Cloud' })).toBeVisible();
+	await expect(page.getByRole('dialog', { name: 'Send feedback to DoulaCloud' })).toBeVisible();
 
 	await page.getByLabel('An idea or a request').check();
 	await page.getByLabel('Tell us more').fill('Add a way to export invoices as CSV.');
