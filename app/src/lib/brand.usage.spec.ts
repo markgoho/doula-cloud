@@ -8,7 +8,8 @@ import { globFiles } from './globFiles';
  * #1463's gate. ADR-0050 settled the product's name as one word, DoulaCloud,
  * in every place a person reads it, and this spec fails the build on the
  * two-word form coming back: in the app, its end-to-end specs, the
- * marketing site, the BFF, and the hand-written documents.
+ * marketing site, the BFF, the hand-written documents, and the scripts,
+ * workflows and Terraform beside them.
  *
  * Identifiers and slugs are not the name, so `doula-cloud` (the repo, the
  * GCP project, the `.pen` file) is never a match: the check is the exact
@@ -19,8 +20,11 @@ import { globFiles } from './globFiles';
  *
  * Out of the sweep, as #1463 draws it: `docs/research/` (evidence, often a
  * verbatim quotation), `api/db/migrations/` (goose never re-runs an
- * applied file, and its SQL is not in the Go glob anyway), and generated
- * files, which cannot carry a marker. A verbatim quotation anywhere else
+ * applied file, and its SQL is not in the Go glob anyway). Unlike the
+ * spelling gate, this one does read `docs/design/doula-cloud.export.md`,
+ * the generated read-back of the `.pen` file: it cannot carry a marker,
+ * but it has no reason to, and a two-word name there means the canvas
+ * still draws it. The fix is on the canvas. A verbatim quotation anywhere else
  * stays by putting `brand:ignore` and the reason on the line, the same
  * shape as `spelling:ignore`; in Markdown the marker is an HTML comment,
  * `<!-- brand:ignore: the reason -->`.
@@ -34,14 +38,19 @@ const IGNORE_MARKER = 'brand:ignore';
 // The two words are built rather than written, so this file does not
 // fail its own check and a grep of the repo for them finds real ones.
 const TWO_WORDS = ['Doula', 'Cloud'].join(' ');
-const ENDS_WITH_FIRST = /\bDoula$/;
-const OPENS_WITH_SECOND = /^\s*(?:\/\/|#|\*|--|<!--)?\s*Cloud\b/;
+const ENDS_WITH_FIRST = /\bDoula\s*$/;
+// The leaders a wrapped comment or Markdown line can open with: Go and
+// TypeScript line and block comments, shell and YAML, SQL, HTML, and a
+// Markdown blockquote.
+const OPENS_WITH_SECOND = /^\s*(?:\/\/|\/\*|#|\*|--|<!--|>)?\s*Cloud\b/;
 
 interface Offense {
 	file: string;
 	line: number;
 }
 
+// The marker exempts the line it is on. A split name spans two lines, so a
+// marker on either of them exempts it.
 function findTwoWordNames(file: string, source: string): Offense[] {
 	const lines = source.split('\n');
 	return lines.flatMap((text, index) => {
@@ -61,6 +70,9 @@ const repoFiles = [
 	...globFiles('app/e2e/**/*.{ts,js}', { cwd: repoRoot }),
 	...globFiles('site/src/**/*.{svelte,ts,js,css,svg,html,md}', { cwd: repoRoot }),
 	...globFiles('api/**/*.go', { cwd: repoRoot }),
+	...globFiles('scripts/**/*.{ts,js}', { cwd: repoRoot }),
+	...globFiles('.github/**/*.{yml,yaml,md}', { cwd: repoRoot }),
+	...globFiles('terraform/**/*.tf', { cwd: repoRoot }),
 	...globFiles('docs/**/*.{md,html}', { cwd: repoRoot }).filter(
 		(file) => !file.startsWith('docs/research/')
 	),
@@ -96,6 +108,7 @@ describe('the product is named DoulaCloud, one word (ADR-0050)', () => {
 			{ file: 'a.go', line: 1 }
 		]);
 		expect(findTwoWordNames('a.go', '// a contractor Doula\n// attaches to the Engagement')).toEqual([]);
+		expect(findTwoWordNames('a.md', '> the Doula \n> Cloud team')).toEqual([{ file: 'a.md', line: 1 }]);
 	});
 
 	it('leaves a line that carries the marker', () => {
