@@ -1,5 +1,5 @@
 /**
- * The Client register (ADR-0005, CONTEXT.md's `_Client says_:` lines) as
+ * The Client register (ADR-0005, GLOSSARY.md's `_Client says_:` lines) as
  * code, not prose a portal screen re-derives on its own. Binding on
  * `routes/portal/**` -- see `clientRegister.usage.spec.ts` for the gate
  * that holds it there. A team word or a raw enum value earns a lookup
@@ -47,7 +47,7 @@ export function engagementStatusLabel(status: string): string {
 }
 
 /** `contract_status` (`draft | sent | signed | voided`) had no Client
- * register entry before #212 -- CONTEXT.md's Contract entry gains one
+ * register entry before #212 -- GLOSSARY.md's Contract entry gains one
  * here. `draft` never reaches a Client (a Draft Contract 404s the
  * client-portal read the same way an unsent one does), but it still gets
  * a fixed label rather than being left to throw, in case that ever
@@ -74,7 +74,7 @@ export function contractVoidedNotice(practiceName: string): string {
 	return `${practiceName} ended this Contract.`;
 }
 
-/** The Engagement noun (CONTEXT.md: "my care", heading form "Your care").
+/** The Engagement noun (GLOSSARY.md: "my care", heading form "Your care").
  * `CARE_HEADING` replaces every "Choose an Engagement" heading;
  * `NO_CARE_HEADING` and `NO_CARE_MESSAGE` replace every "You don't have an
  * Engagement yet" heading and paragraph beside it.
@@ -103,7 +103,7 @@ export const NO_CARE_WRONG_ADDRESS_MESSAGE =
  * hers might sit side by side: the portal root's list, and the authenticated
  * chrome's own way back to it (#310). Naming by Practice alone stopped being
  * enough once ADR-0015 let two Engagements share a Practice, so the label
- * also carries when this one began -- CONTEXT.md's register addition for
+ * also carries when this one began -- GLOSSARY.md's register addition for
  * #310, and the one fact that distinguishes them honestly for every Client,
  * including one whose care ended in loss (unlike a due date or a birth
  * outcome, both staff-only or absent). Deliberately narrow: the input type
@@ -122,7 +122,7 @@ export function engagementLabel(engagement: EngagementLabelInput): string {
 /**
  * The Client register's own phrase for one `activity.EngagementAction`
  * (#708). One fixed phrase per action, the same for every Client, in the
- * vocabulary CONTEXT.md's `_Client says_:` lines already settle -- her
+ * vocabulary GLOSSARY.md's `_Client says_:` lines already settle -- her
  * care, her visits, her Contract, her Invoice, her payments, her Birth
  * Plan, her login, her notifications.
  *
@@ -169,7 +169,7 @@ const CLIENT_ACTIVITY_PHRASES: Record<string, string> = {
 	// figure) and `contract_amount_repriced` (the Practice's rate card
 	// moved underneath it) share one phrase on purpose: the difference
 	// between them is the Practice's own bookkeeping, and to a Client both
-	// mean her price changed -- the same reasoning CONTEXT.md's Invoice
+	// mean her price changed -- the same reasoning GLOSSARY.md's Invoice
 	// entry gives for `void` and `uncollectible` sharing "You no longer owe this".
 	contract_priced: "Your Contract's price was set.",
 	contract_amount_overridden: "Your Contract's price changed.",
@@ -188,7 +188,7 @@ const CLIENT_ACTIVITY_PHRASES: Record<string, string> = {
 	// *or cleared* (its diff carries a nullable before and a nullable
 	// after), and `visit_notes_edited` records notes written *or
 	// re-written*. "Scheduled" or "added" would be false the first time it
-	// is not, which is what CONTEXT.md's Contract entry rules out: a
+	// is not, which is what GLOSSARY.md's Contract entry rules out: a
 	// register label never claims a fact the model does not hold.
 	//
 	// `visit_notes_edited` says notes exist and never what they say:
@@ -198,13 +198,13 @@ const CLIENT_ACTIVITY_PHRASES: Record<string, string> = {
 	visit_scheduled: "A visit's timing was updated.",
 	visit_notes_edited: 'Notes on a visit were updated.',
 
-	// The Plan Instance, which she calls her Birth Plan (CONTEXT.md's Plan
+	// The Plan Instance, which she calls her Birth Plan (GLOSSARY.md's Plan
 	// Instance entry: she never meets the concept itself).
 	plan_instance_edited: 'Your Birth Plan was updated.',
 	birth_plan_acknowledged: 'You marked your Birth Plan as read.',
 
 	// Her money. `invoice_voided` and `invoice_written_off` share one
-	// phrase for CONTEXT.md's own stated reason: "Written off" would tell
+	// phrase for GLOSSARY.md's own stated reason: "Written off" would tell
 	// her that her Practice absorbed a loss on her, which is true, unkind,
 	// and hers to be spared.
 	// "Added to your care", not "sent to you": raising an Invoice
@@ -226,7 +226,7 @@ const CLIENT_ACTIVITY_PHRASES: Record<string, string> = {
 	invoice_voided: 'You no longer owe an Invoice.',
 	invoice_written_off: 'You no longer owe an Invoice.',
 
-	// Her way in. Never "portal": CONTEXT.md's Portal Account entry says
+	// Her way in. Never "portal": GLOSSARY.md's Portal Account entry says
 	// she meets a login and never the term, and no Client-facing copy in
 	// this build says "portal" either.
 	portal_invite_sent: 'You were invited to sign in.',

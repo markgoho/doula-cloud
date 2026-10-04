@@ -99,4 +99,4 @@ What keeps a Practice here once she has tried it, and does the feature list foll
 - `docs/design/brief.md`, chosen 2026-08-28 on #409: conventional in pattern and behavior, distinctive in execution, with Jakob's Law as the governing reason and smooth UX as a primary goal.
 - `docs/personas/evaluator-doula.md`: the evaluator's one question is whether the product is built for what she does and whether she can get out again.
 - #994: the interviewer does not offer the words "one place", "save time", "all in one", or "free", and writes it down as a finding if she says them unprompted.
-- The **Connected account** entry in `CONTEXT.md` and ADR-0007: Stripe refuses to create the older Accounts v1 shape for a new integration; #421 reads v2 requirements for a v2 account.
+- The **Connected account** entry in `GLOSSARY.md` and ADR-0007: Stripe refuses to create the older Accounts v1 shape for a new integration; #421 reads v2 requirements for a v2 account.

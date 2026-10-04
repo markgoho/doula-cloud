@@ -47,7 +47,7 @@ type Detail struct {
 	CreatedAt time.Time `json:"createdAt"`
 	// OffersBirthPlan is engagement.OffersBirthPlan's own resolved answer
 	// -- not the Engagement's kind (#311) and not its birth outcome
-	// (#294), both of which are staff-only (CONTEXT.md's Engagement
+	// (#294), both of which are staff-only (GLOSSARY.md's Engagement
 	// entry, ADR-0015) and must never reach a Client-facing response.
 	// Every portal surface that offers, links to or announces a Birth
 	// Plan reads this one field, so they cannot drift apart, and because

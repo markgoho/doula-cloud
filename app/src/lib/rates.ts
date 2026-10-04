@@ -10,7 +10,7 @@ import type { Fetcher } from './fetcher.js';
 
 import { apiErrorMessage } from './apiErrorMessage.js';
 
-/** An Engagement's kind, matching CONTEXT.md's Engagement entry -- "birth"
+/** An Engagement's kind, matching GLOSSARY.md's Engagement entry -- "birth"
  * or "postpartum, what the Practice sold". */
 export type EngagementKind = 'birth' | 'postpartum';
 

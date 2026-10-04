@@ -93,7 +93,7 @@ Which ways of moving a person are open to the product and to the site that sells
 - ADR-0021: an error message never says "please", "valid", "invalid", or "required"; `app/src/lib/formErrors.usage.spec.ts` fails a commit on those words (#467).
 - ADR-0038 (decided on #981): an open Invoice keeps the Client-facing label "Not yet paid", because "Overdue" in red on a bill read by a woman whose pregnancy ended in loss is the product shaming her.
 - #473, recorded in the Dialog paragraph of `docs/design/govuk-alignment.md`: block over warn for all four undoable actions, a hard block with a deliberate, action-named override.
-- ADR-0017: pronouns stay Practice-defined because the product reads none of them; only `given_name` is required; `clients.email` is nullable because a fake value is worse than an empty one (the **Client** entry in `CONTEXT.md`). The Names departure in `docs/design/govuk-alignment.md` keeps no title or honorific column.
+- ADR-0017: pronouns stay Practice-defined because the product reads none of them; only `given_name` is required; `clients.email` is nullable because a fake value is worse than an empty one (the **Client** entry in `GLOSSARY.md`). The Names departure in `docs/design/govuk-alignment.md` keeps no title or honorific column.
 - The signup screen, `app/src/routes/(signed-out)/signup/+page.svelte`, renders six controls and no consent checkbox and no optional-looking field between them.
 - #439: one Credit at one flat price, no volume discount, so nothing on the Billing screen is visually favored; #285 reads the price from the Stripe Price onto the screen.
 - #421 and #444: the pilot runs at list with a founding grant, and the pilot terms are unlisted.

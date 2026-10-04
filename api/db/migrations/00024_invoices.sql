@@ -1,5 +1,5 @@
 -- +goose Up
--- An "Invoice" is a bill issued against a Contract (see CONTEXT.md),
+-- An "Invoice" is a bill issued against a Contract (see GLOSSARY.md),
 -- created via Stripe's Invoicing API on behalf of a Practice's connected
 -- account (#79). status mirrors Stripe's own Invoice statuses exactly, so
 -- the webhook handler #82 adds can write it straight through without a

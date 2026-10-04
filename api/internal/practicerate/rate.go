@@ -1,7 +1,7 @@
 // Package practicerate holds the Staff-side BFF handlers for a
 // Practice's rate card (#966): the flat amount in cents it charges for
 // each Engagement kind. Every Staff member with practice access reads
-// it, contractors included -- CONTEXT.md: "a Practice's published rates
+// it, contractors included -- GLOSSARY.md: "a Practice's published rates
 // hold no person's information", the same reason ADR-0008's read table
 // already gives every Doula the Contract Template. Only an Owner or an
 // Admin may set or change it. All handlers rely on staffauth.Middleware
@@ -32,9 +32,9 @@ import (
 const actionRateChanged = "practice_rate_changed"
 
 // kinds is every Engagement kind #966's rate card names, in the fixed
-// order GetRatesHandler renders them -- CONTEXT.md's Engagement entry
+// order GetRatesHandler renders them -- GLOSSARY.md's Engagement entry
 // names exactly these two ("birth" or "postpartum, what the Practice
-// sold"), so a third value here would mean CONTEXT.md changed first.
+// sold"), so a third value here would mean GLOSSARY.md changed first.
 var kinds = []engagement.Kind{engagement.KindBirth, engagement.KindPostpartum}
 
 // validKind reports whether kind is one of the two path segments

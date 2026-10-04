@@ -19,7 +19,7 @@ She is the full-arc Client: the only Persona who walks every client-facing scree
 | Engagement status | "am I still…?" | She is shown the raw enum (`intake`) — [#212](https://github.com/markgoho/doula-cloud/issues/212) |
 | Birth Plan | "my birth plan" | Matches — and it is the one thing she thinks of as **hers**, which the product does not agree with |
 | Contract | "the paperwork" | |
-| Visit | "when she comes over" | No client-facing surface at all (`CONTEXT.md`) |
+| Visit | "when she comes over" | No client-facing surface at all (`GLOSSARY.md`) |
 | Client portal | "the doula site" | She has one prior reference point, her dentist's portal, and she disliked it |
 | Due date | "I'm 18 weeks" | The product holds no due date and shows her the date her care was **created** instead (**MO-G3**) |
 
@@ -83,7 +83,7 @@ She is the full-arc Client: the only Persona who walks every client-facing scree
 
 ### Stage 5 — Reading the Birth Plan
 
-**Thinking**: "That's not quite what I said about the epidural." **Pain points**: the Birth Plan is **staff-drafted and read-only to her** (`CONTEXT.md`). Her only route to a correction is to type it into the message thread and hope it is transcribed. The document she will hand to a hospital is one she cannot author, cannot annotate, and cannot confirm she has read (HS-G2). Before Maya fills it in, the page says "No Birth Plan has been created for this Engagement yet" — with no indication of whether one is coming, or when.
+**Thinking**: "That's not quite what I said about the epidural." **Pain points**: the Birth Plan is **staff-drafted and read-only to her** (`GLOSSARY.md`). Her only route to a correction is to type it into the message thread and hope it is transcribed. The document she will hand to a hospital is one she cannot author, cannot annotate, and cannot confirm she has read (HS-G2). Before Maya fills it in, the page says "No Birth Plan has been created for this Engagement yet" — with no indication of whether one is coming, or when.
 
 **Budget**:
 
@@ -114,7 +114,7 @@ She is the full-arc Client: the only Persona who walks every client-facing scree
 
 ### Stage 7 — Living in the thread
 
-**Thinking**: "Is it normal that…?" **Pain points**: none identified — this is the part of the product built for her. Messages are immutable and kept as a permanent record (`CONTEXT.md`, ADR-0002), attachments are supported both ways with inline image previews, older messages page in on demand, and a content-free push wakes a fetch so a new Message appears without a reload. What she is never told is that the push is not an alarm: ADR-0002 is explicit that it is not a substitute for a phone call in a time-critical moment, and nothing on screen says so (HS-G4).
+**Thinking**: "Is it normal that…?" **Pain points**: none identified — this is the part of the product built for her. Messages are immutable and kept as a permanent record (`GLOSSARY.md`, ADR-0002), attachments are supported both ways with inline image previews, older messages page in on demand, and a content-free push wakes a fetch so a new Message appears without a reload. What she is never told is that the push is not an alarm: ADR-0002 is explicit that it is not a substitute for a phone call in a time-critical moment, and nothing on screen says so (HS-G4).
 
 **Budget**:
 
@@ -130,7 +130,7 @@ She is the full-arc Client: the only Persona who walks every client-facing scree
 
 ### Stage 8 — Birth, and afterwards
 
-**Thinking**: "Everything's different now." **Pain points**: nothing in the portal changes, ever. Her Engagement is still `intake` (**MO-G4**) through pregnancy, birth, and postpartum, so the status line on her home screen has been wrong since the day she signed. Her Visits — including the birth — are invisible to her (`CONTEXT.md`: no client-facing Visit surface), and the Birth Plan link stays exactly where it was.
+**Thinking**: "Everything's different now." **Pain points**: nothing in the portal changes, ever. Her Engagement is still `intake` (**MO-G4**) through pregnancy, birth, and postpartum, so the status line on her home screen has been wrong since the day she signed. Her Visits — including the birth — are invisible to her (`GLOSSARY.md`: no client-facing Visit surface), and the Birth Plan link stays exactly where it was.
 
 **Budget**:
 
@@ -142,7 +142,7 @@ She is the full-arc Client: the only Persona who walks every client-facing scree
 
 ### Stage 9 — Her partner asks for the login
 
-**Thinking**: "Just use mine, I suppose." **Pain points**: `CONTEXT.md` names portal access for a second person a **future extension of Client**, not a new entity, so there is no invite flow built for one. What actually stops Maya from sending a second invite is not the schema — `client_portal_users` now allows more than one `(identity_uid, client_id)` pair (#819) — it is `invite()` itself (`portalinvite/invite.go`), which reads the row by `client_id` and answers an already-accepted Client with "this client already has portal access", a handler rule guarding the one Portal Account Hannah holds. The path nobody designed is not password-sharing — a Client has no password to share (ADR-0026) — it is sharing the mailbox that receives her sign-in links (HS-G5).
+**Thinking**: "Just use mine, I suppose." **Pain points**: `GLOSSARY.md` names portal access for a second person a **future extension of Client**, not a new entity, so there is no invite flow built for one. What actually stops Maya from sending a second invite is not the schema — `client_portal_users` now allows more than one `(identity_uid, client_id)` pair (#819) — it is `invite()` itself (`portalinvite/invite.go`), which reads the row by `client_id` and answers an already-accepted Client with "this client already has portal access", a handler rule guarding the one Portal Account Hannah holds. The path nobody designed is not password-sharing — a Client has no password to share (ADR-0026) — it is sharing the mailbox that receives her sign-in links (HS-G5).
 
 **Budget**:
 
@@ -162,7 +162,7 @@ She is the full-arc Client: the only Persona who walks every client-facing scree
 | HS-G2 | 5, 6 | Both | The Birth Plan is hers in every sense except authorship: staff-drafted, read-only to the Client, with no comment, no suggested edit, and no acknowledgment that she has read it. The correction route is the message thread and a re-type by Staff. | [#301](https://github.com/markgoho/doula-cloud/issues/301) |
 | HS-G3 | 4 | Interaction | The Client cannot get a copy of what she signed. `GET /api/portal/engagements/{id}/contract/pdf` is routed (`main.go:226`) but nothing in `portal/…/contract/+page.svelte` links it. | [#302](https://github.com/markgoho/doula-cloud/issues/302) |
 | HS-G4 | 3, 7 | Experience | Push is registered silently on first landing and can never be reviewed, muted, or explained. There is no notification setting, and nothing tells her that a push is not an alarm (ADR-0002). Nadia's NH-G7 is the same absence at its cruellest. | [#303](https://github.com/markgoho/doula-cloud/issues/303) |
-| HS-G5 | 9 | Both | A second person cannot be given portal access. No invite flow, no guest role, no read-only share of the Birth Plan — `invite()` refuses a second invitation on an already-accepted Client at the handler level (`portalinvite/invite.go`), not the schema, which now allows more than one `(identity_uid, client_id)` pair. Partners are onboarded by sharing the mailbox that receives Hannah's sign-in links instead. `CONTEXT.md` marks a second Portal Account a future extension of Client. | [#304](https://github.com/markgoho/doula-cloud/issues/304) |
+| HS-G5 | 9 | Both | A second person cannot be given portal access. No invite flow, no guest role, no read-only share of the Birth Plan — `invite()` refuses a second invitation on an already-accepted Client at the handler level (`portalinvite/invite.go`), not the schema, which now allows more than one `(identity_uid, client_id)` pair. Partners are onboarded by sharing the mailbox that receives Hannah's sign-in links instead. `GLOSSARY.md` marks a second Portal Account a future extension of Client. | [#304](https://github.com/markgoho/doula-cloud/issues/304) |
 | HS-G6 | 4, 7 | Interaction | Retrieving a stored object 500s outright — the write succeeds and the object is present in the store, but nothing can read it back. Confirmed on both the signed Contract PDF (`GET .../contract/pdf`, sharpening HS-G3: fixing the missing link would not fix this) and a message attachment, in both directions. `objectstore.GCSStore.Get` (`api/internal/objectstore/gcs.go`) is backed by a `storage.Client` built with no options (`main.go:263`); whether this also breaks against real GCS or is local-emulator-only is unverified — walked at [#240](https://github.com/markgoho/doula-cloud/issues/240). | [#305](https://github.com/markgoho/doula-cloud/issues/305) |
 | HS-G7 | 6 | Interaction | The Birth Plan has no export mechanism of its own beyond the browser's **Print** — no PDF, no share link, from the Client's own side. Distinct from PR-G5, which is the same absence from the Doula's side of the same moment. Walked at [#240](https://github.com/markgoho/doula-cloud/issues/240). | [#306](https://github.com/markgoho/doula-cloud/issues/306) |
 

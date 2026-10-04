@@ -174,7 +174,7 @@ What she actually needs is her **own Practice**. Her *Add a Client* screen is th
 
 ### Two corrections to things the repo believed
 
-**An Admin may buy Credits.** `api/internal/billing/purchase.go:33` goes `RequireOwner` to `RequireOwnerOrAdmin`, and `CONTEXT.md`'s *only an Owner buys them* was wrong. An Admin who may approve a Request, and who already reads the balance and the ledger, must be able to top up the balance she approves against.
+**An Admin may buy Credits.** `api/internal/billing/purchase.go:33` goes `RequireOwner` to `RequireOwnerOrAdmin`, and `GLOSSARY.md`'s *only an Owner buys them* was wrong. An Admin who may approve a Request, and who already reads the balance and the ledger, must be able to top up the balance she approves against.
 
 **`clients.email` and a Client's login were never the same field.** `portal/accept-invite/+page.svelte:23,43` lets her type **any** address into `createUserWithEmailAndPassword`, and accept keys on `identity_uid`. So `clients.email` is *the address the Practice reaches her at*, and stays staff-editable forever; her login is hers already, and this document does not touch it. That is what removed the correction path #374 went looking for, and it is why the portal ruling above survived.
 

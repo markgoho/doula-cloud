@@ -277,7 +277,7 @@ subject is not the route the fixture describes.
 
 ## A component demo declares its other states as `variants`, and has no switch of its own
 
-A component's fixture is its style-guide page (`CONTEXT.md`). The continuum check mounts that page and never clicks, so a state the page keeps behind a button of its own is swept never ([#1638](https://github.com/markgoho/doula-cloud/issues/1638), ADR-0025's Fixtures section). A page that renders more than one state declares each other one the way a route fixture declares a session: the state is a prop of the page, the default value is the page as it stands, and the page exports `variants` from its `<script module>`.
+A component's fixture is its style-guide page (`GLOSSARY.md`). The continuum check mounts that page and never clicks, so a state the page keeps behind a button of its own is swept never ([#1638](https://github.com/markgoho/doula-cloud/issues/1638), ADR-0025's Fixtures section). A page that renders more than one state declares each other one the way a route fixture declares a session: the state is a prop of the page, the default value is the page as it stands, and the page exports `variants` from its `<script module>`.
 
 ```svelte
 <script module lang="ts">

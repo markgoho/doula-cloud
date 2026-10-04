@@ -52,7 +52,7 @@ Ridgeline's Owner is the one cast member with no walk of her own at all: she exi
 
 ## The cast
 
-`CONTEXT.md` fixes **Persona** at nine — a Persona has a journey map, a test plan, and a documented interior life. Everyone else in the World is an **Extra**: a person with a name, a Practice, a role, an employment type, and one reason to open the app, and nothing more. An Extra is a person, not a row — she is invited and she accepts, in a browser, like anybody else — but no friction log is written in her voice, and she has no journey to walk.
+`GLOSSARY.md` fixes **Persona** at nine — a Persona has a journey map, a test plan, and a documented interior life. Everyone else in the World is an **Extra**: a person with a name, a Practice, a role, an employment type, and one reason to open the app, and nothing more. An Extra is a person, not a row — she is invited and she accepts, in a browser, like anybody else — but no friction log is written in her voice, and she has no journey to walk.
 
 That distinction is the answer to "how thin may a cast member be": **thin enough to have no journey, never thin enough to skip the door.**
 

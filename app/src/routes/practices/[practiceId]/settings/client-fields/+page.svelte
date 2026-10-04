@@ -93,7 +93,7 @@
 	fields, which `clientfieldtemplate/template.go` calls the designed state
 	for a new Practice -- so the "a default meant to be changed" sentence the
 	other two carry would be false here. And the reassurance is the archive
-	rule, not ADR-0001's snapshot: CONTEXT.md is explicit that a Client's
+	rule, not ADR-0001's snapshot: GLOSSARY.md is explicit that a Client's
 	values are read live against the current list, so archiving is the only
 	thing standing between a removed field and a recorded fact.
 -->

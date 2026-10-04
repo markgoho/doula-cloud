@@ -27,7 +27,7 @@ The Engagement is closed in a way that is accurate, Maya can still support her t
 ## Watch for
 
 - **`engagement_status` has no terminal state for this.** The enum is `intake | active | postpartum | completed`. Marking her `completed` says the work finished; leaving her `active` says the pregnancy continues. Both are wrong. This is the sharpest expected gap in the effort.
-- Deletion is not the answer. The Engagement is a permanent record and Messages are immutable by design (CONTEXT.md, ADR-0002). She must be able to leave without the record being destroyed.
+- Deletion is not the answer. The Engagement is a permanent record and Messages are immutable by design (GLOSSARY.md, ADR-0002). She must be able to leave without the record being destroyed.
 - The Birth Plan still exists and is still readable in the portal. Decide, and record, what should happen to it.
 - Every automated prompt is a hazard: Invoice reminders, Visit reminders, push notifications, any "your baby is due in N weeks" copy. Walk them all.
 - Billing after a loss is its own decision — what is owed, and who has to say so.

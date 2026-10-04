@@ -115,7 +115,7 @@ She is the full-arc Client and the only Persona who walks every client-facing sc
 | --- | --- | --- | --- |
 | 8.1 | Open the portal after the birth | It looks exactly as it did at 18 weeks. Same heading, same `intake`, same two links | `manual` |
 | 8.1-a | Have the status reflect where she actually is | No handler writes `UPDATE engagements`, so the status line on her home screen has been wrong since the day she signed | `missing-feature (MO-G4)` [#253](https://github.com/markgoho/doula-cloud/issues/253) |
-| 8.1-b | Find any record of the birth itself | Visits are invisible to the Client (`CONTEXT.md`), the birth included | `manual` |
+| 8.1-b | Find any record of the birth itself | Visits are invisible to the Client (`GLOSSARY.md`), the birth included | `manual` |
 | 8.B-screens | Count the screens from the stage's entry to its end | **Screens**: 1 (Hick's Law, Flow) | `manual` |
 | 8.B-time | Time each routine act on the stage's device, from the input to the result settled on screen | **Time**: 400 ms, 100 ms (Doherty Threshold) | `manual` |
 | 8.B-320px | Sweep the stage's screens from 320px up | **320px**: yes (ADR-0024) | `automated (portal-320.e2e.ts)` |

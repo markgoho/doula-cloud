@@ -59,7 +59,7 @@ func createdInvoice(t *testing.T, srv *httptest.Server, session, practiceID, eng
 // Stripe Customer per connected account, so her second Invoice bills the
 // Customer her first one made rather than raising a fresh one. Before
 // this, a Client billed six times had six Customers in her Practice's
-// Stripe account, which is not the single Customer CONTEXT.md's Erasure
+// Stripe account, which is not the single Customer GLOSSARY.md's Erasure
 // entry has always described.
 func TestPostInvoiceHandler_SecondInvoiceBillsTheSameCustomer(t *testing.T) {
 	db := testdb.New(t)

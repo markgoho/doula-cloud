@@ -109,7 +109,7 @@ describe('the way back to an approval an empty balance interrupted (#502)', () =
 });
 
 describe('what a Credit buys (#286)', () => {
-	it('states the settled sentence above the balance, matching CONTEXT.md and pilot-terms.md', async () => {
+	it('states the settled sentence above the balance, matching GLOSSARY.md and pilot-terms.md', async () => {
 		await renderBilling();
 
 		await expect

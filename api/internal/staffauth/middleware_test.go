@@ -610,7 +610,7 @@ func TestMiddleware_MFAGate(t *testing.T) {
 	// TestMiddleware_MFAGate/split proves #606's own AC: a person whose
 	// Membership at Practice A requires MFA and at Practice B does not is
 	// barred from A and admitted to B while un-enrolled, one identity and
-	// one session cookie throughout -- the fact CONTEXT.md's per-Membership
+	// one session cookie throughout -- the fact GLOSSARY.md's per-Membership
 	// role model is what forced the gate off session.CreateHandler in the
 	// first place (#167's amendment).
 	t.Run("split across two practices", func(t *testing.T) {

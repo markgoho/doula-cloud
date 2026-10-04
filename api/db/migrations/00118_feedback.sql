@@ -1,6 +1,6 @@
 -- +goose Up
 -- The Feedback table (#1523, under the #1519 pilot feedback mechanism).
--- CONTEXT.md's Feedback glossary entry and #1501's resolution comment
+-- GLOSSARY.md's Feedback glossary entry and #1501's resolution comment
 -- (Q1) settle the field list; #1498's resolution comment (Q5) settles
 -- the three kinds. This migration stores a piece of Feedback only --
 -- opening a private GitHub issue for it is #1524's outbox, erasure and

@@ -306,7 +306,7 @@ func TestAttachSelfHandler_AlreadyGrantedByAnotherWriter(t *testing.T) {
 
 // TestAttachSelfHandler_UpgradesAnAccruedAttachment: an employee Doula
 // who has done work on the Engagement holds an accrued Attachment, which
-// is a record of work and not the claim (CONTEXT.md, Attachment). She is
+// is a record of work and not the claim (GLOSSARY.md, Attachment). She is
 // not "the Doula" on any screen, so she has the control, and the press
 // upgrades the row in place.
 func TestAttachSelfHandler_UpgradesAnAccruedAttachment(t *testing.T) {

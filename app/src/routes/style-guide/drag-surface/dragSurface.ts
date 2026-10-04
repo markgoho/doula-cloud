@@ -7,7 +7,7 @@ import {
 } from '../../routeFixture.js';
 
 /*
- * The demo half of the drag surface (CONTEXT.md): the list of components a
+ * The demo half of the drag surface (GLOSSARY.md): the list of components a
  * reader can put inside the frame.
  *
  * Every component already has a style-guide page, and that page is an

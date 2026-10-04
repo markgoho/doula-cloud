@@ -109,7 +109,7 @@
 
 		/* A minimum, never a fixed height (#1573). The Practice's name is
 		   her own data of any length, and wrapping it is the correct outcome
-		   (CONTEXT.md's Content floor entry), so a long one makes the bar
+		   (GLOSSARY.md's Content floor entry), so a long one makes the bar
 		   taller rather than drawing out of it over the page. The groups
 		   inside stretch to the bar rather than taking a percentage of it,
 		   which against a height the bar no longer fixes would resolve to
@@ -181,7 +181,7 @@
 		   Chromium, so the bar needs 584px, not 572px, to stop
 		   overflowing. 36.5rem is that fixed point, measured in CI's own
 		   Linux/Chromium, the one named environment a floor's minimality
-		   is judged against (CONTEXT.md's Content floor entry), with no
+		   is judged against (GLOSSARY.md's Content floor entry), with no
 		   margin added beyond it.
 
 		   Measured again 2026-09-29 (#1568), because 36.5rem was what FOUR

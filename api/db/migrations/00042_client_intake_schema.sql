@@ -315,7 +315,7 @@ GRANT SELECT, INSERT, UPDATE ON engagement_request_outbox TO app_runtime;
 -- current state (skip one already decided or withdrawn before this row
 -- was sent) and stamp its own bookkeeping. This does not license the
 -- mailed body to say more: Notifications stay content-free per
--- CONTEXT.md -- no kind, due date, or Client name in the message itself,
+-- GLOSSARY.md -- no kind, due date, or Client name in the message itself,
 -- only a pointer back to the dashboard, the same restraint
 -- engagement_offers_notification_worker (00041) already observes.
 -- +goose StatementBegin

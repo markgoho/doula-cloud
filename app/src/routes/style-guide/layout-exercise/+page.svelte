@@ -10,7 +10,7 @@
 	 *
 	 * Both cards are shown at the conformance commitment rather than in a
 	 * frame with a handle on it: the drag surface already exists at
-	 * /style-guide/drag-surface and CONTEXT.md defines it and the
+	 * /style-guide/drag-surface and GLOSSARY.md defines it and the
 	 * continuum check as one artifact, so a second draggable frame here
 	 * would be a third. 320 is the one width this repo's verification may
 	 * name (ADR-0024).

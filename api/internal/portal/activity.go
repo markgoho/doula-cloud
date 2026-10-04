@@ -18,7 +18,7 @@ import (
 const activityPageSize = 30
 
 // staffingActions is the exclusion list built once from
-// activity.StaffingActions() -- CONTEXT.md's Activity entry: a
+// activity.StaffingActions() -- GLOSSARY.md's Activity entry: a
 // Client reads her own Activity, "never who inside the Practice did
 // what." An Offer names which Doula was asked, accepted or bumped, and a
 // Visit reassignment names which Doula covers it; both are Practice
@@ -44,7 +44,7 @@ func buildStaffingActions() []string {
 // reaches -- rather than trusting every future caller of
 // activityfeed.ListForSubject (a Staff-side one included, where the real
 // name is exactly what ADR-0022 asks the ledger to carry) to remember
-// this redaction itself. CONTEXT.md's Activity entry, the second half of
+// this redaction itself. GLOSSARY.md's Activity entry, the second half of
 // the same sentence staffingActions answers: "she reads her own
 // Activity ... never who inside the Practice did what." Excluding
 // staffing-shaped actions (offer_*, visit_reassigned) is not enough on
@@ -68,16 +68,16 @@ func redactStaffActorNames(items []activityfeed.Entry) {
 // at all): clientauth.Middleware has already confirmed the caller's own
 // Client owns this Engagement before this handler ever runs, which is
 // the whole of the access decision -- there is no role hierarchy to
-// filter further, and CONTEXT.md's Activity entry says she reads "her
+// filter further, and GLOSSARY.md's Activity entry says she reads "her
 // money" in full, unlike an employed Doula under ADR-0008's money tier.
 // staffingActions excludes Practice-roster actions outright, and
 // redactStaffActorNames replaces every surviving Staff actor's own name --
-// together the two halves of that same CONTEXT.md sentence. Must be
+// together the two halves of that same GLOSSARY.md sentence. Must be
 // mounted behind clientauth.Middleware.
 //
 // A Membership row never belongs here, decided rather than inherited
 // (#1148, which put those rows on the Practice's own feed): the roster is
-// the far side of the same CONTEXT.md sentence -- she reads her own
+// the far side of the same GLOSSARY.md sentence -- she reads her own
 // Activity, "never who inside the Practice did what" -- and who joined,
 // whose roles moved, whose employment type changed and who left is that
 // sentence exactly. It is already structurally impossible, since this is

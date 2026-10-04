@@ -39,7 +39,7 @@ No step: the product is not involved, and **that is the finding**. Every fact sh
 
 | Step | Action | Expected result | Mark |
 | --- | --- | --- | --- |
-| 4.1 | Record that this Engagement is postpartum work, not a birth | **She can, at the ask.** The Engagement Request Priya raises from Camille's Client detail hub demands "Select whether this is birth or postpartum work" before it can be approved, and approval creates the Engagement already carrying `kind: postpartum` (`engagements.kind`, `00042_client_intake_schema.sql`). `CONTEXT.md`'s "deliberately generic" claim now holds because the product knows which it is | `manual` |
+| 4.1 | Record that this Engagement is postpartum work, not a birth | **She can, at the ask.** The Engagement Request Priya raises from Camille's Client detail hub demands "Select whether this is birth or postpartum work" before it can be approved, and approval creates the Engagement already carrying `kind: postpartum` (`engagements.kind`, `00042_client_intake_schema.sql`). `GLOSSARY.md`'s "deliberately generic" claim now holds because the product knows which it is | `manual` |
 | 4.1-a | Approximate it by moving the status to `postpartum` | **Refused, and no longer needed.** `engagement_status` carries no `postpartum` member any more (dropped by `00057_engagement_status_drop_postpartum.sql`), and `TransitionHandler` refuses any target besides `active`/`completed` with a 400. 4.1's `kind` field already records the fact directly, so there is nothing left to approximate | `manual` |
 
 ### Stage 5 — The second invitation, and the login she already has

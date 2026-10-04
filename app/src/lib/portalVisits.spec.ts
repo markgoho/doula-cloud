@@ -56,7 +56,7 @@ describe('portalVisitColumns', () => {
 	});
 
 	// The Activity ledger replaces a Staff actor's name with "Your
-	// practice" (CONTEXT.md: she never reads who inside the Practice did
+	// practice" (GLOSSARY.md: she never reads who inside the Practice did
 	// what). That rule is about the Practice's roster acts; who is coming
 	// to her home is a fact about her care, and this column says so.
 	it('names the Doula who is coming, not the Practice', () => {

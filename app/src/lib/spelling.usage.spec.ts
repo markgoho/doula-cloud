@@ -442,7 +442,7 @@ const documentFiles = [
 		(file) =>
 			!file.startsWith('docs/research/transcripts/') && file !== 'docs/design/doula-cloud.export.md'
 	),
-	'CONTEXT.md',
+	'GLOSSARY.md',
 	'README.md',
 	'CLAUDE.md',
 	'CONTRIBUTING.md'

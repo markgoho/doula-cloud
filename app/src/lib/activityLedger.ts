@@ -255,7 +255,7 @@ export function activityLedgerColumns(
  * `row.detail` is not consulted here, and that is structural rather than
  * incidental: #887's sentence is staff-register prose that names
  * individual Doulas ("Visit reassigned from <one Doula> to <another>"),
- * which is exactly the half of CONTEXT.md's Activity entry
+ * which is exactly the half of GLOSSARY.md's Activity entry
  * portal.ActivityHandler's own actor redaction exists to hold. No portal
  * reader can send one today -- activityfeed.Entry has no such field --
  * but that handler redacts the actor's name and nothing else, so a column

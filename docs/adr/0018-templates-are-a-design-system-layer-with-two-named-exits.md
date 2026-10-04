@@ -6,7 +6,7 @@ The reversal is small. The part worth writing down is the second half of the tit
 
 ## Template means the Atomic Design layer, and the domain nouns stay qualified
 
-`CONTEXT.md` already defines **Plan Template** and **Client Field Template**: a Practice's own field definitions, per [ADR-0001](0001-practice-defined-plan-templates.md) and [ADR-0017](0017-twelve-columns-a-practice-defined-layer-and-an-engagement-that-is-asked-for.md). Adding a UI layer called Template creates an ambiguity, and it is tolerated rather than designed away, because Atomic Design is one of two things the map declared it would not change.
+`GLOSSARY.md` already defines **Plan Template** and **Client Field Template**: a Practice's own field definitions, per [ADR-0001](0001-practice-defined-plan-templates.md) and [ADR-0017](0017-twelve-columns-a-practice-defined-layer-and-an-engagement-that-is-asked-for.md). Adding a UI layer called Template creates an ambiguity, and it is tolerated rather than designed away, because Atomic Design is one of two things the map declared it would not change.
 
 The ambiguity is resolved by convention, not by renaming: **the domain nouns are always written qualified**, and a bare "Template" therefore always means the Atomic Design layer. Considered and rejected: calling the layer `PageShell` or `Scaffold`, which removes the collision at the cost of no longer speaking Atomic Design in the one codebase organized by it.
 

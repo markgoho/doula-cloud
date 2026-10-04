@@ -60,7 +60,7 @@ New York Medicaid's own enrollment agreement — 18 NYCRR §504.3(a) and §517.3
 
 Erasure still runs the moment a Client asks, and still destroys everything it destroys today — every free-text field, the Stripe Customer, the sealed `activity` key. What changes is narrow: on an Engagement with a submitted Medicaid claim, the handful of identifying fields that claim carried are held rather than redacted, marked as held rather than silently kept, until the retention period tied to that claim's payer ends. The rejected alternative — refusing Erasure outright while any claim is unexpired — tells a Client "no" for six to ten years and holds her Practice's own non-billed data about her for no reason any regulation asks; it is recorded below.
 
-**The trigger is a submitted claim on the Engagement's own Visit, not the Practice's Medicaid enrollment.** A Practice enrolled with Medicaid that never billed for a given Client's care owes nothing extra for her record; the fact that gates the hold sits on the Engagement, by way of its Visits, never on the Practice. `CONTEXT.md`'s **Erasure** entry states this.
+**The trigger is a submitted claim on the Engagement's own Visit, not the Practice's Medicaid enrollment.** A Practice enrolled with Medicaid that never billed for a given Client's care owes nothing extra for her record; the fact that gates the hold sits on the Engagement, by way of its Visits, never on the Practice. `GLOSSARY.md`'s **Erasure** entry states this.
 
 **What is retained, concretely, and what is not, on a billed Engagement:**
 

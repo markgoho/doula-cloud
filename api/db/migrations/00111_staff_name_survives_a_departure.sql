@@ -9,7 +9,7 @@
 -- every Client at the Practice loses her name -- on Visits she already
 -- worked and Messages she already sent. portal/visits.go's LEFT JOIN
 -- keeps the Visit and prints "Your practice" for the name;
--- message/list.go's does the same for the sender. CONTEXT.md's Visit
+-- message/list.go's does the same for the sender. GLOSSARY.md's Visit
 -- entry settles that the name is the requirement ("a Client sees the
 -- visits on her own Engagement, past and scheduled, with who is
 -- coming"), and CLAUDE.md's audit-trail expectation says the same about

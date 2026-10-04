@@ -29,7 +29,7 @@ She has a portal account, a signed Contract, a Birth Plan she has read and can p
 - She is the push-notification persona. ADR-0002 says the push carries no content and wakes a fetch, so the assertion is at the in-app fetch level, not on a real device.
 - Printing the Birth Plan for the hospital is a real, physical step. The print stylesheet is part of her journey, not a nicety.
 - She sees the Birth Plan read-only and never sees the Care Plan. Confirm the Care Plan is genuinely absent from the portal.
-- Her partner will want access and cannot have it. CONTEXT.md names this as a future extension of Client; capture it as a gap line, not a persona.
+- Her partner will want access and cannot have it. GLOSSARY.md names this as a future extension of Client; capture it as a gap line, not a persona.
 - **An Engagement's status never changes.** No code anywhere runs `UPDATE engagements`, so every Engagement stays at `intake` for its whole life. The `intake → active → postpartum` arc her journey needs cannot happen today.
 - The print stylesheet **does** exist, on the portal's Birth Plan page (`portal/(authenticated)/engagements/[engagementId]/birth-plan/+page.svelte`).
 - There is no first-class due date on `engagements`. A Practice could record one as a Plan Template field (the field types are text, select, checkbox, and section header — there is no date type), but nothing in the app can then treat it as a date. Note what the portal shows her instead before calling this a gap.

@@ -487,7 +487,7 @@
 		   /style-guide/data-table's own demo of that exact shape. 48.75rem
 		   is that fixed point, measured in CI's own Linux/Chromium, the
 		   one named environment a floor's minimality is judged against
-		   (CONTEXT.md's Content floor entry), with no margin added beyond
+		   (GLOSSARY.md's Content floor entry), with no margin added beyond
 		   it. It is the frame's own inline size that is measured, never
 		   the viewport (ADR-0024). A future table wider than this floor
 		   moves it. */

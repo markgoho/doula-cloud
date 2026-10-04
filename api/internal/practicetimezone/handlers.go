@@ -86,7 +86,7 @@ func GetHandler() http.Handler {
 //
 // Changing the zone retypes the Practice's existing Visits at once, and
 // that is the intended behavior rather than a side effect to guard
-// against: CONTEXT.md's Visit entry computes a Visit's type on every
+// against: GLOSSARY.md's Visit entry computes a Visit's type on every
 // read, so there is nothing stored to migrate and no instant that moves.
 // The screen says so before the press; a Practice that needs its old
 // Visits typed in the old zone needs the per-Visit time model parked on

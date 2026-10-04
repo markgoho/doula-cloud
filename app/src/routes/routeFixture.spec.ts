@@ -1,5 +1,5 @@
 /*
- * `toRoutePath` is read by both halves of the continuum check (CONTEXT.md):
+ * `toRoutePath` is read by both halves of the continuum check (GLOSSARY.md):
  * `route-continuum.svelte.spec.ts` globs `./**` and sees `+page.svelte` and
  * `page.fixture.ts` alike, while the drag surface globs `../../**` and sees
  * only fixtures. Both forms are asserted here, together, because the reason

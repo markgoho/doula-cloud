@@ -42,7 +42,7 @@
 		// endpoint, so a Doula who followed the link would meet a screen
 		// with nothing on it. It stays first in the list for whoever does
 		// see it. Labeled Getting paid, not Payments (#256): the route
-		// stays `/settings/payments` on purpose (ADR-0032), but CONTEXT.md
+		// stays `/settings/payments` on purpose (ADR-0032), but GLOSSARY.md
 		// defines Payment as money received against an Invoice, which this
 		// screen holds none of -- it manages a Connected account instead.
 		...(isPracticeOwnerOrAdmin

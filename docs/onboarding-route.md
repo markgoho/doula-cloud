@@ -358,6 +358,6 @@ The decision tickets of the map, in the order they closed. Each resolution comme
 | [What stands between the empty Practice and First Value, and what an act is (#1516)](https://github.com/markgoho/doula-cloud/issues/1516) | Screens 2 to 5; the count of presses |
 | [The signup screen and the screens after it, as a prototype (#1496)](https://github.com/markgoho/doula-cloud/issues/1496) | Mark's walk of the route; the words that no ticket had |
 
-The records that the decisions wrote or amended: ADR-0008, ADR-0017, ADR-0026, ADR-0033, ADR-0043, ADR-0048 and ADR-0053, and the `CONTEXT.md` entries **Attachment**, **Billing mode**, **Credit** and **Engagement Request**.
+The records that the decisions wrote or amended: ADR-0008, ADR-0017, ADR-0026, ADR-0033, ADR-0043, ADR-0048 and ADR-0053, and the `GLOSSARY.md` entries **Attachment**, **Billing mode**, **Credit** and **Engagement Request**.
 
 `docs/design/govuk-alignment.md` is not changed by this document. Its rows change on the commit that builds each screen.

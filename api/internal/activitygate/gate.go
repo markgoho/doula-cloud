@@ -126,7 +126,7 @@ var registry = map[string]Rule{
 		// way staffauth/mount.go's own comment warns a route-name prose
 		// list would -- and most of them (payment terms, the rate card,
 		// the timezone, the on-call settings: "the same authority that
-		// writes the rate card and the payment terms" CONTEXT.md names)
+		// writes the rate card and the payment terms" GLOSSARY.md names)
 		// are mounted staffauth.OwnerAndAdmin. Narrowing the feed to
 		// Owner alone would hide an Admin's own writes from her, which no
 		// other Rule in this registry does.

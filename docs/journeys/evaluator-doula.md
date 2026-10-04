@@ -13,17 +13,17 @@ Tasha is the only Persona who may legitimately abandon. Every stage therefore na
 
 ## Words
 
-Tasha is not yet a domain expert. She is the Persona furthest from `CONTEXT.md`.
+Tasha is not yet a domain expert. She is the Persona furthest from `GLOSSARY.md`.
 
 | Domain term | What Tasha says | Note |
 | --- | --- | --- |
 | Practice | "my business", "us two" | Signup asks for a "Practice name" in her first 15 seconds |
 | Engagement | "a client" | She has never heard the word and never will unless we teach it |
-| Client | "my clients", "the mom" | `CONTEXT.md` avoids "mom" deliberately |
-| Plan Template | "the form" | `CONTEXT.md` avoids "form" deliberately — the two agree on nothing |
+| Client | "my clients", "the mom" | `GLOSSARY.md` avoids "mom" deliberately |
+| Plan Template | "the form" | `GLOSSARY.md` avoids "form" deliberately — the two agree on nothing |
 | Birth Plan | "birth plan" | The one term that matches. It is also the term she is shopping for |
 
-The divergence is the finding: the terms she arrives with are the terms `CONTEXT.md` explicitly rejects. This is not a naming quibble at the top of the funnel — it is the vocabulary of the page that has to sell her.
+The divergence is the finding: the terms she arrives with are the terms `GLOSSARY.md` explicitly rejects. This is not a naming quibble at the top of the funnel — it is the vocabulary of the page that has to sell her.
 
 ## Stages
 

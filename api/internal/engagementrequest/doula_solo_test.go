@@ -133,7 +133,7 @@ func TestRequestHandler_ASoloOwnerWithNoDoulaYetIsNotAttached(t *testing.T) {
 // with a due date and with herself named.
 //
 // What that one act settles is the half of the window that was missing
-// before #1596: somebody holds a granted Attachment. CONTEXT.md gives a
+// before #1596: somebody holds a granted Attachment. GLOSSARY.md gives a
 // window to an `active` Engagement only, and an Engagement starts at
 // `intake`, so on the day it starts the read answers "not active" and
 // never "nobody attached". The move to `active` is the Engagement's own

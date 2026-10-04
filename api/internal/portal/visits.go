@@ -25,7 +25,7 @@ const visitPageSize = 30
 //   - no staffId -- a Client is told a person's name, never the
 //     Practice's own identifier for her;
 //   - no notes -- staff-only, ADR-0006 and #251;
-//   - no type -- CONTEXT.md's Visit entry keeps `prenatal`/`birth`/
+//   - no type -- GLOSSARY.md's Visit entry keeps `prenatal`/`birth`/
 //     `postpartum` staff-only and settles no Client word for it, and
 //     `postpartum` "still describes a birth with a baby at the end of
 //     it" (docs/journeys/loss-client.md), so labeling a bereavement
@@ -39,7 +39,7 @@ const visitPageSize = 30
 type Visit struct {
 	VisitID     string    `json:"visitId"`
 	ScheduledAt time.Time `json:"scheduledAt"`
-	// DoulaName is the name of the Doula who is coming -- CONTEXT.md's
+	// DoulaName is the name of the Doula who is coming -- GLOSSARY.md's
 	// own settled word for this surface ("a Client sees the visits on her
 	// own Engagement, past and scheduled, with who is coming").
 	// Deliberately NOT the Activity ledger's redactStaffActorNames

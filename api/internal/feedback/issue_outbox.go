@@ -55,7 +55,7 @@ const (
 )
 
 // RetentionMonths is how long a piece of Feedback nothing destroys is
-// kept, counted from when it was sent (#1501 Q4, CONTEXT.md's Feedback
+// kept, counted from when it was sent (#1501 Q4, GLOSSARY.md's Feedback
 // entry). Its GitHub issue is not touched when it goes.
 const RetentionMonths = 24
 

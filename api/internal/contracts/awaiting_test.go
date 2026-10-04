@@ -270,7 +270,7 @@ func TestAwaitingSignatureHandler_ContractorWithNoAttachmentSeesNothing(t *testi
 // is #1635: the list narrows only for the contractor who holds neither
 // the Owner role nor the Admin role (staffauth.Reader.IsAmbientContractor,
 // the population ADR-0008 confines). Employment type is independent of
-// roles (CONTEXT.md), so an Owner or an Admin whose Membership reads
+// roles (GLOSSARY.md), so an Owner or an Admin whose Membership reads
 // "contractor" is real, and she reaches the whole Practice. She reads
 // each outstanding Contract, on an Engagement she holds a granted
 // Attachment on and on one she does not. The same defect on the Clients

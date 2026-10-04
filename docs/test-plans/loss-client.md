@@ -94,7 +94,7 @@ Walked as Maya. Nadia is not in the app.
 | Step | Action | Expected result | Mark |
 | --- | --- | --- | --- |
 | 7.1 | As Maya, log a bereavement Visit | The row now carries a scheduled date and time, a type and notes (**[MO-G1](https://github.com/markgoho/doula-cloud/issues/250)**, **[PR-G6](https://github.com/markgoho/doula-cloud/issues/281)**, **[MO-G2](https://github.com/markgoho/doula-cloud/issues/251)** all closed), so it is no longer indistinguishable from the prenatal ones. The type is not chosen, though — ADR-0015 derives it from when the Visit falls against the end of the pregnancy, and a bereavement Visit types as `postpartum` for the same reason postpartum care after a loss is still postpartum. That is the honest word the model holds, and it is not the word for what Maya went to do | `manual` |
-| 7.1-a | As Nadia, find any trace of that Visit | None. There is no client-facing Visit surface (`CONTEXT.md`), by design. The support is real; the record of it is empty on both sides | `manual` |
+| 7.1-a | As Nadia, find any trace of that Visit | None. There is no client-facing Visit surface (`GLOSSARY.md`), by design. The support is real; the record of it is empty on both sides | `manual` |
 | 7.2 | Continue the thread both ways | Unchanged and unchangeable — immutable by design, which is correct here | `manual` |
 | 7.2-a | Mark that the thread's subject has changed, or pause push | Neither exists. Push unregistration happens only at sign-out, so her only mute is to leave | `missing-feature (NH-G7)` [#298](https://github.com/markgoho/doula-cloud/issues/298) |
 | 7.B-screens | Count the screens from the stage's entry to its end | **Screens**: 1 (Hick's Law, Flow) | `manual` |

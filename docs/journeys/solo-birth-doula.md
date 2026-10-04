@@ -22,7 +22,7 @@ Maya is close to a domain expert but not inside the model.
 | Plan Instance | — | She has no word for it, and needs none. It is a modeling term |
 | Plan Template | "the form I use every time" | |
 | Visit | "a visit", "the birth" | Matches |
-| Client | "my client", "the mom" | `CONTEXT.md` avoids "mom" deliberately |
+| Client | "my client", "the mom" | `GLOSSARY.md` avoids "mom" deliberately |
 
 ## Stages
 

@@ -32,7 +32,7 @@ import type { PracticeSession } from './practices/[practiceId]/+layout.js';
 
 /**
 The route a module path belongs to, for both halves of the check
-(CONTEXT.md): `./practices/[practiceId]/invoices/+page.svelte` and
+(GLOSSARY.md): `./practices/[practiceId]/invoices/+page.svelte` and
 `../../practices/[practiceId]/invoices/page.fixture.ts` alike read as
 `practices/[practiceId]/invoices`, so a break found by dragging and a
 break found by the sweep name the same screen.
@@ -291,7 +291,7 @@ check ([#1638](https://github.com/markgoho/doula-cloud/issues/1638)): the
 declaration itself first, then one shallow override of it per variant.
 
 A component demo declares `variants` too -- its style-guide page is its
-fixture (CONTEXT.md), and a page that renders an empty state and an error
+fixture (GLOSSARY.md), and a page that renders an empty state and an error
 state is several subjects behind one page the same way a route is several
 behind one path. It cannot be a `RouteFixture`: it has no `params`, no
 `url` and no `readyText` to state. What the two tiers do share is this

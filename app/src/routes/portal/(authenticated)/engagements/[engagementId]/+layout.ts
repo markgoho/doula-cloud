@@ -13,7 +13,7 @@ export interface EngagementIdentity {
 	createdAt: string;
 	/** portal.Detail's own resolved answer to ADR-0015's suppression
 	 * question (#311) -- never the Engagement's kind itself, which
-	 * CONTEXT.md gives no Client word and which this DTO never carries.
+	 * GLOSSARY.md gives no Client word and which this DTO never carries.
 	 * Every portal surface that offers, links to or announces a Birth
 	 * Plan reads this one field. */
 	offersBirthPlan: boolean;

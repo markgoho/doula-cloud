@@ -51,7 +51,7 @@ func TestHandler_NoCredentialOrKeyMaterialAnywhere(t *testing.T) {
 // TestHandler_ExportLeavesOutFeedback is #1523's own AC: charting Q7
 // (#1498) settled that a piece of Feedback goes to DoulaCloud only and
 // is never the Practice's record, so entities() must never name it --
-// CONTEXT.md's Feedback entry restates the same rule ("a Practice's
+// GLOSSARY.md's Feedback entry restates the same rule ("a Practice's
 // export leaves it out"). There is no feedback.csv to assert an absence
 // of columns from, so this proves the omission the way #288's own
 // "excluded, not a judgment call" list already does elsewhere: seed a

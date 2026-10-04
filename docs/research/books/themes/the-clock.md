@@ -92,6 +92,6 @@ When, if ever, does a message go out because a date arrived rather than because 
 - ADR-0028: the shell has no notification bell; unfinished work appears in a list and never as a badge that pulses.
 - ADR-0002: a Web Push notification carries no content; it wakes the service worker, which fetches the message from the BFF.
 - ADR-0014: the waitlist lives in Buttondown, outside the stack; it sends one confirmation carrying the pilot-group offer and broadcasts once in January 2027; Kit and Drip were weighed and rejected as funnel automation.
-- The **Credit** entry in `CONTEXT.md`: Credits do not expire. `api/internal/billing/dormancy.go` holds a two-year dormancy notice whose comment cites New York's APL 1315(1-b) escheat deadline as the source of the interval.
+- The **Credit** entry in `GLOSSARY.md`: Credits do not expire. `api/internal/billing/dormancy.go` holds a two-year dormancy notice whose comment cites New York's APL 1315(1-b) escheat deadline as the source of the interval.
 - #1266, which asked what a Practice with untouched signup Credits hears after two years of silence, was closed as not planned on 2026-09-10; a not-planned ticket decides nothing.
 - Open: #361, the confirmation email and how a person says yes to the pilot; #1003, the channel plan through January.

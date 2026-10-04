@@ -163,7 +163,7 @@ func resolveStaffTarget(ctx context.Context, tx *sql.Tx, practiceID, actorStaffI
 // once" -- plus the six-digit code the pre-account read asks for.
 //
 // The Invitation always carries the Doula role and contractor employment
-// type: CONTEXT.md's Offer entry says this link "joins her to the
+// type: GLOSSARY.md's Offer entry says this link "joins her to the
 // Practice as a contractor Doula", and it is the only shape that makes
 // sense here -- an employee is inside the business, which is not
 // something an emailed link makes anyone. Someone who should be an

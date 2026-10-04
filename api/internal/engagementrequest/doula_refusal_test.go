@@ -59,7 +59,7 @@ func TestRequestHandler_RefusesAPersonWhoCannotBeNamed(t *testing.T) {
 
 // TestRequestHandler_AnOwnerWithNoDoulaRoleCannotNameHerself proves the
 // rule is about the person named and not about who asks: Attachment is
-// for Doulas only (CONTEXT.md), so an Owner who does not hold the Doula
+// for Doulas only (GLOSSARY.md), so an Owner who does not hold the Doula
 // role is refused her own name.
 func TestRequestHandler_AnOwnerWithNoDoulaRoleCannotNameHerself(t *testing.T) {
 	db := testdb.New(t)

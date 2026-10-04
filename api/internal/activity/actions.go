@@ -161,7 +161,7 @@ const DepartedStaffName = "a former colleague"
 // StaffActorDisplayName is DepartedStaffName's Client-facing sibling:
 // the word a Client-portal surface uses in the same "this row's Staff
 // person cannot be named" situation. It is a different word on purpose
-// -- portal/activity.go's own redaction reasoning is CONTEXT.md's rule
+// -- portal/activity.go's own redaction reasoning is GLOSSARY.md's rule
 // that a Client never learns which individual inside the Practice acted,
 // which is not what DepartedStaffName answers (Staff readers are
 // entitled to know a colleague acted, just not who once she is gone).
@@ -475,7 +475,7 @@ func MoneyActions() []EngagementAction {
 	return out
 }
 
-// staffingActions is what CONTEXT.md's Activity entry keeps off a
+// staffingActions is what GLOSSARY.md's Activity entry keeps off a
 // Client's own portal ledger (#486): "she reads her own Activity ...
 // never who inside the Practice did what." The set is that whole
 // sentence, not the roster alone. An Offer is Doula staffing -- who was
@@ -489,7 +489,7 @@ func MoneyActions() []EngagementAction {
 // granted ask still reaches her as the void itself.
 //
 // Money actions (moneyActions above) are a different, Staff-role-only cut
-// and are deliberately absent here: CONTEXT.md also says "her money", so
+// and are deliberately absent here: GLOSSARY.md also says "her money", so
 // a Client keeps every Contract and Invoice entry on her own Engagement.
 //
 // Three members do not pass that test, and are here by a separate rule
@@ -528,7 +528,7 @@ var staffingActions = map[EngagementAction]bool{
 	ActionBirthOutcomeRecorded: true,
 }
 
-// StaffingActions returns every action CONTEXT.md's Activity entry keeps
+// StaffingActions returns every action GLOSSARY.md's Activity entry keeps
 // off a Client's own portal ledger, sorted for a deterministic query
 // string -- the same shape MoneyActions already gives
 // engagement.ListActivityHandler, so a caller building a SQL exclusion

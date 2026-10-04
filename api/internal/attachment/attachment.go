@@ -45,11 +45,11 @@ const (
 	// ends by a DELETE of the row, staffauth's removal).
 	NotAtPractice NotAttachable = "not_at_practice"
 	// NotADoula is the person who is Staff here with a Membership that does not carry
-	// the Doula role. Attachment is for Doulas only (CONTEXT.md).
+	// the Doula role. Attachment is for Doulas only (GLOSSARY.md).
 	NotADoula NotAttachable = "not_a_doula"
 	// IsContractor is the contractor who holds neither the Owner role nor
 	// the Admin role, who is attached by her own acceptance of an Offer and
-	// by nothing else (CONTEXT.md's Attachment entry). It is the population
+	// by nothing else (GLOSSARY.md's Attachment entry). It is the population
 	// staffauth.Reader.IsAmbientContractor confines for reach. A contractor
 	// who holds Owner or Admin is not this person, and never gets this
 	// answer (#1625).
@@ -78,7 +78,7 @@ type Membership struct {
 // answers Attachable where she may be attached.
 //
 // The contractor rule exists because "nobody can put an outsider on a
-// Client's birth without her agreement" (CONTEXT.md's Attachment entry).
+// Client's birth without her agreement" (GLOSSARY.md's Attachment entry).
 // A person who holds Owner or Admin is not an outsider: she starts
 // Engagements, approves Requests, and names Doulas. So the rule confines
 // the same contractor that each reach rule confines
