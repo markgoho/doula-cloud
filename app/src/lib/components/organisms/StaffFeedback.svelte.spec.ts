@@ -26,7 +26,7 @@ describe('StaffFeedback', () => {
 		await setup();
 
 		await expect
-			.element(page.getByText('Doula Cloud is new, and you are one of the first to use it.', { exact: false }))
+			.element(page.getByText('DoulaCloud is new, and you are one of the first to use it.', { exact: false }))
 			.toBeVisible();
 		await expect.element(page.getByRole('button', { name: CONTROL })).toBeVisible();
 	});
@@ -36,11 +36,11 @@ describe('StaffFeedback', () => {
 
 		await openDrawer();
 
-		await expect.element(page.getByRole('dialog', { name: 'Send feedback to Doula Cloud' })).toBeVisible();
+		await expect.element(page.getByRole('dialog', { name: 'Send feedback to DoulaCloud' })).toBeVisible();
 		await expect
 			.element(
 				page.getByText(
-					'The Doula Cloud team reads every piece of feedback during the pilot. It is how we decide what to fix first.'
+					'The DoulaCloud team reads every piece of feedback during the pilot. It is how we decide what to fix first.'
 				)
 			)
 			.toBeVisible();
@@ -79,7 +79,7 @@ describe('StaffFeedback', () => {
 
 		await expect.element(page.getByRole('dialog')).not.toBeInTheDocument();
 		const message =
-			'Feedback sent. Thank you. If a reply would help, Mark Goho, who builds Doula Cloud, will email you at jordan@fingerlakesbirth.example.';
+			'Feedback sent. Thank you. If a reply would help, Mark Goho, who builds DoulaCloud, will email you at jordan@fingerlakesbirth.example.';
 		await expect.element(page.getByText(message)).toBeVisible();
 		// The focused element is the Notice's own wrapper (`.notice`,
 		// tabindex="-1"), not the <p role="status"> text inside it -- no
@@ -118,7 +118,7 @@ describe('StaffFeedback', () => {
 		await expect
 			.element(page.getByText('There is a problem with the service. Try again in a few minutes.'))
 			.toBeVisible();
-		await expect.element(page.getByRole('dialog', { name: 'Send feedback to Doula Cloud' })).toBeVisible();
+		await expect.element(page.getByRole('dialog', { name: 'Send feedback to DoulaCloud' })).toBeVisible();
 		await expect.element(page.getByLabelText('Tell us more')).toHaveValue('Kept on a refusal.');
 	});
 });

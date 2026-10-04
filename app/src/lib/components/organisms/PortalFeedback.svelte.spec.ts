@@ -38,14 +38,14 @@ describe('PortalFeedback', () => {
 		await expect
 			.element(
 				page.getByText(
-					'Finger Lakes Birth Collective uses Doula Cloud to run this portal. The Doula Cloud team reads every piece of feedback.'
+					'Finger Lakes Birth Collective uses DoulaCloud to run this portal. The DoulaCloud team reads every piece of feedback.'
 				)
 			)
 			.toBeVisible();
 		await expect
 			.element(
 				page.getByText(
-					'This goes to the Doula Cloud team, not to Finger Lakes Birth Collective. For anything about your care, message your doula.'
+					'This goes to the DoulaCloud team, not to Finger Lakes Birth Collective. For anything about your care, message your doula.'
 				)
 			)
 			.toBeVisible();
@@ -59,14 +59,14 @@ describe('PortalFeedback', () => {
 		await expect
 			.element(
 				page.getByText(
-					"Your doula's Practice uses Doula Cloud to run this portal. The Doula Cloud team reads every piece of feedback."
+					"Your doula's Practice uses DoulaCloud to run this portal. The DoulaCloud team reads every piece of feedback."
 				)
 			)
 			.toBeVisible();
 		await expect
 			.element(
 				page.getByText(
-					"This goes to the Doula Cloud team, not to your doula's Practice. For anything about your care, message your doula."
+					"This goes to the DoulaCloud team, not to your doula's Practice. For anything about your care, message your doula."
 				)
 			)
 			.toBeVisible();
@@ -105,7 +105,7 @@ describe('PortalFeedback', () => {
 
 		await expect.element(page.getByRole('dialog')).not.toBeInTheDocument();
 		const message =
-			'Feedback sent. Thank you. If a reply would help, the Doula Cloud team will email you at alex.rivera@example.com.';
+			'Feedback sent. Thank you. If a reply would help, the DoulaCloud team will email you at alex.rivera@example.com.';
 		await expect.element(page.getByText(message)).toBeVisible();
 		// The focused element is the Notice's own wrapper (`.notice`,
 		// tabindex="-1"), not the <p role="status"> text inside it -- no

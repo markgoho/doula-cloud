@@ -54,7 +54,7 @@ func enqueue(ctx context.Context, tx *sql.Tx, practiceID string, a act, dueAt ti
 //
 //nolint:gosec // deletion-reminder copy, not a credential
 var reminderSubject = fmt.Sprintf(
-	"Doula Cloud: your Practice will be deleted in %d days",
+	"DoulaCloud: your Practice will be deleted in %d days",
 	int((RestoreWindow-ReminderLeadTime)/(24*time.Hour)),
 )
 

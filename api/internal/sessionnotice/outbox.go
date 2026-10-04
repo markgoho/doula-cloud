@@ -39,23 +39,23 @@ import (
 // credential is most likely to be the one still working.
 const signinIdleWindow = 7 * 24 * time.Hour
 
-const newSignInSubject = "Doula Cloud: new sign-in to your account"
+const newSignInSubject = "DoulaCloud: new sign-in to your account"
 
 func newSignInText() string {
 	return "Hello,\n\n" +
-		"Your Doula Cloud account was just signed in to.\n\n" +
+		"Your DoulaCloud account was just signed in to.\n\n" +
 		"If this was you, no action is needed. If it wasn't, reply to this email right away.\n"
 }
 
-const sessionRevokedSubject = "Doula Cloud: your sessions were signed out"
+const sessionRevokedSubject = "DoulaCloud: your sessions were signed out"
 
 func sessionRevokedText() string {
 	return "Hello,\n\n" +
-		"All of your Doula Cloud sessions were signed out. You'll need to sign in again on every device.\n\n" +
+		"All of your DoulaCloud sessions were signed out. You'll need to sign in again on every device.\n\n" +
 		"If you didn't expect this, reply to this email.\n"
 }
 
-const sessionEvictedSubject = "Doula Cloud: you were signed out in one browser"
+const sessionEvictedSubject = "DoulaCloud: you were signed out in one browser"
 
 // Deliberately not sessionRevokedText: an eviction ends exactly one
 // session -- the one the browser she is standing at held -- and every
@@ -64,15 +64,15 @@ const sessionEvictedSubject = "Doula Cloud: you were signed out in one browser"
 // reasoning at the schema.
 func sessionEvictedText() string {
 	return "Hello,\n\n" +
-		"You were signed out of Doula Cloud in one browser, because that browser was used to sign in to the client portal. Your other devices are still signed in.\n\n" +
+		"You were signed out of DoulaCloud in one browser, because that browser was used to sign in to the client portal. Your other devices are still signed in.\n\n" +
 		"If you didn't expect this, reply to this email.\n"
 }
 
-const mfaRecoveryClearedSubject = "Doula Cloud: your two-factor authentication was reset"
+const mfaRecoveryClearedSubject = "DoulaCloud: your two-factor authentication was reset"
 
 func mfaRecoveryClearedText() string {
 	return "Hello,\n\n" +
-		"The two-factor authenticator on your Doula Cloud account was removed as part of an account-recovery request, and every one of your sessions was signed out.\n\n" +
+		"The two-factor authenticator on your DoulaCloud account was removed as part of an account-recovery request, and every one of your sessions was signed out.\n\n" +
 		"You'll need to sign in with your password and set up a new authenticator. If you didn't request this, reply to this email right away.\n"
 }
 

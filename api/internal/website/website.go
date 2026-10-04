@@ -1,5 +1,5 @@
 // Package website holds the website a Practice declares to Stripe (#440):
-// either a URL of her own, or a page Doula Cloud publishes for her at
+// either a URL of her own, or a page DoulaCloud publishes for her at
 // doula.cloud/p/<slug>.
 //
 // Stripe's hosted onboarding demands a website from every connected

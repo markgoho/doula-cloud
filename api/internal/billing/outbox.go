@@ -14,7 +14,7 @@ import (
 // Notification's fixed copy (ADR-0009's content rule: no Client name, no
 // Engagement detail, no Staff member -- nothing identifying who tripped
 // the wall or which Client caused it). billingLink is the only variable.
-const lowCreditSubject = "Doula Cloud: your Practice is out of Credits" //nolint:gosec // billing Credits copy, not a credential
+const lowCreditSubject = "DoulaCloud: your Practice is out of Credits" //nolint:gosec // billing Credits copy, not a credential
 
 func lowCreditText(billingLink string) string {
 	return "Hello,\n\n" +

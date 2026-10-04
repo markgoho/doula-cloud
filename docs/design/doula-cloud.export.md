@@ -286,7 +286,7 @@ Generated from `docs/design/doula-cloud.pen`. Do not hand-edit this file: run `b
 ## BrandLockup (reusable)
 
 - ref "Mark" -> component "CloudMark" (theme: size=sm)
-- text: "Doula Cloud" [fill: $color-on-surface; fontFamily: $font-family-base]
+- text: "DoulaCloud" [fill: $color-on-surface; fontFamily: $font-family-base]
 
 ## FormField (reusable)
 
@@ -1468,7 +1468,7 @@ Generated from `docs/design/doula-cloud.pen`. Do not hand-edit this file: run `b
           - ref "Entry 1" -> component "ActivityEntry"
             - override When (text): content: "12 minutes ago"
             - override What happened (text): content: "Invoice INV-2052 emailed to Amara Okafor"
-            - override Who (text): content: "Doula Cloud"
+            - override Who (text): content: "DoulaCloud"
           - ref "Entry 2" -> component "ActivityEntry"
             - override When (text): content: "2 hours ago"
             - override What happened (text): content: "Invoice INV-2052 raised for $925.00"
@@ -1492,7 +1492,7 @@ Generated from `docs/design/doula-cloud.pen`. Do not hand-edit this file: run `b
           - ref "Entry 7" -> component "ActivityEntry"
             - override When (text): content: "12 Aug 2026, 11:06am"
             - override What happened (text): content: "Portal invite sent to amara.okafor@example.com"
-            - override Who (text): content: "Doula Cloud"
+            - override Who (text): content: "DoulaCloud"
           - ref "Entry 8" -> component "ActivityEntry"
             - override When (text): content: "12 Aug 2026, 11:05am"
             - override What happened (text): content: "Contract sent"
@@ -1500,7 +1500,7 @@ Generated from `docs/design/doula-cloud.pen`. Do not hand-edit this file: run `b
           - ref "Entry 9" -> component "ActivityEntry"
             - override When (text): content: "23 Jul 2026, 9:04am"
             - override What happened (text): content: "Offer to Lena Vasquez superseded"
-            - override Who (text): content: "Doula Cloud"
+            - override Who (text): content: "DoulaCloud"
           - ref "Entry 10" -> component "ActivityEntry"
             - override When (text): content: "22 Jul 2026, 8:19am"
             - override What happened (text): content: "Offer accepted — Priya Raman attached"
@@ -1510,7 +1510,7 @@ Generated from `docs/design/doula-cloud.pen`. Do not hand-edit this file: run `b
             - override What happened (text): content: "Engagement created from an approved request"
             - override Who (text): content: "Tasha Lin"
         - frame "Gap note" [fill: $color-surface-container; stroke: $color-warning]
-          - text: "Two rules the drawing is asserting. Actors come in three kinds and only one is a staff member — a person did it, the Client did it (Amara signed, Amara paid), or Doula Cloud did it with nobody asking. And time is relative under seven days and absolute beyond it, on a 12-hour clock — “2 hours ago” is what a person reads and “14 Aug 2026, 8:12pm” is what an audit trail survives on; the exact instant is always carried underneath, never replaced. Only two of these eleven events are recorded at all today." [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-meta-size]
+          - text: "Two rules the drawing is asserting. Actors come in three kinds and only one is a staff member — a person did it, the Client did it (Amara signed, Amara paid), or DoulaCloud did it with nobody asking. And time is relative under seven days and absolute beyond it, on a 12-hour clock — “2 hours ago” is what a person reads and “14 Aug 2026, 8:12pm” is what an audit trail survives on; the exact instant is always carried underneath, never replaced. Only two of these eleven events are recorded at all today." [fill: $color-on-surface-variant; fontFamily: $font-family-base; fontSize: $text-meta-size]
 
 ## Engagement - Doula (employee)
 
@@ -1671,7 +1671,7 @@ Generated from `docs/design/doula-cloud.pen`. Do not hand-edit this file: run `b
           - ref "Entry 7" -> component "ActivityEntry"
             - override When (text): content: "12 Aug 2026, 11:06am"
             - override What happened (text): content: "Portal invite sent to amara.okafor@example.com"
-            - override Who (text): content: "Doula Cloud"
+            - override Who (text): content: "DoulaCloud"
           - ref "Entry 8" -> component "ActivityEntry"
             - override When (text): content: "12 Aug 2026, 11:05am"
             - override What happened (text): content: "Contract sent"
@@ -1679,7 +1679,7 @@ Generated from `docs/design/doula-cloud.pen`. Do not hand-edit this file: run `b
           - ref "Entry 9" -> component "ActivityEntry"
             - override When (text): content: "23 Jul 2026, 9:04am"
             - override What happened (text): content: "Offer to Lena Vasquez superseded"
-            - override Who (text): content: "Doula Cloud"
+            - override Who (text): content: "DoulaCloud"
           - ref "Entry 10" -> component "ActivityEntry"
             - override When (text): content: "22 Jul 2026, 8:19am"
             - override What happened (text): content: "Offer accepted — Priya Raman attached"
@@ -1853,7 +1853,7 @@ Generated from `docs/design/doula-cloud.pen`. Do not hand-edit this file: run `b
           - ref "Entry 7" -> component "ActivityEntry"
             - override When (text): content: "12 Aug 2026, 11:06am"
             - override What happened (text): content: "Portal invite sent to amara.okafor@example.com"
-            - override Who (text): content: "Doula Cloud"
+            - override Who (text): content: "DoulaCloud"
           - ref "Entry 8" -> component "ActivityEntry"
             - override When (text): content: "12 Aug 2026, 11:05am"
             - override What happened (text): content: "Contract sent"
@@ -1861,7 +1861,7 @@ Generated from `docs/design/doula-cloud.pen`. Do not hand-edit this file: run `b
           - ref "Entry 9" -> component "ActivityEntry"
             - override When (text): content: "23 Jul 2026, 9:04am"
             - override What happened (text): content: "Offer to Lena Vasquez superseded"
-            - override Who (text): content: "Doula Cloud"
+            - override Who (text): content: "DoulaCloud"
           - ref "Entry 10" -> component "ActivityEntry"
             - override When (text): content: "22 Jul 2026, 8:19am"
             - override What happened (text): content: "Offer accepted — Priya Raman attached"

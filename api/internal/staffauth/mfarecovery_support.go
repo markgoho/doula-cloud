@@ -11,7 +11,7 @@ import (
 	"doula-cloud/api/internal/internalauth"
 )
 
-// SupportClearRequest is the body a Doula Cloud operator's own tooling
+// SupportClearRequest is the body a DoulaCloud operator's own tooling
 // sends: which Staff member's enrollment to clear, and the operator's own
 // name -- staff_auth_events.actor_operator, docs/runbooks/mfa-recovery-
 // support.md's "who ran it" requirement.

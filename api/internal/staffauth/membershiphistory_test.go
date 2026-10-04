@@ -311,7 +311,7 @@ func TestListMembershipHistory_DepartedActorIsNamedAsGone(t *testing.T) {
 
 // TestListMembershipHistory_SystemActorIsNamedDoulaCloud holds
 // ADR-0022's naming rule for the actor kind this subject kind has no
-// writer for yet: if one is ever added, the row reads "Doula Cloud",
+// writer for yet: if one is ever added, the row reads "DoulaCloud",
 // never "System" and never a blank name.
 func TestListMembershipHistory_SystemActorIsNamedDoulaCloud(t *testing.T) {
 	db := testdb.New(t)

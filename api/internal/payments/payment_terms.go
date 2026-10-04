@@ -220,7 +220,7 @@ func PutPaymentTermsHandler() http.Handler {
 		}
 
 		// An unset Practice writing 30 is still a real change: it moves
-		// off "whatever Doula Cloud picks" onto a number it chose, and
+		// off "whatever DoulaCloud picks" onto a number it chose, and
 		// the Activity row is the only record that it did.
 		if !set || before != req.NetDays {
 			if err := writePaymentTerms(r.Context(), tx, practiceID, req.NetDays, before, set); err != nil {

@@ -44,7 +44,7 @@ func TestMailgunSender_DeleteBounce(t *testing.T) {
 
 // Verified live against mg.doula.cloud on #744: Mailgun answers 404
 // "Address not found in bounces table" for an address it never listed.
-// Doula Cloud records suppressions from the webhook's own permanent_fail
+// DoulaCloud records suppressions from the webhook's own permanent_fail
 // event, which can outlive or precede Mailgun's list entry, so a 404
 // means the goal state already holds -- not that the clear failed.
 func TestMailgunSender_DeleteBounce_404IsSuccess(t *testing.T) {

@@ -33,7 +33,7 @@
 				<li>Your role and Practice</li>
 				<li>The time</li>
 				<li>Your screen width and browser</li>
-				<li>The version of Doula Cloud</li>
+				<li>The version of DoulaCloud</li>
 			</ul>
 		</Details>
 	</section>

@@ -113,7 +113,7 @@
 	</StackedForm>
 
 	<Text
-		text="No code, and no owner above you? Ask the person who runs your practice to get in touch with Doula Cloud."
+		text="No code, and no owner above you? Ask the person who runs your practice to get in touch with DoulaCloud."
 		tone="muted"
 		step="body-sm"
 	/>

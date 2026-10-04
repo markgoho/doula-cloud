@@ -1,5 +1,5 @@
 <!--
-/support (#390, #358): what Doula Cloud sells, who to contact, and the
+/support (#390, #358): what DoulaCloud sells, who to contact, and the
 refund position. Copy, verbatim, and why each sentence is there:
 docs/copy/support-page.md.
 

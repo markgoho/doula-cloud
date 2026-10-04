@@ -1,10 +1,10 @@
-# A Practice pays per Engagement, and Doula Cloud is paid when the doula is
+# A Practice pays per Engagement, and DoulaCloud is paid when the doula is
 
-How a Practice pays Doula Cloud was decided in August 2026, one mechanism at a time: no subscription and no tiers on [#45](https://github.com/markgoho/doula-cloud/issues/45); one Credit at $20.00 per Engagement, flat, anchored and provisional, on [#439](https://github.com/markgoho/doula-cloud/issues/439); three Credits at signup with no card on [#257](https://github.com/markgoho/doula-cloud/issues/257) and the founding grant on [#449](https://github.com/markgoho/doula-cloud/issues/449); the three-year refund of an unspent Credit on [#390](https://github.com/markgoho/doula-cloud/issues/390); the pilot at list price with no recurring charge on [#421](https://github.com/markgoho/doula-cloud/issues/421) and [#444](https://github.com/markgoho/doula-cloud/issues/444); the price stated before Stripe on [#285](https://github.com/markgoho/doula-cloud/issues/285); and Credits as Doula Cloud's own billing surface in [ADR-0032](0032-billing-is-credits-payments-is-getting-paid.md). Those records hold the mechanism, and the **Credit** entry in `CONTEXT.md` holds the glossary. None of them records the value the mechanism serves.
+How a Practice pays DoulaCloud was decided in August 2026, one mechanism at a time: no subscription and no tiers on [#45](https://github.com/markgoho/doula-cloud/issues/45); one Credit at $20.00 per Engagement, flat, anchored and provisional, on [#439](https://github.com/markgoho/doula-cloud/issues/439); three Credits at signup with no card on [#257](https://github.com/markgoho/doula-cloud/issues/257) and the founding grant on [#449](https://github.com/markgoho/doula-cloud/issues/449); the three-year refund of an unspent Credit on [#390](https://github.com/markgoho/doula-cloud/issues/390); the pilot at list price with no recurring charge on [#421](https://github.com/markgoho/doula-cloud/issues/421) and [#444](https://github.com/markgoho/doula-cloud/issues/444); the price stated before Stripe on [#285](https://github.com/markgoho/doula-cloud/issues/285); and Credits as DoulaCloud's own billing surface in [ADR-0032](0032-billing-is-credits-payments-is-getting-paid.md). Those records hold the mechanism, and the **Credit** entry in `CONTEXT.md` holds the glossary. None of them records the value the mechanism serves.
 
 On 2026-09-14 the founder tested every one of those decisions against the twenty-nine books on the values track, in the first grilling session under [ADR-0041](0041-a-book-enters-the-repo-as-evidence-and-becomes-a-rule-only-through-a-decision.md), on [#1369](https://github.com/markgoho/doula-cloud/issues/1369), from the theme synthesis at [`docs/research/books/themes/price-the-free-credits-and-the-card.md`](../research/books/themes/price-the-free-credits-and-the-card.md). Thirteen questions over three rounds; every recorded decision held, and the questions the record left open were settled. He confirmed the positions record on that ticket. This ADR is the value behind the mechanism: why each position holds, in his reasons, with the evidence weighed and what was rejected. Page citations are as the read-backs in `docs/research/books/` give them, each under its own page rule. A book is evidence here and nowhere the reason.
 
-**Doula Cloud is paid when the doula is. A Practice pays one flat price for each Engagement and nothing in between, every feature is included, and a stranger runs three families through the product before any card is taken.**
+**DoulaCloud is paid when the doula is. A Practice pays one flat price for each Engagement and nothing in between, every feature is included, and a stranger runs three families through the product before any card is taken.**
 
 ## The decision
 
@@ -24,7 +24,7 @@ Signup grants three Credits and takes no card. The card is taken at the first pu
 
 Weighed for: *Company of One*'s free version that feeds word of mouth and converts without much extra effort (ch. 7, PDF p. 89); *Lean Marketing*'s own churn case, a thirty-day trial taken with a card and never set up because the import looked daunting (Chapter 14, pp. 231–232); *Landing Page Hot Tips*'s no-card trial as the way to lower the risk to commit (Tips #46, #47; PDF pp. 91, 92).
 
-Weighed against and rejected: *The SaaS Playbook*'s card before value as a qualifying event, with trials without one multiplying support tenfold (Pricing, pp. 75–78), and *Software as a Science*'s card asked for on the sales call itself (ch. 5, PDF p. 114). Both assume a sales motion with a call in it; here the first purchase is the qualifying event, and it happens without anyone from Doula Cloud in the room.
+Weighed against and rejected: *The SaaS Playbook*'s card before value as a qualifying event, with trials without one multiplying support tenfold (Pricing, pp. 75–78), and *Software as a Science*'s card asked for on the sales call itself (ch. 5, PDF p. 114). Both assume a sales motion with a call in it; here the first purchase is the qualifying event, and it happens without anyone from DoulaCloud in the room.
 
 Held in view: *The Mom Test*'s rule that a free thing counts as commitment only in proportion to what it costs the person, and a cheap trial has to be made more expensive before it means anything (ch. 5, p. 70). Spending a Credit costs her a real family run through the product, which is not cheap. A recommendation to cut the grant from three to one on that reasoning was put to the founder and not taken. The pilot watches for the Practice that spends three and never buys, on #243.
 
@@ -42,7 +42,7 @@ Weighed against and rejected: three tiers with one suggested, in *Marketing Made
 
 Weighed for: *Company of One*'s simplicity, Casper making three mattresses rather than 108 (ch. 1, PDF pp. 25–27); Thomas's warning that a visually favored plan is a bias the designer would have to disclose ([Design for Cognitive Bias](../research/books/design-for-cognitive-bias.md), ch. 4, pp. 87–88), which one price with no plans never raises.
 
-Open elsewhere: whether claims submission carries a per-claim charge, if [#809](https://github.com/markgoho/doula-cloud/issues/809) ends with Doula Cloud in the claims path, is decided there, not here.
+Open elsewhere: whether claims submission carries a per-claim charge, if [#809](https://github.com/markgoho/doula-cloud/issues/809) ends with DoulaCloud in the claims path, is decided there, not here.
 
 ### The price is published
 
@@ -64,7 +64,7 @@ Weighed for: *Software as a Science*'s advice to sell a year of the current pric
 
 ## What was considered instead
 
-**A subscription, or any recurring element.** Rejected because it bills a doula for months in which the product did nothing for her, and severs the tie the founder wants: Doula Cloud paid when she is.
+**A subscription, or any recurring element.** Rejected because it bills a doula for months in which the product did nothing for her, and severs the tie the founder wants: DoulaCloud paid when she is.
 
 **A card before value.** Rejected because the first purchase is the qualifying event and no sales call exists to take a card on; a card at signup would only stop the doula who was going to try three families and buy.
 

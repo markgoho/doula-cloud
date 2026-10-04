@@ -19,7 +19,7 @@
 		errorKind="Select what kind of feedback it is"
 		textLabel="Tell us more"
 		textHint="What were you trying to do, and what happened?"
-		destination="This goes to the Doula Cloud team, not to your Practice."
+		destination="This goes to the DoulaCloud team, not to your Practice."
 		detailsSummary="What else we send with your feedback"
 		roleAndPractice="Owner, Riverside Doulas"
 		onSend={async (input) => {

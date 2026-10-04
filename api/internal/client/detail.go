@@ -27,7 +27,7 @@ import (
 //
 // It is always present, and #1150 is why. It used to be nil for a system
 // actor and nil again for a Staff member who had since left, and the
-// screen filled both in itself -- "Doula Cloud" for the first, "Unknown
+// screen filled both in itself -- "DoulaCloud" for the first, "Unknown
 // staff" for the second. The first put ADR-0022's own word for the
 // product in a second place; the second gave one Practice two words for
 // one absence, since every other surface calls her "a former colleague"

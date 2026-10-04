@@ -7,7 +7,7 @@ import { toPageState } from '../../../routeFixture.js';
 import { fixture } from './page.fixture.js';
 
 /*
- * #610: a browser holds exactly one Doula Cloud session, so redeeming a
+ * #610: a browser holds exactly one DoulaCloud session, so redeeming a
  * sign-in link on the laptop where her Practice session is live ends
  * that one. The BFF refuses the first Continue and says what it costs;
  * this page shows it on the button rather than on a screen of its own.

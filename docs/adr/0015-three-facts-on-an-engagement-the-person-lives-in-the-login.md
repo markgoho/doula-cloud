@@ -64,7 +64,7 @@ The status set was never defined in words, and the transition rule could not be 
 
 **The product has no lead or prospect concept**, and this ADR states that explicitly so `intake` never quietly becomes one. Three facts already in the model rule that reading out:
 
-- **A Credit locks when an Engagement is created** ([#332](https://github.com/markgoho/doula-cloud/issues/332), [#45](https://github.com/markgoho/doula-cloud/issues/45)). If `intake` held leads, a Practice would pay Doula Cloud for every inquiry that went nowhere. That is not the pricing model.
+- **A Credit locks when an Engagement is created** ([#332](https://github.com/markgoho/doula-cloud/issues/332), [#45](https://github.com/markgoho/doula-cloud/issues/45)). If `intake` held leads, a Practice would pay DoulaCloud for every inquiry that went nowhere. That is not the pricing model.
 - **`intake` carries a binding Client-portal label** under ADR-0005 — "Getting started". Only a person with a portal login reads it, and a Practice does not hand a portal login to someone it has not taken on.
 - **The freeze rule** treats an Engagement as one person and one baby for life. A lead pipeline needs the opposite: cheap, disposable, re-pointable rows.
 
@@ -238,7 +238,7 @@ A Birth Plan on an Engagement that changes to `postpartum` is **retired, not del
 
 ### A kind change moves nothing automatically
 
-An upgrade from `postpartum` to `birth` is a Client buying more. **The Contract, the Invoice, and the Credit ledger are untouched by the change itself.** Contract and Invoice are the Practice's own instruments: an upgrade means a new Contract and a new Invoice, made by hand the way any other change of terms is, because the alternative is Doula Cloud inferring commercial intent from a radio button. **No second Credit** — a Credit covers the complete birth cycle whatever the kind, and this is the same Engagement.
+An upgrade from `postpartum` to `birth` is a Client buying more. **The Contract, the Invoice, and the Credit ledger are untouched by the change itself.** Contract and Invoice are the Practice's own instruments: an upgrade means a new Contract and a new Invoice, made by hand the way any other change of terms is, because the alternative is DoulaCloud inferring commercial intent from a radio button. **No second Credit** — a Credit covers the complete birth cycle whatever the kind, and this is the same Engagement.
 
 ## Identity: the person lives in the login
 
@@ -525,7 +525,7 @@ Per ADR-0006 the real refusal lives on the API read endpoint. This is the backst
 
 **Inferring kind from the Plan Template chosen (ADR-0001).** There is nothing to infer from. ADR-0001 gives a Practice **one** Care Plan template and **one** Birth Plan template, shared across every Engagement; there is no per-Engagement template choice. Taking this option means first inventing template selection at creation time, so it is not the cheap structural option it looks like.
 
-**A Practice-configured service list instead of a kind enum.** Kind is not the price list; the **Contract** is where what-was-sold-and-for-how-much belongs. Kind answers one narrow question — *does this relationship include a birth we will attend?* — which has a small, stable answer set. A Practice-configured menu would fit every Practice exactly and let Doula Cloud reason about none of it, because the software cannot know what "Bereavement package" means. A real feature; a different one.
+**A Practice-configured service list instead of a kind enum.** Kind is not the price list; the **Contract** is where what-was-sold-and-for-how-much belongs. Kind answers one narrow question — *does this relationship include a birth we will attend?* — which has a small, stable answer set. A Practice-configured menu would fit every Practice exactly and let DoulaCloud reason about none of it, because the software cannot know what "Bereavement package" means. A real feature; a different one.
 
 **A `both` kind value.** Rejected; see above.
 

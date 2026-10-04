@@ -136,7 +136,7 @@ export function engagementLabel(engagement: EngagementLabelInput): string {
  * itself and fails on an action added, removed, or left unphrased.
  *
  * No phrase names a person: the ledger's own "Who" column already carries
- * the actor (a Client's own name, "Your practice", or "Doula Cloud"), so
+ * the actor (a Client's own name, "Your practice", or "DoulaCloud"), so
  * a phrase naming one would say it twice. A phrase opens with "You" only
  * where the write side admits one actor kind and it is hers -- an
  * acknowledged Birth Plan, her own notification switch, an invitation

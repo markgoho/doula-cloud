@@ -50,6 +50,6 @@
 			no Practice content at all, and its one string is the product's own
 			name, which never gets longer.
 		-->
-		<CloudMark size="md" label="Doula Cloud" />
+		<CloudMark size="md" label="DoulaCloud" />
 	</section>
 </stack-l>

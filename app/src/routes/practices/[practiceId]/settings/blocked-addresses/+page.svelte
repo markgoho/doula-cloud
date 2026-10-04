@@ -1,6 +1,6 @@
 <script lang="ts">
 	/*
-	 * Where Staff see the addresses Doula Cloud has stopped writing to,
+	 * Where Staff see the addresses DoulaCloud has stopped writing to,
 	 * and lift the ones that can be lifted (ADR-0029, #744).
 	 *
 	 * An address-keyed list, not a per-record affordance on each mail
@@ -122,7 +122,7 @@
 
 {#snippet intro()}
 	<Text
-		text="Doula Cloud stops writing to an address once an email to it comes back undelivered, or once the recipient marks an email as spam. Nothing this Practice sends reaches a blocked address until the block is lifted."
+		text="DoulaCloud stops writing to an address once an email to it comes back undelivered, or once the recipient marks an email as spam. Nothing this Practice sends reaches a blocked address until the block is lifted."
 	/>
 {/snippet}
 
@@ -160,7 +160,7 @@
 				}
 			}
 			title="Unblock this address"
-			consequence={`Doula Cloud writes to ${suppression.address} again. If an email to it comes back undelivered, it is blocked again.`}
+			consequence={`DoulaCloud writes to ${suppression.address} again. If an email to it comes back undelivered, it is blocked again.`}
 			confirmLabel="Unblock this address"
 			error={unblockError[suppression.address]}
 			onConfirm={() => handleUnblock(suppression.address)}

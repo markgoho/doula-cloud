@@ -15,7 +15,7 @@ import { acceptStaffInvite, seedFoundingOwner, uniqueEmail } from './staffSignup
 // The subject portalauth's magic-link Compose gives the sign-in mail --
 // the wait below and the click that follows it are about one message, so
 // they name it once.
-const MAGIC_LINK_SUBJECT = 'Your Doula Cloud sign-in link';
+const MAGIC_LINK_SUBJECT = 'Your DoulaCloud sign-in link';
 
 // The Firebase Auth emulator and the Go BFF -- both host processes -- see
 // e2e/global-setup.ts and e2e/stack.ts for how these get started.

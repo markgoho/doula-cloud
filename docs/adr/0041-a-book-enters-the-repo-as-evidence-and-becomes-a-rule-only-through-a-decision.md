@@ -1,8 +1,8 @@
 # A book enters the repo as evidence, and becomes a rule only through a decision
 
-Doula Cloud's founder has a shelf of books he wants the product shaped by: two on running a bootstrapped SaaS, one on jobs to be done, one on interfaces that disappear, one on cognitive bias, and a dozen on forms, components, design systems, type, and accessibility. The first attempt to bring them in, `docs/manifesto.md` on PR [#1270](https://github.com/markgoho/doula-cloud/pull/1270), was closed unmerged on 2026-09-10 and the reset landed as [#1277](https://github.com/markgoho/doula-cloud/pull/1277). Three agents had distilled three books into 34 principles in one day. Where the books disagreed, the agents settled it by message. Where a book met a recorded decision, the agents wrote the ruling. Speed also produced about fifteen factual errors that peer review caught. The rules came before the values they should rest on, and the person who holds those values never decided them.
+DoulaCloud's founder has a shelf of books he wants the product shaped by: two on running a bootstrapped SaaS, one on jobs to be done, one on interfaces that disappear, one on cognitive bias, and a dozen on forms, components, design systems, type, and accessibility. The first attempt to bring them in, `docs/manifesto.md` on PR [#1270](https://github.com/markgoho/doula-cloud/pull/1270), was closed unmerged on 2026-09-10 and the reset landed as [#1277](https://github.com/markgoho/doula-cloud/pull/1277). Three agents had distilled three books into 34 principles in one day. Where the books disagreed, the agents settled it by message. Where a book met a recorded decision, the agents wrote the ruling. Speed also produced about fifteen factual errors that peer review caught. The rules came before the values they should rest on, and the person who holds those values never decided them.
 
-**A book is evidence. Only a decision of the founder turns evidence into a rule.** The path from shelf to rule has fixed stages, each stage has a form the repo already uses, and no stage before the decision may contain a ruling about Doula Cloud.
+**A book is evidence. Only a decision of the founder turns evidence into a rule.** The path from shelf to rule has fixed stages, each stage has a form the repo already uses, and no stage before the decision may contain a ruling about DoulaCloud.
 
 ## The decision
 
@@ -10,7 +10,7 @@ Doula Cloud's founder has a shelf of books he wants the product shaped by: two o
 
 **The values track** is for books that argue what a product should want from a person, how to price, what to measure, how to market, and how a founder spends time. Its stages are:
 
-1. **Read-back.** One page-cited summary per book in `docs/research/books/`, on the template in [`docs/agents/literature.md`](../agents/literature.md). It records what the book argued, including its own exceptions, what has changed since it was published, and where it is weak. It names no Doula Cloud decision as the book's: where the repo has already decided something the book touches, the read-back cites the ADR or ticket that decided it, and the decision belongs to that record.
+1. **Read-back.** One page-cited summary per book in `docs/research/books/`, on the template in [`docs/agents/literature.md`](../agents/literature.md). It records what the book argued, including its own exceptions, what has changed since it was published, and where it is weak. It names no DoulaCloud decision as the book's: where the repo has already decided something the book touches, the read-back cites the ADR or ticket that decided it, and the decision belongs to that record.
 2. **Synthesis by theme.** One document per theme, not per book and not per conflict, once every read-back on the track is on trunk. A theme is a question the product has to answer, such as what the product asks of a person, how it is priced, or what it measures. The synthesis lays out what each book claims on the theme, where the books agree, where they conflict, and what the repo already decided. It still contains no ruling.
 3. **A grilling session per theme.** The founder works through one synthesis at a time with the `grilling` skill. The session ends when his position and its reasons are recorded.
 4. **A value ADR per theme.** It records the value, the evidence weighed, page-cited, and what was rejected and why. `docs/manifesto.md` is the index over these ADRs, one line each, and is written only once the first value ADR exists.
@@ -25,7 +25,7 @@ Which track a book takes is recorded in the book table in `docs/agents/literatur
 
 ### The no-ruling rule
 
-A read-back or a synthesis states what a book claims. It never states what Doula Cloud should or must do. The reviewer of each one checks for that specifically, word by word, before it merges. A sentence that reads as a ruling is a defect in the document, whatever its content, and the fix is to name the decision it belongs to or to cut it.
+A read-back or a synthesis states what a book claims. It never states what DoulaCloud should or must do. The reviewer of each one checks for that specifically, word by word, before it merges. A sentence that reads as a ruling is a defect in the document, whatever its content, and the fix is to name the decision it belongs to or to cut it.
 
 ### The citation rule
 

@@ -42,8 +42,8 @@ func StaffActor(staffID string) Actor { return Actor{Kind: ActorStaff, StaffID: 
 // folded into ActorSystem (ADR-0022's "Considered and rejected").
 func ClientActor(clientID string) Actor { return Actor{Kind: ActorClient, ClientID: clientID} }
 
-// SystemActor is Doula Cloud acting with nobody asking. Displays as
-// "Doula Cloud", never "System" (ADR-0022).
+// SystemActor is DoulaCloud acting with nobody asking. Displays as
+// "DoulaCloud", never "System" (ADR-0022).
 func SystemActor() Actor { return Actor{Kind: ActorSystem} }
 
 // Entry is one row: what it happened to (SubjectKind, SubjectID), what

@@ -12,7 +12,7 @@ Priya is two years in, employed by Rooted Birth Collective rather than running h
 
 She works from a phone far more than a laptop, often in a hospital corridor.
 
-## Why she comes to Doula Cloud
+## Why she comes to DoulaCloud
 
 To know where she has to be, what this Client wants, and what she was told last time — without texting Renata.
 

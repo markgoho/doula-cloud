@@ -120,7 +120,7 @@ Until this is built, the whole roster is unbuildable through the UI, and every P
 
 ### Stage 7 — See the money across all Staff
 
-**Thinking**: "Which invoices are unpaid?" **Pain points**: Invoices exist only inside one Engagement's Contract. There is no Practice-wide invoice list and no unpaid view. The screen named **Billing** is about credits she buys from Doula Cloud, not money her Clients owe her.
+**Thinking**: "Which invoices are unpaid?" **Pain points**: Invoices exist only inside one Engagement's Contract. There is no Practice-wide invoice list and no unpaid view. The screen named **Billing** is about credits she buys from DoulaCloud, not money her Clients owe her.
 
 **Budget**:
 

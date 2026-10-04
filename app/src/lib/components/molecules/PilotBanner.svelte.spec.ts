@@ -7,7 +7,7 @@ import PilotBanner from './PilotBanner.svelte';
 type SetupOptions = Partial<ComponentProps<typeof PilotBanner>>;
 
 async function setup({
-	sentence = 'Doula Cloud is new, and you are one of the first to use it.',
+	sentence = 'DoulaCloud is new, and you are one of the first to use it.',
 	controlText = 'Tell us what is not working or what you need',
 	open = false,
 	controlsId = 'feedback-drawer',

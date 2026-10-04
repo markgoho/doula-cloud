@@ -1,5 +1,5 @@
 // Package portalaccount mints the identifier a Portal Account is known
-// by, per ADR-0026's "The Portal Account becomes a table": Doula Cloud
+// by, per ADR-0026's "The Portal Account becomes a table": DoulaCloud
 // issues this identity itself now that a Client has no Identity Platform
 // account behind her, and the identifier is what portal_accounts.identifier
 // and client_portal_users.identity_uid both hold.
@@ -7,7 +7,7 @@ package portalaccount
 
 import "github.com/google/uuid"
 
-// Prefix marks an identifier as one Doula Cloud minted itself, never one
+// Prefix marks an identifier as one DoulaCloud minted itself, never one
 // Identity Platform issued. It is the namespace the ADR names as the
 // sanctioned way to tell the two populations' identity_uid values apart
 // -- not a hint read alongside the value, but the value's own proof of

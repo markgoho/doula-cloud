@@ -135,10 +135,10 @@ describe('what Credits is, who it is between, and how it differs from Getting pa
 		await expect.element(testPage.getByRole('heading', { level: 1, name: 'Credits' })).toBeVisible();
 	});
 
-	it('names Doula Cloud as the counterparty and states the fixed price', async () => {
+	it('names DoulaCloud as the counterparty and states the fixed price', async () => {
 		await renderBilling();
 
-		await expect.element(testPage.getByText('Practices buy Credits from Doula Cloud.')).toBeVisible();
+		await expect.element(testPage.getByText('Practices buy Credits from DoulaCloud.')).toBeVisible();
 		await expect.element(testPage.getByText('One Credit costs $20.00.')).toBeVisible();
 	});
 

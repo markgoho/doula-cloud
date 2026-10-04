@@ -16,10 +16,10 @@ import (
 
 // staffInviteSubject and staffInviteText are the Staff invitation's
 // fixed, content-free copy. Platform voice (ADR-0009): the invited
-// person is told she has been invited to join a practice on Doula
-// Cloud, never which one, and no Client name or Engagement detail
+// person is told she has been invited to join a practice on
+// DoulaCloud, never which one, and no Client name or Engagement detail
 // (neither applies here regardless). link is the only variable.
-const staffInviteSubject = "You've been invited to join a practice on Doula Cloud"
+const staffInviteSubject = "You've been invited to join a practice on DoulaCloud"
 
 // invitationStatusPending mirrors practice_invitations.status's live
 // value (00030): a row still open to being accepted.
@@ -27,7 +27,7 @@ const invitationStatusPending = "pending"
 
 func staffInviteText(link string) string {
 	return "Hello,\n\n" +
-		"You've been invited to join a practice on Doula Cloud.\n\n" +
+		"You've been invited to join a practice on DoulaCloud.\n\n" +
 		link + "\n\n" +
 		"If you weren't expecting this, you can safely ignore this email.\n"
 }

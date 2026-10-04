@@ -257,7 +257,7 @@ describe('the Pilot banner and Feedback drawer (#1528)', () => {
 		await expect
 			.element(
 				page.getByText(
-					'Riverside Doula Collective uses Doula Cloud to run this portal. The Doula Cloud team reads every piece of feedback.'
+					'Riverside Doula Collective uses DoulaCloud to run this portal. The DoulaCloud team reads every piece of feedback.'
 				)
 			)
 			.toBeVisible();
@@ -275,7 +275,7 @@ describe('the Pilot banner and Feedback drawer (#1528)', () => {
 		await expect
 			.element(
 				page.getByText(
-					"Your doula's Practice uses Doula Cloud to run this portal. The Doula Cloud team reads every piece of feedback."
+					"Your doula's Practice uses DoulaCloud to run this portal. The DoulaCloud team reads every piece of feedback."
 				)
 			)
 			.toBeVisible();
@@ -299,7 +299,7 @@ describe('the Pilot banner and Feedback drawer (#1528)', () => {
 		await expect
 			.element(
 				page.getByText(
-					'Feedback sent. Thank you. If a reply would help, the Doula Cloud team will email you at tasha.bell@example.test.'
+					'Feedback sent. Thank you. If a reply would help, the DoulaCloud team will email you at tasha.bell@example.test.'
 				)
 			)
 			.toBeVisible();

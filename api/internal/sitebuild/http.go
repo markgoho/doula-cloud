@@ -23,7 +23,7 @@ const DispatchEventType = "practice-page-published"
 
 // DispatchRepo is the repository whose deploy workflow this fires. A
 // constant for the same reason website.SiteBaseURL is one: there is one
-// Doula Cloud site, built from one repository, and a per-environment
+// DoulaCloud site, built from one repository, and a per-environment
 // value could only point the deploy at somewhere that does not serve
 // Practice pages.
 const DispatchRepo = "markgoho/doula-cloud"

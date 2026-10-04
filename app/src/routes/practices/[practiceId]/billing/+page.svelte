@@ -115,13 +115,13 @@
 		could not tell it apart from Getting paid (Stripe Connect, a
 		different counterparty entirely) without opening both. The three
 		sentences below state that in CONTEXT.md's own words: Credit ("a
-		unit of Doula Cloud's own billing... one costs $20.00") and
+		unit of DoulaCloud's own billing... one costs $20.00") and
 		Connected account ("so Clients can pay that Practice directly").
 		"Stripe account" itself is on that entry's own _Avoid_ list, so the
 		cross-reference says "connects Stripe", matching the button and
 		status copy on that screen.
 	-->
-	<Text text="Practices buy Credits from Doula Cloud." />
+	<Text text="Practices buy Credits from DoulaCloud." />
 	<Text
 		text="One Credit covers one Engagement — a single Client relationship centered on one baby, from intake through the end of care."
 	/>

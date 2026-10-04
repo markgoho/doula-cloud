@@ -1,7 +1,7 @@
 // Package export is #288's whole-Practice export: one ZIP archive of
 // UTF-8 CSVs, one file per domain entity the Practice owns, so an Owner
 // who asks "can I get out again?" gets back an answer a spreadsheet can
-// open and a machine can read without Doula Cloud.
+// open and a machine can read without DoulaCloud.
 //
 // Owner-only, the same seat as erasure (ADR-0027) and the MFA switch --
 // a whole-Practice export is a bulk read across every attachment and

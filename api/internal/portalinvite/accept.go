@@ -38,7 +38,7 @@ type AcceptInviteResponse struct {
 // itself is the whole credential -- the same shape
 // staffauth.SpendResetHandler and clientauth.RedeemMagicLinkHandler use
 // for a mailed token. The identity this handler stores is a Portal
-// Account identifier Doula Cloud mints itself (portalaccount.NewIdentifier),
+// Account identifier DoulaCloud mints itself (portalaccount.NewIdentifier),
 // never an Identity Platform uid. Like clientauth.SessionHandler, this
 // runs before any Client is resolved, so it never sets
 // app.current_client_id.

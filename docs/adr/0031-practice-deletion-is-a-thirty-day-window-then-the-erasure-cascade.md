@@ -1,6 +1,6 @@
 # Practice deletion is a thirty-day window, then the erasure cascade
 
-A Practice Owner who signs up, evaluates, and decides against Doula Cloud has no way to remove the Practice. [ADR-0027](0027-erasure-redacts-in-place-and-shreds-the-key.md) already answered this shape once, for a Client asking her Practice. This is the same shape one level up: a Practice asking Doula Cloud. It is a template, not an answer, because a Practice carries something a Client does not — Doula Cloud's own business records about the Practice, not only the Practice's records about other people.
+A Practice Owner who signs up, evaluates, and decides against DoulaCloud has no way to remove the Practice. [ADR-0027](0027-erasure-redacts-in-place-and-shreds-the-key.md) already answered this shape once, for a Client asking her Practice. This is the same shape one level up: a Practice asking DoulaCloud. It is a template, not an answer, because a Practice carries something a Client does not — DoulaCloud's own business records about the Practice, not only the Practice's records about other people.
 
 Decided on [#871](https://github.com/markgoho/doula-cloud/issues/871), split from [#288](https://github.com/markgoho/doula-cloud/issues/288). GDPR and every non-US jurisdiction are out of scope, the same carve-out ADR-0027 makes.
 
@@ -24,7 +24,7 @@ At day 30, three things happen in one transaction:
 
 1. Every Client still on file (an Owner may already have erased one by hand before initiating deletion — the lockout below refuses every Client route, `client.EraseHandler` included, for the whole window after) is erased through the exact path a single Owner-run erasure uses — `client.Erase`, ADR-0027's redact-in-place, key-shredding, Stripe-Customer-deletion act, run once per Client with `activity.SystemActor()` rather than the Staff actor a live request would carry.
 2. Any unspent Credit balance is **forfeited, not refunded** — written as one `credit_ledger` row, `origin = 'forfeit'`, so the ledger still sums to zero and the act carries its own who-and-when the way every other origin does. Forfeiture happens only here, at finalization, never at initiation: nothing irreversible touches the ledger while the window is still open.
-3. `practices.deleted_at` is stamped, and one `activity` row records the finalization — subject the Practice, actor Doula Cloud (ADR-0022's third actor kind, "nobody asking").
+3. `practices.deleted_at` is stamped, and one `activity` row records the finalization — subject the Practice, actor DoulaCloud (ADR-0022's third actor kind, "nobody asking").
 
 Client erasure already refuses while any of that Client's invoices is `draft` or `open`. Rather than let finalization discover that 30 days late with no Owner left to act on it, initiation itself refuses up front if any Client under the Practice carries an unsettled invoice — one whole-Practice precheck, not fifty per-Client ones.
 
@@ -36,9 +36,9 @@ Decision 2 asked for the same enumeration ADR-0027 gives for a Client, one level
 
 **Kept, but locked for the 30-day window and every day after (finalization does not touch these; only the cascade above and `practices.deleted_at` itself do).** `engagements`, `visits`, `messages`, `contracts`, `invoices`, `payments`, `plan_templates`/`plan_instances`, and `practice_websites` -- every one of them still resolves by id and still holds exactly what it held. The lock itself lives on `practice_memberships`, not on `staff`: a Staff member who also belongs to another Practice keeps signing in there without incident, since `staffauth.Middleware` scopes its refusal to the one Practice pending deletion, not to the person.
 
-## What Doula Cloud keeps regardless
+## What DoulaCloud keeps regardless
 
-The Credit ledger, the Stripe Connect account and its payouts, and `stripe_webhook_events` are Doula Cloud's own business records, not the Practice's to delete out from under. Deletion does not touch the Practice's connected Stripe account at all — it is the Practice's own, on its own Stripe login. A Practice cannot delete its way out of Doula Cloud's ledger, and the confirmation says so before an Owner commits to the act.
+The Credit ledger, the Stripe Connect account and its payouts, and `stripe_webhook_events` are DoulaCloud's own business records, not the Practice's to delete out from under. Deletion does not touch the Practice's connected Stripe account at all — it is the Practice's own, on its own Stripe login. A Practice cannot delete its way out of DoulaCloud's ledger, and the confirmation says so before an Owner commits to the act.
 
 `activity` is the same outcome for a different reason: append-only, `GRANT SELECT, INSERT` only, and the record `CLAUDE.md`'s audit expectation exists to keep. Every `*_outbox` table — `client_erasure_outbox`, `practice_deletion_outbox` itself, and the rest — is kept regardless too, for a third reason again: none of them is scoped to a live session at all, so deletion has no mechanism that could reach them even if it wanted to.
 
@@ -95,15 +95,15 @@ A held field lives on the `clients` row — the same row ADR-0027's own cascade 
 
 ### Deletion refuses to start until a complete export exists
 
-Export was previously this ADR's own "stated prerequisite in product terms, not a code dependency" — a Practice could take its data out first, but nothing enforced that it happened before deletion started. It becomes a precheck: initiation refuses, the same way the unsettled-invoice precheck above already does, until the Owner has downloaded a complete export of the Practice's data. With that met, finalization runs exactly as this ADR describes today — every Client on file erased through the same cascade, the balance forfeited, the row locked. Deletion does not gain a retained-records tier that outlives a departed Practice: a Client's claim-carried fields, wherever they were being held under an unexpired retention period, are exported to the Practice along with the rest of her record and then destroyed at finalization the same as everything else the cascade already destroys — the six-to-ten-year obligation moves to whoever signed the ETIN Certification Statement for it, not to Doula Cloud. This is the return path 45 CFR §164.504(e)(2)(ii)(J) names for a business associate at termination, and it is feasible here specifically because export exists.
+Export was previously this ADR's own "stated prerequisite in product terms, not a code dependency" — a Practice could take its data out first, but nothing enforced that it happened before deletion started. It becomes a precheck: initiation refuses, the same way the unsettled-invoice precheck above already does, until the Owner has downloaded a complete export of the Practice's data. With that met, finalization runs exactly as this ADR describes today — every Client on file erased through the same cascade, the balance forfeited, the row locked. Deletion does not gain a retained-records tier that outlives a departed Practice: a Client's claim-carried fields, wherever they were being held under an unexpired retention period, are exported to the Practice along with the rest of her record and then destroyed at finalization the same as everything else the cascade already destroys — the six-to-ten-year obligation moves to whoever signed the ETIN Certification Statement for it, not to DoulaCloud. This is the return path 45 CFR §164.504(e)(2)(ii)(J) names for a business associate at termination, and it is feasible here specifically because export exists.
 
 ## Considered and rejected
 
 **Refusing Erasure outright while a Medicaid claim is unexpired ([#1094](https://github.com/markgoho/doula-cloud/issues/1094)).** Simpler to build and worse to read: a Client who asks is told "no" for six to ten years, and her Practice's own non-billed data about her stays too, which no regulation asks for. Holding only the claim-carried fields, and running everything else exactly as before, was chosen instead.
 
-**Doula Cloud hosting a departed Practice's claim-carried records for the full retention period ([#1094](https://github.com/markgoho/doula-cloud/issues/1094)).** Five to ten years of storage and backup per departed Practice, inside the audit and security surface, for a Practice that pays nothing further — against one precheck at initiation. 45 CFR §164.504(e)(2)(ii)(J)'s return-if-feasible path also points at handing the records over rather than holding them, and export already makes that feasible.
+**DoulaCloud hosting a departed Practice's claim-carried records for the full retention period ([#1094](https://github.com/markgoho/doula-cloud/issues/1094)).** Five to ten years of storage and backup per departed Practice, inside the audit and security surface, for a Practice that pays nothing further — against one precheck at initiation. 45 CFR §164.504(e)(2)(ii)(J)'s return-if-feasible path also points at handing the records over rather than holding them, and export already makes that feasible.
 
-**Deleting the `practices` row.** The same argument ADR-0027 makes for `clients`, one table wider: it would take fifty-odd related tables with it or leave them orphaned, and Doula Cloud's own billing record is not the Practice's to delete.
+**Deleting the `practices` row.** The same argument ADR-0027 makes for `clients`, one table wider: it would take fifty-odd related tables with it or leave them orphaned, and DoulaCloud's own billing record is not the Practice's to delete.
 
 **Requiring an Owner to erase every Client by hand before deleting the Practice.** A 14-doula agency can carry hundreds of Client records; asking an Owner to run erasure that many times by hand is not a real requirement, it is a way of not building the cascade.
 
@@ -111,6 +111,6 @@ Export was previously this ADR's own "stated prerequisite in product terms, not 
 
 **Refunding the unspent Credit balance.** Considered and left open at triage until [#285](https://github.com/markgoho/doula-cloud/issues/285) and [#286](https://github.com/markgoho/doula-cloud/issues/286) settled what a Credit costs and buys. Once both closed, forfeiture was chosen: a Credit is not a subscription payment owed back on cancellation, and refunding would need to reconcile against per-lot refund eligibility (`credit_ledger`'s own three-year purchased-lot window) for a Practice that, by definition, will not be back to dispute it.
 
-**Deleting the Practice's own Stripe Connect account.** It belongs to the Practice, on the Practice's own Stripe login, not to Doula Cloud to close on its behalf.
+**Deleting the Practice's own Stripe Connect account.** It belongs to the Practice, on the Practice's own Stripe login, not to DoulaCloud to close on its behalf.
 
 **A second explicit confirmation at day 30.** The Owner already confirmed once, with the consequence stated in full, at initiation. A second prompt with nobody left to answer it would either block finalization forever or become a formality nobody reads — the same reasoning `staff.ts`'s `X-Confirmed` backstop settles once, at the point where a person is actually looking at the screen.

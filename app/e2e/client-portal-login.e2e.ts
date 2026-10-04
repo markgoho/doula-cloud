@@ -33,7 +33,7 @@ test('Client-portal login lands on their engagement-scoped URL', async ({ page, 
 });
 
 /*
- * #610: a browser holds exactly one Doula Cloud session, so a doula who
+ * #610: a browser holds exactly one DoulaCloud session, so a doula who
  * is also a Client cannot be signed into both at once. She is told what
  * continuing costs before it happens, and the Practice session she
  * leaves is deleted rather than left live behind a cookie she no longer

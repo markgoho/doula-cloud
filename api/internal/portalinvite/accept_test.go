@@ -133,7 +133,7 @@ func TestAcceptInviteHandler_Success(t *testing.T) {
 	if err := db.Admin.QueryRowContext(t.Context(), `SELECT identity_uid, invite_token::text FROM client_portal_users WHERE client_id = $1`, clientID).Scan(&identityUID, &storedToken); err != nil {
 		t.Fatalf("query claimed row: %v", err)
 	}
-	// identity_uid is a Portal Account Doula Cloud mints itself (#616): with
+	// identity_uid is a Portal Account DoulaCloud mints itself (#616): with
 	// #617 landed, there is no caller-presented Identity Platform uid left
 	// to compare it against at all.
 	if !strings.HasPrefix(identityUID, portalaccount.Prefix) {

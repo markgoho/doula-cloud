@@ -55,7 +55,7 @@ const connectMerchantConfiguration = "merchant"
 // has no default: both collectors are "stripe", meaning the Practice's own
 // account is billed Stripe's processing fee and absorbs a disputed charge.
 // That is what v1's type=standard did implicitly, and it is what keeps
-// Doula Cloud off the money-transmitter path -- there is no
+// DoulaCloud off the money-transmitter path -- there is no
 // ApplicationFeeAmount anywhere in this package (docs/environment.md).
 func (c *StripeAPIClient) CreateAccount(ctx context.Context, profile AccountProfile) (string, error) {
 	// coverage:ignore reason: requires a real Stripe API key and network access, not exercised by unit tests
@@ -294,8 +294,8 @@ func (c *StripeAPIClient) CreateInvoice(ctx context.Context, accountID, customer
 
 	// DueDate, not DaysUntilDue (#768). Stripe's API rejects
 	// collection_method=send_invoice without one of the two, and this used
-	// to be a hardcoded days_until_due=30 that was explicitly not a Doula
-	// Cloud policy. It is now the Practice's own payment terms, resolved
+	// to be a hardcoded days_until_due=30 that was explicitly not a
+	// DoulaCloud policy. It is now the Practice's own payment terms, resolved
 	// to a single instant by the caller and sent verbatim, so the date
 	// Stripe prints on the Client's hosted invoice is the same date the
 	// invoices row carries rather than a second one derived from Stripe's
@@ -543,7 +543,7 @@ const redactionJobAPIVersion = "2026-06-24.preview"
 // rest.
 //
 // Known state on #394: this endpoint answers "Unrecognized request URL"
-// on the Doula Cloud Stripe account today, under both /v1 and /v2 and
+// on the DoulaCloud Stripe account today, under both /v1 and /v2 and
 // under every preview Stripe-Version tried. Redaction Jobs is in public
 // preview and is not enabled on the account; enabling it is a request to
 // Stripe, not a code change. The call is written against the documented

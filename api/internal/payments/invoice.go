@@ -306,7 +306,7 @@ func createByHandInvoice(ctx context.Context, tx *sql.Tx, practiceID, contractID
 // inserted 'draft' with its reference temporarily set to the Stripe
 // invoice id (never NULL, satisfying the NOT NULL reference column)
 // before FinalizeInvoice is called, so a Stripe-side failure at that
-// point still leaves a persisted Doula Cloud record rather than an
+// point still leaves a persisted DoulaCloud record rather than an
 // Invoice that exists on Stripe with no local row -- same fail-safe
 // property the pre-#271 code had. Once Finalize succeeds, the row is
 // updated to 'open' with Stripe's own human-readable `number` as its

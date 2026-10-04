@@ -83,15 +83,15 @@
 	}
 
 	// ADR-0031's own wording: what is destroyed, what survives, and the
-	// window before either happens. Names two of Doula Cloud's own
+	// window before either happens. Names two of DoulaCloud's own
 	// business records -- the Credit ledger and the Stripe Connect
 	// account -- as kept, the plain-language stand-ins for the full
 	// AC #4 list (which also includes Stripe webhook events, too far
 	// into implementation detail for an Owner-facing confirmation to
-	// name by that word). They are Doula Cloud's own obligation to
+	// name by that word). They are DoulaCloud's own obligation to
 	// retain, not the Practice's to delete out from under.
 	let deleteConsequence = $derived(
-		`This starts a 30-day countdown to delete ${session.practiceName}. During it, no Staff member or Client can sign in to this Practice, except that any Owner can return here to restore it. If the countdown finishes, every Client on file has their personal data erased the same way a single Client's own erasure works, any unspent Credit balance is forfeited, and this cannot be undone. Doula Cloud's own billing records -- the Credit ledger, the Stripe Connect account and its payouts -- are kept regardless.`
+		`This starts a 30-day countdown to delete ${session.practiceName}. During it, no Staff member or Client can sign in to this Practice, except that any Owner can return here to restore it. If the countdown finishes, every Client on file has their personal data erased the same way a single Client's own erasure works, any unspent Credit balance is forfeited, and this cannot be undone. DoulaCloud's own billing records -- the Credit ledger, the Stripe Connect account and its payouts -- are kept regardless.`
 	);
 
 	let loading = $derived(isOwner && status === undefined ? 'Loading this setting' : undefined);

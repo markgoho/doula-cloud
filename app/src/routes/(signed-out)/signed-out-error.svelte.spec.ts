@@ -15,7 +15,7 @@ describe('(signed-out)/+error.svelte', () => {
 	it('renders the state matching page.status, inside the signed-out chrome the layout above it still provides', async () => {
 		await setup(503);
 
-		await expect.element(page.getByRole('heading', { name: 'Doula Cloud is unavailable' })).toBeVisible();
+		await expect.element(page.getByRole('heading', { name: 'DoulaCloud is unavailable' })).toBeVisible();
 	});
 
 	it('offers the way out to log in', async () => {

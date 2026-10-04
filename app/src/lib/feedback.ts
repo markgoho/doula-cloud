@@ -118,8 +118,8 @@ export async function sendPortalFeedback(fetcher: Fetcher, input: PortalFeedback
  * dropped entirely rather than interpolating nothing into it.
  *
  * `replierLabel` carries its own trailing punctuation: Staff's "Mark
- * Goho, who builds Doula Cloud," is an appositive that needs its closing
- * comma before "will"; Portal's plain "the Doula Cloud team" needs none.
+ * Goho, who builds DoulaCloud," is an appositive that needs its closing
+ * comma before "will"; Portal's plain "the DoulaCloud team" needs none.
  * Baking that into the caller's own string keeps this template from
  * having to guess which shape a given label wants.
  */

@@ -104,8 +104,8 @@ func refundRowsFor(t *testing.T, db *testdb.DB, invoiceID string) []refundRow {
 
 // TestConnectWebhook_DashboardCreditNoteIsRecordedAsRefund proves a
 // credit note a Practice issued from her own Stripe Dashboard reaches
-// Doula Cloud's record: a Refund row against the card Payment, keyed on
-// the Refund object's id, recorded by Doula Cloud with its origin named
+// DoulaCloud's record: a Refund row against the card Payment, keyed on
+// the Refund object's id, recorded by DoulaCloud with its origin named
 // -- and the Invoice left at 'paid'.
 func TestConnectWebhook_DashboardCreditNoteIsRecordedAsRefund(t *testing.T) {
 	f := newRefundWebhookFixture(t, "cn_dashboard")
@@ -210,7 +210,7 @@ func TestConnectWebhook_OutOfBandCreditNoteIsKeyedOnItsOwnID(t *testing.T) {
 // TestConnectWebhook_RefundEventsThatRecordNothing covers every case the
 // handlers acknowledge without writing a Refund row: a replay, a credit
 // note that is only a balance credit, a Refund that failed, one for a
-// Payment Doula Cloud never recorded, an Invoice it never raised, and one
+// Payment DoulaCloud never recorded, an Invoice it never raised, and one
 // that would over-return the Payment.
 func TestConnectWebhook_RefundEventsThatRecordNothing(t *testing.T) {
 	cases := []struct {

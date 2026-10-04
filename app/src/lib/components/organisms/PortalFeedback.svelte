@@ -60,14 +60,14 @@
 
 	const intro = $derived(
 		practiceName === undefined
-			? "Your doula's Practice uses Doula Cloud to run this portal. The Doula Cloud team reads every piece of feedback."
-			: `${practiceName} uses Doula Cloud to run this portal. The Doula Cloud team reads every piece of feedback.`
+			? "Your doula's Practice uses DoulaCloud to run this portal. The DoulaCloud team reads every piece of feedback."
+			: `${practiceName} uses DoulaCloud to run this portal. The DoulaCloud team reads every piece of feedback.`
 	);
 
 	const destination = $derived(
 		practiceName === undefined
-			? "This goes to the Doula Cloud team, not to your doula's Practice. For anything about your care, message your doula."
-			: `This goes to the Doula Cloud team, not to ${practiceName}. For anything about your care, message your doula.`
+			? "This goes to the DoulaCloud team, not to your doula's Practice. For anything about your care, message your doula."
+			: `This goes to the DoulaCloud team, not to ${practiceName}. For anything about your care, message your doula.`
 	);
 
 	let isOpen = $state(false);
@@ -84,7 +84,7 @@
 
 	function handleSent(): void {
 		isOpen = false;
-		sentMessage = feedbackSentNotice(email, 'the Doula Cloud team');
+		sentMessage = feedbackSentNotice(email, 'the DoulaCloud team');
 	}
 </script>
 

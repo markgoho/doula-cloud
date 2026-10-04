@@ -16,7 +16,7 @@ describe('PageTitle', () => {
 	it('sets the browser tab title', async () => {
 		await setup({ page: 'Clients' });
 
-		await expect.poll(() => document.title).toBe('Clients — Doula Cloud');
+		await expect.poll(() => document.title).toBe('Clients — DoulaCloud');
 	});
 
 	it('updates the title when the page prop changes', async () => {
@@ -24,13 +24,13 @@ describe('PageTitle', () => {
 
 		await rerender({ page: 'Billing' });
 
-		await expect.poll(() => document.title).toBe('Billing — Doula Cloud');
+		await expect.poll(() => document.title).toBe('Billing — DoulaCloud');
 	});
 
 	it('prefixes Error: when a refused form is showing', async () => {
 		await setup({ page: 'Log in', isError: true });
 
-		await expect.poll(() => document.title).toBe('Error: Log in — Doula Cloud');
+		await expect.poll(() => document.title).toBe('Error: Log in — DoulaCloud');
 	});
 
 	it("uses the Practice's own name on the portal", async () => {

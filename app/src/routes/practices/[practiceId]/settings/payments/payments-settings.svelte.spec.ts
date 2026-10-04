@@ -350,7 +350,7 @@ describe('telling an Owner the Practice still has to connect Stripe (#917)', () 
 	it("says why the ask was refused rather than swallowing the server's sentence", async () => {
 		// The ordinary way to meet this is a colleague having asked
 		// yesterday from her own screen, which this one cannot see.
-		const refusal = 'Doula Cloud was already asked to email every Practice Owner about this in the last week.';
+		const refusal = 'DoulaCloud was already asked to email every Practice Owner about this in the last week.';
 		await setup({ status: 'not_connected', roles: ['admin'], nudgeRefusal: refusal });
 
 		await testPage.getByRole('button', { name: 'Email the Practice Owners' }).click();
@@ -399,7 +399,7 @@ describe('what Getting paid is, who it is between, and how it differs from Credi
 			.toBeVisible();
 		await expect
 			.element(
-				testPage.getByText('Credits is a separate screen, where this Practice buys Credits from Doula Cloud.')
+				testPage.getByText('Credits is a separate screen, where this Practice buys Credits from DoulaCloud.')
 			)
 			.toBeVisible();
 	});

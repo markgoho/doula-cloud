@@ -752,7 +752,7 @@ func TestPostInvoiceHandler_CreateInvoiceFailureReturns500AndPersistsNothing(t *
 // TestPostInvoiceHandler_FinalizeInvoiceFailureReturns500ButPersistsDraft
 // proves that if FinalizeInvoice fails after the draft Invoice was
 // already created on Stripe and inserted locally, the 500 response still
-// leaves the draft row committed -- Doula Cloud never loses track of an
+// leaves the draft row committed -- DoulaCloud never loses track of an
 // Invoice that exists on Stripe.
 func TestPostInvoiceHandler_FinalizeInvoiceFailureReturns500ButPersistsDraft(t *testing.T) {
 	db := testdb.New(t)

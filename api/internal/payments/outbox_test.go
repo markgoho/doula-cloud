@@ -217,7 +217,7 @@ func TestPayoutWorker_ProcessPending_MailsEveryOwnerAndMarksSent(t *testing.T) {
 	wantLink := testPayoutAppBaseURL + "/practices/" + practiceID + "/settings/payments"
 	wantRecipients := map[string]bool{"owner-one@example.com": false, "owner-two@example.com": false}
 	for _, msg := range sent {
-		if msg.Subject != "Doula Cloud: your Practice's payout account needs more information" {
+		if msg.Subject != "DoulaCloud: your Practice's payout account needs more information" {
 			t.Fatalf("subject = %q", msg.Subject)
 		}
 		if _, ok := wantRecipients[msg.To]; !ok {

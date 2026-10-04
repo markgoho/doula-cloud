@@ -1,7 +1,7 @@
 // The sandbox mailbox: where a persona's email actually goes (#764,
 // under map #759).
 //
-// Doula Cloud reaches a person by email and nowhere else at eleven
+// DoulaCloud reaches a person by email and nowhere else at eleven
 // points -- a Staff invitation, a Client's portal invitation, a
 // verification link, an Offer, a payment receipt. Several of those are
 // the first thing that ever happens to somebody, so a simulation run

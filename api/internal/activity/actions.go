@@ -137,11 +137,11 @@ func MembershipActions() []MembershipAction {
 	return out
 }
 
-// SystemActorName is what ActorSystem renders as -- ADR-0022: "Doula
-// Cloud", never "System". Every reader that resolves an activity row's
+// SystemActorName is what ActorSystem renders as -- ADR-0022:
+// "DoulaCloud", never "System". Every reader that resolves an activity row's
 // actor to a display name falls back to this constant for actor_kind =
 // 'system', rather than each caller inventing its own string.
-const SystemActorName = "Doula Cloud"
+const SystemActorName = "DoulaCloud"
 
 // DepartedStaffName is what a Staff member reads as once no reader can
 // reach her staff row any more -- staff_practice_visibility (00002)

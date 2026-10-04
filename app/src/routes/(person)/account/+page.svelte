@@ -275,8 +275,8 @@
 
 	/*
 	 * #892: deleting her own login, the third direction ADR-0033 records
-	 * -- a person asking Doula Cloud, where Erasure is a Client asking her
-	 * Practice and Deletion is a Practice asking Doula Cloud.
+	 * -- a person asking DoulaCloud, where Erasure is a Client asking her
+	 * Practice and Deletion is a Practice asking DoulaCloud.
 	 *
 	 * It lives here rather than on a Practice screen for the same reason
 	 * the work state does: her login is one fact about one person, however
@@ -482,7 +482,7 @@
 			text="You are the only owner of a practice, so nobody else can vouch for you. Recovery codes are how you get back in if you lose your authenticator app."
 		/>
 		<Text
-			text="They are shown once, when you ask for them. Doula Cloud keeps no copy it can read back to you."
+			text="They are shown once, when you ask for them. DoulaCloud keeps no copy it can read back to you."
 			tone="variant"
 		/>
 		<Button
@@ -518,13 +518,13 @@
 		this page has no other use for (docs/design's own rule about
 		choosing a component being a layout decision).
 	-->
-	<Text text="Deleting your login ends your access to Doula Cloud everywhere, at once. It cannot be undone." />
+	<Text text="Deleting your login ends your access to DoulaCloud everywhere, at once. It cannot be undone." />
 	<Text
 		text="This deletes your login and your membership of every practice you work at, and signs you out on every device."
 		tone="variant"
 	/>
 	<Text
-		text="Everything you did stays with the practices you did it for &mdash; the messages you sent, the contracts you are named on, the visits you worked. Doula Cloud keeps its own record that this account existed and that you deleted it."
+		text="Everything you did stays with the practices you did it for &mdash; the messages you sent, the contracts you are named on, the visits you worked. DoulaCloud keeps its own record that this account existed and that you deleted it."
 		tone="variant"
 	/>
 	<Button
@@ -537,7 +537,7 @@
 	<ConfirmDialog
 		bind:open={isDeleteLoginDialogOpen}
 		title="Delete your login"
-		consequence="Your login, and your membership of every practice you work at, are deleted immediately. You cannot sign in again. Everything you did stays with those practices, and Doula Cloud keeps its own record that this account existed."
+		consequence="Your login, and your membership of every practice you work at, are deleted immediately. You cannot sign in again. Everything you did stays with those practices, and DoulaCloud keeps its own record that this account existed."
 		confirmLabel="Delete your login"
 		error={deleteLoginError}
 		onConfirm={handleDeleteLogin}

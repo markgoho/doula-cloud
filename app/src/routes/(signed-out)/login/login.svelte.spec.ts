@@ -349,7 +349,7 @@ describe('Staff login -- the TOTP sign-in challenge (#606)', () => {
 });
 
 /*
- * #610: a browser holds exactly one Doula Cloud session, so signing in
+ * #610: a browser holds exactly one DoulaCloud session, so signing in
  * here while the Client portal's session is live ends that one. The BFF
  * refuses the first exchange and says what continuing costs; the page
  * shows it and offers the press-through.

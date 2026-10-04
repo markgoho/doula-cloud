@@ -18,7 +18,7 @@
 
 	/*
 	 * #610: what the BFF said continuing costs, once it has refused an
-	 * unconfirmed press. A browser holds exactly one Doula Cloud session,
+	 * unconfirmed press. A browser holds exactly one DoulaCloud session,
 	 * so a doula who is also a Client loses her Practice session by
 	 * signing in here -- she is told before it happens, not after. Set
 	 * only by the refusal, so the button below is an ordinary Continue

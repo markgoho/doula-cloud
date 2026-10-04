@@ -155,7 +155,7 @@ func TestPaymentWorker_ProcessPending_MailsEveryOwnerAndAdminMarksSent(t *testin
 	wantLink := testPaymentAppBaseURL + "/practices/" + practiceID
 	wantRecipients := map[string]bool{"payment-owner-one@example.com": false, "payment-admin-one@example.com": false}
 	for _, msg := range sent {
-		if msg.Subject != "Doula Cloud: a Payment arrived" {
+		if msg.Subject != "DoulaCloud: a Payment arrived" {
 			t.Fatalf("subject = %q", msg.Subject)
 		}
 		if _, ok := wantRecipients[msg.To]; !ok {

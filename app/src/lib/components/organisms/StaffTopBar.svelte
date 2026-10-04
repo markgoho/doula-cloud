@@ -229,7 +229,7 @@
 		   Re-measured 2026-10-03 (#1747): 50.75rem was still taken with the
 		   brand lockup shrunk. Its mark drew 34.9px of its 40, because
 		   reset.css's percentage cap took the mark out of the lockup's
-		   width, and the name "Doula Cloud" wrapped onto two lines in the
+		   width, and the name "DoulaCloud" wrapped onto two lines in the
 		   bar, at 1440px as at the floor. With the mark at its full width
 		   and the name on one line, the wide tree needs 911px at 908px on
 		   macOS; on CI's Linux/Chromium it needed 916px at 912px. 57.5rem

@@ -140,8 +140,8 @@ func TestListActivityHandler_SystemActorRendersAsDoulaCloud(t *testing.T) {
 	if len(got.Items) != 1 {
 		t.Fatalf("got %d items, want 1", len(got.Items))
 	}
-	if got.Items[0].ActorName != "Doula Cloud" {
-		t.Fatalf("system actor ActorName = %q, want %q", got.Items[0].ActorName, "Doula Cloud")
+	if got.Items[0].ActorName != "DoulaCloud" {
+		t.Fatalf("system actor ActorName = %q, want %q", got.Items[0].ActorName, "DoulaCloud")
 	}
 	if got.Items[0].ActorName == "System" {
 		t.Fatal("system actor must never render as \"System\"")

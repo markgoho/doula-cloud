@@ -2,7 +2,7 @@
  * An Invoice billed against an Engagement's Contract, created via Stripe's
  * Invoicing API on behalf of the Practice's connected account (#79/#81).
  * Stripe hosts the payment page and emails the Client -- this module only
- * loads/creates the Invoice record Doula Cloud keeps, decoupled from
+ * loads/creates the Invoice record DoulaCloud keeps, decoupled from
  * SvelteKit and the DOM so it can be unit-tested directly -- mirrors
  * contract.ts.
  */
@@ -372,7 +372,7 @@ export interface RefundPaymentInput {
  * Payment (#1009): Stripe keeps its processing fee, and her account pays
  * it. Stated as a fact about what is about to happen -- WarningText, not
  * Notice -- and the amount she typed is never adjusted to cover it.
- * Doula Cloud takes no cut of a Client's money (no ApplicationFeeAmount
+ * DoulaCloud takes no cut of a Client's money (no ApplicationFeeAmount
  * anywhere in the integration), so the fee is Stripe's alone. */
 export const stripeRefundFeeWarning =
 	"Stripe sends this money back to the Client's card. Stripe does not return its processing fee, so this Practice's Stripe account pays it. The Client gets back the full amount above.";
@@ -556,7 +556,7 @@ export function dueLabel(invoice: Pick<Invoice, 'status' | 'dueAt'>, now: Date):
 
 /** A Practice's payment terms (#768): how many days after an Invoice is
  * raised it falls due. `isDefault` is true when the Practice has never
- * set any of its own and is running on Doula Cloud's 30 days. */
+ * set any of its own and is running on DoulaCloud's 30 days. */
 export interface PaymentTerms {
 	netDays: number;
 	isDefault: boolean;

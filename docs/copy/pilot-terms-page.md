@@ -28,7 +28,7 @@ It must sit **beside the accept link**, not in the footer. Placement is the whol
 
 ## Constraints the copy is written under
 
-- **These are promotion terms, not a pilot agreement.** The page is one-directional: what Doula Cloud grants and what it charges. It asks **nothing** of the Practice — no feedback obligation, no participation commitment, no confidentiality, no data or termination terms. The moment it asks something of her it becomes a pilot agreement, which is **out of scope** on [#375](https://github.com/markgoho/doula-cloud/issues/375) and needs a lawyer reading drafted text.
+- **These are promotion terms, not a pilot agreement.** The page is one-directional: what DoulaCloud grants and what it charges. It asks **nothing** of the Practice — no feedback obligation, no participation commitment, no confidentiality, no data or termination terms. The moment it asks something of her it becomes a pilot agreement, which is **out of scope** on [#375](https://github.com/markgoho/doula-cloud/issues/375) and needs a lawyer reading drafted text.
 - **The price is on this page, and that is deliberate.** `/support` carries no price because [#285](https://github.com/markgoho/doula-cloud/issues/285) owns the *published* price on January's marketing site and Stripe does not require one there. Here the number is unavoidable: [#421](https://github.com/markgoho/doula-cloud/issues/421) obliges the terms to state the grant's size and that list pricing applies beyond it, and "what it costs" cannot be said without saying $20.00.
 - **The refund position is `/support`'s, word for word in substance.** Any divergence between the two pages is a bug, not a nuance. See the note at the top of [`support-page.md`](support-page.md). Since [#1556](https://github.com/markgoho/doula-cloud/issues/1556) the Terms of Service carry the same Refunds section word for word and are its binding home, and `site/src/routes/terms/terms.svelte.spec.ts` fails when the section here and the one there differ.
 - **Connect Terms §3.4(b)** forbids holding ourselves out as a payment facilitator, intermediary or aggregator. The last section says so in the place a Practice is agreeing to something.
@@ -38,7 +38,7 @@ It must sit **beside the accept link**, not in the footer. Placement is the whol
 
 # Pilot terms
 
-Doula Cloud is in a private pilot with a small number of practices, from October 2026 until it opens to everyone in January 2027.
+DoulaCloud is in a private pilot with a small number of practices, from October 2026 until it opens to everyone in January 2027.
 
 This page says what a practice is offered for taking part, and what it is charged. It applies to every practice invited into the pilot.
 
@@ -60,7 +60,7 @@ There is no subscription and no recurring charge. A practice buys Credits when i
 
 ## What happens when the pilot ends
 
-Nothing changes when Doula Cloud opens to everyone in January 2027.
+Nothing changes when DoulaCloud opens to everyone in January 2027.
 
 - A Credit still costs $20.00.
 - Unused Credits stay, granted and purchased alike.
@@ -76,7 +76,7 @@ Purchased Credits that have not been spent can be refunded within three years of
 
 ## The pilot does not change who the merchant is
 
-Doula Cloud is not a payment service. When a practice invoices a client, the practice is the merchant: it holds its own agreement with Stripe, the money is paid into its own account, and it is responsible for the care it provides and for what it charges. Doula Cloud never receives or holds a practice's money.
+DoulaCloud is not a payment service. When a practice invoices a client, the practice is the merchant: it holds its own agreement with Stripe, the money is paid into its own account, and it is responsible for the care it provides and for what it charges. DoulaCloud never receives or holds a practice's money.
 
 ## Contact us
 
@@ -99,8 +99,8 @@ Email **hello@doula.cloud**. That address reaches a person.
 | *"That is the ordinary price of a Credit, not a pilot price…"* | The load-bearing sentence of the whole page. [#421](https://github.com/markgoho/doula-cloud/issues/421) rejected cheap pilot Credits precisely so that January is not a price increase asked of every pilot Practice at once. The terms are where that becomes something she can hold us to. |
 | *"…what a practice pays for every Credit beyond its grant."* | [#421](https://github.com/markgoho/doula-cloud/issues/421)'s third obligation: list pricing applies to everything past the grant, including after January. |
 | *"There is no subscription and no recurring charge."* | Matches `/support`. A reader agreeing to a "pilot" reasonably fears an auto-renewing trial, which is the pattern this is not. |
-| *"Nothing changes when Doula Cloud opens to everyone in January 2027."* + the three bullets | "What happens when it ends" is one of this ticket's acceptance criteria, and the honest answer is *nothing*. Written as a list because a reader scanning for the catch should find it in one pass and not find one. |
+| *"Nothing changes when DoulaCloud opens to everyone in January 2027."* + the three bullets | "What happens when it ends" is one of this ticket's acceptance criteria, and the honest answer is *nothing*. Written as a list because a reader scanning for the catch should find it in one pass and not find one. |
 | *"Credits given free of charge are not refundable."* | `/support`'s position, and the reason the grant needs no cash-out mechanism. |
 | *"…within three years… at the price paid… to the original payment method."* | `/support` verbatim in substance, and every clause in it is load-bearing against a specific statute — [§1139](https://www.nysenate.gov/legislation/laws/TAX/1139), [APL §1315](https://www.nysenate.gov/legislation/laws/ABP/1315). **Do not reword this paragraph on one page only.** Read [#390](https://github.com/markgoho/doula-cloud/issues/390) and [#439](https://github.com/markgoho/doula-cloud/issues/439) first, then change both. |
-| *"Doula Cloud is not a payment service… never receives or holds a practice's money."* | Connect Terms §3.4(b), and [#383](https://github.com/markgoho/doula-cloud/issues/383)'s money-transmission ruling, said at the moment a Practice is agreeing to take part — which is the moment she could otherwise conclude the platform is the one handling her fees. |
+| *"DoulaCloud is not a payment service… never receives or holds a practice's money."* | Connect Terms §3.4(b), and [#383](https://github.com/markgoho/doula-cloud/issues/383)'s money-transmission ruling, said at the moment a Practice is agreeing to take part — which is the moment she could otherwise conclude the platform is the one handling her fees. |
 | *"Email **hello@doula.cloud**."* | The same contact as `/support`. A promotion with no way to ask a question about it is a promotion a reviewer distrusts. |

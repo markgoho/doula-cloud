@@ -19,7 +19,7 @@ import (
 
 const (
 	connectNudgePath          = "/payments/connect/nudge"
-	connectNudgeSubject       = "Doula Cloud: your Practice still has to connect Stripe"
+	connectNudgeSubject       = "DoulaCloud: your Practice still has to connect Stripe"
 	connectNudgeActionName    = "stripe_connect_nudge_requested"
 	testConnectNudgeAccountID = "acct_already_connected"
 )

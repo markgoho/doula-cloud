@@ -115,7 +115,7 @@
 	let createError = $state('');
 
 	const billingModeOptions = [
-		{ value: 'stripe' as const, label: 'Stripe', description: 'Doula Cloud sends the bill and collects the card payment.' },
+		{ value: 'stripe' as const, label: 'Stripe', description: 'DoulaCloud sends the bill and collects the card payment.' },
 		{ value: 'by_hand' as const, label: 'By hand', description: 'This Practice bills and collects payment itself.' }
 	];
 

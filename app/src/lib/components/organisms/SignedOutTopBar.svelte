@@ -9,7 +9,7 @@
 	 * moment a person's session starts.
 	 *
 	 * It takes no props. The Client portal's signed-out screens use it too,
-	 * and say `Doula Cloud` rather than the Practice's name: /portal/login
+	 * and say `DoulaCloud` rather than the Practice's name: /portal/login
 	 * has no session, so the app does not yet know which Practice the person
 	 * belongs to. That is accepted, not a defect to design around.
 	 */

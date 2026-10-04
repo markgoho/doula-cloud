@@ -68,7 +68,7 @@ func TestEditHandler_EmailChangeLeavesPortalAccessAlone(t *testing.T) {
 // #619's activity record, and the one Client-authored row the
 // client-subject history has: her Practice must be able to answer "how
 // did this come to be?" and see her name against it, not a Staff
-// member's and not "Doula Cloud".
+// member's and not "DoulaCloud".
 //
 // The diff is written unsealed (ADR-0027 seals what changed, and this
 // row deliberately records no address at all -- ADR-0015 makes her login

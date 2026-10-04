@@ -43,7 +43,7 @@
 	 * of the layout, which is what gives this screen a readable measure at
 	 * every width rather than text flush to both edges.
 	 *
-	 * The signed-out state's heading used to be `Doula Cloud`. With the
+	 * The signed-out state's heading used to be `DoulaCloud`. With the
 	 * bar above it now carrying the brand lockup, an `<h1>` repeating it
 	 * says nothing about the page; per ADR-0021 the heading names what
 	 * the page is for instead. `EntryPage` writes the tab title from the

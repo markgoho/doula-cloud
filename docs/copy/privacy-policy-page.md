@@ -28,22 +28,22 @@ Built as `site/src/routes/privacy/+page.svelte` on `site/src/lib/components/Read
 
 # Privacy Policy
 
-This policy says what Elephantine LLC, which operates Doula Cloud, holds about each person who uses Doula Cloud or visits this site: where it comes from, what it is used for, who else receives it, how long it is kept, and how you see it, correct it or have it erased. “We” and “us” mean Elephantine LLC.
+This policy says what Elephantine LLC, which operates DoulaCloud, holds about each person who uses DoulaCloud or visits this site: where it comes from, what it is used for, who else receives it, how long it is kept, and how you see it, correct it or have it erased. “We” and “us” mean Elephantine LLC.
 
-This version takes effect on October 2, 2026. The history of every version is at the end of this page.
+This version takes effect on October 3, 2026. The history of every version is at the end of this page.
 
 ## Who decides about your data
 
-A practice's records about its clients belong to the practice. The practice decides what it records about a client, who on its staff sees it, and when it is erased. We hold those records for the practice, and use them only to run Doula Cloud for it.
+A practice's records about its clients belong to the practice. The practice decides what it records about a client, who on its staff sees it, and when it is erased. We hold those records for the practice, and use them only to run DoulaCloud for it.
 
 For the account of each person who owns or works at a practice, and for a visitor to this site, we decide, and this policy says how.
 
 ## What we never do
 
 - We do not sell anyone's data.
-- We do not use it for advertising, and Doula Cloud shows no advertisements.
+- We do not use it for advertising, and DoulaCloud shows no advertisements.
 - No email we send is tracked for opens or clicks. A message from your doula is only a message.
-- We do not study what a named person does in Doula Cloud. The record of who changed what is there for the practice to read, and the only use we measure is how many Credits each practice bought and spent.
+- We do not study what a named person does in DoulaCloud. The record of who changed what is there for the practice to read, and the only use we measure is how many Credits each practice bought and spent.
 
 ## If you own a practice
 
@@ -58,7 +58,7 @@ When you create a practice, and while you run it, we hold:
 - what you tell us through Feedback, with the name and version of your browser;
 - a record of each change you make, with who made it and when.
 
-We use it to run Doula Cloud for your practice, to charge for Credits, to email you about your practice's account, and to answer you.
+We use it to run DoulaCloud for your practice, to charge for Credits, to email you about your practice's account, and to answer you.
 
 ## If you work at a practice
 
@@ -72,7 +72,7 @@ The Feedback you sent us stays when your login is deleted, and when a practice y
 
 ## If you are a client of a practice
 
-Your doula's practice uses Doula Cloud to keep its records about you. This section is written to you.
+Your doula's practice uses DoulaCloud to keep its records about you. This section is written to you.
 
 Your practice decides what it records. That can include your name, contact details, address and date of birth; what it records about your pregnancy, birth and care; your visits; your plans, such as a birth plan; the contracts you sign; your invoices and payments; and the messages and files you and your doula send each other. When you sign a contract, we record the time and the IP address it was signed from.
 
@@ -84,7 +84,7 @@ When you pay an invoice, the payment form comes from Stripe, and your card detai
 
 When your practice erases your record, your name, contact details, address, date of birth and the details it recorded about you in its own fields are removed, Stripe's customer record of you is deleted, and the history of changes to those details becomes unreadable. What was written in messages, contracts and notes stays, because those are your practice's own records of the care it gave and what it charged.
 
-You can tell us what you think of Doula Cloud through Feedback in the portal. It comes to us, never to your practice. We keep what you send, with the name and version of your browser, and erase it when your practice erases your record or is deleted. If more than one practice keeps a record of you, Feedback you sent from a portal page that is not about one practice is erased when the last of them erases your record.
+You can tell us what you think of DoulaCloud through Feedback in the portal. It comes to us, never to your practice. We keep what you send, with the name and version of your browser, and erase it when your practice erases your record or is deleted. If more than one practice keeps a record of you, Feedback you sent from a portal page that is not about one practice is erased when the last of them erases your record.
 
 ## If you visit this site
 
@@ -92,18 +92,18 @@ This site sets no cookies and runs no scripts. It does not count visits today. I
 
 Firebase Hosting, a Google service, delivers each page, and receives your IP address to do so.
 
-This site has no waitlist form today. If you join the waitlist once it has one, your email address and first name are kept by Buttondown, the service that runs the list. After you confirm your address, the list writes to you once, when Doula Cloud opens in January 2027.
+This site has no waitlist form today. If you join the waitlist once it has one, your email address and first name are kept by Buttondown, the service that runs the list. After you confirm your address, the list writes to you once, when DoulaCloud opens in January 2027.
 
-Doula Cloud does not follow you across other sites, so it treats every visit the same whether or not your browser sends a Do Not Track signal.
+DoulaCloud does not follow you across other sites, so it treats every visit the same whether or not your browser sends a Do Not Track signal.
 
 ## Who else receives data
 
-These companies receive data to run Doula Cloud, and each receives only what its job needs:
+These companies receive data to run DoulaCloud, and each receives only what its job needs:
 
-- **Google Cloud** runs Doula Cloud and stores all of its data, in the United States: the database, files such as contract documents and message attachments, and the jobs that send its email.
+- **Google Cloud** runs DoulaCloud and stores all of its data, in the United States: the database, files such as contract documents and message attachments, and the jobs that send its email.
 - **Google Identity Platform** checks the sign-in of each person who owns or works at a practice: the email address, the password and the second sign-in factor.
-- **Firebase Hosting**, a Google service, delivers the Doula Cloud app and this site, and receives the IP address of each request.
-- **Mailgun** sends Doula Cloud's email. It receives each address and message, and deletes its logs of them within 30 days.
+- **Firebase Hosting**, a Google service, delivers the DoulaCloud app and this site, and receives the IP address of each request.
+- **Mailgun** sends DoulaCloud's email. It receives each address and message, and deletes its logs of them within 30 days.
 - **Stripe** takes payments: a practice's payment for Credits, and a client's payment of an invoice. It receives what each payment needs, including a client's name and email address with an invoice, and it holds each practice's own Stripe account. Stripe processes data as [Stripe's Privacy Policy](https://stripe.com/privacy) explains.
 - **Your browser's push service** — Google, Apple or Mozilla, depending on your browser — carries the signal that tells your device a new message is waiting. The signal says only that something is waiting, never what it is.
 - **GitHub** keeps a note of each piece of Feedback in a private repository, so that we can sort it. The note holds only:
@@ -120,7 +120,7 @@ A company is added to this list, in a new version of this policy, before it rece
 
 ## Cookies and storage on your device
 
-Doula Cloud sets one cookie, `__session`, which keeps you signed in. It is used for nothing else, and it ends when you sign out or your session expires.
+DoulaCloud sets one cookie, `__session`, which keeps you signed in. It is used for nothing else, and it ends when you sign out or your session expires.
 
 When a person who owns or works at a practice signs in, Google's sign-in library keeps a record of the sign-in in the browser's own storage until they sign out. The app also keeps a form you have not sent yet, such as a new client's intake, in the browser tab's own storage until the tab is closed.
 
@@ -128,7 +128,7 @@ This site sets no cookies.
 
 ## How long we keep data
 
-- We keep a practice's records for as long as the practice uses Doula Cloud.
+- We keep a practice's records for as long as the practice uses DoulaCloud.
 - A client's record is erased at once when the practice erases it, as described above.
 - A practice's records are erased at the end of its 30-day deletion window, as the [Terms of Service](/terms) describe.
 - A login is deleted at once when its owner deletes it, as described above.
@@ -142,7 +142,7 @@ Some records stay after a practice or a login is deleted: the practice's own nam
 
 We keep a program of safeguards, as New York's SHIELD Act asks. Among them:
 
-- every connection to Doula Cloud and to this site is encrypted;
+- every connection to DoulaCloud and to this site is encrypted;
 - Google Cloud encrypts the data it stores;
 - the database itself keeps each practice's records apart from every other practice's;
 - each person who owns or works at a practice can add a second sign-in factor;
@@ -154,11 +154,11 @@ If someone gets access to data they should not have, we tell each practice whose
 
 ## Children
 
-Doula Cloud is for adults, and a child cannot have an account. A practice's record can name a baby. That information comes from the baby's parent or from the practice, and the parent can ask the practice about it as the section for clients describes.
+DoulaCloud is for adults, and a child cannot have an account. A practice's record can name a baby. That information comes from the baby's parent or from the practice, and the parent can ask the practice about it as the section for clients describes.
 
 ## Where this policy applies
 
-Doula Cloud is offered in the United States, and its data is stored there. This policy is written for the laws of the United States.
+DoulaCloud is offered in the United States, and its data is stored there. This policy is written for the laws of the United States.
 
 ## When this policy changes
 
@@ -174,8 +174,9 @@ Email [hello@doula.cloud](mailto:hello@doula.cloud). That address reaches a pers
 
 ## Version history
 
-1. October 2, 2026. Not a material change. Says how long Feedback is kept, what erases it, and that GitHub keeps a note of each piece.
-2. September 29, 2026. Not a material change. First version.
+1. October 3, 2026. Not a material change. Writes the name of the product as one word, DoulaCloud.
+2. October 2, 2026. Not a material change. Says how long Feedback is kept, what erases it, and that GitHub keeps a note of each piece.
+3. September 29, 2026. Not a material change. First version.
 
 ---
 
@@ -185,12 +186,12 @@ One row per claim that names a company, a cookie, a store on the device, or how 
 
 | Section | Claim | Checked against |
 | --- | --- | --- |
-| Who decides about your data | The Practice decides about a Client's record, and Doula Cloud holds it for her; Doula Cloud decides about account and visitor data. | ADR-0027 (erasure is the Practice's act); ADR-0033 (a login is the person's own). |
+| Who decides about your data | The Practice decides about a Client's record, and DoulaCloud holds it for her; DoulaCloud decides about account and visitor data. | ADR-0027 (erasure is the Practice's act); ADR-0033 (a login is the person's own). |
 | What we never do | No sale, no advertising. | Nothing in `api/` or `app/` sends data to an advertiser; ADR-0046. |
 | What we never do | No open or click tracking in any email. | ADR-0030. Checked: `mail.MailgunSender.Send` posts only a `text` part, so there is nothing a tracking pixel could ride in, and the tracking CNAME is not installed. |
 | What we never do | No study of a named person's use; the only measure is Credits bought and spent. | ADR-0046, "the app counts nothing about anyone". |
-| If you own a practice | Identity Platform checks the password, and Doula Cloud does not store it. | ADR-0026. Checked: the `staff` table holds `identity_uid`, `name` and `email`, and no password column exists. |
-| If you own a practice | Stripe takes the Credit payment; no card number reaches Doula Cloud. | `docs/environment.md` "No PHI reaches Stripe": the Credit flow sends a Practice id and a count. |
+| If you own a practice | Identity Platform checks the password, and DoulaCloud does not store it. | ADR-0026. Checked: the `staff` table holds `identity_uid`, `name` and `email`, and no password column exists. |
+| If you own a practice | Stripe takes the Credit payment; no card number reaches DoulaCloud. | `docs/environment.md` "No PHI reaches Stripe": the Credit flow sends a Practice id and a count. |
 | If you own a practice | The Practice Page is public and carries a named contact. | `CONTEXT.md` **Practice Page**; `site/src/routes/p/[slug]/+page.svelte`. |
 | If you own a practice | The date, time and IP address of the agreement. | ADR-0053: one `activity` row with both versions and the IP address from `clientip.From`. Built by #1547. |
 | If you own a practice | Feedback keeps the browser's name and major version, never the raw header. | `api/internal/feedback/browser.go`, `ParseBrowser`. |
@@ -203,7 +204,7 @@ One row per claim that names a company, a cookie, a store on the device, or how 
 | If you are a client of a practice | A signed Contract records the time and the IP address. | ADR-0053 names `clientip.From` as the function a Contract signature already uses. |
 | If you are a client of a practice | The portal signs in by an emailed link, with no password. | ADR-0026, "Magic link, minted by the BFF". |
 | If you are a client of a practice | The payment form is Stripe's; Stripe receives her name and email with an invoice and collects device information against fraud. | `docs/environment.md` "No PHI reaches Stripe": "The invoice flow sends a Client's name and email". The portal Payment Element loads Stripe.js (#1020), which collects device signals for Stripe's fraud checks. |
-| If you are a client of a practice | Ask the Practice first; Doula Cloud forwards a request the Practice leaves unanswered. | Spec #1556, "The Client section is written to the Client". |
+| If you are a client of a practice | Ask the Practice first; DoulaCloud forwards a request the Practice leaves unanswered. | Spec #1556, "The Client section is written to the Client". |
 | If you are a client of a practice | What erasure removes, that Stripe's Customer is deleted, that her history of changes becomes unreadable, and that free text stays. | ADR-0027 (redact in place; crypto-shredding; free text is not scrubbed; the Stripe Customer is deleted). The Medicaid hold in ADR-0031's amendment is not built (#335), so the policy does not describe it; the version that builds it adds it. |
 | If you are a client of a practice | A Client can send Feedback from the portal; it goes to DoulaCloud, never to her Practice. | `clientauth.FeedbackHandler`, mounted as `POST /api/portal/feedback` in `api/internal/clientauth/mount.go` ("any signed-in Client sends a piece of Feedback from any portal screen"); `PortalFeedback` in `app/src/routes/portal/(authenticated)/+layout.svelte`. `CONTEXT.md` **Feedback**: "no Staff member reads it and a Practice's export leaves it out". |
 | If you are a client of a practice | Her Feedback is erased when her record is erased, and when her Practice is deleted; a piece sent from a portal page with no single Engagement goes when the last Practice with a record of her erases it. | `client.Erase` calls `eraseFeedback` (`erase_client_feedback`, 00121) for the record and for each record merged into it (`api/internal/client/erase.go`); the Portal Account branch calls `erase_portal_account_feedback` only when `portal_account_reaches_a_live_client` is false. Practice Deletion reaches both through the same cascade: `api/internal/practicedeletion/outbox_test.go`, `TestWorker_FinalizeDestroysClientFeedbackAndLeavesStaffFeedback`. Decided on #1525 and #1501 Q3. |

@@ -4,7 +4,7 @@
  * what a person reads is #1463, and this constant is the one edit it
  * needs here.
  */
-export const PRODUCT_NAME = 'Doula Cloud';
+export const PRODUCT_NAME = 'DoulaCloud';
 
 // The site's own origin, as `api/internal/website.SiteBaseURL` has it.
 export const SITE_ORIGIN = 'https://doula.cloud';

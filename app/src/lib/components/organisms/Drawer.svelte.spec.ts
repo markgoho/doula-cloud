@@ -5,7 +5,7 @@ import { render } from 'vitest-browser-svelte';
 import Drawer from './Drawer.svelte';
 
 const CONTENT = createRawSnippet(() => ({ render: () => '<p>drawer content</p>' }));
-const HEADING = 'Send feedback to Doula Cloud';
+const HEADING = 'Send feedback to DoulaCloud';
 
 /*
  * Past 28rem (448px) the panel renders at its own fixed 28rem and opens

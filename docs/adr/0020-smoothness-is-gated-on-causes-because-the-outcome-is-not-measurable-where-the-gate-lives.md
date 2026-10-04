@@ -4,7 +4,7 @@ Status: accepted, 2026-08-28. Decided on [#418](https://github.com/markgoho/doul
 
 ## Context
 
-[The design brief](../design/brief.md) makes smoothness the first place Doula Cloud's distinctiveness is spent, and says it "gets checked, not hoped for". It lists six requirements: nothing shifts after it paints; every action acknowledges itself within 100ms; loading is skeletal, not spinning; focus is visible and predictable; keyboard is a first-class path; and a dense list stays at 60fps under a real Practice's data.
+[The design brief](../design/brief.md) makes smoothness the first place DoulaCloud's distinctiveness is spent, and says it "gets checked, not hoped for". It lists six requirements: nothing shifts after it paints; every action acknowledges itself within 100ms; loading is skeletal, not spinning; focus is visible and predictable; keyboard is a first-class path; and a dense list stays at 60fps under a real Practice's data.
 
 Two of those six name a number a browser can report — Cumulative Layout Shift and Interaction to Next Paint — so the obvious design is to measure the outcome and fail the build on a threshold. Before committing to it, #418 measured whether the numbers can actually be read where a gate would run.
 

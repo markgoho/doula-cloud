@@ -23,7 +23,7 @@ Infer the repo from `git remote -v` — `gh` does this automatically when run in
 
 ## The Project: triage state
 
-Every open issue is an item on the **Doula Cloud Project** — https://github.com/users/markgoho/projects/5, project number `5`, owner `markgoho`. Its **Status** field replaced the four triage labels ([#621](https://github.com/markgoho/doula-cloud/issues/621)); the role-to-value mapping is in `docs/agents/triage-labels.md`.
+Every open issue is an item on the **DoulaCloud Project** — https://github.com/users/markgoho/projects/5, project number `5`, owner `markgoho`. Its **Status** field replaced the four triage labels ([#621](https://github.com/markgoho/doula-cloud/issues/621)); the role-to-value mapping is in `docs/agents/triage-labels.md`.
 
 - **Read or write one issue's Status**: the Project id, the Status field id, each option id, and the 1-point lookup of one issue's item id and Status are in `docs/agents/triage-labels.md` under "The ids". A write by node id costs nothing; one field per invocation.
 - **Read Status for many issues at once** (a bulk triage pass): `gh project item-list 5 --owner markgoho --format json --limit 400` — `--limit` defaults to 30, well under the ~171-item project, so pass it explicitly or the query silently returns nothing. **Call this once per session, never once per issue.** It costs 404 GraphQL points — 8% of the hourly budget — and the cost does not fall when you filter with `--jq`, because the filter runs after the whole board is fetched. Save the JSON to a file and read every issue's `.status` and item `.id` out of that.

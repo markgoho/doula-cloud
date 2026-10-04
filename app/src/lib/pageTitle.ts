@@ -8,7 +8,7 @@ export function formatPageTitle(
 	page: string,
 	options: { serviceName?: string; isError?: boolean } = {}
 ): string {
-	const serviceName = options.serviceName ?? 'Doula Cloud';
+	const serviceName = options.serviceName ?? 'DoulaCloud';
 	const prefix = options.isError ? 'Error: ' : '';
 	return `${prefix}${page} — ${serviceName}`;
 }

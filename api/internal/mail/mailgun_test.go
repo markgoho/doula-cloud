@@ -33,7 +33,7 @@ func TestMailgunSender_Send(t *testing.T) {
 
 	err := sender.Send(t.Context(), mail.Message{
 		To:      "client@example.test",
-		From:    "Doula Cloud <notifications@mg.doula.cloud>",
+		From:    "DoulaCloud <notifications@mg.doula.cloud>",
 		ReplyTo: "noreply@mg.doula.cloud",
 		Subject: "You have something waiting",
 		Text:    "View it: https://app.example.test/portal/accept-invite?token=abc",

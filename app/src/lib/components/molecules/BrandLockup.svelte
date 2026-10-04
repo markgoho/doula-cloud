@@ -3,9 +3,8 @@
 
 	/*
 	 * The product's name, drawn once. Every bar that says who we are renders
-	 * this rather than its own mark-and-words pair, so #338 can settle
-	 * `Doula Cloud` versus `DoulaCloud` by editing one string. This ticket
-	 * ships the current two-word form and decides nothing about it.
+	 * this rather than its own mark-and-words pair. The name is one word,
+	 * capital D and capital C (ADR-0050).
 	 */
 	interface Properties {
 		size?: 'sm' | 'md' | 'lg';
@@ -13,7 +12,7 @@
 
 	let { size = 'sm' }: Properties = $props();
 
-	const WORDMARK = 'Doula Cloud';
+	const WORDMARK = 'DoulaCloud';
 	// Built here rather than interpolated in the attribute, the way Heading
 	// and Text already do it: Svelte compiles `class="lockup size-{size}"`
 	// into a nullish check whose second arm a defaulted prop can never

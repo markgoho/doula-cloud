@@ -226,7 +226,7 @@ func TestWorker_ProcessPending_MailsNewSignInAndMarksSent(t *testing.T) {
 	if sent[0].To != uid+"@example.com" {
 		t.Fatalf("To = %q", sent[0].To)
 	}
-	if sent[0].Subject != "Doula Cloud: new sign-in to your account" {
+	if sent[0].Subject != "DoulaCloud: new sign-in to your account" {
 		t.Fatalf("subject = %q", sent[0].Subject)
 	}
 }
@@ -248,7 +248,7 @@ func TestWorker_ProcessPending_MailsSessionRevoked(t *testing.T) {
 	if len(sent) != 1 {
 		t.Fatalf("sent %d messages, want 1", len(sent))
 	}
-	if sent[0].Subject != "Doula Cloud: your sessions were signed out" {
+	if sent[0].Subject != "DoulaCloud: your sessions were signed out" {
 		t.Fatalf("subject = %q", sent[0].Subject)
 	}
 }
@@ -366,7 +366,7 @@ func TestWorker_ProcessPending_MailsMFARecoveryCleared(t *testing.T) {
 	if len(sent) != 1 {
 		t.Fatalf("sent %d messages, want 1", len(sent))
 	}
-	if sent[0].Subject != "Doula Cloud: your two-factor authentication was reset" {
+	if sent[0].Subject != "DoulaCloud: your two-factor authentication was reset" {
 		t.Fatalf("subject = %q", sent[0].Subject)
 	}
 }

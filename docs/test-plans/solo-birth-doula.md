@@ -63,7 +63,7 @@ None. Maya's journey starts at a cold `/signup`, so this plan builds its own fix
 
 **The doula's card statement says `DOULA.CLOU`.** Found on Dee's walk ([#236](https://github.com/markgoho/doula-cloud/issues/236)) while tracing the Client-facing `DOULA.CLOU` that `7261a59` fixed. This is the *other* half of that bug and it is **not** fixed: the credits Checkout session sets no descriptor (`billing/purchase.go`), so the charge falls back to the platform account's, and the platform's `statement_descriptor` is `DOULA.CLOUD` — 11 characters. Stripe caps a card prefix at 10 and truncates, giving `DOULA.CLOU`. The Client never sees it, because a connected account now carries its own `display_name`; the **doula** sees it every time she buys credits.
 
-**No code change fixes this** — it is one Dashboard field, so it is a launch checklist item rather than a `journey-gap`. Set the *shortened descriptor* (the prefix) on the Doula Cloud account to `DoulaCloud`, which is exactly 10 characters and drops the period that makes the truncation read as a cut-off URL. It must be set on **both** the sandbox and the live account; Stripe only exposes it in the Dashboard (`settings/business-details`), not the API. Verified against the Sandbox on 2026-08-22.
+**No code change fixes this** — it is one Dashboard field, so it is a launch checklist item rather than a `journey-gap`. Set the *shortened descriptor* (the prefix) on the DoulaCloud account to `DoulaCloud`, which is exactly 10 characters and drops the period that makes the truncation read as a cut-off URL. It must be set on **both** the sandbox and the live account; Stripe only exposes it in the Dashboard (`settings/business-details`), not the API. Verified against the Sandbox on 2026-08-22.
 
 
 ### Stage 4 — Fill the Care Plan and the Birth Plan
@@ -117,7 +117,7 @@ None. Maya's journey starts at a cold `/signup`, so this plan builds its own fix
 | --- | --- | --- | --- |
 | 7.1 | Open `/practices/[practiceId]/settings/payments` and start Connect onboarding | `POST .../payments/connect` is owner-gated and passes for Maya, returns a real v2 Account Link, and the hosted flow completes to an active account (#247, walked 2026-08-22) | `manual` |
 | 7.2 | Raise an Invoice against the signed Contract | An Invoice is created on the connected account and is payable (#247, walked 2026-08-22) | `manual` |
-| 7.2-a | Compare the **Billing** and **Settings → Payments** screens | Two money screens, neither explaining that one buys credits from Doula Cloud and the other takes money from Clients | `manual` |
+| 7.2-a | Compare the **Billing** and **Settings → Payments** screens | Two money screens, neither explaining that one buys credits from DoulaCloud and the other takes money from Clients | `manual` |
 | 7.B-screens | Count the screens from the stage's entry to its end | **Screens**: 3 (Hick's Law, Flow). **Settings → Payments**, back from Stripe, then the Engagement's Invoice; Stripe's own pages do not count | `manual` |
 | 7.B-decisions | On each screen, count the decisions visible at once; record the largest | **Decisions**: 3 (Hick's Law, Miller's Law) | `manual` |
 | 7.B-confirmation | Read the screen the stage ends on | **Confirmation**: yes (Peak-End Rule) | `manual` |

@@ -25,7 +25,7 @@ func writeReadme(ctx context.Context, tx *sql.Tx, w http.ResponseWriter, zw *zip
 	}
 
 	var b strings.Builder
-	fmt.Fprintf(&b, "%s -- Doula Cloud data export\n\n", practiceName)
+	fmt.Fprintf(&b, "%s -- DoulaCloud data export\n\n", practiceName)
 	fmt.Fprintf(&b, "Run by %s, %s.\n\n", staffName, now.Format("2006-01-02T15:04:05Z"))
 	b.WriteString("Every file is a UTF-8 CSV with a header row. Ids are included so the files join to each other.\n")
 	b.WriteString("A blank cell means the column was empty (NULL), not that it was left out.\n")

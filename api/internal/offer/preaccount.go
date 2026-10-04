@@ -123,7 +123,7 @@ func DeclineByTokenHandler(db *sql.DB) http.Handler {
 // (ADR-0008 forbids inventing one: "that would misrecord a human action
 // that did not happen"), and this is not a Client acting either, so
 // actor_kind 'system' is the closest of activity's three kinds without
-// misattributing the act to Doula Cloud itself; the row's own decided_at
+// misattributing the act to DoulaCloud itself; the row's own decided_at
 // and the Invitation it names remain the fuller audit answer, per this
 // file's existing doc comment. This handler runs on withTokenTx's own
 // db.BeginTx, outside staffauth.Middleware, so app.current_practice_id

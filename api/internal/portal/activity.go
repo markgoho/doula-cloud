@@ -51,7 +51,7 @@ func buildStaffingActions() []string {
 // its own: every remaining Staff-authored row (a Contract sent, an
 // Invoice raised) still names the individual Doula who did it unless that
 // name is replaced here. A Client actor's own name and
-// activity.SystemActorName ("Doula Cloud") are untouched -- the first is
+// activity.SystemActorName ("DoulaCloud") are untouched -- the first is
 // her own act, the second already reads as the product, not a person.
 func redactStaffActorNames(items []activityfeed.Entry) {
 	for i := range items {

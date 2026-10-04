@@ -5,7 +5,7 @@ import { signInEnrolled, enterPracticeAsEnrolled } from './mfa';
 import { seedFoundingOwner, uniqueEmail } from './staffSignup';
 
 const STAFF_INVITE_OUTBOX = 'process-staff-invite-outbox';
-const INVITE_SUBJECT = "You've been invited to join a practice on Doula Cloud";
+const INVITE_SUBJECT = "You've been invited to join a practice on DoulaCloud";
 
 // The one spec that walks mail as mail (#764, map #759). Every other
 // spec that needs an invite token reads it off the pending outbox row
@@ -66,7 +66,7 @@ test('An invitation arrives as readable mail, and a complaint stops the next one
 		doulaEmail,
 		INVITE_SUBJECT
 	);
-	expect(message.from).toBe(`Doula Cloud <notifications@${MAILBOX_DOMAIN}>`);
+	expect(message.from).toBe(`DoulaCloud <notifications@${MAILBOX_DOMAIN}>`);
 
 	// The persona's read: the inbox, in a browser, clicking the link out
 	// of the message body rather than lifting a token from a table.

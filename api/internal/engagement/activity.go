@@ -22,8 +22,8 @@ const activityPageSize = 30
 
 // ActivityEntry is one row of an Engagement's activity ledger (ADR-0022):
 // what happened, the diff, who did it, and when. ActorName is always
-// populated, never a bare id a reader has to resolve itself -- "Doula
-// Cloud" for a system actor (ADR-0022: never "System"), the acting Staff
+// populated, never a bare id a reader has to resolve itself --
+// "DoulaCloud" for a system actor (ADR-0022: never "System"), the acting Staff
 // member's name, or the acting Client's preferred name.
 type ActivityEntry struct {
 	Action    string          `json:"action"`
@@ -234,12 +234,12 @@ func attachmentDetail(attached sql.NullString) string {
 	return "Put on this Engagement as the Doula: " + staffDisplayName(attached)
 }
 
-// refundDetail says where a Refund came from when nobody in Doula Cloud
+// refundDetail says where a Refund came from when nobody in DoulaCloud
 // issued it (#1009). A Refund a Practice issues from her own Stripe
 // Dashboard reaches the log through the Connect webhook, recorded by
-// Doula Cloud -- ADR-0022's third actor, whose Who column reads "Doula
-// Cloud". Left at the generic "Payment refunded", that row would read as
-// Doula Cloud having returned her Client's money on its own; this
+// DoulaCloud -- ADR-0022's third actor, whose Who column reads
+// "DoulaCloud". Left at the generic "Payment refunded", that row would read as
+// DoulaCloud having returned her Client's money on its own; this
 // sentence says what actually happened. A Refund an Owner or Admin issued
 // here names her in the Who column already and gets no sentence.
 func refundDetail(diff []byte) string {

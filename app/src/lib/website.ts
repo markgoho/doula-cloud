@@ -1,6 +1,6 @@
 /**
  * The website a Practice declares to Stripe (#440): a URL of her own, or
- * a page Doula Cloud publishes for her at `doula.cloud/p/<slug>`.
+ * a page DoulaCloud publishes for her at `doula.cloud/p/<slug>`.
  *
  * Stripe's hosted onboarding demands a website from every connected
  * account, and #421 walked what happens when it does not get one -- the

@@ -274,6 +274,9 @@ jobs:
   # trees too, with the same word list, and that half runs here as well: one
   # spec, so the documents and the code cannot be held to two lists.
   #
+  # `brand.usage.spec.ts` is on the list since #1463, for the same reason:
+  # it holds the documents and the code to one form of the product's name.
+  #
   # The same specs also run inside `app`'s full suite whenever `app` runs.
   # No --coverage: the 100% gate is measured over the whole suite, and a
   # partial run would fail it.
@@ -304,6 +307,7 @@ jobs:
           src/lib/adrNumbers.usage.spec.ts
           src/lib/testPlans.usage.spec.ts
           src/lib/spelling.usage.spec.ts
+          src/lib/brand.usage.spec.ts
 
   # `api` and `app` skip on a docs-only PR (#1466). GitHub reads a skipped
   # required check as passed, which is why this is a job-level `if:` and not

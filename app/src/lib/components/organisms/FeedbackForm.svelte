@@ -99,7 +99,7 @@
 		items.push(
 			`the time: ${new Date().toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' })}`,
 			`your screen width and browser: ${window.innerWidth}px, ${browserName(navigator.userAgent)}`,
-			`the version of Doula Cloud: ${appBuild()}`
+			`the version of DoulaCloud: ${appBuild()}`
 		);
 		return items;
 	}
@@ -185,7 +185,7 @@
 			font-size: var(--text-body-sm-size);
 			line-height: var(--text-body-sm-leading);
 			color: var(--color-on-surface-variant);
-			/* the version of Doula Cloud" is a real build's full 40-character
+			/* the version of DoulaCloud" is a real build's full 40-character
 			   commit SHA in production, never "dev" -- one unbroken token
 			   with no space to wrap at, the same bare-URL case Link.svelte's
 			   own overflow-wrap override exists for. Confirmed on CI, not

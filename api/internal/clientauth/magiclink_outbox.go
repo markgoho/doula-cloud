@@ -74,8 +74,8 @@ func composeMagicLink(mailer outbox.Mailer) func(context.Context, *sql.Tx, magic
 // no Client name, no Practice name, only the link.
 func magicLinkCopy(appBaseURL, token string) (subject, text string) {
 	link := appBaseURL + "/portal/sign-in?token=" + token
-	return "Your Doula Cloud sign-in link", "Hello,\n\n" +
-		"Here is your sign-in link for Doula Cloud.\n\n" +
+	return "Your DoulaCloud sign-in link", "Hello,\n\n" +
+		"Here is your sign-in link for DoulaCloud.\n\n" +
 		link + "\n\n" +
 		"This link expires in 15 minutes. If you didn't request this, you can safely ignore this email.\n"
 }

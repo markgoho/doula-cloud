@@ -8,7 +8,7 @@ The evidence is two research files, each on its own branch: `docs/research/signu
 
 | Moment | What is agreed | Who captures it |
 | --- | --- | --- |
-| Signup | The Terms of Service and the Privacy Policy | Doula Cloud |
+| Signup | The Terms of Service and the Privacy Policy | DoulaCloud |
 | Connecting Stripe | Stripe's Connected Account Agreement | Stripe, in its own flow |
 | Buying a Credit | Nothing new | Nobody |
 
@@ -44,7 +44,7 @@ The row is plain text and stays for the life of the log. It survives the deletio
 
 ## When a document changes
 
-Doula Cloud decides for each new version whether the change is **material**. A material change is a change to what a Practice pays, what she gets, or what occurs with her data. A corrected typing error is not material.
+DoulaCloud decides for each new version whether the change is **material**. A material change is a change to what a Practice pays, what she gets, or what occurs with her data. A corrected typing error is not material.
 
 | | A change that is not material | A material change |
 | --- | --- | --- |

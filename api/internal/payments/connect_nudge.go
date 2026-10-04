@@ -49,7 +49,7 @@ const MsgConnectNudgeAlreadyConnected = "This Practice has already connected Str
 // the bound in the same breath as the refusal, so the reader learns the
 // rule from the sentence rather than having to discover it by trying
 // again tomorrow.
-const MsgConnectNudgeTooSoon = "Doula Cloud was already asked to email every Practice Owner about this in the last week. It sends this reminder at most once a week, so there is nothing more to send right now."
+const MsgConnectNudgeTooSoon = "DoulaCloud was already asked to email every Practice Owner about this in the last week. It sends this reminder at most once a week, so there is nothing more to send right now."
 
 // actionConnectNudgeRequested records a Staff member asking every Owner to
 // connect Stripe -- Practice-scoped, plain-string, the same shape
@@ -71,7 +71,7 @@ const actionConnectNudgeRequested = "stripe_connect_nudge_requested"
 // somewhere better to live: the Activity entry this send writes, which
 // the Practice reads behind its own permission gate. "Someone at your
 // Practice" is the whole of what the email says about it.
-const connectNudgeSubject = "Doula Cloud: your Practice still has to connect Stripe"
+const connectNudgeSubject = "DoulaCloud: your Practice still has to connect Stripe"
 
 func connectNudgeText(link string) string {
 	return "Hello,\n\n" +

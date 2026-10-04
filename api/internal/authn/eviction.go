@@ -1,6 +1,6 @@
 // Cross-population session eviction (#610, decided on #168).
 //
-// A browser can hold exactly one Doula Cloud session: Firebase Hosting
+// A browser can hold exactly one DoulaCloud session: Firebase Hosting
 // strips every cookie on the /api/** hop but __session (#139), so a
 // second one cannot be issued. Signing into the second population
 // therefore overwrites the first, and until #610 nothing in the code
@@ -38,7 +38,7 @@ type Tier string
 const (
 	// TierStaff is an Identity Platform uid -- a Staff member.
 	TierStaff Tier = "staff"
-	// TierPortal is a Doula Cloud-issued Portal Account identifier -- a
+	// TierPortal is a DoulaCloud-issued Portal Account identifier -- a
 	// Client.
 	TierPortal Tier = "portal"
 )

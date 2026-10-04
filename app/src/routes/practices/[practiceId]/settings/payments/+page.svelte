@@ -557,7 +557,7 @@
 	<!--
 		#256: this screen used to say nothing about itself until the Connect
 		status resolved, so a person landing here directly had no way to
-		tell it apart from Credits (Doula Cloud's own billing to the
+		tell it apart from Credits (DoulaCloud's own billing to the
 		Practice) without opening both -- two different counterparties
 		hidden behind two similar-sounding names. FormPage now renders
 		`intro` in the loading and loadError branches too (#256), so this
@@ -566,7 +566,7 @@
 		list, so this says "connects Stripe", matching the button copy.
 	-->
 	<Text text="This is where a Practice connects Stripe, so its Clients can pay it directly." />
-	<Text text="Credits is a separate screen, where this Practice buys Credits from Doula Cloud." />
+	<Text text="Credits is a separate screen, where this Practice buys Credits from DoulaCloud." />
 {/snippet}
 
 {#snippet body()}

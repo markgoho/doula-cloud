@@ -128,7 +128,7 @@ describe('the blocked email addresses screen', () => {
 			.element(
 				testPage
 					.getByRole('dialog', { name: 'Unblock this address' })
-					.getByText(`Doula Cloud writes to ${bounced!.address} again.`, { exact: false })
+					.getByText(`DoulaCloud writes to ${bounced!.address} again.`, { exact: false })
 			)
 			.toBeVisible();
 	});

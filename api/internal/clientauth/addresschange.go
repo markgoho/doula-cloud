@@ -191,7 +191,7 @@ type spendAddressChangeResponse struct {
 // Account has claimed since the link was sent. Safe to say plainly, and
 // only here: she has proved this mailbox, so she could have learned the
 // same fact by asking for a sign-in link at it.
-const MsgAddressTaken = "that address already signs in to Doula Cloud -- choose another"
+const MsgAddressTaken = "that address already signs in to DoulaCloud -- choose another"
 
 // MsgAddressLinkInvalid is the one outcome an unusable confirmation link
 // gets, whatever made it unusable -- never minted, already spent, or

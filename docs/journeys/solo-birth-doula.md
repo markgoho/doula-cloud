@@ -135,7 +135,7 @@ This is the largest single gap on the practice side. It also removes any possibi
 
 ### Stage 7 — Get paid
 
-**Thinking**: "I am tired of chasing money by text." **Pain points**: two money screens with names that invite the wrong click. **Billing** is where the Practice *buys credits from Doula Cloud*. **Settings → Payments** is where the Practice *gets paid by Clients*. Nothing on either screen explains the difference.
+**Thinking**: "I am tired of chasing money by text." **Pain points**: two money screens with names that invite the wrong click. **Billing** is where the Practice *buys credits from DoulaCloud*. **Settings → Payments** is where the Practice *gets paid by Clients*. Nothing on either screen explains the difference.
 
 **Budget**:
 
