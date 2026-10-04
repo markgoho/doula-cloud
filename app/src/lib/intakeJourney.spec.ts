@@ -11,7 +11,8 @@ import {
 	nextStepHref,
 	previousStepHref,
 	intakeOrigin,
-	originQuery
+	originQuery,
+	carriedGivenName
 } from './intakeJourney.js';
 
 function field(partial: Partial<Field> & { id: string }): Field {
@@ -232,5 +233,30 @@ describe('intakeOrigin (#1609)', () => {
 		['an address', 'from=https://example.test/']
 	])('names no screen for %s', (_case, query) => {
 		expect(intakeOrigin(new URLSearchParams(query))).toBeUndefined();
+	});
+});
+
+// #1716: a name typed into the search is never split on a space -- GOV.UK,
+// the reference under ADR-0021, says not to guess a name's structure.
+describe('carriedGivenName', () => {
+	it.each([
+		['one word', 'Yar', 'Yar'],
+		['one word with spaces around it', '  Yar  ', 'Yar'],
+		['a hyphenated name', 'Anne-Marie', 'Anne-Marie']
+	])('carries %s into Given name', (_case, value, expected) => {
+		expect(carriedGivenName(value)).toBe(expected);
+	});
+
+	it.each([
+		['two words', 'Yar Pell'],
+		['two words with spaces around them', ' Yar Pell '],
+		['several spaces between', 'Yar   Pell'],
+		['a tab between', 'Yar\tPell'],
+		['a no-break space between', 'Yar\u{A0}Pell'],
+		['three words', 'Yar de Pell'],
+		['nothing', ' '.repeat(3)],
+		['no name at all', undefined]
+	])('carries nothing for %s', (_case, value) => {
+		expect(carriedGivenName(value)).toBeUndefined();
 	});
 });
