@@ -91,14 +91,50 @@ describe('intake for everyone else', () => {
 	 * name; two or more carry into neither field. The name question is
 	 * mounted after the layout, so these read the fields she sees.
 	 */
+	// The draft still holds an earlier search's name: a URL that names
+	// one word replaces it, so no old line sits over "Yar".
 	it('carries a one-word name into Given name', async () => {
 		intakeDraft.clear();
+		intakeDraft.searchedName = 'Yar Pell';
 
 		await setup({ search: '?name=Yar' });
 		await render(NamePage);
 
 		await expect.element(testPage.getByLabelText('Given name')).toHaveValue('Yar');
 		await expect.element(testPage.getByLabelText('Family name (optional)')).toHaveValue('');
+		await expect.element(testPage.getByText(/You searched for/u)).not.toBeInTheDocument();
+	});
+
+	// #1758: what the search typed and did not carry is shown, so it does
+	// not have to be remembered. It fills no field and is not saved, so
+	// it sits apart from the list of what is saved with the name.
+	it('shows a two-word name the search typed, and fills no field with it', async () => {
+		intakeDraft.clear();
+
+		await setup({ search: '?name=Yar%20Pell&email=yar%40example.com' });
+		await render(NamePage);
+
+		await expect
+			.element(testPage.getByText('You searched for "Yar Pell". Type the name into the fields below.'))
+			.toBeVisible();
+		await expect.element(testPage.getByLabelText('Given name')).toHaveValue('');
+		await expect.element(testPage.getByLabelText('Family name (optional)')).toHaveValue('');
+		await expect.element(testPage.getByLabelText('Preferred name (optional)')).toHaveValue('');
+		// Not in the list of what is saved with the name.
+		await expect.element(testPage.getByText('yar@example.com')).toBeVisible();
+		await expect.element(testPage.getByText('Yar Pell', { exact: true })).not.toBeInTheDocument();
+		expect(intakeDraft.answers).not.toHaveProperty('searchedName');
+	});
+
+	// The duplicate page's Back opens the name question with no query
+	// string, so the name already read is kept, as the origin is.
+	it('keeps the searched name it already read when the URL carries none', async () => {
+		intakeDraft.searchedName = 'Yar Pell';
+
+		await setup();
+		await render(NamePage);
+
+		await expect.element(testPage.getByText(/You searched for "Yar Pell"/u)).toBeVisible();
 	});
 
 	it('carries a two-word name into neither name field, and still carries the rest', async () => {

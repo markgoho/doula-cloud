@@ -16,7 +16,8 @@
 	 * -- `clients/new/+layout.svelte` reads all four and the name question
 	 * shows them (#1611): a one-word name in Given name, and the other
 	 * three listed under the fields. A name of two or more words fills
-	 * neither name field, since it is never split on a space (#1716). All
+	 * neither name field, since it is never split on a space (#1716); the
+	 * name question shows it above the fields, read-only (#1758). All
 	 * four, not only the name, because a staff member holding nothing but
 	 * a phone number would otherwise lose the one thing she had.
 	 */

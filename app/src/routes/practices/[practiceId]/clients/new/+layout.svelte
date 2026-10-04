@@ -19,7 +19,7 @@
 	import { untrack, type Snippet } from 'svelte';
 	import { page } from '#lib/appState.svelte.js';
 	import { intakeDraft, type IntakeAnswers } from '#lib/intakeDraft.svelte.js';
-	import { carriedGivenName, intakeOrigin } from '#lib/intakeJourney.js';
+	import { carriedGivenName, intakeOrigin, searchedName } from '#lib/intakeJourney.js';
 	import ContractorDoor from '../ContractorDoor.svelte';
 	import type { LayoutProps as LayoutProperties } from './$types';
 
@@ -35,7 +35,8 @@
 	 * The four keys the search hands over (#498). `name` is the given
 	 * name when it is one word, and the name question shows it in that
 	 * field. A value of two or more words carries into neither name
-	 * field: it is never split on a space (#1716, `carriedGivenName`).
+	 * field: it is never split on a space (#1716, `carriedGivenName`),
+	 * and the name question shows it, read-only (#1758, `searchedName`).
 	 * The other three are listed on the name question and saved with it
 	 * (#1611).
 	 */
@@ -74,6 +75,12 @@
 			// later visit that carries none -- the duplicate page's Back, a
 			// reload -- keeps the one already read.
 			intakeDraft.origin = intakeOrigin(page.url.searchParams) ?? intakeDraft.origin;
+			// #1758: a name of two or more words carries into no field,
+			// and the name question shows it instead. A URL with no `name`
+			// keeps the one already read, as above; a URL with one replaces
+			// it, so a one-word name never sits under an old search's line.
+			const name = page.url.searchParams.get('name');
+			if (name !== null) intakeDraft.searchedName = searchedName(name);
 		});
 	});
 </script>

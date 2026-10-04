@@ -12,7 +12,8 @@ import {
 	previousStepHref,
 	intakeOrigin,
 	originQuery,
-	carriedGivenName
+	carriedGivenName,
+	searchedName
 } from './intakeJourney.js';
 
 function field(partial: Partial<Field> & { id: string }): Field {
@@ -258,5 +259,26 @@ describe('carriedGivenName', () => {
 		['no name at all', undefined]
 	])('carries nothing for %s', (_case, value) => {
 		expect(carriedGivenName(value)).toBeUndefined();
+	});
+});
+
+// #1758: the name question shows a name of two or more words that the
+// search typed and did not carry. It is the other half of the rule
+// above, so the two never disagree about which value is which.
+describe('searchedName', () => {
+	it.each([
+		['two words', 'Yar Pell', 'Yar Pell'],
+		['two words with spaces around them', ' Yar Pell ', 'Yar Pell'],
+		['three words', 'Yar de Pell', 'Yar de Pell']
+	])('shows %s', (_case, value, expected) => {
+		expect(searchedName(value)).toBe(expected);
+	});
+
+	it.each([
+		['one word', 'Yar'],
+		['nothing', ' '.repeat(3)],
+		['no name at all', undefined]
+	])('shows nothing for %s', (_case, value) => {
+		expect(searchedName(value)).toBeUndefined();
 	});
 });
