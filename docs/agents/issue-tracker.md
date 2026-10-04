@@ -94,6 +94,12 @@ GitHub shares one number space across issues and PRs, so a bare `#42` may be eit
 
 Create a GitHub issue. If the ticket has a parent/source issue (e.g. tickets broken out from a spec via `/to-tickets`), also link it as a native GitHub sub-issue of that parent — `gh api --method POST repos/<owner>/<repo>/issues/<parent>/sub_issues -F sub_issue_id=<child-db-id>`, where `<child-db-id>` is the child's numeric **database id** (`gh api repos/<owner>/<repo>/issues/<n> --jq .id`, not the `#number`). A text reference ("Part of #N") in the body is not a substitute — it doesn't show up in GitHub's sub-issue progress bar or hierarchy UI.
 
+### A parent stays open until every sub-issue is closed
+
+Do not close an issue, or merge a PR with `Closes #N` for it, while one of its sub-issues is open. A parent that is done except for its children stays open; it closes when the last child closes.
+
+A decision ticket (a grilling, prototype or research ticket, or any ticket whose deliverable is a recorded answer) has no sub-issues. The build tickets that come from its answer are linked to the decision ticket's own parent, as its siblings, and the decision ticket closes when the answer is recorded. If the decision ticket has no parent, it stays open as the parent of its build tickets. The reason: GitHub's progress count on an issue shows only its direct children, so build tickets nested under a closed decision ticket disappear from the parent's count, and the parent looks done when it is not ([#1760](https://github.com/markgoho/doula-cloud/issues/1760)).
+
 ## When a skill says "fetch the relevant ticket"
 
 Run `gh issue view <number> --comments`.
@@ -107,4 +113,4 @@ Used by `/wayfinder`. The **map** is a single issue with **child** issues as tic
 - **Blocking**: GitHub's **native issue dependencies** — the canonical, UI-visible representation. Add an edge with `gh api --method POST repos/<owner>/<repo>/issues/<child>/dependencies/blocked_by -F issue_id=<blocker-db-id>`, where `<blocker-db-id>` is the blocker's numeric **database id** (`gh api repos/<owner>/<repo>/issues/<n> --jq .id`, _not_ the `#number` or `node_id`). GitHub reports `issue_dependencies_summary.blocked_by` (open blockers only — the live gate). Where dependencies aren't available, fall back to a `Blocked by: #<n>, #<n>` line at the top of the child body. A ticket is unblocked when every blocker is closed.
 - **Frontier query**: list the map's open children (`gh issue list --state open`, scoped to the map's sub-issues / task list), drop any with an open blocker (`issue_dependencies_summary.blocked_by > 0`, or an open issue in the `Blocked by` line) or an assignee; first in map order wins.
 - **Claim**: `gh issue edit <n> --add-assignee @me` — the session's first write.
-- **Resolve**: `gh issue comment <n> --body "<answer>"`, then `gh issue close <n>`, then append a context pointer (gist + link) to the map's Decisions-so-far.
+- **Resolve**: `gh issue comment <n> --body "<answer>"`, then `gh issue close <n>`, then append a context pointer (gist + link) to the map's Decisions-so-far. Build tickets that come from the answer are sub-issues of the map, not of the ticket (see "A parent stays open until every sub-issue is closed" above).
