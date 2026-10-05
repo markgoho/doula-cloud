@@ -55,6 +55,7 @@
 	// (see `resolve()` call sites), so this alone tells external apart from
 	// internal without a redundant `external` prop for callers to keep in sync.
 	const isExternal = $derived(/^(https?:)?\/\//.test(href));
+	const text = $derived(isExternal ? `${label} (opens in new tab)` : label);
 </script>
 
 <a
@@ -70,10 +71,15 @@
 	{#if icon}
 		<Icon name={icon} size={16} />
 	{/if}
-	<span class="label">{label}</span>
+	<!--
+		The new-tab words are drawn inside the label, not hidden beside it
+		(#1557): GOV.UK's Links style puts "(opens in new tab)" in the link
+		text a sighted reader sees too. Inside `.label`, so the words wrap
+		with the label at 320px rather than being a flex item that cannot.
+	-->
+	<span class="label">{text}</span>
 	{#if isExternal}
 		<Icon name="arrow-square-out" size={16} />
-		<span class="visually-hidden">(opens in new tab)</span>
 	{/if}
 </a>
 

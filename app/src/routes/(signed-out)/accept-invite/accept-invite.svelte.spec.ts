@@ -400,6 +400,44 @@ describe('step two -- a person who is Staff somewhere already', () => {
 	});
 });
 
+/*
+ * #1557: the screen that accepts tells her where her data is described,
+ * and asks her to agree to nothing -- a Practice agrees through its Owner
+ * (ADR-0053). Both branches of step two carry it, because both end on the
+ * same Accept invite button.
+ */
+const privacyLink = () =>
+	testPage.getByRole('link', { name: 'Privacy Policy (opens in new tab)' });
+
+describe('step two -- the Privacy Policy notice (#1557)', () => {
+	it.each([
+		['a person who is new here', 'signup', refusal(404, 'no matching staff account')],
+		['a person who is Staff already', 'login', jsonResponse(existingStaff)]
+	] as const)('shows %s the notice with a new-tab link to /privacy', async (_, mode, probe) => {
+		await setup({ probe });
+
+		await identify(mode);
+
+		await expect
+			.element(testPage.getByText(/tells you what DoulaCloud holds\s+about you/))
+			.toBeVisible();
+		await expect.element(privacyLink()).toBeVisible();
+		await expect.element(privacyLink()).toHaveAttribute('href', 'https://doula.cloud/privacy');
+		await expect.element(privacyLink()).toHaveAttribute('target', '_blank');
+		await expect.element(acceptButton()).toBeVisible();
+	});
+
+	it('asks for no agreement: no words of agreement and no checkbox', async () => {
+		await setup();
+
+		await identify();
+
+		const notice = testPage.getByText(/tells you what DoulaCloud holds\s+about you/);
+		await expect.element(notice).not.toHaveTextContent(/agree|consent|accept/i);
+		expect(testPage.getByRole('checkbox').elements()).toHaveLength(0);
+	});
+});
+
 describe('what happens after the invite is accepted', () => {
 	it('lands her straight on the Practice she just joined', async () => {
 		await setup();
