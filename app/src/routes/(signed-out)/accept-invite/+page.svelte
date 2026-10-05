@@ -46,6 +46,7 @@
 	import ErrorSummary from '#lib/components/molecules/ErrorSummary.svelte';
 	import EntryPage from '#lib/components/templates/EntryPage.svelte';
 	import { workStateCode, workStateName, workStateReportedOn } from '#lib/workStates.js';
+	import { privacyPolicyUrl } from '#lib/legal.js';
 
 	const modeOptions: { value: 'signup' | 'login'; label: string }[] = [
 		{ value: 'signup', label: "I'm new here — create an account" },
@@ -453,6 +454,17 @@
 					error={submission.errorFor(workStateId)}
 				/>
 			{/if}
+
+			<!--
+				A notice, not a consent (#1557): it says where her data is
+				described and asks her to agree to nothing, because a Practice
+				agrees through its Owner (ADR-0053). No checkbox, and nothing is
+				recorded for it. Both branches end on this button, so both carry it.
+			-->
+			<p>
+				The <Link href={privacyPolicyUrl} label="Privacy Policy" /> tells you what DoulaCloud holds
+				about you.
+			</p>
 
 			<Button type="submit" label="Accept invite" loading={submission.isSubmitting} />
 		</StackedForm>
