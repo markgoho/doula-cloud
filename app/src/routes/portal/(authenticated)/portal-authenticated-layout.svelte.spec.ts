@@ -3,6 +3,7 @@ import { page } from 'vitest/browser';
 import { describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import { jsonResponse } from '#lib/testResponse.js';
+import { expectPrivacyLinkAfterMain } from '#lib/testPrivacyLink.js';
 import type { SignOutOutcome } from '#lib/signOut.js';
 import Layout from './+layout.svelte';
 
@@ -246,11 +247,7 @@ describe('the Privacy Policy link (#1558)', () => {
 	it('carries the link in the footer, after the main content, on every screen this layout wraps', async () => {
 		await setup({ pathname: '/portal/engagements/engagement-1/contract' });
 
-		const link = page.getByRole('contentinfo').getByRole('link', { name: 'Privacy Policy (opens in new tab)' });
-		await expect.element(link).toBeVisible();
-		await expect.element(link).toHaveAttribute('href', 'https://doula.cloud/privacy');
-		const main = page.getByRole('main').element();
-		expect(main.compareDocumentPosition(link.element()) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+		await expectPrivacyLinkAfterMain();
 	});
 });
 

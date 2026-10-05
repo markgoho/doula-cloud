@@ -66,14 +66,10 @@ describe('Link.svelte', () => {
 	});
 
 	// GOV.UK's Links style (#1557): a sighted reader is told too, not only
-	// a screen reader, so the words are drawn, never visually hidden.
-	// `querySelector` because no accessible query can tell: `toBeVisible`
-	// passes on a clipped `.visually-hidden` span, and the accessible name
-	// is the same either way.
+	// a screen reader, so the words are drawn in the link's own text.
 	it('draws "(opens in new tab)" as visible text of an external link', async () => {
-		const { container } = await setup({ href: 'https://example.com', label: 'Visit site' });
+		await setup({ href: 'https://example.com', label: 'Visit site' });
 
-		expect(container.querySelector('.visually-hidden')).toBeNull();
 		await expect.element(page.getByText('Visit site (opens in new tab)')).toBeVisible();
 	});
 

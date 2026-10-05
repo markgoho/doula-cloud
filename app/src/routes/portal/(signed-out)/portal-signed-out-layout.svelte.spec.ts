@@ -2,6 +2,7 @@ import { createRawSnippet } from 'svelte';
 import { page } from 'vitest/browser';
 import { describe, expect, it } from 'vitest';
 import { render } from 'vitest-browser-svelte';
+import { expectPrivacyLinkAfterMain } from '#lib/testPrivacyLink.js';
 import Layout from './+layout.svelte';
 
 async function setup() {
@@ -22,10 +23,6 @@ describe('Client portal signed-out layout', () => {
 	it('carries the Privacy Policy link in the footer, after the main content', async () => {
 		await setup();
 
-		const link = page.getByRole('contentinfo').getByRole('link', { name: 'Privacy Policy (opens in new tab)' });
-		await expect.element(link).toBeVisible();
-		await expect.element(link).toHaveAttribute('href', 'https://doula.cloud/privacy');
-		const main = page.getByRole('main').element();
-		expect(main.compareDocumentPosition(link.element()) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+		await expectPrivacyLinkAfterMain();
 	});
 });

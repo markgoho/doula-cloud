@@ -112,9 +112,10 @@
 		 * itself break inside the width flexbox now allows it to take,
 		 * since a URL still has no space or hyphen to wrap at normally.
 		 * The anchor stays a `nowrap` flex row (no `flex-wrap` here), so
-		 * the label is the only thing that wraps -- the leading icon, the
-		 * trailing external-link icon and its hidden text stay pinned
-		 * beside it rather than ever landing on a row of their own.
+		 * the label is the only thing that wraps -- the leading icon and the
+		 * trailing external-link icon stay pinned beside it rather than ever
+		 * landing on a row of their own. The "(opens in new tab)" words are
+		 * part of the label (#1557), so they wrap with it.
 		 */
 		.label {
 			min-inline-size: 0;

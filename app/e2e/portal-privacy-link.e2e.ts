@@ -1,5 +1,6 @@
 import { expect, test, type FrameLocator, type Page } from '@playwright/test';
 import { openMagicLink, seedPortalClient } from './portalClient';
+import { seedEngagement } from './stack';
 
 // #1558: every Portal screen carries the link to the Privacy Policy, in
 // the same footer, and the link is complete and usable at every width the
@@ -22,6 +23,9 @@ async function expectPrivacyLink(surface: Surface, where: string): Promise<void>
 	await expect(link).toHaveAttribute('target', '_blank');
 	// Its own text says so, not only its accessible name.
 	await expect(link).toHaveText(LINK_NAME);
+	// The brief's Density rule: no hit target under 44px, at any width.
+	const box = await link.boundingBox();
+	expect(box?.height ?? 0, `${where}: the link's hit target is under 44px`).toBeGreaterThanOrEqual(44);
 	// ADR-0053: a notice. Nothing in the footer asks her to agree.
 	await expect(surface.getByRole('contentinfo').getByRole('checkbox')).toHaveCount(0);
 	await expect(surface.getByRole('contentinfo').getByRole('button')).toHaveCount(0);
@@ -53,18 +57,24 @@ function portalScreens(engagementId: string): string[] {
 // still a Portal screen she can land on.
 const SIGNED_OUT_SCREENS = ['/portal/login', '/portal/accept-invite', '/portal/confirm-sign-in-address'];
 
-async function walk(page: Page, request: Parameters<typeof seedPortalClient>[0], width: number): Promise<void> {
+// `width` names the pass in failure messages and in the seeded Practice's
+// name. It sets no viewport: the wide pass runs at Playwright's default,
+// and the narrow pass pins 320px, the one width ADR-0025 names.
+async function walk(page: Page, request: Parameters<typeof seedPortalClient>[0], width: string): Promise<void> {
 	for (const path of SIGNED_OUT_SCREENS) {
 		await page.goto(path);
 		await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
-		await expectPrivacyLink(page, `${path} at ${width}px`);
-		await expectNoSidewaysScroll(page, `${path} at ${width}px`);
+		await expectPrivacyLink(page, `${path} at ${width}`);
+		await expectNoSidewaysScroll(page, `${path} at ${width}`);
 	}
 
-	const { engagementId, clientEmail } = await seedPortalClient(request, `Riverside Doulas ${width}`);
+	const { engagementId, clientEmail, clientId, practiceId } = await seedPortalClient(
+		request,
+		`Riverside Doulas ${width}`
+	);
 	await openMagicLink(page, request, clientEmail);
-	await expectPrivacyLink(page, `the first sign-in screen at ${width}px`);
-	await expectNoSidewaysScroll(page, `the first sign-in screen at ${width}px`);
+	await expectPrivacyLink(page, `the first sign-in screen at ${width}`);
+	await expectNoSidewaysScroll(page, `the first sign-in screen at ${width}`);
 	await page.getByRole('button', { name: 'Continue' }).click();
 	await expect(page).toHaveURL(new RegExp(`/portal/engagements/${engagementId}$`));
 
@@ -72,24 +82,29 @@ async function walk(page: Page, request: Parameters<typeof seedPortalClient>[0],
 		await page.goto(path);
 		await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
 		await expect(page.locator('[aria-busy="true"]')).toHaveCount(0);
-		await expectPrivacyLink(page, `${path} at ${width}px`);
-		await expectNoSidewaysScroll(page, `${path} at ${width}px`);
+		await expectPrivacyLink(page, `${path} at ${width}`);
+		await expectNoSidewaysScroll(page, `${path} at ${width}`);
 	}
+
+	// `/` is the portal picker once the Client has two Engagements: a
+	// Portal screen outside `/portal`, drawn by the signed-out shell.
+	seedEngagement(clientId, practiceId);
+	await page.goto('/');
+	await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
+	await expect(page.getByRole('link', { name: /Riverside Doulas/ })).toHaveCount(2);
+	await expectPrivacyLink(page, `the portal picker at / at ${width}`);
+	await expectNoSidewaysScroll(page, `the portal picker at / at ${width}`);
 }
 
-test.describe('at 1280px', () => {
-	test.use({ viewport: { width: 1280, height: 800 } });
-
-	test('every Portal screen carries the Privacy Policy link in its footer', async ({ page, request }) => {
-		await walk(page, request, 1280);
-	});
+test('every Portal screen carries the Privacy Policy link in its footer', async ({ page, request }) => {
+	await walk(page, request, 'the default width');
 });
 
 test.describe('at 320px', () => {
 	test.use({ viewport: { width: 320, height: 640 } });
 
 	test('every Portal screen carries the Privacy Policy link in its footer', async ({ page, request }) => {
-		await walk(page, request, 320);
+		await walk(page, request, '320px');
 	});
 });
 
@@ -135,7 +150,6 @@ async function expectFitsInColumn(page: Page, path: string): Promise<void> {
 
 test('the link is complete and usable in a narrow column of a Practice website', async ({ page, request }) => {
 	test.setTimeout(120_000);
-	await page.setViewportSize({ width: 1280, height: 800 });
 
 	await page.goto('/portal/login');
 	for (const path of SIGNED_OUT_SCREENS) {

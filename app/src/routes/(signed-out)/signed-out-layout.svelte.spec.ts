@@ -2,25 +2,27 @@ import { createRawSnippet } from 'svelte';
 import { page } from 'vitest/browser';
 import { describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
+import { expectPrivacyLinkAfterMain } from '#lib/testPrivacyLink.js';
+import type { RootLanding } from './+page.js';
 import Layout from './+layout.svelte';
 
 // `data` stands in for `/`'s own load result (`+page.ts`'s `RootLanding`);
 // every other screen in this group loads no `type` at all.
+type LayoutData = Partial<Pick<RootLanding, 'type'>>;
+
 const pageState = vi.hoisted(() => ({
 	params: {},
 	url: new URL('http://localhost/'),
-	data: {} as { type?: string }
+	data: {}
 }));
 vi.mock('$app/state', () => ({ page: pageState }));
 
-async function setup(data: { type?: string }) {
+async function setup(data: LayoutData) {
 	pageState.data = data;
 	await render(Layout, {
 		children: createRawSnippet(() => ({ render: () => '<p>child content</p>' }))
 	});
 }
-
-const privacyLink = () => page.getByRole('link', { name: 'Privacy Policy (opens in new tab)' });
 
 describe('the signed-out shell', () => {
 	it('renders its children inside the main landmark', async () => {
@@ -37,19 +39,16 @@ describe('the signed-out shell', () => {
 	it('carries the Portal footer on the portal picker at /', async () => {
 		await setup({ type: 'portal-picker' });
 
-		const link = page.getByRole('contentinfo').getByRole('link', { name: 'Privacy Policy (opens in new tab)' });
-		await expect.element(link).toBeVisible();
-		const main = page.getByRole('main').element();
-		expect(main.compareDocumentPosition(link.element()) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+		await expectPrivacyLinkAfterMain();
 	});
 
-	it.each([{ type: 'staff-picker' }, { type: 'signed-out' }, {}])(
+	it.each<LayoutData>([{ type: 'staff-picker' }, { type: 'signed-out' }, {}])(
 		'carries no Portal footer on a screen a Client is not reading (%o)',
 		async (data) => {
 			await setup(data);
 
 			await expect.element(page.getByText('child content')).toBeVisible();
-			await expect.element(privacyLink()).not.toBeInTheDocument();
+			await expect.element(page.getByRole('contentinfo')).not.toBeInTheDocument();
 		}
 	);
 });
