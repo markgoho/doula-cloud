@@ -2,6 +2,9 @@ import type { ComponentProps } from 'svelte';
 import { page } from 'vitest/browser';
 import { describe, expect, it } from 'vitest';
 import { render } from 'vitest-browser-svelte';
+// The app's own stylesheet, for `.visually-hidden`: whether "(opens in new
+// tab)" is drawn is a fact about that rule, which a bare render lacks.
+import '#lib/styles/app.css';
 import Link from './Link.svelte';
 
 type SetupOptions = Partial<ComponentProps<typeof Link>>;
@@ -63,6 +66,28 @@ describe('Link.svelte', () => {
 		await expect
 			.element(page.getByRole('link', { name: 'Visit site (opens in new tab)' }))
 			.toBeVisible();
+	});
+
+	/*
+	 * #1558: GOV.UK's own rule puts "(opens in new tab)" in the link's
+	 * visible text, not only in its accessible name. Visually hidden text
+	 * is clipped to a 1px box, so its drawn width tells the two apart.
+	 */
+	it('draws "(opens in new tab)" as visible text when newTabTextVisible is set', async () => {
+		await setup({ href: 'https://example.com', label: 'Privacy Policy', newTabTextVisible: true });
+
+		await expect
+			.element(page.getByRole('link', { name: 'Privacy Policy (opens in new tab)' }))
+			.toBeVisible();
+		const text = page.getByText('Privacy Policy (opens in new tab)', { exact: true }).element();
+		expect(text.getBoundingClientRect().width).toBeGreaterThan(1);
+	});
+
+	it('keeps "(opens in new tab)" out of sight by default', async () => {
+		await setup({ href: 'https://example.com', label: 'Visit site' });
+
+		const notice = page.getByText('(opens in new tab)').element();
+		expect(notice.getBoundingClientRect().width).toBeLessThanOrEqual(1);
 	});
 
 	it('renders no icon and no "opens in new tab" text for an internal link', async () => {

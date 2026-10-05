@@ -38,6 +38,15 @@
 		 * link's destination apart from the "Your care" nav item beside it.
 		 */
 		ariaLabel?: string;
+		/*
+		 * Draws the "(opens in new tab)" an external link already carries,
+		 * rather than keeping it for assistive technology alone. GOV.UK puts
+		 * it in the link's visible text, and the Portal's Privacy Policy
+		 * link (#1558) has to say so on screen. A prop rather than a label
+		 * that spells it out: the label would then name the tab twice in
+		 * the accessible name.
+		 */
+		newTabTextVisible?: boolean;
 	}
 
 	let {
@@ -47,7 +56,8 @@
 		icon,
 		current = false,
 		describedBy,
-		ariaLabel
+		ariaLabel,
+		newTabTextVisible = false
 	}: Properties = $props();
 
 	// Absolute (http(s)) or protocol-relative hrefs leave the app; every
@@ -70,10 +80,16 @@
 	{#if icon}
 		<Icon name={icon} size={16} />
 	{/if}
-	<span class="label">{label}</span>
-	{#if isExternal}
+	{#if isExternal && newTabTextVisible}
+		<!-- One shrinkable span, so the words wrap together at 320px and the icon stays beside them. -->
+		<span class="label">{label} (opens in new tab)</span>
 		<Icon name="arrow-square-out" size={16} />
-		<span class="visually-hidden">(opens in new tab)</span>
+	{:else}
+		<span class="label">{label}</span>
+		{#if isExternal}
+			<Icon name="arrow-square-out" size={16} />
+			<span class="visually-hidden">(opens in new tab)</span>
+		{/if}
 	{/if}
 </a>
 

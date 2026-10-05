@@ -242,6 +242,18 @@ describe('Client portal authenticated layout', () => {
 	});
 });
 
+describe('the Privacy Policy link (#1558)', () => {
+	it('carries the link in the footer, after the main content, on every screen this layout wraps', async () => {
+		await setup({ pathname: '/portal/engagements/engagement-1/contract' });
+
+		const link = page.getByRole('contentinfo').getByRole('link', { name: 'Privacy Policy (opens in new tab)' });
+		await expect.element(link).toBeVisible();
+		await expect.element(link).toHaveAttribute('href', 'https://doula.cloud/privacy');
+		const main = page.getByRole('main').element();
+		expect(main.compareDocumentPosition(link.element()) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+	});
+});
+
 describe('the Pilot banner and Feedback drawer (#1528)', () => {
 	it('shows the Portal banner sentence on every screen this layout wraps', async () => {
 		await setup();

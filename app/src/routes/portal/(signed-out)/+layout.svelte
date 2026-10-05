@@ -1,5 +1,6 @@
 <script lang="ts">
 	import Link from '#lib/components/atoms/Link.svelte';
+	import PortalFooter from '#lib/components/organisms/PortalFooter.svelte';
 	import SignedOutTopBar from '#lib/components/organisms/SignedOutTopBar.svelte';
 
 	/*
@@ -22,3 +23,5 @@
 <main id="main" tabindex="-1">
 	{@render children()}
 </main>
+<!-- #1558: the same footer, in the same place, as every signed-in Portal screen. -->
+<PortalFooter />
