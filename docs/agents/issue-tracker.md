@@ -104,6 +104,20 @@ A decision ticket (a grilling, prototype or research ticket, or any ticket whose
 
 Run `gh issue view <number> --comments`.
 
+## When a skill says "resolve the ticket the way the issue tracker closes work"
+
+A ticket closes through a PR that merges into `trunk`. The PR lands by the steps in `docs/agents/worktree-flow.md`. These are the steps that close the ticket, and they are not done until all of them are done. Stopping at "the PR is ready" leaves the work open ([#1767](https://github.com/markgoho/doula-cloud/issues/1767)).
+
+1. **The PR body has `Closes #<ticket>`** for each ticket it builds. A `(#N)` in the title alone links nothing.
+2. **Tick every acceptance box** on each ticket, checked against the committed code, before the merge. A box the code does not meet stays unticked, and the ticket stays open.
+3. **Queue the merge**: `gh pr merge <PR> --squash --auto`. Then wait for `MERGED`, as `worktree-flow.md` step 7 says.
+4. **Set each ticket's Status to `Done`** after the merge, by node id (the ids are in `docs/agents/triage-labels.md`).
+5. **A parent does not close here.** It closes by hand when its last sub-issue closes (see "A parent stays open until every sub-issue is closed" above).
+
+One PR may close several tickets: `/implement-spec` lands a whole parent on one integration branch and one PR. Each ticket still gets its own `Closes #N` line and its own ticked boxes.
+
+**Which skill builds a parent's sub-issues.** When 3 or more sub-issues are ready and no one of them blocks another, use `/implement-spec`. When fewer are ready, use `/implement` on each ticket in turn. The rule comes from the trial on #1505 (PR #1766): with 2 tickets, the merge agents and the review fix took most of the run, and the time saving from parallel work was small.
+
 ## Wayfinding operations
 
 Used by `/wayfinder`. The **map** is a single issue with **child** issues as tickets.
