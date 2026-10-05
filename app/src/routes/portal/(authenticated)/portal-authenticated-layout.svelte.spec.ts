@@ -3,6 +3,7 @@ import { page } from 'vitest/browser';
 import { describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import { jsonResponse } from '#lib/testResponse.js';
+import { expectPrivacyLinkAfterMain } from '#lib/testPrivacyLink.js';
 import type { SignOutOutcome } from '#lib/signOut.js';
 import Layout from './+layout.svelte';
 
@@ -239,6 +240,14 @@ describe('Client portal authenticated layout', () => {
 
 		await expect.element(page.getByRole('banner')).toBeVisible();
 		await expect.element(page.getByRole('button', { name: /Your account/ })).not.toBeInTheDocument();
+	});
+});
+
+describe('the Privacy Policy link (#1558)', () => {
+	it('carries the link in the footer, after the main content, on every screen this layout wraps', async () => {
+		await setup({ pathname: '/portal/engagements/engagement-1/contract' });
+
+		await expectPrivacyLinkAfterMain();
 	});
 });
 

@@ -55,6 +55,7 @@
 	// (see `resolve()` call sites), so this alone tells external apart from
 	// internal without a redundant `external` prop for callers to keep in sync.
 	const isExternal = $derived(/^(https?:)?\/\//.test(href));
+	const text = $derived(isExternal ? `${label} (opens in new tab)` : label);
 </script>
 
 <a
@@ -70,10 +71,15 @@
 	{#if icon}
 		<Icon name={icon} size={16} />
 	{/if}
-	<span class="label">{label}</span>
+	<!--
+		The new-tab words are drawn inside the label, not hidden beside it
+		(#1557): GOV.UK's Links style puts "(opens in new tab)" in the link
+		text a sighted reader sees too. Inside `.label`, so the words wrap
+		with the label at 320px rather than being a flex item that cannot.
+	-->
+	<span class="label">{text}</span>
 	{#if isExternal}
 		<Icon name="arrow-square-out" size={16} />
-		<span class="visually-hidden">(opens in new tab)</span>
 	{/if}
 </a>
 
@@ -106,9 +112,10 @@
 		 * itself break inside the width flexbox now allows it to take,
 		 * since a URL still has no space or hyphen to wrap at normally.
 		 * The anchor stays a `nowrap` flex row (no `flex-wrap` here), so
-		 * the label is the only thing that wraps -- the leading icon, the
-		 * trailing external-link icon and its hidden text stay pinned
-		 * beside it rather than ever landing on a row of their own.
+		 * the label is the only thing that wraps -- the leading icon and the
+		 * trailing external-link icon stay pinned beside it rather than ever
+		 * landing on a row of their own. The "(opens in new tab)" words are
+		 * part of the label (#1557), so they wrap with it.
 		 */
 		.label {
 			min-inline-size: 0;

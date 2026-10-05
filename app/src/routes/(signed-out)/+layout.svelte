@@ -1,6 +1,9 @@
 <script lang="ts">
 	import Link from '#lib/components/atoms/Link.svelte';
+	import { page } from '#lib/appState.svelte.js';
+	import PortalFooter from '#lib/components/organisms/PortalFooter.svelte';
 	import SignedOutTopBar from '#lib/components/organisms/SignedOutTopBar.svelte';
+	import type { RootLanding } from './+page.js';
 
 	/*
 	 * The chrome for archetype A: login, signup, accept-invite and the
@@ -33,6 +36,22 @@
 	 * page instantiates (ADR-0018).
 	 */
 	let { children } = $props();
+
+	/*
+	 * `/`'s portal picker is a Portal screen: a signed-in Client choosing an
+	 * Engagement, or told she has none. So it carries the Portal's own
+	 * footer, in the same place as every other Portal screen (#1558). No
+	 * other screen in this group is read by a Client, and `/` only knows
+	 * which population is reading once its load resolves. Narrowed through
+	 * `RootLanding`, so a renamed variant there fails the type check here.
+	 */
+	function isPortalPicker(
+		data: Record<string, unknown>
+	): data is Extract<RootLanding, { type: 'portal-picker' }> {
+		return data.type === ('portal-picker' satisfies RootLanding['type']);
+	}
+
+	const isPortalScreen = $derived(isPortalPicker(page.data));
 </script>
 
 <Link href="#main" label="Skip to main content" variant="skip" />
@@ -40,3 +59,6 @@
 <main id="main" tabindex="-1">
 	{@render children()}
 </main>
+{#if isPortalScreen}
+	<PortalFooter />
+{/if}

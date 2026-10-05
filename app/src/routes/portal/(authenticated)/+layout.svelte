@@ -16,6 +16,7 @@
 	import { sendPortalFeedback } from '#lib/feedback.js';
 	import Link from '#lib/components/atoms/Link.svelte';
 	import PortalFeedback from '#lib/components/organisms/PortalFeedback.svelte';
+	import PortalFooter from '#lib/components/organisms/PortalFooter.svelte';
 	import PortalTopBar from '#lib/components/organisms/PortalTopBar.svelte';
 	import type { NavItem } from '#lib/components/organisms/StaffTopBar.svelte';
 
@@ -209,3 +210,5 @@
 <main id="main" tabindex="-1">
 	{@render children()}
 </main>
+<!-- #1558: the same footer, in the same place, as the signed-out Portal screens. -->
+<PortalFooter />
