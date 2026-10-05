@@ -13,9 +13,20 @@
 	import { page } from '$app/state';
 	import { resolve } from '$app/paths';
 	import Link from '#lib/components/atoms/Link.svelte';
+	import PortalFooter from '#lib/components/organisms/PortalFooter.svelte';
 	import SignedOutTopBar from '#lib/components/organisms/SignedOutTopBar.svelte';
 	import ErrorPage from '#lib/components/templates/ErrorPage.svelte';
 	import { errorKindForStatus } from '#lib/errorPage.js';
+
+	/*
+	 * No `portal/+error.svelte` exists, so a Portal 404 or 500 renders this
+	 * boundary with no Portal layout above it. The address alone says it is
+	 * a Portal screen, and every Portal screen carries the Portal's footer
+	 * (#1558). `/portal` itself or below it, never a sibling like `/portalx`.
+	 */
+	const isPortalPath = $derived(
+		page.url.pathname === '/portal' || page.url.pathname.startsWith('/portal/')
+	);
 </script>
 
 <Link href="#main" label="Skip to main content" variant="skip" />
@@ -27,3 +38,6 @@
 		wayOutLabel="Log in"
 	/>
 </main>
+{#if isPortalPath}
+	<PortalFooter />
+{/if}

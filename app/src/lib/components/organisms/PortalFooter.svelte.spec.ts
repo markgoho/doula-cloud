@@ -29,6 +29,20 @@ describe('PortalFooter.svelte', () => {
 			.toBeVisible();
 	});
 
+	// The brief's Density and Fitts's Law rule: no hit target under 44px.
+	// The default width runs first, before any test pins the viewport.
+	it.each([
+		['the default width', undefined],
+		['320px', 320]
+	] as const)('gives the link a hit target of 44px or more at %s', async (_, width) => {
+		if (width) await page.viewport(width, 640);
+		await setup();
+
+		const link = page.getByRole('link', { name: 'Privacy Policy (opens in new tab)' });
+		await expect.element(link).toBeVisible();
+		expect(link.element().getBoundingClientRect().height).toBeGreaterThanOrEqual(44);
+	});
+
 	// ADR-0053: the link is a notice. Nothing here asks her to agree.
 	it('asks for no agreement', async () => {
 		await setup();

@@ -434,7 +434,7 @@ describe('step two -- the Privacy Policy notice (#1557)', () => {
 
 		const notice = testPage.getByText(/tells you what DoulaCloud holds\s+about you/);
 		await expect.element(notice).not.toHaveTextContent(/agree|consent|accept/i);
-		expect(testPage.getByRole('checkbox').elements()).toHaveLength(0);
+		await expect.element(testPage.getByRole('checkbox')).not.toBeInTheDocument();
 	});
 });
 
