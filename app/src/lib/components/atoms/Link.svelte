@@ -38,15 +38,6 @@
 		 * link's destination apart from the "Your care" nav item beside it.
 		 */
 		ariaLabel?: string;
-		/*
-		 * Draws the "(opens in new tab)" an external link already carries,
-		 * rather than keeping it for assistive technology alone. GOV.UK puts
-		 * it in the link's visible text, and the Portal's Privacy Policy
-		 * link (#1558) has to say so on screen. A prop rather than a label
-		 * that spells it out: the label would then name the tab twice in
-		 * the accessible name.
-		 */
-		newTabTextVisible?: boolean;
 	}
 
 	let {
@@ -56,8 +47,7 @@
 		icon,
 		current = false,
 		describedBy,
-		ariaLabel,
-		newTabTextVisible = false
+		ariaLabel
 	}: Properties = $props();
 
 	// Absolute (http(s)) or protocol-relative hrefs leave the app; every
@@ -65,6 +55,7 @@
 	// (see `resolve()` call sites), so this alone tells external apart from
 	// internal without a redundant `external` prop for callers to keep in sync.
 	const isExternal = $derived(/^(https?:)?\/\//.test(href));
+	const text = $derived(isExternal ? `${label} (opens in new tab)` : label);
 </script>
 
 <a
@@ -80,16 +71,15 @@
 	{#if icon}
 		<Icon name={icon} size={16} />
 	{/if}
-	{#if isExternal && newTabTextVisible}
-		<!-- One shrinkable span, so the words wrap together at 320px and the icon stays beside them. -->
-		<span class="label">{label} (opens in new tab)</span>
+	<!--
+		The new-tab words are drawn inside the label, not hidden beside it
+		(#1557): GOV.UK's Links style puts "(opens in new tab)" in the link
+		text a sighted reader sees too. Inside `.label`, so the words wrap
+		with the label at 320px rather than being a flex item that cannot.
+	-->
+	<span class="label">{text}</span>
+	{#if isExternal}
 		<Icon name="arrow-square-out" size={16} />
-	{:else}
-		<span class="label">{label}</span>
-		{#if isExternal}
-			<Icon name="arrow-square-out" size={16} />
-			<span class="visually-hidden">(opens in new tab)</span>
-		{/if}
 	{/if}
 </a>
 

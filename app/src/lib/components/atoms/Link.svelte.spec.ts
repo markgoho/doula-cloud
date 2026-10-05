@@ -2,9 +2,6 @@ import type { ComponentProps } from 'svelte';
 import { page } from 'vitest/browser';
 import { describe, expect, it } from 'vitest';
 import { render } from 'vitest-browser-svelte';
-// The app's own stylesheet, for `.visually-hidden`: whether "(opens in new
-// tab)" is drawn is a fact about that rule, which a bare render lacks.
-import '#lib/styles/app.css';
 import Link from './Link.svelte';
 
 type SetupOptions = Partial<ComponentProps<typeof Link>>;
@@ -68,26 +65,16 @@ describe('Link.svelte', () => {
 			.toBeVisible();
 	});
 
-	/*
-	 * #1558: GOV.UK's own rule puts "(opens in new tab)" in the link's
-	 * visible text, not only in its accessible name. Visually hidden text
-	 * is clipped to a 1px box, so its drawn width tells the two apart.
-	 */
-	it('draws "(opens in new tab)" as visible text when newTabTextVisible is set', async () => {
-		await setup({ href: 'https://example.com', label: 'Privacy Policy', newTabTextVisible: true });
+	// GOV.UK's Links style (#1557): a sighted reader is told too, not only
+	// a screen reader, so the words are drawn, never visually hidden.
+	// `querySelector` because no accessible query can tell: `toBeVisible`
+	// passes on a clipped `.visually-hidden` span, and the accessible name
+	// is the same either way.
+	it('draws "(opens in new tab)" as visible text of an external link', async () => {
+		const { container } = await setup({ href: 'https://example.com', label: 'Visit site' });
 
-		await expect
-			.element(page.getByRole('link', { name: 'Privacy Policy (opens in new tab)' }))
-			.toBeVisible();
-		const text = page.getByText('Privacy Policy (opens in new tab)', { exact: true }).element();
-		expect(text.getBoundingClientRect().width).toBeGreaterThan(1);
-	});
-
-	it('keeps "(opens in new tab)" out of sight by default', async () => {
-		await setup({ href: 'https://example.com', label: 'Visit site' });
-
-		const notice = page.getByText('(opens in new tab)').element();
-		expect(notice.getBoundingClientRect().width).toBeLessThanOrEqual(1);
+		expect(container.querySelector('.visually-hidden')).toBeNull();
+		await expect.element(page.getByText('Visit site (opens in new tab)')).toBeVisible();
 	});
 
 	it('renders no icon and no "opens in new tab" text for an internal link', async () => {

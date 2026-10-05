@@ -13,20 +13,15 @@
 	 * checkbox, nothing written when she follows it.
 	 *
 	 * `secondary`, not `primary`: the accent is spent on each screen's own
-	 * action, and a footer link in the accent would compete with it. The
-	 * words "(opens in new tab)" are drawn, as GOV.UK's guidance asks.
+	 * action, and a footer link in the accent would compete with it. `Link`
+	 * itself draws "(opens in new tab)" for an external href (#1557).
 	 *
 	 * It takes no props, so no Practice content can reach it.
 	 */
 </script>
 
 <footer>
-	<Link
-		href={privacyPolicyUrl}
-		label="Privacy Policy"
-		variant="secondary"
-		newTabTextVisible
-	/>
+	<Link href={privacyPolicyUrl} label="Privacy Policy" variant="secondary" />
 </footer>
 
 <style>
