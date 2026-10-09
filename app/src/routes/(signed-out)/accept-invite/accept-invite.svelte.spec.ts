@@ -330,6 +330,19 @@ describe('step two -- a person who is new here', () => {
 			.toHaveFocus();
 	});
 
+	it('refuses each empty name on its own, before anything is sent', async () => {
+		await setup();
+		await identify('signup');
+		await firstNameField().fill('Lena');
+		await stateField().selectOptions('New Jersey');
+
+		await acceptButton().click();
+
+		await expect.element(testPage.getByRole('link', { name: 'Enter your last name' })).toBeVisible();
+		expect(testPage.getByRole('link', { name: 'Enter your first name' }).elements()).toHaveLength(0);
+		expect(globalFetch).not.toHaveBeenCalledWith('/api/staff/accept-invite', expect.anything());
+	});
+
 	it('sends the name and the USPS code she chose, with the Bearer token', async () => {
 		await setup();
 
