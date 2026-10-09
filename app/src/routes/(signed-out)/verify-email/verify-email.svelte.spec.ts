@@ -1,5 +1,5 @@
 import { page as testPage } from 'vitest/browser';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import { expectOneFramedHeading } from '#lib/components/templates/pageFrame.testing.js';
 import Page from './+page.svelte';
@@ -19,7 +19,13 @@ const pageState = vi.hoisted(() => ({
 vi.mock('$app/state', () => ({ page: pageState }));
 
 vi.mock('#lib/firebase.js', () => ({ getFirebaseAuth: () => ({ currentUser: undefined }) }));
-vi.mock('#lib/api.js', () => ({ apiBaseURL: () => '' }));
+const probeSession = vi.hoisted(() => vi.fn());
+vi.mock('#lib/api.js', () => ({ apiBaseURL: () => '', probeSession }));
+
+beforeEach(() => {
+	probeSession.mockReset();
+	probeSession.mockResolvedValue(undefined);
+});
 
 afterEach(() => {
 	vi.unstubAllGlobals();
@@ -49,6 +55,16 @@ describe('verifying an email address', () => {
 		await expect.element(testPage.getByText('Your email address is verified.')).toBeVisible();
 		await expect.element(testPage.getByRole('link', { name: 'Continue to log in' })).toBeVisible();
 		await expectOneFramedHeading(fixture.readyText);
+	});
+
+	// #1504: the Owner who signed up in this browser is still signed in, so
+	// the link goes to her Practice and says so, not to a login screen.
+	it('names where the link goes for a person who is signed in', async () => {
+		probeSession.mockResolvedValue({ staffId: 'staff-1' });
+		await setup({ token: 'token-1', respond: () => Promise.resolve(new Response(undefined, { status: 204 })) });
+
+		await expect.element(testPage.getByRole('link', { name: 'Go to your Practice' })).toHaveAttribute('href', '/');
+		expect(testPage.getByRole('link', { name: 'Continue to log in' }).elements()).toHaveLength(0);
 	});
 
 	// A failed link is not a refused form, so the tab title carries no

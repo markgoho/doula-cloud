@@ -3,7 +3,8 @@
 	import { page } from '#lib/appState.svelte.js';
 	import { resolve } from '$app/paths';
 	import { getFirebaseAuth } from '#lib/firebase.js';
-	import { apiBaseURL } from '#lib/api.js';
+	import { apiBaseURL, probeSession } from '#lib/api.js';
+	import type { SessionInfo } from '#lib/landing.js';
 	import { refusalMessage, SERVICE_PROBLEM } from '#lib/formErrors.js';
 	import Notice from '#lib/components/atoms/Notice.svelte';
 	import Link from '#lib/components/atoms/Link.svelte';
@@ -13,6 +14,10 @@
 
 	let status = $state<'checking' | 'verified' | 'failed'>('checking');
 	let errorMessage = $state('');
+	// #1504: the link is spent in whatever browser she opens it in. In the
+	// one she signed up in she is still signed in, and "Continue to log in"
+	// would misname where the link goes.
+	let isSignedIn = $state(false);
 
 	onMount(async () => {
 		if (!token) {
@@ -44,6 +49,7 @@
 				await user.reload();
 				await user.getIdToken(true);
 			}
+			isSignedIn = (await probeSession<SessionInfo>('/api/staff/session')) !== undefined;
 			status = 'verified';
 		} catch {
 			errorMessage = SERVICE_PROBLEM;
@@ -63,7 +69,11 @@
 			<Notice variant="info" message="Checking your link…" />
 		{:else if status === 'verified'}
 			<Notice variant="status" message="Your email address is verified." />
-			<Link href={resolve('/(signed-out)/login')} label="Continue to log in" />
+			{#if isSignedIn}
+				<Link href={resolve('/(signed-out)')} label="Go to your Practice" />
+			{:else}
+				<Link href={resolve('/(signed-out)/login')} label="Continue to log in" />
+			{/if}
 		{:else}
 			<Notice variant="error" message={errorMessage} />
 		{/if}

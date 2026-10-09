@@ -42,13 +42,21 @@
 	import { resolve } from '$app/paths';
 	import { page } from '#lib/appState.svelte.js';
 	import { getFirebaseAuth } from '#lib/firebase.js';
-	import { apiBaseURL, probeSession } from '#lib/api.js';
-	import { passwordReauthRefusal, refusalMessage, refusalOrConfirmable, totpCodeRefusal } from '#lib/formErrors.js';
+	import { apiBaseURL, apiFetchWithSession, probeSession } from '#lib/api.js';
+	import {
+		isUnverifiedEmail,
+		passwordReauthRefusal,
+		refusalMessage,
+		refusalOrConfirmable,
+		totpCodeRefusal,
+		UNVERIFIED_EMAIL
+	} from '#lib/formErrors.js';
 	import { FormSubmission, orServiceProblem } from '#lib/formSubmission.svelte.js';
 	import type { SessionInfo } from '#lib/landing.js';
 	import TextInput from '#lib/components/atoms/TextInput.svelte';
 	import Button from '#lib/components/atoms/Button.svelte';
 	import Text from '#lib/components/atoms/Text.svelte';
+	import Notice from '#lib/components/atoms/Notice.svelte';
 	import WarningText from '#lib/components/atoms/WarningText.svelte';
 	import LabeledField from '#lib/components/molecules/LabeledField.svelte';
 	import StackedForm from '#lib/components/molecules/StackedForm.svelte';
@@ -64,7 +72,7 @@
 	// final submit -- "Confirm and turn on" is the deliberate press that
 	// mints a session, the same reasoning the sign-in page's Continue
 	// button uses.
-	let step = $state<'password' | 'setup' | 'confirm-sign-out'>('password');
+	let step = $state<'password' | 'verify-email' | 'setup' | 'confirm-sign-out'>('password');
 	let email = $state('');
 	let password = $state('');
 	let code = $state('');
@@ -141,12 +149,59 @@
 			const credential = await signInWithEmailAndPassword(getFirebaseAuth(), email, password);
 			enrollingUser = credential.user;
 
-			const session = await multiFactor(enrollingUser).getSession();
-			totpSecret = await TotpMultiFactorGenerator.generateSecret(session);
-			qrCodeDataUrl = await QRCode.toDataURL(totpSecret.generateQrCodeUrl(email, 'DoulaCloud'));
-			secretKey = totpSecret.secretKey;
-			step = 'setup';
+			await openEnrollmentSession(enrollingUser);
 		}, (refusal) => (Array.isArray(refusal) ? refusal : [passwordReauthRefusal(refusal, passwordId)]));
+	}
+
+	/*
+	 * Identity Platform refuses a second factor for an address no one has
+	 * proven (#1504), and a new Owner arrives here before the message
+	 * signup sent has reached her. So verification comes first: the
+	 * sign-in just made reports whether the address is verified, and the
+	 * platform's own refusal is caught too, for the race where she
+	 * verified or changed it between the two. Either way she is told what
+	 * to do, never shown a QR code step that cannot succeed.
+	 */
+	async function openEnrollmentSession(user: User): Promise<void> {
+		if (!user.emailVerified) {
+			step = 'verify-email';
+			return;
+		}
+		try {
+			const session = await multiFactor(user).getSession();
+			totpSecret = await TotpMultiFactorGenerator.generateSecret(session);
+		} catch (error) {
+			if (!isUnverifiedEmail(error)) throw error;
+			step = 'verify-email';
+			return;
+		}
+		qrCodeDataUrl = await QRCode.toDataURL(totpSecret.generateQrCodeUrl(email, 'DoulaCloud'));
+		secretKey = totpSecret.secretKey;
+		step = 'setup';
+	}
+
+	// "I have verified my email address": reads the account's current flag
+	// and moves on only when it is set.
+	async function handleCheckVerified(): Promise<void> {
+		await submission.run(async () => {
+			await enrollingUser!.reload();
+			if (!enrollingUser!.emailVerified) {
+				return [{ message: UNVERIFIED_EMAIL }];
+			}
+			// The cached token still says email_verified: false.
+			await enrollingUser!.getIdToken(true);
+			await openEnrollmentSession(enrollingUser!);
+		}, orServiceProblem);
+	}
+
+	let resendNotice = $state('');
+	async function handleResendVerification(): Promise<void> {
+		resendNotice = '';
+		await submission.run(async () => {
+			const response = await apiFetchWithSession('/api/staff/verify-email/request', { method: 'POST' });
+			if (!response.ok) return [{ message: await refusalMessage(response) }];
+			resendNotice = `We've sent a new verification link to ${email}.`;
+		}, orServiceProblem);
 	}
 
 	/*
@@ -280,6 +335,28 @@
 			</LabeledField>
 			<Button type="submit" label="Continue" loading={submission.isSubmitting} />
 		</StackedForm>
+	{:else if step === 'verify-email'}
+		<!--
+			#1504: verification comes before enrollment. Nothing here is a
+			field -- both presses are deliberate acts, so no form.
+		-->
+		<h2>Verify your email address first</h2>
+		<Text text="We sent a link to {email}. Open it, then come back and press the button." />
+		{#if resendNotice}
+			<Notice variant="status" message={resendNotice} />
+		{/if}
+		<Button
+			type="button"
+			label="I have verified my email address"
+			loading={submission.isSubmitting}
+			onClick={handleCheckVerified}
+		/>
+		<Button
+			type="button"
+			label="Send a new verification link"
+			variant="secondary"
+			onClick={handleResendVerification}
+		/>
 	{:else if step === 'confirm-sign-out'}
 		<!--
 			#816: the warning goes on the button that acts, not on a screen

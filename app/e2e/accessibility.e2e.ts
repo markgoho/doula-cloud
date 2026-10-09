@@ -9,7 +9,7 @@ import {
 	PORTAL_CLIENT_PASSWORD
 } from './portalClient';
 import { seedEngagement, seedEngagementRequest, seedInvoice } from './stack';
-import { enterPracticeAsEnrolled } from './mfa';
+import { enterPracticeAsEnrolled, verifyEmail } from './mfa';
 import { seedAccountWithNoPractice } from './staffSignup';
 import { stubTotpFactor } from './totpStub';
 import { WCAG_TAGS } from './wcag';
@@ -269,7 +269,10 @@ test('Archetype A -- the two screens behind a session with no Practice', async (
 	request,
 	context
 }) => {
-	const { headers, password, email } = await seedAccountWithNoPractice(request);
+	const { headers, password, email, localId } = await seedAccountWithNoPractice(request);
+	// #1504: an unverified address is shown the verify-first step, so step
+	// two's QR code is reached only once the address is verified.
+	await verifyEmail(request, localId);
 	const token = headers.Cookie.replace('__session=', '');
 	await context.addCookies([
 		{ name: '__session', value: token, url: PREVIEW_SERVER_ORIGIN, httpOnly: true, secure: false, sameSite: 'Lax' }
