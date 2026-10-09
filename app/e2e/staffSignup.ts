@@ -117,6 +117,10 @@ export interface SeededNoPracticeAccount {
 	email: string;
 	password: string;
 	headers: { Cookie: string };
+	// The Identity Platform account id, for mfa.ts's verifyEmail: this
+	// account's address is unverified, and `mfa/enroll` shows its verify-first
+	// step rather than the QR code until it is (#1504).
+	localId: string;
 }
 
 /**
@@ -145,9 +149,9 @@ export async function seedAccountWithNoPractice(request: APIRequestContext): Pro
 		{ data: { email, password, returnSecureToken: true } }
 	);
 	expect(signUp.ok(), `no-practice account signUp failed: ${signUp.status()} ${await signUp.text()}`).toBe(true);
-	const { idToken } = await signUp.json();
+	const { idToken, localId } = await signUp.json();
 
 	const headers = await signIn(request, API_URL, idToken);
 
-	return { email, password, headers };
+	return { email, password, headers, localId };
 }
