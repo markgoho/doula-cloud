@@ -57,7 +57,8 @@ const SubjectClient = "client"
 // initiate/restore/finalize, and payments', practicerate's,
 // practicetimezone's and oncall's own settings writes (billing mode,
 // payment terms, the Connect nudge, the rate card, the timezone, the
-// on-call settings) all write against it. Exported for the same reason
+// on-call settings), and staffauth's second-factor act seam (#1532's
+// refusal of one of the five acts) all write against it. Exported for the same reason
 // SubjectClient is -- a second write site is exactly the drift this
 // prevents.
 const SubjectPractice = "practice"

@@ -50,6 +50,17 @@ const (
 	// ... does not send the browser to the login screen"). #842 moves it
 	// here from staffauth's own local APIError copy.
 	CodeMFARequired Code = "MFA_REQUIRED"
+	// CodeSecondFactorRequired is #1532's refusal of one act, not of a
+	// Practice: the caller may be inside this Practice, and this one act
+	// -- the archive, starting Practice deletion, erasing a Client,
+	// vouching for a Staff member, turning on "require MFA for all
+	// staff" -- needs a second factor she does not have (ADR-0026's
+	// amendment for #1492). staffauth's act seam writes it. Its own code,
+	// not CodeMFARequired: that one means "this Practice's door is shut
+	// to you", and the app answers it by sending her to enrollment from
+	// wherever she was; this one leaves her on the screen she is on,
+	// which already told her the act needs a second factor.
+	CodeSecondFactorRequired Code = "SECOND_FACTOR_REQUIRED"
 	// CodePracticePendingDeletion is #871's Practice-scoped boundary
 	// refusal: a live, valid session, and a Practice whose deletion is
 	// pending. staffauth.Middleware writes it for every route under that
@@ -118,7 +129,7 @@ const (
 // across the wire, so the error page asserted the one cause a status
 // code cannot actually name -- "your role does not have permission" --
 // for every 403 alike, including two that are not about a role at all.
-// Three codes, one per kind of thing a reader can do about it:
+// Four codes, one per kind of thing a reader can do about it:
 //
 //   - CodeForbidden -- a role refusal. CodeForStatus hands this to every
 //     403 that names no more specific reason, so it is also the default,
@@ -127,8 +138,11 @@ const (
 //     about the reader; a different Practice-level fact has to change.
 //   - CodeMFARequired -- a step the reader can take. Trying again does
 //     nothing, but enrolling a second factor and then trying again does.
+//   - CodeSecondFactorRequired -- the same step, asked of one act rather
+//     than of the whole Practice (#1532). The reader is inside the
+//     Practice; only this act waits for the second factor.
 //
-// A fourth kind of 403 needs a fourth code here and a fourth state on
+// A fifth kind of 403 needs a fifth code here and a fifth state on
 // the app's error page, not a fourth shade of the role-refusal copy.
 // TestEveryForbiddenWriteCarriesARecordedCode holds the set closed: a
 // literal http.StatusForbidden paired with a code outside it -- in an
@@ -137,6 +151,7 @@ var ForbiddenCodes = map[Code]bool{
 	CodeForbidden:               true,
 	CodePracticePendingDeletion: true,
 	CodeMFARequired:             true,
+	CodeSecondFactorRequired:    true,
 }
 
 // APIError is docs/api-design.md section 7's structured error shape.

@@ -32,6 +32,7 @@ const (
 	txKey              contextKey = "staffauth.tx"
 	readerKey          contextKey = "staffauth.reader"
 	pendingDeletionKey contextKey = "staffauth.pendingDeletion"
+	secondFactorKey    contextKey = "staffauth.secondFactor"
 )
 
 // StaffID returns the resolved Staff id for the current request.
@@ -126,6 +127,22 @@ func RequireConfirmed(w http.ResponseWriter, r *http.Request) (ok bool) {
 // low-privilege app_runtime role -- the role the RLS policies in
 // 00002_practice_staff_tenancy.sql apply to.
 func Middleware(db *sql.DB) func(http.Handler) http.Handler {
+	return middleware(db, false)
+}
+
+// middleware is Middleware, told whether the route it guards is one of
+// SecondFactorActs. GatedRouter is the only caller that passes true.
+//
+// isAct exists for one clause only, and only until #1531: the boundary
+// below still refuses an Owner with no second factor, and on an act's
+// route that refusal would stand in front of the act's own
+// (requireSecondFactor), so an Owner would meet "this Practice needs a
+// second factor" rather than "this act does". On an act's route the
+// boundary leaves the Owner case to the act's seam. The seam refuses
+// the same person, so nothing gets through that did not before. When
+// #1531 removes the Owner clause, isAct has nothing left to decide and
+// goes with it.
+func middleware(db *sql.DB, isAct bool) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			tx, uid, secondFactor, ok := authn.Begin(w, r, db, authn.TierStaff)
@@ -195,8 +212,10 @@ func Middleware(db *sql.DB) func(http.Handler) http.Handler {
 			// This is not an ended session (401 would send the browser to
 			// the login screen, per credentialed-fetch's own contract),
 			// so it is a distinct, machine-readable 403 the app branches
-			// on to route into enrollment instead.
-			if !secondFactor && (reader.Has(roleOwner) || requireMFA) {
+			// on to route into enrollment instead. On one of
+			// SecondFactorActs' routes the Owner half is left to the
+			// act's own seam (#1532) -- see middleware's isAct.
+			if !secondFactor && ((reader.Has(roleOwner) && !isAct) || requireMFA) {
 				writeMFARequired(w)
 				return
 			}
@@ -277,6 +296,7 @@ func Middleware(db *sql.DB) func(http.Handler) http.Handler {
 			ctx = context.WithValue(ctx, txKey, tx)
 			ctx = context.WithValue(ctx, readerKey, reader)
 			ctx = context.WithValue(ctx, pendingDeletionKey, pendingDeletion)
+			ctx = context.WithValue(ctx, secondFactorKey, secondFactor)
 			ctx = tasknudge.Begin(ctx)
 
 			next.ServeHTTP(w, r.WithContext(ctx))

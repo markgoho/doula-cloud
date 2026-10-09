@@ -30,6 +30,11 @@ type GatedRoute struct {
 	// Doula regardless of attachment) -- and carries its own non-empty
 	// Roles, checked the same way a GET's is.
 	Write bool
+	// SecondFactorAct names the act this route performs when it is one
+	// of SecondFactorActs, and is empty otherwise. Get and GatedWrite set
+	// it from that map as they mount the route, and place the act's seam
+	// (requireSecondFactor) in front of its handler (#1532).
+	SecondFactorAct string
 }
 
 // AnyStaff is the explicit opt-out for an endpoint every Staff member may
@@ -108,8 +113,21 @@ func (g *GatedRouter) Get(pattern string, roles []string, h http.Handler) {
 	if len(roles) == 0 {
 		panic(fmt.Sprintf("staffauth: GatedRouter.Get(%q): no roles declared -- pass staffauth.AnyStaff to open this endpoint on purpose", pattern))
 	}
-	g.routes = append(g.routes, GatedRoute{Method: http.MethodGet, Pattern: pattern, Roles: roles})
-	g.mux.Handle("GET "+pattern, Middleware(g.db)(requireAnyRole(roles, h)))
+	act := SecondFactorActs[http.MethodGet+" "+pattern]
+	g.routes = append(g.routes, GatedRoute{Method: http.MethodGet, Pattern: pattern, Roles: roles, SecondFactorAct: act})
+	g.mux.Handle("GET "+pattern, g.gated(act, roles, h))
+}
+
+// gated is the chain Get and GatedWrite mount: Middleware, then the
+// role check, then -- on a route SecondFactorActs names -- the act's
+// second-factor seam, then h. The seam sits after the role check so a
+// person refused the act by role meets that refusal, and before h, so
+// it sits outside any idempotency.Wrap h carries.
+func (g *GatedRouter) gated(act string, roles []string, h http.Handler) http.Handler {
+	if act == "" {
+		return Middleware(g.db)(requireAnyRole(roles, h))
+	}
+	return middleware(g.db, true)(requireAnyRole(roles, requireSecondFactor(act, h)))
 }
 
 // OpenGet mounts a GET that sits outside Middleware entirely, for reason.
@@ -185,8 +203,9 @@ func (g *GatedRouter) GatedWrite(pattern string, roles []string, h http.Handler)
 	if len(roles) == 0 {
 		panic(fmt.Sprintf("staffauth: GatedRouter.GatedWrite(%q): no roles declared -- pass staffauth.AnyStaff to open this write to any Staff member on purpose", pattern))
 	}
-	g.routes = append(g.routes, GatedRoute{Method: method, Pattern: path, Write: true, Roles: roles})
-	g.mux.Handle(pattern, Middleware(g.db)(requireAnyRole(roles, h)))
+	act := SecondFactorActs[pattern]
+	g.routes = append(g.routes, GatedRoute{Method: method, Pattern: path, Write: true, Roles: roles, SecondFactorAct: act})
+	g.mux.Handle(pattern, g.gated(act, roles, h))
 }
 
 // cutWritePattern is Write and GatedWrite's shared pattern parse: split
