@@ -271,33 +271,87 @@ describe('InvoiceSection.svelte', () => {
 			await setup({ billingMode: 'unset', clientsCanPay: false, hasClientEmail: false });
 
 			await expect.element(page.getByText('How does this Practice bill Clients?')).toBeVisible();
-			await expect.element(page.getByLabelText('Stripe')).toBeVisible();
-			await expect.element(page.getByLabelText('By hand')).toBeVisible();
+			await expect.element(page.getByLabelText('By card, through Stripe.')).toBeVisible();
+			await expect.element(page.getByLabelText('By hand.')).toBeVisible();
 			await expect.element(page.getByRole('button', { name: 'Create Invoice' })).toBeVisible();
 			await expect.element(page.getByText(/Clients cannot pay this Practice/)).not.toBeInTheDocument();
+		});
+
+		it('says the words of the question, the hint and both options (#1590)', async () => {
+			await setup({ billingMode: 'unset', clientsCanPay: true });
+
+			await expect.element(page.getByText('You answer this one time. A Practice Owner can change it later in Settings.')).toBeVisible();
+			await expect.element(page.getByText('DoulaCloud sends the bill and the Client pays by card.', { exact: true })).toBeVisible();
+			await expect
+				.element(page.getByText('This Practice sends the bill and collects the payment itself. You record each payment here.'))
+				.toBeVisible();
+		});
+
+		it('selects no option when the question opens (#1590)', async () => {
+			await setup({ billingMode: 'unset' });
+
+			await expect.element(page.getByLabelText('By card, through Stripe.')).not.toBeChecked();
+			await expect.element(page.getByLabelText('By hand.')).not.toBeChecked();
+		});
+
+		it('warns on the Stripe option, before the choice, when Clients cannot pay yet (#1590)', async () => {
+			await setup({ billingMode: 'unset', clientsCanPay: false });
+
+			await expect.element(page.getByText('A Practice Owner must connect Stripe first.', { exact: false })).toBeVisible();
+		});
+
+		it('does not warn when Clients can already pay (#1590)', async () => {
+			await setup({ billingMode: 'unset', clientsCanPay: true });
+
+			await expect.element(page.getByText('must connect Stripe first', { exact: false })).not.toBeInTheDocument();
 		});
 
 		it('submits the chosen mode on the first raise', async () => {
 			const { onCreate } = await setup({ billingMode: 'unset' });
 
-			await page.getByLabelText('By hand').click();
+			await page.getByLabelText('By hand.').click();
 			await page.getByRole('button', { name: 'Create Invoice' }).click();
 
 			expect(onCreate).toHaveBeenCalledWith('by_hand');
 		});
 
-		it('defaults to Stripe when submitted without changing the radio', async () => {
+		it('submits Stripe when that option is chosen', async () => {
+			const { onCreate } = await setup({ billingMode: 'unset' });
+
+			await page.getByLabelText('By card, through Stripe.').click();
+			await page.getByRole('button', { name: 'Create Invoice' }).click();
+
+			expect(onCreate).toHaveBeenCalledWith('stripe');
+		});
+
+		it('refuses a submit with no option chosen, names the question, and sends no request (#1590)', async () => {
 			const { onCreate } = await setup({ billingMode: 'unset' });
 
 			await page.getByRole('button', { name: 'Create Invoice' }).click();
 
-			expect(onCreate).toHaveBeenCalledWith('stripe');
+			expect(onCreate).not.toHaveBeenCalled();
+			await expect
+				.element(page.getByRole('link', { name: 'Select how this Practice bills Clients' }))
+				.toHaveAttribute('href', '#invoice-billing-mode-stripe');
+			await expect.element(page.getByLabelText('By card, through Stripe.')).toBeVisible();
+		});
+
+		it('clears the refusal once an option is chosen and the form is sent (#1590)', async () => {
+			const { onCreate } = await setup({ billingMode: 'unset' });
+
+			await page.getByRole('button', { name: 'Create Invoice' }).click();
+			await page.getByLabelText('By hand.').click();
+			await page.getByRole('button', { name: 'Create Invoice' }).click();
+
+			expect(onCreate).toHaveBeenCalledWith('by_hand');
+			await expect.element(page.getByRole('link', { name: 'Select how this Practice bills Clients' })).not.toBeInTheDocument();
 		});
 
 		it('shows an error when onCreate throws from the billing-mode ask', async () => {
 			const onCreate = vi.fn().mockRejectedValue(new Error('billing mode invalid'));
 			await setup({ billingMode: 'unset', onCreate });
 
+			await page.getByLabelText('By hand.').click();
 			await page.getByRole('button', { name: 'Create Invoice' }).click();
 
 			await expect.element(page.getByText('billing mode invalid')).toBeVisible();

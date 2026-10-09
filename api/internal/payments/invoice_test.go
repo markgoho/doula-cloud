@@ -1204,6 +1204,34 @@ func TestPostInvoiceHandler_FailedFirstInvoiceDoesNotLockInBillingMode(t *testin
 	}
 }
 
+// TestPostInvoiceHandler_RefusedForNoStripeAccountDoesNotLockInBillingMode
+// is #1590's case: a first Invoice refused because the Practice has no
+// Stripe account (409) saves no billing mode, so the next visit asks the
+// question again.
+func TestPostInvoiceHandler_RefusedForNoStripeAccountDoesNotLockInBillingMode(t *testing.T) {
+	db := testdb.New(t)
+	const uid = "invoice-no-stripe-account-not-locked-in"
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
+	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Has Email Client", "client@example.test")
+	seedSignedContract(t, db, engagementID)
+
+	srv, session := newInvoiceServer(t, db, uid, payments.NewFakeClient())
+	defer srv.Close()
+
+	resp := postInvoiceWithBillingMode(t, srv, session, practiceID, engagementID, string(payments.BillingModeStripe))
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusConflict {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusConflict)
+	}
+	if got := invoiceCount(t, db); got != 0 {
+		t.Fatalf("invoices row count = %d, want 0", got)
+	}
+	if _, ok, err := billingModeOfPractice(t, db, practiceID); err != nil || ok {
+		t.Fatalf("billing_mode = ok %v, err %v; want it left unset", ok, err)
+	}
+}
+
 // TestPostInvoiceHandler_ByHandInvoiceCreatedOpenNoStripeCall proves
 // #271's by-hand rail: raised 'open' immediately, no Stripe call at all,
 // a sequence-derived reference, and the Practice's billing_mode is
