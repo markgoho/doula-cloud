@@ -316,8 +316,10 @@
 		}
 	}
 
-	// One row per status rather than four parallel maps: what it means for the Practice in the Owner's words, and
-	// whether reopening Stripe's hosted form could help.
+	// One row per status rather than two parallel maps: what it means for
+	// the Practice in the Owner's words, and whether reopening Stripe's
+	// hosted form could help. The label and badge color live in
+	// `CONNECT_STATUS_BADGES`, which the Practice overview reads too (#1589).
 	//
 	// `onboarding` is not derivable from the status alone. `pending` means
 	// Stripe is reviewing and there is nothing to supply, so offering the

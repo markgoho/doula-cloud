@@ -165,8 +165,10 @@
 	const ownerAskEnd = 'If you collect payment yourself, you do not need Stripe.';
 	const adminAsk = 'Clients cannot pay this Practice by card yet. A Practice Owner has to connect Stripe.';
 
+	const isPracticeOwner = $derived(isOwner(session));
+
 	function notConnectedWords(connect: ConnectHealth): string {
-		if (!isOwner(session)) return adminAsk;
+		if (!isPracticeOwner) return adminAsk;
 		return connect.billingMode === 'stripe' ? ownerAskStart : `${ownerAskStart} ${ownerAskEnd}`;
 	}
 </script>
@@ -303,7 +305,7 @@
 					href={resolve('/practices/[practiceId]/settings/payments', {
 						practiceId: page.params.practiceId!
 					})}
-					label={isOwner(session) ? 'Set up card payments' : 'Getting paid'}
+					label={isPracticeOwner ?'Set up card payments' : 'Getting paid'}
 					variant="secondary"
 				/>
 			{:else}
