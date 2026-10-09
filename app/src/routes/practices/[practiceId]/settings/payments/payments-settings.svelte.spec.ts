@@ -273,6 +273,8 @@ describe('payments settings screen', () => {
 		// do, and asserting only the sentence above would pass on a screen
 		// that told her to go and find her Social Security number.
 		await expect.element(testPage.getByText('What Stripe will ask you for')).not.toBeInTheDocument();
+		await expect.element(testPage.getByText('Stripe reviews your details', { exact: false })).not.toBeInTheDocument();
+		await expect.element(testPage.getByText('typically 7 to 14 days', { exact: false })).not.toBeInTheDocument();
 	});
 
 	// The blocked states used to show an Admin nothing at all: the sentence
@@ -550,6 +552,29 @@ describe('payments settings screen: what #442 refuses and what it warns about', 
 			.element(testPage.getByText('last four digits of your Social Security number', { exact: false }))
 			.toBeVisible();
 		await expect.element(testPage.getByText('bank routing and account numbers', { exact: false })).toBeVisible();
+	});
+
+	it('says what comes after the form: a review, and a first payout in 7 to 14 days (#1592)', async () => {
+		await setup({ status: 'not_connected', roles: ['owner'] });
+
+		await expect
+			.element(
+				testPage.getByText('After you finish, Stripe reviews your details. Stripe does not say how long this takes.')
+			)
+			.toBeVisible();
+		await expect
+			.element(
+				testPage.getByText(
+					'Your first card payment takes longer to reach your bank than the ones after it: typically 7 to 14 days.'
+				)
+			)
+			.toBeVisible();
+	});
+
+	it('does not repeat it to an Owner already past onboarding (#1592)', async () => {
+		await setup({ status: 'active', roles: ['owner'] });
+
+		await expect.element(testPage.getByText('Stripe reviews your details', { exact: false })).not.toBeInTheDocument();
 	});
 
 	it('tells her where the text on her Clients card statements comes from', async () => {
