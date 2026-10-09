@@ -65,7 +65,8 @@
 				{/each}
 			</nav>
 		</div>
-		<AvatarMenu {name} {accountHref} {signOut} />
+		<!-- The portal knows the Client by the one name she goes by, so it is the first name and there is no last (#1537). -->
+		<AvatarMenu firstName={name} {accountHref} {signOut} />
 	</div>
 	<nav class="narrow" aria-label="Your care">
 		{#each navItems as item (item.href)}

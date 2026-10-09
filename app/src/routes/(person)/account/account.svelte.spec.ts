@@ -1,4 +1,4 @@
-import { page as testPage } from 'vitest/browser';
+import { page as testPage, userEvent } from 'vitest/browser';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import { workStateReportedOn } from '#lib/workStates.js';
@@ -606,5 +606,90 @@ describe('recovery codes for a sole Owner (#615)', () => {
 		await expect
 			.element(testPage.getByText("saved recovery codes are only issued to a practice's sole owner"))
 			.toBeVisible();
+	});
+});
+
+/*
+ * Correcting her own name (#1537). One form with two submit buttons, so
+ * the handler has to know which one asked: these pin that a name save
+ * never sends a work state and the reverse.
+ */
+const saveNameButton = () => testPage.getByRole('button', { name: 'Save name' });
+const firstName = () => testPage.getByLabelText('First name');
+const lastName = () => testPage.getByLabelText('Last name');
+
+describe('correcting her name (#1537)', () => {
+	it('shows her two names, each in its own field', async () => {
+		await setup();
+
+		await expect.element(firstName()).toHaveValue(session.firstName);
+		await expect.element(lastName()).toHaveValue(session.lastName);
+	});
+
+	it('sends both names, with no staff id and no work state', async () => {
+		await setup({ saveResponse: jsonResponse({ firstName: 'Mary Anne', lastName: 'Smith' }) });
+
+		await firstName().fill('Mary Anne');
+		await lastName().fill('Smith');
+		await saveNameButton().click();
+
+		expect(apiFetchWithSession).toHaveBeenCalledWith('/api/staff/name', {
+			method: 'PUT',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ firstName: 'Mary Anne', lastName: 'Smith' })
+		});
+		expect(apiFetchWithSession).not.toHaveBeenCalledWith('/api/staff/work-state', expect.anything());
+		await expect.element(testPage.getByText('Saved. Your name is Mary Anne Smith.')).toBeVisible();
+	});
+
+	it('saves the name, not the work state, when she presses Enter in a name field', async () => {
+		await setup({ saveResponse: jsonResponse({ firstName: 'Mary Anne', lastName: 'Smith' }) });
+
+		await firstName().fill('Mary Anne');
+		await lastName().fill('Smith');
+		await lastName().click();
+		await userEvent.keyboard('{Enter}');
+
+		await vi.waitFor(() =>
+			expect(apiFetchWithSession).toHaveBeenCalledWith('/api/staff/name', expect.anything())
+		);
+		expect(apiFetchWithSession).not.toHaveBeenCalledWith('/api/staff/work-state', expect.anything());
+	});
+
+	it('refuses each empty name on its own, without calling the server', async () => {
+		await setup();
+
+		await firstName().fill('');
+		await saveNameButton().click();
+
+		await expect.element(testPage.getByText('Enter your first name').first()).toBeVisible();
+		expect(apiFetchWithSession).not.toHaveBeenCalledWith('/api/staff/name', expect.anything());
+		expect(testPage.getByText('Enter your last name').elements()).toHaveLength(0);
+
+		await firstName().fill('Anne-Marie');
+		await lastName().fill('');
+		await saveNameButton().click();
+
+		await expect.element(testPage.getByText('Enter your last name').first()).toBeVisible();
+	});
+
+	it("shows the server's own words when the save is refused", async () => {
+		await setup({ saveResponse: refusal(400, 'firstName and lastName are required') });
+
+		await saveNameButton().click();
+
+		await expect
+			.element(testPage.getByRole('alert'))
+			.toHaveTextContent('firstName and lastName are required');
+	});
+
+	it('keeps the work state save working beside it', async () => {
+		await setup();
+
+		await stateSelect().selectOptions('New Jersey');
+		await saveButton().click();
+
+		expect(apiFetchWithSession).toHaveBeenCalledWith('/api/staff/work-state', expect.anything());
+		expect(apiFetchWithSession).not.toHaveBeenCalledWith('/api/staff/name', expect.anything());
 	});
 });

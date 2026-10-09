@@ -27,7 +27,7 @@ func seedStaffWithEmail(t *testing.T, db *testdb.DB, identityUID, email string) 
 	t.Helper()
 	var id string
 	if err := db.Admin.QueryRowContext(t.Context(),
-		`INSERT INTO staff (identity_uid, name, email, work_state) VALUES ($1, 'Test Staff', $2, 'NY') RETURNING id`,
+		`INSERT INTO staff (identity_uid, first_name, last_name, email, work_state) VALUES ($1, 'Test', 'Staff', $2, 'NY') RETURNING id`,
 		identityUID, email,
 	).Scan(&id); err != nil {
 		t.Fatalf("seed staff %q: %v", identityUID, err)
@@ -317,7 +317,7 @@ func inSelfWindow(t *testing.T, db *testdb.DB, identityUID string, trusted bool,
 // redactingUpdate is the UPDATE redactStaffRow runs, with each column a
 // caller controls left as a parameter so a test can bend one of them out
 // of shape and watch the policies refuse.
-const redactingUpdate = `UPDATE staff SET name = $1, email = $2, identity_uid = $3, deleted_at = $4 WHERE id = $5`
+const redactingUpdate = `UPDATE staff SET first_name = $1, last_name = $2, email = $3, identity_uid = $4, deleted_at = $5 WHERE id = $6`
 
 // TestRLS_LoginDeletionPolicyAdmitsTheRedaction pins what 00101's
 // staff_self_login_deletion admits and refuses, as herself, in the
@@ -335,7 +335,7 @@ func TestRLS_LoginDeletionPolicyAdmitsTheRedaction(t *testing.T) {
 	// what 00101's WITH CHECK exists to refuse, and 00044 refuses it too.
 	asHerself(t, db, uid, func(tx *sql.Tx) {
 		if _, err := tx.ExecContext(t.Context(), redactingUpdate,
-			staffauth.DeletedStaffName, staffauth.DeletedStaffEmail, sentinel, nil, staffID); err == nil {
+			staffauth.DeletedStaffFirstName, staffauth.DeletedStaffLastName, staffauth.DeletedStaffEmail, sentinel, nil, staffID); err == nil {
 			t.Fatal("the policies admitted a sentinel with no deleted_at stamp")
 		}
 	})
@@ -354,7 +354,7 @@ func TestRLS_LoginDeletionPolicyAdmitsTheRedaction(t *testing.T) {
 	// admitting the sentinel at all.
 	asHerself(t, db, uid, func(tx *sql.Tx) {
 		if _, err := tx.ExecContext(t.Context(), redactingUpdate,
-			staffauth.DeletedStaffName, staffauth.DeletedStaffEmail, uid, time.Now(), staffID); err != nil {
+			staffauth.DeletedStaffFirstName, staffauth.DeletedStaffLastName, staffauth.DeletedStaffEmail, uid, time.Now(), staffID); err != nil {
 			t.Fatalf("00044's own whole-row self-update stopped admitting a plain column write: %v", err)
 		}
 	})
@@ -362,7 +362,7 @@ func TestRLS_LoginDeletionPolicyAdmitsTheRedaction(t *testing.T) {
 	// Admitted: the whole redaction, the exact shape redactStaffRow writes.
 	asHerself(t, db, uid, func(tx *sql.Tx) {
 		res, err := tx.ExecContext(t.Context(), redactingUpdate,
-			staffauth.DeletedStaffName, staffauth.DeletedStaffEmail, sentinel, time.Now(), staffID)
+			staffauth.DeletedStaffFirstName, staffauth.DeletedStaffLastName, staffauth.DeletedStaffEmail, sentinel, time.Now(), staffID)
 		if err != nil {
 			t.Fatalf("the policy refused the redaction it exists to admit: %v", err)
 		}
@@ -399,7 +399,7 @@ func TestRLS_LoginDeletionNeedsTheTrustedFlagToSeeItsOwnNewRow(t *testing.T) {
 
 	inSelfWindow(t, db, uid, false, func(tx *sql.Tx) {
 		if _, err := tx.ExecContext(t.Context(), redactingUpdate,
-			staffauth.DeletedStaffName, staffauth.DeletedStaffEmail,
+			staffauth.DeletedStaffFirstName, staffauth.DeletedStaffLastName, staffauth.DeletedStaffEmail,
 			"deleted:"+staffID, time.Now(), staffID); err == nil {
 			t.Fatal("the redaction committed with no trusted flag set -- see this test's comment; the handler's own set_config may have become load-bearing somewhere else, or a new SELECT policy now admits the redacted row")
 		}
@@ -418,7 +418,7 @@ func TestRLS_LoginDeletionPolicyRefusesAnotherPersonsRow(t *testing.T) {
 
 	asHerself(t, db, uid, func(tx *sql.Tx) {
 		res, err := tx.ExecContext(t.Context(), redactingUpdate,
-			staffauth.DeletedStaffName, staffauth.DeletedStaffEmail,
+			staffauth.DeletedStaffFirstName, staffauth.DeletedStaffLastName, staffauth.DeletedStaffEmail,
 			"deleted:"+victimID, time.Now(), victimID)
 		if err != nil {
 			// coverage:ignore reason: a refusal here arrives as zero rows rather than an error -- USING filters the row out before any WITH CHECK is consulted

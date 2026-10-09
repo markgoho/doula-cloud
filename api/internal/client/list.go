@@ -357,7 +357,7 @@ func attachOpenEngagements(ctx context.Context, tx *sql.Tx, list []ListItem, rea
 // below always come after every clientID placeholder, never before.
 const openEngagementRollupQueryTemplate = `
 	SELECT e.client_id, e.id, e.status, ct.status,
-	       (SELECT string_agg(s.name, ', ' ORDER BY s.name)
+	       (SELECT string_agg(s.name, ', ' ORDER BY s.last_name, s.first_name)
 	        FROM engagement_attachments ea
 	        JOIN staff s ON s.id = ea.staff_id
 	        WHERE ea.engagement_id = e.id AND ea.origin = 'granted' AND ea.ended_at IS NULL),

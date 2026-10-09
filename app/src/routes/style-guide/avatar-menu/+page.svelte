@@ -26,7 +26,8 @@
 			and a Practice hands out addresses on its own domain.
 		-->
 		<AvatarMenu
-			name="Anne-Marie Ochieng-Whitfield"
+			firstName="Anne-Marie"
+			lastName="Ochieng-Whitfield"
 			email="anne-marie.ochieng-whitfield@highland-midwifery-group.example.org"
 			accountHref="#account"
 			{signOut}
@@ -39,7 +40,7 @@
 			No email and no Account link: the portal has no per-person screen to reach, and the Client's
 			address is not something the portal asks the Client to check.
 		</p>
-		<AvatarMenu name="Renata Chiamaka Okonkwo-Adeyemi" signOut={refuses} />
+		<AvatarMenu firstName="Renata Chiamaka Okonkwo-Adeyemi" signOut={refuses} />
 	</section>
 
 	<section>
@@ -49,6 +50,6 @@
 			That keeps the bar's inline end still rather than having the avatar shove the row when the
 			session arrives.
 		</p>
-		<AvatarMenu name="" {signOut} />
+		<AvatarMenu firstName="" {signOut} />
 	</section>
 </stack-l>

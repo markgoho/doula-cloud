@@ -17,6 +17,8 @@ export const session: SessionInfo = {
 	lastPracticeId: 'practice-1',
 	staffId: 'staff-1',
 	name: 'Anne-Marie Ochieng-Whitfield',
+	firstName: 'Anne-Marie',
+	lastName: 'Ochieng-Whitfield',
 	email: 'anne-marie@example.test',
 	workState: 'NY',
 	workStateReportedAt: '2026-01-01T00:00:00Z',

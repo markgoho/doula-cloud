@@ -176,8 +176,8 @@ func TestPracticeQueryPlanWithDepartedMembershipSubjects(t *testing.T) {
 	const rowCount = 5000
 	if _, err := db.Admin.ExecContext(t.Context(),
 		`WITH departed AS (
-		     INSERT INTO staff (identity_uid, name, email, work_state)
-		     SELECT 'perf-departed-' || n, 'Perf Doula ' || n, 'perf-departed-' || n || '@example.com', 'NY'
+		     INSERT INTO staff (identity_uid, first_name, last_name, email, work_state)
+		     SELECT 'perf-departed-' || n, 'Perf', 'Doula ' || n, 'perf-departed-' || n || '@example.com', 'NY'
 		     FROM generate_series(1, $2) AS n
 		     RETURNING id
 		 )

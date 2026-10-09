@@ -3,22 +3,23 @@ import { describe, expect, it } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import Avatar, { initialsOf } from './Avatar.svelte';
 
-async function setup({ name = 'Mark Goho' }: { name?: string } = {}) {
-	await render(Avatar, { name });
+async function setup({ firstName = 'Mark', lastName = 'Goho' }: { firstName?: string; lastName?: string } = {}) {
+	await render(Avatar, { firstName, lastName });
 }
 
 describe('initialsOf', () => {
 	it.each([
-		['two names', 'Mark Goho', 'MG'],
-		['one name', 'Prince', 'P'],
-		// First and last only: a middle name adds a letter nobody reads at
-		// 34px, and three no longer fit the circle.
-		['three names', 'Renata Okonkwo Adeyemi', 'RA'],
-		['a lower-case name', 'dee marchetti', 'DM'],
-		['extra whitespace', '  Tasha   Bell  ', 'TB'],
-		['no name at all', '', '']
-	])('takes %s to %s', (_case, name, expected) => {
-		expect(initialsOf(name)).toBe(expected);
+		['two names', 'Mark', 'Goho', 'MG'],
+		['one name only', 'Prince', '', 'P'],
+		// No split on white space (#1537): "Mary Anne" is one first name, so
+		// the initials are M and S, never M, A and S.
+		['a first name of two words', 'Mary Anne', 'Smith', 'MS'],
+		['a last name of several words', 'Lena', 'de la Cruz', 'LD'],
+		['lower-case names', 'dee', 'marchetti', 'DM'],
+		['extra whitespace', '  Tasha ', ' Bell  ', 'TB'],
+		['no name at all', '', '', '']
+	])('takes %s to %s', (_case, firstName, lastName, expected) => {
+		expect(initialsOf(firstName, lastName)).toBe(expected);
 	});
 });
 

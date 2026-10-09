@@ -1027,8 +1027,8 @@ func TestListHandler_SenderWhoDeletedHerLoginShowsAFormerColleague(t *testing.T)
 
 	testdb.EndMembership(t, db, practiceID, senderID, senderID)
 	if _, err := db.Admin.ExecContext(t.Context(),
-		`UPDATE staff SET name = $1, deleted_at = now() WHERE id = $2`,
-		staffauth.DeletedStaffName, senderID,
+		`UPDATE staff SET first_name = $1, last_name = $2, deleted_at = now() WHERE id = $3`,
+		staffauth.DeletedStaffFirstName, staffauth.DeletedStaffLastName, senderID,
 	); err != nil {
 		t.Fatalf("redact staff row: %v", err)
 	}

@@ -160,7 +160,8 @@ const passwordField = () => testPage.getByLabelText('Password');
 const continueButton = () => testPage.getByRole('button', { name: 'Continue' });
 const acceptButton = () => testPage.getByRole('button', { name: 'Accept invite' });
 
-const nameField = () => testPage.getByLabelText('Your name');
+const firstNameField = () => testPage.getByLabelText('First name');
+const lastNameField = () => testPage.getByLabelText('Last name');
 const stateField = () => testPage.getByRole('combobox', { name: 'Which state do you work from?' });
 
 async function identify(mode: 'signup' | 'login' = 'signup') {
@@ -177,7 +178,8 @@ async function identify(mode: 'signup' | 'login' = 'signup') {
 // answer them the way a person would.
 async function identifyAsNewPerson() {
 	await identify('signup');
-	await nameField().fill('Priya Sharma');
+	await firstNameField().fill('Priya');
+	await lastNameField().fill('Sharma');
 	await stateField().selectOptions('New Jersey');
 }
 
@@ -208,7 +210,8 @@ describe('step one -- identifying yourself', () => {
 
 		await expect.element(emailField()).toBeVisible();
 		await expect.element(passwordField()).toBeVisible();
-		expect(testPage.getByLabelText('Your name').elements()).toHaveLength(0);
+		expect(firstNameField().elements()).toHaveLength(0);
+		expect(lastNameField().elements()).toHaveLength(0);
 		expect(testPage.getByLabelText('Which state do you work from?').elements()).toHaveLength(0);
 	});
 
@@ -300,7 +303,8 @@ describe('step two -- a person who is new here', () => {
 		await expect
 			.element(testPage.getByRole('heading', { name: 'Tell us about yourself' }))
 			.toBeVisible();
-		await expect.element(nameField()).toBeVisible();
+		await expect.element(firstNameField()).toBeVisible();
+		await expect.element(lastNameField()).toBeVisible();
 		await expect.element(stateField()).toBeVisible();
 	});
 
@@ -309,7 +313,8 @@ describe('step two -- a person who is new here', () => {
 
 		await identify();
 
-		await expect.element(nameField()).toHaveAttribute('autocomplete', 'name');
+		await expect.element(firstNameField()).toHaveAttribute('autocomplete', 'given-name');
+		await expect.element(lastNameField()).toHaveAttribute('autocomplete', 'family-name');
 	});
 
 	// A step that replaces the form without moving focus leaves a keyboard
@@ -334,7 +339,7 @@ describe('step two -- a person who is new here', () => {
 		expect(globalFetch).toHaveBeenCalledWith('/api/staff/accept-invite', {
 			method: 'POST',
 			headers: { 'Content-Type': 'application/json', Authorization: 'Bearer id-token' },
-			body: JSON.stringify({ inviteToken, name: 'Priya Sharma', workState: 'NJ' })
+			body: JSON.stringify({ inviteToken, firstName: 'Priya', lastName: 'Sharma', workState: 'NJ' })
 		});
 	});
 });
@@ -371,7 +376,8 @@ describe('step two -- a person who is Staff somewhere already', () => {
 
 		await identify('login');
 
-		expect(nameField().elements()).toHaveLength(0);
+		expect(firstNameField().elements()).toHaveLength(0);
+		expect(lastNameField().elements()).toHaveLength(0);
 		expect(stateField().elements()).toHaveLength(0);
 	});
 
@@ -394,7 +400,7 @@ describe('step two -- a person who is Staff somewhere already', () => {
 		expect(globalFetch).toHaveBeenCalledWith(
 			'/api/staff/accept-invite',
 			expect.objectContaining({
-				body: JSON.stringify({ inviteToken, name: '', workState: '' })
+				body: JSON.stringify({ inviteToken, firstName: '', lastName: '', workState: '' })
 			})
 		);
 	});

@@ -20,7 +20,7 @@
 	let { children } = $props();
 
 	type Membership = { practiceId: string; practiceName: string; roles: string[] };
-	type StaffSession = { name: string; email: string; memberships: Membership[] };
+	type StaffSession = { firstName: string; lastName: string; email: string; memberships: Membership[] };
 
 	let session = $state<StaffSession | undefined>();
 
@@ -148,7 +148,8 @@
 	{navItems}
 	{practices}
 	currentPracticeId={practiceId ?? ''}
-	name={session?.name ?? ''}
+	firstName={session?.firstName ?? ''}
+	lastName={session?.lastName ?? ''}
 	email={session?.email}
 	accountHref={resolve('/(person)/account')}
 	signOut={handleSignOut}

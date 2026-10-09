@@ -24,6 +24,8 @@ import (
 type selfStaff struct {
 	ID                  string
 	Name                string
+	FirstName           string
+	LastName            string
 	Email               string
 	WorkState           string
 	WorkStateReportedAt time.Time
@@ -80,7 +82,7 @@ func querySelf(ctx context.Context, tx *sql.Tx, identityUID string, forUpdate bo
 		return selfStaff{}, false, fmt.Errorf("staffauth: set current identity uid: %w", err)
 	}
 
-	query := `SELECT id, name, email, work_state, work_state_reported_at, last_practice_id,
+	query := `SELECT id, name, first_name, last_name, email, work_state, work_state_reported_at, last_practice_id,
 	                 last_active_at IS NULL OR last_active_at < now() - interval '1 day',
 	                 deleted_at
 	            FROM staff WHERE identity_uid = $1`
@@ -90,7 +92,7 @@ func querySelf(ctx context.Context, tx *sql.Tx, identityUID string, forUpdate bo
 
 	var self selfStaff
 	err := tx.QueryRowContext(ctx, query, identityUID).Scan(
-		&self.ID, &self.Name, &self.Email, &self.WorkState,
+		&self.ID, &self.Name, &self.FirstName, &self.LastName, &self.Email, &self.WorkState,
 		&self.WorkStateReportedAt, &self.LastPracticeID, &self.ActivityStampStale, &self.DeletedAt,
 	)
 	if errors.Is(err, sql.ErrNoRows) {

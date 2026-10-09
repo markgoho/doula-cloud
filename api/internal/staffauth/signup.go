@@ -3,6 +3,7 @@ package staffauth
 import (
 	"context"
 	"database/sql"
+	"maps"
 	"net/http"
 	"strings"
 
@@ -71,7 +72,10 @@ const MsgTimezoneRequired = "timezone is needed, and must be an IANA zone name s
 // resolveStaff already follows on the invitation-acceptance path.
 type SignupRequest struct {
 	PracticeName string `json:"practiceName"`
-	StaffName    string `json:"staffName"`
+	// FirstName and LastName are the two fields a Staff member's name is
+	// asked in (#1537), both needed.
+	FirstName string `json:"firstName"`
+	LastName  string `json:"lastName"`
 	// WorkState is the US state this person works from, as a USPS
 	// two-letter abbreviation (#415). Required, because New York's sales
 	// tax on a Credit purchase is apportioned over where a Practice's
@@ -116,20 +120,19 @@ func SignupHandler(verifier authn.Verifier, db *sql.DB, enq tasknudge.Enqueuer) 
 			return
 		}
 		req.PracticeName = strings.TrimSpace(req.PracticeName)
-		req.StaffName = strings.TrimSpace(req.StaffName)
-		if req.PracticeName == "" || req.StaffName == "" {
-			// One refusal, one entry per empty field (#488): the two are
+		firstName, lastName, nameDetails := normalizeNames(req.FirstName, req.LastName)
+		req.FirstName, req.LastName = firstName, lastName
+		if req.PracticeName == "" || nameDetails != nil {
+			// One refusal, one entry per empty field (#488): the fields are
 			// asked for on one screen and can be missing together, so
 			// answering only the first would send her back twice.
 			details := map[string]string{}
 			if req.PracticeName == "" {
 				details["practiceName"] = MsgPracticeNameNeeded
 			}
-			if req.StaffName == "" {
-				details["staffName"] = MsgStaffNameNeeded
-			}
+			maps.Copy(details, nameDetails)
 			apierr.Write(w, http.StatusBadRequest, apierr.CodeInvalidArgument,
-				"practiceName and staffName are required", details)
+				"practiceName, firstName and lastName are required", details)
 			return
 		}
 		workState, ok := NormalizeWorkState(req.WorkState)
@@ -233,8 +236,8 @@ func signup(r *http.Request, tx *sql.Tx, verified authn.VerifiedToken, req Signu
 	staffID := resumeStaffID
 	if !resuming {
 		err := tx.QueryRowContext(ctx,
-			`INSERT INTO staff (identity_uid, name, email, work_state) VALUES ($1, $2, $3, $4) RETURNING id`,
-			identityUID, req.StaffName, address, req.WorkState,
+			`INSERT INTO staff (identity_uid, first_name, last_name, email, work_state) VALUES ($1, $2, $3, $4, $5) RETURNING id`,
+			identityUID, req.FirstName, req.LastName, address, req.WorkState,
 		).Scan(&staffID)
 		// Two signups for one identity racing each other, both past
 		// existingStaff before either inserted: the loser gets the same

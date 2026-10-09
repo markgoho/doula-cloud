@@ -41,7 +41,8 @@ beforeEach(() => {
 
 async function fillForm() {
 	await testPage.getByLabelText('Practice name').fill('Riverside Doulas');
-	await testPage.getByLabelText('Your name').fill('Priya Sharma');
+	await testPage.getByLabelText('First name').fill('Priya');
+	await testPage.getByLabelText('Last name').fill('Sharma');
 	await testPage
 		.getByRole('combobox', { name: 'Which state do you work from?' })
 		.selectOptions('New Jersey');
@@ -140,10 +141,35 @@ describe('the address the Practice is created with (#614)', () => {
 		// claim, not as a field the BFF could take at its word.
 		expect(JSON.parse(init.body)).toEqual({
 			practiceName: 'Riverside Doulas',
-			staffName: 'Priya Sharma',
+			firstName: 'Priya',
+			lastName: 'Sharma',
 			workState: 'NJ',
 			timezone: 'America/Chicago'
 		});
 		expect(init.headers.Authorization).toBe('Bearer id-token');
+	});
+});
+
+describe('the two name fields (#1537)', () => {
+	it('asks for a first name and a last name with GOV.UK autocomplete tokens', async () => {
+		await setup();
+
+		await expect.element(testPage.getByLabelText('First name')).toHaveAttribute('autocomplete', 'given-name');
+		await expect.element(testPage.getByLabelText('Last name')).toHaveAttribute('autocomplete', 'family-name');
+	});
+
+	it('refuses each empty name on its own, before anything is sent', async () => {
+		await setup();
+		await fillForm();
+		await testPage.getByLabelText('Last name').fill('');
+
+		await submit();
+
+		await expect
+			.element(testPage.getByRole('link', { name: 'Enter your last name' }))
+			.toBeVisible();
+		expect(testPage.getByRole('link', { name: 'Enter your first name' }).elements()).toHaveLength(0);
+		expect(createUserWithEmailAndPassword).not.toHaveBeenCalled();
+		expect(globalFetch).not.toHaveBeenCalled();
 	});
 });

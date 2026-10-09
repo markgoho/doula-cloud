@@ -44,6 +44,7 @@ type selfRoute struct {
 var selfResolvingRoutes = map[string]selfRoute{
 	"GET /api/staff/session":                          {},
 	"PUT /api/staff/work-state":                       {body: `{"workState":"NY"}`},
+	"PUT /api/staff/name":                             {body: `{"firstName":"A","lastName":"B"}`},
 	"PUT /api/staff/email":                            {body: `{"newEmail":"moved@example.com"}`},
 	"POST /api/staff/verify-email/request":            {},
 	"POST /api/staff/mfa-recovery/saved-codes/rotate": {},

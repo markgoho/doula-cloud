@@ -62,14 +62,22 @@ func existingStaff(ctx context.Context, tx *sql.Tx, identityUID string) (staffID
 // Identity Platform too, which this endpoint cannot do.
 func recordSignupPerson(ctx context.Context, tx *sql.Tx, staffID string, req SignupRequest, previousWorkState string, resuming bool) error {
 	if !resuming {
+		if err := RecordFirstName(ctx, tx, staffID, staffID); err != nil {
+			// coverage:ignore reason: DB query failure, not exercised by unit tests
+			return err
+		}
 		return RecordFirstWorkStateAssertion(ctx, tx, staffID, req.WorkState, staffID)
 	}
 	if _, err := tx.ExecContext(ctx,
-		`UPDATE staff SET name = $1, work_state = $2, work_state_reported_at = now() WHERE id = $3`,
-		req.StaffName, req.WorkState, staffID,
+		`UPDATE staff SET first_name = $1, last_name = $2, work_state = $3, work_state_reported_at = now() WHERE id = $4`,
+		req.FirstName, req.LastName, req.WorkState, staffID,
 	); err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		return fmt.Errorf("staffauth: move name and work state on resumed signup: %w", err)
+	}
+	if err := RecordNameChange(ctx, tx, staffID, staffID); err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		return err
 	}
 	return RecordWorkStateChange(ctx, tx, staffID, previousWorkState, req.WorkState, staffID)
 }

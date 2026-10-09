@@ -66,7 +66,7 @@ func TestSignupHandler_MintsSavedCodesForFoundingOwner(t *testing.T) {
 	defer srv.Close()
 
 	resp := postSignup(t, srv, "tok", staffauth.SignupRequest{
-		WorkState: "NY", PracticeName: "Founding Practice", StaffName: "Founder",
+		WorkState: "NY", PracticeName: "Founding Practice", FirstName: "Founder", LastName: placeholderLastName,
 	})
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusCreated {
@@ -103,7 +103,7 @@ func TestAcceptInvite_SecondOwnerRevokesFirstOwnersSavedCodes(t *testing.T) {
 	_, token := seedInvitationWithToken(t, db, practiceID, founderID, "coowner@example.com", "{"+ownerRole+"}", employeeType, time.Now().Add(time.Hour))
 	acceptSrv := newAcceptServer(t, db, "co-owner-uid", "coowner@example.com")
 	defer acceptSrv.Close()
-	acceptResp := postAccept(t, acceptSrv, staffauth.AcceptInviteRequest{WorkState: "NY", InviteToken: token, Name: "Co Owner"})
+	acceptResp := postAccept(t, acceptSrv, staffauth.AcceptInviteRequest{WorkState: "NY", InviteToken: token, FirstName: "Co", LastName: ownerLastName})
 	defer acceptResp.Body.Close()
 	if acceptResp.StatusCode != http.StatusOK {
 		t.Fatalf("accept status = %d, want 200", acceptResp.StatusCode)

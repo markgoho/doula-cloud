@@ -197,7 +197,7 @@ func TestRLS_StaffSelfVisibilityHiddenDuringClientPortalContext(t *testing.T) {
 
 	clientID, _ := seedClientWithEngagement(t, db, sharedUID)
 	if _, err := db.Admin.ExecContext(t.Context(),
-		`INSERT INTO staff (identity_uid, name, email, work_state) VALUES ($1, 'Shared Person', 'shared@example.com', 'NY')`,
+		`INSERT INTO staff (identity_uid, first_name, last_name, email, work_state) VALUES ($1, 'Shared', 'Person', 'shared@example.com', 'NY')`,
 		sharedUID,
 	); err != nil {
 		t.Fatalf("seed staff row with shared identity_uid: %v", err)

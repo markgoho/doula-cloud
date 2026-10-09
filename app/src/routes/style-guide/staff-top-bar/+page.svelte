@@ -53,7 +53,8 @@
 		{navItems}
 		{practices}
 		currentPracticeId="p1"
-		name="Persephone Adeyemi-Wollstonecraft"
+		firstName="Persephone"
+		lastName="Adeyemi-Wollstonecraft"
 		email="persephone.adeyemi-wollstonecraft@highland-midwifery-group.example.org"
 		accountHref="#account"
 		{signOut}

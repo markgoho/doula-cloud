@@ -492,8 +492,8 @@ func TestClientListHandler_StandsInForASenderWhoDeletedHerLogin(t *testing.T) {
 
 	testdb.RemoveMembership(t, db, staffID)
 	if _, err := db.Admin.ExecContext(t.Context(),
-		`UPDATE staff SET name = $1, deleted_at = now() WHERE id = $2`,
-		staffauth.DeletedStaffName, staffID,
+		`UPDATE staff SET first_name = $1, last_name = $2, deleted_at = now() WHERE id = $3`,
+		staffauth.DeletedStaffFirstName, staffauth.DeletedStaffLastName, staffID,
 	); err != nil {
 		t.Fatalf("redact staff row: %v", err)
 	}

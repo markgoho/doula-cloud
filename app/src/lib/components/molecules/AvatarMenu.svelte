@@ -20,17 +20,23 @@
 	 * Practice she works at.
 	 */
 	interface Properties {
-		name: string;
+		firstName: string;
+		lastName?: string;
 		email?: string;
 		accountHref?: string;
 		signOut: () => Promise<SignOutOutcome>;
 	}
 
-	let { name, email, accountHref, signOut }: Properties = $props();
+	let { firstName, lastName = '', email, accountHref, signOut }: Properties = $props();
+
+	// First then last, the order every screen prints a Staff member's name in (#1537).
+	function fullName(): string {
+		return lastName ? `${firstName} ${lastName}` : firstName;
+	}
 </script>
 
 {#snippet face()}
-	<Avatar {name} />
+	<Avatar {firstName} {lastName} />
 {/snippet}
 
 <!--
@@ -40,12 +46,12 @@
 	lands -- the brief's smoothness requirement, applied to the one part of
 	the chrome that is not known at first paint.
 -->
-{#if name === ''}
+{#if firstName === ''}
 	<span class="placeholder" aria-hidden="true"></span>
 {:else}
-	<MenuButton label="Your account, {name}" iconOnly visual={face} align="end">
+	<MenuButton label="Your account, {fullName()}" iconOnly visual={face} align="end">
 		<div class="identity">
-			<p class="name">{name}</p>
+			<p class="name">{fullName()}</p>
 			{#if email}
 				<p class="email">{email}</p>
 			{/if}

@@ -32,7 +32,12 @@
 	import { staffLoginAfterSessionEnded } from '#lib/sessionEnded.js';
 	import { getFirebaseAuth } from '#lib/firebase.js';
 	import { refusalErrors, refusalMessage, SERVICE_PROBLEM } from '#lib/formErrors.js';
-	import { FormSubmission, orServiceProblem, orThrownMessage } from '#lib/formSubmission.svelte.js';
+	import {
+		FormSubmission,
+		orServiceProblem,
+		orThrownMessage,
+		type FormError
+	} from '#lib/formSubmission.svelte.js';
 	import { rotateSavedCodes } from '#lib/mfaRecovery.js';
 	import { triggerBlobDownload } from '#lib/blobDownload.js';
 	import { workStateCode, workStateName, workStateReportedOn } from '#lib/workStates.js';
@@ -45,13 +50,23 @@
 	import ReauthPrompt from '#lib/components/molecules/ReauthPrompt.svelte';
 	import WorkStateField from '#lib/components/molecules/WorkStateField.svelte';
 	import ErrorSummary from '#lib/components/molecules/ErrorSummary.svelte';
+	import StaffNameFields from '#lib/components/molecules/StaffNameFields.svelte';
 	import { deleteOwnLogin } from '#lib/loginDeletion.js';
 	import ConfirmDialog from '#lib/components/molecules/ConfirmDialog.svelte';
 	import { loadAccountSession } from '../session.svelte.js';
 
 	const workStateId = 'account-work-state';
+	const firstNameId = 'account-first-name';
+	const lastNameId = 'account-last-name';
 
-	let name = $state('');
+	let firstName = $state('');
+	let lastName = $state('');
+	// Which button asked for the submit. The page is one <form>, so a
+	// name save and a work state save arrive at the same handler; the
+	// button pressed (or, for Enter in a name field, the first submit
+	// button in the page, which is Save name) says which one this is.
+	let submitIntent: 'name' | 'workState' = 'workState';
+	let savedName = $state('');
 	let email = $state('');
 	let reportedAt = $state('');
 	// The full state name the <select> speaks; workStateCode() converts it
@@ -118,7 +133,8 @@
 			return;
 		}
 
-		name = result.session.name;
+		firstName = result.session.firstName;
+		lastName = result.session.lastName;
 		email = result.session.email;
 		reportedAt = result.session.workStateReportedAt;
 		selectedState = workStateName(result.session.workState);
@@ -159,9 +175,14 @@
 	 */
 	async function handleSubmit(event: SubmitEvent) {
 		event.preventDefault();
+		const intent = submitIntent;
+		submitIntent = 'workState';
 		savedState = '';
+		savedName = '';
 
 		await saveSubmission.run(async () => {
+			if (intent === 'name') return await saveName();
+
 			// The one question this page asks. Nothing else on it is editable.
 			if (selectedState === '') {
 				return [{ message: 'Choose the state you work from', targetId: workStateId }];
@@ -196,6 +217,34 @@
 			selectedState = workStateName(saved.workState);
 			savedState = selectedState;
 		}, orServiceProblem);
+	}
+
+	/*
+	 * Correcting her name (#1537). Both fields are sent every time and
+	 * both are needed, the same as at signup. There is no staff id in the
+	 * path or the body: the endpoint only ever writes the caller's own
+	 * row, and records who changed it and when.
+	 */
+	async function saveName(): Promise<FormError[] | undefined> {
+		const refusals: FormError[] = [];
+		if (firstName.trim() === '')
+			refusals.push({ message: 'Enter your first name', targetId: firstNameId });
+		if (lastName.trim() === '') refusals.push({ message: 'Enter your last name', targetId: lastNameId });
+		if (refusals.length > 0) return refusals;
+
+		const response = await apiFetchWithSession('/api/staff/name', {
+			method: 'PUT',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ firstName, lastName })
+		});
+		if (!response.ok) {
+			return await refusalErrors(response, { firstName: firstNameId, lastName: lastNameId });
+		}
+
+		const saved: { firstName: string; lastName: string } = await response.json();
+		firstName = saved.firstName;
+		lastName = saved.lastName;
+		savedName = `${saved.firstName} ${saved.lastName}`;
 	}
 
 	function beginMfaRemoval() {
@@ -347,6 +396,31 @@
 		text="Where you work sets how much sales tax your practice pays on the credits it buys. Changing it here changes that from today forward &mdash; purchases you have already made are not re-priced, and no receipt you have already been sent changes."
 		tone="variant"
 	/>
+{/snippet}
+
+{#snippet nameSection()}
+	<StaffNameFields
+		bind:firstName
+		bind:lastName
+		firstId={firstNameId}
+		lastId={lastNameId}
+		firstError={saveSubmission.errorFor(firstNameId)}
+		lastError={saveSubmission.errorFor(lastNameId)}
+	/>
+	<!--
+		The first submit button in the page, on purpose: Enter in a name
+		field submits the form through its first submit button, so this
+		is what makes Enter here save the name and not the work state.
+	-->
+	<Button
+		type="submit"
+		label="Save name"
+		loading={saveSubmission.isSubmitting}
+		onClick={() => (submitIntent = 'name')}
+	/>
+	{#if savedName}
+		<Notice variant="status" message={`Saved. Your name is ${savedName}.`} />
+	{/if}
 {/snippet}
 
 {#snippet workState()}
@@ -549,7 +623,12 @@
 {/snippet}
 
 {#snippet actions()}
-	<Button type="submit" label="Save work state" loading={saveSubmission.isSubmitting} />
+	<Button
+		type="submit"
+		label="Save work state"
+		loading={saveSubmission.isSubmitting}
+		onClick={() => (submitIntent = 'workState')}
+	/>
 	<!--
 		Confirmation sits where she just was -- immediately under the Save
 		button she pressed, not in a banner at the top of a page she would
@@ -597,7 +676,8 @@
 		{intro}
 		fieldsets={isLoaded
 			? [
-					{ legend: `Your details, ${name}`, content: workState },
+					{ legend: 'Your name', content: nameSection },
+					{ legend: 'Where you work', content: workState },
 					{ legend: 'Two-factor authentication', content: mfaSection },
 					...(isSoleOwner ? [{ legend: 'Recovery codes', content: savedCodesSection }] : []),
 					{ legend: 'Delete your login', content: deleteLoginSection }

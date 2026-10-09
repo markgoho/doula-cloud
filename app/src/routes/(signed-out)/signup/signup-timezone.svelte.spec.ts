@@ -44,7 +44,8 @@ beforeEach(() => {
 
 async function fillEverythingButTheZone() {
 	await testPage.getByLabelText('Practice name').fill('Riverside Doulas');
-	await testPage.getByLabelText('Your name').fill('Priya Sharma');
+	await testPage.getByLabelText('First name').fill('Priya');
+	await testPage.getByLabelText('Last name').fill('Sharma');
 	await testPage
 		.getByRole('combobox', { name: 'Which state do you work from?' })
 		.selectOptions('New Jersey');

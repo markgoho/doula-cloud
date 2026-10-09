@@ -77,8 +77,8 @@ func entities() []entity {
 			// specific to this one) are deliberately not selected.
 			file:        "staff.csv",
 			description: "Every Staff member's Membership at this Practice: her roles, employment type, and work state.",
-			header:      []string{colStaffID, "name", "email", "roles", colEmploymentType, "work_state", "last_active_at", "membership_created_at"},
-			query: `SELECT s.id::text, s.name, s.email, array_to_string(pm.roles, ','), pm.employment_type::text,
+			header:      []string{colStaffID, "first_name", "last_name", "email", "roles", colEmploymentType, "work_state", "last_active_at", "membership_created_at"},
+			query: `SELECT s.id::text, s.first_name, s.last_name, s.email, array_to_string(pm.roles, ','), pm.employment_type::text,
 			               s.work_state, s.last_active_at::text, pm.created_at::text
 			          FROM practice_memberships pm
 			          JOIN staff s ON s.id = pm.staff_id

@@ -186,7 +186,7 @@ const doulaRosterQuery = `SELECT s.id, s.name, m.employment_type::text, ` + atta
 	  FROM practice_memberships m
 	  JOIN staff s ON s.id = m.staff_id
 	 WHERE m.practice_id = $1 AND $2 = ANY(m.roles)
-	 ORDER BY s.name, s.id`
+	 ORDER BY s.last_name, s.first_name, s.id`
 
 // grantedAttachmentsQuery reads, in one go, every Staff member holding the
 // attachment this Engagement's contractors need. Two set queries rather

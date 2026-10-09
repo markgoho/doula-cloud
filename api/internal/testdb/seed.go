@@ -93,8 +93,8 @@ func SeedBillingMode(t *testing.T, db *DB, practiceID, mode string) {
 func SeedStaff(t *testing.T, db *DB, identityUID string) (staffID string) {
 	t.Helper()
 	if err := db.Admin.QueryRowContext(t.Context(),
-		`INSERT INTO staff (identity_uid, name, email, work_state) VALUES ($1, $2, $3, 'NY') RETURNING id`,
-		identityUID, "Test Staff "+identityUID, identityUID+"@example.com",
+		`INSERT INTO staff (identity_uid, first_name, last_name, email, work_state) VALUES ($1, $2, $3, $4, 'NY') RETURNING id`,
+		identityUID, "Test", "Staff "+identityUID, identityUID+"@example.com",
 	).Scan(&staffID); err != nil {
 		// coverage:ignore reason: fixture insert failure, not exercised by the happy-path test
 		t.Fatalf("testdb: seed staff: %v", err)
@@ -121,7 +121,7 @@ func RedactDeletedLogin(t *testing.T, db *DB, staffID string) {
 	if _, err := db.Admin.ExecContext(t.Context(),
 		`UPDATE staff
 		    SET identity_uid = 'deleted:' || id, deleted_at = now(),
-		        name = 'Deleted Staff Member', email = 'deleted@deleted.invalid'
+		        first_name = 'Deleted', last_name = 'Staff Member', email = 'deleted@deleted.invalid'
 		  WHERE id = $1`,
 		staffID,
 	); err != nil {
@@ -168,9 +168,12 @@ func SeedStaffAtPractice(t *testing.T, db *DB, practiceID, identityUID string, r
 func SeedNamedStaffAtPractice(t *testing.T, db *DB, practiceID, identityUID, name string, roles []string, employmentType string) (staffID string) {
 	t.Helper()
 
+	// The name is split at its first space, the way 00124 split the
+	// column it replaced; a one-word name has an empty last name.
+	first, last, _ := strings.Cut(name, " ")
 	if err := db.Admin.QueryRowContext(t.Context(),
-		`INSERT INTO staff (identity_uid, name, email, work_state) VALUES ($1, $2, $3, 'NY') RETURNING id`,
-		identityUID, name, identityUID+"@example.com",
+		`INSERT INTO staff (identity_uid, first_name, last_name, email, work_state) VALUES ($1, $2, $3, $4, 'NY') RETURNING id`,
+		identityUID, first, last, identityUID+"@example.com",
 	).Scan(&staffID); err != nil {
 		// coverage:ignore reason: fixture insert failure, not exercised by the happy-path test
 		t.Fatalf("testdb: seed staff: %v", err)

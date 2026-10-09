@@ -18,7 +18,8 @@ test('Signing up through the /signup form drives the new Owner into MFA enrollme
 
 	await page.goto('/signup');
 	await page.getByLabel('Practice name').fill('Riverside Doulas');
-	await page.getByLabel('Your name').fill('Jamie Owner');
+	await page.getByLabel('First name').fill('Jamie');
+	await page.getByLabel('Last name').fill('Owner');
 	await page.getByLabel('Which state do you work from?').selectOption('New York');
 	// #1166: chosen rather than left on whatever zone the runner reports,
 	// so what the form sends is the same on a laptop and in CI.

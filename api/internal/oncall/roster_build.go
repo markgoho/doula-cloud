@@ -126,7 +126,7 @@ func rosterDoulas(ctx context.Context, tx *sql.Tx, practiceID string, from, to a
 		   FROM practice_memberships pm
 		   JOIN staff s ON s.id = pm.staff_id
 		  WHERE pm.practice_id = $1 AND 'doula' = ANY(pm.roles)
-		  ORDER BY s.name, s.id`,
+		  ORDER BY s.last_name, s.first_name, s.id`,
 		practiceID, from, to,
 	)
 	if err != nil {

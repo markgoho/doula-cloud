@@ -26,7 +26,14 @@ const (
 	testStaffEmail = "s@example.com"
 	jamieEmail     = "jamie@example.com"
 	jamieName      = "Jamie"
-	jamieOwnerName = "Jamie Owner"
+	ownerLastName  = "Owner"
+	// placeholderLastName fills the last name for a test whose subject is
+	// something else.
+	placeholderLastName = "Last"
+	leaFirstName        = "Lena"
+	maryAnne            = "Mary Anne"
+	smith               = "Smith"
+	jamieOwnerName      = "Jamie Owner"
 
 	// addresslessPractice names the Practice #614's refusal must never
 	// create. Read twice -- as the request's name, and as the row count
@@ -110,7 +117,7 @@ func TestSignupHandler_MissingToken(t *testing.T) {
 	srv := newSignupServer(authntest.Verifier{}, db)
 	defer srv.Close()
 
-	resp := postSignup(t, srv, "", staffauth.SignupRequest{WorkState: "NY", PracticeName: "P", StaffName: "S"})
+	resp := postSignup(t, srv, "", staffauth.SignupRequest{WorkState: "NY", PracticeName: "P", FirstName: "S", LastName: placeholderLastName})
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusUnauthorized {
@@ -126,7 +133,7 @@ func TestSignupHandler_TokenVerificationFailure(t *testing.T) {
 	srv := newSignupServer(authntest.Verifier{Err: errBadToken}, db)
 	defer srv.Close()
 
-	resp := postSignup(t, srv, "bad-token", staffauth.SignupRequest{WorkState: "NY", PracticeName: "P", StaffName: "S"})
+	resp := postSignup(t, srv, "bad-token", staffauth.SignupRequest{WorkState: "NY", PracticeName: "P", FirstName: "S", LastName: placeholderLastName})
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusUnauthorized {
@@ -168,20 +175,20 @@ func TestSignupHandler_MissingFields(t *testing.T) {
 	srv := newSignupServer(authntest.Verifier{UID: newOwnerUID}, db)
 	defer srv.Close()
 
-	resp := postSignup(t, srv, "tok", staffauth.SignupRequest{WorkState: "NY", PracticeName: "", StaffName: "S"})
+	resp := postSignup(t, srv, "tok", staffauth.SignupRequest{WorkState: "NY", PracticeName: "", FirstName: "S", LastName: placeholderLastName})
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusBadRequest {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
 	}
 	// #488: the refusal names the field at fault, keyed by the DTO's own
-	// json tag, and names only that one -- staffName was sent.
+	// json tag, and names only that one -- both names were sent.
 	details := decodeDetails(t, resp)
 	if details["practiceName"] != staffauth.MsgPracticeNameNeeded {
 		t.Fatalf("details = %v, want practiceName entry", details)
 	}
-	if _, ok := details["staffName"]; ok {
-		t.Fatalf("details = %v, want no staffName entry", details)
+	if _, ok := details["firstName"]; ok {
+		t.Fatalf("details = %v, want no firstName entry", details)
 	}
 }
 
@@ -200,7 +207,7 @@ func TestSignupHandler_MissingBothNames(t *testing.T) {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
 	}
 	details := decodeDetails(t, resp)
-	if details["practiceName"] != staffauth.MsgPracticeNameNeeded || details["staffName"] != staffauth.MsgStaffNameNeeded {
+	if details["practiceName"] != staffauth.MsgPracticeNameNeeded || details["firstName"] != staffauth.MsgFirstNameNeeded || details["lastName"] != staffauth.MsgLastNameNeeded {
 		t.Fatalf("details = %v, want both name entries", details)
 	}
 }
@@ -214,7 +221,7 @@ func TestSignupHandler_MissingWorkState(t *testing.T) {
 	srv := newSignupServer(authntest.Verifier{UID: newOwnerUID}, db)
 	defer srv.Close()
 
-	resp := postSignup(t, srv, "tok", staffauth.SignupRequest{PracticeName: "P", StaffName: "S", WorkState: "ZZ"})
+	resp := postSignup(t, srv, "tok", staffauth.SignupRequest{PracticeName: "P", FirstName: "S", LastName: placeholderLastName, WorkState: "ZZ"})
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusBadRequest {
@@ -236,7 +243,7 @@ func TestSignupHandler_ZoneIsStatedNotInherited(t *testing.T) {
 	defer srv.Close()
 
 	resp := postSignup(t, srv, "tok", staffauth.SignupRequest{
-		PracticeName: "Mile High Doulas", StaffName: "Robin", WorkState: "CO",
+		PracticeName: "Mile High Doulas", FirstName: "Robin", LastName: placeholderLastName, WorkState: "CO",
 		Timezone: "America/Denver",
 	})
 	defer resp.Body.Close()
@@ -272,7 +279,7 @@ func TestSignupHandler_RefusesAZoneTheDatabaseDoesNotName(t *testing.T) {
 			defer srv.Close()
 
 			resp := postSignup(t, srv, "tok", map[string]string{
-				"practiceName": "P", "staffName": "S", "workState": "NY", "timezone": zone,
+				"practiceName": "P", "firstName": "S", "lastName": "Last", "workState": "NY", "timezone": zone,
 			})
 			defer resp.Body.Close()
 
@@ -309,7 +316,7 @@ func TestSignupHandler_Success(t *testing.T) {
 
 	resp := postSignup(t, srv, "tok", staffauth.SignupRequest{WorkState: "NY",
 		PracticeName: "Solo Doula Co",
-		StaffName:    jamieOwnerName,
+		FirstName:    jamieName, LastName: ownerLastName,
 	})
 	defer resp.Body.Close()
 
@@ -367,7 +374,7 @@ func TestSignupHandler_SessionStoreFailure(t *testing.T) {
 
 	resp := postSignup(t, srv, "tok", staffauth.SignupRequest{WorkState: "NY",
 		PracticeName: practiceName,
-		StaffName:    jamieOwnerName,
+		FirstName:    jamieName, LastName: ownerLastName,
 	})
 	defer resp.Body.Close()
 
@@ -394,14 +401,14 @@ func TestSignupHandler_DuplicateSignup(t *testing.T) {
 	srv := newSignupServer(authntest.Verifier{UID: "repeat-owner", Email: jamieEmail}, db)
 	defer srv.Close()
 
-	body := staffauth.SignupRequest{WorkState: "NY", PracticeName: "First Practice", StaffName: jamieName}
+	body := staffauth.SignupRequest{WorkState: "NY", PracticeName: "First Practice", FirstName: jamieName, LastName: ownerLastName}
 	first := postSignup(t, srv, "tok", body)
 	_ = first.Body.Close()
 	if first.StatusCode != http.StatusCreated {
 		t.Fatalf("first signup status = %d, want %d", first.StatusCode, http.StatusCreated)
 	}
 
-	second := postSignup(t, srv, "tok", staffauth.SignupRequest{WorkState: "NY", PracticeName: "Second Practice", StaffName: jamieName})
+	second := postSignup(t, srv, "tok", staffauth.SignupRequest{WorkState: "NY", PracticeName: "Second Practice", FirstName: jamieName, LastName: ownerLastName})
 	defer second.Body.Close()
 	if second.StatusCode != http.StatusConflict {
 		t.Fatalf("second signup status = %d, want %d", second.StatusCode, http.StatusConflict)
@@ -418,7 +425,7 @@ func TestSignupHandler_GrantsSignupBonus(t *testing.T) {
 
 	resp := postSignup(t, srv, "tok", staffauth.SignupRequest{WorkState: "NY",
 		PracticeName: "Bonus Practice",
-		StaffName:    jamieOwnerName,
+		FirstName:    jamieName, LastName: ownerLastName,
 	})
 	defer resp.Body.Close()
 
@@ -453,7 +460,7 @@ func TestSignupHandler_SeedsDefaultPlanTemplates(t *testing.T) {
 
 	resp := postSignup(t, srv, "tok", staffauth.SignupRequest{WorkState: "NY",
 		PracticeName: "Seeded Practice",
-		StaffName:    jamieOwnerName,
+		FirstName:    jamieName, LastName: ownerLastName,
 	})
 	defer resp.Body.Close()
 
@@ -507,7 +514,7 @@ func TestSignupHandler_SeededTemplatesRoundTripThroughPlansAPI(t *testing.T) {
 	session := authntest.SeedSession(t, db.App, roundtripOwnerUID)
 
 	signupResp := postSignup(t, srv, "tok", staffauth.SignupRequest{WorkState: "NY",
-		PracticeName: "Roundtrip Practice", StaffName: jamieName,
+		PracticeName: "Roundtrip Practice", FirstName: jamieName, LastName: ownerLastName,
 	})
 	defer signupResp.Body.Close()
 	var signedUp staffauth.SignupResponse
@@ -570,7 +577,7 @@ func TestSignupHandler_SeedsDefaultContractTemplate(t *testing.T) {
 
 	resp := postSignup(t, srv, "tok", staffauth.SignupRequest{WorkState: "NY",
 		PracticeName: "Seeded Contract Practice",
-		StaffName:    jamieOwnerName,
+		FirstName:    jamieName, LastName: ownerLastName,
 	})
 	defer resp.Body.Close()
 
@@ -613,7 +620,7 @@ func TestSignupHandler_SeededContractTemplateRoundTripsThroughContractsAPI(t *te
 	session := authntest.SeedSession(t, db.App, ownerUID)
 
 	signupResp := postSignup(t, srv, "tok", staffauth.SignupRequest{WorkState: "NY",
-		PracticeName: "Roundtrip Contract Practice", StaffName: jamieName,
+		PracticeName: "Roundtrip Contract Practice", FirstName: jamieName, LastName: ownerLastName,
 	})
 	defer signupResp.Body.Close()
 	var signedUp staffauth.SignupResponse
@@ -676,7 +683,7 @@ func TestSignupHandler_RefusesTokenWithNoAddress(t *testing.T) {
 	defer srv.Close()
 
 	resp := postSignup(t, srv, "tok", staffauth.SignupRequest{
-		WorkState: "NY", PracticeName: addresslessPractice, StaffName: jamieName,
+		WorkState: "NY", PracticeName: addresslessPractice, FirstName: jamieName, LastName: ownerLastName,
 	})
 	defer resp.Body.Close()
 
@@ -713,7 +720,7 @@ func TestSignupHandler_TakesEmailFromVerifiedToken(t *testing.T) {
 	defer srv.Close()
 
 	resp := postSignup(t, srv, "tok", staffauth.SignupRequest{
-		WorkState: "NY", PracticeName: "Token Address Practice", StaffName: jamieName,
+		WorkState: "NY", PracticeName: "Token Address Practice", FirstName: jamieName, LastName: ownerLastName,
 	})
 	defer resp.Body.Close()
 

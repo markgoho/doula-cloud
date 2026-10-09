@@ -154,7 +154,7 @@ func listMembers(ctx context.Context, tx *sql.Tx, practiceID string) ([]StaffSum
 		 FROM staff s
 		 JOIN practice_memberships pm ON pm.staff_id = s.id
 		 WHERE pm.practice_id = $1
-		 ORDER BY s.name
+		 ORDER BY s.last_name, s.first_name
 		 LIMIT $2`,
 		practiceID, maxMembers,
 	)

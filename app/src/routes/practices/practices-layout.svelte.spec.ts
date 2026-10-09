@@ -79,7 +79,7 @@ async function setup({
 	signOutOfSession.mockResolvedValue(outcome);
 	apiFetchWithSession.mockReset();
 	apiFetchWithSession.mockResolvedValue(
-		jsonResponse({ name: 'Mark Goho', email: 'mark@example.test', memberships }, staffSessionRefuses ? 403 : 200)
+		jsonResponse({ name: 'Mark Goho', firstName: 'Mark', lastName: 'Goho', email: 'mark@example.test', memberships }, staffSessionRefuses ? 403 : 200)
 	);
 	await render(Layout, {
 		children: createRawSnippet(() => ({ render: () => '<p>staff child content</p>' }))

@@ -32,7 +32,8 @@
 		navItems: NavItem[];
 		practices: PracticeOption[];
 		currentPracticeId: string;
-		name: string;
+		firstName: string;
+		lastName: string;
 		email?: string;
 		accountHref?: string;
 		signOut: () => Promise<SignOutOutcome>;
@@ -42,7 +43,8 @@
 		navItems,
 		practices,
 		currentPracticeId,
-		name,
+		firstName,
+		lastName,
 		email,
 		accountHref,
 		signOut
@@ -90,14 +92,14 @@
 		</div>
 		<div class="account">
 			<PracticeSwitcher {practices} {currentPracticeId} />
-			<AvatarMenu {name} {email} {accountHref} {signOut} />
+			<AvatarMenu {firstName} {lastName} {email} {accountHref} {signOut} />
 		</div>
 	</div>
 
 	<div class="narrow">
 		<Button label="Menu" icon="list" iconOnly variant="bare" onClick={openSheet} />
 		<PracticeSwitcher {practices} {currentPracticeId} />
-		<AvatarMenu {name} {email} {accountHref} {signOut} />
+		<AvatarMenu {firstName} {lastName} {email} {accountHref} {signOut} />
 	</div>
 </header>
 
@@ -105,7 +107,7 @@
 	<div class="sheet-bar">
 		<Button label="Close menu" icon="x" iconOnly variant="bare" onClick={closeSheet} />
 		<BrandLockup />
-		<AvatarMenu {name} {email} {accountHref} {signOut} />
+		<AvatarMenu {firstName} {lastName} {email} {accountHref} {signOut} />
 	</div>
 	<nav aria-label="Practice">
 		{#each navItems as item (item.href)}

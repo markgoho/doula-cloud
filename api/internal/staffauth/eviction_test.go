@@ -43,7 +43,7 @@ func TestSignupHandler_LivePortalSessionRefusesThenConfirmedRetrySucceeds(t *tes
 	srv := newSignupServer(authntest.Verifier{UID: identityUID, Email: "signup-evicts@example.com"}, db)
 	defer srv.Close()
 
-	body, err := json.Marshal(staffauth.SignupRequest{PracticeName: "Evicting Practice", StaffName: "Jamie", WorkState: "NY", Timezone: signupZone})
+	body, err := json.Marshal(staffauth.SignupRequest{PracticeName: "Evicting Practice", FirstName: jamieName, LastName: placeholderLastName, WorkState: "NY", Timezone: signupZone})
 	if err != nil {
 		t.Fatalf("marshal body: %v", err)
 	}
@@ -112,7 +112,7 @@ func TestAcceptInviteHandler_LivePortalSessionRefusesThenConfirmedRetrySucceeds(
 	srv := newAcceptServer(t, db, identityUID, address)
 	defer srv.Close()
 
-	body, err := json.Marshal(staffauth.AcceptInviteRequest{InviteToken: inviteToken, Name: "Invitee", WorkState: "NY"})
+	body, err := json.Marshal(staffauth.AcceptInviteRequest{InviteToken: inviteToken, FirstName: "Invitee", LastName: placeholderLastName, WorkState: "NY"})
 	if err != nil {
 		t.Fatalf("marshal body: %v", err)
 	}

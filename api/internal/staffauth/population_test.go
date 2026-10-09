@@ -55,6 +55,7 @@ const (
 var staffFamilyGroups = map[string]routeGroup{
 	"GET /api/staff/session":                          groupSession,
 	"PUT /api/staff/work-state":                       groupSession,
+	"PUT /api/staff/name":                             groupSession,
 	"PUT /api/staff/email":                            groupSession,
 	"POST /api/staff/verify-email/request":            groupSession,
 	"POST /api/staff/mfa-recovery/saved-codes/rotate": groupSession,

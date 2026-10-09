@@ -28,6 +28,8 @@ vi.mock('#lib/signOut.js', () => ({ signOutOfSession }));
 const session = {
 	staffId: 'staff-1',
 	name: 'Priya Sharma',
+	firstName: 'Priya',
+	lastName: 'Sharma',
 	email: 'priya@example.test',
 	workState: 'NY',
 	workStateReportedAt: '2026-08-28T14:02:11Z',

@@ -346,8 +346,8 @@ func TestRoutes_SignupLoginLanding(t *testing.T) {
 	signupBody, _ := json.Marshal(staffauth.SignupRequest{
 		WorkState:    "NY",
 		PracticeName: "Riverside Doulas",
-		StaffName:    "Jamie Owner",
-		Timezone:     "America/New_York",
+		FirstName:    "Jamie", LastName: "Owner",
+		Timezone: "America/New_York",
 	})
 	signupReq, _ := http.NewRequestWithContext(t.Context(), http.MethodPost, srv.URL+"/api/staff/signup", bytes.NewReader(signupBody))
 	signupReq.Header.Set("Authorization", "Bearer tok")
