@@ -25,5 +25,6 @@ The refusal, and the sentence the error summary links to the field.
 export const PASSWORD_TOO_SHORT = `Password must be ${MIN_PASSWORD_LENGTH} characters or more`;
 
 export function isPasswordTooShort(password: string): boolean {
-	return password.length < MIN_PASSWORD_LENGTH;
+	// Code points, not UTF-16 units, so the browser counts the way the BFF does.
+	return [...password].length < MIN_PASSWORD_LENGTH;
 }

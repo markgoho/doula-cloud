@@ -225,8 +225,8 @@ describe('step one -- the password rule (#1538)', () => {
 		await passwordField().fill('short');
 		await continueButton().click();
 
-		expect(signInWithEmailAndPassword).toHaveBeenCalled();
-		expect(testPage.getByText('Must be 15 characters or more').elements()).toHaveLength(0);
+		await vi.waitFor(() => expect(signInWithEmailAndPassword).toHaveBeenCalled());
+		expect(testPage.getByText('Password must be 15 characters or more').elements()).toHaveLength(0);
 	});
 });
 

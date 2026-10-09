@@ -17,4 +17,9 @@ describe('the Staff password rule', () => {
 		expect(isPasswordTooShort('correct horse battery staple')).toBe(false);
 		expect(isPasswordTooShort(' '.repeat(15))).toBe(false);
 	});
+
+	it('counts characters, not UTF-16 units', () => {
+		expect(isPasswordTooShort('😀'.repeat(8))).toBe(true);
+		expect(isPasswordTooShort('😀'.repeat(15))).toBe(false);
+	});
 });

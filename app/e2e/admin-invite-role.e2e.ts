@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test';
 import { signInEnrolled, enterPracticeAsEnrolled } from './mfa';
 import { readStaffInviteToken } from './stack';
-import { seedFoundingOwner, uniqueEmail } from './staffSignup';
+import { seedFoundingOwner, uniqueEmail, STAFF_PASSWORD } from './staffSignup';
 
 // The Admin bundle -- `admin` without `owner` and without `doula` -- is
 // the one role set no other spec reaches the app as (#965). Every spec that
@@ -18,7 +18,7 @@ test('An Admin invited via the Staff invite route reaches the Credits and Staff 
 	context
 }) => {
 	const adminEmail = uniqueEmail('admin');
-	const password = 'staff-password-123';
+	const password = STAFF_PASSWORD;
 
 	// Fixture setup, not the seam under test (#207): the Owner side is
 	// provisioned the way every other spec provisions its Practice.

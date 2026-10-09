@@ -2,7 +2,7 @@ import { expect, test } from '@playwright/test';
 import { MAILBOX_DOMAIN, MAILBOX_URL } from './stack';
 import { drainOutbox, drainUntilMailArrives, readMailbox } from './outboxMail';
 import { signInEnrolled, enterPracticeAsEnrolled } from './mfa';
-import { seedFoundingOwner, uniqueEmail } from './staffSignup';
+import { seedFoundingOwner, uniqueEmail, STAFF_PASSWORD } from './staffSignup';
 
 const STAFF_INVITE_OUTBOX = 'process-staff-invite-outbox';
 const INVITE_SUBJECT = "You've been invited to join a practice on DoulaCloud";
@@ -27,7 +27,7 @@ test('An invitation arrives as readable mail, and a complaint stops the next one
 }) => {
 	const doulaEmail = uniqueEmail('doula', MAILBOX_DOMAIN);
 	const complainerEmail = uniqueEmail('complainer', MAILBOX_DOMAIN);
-	const password = 'staff-password-123';
+	const password = STAFF_PASSWORD;
 
 	// Fixture setup, not the seam under test (#207).
 	const { idToken: ownerIdToken, localId: ownerUID, practiceId } = await seedFoundingOwner(request, {
