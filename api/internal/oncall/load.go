@@ -72,14 +72,14 @@ type engagementsFilter struct {
 	engagementID string
 }
 
-// engagementsSelect reads every active birth Engagement at the Practice
+// engagementsSelect reads every live (not completed) birth Engagement at the Practice
 // that has at least one open, granted Attachment, one row per such
 // Attachment. Those are the only Engagements that can have a window
 // (DeriveWindow's own first three refusals), so nothing that can never
 // be on the roster is read at all.
 //
 // Performance: bounded by the Practice's live births rather than by its
-// history, since status = 'active' excludes every completed Engagement;
+// history, since status <> 'completed' excludes every completed Engagement;
 // at a fourteen-doula agency that is on the order of a hundred rows. The
 // window is then derived in Go, because a gestational week, a grant
 // date and a grace do not reduce to one indexable column.
@@ -97,7 +97,7 @@ const engagementsSelect = `SELECT e.id, cl.given_name, cl.preferred_name,
 	    ON ea.engagement_id = e.id AND ea.origin = 'granted' AND ea.ended_at IS NULL
 	  LEFT JOIN staff s ON s.id = ea.staff_id
 	 WHERE e.practice_id = $1
-	   AND e.status = 'active'
+	   AND e.status <> 'completed'
 	   AND e.kind = 'birth'
 	   AND ($2::uuid IS NULL OR EXISTS (
 	         SELECT 1 FROM engagement_attachments mine

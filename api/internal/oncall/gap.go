@@ -34,7 +34,7 @@ const (
 	// it states why a birth has no window rather than guessing a date.
 	MsgNoWindowNoDueDate  = "This birth has no on-call window yet, so there is no time to record a gap in. Add a due date first."
 	MsgNoWindowPostpartum = "Postpartum care is not on-call work, so there is no on-call window to record a gap in."
-	MsgNoWindowNotActive  = "Care has not started on this birth, or it has ended, so there is no on-call window to record a gap in."
+	MsgNoWindowCompleted  = "Care has ended on this birth, so there is no on-call window to record a gap in."
 	MsgNoWindowNobodyOnIt = "Nobody is on this birth yet, so there is nobody to record a gap for."
 	MsgNoWindowEnded      = "The baby arrived before on call would have opened, so there is no window to record a gap in."
 	MsgNotOnCall          = "Choose a doula who is on this birth."
@@ -233,8 +233,8 @@ func noWindowRefusal(reason NoWindowReason) string {
 	switch reason {
 	case NoWindowPostpartum:
 		return MsgNoWindowPostpartum
-	case NoWindowNotActive:
-		return MsgNoWindowNotActive
+	case NoWindowCompleted:
+		return MsgNoWindowCompleted
 	case NoWindowNobodyAttached:
 		return MsgNoWindowNobodyOnIt
 	case NoWindowEndedBeforeStart:
