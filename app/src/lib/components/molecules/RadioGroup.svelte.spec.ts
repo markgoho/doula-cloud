@@ -160,7 +160,7 @@ describe('RadioGroup.svelte', () => {
 	// #1590: a question can open with nothing selected, and carry a hint
 	// of its own under the legend that the fieldset is described by.
 	it('selects nothing when the value is undefined, and describes the group by its hint and its refusal', async () => {
-		const { container } = await render(RadioGroup<Mode>, {
+		await render(RadioGroup<Mode>, {
 			legend: 'Mode',
 			hint: 'You answer this one time.',
 			name: 'mode',
@@ -173,7 +173,9 @@ describe('RadioGroup.svelte', () => {
 		await expect.element(page.getByLabelText("I'm new here -- create an account")).not.toBeChecked();
 		await expect.element(page.getByLabelText('I already have an account -- log in')).not.toBeChecked();
 		await expect.element(page.getByText('You answer this one time.')).toBeVisible();
-		expect(container.querySelector('fieldset')!.getAttribute('aria-describedby')).toBe('mode-hint mode-error');
+		await expect
+			.element(page.getByRole('group', { name: 'Mode' }))
+			.toHaveAttribute('aria-describedby', 'mode-hint mode-error');
 	});
 
 	/*

@@ -164,7 +164,7 @@
 			opacity: var(--opacity-disabled);
 		}
 
-		/* Under the legend, the legend's own bottom margin moved below it. */
+		/* With a hint, the gap sits below the hint instead of the legend. */
 		legend:has(+ .hint) {
 			margin-block-end: var(--space-1);
 		}

@@ -119,6 +119,8 @@
 	let createError = $state('');
 
 	const billingModeName = 'invoice-billing-mode';
+	// The first option's id, as the payment form's Method does: the summary
+	// link lands on the first option, whichever one is checked.
 	const billingModeFieldId = radioFieldId(billingModeName, 'stripe');
 	const billingModeErrors = $derived<FormError[]>(
 		billingModeError ? [{ message: billingModeError, targetId: billingModeFieldId }] : []
@@ -694,7 +696,8 @@
 			value={chosenBillingMode}
 			onChange={(value) => (chosenBillingMode = value)}
 			error={billingModeError || undefined}
-		/>		<Button label="Create Invoice" type="submit" loading={isCreating} />
+		/>
+		<Button label="Create Invoice" type="submit" loading={isCreating} />
 	</StackedForm>
 	{#if createError}
 		<p role="alert">{createError}</p>
