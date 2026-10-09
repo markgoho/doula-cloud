@@ -21,11 +21,15 @@
 	import { decideOffer } from '#lib/offer.js';
 	import {
 		hasSecondary,
+		isConnectCardShown,
 		loadPracticeLanding,
 		loadWaitingOnReplyPage,
+		type ConnectHealth,
 		type PracticeLanding,
 		type WaitingOnReply
 	} from '#lib/practiceLanding.js';
+	import { CONNECT_STATUS_BADGES } from '#lib/payments.js';
+	import { isOwner } from '#lib/roles.js';
 	import { PaginatedList } from '#lib/paginatedList.svelte.js';
 	import { startHref } from './clients/new/intake.js';
 	import { activityLedgerColumns, loadPracticeActivityPage, type ActivityEntry } from '#lib/activityLedger.js';
@@ -152,13 +156,19 @@
 		}
 	];
 
-	const connectLabels: Record<string, { label: string; variant: 'neutral' | 'warning' | 'success' }> = {
-		not_connected: { label: 'Not connected', variant: 'neutral' },
-		onboarding_incomplete: { label: 'Onboarding incomplete', variant: 'warning' },
-		pending: { label: 'Awaiting Stripe review', variant: 'warning' },
-		payouts_restricted: { label: 'Payouts on hold', variant: 'warning' },
-		active: { label: 'Taking payments', variant: 'success' }
-	};
+	// The words of the Getting paid card with no Stripe account (#1589).
+	// An Owner can connect Stripe, so hers asks; an Admin cannot
+	// (ADR-0035), so hers says who can. The last sentence is left out once
+	// the Practice has chosen Stripe: it answered the question.
+	const ownerAskStart =
+		'Clients cannot pay you by card yet. To take card payments, connect Stripe. It takes about fifteen minutes, and then Stripe reviews your details.';
+	const ownerAskEnd = 'If you collect payment yourself, you do not need Stripe.';
+	const adminAsk = 'Clients cannot pay this Practice by card yet. A Practice Owner has to connect Stripe.';
+
+	function notConnectedWords(connect: ConnectHealth): string {
+		if (!isOwner(session)) return adminAsk;
+		return connect.billingMode === 'stripe' ? ownerAskStart : `${ownerAskStart} ${ownerAskEnd}`;
+	}
 </script>
 
 {#snippet primary()}
@@ -281,23 +291,32 @@
 	</section>
 {/snippet}
 
-{#snippet connectBlock()}
+{#snippet connectBlock(connect: ConnectHealth | 'unavailable')}
 	<section>
 		<stack-l space="var(--space-3)">
 			<Heading level={2} variant="card" text="Getting paid" />
-			{#if landing!.connect === 'unavailable'}
+			{#if connect === 'unavailable'}
 				<Text text="Could not load your Stripe status just now." tone="muted" />
-			{:else if landing!.connect}
-				{#if landing!.connect.requirementsDue.length > 0}
+			{:else if connect.status === 'not_connected'}
+				<Text text={notConnectedWords(connect)} />
+				<Link
+					href={resolve('/practices/[practiceId]/settings/payments', {
+						practiceId: page.params.practiceId!
+					})}
+					label={isOwner(session) ? 'Set up card payments' : 'Getting paid'}
+					variant="secondary"
+				/>
+			{:else}
+				{#if connect.requirementsDue.length > 0}
 					<Text
-						text={`Stripe is waiting on ${landing!.connect.requirementsDue.length} more detail${landing!.connect.requirementsDue.length === 1 ? '' : 's'}.`}
+						text={`Stripe is waiting on ${connect.requirementsDue.length} more detail${connect.requirementsDue.length === 1 ? '' : 's'}.`}
 						tone="variant"
 					/>
 				{/if}
 				<cluster-l space="var(--space-3)" align="center">
 					<Badge
-						label={connectLabels[landing!.connect.status].label}
-						variant={connectLabels[landing!.connect.status].variant}
+						label={CONNECT_STATUS_BADGES[connect.status].label}
+						variant={CONNECT_STATUS_BADGES[connect.status].variant}
 					/>
 					<Link
 						href={resolve('/practices/[practiceId]/settings/payments', {
@@ -316,7 +335,7 @@
 	{#if landing!.requests !== undefined}{@render requestBlock()}{/if}
 	{#if landing!.roster !== undefined}{@render rosterBlock()}{/if}
 	{#if landing!.credit !== undefined}{@render creditBlock()}{/if}
-	{#if landing!.connect !== undefined}{@render connectBlock()}{/if}
+	{#if isConnectCardShown(landing!.connect)}{@render connectBlock(landing!.connect)}{/if}
 {/snippet}
 
 <!--

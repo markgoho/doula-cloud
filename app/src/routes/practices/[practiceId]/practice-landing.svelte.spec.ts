@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import { registerLayoutPrimitives } from '#lib/primitives/index.js';
 import { jsonResponse } from '#lib/testResponse.js';
+import { CONNECT_STATUS_BADGES } from '#lib/payments.js';
 import Page from './+page.svelte';
 // The Skeleton reserves a line of body copy with `var(--text-body-size)`,
 // so without the tokens it draws at zero height and reserves nothing --
@@ -88,6 +89,8 @@ async function setup({ roles = ['owner'], clients = [{ clientId: 'c1' }], overri
 			members: [{ staffId: 's1' }, { staffId: 's2' }],
 			invitations: { items: [{ expired: true }], hasMore: false }
 		}),
+		// Before `billing`: its path holds `/billing` (#1589).
+		'billing-mode': jsonResponse({}),
 		billing: jsonResponse({ balance: 12, ledger: { items: [], hasMore: false } }),
 		connect: jsonResponse({
 			status: 'onboarding_incomplete',
@@ -230,6 +233,110 @@ describe('the Practice landing page', () => {
 
 		await expect.element(testPage.getByRole('heading', { name: 'Your people' })).toBeVisible();
 		await expect.element(testPage.getByRole('heading', { name: 'Getting paid' })).toBeVisible();
+	});
+
+	/*
+	 * #1589: the Getting paid card is the first moment the product asks an
+	 * Owner to connect Stripe (#1495). The words are the decided ones.
+	 */
+	describe('the Getting paid card', () => {
+		const notConnected = jsonResponse({
+			status: 'not_connected',
+			cardPaymentsStatus: 'inactive',
+			payoutsStatus: 'inactive',
+			requirementsDue: []
+		});
+		const ownerWords =
+			'Clients cannot pay you by card yet. To take card payments, connect Stripe. It takes about fifteen minutes, and then Stripe reviews your details. If you collect payment yourself, you do not need Stripe.';
+		const ownerWordsWithStripe =
+			'Clients cannot pay you by card yet. To take card payments, connect Stripe. It takes about fifteen minutes, and then Stripe reviews your details.';
+		const adminWords = 'Clients cannot pay this Practice by card yet. A Practice Owner has to connect Stripe.';
+
+		function setupCard(overrides: Record<string, Response>, roles = ['owner']) {
+			return setup({ roles, overrides: { connect: notConnected, ...overrides } });
+		}
+
+		it('asks an Owner with no Stripe account and no billing mode to set up card payments', async () => {
+			await setupCard({});
+
+			await expect.element(testPage.getByText(ownerWords, { exact: true })).toBeVisible();
+			await expect
+				.element(testPage.getByRole('link', { name: 'Set up card payments' }))
+				.toHaveAttribute('href', `/practices/${practiceId}/settings/payments`);
+			expect(testPage.getByText('Not connected').elements()).toHaveLength(0);
+		});
+
+		it('leaves out the sentence about collecting payment herself once the mode is Stripe', async () => {
+			await setupCard({ 'billing-mode': jsonResponse({ billingMode: 'stripe' }) });
+
+			await expect.element(testPage.getByText(ownerWordsWithStripe, { exact: true })).toBeVisible();
+			expect(testPage.getByText(/collect payment yourself/).elements()).toHaveLength(0);
+		});
+
+		it('tells an Admin, who cannot connect Stripe, who can', async () => {
+			await setupCard({}, ['admin']);
+
+			await expect.element(testPage.getByText(adminWords, { exact: true })).toBeVisible();
+			await expect
+				.element(testPage.getByRole('link', { name: 'Getting paid' }))
+				.toHaveAttribute('href', `/practices/${practiceId}/settings/payments`);
+			expect(testPage.getByText('Not connected').elements()).toHaveLength(0);
+		});
+
+		it('is shown when the billing mode cannot be loaded', async () => {
+			await setupCard({ 'billing-mode': refusal('nope') });
+
+			await expect.element(testPage.getByText(ownerWords, { exact: true })).toBeVisible();
+		});
+
+		it.each(['not_connected', 'onboarding_incomplete', 'pending', 'payouts_restricted', 'active'])(
+			'is not drawn for a Practice that bills by hand, whatever Stripe says (%s)',
+			async (status) => {
+				await setup({
+					overrides: {
+						'billing-mode': jsonResponse({ billingMode: 'by_hand' }),
+						connect: jsonResponse({
+							status,
+							cardPaymentsStatus: 'inactive',
+							payoutsStatus: 'inactive',
+							requirementsDue: []
+						})
+					}
+				});
+
+				// The rail has drawn: its other blocks are the proof the page is
+				// loaded, so the absence below is not just a slow render.
+				await expect.element(testPage.getByRole('heading', { name: 'Credits' })).toBeVisible();
+				expect(testPage.getByRole('heading', { name: 'Getting paid' }).elements()).toHaveLength(0);
+			}
+		);
+
+		it.each(['onboarding_incomplete', 'pending', 'payouts_restricted', 'active'] as const)(
+			'keeps its Badge for %s, in the words the Getting paid screen shares',
+			async (status) => {
+				await setup({
+					overrides: {
+						connect: jsonResponse({
+							status,
+							cardPaymentsStatus: 'inactive',
+							payoutsStatus: 'inactive',
+							requirementsDue: []
+						})
+					}
+				});
+
+				await expect
+					.element(testPage.getByText(CONNECT_STATUS_BADGES[status].label, { exact: true }))
+					.toBeVisible();
+			}
+		);
+
+		it('draws no Getting paid card on the empty Practice', async () => {
+			await setup({ clients: [], overrides: { connect: notConnected } });
+
+			await expect.element(testPage.getByRole('link', { name: 'Add your first Client' })).toBeVisible();
+			expect(testPage.getByRole('heading', { name: 'Getting paid' }).elements()).toHaveLength(0);
+		});
 	});
 
 	it('shows a Doula her Offers and no rail at all', async () => {

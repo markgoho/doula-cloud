@@ -204,6 +204,13 @@ function respondForPopulatedPractice(path: string): Response {
 			]
 		});
 	}
+	// #1589: the Getting paid card reads the billing mode beside the Connect
+	// status. A Practice that has not chosen one answers with no
+	// `billingMode`, which is the state the card asks in. This path holds
+	// `/billing`, so it is answered before the Credits branch below.
+	if (path.includes('/payments/billing-mode')) {
+		return jsonResponse({});
+	}
 	if (path.includes('/billing')) {
 		return jsonResponse({ balance: 1284, ledger: { items: [], hasMore: false } });
 	}
@@ -270,6 +277,30 @@ export const asOwnerWithNoClient: RouteVariant = {
 	}
 };
 
+/*
+ * The Getting paid card with no Stripe account (#1589): a sentence and one
+ * link in place of a Badge, and the longest words that card carries (the
+ * Owner's four sentences). The base answers `onboarding_incomplete`, so this
+ * variant restates `/payments/connect` and hands every other path to the
+ * base's function -- a replacement, not a merge, as with the variant above,
+ * and for the same reason: `block()` swallows an unanswered path.
+ */
+export const asOwnerNotConnected: RouteVariant = {
+	name: 'The Practice landing hub, as an Owner whose Practice has no Stripe account',
+	pageData: practiceSession(['owner'], { practiceName }),
+	respond: (path) => {
+		if (path.includes('/payments/connect')) {
+			return jsonResponse({
+				status: 'not_connected',
+				cardPaymentsStatus: 'inactive',
+				payoutsStatus: 'inactive',
+				requirementsDue: []
+			});
+		}
+		return respondForPopulatedPractice(path);
+	}
+};
+
 export const fixture: RouteFixture = {
 	name: 'The Practice landing hub, as a Doula',
 	component: Page,
@@ -278,5 +309,5 @@ export const fixture: RouteFixture = {
 	pageData: practiceSession(['doula'], { practiceName }),
 	respond: respondForPopulatedPractice,
 	readyText: `Welcome to ${practiceName}`,
-	variants: [asOwner, asOwnerWithNoClient]
+	variants: [asOwner, asOwnerWithNoClient, asOwnerNotConnected]
 };

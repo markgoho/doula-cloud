@@ -3,6 +3,7 @@ import {
 	canReadConnect,
 	canReadRoster,
 	hasSecondary,
+	isConnectCardShown,
 	loadPracticeLanding,
 	loadWaitingOnReplyPage,
 	type PracticeLanding
@@ -37,6 +38,8 @@ function fetcherFor(overrides: Record<string, Response> = {}) {
 		offers: jsonResponse({ items: [openOffer, decidedOffer] }),
 		clients: jsonResponse({ items: [{ clientId: 'client-1' }], hasMore: false }),
 		staff: jsonResponse(roster),
+		// Before `billing`: its path holds `/billing` (#1589).
+		'billing-mode': jsonResponse({ billingMode: 'stripe' }),
 		billing: jsonResponse({ balance: 7, ledger: { items: [], hasMore: false } }),
 		connect: jsonResponse(connectStatus),
 		'engagement-requests': jsonResponse({
@@ -90,6 +93,24 @@ describe('hasSecondary', () => {
 	});
 });
 
+describe('isConnectCardShown', () => {
+	const connect = { status: 'not_connected' as const, requirementsDue: [] };
+
+	it.each([
+		['stripe', true],
+		['unchosen', true],
+		['unavailable', true],
+		['by_hand', false]
+	] as const)('is drawn for the billing mode %s: %s', (billingMode, shown) => {
+		expect(isConnectCardShown({ ...connect, billingMode })).toBe(shown);
+	});
+
+	it('is drawn when the Connect read failed, and not for a caller who may not read it', () => {
+		expect(isConnectCardShown('unavailable')).toBe(true);
+		expect(isConnectCardShown(undefined)).toBe(false);
+	});
+});
+
 describe('loadPracticeLanding', () => {
 	it('keeps only the Offers still awaiting an answer', async () => {
 		const landing = await loadPracticeLanding(fetcherFor(), 'practice-1', session);
@@ -105,7 +126,8 @@ describe('loadPracticeLanding', () => {
 		expect(landing.credit).toEqual({ balance: 7, count: '7 Credits' });
 		expect(landing.connect).toEqual({
 			status: 'onboarding_incomplete',
-			requirementsDue: ['individual.dob']
+			requirementsDue: ['individual.dob'],
+			billingMode: 'stripe'
 		});
 		expect(landing.requests).toEqual({ count: 2, hasMore: false });
 	});
@@ -165,6 +187,28 @@ describe('loadPracticeLanding', () => {
 		expect(landing.connect).not.toBeUndefined();
 		expect(landing.roster).not.toBeUndefined();
 		expect(landing.credit).not.toBeUndefined();
+	});
+
+	// #1589: the mode rides on the Connect block, and a read that fails
+	// leaves the block in place -- the card is shown, not hidden.
+	it('reads a Practice that has not chosen a billing mode as unchosen', async () => {
+		const landing = await loadPracticeLanding(
+			fetcherFor({ 'billing-mode': jsonResponse({}) }),
+			'practice-1',
+			session
+		);
+
+		expect(landing.connect).toMatchObject({ billingMode: 'unchosen' });
+	});
+
+	it('keeps the Connect block when the billing mode cannot be read', async () => {
+		const landing = await loadPracticeLanding(
+			fetcherFor({ 'billing-mode': refusal('nope') }),
+			'practice-1',
+			session
+		);
+
+		expect(landing.connect).toMatchObject({ status: 'onboarding_incomplete', billingMode: 'unavailable' });
 	});
 
 	it.each([['staff'], ['billing'], ['connect'], ['engagement-requests']])(
