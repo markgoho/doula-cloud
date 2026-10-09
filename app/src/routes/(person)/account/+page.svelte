@@ -153,7 +153,7 @@
 	onMount(() => signOutOfMfaFirebaseSDK);
 
 	/*
-	 * One deliberate act: choose a state, press Save. No confirmation
+	 * The work state form: one deliberate act, choose a state, press Save. No confirmation
 	 * step, and that is a decision rather than an omission (#437).
 	 *
 	 * A confirmation dialog buys its friction with a promise that the act
@@ -211,12 +211,7 @@
 		}, orServiceProblem);
 	}
 
-	/*
-	 * Correcting her name (#1537). Both fields are sent every time and
-	 * both are needed, the same as at signup. There is no staff id in the
-	 * path or the body: the endpoint only ever writes the caller's own
-	 * row, and records who changed it and when.
-	 */
+	// Its own form, so Enter in a name field lands here and not on the work state.
 	async function handleSaveName(event: SubmitEvent) {
 		event.preventDefault();
 		savedState = '';
@@ -225,6 +220,12 @@
 		await saveSubmission.run(saveName, orServiceProblem);
 	}
 
+	/*
+	 * Correcting her name (#1537). Both fields are sent every time and
+	 * both are needed, the same as at signup. There is no staff id in the
+	 * path or the body: the endpoint only ever writes the caller's own
+	 * row, and records who changed it and when.
+	 */
 	async function saveName(): Promise<FormError[] | undefined> {
 		const refusals: FormError[] = [];
 		if (firstName.trim() === '')

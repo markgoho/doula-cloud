@@ -242,15 +242,14 @@
 	{/if}
 {/snippet}
 
-	<!-- `novalidate` lives on StackedForm: the page refuses the submit, not the browser (#467). -->
-	<StackedForm onSubmit={step === 'password' ? handlePasswordSubmit : handleCodeSubmit}>
-		{@render fields()}
-		<Button
-			type="submit"
-			variant={confirmVariant}
-			label={buttonLabel}
-			loading={submission.isSubmitting}
-		/>
-		{@render cancelButton()}
-	</StackedForm>
-
+<!-- `novalidate` lives on StackedForm: the page refuses the submit, not the browser (#467). -->
+<StackedForm onSubmit={step === 'password' ? handlePasswordSubmit : handleCodeSubmit}>
+	{@render fields()}
+	<Button
+		type="submit"
+		variant={confirmVariant}
+		label={buttonLabel}
+		loading={submission.isSubmitting}
+	/>
+	{@render cancelButton()}
+</StackedForm>
