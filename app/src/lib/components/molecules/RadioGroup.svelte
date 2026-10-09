@@ -37,12 +37,18 @@
 		 * the question twice.
 		 */
 		legend?: string;
+		/* GOV.UK's hint for the question itself, under the legend (#1590).
+		   Only drawn with a legend: without one the Template owns the
+		   question and its hint. */
+		hint?: string;
 		name?: string;
 		/* `readonly`: the group only reads its options, and a caller
 		   handing it a shared constant (`EMPLOYMENT_TYPE_LABELS`, #262)
 		   should not have to copy the array to pass it. */
 		options: readonly Option<T>[];
-		value: T;
+		/* `undefined` selects nothing: GOV.UK's Radios guidance asks for no
+		   pre-selected option on a question (#1590). */
+		value: T | undefined;
 		onChange: (value: T) => void;
 		/*
 		 * The refusal for this group, in the reader's words. GOV.UK asks
@@ -60,9 +66,11 @@
 
 	const generatedName = $props.id();
 
-	let { legend, name = generatedName, options, value, onChange, error }: Properties<T> = $props();
+	let { legend, hint, name = generatedName, options, value, onChange, error }: Properties<T> = $props();
 
 	const errorId = $derived(`${name}-error`);
+	const hintId = $derived(`${name}-hint`);
+	const describedBy = $derived([hint ? hintId : undefined, error ? errorId : undefined].filter(Boolean).join(' ') || undefined);
 </script>
 
 {#snippet errorMessage()}
@@ -123,8 +131,11 @@
 	<!-- aria-describedby only: aria-invalid is not supported on role="group",
 	     which <fieldset> carries implicitly. The refusal reaches the reader
 	     through the description and through role="alert". -->
-	<fieldset aria-describedby={error ? errorId : undefined}>
+	<fieldset aria-describedby={describedBy}>
 		<legend>{legend}</legend>
+		{#if hint}
+			<p id={hintId} class="hint">{hint}</p>
+		{/if}
 		{@render errorMessage()}
 		{@render radios()}
 	</fieldset>
@@ -151,6 +162,17 @@
 		   question dims with its options rather than reading as live. */
 		fieldset:disabled > legend {
 			opacity: var(--opacity-disabled);
+		}
+
+		/* Under the legend, the legend's own bottom margin moved below it. */
+		legend:has(+ .hint) {
+			margin-block-end: var(--space-1);
+		}
+
+		.hint {
+			margin: 0 0 var(--space-5);
+			color: var(--color-on-surface-muted);
+			font-size: var(--text-body-sm-size);
 		}
 
 		/* The same weight and color LabeledField gives a refusal, so one

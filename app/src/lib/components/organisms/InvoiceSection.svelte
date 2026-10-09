@@ -110,14 +110,34 @@
 
 	const isBillable = $derived(contractStatus === billableContractStatus);
 
-	let chosenBillingMode = $state<BillingMode>('stripe');
+	// No option is selected when the question opens (#1590): a default
+	// carries authority, and a Staff member who presses the button without
+	// reading would otherwise set the Practice's billing mode unchosen.
+	let chosenBillingMode = $state<BillingMode | undefined>();
+	let billingModeError = $state('');
 	let isCreating = $state(false);
 	let createError = $state('');
 
-	const billingModeOptions = [
-		{ value: 'stripe' as const, label: 'Stripe', description: 'DoulaCloud sends the bill and collects the card payment.' },
-		{ value: 'by_hand' as const, label: 'By hand', description: 'This Practice bills and collects payment itself.' }
-	];
+	const billingModeName = 'invoice-billing-mode';
+	const billingModeFieldId = radioFieldId(billingModeName, 'stripe');
+	const billingModeErrors = $derived<FormError[]>(
+		billingModeError ? [{ message: billingModeError, targetId: billingModeFieldId }] : []
+	);
+
+	const billingModeOptions = $derived([
+		{
+			value: 'stripe' as const,
+			label: 'By card, through Stripe.',
+			description: clientsCanPay
+				? 'DoulaCloud sends the bill and the Client pays by card.'
+				: 'DoulaCloud sends the bill and the Client pays by card. A Practice Owner must connect Stripe first.'
+		},
+		{
+			value: 'by_hand' as const,
+			label: 'By hand.',
+			description: 'This Practice sends the bill and collects the payment itself. You record each payment here.'
+		}
+	]);
 
 	// #947: the amount an Invoice is raised for is the Contract's own
 	// price, never a figure typed here -- there is nothing left to
@@ -125,6 +145,12 @@
 	async function handleCreate(event: SubmitEvent) {
 		event.preventDefault();
 		createError = '';
+		billingModeError = '';
+
+		if (billingMode === undefined && chosenBillingMode === undefined) {
+			billingModeError = 'Select how this Practice bills Clients';
+			return;
+		}
 
 		isCreating = true;
 		try {
@@ -657,13 +683,18 @@
 	<Notice variant="info" message={unbillableContractMessage(contractStatus)} />
 {:else if billingMode === undefined}
 	<StackedForm onSubmit={handleCreate}>
+		{#if billingModeErrors.length > 0}
+			<ErrorSummary errors={billingModeErrors} />
+		{/if}
 		<RadioGroup
 			legend="How does this Practice bill Clients?"
+			hint="You answer this one time. A Practice Owner can change it later in Settings."
+			name={billingModeName}
 			options={billingModeOptions}
 			value={chosenBillingMode}
 			onChange={(value) => (chosenBillingMode = value)}
-		/>
-		<Button label="Create Invoice" type="submit" loading={isCreating} />
+			error={billingModeError || undefined}
+		/>		<Button label="Create Invoice" type="submit" loading={isCreating} />
 	</StackedForm>
 	{#if createError}
 		<p role="alert">{createError}</p>

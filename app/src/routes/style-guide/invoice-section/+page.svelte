@@ -241,12 +241,14 @@
 	<!-- #271: the Practice has never chosen a rail -- asked inline, on the
 	     first Invoice raise, rather than assumed from an absent Stripe
 	     Connect account. -->
+	<!-- #1590: no Stripe account yet, so the first option carries its third
+	     sentence -- the longest words this question has. -->
 	<section>
 		<h2>Billing mode not yet chosen</h2>
 		<InvoiceSection
 			invoices={[]}
 			contractStatus="signed"
-			clientsCanPay={true}
+			clientsCanPay={false}
 			hasClientEmail={true}
 			isOwner={false}
 			isOwnerOrAdmin={false}
