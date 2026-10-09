@@ -70,7 +70,16 @@ describe('the Practice name screen', () => {
 		await control().fill('Willow Birth Services');
 		await save();
 
-		await expect.element(testPage.getByText('Saved.')).toBeVisible();
+		await expect
+			.element(
+				testPage.getByText('Practice name changed to Willow Birth Services. Your Clients see it from now on.')
+			)
+			.toBeVisible();
+		// Editing again withdraws a confirmation that no longer holds.
+		await control().fill('Willow Birth Services LLC');
+		await expect
+			.element(testPage.getByText(/Practice name changed to/))
+			.not.toBeInTheDocument();
 		const [path, init] = apiFetchWithSession.mock.calls[0];
 		expect(path).toBe('/api/practices/practice-1/name');
 		expect(init.method).toBe('PUT');
@@ -97,7 +106,7 @@ describe('the Practice name screen', () => {
 		await expect
 			.element(testPage.getByRole('link', { name: 'Enter the name of your Practice' }))
 			.toBeVisible();
-		await expect.element(testPage.getByText('Saved.')).not.toBeInTheDocument();
+		await expect.element(testPage.getByText(/Practice name changed to/)).not.toBeInTheDocument();
 		expect(invalidateAll).not.toHaveBeenCalled();
 	});
 

@@ -135,7 +135,7 @@
 						// the rest of this group: the BFF refuses an Admin, so
 						// the link is not shown to one.
 						label: 'Practice name',
-						description: 'What your Clients, your Contracts and your Practice page call you.',
+						description: 'What your Clients, your Contracts and your Practice Page call you.',
 						href: resolve('/practices/[practiceId]/settings/name', { practiceId })
 					},
 					{

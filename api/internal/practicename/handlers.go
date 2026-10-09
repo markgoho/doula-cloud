@@ -12,6 +12,7 @@ import (
 
 	"doula-cloud/api/internal/activity"
 	"doula-cloud/api/internal/apierr"
+	"doula-cloud/api/internal/contracts"
 	"doula-cloud/api/internal/staffauth"
 )
 
@@ -23,13 +24,6 @@ const actionNameChanged = "practice_name_changed"
 // fieldName is PutRequest's own json tag, and so the Details key its
 // refusal is written under (docs/api-design.md section 7 rule 4).
 const fieldName = "name"
-
-// practiceNameMergeKey is the Contract merge field that carries the
-// Practice's name. Duplicated from the contracts package, which keeps it
-// private, because a rename has to reach the Drafts that copied the name
-// at creation and importing contracts for one string would couple the two
-// packages for no other reason.
-const practiceNameMergeKey = "practice_name"
 
 // Response is what PutHandler returns: the name the Practice now holds.
 type Response struct {
@@ -99,7 +93,7 @@ func PutHandler() http.Handler {
 		}
 
 		if before != after {
-			if err := write(r.Context(), tx, practiceID, before, after); err != nil {
+			if err := applyRename(r.Context(), tx, practiceID, before, after); err != nil {
 				// coverage:ignore reason: DB query failure, not exercised by unit tests
 				apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 				return
@@ -110,10 +104,10 @@ func PutHandler() http.Handler {
 	})
 }
 
-// write persists the name, moves the Drafts that copied the old one, and
+// applyRename persists the name, moves the Drafts that copied the old one, and
 // records who changed it and when -- one write path, so the row and its
 // Activity entry can never disagree about what happened.
-func write(ctx context.Context, tx *sql.Tx, practiceID, before, after string) error {
+func applyRename(ctx context.Context, tx *sql.Tx, practiceID, before, after string) error {
 	if _, err := tx.ExecContext(ctx,
 		`UPDATE practices SET name = $1 WHERE id = $2`, after, practiceID,
 	); err != nil {
@@ -127,7 +121,7 @@ func write(ctx context.Context, tx *sql.Tx, practiceID, before, after string) er
 		  WHERE status = 'draft'
 		    AND merge_field_values ->> $1 = $3
 		    AND engagement_id IN (SELECT id FROM engagements WHERE practice_id = $4)`,
-		practiceNameMergeKey, after, before, practiceID,
+		contracts.PracticeNameMergeKey, after, before, practiceID,
 	); err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		return fmt.Errorf("practicename: move draft contracts to the new name: %w", err)

@@ -465,7 +465,7 @@ func fetchContract(ctx context.Context, tx *sql.Tx, engagementID string) (id, pr
 	return id, prose, status, values, amountCents, amountChangedAt, nil
 }
 
-// clientNameMergeKey and practiceNameMergeKey are the merge fields this
+// clientNameMergeKey and PracticeNameMergeKey are the merge fields this
 // package resolves for the caller and stores in merge_field_values --
 // per #258's brief, the Practice name and the Client's legal name
 // (ADR-0017: client_name always resolves to the legal name, never the
@@ -487,11 +487,11 @@ func fetchContract(ctx context.Context, tx *sql.Tx, engagementID string) (id, pr
 // to let Staff overwrite the way it lets them overwrite these two.
 const (
 	clientNameMergeKey   = "client_name"
-	practiceNameMergeKey = "practice_name"
+	PracticeNameMergeKey = "practice_name"
 )
 
 // resolveMergeFieldValues returns Draft Values with every merge field in
-// the resolvable set (clientNameMergeKey, practiceNameMergeKey) already
+// the resolvable set (clientNameMergeKey, PracticeNameMergeKey) already
 // filled in, for whichever of those two the Template's prose actually
 // asks for -- one query against the Engagement, its Client and its
 // Practice, rather than one query per resolvable field. Every other
@@ -499,7 +499,7 @@ const (
 // exactly as before.
 func resolveMergeFieldValues(ctx context.Context, tx *sql.Tx, engagementID string, mergeFields []string) (MergeFieldValues, error) {
 	wantsClientName := slices.Contains(mergeFields, clientNameMergeKey)
-	wantsPracticeName := slices.Contains(mergeFields, practiceNameMergeKey)
+	wantsPracticeName := slices.Contains(mergeFields, PracticeNameMergeKey)
 	if !wantsClientName && !wantsPracticeName {
 		return MergeFieldValues{}, nil
 	}
@@ -523,7 +523,7 @@ func resolveMergeFieldValues(ctx context.Context, tx *sql.Tx, engagementID strin
 		values[clientNameMergeKey] = personname.Legal(givenName, familyName.String)
 	}
 	if wantsPracticeName {
-		values[practiceNameMergeKey] = practiceName
+		values[PracticeNameMergeKey] = practiceName
 	}
 	return values, nil
 }

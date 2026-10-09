@@ -39,7 +39,11 @@
 	// BFF has accepted it. Seeded once from the session; a save replaces it
 	// with the name the BFF stored (trimmed).
 	let name = $state((page.data as { session: PracticeSession }).session.practiceName);
-	let isSaved = $state(false);
+	// The name the last save stored, or empty. A status Notice (not plain
+	// text) so a screen reader hears it, and it names the result and what
+	// follows. Cleared when the field is edited again, so it never
+	// describes a state that no longer holds.
+	let savedName = $state('');
 	const submission = new FormSubmission();
 
 	// A refusal keyed to the `name` field lands on the control and in the
@@ -50,11 +54,11 @@
 
 	async function save(event: SubmitEvent) {
 		event.preventDefault();
-		isSaved = false;
+		savedName = '';
 		await submission.run(async () => {
 			const saved = await savePracticeName(apiFetchWithSession, page.params.practiceId!, name);
 			name = saved.name;
-			isSaved = true;
+			savedName = saved.name;
 			await invalidateAll();
 		}, mapRefusal);
 	}
@@ -70,8 +74,11 @@
 {/snippet}
 
 {#snippet fields()}
-	{#if isSaved}
-		<Text text="Saved." />
+	{#if savedName !== ''}
+		<Notice
+			variant="status"
+			message={`Practice name changed to ${savedName}. Your Clients see it from now on.`}
+		/>
 	{/if}
 	<LabeledField id={nameId} label="Practice name" error={submission.errorFor(nameId)}>
 		{#snippet children({ id, describedBy, invalid })}
@@ -80,7 +87,10 @@
 				{describedBy}
 				{invalid}
 				value={name}
-				onInput={(value) => (name = value)}
+				onInput={(value) => {
+					name = value;
+					savedName = '';
+				}}
 				autocomplete="organization"
 			/>
 		{/snippet}
@@ -92,10 +102,10 @@
 		its own copy.
 	-->
 	<Text
-		text="Your Clients see this name on their portal, on your Practice's page, in the email they get from you, and on every Contract you have not sent yet."
+		text="Your Clients see this name on their portal, on your Practice Page, in the email they get from you, and on every Contract you have not sent yet."
 	/>
 	<Text
-		text="A Contract that is already sent or signed keeps the name it was sent with. Your Practice page keeps its web address."
+		text="A Contract that is already sent or signed keeps the name it was sent with. Your Practice Page keeps its web address."
 	/>
 	<Text
 		text="The name on your Stripe statement does not change with this. You change it in your Stripe dashboard."
