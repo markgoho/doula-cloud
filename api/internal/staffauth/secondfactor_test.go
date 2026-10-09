@@ -27,6 +27,38 @@ func countRefusals(t *testing.T, db *testdb.DB, practiceID string) int {
 	return n
 }
 
+// An Owner with no second factor who throws the switch is refused by the
+// act's seam, the switch stays off, and the refusal is recorded once.
+func TestSecondFactorAct_RefusesAndRecords(t *testing.T) {
+	db := testdb.New(t)
+	const ownerUID = "owner-no-factor-act"
+	_, practiceID := seedOwnerMembership(t, db, ownerUID)
+
+	srv, _ := newMFARequiredServer(t, db, authntest.NewFakeAccountManager())
+	defer srv.Close()
+
+	session := authntest.SeedSessionWithSecondFactor(t, db.App, ownerUID, false)
+	resp := putMFARequired(t, srv, session, practiceID, true, true)
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusForbidden {
+		t.Fatalf("status = %d, want 403", resp.StatusCode)
+	}
+	if got := apierrtest.Decode(t, resp).Code; got != apierr.CodeSecondFactorRequired {
+		t.Fatalf("code = %q, want %q", got, apierr.CodeSecondFactorRequired)
+	}
+	if n := countRefusals(t, db, practiceID); n != 1 {
+		t.Fatalf("refusals recorded = %d, want 1", n)
+	}
+	var required bool
+	if err := db.Admin.QueryRowContext(t.Context(),
+		`SELECT require_mfa_for_all_staff FROM practices WHERE id = $1`, practiceID).Scan(&required); err != nil {
+		t.Fatalf("read switch: %v", err)
+	}
+	if required {
+		t.Fatal("switch is on after a refused request")
+	}
+}
+
 // A Doula with no second factor who asks for an act meets the role
 // refusal she met before #1532, and nothing is recorded: the seam runs
 // after the role check, so it only ever refuses a person who may do the
