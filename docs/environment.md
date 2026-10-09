@@ -72,6 +72,24 @@ The DSN belongs to `site_builder_login`, a Cloud SQL user created for this and g
 
 They hold the same string in all three environments today, and they are still two variables. `EXPECTED_ORIGINS` is a list the CSRF check compares an inbound `Origin` header against. `APP_BASE_URL` is one string the BFF concatenates redirect targets onto: Checkout returns to `/practices/{id}/billing?checkout=success|canceled`, and the Connect Account Link returns to `/practices/{id}/settings/payments?connect=return|refresh`. A tunneled local walk needs `APP_BASE_URL` overridden and `EXPECTED_ORIGINS` left alone.
 
+## The Staff password policy (Identity Platform)
+
+A Staff password is 15 characters or more, with no composition rule, and Identity Platform enforces it ([#1538](https://github.com/markgoho/doula-cloud/issues/1538), [ADR-0026's amendment](adr/0026-two-populations-two-sign-in-methods-and-one-token-table.md)). The number is written once in `app/src/lib/passwordRule.ts` (`MIN_PASSWORD_LENGTH`) and once in `api/internal/staffauth/reset.go` (`minPasswordLength`), which refuses a short password on the reset path before the Admin SDK sees it.
+
+**Terraform does not own the policy.** The `google` provider's `google_identity_platform_config` has no password-policy block, and [`docs/infrastructure.md`](infrastructure.md) already keeps Identity Platform's configuration out of Terraform ([ADR-0034](adr/0034-terraform-owns-the-shape-not-the-image-and-apply-stays-off-ci.md)). The policy is a one-time `PATCH` on the project's admin config. Before #1538 the live project returned `passwordPolicyConfig: null`, which is Identity Platform's default of six characters. `ENFORCE` makes the provider refuse a shorter password at account creation and at a password change; `forceUpgradeOnSignin` is left off, so no existing account is forced to change anything.
+
+```sh
+curl -X PATCH "https://identitytoolkit.googleapis.com/admin/v2/projects/doula-cloud/config?updateMask=passwordPolicyConfig" -H "Authorization: Bearer $(gcloud auth print-access-token)" -H "X-Goog-User-Project: doula-cloud" -H "Content-Type: application/json" -d '{"passwordPolicyConfig":{"passwordPolicyEnforcementState":"ENFORCE","passwordPolicyVersions":[{"customStrengthOptions":{"minPasswordLength":15,"maxPasswordLength":4096}}]}}'
+```
+
+Read it back; the response must show `ENFORCE` and `minPasswordLength` of 15, with no `containsLowercaseCharacter`, `containsUppercaseCharacter`, `containsNumericCharacter` or `containsNonAlphanumericCharacter`:
+
+```sh
+curl "https://identitytoolkit.googleapis.com/admin/v2/projects/doula-cloud/config" -H "Authorization: Bearer $(gcloud auth print-access-token)" -H "X-Goog-User-Project: doula-cloud"
+```
+
+**The Auth emulator cannot enforce it.** The e2e stack's and the local stack's emulator (firebase-tools 15) hardcodes a six-character minimum in `operations.js` and its `PATCH` on the project config accepts no `passwordPolicyConfig` (the v2 admin route answers 404; probed for #1538). So the rule is covered in the browser and on the BFF instead: `passwordRule.spec.ts` for the number, the three screens' specs (`signup`, `accept-invite`, `reset-password`) for the hint and the refusal before a request leaves, `formErrors.spec.ts` for the provider's own refusal in the same words, and `TestSpendResetHandler_PasswordTooShort` for the BFF. The e2e fixtures use passwords that pass the rule, so a run against a stricter emulator would not break.
+
 ## Mailgun
 
 Provisioned for #218 (map #213). One account, one API key, no per-domain Sending Key: Mailgun's API key is account-wide, so the same value works against both the sandbox domain and the verified one — only `MAILGUN_DOMAIN` changes between Local and Deployed.

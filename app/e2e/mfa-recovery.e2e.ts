@@ -4,7 +4,7 @@ import { readStaffInviteToken } from './stack';
 import { drainUntilMailArrives, readMailbox } from './outboxMail';
 import { signIn } from './auth';
 import { enrollSecondFactor, enterPracticeAsEnrolled, verifyEmail } from './mfa';
-import { seedFoundingOwner, uniqueEmail } from './staffSignup';
+import { seedFoundingOwner, uniqueEmail, STAFF_PASSWORD } from './staffSignup';
 import { STUB_TOTP_CODE, stubTotpFactor } from './totpStub';
 
 // The subject mfarecoverymail's Compose gives the vouched code. Named
@@ -45,7 +45,7 @@ test('An Owner vouches for a locked-out doula, and the code reaches her and nobo
 }) => {
 	const doulaEmail = uniqueEmail('doula');
 	const doulaName = 'Robin Doula';
-	const password = 'password123';
+	const password = STAFF_PASSWORD;
 
 	// Fixture setup, not the seam under test (#207).
 	const {

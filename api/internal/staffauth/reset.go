@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"unicode/utf8"
 
 	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/authmail"
@@ -18,7 +19,7 @@ import (
 // a too-short password here means SpendResetHandler never has to
 // distinguish "the Admin SDK rejected this" from any other failure of
 // SetPassword; only length is checked server-side, and only here.
-const minPasswordLength = 6
+const minPasswordLength = 15
 
 // RequestResetRequest is the body of a password-reset request: the
 // address to send a reset link to.
@@ -126,7 +127,7 @@ func SpendResetHandler(accounts authn.AccountManager, db *sql.DB) http.Handler {
 			apierr.WriteError(w, "token is required", http.StatusBadRequest)
 			return
 		}
-		if len(req.NewPassword) < minPasswordLength {
+		if utf8.RuneCountInString(req.NewPassword) < minPasswordLength {
 			apierr.Write(w, http.StatusBadRequest, apierr.CodeInvalidArgument,
 				fmt.Sprintf("newPassword must be at least %d characters", minPasswordLength),
 				map[string]string{"newPassword": MsgPasswordTooShort})

@@ -139,7 +139,7 @@ func TestSpendResetHandler_MissingToken(t *testing.T) {
 	srv := newResetSpendServer(authntest.NewFakeAccountManager(), db)
 	defer srv.Close()
 
-	resp := postJSONTo(t, srv, "/api/staff/password-reset", `{"token":"","newPassword":"longenough"}`)
+	resp := postJSONTo(t, srv, "/api/staff/password-reset", `{"token":"","newPassword":"a-long-enough-password"}`)
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusBadRequest {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
@@ -185,12 +185,27 @@ func TestSpendResetHandler_PasswordTooShort(t *testing.T) {
 	}
 }
 
+// #1538: the limit counts characters, as Identity Platform and the browser
+// do, not bytes -- 14 two-byte characters are 28 bytes and still too short.
+func TestSpendResetHandler_PasswordLengthCountsCharacters(t *testing.T) {
+	db := testdb.New(t)
+	srv := newResetSpendServer(authntest.NewFakeAccountManager(), db)
+	defer srv.Close()
+
+	resp := postJSONTo(t, srv, "/api/staff/password-reset",
+		`{"token":"some-token","newPassword":"`+strings.Repeat("é", 14)+`"}`)
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
+	}
+}
+
 func TestSpendResetHandler_UnknownTokenInvalid(t *testing.T) {
 	db := testdb.New(t)
 	srv := newResetSpendServer(authntest.NewFakeAccountManager(), db)
 	defer srv.Close()
 
-	resp := postJSONTo(t, srv, "/api/staff/password-reset", `{"token":"never-minted","newPassword":"longenough"}`)
+	resp := postJSONTo(t, srv, "/api/staff/password-reset", `{"token":"never-minted","newPassword":"a-long-enough-password"}`)
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusBadRequest {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
@@ -213,7 +228,7 @@ func TestSpendResetHandler_Success(t *testing.T) {
 	srv := newResetSpendServer(accounts, db)
 	defer srv.Close()
 
-	resp := postJSONTo(t, srv, "/api/staff/password-reset", `{"token":"`+token+`","newPassword":"a-new-password"}`)
+	resp := postJSONTo(t, srv, "/api/staff/password-reset", `{"token":"`+token+`","newPassword":"a-new-password-15ch"}`)
 	if resp.StatusCode != http.StatusNoContent {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusNoContent)
 	}
@@ -222,8 +237,8 @@ func TestSpendResetHandler_Success(t *testing.T) {
 		t.Fatal("a reset response must not mint a session cookie")
 	}
 
-	if accounts.Password(uid) != "a-new-password" {
-		t.Fatalf("Password = %q, want a-new-password", accounts.Password(uid))
+	if accounts.Password(uid) != "a-new-password-15ch" {
+		t.Fatalf("Password = %q, want a-new-password-15ch", accounts.Password(uid))
 	}
 	if authntest.CountFor(t, db.App, uid) != 0 {
 		t.Fatal("expected every existing session to be ended")
@@ -252,7 +267,7 @@ func TestSpendResetHandler_SetPasswordFailureRollsBackTheSpend(t *testing.T) {
 	srv := newResetSpendServer(accounts, db)
 	defer srv.Close()
 
-	resp := postJSONTo(t, srv, "/api/staff/password-reset", `{"token":"`+token+`","newPassword":"a-new-password"}`)
+	resp := postJSONTo(t, srv, "/api/staff/password-reset", `{"token":"`+token+`","newPassword":"a-new-password-15ch"}`)
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusInternalServerError {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusInternalServerError)

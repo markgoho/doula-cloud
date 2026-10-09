@@ -52,7 +52,7 @@ async function fillForm() {
 		.getByRole('combobox', { name: 'What timezone does this Practice work in?' })
 		.selectOptions('Central time (Chicago)');
 	await testPage.getByLabelText('Email').fill('priya@example.com');
-	await testPage.getByLabelText('Password').fill('correct horse');
+	await testPage.getByLabelText('Password').fill('correct horse battery');
 }
 
 const submit = () => testPage.getByRole('button', { name: 'Create Practice' }).click();
@@ -81,7 +81,7 @@ describe('signing up when the account half-landed (#745)', () => {
 		await submit();
 
 		await vi.waitFor(() => expect(goto).toHaveBeenCalledWith('/practices/practice-1'));
-		expect(signInWithEmailAndPassword).toHaveBeenCalledWith({}, 'priya@example.com', 'correct horse');
+		expect(signInWithEmailAndPassword).toHaveBeenCalledWith({}, 'priya@example.com', 'correct horse battery');
 		// One account, not two: the retry never asked for a second one.
 		expect(createUserWithEmailAndPassword).toHaveBeenCalledTimes(2);
 	});
@@ -106,6 +106,52 @@ describe('signing up when the account half-landed (#745)', () => {
 			.toBeVisible();
 		expect(globalFetch).not.toHaveBeenCalled();
 		expect(goto).not.toHaveBeenCalled();
+	});
+});
+
+describe('the password rule (#1538)', () => {
+	it('states the rule before she types', async () => {
+		await setup();
+
+		await expect.element(testPage.getByText('Must be 15 characters or more')).toBeVisible();
+	});
+
+	it('refuses a password of 14 characters before anything is sent', async () => {
+		await setup();
+		await fillForm();
+		await testPage.getByLabelText('Password').fill('a'.repeat(14));
+		await submit();
+
+		await expect
+			.element(testPage.getByRole('link', { name: 'Password must be 15 characters or more' }))
+			.toBeVisible();
+		expect(createUserWithEmailAndPassword).not.toHaveBeenCalled();
+	});
+
+	it('accepts 64 characters with spaces in them', async () => {
+		const long = 'correct horse battery staple '.repeat(3).slice(0, 64);
+		await setup();
+		await fillForm();
+		await testPage.getByLabelText('Password').fill(long);
+		createUserWithEmailAndPassword.mockResolvedValueOnce(credential);
+		globalFetch.mockResolvedValueOnce(jsonResponse({ practiceId: 'practice-1' }, 201));
+		await submit();
+
+		await vi.waitFor(() => expect(goto).toHaveBeenCalledWith('/practices/practice-1'));
+		expect(createUserWithEmailAndPassword).toHaveBeenCalledWith({}, 'priya@example.com', long);
+	});
+
+	it('shows the policy refusal Identity Platform sends in the same words', async () => {
+		await setup();
+		await fillForm();
+		createUserWithEmailAndPassword.mockRejectedValueOnce({
+			code: 'auth/password-does-not-meet-requirements'
+		});
+		await submit();
+
+		await expect
+			.element(testPage.getByRole('link', { name: 'Password must be 15 characters or more' }))
+			.toBeVisible();
 	});
 });
 

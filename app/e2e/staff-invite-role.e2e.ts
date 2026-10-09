@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test';
 import { signInEnrolled, enterPracticeAsEnrolled } from './mfa';
 import { readStaffInviteToken } from './stack';
-import { seedFoundingOwner, uniqueEmail } from './staffSignup';
+import { seedFoundingOwner, uniqueEmail, STAFF_PASSWORD } from './staffSignup';
 
 // Every other spec that signs in does so as the Owner signup itself creates,
 // who holds owner + admin + doula at once. This is the one spec
@@ -15,7 +15,7 @@ test('A Doula invited via the Staff invite route is refused an Owner-only action
 	context
 }) => {
 	const doulaEmail = uniqueEmail('doula');
-	const password = 'password123';
+	const password = STAFF_PASSWORD;
 
 	// Fixture setup, not the seam under test (#207): the Owner side of this
 	// spec is provisioned the way every other spec provisions its Practice.

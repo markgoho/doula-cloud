@@ -13,7 +13,7 @@ import { API_URL, E2E_EMULATOR_HOST, E2E_EMULATOR_PORT } from './ports';
 import { provisionTail, standUpRidgeline, writeWorldRecord } from './simulation/provision';
 import { describeWorld, ROOTED_TAIL_TOTAL, type SeededClient } from './simulation/world';
 import { readStaffInviteToken } from './stack';
-import { acceptStaffInvite, seedFoundingOwner, uniqueEmail } from './staffSignup';
+import { acceptStaffInvite, seedFoundingOwner, uniqueEmail, STAFF_PASSWORD } from './staffSignup';
 
 const EMULATOR_URL = `http://${E2E_EMULATOR_HOST}:${E2E_EMULATOR_PORT}`;
 const RUNS_ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), 'test-results', 'simulation-world-rehearsal');
@@ -84,7 +84,7 @@ test.describe.serial('The World stands up: description, Ridgeline, the tail', ()
 		const { invitationId } = JSON.parse(await invited.text());
 		const inviteToken = await readStaffInviteToken(request, invitationId);
 		const signedUp = await request.post(`${EMULATOR_URL}/identitytoolkit.googleapis.com/v1/accounts:signUp?key=fake-key`, {
-			data: { email: doulaEmail, password: 'password123', returnSecureToken: true }
+			data: { email: doulaEmail, password: STAFF_PASSWORD, returnSecureToken: true }
 		});
 		const { idToken: doulaIdToken } = await signedUp.json();
 		const accepted = await acceptStaffInvite(request, doulaIdToken, { inviteToken, name: 'Test Doula' });

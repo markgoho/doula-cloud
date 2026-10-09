@@ -5,7 +5,9 @@ import { retryPastRateLimit } from './rateLimit';
 
 const EMULATOR_URL = `http://${E2E_EMULATOR_HOST}:${E2E_EMULATOR_PORT}`;
 
-const FOUNDING_OWNER_PASSWORD = 'password123';
+// Fifteen characters or more: the Staff rule (#1538), which the emulator does not enforce.
+export const STAFF_PASSWORD = 'staff-password-123';
+const FOUNDING_OWNER_PASSWORD = STAFF_PASSWORD;
 
 /**
  * An address no other call to this function is realistically going to
@@ -154,7 +156,7 @@ export async function seedAccountWithNoPractice(request: APIRequestContext): Pro
 	// here would name this account after a role it never holds. The value
 	// only has to satisfy accounts:signUp and the password re-auth on
 	// mfa/enroll's own step one.
-	const password = 'password123';
+	const password = STAFF_PASSWORD;
 	const signUp = await request.post(
 		`${EMULATOR_URL}/identitytoolkit.googleapis.com/v1/accounts:signUp?key=fake-key`,
 		{ data: { email, password, returnSecureToken: true } }

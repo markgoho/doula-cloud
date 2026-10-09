@@ -83,5 +83,5 @@ const (
 	// and skips a call expression rather than guessing at it, so a
 	// formatted sentence would be the one Details value the gate cannot
 	// see. TestPasswordTooShortMatchesTheLimit keeps the number honest.
-	MsgPasswordTooShort = "Password must be 6 characters or more"
+	MsgPasswordTooShort = "Password must be 15 characters or more"
 )

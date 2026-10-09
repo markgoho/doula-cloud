@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { uniqueEmail } from './staffSignup';
+import { uniqueEmail, STAFF_PASSWORD } from './staffSignup';
 
 // Every other spec in this suite provisions its Practice with
 // POST /api/staff/signup directly (fixture setup is not automation, #207) --
@@ -14,7 +14,7 @@ import { uniqueEmail } from './staffSignup';
 // exchange itself, not about which screen she lands on afterward.
 test('Signing up through the /signup form drives the new Owner into MFA enrollment', async ({ page }) => {
 	const email = uniqueEmail('signup-form');
-	const password = 'password123';
+	const password = STAFF_PASSWORD;
 
 	await page.goto('/signup');
 	await page.getByLabel('Practice name').fill('Riverside Doulas');

@@ -3,6 +3,7 @@
 	import LabeledField from '#lib/components/molecules/LabeledField.svelte';
 	import TextInput from '#lib/components/atoms/TextInput.svelte';
 	import Button from '#lib/components/atoms/Button.svelte';
+	import { PASSWORD_HINT } from '#lib/passwordRule.js';
 
 	const emailId = 'stacked-form-email';
 	const passwordId = 'stacked-form-password';
@@ -37,7 +38,7 @@
 					/>
 				{/snippet}
 			</LabeledField>
-			<LabeledField id={passwordId} label="Password" hint="Must be 6 characters or more">
+			<LabeledField id={passwordId} label="Password" hint={PASSWORD_HINT}>
 				{#snippet children({ id, describedBy, invalid })}
 					<TextInput
 						{id}

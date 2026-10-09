@@ -2,7 +2,7 @@ import { expect, type APIRequestContext } from '@playwright/test';
 import { signInEnrolled } from './mfa';
 import { E2E_EMULATOR_HOST, E2E_EMULATOR_PORT } from './ports';
 import { seedFounder } from './stack';
-import { uniqueEmail } from './staffSignup';
+import { uniqueEmail, STAFF_PASSWORD } from './staffSignup';
 
 const EMULATOR_URL = `http://${E2E_EMULATOR_HOST}:${E2E_EMULATOR_PORT}`;
 
@@ -23,7 +23,7 @@ const EMULATOR_URL = `http://${E2E_EMULATOR_HOST}:${E2E_EMULATOR_PORT}`;
 export async function seedFounderSession(request: APIRequestContext): Promise<{ Cookie: string }> {
 	const email = uniqueEmail('founder');
 	const signUp = await request.post(`${EMULATOR_URL}/identitytoolkit.googleapis.com/v1/accounts:signUp?key=fake-key`, {
-		data: { email, password: 'password123', returnSecureToken: true }
+		data: { email, password: STAFF_PASSWORD, returnSecureToken: true }
 	});
 	expect(signUp.ok(), `founder signUp failed: ${signUp.status()} ${await signUp.text()}`).toBe(true);
 	const { idToken, localId } = await signUp.json();

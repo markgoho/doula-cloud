@@ -7,6 +7,7 @@
 	import LabeledField from '#lib/components/molecules/LabeledField.svelte';
 	import StackedForm from '#lib/components/molecules/StackedForm.svelte';
 	import { FormSubmission, type FormError } from '#lib/formSubmission.svelte.js';
+	import { PASSWORD_TOO_SHORT } from '#lib/passwordRule.js';
 
 	const emailId = 'style-guide-error-summary-email';
 	const passwordId = 'style-guide-error-summary-password';
@@ -74,7 +75,7 @@
 					message: 'Choose the state you work from, so we can show the right Contract terms',
 					targetId: emailId
 				},
-				{ message: 'Password must be 6 characters or more', targetId: passwordId }
+				{ message: PASSWORD_TOO_SHORT, targetId: passwordId }
 			]}
 		/>
 	</stack-l>
