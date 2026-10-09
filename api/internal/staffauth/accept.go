@@ -261,8 +261,10 @@ func acceptInvite(ctx context.Context, tx *sql.Tx, verified authn.VerifiedToken,
 	// (#415). Written after the Membership because
 	// staff_work_state_events_practice_visibility (00043) admits a row
 	// only for someone holding one at the current Practice.
+	// newWorkState is non-empty exactly when resolveStaff created the row,
+	// which is also when she stated her name here.
 	if newWorkState != "" {
-		if err := RecordFirstName(ctx, tx, staffID, staffID); err != nil {
+		if err := RecordNameStated(ctx, tx, staffID, staffID); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			return AcceptInviteResponse{}, http.StatusInternalServerError, apierr.MsgInternalError, nil
 		}

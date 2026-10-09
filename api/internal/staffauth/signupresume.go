@@ -62,7 +62,7 @@ func existingStaff(ctx context.Context, tx *sql.Tx, identityUID string) (staffID
 // Identity Platform too, which this endpoint cannot do.
 func recordSignupPerson(ctx context.Context, tx *sql.Tx, staffID string, req SignupRequest, previousWorkState string, resuming bool) error {
 	if !resuming {
-		if err := RecordFirstName(ctx, tx, staffID, staffID); err != nil {
+		if err := RecordNameStated(ctx, tx, staffID, staffID); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			return err
 		}

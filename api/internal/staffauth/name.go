@@ -53,10 +53,10 @@ func normalizeNames(first, last string) (string, string, map[string]string) {
 	return first, last, details
 }
 
-// RecordFirstName appends the onboarding row to the name audit trail:
-// what this person called herself, and when. previous_* stay NULL, which
-// is what a first statement means. The sibling of RecordNameChange.
-func RecordFirstName(ctx context.Context, tx *sql.Tx, staffID, actorStaffID string) error {
+// RecordNameStated appends the onboarding row to the name audit trail:
+// who said she has a name, and when. It holds no name -- see 00124. The
+// sibling of RecordNameChange.
+func RecordNameStated(ctx context.Context, tx *sql.Tx, staffID, actorStaffID string) error {
 	_, err := tx.ExecContext(ctx,
 		`INSERT INTO staff_name_events (staff_id, kind, actor_staff_id)
 		 VALUES ($1, 'stated', $2)`,

@@ -65,7 +65,7 @@ The per-Practice `removed` membership events still go to `activity`, one per Pra
 - Every `practice_memberships` row of hers, at every Practice.
 - Her enrolled MFA factor, as a consequence of the account going, not as a separate act.
 
-**Redacted.** `staff.name`, `staff.email`, `staff.identity_uid`, with `staff.deleted_at` stamped. Nothing else on the row is touched: `work_state` and `work_state_reported_at` are a US state abbreviation and a date, neither of which identifies anybody.
+**Redacted.** `staff.first_name` and `staff.last_name` (`staff.name` is generated from them, #1537), `staff.email`, `staff.identity_uid`, with `staff.deleted_at` stamped. Nothing else on the row is touched: `work_state` and `work_state_reported_at` are a US state abbreviation and a date, neither of which identifies anybody.
 
 **Kept, and still resolving to the redacted row.** `activity` (every row she is the actor of, and every `membership`-subject row about her), `staff_auth_events`, `staff_work_state_events`, `messages`, `visits`, `contracts`, `engagements`, `engagement_attachments`, `offers`, `contract_void_requests`, `credit_ledger.granted_by`, `staff_invitations.invited_by`, and every other foreign key into `staff`.
 
