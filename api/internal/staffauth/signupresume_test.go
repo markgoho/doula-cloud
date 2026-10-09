@@ -152,6 +152,32 @@ func TestSignupHandler_ResumeQueuesNoSecondVerificationMail(t *testing.T) {
 	}
 }
 
+// TestSignupHandler_ResumeWithEmptyPracticeNameTakesHerName proves the
+// fallback (#1536) holds on the resumed half too: it is applied to the
+// request before either branch runs, so a resumed signup's Practice is
+// called by the name she typed this time, not by the seeded row's.
+func TestSignupHandler_ResumeWithEmptyPracticeNameTakesHerName(t *testing.T) {
+	db := testdb.New(t)
+	srv := newSignupServer(authntest.Verifier{UID: resumeUID, Email: jamieEmail}, db)
+	defer srv.Close()
+	testdb.SeedStaff(t, db, resumeUID)
+
+	resp := postSignup(t, srv, "tok", staffauth.SignupRequest{
+		WorkState: "NY", FirstName: jamieName, LastName: ownerLastName,
+	})
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusCreated {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusCreated)
+	}
+	var out staffauth.SignupResponse
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if got := storedPracticeName(t, db, out.PracticeID); got != jamieOwnerName {
+		t.Fatalf("practices.name = %q, want her own name %q", got, jamieOwnerName)
+	}
+}
+
 // TestSignupHandler_RefusesWhenAlreadyInAPractice proves the third
 // branch: an identity that already holds a Membership is told so in
 // words a reader can act on, and the Practice name she typed creates

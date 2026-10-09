@@ -175,21 +175,72 @@ func TestSignupHandler_MissingFields(t *testing.T) {
 	srv := newSignupServer(authntest.Verifier{UID: newOwnerUID}, db)
 	defer srv.Close()
 
-	resp := postSignup(t, srv, "tok", staffauth.SignupRequest{WorkState: "NY", PracticeName: "", FirstName: "S", LastName: placeholderLastName})
+	resp := postSignup(t, srv, "tok", staffauth.SignupRequest{WorkState: "NY", PracticeName: "P", FirstName: "", LastName: placeholderLastName})
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusBadRequest {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
 	}
 	// #488: the refusal names the field at fault, keyed by the DTO's own
-	// json tag, and names only that one -- both names were sent.
+	// json tag, and names only that one -- the last name was sent.
 	details := decodeDetails(t, resp)
-	if details["practiceName"] != staffauth.MsgPracticeNameNeeded {
-		t.Fatalf("details = %v, want practiceName entry", details)
+	if details["firstName"] != staffauth.MsgFirstNameNeeded {
+		t.Fatalf("details = %v, want firstName entry", details)
 	}
-	if _, ok := details["firstName"]; ok {
-		t.Fatalf("details = %v, want no firstName entry", details)
+	if _, ok := details["lastName"]; ok {
+		t.Fatalf("details = %v, want no lastName entry", details)
 	}
+}
+
+// TestSignupHandler_EmptyPracticeNameTakesHerName is #1536's fallback,
+// held in the BFF so a caller that sends no Practice name gets what the
+// form gets: the Practice is called by her own name, first name then last
+// name as she typed them, and never by nothing (practices.name is NOT
+// NULL, and a Contract, the portal and a card statement each need one).
+// A name of white space is no name, and a body with no practiceName key
+// at all is the same request as an empty one.
+func TestSignupHandler_EmptyPracticeNameTakesHerName(t *testing.T) {
+	bodies := map[string]any{
+		"empty":       staffauth.SignupRequest{WorkState: "NY", PracticeName: "", FirstName: " " + maryAnne + " ", LastName: smith},
+		"white space": staffauth.SignupRequest{WorkState: "NY", PracticeName: "   ", FirstName: maryAnne, LastName: smith},
+		"no key": map[string]string{
+			"firstName": maryAnne, "lastName": smith, "workState": "NY", "timezone": signupZone,
+		},
+	}
+	for label, body := range bodies {
+		t.Run(label, func(t *testing.T) {
+			db := testdb.New(t)
+			srv := newSignupServer(authntest.Verifier{UID: newOwnerUID, Email: jamieEmail}, db)
+			defer srv.Close()
+
+			resp := postSignup(t, srv, "tok", body)
+			defer resp.Body.Close()
+
+			if resp.StatusCode != http.StatusCreated {
+				t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusCreated)
+			}
+			var out staffauth.SignupResponse
+			if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+				t.Fatalf("decode response: %v", err)
+			}
+			if got, want := storedPracticeName(t, db, out.PracticeID), maryAnne+" "+smith; got != want {
+				t.Fatalf("practices.name = %q, want her own name %q", got, want)
+			}
+		})
+	}
+}
+
+// storedPracticeName reads a Practice's stored name. Shared with
+// signupresume_test.go.
+func storedPracticeName(t *testing.T, db *testdb.DB, practiceID string) string {
+	t.Helper()
+	var stored string
+	if err := db.Admin.QueryRowContext(t.Context(),
+		`SELECT name FROM practices WHERE id = $1`, practiceID,
+	).Scan(&stored); err != nil {
+		t.Fatalf("read the Practice's name: %v", err)
+	}
+	return stored
 }
 
 // TestSignupHandler_MissingBothNames is the other half of the same
@@ -207,8 +258,12 @@ func TestSignupHandler_MissingBothNames(t *testing.T) {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
 	}
 	details := decodeDetails(t, resp)
-	if details["practiceName"] != staffauth.MsgPracticeNameNeeded || details["firstName"] != staffauth.MsgFirstNameNeeded || details["lastName"] != staffauth.MsgLastNameNeeded {
+	if details["firstName"] != staffauth.MsgFirstNameNeeded || details["lastName"] != staffauth.MsgLastNameNeeded {
 		t.Fatalf("details = %v, want both name entries", details)
+	}
+	// An empty Practice name is no refusal (#1536): it takes her name.
+	if _, ok := details["practiceName"]; ok {
+		t.Fatalf("details = %v, want no practiceName entry", details)
 	}
 }
 
