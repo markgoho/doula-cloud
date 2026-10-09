@@ -18,6 +18,22 @@ export type ConnectStatus =
 	| 'payouts_restricted'
 	| 'active';
 
+/**
+ * The words and badge color for each Connect state (#1589). The Practice
+ * overview and the Getting paid screen both read this table, so the two
+ * name one state one way. A spec fails if either screen draws its own.
+ */
+export const CONNECT_STATUS_BADGES: Record<
+	ConnectStatus,
+	{ label: string; variant: 'neutral' | 'warning' | 'success' }
+> = {
+	not_connected: { label: 'Not connected', variant: 'neutral' },
+	onboarding_incomplete: { label: 'Onboarding incomplete', variant: 'warning' },
+	pending: { label: 'Awaiting Stripe review', variant: 'warning' },
+	payouts_restricted: { label: 'Taking payments, payouts on hold', variant: 'warning' },
+	active: { label: 'Taking payments', variant: 'success' }
+};
+
 /** The status Stripe reports for one capability on a v2 Account's merchant
  * configuration. Accounts v1 reported booleans; v2 reports four values, and
  * `pending` is the one a boolean could not express -- Stripe is reviewing,

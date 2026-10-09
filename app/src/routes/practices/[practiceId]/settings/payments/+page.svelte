@@ -31,6 +31,7 @@
 		canConnectStatusStillMove,
 		pollConnectStatus,
 		nudgeOwnersToConnect,
+		CONNECT_STATUS_BADGES,
 		CONNECT_STATUS_CHECK_FAILED_MESSAGE,
 		CONNECT_NUDGE_OFFER_MESSAGE,
 		CONNECT_NUDGE_SENT_MESSAGE,
@@ -315,9 +316,10 @@
 		}
 	}
 
-	// One row per status rather than four parallel maps: the label, the
-	// badge, what it means for the Practice in the Owner's words, and
-	// whether reopening Stripe's hosted form could help.
+	// One row per status rather than two parallel maps: what it means for
+	// the Practice in the Owner's words, and whether reopening Stripe's
+	// hosted form could help. The label and badge color live in
+	// `CONNECT_STATUS_BADGES`, which the Practice overview reads too (#1589).
 	//
 	// `onboarding` is not derivable from the status alone. `pending` means
 	// Stripe is reviewing and there is nothing to supply, so offering the
@@ -327,40 +329,28 @@
 	const statusCopy: Record<
 		ConnectStatus,
 		{
-			label: string;
-			variant: 'neutral' | 'warning' | 'success';
 			explanation: string;
 			onboarding: 'always' | 'never' | 'if-outstanding';
 		}
 	> = {
 		not_connected: {
-			label: 'Not connected',
-			variant: 'neutral',
 			explanation: 'Clients cannot pay their invoices yet.',
 			onboarding: 'always'
 		},
 		onboarding_incomplete: {
-			label: 'Onboarding incomplete',
-			variant: 'warning',
 			explanation: 'Stripe still needs some details before Clients can pay this Practice.',
 			onboarding: 'always'
 		},
 		pending: {
-			label: 'Awaiting Stripe review',
-			variant: 'warning',
 			explanation: 'Stripe is reviewing the details already submitted. Nothing more is needed right now.',
 			onboarding: 'never'
 		},
 		payouts_restricted: {
-			label: 'Taking payments, payouts on hold',
-			variant: 'warning',
 			explanation:
 				"Clients can pay their invoices, but Stripe cannot send the money to this Practice's bank yet.",
 			onboarding: 'if-outstanding'
 		},
 		active: {
-			label: 'Active',
-			variant: 'success',
 			explanation: "Clients can pay their invoices, and payouts reach this Practice's bank.",
 			onboarding: 'never'
 		}
@@ -603,7 +593,10 @@
 		-->
 		<cluster-l aria-live="polite">
 			<Text text="Stripe Connect status:" />
-			<Badge label={statusCopy[status!.status].label} variant={statusCopy[status!.status].variant} />
+			<Badge
+				label={CONNECT_STATUS_BADGES[status!.status].label}
+				variant={CONNECT_STATUS_BADGES[status!.status].variant}
+			/>
 		</cluster-l>
 
 		{#if isBackFromStripeRestricted}

@@ -2,6 +2,7 @@ import { page as testPage } from 'vitest/browser';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import { jsonResponse } from '#lib/testResponse.js';
+import { CONNECT_STATUS_BADGES } from '#lib/payments.js';
 import {
 	CONNECT_NUDGE_SENT_MESSAGE,
 	CONNECT_OWNERS_ALREADY_EMAILED_MESSAGE,
@@ -300,11 +301,25 @@ describe('payments settings screen', () => {
 		await expect.element(testPage.getByRole('button', { name: 'Connect Stripe' })).not.toBeInTheDocument();
 	});
 
+	// #1589: the overview reads the same table, and its own spec asserts the
+	// same labels, so the two screens cannot name one state two ways.
+	it.each(['not_connected', 'onboarding_incomplete', 'pending', 'payouts_restricted', 'active'] as const)(
+		'names %s in the words the Practice overview shares',
+		async (status) => {
+			await setup({ status, roles: ['owner'] });
+
+			await expect.element(testPage.getByText('Stripe Connect status:')).toBeVisible();
+			await expect
+				.element(testPage.getByText(CONNECT_STATUS_BADGES[status].label, { exact: true }))
+				.toBeVisible();
+		}
+	);
+
 	it('hides the connect button once the account is active, even for an Owner', async () => {
 		await setup({ status: 'active', roles: ['owner'] });
 
 		await expect.element(testPage.getByText('Stripe Connect status:')).toBeVisible();
-		await expect.element(testPage.getByText('Active', { exact: true })).toBeVisible();
+		await expect.element(testPage.getByText('Taking payments', { exact: true })).toBeVisible();
 		await expect.element(testPage.getByRole('button', { name: /Stripe/ })).not.toBeInTheDocument();
 		await expect.element(testPage.getByText('A Practice Owner has to connect Stripe.')).not.toBeInTheDocument();
 	});
@@ -594,7 +609,7 @@ describe('payments settings screen: re-reading Connect status on return from Str
 		await vi.advanceTimersByTimeAsync(CONNECT_STATUS_POLL_DELAYS_MS[0]);
 
 		expect(connectCallCount()).toBe(2);
-		await expect.element(testPage.getByText('Active', { exact: true })).toBeVisible();
+		await expect.element(testPage.getByText('Taking payments', { exact: true })).toBeVisible();
 	});
 
 	it('updates the badge, explanation, requirement count and banner together, and announces the change', async () => {
@@ -610,12 +625,12 @@ describe('payments settings screen: re-reading Connect status on return from Str
 
 		await vi.advanceTimersByTimeAsync(CONNECT_STATUS_POLL_DELAYS_MS[0]);
 
-		await expect.element(testPage.getByText('Active', { exact: true })).toBeVisible();
+		await expect.element(testPage.getByText('Taking payments', { exact: true })).toBeVisible();
 		await expect
 			.element(testPage.getByText("Clients can pay their invoices, and payouts reach this Practice's bank."))
 			.toBeVisible();
 		await expect.element(testPage.getByText('Taking payments, payouts on hold')).not.toBeInTheDocument();
-		expect(statusRegion?.textContent).toContain('Active');
+		expect(statusRegion?.textContent).toContain('Taking payments');
 	});
 
 	it('promises to keep checking only while a check is actually still scheduled', async () => {

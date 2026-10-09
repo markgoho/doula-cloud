@@ -18,6 +18,7 @@ import { hasAnyClient } from './client.js';
 export type { Fetcher } from './fetcher.js';
 import { creditCount, loadBalance } from './billing.js';
 import { loadConnectStatus, type ConnectStatus } from './payments.js';
+import { loadBillingMode, type BillingMode } from './invoice.js';
 import type { Fetcher } from './fetcher.js';
 import type { CursorPage } from './paginatedList.svelte.js';
 
@@ -54,6 +55,22 @@ export interface RequestHealth {
 export interface ConnectHealth {
 	status: ConnectStatus;
 	requirementsDue: string[];
+	/**
+	 * How the Practice bills (#1589), from the same read the Getting paid
+	 * screen makes (`loadBillingMode`), kept on the Connect block because
+	 * only the Getting paid card uses it. `'unchosen'` is a Practice that
+	 * has not answered yet; `'unavailable'` is a read that failed, which
+	 * shows the card rather than hiding it.
+	 */
+	billingMode: BillingMode | 'unchosen' | 'unavailable';
+}
+
+/** Whether the overview draws the Getting paid card (#1589). A Practice
+ * that bills by hand answered the question, and a card that goes on
+ * showing what it did not do reads its use back to it (ADR-0048) -- so
+ * it is not drawn in any Connect state. */
+export function isConnectCardShown(connect: Block<ConnectHealth>): connect is ConnectHealth | 'unavailable' {
+	return connect !== undefined && (connect === 'unavailable' || connect.billingMode !== 'by_hand');
 }
 
 /**
@@ -133,7 +150,7 @@ export function hasSecondary(landing: PracticeLanding): boolean {
 	return (
 		landing.roster !== undefined ||
 		landing.credit !== undefined ||
-		landing.connect !== undefined ||
+		isConnectCardShown(landing.connect) ||
 		landing.requests !== undefined
 	);
 }
@@ -144,6 +161,19 @@ export function hasSecondary(landing: PracticeLanding): boolean {
 async function block<T>(load: () => Promise<T>): Promise<Block<T>> {
 	try {
 		return await load();
+	} catch {
+		return 'unavailable';
+	}
+}
+
+// A billing mode that cannot be read does not take the Connect block down
+// with it: the card is shown, not hidden (#1589).
+async function readBillingMode(
+	fetcher: Fetcher,
+	practiceId: string
+): Promise<ConnectHealth['billingMode']> {
+	try {
+		return (await loadBillingMode(fetcher, practiceId)) ?? 'unchosen';
 	} catch {
 		return 'unavailable';
 	}
@@ -202,8 +232,11 @@ export async function loadPracticeLanding(
 			: undefined,
 		canReadConnect(roles)
 			? block(async () => {
-					const status = await loadConnectStatus(fetcher, practiceId);
-					return { status: status.status, requirementsDue: status.requirementsDue };
+					const [status, billingMode] = await Promise.all([
+						loadConnectStatus(fetcher, practiceId),
+						readBillingMode(fetcher, practiceId)
+					]);
+					return { status: status.status, requirementsDue: status.requirementsDue, billingMode };
 				})
 			: undefined,
 		// Same Owner/Admin gate the inbox endpoint itself holds -- a Doula
