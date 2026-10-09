@@ -14,7 +14,7 @@ import (
 
 // priceMergeKey is the reserved merge-field key #967 gives a Contract's
 // amount -- resolved by the product the same way clientNameMergeKey and
-// practiceNameMergeKey are, but never stored: see withResolvedPrice.
+// PracticeNameMergeKey are, but never stored: see withResolvedPrice.
 // Matches the default seeded Contract Template (staffauth/signup.go) and
 // app/src/lib/contractTemplate.ts's MERGE_FIELDS entry, so a Practice
 // that keeps the default prose gets it resolved with no template edit.

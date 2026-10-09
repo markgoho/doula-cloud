@@ -145,6 +145,15 @@
 		...(isPracticeOwner
 			? [
 					{
+						// #1540: the name a Client, a Contract and the Practice
+						// Page call this Practice. Owner-only, the same seat as
+						// the rest of this group: the BFF refuses an Admin, so
+						// the link is not shown to one.
+						label: 'Practice name',
+						description: 'What your Clients, your Contracts and your Practice Page call you.',
+						href: resolve('/practices/[practiceId]/settings/name', { practiceId })
+					},
+					{
 						label: 'Multi-factor authentication',
 						description: 'Whether every Staff member must use a second factor to sign in, not only Owners.',
 						href: resolve('/practices/[practiceId]/settings/mfa', { practiceId })

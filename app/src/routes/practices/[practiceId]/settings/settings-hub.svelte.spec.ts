@@ -66,6 +66,7 @@ describe('the Settings hub', () => {
 	it('gives an Admin the blocked-addresses, Getting paid and Rates entries but not the Owner-only MFA one', async () => {
 		await setup(['admin']);
 
+		await expect.element(testPage.getByRole('link', { name: 'Practice name' })).not.toBeInTheDocument();
 		// #267: Getting paid is the second entry gated at Owner-or-Admin,
 		// and for the same reason -- its screen reads an endpoint an Admin
 		// may read and a Doula may not.
@@ -91,6 +92,10 @@ describe('the Settings hub', () => {
 	it("adds the Owner-only MFA entry, linking to the switch's own screen", async () => {
 		await setup(['owner']);
 
+		// #1540: the Practice name is the Owner's alone; the BFF refuses an Admin.
+		await expect
+			.element(testPage.getByRole('link', { name: 'Practice name' }))
+			.toHaveAttribute('href', '/practices/practice-1/settings/name');
 		const link = testPage.getByRole('link', { name: 'Multi-factor authentication' });
 		await expect.element(link).toBeVisible();
 		await expect.element(testPage.getByRole('link', { name: 'Getting paid' })).toBeVisible();
