@@ -87,7 +87,7 @@ type engagementsFilter struct {
 // $2 is the contractor narrowing and $3 the one-Engagement narrowing,
 // each "NULL, or it matches" -- the same NULL-able parameter form
 // visit.scheduleSelect uses, so no clause is assembled at run time.
-const engagementsSelect = `SELECT e.id, cl.given_name, cl.preferred_name,
+const engagementsSelect = `SELECT e.id, e.status::text, cl.given_name, cl.preferred_name,
 	       e.due_date::text, e.pregnancy_ended_on::text,
 	       e.on_call_start_rule::text, e.on_call_start_week,
 	       ea.staff_id, s.name, ea.attached_at, ea.on_call_from::text, ea.on_call_to::text
@@ -120,7 +120,7 @@ func loadEngagements(ctx context.Context, tx *sql.Tx, practiceID string, setting
 	var out []engagementOnCall
 	for rows.Next() {
 		var (
-			id, givenName            string
+			id, status, givenName    string
 			preferredName, staffName sql.NullString
 			dueDate, endedOn         sql.NullString
 			overrideRule             sql.NullString
@@ -128,7 +128,7 @@ func loadEngagements(ctx context.Context, tx *sql.Tx, practiceID string, setting
 			doula                    attachedDoula
 			narrowFrom, narrowTo     sql.NullString
 		)
-		if err := rows.Scan(&id, &givenName, &preferredName, &dueDate, &endedOn,
+		if err := rows.Scan(&id, &status, &givenName, &preferredName, &dueDate, &endedOn,
 			&overrideRule, &overrideWeek,
 			&doula.staffID, &staffName, &doula.attachedAt, &narrowFrom, &narrowTo); err != nil {
 			// coverage:ignore reason: row scan failure, not exercised by unit tests
@@ -160,7 +160,7 @@ func loadEngagements(ctx context.Context, tx *sql.Tx, practiceID string, setting
 			current := &out[len(out)-1]
 			current.window, current.reason = DeriveWindow(WindowInput{
 				Kind:             KindBirth,
-				Status:           "active",
+				Status:           status,
 				DueDate:          current.dueDate,
 				PregnancyEndedOn: nullString(endedOn),
 				FirstGrantedOn:   &granted,

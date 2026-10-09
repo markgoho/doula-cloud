@@ -9,7 +9,7 @@ import (
 const statusIntake = "intake"
 
 // birth is the ordinary case every table row below starts from: an
-// active birth Engagement with a granted Attachment, the Practice's
+// birth Engagement with a granted Attachment, the Practice's
 // default rule, and a due date.
 func birth() oncall.WindowInput {
 	return oncall.WindowInput{

@@ -77,6 +77,26 @@ func TestRoster_TheGrantDateRuleAndAPerEngagementOverride(t *testing.T) {
 	}
 }
 
+// TestRoster_AnIntakeBirthWithADoulaIsOnTheRoster is #1616: the Attachment
+// is the fact that somebody is on the birth, so the roster shows an
+// `intake` birth, and only `completed` takes it off.
+func TestRoster_AnIntakeBirthWithADoulaIsOnTheRoster(t *testing.T) {
+	db := testdb.New(t)
+	f := newSoloFixture(t, db, "roster-intake")
+	exec(t, db, `UPDATE engagements SET status = 'intake' WHERE id = $1`, f.engagementID)
+
+	got := f.roster(t, db, octFirst, octLast)
+	if len(got.Windows) != 1 || got.Windows[0].Window != (oncall.Window{Start: windowStart, End: windowEnd}) {
+		t.Fatalf("an intake birth: windows = %+v, want one 2026-10-09..2026-11-13", got.Windows)
+	}
+
+	exec(t, db, `UPDATE engagements SET status = 'completed', ending_reason = 'care_complete', birth_outcome = 'unknown' WHERE id = $1`, f.engagementID)
+	got = f.roster(t, db, octFirst, octLast)
+	if len(got.Windows) != 0 {
+		t.Fatalf("a completed birth reached the roster: %+v", got.Windows)
+	}
+}
+
 func TestRoster_APostpartumEngagementNeverHasAWindow(t *testing.T) {
 	db := testdb.New(t)
 	f := newSoloFixture(t, db, "roster-postpartum")
