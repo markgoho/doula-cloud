@@ -48,7 +48,8 @@
 		passwordReauthRefusal,
 		refusalMessage,
 		refusalOrConfirmable,
-		totpCodeRefusal
+		totpCodeRefusal,
+		UNVERIFIED_EMAIL
 	} from '#lib/formErrors.js';
 	import { FormSubmission, orServiceProblem } from '#lib/formSubmission.svelte.js';
 	import type { SessionInfo } from '#lib/landing.js';
@@ -185,7 +186,7 @@
 		await submission.run(async () => {
 			await enrollingUser!.reload();
 			if (!enrollingUser!.emailVerified) {
-				return [{ message: `Your email address is not verified yet. Open the message we sent to ${email} and follow its link.` }];
+				return [{ message: UNVERIFIED_EMAIL }];
 			}
 			// The cached token still says email_verified: false.
 			await enrollingUser!.getIdToken(true);
@@ -340,10 +341,7 @@
 			field -- both presses are deliberate acts, so no form.
 		-->
 		<h2>Verify your email address first</h2>
-		<Text
-			text="An authenticator app needs a verified email address. We sent a message to {email}. Open it and follow the link. It can take a few minutes to arrive."
-		/>
-		<Text text="Then come back to this page and press the button below." />
+		<Text text="We sent a link to {email}. Open it, then come back and press the button." />
 		{#if resendNotice}
 			<Notice variant="status" message={resendNotice} />
 		{/if}

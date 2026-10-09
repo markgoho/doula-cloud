@@ -361,6 +361,10 @@ export function authRefusal(
 	}
 }
 
+// The cause and the next step for an address no one has proven (#1504).
+export const UNVERIFIED_EMAIL =
+	'Your email address is not verified yet. Open the message we sent you, follow its link, then try again.';
+
 /*
  * Identity Platform's refusal for the password re-entry step MFA
  * enrollment and removal both use (#606) -- a step-up reauthentication,
@@ -385,9 +389,7 @@ export function passwordReauthRefusal(cause: unknown, passwordId: string): FormE
 			// one has proven (#1504). Name the cause and the next step; a
 			// generic service problem sends her back to retry what cannot
 			// work.
-			return {
-				message: 'Your email address is not verified yet. Open the message we sent you, follow its link, then try again.'
-			};
+			return { message: UNVERIFIED_EMAIL };
 		}
 		default: {
 			return { message: SERVICE_PROBLEM };

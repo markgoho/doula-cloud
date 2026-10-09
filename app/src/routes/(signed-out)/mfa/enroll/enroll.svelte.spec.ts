@@ -226,6 +226,9 @@ describe('TOTP enrollment -- an email address not yet verified (#1504)', () => {
 		generateSecret.mockRejectedValue({ code: 'auth/unverified-email' });
 
 		await goToVerifyStep();
+
+		await expect.element(testPage.getByText(`We sent a link to ${session.email}.`, { exact: false })).toBeVisible();
+		expect(testPage.getByAltText(/QR code/).elements()).toHaveLength(0);
 	});
 
 	it('still reports any other refusal while opening the enrollment session', async () => {
