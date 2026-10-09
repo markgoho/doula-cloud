@@ -72,14 +72,14 @@ type engagementsFilter struct {
 	engagementID string
 }
 
-// engagementsSelect reads every active birth Engagement at the Practice
+// engagementsSelect reads every live (not completed) birth Engagement at the Practice
 // that has at least one open, granted Attachment, one row per such
 // Attachment. Those are the only Engagements that can have a window
 // (DeriveWindow's own first three refusals), so nothing that can never
 // be on the roster is read at all.
 //
 // Performance: bounded by the Practice's live births rather than by its
-// history, since status = 'active' excludes every completed Engagement;
+// history, since status <> 'completed' excludes every completed Engagement;
 // at a fourteen-doula agency that is on the order of a hundred rows. The
 // window is then derived in Go, because a gestational week, a grant
 // date and a grace do not reduce to one indexable column.
@@ -87,7 +87,7 @@ type engagementsFilter struct {
 // $2 is the contractor narrowing and $3 the one-Engagement narrowing,
 // each "NULL, or it matches" -- the same NULL-able parameter form
 // visit.scheduleSelect uses, so no clause is assembled at run time.
-const engagementsSelect = `SELECT e.id, cl.given_name, cl.preferred_name,
+const engagementsSelect = `SELECT e.id, e.status::text, cl.given_name, cl.preferred_name,
 	       e.due_date::text, e.pregnancy_ended_on::text,
 	       e.on_call_start_rule::text, e.on_call_start_week,
 	       ea.staff_id, s.name, ea.attached_at, ea.on_call_from::text, ea.on_call_to::text
@@ -97,7 +97,7 @@ const engagementsSelect = `SELECT e.id, cl.given_name, cl.preferred_name,
 	    ON ea.engagement_id = e.id AND ea.origin = 'granted' AND ea.ended_at IS NULL
 	  LEFT JOIN staff s ON s.id = ea.staff_id
 	 WHERE e.practice_id = $1
-	   AND e.status = 'active'
+	   AND e.status <> 'completed'
 	   AND e.kind = 'birth'
 	   AND ($2::uuid IS NULL OR EXISTS (
 	         SELECT 1 FROM engagement_attachments mine
@@ -120,7 +120,7 @@ func loadEngagements(ctx context.Context, tx *sql.Tx, practiceID string, setting
 	var out []engagementOnCall
 	for rows.Next() {
 		var (
-			id, givenName            string
+			id, status, givenName    string
 			preferredName, staffName sql.NullString
 			dueDate, endedOn         sql.NullString
 			overrideRule             sql.NullString
@@ -128,7 +128,7 @@ func loadEngagements(ctx context.Context, tx *sql.Tx, practiceID string, setting
 			doula                    attachedDoula
 			narrowFrom, narrowTo     sql.NullString
 		)
-		if err := rows.Scan(&id, &givenName, &preferredName, &dueDate, &endedOn,
+		if err := rows.Scan(&id, &status, &givenName, &preferredName, &dueDate, &endedOn,
 			&overrideRule, &overrideWeek,
 			&doula.staffID, &staffName, &doula.attachedAt, &narrowFrom, &narrowTo); err != nil {
 			// coverage:ignore reason: row scan failure, not exercised by unit tests
@@ -160,7 +160,7 @@ func loadEngagements(ctx context.Context, tx *sql.Tx, practiceID string, setting
 			current := &out[len(out)-1]
 			current.window, current.reason = DeriveWindow(WindowInput{
 				Kind:             KindBirth,
-				Status:           "active",
+				Status:           status,
 				DueDate:          current.dueDate,
 				PregnancyEndedOn: nullString(endedOn),
 				FirstGrantedOn:   &granted,

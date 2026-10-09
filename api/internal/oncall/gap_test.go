@@ -147,6 +147,18 @@ func TestCreateGap_RefusesWhatItShould(t *testing.T) {
 	}
 }
 
+// TestCreateGap_AnIntakeBirthHasAWindowToRecordAGapIn is #1616: a birth
+// with a Doula on it has a window from intake, so a gap can be recorded.
+func TestCreateGap_AnIntakeBirthHasAWindowToRecordAGapIn(t *testing.T) {
+	db := testdb.New(t)
+	f := newSoloFixture(t, db, "gap-intake")
+	exec(t, db, `UPDATE engagements SET status = 'intake' WHERE id = $1`, f.engagementID)
+	srv, session := newServer(t, db, f.ownerUID)
+	defer srv.Close()
+
+	doJSON[oncall.Gap](t, session, http.MethodPost, gapsURL(srv.URL, f.practiceID, f.engagementID), gapBody(f.doulaID, nil), http.StatusCreated)
+}
+
 func TestCreateGap_NoWindowIsRefused(t *testing.T) {
 	db := testdb.New(t)
 	f := newSoloFixture(t, db, "gap-nowindow")
@@ -173,8 +185,8 @@ func TestCreateGap_SaysWhichReasonThereIsNoWindow(t *testing.T) {
 		"postpartum care is not on-call work": {
 			"pp", `UPDATE engagements SET kind = 'postpartum' WHERE id = $1`, oncall.MsgNoWindowPostpartum,
 		},
-		"care has not started": {
-			"intake", `UPDATE engagements SET status = 'intake' WHERE id = $1`, oncall.MsgNoWindowNotActive,
+		"care has ended": {
+			"completed", `UPDATE engagements SET status = 'completed', ending_reason = 'care_complete', birth_outcome = 'unknown' WHERE id = $1`, oncall.MsgNoWindowCompleted,
 		},
 		"nobody is on the birth": {
 			"nobody",

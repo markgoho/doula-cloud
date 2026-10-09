@@ -106,7 +106,7 @@ describe('the words a reader meets', () => {
 			'Nobody is on this birth'
 		);
 		expect(describeNoWindow('postpartum')).toContain('Postpartum');
-		expect(describeNoWindow('not_active')).toContain('Care has not started');
+		expect(describeNoWindow('completed')).toContain('Care has ended');
 		expect(describeNoWindow('ended_before_start')).toContain('arrived before');
 	});
 

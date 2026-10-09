@@ -6,8 +6,10 @@ import (
 	"doula-cloud/api/internal/oncall"
 )
 
+const statusIntake = "intake"
+
 // birth is the ordinary case every table row below starts from: an
-// active birth Engagement with a granted Attachment, the Practice's
+// birth Engagement with a granted Attachment, the Practice's
 // default rule, and a due date.
 func birth() oncall.WindowInput {
 	return oncall.WindowInput{
@@ -86,14 +88,29 @@ func TestDeriveWindow(t *testing.T) {
 			wantReason: oncall.NoWindowPostpartum,
 		},
 		{
-			name:       "an Engagement still in intake has no window",
-			edit:       func(in *oncall.WindowInput) { in.Status = "intake" },
-			wantReason: oncall.NoWindowNotActive,
+			name:      "an Engagement still in intake has a window once somebody is attached (#1616)",
+			edit:      func(in *oncall.WindowInput) { in.Status = statusIntake },
+			wantStart: windowStart,
+			wantEnd:   windowEnd,
+		},
+		{
+			name: "an intake Engagement under the grant-date rule starts the day of the grant (#1616)",
+			edit: func(in *oncall.WindowInput) {
+				in.Status = statusIntake
+				in.Rule.Start = oncall.StartAttachmentGranted
+			},
+			wantStart: grantedOn,
+			wantEnd:   windowEnd,
+		},
+		{
+			name:       "an intake Engagement nobody is attached to has no window",
+			edit:       func(in *oncall.WindowInput) { in.Status = statusIntake; in.FirstGrantedOn = nil },
+			wantReason: oncall.NoWindowNobodyAttached,
 		},
 		{
 			name:       "a completed Engagement has no window",
 			edit:       func(in *oncall.WindowInput) { in.Status = "completed" },
-			wantReason: oncall.NoWindowNotActive,
+			wantReason: oncall.NoWindowCompleted,
 		},
 		{
 			name:       "nobody granted on the Engagement means nobody is on call for it",

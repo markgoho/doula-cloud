@@ -81,8 +81,10 @@ const (
 	// NoWindowPostpartum: postpartum work is shift-shaped, not
 	// on-call-shaped, so a postpartum Engagement never has a window.
 	NoWindowPostpartum NoWindowReason = "postpartum"
-	// NoWindowNotActive: care has not started, or has ended.
-	NoWindowNotActive NoWindowReason = "not_active"
+	// NoWindowCompleted: care has ended. An `intake` or `active` birth
+	// with a granted Attachment has a window (#1616); only `completed`
+	// takes it away.
+	NoWindowCompleted NoWindowReason = "completed"
 	// NoWindowNobodyAttached: nobody holds a granted Attachment, so
 	// nobody can be on call for it.
 	NoWindowNobodyAttached NoWindowReason = "nobody_attached"
@@ -125,8 +127,8 @@ func DeriveWindow(in WindowInput) (*Window, NoWindowReason) {
 	switch {
 	case in.Kind != KindBirth:
 		return nil, NoWindowPostpartum
-	case in.Status != "active":
-		return nil, NoWindowNotActive
+	case in.Status == "completed":
+		return nil, NoWindowCompleted
 	case isBlank(in.FirstGrantedOn):
 		return nil, NoWindowNobodyAttached
 	}

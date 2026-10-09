@@ -221,8 +221,8 @@ export function describeNoWindow(reason: string): string {
 		case 'postpartum': {
 			return 'Postpartum care is not on-call work.';
 		}
-		case 'not_active': {
-			return 'Care has not started, or has ended.';
+		case 'completed': {
+			return 'Care has ended.';
 		}
 		case 'ended_before_start': {
 			return 'The baby arrived before the window would have opened.';

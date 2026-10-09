@@ -132,15 +132,14 @@ func TestRequestHandler_ASoloOwnerWithNoDoulaYetIsNotAttached(t *testing.T) {
 // window of a solo Owner's first birth Engagement, started in one act
 // with a due date and with herself named.
 //
-// What that one act settles is the half of the window that was missing
-// before #1596: somebody holds a granted Attachment. GLOSSARY.md gives a
-// window to an `active` Engagement only, and an Engagement starts at
-// `intake`, so on the day it starts the read answers "not active" and
-// never "nobody attached". The move to `active` is the Engagement's own
-// care phase (ADR-0015), which a scheduled Visit makes by itself, and it
-// is no act of attaching. Once it is made, the window is there and she
-// is the Doula on call, with no Offer to herself and no Visit naming
-// herself in between.
+// The Attachment is the fact that somebody is on the birth, and GLOSSARY.md
+// gives a window to a `birth` Engagement with a granted Attachment whose
+// status is not `completed` (decided on #1616). An Engagement starts at
+// `intake`, so on the day it starts the window is already there and she
+// is the Doula on call, with no Offer to herself, no Visit naming herself
+// and no move to `active` in between. The care phase (ADR-0015) says only
+// whether care has started, so moving to `active` changes nothing about
+// the window, and `completed` is what takes it away.
 func TestSoloOwnersFirstBirthNeedsNoFurtherActToBeOnCall(t *testing.T) {
 	db := testdb.New(t)
 	practiceID, ownerID := testdb.SeedStaffAtNewPractice(t, db, "solo-owner", founderRoles, employeeType)
@@ -158,10 +157,7 @@ func TestSoloOwnersFirstBirthNeedsNoFurtherActToBeOnCall(t *testing.T) {
 
 	var atIntake oncall.EngagementOnCall
 	decode(t, get(t, onCallURL, session), http.StatusOK, &atIntake)
-	if atIntake.NoWindowReason != oncall.NoWindowNotActive {
-		t.Fatalf("no-window reason at intake = %q, want %q: the Attachment is not what is missing",
-			atIntake.NoWindowReason, oncall.NoWindowNotActive)
-	}
+	assertSoloOwnerOnCall(t, atIntake, ownerID, "intake")
 
 	if _, err := db.Admin.ExecContext(t.Context(),
 		`UPDATE engagements SET status = 'active' WHERE id = $1`, started.EngagementID,
@@ -171,10 +167,30 @@ func TestSoloOwnersFirstBirthNeedsNoFurtherActToBeOnCall(t *testing.T) {
 
 	var active oncall.EngagementOnCall
 	decode(t, get(t, onCallURL, session), http.StatusOK, &active)
-	if active.Window == nil {
-		t.Fatalf("window = none (%q), want one for an active birth with a due date and a granted Attachment", active.NoWindowReason)
+	assertSoloOwnerOnCall(t, active, ownerID, "active")
+
+	if _, err := db.Admin.ExecContext(t.Context(),
+		`UPDATE engagements SET status = 'completed', ending_reason = 'care_complete', birth_outcome = 'unknown' WHERE id = $1`, started.EngagementID,
+	); err != nil {
+		t.Fatalf("move engagement to completed: %v", err)
 	}
-	if len(active.Doulas) != 1 || active.Doulas[0].StaffID != ownerID {
-		t.Fatalf("doulas on call = %+v, want the Owner alone", active.Doulas)
+
+	var completed oncall.EngagementOnCall
+	decode(t, get(t, onCallURL, session), http.StatusOK, &completed)
+	if completed.Window != nil || completed.NoWindowReason != oncall.NoWindowCompleted {
+		t.Fatalf("completed: window = %+v, reason = %q, want no window and %q",
+			completed.Window, completed.NoWindowReason, oncall.NoWindowCompleted)
+	}
+}
+
+// assertSoloOwnerOnCall fails unless the read has a window and names the
+// Owner alone as the Doula on call.
+func assertSoloOwnerOnCall(t *testing.T, got oncall.EngagementOnCall, ownerID, phase string) {
+	t.Helper()
+	if got.Window == nil {
+		t.Fatalf("%s: window = none (%q), want one for a birth with a granted Attachment", phase, got.NoWindowReason)
+	}
+	if len(got.Doulas) != 1 || got.Doulas[0].StaffID != ownerID {
+		t.Fatalf("%s: doulas on call = %+v, want the Owner alone", phase, got.Doulas)
 	}
 }
