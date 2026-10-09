@@ -4,6 +4,7 @@ import {
 	emailFormatError,
 	errorsFromCause,
 	isMultiFactorAuthRequired,
+	isUnverifiedEmail,
 	passwordReauthRefusal,
 	RefusalError,
 	refusalError,
@@ -144,6 +145,16 @@ describe('passwordReauthRefusal', () => {
 		}
 	);
 
+	// #1504: the refusal Identity Platform gives an unverified address
+	// names the cause and the next step, and points at no field.
+	it('tells her to verify her email address for auth/unverified-email', () => {
+		const refusal = passwordReauthRefusal({ code: 'auth/unverified-email' }, passwordId);
+
+		expect(refusal.message).toContain('email address is not verified');
+		expect(refusal.message).toContain('follow its link');
+		expect(refusal.targetId).toBeUndefined();
+	});
+
 	it('falls back to the service message for a code it has never seen', () => {
 		expect(passwordReauthRefusal({ code: 'auth/brand-new' }, passwordId).message).toBe(
 			SERVICE_PROBLEM
@@ -202,6 +213,16 @@ describe('isMultiFactorAuthRequired', () => {
 			expect(isMultiFactorAuthRequired(cause)).toBe(false);
 		}
 	);
+});
+
+describe('isUnverifiedEmail', () => {
+	it('recognizes Identity Platform’s own code for an unverified address', () => {
+		expect(isUnverifiedEmail({ code: 'auth/unverified-email' })).toBe(true);
+	});
+
+	it.each([[undefined], ['a string'], [{ code: 'auth/wrong-password' }]])('reads %s as anything else', (cause) => {
+		expect(isUnverifiedEmail(cause)).toBe(false);
+	});
 });
 
 describe('refusalMessage', () => {

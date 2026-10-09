@@ -54,8 +54,10 @@ const toDataURL = vi.hoisted(() => vi.fn());
 vi.mock('qrcode', () => ({ default: { toDataURL }, toDataURL }));
 
 const apiFetch = vi.hoisted(() => vi.fn());
+const apiFetchWithSession = vi.hoisted(() => vi.fn());
 vi.mock('#lib/api.js', () => ({
 	apiBaseURL: () => '',
+	apiFetchWithSession,
 	probeSession: async <Session,>(path: string): Promise<Session | undefined> => {
 		try {
 			const response = await apiFetch(path);
@@ -90,6 +92,7 @@ beforeEach(() => {
 	for (const mock of [
 		goto,
 		apiFetch,
+		apiFetchWithSession,
 		globalFetch,
 		signInWithEmailAndPassword,
 		signOut,
@@ -110,7 +113,7 @@ beforeEach(() => {
 	assertionForEnrollment.mockReturnValue({ assertion: true });
 	toDataURL.mockResolvedValue('data:image/png;base64,fake');
 	signInWithEmailAndPassword.mockResolvedValue({
-		user: { getIdToken: vi.fn().mockResolvedValue('id-token') }
+		user: { emailVerified: true, getIdToken: vi.fn().mockResolvedValue('id-token') }
 	});
 	signOut.mockResolvedValue(undefined);
 	enroll.mockResolvedValue(undefined);
@@ -183,6 +186,103 @@ describe('TOTP enrollment -- step one, re-authenticating', () => {
 	});
 });
 
+/*
+ * #1504: a new Owner arrives here before the verification message signup
+ * queued has reached her, and Identity Platform refuses a second factor for
+ * an unverified address. Wherever she arrives from, she is told to verify
+ * first and never shown a QR code step that cannot succeed.
+ */
+function signInUnverified() {
+	const user = {
+		emailVerified: false,
+		reload: vi.fn().mockResolvedValue(undefined),
+		getIdToken: vi.fn().mockResolvedValue('id-token')
+	};
+	signInWithEmailAndPassword.mockResolvedValue({ user });
+	return user;
+}
+
+async function goToVerifyStep() {
+	await render(Page, {});
+	await testPage.getByLabelText('Password').fill('correct horse');
+	await testPage.getByRole('button', { name: 'Continue' }).click();
+	await expect.element(testPage.getByRole('heading', { name: 'Verify your email address first' })).toBeVisible();
+}
+
+describe('TOTP enrollment -- an email address not yet verified (#1504)', () => {
+	it('says to verify first, to which address, and how to get a new link, before any enrollment call', async () => {
+		signInUnverified();
+
+		await goToVerifyStep();
+
+		await expect.element(testPage.getByText(session.email, { exact: false })).toBeVisible();
+		await expect.element(testPage.getByRole('button', { name: 'Send a new verification link' })).toBeVisible();
+		expect(getSession).not.toHaveBeenCalled();
+		expect(generateSecret).not.toHaveBeenCalled();
+		expect(testPage.getByAltText(/QR code/).elements()).toHaveLength(0);
+	});
+
+	it('names the cause when Identity Platform refuses an address the sign-in showed as verified', async () => {
+		generateSecret.mockRejectedValue({ code: 'auth/unverified-email' });
+
+		await goToVerifyStep();
+	});
+
+	it('still reports any other refusal while opening the enrollment session', async () => {
+		generateSecret.mockRejectedValue({ code: 'auth/network-request-failed' });
+		await render(Page, {});
+		await testPage.getByLabelText('Password').fill('correct horse');
+
+		await testPage.getByRole('button', { name: 'Continue' }).click();
+
+		await expect.element(testPage.getByRole('alert')).toHaveTextContent('We could not reach the service');
+	});
+
+	it('stays on the step, with the reason, while the address is still not verified', async () => {
+		signInUnverified();
+		await goToVerifyStep();
+
+		await testPage.getByRole('button', { name: 'I have verified my email address' }).click();
+
+		await expect.element(testPage.getByRole('alert')).toHaveTextContent('Your email address is not verified yet.');
+		expect(generateSecret).not.toHaveBeenCalled();
+	});
+
+	it('moves on to the QR code once the address is verified', async () => {
+		const user = signInUnverified();
+		await goToVerifyStep();
+		user.reload.mockImplementation(async () => {
+			user.emailVerified = true;
+		});
+
+		await testPage.getByRole('button', { name: 'I have verified my email address' }).click();
+
+		await expect.element(testPage.getByLabelText('Authenticator app code')).toBeVisible();
+		expect(user.getIdToken).toHaveBeenCalledWith(true);
+	});
+
+	it('sends a new verification link on request and says so', async () => {
+		signInUnverified();
+		apiFetchWithSession.mockResolvedValue(new Response(undefined, { status: 202 }));
+		await goToVerifyStep();
+
+		await testPage.getByRole('button', { name: 'Send a new verification link' }).click();
+
+		await expect.element(testPage.getByText(`We've sent a new verification link to ${session.email}.`)).toBeVisible();
+		expect(apiFetchWithSession).toHaveBeenCalledWith('/api/staff/verify-email/request', { method: 'POST' });
+	});
+
+	it('reports a refused request for a new link in the server’s words', async () => {
+		signInUnverified();
+		apiFetchWithSession.mockResolvedValue(jsonResponse('Too many requests. Try again later.', 429));
+		await goToVerifyStep();
+
+		await testPage.getByRole('button', { name: 'Send a new verification link' }).click();
+
+		await expect.element(testPage.getByRole('alert')).toHaveTextContent('Too many requests');
+	});
+});
+
 describe('TOTP enrollment -- step two, the QR code and secret', () => {
 	it('opens an enrollment session and shows the QR code and secret as text', async () => {
 		await goToSetupStep();
@@ -219,7 +319,7 @@ describe('TOTP enrollment -- step two, the QR code and secret', () => {
 
 	it('force-refreshes the ID token before finishing enrollment', async () => {
 		const getIdToken = vi.fn().mockResolvedValue('fresh-id-token');
-		signInWithEmailAndPassword.mockResolvedValue({ user: { getIdToken } });
+		signInWithEmailAndPassword.mockResolvedValue({ user: { emailVerified: true, getIdToken } });
 		globalFetch.mockResolvedValue(jsonResponse({ ok: true }));
 		await goToSetupStep();
 

@@ -380,10 +380,29 @@ export function passwordReauthRefusal(cause: unknown, passwordId: string): FormE
 		case 'auth/network-request-failed': {
 			return { message: 'We could not reach the service. Check your connection and try again.' };
 		}
+		case 'auth/unverified-email': {
+			// Identity Platform refuses a second factor for an address no
+			// one has proven (#1504). Name the cause and the next step; a
+			// generic service problem sends her back to retry what cannot
+			// work.
+			return {
+				message: 'Your email address is not verified yet. Open the message we sent you, follow its link, then try again.'
+			};
+		}
 		default: {
 			return { message: SERVICE_PROBLEM };
 		}
 	}
+}
+
+/*
+ * Whether Identity Platform refused a second-factor step because the
+ * account's email address is not verified (#1504). The enrollment screen
+ * reads it to show the verification step instead of a form that cannot
+ * succeed.
+ */
+export function isUnverifiedEmail(cause: unknown): boolean {
+	return authErrorCode(cause) === 'auth/unverified-email';
 }
 
 /*
