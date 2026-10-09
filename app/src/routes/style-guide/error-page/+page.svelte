@@ -40,6 +40,11 @@
 			wayOutLabel: 'Go to the Highland Midwifery Practice overview'
 		},
 		{
+			kind: 'actSecondFactor',
+			heading: 'An act that needs a second factor (403 SECOND_FACTOR_REQUIRED)',
+			wayOutLabel: 'Go to the Highland Midwifery Practice overview'
+		},
+		{
 			kind: 'unavailable',
 			heading: 'Service unavailable (503)',
 			wayOutLabel: 'Go to the Highland Midwifery Practice overview'

@@ -28,12 +28,13 @@ const apierrTestPackage = "apierrtest"
 // spelled the way a call site spells them. The AST walk below sees an
 // identifier, never a value, so it needs the names; the values are here
 // too so TestForbiddenCodesAreTheRecordedSet can prove this table and
-// apierr.ForbiddenCodes still describe the same three codes rather than
+// apierr.ForbiddenCodes still describe the same codes rather than
 // drifting apart the first time one of them is added to alone.
 var forbiddenCodeIdents = map[string]apierr.Code{
 	"CodeForbidden":               apierr.CodeForbidden,
 	"CodePracticePendingDeletion": apierr.CodePracticePendingDeletion,
 	"CodeMFARequired":             apierr.CodeMFARequired,
+	"CodeSecondFactorRequired":    apierr.CodeSecondFactorRequired,
 }
 
 // TestForbiddenCodesAreTheRecordedSet is the cross-check that keeps the

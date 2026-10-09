@@ -8,7 +8,7 @@ import { parseRefusal } from './formErrors.js';
  * because it crashed" except by the status code the failing `load`
  * deliberately chooses.
  *
- * Three of these are a 403 (#918). A status code carries no cause, so
+ * Four of these are a 403 (#918). A status code carries no cause, so
  * keying the page off it alone made every refusal assert the one cause
  * 403 cannot name -- a role -- including the two the BFF already answers
  * that are nothing to do with the reader's role. The cause travels in
@@ -30,6 +30,7 @@ export type ErrorKind =
 	| 'refused'
 	| 'practiceLocked'
 	| 'secondFactor'
+	| 'actSecondFactor'
 	| 'unavailable'
 	| 'problem';
 
@@ -43,7 +44,11 @@ export type ErrorKind =
  */
 const kindByRefusalCode: Record<string, ErrorKind> = {
 	PRACTICE_PENDING_DELETION: 'practiceLocked',
-	MFA_REQUIRED: 'secondFactor'
+	MFA_REQUIRED: 'secondFactor',
+	// #1532: one of the five acts that need a second factor. Each act's own
+	// screen says so before she tries, so this page is the fallback for a
+	// refusal that gets past it -- a stale tab, a session that changed.
+	SECOND_FACTOR_REQUIRED: 'actSecondFactor'
 };
 
 /** Maps the status SvelteKit hands a `+error.svelte`, and the refusal code

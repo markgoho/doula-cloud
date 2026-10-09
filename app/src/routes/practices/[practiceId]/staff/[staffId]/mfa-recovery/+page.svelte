@@ -33,7 +33,7 @@
 	import { resolve } from '$app/paths';
 	import { apiFetch, apiFetchWithSession } from '#lib/api.js';
 	import { apiErrorMessage } from '#lib/apiErrorMessage.js';
-	import { isOwner as checkIsOwner } from '#lib/roles.js';
+	import { hasSecondFactor as checkHasSecondFactor, isOwner as checkIsOwner } from '#lib/roles.js';
 	import { loadStaff, type StaffSummary } from '#lib/staff.js';
 	import { vouchForStaff } from '#lib/mfaRecovery.js';
 	import type { SessionInfo } from '#lib/landing.js';
@@ -45,11 +45,16 @@
 	import WarningText from '#lib/components/atoms/WarningText.svelte';
 	import ErrorSummary from '#lib/components/molecules/ErrorSummary.svelte';
 	import ReauthPrompt from '#lib/components/molecules/ReauthPrompt.svelte';
+	import SecondFactorNeeded from '#lib/components/molecules/SecondFactorNeeded.svelte';
 	import FormPage from '#lib/components/templates/FormPage.svelte';
 	import type { PracticeSession } from '../../../+layout.js';
 
 	const session = $derived((page.data as { session: PracticeSession }).session);
 	const isOwner = $derived(checkIsOwner(session));
+	// #1532: vouching is one of the five acts the BFF refuses without a
+	// second factor of her own. `hasSecondFactor` (#lib/roles.ts)
+	// holds the rule for a session that says nothing.
+	const hasSecondFactor = $derived(checkHasSecondFactor(session));
 	const practiceId = $derived(page.params.practiceId!);
 	const staffId = $derived(page.params.staffId!);
 
@@ -179,6 +184,12 @@
 			text={`You pass the code on to ${memberName} on a call where you are sure who you are talking to. Entering the code is what switches two-factor authentication off, so a new authenticator app can be set up.`}
 			tone="variant"
 		/>
+		{#if !hasSecondFactor}
+			<SecondFactorNeeded
+				message={`You need two-factor authentication yourself before you can send a recovery code for ${memberName}.`}
+				returnTo={page.url.pathname}
+			/>
+		{/if}
 	{/if}
 {/snippet}
 
@@ -188,7 +199,9 @@
 
 {#snippet actions()}
 	{#if isOwner && isLoaded && step === 'intro'}
-		<Button type="button" label="Send a recovery code" onClick={() => (step = 'reauth')} />
+		{#if hasSecondFactor}
+			<Button type="button" label="Send a recovery code" onClick={() => (step = 'reauth')} />
+		{/if}
 		<Link href={rosterHref} label="Staff" />
 	{/if}
 {/snippet}

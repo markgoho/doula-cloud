@@ -14,9 +14,10 @@
 	import { resolve } from '$app/paths';
 	import { page } from '#lib/appState.svelte.js';
 	import { apiBaseURL } from '#lib/api.js';
-	import { isOwner, isOwnerOrAdmin } from '#lib/roles.js';
+	import { hasSecondFactor as checkHasSecondFactor, isOwner, isOwnerOrAdmin } from '#lib/roles.js';
 	import Link from '#lib/components/atoms/Link.svelte';
 	import Text from '#lib/components/atoms/Text.svelte';
+	import SecondFactorNeeded from '#lib/components/molecules/SecondFactorNeeded.svelte';
 	import OverviewHub from '#lib/components/templates/OverviewHub.svelte';
 	import type { PracticeSession } from '../+layout.js';
 
@@ -35,8 +36,22 @@
 	// hands as the roster it is drawn from -- Owner or Admin, matching the
 	// endpoint's own `ownerAndAdmin` guard.
 	let isPracticeOwnerOrAdmin = $derived(isOwnerOrAdmin(session));
+	// #1532: downloading the archive is one of the five acts the BFF
+	// refuses without a second factor. `hasSecondFactor` (#lib/roles.ts)
+	// holds the rule for a session that says nothing.
+	const hasSecondFactor = $derived(checkHasSecondFactor(session));
 
-	const settings = $derived([
+	interface SettingEntry {
+		label: string;
+		description: string;
+		href: string;
+		/** Set when the entry is an act this session cannot do yet for
+		 * want of a second factor (#1532): the entry names the act and
+		 * what it needs, in place of a link the BFF would refuse. */
+		secondFactorMessage?: string;
+	}
+
+	const settings: SettingEntry[] = $derived([
 		// Getting paid (#267) is gated the same notch as blocked addresses,
 		// and for the same reason: its screen reads an Owner-or-Admin
 		// endpoint, so a Doula who followed the link would meet a screen
@@ -141,10 +156,16 @@
 					// across every attachment and role boundary ADR-0008 draws.
 					// Plain API href, not resolve(): this is not a page inside
 					// the app, it is a download the browser fetches on its own.
+					// A bare download link, so a refusal would land her on the
+					// BFF's own JSON with no way back: without a second factor
+					// the entry says what the act needs instead (#1532).
 					{
 						label: "Export this Practice's data",
 						description: 'Every record this Practice holds, as one ZIP of spreadsheet-ready files.',
-						href: `${apiBaseURL()}/api/practices/${practiceId}/export`
+						href: `${apiBaseURL()}/api/practices/${practiceId}/export`,
+						...(!hasSecondFactor && {
+							secondFactorMessage: "You need two-factor authentication before you can export this Practice's data."
+						})
 					},
 					// #871: the same seat as export and erasure. Export is the
 					// stated prerequisite in product terms, which is why this
@@ -164,8 +185,14 @@
 	<ul>
 		{#each settings as setting (setting.href)}
 			<li>
-				<Link href={setting.href} label={setting.label} />
-				<Text text={setting.description} step="body-sm" tone="variant" />
+				{#if setting.secondFactorMessage}
+					<Text text={setting.label} />
+					<Text text={setting.description} step="body-sm" tone="variant" />
+					<SecondFactorNeeded message={setting.secondFactorMessage} returnTo={page.url.pathname} />
+				{:else}
+					<Link href={setting.href} label={setting.label} />
+					<Text text={setting.description} step="body-sm" tone="variant" />
+				{/if}
 			</li>
 		{/each}
 	</ul>

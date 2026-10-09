@@ -7,15 +7,16 @@
 	 * Each `kind` answers the one thing GOV.UK says the person actually
 	 * needs: whether trying again will help.
 	 *
-	 * Three kinds are a 403, one per code in `apierr.ForbiddenCodes`
+	 * Four kinds are a 403, one per code in `apierr.ForbiddenCodes`
 	 * (#918). `refused` is ADR-0008's read gate and the fallback for a
 	 * refusal that names no reason: nothing will change, because a role
 	 * is not something the reader can go and alter. `practiceLocked` is
 	 * a fact about the Practice and says who can undo it, since telling
 	 * a Practice Owner her own role is the problem would be false.
-	 * `secondFactor` is the one refusal here a reader can clear herself,
-	 * so it is the one that does not end by saying trying again is
-	 * pointless -- it names the step, and trying again after it works.
+	 * `secondFactor` and `actSecondFactor` are the refusals here a reader
+	 * can clear herself, so they do not end by saying trying again is
+	 * pointless -- they name the step, and trying again after it works.
+	 * The first shuts the whole Practice; the second only one act (#1532).
 	 *
 	 * No chrome here, per ADR-0018 -- the nearest `+layout.svelte` above the
 	 * failure renders it. This owns only the gutter, the max-width, and the
@@ -51,6 +52,10 @@
 		secondFactor: {
 			title: 'Set up a second sign-in factor',
 			body: 'This Practice asks for a second sign-in factor before its screens open. Set one up from your Account screen, then try this page again.'
+		},
+		actSecondFactor: {
+			title: 'This needs two-factor authentication',
+			body: 'You can use this Practice, but this step needs two-factor authentication. Set it up from your Account screen, then try again.'
 		},
 		unavailable: {
 			title: 'DoulaCloud is unavailable',

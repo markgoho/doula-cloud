@@ -27,6 +27,12 @@ describe('errorKindForStatus', () => {
 		expect(errorKindForStatus(403, 'MFA_REQUIRED')).toBe('secondFactor');
 	});
 
+	// #1532: the same step, asked of one act rather than of the Practice --
+	// a different sentence, since the Practice itself is open to her.
+	it('maps a 403 carrying the act code to actSecondFactor', () => {
+		expect(errorKindForStatus(403, 'SECOND_FACTOR_REQUIRED')).toBe('actSecondFactor');
+	});
+
 	// A code from a BFF newer than this app, or one added to
 	// apierr.ForbiddenCodes without a state here yet: the reader still
 	// gets the refusal every 403 said before #918, never a blank page.

@@ -50,6 +50,28 @@ describe('practices/[practiceId]/+layout.ts load', () => {
 		});
 	});
 
+	// #1532: the five screens whose act needs a second factor read this
+	// off the session, so they can say so before she tries.
+	it("carries the session's own second-factor fact", async () => {
+		const { load } = await import('./+layout.js');
+		setup({
+			'/api/practices/practice-1/session': {
+				status: 200,
+				body: {
+					staffId: 'staff-9',
+					practiceName: 'Riverside Doula Collective',
+					roles: ['owner'],
+					isContractor: false,
+					secondFactor: false
+				}
+			}
+		});
+
+		const result = await load(loadArguments);
+
+		expect(result).toMatchObject({ session: { secondFactor: false } });
+	});
+
 	it('redirects to login on a 401, rather than reaching for goto mid-load', async () => {
 		const { load } = await import('./+layout.js');
 		setup({ '/api/practices/practice-1/session': { status: 401, body: 'no session' } });

@@ -16,7 +16,7 @@
 	import { onMount } from 'svelte';
 	import { page } from '#lib/appState.svelte.js';
 	import { apiFetchWithSession } from '#lib/api.js';
-	import { isOwner as checkIsOwner } from '#lib/roles.js';
+	import { hasSecondFactor as checkHasSecondFactor, isOwner as checkIsOwner } from '#lib/roles.js';
 	import {
 		loadDeletionStatus,
 		initiateDeletion,
@@ -28,11 +28,17 @@
 	import Button from '#lib/components/atoms/Button.svelte';
 	import Notice from '#lib/components/atoms/Notice.svelte';
 	import ConfirmDialog from '#lib/components/molecules/ConfirmDialog.svelte';
+	import SecondFactorNeeded from '#lib/components/molecules/SecondFactorNeeded.svelte';
 	import FormPage from '#lib/components/templates/FormPage.svelte';
 	import type { PracticeSession } from '../../+layout.js';
 
 	const session = $derived((page.data as { session: PracticeSession }).session);
 	let isOwner = $derived(checkIsOwner(session));
+	// #1532: starting deletion is one of the five acts the BFF refuses
+	// without a second factor. Restoring is not one of them.
+	// `hasSecondFactor` (#lib/roles.ts) holds the rule for a session that
+	// says nothing.
+	const hasSecondFactor = $derived(checkHasSecondFactor(session));
 
 	let status = $state<DeletionStatus | undefined>();
 	let loadError = $state('');
@@ -125,6 +131,11 @@
 			variant="info"
 			message="This Practice can't be deleted yet -- it has an unsettled Invoice. Settle or void it first."
 		/>
+	{:else if status && !hasSecondFactor}
+		<SecondFactorNeeded
+			message="You need two-factor authentication before you can delete this Practice."
+			returnTo={page.url.pathname}
+		/>
 	{/if}
 	{#if successNotice}
 		<Notice variant="status" message={successNotice} />
@@ -140,7 +151,7 @@
 	{#if isOwner && status}
 		{#if status.pending}
 			<Button label="Restore this Practice" loading={isSubmitting} onClick={handleRestore} />
-		{:else if !status.hasUnsettledInvoices}
+		{:else if !status.hasUnsettledInvoices && hasSecondFactor}
 			<Button
 				label="Delete this Practice"
 				variant="destructive"

@@ -47,6 +47,12 @@ type PracticeSessionResponse struct {
 	// everyone else to an accurate locked message, rather than every
 	// other route under this Practice quietly refusing one at a time.
 	PendingDeletion bool `json:"pendingDeletion"`
+	// SecondFactor is this session's own second-factor fact, the same one
+	// `/api/staff/session` carries (#606), carried here so each of the
+	// five screens of SecondFactorActs can say before she tries that the
+	// act needs a second factor, without a second call (#1532). A UX-only
+	// mirror: the act's own seam is what refuses.
+	SecondFactor bool `json:"secondFactor"`
 }
 
 // PracticeSessionHandler answers GET .../session: which Practice, which
@@ -81,6 +87,7 @@ func PracticeSessionHandler() http.Handler {
 			Roles:           reader.Roles(),
 			IsContractor:    reader.IsContractor(), //nolint:forbidigo // the Employment type as a fact, not reach -- see PracticeSessionResponse
 			PendingDeletion: pendingDeletionFrom(r.Context()),
+			SecondFactor:    SecondFactor(r.Context()),
 		}
 		apierr.WriteJSON(w, http.StatusOK, resp)
 	})

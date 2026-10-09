@@ -27,6 +27,7 @@ interface SetupOptions {
 	impact?: { required: boolean; withoutSecondFactor: number };
 	impactOk?: boolean;
 	putResponse?: () => Response;
+	secondFactor?: boolean;
 }
 
 /*
@@ -35,9 +36,21 @@ interface SetupOptions {
  * ask for?" is the behavior this screen exists to produce. The Membership
  * (roles) comes off page.data.session (#835), set here rather than fetched.
  */
-async function setup({ roles = ['owner'], impact = fixtureImpact, impactOk = true, putResponse }: SetupOptions = {}) {
+async function setup({
+	roles = ['owner'],
+	impact = fixtureImpact,
+	impactOk = true,
+	putResponse,
+	secondFactor = true
+}: SetupOptions = {}) {
 	pageState.data = {
-		session: { practiceId: 'practice-1', practiceName: 'Riverside Doula Collective', roles, isContractor: false }
+		session: {
+			practiceId: 'practice-1',
+			practiceName: 'Riverside Doula Collective',
+			roles,
+			isContractor: false,
+			secondFactor
+		}
 	};
 	const puts: { body: Record<string, unknown>; headers: Record<string, string> }[] = [];
 	apiFetchWithSession.mockImplementation((path: string, init?: RequestInit) => {
@@ -163,5 +176,24 @@ describe('MFA settings screen', () => {
 		await setup({ impactOk: false });
 
 		await expect.element(testPage.getByText('There is a problem with the service. Try again in a few minutes.')).toBeVisible();
+	});
+
+	// #1532: turning the switch on needs a second factor of her own. She is
+	// told so before she tries, with the way to set one up, and enrollment
+	// brings her back here.
+	it('tells an Owner with no second factor that requiring it needs one, in place of the button', async () => {
+		await setup({ secondFactor: false });
+
+		await expect
+			.element(
+				testPage.getByText(
+					'You need two-factor authentication yourself before you can require it for every Staff member.'
+				)
+			)
+			.toBeVisible();
+		await expect
+			.element(testPage.getByRole('link', { name: 'Set up two-factor authentication' }))
+			.toHaveAttribute('href', `/mfa/enroll?returnTo=${encodeURIComponent(pageState.url.pathname)}`);
+		await expect.element(testPage.getByRole('button', { name: 'Require MFA for all Staff' })).not.toBeInTheDocument();
 	});
 });

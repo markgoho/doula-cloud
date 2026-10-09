@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
 	isDoula,
+	hasSecondFactor,
 	isOwner,
 	isOwnerOrAdmin,
 	isAmbientContractor,
@@ -27,6 +28,14 @@ describe('isOwner', () => {
 
 	it('is false for a plain doula', () => {
 		expect(isOwner(session(['doula']))).toBe(false);
+	});
+});
+
+describe('hasSecondFactor (#1532)', () => {
+	it('is false only for a session that says it has none', () => {
+		expect(hasSecondFactor({ secondFactor: false })).toBe(false);
+		expect(hasSecondFactor({ secondFactor: true })).toBe(true);
+		expect(hasSecondFactor({})).toBe(true);
 	});
 });
 

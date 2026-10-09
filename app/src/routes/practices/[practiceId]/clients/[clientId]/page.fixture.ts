@@ -201,6 +201,18 @@ export const asOwnerWhoMayErase: RouteVariant = {
 	}
 };
 
+/*
+ * The same Owner with no second factor of her own (#1532). Erasing needs
+ * one, so the erase control gives way to a notice naming that, with the
+ * Client's hostile name in it, and a link to enrollment -- a tree no
+ * other session draws.
+ */
+export const asOwnerWithoutSecondFactor: RouteVariant = {
+	...asOwnerWhoMayErase,
+	name: 'The Client detail hub, as an Owner with no second factor',
+	props: { data: { isContractor: false, isOwner: true, hasSecondFactor: false } }
+};
+
 export const fixture: RouteFixture = {
 	name: 'The Client detail hub, as an employee Doula',
 	component: Page,
@@ -212,5 +224,5 @@ export const fixture: RouteFixture = {
 		return jsonResponse(detail);
 	},
 	readyText: 'Persephone Ochieng-Whitfield',
-	variants: [asOwner, asOwnerWhoMayErase]
+	variants: [asOwner, asOwnerWhoMayErase, asOwnerWithoutSecondFactor]
 };

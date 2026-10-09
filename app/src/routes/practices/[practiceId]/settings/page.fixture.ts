@@ -30,6 +30,17 @@ export const asDoula: RouteVariant = {
 	pageData: practiceSession(['doula'])
 };
 
+/*
+ * An Owner with no second factor of her own (#1532). The export entry is
+ * an act that needs one, so it gives way to its label, a notice naming
+ * what it needs, and a link to enrollment -- the one entry on the hub
+ * that is not a single link, and so a tree no other session draws.
+ */
+export const ownerWithoutSecondFactor: RouteVariant = {
+	name: 'The Settings hub, as an Owner with no second factor',
+	pageData: practiceSession(['owner'], { secondFactor: false })
+};
+
 export const fixture: RouteFixture = {
 	name: 'The Settings hub, as an Owner',
 	component: Page,
@@ -37,5 +48,5 @@ export const fixture: RouteFixture = {
 	url: 'https://example.test/practices/practice-1/settings',
 	pageData: practiceSession(['owner']),
 	readyText: 'Settings',
-	variants: [asDoula]
+	variants: [asDoula, ownerWithoutSecondFactor]
 };
