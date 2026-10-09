@@ -18,9 +18,15 @@ const pageState = vi.hoisted(() => ({
 vi.mock('$app/state', () => ({ page: pageState }));
 Object.assign(pageState, toPageState(fixture));
 
-async function setup(roles: string[] = []) {
+async function setup(roles: string[] = [], hasSecondFactor = true) {
 	pageState.data = {
-		session: { practiceId: 'practice-1', practiceName: 'Riverside Doula Collective', roles, isContractor: false }
+		session: {
+			practiceId: 'practice-1',
+			practiceName: 'Riverside Doula Collective',
+			roles,
+			isContractor: false,
+			secondFactor: hasSecondFactor
+		}
 	};
 	await render(Page, {});
 }
@@ -114,5 +120,23 @@ describe('the Settings hub', () => {
 		await expect
 			.element(testPage.getByRole('link', { name: "Export this Practice's data" }))
 			.not.toBeInTheDocument();
+	});
+
+	// #1532: the archive needs a second factor. She is told so before she
+	// tries, in place of a download link the BFF would refuse, with the way
+	// to set one up; enrollment brings her back to this hub.
+	it('tells an Owner with no second factor that exporting needs one, in place of the download link', async () => {
+		await setup(['owner'], false);
+
+		await expect.element(testPage.getByText("Export this Practice's data", { exact: true })).toBeVisible();
+		await expect
+			.element(testPage.getByRole('link', { name: "Export this Practice's data" }))
+			.not.toBeInTheDocument();
+		await expect
+			.element(testPage.getByText("You need two-factor authentication before you can export this Practice's data."))
+			.toBeVisible();
+		await expect
+			.element(testPage.getByRole('link', { name: 'Set up two-factor authentication' }))
+			.toHaveAttribute('href', `/mfa/enroll?returnTo=${encodeURIComponent(pageState.url.pathname)}`);
 	});
 });

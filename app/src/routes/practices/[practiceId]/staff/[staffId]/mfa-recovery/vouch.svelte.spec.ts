@@ -48,6 +48,7 @@ const resolver = { hints: [{ uid: 'enrollment-1' }], resolveSignIn: vi.fn() };
 
 interface SetupOptions {
 	roles?: string[];
+	secondFactor?: boolean;
 	rosterResponse?: Response;
 	sessionResponse?: Response;
 	vouchResponse?: Response;
@@ -61,11 +62,12 @@ interface SetupOptions {
  */
 async function setup({
 	roles = ['owner'],
+	secondFactor = true,
 	rosterResponse = jsonResponse(roster),
 	sessionResponse = jsonResponse(session),
 	vouchResponse = jsonResponse(undefined, 204)
 }: SetupOptions = {}) {
-	pageState.data = { session: { ...ownerSession, roles } };
+	pageState.data = { session: { ...ownerSession, roles, secondFactor } };
 	apiFetchWithSession.mockImplementation((path: string) =>
 		Promise.resolve(path.startsWith('/api/staff/session') ? sessionResponse : rosterResponse)
 	);
@@ -211,5 +213,24 @@ describe('vouching for a locked-out Staff member', () => {
 			.element(testPage.getByText(`It does not go to ${member.name}`, { exact: false }))
 			.toBeVisible();
 		expect(testPage.getByLabelText('Password').elements()).toHaveLength(0);
+	});
+
+	// #1532: vouching needs a second factor of her own. She is told so
+	// before she tries, with the way to set one up, and enrollment brings
+	// her back here.
+	it('tells an Owner with no second factor that vouching needs one, in place of the button', async () => {
+		await setup({ secondFactor: false });
+
+		await expect
+			.element(
+				testPage.getByText(
+					`You need two-factor authentication yourself before you can send a recovery code for ${member.name}.`
+				)
+			)
+			.toBeVisible();
+		await expect
+			.element(testPage.getByRole('link', { name: 'Set up two-factor authentication' }))
+			.toHaveAttribute('href', `/mfa/enroll?returnTo=${encodeURIComponent(pageState.url.pathname)}`);
+		await expect.element(testPage.getByRole('button', { name: 'Send a recovery code' })).not.toBeInTheDocument();
 	});
 });

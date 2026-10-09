@@ -25,6 +25,7 @@
 	import DataTable from '#lib/components/organisms/DataTable.svelte';
 	import Button from '#lib/components/atoms/Button.svelte';
 	import ConfirmDialog from '#lib/components/molecules/ConfirmDialog.svelte';
+	import SecondFactorNeeded from '#lib/components/molecules/SecondFactorNeeded.svelte';
 	import Heading from '#lib/components/atoms/Heading.svelte';
 	import Link from '#lib/components/atoms/Link.svelte';
 	import Notice from '#lib/components/atoms/Notice.svelte';
@@ -45,6 +46,7 @@
 	// from a genuine Owner for one page load, never a wider door than the
 	// server actually opens.
 	const isOwner = $derived(data?.isOwner ?? false);
+	const hasNoSecondFactor = $derived(data?.hasNoSecondFactor ?? false);
 
 	// What the save that led here did, if one did (#1710): her details
 	// journey, the edit form, a duplicate page, or a request to start work
@@ -542,6 +544,13 @@
 	-->
 	{#if eligibility!.unsettledInvoices.length > 0}
 		<Notice variant="info" message={unsettledInvoicesMessage(eligibility!.unsettledInvoices)} />
+	{:else if hasNoSecondFactor}
+		<!-- #1532: erasing needs a second factor, so the control gives way to
+		     what it needs and the way to set it up. -->
+		<SecondFactorNeeded
+			message="You need two-factor authentication before you can erase {name}'s data."
+			returnTo={page.url.pathname}
+		/>
 	{:else}
 		<stack-l space="var(--space-4)">
 			<Text text="Erasing removes {name}'s name, contact details and date of birth for good. It cannot be undone." />

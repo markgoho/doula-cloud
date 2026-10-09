@@ -30,6 +30,13 @@ export interface PracticeSession {
 	// rather than the generic "Only a Practice Owner..." notice every
 	// other Owner-only setting shows.
 	pendingDeletion?: boolean;
+	// #1532: whether this session showed a second factor at sign-in. The
+	// five screens whose act needs one (`SecondFactorNeeded`) read it to
+	// say so before she tries; the BFF's own seam is what refuses. This
+	// load always sets it. It is optional only so the route fixtures that
+	// predate it need not restate it, and a screen treats it as absent
+	// only when it is `false`, never when it is missing.
+	secondFactor?: boolean;
 }
 
 // The one route the deletion lockout leaves open regardless of role
@@ -95,6 +102,7 @@ export const load: LayoutLoad = async ({ params, url }): Promise<{ session: Prac
 		roles: string[];
 		isContractor: boolean;
 		pendingDeletion: boolean;
+		secondFactor: boolean;
 	} = await response.json();
 
 	if (body.pendingDeletion && url.pathname !== deleteSettingsPath(params.practiceId)) {
@@ -108,7 +116,8 @@ export const load: LayoutLoad = async ({ params, url }): Promise<{ session: Prac
 			practiceName: body.practiceName,
 			roles: body.roles,
 			isContractor: body.isContractor,
-			pendingDeletion: body.pendingDeletion
+			pendingDeletion: body.pendingDeletion,
+			secondFactor: body.secondFactor
 		}
 	};
 };

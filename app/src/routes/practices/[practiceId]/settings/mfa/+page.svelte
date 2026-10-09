@@ -34,6 +34,7 @@
 	import Button from '#lib/components/atoms/Button.svelte';
 	import Notice from '#lib/components/atoms/Notice.svelte';
 	import ConfirmDialog from '#lib/components/molecules/ConfirmDialog.svelte';
+	import SecondFactorNeeded from '#lib/components/molecules/SecondFactorNeeded.svelte';
 	import FormPage from '#lib/components/templates/FormPage.svelte';
 	import type { PracticeSession } from '../../+layout.js';
 
@@ -41,6 +42,10 @@
 	// already-resolved read (#835), not a fetch of this page's own.
 	const session = $derived((page.data as { session: PracticeSession }).session);
 	let isOwner = $derived(checkIsOwner(session));
+	// #1532: turning the switch on is one of the five acts the BFF refuses
+	// without a second factor of her own. Only `false` counts: see
+	// `PracticeSession.secondFactor`.
+	const hasNoSecondFactor = $derived(session.secondFactor === false);
 
 	let impact = $state<MfaRequirementImpact | undefined>();
 	let loadError = $state('');
@@ -173,6 +178,12 @@
 			/>
 		</cluster-l>
 		<Text text={staffCountText} />
+		{#if hasNoSecondFactor && !impact!.required}
+			<SecondFactorNeeded
+				message="You need two-factor authentication yourself before you can require it for every Staff member."
+				returnTo={page.url.pathname}
+			/>
+		{/if}
 		{#if successNotice}
 			<Notice variant="status" message={successNotice} />
 		{/if}
@@ -194,7 +205,7 @@
 				loading={isSubmitting}
 				onClick={handleStopRequiring}
 			/>
-		{:else}
+		{:else if !hasNoSecondFactor}
 			<Button label="Require MFA for all Staff" loading={isSubmitting} onClick={handleRequireAll} />
 		{/if}
 	{/if}

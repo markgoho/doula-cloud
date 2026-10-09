@@ -51,6 +51,18 @@ describe('ErrorPage.svelte', () => {
 			.not.toBeInTheDocument();
 	});
 
+	// #1532: one act needs a second factor, not the whole Practice, so the
+	// copy must not say the Practice's screens are shut.
+	it('renders distinct copy for an act that needs a second factor, and names the step', async () => {
+		await setup({ kind: 'actSecondFactor' });
+
+		await expect
+			.element(page.getByRole('heading', { name: 'This needs two-factor authentication' }))
+			.toBeVisible();
+		await expect.element(page.getByText('then try again')).toBeVisible();
+		await expect.element(page.getByText('before its screens open')).not.toBeInTheDocument();
+	});
+
 	it('renders distinct copy for an unavailable page, and says trying again will help', async () => {
 		await setup({ kind: 'unavailable' });
 

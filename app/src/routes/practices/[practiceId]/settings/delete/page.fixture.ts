@@ -31,6 +31,16 @@ export const nonOwner: RouteVariant = {
 	pageData: practiceSession(['admin'])
 };
 
+/*
+ * An Owner whose own session shows no second factor (#1532). Starting
+ * deletion needs one, so the Delete button gives way to a notice naming
+ * that and a link to enrollment -- a tree no other session draws.
+ */
+export const ownerWithoutSecondFactor: RouteVariant = {
+	name: 'The Delete-this-Practice settings screen, as an Owner with no second factor',
+	pageData: practiceSession(['owner'], { secondFactor: false })
+};
+
 export const fixture: RouteFixture = {
 	name: 'The Delete-this-Practice settings screen, as an Owner',
 	component: Page,
@@ -39,5 +49,5 @@ export const fixture: RouteFixture = {
 	pageData: practiceSession(['owner']),
 	respond: () => jsonResponse(status),
 	readyText: 'Delete this Practice',
-	variants: [nonOwner]
+	variants: [nonOwner, ownerWithoutSecondFactor]
 };

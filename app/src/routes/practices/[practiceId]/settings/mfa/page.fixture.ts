@@ -28,6 +28,16 @@ export const nonOwner: RouteVariant = {
 	pageData: practiceSession(['admin'])
 };
 
+/*
+ * An Owner whose own session shows no second factor (#1532). Turning the
+ * switch on needs one, so the button gives way to a notice naming that
+ * and a link to enrollment -- a tree no other session draws.
+ */
+export const ownerWithoutSecondFactor: RouteVariant = {
+	name: 'The MFA settings screen, as an Owner with no second factor',
+	pageData: practiceSession(['owner'], { secondFactor: false })
+};
+
 export const fixture: RouteFixture = {
 	name: 'The MFA settings screen, as an Owner',
 	component: Page,
@@ -36,5 +46,5 @@ export const fixture: RouteFixture = {
 	pageData: practiceSession(['owner']),
 	respond: () => jsonResponse(impact),
 	readyText: 'Multi-factor authentication',
-	variants: [nonOwner]
+	variants: [nonOwner, ownerWithoutSecondFactor]
 };

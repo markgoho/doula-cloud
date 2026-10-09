@@ -72,13 +72,24 @@ export const asAdmin: RouteVariant = {
 	readyText: 'Help someone sign in again'
 };
 
+/*
+ * An Owner whose own session shows no second factor (#1532). Vouching
+ * needs one, so the button gives way to a notice naming that, with the
+ * Staff member's hostile name in it, and a link to enrollment -- a tree
+ * no other session draws.
+ */
+export const ownerWithoutSecondFactor: RouteVariant = {
+	name: 'Owner vouching, as an Owner with no second factor',
+	pageData: { session: { ...ownerSession, secondFactor: false } }
+};
+
 export const fixture: RouteFixture = {
 	name: 'Owner vouching for a locked-out Staff member',
 	component: Page,
 	params: { practiceId: 'practice-1', staffId: 'staff-2' },
 	url: 'https://example.test/practices/practice-1/staff/staff-2/mfa-recovery',
 	pageData: { session: ownerSession },
-	variants: [asAdmin],
+	variants: [asAdmin, ownerWithoutSecondFactor],
 	respond: (path: string) =>
 		jsonResponse(path.startsWith('/api/staff/session') ? session : roster),
 	readyText: 'Help Persephone Ochieng-Whitfield sign in again'

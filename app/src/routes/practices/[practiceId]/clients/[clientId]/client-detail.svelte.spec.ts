@@ -93,6 +93,10 @@ interface SetupOptions {
 	/** `+page.ts`'s isOwner (#691) -- defaults to false so existing tests
 	 * keep seeing no erase control. */
 	isOwner?: boolean;
+	/**
+	 * #1532: the session has no second factor, so erasing waits for one.
+	 */
+	hasNoSecondFactor?: boolean;
 	/** `EraseEligibilityHandler`'s own response, read only when isOwner --
 	 * defaults to nothing standing in the way. */
 	eligibility?: EraseEligibility;
@@ -118,6 +122,7 @@ async function setup({
 	sessionThrows = false,
 	isContractor = false,
 	isOwner = false,
+	hasNoSecondFactor = false,
 	eligibility = { unsettledInvoices: [] },
 	eligibilityStatus = 200,
 	eraseResponse = { erasedAt: '2026-04-01T00:00:00Z', stripeCustomersQueued: 0, portalAccountQueued: false },
@@ -139,7 +144,7 @@ async function setup({
 		}
 		return Promise.resolve(jsonResponse({ ...baseDetail, ...overrides }));
 	});
-	return render(Page, { data: { isContractor, isOwner, session: sessionStub } });
+	return render(Page, { data: { isContractor, isOwner, hasNoSecondFactor, session: sessionStub } });
 }
 
 // #1710: a save made on another screen lands here, and says what it did.
@@ -618,6 +623,26 @@ describe('erasing a Client (#691, ADR-0027)', () => {
 		await expect.element(section.getByRole('link')).not.toBeInTheDocument();
 	});
 
+	// #1532: erasing needs a second factor. She is told so before she tries,
+	// with the way to set one up, and enrollment brings her back here.
+	it('tells an Owner with no second factor that erasing needs one, in place of the button', async () => {
+		await setup({ isOwner: true, hasNoSecondFactor: true });
+
+		await expect
+			.element(
+				testPage.getByText(
+					`You need two-factor authentication before you can erase ${fixture.readyText}'s data.`
+				)
+			)
+			.toBeVisible();
+		await expect
+			.element(testPage.getByRole('link', { name: 'Set up two-factor authentication' }))
+			.toHaveAttribute('href', `/mfa/enroll?returnTo=${encodeURIComponent(new URL(fixture.url).pathname)}`);
+		await expect
+			.element(testPage.getByRole('button', { name: "Erase this Client's data" }))
+			.not.toBeInTheDocument();
+	});
+
 	it('shows no erase control when the precheck itself refuses', async () => {
 		await setup({ isOwner: true, eligibilityStatus: 403 });
 
@@ -698,7 +723,7 @@ describe('erasing a Client (#691, ADR-0027)', () => {
 				)
 			);
 		});
-		await render(Page, { data: { isContractor: false, isOwner: true, session: sessionStub } });
+		await render(Page, { data: { isContractor: false, isOwner: true, hasNoSecondFactor: false, session: sessionStub } });
 
 		await expect.element(testPage.getByText(baseDetail.email)).toBeVisible();
 		await testPage.getByRole('button', { name: "Erase this Client's data" }).click();

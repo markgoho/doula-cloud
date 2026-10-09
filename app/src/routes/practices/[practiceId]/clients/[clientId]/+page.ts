@@ -22,9 +22,17 @@ import type { PageLoad } from './$types';
 export interface ContractorGate {
 	isContractor: boolean;
 	isOwner: boolean;
+	// #1532: erasing a Client is one of the five acts the BFF refuses
+	// without a second factor. Only `false` counts: see
+	// `PracticeSession.secondFactor`.
+	hasNoSecondFactor: boolean;
 }
 
 export const load: PageLoad = async ({ parent }): Promise<ContractorGate> => {
 	const { session } = await parent();
-	return { isContractor: isAmbientContractor(session), isOwner: isOwner(session) };
+	return {
+		isContractor: isAmbientContractor(session),
+		isOwner: isOwner(session),
+		hasNoSecondFactor: session.secondFactor === false
+	};
 };

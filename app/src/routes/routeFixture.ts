@@ -105,10 +105,18 @@ fourth axis.
 */
 export function practiceSession(
 	roles: string[],
-	{ practiceName = 'Riverside Doula Collective', staffId = 'staff-1' }: { practiceName?: string; staffId?: string } = {}
+	{
+		practiceName = 'Riverside Doula Collective',
+		staffId = 'staff-1',
+		secondFactor
+	}: { practiceName?: string; staffId?: string; secondFactor?: boolean } = {}
 ): { session: PracticeSession } {
+	// `secondFactor` only when asked for (#1532): the five screens whose
+	// act needs one draw a branch of their own for `false`, and every
+	// other fixture's session stays the shape it was.
+	const factor = secondFactor === undefined ? {} : { secondFactor };
 	return {
-		session: { practiceId: 'practice-1', staffId, practiceName, roles, isContractor: false }
+		session: { practiceId: 'practice-1', staffId, practiceName, roles, isContractor: false, ...factor }
 	};
 }
 
