@@ -13,7 +13,7 @@ const EMULATOR_URL = `http://${E2E_EMULATOR_HOST}:${E2E_EMULATOR_PORT}`;
 // the standalone `request` fixture other e2e specs use for setup calls).
 test('a browser accepts and clears the __session cookie', async ({ page }) => {
 	const email = uniqueEmail('session-cookie');
-	const password = 'password123';
+	const password = 'staff-password-123';
 
 	const signUp = await page.request.post(
 		`${EMULATOR_URL}/identitytoolkit.googleapis.com/v1/accounts:signUp?key=fake-key`,

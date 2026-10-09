@@ -30,6 +30,7 @@
 	import { getFirebaseAuth } from '#lib/firebase.js';
 	import { apiBaseURL, apiFetch, apiFetchWithSession } from '#lib/api.js';
 	import { authRefusal, refusalErrors, refusalOrConfirmable } from '#lib/formErrors.js';
+	import { PASSWORD_HINT, PASSWORD_TOO_SHORT, isPasswordTooShort } from '#lib/passwordRule.js';
 	import { FormSubmission, orServiceProblem, type FormError } from '#lib/formSubmission.svelte.js';
 	import { decideLanding, type Membership, type SessionInfo } from '#lib/landing.js';
 	import TextInput from '#lib/components/atoms/TextInput.svelte';
@@ -97,7 +98,7 @@
 	const passwordAutocomplete = $derived(mode === 'signup' ? 'new-password' : 'current-password');
 	// Only when she is setting a new password: an existing password does
 	// not retroactively follow a rule stated for the one being created.
-	const passwordHint = $derived(mode === 'signup' ? 'Must be 6 characters or more' : undefined);
+	const passwordHint = $derived(mode === 'signup' ? PASSWORD_HINT : undefined);
 
 	let credential = $state<UserCredential | undefined>();
 	// What the session read after sign-in found: an existing Staff record,
@@ -126,11 +127,11 @@
 				refusals.push({ message: 'Enter your email address', targetId: emailId });
 			if (password === '') {
 				refusals.push({ message: 'Enter your password', targetId: passwordId });
-			} else if (mode === 'signup' && password.length < 6) {
+			} else if (mode === 'signup' && isPasswordTooShort(password)) {
 				// Only on the signup branch: an existing account's password is
 				// whatever it already is, and refusing a short one here would
 				// lock out anyone who set one before the rule existed.
-				refusals.push({ message: 'Password must be 6 characters or more', targetId: passwordId });
+				refusals.push({ message: PASSWORD_TOO_SHORT, targetId: passwordId });
 			}
 			if (refusals.length > 0) return refusals;
 

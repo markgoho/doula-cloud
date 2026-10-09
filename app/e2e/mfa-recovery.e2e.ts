@@ -45,7 +45,7 @@ test('An Owner vouches for a locked-out doula, and the code reaches her and nobo
 }) => {
 	const doulaEmail = uniqueEmail('doula');
 	const doulaName = 'Robin Doula';
-	const password = 'password123';
+	const password = 'staff-password-123';
 
 	// Fixture setup, not the seam under test (#207).
 	const {

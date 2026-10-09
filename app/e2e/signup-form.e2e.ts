@@ -14,7 +14,7 @@ import { uniqueEmail } from './staffSignup';
 // exchange itself, not about which screen she lands on afterward.
 test('Signing up through the /signup form drives the new Owner into MFA enrollment', async ({ page }) => {
 	const email = uniqueEmail('signup-form');
-	const password = 'password123';
+	const password = 'staff-password-123';
 
 	await page.goto('/signup');
 	await page.getByLabel('Practice name').fill('Riverside Doulas');

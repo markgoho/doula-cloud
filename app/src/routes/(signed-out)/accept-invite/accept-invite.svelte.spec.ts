@@ -165,7 +165,7 @@ const stateField = () => testPage.getByRole('combobox', { name: 'Which state do 
 
 async function identify(mode: 'signup' | 'login' = 'signup') {
 	await emailField().fill('priya@example.com');
-	await passwordField().fill('correct horse');
+	await passwordField().fill('correct horse battery');
 	if (mode === 'login')
 		await testPage.getByRole('radio', { name: /I already have an account/ }).click();
 	await continueButton().click();
@@ -196,6 +196,37 @@ describe('step one -- autocomplete follows which mode is picked (#469)', () => {
 
 		await expect.element(emailField()).toHaveAttribute('autocomplete', 'username');
 		await expect.element(passwordField()).toHaveAttribute('autocomplete', 'current-password');
+	});
+});
+
+describe('step one -- the password rule (#1538)', () => {
+	it('states the rule before she types when she is making a new account', async () => {
+		await setup();
+
+		await expect.element(testPage.getByText('Must be 15 characters or more')).toBeVisible();
+	});
+
+	it('refuses a short password for a new account before anything is sent', async () => {
+		await setup();
+		await emailField().fill('priya@example.com');
+		await passwordField().fill('a'.repeat(14));
+		await continueButton().click();
+
+		await expect
+			.element(testPage.getByRole('link', { name: 'Password must be 15 characters or more' }))
+			.toBeVisible();
+		expect(createUserWithEmailAndPassword).not.toHaveBeenCalled();
+	});
+
+	it('checks nothing about the length of an existing account password', async () => {
+		await setup();
+		await testPage.getByRole('radio', { name: /I already have an account/ }).click();
+		await emailField().fill('priya@example.com');
+		await passwordField().fill('short');
+		await continueButton().click();
+
+		expect(signInWithEmailAndPassword).toHaveBeenCalled();
+		expect(testPage.getByText('Must be 15 characters or more').elements()).toHaveLength(0);
 	});
 });
 

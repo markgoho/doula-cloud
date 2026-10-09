@@ -84,7 +84,7 @@ test.describe.serial('The World stands up: description, Ridgeline, the tail', ()
 		const { invitationId } = JSON.parse(await invited.text());
 		const inviteToken = await readStaffInviteToken(request, invitationId);
 		const signedUp = await request.post(`${EMULATOR_URL}/identitytoolkit.googleapis.com/v1/accounts:signUp?key=fake-key`, {
-			data: { email: doulaEmail, password: 'password123', returnSecureToken: true }
+			data: { email: doulaEmail, password: 'staff-password-123', returnSecureToken: true }
 		});
 		const { idToken: doulaIdToken } = await signedUp.json();
 		const accepted = await acceptStaffInvite(request, doulaIdToken, { inviteToken, name: 'Test Doula' });

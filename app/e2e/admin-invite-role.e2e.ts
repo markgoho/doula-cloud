@@ -18,7 +18,7 @@ test('An Admin invited via the Staff invite route reaches the Credits and Staff 
 	context
 }) => {
 	const adminEmail = uniqueEmail('admin');
-	const password = 'password123';
+	const password = 'staff-password-123';
 
 	// Fixture setup, not the seam under test (#207): the Owner side is
 	// provisioned the way every other spec provisions its Practice.

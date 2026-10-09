@@ -3,6 +3,7 @@
 	import { resolve } from '$app/paths';
 	import { apiBaseURL } from '#lib/api.js';
 	import { refusalErrors } from '#lib/formErrors.js';
+	import { PASSWORD_HINT, PASSWORD_TOO_SHORT, isPasswordTooShort } from '#lib/passwordRule.js';
 	import { FormSubmission, orServiceProblem } from '#lib/formSubmission.svelte.js';
 	import TextInput from '#lib/components/atoms/TextInput.svelte';
 	import Button from '#lib/components/atoms/Button.svelte';
@@ -26,8 +27,8 @@
 			if (!token) {
 				return [{ message: 'This link has expired or was already used -- ask for a new one.' }];
 			}
-			if (newPassword.length < 6) {
-				return [{ message: 'Enter a password of at least 6 characters', targetId: passwordId }];
+			if (isPasswordTooShort(newPassword)) {
+				return [{ message: PASSWORD_TOO_SHORT, targetId: passwordId }];
 			}
 
 			const response = await fetch(`${apiBaseURL()}/api/staff/password-reset`, {
@@ -56,7 +57,12 @@
 		<Link href={resolve('/(signed-out)/login')} label="Continue to log in" />
 	{:else}
 		<StackedForm onSubmit={handleSubmit}>
-			<LabeledField id={passwordId} label="New password" error={submission.errorFor(passwordId)}>
+			<LabeledField
+				id={passwordId}
+				label="New password"
+				hint={PASSWORD_HINT}
+				error={submission.errorFor(passwordId)}
+			>
 				{#snippet children({ id, describedBy, invalid })}
 					<TextInput
 						{id}

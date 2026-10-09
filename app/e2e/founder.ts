@@ -23,7 +23,7 @@ const EMULATOR_URL = `http://${E2E_EMULATOR_HOST}:${E2E_EMULATOR_PORT}`;
 export async function seedFounderSession(request: APIRequestContext): Promise<{ Cookie: string }> {
 	const email = uniqueEmail('founder');
 	const signUp = await request.post(`${EMULATOR_URL}/identitytoolkit.googleapis.com/v1/accounts:signUp?key=fake-key`, {
-		data: { email, password: 'password123', returnSecureToken: true }
+		data: { email, password: 'staff-password-123', returnSecureToken: true }
 	});
 	expect(signUp.ok(), `founder signUp failed: ${signUp.status()} ${await signUp.text()}`).toBe(true);
 	const { idToken, localId } = await signUp.json();

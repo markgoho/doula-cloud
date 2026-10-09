@@ -15,7 +15,7 @@ test('A Doula invited via the Staff invite route is refused an Owner-only action
 	context
 }) => {
 	const doulaEmail = uniqueEmail('doula');
-	const password = 'password123';
+	const password = 'staff-password-123';
 
 	// Fixture setup, not the seam under test (#207): the Owner side of this
 	// spec is provisioned the way every other spec provisions its Practice.

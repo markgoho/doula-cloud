@@ -17,6 +17,7 @@
 export type { FormError } from './components/molecules/ErrorSummary.svelte';
 
 import type { FormError } from './components/molecules/ErrorSummary.svelte';
+import { PASSWORD_TOO_SHORT } from './passwordRule.js';
 
 /*
  * What the reader is told when the failure is ours and there is nothing
@@ -340,9 +341,13 @@ export function authRefusal(
 				targetId: fields.emailId
 			};
 		}
+		// Identity Platform's password policy (15 characters, #1538) answers
+		// with its own code; the older weak-password code is the default
+		// six-character rule and reads the same way here.
+		case 'auth/password-does-not-meet-requirements':
 		case 'auth/weak-password': {
 			return {
-				message: 'Password must be 6 characters or more',
+				message: PASSWORD_TOO_SHORT,
 				targetId: fields.passwordId
 			};
 		}

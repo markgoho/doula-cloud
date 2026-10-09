@@ -27,7 +27,7 @@ test('An invitation arrives as readable mail, and a complaint stops the next one
 }) => {
 	const doulaEmail = uniqueEmail('doula', MAILBOX_DOMAIN);
 	const complainerEmail = uniqueEmail('complainer', MAILBOX_DOMAIN);
-	const password = 'password123';
+	const password = 'staff-password-123';
 
 	// Fixture setup, not the seam under test (#207).
 	const { idToken: ownerIdToken, localId: ownerUID, practiceId } = await seedFoundingOwner(request, {

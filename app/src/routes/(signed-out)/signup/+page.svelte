@@ -25,6 +25,7 @@
 	import { workStateCode } from '#lib/workStates.js';
 	import { TIMEZONE_HINT, TIMEZONE_NEEDED, detectTimezone } from '#lib/timezones.js';
 	import { ROLE_LABELS } from '#lib/roles.js';
+	import { PASSWORD_HINT, PASSWORD_TOO_SHORT, isPasswordTooShort } from '#lib/passwordRule.js';
 
 	const practiceNameId = 'signup-practice-name';
 	const staffNameId = 'signup-staff-name';
@@ -96,8 +97,8 @@
 		if (email.trim() === '') found.push({ message: 'Enter your email address', targetId: emailId });
 		if (password === '') {
 			found.push({ message: 'Enter a password', targetId: passwordId });
-		} else if (password.length < 6) {
-			found.push({ message: 'Password must be 6 characters or more', targetId: passwordId });
+		} else if (isPasswordTooShort(password)) {
+			found.push({ message: PASSWORD_TOO_SHORT, targetId: passwordId });
 		}
 		return found;
 	}
@@ -339,7 +340,7 @@
 		<LabeledField
 			id={passwordId}
 			label="Password"
-			hint="Must be 6 characters or more"
+			hint={PASSWORD_HINT}
 			error={submission.errorFor(passwordId)}
 		>
 			{#snippet children({ id, describedBy, invalid })}

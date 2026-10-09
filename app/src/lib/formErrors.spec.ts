@@ -75,12 +75,17 @@ describe('authRefusal', () => {
 		expect(refusal.targetId).toBe('email');
 	});
 
-	it('sends a short password to the password field', () => {
-		const refusal = authRefusal({ code: 'auth/weak-password' }, FIELDS);
+	// Identity Platform's password policy answers with the first code; the
+	// default six-character rule answered with the second (#1538).
+	it.each(['auth/password-does-not-meet-requirements', 'auth/weak-password'])(
+		'sends a refused password (%s) to the password field, in the browser check words',
+		(code) => {
+			const refusal = authRefusal({ code }, FIELDS);
 
-		expect(refusal.message).toBe('Password must be 6 characters or more');
-		expect(refusal.targetId).toBe('password');
-	});
+			expect(refusal.message).toBe('Password must be 15 characters or more');
+			expect(refusal.targetId).toBe('password');
+		}
+	);
 
 	/*
 	 * Rate limiting, a disabled account and a dead connection are all true
