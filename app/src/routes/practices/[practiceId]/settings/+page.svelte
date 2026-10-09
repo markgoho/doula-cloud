@@ -14,7 +14,7 @@
 	import { resolve } from '$app/paths';
 	import { page } from '#lib/appState.svelte.js';
 	import { apiBaseURL } from '#lib/api.js';
-	import { isOwner, isOwnerOrAdmin } from '#lib/roles.js';
+	import { hasSecondFactor as checkHasSecondFactor, isOwner, isOwnerOrAdmin } from '#lib/roles.js';
 	import Link from '#lib/components/atoms/Link.svelte';
 	import Text from '#lib/components/atoms/Text.svelte';
 	import SecondFactorNeeded from '#lib/components/molecules/SecondFactorNeeded.svelte';
@@ -37,9 +37,9 @@
 	// endpoint's own `ownerAndAdmin` guard.
 	let isPracticeOwnerOrAdmin = $derived(isOwnerOrAdmin(session));
 	// #1532: downloading the archive is one of the five acts the BFF
-	// refuses without a second factor. Only `false` counts: see
-	// `PracticeSession.secondFactor`.
-	const hasNoSecondFactor = $derived(session.secondFactor === false);
+	// refuses without a second factor. `hasSecondFactor` (#lib/roles.ts)
+	// holds the rule for a session that says nothing.
+	const hasSecondFactor = $derived(checkHasSecondFactor(session));
 
 	interface SettingEntry {
 		label: string;
@@ -163,7 +163,7 @@
 						label: "Export this Practice's data",
 						description: 'Every record this Practice holds, as one ZIP of spreadsheet-ready files.',
 						href: `${apiBaseURL()}/api/practices/${practiceId}/export`,
-						...(hasNoSecondFactor && {
+						...(!hasSecondFactor && {
 							secondFactorMessage: "You need two-factor authentication before you can export this Practice's data."
 						})
 					},

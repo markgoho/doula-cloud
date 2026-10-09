@@ -14,7 +14,7 @@ describe('clients/[clientId]/+page.ts load (#465, #691)', () => {
 		const result = await load({ parent } as unknown as Parameters<typeof load>[0]);
 
 		expect(parent).toHaveBeenCalled();
-		expect(result).toEqual({ isContractor: true, isOwner: false, hasNoSecondFactor: false });
+		expect(result).toEqual({ isContractor: true, isOwner: false, hasSecondFactor: true });
 	});
 
 	it('flags isOwner for an Owner (#691)', async () => {
@@ -25,12 +25,12 @@ describe('clients/[clientId]/+page.ts load (#465, #691)', () => {
 
 		const result = await load({ parent } as unknown as Parameters<typeof load>[0]);
 
-		expect(result).toEqual({ isContractor: false, isOwner: true, hasNoSecondFactor: false });
+		expect(result).toEqual({ isContractor: false, isOwner: true, hasSecondFactor: true });
 	});
 
 	// #1532: erasing a Client needs a second factor, and the screen says so
 	// before she tries. Only a session that says `false` lacks one.
-	it('flags hasNoSecondFactor for a session with no second factor (#1532)', async () => {
+	it('clears hasSecondFactor for a session with no second factor (#1532)', async () => {
 		const { load } = await import('./+page.js');
 		const parent = vi.fn().mockResolvedValue({
 			session: {
@@ -44,6 +44,6 @@ describe('clients/[clientId]/+page.ts load (#465, #691)', () => {
 
 		const result = await load({ parent } as unknown as Parameters<typeof load>[0]);
 
-		expect(result).toEqual({ isContractor: false, isOwner: true, hasNoSecondFactor: true });
+		expect(result).toEqual({ isContractor: false, isOwner: true, hasSecondFactor: false });
 	});
 });

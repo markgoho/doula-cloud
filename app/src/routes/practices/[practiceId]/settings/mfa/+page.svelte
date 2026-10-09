@@ -23,7 +23,7 @@
 	import { onMount } from 'svelte';
 	import { page } from '#lib/appState.svelte.js';
 	import { apiFetchWithSession } from '#lib/api.js';
-	import { isOwner as checkIsOwner } from '#lib/roles.js';
+	import { hasSecondFactor as checkHasSecondFactor, isOwner as checkIsOwner } from '#lib/roles.js';
 	import {
 		loadMfaRequirementImpact,
 		setMfaRequired,
@@ -43,9 +43,9 @@
 	const session = $derived((page.data as { session: PracticeSession }).session);
 	let isOwner = $derived(checkIsOwner(session));
 	// #1532: turning the switch on is one of the five acts the BFF refuses
-	// without a second factor of her own. Only `false` counts: see
-	// `PracticeSession.secondFactor`.
-	const hasNoSecondFactor = $derived(session.secondFactor === false);
+	// without a second factor of her own. `hasSecondFactor` (#lib/roles.ts)
+	// holds the rule for a session that says nothing.
+	const hasSecondFactor = $derived(checkHasSecondFactor(session));
 
 	let impact = $state<MfaRequirementImpact | undefined>();
 	let loadError = $state('');
@@ -178,7 +178,7 @@
 			/>
 		</cluster-l>
 		<Text text={staffCountText} />
-		{#if hasNoSecondFactor && !impact!.required}
+		{#if !hasSecondFactor && !impact!.required}
 			<SecondFactorNeeded
 				message="You need two-factor authentication yourself before you can require it for every Staff member."
 				returnTo={page.url.pathname}
@@ -205,7 +205,7 @@
 				loading={isSubmitting}
 				onClick={handleStopRequiring}
 			/>
-		{:else if !hasNoSecondFactor}
+		{:else if hasSecondFactor}
 			<Button label="Require MFA for all Staff" loading={isSubmitting} onClick={handleRequireAll} />
 		{/if}
 	{/if}

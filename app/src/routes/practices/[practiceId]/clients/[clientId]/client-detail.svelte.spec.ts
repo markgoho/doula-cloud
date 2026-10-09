@@ -96,7 +96,7 @@ interface SetupOptions {
 	/**
 	 * #1532: the session has no second factor, so erasing waits for one.
 	 */
-	hasNoSecondFactor?: boolean;
+	hasSecondFactor?: boolean;
 	/** `EraseEligibilityHandler`'s own response, read only when isOwner --
 	 * defaults to nothing standing in the way. */
 	eligibility?: EraseEligibility;
@@ -122,7 +122,7 @@ async function setup({
 	sessionThrows = false,
 	isContractor = false,
 	isOwner = false,
-	hasNoSecondFactor = false,
+	hasSecondFactor = true,
 	eligibility = { unsettledInvoices: [] },
 	eligibilityStatus = 200,
 	eraseResponse = { erasedAt: '2026-04-01T00:00:00Z', stripeCustomersQueued: 0, portalAccountQueued: false },
@@ -144,7 +144,7 @@ async function setup({
 		}
 		return Promise.resolve(jsonResponse({ ...baseDetail, ...overrides }));
 	});
-	return render(Page, { data: { isContractor, isOwner, hasNoSecondFactor, session: sessionStub } });
+	return render(Page, { data: { isContractor, isOwner, hasSecondFactor, session: sessionStub } });
 }
 
 // #1710: a save made on another screen lands here, and says what it did.
@@ -626,7 +626,7 @@ describe('erasing a Client (#691, ADR-0027)', () => {
 	// #1532: erasing needs a second factor. She is told so before she tries,
 	// with the way to set one up, and enrollment brings her back here.
 	it('tells an Owner with no second factor that erasing needs one, in place of the button', async () => {
-		await setup({ isOwner: true, hasNoSecondFactor: true });
+		await setup({ isOwner: true, hasSecondFactor: false });
 
 		await expect
 			.element(
@@ -723,7 +723,7 @@ describe('erasing a Client (#691, ADR-0027)', () => {
 				)
 			);
 		});
-		await render(Page, { data: { isContractor: false, isOwner: true, hasNoSecondFactor: false, session: sessionStub } });
+		await render(Page, { data: { isContractor: false, isOwner: true, hasSecondFactor: true, session: sessionStub } });
 
 		await expect.element(testPage.getByText(baseDetail.email)).toBeVisible();
 		await testPage.getByRole('button', { name: "Erase this Client's data" }).click();

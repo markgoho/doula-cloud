@@ -34,8 +34,8 @@ export interface PracticeSession {
 	// five screens whose act needs one (`SecondFactorNeeded`) read it to
 	// say so before she tries; the BFF's own seam is what refuses. This
 	// load always sets it. It is optional only so the route fixtures that
-	// predate it need not restate it, and a screen treats it as absent
-	// only when it is `false`, never when it is missing.
+	// predate it need not restate it; a screen reads it through
+	// `hasSecondFactor` (#lib/roles.ts), which counts only `false` as none.
 	secondFactor?: boolean;
 }
 

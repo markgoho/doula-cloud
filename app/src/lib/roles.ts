@@ -94,6 +94,20 @@ export function isOwner(session: Pick<RoleSession, 'roles'>): boolean {
 }
 
 /**
+ * Whether this session may do one of the five acts that need a second
+ * factor (#1532): the archive, starting Practice deletion, erasing a
+ * Client, vouching, and turning on "require MFA for all staff". Drawing
+ * only, like every predicate here: the BFF's own seam refuses the act.
+ *
+ * Only a session that says `false` has none. `practices/[practiceId]/
+ * +layout.ts` always sets the field; a session without it is a fixture
+ * that predates it, and draws the act as it always has.
+ */
+export function hasSecondFactor(session: { secondFactor?: boolean }): boolean {
+	return session.secondFactor !== false;
+}
+
+/**
  * Whether the session's caller holds the 'doula' role -- the role that
  * puts a person on a birth, and so the one that decides whether she has a
  * Visit of her own to log (#268). An Owner or Admin who does not hold it

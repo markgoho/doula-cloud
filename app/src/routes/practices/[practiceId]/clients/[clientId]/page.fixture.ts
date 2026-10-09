@@ -210,7 +210,7 @@ export const asOwnerWhoMayErase: RouteVariant = {
 export const asOwnerWithoutSecondFactor: RouteVariant = {
 	...asOwnerWhoMayErase,
 	name: 'The Client detail hub, as an Owner with no second factor',
-	props: { data: { isContractor: false, isOwner: true, hasNoSecondFactor: true } }
+	props: { data: { isContractor: false, isOwner: true, hasSecondFactor: false } }
 };
 
 export const fixture: RouteFixture = {

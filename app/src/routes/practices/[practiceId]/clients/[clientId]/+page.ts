@@ -16,16 +16,16 @@
  * already-resolved Membership (#835) through `parent()`, not a second
  * `/api/practices/${practiceId}/session` fetch of its own.
  */
-import { isAmbientContractor, isOwner } from '#lib/roles.js';
+import { hasSecondFactor as checkHasSecondFactor, isAmbientContractor, isOwner } from '#lib/roles.js';
 import type { PageLoad } from './$types';
 
 export interface ContractorGate {
 	isContractor: boolean;
 	isOwner: boolean;
 	// #1532: erasing a Client is one of the five acts the BFF refuses
-	// without a second factor. Only `false` counts: see
-	// `PracticeSession.secondFactor`.
-	hasNoSecondFactor: boolean;
+	// without a second factor. `hasSecondFactor` (#lib/roles.ts)
+	// holds the rule for a session that says nothing.
+	hasSecondFactor: boolean;
 }
 
 export const load: PageLoad = async ({ parent }): Promise<ContractorGate> => {
@@ -33,6 +33,6 @@ export const load: PageLoad = async ({ parent }): Promise<ContractorGate> => {
 	return {
 		isContractor: isAmbientContractor(session),
 		isOwner: isOwner(session),
-		hasNoSecondFactor: session.secondFactor === false
+		hasSecondFactor: checkHasSecondFactor(session)
 	};
 };

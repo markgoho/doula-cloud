@@ -143,7 +143,7 @@ const (
 //     Practice; only this act waits for the second factor.
 //
 // A fifth kind of 403 needs a fifth code here and a fifth state on
-// the app's error page, not a fourth shade of the role-refusal copy.
+// the app's error page, not another shade of the role-refusal copy.
 // TestEveryForbiddenWriteCarriesARecordedCode holds the set closed: a
 // literal http.StatusForbidden paired with a code outside it -- in an
 // apierr.Write call or in a refusal struct literal -- fails the build.
