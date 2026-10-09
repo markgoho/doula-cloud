@@ -758,6 +758,20 @@
 					{/if}
 				</ul>
 				<!--
+					#1592 (decided on #1495). What comes after the form. Stripe
+					publishes no time for its review of a new account, so the
+					first sentence gives none; #1591 replaces it when the pilot
+					gives a number. The 7 to 14 days is Stripe's own, from its
+					Payouts page (https://docs.stripe.com/payouts): "After you
+					successfully receive your first live payment, Stripe
+					typically schedules your initial payout to complete within
+					7-14 days". Check the number there before changing it.
+				-->
+				<Text text="After you finish, Stripe reviews your details. Stripe does not say how long this takes." />
+				<Text
+					text="Your first card payment takes longer to reach your bank than the ones after it: typically 7 to 14 days."
+				/>
+				<!--
 					#421 watched Stripe put FACEBOOK.COM/ROCHESTER onto a walked
 					account's Clients' card statements, because it derives the
 					descriptor from the website URL when it is not told one. It is
