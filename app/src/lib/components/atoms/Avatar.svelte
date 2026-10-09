@@ -1,32 +1,33 @@
 <script module lang="ts">
 	/*
-	 * Initials are derived here rather than served, because a name is
-	 * already on the wire (`GET /api/staff/session`, and the portal's
-	 * Engagement detail) and a second field holding two letters of it would
-	 * be a copy that can go stale.
+	 * Initials are taken from the two name fields, never guessed from white
+	 * space (#1537): "Mary Anne Smith" is first name "Mary Anne" and last
+	 * name "Smith", and a split on spaces cannot know that. They are derived
+	 * here rather than served, because both names are already on the wire
+	 * (`GET /api/staff/session`) and a second field holding two letters of
+	 * them would be a copy that can go stale.
 	 *
-	 * First and last word only: a middle name adds a letter nobody reads at
-	 * 34px, and three letters no longer fit the circle. Exported so the
-	 * style guide and the specs use the same rule as the component.
+	 * One letter from each. A caller that has only one name (the Client
+	 * portal knows the Client by the name she goes by) leaves `lastName`
+	 * empty and gets one letter. Exported so the style guide and the specs
+	 * use the same rule as the component.
 	 */
-	export function initialsOf(name: string): string {
-		const words = name.trim().split(/\s+/).filter(Boolean);
-		if (words.length === 0) return '';
-		const first = words[0]!;
-		const last = words.at(-1)!;
-		const letters = words.length === 1 ? first.slice(0, 1) : first.slice(0, 1) + last.slice(0, 1);
-		return letters.toLocaleUpperCase();
+	export function initialsOf(firstName: string, lastName = ''): string {
+		const first = firstName.trim().slice(0, 1);
+		const last = lastName.trim().slice(0, 1);
+		return (first + last).toLocaleUpperCase();
 	}
 </script>
 
 <script lang="ts">
 	interface Properties {
-		name: string;
+		firstName: string;
+		lastName?: string;
 	}
 
-	let { name }: Properties = $props();
+	let { firstName, lastName = '' }: Properties = $props();
 
-	const initials = $derived(initialsOf(name));
+	const initials = $derived(initialsOf(firstName, lastName));
 </script>
 
 <!--

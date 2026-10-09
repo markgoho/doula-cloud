@@ -108,7 +108,7 @@ export async function standUpRidgeline(request: APIRequestContext): Promise<Ridg
 
 	const accepted = await request.post(`${API_URL}/api/staff/accept-invite`, {
 		headers: { Authorization: `Bearer ${lenaIdToken}` },
-		data: { inviteToken, name: 'Lena Vasquez', workState: 'NY' }
+		data: { inviteToken, firstName: 'Lena', lastName: 'Vasquez', workState: 'NY' }
 	});
 	const { staffId: lenaStaffId } = JSON.parse(await readBody(accepted, 'standUpRidgeline: Lena accepting her invitation'));
 

@@ -36,6 +36,10 @@ type Membership struct {
 type SessionResponse struct {
 	StaffID string `json:"staffId"`
 	Name    string `json:"name"`
+	// FirstName and LastName are the two fields Name is built from
+	// (#1537); /account prefills its name correction from them.
+	FirstName string `json:"firstName"`
+	LastName  string `json:"lastName"`
 	// Email is here for the shell's avatar menu (#452), which shows the
 	// person the account they are signed in as. A Staff member can hold
 	// Memberships at several Practices under one account, so "which
@@ -125,6 +129,8 @@ func resolveSession(r *http.Request, tx *sql.Tx, self selfStaff, secondFactor bo
 	resp := SessionResponse{
 		StaffID:             staffID,
 		Name:                self.Name,
+		FirstName:           self.FirstName,
+		LastName:            self.LastName,
 		Email:               self.Email,
 		WorkState:           self.WorkState,
 		WorkStateReportedAt: self.WorkStateReportedAt,

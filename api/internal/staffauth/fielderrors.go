@@ -33,13 +33,6 @@ const fieldTimezone = "timezone"
 const (
 	// MsgPracticeNameNeeded is signup's practiceName field.
 	MsgPracticeNameNeeded = "Enter the name of your Practice"
-	// MsgStaffNameNeeded is signup's staffName field.
-	MsgStaffNameNeeded = "Enter your name"
-	// MsgOwnNameNeeded is the name field on the invitation-acceptance
-	// form, which is the same question signup's staffName asks -- one
-	// sentence apart because that form's own control is called `name`,
-	// and a Details key is the DTO's json tag, not the concept's.
-	MsgOwnNameNeeded = "Enter your name"
 	// MsgWorkStateNeeded is the workState field, on both the screens that
 	// ask for it -- signup and the account page's own correction (#437).
 	// The pair of MsgWorkStateRequired, which is the summary line the

@@ -245,6 +245,9 @@ func mountSessionRoutes(g *GatedRouter, db *sql.DB, verifier authn.Verifier, acc
 	// under a Practice -- no {practiceId} in the path, and no staff id
 	// either, which is what makes it self-edit-only by shape (#437).
 	g.Write("PUT /api/staff/work-state", UpdateWorkStateHandler(db))
+	// Her name is a fact about the person too (#1537): same shape, no
+	// {practiceId} and no staff id, so it is self-edit only.
+	g.Write("PUT /api/staff/name", UpdateNameHandler(db))
 	g.Write("POST /api/staff/accept-invite",
 		ratelimit.Wrap(db, "staff_accept_invite", bootstrapRules)(AcceptInviteHandler(verifier, accounts, db, enq)))
 	// #613: an email address, like a work state, is a fact about the

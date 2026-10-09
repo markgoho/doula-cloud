@@ -246,8 +246,8 @@ func TestVisitsHandler_StandsInForADoulaWhoDeletedHerLogin(t *testing.T) {
 	visitID := seedPortalVisit(t, db, engagementID, doulaID, time.Now().Add(-21*24*time.Hour))
 	testdb.RemoveMembership(t, db, doulaID)
 	if _, err := db.Admin.ExecContext(t.Context(),
-		`UPDATE staff SET name = $1, deleted_at = now() WHERE id = $2`,
-		staffauth.DeletedStaffName, doulaID,
+		`UPDATE staff SET first_name = $1, last_name = $2, deleted_at = now() WHERE id = $3`,
+		staffauth.DeletedStaffFirstName, staffauth.DeletedStaffLastName, doulaID,
 	); err != nil {
 		t.Fatalf("redact staff row: %v", err)
 	}

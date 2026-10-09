@@ -407,8 +407,8 @@ export function seedClientPortalUser(signInAddress: string, clientID: string) {
 // A new founder test goes in that file.
 export function seedFounder(identityUID: string, email: string) {
 	execSQL(
-		`INSERT INTO staff (id, identity_uid, name, email, work_state)
-		 VALUES (${sqlLiteral(FOUNDER_STAFF_ID)}, ${sqlLiteral(identityUID)}, 'The Founder', ${sqlLiteral(email)}, 'NY')
+		`INSERT INTO staff (id, identity_uid, first_name, last_name, email, work_state)
+		 VALUES (${sqlLiteral(FOUNDER_STAFF_ID)}, ${sqlLiteral(identityUID)}, 'The', 'Founder', ${sqlLiteral(email)}, 'NY')
 		 ON CONFLICT (id) DO UPDATE SET identity_uid = EXCLUDED.identity_uid, email = EXCLUDED.email`
 	);
 }

@@ -5,7 +5,8 @@ import type { SignOutOutcome } from '#lib/signOut.js';
 import AvatarMenu from './AvatarMenu.svelte';
 
 interface SetupOptions {
-	name?: string;
+	firstName?: string;
+	lastName?: string;
 	// Booleans rather than optional values: passing `email: undefined` would
 	// take the default instead of taking the email away, which is exactly
 	// how the portal case first tested nothing.
@@ -15,7 +16,8 @@ interface SetupOptions {
 }
 
 async function setup({
-	name = 'Mark Goho',
+	firstName = 'Mark',
+	lastName = 'Goho',
 	hasEmail = true,
 	hasAccountScreen = true,
 	outcome = { ok: true }
@@ -23,7 +25,8 @@ async function setup({
 	const email = hasEmail ? 'mark@example.test' : undefined;
 	const accountHref = hasAccountScreen ? '/account' : undefined;
 	const signOut = vi.fn<() => Promise<SignOutOutcome>>().mockResolvedValue(outcome);
-	await render(AvatarMenu, { name, email, accountHref, signOut });
+	await render(AvatarMenu, { firstName, lastName, email, accountHref, signOut });
+	const name = [firstName, lastName].filter(Boolean).join(' ');
 	return { signOut, trigger: page.getByRole('button', { name: `Your account, ${name}` }) };
 }
 
@@ -88,8 +91,18 @@ describe('AvatarMenu', () => {
 	 * when the session lands.
 	 */
 	it('holds its space and offers no control before the session lands', async () => {
-		await setup({ name: '' });
+		await setup({ firstName: '', lastName: '' });
 
 		await expect.element(page.getByRole('button')).not.toBeInTheDocument();
+	});
+
+	// The Client portal knows a Client by the one name she goes by, so it
+	// passes no last name (#1537): the name is that one word, with no
+	// stray space after it.
+	it('names a person who has only a first name', async () => {
+		const signOut = vi.fn<() => Promise<SignOutOutcome>>().mockResolvedValue({ ok: true });
+		await render(AvatarMenu, { firstName: 'Renata', signOut });
+
+		await expect.element(page.getByRole('button', { name: 'Your account, Renata' })).toBeVisible();
 	});
 });

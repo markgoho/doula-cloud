@@ -40,6 +40,7 @@
 	import Text from '#lib/components/atoms/Text.svelte';
 	import Heading from '#lib/components/atoms/Heading.svelte';
 	import LabeledField from '#lib/components/molecules/LabeledField.svelte';
+	import StaffNameFields from '#lib/components/molecules/StaffNameFields.svelte';
 	import StackedForm from '#lib/components/molecules/StackedForm.svelte';
 	import RadioGroup from '#lib/components/molecules/RadioGroup.svelte';
 	import WorkStateField from '#lib/components/molecules/WorkStateField.svelte';
@@ -57,12 +58,13 @@
 
 	const emailId = 'accept-invite-email';
 	const passwordId = 'accept-invite-password';
-	const nameId = 'accept-invite-name';
+	const firstNameId = 'accept-invite-first-name';
+	const lastNameId = 'accept-invite-last-name';
 	const workStateId = 'accept-invite-work-state';
 
 	// docs/api-design.md section 7's Details is keyed by the DTO's own
 	// JSON field name -- POST /api/staff/accept-invite's body, below.
-	const acceptFieldIds = { name: nameId, workState: workStateId };
+	const acceptFieldIds = { firstName: firstNameId, lastName: lastNameId, workState: workStateId };
 
 	let email = $state('');
 	let password = $state('');
@@ -70,7 +72,8 @@
 	// The Invitation carries an address and a Membership, never a name --
 	// a person names herself here, but only if she has no Staff account
 	// already carrying one.
-	let name = $state('');
+	let firstName = $state('');
+	let lastName = $state('');
 	let workStateName_ = $state('');
 	/*
 	 * One `FormSubmission` for both steps: they never render at the same
@@ -229,7 +232,8 @@
 				// Empty on the existing-Staff branch, which the server
 				// already ignores there -- what she asserted before stands,
 				// and this screen never had a newer answer to offer.
-				name: existing ? '' : name,
+				firstName: existing ? '' : firstName,
+				lastName: existing ? '' : lastName,
 				workState: existing ? '' : workStateCode(workStateName_)
 			})
 		});
@@ -271,7 +275,10 @@
 			// questions, it only shows what she already asserted.
 			if (!existing) {
 				const refusals: FormError[] = [];
-				if (name.trim() === '') refusals.push({ message: 'Enter your name', targetId: nameId });
+				if (firstName.trim() === '')
+					refusals.push({ message: 'Enter your first name', targetId: firstNameId });
+				if (lastName.trim() === '')
+					refusals.push({ message: 'Enter your last name', targetId: lastNameId });
 				if (workStateName_ === '')
 					refusals.push({ message: 'Choose the state you work from', targetId: workStateId });
 				if (refusals.length > 0) return refusals;
@@ -435,19 +442,14 @@
 				-->
 				<Link href={resolve('/(person)/account')} label="Change where you work" variant="secondary" />
 			{:else}
-				<LabeledField id={nameId} label="Your name" error={submission.errorFor(nameId)}>
-					{#snippet children({ id, describedBy, invalid })}
-						<TextInput
-							{id}
-							{describedBy}
-							{invalid}
-							value={name}
-							onInput={(value) => (name = value)}
-							required
-							autocomplete="name"
-						/>
-					{/snippet}
-				</LabeledField>
+				<StaffNameFields
+					bind:firstName
+					bind:lastName
+					firstId={firstNameId}
+					lastId={lastNameId}
+					firstError={submission.errorFor(firstNameId)}
+					lastError={submission.errorFor(lastNameId)}
+				/>
 				<WorkStateField
 					id={workStateId}
 					bind:value={workStateName_}

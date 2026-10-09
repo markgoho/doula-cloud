@@ -291,7 +291,7 @@ func seedStaffInState(t *testing.T, db *testdb.DB, practiceID, identityUID, work
 	t.Helper()
 	var staffID string
 	if err := db.Admin.QueryRowContext(t.Context(),
-		`INSERT INTO staff (identity_uid, name, email, work_state) VALUES ($1, $1, $1 || '@example.com', $2) RETURNING id`,
+		`INSERT INTO staff (identity_uid, first_name, last_name, email, work_state) VALUES ($1, $1, '', $1 || '@example.com', $2) RETURNING id`,
 		identityUID, workState,
 	).Scan(&staffID); err != nil {
 		t.Fatalf("seed staff %q in %q: %v", identityUID, workState, err)
@@ -344,7 +344,7 @@ func TestPostPurchaseHandler_WhollyOutOfStatePracticeCountsNoNewYorkStaff(t *tes
 	practiceID := testdb.SeedPractice(t, db, "Out Of State Practice")
 	var ownerID string
 	if err := db.Admin.QueryRowContext(t.Context(),
-		`INSERT INTO staff (identity_uid, name, email, work_state) VALUES ($1, 'Owner', 'oos-owner@example.com', 'NJ') RETURNING id`,
+		`INSERT INTO staff (identity_uid, first_name, last_name, email, work_state) VALUES ($1, 'Owner', '', 'oos-owner@example.com', 'NJ') RETURNING id`,
 		uid,
 	).Scan(&ownerID); err != nil {
 		t.Fatalf("seed owner: %v", err)

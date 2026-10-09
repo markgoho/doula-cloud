@@ -212,7 +212,9 @@ test('An Owner vouches for a locked-out doula, and the code reaches her and nobo
 		await page.getByLabel('Password').fill(password);
 		await page.getByRole('button', { name: 'Continue' }).click();
 		await expect(page.getByRole('heading', { name: 'Tell us about yourself' })).toBeVisible();
-		await page.getByLabel('Your name').fill(doulaName);
+		const [doulaFirstName, ...doulaLastName] = doulaName.split(' ');
+		await page.getByLabel('First name').fill(doulaFirstName!);
+		await page.getByLabel('Last name').fill(doulaLastName.join(' '));
 		await page.getByLabel('Which state do you work from?').selectOption('New York');
 		await page.getByRole('button', { name: 'Accept invite' }).click();
 		await expect(page).toHaveURL(new RegExp(`/practices/${practiceId}$`));

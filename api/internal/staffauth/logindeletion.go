@@ -14,12 +14,17 @@ import (
 	"doula-cloud/api/internal/clock"
 )
 
-// DeletedStaffName is what a deleted login's staff.name becomes. The
-// column is NOT NULL and always has been, so the redaction replaces it
-// rather than nulling it, and the replacement says plainly what happened
-// rather than inventing a person -- the same choice client.ErasedGivenName
-// makes for a Client.
-const DeletedStaffName = "Deleted Staff Member"
+// DeletedStaffFirstName and DeletedStaffLastName are what a deleted
+// login's staff.first_name and staff.last_name become (#1537). The
+// columns are NOT NULL, so the redaction replaces them rather than
+// nulling them, and the replacement says plainly what happened rather
+// than inventing a person -- the same choice client.ErasedGivenName
+// makes for a Client. DeletedStaffName is the staff.name they print as.
+const (
+	DeletedStaffFirstName = "Deleted"
+	DeletedStaffLastName  = "Staff Member"
+	DeletedStaffName      = DeletedStaffFirstName + " " + DeletedStaffLastName
+)
 
 // DeletedStaffEmail is what a deleted login's staff.email becomes. Also
 // NOT NULL, and unlike identity_uid not unique, so one shared constant
@@ -410,9 +415,9 @@ func redactStaffRow(ctx context.Context, tx *sql.Tx, staffID, uid string, now ti
 
 	res, err := tx.ExecContext(ctx,
 		`UPDATE staff
-		    SET name = $1, email = $2, identity_uid = $3, deleted_at = $4
-		  WHERE id = $5 AND deleted_at IS NULL`,
-		DeletedStaffName, DeletedStaffEmail, deletedIdentityUID(staffID), now, staffID,
+		    SET first_name = $1, last_name = $2, email = $3, identity_uid = $4, deleted_at = $5
+		  WHERE id = $6 AND deleted_at IS NULL`,
+		DeletedStaffFirstName, DeletedStaffLastName, DeletedStaffEmail, deletedIdentityUID(staffID), now, staffID,
 	)
 	if err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests

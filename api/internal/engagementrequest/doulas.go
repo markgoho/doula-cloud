@@ -111,7 +111,7 @@ const doulaRosterQuery = `SELECT s.id, s.name, m.employment_type::text, ` + atta
 	  FROM practice_memberships m
 	  JOIN staff s ON s.id = m.staff_id
 	 WHERE m.practice_id = $1 AND $2 = ANY(m.roles)
-	 ORDER BY (s.id = $3) DESC, s.name, s.id`
+	 ORDER BY (s.id = $3) DESC, s.last_name, s.first_name, s.id`
 
 // listRequestDoulas builds the answer. readsRoster is whether the caller
 // may be shown a colleague: true for an Owner or an Admin.

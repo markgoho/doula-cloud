@@ -25,7 +25,7 @@ const signupIPBudget = 50
 // function rather than a package-level var so nothing else in
 // staffauth_test can mutate the value this test sends.
 func burstSignupBody() staffauth.SignupRequest {
-	return staffauth.SignupRequest{PracticeName: "Riverside Doulas", StaffName: jamieOwnerName, WorkState: "NY"}
+	return staffauth.SignupRequest{PracticeName: "Riverside Doulas", FirstName: jamieName, LastName: ownerLastName, WorkState: "NY"}
 }
 
 // TestSignupRefusesAGenuineBurst is the measurement behind #1138 and the

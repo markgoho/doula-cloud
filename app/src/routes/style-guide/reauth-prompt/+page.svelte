@@ -2,8 +2,7 @@
 	/*
 	 * `ReauthPrompt` talks to Identity Platform the moment either button is
 	 * pressed, so this catalog page shows the two shapes it takes rather
-	 * than driving one -- what the component looks like when a page owns
-	 * the surrounding form, and what it looks like when it brings its own.
+	 * than driving one -- its default and its destructive variant.
 	 * A refusal is realized by writing the submission's `errors` directly,
 	 * the same public field a client-side check writes.
 	 */
@@ -14,7 +13,7 @@
 	const refused = new FormSubmission();
 	refused.errors = [{ message: 'Password is not correct', targetId: 'style-guide-refused-password' }];
 
-	const nested = new FormSubmission();
+	const destructive = new FormSubmission();
 
 	function noop() {}
 </script>
@@ -48,20 +47,16 @@
 	</section>
 
 	<section>
-		<h2>Inside a form the page already owns</h2>
-		<!-- stacked-form:ignore: #1108 -- the point of this example is the `insideForm` branch, which exists because HTML forbids a nested form. The bare `<form>` is the page's own outer form being demonstrated; `ReauthPrompt` brings a `StackedForm` in the other branch above. -->
-		<form onsubmit={(event) => event.preventDefault()}>
-			<ReauthPrompt
-				idPrefix="style-guide-nested"
-				email="anne-marie@example.test"
-				prompt="Confirm your password to remove two-factor authentication."
-				confirmLabel="Remove"
-				confirmVariant="destructive"
-				submission={nested}
-				onAuthenticated={noop}
-				onCancel={noop}
-				insideForm
-			/>
-		</form>
+		<h2>Destructive</h2>
+		<ReauthPrompt
+			idPrefix="style-guide-destructive"
+			email="anne-marie@example.test"
+			prompt="Confirm your password to remove two-factor authentication."
+			confirmLabel="Remove"
+			confirmVariant="destructive"
+			submission={destructive}
+			onAuthenticated={noop}
+			onCancel={noop}
+		/>
 	</section>
 </stack-l>

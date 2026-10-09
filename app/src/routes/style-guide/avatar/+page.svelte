@@ -8,10 +8,10 @@
 	 * circle, that decides how wide this row gets.
 	 */
 	const names = [
-		'Anne-Marie Ochieng-Whitfield',
-		'Renata Chiamaka Okonkwo-Adeyemi',
-		'Prince',
-		'dee marchetti'
+		{ firstName: 'Anne-Marie', lastName: 'Ochieng-Whitfield' },
+		{ firstName: 'Renata Chiamaka', lastName: 'Okonkwo-Adeyemi' },
+		{ firstName: 'Prince', lastName: '' },
+		{ firstName: 'dee', lastName: 'marchetti' }
 	];
 </script>
 
@@ -19,17 +19,18 @@
 	<h1>Avatar</h1>
 
 	<section>
-		<h2>Initials, derived from the name</h2>
+		<h2>Initials, taken from the two name fields</h2>
 		<p>
-			The initials are worked out here rather than served: the name is already on the wire, and a
-			second field holding two letters of it is a copy that can go stale. First and last word only,
-			so a middle name adds no third letter to a 34px circle.
+			The initials are worked out here rather than served: both names are already on the wire, and a
+			second field holding two letters of them is a copy that can go stale. One letter from the
+			first name and one from the last, so a name of several words never splits on a space and never
+			adds a third letter to a 34px circle.
 		</p>
 		<cluster-l space="var(--space-5)" align="center">
-			{#each names as name (name)}
+			{#each names as { firstName, lastName } (`${firstName} ${lastName}`)}
 				<cluster-l space="var(--space-2)" align="center">
-					<Avatar {name} />
-					<span>{name} &rarr; {initialsOf(name)}</span>
+					<Avatar {firstName} {lastName} />
+					<span>{firstName} {lastName} &rarr; {initialsOf(firstName, lastName)}</span>
 				</cluster-l>
 			{/each}
 		</cluster-l>

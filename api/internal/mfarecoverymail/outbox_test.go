@@ -35,7 +35,7 @@ func seedStaffRow(t *testing.T, db *testdb.DB, identityUID, name string) string 
 	t.Helper()
 	var id string
 	if err := db.Admin.QueryRowContext(t.Context(),
-		`INSERT INTO staff (identity_uid, name, email, work_state) VALUES ($1, $2, $1 || '@example.com', 'NY') RETURNING id`,
+		`INSERT INTO staff (identity_uid, first_name, last_name, email, work_state) VALUES ($1, $2, '', $1 || '@example.com', 'NY') RETURNING id`,
 		identityUID, name,
 	).Scan(&id); err != nil {
 		t.Fatalf("seed staff: %v", err)

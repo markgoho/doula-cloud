@@ -66,7 +66,8 @@
 	let { children } = $props();
 
 	let memberships = $state<Membership[]>([]);
-	let name = $state('');
+	let firstName = $state('');
+	let lastName = $state('');
 	let email = $state<string | undefined>();
 	let isLoaded = $state(false);
 
@@ -75,7 +76,8 @@
 		if (!result.ok) return;
 
 		memberships = result.session.memberships;
-		name = result.session.name;
+		firstName = result.session.firstName;
+		lastName = result.session.lastName;
 		email = result.session.email;
 		isLoaded = true;
 	});
@@ -105,7 +107,8 @@
 	navItems={[]}
 	practices={[]}
 	currentPracticeId=""
-	{name}
+	{firstName}
+	{lastName}
 	{email}
 	accountHref={resolve('/(person)/account')}
 	signOut={handleSignOut}

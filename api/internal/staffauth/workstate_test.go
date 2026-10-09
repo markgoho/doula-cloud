@@ -46,7 +46,7 @@ func TestSignup_RejectsMissingWorkState(t *testing.T) {
 	defer srv.Close()
 
 	resp := postSignup(t, srv, "tok", staffauth.SignupRequest{
-		PracticeName: "No State Practice", StaffName: workStateName,
+		PracticeName: "No State Practice", FirstName: workStateName, LastName: placeholderLastName,
 	})
 	defer resp.Body.Close()
 
@@ -64,7 +64,7 @@ func TestSignup_RejectsUnknownWorkState(t *testing.T) {
 	defer srv.Close()
 
 	resp := postSignup(t, srv, "tok", staffauth.SignupRequest{
-		PracticeName: "Bad State Practice", StaffName: workStateName,
+		PracticeName: "Bad State Practice", FirstName: workStateName, LastName: placeholderLastName,
 		WorkState: "ZZ",
 	})
 	defer resp.Body.Close()
@@ -83,7 +83,7 @@ func TestSignup_NormalizesWorkStateAndRecordsFirstEvent(t *testing.T) {
 	defer srv.Close()
 
 	resp := postSignup(t, srv, "tok", staffauth.SignupRequest{
-		PracticeName: "Lower Case Practice", StaffName: workStateName,
+		PracticeName: "Lower Case Practice", FirstName: workStateName, LastName: placeholderLastName,
 		WorkState: "  nj ",
 	})
 	defer resp.Body.Close()
@@ -113,7 +113,7 @@ func TestAcceptInvite_RecordsWorkStateForANewPerson(t *testing.T) {
 	defer srv.Close()
 
 	resp := postAccept(t, srv, staffauth.AcceptInviteRequest{
-		InviteToken: token, Name: "Rosa Mendel", WorkState: "pa",
+		InviteToken: token, FirstName: "Rosa", LastName: "Mendel", WorkState: "pa",
 	})
 	defer resp.Body.Close()
 
@@ -138,7 +138,7 @@ func TestAcceptInvite_RejectsUnknownWorkStateForANewPerson(t *testing.T) {
 	defer srv.Close()
 
 	resp := postAccept(t, srv, staffauth.AcceptInviteRequest{
-		InviteToken: token, Name: "Zed Nowhere", WorkState: "Ontario",
+		InviteToken: token, FirstName: "Zed", LastName: "Nowhere", WorkState: "Ontario",
 	})
 	defer resp.Body.Close()
 
@@ -158,7 +158,7 @@ func TestAcceptInvite_IgnoresWorkStateForAnExistingPerson(t *testing.T) {
 	signupSrv := newSignupServer(authntest.Verifier{UID: "roaming-uid", Email: "nell@example.com"}, db)
 	defer signupSrv.Close()
 	first := postSignup(t, signupSrv, "tok", staffauth.SignupRequest{
-		PracticeName: "Her First Practice", StaffName: "Nell Ward", WorkState: "NY",
+		PracticeName: "Her First Practice", FirstName: "Nell", LastName: "Ward", WorkState: "NY",
 	})
 	_ = first.Body.Close()
 	if first.StatusCode != http.StatusCreated {
@@ -172,7 +172,7 @@ func TestAcceptInvite_IgnoresWorkStateForAnExistingPerson(t *testing.T) {
 	defer acceptSrv.Close()
 
 	resp := postAccept(t, acceptSrv, staffauth.AcceptInviteRequest{
-		InviteToken: token, Name: "Nell Ward", WorkState: "TX",
+		InviteToken: token, FirstName: "Nell", LastName: "Ward", WorkState: "TX",
 	})
 	defer resp.Body.Close()
 
@@ -196,7 +196,7 @@ func TestRoster_CarriesWorkStateAndItsDate(t *testing.T) {
 	defer srv.Close()
 
 	resp := postSignup(t, srv, "tok", staffauth.SignupRequest{
-		PracticeName: "Roster Practice", StaffName: "Ada Frost", WorkState: "CT",
+		PracticeName: "Roster Practice", FirstName: "Ada", LastName: "Frost", WorkState: "CT",
 	})
 	defer resp.Body.Close()
 	var created staffauth.SignupResponse

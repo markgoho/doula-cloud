@@ -37,7 +37,8 @@ const WIDE = [1440, 900] as const;
 const NARROW = [390, 844] as const;
 
 async function setup({
-	name = 'Mark Goho',
+	firstName = 'Mark',
+	lastName = 'Goho',
 	practices = PRACTICES,
 	currentPracticeId = 'p1'
 } = {}) {
@@ -47,7 +48,8 @@ async function setup({
 		navItems: NAV_ITEMS,
 		practices,
 		currentPracticeId,
-		name,
+		firstName,
+		lastName,
 		email: 'mark@example.test',
 		accountHref: '/account',
 		signOut

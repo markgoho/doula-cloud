@@ -24,7 +24,11 @@ export interface SessionInfo {
 	 * has an opinion about them.
 	 */
 	staffId: string;
+	// The name, as the two fields it is asked and stored in (#1537), and the
+	// two joined, first then last, for a screen that prints it whole.
 	name: string;
+	firstName: string;
+	lastName: string;
 	// The Staff shell's avatar menu shows this beside the name (#452), off
 	// practices/+layout.svelte's own inline session type -- /account's bar
 	// (#484) reads the same `/api/staff/session` fact off this SessionInfo

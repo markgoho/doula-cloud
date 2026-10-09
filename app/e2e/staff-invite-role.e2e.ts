@@ -59,7 +59,8 @@ test('A Doula invited via the Staff invite route is refused an Owner-only action
 	await page.getByRole('button', { name: 'Continue' }).click();
 
 	await expect(page.getByRole('heading', { name: 'Tell us about yourself' })).toBeVisible();
-	await page.getByLabel('Your name').fill('Robin Doula');
+	await page.getByLabel('First name').fill('Robin');
+	await page.getByLabel('Last name').fill('Doula');
 	await page.getByLabel('Which state do you work from?').selectOption('New York');
 	await page.getByRole('button', { name: 'Accept invite' }).click();
 

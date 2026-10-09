@@ -89,7 +89,7 @@ func TestAcceptInviteHandler_CreatesStaffAndMembership(t *testing.T) {
 	srv := newAcceptServer(t, db, "lena-uid", "Lena@Example.com")
 	defer srv.Close()
 
-	resp := postAccept(t, srv, staffauth.AcceptInviteRequest{WorkState: "NY", InviteToken: token, Name: "Lena Vasquez"})
+	resp := postAccept(t, srv, staffauth.AcceptInviteRequest{WorkState: "NY", InviteToken: token, FirstName: leaFirstName, LastName: "Vasquez"})
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
@@ -238,7 +238,7 @@ func TestAcceptInviteHandler_SecondIdentityOnOneAddressIs409(t *testing.T) {
 	srv := newAcceptServer(t, db, "twice-uid-b", "twice@example.com")
 	defer srv.Close()
 
-	resp := postAccept(t, srv, staffauth.AcceptInviteRequest{WorkState: "NY", InviteToken: token, Name: "Twice Over"})
+	resp := postAccept(t, srv, staffauth.AcceptInviteRequest{WorkState: "NY", InviteToken: token, FirstName: "Twice", LastName: "Over"})
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusConflict {
@@ -265,7 +265,7 @@ func TestAcceptInviteHandler_WrongAddressForbidden(t *testing.T) {
 	srv := newAcceptServer(t, db, "someone-else-uid", "someone.else@example.com")
 	defer srv.Close()
 
-	resp := postAccept(t, srv, staffauth.AcceptInviteRequest{WorkState: "NY", InviteToken: token, Name: "Someone Else"})
+	resp := postAccept(t, srv, staffauth.AcceptInviteRequest{WorkState: "NY", InviteToken: token, FirstName: "Someone", LastName: "Else"})
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusForbidden {
@@ -281,7 +281,7 @@ func TestAcceptInviteHandler_NoVerifiedAddressForbidden(t *testing.T) {
 	srv := newAcceptServer(t, db, "address-less-uid", "")
 	defer srv.Close()
 
-	resp := postAccept(t, srv, staffauth.AcceptInviteRequest{WorkState: "NY", InviteToken: token, Name: "No Address"})
+	resp := postAccept(t, srv, staffauth.AcceptInviteRequest{WorkState: "NY", InviteToken: token, FirstName: "No", LastName: "Address"})
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusForbidden {
@@ -297,7 +297,7 @@ func TestAcceptInviteHandler_ExpiredIsGoneAndMarked(t *testing.T) {
 	srv := newAcceptServer(t, db, "late-uid", "late@example.com")
 	defer srv.Close()
 
-	resp := postAccept(t, srv, staffauth.AcceptInviteRequest{WorkState: "NY", InviteToken: token, Name: "Too Late"})
+	resp := postAccept(t, srv, staffauth.AcceptInviteRequest{WorkState: "NY", InviteToken: token, FirstName: "Too", LastName: "Late"})
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusGone {
@@ -323,7 +323,7 @@ func TestAcceptInviteHandler_UnknownToken(t *testing.T) {
 	srv := newAcceptServer(t, db, "nobody-uid", "nobody@example.com")
 	defer srv.Close()
 
-	resp := postAccept(t, srv, staffauth.AcceptInviteRequest{WorkState: "NY", InviteToken: "not-a-real-token", Name: "Nobody"})
+	resp := postAccept(t, srv, staffauth.AcceptInviteRequest{WorkState: "NY", InviteToken: "not-a-real-token", FirstName: "Nobody", LastName: placeholderLastName})
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusNotFound {
@@ -344,7 +344,7 @@ func TestAcceptInviteHandler_RevokedTokenIsNotFound(t *testing.T) {
 	srv := newAcceptServer(t, db, "gone-uid", "gone@example.com")
 	defer srv.Close()
 
-	resp := postAccept(t, srv, staffauth.AcceptInviteRequest{WorkState: "NY", InviteToken: token, Name: "Too Late"})
+	resp := postAccept(t, srv, staffauth.AcceptInviteRequest{WorkState: "NY", InviteToken: token, FirstName: "Too", LastName: "Late"})
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusNotFound {
@@ -369,7 +369,7 @@ func TestAcceptInviteHandler_BadRequests(t *testing.T) {
 	})
 
 	t.Run("missing token", func(t *testing.T) {
-		resp := postAccept(t, srv, staffauth.AcceptInviteRequest{WorkState: "NY", Name: "Nameless"})
+		resp := postAccept(t, srv, staffauth.AcceptInviteRequest{WorkState: "NY", FirstName: "Nameless", LastName: placeholderLastName})
 		defer resp.Body.Close()
 		if resp.StatusCode != http.StatusBadRequest {
 			t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
@@ -449,7 +449,7 @@ func TestAcceptInviteHandler_BackfillsOfferStaffID(t *testing.T) {
 	srv := newAcceptServer(t, db, "renata-uid", "renata@example.com")
 	defer srv.Close()
 
-	resp := postAccept(t, srv, staffauth.AcceptInviteRequest{WorkState: "NY", InviteToken: token, Name: "Renata Alvarez"})
+	resp := postAccept(t, srv, staffauth.AcceptInviteRequest{WorkState: "NY", InviteToken: token, FirstName: "Renata", LastName: "Alvarez"})
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("status = %d, want 200", resp.StatusCode)
@@ -485,7 +485,7 @@ func TestAcceptInviteHandler_SetsEmailVerifiedAndQueuesNoMail(t *testing.T) {
 	srv := newAcceptServerWithAccounts(t, db, uid, email, accounts)
 	defer srv.Close()
 
-	resp := postAccept(t, srv, staffauth.AcceptInviteRequest{WorkState: "NY", InviteToken: token, Name: "Verified Person"})
+	resp := postAccept(t, srv, staffauth.AcceptInviteRequest{WorkState: "NY", InviteToken: token, FirstName: "Verified", LastName: "Person"})
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
@@ -526,7 +526,7 @@ func TestAcceptInviteHandler_SetEmailVerifiedFailureRollsBackTheMembership(t *te
 	srv := newAcceptServerWithAccounts(t, db, uid, email, accounts)
 	defer srv.Close()
 
-	resp := postAccept(t, srv, staffauth.AcceptInviteRequest{WorkState: "NY", InviteToken: token, Name: "Verify Fail Person"})
+	resp := postAccept(t, srv, staffauth.AcceptInviteRequest{WorkState: "NY", InviteToken: token, FirstName: "Verify", LastName: "Fail Person"})
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusInternalServerError {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusInternalServerError)

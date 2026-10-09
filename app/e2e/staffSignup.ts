@@ -29,6 +29,17 @@ export function uniqueEmail(localPart: string, domain = 'example.com'): string {
 	return `${localPart}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}@${domain}`;
 }
 
+/**
+ * A full name as the two fields the product stores (#1537): the first word
+ * is the first name and the rest the last. Specs keep writing the name a
+ * persona is known by ("Jamie Owner"); this is the one place that splits
+ * it. A single word gets a last name of "Owner" so both fields are filled.
+ */
+export function splitName(fullName: string): { firstName: string; lastName: string } {
+	const [firstName = '', ...rest] = fullName.split(' ');
+	return { firstName, lastName: rest.join(' ') || 'Owner' };
+}
+
 export interface FoundingOwnerFields {
 	practiceName?: string;
 	staffName?: string;
@@ -79,7 +90,7 @@ export async function seedFoundingOwner(
 	const signup = await retryPastRateLimit(() =>
 		request.post(`${API_URL}/api/staff/signup`, {
 			headers: { Authorization: `Bearer ${idToken}` },
-			data: { practiceName, staffName, workState, timezone }
+			data: { practiceName, ...splitName(staffName), workState, timezone }
 		})
 	);
 	const signupBody = await signup.text();
@@ -108,7 +119,7 @@ export function acceptStaffInvite(
 	return retryPastRateLimit(() =>
 		request.post(`${API_URL}/api/staff/accept-invite`, {
 			headers: { Authorization: `Bearer ${idToken}` },
-			data: { inviteToken, name, workState }
+			data: { inviteToken, ...splitName(name), workState }
 		})
 	);
 }

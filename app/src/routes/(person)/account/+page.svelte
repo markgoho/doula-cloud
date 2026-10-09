@@ -32,7 +32,12 @@
 	import { staffLoginAfterSessionEnded } from '#lib/sessionEnded.js';
 	import { getFirebaseAuth } from '#lib/firebase.js';
 	import { refusalErrors, refusalMessage, SERVICE_PROBLEM } from '#lib/formErrors.js';
-	import { FormSubmission, orServiceProblem, orThrownMessage } from '#lib/formSubmission.svelte.js';
+	import {
+		FormSubmission,
+		orServiceProblem,
+		orThrownMessage,
+		type FormError
+	} from '#lib/formSubmission.svelte.js';
 	import { rotateSavedCodes } from '#lib/mfaRecovery.js';
 	import { triggerBlobDownload } from '#lib/blobDownload.js';
 	import { workStateCode, workStateName, workStateReportedOn } from '#lib/workStates.js';
@@ -45,13 +50,19 @@
 	import ReauthPrompt from '#lib/components/molecules/ReauthPrompt.svelte';
 	import WorkStateField from '#lib/components/molecules/WorkStateField.svelte';
 	import ErrorSummary from '#lib/components/molecules/ErrorSummary.svelte';
+	import StackedForm from '#lib/components/molecules/StackedForm.svelte';
+	import StaffNameFields from '#lib/components/molecules/StaffNameFields.svelte';
 	import { deleteOwnLogin } from '#lib/loginDeletion.js';
 	import ConfirmDialog from '#lib/components/molecules/ConfirmDialog.svelte';
 	import { loadAccountSession } from '../session.svelte.js';
 
 	const workStateId = 'account-work-state';
+	const firstNameId = 'account-first-name';
+	const lastNameId = 'account-last-name';
 
-	let name = $state('');
+	let firstName = $state('');
+	let lastName = $state('');
+	let savedName = $state('');
 	let email = $state('');
 	let reportedAt = $state('');
 	// The full state name the <select> speaks; workStateCode() converts it
@@ -118,7 +129,8 @@
 			return;
 		}
 
-		name = result.session.name;
+		firstName = result.session.firstName;
+		lastName = result.session.lastName;
 		email = result.session.email;
 		reportedAt = result.session.workStateReportedAt;
 		selectedState = workStateName(result.session.workState);
@@ -141,7 +153,7 @@
 	onMount(() => signOutOfMfaFirebaseSDK);
 
 	/*
-	 * One deliberate act: choose a state, press Save. No confirmation
+	 * The work state form: one deliberate act, choose a state, press Save. No confirmation
 	 * step, and that is a decision rather than an omission (#437).
 	 *
 	 * A confirmation dialog buys its friction with a promise that the act
@@ -160,6 +172,7 @@
 	async function handleSubmit(event: SubmitEvent) {
 		event.preventDefault();
 		savedState = '';
+		savedName = '';
 
 		await saveSubmission.run(async () => {
 			// The one question this page asks. Nothing else on it is editable.
@@ -196,6 +209,43 @@
 			selectedState = workStateName(saved.workState);
 			savedState = selectedState;
 		}, orServiceProblem);
+	}
+
+	// Its own form, so Enter in a name field lands here and not on the work state.
+	async function handleSaveName(event: SubmitEvent) {
+		event.preventDefault();
+		savedState = '';
+		savedName = '';
+
+		await saveSubmission.run(saveName, orServiceProblem);
+	}
+
+	/*
+	 * Correcting her name (#1537). Both fields are sent every time and
+	 * both are needed, the same as at signup. There is no staff id in the
+	 * path or the body: the endpoint only ever writes the caller's own
+	 * row, and records who changed it and when.
+	 */
+	async function saveName(): Promise<FormError[] | undefined> {
+		const refusals: FormError[] = [];
+		if (firstName.trim() === '')
+			refusals.push({ message: 'Enter your first name', targetId: firstNameId });
+		if (lastName.trim() === '') refusals.push({ message: 'Enter your last name', targetId: lastNameId });
+		if (refusals.length > 0) return refusals;
+
+		const response = await apiFetchWithSession('/api/staff/name', {
+			method: 'PUT',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ firstName, lastName })
+		});
+		if (!response.ok) {
+			return await refusalErrors(response, { firstName: firstNameId, lastName: lastNameId });
+		}
+
+		const saved: { firstName: string; lastName: string } = await response.json();
+		firstName = saved.firstName;
+		lastName = saved.lastName;
+		savedName = `${saved.firstName} ${saved.lastName}`;
 	}
 
 	function beginMfaRemoval() {
@@ -349,20 +399,56 @@
 	/>
 {/snippet}
 
-{#snippet workState()}
-	{#if reportedAt}
-		<Text text={`Last confirmed ${workStateReportedOn(reportedAt)}.`} step="meta" tone="muted" />
-	{/if}
-	<WorkStateField
-		id={workStateId}
-		bind:value={selectedState}
-		error={saveSubmission.errorFor(workStateId)}
-	/>
+{#snippet nameSection()}
 	<!--
-		Saving the same state again is a re-assertion, not a no-op -- see
-		the comment on handleSubmit. Hence no `disabled` on an unchanged
-		value.
+		Its own <form>, so Enter in a name field submits the name natively
+		and the work state below is a separate act with its own button.
 	-->
+	<StackedForm onSubmit={handleSaveName}>
+		<StaffNameFields
+			bind:firstName
+			bind:lastName
+			firstId={firstNameId}
+			lastId={lastNameId}
+			firstError={saveSubmission.errorFor(firstNameId)}
+			lastError={saveSubmission.errorFor(lastNameId)}
+		/>
+		<Button type="submit" label="Save name" loading={saveSubmission.isSubmitting} />
+		{#if savedName}
+			<Notice variant="status" message={`Saved. Your name is ${savedName}.`} />
+		{/if}
+	</StackedForm>
+{/snippet}
+
+{#snippet workState()}
+	<StackedForm onSubmit={handleSubmit}>
+		{#if reportedAt}
+			<Text text={`Last confirmed ${workStateReportedOn(reportedAt)}.`} step="meta" tone="muted" />
+		{/if}
+		<WorkStateField
+			id={workStateId}
+			bind:value={selectedState}
+			error={saveSubmission.errorFor(workStateId)}
+		/>
+		<!--
+			Saving the same state again is a re-assertion, not a no-op -- see
+			the comment on handleSubmit. Hence no `disabled` on an unchanged
+			value.
+		-->
+		<Button type="submit" label="Save work state" loading={saveSubmission.isSubmitting} />
+		<!--
+			Confirmation sits where she just was -- immediately under the Save
+			button she pressed, not in a banner at the top of a page she would
+			have to scroll back up to read. Notice's status variant carries
+			role="status", so a screen reader announces it politely wherever it
+			is; a sighted reader is looking at the button. The "Last confirmed"
+			line above the field moves to the new date at the same moment,
+			which is the durable half of the same answer.
+		-->
+		{#if savedState}
+			<Notice variant="status" message={`Saved. You work from ${savedState}.`} />
+		{/if}
+	</StackedForm>
 {/snippet}
 
 {#snippet mfaSection()}
@@ -371,19 +457,11 @@
 		SessionInfo's own doc comment) rather than re-deriving it, which
 		matches how staffauth.Middleware reads the same fact server-side.
 
-		No nested `<form>` here -- the whole page is already one `<form>`
-		(`handleSubmit`, below), and HTML forbids nesting one inside
-		another. Every control in this fieldset is `type="button"` with its
-		own `onClick`, the same shape "Send a new verification link" (in
-		`actions`, below) already uses for a same-page secondary action.
+		The page is not one form: the name and the work state are each their
+		own <form> above, and this fieldset stands outside both.
 	-->
 	{#if hasSecondFactor}
 		{#if isRemovingSecondFactor}
-			<!--
-				`insideForm`: this fieldset is inside the page's own `<form>`
-				(below), and HTML forbids nesting one form inside another --
-				see ReauthPrompt's own prop doc.
-			-->
 			<ReauthPrompt
 				idPrefix="account-mfa"
 				{email}
@@ -393,7 +471,6 @@
 				submission={mfaSubmission}
 				onAuthenticated={removeSecondFactor}
 				onCancel={cancelMfaRemoval}
-				insideForm
 			/>
 		{:else}
 			<Text text="Turned on. You'll be asked for a code from your authenticator app when you sign in." />
@@ -549,23 +626,6 @@
 {/snippet}
 
 {#snippet actions()}
-	<Button type="submit" label="Save work state" loading={saveSubmission.isSubmitting} />
-	<!--
-		Confirmation sits where she just was -- immediately under the Save
-		button she pressed, not in a banner at the top of a page she would
-		have to scroll back up to read. Notice's status variant carries
-		role="status", so a screen reader announces it politely wherever it
-		is; a sighted reader is looking at the button. The "Last confirmed"
-		line above the field moves to the new date at the same moment,
-		which is the durable half of the same answer.
-
-		Inside FormPage's actions region, the same placement `invite` (#425)
-		uses -- FormPage owns the frame's width cap and gutters, and a
-		sibling of the <form> below inherited neither (#474).
-	-->
-	{#if savedState}
-		<Notice variant="status" message={`Saved. You work from ${savedState}.`} />
-	{/if}
 	<Button
 		type="button"
 		variant="secondary"
@@ -590,25 +650,23 @@
 	state -- `novalidate`: this page refuses the submit, not the browser
 	(#467).
 -->
-<!-- stacked-form:ignore: #1108 -- this form wraps a Template. `FormPage` stacks each fieldset's content itself, so the `<form>` here owns the submit and arranges nothing; a `StackedForm` would put a second, empty stack around one child. -->
-<form onsubmit={handleSubmit} novalidate>
-	<FormPage
-		title="Your account"
-		{intro}
-		fieldsets={isLoaded
-			? [
-					{ legend: `Your details, ${name}`, content: workState },
-					{ legend: 'Two-factor authentication', content: mfaSection },
-					...(isSoleOwner ? [{ legend: 'Recovery codes', content: savedCodesSection }] : []),
-					{ legend: 'Delete your login', content: deleteLoginSection }
-				]
-			: []}
-		errorSummary={saveSubmission.errors.length > 0 ? errorSummary : undefined}
-		{actions}
-		loading={isLoaded || loadError ? undefined : 'Loading your account'}
-		{loadError}
-	/>
-</form>
+<FormPage
+	title="Your account"
+	{intro}
+	fieldsets={isLoaded
+		? [
+				{ legend: 'Your name', content: nameSection },
+				{ legend: 'Where you work', content: workState },
+				{ legend: 'Two-factor authentication', content: mfaSection },
+				...(isSoleOwner ? [{ legend: 'Recovery codes', content: savedCodesSection }] : []),
+				{ legend: 'Delete your login', content: deleteLoginSection }
+			]
+		: []}
+	errorSummary={saveSubmission.errors.length > 0 ? errorSummary : undefined}
+	{actions}
+	loading={isLoaded || loadError ? undefined : 'Loading your account'}
+	{loadError}
+/>
 
 <style>
 	@layer components {

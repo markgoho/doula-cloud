@@ -32,7 +32,7 @@ func TestSignupHandler_ResumesStaffRowWithNoMembership(t *testing.T) {
 	resp := postSignup(t, srv, "tok", staffauth.SignupRequest{
 		WorkState:    "VT",
 		PracticeName: "Resumed Practice",
-		StaffName:    jamieOwnerName,
+		FirstName:    jamieName, LastName: ownerLastName,
 	})
 	defer resp.Body.Close()
 
@@ -105,7 +105,7 @@ func TestSignupHandler_ResumeQueuesNoSecondVerificationMail(t *testing.T) {
 	testdb.SeedStaff(t, db, resumeUID)
 
 	resp := postSignup(t, srv, "tok", staffauth.SignupRequest{
-		WorkState: "NY", PracticeName: "Quiet Practice", StaffName: jamieOwnerName,
+		WorkState: "NY", PracticeName: "Quiet Practice", FirstName: jamieName, LastName: ownerLastName,
 	})
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusCreated {
@@ -134,7 +134,7 @@ func TestSignupHandler_RefusesWhenAlreadyInAPractice(t *testing.T) {
 	defer srv.Close()
 
 	first := postSignup(t, srv, "tok", staffauth.SignupRequest{
-		WorkState: "NY", PracticeName: "First Practice", StaffName: jamieName,
+		WorkState: "NY", PracticeName: "First Practice", FirstName: jamieName, LastName: ownerLastName,
 	})
 	_ = first.Body.Close()
 	if first.StatusCode != http.StatusCreated {
@@ -143,7 +143,7 @@ func TestSignupHandler_RefusesWhenAlreadyInAPractice(t *testing.T) {
 
 	const secondName = "Second Practice"
 	second := postSignup(t, srv, "tok", staffauth.SignupRequest{
-		WorkState: "NY", PracticeName: secondName, StaffName: jamieName,
+		WorkState: "NY", PracticeName: secondName, FirstName: jamieName, LastName: ownerLastName,
 	})
 	defer second.Body.Close()
 	if second.StatusCode != http.StatusConflict {

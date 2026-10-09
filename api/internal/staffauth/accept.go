@@ -25,7 +25,10 @@ import (
 // already has a staff row, whose name is hers to change elsewhere.
 type AcceptInviteRequest struct {
 	InviteToken string `json:"inviteToken"`
-	Name        string `json:"name"`
+	// FirstName and LastName are the two fields a Staff member's name is
+	// asked in (#1537).
+	FirstName string `json:"firstName"`
+	LastName  string `json:"lastName"`
 	// WorkState is the US state this person works from, as a USPS
 	// two-letter abbreviation (#415). Like Name, it is asked for on the
 	// form and ignored when the caller already has a staff row: a work
@@ -77,7 +80,6 @@ func AcceptInviteHandler(verifier authn.Verifier, accounts authn.AccountManager,
 			return
 		}
 		req.InviteToken = strings.TrimSpace(req.InviteToken)
-		req.Name = strings.TrimSpace(req.Name)
 		req.WorkState = strings.TrimSpace(req.WorkState)
 		if req.InviteToken == "" {
 			apierr.WriteError(w, "inviteToken is required", http.StatusBadRequest)
@@ -199,7 +201,7 @@ func acceptInvite(ctx context.Context, tx *sql.Tx, verified authn.VerifiedToken,
 		return AcceptInviteResponse{}, http.StatusGone, "this invitation has expired -- ask for a new one", nil
 	}
 
-	staffID, newWorkState, status, msg, details := resolveStaff(ctx, tx, verified, address, req.Name, req.WorkState)
+	staffID, newWorkState, status, msg, details := resolveStaff(ctx, tx, verified, address, req.FirstName, req.LastName, req.WorkState)
 	if status != http.StatusOK {
 		return AcceptInviteResponse{}, status, msg, details
 	}
@@ -259,7 +261,13 @@ func acceptInvite(ctx context.Context, tx *sql.Tx, verified authn.VerifiedToken,
 	// (#415). Written after the Membership because
 	// staff_work_state_events_practice_visibility (00043) admits a row
 	// only for someone holding one at the current Practice.
+	// newWorkState is non-empty exactly when resolveStaff created the row,
+	// which is also when she stated her name here.
 	if newWorkState != "" {
+		if err := RecordNameStated(ctx, tx, staffID, staffID); err != nil {
+			// coverage:ignore reason: DB query failure, not exercised by unit tests
+			return AcceptInviteResponse{}, http.StatusInternalServerError, apierr.MsgInternalError, nil
+		}
 		if err := RecordFirstWorkStateAssertion(ctx, tx, staffID, newWorkState, staffID); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			return AcceptInviteResponse{}, http.StatusInternalServerError, apierr.MsgInternalError, nil
@@ -302,7 +310,7 @@ func acceptInvite(ctx context.Context, tx *sql.Tx, verified authn.VerifiedToken,
 // what this function already validated. Must run before
 // app.current_practice_id is set: both policies it depends on
 // (staff_self_visibility, staff_self_insert) are scoped to that window.
-func resolveStaff(ctx context.Context, tx *sql.Tx, verified authn.VerifiedToken, address, name, workState string) (string, string, int, string, map[string]string) {
+func resolveStaff(ctx context.Context, tx *sql.Tx, verified authn.VerifiedToken, address, firstName, lastName, workState string) (string, string, int, string, map[string]string) {
 	var staffID string
 	err := tx.QueryRowContext(ctx, `SELECT id FROM staff WHERE identity_uid = $1`, verified.UID).Scan(&staffID)
 	if err == nil {
@@ -313,12 +321,12 @@ func resolveStaff(ctx context.Context, tx *sql.Tx, verified authn.VerifiedToken,
 		return "", "", http.StatusInternalServerError, apierr.MsgInternalError, nil
 	}
 
-	if name == "" {
-		// The two refusals on this branch are the only ones acceptInvite
-		// can answer that a person caused by filling in the form, so they
-		// are the only ones that name a field (#488).
-		return "", "", http.StatusBadRequest, "name is required to create your account",
-			map[string]string{"name": MsgOwnNameNeeded}
+	// The refusals on this branch are the only ones acceptInvite can
+	// answer that a person caused by filling in the form, so they are the
+	// only ones that name a field (#488).
+	firstName, lastName, nameDetails := normalizeNames(firstName, lastName)
+	if nameDetails != nil {
+		return "", "", http.StatusBadRequest, MsgNamesRequired, nameDetails
 	}
 	// Validated here rather than at the top of the handler because it is
 	// required only on the branch that creates a person: someone already
@@ -334,8 +342,8 @@ func resolveStaff(ctx context.Context, tx *sql.Tx, verified authn.VerifiedToken,
 	// -- it is what a later invitation to this Practice is matched
 	// against, so it may not be self-asserted.
 	if err := tx.QueryRowContext(ctx,
-		`INSERT INTO staff (identity_uid, name, email, work_state) VALUES ($1, $2, $3, $4) RETURNING id`,
-		verified.UID, name, address, normalized,
+		`INSERT INTO staff (identity_uid, first_name, last_name, email, work_state) VALUES ($1, $2, $3, $4, $5) RETURNING id`,
+		verified.UID, firstName, lastName, address, normalized,
 	).Scan(&staffID); err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		return "", "", http.StatusInternalServerError, apierr.MsgInternalError, nil

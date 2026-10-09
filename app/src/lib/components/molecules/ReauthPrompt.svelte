@@ -84,16 +84,6 @@
 		Backing out. Omitted where there is nothing to back out to.
 		*/
 		onCancel?: () => void;
-		/**
-		 * True when this prompt is rendered inside a `<form>` the page
-		 * already owns -- HTML forbids nesting one form inside another, so
-		 * the controls become plain buttons with their own `onClick`,
-		 * exactly what the account screen did before this component
-		 * existed. Left false, the prompt brings its own `<form>`, which is
-		 * what makes Enter submit a password field on a page built around
-		 * this one act.
-		 */
-		insideForm?: boolean;
 	}
 
 	let {
@@ -104,8 +94,7 @@
 		confirmVariant = 'primary',
 		submission,
 		onAuthenticated,
-		onCancel,
-		insideForm = false
+		onCancel
 	}: Properties = $props();
 
 	const passwordId = $derived(`${idPrefix}-password`);
@@ -253,26 +242,14 @@
 	{/if}
 {/snippet}
 
-{#if insideForm}
+<!-- `novalidate` lives on StackedForm: the page refuses the submit, not the browser (#467). -->
+<StackedForm onSubmit={step === 'password' ? handlePasswordSubmit : handleCodeSubmit}>
 	{@render fields()}
 	<Button
-		type="button"
+		type="submit"
 		variant={confirmVariant}
 		label={buttonLabel}
 		loading={submission.isSubmitting}
-		onClick={() => (step === 'password' ? handlePasswordSubmit() : handleCodeSubmit())}
 	/>
 	{@render cancelButton()}
-{:else}
-	<!-- `novalidate` lives on StackedForm: the page refuses the submit, not the browser (#467). -->
-	<StackedForm onSubmit={step === 'password' ? handlePasswordSubmit : handleCodeSubmit}>
-		{@render fields()}
-		<Button
-			type="submit"
-			variant={confirmVariant}
-			label={buttonLabel}
-			loading={submission.isSubmitting}
-		/>
-		{@render cancelButton()}
-	</StackedForm>
-{/if}
+</StackedForm>

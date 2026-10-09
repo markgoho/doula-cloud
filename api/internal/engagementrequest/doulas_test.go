@@ -73,7 +73,7 @@ func TestDoulasHandler_AnOwnerReadsEveryEmployeeDoula(t *testing.T) {
 	}
 
 	got := readDoulas(t, db, practiceID, "owner-1")
-	want := []string{"Renata Alvarez", "Amara Okafor", "Zora Bell"}
+	want := []string{"Renata Alvarez", "Zora Bell", "Amara Okafor"} // last name, then first name (#1537)
 	if !slices.Equal(names(got.Items), want) {
 		t.Fatalf("items = %v, want %v", names(got.Items), want)
 	}
