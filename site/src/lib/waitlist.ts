@@ -1,13 +1,13 @@
 /**
  * The teaser's waitlist form, whose list Buttondown keeps (ADR-0014).
  *
- * The form posts to Buttondown's embed URL, which #366 records once the
- * account exists. Until then this is `undefined`, and the teaser shows no
- * form: a form with no address would take a person's name and lose it.
- * Setting it is the whole change that turns the form on, together with a
- * new version of the Privacy Policy that names Buttondown (ADR-0054).
+ * The form posts to Buttondown's embed URL (#366). The Privacy Policy
+ * names Buttondown. Setting this to `undefined` turns the form off, and
+ * the card then says the list is not open yet: a form with no address
+ * would take a person's name and lose it.
  */
-export const WAITLIST_FORM_ACTION: string | undefined = undefined;
+export const WAITLIST_FORM_ACTION: string | undefined =
+	'https://buttondown.com/api/emails/embed-subscribe/doulacloud';
 
 /**
  * The four campaign parameters the form carries as hidden inputs, each

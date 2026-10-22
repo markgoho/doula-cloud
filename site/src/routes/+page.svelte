@@ -36,6 +36,8 @@ none, and docs/copy/support-page.md follows it.
 		content="Doula. Scheduler. Bookkeeper. Contract writer. The last three are struck through: I'm building the other three."
 	/>
 	<meta name="twitter:card" content="summary_large_image" />
+	<!-- Pirsch's tag, verbatim from #392. ADR-0016 allows it on this page only. If it is blocked, the signup still works. -->
+	<script defer src="https://api.pirsch.io/pa.js" id="pianjs" data-code="MbvnhdqLauluFOdAKiUtNuHisLThCYam"></script>
 </svelte:head>
 
 <main class="page">

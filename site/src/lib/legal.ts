@@ -44,7 +44,12 @@ export const PRIVACY: LegalDocument = {
 			material: false,
 			change: 'Says how long Feedback is kept, what erases it, and that GitHub keeps a note of each piece.'
 		},
-		{ effective: '2026-10-03', material: false, change: 'Writes the name of the product as one word, DoulaCloud.' }
+		{ effective: '2026-10-03', material: false, change: 'Writes the name of the product as one word, DoulaCloud.' },
+		{
+			effective: '2026-10-22',
+			material: false,
+			change: 'Names Buttondown, which keeps the waitlist, and Pirsch, which counts visits to the home page without a cookie.'
+		}
 	]
 };
 

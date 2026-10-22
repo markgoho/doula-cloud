@@ -59,5 +59,6 @@ var Privacy = Document{
 		{Effective: "2026-09-29", Material: false, Change: "First version."},
 		{Effective: "2026-10-02", Material: false, Change: "Says how long Feedback is kept, what erases it, and that GitHub keeps a note of each piece."},
 		{Effective: "2026-10-03", Material: false, Change: "Writes the name of the product as one word, DoulaCloud."},
+		{Effective: "2026-10-22", Material: false, Change: "Names Buttondown, which keeps the waitlist, and Pirsch, which counts visits to the home page without a cookie."},
 	},
 }
