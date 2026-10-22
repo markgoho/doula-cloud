@@ -188,7 +188,8 @@ site footer on every page links here.
 		<p>
 			If you join the waitlist, your email address and first name are kept by Buttondown, the service
 			that runs the list, together with the campaign tags from the address you arrived by, if it had
-			any. After you confirm your address, the list writes to you once, when {PRODUCT_NAME} opens in
+			any. After you confirm your address, the list sends you one email straight away, which asks
+			whether you would like to join the pilot, and then writes to you when {PRODUCT_NAME} opens in
 			January 2027. You can leave the list from any of its emails.
 		</p>
 		<p>

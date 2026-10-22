@@ -21,7 +21,7 @@ describe('the teaser at / (#358)', () => {
 			.element(testPage.getByText("It opens in January 2027. It's not ready yet", { exact: false }))
 			.toBeVisible();
 		await expect
-			.element(testPage.getByText("Put your name down and I'll write to you once, when it opens."))
+			.element(testPage.getByText("Put your name down and I'll write to you when it opens."))
 			.toBeVisible();
 		await expect.element(testPage.getByText('Building DoulaCloud')).toBeVisible();
 	});

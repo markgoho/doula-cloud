@@ -94,7 +94,7 @@ Pirsch, a German company, counts how many people visit the home page, and holds 
 
 Firebase Hosting, a Google service, delivers each page, and receives your IP address to do so.
 
-If you join the waitlist, your email address and first name are kept by Buttondown, the service that runs the list, together with the campaign tags from the address you arrived by, if it had any. After you confirm your address, the list writes to you once, when DoulaCloud opens in January 2027. You can leave the list from any of its emails.
+If you join the waitlist, your email address and first name are kept by Buttondown, the service that runs the list, together with the campaign tags from the address you arrived by, if it had any. After you confirm your address, the list sends you one email straight away, which asks whether you would like to join the pilot, and then writes to you when DoulaCloud opens in January 2027. You can leave the list from any of its emails.
 
 DoulaCloud does not follow you across other sites, so it treats every visit the same whether or not your browser sends a Do Not Track signal.
 
