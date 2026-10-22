@@ -70,8 +70,8 @@ not open yet. #366 records the address; `WAITLIST_FORM_ACTION` carries it.
 			<!-- eslint-disable-next-line svelte/no-at-html-tags -- a fixed string of our own, not visitor input -->
 			{@html utmScriptElement}
 			<p class="fine">
-				One confirmation email now, one when we open. Nothing else, and you can leave the list from any
-				of them. <a href="/privacy">Privacy Policy</a>
+				A confirmation email now, a welcome once you confirm, and one when we open. Nothing else, and
+				you can leave the list from any of them. <a href="/privacy">Privacy Policy</a>
 			</p>
 		{:else}
 			<p class="closed">
