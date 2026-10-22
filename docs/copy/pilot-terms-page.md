@@ -20,11 +20,11 @@ Three mechanisms make "unlisted" true, and all three are needed:
 
 ## The line that links it
 
-The page is reached from the waitlist confirmation email ([#361](https://github.com/markgoho/doula-cloud/issues/361)), beside the link a Practice accepts the pilot from. That email is composed in Buttondown and is not built yet, so this line is a **specification** for it, carried as an acceptance criterion on #361:
+The page is reached from the waitlist Welcome email ([#361](https://github.com/markgoho/doula-cloud/issues/361), amended 2026-10-22: Buttondown sends it the moment she confirms), beside the `pilot_interest` survey button she asks to join the pilot with. That email is composed in Buttondown and is not built yet, so this line is a **specification** for it, carried as an acceptance criterion on #361:
 
 > The pilot's founding grant of free Credits, and what a Credit costs once it runs out, are set out in the [pilot terms](https://doula.cloud/pilot-terms).
 
-It must sit **beside the accept link**, not in the footer. Placement is the whole requirement.
+It must sit **beside the survey button**, not in the footer. Placement is the whole requirement.
 
 ## Constraints the copy is written under
 
