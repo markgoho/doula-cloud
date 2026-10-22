@@ -94,7 +94,7 @@ Where does the founder go, what does the money buy, and does the January site ha
 - #992: the DONA summit's exhibitor terms, read first-hand: Bronze $400, Silver $750, Platinum $1,050, setup closes October 15, 2026, no refunds; the drafted contact email was discarded.
 - #993: five venues worth a founder's time.
 - #362 and #358: the social card carries a generated 1200×630 image, because a bare link reads as spam in a group.
-- ADR-0014: the waitlist lives in Buttondown; one confirmation, one January broadcast.
+- ADR-0014: the waitlist lives in Buttondown; a confirmation, a Welcome email on confirming (amended 2026-10-22 on #361), one January broadcast.
 - ADR-0016: a subscriber's channel rides on a hidden form field filled from `utm_source`; counts are a floor, never a total.
 - #368, decided 2026-08-26: the teaser does not test two social cards, chosen on the merits, because card and audience confound and a sequenced test confounds card with time; the same amendment enlarges the hidden fields to four and records that `utm_content` is a label, never a verdict.
 - #444: the pilot terms are published unlisted at `doula.cloud/pilot-terms` with `noindex`, and are visible when someone agrees to take part.
