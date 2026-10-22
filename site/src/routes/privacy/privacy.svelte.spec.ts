@@ -23,7 +23,7 @@ describe('the Privacy Policy at /privacy (#1556)', () => {
 
 	it('says when this version takes effect, and shows the version history', async () => {
 		await render(Page);
-		await expect.element(testPage.getByText('Last updated October 3, 2026.')).toBeVisible();
+		await expect.element(testPage.getByText('Last updated October 22, 2026.')).toBeVisible();
 		await expect.element(testPage.getByRole('heading', { level: 2, name: 'Version history' })).toBeVisible();
 		await expect
 			.element(testPage.getByRole('listitem').filter({ hasText: 'Not a material change. First version.' }))
@@ -87,6 +87,18 @@ describe('the Privacy Policy at /privacy (#1556)', () => {
 		}
 	});
 
+	it('names Buttondown for the waitlist and Pirsch for counting visits, with its counts in Germany (#358)', async () => {
+		await render(Page);
+		await expect
+			.element(testPage.getByText('are kept by Buttondown, the service that runs the list', { exact: false }))
+			.toBeVisible();
+		await expect
+			.element(testPage.getByText('Pirsch, a German company, counts how many people visit', { exact: false }))
+			.toBeVisible();
+		await expect.element(testPage.getByText('holds its counts in Germany. It works out', { exact: false })).toBeVisible();
+		await expect.element(testPage.getByText('Buttondown', { exact: true })).toBeVisible();
+	});
+
 	it("links Stripe's Privacy Policy", async () => {
 		await render(Page);
 		await expect
@@ -97,7 +109,7 @@ describe('the Privacy Policy at /privacy (#1556)', () => {
 	it('names the one cookie, and says the site sets none', async () => {
 		await render(Page);
 		await expect.element(testPage.getByText('__session')).toBeVisible();
-		await expect.element(testPage.getByText('This site sets no cookies.')).toBeVisible();
+		await expect.element(testPage.getByText('This site sets no cookies.', { exact: true })).toBeVisible();
 	});
 
 	it('refuses to sell data, to advertise, or to track email', async () => {

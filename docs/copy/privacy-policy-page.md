@@ -15,9 +15,9 @@ Built as `site/src/routes/privacy/+page.svelte` on `site/src/lib/components/Read
 
 ## Constraints the copy is written under
 
-- **Each sentence is true of the product as built today** (ADR-0054). What the site does not run yet, a waitlist and a visit counter, the policy says it does not run.
+- **Each sentence is true of the product as built today** (ADR-0054). The waitlist and the visit counter are live from October 22, 2026, and the policy names Buttondown and Pirsch.
 - **A new version is three edits in one commit:** this document and the page, an entry in `site/src/lib/legal.ts`, and the same entry in `api/internal/legal/legal.go`.
-- **A company is named before it receives data.** The teaser ([#358](https://github.com/markgoho/doula-cloud/issues/358)) adds Buttondown's form and Pirsch's script; the commit that adds them adds a version of this policy that names them, and says Pirsch holds its counts in Germany (ADR-0016).
+- **A company is named before it receives data.** The teaser ([#358](https://github.com/markgoho/doula-cloud/issues/358)) added Buttondown's form and Pirsch's script in the same commit as the version of October 22, 2026, which names them and says Pirsch holds its counts in Germany (ADR-0016).
 - **No GDPR statement.** ADR-0027 puts every non-US jurisdiction out of scope.
 - **No claim of a BAA with any vendor** while [#546](https://github.com/markgoho/doula-cloud/issues/546) is open.
 - **The Client section is written to the Client**, in the second person, because she is the reader least likely to know that a company other than her doula holds her record.
@@ -30,7 +30,7 @@ Built as `site/src/routes/privacy/+page.svelte` on `site/src/lib/components/Read
 
 This policy says what Elephantine LLC, which operates DoulaCloud, holds about each person who uses DoulaCloud or visits this site: where it comes from, what it is used for, who else receives it, how long it is kept, and how you see it, correct it or have it erased. “We” and “us” mean Elephantine LLC.
 
-This version takes effect on October 3, 2026. The history of every version is at the end of this page.
+This version takes effect on October 22, 2026. The history of every version is at the end of this page.
 
 ## Who decides about your data
 
@@ -88,11 +88,13 @@ You can tell us what you think of DoulaCloud through Feedback in the portal. It 
 
 ## If you visit this site
 
-This site sets no cookies and runs no scripts. It does not count visits today. If it starts to, it will count them with a service that sets no cookie and cannot identify you, and this policy will name that service first.
+This site sets no cookies. Its home page runs two scripts: one of ours, which copies any campaign tags in the address you arrived by, such as `utm_source`, into the waitlist form, and one from Pirsch, which counts visits to that page. No other page runs a script.
+
+Pirsch, a German company, counts how many people visit the home page, and holds its counts in Germany. It works out that two visits came from the same person by mixing your IP address, your browser's own description of itself, the date and a secret value into a fingerprint that cannot be unscrambled. Your IP address goes in and is thrown away, never stored. The secret changes daily and differs from site to site, so nothing can recognize you tomorrow or on another site. Your rough location comes from a list Pirsch holds on its own machines, not from keeping your address. Pirsch never sees your name or your email address, and it cannot connect a visit to a signup. We count visits because a waitlist number means little without knowing how many people saw the page. A tracker blocker stops the count, and nothing on the page breaks.
 
 Firebase Hosting, a Google service, delivers each page, and receives your IP address to do so.
 
-This site has no waitlist form today. If you join the waitlist once it has one, your email address and first name are kept by Buttondown, the service that runs the list. After you confirm your address, the list writes to you once, when DoulaCloud opens in January 2027.
+If you join the waitlist, your email address and first name are kept by Buttondown, the service that runs the list, together with the campaign tags from the address you arrived by, if it had any. After you confirm your address, the list sends you one email straight away, which asks whether you would like to join the pilot, and then writes to you when DoulaCloud opens in January 2027. You can leave the list from any of its emails.
 
 DoulaCloud does not follow you across other sites, so it treats every visit the same whether or not your browser sends a Do Not Track signal.
 
@@ -103,6 +105,8 @@ These companies receive data to run DoulaCloud, and each receives only what its 
 - **Google Cloud** runs DoulaCloud and stores all of its data, in the United States: the database, files such as contract documents and message attachments, and the jobs that send its email.
 - **Google Identity Platform** checks the sign-in of each person who owns or works at a practice: the email address, the password and the second sign-in factor.
 - **Firebase Hosting**, a Google service, delivers the DoulaCloud app and this site, and receives the IP address of each request.
+- **Buttondown** keeps the waitlist: the email address and first name of each person who joins, and the campaign tags from the address they arrived by. It sends the confirmation email and the one email when DoulaCloud opens.
+- **Pirsch**, a German company, counts visits to the home page of this site, and holds its counts in Germany. It sets no cookie and keeps no IP address.
 - **Mailgun** sends DoulaCloud's email. It receives each address and message, and deletes its logs of them within 30 days.
 - **Stripe** takes payments: a practice's payment for Credits, and a client's payment of an invoice. It receives what each payment needs, including a client's name and email address with an invoice, and it holds each practice's own Stripe account. Stripe processes data as [Stripe's Privacy Policy](https://stripe.com/privacy) explains.
 - **Your browser's push service** — Google, Apple or Mozilla, depending on your browser — carries the signal that tells your device a new message is waiting. The signal says only that something is waiting, never what it is.
@@ -174,9 +178,10 @@ Email [hello@doula.cloud](mailto:hello@doula.cloud). That address reaches a pers
 
 ## Version history
 
-1. October 3, 2026. Not a material change. Writes the name of the product as one word, DoulaCloud.
-2. October 2, 2026. Not a material change. Says how long Feedback is kept, what erases it, and that GitHub keeps a note of each piece.
-3. September 29, 2026. Not a material change. First version.
+1. October 22, 2026. Not a material change. Names Buttondown, which keeps the waitlist, and Pirsch, which counts visits to the home page without a cookie.
+2. October 3, 2026. Not a material change. Writes the name of the product as one word, DoulaCloud.
+3. October 2, 2026. Not a material change. Says how long Feedback is kept, what erases it, and that GitHub keeps a note of each piece.
+4. September 29, 2026. Not a material change. First version.
 
 ---
 
@@ -208,13 +213,15 @@ One row per claim that names a company, a cookie, a store on the device, or how 
 | If you are a client of a practice | What erasure removes, that Stripe's Customer is deleted, that her history of changes becomes unreadable, and that free text stays. | ADR-0027 (redact in place; crypto-shredding; free text is not scrubbed; the Stripe Customer is deleted). The Medicaid hold in ADR-0031's amendment is not built (#335), so the policy does not describe it; the version that builds it adds it. |
 | If you are a client of a practice | A Client can send Feedback from the portal; it goes to DoulaCloud, never to her Practice. | `clientauth.FeedbackHandler`, mounted as `POST /api/portal/feedback` in `api/internal/clientauth/mount.go` ("any signed-in Client sends a piece of Feedback from any portal screen"); `PortalFeedback` in `app/src/routes/portal/(authenticated)/+layout.svelte`. `GLOSSARY.md` **Feedback**: "no Staff member reads it and a Practice's export leaves it out". |
 | If you are a client of a practice | Her Feedback is erased when her record is erased, and when her Practice is deleted; a piece sent from a portal page with no single Engagement goes when the last Practice with a record of her erases it. | `client.Erase` calls `eraseFeedback` (`erase_client_feedback`, 00121) for the record and for each record merged into it (`api/internal/client/erase.go`); the Portal Account branch calls `erase_portal_account_feedback` only when `portal_account_reaches_a_live_client` is false. Practice Deletion reaches both through the same cascade: `api/internal/practicedeletion/outbox_test.go`, `TestWorker_FinalizeDestroysClientFeedbackAndLeavesStaffFeedback`. Decided on #1525 and #1501 Q3. |
-| If you visit this site | The site sets no cookies, runs no scripts, and counts no visits today. | `site/src/routes/+layout.ts` (`csr = false`); no analytics tag anywhere under `site/src`. ADR-0016 names Pirsch for when it does, cookieless. |
+| If you visit this site | The site sets no cookies. Only the home page runs scripts: our utm-filling script and Pirsch's. | `site/src/routes/+layout.ts` (`csr = false`); `site/src/routes/+page.svelte` (the Pirsch tag in `<svelte:head>`); `site/src/lib/components/WaitlistCard.svelte` (the inline script); ADR-0016; ADR-0051. |
+| If you visit this site | Pirsch counts home-page visits from a daily-salted hash of IP address, user agent and date; the IP is not stored; no cookie; counts held in Germany. | ADR-0016; Pirsch's privacy documentation as recorded on [#363](https://github.com/markgoho/doula-cloud/issues/363). |
 | If you visit this site | Firebase Hosting delivers each page and receives the IP address. | `firebase.json` hosting targets. |
-| If you visit this site | No waitlist form today; Buttondown keeps the list once there is one, and the list writes once, in January. | ADR-0014 (Buttondown; one confirmation, one January broadcast). No form exists under `site/src`. |
+| If you visit this site | Buttondown keeps the waitlist, with the four campaign tags; the list writes once, in January. | ADR-0014 (Buttondown; one confirmation, one January broadcast); ADR-0016 (the four hidden fields); `site/src/lib/waitlist.ts` (`WAITLIST_FORM_ACTION`). |
 | If you visit this site | Do Not Track. | CalOPPA §22575(b)(5) asks a policy to say how the site responds to a Do Not Track signal. |
 | Who else receives data | Google Cloud runs the service and stores all data in the United States. | `terraform/cloud_sql.tf` (`region = "us-central1"`); `docs/environment.md` (the attachments bucket in `us-central1`; the Cloud Tasks queue). |
 | Who else receives data | Google Identity Platform checks each Staff sign-in. | ADR-0026. |
 | Who else receives data | Firebase Hosting delivers the app and the site. | `firebase.json`. |
+| Who else receives data | Buttondown keeps the waitlist; Pirsch counts home-page visits. | ADR-0014; ADR-0016. |
 | Who else receives data | Mailgun sends every email and deletes its logs within 30 days. | ADR-0012; ADR-0030 (logs held 1 to 30 days by plan); ADR-0027 ("Mailgun self-purges within 3–30 days"). |
 | Who else receives data | Stripe takes both kinds of payment and holds each Practice's own account. | ADR-0007; ADR-0032; `docs/environment.md` "Stripe: two surfaces, one key". |
 | Who else receives data | The browser's push service carries a signal with no content. | ADR-0002 (a content-free Web Push wakes the service worker, which fetches the content from the BFF). |

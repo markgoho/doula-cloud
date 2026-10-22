@@ -36,6 +36,8 @@ none, and docs/copy/support-page.md follows it.
 		content="Doula. Scheduler. Bookkeeper. Contract writer. The last three are struck through: I'm building the other three."
 	/>
 	<meta name="twitter:card" content="summary_large_image" />
+	<!-- Pirsch's tag, verbatim from #392. ADR-0016 allows it on this page only. If it is blocked, the signup still works. -->
+	<script defer src="https://api.pirsch.io/pa.js" id="pianjs" data-code="MbvnhdqLauluFOdAKiUtNuHisLThCYam"></script>
 </svelte:head>
 
 <main class="page">
@@ -53,7 +55,7 @@ none, and docs/copy/support-page.md follows it.
 					{PRODUCT_NAME} is one place for all of it, whether it's just you or a dozen doulas. It opens in
 					January 2027. It's not ready yet, and I'd rather tell you that than show you a demo.
 				</p>
-				<p>Put your name down and I'll write to you once, when it opens.</p>
+				<p>Put your name down and I'll write to you when it opens.</p>
 				<p class="signature">Mark<br /><span>Building {PRODUCT_NAME}</span></p>
 			</stack-l>
 		</article>

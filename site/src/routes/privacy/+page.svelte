@@ -169,15 +169,28 @@ site footer on every page links here.
 
 	<PageSection heading="If you visit this site">
 		<p>
-			This site sets no cookies and runs no scripts. It does not count visits today. If it starts to, it
-			will count them with a service that sets no cookie and cannot identify you, and this policy will
-			name that service first.
+			This site sets no cookies. Its home page runs two scripts: one of ours, which copies any campaign
+			tags in the address you arrived by, such as <code>utm_source</code>, into the waitlist form, and
+			one from Pirsch, which counts visits to that page. No other page runs a script.
+		</p>
+		<p>
+			Pirsch, a German company, counts how many people visit the home page, and holds its counts in
+			Germany. It works out that two visits came from the same person by mixing your IP address, your
+			browser's own description of itself, the date and a secret value into a fingerprint that cannot
+			be unscrambled. Your IP address goes in and is thrown away, never stored. The secret changes daily
+			and differs from site to site, so nothing can recognize you tomorrow or on another site. Your
+			rough location comes from a list Pirsch holds on its own machines, not from keeping your address.
+			Pirsch never sees your name or your email address, and it cannot connect a visit to a signup. We
+			count visits because a waitlist number means little without knowing how many people saw the page.
+			A tracker blocker stops the count, and nothing on the page breaks.
 		</p>
 		<p>Firebase Hosting, a Google service, delivers each page, and receives your IP address to do so.</p>
 		<p>
-			This site has no waitlist form today. If you join the waitlist once it has one, your email address
-			and first name are kept by Buttondown, the service that runs the list. After you confirm your
-			address, the list writes to you once, when {PRODUCT_NAME} opens in January 2027.
+			If you join the waitlist, your email address and first name are kept by Buttondown, the service
+			that runs the list, together with the campaign tags from the address you arrived by, if it had
+			any. After you confirm your address, the list sends you one email straight away, which asks
+			whether you would like to join the pilot, and then writes to you when {PRODUCT_NAME} opens in
+			January 2027. You can leave the list from any of its emails.
 		</p>
 		<p>
 			{PRODUCT_NAME} does not follow you across other sites, so it treats every visit the same whether or
@@ -200,6 +213,15 @@ site footer on every page links here.
 			<li>
 				<strong>Firebase Hosting</strong>, a Google service, delivers the {PRODUCT_NAME} app and this
 				site, and receives the IP address of each request.
+			</li>
+			<li>
+				<strong>Buttondown</strong> keeps the waitlist: the email address and first name of each person
+				who joins, and the campaign tags from the address they arrived by. It sends the confirmation
+				email and the one email when {PRODUCT_NAME} opens.
+			</li>
+			<li>
+				<strong>Pirsch</strong>, a German company, counts visits to the home page of this site, and
+				holds its counts in Germany. It sets no cookie and keeps no IP address.
 			</li>
 			<li>
 				<strong>Mailgun</strong> sends {PRODUCT_NAME}'s email. It receives each address and message, and
