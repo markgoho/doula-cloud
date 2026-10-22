@@ -44,7 +44,7 @@ describe('WaitlistCard, with Buttondown’s address (#358)', () => {
 	it('carries the fine print and a link to the Privacy Policy beside it', async () => {
 		await render(WaitlistCard, { action });
 		await expect
-			.element(testPage.getByText('One confirmation email now, one when we open.', { exact: false }))
+			.element(testPage.getByText('A confirmation email now, a welcome once you confirm, and one when we open.', { exact: false }))
 			.toBeVisible();
 		await expect.element(testPage.getByRole('link', { name: 'Privacy Policy' })).toHaveAttribute('href', '/privacy');
 	});
