@@ -30,7 +30,14 @@
 	import { getFirebaseAuth } from '#lib/firebase.js';
 	import { apiBaseURL, apiFetch, apiFetchWithSession } from '#lib/api.js';
 	import { authRefusal, refusalErrors, refusalOrConfirmable } from '#lib/formErrors.js';
-	import { PASSWORD_HINT, PASSWORD_TOO_SHORT, isPasswordTooShort } from '#lib/passwordRule.js';
+	import {
+		PASSWORD_HINT,
+		PASSWORD_TOO_COMMON,
+		PASSWORD_TOO_SHORT,
+		isPasswordTooCommon,
+		isPasswordTooShort,
+		preloadCommonPasswords
+	} from '#lib/passwordRule.js';
 	import { FormSubmission, orServiceProblem, type FormError } from '#lib/formSubmission.svelte.js';
 	import { decideLanding, type Membership, type SessionInfo } from '#lib/landing.js';
 	import TextInput from '#lib/components/atoms/TextInput.svelte';
@@ -82,6 +89,9 @@
 	 * only ever describe the form on screen.
 	 */
 	const submission = new FormSubmission();
+	// #1539: the list loads while she fills in the form, not on submit. The
+	// screen opens on the branch that sets a password.
+	preloadCommonPasswords();
 	let picker = $state<Membership[] | undefined>();
 
 	/*
@@ -130,11 +140,16 @@
 				refusals.push({ message: 'Enter your email address', targetId: emailId });
 			if (password === '') {
 				refusals.push({ message: 'Enter your password', targetId: passwordId });
-			} else if (mode === 'signup' && isPasswordTooShort(password)) {
+			} else if (mode === 'signup') {
 				// Only on the signup branch: an existing account's password is
-				// whatever it already is, and refusing a short one here would
-				// lock out anyone who set one before the rule existed.
-				refusals.push({ message: PASSWORD_TOO_SHORT, targetId: passwordId });
+				// whatever it already is, and refusing a short or a common one
+				// here would lock out anyone who set one before the rule existed.
+				if (isPasswordTooShort(password)) {
+					refusals.push({ message: PASSWORD_TOO_SHORT, targetId: passwordId });
+				} else if (await isPasswordTooCommon(password)) {
+					// #1539: Identity Platform has no such list, so this is the check.
+					refusals.push({ message: PASSWORD_TOO_COMMON, targetId: passwordId });
+				}
 			}
 			if (refusals.length > 0) return refusals;
 

@@ -133,6 +133,14 @@ func SpendResetHandler(accounts authn.AccountManager, db *sql.DB) http.Handler {
 				map[string]string{"newPassword": MsgPasswordTooShort})
 			return
 		}
+		// #1539: before the token is spent, so a refused password leaves the
+		// link usable for a second try.
+		if isPasswordTooCommon(req.NewPassword) {
+			apierr.Write(w, http.StatusBadRequest, apierr.CodeInvalidArgument,
+				"newPassword is a commonly used password",
+				map[string]string{"newPassword": MsgPasswordTooCommon})
+			return
+		}
 
 		tx, err := db.BeginTx(r.Context(), nil)
 		if err != nil {

@@ -82,4 +82,8 @@ const (
 	// formatted sentence would be the one Details value the gate cannot
 	// see. TestPasswordTooShortMatchesTheLimit keeps the number honest.
 	MsgPasswordTooShort = "Password must be 15 characters or more"
+	// MsgPasswordTooCommon is the newPassword field on the reset screen,
+	// for a password on the common-password list (#1539). The same words
+	// as PASSWORD_TOO_COMMON in app/src/lib/passwordRule.ts.
+	MsgPasswordTooCommon = "Password is too common. Enter a different password"
 )

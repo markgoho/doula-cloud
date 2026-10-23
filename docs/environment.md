@@ -90,6 +90,22 @@ curl "https://identitytoolkit.googleapis.com/admin/v2/projects/doula-cloud/confi
 
 **The Auth emulator cannot enforce it.** The e2e stack's and the local stack's emulator (firebase-tools 15) hardcodes a six-character minimum in `operations.js` and its `PATCH` on the project config accepts no `passwordPolicyConfig` (the v2 admin route answers 404; probed for #1538). So the rule is covered in the browser and on the BFF instead: `passwordRule.spec.ts` for the number, the three screens' specs (`signup`, `accept-invite`, `reset-password`) for the hint and the refusal before a request leaves, `formErrors.spec.ts` for the provider's own refusal in the same words, and `TestSpendResetHandler_PasswordTooShort` for the BFF. The e2e fixtures use passwords that pass the rule, so a run against a stricter emulator would not break.
 
+## The common-password list
+
+A Staff password on a list of commonly used passwords is refused on the three screens that set one ([#1539](https://github.com/markgoho/doula-cloud/issues/1539), ADR-0026's amendment for #1493). Identity Platform's password policy has no such list, so the check is the product's own.
+
+**Where it comes from.** [SecLists](https://github.com/danielmiessler/SecLists) (MIT), pinned to one commit, from three files under `Passwords/Common-Credentials/`: `100k-most-used-passwords-NCSC.txt`, `xato-net-10-million-passwords-1000000.txt` and `Pwdb_top-1000000.txt`. Only an entry of 15 characters or more is kept, because a shorter one is already refused for its length; entries are lowercased, kept to printable ASCII, and a cracking tool's `$HEX[...]` encoding is dropped. The result is about 16,000 entries and 280 KB of text, about 130 KB compressed.
+
+**Where it lives.** Two copies of the same bytes: `app/src/lib/commonPasswords.txt`, which the browser loads as a chunk of its own on `/signup`, `/accept-invite` and `/reset-password` only (`passwordRule.usage.spec.ts` names those three), and `api/internal/staffauth/commonpasswords.txt`, which the BFF embeds for the reset spend. `commonPasswords.spec.ts` fails the build if the two differ. Neither file is edited by hand.
+
+**How it is updated.** Move `SECLISTS_COMMIT` in `app/scripts/sync-common-passwords.ts` to a newer commit (or change `SOURCES`), then run `bun run --cwd app sync-common-passwords`. The script writes both copies. Commit both.
+
+**What is compared.** The whole password, lowercased, against whole entries: never a part of it. The comparison runs in the browser, so neither the password nor a hash of it goes anywhere to be checked. A range query on a hash prefix (k-anonymity, as Have I Been Pwned's Pwned Passwords offers) was the other choice and was not taken: it sends a part of a hash of the secret to a third party at signup, with the address of a person signing up for a pregnancy-related service, and makes signup depend on that party being up. The cost of the choice is coverage: this is a list of commonly used passwords, not of every breached one.
+
+**Where it is enforced.** On `/signup` and `/accept-invite` the browser gives the password to Identity Platform directly, so the browser's check is the only one. On `/reset-password` the request already carries the password to the BFF, which hands it to the Admin SDK (ADR-0026, #613), so `staffauth/reset.go` refuses a common password too, before it spends the link.
+
+**If the list cannot be loaded** (a dropped connection, or a deploy that replaced the chunk under an open tab), the screen refuses the submit and says "There is a problem with the service. Try again in a few minutes." An unchecked password is never let through: block over warn. The next submit loads the list again.
+
 ## Mailgun
 
 Provisioned for #218 (map #213). One account, one API key, no per-domain Sending Key: Mailgun's API key is account-wide, so the same value works against both the sandbox domain and the verified one — only `MAILGUN_DOMAIN` changes between Local and Deployed.

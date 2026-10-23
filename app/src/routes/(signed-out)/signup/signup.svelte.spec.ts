@@ -114,7 +114,49 @@ describe('the password rule (#1538)', () => {
 	it('states the rule before she types', async () => {
 		await setup();
 
-		await expect.element(testPage.getByText('Must be 15 characters or more')).toBeVisible();
+		await expect
+			.element(testPage.getByText('Must be 15 characters or more, and not a commonly used password'))
+			.toBeVisible();
+	});
+
+	it('refuses a commonly used password before the account is created, and sends it nowhere (#1539)', async () => {
+		await setup();
+		await fillForm();
+		await testPage.getByLabelText('Password').fill('PasswordPassword');
+		await submit();
+
+		await expect
+			.element(testPage.getByRole('link', { name: 'Password is too common. Enter a different password' }))
+			.toBeVisible();
+		expect(createUserWithEmailAndPassword).not.toHaveBeenCalled();
+		// The list is in the browser: checking a password against it is no request at all.
+		expect(globalFetch).not.toHaveBeenCalled();
+	});
+
+	it('gives the password to Identity Platform alone: the BFF request carries none of it (#1539)', async () => {
+		const password = 'correct horse battery staple';
+		await setup();
+		await fillForm();
+		await testPage.getByLabelText('Password').fill(password);
+		createUserWithEmailAndPassword.mockResolvedValueOnce(credential);
+		globalFetch.mockResolvedValueOnce(jsonResponse({ practiceId: 'practice-1' }, 201));
+		await submit();
+
+		await vi.waitFor(() => expect(goto).toHaveBeenCalledWith('/practices/practice-1'));
+		expect(createUserWithEmailAndPassword).toHaveBeenCalledWith({}, 'priya@example.com', password);
+		// One request leaves for the BFF, and nothing in it is the password or
+		// any part of it the check could have derived.
+		expect(globalFetch).toHaveBeenCalledTimes(1);
+		const [url, init] = globalFetch.mock.calls[0] as [string, RequestInit];
+		expect(url).toBe('/api/staff/signup');
+		expect(JSON.parse(String(init.body))).toEqual({
+			practiceName: 'Riverside Doulas',
+			firstName: 'Priya',
+			lastName: 'Sharma',
+			workState: 'NJ',
+			timezone: 'America/Chicago'
+		});
+		expect(JSON.stringify(init)).not.toContain(password);
 	});
 
 	it('refuses a password of 14 characters before anything is sent', async () => {

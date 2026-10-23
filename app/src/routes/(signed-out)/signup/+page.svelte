@@ -28,7 +28,14 @@
 	import { workStateCode } from '#lib/workStates.js';
 	import { TIMEZONE_HINT, TIMEZONE_NEEDED, detectTimezone } from '#lib/timezones.js';
 	import { ROLE_LABELS } from '#lib/roles.js';
-	import { PASSWORD_HINT, PASSWORD_TOO_SHORT, isPasswordTooShort } from '#lib/passwordRule.js';
+	import {
+		PASSWORD_HINT,
+		PASSWORD_TOO_COMMON,
+		PASSWORD_TOO_SHORT,
+		isPasswordTooCommon,
+		isPasswordTooShort,
+		preloadCommonPasswords
+	} from '#lib/passwordRule.js';
 
 	const practiceNameId = 'signup-practice-name';
 	const firstNameId = 'signup-first-name';
@@ -73,6 +80,8 @@
 	let email = $state('');
 	let password = $state('');
 	const submission = new FormSubmission();
+	// #1539: the list loads while she fills in the form, not on submit.
+	preloadCommonPasswords();
 
 	// #816: this multi-step form has no single Continue button to hang
 	// #610's cross-population warning on, so it hangs on the form's own
@@ -206,6 +215,11 @@
 
 		await submission.run(async () => {
 			const refusals = findRefusals();
+			// #1539: checked here, in the browser, before Identity Platform
+			// sees the password, because Identity Platform has no such list.
+			// The password is the last field, so its entry goes last.
+			if (password !== '' && !isPasswordTooShort(password) && (await isPasswordTooCommon(password)))
+				refusals.push({ message: PASSWORD_TOO_COMMON, targetId: passwordId });
 			if (refusals.length > 0) return refusals;
 
 			const credential = await credentialFor(getFirebaseAuth());

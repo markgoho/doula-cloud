@@ -3,7 +3,14 @@
 	import { resolve } from '$app/paths';
 	import { apiBaseURL } from '#lib/api.js';
 	import { refusalErrors } from '#lib/formErrors.js';
-	import { PASSWORD_HINT, PASSWORD_TOO_SHORT, isPasswordTooShort } from '#lib/passwordRule.js';
+	import {
+		PASSWORD_HINT,
+		PASSWORD_TOO_COMMON,
+		PASSWORD_TOO_SHORT,
+		isPasswordTooCommon,
+		isPasswordTooShort,
+		preloadCommonPasswords
+	} from '#lib/passwordRule.js';
 	import { FormSubmission, orServiceProblem } from '#lib/formSubmission.svelte.js';
 	import TextInput from '#lib/components/atoms/TextInput.svelte';
 	import Button from '#lib/components/atoms/Button.svelte';
@@ -19,6 +26,8 @@
 
 	let newPassword = $state('');
 	const submission = new FormSubmission();
+	// #1539: the list loads while she types, not on submit.
+	preloadCommonPasswords();
 	let hasSucceeded = $state(false);
 
 	async function handleSubmit(event: SubmitEvent) {
@@ -29,6 +38,11 @@
 			}
 			if (isPasswordTooShort(newPassword)) {
 				return [{ message: PASSWORD_TOO_SHORT, targetId: passwordId }];
+			}
+			// #1539: the BFF refuses a common password on this path too
+			// (staffauth/reset.go); checking here first saves the round trip.
+			if (await isPasswordTooCommon(newPassword)) {
+				return [{ message: PASSWORD_TOO_COMMON, targetId: passwordId }];
 			}
 
 			const response = await fetch(`${apiBaseURL()}/api/staff/password-reset`, {
