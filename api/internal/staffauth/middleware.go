@@ -127,22 +127,6 @@ func RequireConfirmed(w http.ResponseWriter, r *http.Request) (ok bool) {
 // low-privilege app_runtime role -- the role the RLS policies in
 // 00002_practice_staff_tenancy.sql apply to.
 func Middleware(db *sql.DB) func(http.Handler) http.Handler {
-	return middleware(db, false)
-}
-
-// middleware is Middleware, told whether the route it guards is one of
-// SecondFactorActs. GatedRouter is the only caller that passes true.
-//
-// isAct exists for one clause only, and only until #1531: the boundary
-// below still refuses an Owner with no second factor, and on an act's
-// route that refusal would stand in front of the act's own
-// (requireSecondFactor), so an Owner would meet "this Practice needs a
-// second factor" rather than "this act does". On an act's route the
-// boundary leaves the Owner case to the act's seam. The seam refuses
-// the same person, so nothing gets through that did not before. When
-// #1531 removes the Owner clause, isAct has nothing left to decide and
-// goes with it.
-func middleware(db *sql.DB, isAct bool) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			tx, uid, secondFactor, ok := authn.Begin(w, r, db, authn.TierStaff)
@@ -204,18 +188,21 @@ func middleware(db *sql.DB, isAct bool) func(http.Handler) http.Handler {
 			}
 			reader := NewReader(staffID, roles, employmentType)
 
-			// #606: refuse a Practice-scoped request when the caller's
-			// Membership there holds Owner, or the Practice's own switch
-			// is on, and her session shows no second factor. Signing in
-			// stays open to everyone (authn.Begin above never gates on
-			// this) -- only entering a Practice that demands it does.
-			// This is not an ended session (401 would send the browser to
-			// the login screen, per credentialed-fetch's own contract),
-			// so it is a distinct, machine-readable 403 the app branches
-			// on to route into enrollment instead. On one of
-			// SecondFactorActs' routes the Owner half is left to the
-			// act's own seam (#1532) -- see middleware's isAct.
-			if !secondFactor && ((reader.Has(roleOwner) && !isAct) || requireMFA) {
+			// #606, as amended by #1531 (ADR-0026's amendment for
+			// #1492): refuse a Practice-scoped request when the
+			// Practice's own switch is on and the caller's session shows
+			// no second factor. That is the only reason. A Membership
+			// that is Owner is not one: a new Owner enters her Practice
+			// straight after signup, and the five acts that do need her
+			// second factor refuse her at their own seam
+			// (requireSecondFactor, SecondFactorActs). Signing in stays
+			// open to everyone (authn.Begin above never gates on this)
+			// -- only entering a Practice that demands it does. This is
+			// not an ended session (401 would send the browser to the
+			// login screen, per credentialed-fetch's own contract), so
+			// it is a distinct, machine-readable 403 the app branches on
+			// to route into enrollment instead.
+			if !secondFactor && requireMFA {
 				writeMFARequired(w)
 				return
 			}
@@ -231,10 +218,12 @@ func middleware(db *sql.DB, isAct bool) func(http.Handler) http.Handler {
 			// on its response to route an Owner to the restore screen and
 			// a non-Owner to an accurate locked message, rather than
 			// misreading this 403 as a stale Membership. Checked after
-			// the MFA gate above, not before: an Owner already needs a
-			// second factor to reach anything, including this, so there
-			// is no ordering where skipping this check first would let
-			// her in sooner.
+			// the MFA gate above, not before: at a Practice whose switch
+			// is on, the session read and the restore routes need a
+			// second factor like everything else there, so this check
+			// never admits a person the switch refuses. Restoring is not
+			// one of SecondFactorActs, so at a Practice whose switch is
+			// off an Owner with no second factor can restore it (#1531).
 			if pendingDeletion {
 				sessionRoute := isPracticeSessionRoute(r, practiceID)
 				deletionRoute := reader.Has(roleOwner) && isPracticeDeletionRoute(r, practiceID)

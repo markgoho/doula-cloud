@@ -77,6 +77,14 @@ func FinishEnrollmentHandler(verifier authn.Verifier, db *sql.DB, enq tasknudge.
 				// coverage:ignore reason: DB query failure, not exercised by unit tests
 				return sessionmint.Result{}, err
 			}
+			// #1531: a sole Owner's saved recovery codes are minted when
+			// she enrolls, not at signup -- before now there was nothing
+			// for a code to recover. The row above is what
+			// reconcileSavedCodes reads as "enrolled".
+			if err := reconcileSavedCodes(ctx, tx, staffID); err != nil {
+				// coverage:ignore reason: DB query failure, not exercised by unit tests
+				return sessionmint.Result{}, err
+			}
 			return sessionmint.Result{IdentityUID: verified.UID, Body: struct {
 				OK bool `json:"ok"`
 			}{true}}, nil
