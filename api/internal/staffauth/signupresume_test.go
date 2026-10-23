@@ -95,6 +95,34 @@ func TestSignupHandler_ResumesStaffRowWithNoMembership(t *testing.T) {
 	}
 }
 
+// TestSignupHandler_QueuesTheVerificationMail is #1531's "signup still
+// queues the verification message": nothing on the way into her
+// Practice waits for it, but a first signup still sends it.
+func TestSignupHandler_QueuesTheVerificationMail(t *testing.T) {
+	db := testdb.New(t)
+	srv := newSignupServer(authntest.Verifier{UID: resumeUID, Email: jamieEmail}, db)
+	defer srv.Close()
+
+	resp := postSignup(t, srv, "tok", staffauth.SignupRequest{
+		WorkState: "NY", PracticeName: "Quiet Practice", FirstName: jamieName, LastName: ownerLastName,
+	})
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusCreated {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusCreated)
+	}
+
+	var mailCount int
+	if err := db.Admin.QueryRowContext(t.Context(),
+		`SELECT count(*) FROM staff_token_mail_outbox WHERE identity_uid = $1`,
+		resumeUID,
+	).Scan(&mailCount); err != nil {
+		t.Fatalf("count outbox: %v", err)
+	}
+	if mailCount != 1 {
+		t.Fatalf("outbox messages = %d, want 1 on a first signup", mailCount)
+	}
+}
+
 // TestSignupHandler_ResumeQueuesNoSecondVerificationMail proves the
 // resumed half sends nothing: the staff row already existed, so its
 // address has already been sent a verification link.

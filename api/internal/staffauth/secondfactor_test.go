@@ -111,9 +111,10 @@ func TestSecondFactorAct_SwitchOnBoundaryAnswersFirst(t *testing.T) {
 	}
 }
 
-// Off the five acts' routes the boundary is unchanged until #1531: an
-// Owner with no second factor is still refused the Practice.
-func TestSecondFactorAct_OtherOwnerRoutesStillRefusedAtTheBoundary(t *testing.T) {
+// Off the five acts' routes an Owner with no second factor is let in
+// (#1531): her role is no reason for the boundary to refuse her, so an
+// Owner-only route that is not one of the acts serves her.
+func TestSecondFactorAct_OtherOwnerRoutesAdmitAnOwnerWithNoFactor(t *testing.T) {
 	db := testdb.New(t)
 	const ownerUID = "owner-no-factor-impact"
 	_, practiceID := seedOwnerMembership(t, db, ownerUID)
@@ -131,8 +132,8 @@ func TestSecondFactorAct_OtherOwnerRoutesStillRefusedAtTheBoundary(t *testing.T)
 		t.Fatalf("request: %v", err)
 	}
 	defer resp.Body.Close()
-	if got := apierrtest.Decode(t, resp).Code; got != apierr.CodeMFARequired {
-		t.Fatalf("code = %q, want %q", got, apierr.CodeMFARequired)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200", resp.StatusCode)
 	}
 }
 

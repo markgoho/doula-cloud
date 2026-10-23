@@ -127,7 +127,7 @@ func (g *GatedRouter) gated(act string, roles []string, h http.Handler) http.Han
 	if act == "" {
 		return Middleware(g.db)(requireAnyRole(roles, h))
 	}
-	return middleware(g.db, true)(requireAnyRole(roles, requireSecondFactor(act, h)))
+	return Middleware(g.db)(requireAnyRole(roles, requireSecondFactor(act, h)))
 }
 
 // OpenGet mounts a GET that sits outside Middleware entirely, for reason.

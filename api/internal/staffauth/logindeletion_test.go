@@ -322,6 +322,7 @@ func TestDeleteLoginHandler_AllowsOwnerWithACoOwner(t *testing.T) {
 	const uid = "owner-with-a-co-owner"
 	practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, employeeType)
 	coOwnerID := seedCoOwner(t, db, practiceID, "the-remaining-owner")
+	seedEnrolled(t, db, coOwnerID)
 
 	accounts := authntest.NewFakeAccountManager()
 	accounts.Seed(uid, "owner@example.com", true)
@@ -337,7 +338,8 @@ func TestDeleteLoginHandler_AllowsOwnerWithACoOwner(t *testing.T) {
 		t.Fatal("an Owner with a co-Owner was refused")
 	}
 	// #615's rule, inherited from RemoveMembershipHandler: the co-Owner is
-	// newly sole, so she is newly entitled to saved recovery codes.
+	// newly sole, and has a second factor (#1531), so she is newly
+	// entitled to saved recovery codes.
 	if n := countRows(t, db,
 		`SELECT count(*) FROM staff_mfa_recovery_codes
 		  WHERE staff_id = $1 AND used_at IS NULL AND revoked_at IS NULL`, coOwnerID); n == 0 {

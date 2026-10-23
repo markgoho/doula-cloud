@@ -495,15 +495,36 @@ func setRequireMFA(t *testing.T, db *testdb.DB, practiceID string) {
 	}
 }
 
-// TestMiddleware_MFAGate is #606's AC read literally: refuse a
-// Practice-scoped request when the caller's Membership there holds
-// Owner, or the Practice's switch is on, and her session shows no
-// second factor.
+// TestMiddleware_MFAGate is the boundary's rule since #1531 (ADR-0026's
+// amendment for #1492): refuse a Practice-scoped request only when the
+// Practice's switch is on and the caller's session shows no second
+// factor. A Membership that is Owner is not a reason.
 func TestMiddleware_MFAGate(t *testing.T) {
-	t.Run("owner without second factor is refused", func(t *testing.T) {
+	t.Run("owner without second factor is admitted while the switch is off", func(t *testing.T) {
 		db := testdb.New(t)
 		const identityUID = "owner-no-mfa"
 		_, practiceID := seedOwnerMembership(t, db, identityUID)
+
+		mux := http.NewServeMux()
+		mux.Handle("/practices/{practiceId}/ping", staffauth.Middleware(db.App)(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(http.StatusOK)
+		})))
+		srv := httptest.NewServer(mux)
+		defer srv.Close()
+
+		session := authntest.SeedSessionWithSecondFactor(t, db.App, identityUID, false)
+		resp := get(t, pingURL(srv, practiceID), func(req *http.Request) {
+			authntest.AddSessionCookie(req, session)
+		})
+		defer resp.Body.Close()
+		assertStatus(t, resp, http.StatusOK)
+	})
+
+	t.Run("the switch bars an un-enrolled owner", func(t *testing.T) {
+		db := testdb.New(t)
+		const identityUID = "owner-switch-on"
+		_, practiceID := seedOwnerMembership(t, db, identityUID)
+		setRequireMFA(t, db, practiceID)
 
 		mux := http.NewServeMux()
 		mux.Handle("/practices/{practiceId}/ping", staffauth.Middleware(db.App)(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
@@ -608,8 +629,8 @@ func TestMiddleware_MFAGate(t *testing.T) {
 	})
 
 	// TestMiddleware_MFAGate/split proves #606's own AC: a person whose
-	// Membership at Practice A requires MFA and at Practice B does not is
-	// barred from A and admitted to B while un-enrolled, one identity and
+	// Membership at one Practice requires MFA and at the other does not is
+	// barred from the first and admitted to the second while un-enrolled, one identity and
 	// one session cookie throughout -- the fact GLOSSARY.md's per-Membership
 	// role model is what forced the gate off session.CreateHandler in the
 	// first place (#167's amendment).
@@ -619,6 +640,10 @@ func TestMiddleware_MFAGate(t *testing.T) {
 		staffID, ownerPracticeID := seedOwnerMembership(t, db, identityUID)
 		doulaPracticeID := testdb.SeedPractice(t, db, "Second Practice")
 		seedMembership(t, db, doulaPracticeID, staffID)
+		// #1531: the split is the switch, never the role. She is Owner
+		// at the Practice that has not thrown it, and only a Doula at
+		// the one that has.
+		setRequireMFA(t, db, doulaPracticeID)
 
 		mux := http.NewServeMux()
 		mux.Handle("/practices/{practiceId}/ping", staffauth.Middleware(db.App)(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
@@ -630,11 +655,11 @@ func TestMiddleware_MFAGate(t *testing.T) {
 		unenrolled := authntest.SeedSessionWithSecondFactor(t, db.App, identityUID, false)
 		respA := get(t, pingURL(srv, ownerPracticeID), func(req *http.Request) { authntest.AddSessionCookie(req, unenrolled) })
 		defer respA.Body.Close()
-		assertStatus(t, respA, http.StatusForbidden)
+		assertStatus(t, respA, http.StatusOK)
 
 		respB := get(t, pingURL(srv, doulaPracticeID), func(req *http.Request) { authntest.AddSessionCookie(req, unenrolled) })
 		defer respB.Body.Close()
-		assertStatus(t, respB, http.StatusOK)
+		assertStatus(t, respB, http.StatusForbidden)
 
 		enrolled := authntest.SeedSessionWithSecondFactor(t, db.App, identityUID, true)
 		respA2 := get(t, pingURL(srv, ownerPracticeID), func(req *http.Request) { authntest.AddSessionCookie(req, enrolled) })

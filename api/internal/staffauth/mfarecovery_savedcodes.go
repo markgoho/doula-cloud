@@ -34,19 +34,51 @@ func hasLiveSavedCodes(ctx context.Context, tx *sql.Tx, staffID string) (bool, e
 	return has, nil
 }
 
+// hasEnrolledSecondFactor reports whether staffID's latest
+// staff_auth_events row is an enrollment -- that is, whether she
+// enrolled a second factor and nothing has cleared it since. Every
+// path that adds or clears a factor writes that row in its own
+// transaction (FinishEnrollmentHandler, clearEnrollmentAndRecord), and
+// the table has no RLS (00062), so this answers the same for every
+// Owner reconcileOwnersAtPractice asks about, including one whose
+// session this is not. The staff row itself could not carry the fact:
+// the saved-code and vouch spends that clear a factor run with no
+// session, which no UPDATE policy on staff admits.
+func hasEnrolledSecondFactor(ctx context.Context, tx *sql.Tx, staffID string) (bool, error) {
+	var enrolled bool
+	err := tx.QueryRowContext(ctx,
+		`SELECT COALESCE((SELECT reason = 'enrolled' FROM staff_auth_events
+		                  WHERE staff_id = $1 ORDER BY created_at DESC, id DESC LIMIT 1), false)`,
+		staffID,
+	).Scan(&enrolled)
+	if err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		return false, fmt.Errorf("staffauth: check enrolled second factor: %w", err)
+	}
+	return enrolled, nil
+}
+
 // reconcileSavedCodes mints or revokes staffID's saved-code set to match
 // her current sole-Owner status -- #615's AC: minted on the Membership
 // event that makes her a Practice's sole Owner, revoked when a second
 // Owner's Membership arrives. Every call site that can change who is a
-// sole Owner (signup, invitation acceptance, a Membership edit, a
-// Membership removal) calls this for the staff member whose Membership
-// changed and, since one person's change can make or unmake someone
-// else's sole ownership too, for every other Owner at the same Practice
-// -- see reconcileOwnersAtPractice.
+// sole Owner (invitation acceptance, a Membership edit, a Membership
+// removal, login deletion) calls this for the staff member whose
+// Membership changed and, since one person's change can make or unmake
+// someone else's sole ownership too, for every other Owner at the same
+// Practice -- see reconcileOwnersAtPractice.
+//
+// #1531 (ADR-0026's amendment for #1492): a set is minted only for a
+// sole Owner who has enrolled a second factor. Before she has one there
+// is nothing for a code to recover, so signup mints none, and
+// FinishEnrollmentHandler calls this when she enrolls. Revoking still
+// turns on sole ownership alone: a factor cleared by a recovery leaves
+// her remaining codes as they were, and enrolling again mints no second
+// set over them.
 //
 // Idempotent: calling it when nothing needs to change is a no-op past
-// the two existence checks, so every call site can call it
-// unconditionally rather than working out first whether it applies.
+// the existence checks, so every call site can call it unconditionally
+// rather than working out first whether it applies.
 func reconcileSavedCodes(ctx context.Context, tx *sql.Tx, staffID string) error {
 	sole, err := isSoleOwnerAnywhere(ctx, tx, staffID)
 	if err != nil {
@@ -61,6 +93,14 @@ func reconcileSavedCodes(ctx context.Context, tx *sql.Tx, staffID string) error 
 
 	switch {
 	case sole && !live:
+		enrolled, err := hasEnrolledSecondFactor(ctx, tx, staffID)
+		if err != nil {
+			// coverage:ignore reason: DB query failure, not exercised by unit tests
+			return err
+		}
+		if !enrolled {
+			return nil
+		}
 		return mintSavedCodeSet(ctx, tx, staffID)
 	case !sole && live:
 		if _, err := tx.ExecContext(ctx,
@@ -178,7 +218,7 @@ type RotateSavedCodesResponse struct {
 // these.
 func RotateSavedCodesHandler(db *sql.DB) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, uid, _, ok := authn.Begin(w, r, db, authn.TierStaff)
+		tx, uid, secondFactor, ok := authn.Begin(w, r, db, authn.TierStaff)
 		if !ok {
 			return
 		}
@@ -223,6 +263,12 @@ func RotateSavedCodesHandler(db *sql.DB) http.Handler {
 		}
 		if !sole {
 			apierr.WriteError(w, "saved recovery codes are only issued to a practice's sole owner", http.StatusForbidden)
+			return
+		}
+		// #1531: before she has a second factor there is nothing for a
+		// code to recover, so none is minted for her, asked for or not.
+		if !secondFactor {
+			apierr.Write(w, http.StatusForbidden, apierr.CodeSecondFactorRequired, "saved recovery codes need a second sign-in factor first", nil)
 			return
 		}
 

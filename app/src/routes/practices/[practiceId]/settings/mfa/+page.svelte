@@ -1,7 +1,9 @@
 <script lang="ts">
 	/*
-	 * Where an Owner raises MFA from "mandatory for Owners, optional for
-	 * everyone else" to "mandatory for every Staff member" (#606).
+	 * Where an Owner raises MFA from "optional for every Staff member" to
+	 * "mandatory for every Staff member" (#606). Until #1531 an Owner was
+	 * always held to it; since then she is held to it only by this switch
+	 * and by the five acts that need it (#1532).
 	 *
 	 * The PUT below refuses without an X-Confirmed header (400) on the
 	 * theory that the client has already shown what it is about to do --
@@ -146,7 +148,7 @@
 
 {#snippet intro()}
 	<Text
-		text="Every Owner must already sign in with a second factor. Turn this on to require it for every Staff member at this Practice."
+		text="Turn this on to require a second factor for every Staff member at this Practice, Owners included."
 	/>
 {/snippet}
 
@@ -173,7 +175,7 @@
 			<Badge
 				label={impact!.required
 					? 'Mandatory for every Staff member'
-					: 'Mandatory for Owners, optional for other Staff'}
+					: 'Optional for every Staff member'}
 				variant={impact!.required ? 'success' : 'neutral'}
 			/>
 		</cluster-l>

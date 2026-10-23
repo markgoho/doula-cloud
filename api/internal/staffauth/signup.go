@@ -335,7 +335,11 @@ func signup(r *http.Request, tx *sql.Tx, verified authn.VerifiedToken, req Signu
 	// The founding Owner is, by construction, this brand-new Practice's
 	// only Owner -- #615's AC: saved recovery codes mint on the
 	// Membership event that makes someone a Practice's sole Owner, and a
-	// signup is that event too, not only a later promotion.
+	// signup is that event too, not only a later promotion. Since #1531
+	// that holds only for an Owner who has a second factor, so a
+	// first-time signup mints none: reconcileSavedCodes waits for her to
+	// enroll. A person who enrolled under an earlier Membership gets her
+	// set here.
 	if err := reconcileSavedCodes(ctx, tx, staffID); err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		return SignupResponse{}, &sessionmint.Refusal{Status: http.StatusInternalServerError, Message: apierr.MsgInternalError}

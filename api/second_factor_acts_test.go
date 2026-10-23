@@ -57,10 +57,9 @@ var secondFactorActCases = []secondFactorActCase{
 // five, asked by the same Owner with a second factor, are not refused
 // by the seam.
 //
-// Today the Practice boundary still refuses an Owner with no second
-// factor on every other route (#1531 removes that); these five reach
-// the act's own refusal instead, so this spec holds before and after
-// #1531 lands.
+// Since #1531 the Practice boundary lets an Owner with no second factor
+// in on every route, so these five are the only places she is refused,
+// and this spec is the check that they still are.
 func TestSecondFactorActs_RefusedWithoutASecondFactor(t *testing.T) {
 	for _, tc := range secondFactorActCases {
 		for _, secondFactor := range []bool{false, true} {

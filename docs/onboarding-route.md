@@ -246,8 +246,8 @@ Each ticket that a decision of the map filed, with its state and its blocking ed
 
 | Ticket | On the route | State | Blocked by |
 | --- | --- | --- | --- |
-| [A new Owner enters her Practice straight after signup: the Practice boundary no longer refuses an Owner for her role (#1531)](https://github.com/markgoho/doula-cloud/issues/1531) | Yes, screens 1 to 2 | Open | #1532 |
-| [Five acts need a second factor: the archive, Practice deletion, Erasure, vouching, and the MFA switch (#1532)](https://github.com/markgoho/doula-cloud/issues/1532) | No, but it gates #1531 | Open | None |
+| [A new Owner enters her Practice straight after signup: the Practice boundary no longer refuses an Owner for her role (#1531)](https://github.com/markgoho/doula-cloud/issues/1531) | Yes, screens 1 to 2 | Closed | #1532 |
+| [Five acts need a second factor: the archive, Practice deletion, Erasure, vouching, and the MFA switch (#1532)](https://github.com/markgoho/doula-cloud/issues/1532) | No, but it gates #1531 | Closed | None |
 | [The product recommends a second factor to an Owner after First Value, her first Invitation, and Stripe connected (#1533)](https://github.com/markgoho/doula-cloud/issues/1533) | No, after First Value | Open | #1531 |
 
 ### Tickets of the signup form decision (#1493)

@@ -75,7 +75,7 @@ describe('MFA settings screen', () => {
 	it("shows the switch's current state, the affected count, and a button to require it for an Owner", async () => {
 		await setup();
 
-		await expect.element(testPage.getByText('Mandatory for Owners, optional for other Staff')).toBeVisible();
+		await expect.element(testPage.getByText('Optional for every Staff member')).toBeVisible();
 		await expect
 			.element(testPage.getByText('6 Staff members currently have no second factor set up.'))
 			.toBeVisible();
@@ -155,7 +155,7 @@ describe('MFA settings screen', () => {
 		// inside itself, so the dialog is where the error now lives.
 		await expect.element(dialog).toBeVisible();
 		await expect.element(dialog.getByText('this action requires confirmation')).toBeVisible();
-		await expect.element(testPage.getByText('Mandatory for Owners, optional for other Staff')).toBeVisible();
+		await expect.element(testPage.getByText('Optional for every Staff member')).toBeVisible();
 	});
 
 	it('stops requiring MFA for all Staff immediately, with no confirmation step', async () => {

@@ -83,8 +83,9 @@ async function setup({
 /*
  * The path every test that actually sends a code walks: read the
  * consequence, press through it, then satisfy the two-step re-auth
- * Identity Platform raises for an Owner (who always holds a second
- * factor, #606).
+ * Identity Platform raises for an Owner who holds a second factor --
+ * vouching needs one (#1532), so every Owner who reaches this path has
+ * one.
  */
 async function reachCodeStep() {
 	signInWithEmailAndPassword.mockRejectedValue({ code: 'auth/multi-factor-auth-required' });

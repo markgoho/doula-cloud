@@ -155,7 +155,7 @@
 					},
 					{
 						label: 'Multi-factor authentication',
-						description: 'Whether every Staff member must use a second factor to sign in, not only Owners.',
+						description: 'Whether every Staff member must use a second factor to sign in.',
 						href: resolve('/practices/[practiceId]/settings/mfa', { practiceId })
 					},
 					// #288: a ZIP of every Client, Engagement, Contract, Invoice
