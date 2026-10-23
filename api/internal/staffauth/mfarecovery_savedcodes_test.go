@@ -9,6 +9,8 @@ import (
 	"testing"
 	"time"
 
+	"doula-cloud/api/internal/apierr"
+	"doula-cloud/api/internal/apierrtest"
 	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/idempotency"
 	"doula-cloud/api/internal/staffauth"
@@ -261,6 +263,26 @@ func TestRotateSavedCodesHandler_NonSoleOwnerForbidden(t *testing.T) {
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusForbidden {
 		t.Fatalf("status = %d, want 403", resp.StatusCode)
+	}
+}
+
+// TestRotateSavedCodesHandler_SoleOwnerWithNoSecondFactorRefused covers
+// #1531: a sole Owner with no second factor has nothing for a code to
+// recover, so asking for a set mints none.
+func TestRotateSavedCodesHandler_SoleOwnerWithNoSecondFactorRefused(t *testing.T) {
+	db := testdb.New(t)
+	const uid = "owner-rotating-without-a-factor"
+	ownerID, _ := seedOwnerMembership(t, db, uid)
+	srv, _ := newRotateSavedCodesServer(t, db, uid)
+	defer srv.Close()
+
+	resp := postRotate(t, srv, authntest.SeedSessionWithSecondFactor(t, db.App, uid, false))
+	defer resp.Body.Close()
+	if got := apierrtest.Decode(t, resp).Code; got != apierr.CodeSecondFactorRequired {
+		t.Fatalf("code = %q, want %q", got, apierr.CodeSecondFactorRequired)
+	}
+	if got := liveSavedCodesFor(t, db, ownerID); got != 0 {
+		t.Fatalf("live saved codes = %d, want 0", got)
 	}
 }
 

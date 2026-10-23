@@ -18,10 +18,10 @@ import { STUB_TOTP_CODE, stubTotpFactor } from './totpStub';
  * What each of these tests proves, and what it does not: the screen, the
  * Firebase JS SDK's TOTP code path, the session exchange and the Go
  * gate are all real, and the Owner landing on a Practice-scoped page is
- * the gate in api/internal/staffauth admitting a session that carries
- * `firebase.sign_in_second_factor` -- an Owner is barred from every one
- * of those routes without it, regardless of the Practice's own
- * mfa-required switch. What is *not* proven is that six particular
+ * the gate in api/internal/staffauth admitting her session. Since #1531
+ * that gate admits an Owner with or without
+ * `firebase.sign_in_second_factor` while the Practice's mfa-required
+ * switch is off. What is *not* proven is that six particular
  * digits are the right six digits: no test in this repo can check a TOTP
  * code against a shared secret, because the emulator cannot hold one.
  */
@@ -46,9 +46,11 @@ test('An Owner sets up an authenticator app and lands on the Practice she was se
 	await page.getByLabel('Password').fill(password);
 	await page.getByRole('button', { name: 'Log in' }).click();
 
-	// An Owner with no second factor cannot reach her own Practice, so
-	// the sign-in itself drives her here, carrying where she was headed.
-	await expect(page).toHaveURL(new RegExp(String.raw`/mfa/enroll\?returnTo=`));
+	// #1531: an Owner with no second factor lands on her own Practice,
+	// and enrolls when she chooses to, from a link that carries where to
+	// send her back (SecondFactorNeeded's own shape).
+	await expect(page).toHaveURL(new RegExp(`/practices/${practiceId}$`));
+	await page.goto(`/mfa/enroll?returnTo=${encodeURIComponent(`/practices/${practiceId}`)}`);
 
 	await page.getByLabel('Password').fill(password);
 	await page.getByRole('button', { name: 'Continue' }).click();

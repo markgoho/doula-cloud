@@ -557,6 +557,17 @@ describe('recovery codes for a sole Owner (#615)', () => {
 		expect(testPage.getByText('Recovery codes').elements()).toHaveLength(0);
 	});
 
+	// #1531: a sole Owner with no second factor has nothing for a code to
+	// recover, and the BFF mints none for her.
+	it('offers nothing to a sole Owner with no second factor', async () => {
+		apiFetchWithSession.mockResolvedValue(jsonResponse({ ...soleOwnerSession, secondFactor: false }));
+		await render(Page, {});
+
+		await expect.element(testPage.getByRole('heading', { name: 'Your account' })).toBeVisible();
+		expect(testPage.getByRole('button', { name: 'Show my recovery codes' }).elements()).toHaveLength(0);
+		expect(testPage.getByText('Recovery codes').elements()).toHaveLength(0);
+	});
+
 	it('says what pressing it costs before it mints anything', async () => {
 		await setup();
 

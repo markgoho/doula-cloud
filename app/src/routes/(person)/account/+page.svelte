@@ -87,7 +87,9 @@
 	// whole population that ever holds saved recovery codes. Read off the
 	// session rather than derived here -- the same session-carried fact
 	// `hasSecondFactor` is, and the rotate endpoint re-derives it and
-	// refuses on its own regardless (ADR-0006).
+	// refuses on its own regardless (ADR-0006). Since #1531 the section
+	// also needs `hasSecondFactor`: before she has one there is nothing
+	// for a code to recover, and the rotate endpoint refuses her.
 	let isSoleOwner = $state(false);
 	const savedCodesSubmission = new FormSubmission();
 	let savedCodes = $state<string[]>([]);
@@ -658,7 +660,7 @@
 				{ legend: 'Your name', content: nameSection },
 				{ legend: 'Where you work', content: workState },
 				{ legend: 'Two-factor authentication', content: mfaSection },
-				...(isSoleOwner ? [{ legend: 'Recovery codes', content: savedCodesSection }] : []),
+				...(isSoleOwner && hasSecondFactor ? [{ legend: 'Recovery codes', content: savedCodesSection }] : []),
 				{ legend: 'Delete your login', content: deleteLoginSection }
 			]
 		: []}

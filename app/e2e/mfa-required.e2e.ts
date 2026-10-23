@@ -6,8 +6,10 @@ import { enrollSecondFactor, signInEnrolled } from './mfa';
 import { seedContractorDoula, PORTAL_CLIENT_PASSWORD } from './portalClient';
 import { acceptStaffInvite, seedFoundingOwner } from './staffSignup';
 
-// #606: TOTP MFA for Staff, required for Owners always, and raisable to
-// required-for-everyone per Practice by the mfa-required switch. The
+// #606: TOTP MFA for Staff, raisable to required-for-everyone per
+// Practice by the mfa-required switch. Since #1531 the switch is the
+// only thing that bars a session from a Practice; an Owner's role is
+// not (ADR-0026's amendment for #1492). The
 // Firebase Auth emulator has no TOTP path (see mfa.ts's doc comment), so
 // these specs get a session carrying `firebase.sign_in_second_factor`
 // the same way mfa.ts does for every fixture that needs one -- through
@@ -17,10 +19,9 @@ import { acceptStaffInvite, seedFoundingOwner } from './staffSignup';
 // work landing on this branch at the same time as this file.
 
 /**
- * Provisions a fresh Practice with an enrolled Owner -- an Owner is
- * gated by #606 regardless of the Practice's own switch, so every other
- * seeding step in these specs (inviting Staff, throwing the switch)
- * needs this first.
+ * Provisions a fresh Practice with an enrolled Owner -- throwing the
+ * switch is one of the acts that needs her second factor (#1532), so
+ * every spec here that throws it needs this first.
  */
 async function seedEnrolledOwner(
 	request: APIRequestContext,
@@ -145,11 +146,18 @@ test('one identity, two Practices: MFA required at one and not the other', async
 	});
 	const xHeadersAtA = await signIn(request, API_URL, xIdToken);
 
-	// Y signs up as Owner at Practice B, enrolls (an Owner is always
-	// gated, switch or no switch), and invites X's own email as a plain
-	// Doula there -- one identity holding roles at two Practices, per
-	// #606's own two-Practice-split criterion.
+	// Y signs up as Owner at Practice B, enrolls, throws B's switch (#1531:
+	// the split is the switch, never the role), and invites X's own email
+	// as a plain Doula there -- one identity holding roles at two
+	// Practices, per #606's own two-Practice-split criterion.
 	const { practiceId: practiceIdB, ownerHeaders: yHeaders } = await seedEnrolledOwner(request, 'Practice B');
+	const throwSwitch = await request.put(`${API_URL}/api/practices/${practiceIdB}/mfa-required`, {
+		headers: { ...yHeaders, 'X-Confirmed': 'true' },
+		data: { required: true }
+	});
+	expect(throwSwitch.status(), `mfa-required PUT failed: ${throwSwitch.status()} ${await throwSwitch.text()}`).toBe(
+		204
+	);
 
 	const invite = await request.post(`${API_URL}/api/practices/${practiceIdB}/staff/invitations`, {
 		headers: yHeaders,
@@ -166,11 +174,11 @@ test('one identity, two Practices: MFA required at one and not the other', async
 	const acceptBody = await accept.text();
 	expect(accept.ok(), `X accept-invite at Practice B failed: ${accept.status()} ${acceptBody}`).toBe(true);
 
-	// Un-enrolled: barred at A (Owner), admitted at B (plain Doula,
-	// switch never thrown there).
-	await expectMFARequired(request, sessionURL(practiceIdA), xHeadersAtA);
+	// Un-enrolled: admitted at A (Owner, switch never thrown there),
+	// barred at B (plain Doula, switch on).
+	await expectAdmitted(request, sessionURL(practiceIdA), xHeadersAtA);
 	const xHeadersAtB = sessionCookieFrom(accept, 'X accept-invite at Practice B');
-	await expectAdmitted(request, sessionURL(practiceIdB), xHeadersAtB);
+	await expectMFARequired(request, sessionURL(practiceIdB), xHeadersAtB);
 
 	// Enrolled: a single fresh sign-in, carrying the claim, admits her to
 	// both -- the gate reads the session row, not a per-Practice fact.

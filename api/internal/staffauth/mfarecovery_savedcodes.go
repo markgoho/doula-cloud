@@ -218,7 +218,7 @@ type RotateSavedCodesResponse struct {
 // these.
 func RotateSavedCodesHandler(db *sql.DB) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, uid, _, ok := authn.Begin(w, r, db, authn.TierStaff)
+		tx, uid, secondFactor, ok := authn.Begin(w, r, db, authn.TierStaff)
 		if !ok {
 			return
 		}
@@ -263,6 +263,12 @@ func RotateSavedCodesHandler(db *sql.DB) http.Handler {
 		}
 		if !sole {
 			apierr.WriteError(w, "saved recovery codes are only issued to a practice's sole owner", http.StatusForbidden)
+			return
+		}
+		// #1531: before she has a second factor there is nothing for a
+		// code to recover, so none is minted for her, asked for or not.
+		if !secondFactor {
+			apierr.Write(w, http.StatusForbidden, apierr.CodeSecondFactorRequired, "saved recovery codes need a second sign-in factor first", nil)
 			return
 		}
 

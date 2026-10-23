@@ -1,14 +1,13 @@
 import { expect, test } from '@playwright/test';
 import { seedFoundingOwner } from './staffSignup';
 
-// #606: a fresh signup has no second factor enrolled at all, and an Owner
-// is gated behind one at every Practice-scoped route (staffauth.Middleware) --
-// so she is driven into enrollment rather than landing on her Practice.
-// This is still the right spec for login mechanics (the session cookie,
-// the cleared Firebase JS SDK credential, session persistence across a
-// closed tab): none of those depend on which screen she lands on, only on
-// the sign-in itself having gone through.
-test('Staff login drives an unenrolled Owner into MFA enrollment, carrying returnTo', async ({ page, request }) => {
+// #1531: a fresh signup has no second factor enrolled at all, and being
+// an Owner no longer closes the door of her Practice -- only the
+// Practice's own mfa-required switch does (staffauth.Middleware) -- so
+// she lands on her Practice. This is the spec for login mechanics (the
+// session cookie, the cleared Firebase JS SDK credential, session
+// persistence across a closed tab).
+test('Staff login lands an unenrolled Owner on her Practice', async ({ page, request }) => {
 	const { email, password, practiceId } = await seedFoundingOwner(request);
 
 	await page.goto('/login');
@@ -16,8 +15,8 @@ test('Staff login drives an unenrolled Owner into MFA enrollment, carrying retur
 	await page.getByLabel('Password').fill(password);
 	await page.getByRole('button', { name: 'Log in' }).click();
 
-	const returnTo = encodeURIComponent(`/practices/${practiceId}`);
-	await expect(page).toHaveURL(new RegExp(String.raw`/mfa/enroll\?returnTo=${returnTo}$`));
+	const practicePath = new RegExp(`/practices/${practiceId}$`);
+	await expect(page).toHaveURL(practicePath);
 
 	// #149: the app exchanges the ID token for the session cookie and
 	// signs out of the Firebase JS SDK locally -- the SDK's default
@@ -62,10 +61,10 @@ test('Staff login drives an unenrolled Owner into MFA enrollment, carrying retur
 	// Closing the tab and returning within the session lifetime leaves the
 	// person signed in: the __session cookie lives on the browser context,
 	// not the tab, so a fresh page navigating straight to the practice URL
-	// lands on the same MFA-enrollment redirect a live session gets -- not
-	// on /login, which is what an ended or missing session would produce.
+	// stays on it -- not on /login, which is what an ended or missing
+	// session would produce.
 	await page.close();
 	const reopened = await page.context().newPage();
 	await reopened.goto(`/practices/${practiceId}`);
-	await expect(reopened).toHaveURL(new RegExp(String.raw`/mfa/enroll\?returnTo=${returnTo}$`));
+	await expect(reopened).toHaveURL(practicePath);
 });

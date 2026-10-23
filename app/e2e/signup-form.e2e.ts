@@ -6,13 +6,13 @@ import { uniqueEmail, STAFF_PASSWORD } from './staffSignup';
 // this is the one spec that drives the /signup screen itself, so the form
 // under the whole suite is exercised at least once.
 //
-// #606: the Practice this creates has a brand-new Owner with no second
-// factor enrolled at all, and an Owner is gated behind one at every
-// Practice-scoped route (staffauth.Middleware) -- so signup drives her
-// into MFA enrollment rather than landing her on the Practice it just
-// created. The IndexedDB/cookie checks below are about the signup
-// exchange itself, not about which screen she lands on afterward.
-test('Signing up through the /signup form drives the new Owner into MFA enrollment', async ({ page }) => {
+// #1531: the Practice this creates has a brand-new Owner with an
+// unverified email and no second factor, and neither keeps her out of
+// it: she lands on her Practice overview straight after Create
+// Practice, with no visit to /mfa/enroll (ADR-0026's amendment for
+// #1492). The IndexedDB/cookie checks below are about the signup
+// exchange itself.
+test('Signing up through the /signup form lands the new Owner on her Practice overview', async ({ page }) => {
 	const email = uniqueEmail('signup-form');
 	const password = STAFF_PASSWORD;
 
@@ -30,7 +30,8 @@ test('Signing up through the /signup form drives the new Owner into MFA enrollme
 	await page.getByLabel('Password').fill(password);
 	await page.getByRole('button', { name: 'Create Practice' }).click();
 
-	await expect(page).toHaveURL(/\/mfa\/enroll\?returnTo=%2Fpractices%2F[^&]+$/);
+	await expect(page).toHaveURL(/\/practices\/[^/?]+$/);
+	await expect(page.getByRole('heading', { level: 1, name: 'Welcome to Riverside Doulas' })).toBeVisible();
 
 	// #149: the app exchanges the ID token for the session cookie and signs
 	// out of the Firebase JS SDK locally -- a lingering credential would show
