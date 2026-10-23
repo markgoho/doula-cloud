@@ -9,9 +9,10 @@ import { acceptStaffInvite, seedFoundingOwner } from './staffSignup';
 // #606: TOTP MFA for Staff, raisable to required-for-everyone per
 // Practice by the mfa-required switch. Since #1531 the switch is the
 // only thing that bars a session from a Practice; an Owner's role is
-// not (ADR-0026's amendment for #1492). The
-// Firebase Auth emulator has no TOTP path (see mfa.ts's doc comment), so
-// these specs get a session carrying `firebase.sign_in_second_factor`
+// not (ADR-0026's amendment for #1492).
+//
+// The Firebase Auth emulator has no TOTP path (see mfa.ts's doc
+// comment), so these specs get a session carrying `firebase.sign_in_second_factor`
 // the same way mfa.ts does for every fixture that needs one -- through
 // the emulator's PHONE_SMS enrollment -- and prove the gate itself
 // (api/internal/staffauth/middleware.go) via direct API calls rather

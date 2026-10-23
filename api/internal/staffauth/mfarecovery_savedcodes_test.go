@@ -179,15 +179,17 @@ func TestAcceptInvite_SecondOwnerRevokesFirstOwnersSavedCodes(t *testing.T) {
 // two Owners down to one mints a fresh set for whoever is left, when
 // she has enrolled a second factor (#1531).
 func TestRemoveMembership_RestoresSoleOwnerSavedCodes(t *testing.T) {
-	for _, enrolled := range []bool{true, false} {
-		want := 0
-		name := "unenrolled owner gets none"
-		if enrolled {
-			want = 10
-			name = "enrolled owner gets a fresh set"
-		}
-		t.Run(name, func(t *testing.T) {
-			removeSecondOwner(t, enrolled, want)
+	cases := []struct {
+		name     string
+		enrolled bool
+		want     int
+	}{
+		{"enrolled owner gets a fresh set", true, 10},
+		{"unenrolled owner gets none", false, 0},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			removeSecondOwner(t, tc.enrolled, tc.want)
 		})
 	}
 }
