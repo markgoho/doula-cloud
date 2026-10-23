@@ -25,6 +25,12 @@ const actionNameChanged = "practice_name_changed"
 // refusal is written under (docs/api-design.md section 7 rule 4).
 const fieldName = "name"
 
+// msgNameNeeded refuses a rename to no name. It lives here, not in
+// staffauth, since #1536 made the name optional at signup: only this
+// screen still refuses an empty one, because a Practice always has a name
+// (practices.name is NOT NULL) and here there is no other name to give it.
+const msgNameNeeded = "Enter the name of your Practice"
+
 // Response is what PutHandler returns: the name the Practice now holds.
 type Response struct {
 	Name string `json:"name"`
@@ -79,7 +85,7 @@ func PutHandler() http.Handler {
 		after := strings.TrimSpace(req.Name)
 		if after == "" {
 			apierr.Write(w, http.StatusBadRequest, apierr.CodeInvalidArgument,
-				"name is required", map[string]string{fieldName: staffauth.MsgPracticeNameNeeded})
+				"name is required", map[string]string{fieldName: msgNameNeeded})
 			return
 		}
 

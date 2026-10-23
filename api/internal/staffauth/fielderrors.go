@@ -31,8 +31,6 @@ const fieldWorkState = "workState"
 const fieldTimezone = "timezone"
 
 const (
-	// MsgPracticeNameNeeded is signup's practiceName field.
-	MsgPracticeNameNeeded = "Enter the name of your Practice"
 	// MsgWorkStateNeeded is the workState field, on both the screens that
 	// ask for it -- signup and the account page's own correction (#437).
 	// The pair of MsgWorkStateRequired, which is the summary line the

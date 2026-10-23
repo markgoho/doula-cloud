@@ -17,9 +17,9 @@ test('Signing up through the /signup form lands the new Owner on her Practice ov
 	const password = STAFF_PASSWORD;
 
 	await page.goto('/signup');
-	await page.getByLabel('Practice name').fill('Riverside Doulas');
 	await page.getByLabel('First name').fill('Jamie');
 	await page.getByLabel('Last name').fill('Owner');
+	await page.getByLabel('Practice name (optional)').fill('Riverside Doulas');
 	await page.getByLabel('Which state do you work from?').selectOption('New York');
 	// #1166: chosen rather than left on whatever zone the runner reports,
 	// so what the form sends is the same on a laptop and in CI.
@@ -70,4 +70,23 @@ test('Signing up through the /signup form lands the new Owner on her Practice ov
 	// attribute checks.
 	const readableCookies = await page.evaluate(() => document.cookie);
 	expect(readableCookies, 'session cookie is readable from document.cookie').not.toContain('__session');
+});
+
+// #1536: a solo doula who works under her own name leaves the Practice
+// name empty, and the Practice she lands in is called by her name, first
+// name then last name.
+test('An empty Practice name gives the new Practice her own name', async ({ page }) => {
+	await page.goto('/signup');
+	await page.getByLabel('First name').fill('Jamie');
+	await page.getByLabel('Last name').fill('Owner');
+	await page.getByLabel('Which state do you work from?').selectOption('New York');
+	await page
+		.getByLabel('What timezone does this Practice work in?')
+		.selectOption('America/New_York');
+	await page.getByLabel('Email').fill(uniqueEmail('signup-own-name'));
+	await page.getByLabel('Password').fill(STAFF_PASSWORD);
+	await page.getByRole('button', { name: 'Create Practice' }).click();
+
+	await expect(page).toHaveURL(/\/practices\/[^/?]+$/);
+	await expect(page.getByRole('heading', { level: 1, name: 'Welcome to Jamie Owner' })).toBeVisible();
 });

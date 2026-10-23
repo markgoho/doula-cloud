@@ -3,7 +3,6 @@ package staffauth
 import (
 	"context"
 	"database/sql"
-	"maps"
 	"net/http"
 	"strings"
 
@@ -119,21 +118,26 @@ func SignupHandler(verifier authn.Verifier, db *sql.DB, enq tasknudge.Enqueuer) 
 		if !apierr.DecodeJSON(w, r, &req) {
 			return
 		}
-		req.PracticeName = strings.TrimSpace(req.PracticeName)
 		firstName, lastName, nameDetails := normalizeNames(req.FirstName, req.LastName)
 		req.FirstName, req.LastName = firstName, lastName
-		if req.PracticeName == "" || nameDetails != nil {
-			// One refusal, one entry per empty field (#488): the fields are
-			// asked for on one screen and can be missing together, so
+		if nameDetails != nil {
+			// One refusal, one entry per empty field (#488): the two names
+			// are asked for on one screen and can be missing together, so
 			// answering only the first would send her back twice.
-			details := map[string]string{}
-			if req.PracticeName == "" {
-				details["practiceName"] = MsgPracticeNameNeeded
-			}
-			maps.Copy(details, nameDetails)
 			apierr.Write(w, http.StatusBadRequest, apierr.CodeInvalidArgument,
-				"practiceName, firstName and lastName are required", details)
+				"firstName and lastName are required", nameDetails)
 			return
+		}
+		// #1536: the Practice name is optional, and an empty one is her own
+		// name, first name then last name as she typed them -- never no
+		// name, since a Contract, the portal and a card statement each
+		// print one and practices.name is NOT NULL. Applied here rather
+		// than in the form, so a caller that sends no Practice name gets
+		// what the form gets, and before signup() branches, so a resumed
+		// signup gets it too.
+		req.PracticeName = strings.TrimSpace(req.PracticeName)
+		if req.PracticeName == "" {
+			req.PracticeName = firstName + " " + lastName
 		}
 		workState, ok := NormalizeWorkState(req.WorkState)
 		if !ok {
