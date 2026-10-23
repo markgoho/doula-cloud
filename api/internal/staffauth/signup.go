@@ -235,8 +235,7 @@ func signup(r *http.Request, tx *sql.Tx, verified authn.VerifiedToken, req Signu
 		return SignupResponse{}, &sessionmint.Refusal{Status: http.StatusInternalServerError, Message: apierr.MsgInternalError}
 	}
 	if !admitted {
-		refusal := pilotNotOpen
-		return SignupResponse{}, &refusal
+		return SignupResponse{}, pilotNotOpen()
 	}
 
 	var practiceID string

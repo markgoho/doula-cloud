@@ -111,7 +111,7 @@ func RequestAddressChangeHandler(db *sql.DB) http.Handler {
 			apierr.WriteFieldError(w, http.StatusBadRequest, apierr.CodeInvalidArgument, fieldEmail, MsgAddressRequired)
 			return
 		}
-		if !looksLikeAddress(address) {
+		if !staffauth.LooksLikeAddress(address) {
 			apierr.WriteFieldError(w, http.StatusBadRequest, apierr.CodeInvalidArgument, fieldEmail, MsgAddressMalformed)
 			return
 		}
@@ -150,15 +150,6 @@ func RequestAddressChangeHandler(db *sql.DB) http.Handler {
 
 		w.WriteHeader(http.StatusAccepted)
 	})
-}
-
-// looksLikeAddress is GOV.UK's own email-address rule, no more: an "@"
-// with something either side. Anything stricter refuses addresses that
-// really deliver, and the only proof that matters here is whether the
-// confirmation mail arrives.
-func looksLikeAddress(address string) bool {
-	at := strings.Index(address, "@")
-	return at > 0 && at < len(address)-1
 }
 
 // isPortalAccount reports whether identifier names a portal_accounts row,

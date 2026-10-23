@@ -314,10 +314,12 @@
 		<!--
 			#1790: in the founder's voice, the teaser's own words for the
 			waitlist. The second line is for a pilot doula who typed an
-			address other than the one the founder wrote to.
+			address other than the one the founder wrote to. The heading is
+			the page's own h1 (see `title` below), so the page stops saying
+			"Sign up" once signup is closed to this address; focus lands on
+			the first line, since the button that held it is gone.
 		-->
-		<h2 tabindex="-1" {@attach focusOnAppearing}>DoulaCloud opens in January 2027</h2>
-		<p>
+		<p tabindex="-1" {@attach focusOnAppearing}>
 			Until then, only doulas in the pilot can sign up. If you're in the pilot, use the email
 			address I wrote to.
 		</p>
@@ -412,7 +414,7 @@
 {/snippet}
 
 <EntryPage
-	title="Sign up your Practice"
+	title={step === 'pilot-not-open' ? 'DoulaCloud opens in January 2027' : 'Sign up your Practice'}
 	errorSummary={submission.errors.length > 0 ? errorSummary : undefined}
 	{content}
 />

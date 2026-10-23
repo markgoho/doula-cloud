@@ -27,7 +27,9 @@ const MsgPilotNotOpen = "DoulaCloud opens in January 2027. Until then, only a Pr
 const pilotOperatorDoor = `SELECT set_config('app.pilot_operator_trusted', 'true', true)`
 
 // pilotNotOpen is signup's refusal of an address pilotAdmits says no to.
-var pilotNotOpen = sessionmint.Refusal{Status: http.StatusForbidden, Code: apierr.CodePilotNotOpen, Message: MsgPilotNotOpen}
+func pilotNotOpen() *sessionmint.Refusal {
+	return &sessionmint.Refusal{Status: http.StatusForbidden, Code: apierr.CodePilotNotOpen, Message: MsgPilotNotOpen}
+}
 
 // pilotAdmits answers whether address may create a Practice: yes while
 // the pilot gate is open, and otherwise only if the founder has added it
@@ -81,7 +83,7 @@ func PilotAllowlistHandler(db *sql.DB, auth *internalauth.Guard) http.Handler {
 			return
 		}
 		address := NormalizeAddress(req.Address)
-		if !looksLikeAddress(address) {
+		if !LooksLikeAddress(address) {
 			apierr.WriteError(w, "address must be an email address", http.StatusBadRequest)
 			return
 		}
@@ -214,11 +216,11 @@ func PilotGateOpenHandler(db *sql.DB, auth *internalauth.Guard) http.Handler {
 	})
 }
 
-// looksLikeAddress is GOV.UK's own email-address rule, no more: an "@"
-// with something either side -- the rule clientauth's address change
-// already applies. Anything stricter would refuse an address that really
-// delivers.
-func looksLikeAddress(address string) bool {
+// LooksLikeAddress is GOV.UK's own email-address rule, no more: an "@"
+// with something either side. Anything stricter refuses addresses that
+// really deliver. One copy for both populations: clientauth's address
+// change reads it, and so does the pilot allowlist above (#1790).
+func LooksLikeAddress(address string) bool {
 	at := strings.Index(address, "@")
 	return at > 0 && at < len(address)-1
 }
