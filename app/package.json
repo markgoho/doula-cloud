@@ -10,6 +10,7 @@
 		"seed:founder-session": "bun scripts/seed-founder-session.ts",
 		"sync-icons": "bun scripts/sync-icons.ts",
 		"sync-fonts": "bun scripts/sync-fonts.ts",
+		"sync-common-passwords": "bun scripts/sync-common-passwords.ts",
 		"build": "vite build",
 		"preview": "vite preview",
 		"prepare": "svelte-kit sync || echo ''",

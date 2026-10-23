@@ -32,7 +32,21 @@ describe('the password rule on the reset screen (#1538)', () => {
 	it('states the rule before she types', async () => {
 		await render(Page, {});
 
-		await expect.element(testPage.getByText('Must be 15 characters or more')).toBeVisible();
+		await expect
+			.element(testPage.getByText('Must be 15 characters or more, and not a commonly used password'))
+			.toBeVisible();
+	});
+
+	it('refuses a commonly used password before anything is sent (#1539)', async () => {
+		await render(Page, {});
+		await passwordField().fill('passwordpassword');
+		await submit();
+
+		await expect
+			.element(testPage.getByRole('link', { name: 'Password is too common. Enter a different password' }))
+			.toBeVisible();
+		// The list is in the browser: checking a password against it is no request at all.
+		expect(globalFetch).not.toHaveBeenCalled();
 	});
 
 	it('refuses 14 characters before anything is sent', async () => {
@@ -54,7 +68,15 @@ describe('the password rule on the reset screen (#1538)', () => {
 		await submit();
 
 		await expect.element(testPage.getByText(/Your password has been reset/)).toBeVisible();
-		const [, init] = globalFetch.mock.calls[0];
-		expect(JSON.parse(init.body).newPassword).toBe(long);
+		// The one request this screen makes: the BFF spends the link and hands
+		// the password to Identity Platform's Admin SDK (ADR-0026, #613). The
+		// common-password check added nothing to it and made no request of its own.
+		expect(globalFetch).toHaveBeenCalledTimes(1);
+		const [url, init] = globalFetch.mock.calls[0];
+		expect(url).toBe('/api/staff/password-reset');
+		expect(JSON.parse(init.body)).toEqual({
+			token: new URL(fixture.url).searchParams.get('token'),
+			newPassword: long
+		});
 	});
 });

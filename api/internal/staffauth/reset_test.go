@@ -185,6 +185,41 @@ func TestSpendResetHandler_PasswordTooShort(t *testing.T) {
 	}
 }
 
+// #1539: the reset spend is the one path the BFF carries a Staff password
+// on, so it is the one server boundary that can refuse a commonly used one.
+// The whole password is compared, in any letter case, and never a part.
+func TestSpendResetHandler_PasswordTooCommon(t *testing.T) {
+	for _, tc := range []struct {
+		password string
+		refused  bool
+	}{
+		{"passwordpassword", true},
+		{"PasswordPassword", true},
+		{"passwordpassword!", false},
+		{"my passwordpassword", false},
+	} {
+		t.Run(tc.password, func(t *testing.T) {
+			db := testdb.New(t)
+			srv := newResetSpendServer(authntest.NewFakeAccountManager(), db)
+			defer srv.Close()
+
+			resp := postJSONTo(t, srv, "/api/staff/password-reset",
+				`{"token":"some-token","newPassword":"`+tc.password+`"}`)
+			defer resp.Body.Close()
+			body := apierrtest.Decode(t, resp)
+			if got := body.Details["newPassword"] == staffauth.MsgPasswordTooCommon; got != tc.refused {
+				t.Fatalf("refused as too common = %v, want %v (status %d, details %v)",
+					got, tc.refused, resp.StatusCode, body.Details)
+			}
+			// A password that is not on the list goes on to the token, which
+			// is unknown here, so it is refused for that instead.
+			if resp.StatusCode != http.StatusBadRequest {
+				t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
+			}
+		})
+	}
+}
+
 // #1538: the limit counts characters, as Identity Platform and the browser
 // do, not bytes -- 14 two-byte characters are 28 bytes and still too short.
 func TestSpendResetHandler_PasswordLengthCountsCharacters(t *testing.T) {

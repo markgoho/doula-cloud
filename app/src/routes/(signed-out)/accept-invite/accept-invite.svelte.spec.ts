@@ -205,7 +205,54 @@ describe('step one -- the password rule (#1538)', () => {
 	it('states the rule before she types when she is making a new account', async () => {
 		await setup();
 
-		await expect.element(testPage.getByText('Must be 15 characters or more')).toBeVisible();
+		await expect
+			.element(testPage.getByText('Must be 15 characters or more, and not a commonly used password'))
+			.toBeVisible();
+	});
+
+	it('refuses a commonly used password for a new account before the account is created (#1539)', async () => {
+		await setup();
+		await emailField().fill('priya@example.com');
+		await passwordField().fill('passwordpassword');
+		await continueButton().click();
+
+		await expect
+			.element(testPage.getByRole('link', { name: 'Password is too common. Enter a different password' }))
+			.toBeVisible();
+		expect(createUserWithEmailAndPassword).not.toHaveBeenCalled();
+		// The list is in the browser: checking a password against it is no request at all.
+		expect(globalFetch).not.toHaveBeenCalled();
+		expect(apiFetch).not.toHaveBeenCalled();
+	});
+
+	it('gives the password to Identity Platform alone: no BFF request carries it (#1539)', async () => {
+		await setup();
+		await identifyAsNewPerson();
+		await acceptButton().click();
+
+		await vi.waitFor(() => expect(goto).toHaveBeenCalled());
+		expect(createUserWithEmailAndPassword).toHaveBeenCalledWith({}, 'priya@example.com', 'correct horse battery');
+		// Every request this screen made to the BFF, whatever its route.
+		const sent = JSON.stringify([
+			globalFetch.mock.calls,
+			apiFetch.mock.calls,
+			apiFetchWithSession.mock.calls
+		]);
+		expect(globalFetch).toHaveBeenCalled();
+		expect(sent).not.toContain('correct horse battery');
+	});
+
+	it('checks nothing against the list for an existing account password (#1539)', async () => {
+		await setup();
+		await testPage.getByRole('radio', { name: /I already have an account/ }).click();
+		await emailField().fill('priya@example.com');
+		await passwordField().fill('passwordpassword');
+		await continueButton().click();
+
+		await vi.waitFor(() =>
+			expect(signInWithEmailAndPassword).toHaveBeenCalledWith({}, 'priya@example.com', 'passwordpassword')
+		);
+		expect(testPage.getByText('Password is too common. Enter a different password').elements()).toHaveLength(0);
 	});
 
 	it('refuses a short password for a new account before anything is sent', async () => {
