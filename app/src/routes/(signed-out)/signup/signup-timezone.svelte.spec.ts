@@ -43,7 +43,7 @@ beforeEach(() => {
 });
 
 async function fillEverythingButTheZone() {
-	await testPage.getByLabelText('Practice name').fill('Riverside Doulas');
+	await testPage.getByLabelText('Practice name (optional)').fill('Riverside Doulas');
 	await testPage.getByLabelText('First name').fill('Priya');
 	await testPage.getByLabelText('Last name').fill('Sharma');
 	await testPage
