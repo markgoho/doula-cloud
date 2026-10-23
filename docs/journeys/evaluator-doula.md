@@ -70,14 +70,14 @@ The divergence is the finding: the terms she arrives with are the terms `GLOSSAR
 * **320px**: yes (ADR-0024)
 
 - **3.1** — Open `/signup`.
-- **3.2** — Fill four fields: Practice name, Your name, Email, Password.
+- **3.2** — Fill the fields in this order: First name, Last name, Practice name (optional), the state she works from, Timezone, Email, Password.
 - **3.3** — Press **Create Practice** (`POST /api/staff/signup`). The Practice, the Staff record, and a membership holding Owner + Admin + Doula are created in one statement (`signup.go:152`).
 
 This stage is genuinely cheap and is the strongest leg of her journey. One screen, four fields, no email confirmation step.
 
 - **3.3-a** — Look for anything telling her roles exist. The signup screen now states it, before she commits: the account holds Owner, Admin and Doula, why, and where roles are read and changed afterward. The role-scoped **Staff** nav item repeats it (TB-G7, closed).
 
-**Abandon point**: "Practice name" asks her to name a business she may not think of as one. Low risk, worth watching.
+**Abandon point**: "Practice name" asks her to name a business she may not think of as one. Lower risk since #1536: the field says "(optional)", comes after her own name, and its hint says an empty field gives the Practice her own name. Worth watching.
 
 ### Stage 4 — The first screen — moment of truth
 

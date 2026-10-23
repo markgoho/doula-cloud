@@ -40,8 +40,8 @@ None, and that is the test. Tasha arrives from outside with no account and no fi
 
 | Step | Action | Expected result | Mark |
 | --- | --- | --- | --- |
-| 3.1 | Open `/signup` | One screen, four fields, no email confirmation step. This is the strongest leg of her journey | `automated (signup-form.e2e.ts)` |
-| 3.2 | Fill Practice name, Your name, Email, Password | "Practice name" asks her to name a business she may not think of as one | `automated (signup-form.e2e.ts)` |
+| 3.1 | Open `/signup` | One screen, no email confirmation step. This is the strongest leg of her journey | `automated (signup-form.e2e.ts)` |
+| 3.2 | Fill First name, Last name, Practice name (optional), the state she works from, Timezone, Email, Password | "Practice name" asks her to name a business she may not think of as one; it is optional since [#1536](https://github.com/markgoho/doula-cloud/issues/1536), and an empty one gives the Practice her own name | `automated (signup-form.e2e.ts)` |
 | 3.3 | Press **Create Practice** | `POST /api/staff/signup` creates the Practice, the Staff row, and a membership holding Owner + Admin + Doula in one statement | `automated (signup-form.e2e.ts)` |
 | 3.3-a | Look for anything telling her roles exist, or that she now holds three | The signup screen itself now states it, before she commits: the account holds Owner, Admin and Doula, why, that an invited person gets only the roles chosen for her, and where roles are read and changed afterward ([#290](https://github.com/markgoho/doula-cloud/issues/290), closed). The role-scoped **Staff** nav item repeats it, and the roster reads `Owner, Admin, Doula`, the team's words, not the schema's ([#262](https://github.com/markgoho/doula-cloud/issues/262), closed) | `manual` |
 | 3.B-screens | Count the screens from the stage's entry to its end | **Screens**: 2 (Hick's Law, Flow). `/signup`, then the Practice landing | `manual` |

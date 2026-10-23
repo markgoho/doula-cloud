@@ -40,7 +40,7 @@ Maya is close to a domain expert but not inside the model.
 * **320px**: yes (ADR-0024)
 
 - **1.1** — Open `/signup`.
-- **1.2** — Fill Practice name, Your name, Email, Password; press **Create Practice** (`POST /api/staff/signup`).
+- **1.2** — Fill First name, Last name, Practice name (optional), the state she works from, Timezone, Email, Password; press **Create Practice** (`POST /api/staff/signup`). She works under her own name, so she can leave Practice name empty: the BFF gives the Practice her own name, first name then last name, and she types it only once (#1536).
 - **1.3** — Land on `/practices/[practiceId]`. She now holds Owner, Admin, and Doula on one membership, granted in a single statement (`signup.go:152`).
 
 She is **not** a test of role separation. Every permission boundary rides on Renata's invite route instead.

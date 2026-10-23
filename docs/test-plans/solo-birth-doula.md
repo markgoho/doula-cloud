@@ -14,8 +14,8 @@ None. Maya's journey starts at a cold `/signup`, so this plan builds its own fix
 
 | Step | Action | Expected result | Mark |
 | --- | --- | --- | --- |
-| 1.1 | Open `/signup` | The form shows Practice name, Your name, Email, Password | `automated (signup-form.e2e.ts)` |
-| 1.2 | Fill all four and press **Create Practice** | `POST /api/staff/signup` succeeds; a Practice, a Staff row, and a membership holding `owner`, `admin` and `doula` are created together | `automated (signup-form.e2e.ts)` |
+| 1.1 | Open `/signup` | The form shows, in this order, First name, Last name, Practice name (optional), the state she works from, Timezone, Email, Password. Practice name may be left empty: the Practice then takes her own name, first name then last name ([#1536](https://github.com/markgoho/doula-cloud/issues/1536)) | `automated (signup-form.e2e.ts)` |
+| 1.2 | Fill every field and press **Create Practice** | `POST /api/staff/signup` succeeds; a Practice, a Staff row, and a membership holding `owner`, `admin` and `doula` are created together | `automated (signup-form.e2e.ts)` |
 | 1.3 | Land on `/practices/[practiceId]` | `Welcome to {practice name}`, with all seven tiles including the five owner-only ones | `automated (signup-form.e2e.ts)` |
 | 1.3-a | Read the credit balance on **Billing** | `Credit balance: 3`, one `signup_bonus` ledger row of `+3` | `automated (billing.e2e.ts)` |
 | 1.B-screens | Count the screens from the stage's entry to its end | **Screens**: 2 (Hick's Law, Flow). `/signup`, then the Practice landing | `manual` |

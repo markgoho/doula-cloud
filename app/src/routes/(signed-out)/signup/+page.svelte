@@ -50,9 +50,9 @@
 	// the address off the verified ID token rather than off the body
 	// (#614), so it has no body field to key a Details entry to.
 	const signupFieldIds = {
-		practiceName: practiceNameId,
 		firstName: firstNameId,
 		lastName: lastNameId,
+		practiceName: practiceNameId,
 		workState: workStateId,
 		timezone: timezoneId
 	};
@@ -99,11 +99,12 @@
 	 * which is GOV.UK's rule and is why none of them contains "required".
 	 * The order is the order of the fields, because the summary is read
 	 * top to bottom and its entries have to match what she sees below it.
+	 *
+	 * The Practice name has no entry: it is optional, and the BFF gives an
+	 * empty one her own name (#1536).
 	 */
 	function findRefusals(): FormError[] {
 		const found: FormError[] = [];
-		if (practiceName.trim() === '')
-			found.push({ message: 'Enter the name of your Practice', targetId: practiceNameId });
 		if (firstName.trim() === '')
 			found.push({ message: 'Enter your first name', targetId: firstNameId });
 		if (lastName.trim() === '')
@@ -337,19 +338,13 @@
 	     top, rather than letting the browser's own bubble refuse the first
 	     empty field and say nothing about the other four (#467). -->
 	<StackedForm onSubmit={handleSubmit}>
-		<LabeledField id={practiceNameId} label="Practice name" error={submission.errorFor(practiceNameId)}>
-			{#snippet children({ id, describedBy, invalid })}
-				<TextInput
-					{id}
-					{describedBy}
-					{invalid}
-					value={practiceName}
-					onInput={(value) => (practiceName = value)}
-					required
-					autocomplete="organization"
-				/>
-			{/snippet}
-		</LabeledField>
+		<!--
+			#1536 (decided on #1493): her name comes first, because an empty
+			Practice name takes it. The hint is two sentences, not the brief's
+			one short line, because #1493 decided it has to say both things
+			before she types: what an empty field does, and where Clients see
+			the name.
+		-->
 		<StaffNameFields
 			bind:firstName
 			bind:lastName
@@ -358,6 +353,23 @@
 			firstError={submission.errorFor(firstNameId)}
 			lastError={submission.errorFor(lastNameId)}
 		/>
+		<LabeledField
+			id={practiceNameId}
+			label="Practice name (optional)"
+			hint="If you leave this empty, your Practice takes your own name. Clients see this name on a Contract, in the portal and on a card statement."
+			error={submission.errorFor(practiceNameId)}
+		>
+			{#snippet children({ id, describedBy, invalid })}
+				<TextInput
+					{id}
+					{describedBy}
+					{invalid}
+					value={practiceName}
+					onInput={(value) => (practiceName = value)}
+					autocomplete="organization"
+				/>
+			{/snippet}
+		</LabeledField>
 		<WorkStateField id={workStateId} bind:value={workStateName} error={submission.errorFor(workStateId)} />
 		<TimezoneField
 			id={timezoneId}

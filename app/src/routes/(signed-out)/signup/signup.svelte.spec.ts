@@ -40,9 +40,9 @@ beforeEach(() => {
 });
 
 async function fillForm() {
-	await testPage.getByLabelText('Practice name').fill('Riverside Doulas');
 	await testPage.getByLabelText('First name').fill('Priya');
 	await testPage.getByLabelText('Last name').fill('Sharma');
+	await testPage.getByLabelText('Practice name (optional)').fill('Riverside Doulas');
 	await testPage
 		.getByRole('combobox', { name: 'Which state do you work from?' })
 		.selectOptions('New Jersey');
@@ -217,6 +217,52 @@ describe('the two name fields (#1537)', () => {
 		expect(testPage.getByRole('link', { name: 'Enter your first name' }).elements()).toHaveLength(0);
 		expect(createUserWithEmailAndPassword).not.toHaveBeenCalled();
 		expect(globalFetch).not.toHaveBeenCalled();
+	});
+});
+
+describe('the optional Practice name (#1536)', () => {
+	it('says it is optional, and what an empty one does, before she types', async () => {
+		await setup();
+
+		const field = testPage.getByLabelText('Practice name (optional)');
+		await expect.element(field).toHaveAttribute('autocomplete', 'organization');
+		await expect.element(field).not.toBeRequired();
+		await expect
+			.element(field)
+			.toHaveAccessibleDescription(
+				'If you leave this empty, your Practice takes your own name. Clients see this name on a Contract, in the portal and on a card statement.'
+			);
+	});
+
+	it('sends an empty Practice name for the BFF to fill with her own name', async () => {
+		await setup();
+		await fillForm();
+		await testPage.getByLabelText('Practice name (optional)').fill('');
+
+		createUserWithEmailAndPassword.mockResolvedValueOnce(credential);
+		globalFetch.mockResolvedValueOnce(jsonResponse({ practiceId: 'practice-1' }, 201));
+		await submit();
+
+		await vi.waitFor(() => expect(goto).toHaveBeenCalledWith('/practices/practice-1'));
+		const [, init] = globalFetch.mock.calls[0];
+		expect(JSON.parse(init.body)).toMatchObject({ practiceName: '', firstName: 'Priya', lastName: 'Sharma' });
+	});
+
+	it('lists the refusals of an empty form in the order of its fields, her name first', async () => {
+		await setup();
+
+		await submit();
+
+		await expect.element(testPage.getByRole('link', { name: 'Enter your first name' })).toBeVisible();
+		const summary = testPage.getByRole('alert');
+		expect(summary.getByRole('link').elements().map((link) => link.textContent?.trim())).toEqual([
+			'Enter your first name',
+			'Enter your last name',
+			'Choose the state you work from',
+			'Enter your email address',
+			'Enter a password'
+		]);
+		expect(createUserWithEmailAndPassword).not.toHaveBeenCalled();
 	});
 });
 
