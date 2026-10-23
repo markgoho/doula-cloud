@@ -279,10 +279,15 @@ export function errorsFromCause(
  * shown are still the BFF's own, for the reason `refusalMessage` gives --
  * the server is the only thing that knows which population she is about
  * to leave.
+ *
+ * The `errors` kind carries the refusal's `APIError.code` too, for a
+ * screen that answers one particular refusal with a state of its own
+ * rather than a summary entry: signup's `PILOT_NOT_OPEN` (#1790). The
+ * body is read once, here, so that screen cannot read it a second time.
  */
 export type Refusal =
 	| { kind: 'confirmable'; message: string }
-	| { kind: 'errors'; errors: FormError[] };
+	| { kind: 'errors'; errors: FormError[]; code?: string };
 
 export async function refusalOrConfirmable(
 	response: Response,
@@ -293,7 +298,7 @@ export async function refusalOrConfirmable(
 	if (response.status === 409 && parsed?.code === confirmableCode && parsed.message) {
 		return { kind: 'confirmable', message: parsed.message };
 	}
-	return { kind: 'errors', errors: toErrors(parsed, fieldIds) };
+	return { kind: 'errors', errors: toErrors(parsed, fieldIds), code: parsed?.code };
 }
 
 /*

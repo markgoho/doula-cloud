@@ -126,7 +126,7 @@ func setup(ctx context.Context) error {
 		return fmt.Errorf("create template database: %w", err)
 	}
 
-	if err := migrateTemplate(); err != nil {
+	if err := migrateTemplate(ctx); err != nil {
 		// coverage:ignore reason: migration failure, not exercised by the happy-path test
 		return err
 	}
@@ -142,7 +142,7 @@ func setup(ctx context.Context) error {
 // migrateTemplate applies the goose migrations to templateDB, then closes
 // its connection -- CREATE DATABASE ... TEMPLATE refuses to clone a
 // database with any open connection.
-func migrateTemplate() error {
+func migrateTemplate(ctx context.Context) error {
 	u, err := url.Parse(maintenanceDSN)
 	// coverage:ignore reason: malformed maintenance DSN, not exercised by the happy-path test
 	if err != nil {
@@ -165,6 +165,15 @@ func migrateTemplate() error {
 	// coverage:ignore reason: migration failure, not exercised by the happy-path test
 	if err := goose.Up(tmpl, "."); err != nil {
 		return fmt.Errorf("apply migrations to template: %w", err)
+	}
+
+	// 00125 seeds the pilot gate closed (#1790), which is right for the
+	// deployed database and wrong for every test that signs up a Practice
+	// about something else. The template opens it, so each clone starts
+	// open; a test about the gate closes it again with ClosePilotGate.
+	// coverage:ignore reason: fixture write failure, not exercised by the happy-path test
+	if _, err := tmpl.ExecContext(ctx, openPilotGateSQL); err != nil {
+		return fmt.Errorf("open pilot gate in template: %w", err)
 	}
 
 	if err := tmpl.Close(); err != nil {

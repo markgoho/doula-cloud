@@ -209,6 +209,7 @@ export async function startStack(appOrigin: string) {
 	installSimClock();
 	runMigrations();
 	seedAppE2ERole();
+	openPilotGate();
 	grantSimClock();
 	await seedGCSBucket();
 	await startMailbox();
@@ -366,6 +367,16 @@ function seedAppE2ERole() {
 		"DO $$ BEGIN IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'app_e2e') THEN " +
 			"CREATE ROLE app_e2e LOGIN PASSWORD 'app_e2e' IN ROLE app_runtime; END IF; END $$;"
 	);
+}
+
+// Opens #1790's pilot gate, which migration 00125 seeds closed. Closed is
+// right for the deployed database, where only an address the founder
+// added may create a Practice before January; here every spec signs up
+// a Practice with an address of its own, and the gate would refuse them
+// all. `WHERE opened_at IS NULL` keeps the first record on a long-lived
+// `dev:full` stack, the same rule the operator endpoint follows.
+function openPilotGate() {
+	execSQL("UPDATE pilot_gate SET opened_by = 'e2e stack', opened_at = now() WHERE opened_at IS NULL");
 }
 
 // Links a fresh Portal Account to clientID via client_portal_users, with

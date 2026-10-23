@@ -416,7 +416,8 @@ describe('refusalOrConfirmable', () => {
 
 		expect(refusal).toEqual({
 			kind: 'errors',
-			errors: [{ message: 'That address is already invited' }]
+			errors: [{ message: 'That address is already invited' }],
+			code: 'CONFLICT'
 		});
 	});
 
@@ -425,7 +426,11 @@ describe('refusalOrConfirmable', () => {
 			jsonResponse({ code: 'SESSION_EVICTION_UNCONFIRMED', message: 'Add a website first' }, 400)
 		);
 
-		expect(refusal).toEqual({ kind: 'errors', errors: [{ message: 'Add a website first' }] });
+		expect(refusal).toEqual({
+			kind: 'errors',
+			errors: [{ message: 'Add a website first' }],
+			code: 'SESSION_EVICTION_UNCONFIRMED'
+		});
 	});
 
 	/*
@@ -441,7 +446,8 @@ describe('refusalOrConfirmable', () => {
 
 		expect(refusal).toEqual({
 			kind: 'errors',
-			errors: [{ message: 'Settle the open invoice first' }]
+			errors: [{ message: 'Settle the open invoice first' }],
+			code: 'FAILED_PRECONDITION'
 		});
 	});
 
@@ -450,7 +456,8 @@ describe('refusalOrConfirmable', () => {
 
 		expect(refusal).toEqual({
 			kind: 'errors',
-			errors: [{ message: '{"code":"SESSION_EVICTION_UNCONFIRMED"}' }]
+			errors: [{ message: '{"code":"SESSION_EVICTION_UNCONFIRMED"}' }],
+			code: 'SESSION_EVICTION_UNCONFIRMED'
 		});
 	});
 
@@ -465,7 +472,8 @@ describe('refusalOrConfirmable', () => {
 
 		expect(refusal).toEqual({
 			kind: 'errors',
-			errors: [{ message: 'Enter the code', targetId: 'token-field' }]
+			errors: [{ message: 'Enter the code', targetId: 'token-field' }],
+			code: 'INVALID_ARGUMENT'
 		});
 	});
 

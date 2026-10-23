@@ -119,6 +119,14 @@ const (
 	// Retry-After header only one of them carries, would be doing what
 	// #692 forbids, so the permanent one gets its own code.
 	CodeOfferCodeExhausted Code = "OFFER_CODE_EXHAUSTED"
+	// CodePilotNotOpen is #1790's signup refusal: until the founder opens
+	// the pilot gate, only an address on the pilot allowlist may create a
+	// Practice, and this one is not on it. Its own code rather than
+	// CodeForbidden, because nothing about a role is refused here, and the
+	// signup screen answers it with a screen of its own -- DoulaCloud
+	// opens in January 2027, and the waitlist -- rather than with an error
+	// beside a field. Nothing is written on the refusal.
+	CodePilotNotOpen Code = "PILOT_NOT_OPEN"
 )
 
 // ForbiddenCodes is the recorded set of reason codes a 403 may carry
@@ -129,7 +137,7 @@ const (
 // across the wire, so the error page asserted the one cause a status
 // code cannot actually name -- "your role does not have permission" --
 // for every 403 alike, including two that are not about a role at all.
-// Four codes, one per kind of thing a reader can do about it:
+// Five codes, one per kind of thing a reader can do about it:
 //
 //   - CodeForbidden -- a role refusal. CodeForStatus hands this to every
 //     403 that names no more specific reason, so it is also the default,
@@ -141,9 +149,14 @@ const (
 //   - CodeSecondFactorRequired -- the same step, asked of one act rather
 //     than of the whole Practice (#1532). The reader is inside the
 //     Practice; only this act waits for the second factor.
+//   - CodePilotNotOpen -- a date the reader waits for (#1790). Signup
+//     refuses an address the founder has not let into the pilot. The
+//     signup screen answers it with a screen of its own, so the error
+//     page has no state for it and never meets it.
 //
-// A fifth kind of 403 needs a fifth code here and a fifth state on
-// the app's error page, not another shade of the role-refusal copy.
+// A sixth kind of 403 needs a sixth code here and, if the error page
+// can meet it, a state there too, not another shade of the role-refusal
+// copy.
 // TestEveryForbiddenWriteCarriesARecordedCode holds the set closed: a
 // literal http.StatusForbidden paired with a code outside it -- in an
 // apierr.Write call or in a refusal struct literal -- fails the build.
@@ -152,6 +165,7 @@ var ForbiddenCodes = map[Code]bool{
 	CodePracticePendingDeletion: true,
 	CodeMFARequired:             true,
 	CodeSecondFactorRequired:    true,
+	CodePilotNotOpen:            true,
 }
 
 // APIError is docs/api-design.md section 7's structured error shape.

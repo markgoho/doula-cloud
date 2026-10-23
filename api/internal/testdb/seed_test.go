@@ -36,6 +36,29 @@ func TestPortalUID(t *testing.T) {
 
 // TestSeedPractice proves the Practice row lands with the name passed
 // in -- the fixture every other seed helper in this file builds on.
+// TestClosePilotGate proves both halves of the fixture (#1790): every
+// clone starts with the template's gate open, and ClosePilotGate puts it
+// back to closed with no opener on record.
+func TestClosePilotGate(t *testing.T) {
+	db := testdb.New(t)
+	gateIs := func(closed bool) {
+		t.Helper()
+		var isClosed bool
+		if err := db.Admin.QueryRowContext(t.Context(),
+			`SELECT opened_at IS NULL AND opened_by IS NULL FROM pilot_gate`,
+		).Scan(&isClosed); err != nil {
+			t.Fatalf("read pilot gate: %v", err)
+		}
+		if isClosed != closed {
+			t.Fatalf("gate closed = %v, want %v", isClosed, closed)
+		}
+	}
+
+	gateIs(false)
+	testdb.ClosePilotGate(t, db)
+	gateIs(true)
+}
+
 func TestSeedPractice(t *testing.T) {
 	db := testdb.New(t)
 	practiceID := testdb.SeedPractice(t, db, "Seed Practice Test")
