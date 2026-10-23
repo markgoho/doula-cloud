@@ -10,6 +10,7 @@
 	import { resolve } from '$app/paths';
 	import { getFirebaseAuth } from '#lib/firebase.js';
 	import { apiBaseURL } from '#lib/api.js';
+	import { privacyPolicyUrl, termsOfServiceUrl } from '#lib/legal.js';
 	import TextInput from '#lib/components/atoms/TextInput.svelte';
 	import Button from '#lib/components/atoms/Button.svelte';
 	import Link from '#lib/components/atoms/Link.svelte';
@@ -36,6 +37,7 @@
 	const timezoneId = 'signup-timezone';
 	const emailId = 'signup-email';
 	const passwordId = 'signup-password';
+	const agreementId = 'signup-agreement';
 
 	// #290: read off ROLE_LABELS -- the same source MembershipFields draws
 	// its checkboxes from -- rather than spelling the three words out here
@@ -420,7 +422,26 @@
 			variant="info"
 			message={`This account will hold every role — ${roleNames} — because a Practice's founder is usually its only Doula and needs to hold their own Visits. Anyone you invite later holds only the roles you choose for them. Roles are shown and changed on your Practice's staff roster.`}
 		/>
-		<Button type="submit" label="Create Practice" loading={submission.isSubmitting} />
+		<!--
+			#1547 (ADR-0053): the Practice agrees through its Owner by this
+			sentence, joined to the button in place and as its accessible
+			description -- GOV.UK's Check answers declaration, with no
+			checkbox. Each document opens in a new tab so that she keeps the
+			form. The BFF records the agreement, with each document's current
+			version, in the transaction this button starts.
+		-->
+		<p id={agreementId}>
+			By creating your Practice, you agree to the <Link
+				href={termsOfServiceUrl}
+				label="Terms of Service"
+			/> and the <Link href={privacyPolicyUrl} label="Privacy Policy" />.
+		</p>
+		<Button
+			type="submit"
+			label="Create Practice"
+			loading={submission.isSubmitting}
+			describedBy={agreementId}
+		/>
 	</StackedForm>
 	{/if}
 {/snippet}

@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test';
 import { uniqueEmail, STAFF_PASSWORD } from './staffSignup';
+import { seedClient } from './portalClient';
 
 // Every other spec in this suite provisions its Practice with
 // POST /api/staff/signup directly (fixture setup is not automation, #207) --
@@ -28,6 +29,10 @@ test('Signing up through the /signup form lands the new Owner on her Practice ov
 		.selectOption('America/New_York');
 	await page.getByLabel('Email').fill(email);
 	await page.getByLabel('Password').fill(password);
+	// #1547: the agreement sentence sits above the button and is its description.
+	await expect(page.getByRole('button', { name: 'Create Practice' })).toHaveAccessibleDescription(
+		/^By creating your Practice, you agree to the Terms of Service \(opens in new tab\) and the Privacy Policy \(opens in new tab\)/
+	);
 	await page.getByRole('button', { name: 'Create Practice' }).click();
 
 	await expect(page).toHaveURL(/\/practices\/[^/?]+$/);
@@ -89,4 +94,34 @@ test('An empty Practice name gives the new Practice her own name', async ({ page
 
 	await expect(page).toHaveURL(/\/practices\/[^/?]+$/);
 	await expect(page.getByRole('heading', { level: 1, name: 'Welcome to Jamie Owner' })).toBeVisible();
+});
+
+// #1547 (ADR-0053): pressing Create Practice is the Practice's agreement
+// to the Terms of Service and the Privacy Policy, and the Practice's
+// Recent activity shows it in plain words, with her name and the date.
+// The feed shows once the Practice holds a Client, so the spec adds one.
+test("The Practice's activity shows that its Owner agreed to the terms at signup", async ({ page, request }) => {
+	await page.goto('/signup');
+	await page.getByLabel('First name').fill('Jamie');
+	await page.getByLabel('Last name').fill('Owner');
+	await page.getByLabel('Which state do you work from?').selectOption('New York');
+	await page
+		.getByLabel('What timezone does this Practice work in?')
+		.selectOption('America/New_York');
+	await page.getByLabel('Email').fill(uniqueEmail('signup-terms'));
+	await page.getByLabel('Password').fill(STAFF_PASSWORD);
+	await page.getByRole('button', { name: 'Create Practice' }).click();
+	await expect(page).toHaveURL(/\/practices\/[^/?]+$/);
+
+	const practiceId = new URL(page.url()).pathname.split('/').at(-1)!;
+	const cookies = await page.context().cookies();
+	const session = cookies.find((cookie) => cookie.name === '__session');
+	expect(session, 'no __session cookie after signup').toBeDefined();
+	await seedClient(request, practiceId, { Cookie: `__session=${session!.value}` }, { givenName: 'Ada' });
+	await page.reload();
+
+	const agreement = page.getByRole('row').filter({ hasText: 'Terms accepted' });
+	await expect(agreement).toBeVisible();
+	await expect(agreement).toContainText('Jamie Owner');
+	await expect(agreement.locator('time')).toHaveAttribute('datetime', /^\d{4}-\d{2}-\d{2}T/);
 });

@@ -2,6 +2,7 @@ import { page as testPage } from 'vitest/browser';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import { jsonResponse } from '#lib/testResponse.js';
+import { privacyPolicyUrl, termsOfServiceUrl } from '#lib/legal.js';
 import Page from './+page.svelte';
 
 /*
@@ -168,6 +169,40 @@ describe('the roles statement (#290)', () => {
 			.toBeVisible();
 		// First paint, not a response to submitting -- nothing has fetched yet.
 		expect(globalFetch).not.toHaveBeenCalled();
+	});
+});
+
+describe('the agreement sentence (#1547)', () => {
+	const sentence =
+		'By creating your Practice, you agree to the Terms of Service (opens in new tab) and the Privacy Policy (opens in new tab).';
+
+	it('sits after the role notice and directly above the button, which it describes', async () => {
+		await render(Page, {});
+
+		const button = testPage.getByRole('button', { name: 'Create Practice' });
+		// The Link atom is inline-flex, and the accessible-name computation
+		// puts a space after an inline-block element, so the full stop
+		// arrives as " ." -- a screen reader reads it the same.
+		await expect.element(button).toHaveAccessibleDescription(sentence.replace(/\.$/, ' .'));
+		const paragraph = testPage.getByRole('paragraph').filter({ hasText: 'By creating your Practice' });
+		await expect.element(paragraph).toBeVisible();
+
+		const notice = testPage.getByText(/This account will hold every role/).element();
+		expect(notice.compareDocumentPosition(paragraph.element()) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+		expect(paragraph.element().nextElementSibling).toBe(button.element());
+	});
+
+	it('links each document on the marketing site, in a new tab', async () => {
+		await render(Page, {});
+
+		for (const [name, href] of [
+			['Terms of Service (opens in new tab)', termsOfServiceUrl],
+			['Privacy Policy (opens in new tab)', privacyPolicyUrl]
+		]) {
+			const link = testPage.getByRole('link', { name });
+			await expect.element(link).toHaveAttribute('href', href);
+			await expect.element(link).toHaveAttribute('target', '_blank');
+		}
 	});
 });
 
