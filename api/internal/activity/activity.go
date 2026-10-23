@@ -11,6 +11,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"time"
 )
 
 // ActorKind is the ADR's three kinds of actor -- staff, client and
@@ -58,6 +59,11 @@ type Entry struct {
 	Action      string
 	Diff        json.RawMessage
 	Actor       Actor
+	// CreatedAt is the instant the row records, when its write site has to
+	// name it: a row that is evidence of when a person did something reads
+	// the server's clock.Now(ctx) (#1547's agreement at signup). Zero keeps
+	// the column's DEFAULT now(), which every other write site uses.
+	CreatedAt time.Time
 }
 
 // RecordOption configures a Record call. ScopedTo is the only one.
@@ -121,11 +127,16 @@ func Record(ctx context.Context, tx *sql.Tx, e Entry, opts ...RecordOption) erro
 		}
 	}
 
+	var createdAt sql.NullTime
+	if !e.CreatedAt.IsZero() {
+		createdAt = sql.NullTime{Time: e.CreatedAt, Valid: true}
+	}
+
 	_, err := tx.ExecContext(ctx,
 		`INSERT INTO activity
-		     (practice_id, subject_kind, subject_id, action, diff, actor_kind, actor_staff_id, actor_client_id)
-		 VALUES ($1, $2, $3, $4, $5, $6::activity_actor_kind, $7, $8)`,
-		e.PracticeID, e.SubjectKind, e.SubjectID, e.Action, []byte(diff), string(e.Actor.Kind), staffID, clientID,
+		     (practice_id, subject_kind, subject_id, action, diff, actor_kind, actor_staff_id, actor_client_id, created_at)
+		 VALUES ($1, $2, $3, $4, $5, $6::activity_actor_kind, $7, $8, coalesce($9, now()))`,
+		e.PracticeID, e.SubjectKind, e.SubjectID, e.Action, []byte(diff), string(e.Actor.Kind), staffID, clientID, createdAt,
 	)
 	// coverage:ignore reason: DB query failure, not exercised by unit tests
 	if err != nil {

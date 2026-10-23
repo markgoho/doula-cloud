@@ -3,6 +3,7 @@ package activity_test
 import (
 	"encoding/json"
 	"testing"
+	"time"
 
 	"doula-cloud/api/internal/activity"
 	"doula-cloud/api/internal/testdb"
@@ -131,6 +132,43 @@ func TestRecord_SystemActor(t *testing.T) {
 	}
 	if diffJSON != "{}" {
 		t.Fatalf("diff = %q, want a nil Diff to fall back to an empty object", diffJSON)
+	}
+}
+
+// TestRecord_CreatedAtIsTheCallersInstant: a write site that names the
+// instant (#1547's terms_accepted, read through clock.Now) gets that
+// instant in created_at, not the database's now().
+func TestRecord_CreatedAtIsTheCallersInstant(t *testing.T) {
+	db := testdb.New(t)
+	practiceID := testdb.SeedPractice(t, db, "Test Practice")
+	staffID := testdb.SeedStaff(t, db, "record-created-at")
+	at := time.Date(2026, 10, 23, 9, 15, 0, 0, time.UTC)
+
+	tx, err := db.Admin.BeginTx(t.Context(), nil)
+	if err != nil {
+		t.Fatalf("begin: %v", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	if err := activity.Record(t.Context(), tx, activity.Entry{
+		PracticeID:  practiceID,
+		SubjectKind: activity.SubjectPractice,
+		SubjectID:   practiceID,
+		Action:      "terms_accepted",
+		Actor:       activity.StaffActor(staffID),
+		CreatedAt:   at,
+	}); err != nil {
+		t.Fatalf("record: %v", err)
+	}
+	if err := tx.Commit(); err != nil {
+		t.Fatalf("commit: %v", err)
+	}
+
+	var got time.Time
+	if err := db.Admin.QueryRowContext(t.Context(), `SELECT created_at FROM activity WHERE practice_id = $1`, practiceID).Scan(&got); err != nil {
+		t.Fatalf("read created_at: %v", err)
+	}
+	if !got.Equal(at) {
+		t.Fatalf("created_at = %s, want %s", got, at)
 	}
 }
 

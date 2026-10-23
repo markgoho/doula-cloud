@@ -336,6 +336,15 @@ func signup(r *http.Request, tx *sql.Tx, verified authn.VerifiedToken, req Signu
 		return SignupResponse{}, &sessionmint.Refusal{Status: http.StatusInternalServerError, Message: apierr.MsgInternalError}
 	}
 
+	// #1547 (ADR-0053): the Practice agrees, through her, to the Terms of
+	// Service and the Privacy Policy -- the sentence above the button she
+	// just pressed. A resumed signup is a new Practice too, so it records
+	// one as well.
+	if err := recordTermsAccepted(ctx, tx, r, practiceID, staffID); err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		return SignupResponse{}, &sessionmint.Refusal{Status: http.StatusInternalServerError, Message: apierr.MsgInternalError}
+	}
+
 	// The founding Owner is, by construction, this brand-new Practice's
 	// only Owner -- #615's AC: saved recovery codes mint on the
 	// Membership event that makes someone a Practice's sole Owner, and a
