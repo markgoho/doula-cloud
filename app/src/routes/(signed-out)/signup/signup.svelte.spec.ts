@@ -219,3 +219,49 @@ describe('the two name fields (#1537)', () => {
 		expect(globalFetch).not.toHaveBeenCalled();
 	});
 });
+
+/*
+ * #1790: until January, only an address the founder added can create a
+ * Practice. The BFF says so with its own code, and the screen answers
+ * that code with a screen of its own rather than an error summary.
+ */
+const pilotNotOpen = {
+	code: 'PILOT_NOT_OPEN',
+	message: 'DoulaCloud opens in January 2027. Until then, only a Practice in the pilot can sign up.'
+};
+
+describe('an address not in the pilot (#1790)', () => {
+	it('says DoulaCloud opens in January 2027 and links to the waitlist', async () => {
+		await setup();
+		await fillForm();
+
+		createUserWithEmailAndPassword.mockResolvedValueOnce(credential);
+		globalFetch.mockResolvedValueOnce(jsonResponse(pilotNotOpen, 403));
+		await submit();
+
+		await expect
+			.element(testPage.getByRole('heading', { name: 'DoulaCloud opens in January 2027' }))
+			.toBeVisible();
+		const waitlist = testPage.getByRole('link', { name: 'Join the waitlist' });
+		await expect.element(waitlist).toBeVisible();
+		expect(waitlist.element().getAttribute('href')).toMatch(/^https:\/\/doula\.cloud\/\?utm_source=/);
+		// Not an error summary: nothing she typed is wrong.
+		expect(testPage.getByRole('alert').elements()).toHaveLength(0);
+		// Signed out of the JS SDK, like every other refusal: a retry picks
+		// the same account back up (#745).
+		expect(signOut).toHaveBeenCalled();
+		expect(goto).not.toHaveBeenCalled();
+	});
+
+	it('goes back to the form for a different email address', async () => {
+		await setup();
+		await fillForm();
+
+		createUserWithEmailAndPassword.mockResolvedValueOnce(credential);
+		globalFetch.mockResolvedValueOnce(jsonResponse(pilotNotOpen, 403));
+		await submit();
+		await testPage.getByRole('button', { name: 'Use a different email address' }).click();
+
+		await expect.element(testPage.getByLabelText('Email')).toHaveValue('priya@example.com');
+	});
+});

@@ -54,4 +54,11 @@ func registerInternalRoutes(g *staffauth.GatedRouter, d Deps) {
 	// founding-grants above -- an operator endpoint, deliberately not a
 	// screen (#615's AC: "no product surface").
 	g.Write("POST /api/internal/staffauth/mfa-recovery/support-clear", staffauth.SupportClearHandler(d.AccountManager, d.DB, d.InternalAuth))
+	// #1790's pilot gate, on the same guard and in founding-grants'
+	// shape. Until January only an address the founder added can create
+	// a Practice: the first endpoint adds one, the second opens the gate
+	// for everyone -- the one deliberate act ADR-0043 asks for. Both
+	// record who acted and when; there is no endpoint that undoes either.
+	g.Write("POST /api/internal/staffauth/pilot-allowlist", staffauth.PilotAllowlistHandler(d.DB, d.InternalAuth))
+	g.Write("POST /api/internal/staffauth/pilot-gate/open", staffauth.PilotGateOpenHandler(d.DB, d.InternalAuth))
 }

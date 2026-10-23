@@ -12,6 +12,7 @@
 	import { apiBaseURL } from '#lib/api.js';
 	import TextInput from '#lib/components/atoms/TextInput.svelte';
 	import Button from '#lib/components/atoms/Button.svelte';
+	import Link from '#lib/components/atoms/Link.svelte';
 	import LabeledField from '#lib/components/molecules/LabeledField.svelte';
 	import StackedForm from '#lib/components/molecules/StackedForm.svelte';
 	import StaffNameFields from '#lib/components/molecules/StaffNameFields.svelte';
@@ -77,7 +78,16 @@
 	// reasoning the sign-in page's Continue button and the portal's own
 	// Continue button already use. See the sign-in page's copy of this
 	// comment for the fuller picture.
-	let step = $state<'form' | 'confirm-sign-out'>('form');
+	//
+	// #1790's 'pilot-not-open' is the third: until the founder opens the
+	// pilot, the BFF refuses an address he has not added, and nothing she
+	// typed is wrong -- so it is a screen of its own, not a summary entry.
+	let step = $state<'form' | 'confirm-sign-out' | 'pilot-not-open'>('form');
+
+	// The waitlist, tagged so the teaser's visit counter can tell a visit
+	// sent from this screen from every other (#368).
+	const waitlistURL =
+		'https://doula.cloud/?utm_source=app&utm_medium=signup&utm_campaign=pilot-not-open';
 	let signOutWarning = $state<string | undefined>();
 	// The ID token this signup runs on, kept across the confirm press --
 	// a plain local, not $state, for the same reason the sign-in page's
@@ -218,6 +228,13 @@
 				// alive instead would be a second, invisible way to be signed in
 				// on a screen that shows a refusal (#745).
 				await signOut(getFirebaseAuth());
+				// #1790: the account she made stays, and once the founder adds
+				// her address the same form sent again finishes the signup
+				// through `credentialFor`.
+				if (refusal.code === 'PILOT_NOT_OPEN') {
+					step = 'pilot-not-open';
+					return;
+				}
 				return refusal.errors;
 			}
 
@@ -293,6 +310,26 @@
 			onClick={handleConfirmSignOut}
 		/>
 		<Button type="button" label="Cancel" variant="secondary" onClick={handleCancelSignOut} />
+	{:else if step === 'pilot-not-open'}
+		<!--
+			#1790: in the founder's voice, the teaser's own words for the
+			waitlist. The second line is for a pilot doula who typed an
+			address other than the one the founder wrote to.
+		-->
+		<h2 tabindex="-1" {@attach focusOnAppearing}>DoulaCloud opens in January 2027</h2>
+		<p>
+			Until then, only doulas in the pilot can sign up. If you're in the pilot, use the email
+			address I wrote to.
+		</p>
+		<p>
+			<Link href={waitlistURL} label="Join the waitlist" /> and I'll write to you when it opens.
+		</p>
+		<Button
+			type="button"
+			label="Use a different email address"
+			variant="secondary"
+			onClick={() => (step = 'form')}
+		/>
 	{:else}
 	<!-- `novalidate`: this page refuses the submit and says so once, at the
 	     top, rather than letting the browser's own bubble refuse the first

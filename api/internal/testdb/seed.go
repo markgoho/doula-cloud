@@ -622,3 +622,22 @@ func SeedPushSubscription(t *testing.T, db *DB, ownerType, ownerID, endpoint str
 	}
 	return id
 }
+
+// openPilotGateSQL is what the template runs once after migrating (see
+// migrateTemplate): it opens 00125's pilot gate, so a test that signs up
+// a Practice about something else is not refused by #1790's allowlist.
+// The opener is named, because the row's own CHECK wants both halves.
+const openPilotGateSQL = `UPDATE pilot_gate SET opened_by = 'testdb template', opened_at = now()`
+
+// ClosePilotGate puts 00125's pilot gate back to the state a fresh
+// database is migrated into: closed, with no opener on record. Only a
+// test about #1790's gate wants this -- every clone starts open.
+func ClosePilotGate(t *testing.T, db *DB) {
+	t.Helper()
+	if _, err := db.Admin.ExecContext(t.Context(),
+		`UPDATE pilot_gate SET opened_by = NULL, opened_at = NULL`,
+	); err != nil {
+		// coverage:ignore reason: fixture update failure, not exercised by the happy-path test
+		t.Fatalf("testdb: close pilot gate: %v", err)
+	}
+}
