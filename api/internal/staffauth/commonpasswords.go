@@ -17,7 +17,8 @@ import (
 var commonPasswordsFile string
 
 var commonPasswords = func() map[string]struct{} {
-	entries := strings.Split(commonPasswordsFile, "\n")
+	// The file ends in a newline; the empty line after it is not an entry.
+	entries := strings.Split(strings.TrimSuffix(commonPasswordsFile, "\n"), "\n")
 	set := make(map[string]struct{}, len(entries))
 	for _, entry := range entries {
 		set[entry] = struct{}{}

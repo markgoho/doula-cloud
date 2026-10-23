@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
+import { PASSWORD_TOO_COMMON } from './passwordRule.js';
 
 /*
  * The browser and the BFF read two copies of one generated list (#1539):
@@ -18,5 +19,14 @@ describe('the common-password list', () => {
 
 		expect(browserCopy.length).toBeGreaterThan(0);
 		expect(bffCopy).toBe(browserCopy);
+	});
+
+	it('is refused in the same words by the reset screen and the reset endpoint', () => {
+		const fieldErrors = readFileSync(
+			new URL('../../../api/internal/staffauth/fielderrors.go', import.meta.url),
+			'utf8'
+		);
+
+		expect(fieldErrors).toContain(`MsgPasswordTooCommon = "${PASSWORD_TOO_COMMON}"`);
 	});
 });

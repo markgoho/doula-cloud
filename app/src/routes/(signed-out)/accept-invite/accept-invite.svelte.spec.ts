@@ -225,6 +225,23 @@ describe('step one -- the password rule (#1538)', () => {
 		expect(apiFetch).not.toHaveBeenCalled();
 	});
 
+	it('gives the password to Identity Platform alone: no BFF request carries it (#1539)', async () => {
+		await setup();
+		await identifyAsNewPerson();
+		await acceptButton().click();
+
+		await vi.waitFor(() => expect(goto).toHaveBeenCalled());
+		expect(createUserWithEmailAndPassword).toHaveBeenCalledWith({}, 'priya@example.com', 'correct horse battery');
+		// Every request this screen made to the BFF, whatever its route.
+		const sent = JSON.stringify([
+			globalFetch.mock.calls,
+			apiFetch.mock.calls,
+			apiFetchWithSession.mock.calls
+		]);
+		expect(globalFetch).toHaveBeenCalled();
+		expect(sent).not.toContain('correct horse battery');
+	});
+
 	it('checks nothing against the list for an existing account password (#1539)', async () => {
 		await setup();
 		await testPage.getByRole('radio', { name: /I already have an account/ }).click();

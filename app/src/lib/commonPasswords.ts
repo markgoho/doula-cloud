@@ -13,4 +13,5 @@
  */
 import raw from './commonPasswords.txt?raw';
 
-export const COMMON_PASSWORDS: ReadonlySet<string> = new Set(raw.split('\n'));
+// The file ends in a newline; the empty line after it is not an entry.
+export const COMMON_PASSWORDS: ReadonlySet<string> = new Set(raw.split('\n').filter((entry) => entry !== ''));

@@ -83,3 +83,14 @@ export async function isPasswordTooCommon(password: string): Promise<boolean> {
 	const list = await loadCommonPasswords();
 	return list.has(password.toLowerCase());
 }
+
+/*
+The one call a screen that sets a password makes: the refusal for this
+password, or undefined when the rule is met. A new requirement is added
+here, and all three screens get it.
+*/
+export async function passwordRefusal(password: string): Promise<string | undefined> {
+	if (isPasswordTooShort(password)) return PASSWORD_TOO_SHORT;
+	if (await isPasswordTooCommon(password)) return PASSWORD_TOO_COMMON;
+	return undefined;
+}

@@ -3,14 +3,7 @@
 	import { resolve } from '$app/paths';
 	import { apiBaseURL } from '#lib/api.js';
 	import { refusalErrors } from '#lib/formErrors.js';
-	import {
-		PASSWORD_HINT,
-		PASSWORD_TOO_COMMON,
-		PASSWORD_TOO_SHORT,
-		isPasswordTooCommon,
-		isPasswordTooShort,
-		preloadCommonPasswords
-	} from '#lib/passwordRule.js';
+	import { PASSWORD_HINT, passwordRefusal, preloadCommonPasswords } from '#lib/passwordRule.js';
 	import { FormSubmission, orServiceProblem } from '#lib/formSubmission.svelte.js';
 	import TextInput from '#lib/components/atoms/TextInput.svelte';
 	import Button from '#lib/components/atoms/Button.svelte';
@@ -36,14 +29,10 @@
 			if (!token) {
 				return [{ message: 'This link has expired or was already used -- ask for a new one.' }];
 			}
-			if (isPasswordTooShort(newPassword)) {
-				return [{ message: PASSWORD_TOO_SHORT, targetId: passwordId }];
-			}
 			// #1539: the BFF refuses a common password on this path too
 			// (staffauth/reset.go); checking here first saves the round trip.
-			if (await isPasswordTooCommon(newPassword)) {
-				return [{ message: PASSWORD_TOO_COMMON, targetId: passwordId }];
-			}
+			const refusal = await passwordRefusal(newPassword);
+			if (refusal) return [{ message: refusal, targetId: passwordId }];
 
 			const response = await fetch(`${apiBaseURL()}/api/staff/password-reset`, {
 				method: 'POST',

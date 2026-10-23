@@ -28,14 +28,7 @@
 	import { workStateCode } from '#lib/workStates.js';
 	import { TIMEZONE_HINT, TIMEZONE_NEEDED, detectTimezone } from '#lib/timezones.js';
 	import { ROLE_LABELS } from '#lib/roles.js';
-	import {
-		PASSWORD_HINT,
-		PASSWORD_TOO_COMMON,
-		PASSWORD_TOO_SHORT,
-		isPasswordTooCommon,
-		isPasswordTooShort,
-		preloadCommonPasswords
-	} from '#lib/passwordRule.js';
+	import { PASSWORD_HINT, passwordRefusal, preloadCommonPasswords } from '#lib/passwordRule.js';
 
 	const practiceNameId = 'signup-practice-name';
 	const firstNameId = 'signup-first-name';
@@ -114,7 +107,7 @@
 	 * The Practice name has no entry: it is optional, and the BFF gives an
 	 * empty one her own name (#1536).
 	 */
-	function findRefusals(): FormError[] {
+	async function findRefusals(): Promise<FormError[]> {
 		const found: FormError[] = [];
 		if (firstName.trim() === '')
 			found.push({ message: 'Enter your first name', targetId: firstNameId });
@@ -126,8 +119,11 @@
 		if (email.trim() === '') found.push({ message: 'Enter your email address', targetId: emailId });
 		if (password === '') {
 			found.push({ message: 'Enter a password', targetId: passwordId });
-		} else if (isPasswordTooShort(password)) {
-			found.push({ message: PASSWORD_TOO_SHORT, targetId: passwordId });
+		} else {
+			// #1539: the common-password half of the rule is checked here, in
+			// the browser, because Identity Platform has no such list.
+			const refusal = await passwordRefusal(password);
+			if (refusal) found.push({ message: refusal, targetId: passwordId });
 		}
 		return found;
 	}
@@ -214,12 +210,7 @@
 		event.preventDefault();
 
 		await submission.run(async () => {
-			const refusals = findRefusals();
-			// #1539: checked here, in the browser, before Identity Platform
-			// sees the password, because Identity Platform has no such list.
-			// The password is the last field, so its entry goes last.
-			if (password !== '' && !isPasswordTooShort(password) && (await isPasswordTooCommon(password)))
-				refusals.push({ message: PASSWORD_TOO_COMMON, targetId: passwordId });
+			const refusals = await findRefusals();
 			if (refusals.length > 0) return refusals;
 
 			const credential = await credentialFor(getFirebaseAuth());

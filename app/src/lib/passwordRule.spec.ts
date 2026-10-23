@@ -4,6 +4,7 @@ import {
 	PASSWORD_TOO_COMMON,
 	PASSWORD_TOO_SHORT,
 	isPasswordTooCommon,
+	passwordRefusal,
 	isPasswordTooShort
 } from './passwordRule.js';
 
@@ -46,6 +47,16 @@ describe('the common-password rule (#1539)', () => {
 		expect(await isPasswordTooCommon('passwordpassword!')).toBe(false);
 		expect(await isPasswordTooCommon('my passwordpassword')).toBe(false);
 		expect(await isPasswordTooCommon(' passwordpassword')).toBe(false);
+	});
+
+	it('gives each screen one refusal, in the order the rules are stated', async () => {
+		expect(await passwordRefusal('passwordpassw')).toBe('Password must be 15 characters or more');
+		expect(await passwordRefusal('passwordpassword')).toBe('Password is too common. Enter a different password');
+		expect(await passwordRefusal('correct horse battery staple')).toBeUndefined();
+	});
+
+	it('has no empty entry for an empty password to match', async () => {
+		expect(await isPasswordTooCommon('')).toBe(false);
 	});
 
 	it('accepts a password that is not on the list', async () => {
