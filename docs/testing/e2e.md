@@ -138,6 +138,14 @@ Killing the pid a pidfile names is the one irreversible step here, so it happens
 kill "$(cat "$TMPDIR/doula-cloud-e2e-api-<offset>.pid")" && rm "$TMPDIR/doula-cloud-e2e-api-<offset>.pid"
 ```
 
+## Specs that move the clock: the `clock` project
+
+On the stack, the BFF's clock follows `sim.offset_row` (`E2E_CLOCK_FOLLOWS_SIM_OFFSET`, [#1833](https://github.com/markgoho/doula-cloud/issues/1833)), so a simulation jump moves every date the BFF reads, for every spec at once, and a jump of 12 hours or more ends every Staff session. A spec that jumps therefore cannot run beside one that does not.
+
+`playwright.config.ts` has two projects. `parallel` runs every spec but the ones listed in `CLOCK_SPECS` (`app/e2e/clockProject.ts`), on the usual workers. `clock` runs only those, on one worker, after `parallel` has finished (`dependencies`). `jump()` (`simulation/clock.ts`) and `restartAPI()` (`stack.ts`) throw outside the `clock` project, so a new spec that jumps and is not in the list fails at its own jump, not at another spec's sign-in. Two things follow from `dependencies`: a failure in `parallel` skips `clock`, and a file argument still runs `parallel` in full. To run one clock spec by itself, use `bunx playwright test --project=clock --no-deps e2e/<file>`.
+
+Jumps are cumulative: the offset is not put back, so a clock spec reads the date it needs from the clock as it finds it (`simulatedDateAfter`), which also keeps a retry correct. `terms-agreement.e2e.ts` restarts the BFF with `E2E_LEGAL_VERSIONS`, the shape of a deploy, after its Practice has signed up — a Practice that signs up while a version is coming has agreed to it at signup (ADR-0053) — and restarts it with the shipped history in its `afterAll`. Its version states no price of a Credit: publishing a version that states one asks Stripe for a Price, and CI has no Stripe.
+
 ## Stripe: fakes in CI, the Sandbox by hand
 
 `bun run test:e2e` sets no Stripe variables, so both Stripe clients run against their injected fakes (`api/internal/billing/stripe_fake.go`, `api/internal/payments/stripe_fake.go`). That is the deliberate choice, not a gap: a GitHub-hosted runner has no public URL for Stripe to deliver a webhook to, and the Stripe Sandbox is one shared, stateful environment that parallel runs would trample.
