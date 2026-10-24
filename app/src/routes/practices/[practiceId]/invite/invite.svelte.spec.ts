@@ -136,13 +136,13 @@ describe('invite a Staff member screen', () => {
 
 	it('shows the error the server gives back', async () => {
 		await setup({
-			response: jsonResponse('that address already holds a membership at this practice', 409)
+			response: jsonResponse('That address already holds a membership at this Practice.', 409)
 		});
 
 		await fillAndSubmit('here@example.com');
 
 		await expect
-			.element(testPage.getByText('that address already holds a membership at this practice'))
+			.element(testPage.getByText('That address already holds a membership at this Practice.'))
 			.toBeVisible();
 	});
 

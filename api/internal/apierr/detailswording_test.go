@@ -31,12 +31,11 @@ const apiModuleRoot = "../.."
 // purpose. A Details entry is written to be shown beside a control and
 // read by a person -- it is the only server string the app prints as a
 // field-level error (app/src/lib/formErrors.ts's refusalErrors), so it is
-// held to the client's own rules. Message is the summary a caller reads,
-// it names JSON fields and formats ("workState is required, and must be a
-// two-letter US state abbreviation"), and 64 call sites across
-// api/internal write one that way today; rewording those is a separate
-// piece of work from making Details real, which is the half #488's own
-// acceptance criteria asks a Go test for.
+// held to the client's own rules. Message has its own gates in
+// messagewording_test.go (#1884): it is printed to a person too, as an
+// untargeted error summary entry, but the GOV.UK banned words are a
+// field-message rule, and many messages still in the old engineer form
+// are being reworded on #1894.
 //
 // Resolution is deliberately shallow: a string literal is read directly,
 // and an identifier is resolved against its own package's top-level

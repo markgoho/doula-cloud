@@ -49,7 +49,7 @@ func SearchHandler() http.Handler {
 			return
 		}
 		if reader.IsAmbientContractor() {
-			apierr.WriteError(w, "a contractor doula does not search for clients at a practice she contracts for -- work reaches her as an offer", http.StatusForbidden)
+			apierr.WriteError(w, "You contract for this Practice, so you cannot search its Clients. Work reaches you as an Offer.", http.StatusForbidden)
 			return
 		}
 

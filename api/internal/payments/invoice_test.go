@@ -493,6 +493,15 @@ func TestPostInvoiceHandler_ClientWithNoEmailRefuses(t *testing.T) {
 	if resp.StatusCode != http.StatusUnprocessableEntity {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusUnprocessableEntity)
 	}
+	var out struct {
+		Message string `json:"message"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if out.Message != payments.MsgClientNoEmail {
+		t.Errorf("message = %q, want %q", out.Message, payments.MsgClientNoEmail)
+	}
 	if len(fakeClient.CreateInvoiceCalls) != 0 {
 		t.Fatalf("CreateInvoice calls = %d, want 0 -- must never send an empty string to Stripe", len(fakeClient.CreateInvoiceCalls))
 	}

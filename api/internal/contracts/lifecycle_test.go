@@ -87,24 +87,24 @@ func TestTransitions_DeclaresEveryContractRoute(t *testing.T) {
 // #275 found once, on the Invoice route that had no entry at all.
 func TestTransitions_TableIsComplete(t *testing.T) {
 	want := map[string]contracts.Status{
-		"edited":            contracts.StatusDraft,
-		statusSent:          contracts.StatusDraft,
-		"signed":            contracts.StatusSent,
-		"voided":            contracts.StatusSigned,
-		"billed":            contracts.StatusSigned,
-		"amount overridden": contracts.StatusDraft,
+		"change it":                contracts.StatusDraft,
+		"send it":                  contracts.StatusDraft,
+		"sign it":                  contracts.StatusSent,
+		"void it":                  contracts.StatusSigned,
+		"create an Invoice for it": contracts.StatusSigned,
+		"change its amount":        contracts.StatusDraft,
 	}
 	if len(contracts.Transitions) != len(want) {
 		t.Fatalf("len(Transitions) = %d, want %d", len(contracts.Transitions), len(want))
 	}
 	for _, tr := range contracts.Transitions {
-		requires, known := want[tr.PastTense]
+		requires, known := want[tr.Act]
 		if !known {
 			t.Errorf("Transitions has unexpected entry %+v", tr)
 			continue
 		}
 		if tr.Requires != requires {
-			t.Errorf("Transition %q requires %q, want %q", tr.PastTense, tr.Requires, requires)
+			t.Errorf("Transition %q requires %q, want %q", tr.Act, tr.Requires, requires)
 		}
 	}
 }
@@ -124,5 +124,28 @@ func TestTransition_Check(t *testing.T) {
 	}
 	if !strings.Contains(refusal, "voided") {
 		t.Errorf("refusal = %q, want it to name the actual status %q", refusal, contracts.StatusVoided)
+	}
+}
+
+// TestTransition_CheckSpeaksToThePerson is #1884's own proof: the
+// refusal is the sentence an error summary prints as it is, so it is
+// written for the person who reads it -- a capital, "you", a full stop,
+// and no "contract cannot be billed: it is voided" engineer form.
+func TestTransition_CheckSpeaksToThePerson(t *testing.T) {
+	cases := []struct {
+		transition contracts.Transition
+		current    contracts.Status
+		want       string
+	}{
+		{contracts.TransitionBill, contracts.StatusVoided, "This Contract is voided, so you cannot create an Invoice for it."},
+		{contracts.TransitionBill, contracts.StatusDraft, "This Contract is still a draft, so you cannot create an Invoice for it."},
+		{contracts.TransitionVoid, contracts.StatusSent, "This Contract has been sent and is not signed yet, so you cannot void it."},
+		{contracts.TransitionEdit, contracts.StatusSigned, "This Contract is signed, so you cannot change it."},
+		{contracts.TransitionSign, contracts.Status("archived"), "This Contract is archived, so you cannot sign it."},
+	}
+	for _, tc := range cases {
+		if _, refusal := tc.transition.Check(tc.current); refusal != tc.want {
+			t.Errorf("Check(%q) = %q, want %q", tc.current, refusal, tc.want)
+		}
 	}
 }

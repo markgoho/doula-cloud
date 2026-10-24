@@ -84,7 +84,7 @@ func requireVisitWrite(w http.ResponseWriter, r *http.Request) (visitWriteContex
 func resolveAssignee(w http.ResponseWriter, r *http.Request, c visitWriteContext, engagementID string, requested *string) (staffID string, grants, ok bool) {
 	if requested == nil || *requested == c.staffID {
 		if !c.reader.Has(doulaRole) {
-			apierr.WriteError(w, "only a Staff member with the Doula role can log a Visit for herself -- name the colleague this Visit is for instead", http.StatusForbidden)
+			apierr.WriteError(w, "You do not hold the Doula role, so you cannot log a Visit for yourself. Name the colleague this Visit is for.", http.StatusForbidden)
 			return "", false, false
 		}
 		return c.staffID, attachment.OfReader(c.reader).WhyNotAttachable() == attachment.Attachable, true
