@@ -88,14 +88,14 @@ func (t Transition) Check(current Status) (ok bool, refusal string) {
 	if current == t.Requires {
 		return true, ""
 	}
-	return false, fmt.Sprintf("%s, so you cannot %s.", StatusClause(current), t.Act)
+	return false, fmt.Sprintf("%s, so you cannot %s.", statusClause(current), t.Act)
 }
 
-// StatusClause says what state a Contract is in, as the opening clause
+// statusClause says what state a Contract is in, as the opening clause
 // of a refusal a person reads. Each clause keeps the status's own word
 // ("draft", "sent", "signed", "voided"), so a refusal still names the
 // state the Contract is actually in (#275).
-func StatusClause(current Status) string {
+func statusClause(current Status) string {
 	switch current {
 	case StatusDraft:
 		return "This Contract is still a draft"
