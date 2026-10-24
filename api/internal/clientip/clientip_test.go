@@ -3,6 +3,7 @@ package clientip_test
 import (
 	"net/http"
 	"net/http/httptest"
+	"net/netip"
 	"testing"
 
 	"doula-cloud/api/internal/clientip"
@@ -38,6 +39,11 @@ func TestFrom(t *testing.T) {
 		{
 			name: "through the Hosting rewrite: the Hosting edge on the right is skipped",
 			xff:  "203.0.113.7, 74.125.210.71",
+			want: caller,
+		},
+		{
+			name: "through the Hosting rewrite from 64.233.160.0/19, the edge #1867 found outside the first four ranges",
+			xff:  "203.0.113.7, 64.233.172.134",
 			want: caller,
 		},
 		{
@@ -120,5 +126,21 @@ func TestFrom_JoinsRepeatedHeaders(t *testing.T) {
 
 	if got := clientip.From(r); got != "203.0.113.7" {
 		t.Fatalf("From() = %q, want 203.0.113.7", got)
+	}
+}
+
+// TestHostingEdgeRanges_IsACopy proves the daily check cannot change what
+// From trusts by writing to the slice it is handed.
+func TestHostingEdgeRanges_IsACopy(t *testing.T) {
+	ranges := clientip.HostingEdgeRanges()
+	ranges[0] = netip.MustParsePrefix("198.51.100.0/24")
+
+	r := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/", nil)
+	r.Header.Set("X-Forwarded-For", "203.0.113.7, 198.51.100.4")
+	if got := clientip.From(r); got != "198.51.100.4" {
+		t.Fatalf("From() = %q after writing to the copy, want 198.51.100.4", got)
+	}
+	if clientip.HostingEdgeRanges()[0] == ranges[0] {
+		t.Fatal("HostingEdgeRanges() returned the slice From reads, not a copy")
 	}
 }

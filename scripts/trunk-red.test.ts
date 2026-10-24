@@ -662,6 +662,12 @@ describe('.github/workflows/trunk-red.yml', () => {
     expect(files).toContain('firebase-hosting-merge.yml');
   });
 
+  test('watches the daily Hosting edge check (#1867)', () => {
+    expect(watched.map((name) => names.get(name))).toContain(
+      'hosting-edge-check.yml'
+    );
+  });
+
   test('watches trunk only', () => {
     expect(workflow.on.workflow_run.branches).toEqual(['trunk']);
   });
