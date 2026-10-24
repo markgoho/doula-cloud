@@ -189,17 +189,19 @@ func verificationStaffIsLive(ctx context.Context, tx *sql.Tx, identityUID string
 // tokenMailCopy is verification and reset mail's fixed, content-free
 // copy (ADR-0009): no Staff name, no Practice name, only the link.
 //
-// The reset link also carries to, the address the mail is sent to
-// (#1813): the reset screen puts it in a hidden username field, so a
+// The reset link also carries recipient, the address the mail is sent
+// to (#1813): the reset screen puts it in a hidden username field, so a
 // password manager saves the new password against the account. It
 // tells a holder of the link nothing new -- the link reaches only that
 // mailbox, and Mailgun's message log (ADR-0012) already holds the
 // recipient beside the token. It is a label, not a credential: the BFF
-// never reads it, and the token alone names the account.
-func tokenMailCopy(kind TokenMailKind, appBaseURL, token, to string) (subject, text string) {
+// never reads it, and the token alone names the account, so an edited
+// address files the saved password under the wrong name and does
+// nothing else.
+func tokenMailCopy(kind TokenMailKind, appBaseURL, token, recipient string) (subject, text string) {
 	switch kind {
 	case KindPasswordReset:
-		link := appBaseURL + "/reset-password?token=" + token + "&email=" + url.QueryEscape(to)
+		link := appBaseURL + "/reset-password?token=" + token + "&email=" + url.QueryEscape(recipient)
 		return "Reset your DoulaCloud password", "Hello,\n\n" +
 			"We received a request to reset your DoulaCloud password.\n\n" +
 			link + "\n\n" +

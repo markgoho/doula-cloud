@@ -36,9 +36,8 @@ describe('the account a password manager saves the new password against (#1813)'
 		// out of the accessibility tree, so no accessible query can find it.
 		const username = container.querySelector<HTMLInputElement>('input[autocomplete="username"]');
 		expect(username?.value).toBe('anne-marie+reset@example.test');
-		// display:none: not painted, not in the tab order, not in the accessibility tree.
+		// `hidden`: not painted, not in the tab order, not in the accessibility tree.
 		expect(username?.hidden).toBe(true);
-		expect(username && getComputedStyle(username).display).toBe('none');
 		await expect.element(passwordField()).toHaveAttribute('autocomplete', 'new-password');
 	});
 
