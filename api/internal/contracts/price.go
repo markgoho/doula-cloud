@@ -111,9 +111,11 @@ func resolveContractAmount(ctx context.Context, tx *sql.Tx, engagementID string)
 }
 
 // noRateSetMsg is PostContractHandler's refusal when the Practice has no
-// rate set for the Engagement's kind (#967's AC) -- named so the
-// override endpoint's own tests and PostContractHandler's tests can
-// assert on the same string rather than each hardcoding it.
+// rate set for the Engagement's kind (#967's AC). #1885: it is a sentence
+// a person reads, in the words the Rates settings page uses ("Birth
+// rate", "Postpartum rate", a page titled "Rates"). The Engagement page
+// withholds "Create Draft Contract" before the click in this state, so
+// this text shows only when that check and the server disagree.
 func noRateSetMsg(kind string) string {
-	return fmt.Sprintf("this practice has no rate set for %s engagements -- set one on the rate card before creating a contract", kind)
+	return fmt.Sprintf("Your Practice has no %s rate yet. Set one on the Rates page in Settings before you create a Contract.", kind)
 }

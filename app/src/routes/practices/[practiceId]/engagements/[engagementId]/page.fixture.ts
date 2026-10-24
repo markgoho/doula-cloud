@@ -398,6 +398,32 @@ export const asDoula: RouteVariant<RouteParameters> = {
 	}
 };
 
+/*
+ * #1885: the Contract section's other tree -- no Contract yet, and no rate
+ * for this Engagement's kind, so "Create Draft Contract" is withheld with
+ * the reason and, for the base's Owner, the link to the Rates page. Its
+ * own `respond`, because the branch is two answers the base gives
+ * differently: `/contract` is a 404 and `/rates` holds no amount. Every
+ * other path is the base's answer.
+ */
+export const withNoRate: RouteVariant<RouteParameters> = {
+	name: 'The Staff-side Engagement detail hub, with no Contract and no rate for its kind',
+	respond: (path) => {
+		if (path.endsWith('/contract')) return jsonResponse('not found', 404);
+		if (path.endsWith('/rates')) {
+			return jsonResponse({
+				rates: [
+					// eslint-disable-next-line unicorn/no-null -- a real API response's JSON null, for a kind with no rate set
+					{ kind: 'birth', amountCents: null },
+					// eslint-disable-next-line unicorn/no-null -- a real API response's JSON null, for a kind with no rate set
+					{ kind: 'postpartum', amountCents: null }
+				]
+			});
+		}
+		return fixture.respond!(path);
+	}
+};
+
 export const fixture: RouteFixture<RouteParameters> = {
 	name: 'The Staff-side Engagement detail hub, as an Owner who is also a Doula',
 	component: Page,
@@ -459,6 +485,17 @@ export const fixture: RouteFixture<RouteParameters> = {
 		// a real zone rather than mounting behind the "still loading" gap.
 		if (path.endsWith('/timezone')) return jsonResponse({ timezone: 'America/New_York' });
 		if (path.endsWith('/contract')) return jsonResponse(contract);
+		// #1885: read only while there is no Contract, so this base never
+		// asks; answered for the specs whose `/contract` is a 404, with both
+		// kinds set, the state that leaves "Create Draft Contract" live.
+		if (path.endsWith('/rates')) {
+			return jsonResponse({
+				rates: [
+					{ kind: 'birth', amountCents: 150_000 },
+					{ kind: 'postpartum', amountCents: 90_000 }
+				]
+			});
+		}
 		if (path.endsWith('/offers')) return jsonResponse({ items: [] });
 		if (path.endsWith('/staff')) return jsonResponse({ members: roster, invitations: { items: [] } });
 		// #486: the same ledger treatment, last in this page's own sections.
@@ -495,5 +532,5 @@ export const fixture: RouteFixture<RouteParameters> = {
 		throw new Error(`engagements/[engagementId] fixture: unmatched fetch path ${path}`);
 	},
 	readyText: clientName,
-	variants: [asDoula]
+	variants: [asDoula, withNoRate]
 };

@@ -21,6 +21,7 @@ import {
 	session
 } from './page.fixture.js';
 import type { Contract } from '#lib/contract.js';
+import type { Rate } from '#lib/rates.js';
 import { PREVIOUS_CONTRACT_PDF_NOTICE } from '#lib/components/molecules/ContractStatus.svelte';
 if (!customElements.get('center-l')) registerLayoutPrimitives();
 
@@ -887,6 +888,105 @@ describe('the Save Contract control on a Draft with no editable merge field (#18
 		);
 
 		await expect.element(testPage.getByRole('button', { name: 'Save Contract' })).toBeVisible();
+	});
+});
+
+// #1885: no Contract yet, and the rates the page reads to decide whether
+// "Create Draft Contract" is live. `rates` is the `/rates` answer, or a
+// Response for a refusal; every other path is the fixture's.
+function mockNoContract(rates: Rate[] | Response) {
+	respondFromFixture((path) => {
+		if (path.endsWith('/contract')) return jsonResponse('not found', 404);
+		if (path.endsWith('/rates')) return Array.isArray(rates) ? jsonResponse({ rates }) : rates;
+		return;
+	});
+}
+
+const ownerSession = sessionFor(['owner']);
+const birthRateOnly: Rate[] = [
+	{ kind: 'birth', amountCents: 150_000 },
+	// eslint-disable-next-line unicorn/no-null -- a real API response's JSON null, for a kind with no rate set
+	{ kind: 'postpartum', amountCents: null }
+];
+const noRates: Rate[] = [
+	// eslint-disable-next-line unicorn/no-null -- a real API response's JSON null, for a kind with no rate set
+	{ kind: 'birth', amountCents: null },
+	// eslint-disable-next-line unicorn/no-null -- a real API response's JSON null, for a kind with no rate set
+	{ kind: 'postpartum', amountCents: null }
+];
+
+describe('Create Draft Contract with no rate for the Engagement kind (#1885)', () => {
+	beforeEach(() => {
+		apiFetchWithSession.mockReset();
+	});
+
+	it('withholds Create Draft Contract and links an Owner to the Rates page', async () => {
+		await setupWithContract(() => mockNoContract(noRates), fixtureDetail, ownerSession);
+
+		await expect
+			.element(testPage.getByText('Your Practice has no birth rate yet, so you cannot create a Contract.'))
+			.toBeVisible();
+		await expect
+			.element(testPage.getByRole('link', { name: 'Set the birth rate' }))
+			.toHaveAttribute('href', '/practices/practice-1/settings/rates');
+		await expect.element(testPage.getByRole('button', { name: 'Create Draft Contract' })).toBeDisabled();
+	});
+
+	it('tells a Doula who can set the rate, with no link to a page the Doula cannot use', async () => {
+		await setupWithContract(() => mockNoContract(noRates), fixtureDetail, sessionFor(['doula']));
+
+		await expect
+			.element(
+				testPage.getByText(
+					'Your Practice has no birth rate yet, so you cannot create a Contract. Ask an owner or admin to set one.'
+				)
+			)
+			.toBeVisible();
+		expect(testPage.getByRole('link', { name: 'Set the birth rate' }).elements()).toHaveLength(0);
+		await expect.element(testPage.getByRole('button', { name: 'Create Draft Contract' })).toBeDisabled();
+	});
+
+	it('offers Create Draft Contract when the Engagement kind has a rate', async () => {
+		await setupWithContract(() => mockNoContract(birthRateOnly), fixtureDetail, ownerSession);
+
+		await expect.element(testPage.getByRole('button', { name: 'Create Draft Contract' })).toBeEnabled();
+		expect(testPage.getByText(/no birth rate yet/i).elements()).toHaveLength(0);
+	});
+
+	it('moves the block when the kind changes to one with no rate, with no second read', async () => {
+		await setupWithContract(
+			() => {
+				mockNoContract(birthRateOnly);
+				const fromFixture = apiFetchWithSession.getMockImplementation()!;
+				apiFetchWithSession.mockImplementation((path: string, init?: RequestInit) =>
+					path.endsWith('/kind') && init?.method === 'PUT'
+						? Promise.resolve(jsonResponse({ kind: 'postpartum' }))
+						: fromFixture(path, init)
+				);
+			},
+			fixtureDetail,
+			ownerSession
+		);
+		await expect.element(testPage.getByRole('button', { name: 'Create Draft Contract' })).toBeEnabled();
+
+		await testPage.getByRole('button', { name: 'Change to Postpartum' }).click();
+
+		await expect
+			.element(testPage.getByText('Your Practice has no postpartum rate yet, so you cannot create a Contract.'))
+			.toBeVisible();
+		await expect.element(testPage.getByRole('link', { name: 'Set the postpartum rate' })).toBeVisible();
+		await expect.element(testPage.getByRole('button', { name: 'Create Draft Contract' })).toBeDisabled();
+	});
+
+	it('withholds Create Draft Contract and shows the refusal when the rates do not load', async () => {
+		await setupWithContract(
+			() => mockNoContract(jsonResponse('rates are down', 500)),
+			fixtureDetail,
+			ownerSession
+		);
+
+		await expect.element(testPage.getByText('rates are down')).toBeVisible();
+		await expect.element(testPage.getByRole('button', { name: 'Create Draft Contract' })).toBeDisabled();
 	});
 });
 
