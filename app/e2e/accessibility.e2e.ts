@@ -206,8 +206,8 @@ async function scan(page: Page, route: Route) {
 
 /*
  * The time budget (#1823). Each test has Playwright's default 30 seconds,
- * and one scan -- `goto`, the three ready waits and axe -- takes one to
- * three seconds on CI. So a row is a test of its own wherever the session
+ * and one scan -- `goto`, the three ready waits and axe -- took about 1.2
+ * seconds on CI in the run that failed. So a row is a test of its own wherever the session
  * it needs can be provisioned once and shared: the batches below seed in
  * a `beforeAll` and give every row its own test, its own fresh page, and
  * its own 30 seconds. A new row adds a test, and takes nothing from any
@@ -991,6 +991,10 @@ test.describe('Archetypes B, C, D, E, F, G -- the Staff side', () => {
 		seed = await seedStaffSide(request);
 	});
 
+	// The budget is one row per test: 30 seconds for a scan that took about
+	// 1.2 seconds on CI's failed run 40055897529 (its trace has twenty-three
+	// scans in 28 seconds). Seeding is in the hook, which has 30 seconds of
+	// its own, and does not grow with the rows.
 	for (const row of STAFF_ROUTES) {
 		test(row.key, async ({ page, context }) => {
 			await enterSession(context, seed.token);

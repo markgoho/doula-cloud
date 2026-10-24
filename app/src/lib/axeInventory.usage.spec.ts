@@ -79,6 +79,13 @@ describe('the axe route inventory', () => {
 		expect(keys.length).toBeGreaterThan(50);
 	});
 
+	it('reads every key, because every key is a single-quoted string', () => {
+		const keyCount = inventorySource.match(/\bkey: ["'`]/g)?.length ?? 0;
+		const singleQuoted = inventorySource.match(/\bkey: '/g)?.length ?? 0;
+
+		expect(singleQuoted, 'write each row key as a single-quoted string, or this spec cannot read it').toBe(keyCount);
+	});
+
 	it('scans every route, or names it as scanned elsewhere or not scanned', () => {
 		const missed = routes.filter((route) => !scanned.has(route) && !isListed(route));
 
