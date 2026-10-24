@@ -109,6 +109,32 @@ func TestEachDocumentsHistory(t *testing.T) {
 	}
 }
 
+// TestEachVersionOfTheTermsStatesThePriceOfACredit holds what checkout
+// reads (#1834): each version of the Terms states the price of a Credit,
+// a version that raises it gives the reason, and a version that gives a
+// reason raises it. The Privacy Policy states no price.
+func TestEachVersionOfTheTermsStatesThePriceOfACredit(t *testing.T) {
+	var previous int64
+	for i, v := range legal.Terms.Versions {
+		if v.CreditPriceCents <= 0 {
+			t.Fatalf("version %s: states no price of a Credit", v.Effective)
+		}
+		raises := i > 0 && v.CreditPriceCents > previous
+		if raises && v.PriceRise == "" {
+			t.Fatalf("version %s: raises the price of a Credit with no PriceRise reason", v.Effective)
+		}
+		if !raises && v.PriceRise != "" {
+			t.Fatalf("version %s: gives a PriceRise reason but does not raise the price of a Credit", v.Effective)
+		}
+		previous = v.CreditPriceCents
+	}
+	for _, v := range legal.Privacy.Versions {
+		if v.CreditPriceCents != 0 {
+			t.Fatalf("Privacy Policy version %s states a price of a Credit", v.Effective)
+		}
+	}
+}
+
 func TestEachDocumentLivesAtItsOwnAddress(t *testing.T) {
 	if legal.Terms.Path != "/terms" || legal.Privacy.Path != "/privacy" {
 		t.Fatalf("paths = %q, %q", legal.Terms.Path, legal.Privacy.Path)

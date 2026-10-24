@@ -10,6 +10,7 @@ import (
 	"doula-cloud/api/internal/engagementrequest"
 	"doula-cloud/api/internal/export"
 	"doula-cloud/api/internal/idempotency"
+	"doula-cloud/api/internal/legal"
 	"doula-cloud/api/internal/mailsuppress"
 	"doula-cloud/api/internal/message"
 	"doula-cloud/api/internal/offer"
@@ -44,7 +45,7 @@ import (
 // registerSessionRoutes instead -- see that file's own comment.
 func registerPracticeRoutes(g *staffauth.GatedRouter, ir *idempotency.Router, d Deps) {
 	activityfeed.Mount(g)
-	billing.Mount(g, ir, d.StripeClient)
+	billing.Mount(g, ir, d.StripeClient, legal.Terms)
 	payments.Mount(g, ir, d.PaymentsClient, d.NudgeEnqueuer, d.DB, d.StripePublishableKey)
 	website.Mount(g, ir, d.NudgeEnqueuer)
 	client.Mount(g, ir, d.NudgeEnqueuer)

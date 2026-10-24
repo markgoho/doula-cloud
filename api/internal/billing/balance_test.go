@@ -2,14 +2,15 @@ package billing_test
 
 import (
 	"encoding/json"
-	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
 	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/billing"
+	"doula-cloud/api/internal/clock"
 	"doula-cloud/api/internal/idempotency"
+	"doula-cloud/api/internal/legal"
 	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/testdb"
 )
@@ -70,19 +71,20 @@ const originPurchase = "purchase"
 // GetBalanceHandler lives at that mount, not inside the handler (#315).
 func newBillingServer(t *testing.T, db *testdb.DB, uid string) (srv *httptest.Server, session string) {
 	t.Helper()
-	return newBillingServerWithClient(t, db, uid, billing.NewFakeStripeClient())
+	return newBillingServerAt(t, db, uid, billing.NewFakeStripeClient(), legal.Terms, clock.Real)
 }
 
-// newBillingServerWithClient is newBillingServer with a caller-supplied
-// StripeClient, for tests that need to control what CreditPrice returns
-// (#285) rather than the default fake.
-func newBillingServerWithClient(t *testing.T, db *testdb.DB, uid string, client billing.StripeClient) (srv *httptest.Server, session string) {
+// newBillingServerAt is newBillingServer with a caller-supplied
+// StripeClient, version history of the Terms and clock, for the tests
+// that move the clock across the date a new price of a Credit starts
+// (#1834).
+func newBillingServerAt(t *testing.T, db *testdb.DB, uid string, client billing.StripeClient, terms legal.Document, now clock.Clock) (srv *httptest.Server, session string) {
 	t.Helper()
 	mux := http.NewServeMux()
 	g := staffauth.NewGatedRouter(mux, db.App)
 	ir := idempotency.NewRouter(g, db.App)
-	billing.Mount(g, ir, client)
-	return httptest.NewServer(mux), authntest.SeedSession(t, db.App, uid)
+	billing.Mount(g, ir, client, terms)
+	return httptest.NewServer(clock.Middleware(now)(mux)), authntest.SeedSessionAt(t, db.App, uid, now())
 }
 
 func getBalance(t *testing.T, srv *httptest.Server, session string, practiceID string) *http.Response {
@@ -218,8 +220,8 @@ func TestGetBalanceHandler_EmptyLedgerReturnsZeroBalance(t *testing.T) {
 }
 
 // TestGetBalanceHandler_IncludesCreditPrice proves the read carries the
-// current credit Price alongside the balance and ledger (#285), read
-// through StripeClient rather than a second copy anywhere in this package.
+// price of a Credit the shipped Terms state today alongside the balance
+// and ledger (#285, #1834), and no change to come.
 func TestGetBalanceHandler_IncludesCreditPrice(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "get-owner-price"
@@ -235,45 +237,11 @@ func TestGetBalanceHandler_IncludesCreditPrice(t *testing.T) {
 	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
-	if out.Price == nil {
-		t.Fatal("price = nil, want the fake client's configured price")
-	}
-	if out.Price.UnitAmountCents != seedUnitPriceCents || out.Price.Currency != "usd" {
+	if out.Price.UnitAmountCents != seedUnitPriceCents || out.Price.Currency != usd {
 		t.Fatalf("price = %+v, want {%d usd}", out.Price, seedUnitPriceCents)
 	}
-}
-
-// TestGetBalanceHandler_OmitsCreditPriceWhenStripeUnavailable proves that
-// a StripeClient failure -- no credentials, or Stripe unreachable -- costs
-// the response only its Price field, never the balance and ledger the
-// Practice's own data already answered (#285).
-func TestGetBalanceHandler_OmitsCreditPriceWhenStripeUnavailable(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "get-owner-no-price"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
-	seedLedgerRow(t, db, practiceID, "signup_bonus", 3)
-
-	client := billing.NewFakeStripeClient()
-	client.CreditPriceErr = errors.New("stripe: unreachable")
-	srv, session := newBillingServerWithClient(t, db, uid, client)
-	defer srv.Close()
-
-	resp := getBalance(t, srv, session, practiceID)
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
-	}
-
-	var out billing.BalanceResponse
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
-	if out.Balance != 3 {
-		t.Fatalf("balance = %d, want 3", out.Balance)
-	}
-	if out.Price != nil {
-		t.Fatalf("price = %+v, want nil", out.Price)
+	if out.ComingPrice != nil {
+		t.Fatalf("comingPrice = %+v, want none: the shipped Terms announce no change", out.ComingPrice)
 	}
 }
 

@@ -23,22 +23,31 @@ export interface LedgerPage {
 	hasMore: boolean;
 }
 
-/** What one credit currently costs, mirroring billing.CreditPrice (#285):
- * an integer minor unit plus an ISO 4217 currency code, read live off the
- * configured Stripe Price -- never a float, never a pre-formatted string,
- * and never a second copy of the number. */
+/** What one Credit costs at checkout today, mirroring billing.CreditPrice
+ * (#285, #1834): an integer minor unit plus an ISO 4217 currency code,
+ * the price the version of the Terms in force states -- the same reading
+ * checkout makes, so the screen and the charge cannot disagree. Never a
+ * float and never a pre-formatted string. */
 export interface CreditPrice {
 	unitAmountCents: number;
 	currency: string;
 }
 
+/** A new price of a Credit that has been announced and has not started,
+ * mirroring billing.ComingCreditPrice (#1834): the price, and the date
+ * (YYYY-MM-DD) of the version of the Terms it starts with. */
+export interface ComingCreditPrice extends CreditPrice {
+	effective: string;
+}
+
 export interface Balance {
 	balance: number;
 	ledger: LedgerPage;
-	/** Absent, not zero, when the BFF couldn't read it from Stripe -- no
-	 * credentials, or Stripe unreachable. The Billing screen's price
-	 * region reads that as "unavailable", never as "free". */
-	price?: CreditPrice;
+	price: CreditPrice;
+	/**
+	Present only while a new price is announced and has not started.
+	*/
+	comingPrice?: ComingCreditPrice;
 }
 
 /** What each `credit_ledger` origin is called on the Billing screen.

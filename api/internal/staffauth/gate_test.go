@@ -7,6 +7,7 @@ import (
 
 	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/billing"
+	"doula-cloud/api/internal/legal"
 	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/testdb"
 )
@@ -33,7 +34,7 @@ func TestGatedRouter_PanicsOnUndeclaredRoute(t *testing.T) {
 		}
 	}()
 	g := staffauth.NewGatedRouter(http.NewServeMux(), nil)
-	g.Get("/api/practices/{practiceId}/billing", nil, billing.GetBalanceHandler(billing.NewFakeStripeClient()))
+	g.Get("/api/practices/{practiceId}/billing", nil, billing.GetBalanceHandler(legal.Terms))
 }
 
 // TestGatedRouter_RegistryIsWalkable proves every GET mounted through the
@@ -42,7 +43,7 @@ func TestGatedRouter_PanicsOnUndeclaredRoute(t *testing.T) {
 // runs against the real route table.
 func TestGatedRouter_RegistryIsWalkable(t *testing.T) {
 	g := staffauth.NewGatedRouter(http.NewServeMux(), nil)
-	g.Get("/api/practices/{practiceId}/billing", []string{ownerRole, adminRole}, billing.GetBalanceHandler(billing.NewFakeStripeClient()))
+	g.Get("/api/practices/{practiceId}/billing", []string{ownerRole, adminRole}, billing.GetBalanceHandler(legal.Terms))
 	g.Get("/api/practices/{practiceId}/clients", staffauth.AnyStaff, http.NotFoundHandler())
 
 	for _, route := range g.Routes() {
@@ -63,7 +64,7 @@ func TestGatedRouter_RegistryIsWalkable(t *testing.T) {
 // list.
 func TestGatedRouter_OpenGetIsDeclaredInTheSameRegistry(t *testing.T) {
 	g := staffauth.NewGatedRouter(http.NewServeMux(), nil)
-	g.Get("/api/practices/{practiceId}/billing", []string{ownerRole, adminRole}, billing.GetBalanceHandler(billing.NewFakeStripeClient()))
+	g.Get("/api/practices/{practiceId}/billing", []string{ownerRole, adminRole}, billing.GetBalanceHandler(legal.Terms))
 	g.OpenGet("/api/offers/{offerId}", "token-authenticated pre-account read", http.NotFoundHandler())
 
 	routes := g.Routes()
@@ -172,7 +173,7 @@ func TestGatedRouter_BillingBalance_DoulaForbidden(t *testing.T) {
 
 	mux := http.NewServeMux()
 	g := staffauth.NewGatedRouter(mux, db.App)
-	g.Get("/practices/{practiceId}/billing", []string{ownerRole, adminRole}, billing.GetBalanceHandler(billing.NewFakeStripeClient()))
+	g.Get("/practices/{practiceId}/billing", []string{ownerRole, adminRole}, billing.GetBalanceHandler(legal.Terms))
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
 

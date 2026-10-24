@@ -2,17 +2,19 @@ package billing
 
 import (
 	"doula-cloud/api/internal/idempotency"
+	"doula-cloud/api/internal/legal"
 	"doula-cloud/api/internal/staffauth"
 )
 
 // Mount registers the Practice's Credit balance and ledger (Owner and
-// Admin only, ADR-0008) and the Checkout Session purchase kicks off.
-func Mount(g *staffauth.GatedRouter, ir *idempotency.Router, stripeClient StripeClient) {
-	g.Get("/api/practices/{practiceId}/billing", staffauth.OwnerAndAdmin, GetBalanceHandler(stripeClient))
+// Admin only, ADR-0008) and the Checkout Session purchase kicks off. Both
+// read the price of a Credit from terms: legal.Terms in production.
+func Mount(g *staffauth.GatedRouter, ir *idempotency.Router, stripeClient StripeClient, terms legal.Document) {
+	g.Get("/api/practices/{practiceId}/billing", staffauth.OwnerAndAdmin, GetBalanceHandler(terms))
 	// The purchase declares the same OwnerAndAdmin seat as the balance
 	// read above, here rather than in PostPurchaseHandler (#1016,
 	// following #970 and #990).
 	ir.ExemptGated("POST /api/practices/{practiceId}/billing/purchases",
 		"creates a Stripe Checkout Session URL only; the ledger is credited by the purchase webhook against the actual completed payment, so a duplicate call yields an extra unused Checkout Session, never a double charge or double credit",
-		false, staffauth.OwnerAndAdmin, PostPurchaseHandler(stripeClient))
+		false, staffauth.OwnerAndAdmin, PostPurchaseHandler(stripeClient, terms))
 }

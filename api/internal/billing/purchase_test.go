@@ -11,6 +11,7 @@ import (
 	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/billing"
 	"doula-cloud/api/internal/idempotency"
+	"doula-cloud/api/internal/legal"
 	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/testdb"
 )
@@ -24,7 +25,7 @@ func newPurchaseServer(t *testing.T, db *testdb.DB, uid string, stripeClient bil
 	mux := http.NewServeMux()
 	g := staffauth.NewGatedRouter(mux, db.App)
 	ir := idempotency.NewRouter(g, db.App)
-	billing.Mount(g, ir, stripeClient)
+	billing.Mount(g, ir, stripeClient, legal.Terms)
 	return httptest.NewServer(mux), authntest.SeedSession(t, db.App, uid)
 }
 

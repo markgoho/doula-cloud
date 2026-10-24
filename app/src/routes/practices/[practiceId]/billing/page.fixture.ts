@@ -21,7 +21,7 @@
  * disabled second tree this comment used to have to explain away.
  */
 import type { Balance } from '#lib/billing.js';
-import type { RouteFixture } from '../../../routeFixture.js';
+import type { RouteFixture, RouteVariant } from '../../../routeFixture.js';
 import type { RouteParams as RouteParameters } from './$types';
 import Page from './+page.svelte';
 
@@ -38,6 +38,14 @@ export const data: Balance = {
 	price: { unitAmountCents: 2000, currency: 'usd' }
 };
 
+/** While a rise in the price of a Credit is announced and has not
+ * started, the screen says one more sentence: the new price and its date
+ * (#1834). */
+export const withComingPrice: RouteVariant<RouteParameters> = {
+	name: 'The Practice-wide Billing screen, with a new price coming',
+	props: { data: { ...data, comingPrice: { unitAmountCents: 2500, currency: 'usd', effective: '2027-03-01' } } }
+};
+
 export const fixture: RouteFixture<RouteParameters> = {
 	name: 'The Practice-wide Billing screen',
 	component: Page,
@@ -52,5 +60,6 @@ export const fixture: RouteFixture<RouteParameters> = {
 			isContractor: false
 		}
 	},
-	readyText: 'Credits'
+	readyText: 'Credits',
+	variants: [withComingPrice]
 };

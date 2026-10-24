@@ -18,72 +18,114 @@ type StripeAPIClient struct {
 	appBaseURL    string
 
 	mu            sync.Mutex
-	cachedPricing *creditPricing
+	cachedPricing map[int64]creditPricing
 }
 
 // NewStripeAPIClient builds a StripeAPIClient from a Stripe secret API
-// key, the Stripe Price id representing one credit's flat fee, and the
-// app's own base URL (used to build the Checkout Session's success/cancel
-// redirect targets).
+// key, a Stripe Price on the credit Product (the variable names the
+// Product through one of its Prices, and never has to move when the
+// price of a Credit does, #1834), and the app's own base URL (used to
+// build the Checkout Session's success/cancel redirect targets).
 func NewStripeAPIClient(apiKey, creditPriceID, appBaseURL string) *StripeAPIClient {
 	// coverage:ignore reason: only called from main() to build the real client; not exercised by unit tests, which inject billing.FakeStripeClient instead
 	return &StripeAPIClient{client: stripe.NewClient(apiKey), creditPriceID: creditPriceID, appBaseURL: appBaseURL}
 }
 
-// pricing reads the configured credit Price back from Stripe, once, and
-// remembers it.
+// pricing finds the active Price on the credit Product whose unit amount
+// is unitAmountCents, the price of a Credit the Terms in force state
+// (#1834), and remembers it.
 //
-// The amount is fetched rather than configured as a second environment
-// variable because an apportioned Session has to state cent amounts
-// itself, and a copy of the price outside Stripe is a copy that can
-// disagree with the Price the ordinary path charges. It is fetched here
-// rather than at construction because the BFF has to boot without Stripe
-// credentials -- end-to-end tests and the image's boot smoke test both
-// start it with none -- so a missing or wrong price id fails the purchase
-// that needs it, not the process.
-func (c *StripeAPIClient) pricing(ctx context.Context) (creditPricing, error) {
+// The amount comes from the Terms, not from the Price: a Price is
+// immutable, so a new price of a Credit is a new Price on the same
+// Product, created before its version of the Terms takes effect, and
+// this picks it on the date by its amount. Nothing has to move an
+// environment variable on the day, and no Price can charge more than
+// the Terms allow: with no active Price at the amount, the purchase is
+// refused rather than charged at another one. The Price must be
+// tax_behavior exclusive, or automatic_tax refuses to compute.
+//
+// It is read here rather than at construction because the BFF has to
+// boot without Stripe credentials -- end-to-end tests and the image's
+// boot smoke test both start it with none -- so a missing or wrong price
+// id fails the purchase that needs it, not the process.
+func (c *StripeAPIClient) pricing(ctx context.Context, unitAmountCents int64) (creditPricing, error) {
 	// coverage:ignore reason: requires a real Stripe API key and network access, not exercised by unit tests
 	c.mu.Lock()
 	// coverage:ignore reason: requires a real Stripe API key and network access, not exercised by unit tests
 	defer c.mu.Unlock()
 	// coverage:ignore reason: requires a real Stripe API key and network access, not exercised by unit tests
-	if c.cachedPricing != nil {
-		return *c.cachedPricing, nil
+	if cached, ok := c.cachedPricing[unitAmountCents]; ok {
+		return cached, nil
 	}
 	// coverage:ignore reason: requires a real Stripe API key and network access, not exercised by unit tests
-	price, err := c.client.V1Prices.Retrieve(ctx, c.creditPriceID, nil)
+	configured, err := c.client.V1Prices.Retrieve(ctx, c.creditPriceID, nil)
 	// coverage:ignore reason: requires a real Stripe API key and network access, not exercised by unit tests
 	if err != nil {
 		return creditPricing{}, fmt.Errorf("billing: retrieve credit price %q: %w", c.creditPriceID, err)
 	}
 	// coverage:ignore reason: requires a real Stripe API key and network access, not exercised by unit tests
-	if price.Product == nil {
+	if configured.Product == nil {
 		return creditPricing{}, fmt.Errorf("billing: credit price %q has no product", c.creditPriceID)
 	}
 	// coverage:ignore reason: requires a real Stripe API key and network access, not exercised by unit tests
-	c.cachedPricing = &creditPricing{
-		priceID:         price.ID,
-		productID:       price.Product.ID,
-		currency:        string(price.Currency),
-		unitAmountCents: price.UnitAmount,
+	var match *stripe.Price
+	// coverage:ignore reason: requires a real Stripe API key and network access, not exercised by unit tests
+	for price, err := range c.client.V1Prices.List(ctx, &stripe.PriceListParams{
+		Product:  stripe.String(configured.Product.ID),
+		Active:   new(true),
+		Currency: stripe.String(creditCurrency),
+		Type:     stripe.String(string(stripe.PriceTypeOneTime)),
+	}).All(ctx) {
+		// coverage:ignore reason: requires a real Stripe API key and network access, not exercised by unit tests
+		if err != nil {
+			return creditPricing{}, fmt.Errorf("billing: list prices of credit product %q: %w", configured.Product.ID, err)
+		}
+		// coverage:ignore reason: requires a real Stripe API key and network access, not exercised by unit tests
+		if price.UnitAmount == unitAmountCents && price.TaxBehavior == stripe.PriceTaxBehaviorExclusive {
+			match = price
+			break
+		}
 	}
 	// coverage:ignore reason: requires a real Stripe API key and network access, not exercised by unit tests
-	return *c.cachedPricing, nil
+	if match == nil {
+		return creditPricing{}, fmt.Errorf("billing: credit product %q has no active exclusive-tax Price of %d cents, which the Terms in force charge; create one (docs/environment.md, \"A rise in the price of a Credit\")", configured.Product.ID, unitAmountCents)
+	}
+	// coverage:ignore reason: requires a real Stripe API key and network access, not exercised by unit tests
+	pricing := creditPricing{
+		priceID:         match.ID,
+		productID:       configured.Product.ID,
+		currency:        creditCurrency,
+		unitAmountCents: match.UnitAmount,
+	}
+	// coverage:ignore reason: requires a real Stripe API key and network access, not exercised by unit tests
+	if c.cachedPricing == nil {
+		c.cachedPricing = map[int64]creditPricing{}
+	}
+	// coverage:ignore reason: requires a real Stripe API key and network access, not exercised by unit tests
+	c.cachedPricing[unitAmountCents] = pricing
+	// coverage:ignore reason: requires a real Stripe API key and network access, not exercised by unit tests
+	return pricing, nil
 }
 
-// CreditPrice returns the configured credit Price, for the Billing screen
-// to show before a purchase is started (#285). Shares pricing's cache with
-// CreateCheckoutSession, so a Practice that has already opened Checkout
-// once triggers no second Stripe call.
-func (c *StripeAPIClient) CreditPrice(ctx context.Context) (CreditPrice, error) {
+// CheckCreditPrice finds the Price pricing would charge at
+// unitAmountCents, and returns pricing's error when there is none.
+func (c *StripeAPIClient) CheckCreditPrice(ctx context.Context, unitAmountCents int64) error {
 	// coverage:ignore reason: requires a real Stripe API key and network access, not exercised by unit tests
-	pricing, err := c.pricing(ctx)
+	_, err := c.pricing(ctx, unitAmountCents)
 	// coverage:ignore reason: requires a real Stripe API key and network access, not exercised by unit tests
-	if err != nil {
-		return CreditPrice{}, err
-	}
+	return err
+}
+
+// forget drops the remembered Price at unitAmountCents, so the next
+// purchase reads it again: a Session Stripe refused may have named a
+// Price archived since it was remembered.
+func (c *StripeAPIClient) forget(unitAmountCents int64) {
 	// coverage:ignore reason: requires a real Stripe API key and network access, not exercised by unit tests
-	return CreditPrice{UnitAmountCents: pricing.unitAmountCents, Currency: pricing.currency}, nil
+	c.mu.Lock()
+	// coverage:ignore reason: requires a real Stripe API key and network access, not exercised by unit tests
+	defer c.mu.Unlock()
+	// coverage:ignore reason: requires a real Stripe API key and network access, not exercised by unit tests
+	delete(c.cachedPricing, unitAmountCents)
 }
 
 // CreateCustomer creates a Stripe Customer tagged with practiceID.
@@ -117,7 +159,7 @@ func (c *StripeAPIClient) CreateCustomer(ctx context.Context, practiceID string)
 // which state's tax was charged.
 func (c *StripeAPIClient) CreateCheckoutSession(ctx context.Context, req CheckoutSessionRequest) (string, error) {
 	// coverage:ignore reason: requires a real Stripe API key and network access, not exercised by unit tests
-	pricing, err := c.pricing(ctx)
+	pricing, err := c.pricing(ctx, req.UnitAmountCents)
 	// coverage:ignore reason: requires a real Stripe API key and network access, not exercised by unit tests
 	if err != nil {
 		return "", err
@@ -138,10 +180,15 @@ func (c *StripeAPIClient) CreateCheckoutSession(ctx context.Context, req Checkou
 			"quantity":    strconv.Itoa(req.Quantity),
 			"ny_staff":    strconv.Itoa(req.NewYorkStaff),
 			"total_staff": strconv.Itoa(req.TotalStaff),
+			// Which version of the Terms set the price this Session
+			// charges, so a paid Session answers "why this price?"
+			// beside the lot's own unit_price_cents (#1834).
+			"terms_version": req.TermsVersion,
 		},
 	})
 	// coverage:ignore reason: requires a real Stripe API key and network access, not exercised by unit tests
 	if err != nil {
+		c.forget(req.UnitAmountCents)
 		return "", fmt.Errorf("billing: create checkout session: %w", err)
 	}
 	// coverage:ignore reason: requires a real Stripe API key and network access, not exercised by unit tests

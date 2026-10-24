@@ -1,6 +1,7 @@
 package legalnotice_test
 
 import (
+	"context"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -55,7 +56,7 @@ var (
 			{Effective: "2026-11-15", Material: true, Change: "Says what a Credit costs from November."},
 			{Effective: "2026-12-01", Material: true, Change: "The price of a Credit changes to $40."},
 			{Effective: "2026-12-07", Material: true, Change: "A Credit costs $45.", PriceRise: "Card fees went up."},
-			{Effective: "2026-12-31", Material: true, Change: "A Credit costs $50.", PriceRise: "Text messages cost more to send."},
+			{Effective: "2026-12-31", Material: true, Change: "A Credit costs $50.", CreditPriceCents: 5000, PriceRise: "Text messages cost more to send."},
 		},
 	}
 	fixturePrivacy = legal.Document{
@@ -73,8 +74,28 @@ var (
 // so the instant it records is publishedAt.
 func newPublishServer(t *testing.T, db *testdb.DB) *httptest.Server {
 	t.Helper()
+	return newPublishServerWith(t, db, &fakePrices{})
+}
+
+// fakePrices stands in for the Stripe client's answer to whether a Price
+// exists at an amount: yes, unless err is set. asked is every amount it
+// was asked about.
+type fakePrices struct {
+	err   error
+	asked []int64
+}
+
+func (f *fakePrices) CheckCreditPrice(_ context.Context, unitAmountCents int64) error {
+	f.asked = append(f.asked, unitAmountCents)
+	return f.err
+}
+
+// newPublishServerWith is newPublishServer with the Stripe answer a test
+// chooses (#1834).
+func newPublishServerWith(t *testing.T, db *testdb.DB, prices legalnotice.CreditPrices) *httptest.Server {
+	t.Helper()
 	mux := http.NewServeMux()
-	mux.Handle("POST "+publishURL, legalnotice.PublishHandler(db.App, internalauth.FromSecret(testSecret), fixtureDocs))
+	mux.Handle("POST "+publishURL, legalnotice.PublishHandler(db.App, internalauth.FromSecret(testSecret), fixtureDocs, prices))
 	srv := httptest.NewServer(clock.Middleware(func() time.Time { return publishedAt })(mux))
 	t.Cleanup(srv.Close)
 	return srv

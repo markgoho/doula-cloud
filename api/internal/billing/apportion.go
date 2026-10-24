@@ -21,10 +21,9 @@ const nontaxableTaxCode = "txcd_00000000"
 const remainderProductName = "Credits for staff outside New York"
 
 // creditPricing is what CreateCheckoutSession needs to know about the
-// configured credit Price to build a Session's line items. StripeAPIClient
-// reads it from Stripe once, at construction, so the Price object stays
-// the single source of truth for what a credit costs -- there is no
-// second copy in an environment variable to drift away from it.
+// credit Price to build a Session's line items: the active Price on the
+// credit Product whose amount is the one the Terms in force state
+// (#1834). StripeAPIClient finds it once per amount and remembers it.
 type creditPricing struct {
 	priceID         string // the configured Price, used whole when no apportionment is needed
 	productID       string // the Product that Price belongs to; carries the SaaS tax code

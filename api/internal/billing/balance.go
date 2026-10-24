@@ -9,6 +9,8 @@ import (
 	"time"
 
 	"doula-cloud/api/internal/apierr"
+	"doula-cloud/api/internal/clock"
+	"doula-cloud/api/internal/legal"
 	"doula-cloud/api/internal/pagecursor"
 	"doula-cloud/api/internal/staffauth"
 )
@@ -37,24 +39,18 @@ type LedgerPage struct {
 	HasMore    bool          `json:"hasMore"`
 }
 
-// CreditPrice is what one credit currently costs, read live off the
-// configured Stripe Price rather than held anywhere else (#285) --
-// UnitAmountCents and Currency mirror Stripe's own unit_amount and
-// currency fields.
-type CreditPrice struct {
-	UnitAmountCents int64  `json:"unitAmountCents"`
-	Currency        string `json:"currency"`
-}
-
 // BalanceResponse is the body of GetBalanceHandler's response: a Practice's
 // current derived balance plus one page of the ledger rows that produced
-// it, most recent first, and the current credit Price if Stripe could be
-// reached. Price is absent, not zero, when it couldn't -- the Billing
-// screen reads that as "unavailable", never as "free" (#285).
+// it, most recent first, the price checkout charges for a Credit today,
+// and, while a change to it has been announced and has not started, the
+// new price and its date (#1834). Both prices come from the version of
+// the Terms in force, the same reading checkout makes, so the screen and
+// the charge cannot disagree, and neither needs Stripe to answer.
 type BalanceResponse struct {
-	Balance int          `json:"balance"`
-	Ledger  LedgerPage   `json:"ledger"`
-	Price   *CreditPrice `json:"price,omitempty"`
+	Balance     int                `json:"balance"`
+	Ledger      LedgerPage         `json:"ledger"`
+	Price       CreditPrice        `json:"price"`
+	ComingPrice *ComingCreditPrice `json:"comingPrice,omitempty"`
 }
 
 // Balance returns a Practice's current billing credit balance, derived by
@@ -113,17 +109,15 @@ func ledgerHistory(ctx context.Context, tx *sql.Tx, practiceID string, after *pa
 }
 
 // GetBalanceHandler reads a Practice's billing credit balance and ledger
-// history, plus the current credit Price. Owner and Admin only (ADR-0008's
-// read table) -- a Doula never reaches it, enforced by the "owner","admin"
-// role declaration on this route's GatedRouter mount in main.go, not
-// inside this handler. Must be mounted behind staffauth.Middleware.
+// history, plus the price of a Credit under terms. Owner and Admin only
+// (ADR-0008's read table) -- a Doula never reaches it, enforced by the
+// "owner","admin" role declaration on this route's GatedRouter mount in
+// main.go, not inside this handler. Must be mounted behind
+// staffauth.Middleware.
 //
-// client.CreditPrice's failure -- no Stripe credentials, or Stripe
-// unreachable -- never fails this read: the balance and ledger are the
-// Practice's own data and owe nothing to Stripe being up, so Price is
-// simply left off the response and logged instead of returned as an
-// error.
-func GetBalanceHandler(client StripeClient) http.Handler {
+// terms is the version history the price is read from: legal.Terms in
+// production, a fixture in a test.
+func GetBalanceHandler(terms legal.Document) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		tx, practiceID, ok := staffauth.RequireTx(w, r)
 		// coverage:ignore reason: staffauth.Middleware always sets a tx before this handler runs
@@ -166,13 +160,13 @@ func GetBalanceHandler(client StripeClient) http.Handler {
 			ledger.NextCursor = &next
 		}
 
-		var price *CreditPrice
-		if creditPrice, err := client.CreditPrice(r.Context()); err != nil {
+		pricing, err := creditPriceNow(r.Context(), tx, terms, clock.Now(r.Context()))
+		if err != nil {
 			log.Printf("billing: read credit price: %v", err)
-		} else {
-			price = &creditPrice
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+			return
 		}
 
-		apierr.WriteJSON(w, http.StatusOK, BalanceResponse{Balance: balance, Ledger: ledger, Price: price})
+		apierr.WriteJSON(w, http.StatusOK, BalanceResponse{Balance: balance, Ledger: ledger, Price: pricing.today, ComingPrice: pricing.coming})
 	})
 }

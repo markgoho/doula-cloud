@@ -68,7 +68,7 @@ func registerInternalRoutes(g *staffauth.GatedRouter, d Deps) {
 	// into api/internal/legal, and the founder then publishes it by name.
 	// A material version queues the email to each Owner, and is refused
 	// fewer than 30 days before it takes effect.
-	g.Write("POST /api/internal/legal/publish", legalnotice.PublishHandler(d.DB, d.InternalAuth, legalDocuments))
+	g.Write("POST /api/internal/legal/publish", legalnotice.PublishHandler(d.DB, d.InternalAuth, legalDocuments, d.StripeClient))
 }
 
 // legalDocuments is the version history the BFF publishes and mails

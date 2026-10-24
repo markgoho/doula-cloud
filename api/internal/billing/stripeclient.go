@@ -9,12 +9,19 @@ import "context"
 // sale is a headcount of where the Practice's Staff work (#389), and only
 // the handler can count them -- it holds the request's transaction, and
 // row-level security scopes the count to the Practice being billed.
+//
+// UnitAmountCents is the price of one Credit the version of the Terms in
+// force states, and TermsVersion that version's date (#1834). The Stripe
+// client charges exactly that amount or refuses to build the Session; it
+// never charges what a Stripe Price says instead.
 type CheckoutSessionRequest struct {
-	CustomerID   string
-	PracticeID   string
-	Quantity     int
-	NewYorkStaff int
-	TotalStaff   int
+	CustomerID      string
+	PracticeID      string
+	Quantity        int
+	NewYorkStaff    int
+	TotalStaff      int
+	UnitAmountCents int64
+	TermsVersion    string
 }
 
 // StripeClient is the seam over the outbound Stripe API calls that
@@ -38,12 +45,11 @@ type StripeClient interface {
 	// can credit the right Practice's ledger. Returns the Session's hosted
 	// checkout URL.
 	CreateCheckoutSession(ctx context.Context, req CheckoutSessionRequest) (string, error)
-	// CreditPrice returns the configured credit Price, read back from
-	// Stripe rather than held as a second copy anywhere else (#285). Its
-	// failure -- no Stripe credentials, or Stripe unreachable -- is a
-	// value the billing read tolerates: the balance and ledger still
-	// answer, and the price region alone says it is unavailable.
-	CreditPrice(ctx context.Context) (CreditPrice, error)
+	// CheckCreditPrice answers whether the credit Product has the active
+	// Price CreateCheckoutSession would charge at unitAmountCents, and
+	// fails when it has none. The publish act asks it before a version of
+	// the Terms that states that price is published (#1834).
+	CheckCreditPrice(ctx context.Context, unitAmountCents int64) error
 	// RefundPayment refunds amountCents against the PaymentIntent a
 	// credit purchase arrived on, and returns the Stripe Refund's id.
 	// idempotencyKey is what makes a retried request replay the first
