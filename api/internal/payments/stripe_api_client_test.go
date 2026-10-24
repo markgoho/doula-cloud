@@ -2,6 +2,7 @@ package payments_test
 
 import (
 	"testing"
+	"time"
 
 	"github.com/stripe/stripe-go/v86"
 
@@ -85,6 +86,12 @@ func TestParseAccountEvent_ReadsHeaderAndRelatedObject(t *testing.T) {
 	}
 	if event.AccountID != "acct_thin_1" {
 		t.Fatalf("AccountID = %q, want %q", event.AccountID, "acct_thin_1")
+	}
+	// Stripe's own time for the event (#1812): the history row keeps it
+	// beside the processed time, because a retried delivery can arrive
+	// long after Stripe raised it.
+	if want := time.Date(2026, 8, 22, 23, 24, 51, 0, time.UTC); !event.Created.Equal(want) {
+		t.Fatalf("Created = %v, want %v", event.Created, want)
 	}
 }
 

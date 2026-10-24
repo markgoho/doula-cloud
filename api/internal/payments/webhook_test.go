@@ -105,6 +105,14 @@ func buildConnectEventPayload(t *testing.T, eventID, eventType, accountID string
 // handler has to fetch the account rather than read the payload.
 func accountEventPayload(t *testing.T, eventID, eventType, accountID string) []byte {
 	t.Helper()
+	return accountEventPayloadAt(t, eventID, eventType, accountID, time.Now())
+}
+
+// accountEventPayloadAt is accountEventPayload with Stripe's own `created`
+// time chosen by the caller, for the history tests (#1812) that assert the
+// row keeps it.
+func accountEventPayloadAt(t *testing.T, eventID, eventType, accountID string, created time.Time) []byte {
+	t.Helper()
 	body := map[string]any{
 		"id": eventID,
 		// A thin notification's object discriminator, not "event" --
@@ -112,7 +120,7 @@ func accountEventPayload(t *testing.T, eventID, eventType, accountID string) []b
 		// direction (v2_events.go's EventNotificationFromJSON).
 		objectKey: stripeObjectV2Event,
 		typeKey:   eventType,
-		"created": time.Now().UTC().Format(time.RFC3339),
+		"created": created.UTC().Format(time.RFC3339),
 		"related_object": map[string]any{
 			"id":    accountID,
 			typeKey: "v2.core.account",

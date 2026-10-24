@@ -29,6 +29,13 @@ func Mount(g *staffauth.GatedRouter, ir *idempotency.Router, client Client, enq 
 	// Invoices are paid on. Reading is Owner-or-Admin; starting or
 	// resuming hosted onboarding stays Owner-only above.
 	g.Get("/api/practices/{practiceId}/payments/connect", staffauth.OwnerAndAdmin, GetConnectStatusHandler(client))
+	// #1812: the Owner's return from Stripe's form, recorded on the
+	// server because only the browser sees the landing. Owner-only, the
+	// same as starting onboarding above: only an Owner is sent to the
+	// form, so only an Owner comes back from it.
+	ir.ExemptGated("POST /api/practices/{practiceId}/payments/connect/return",
+		"appends one activity row per landing and changes no state; a retry records a second landing, and the reader picks the landing it needs by time",
+		false, staffauth.OwnerOnly, PostConnectReturnHandler())
 	// #917 (ADR-0035): telling every Owner the account still has to be
 	// connected. Same Owner-and-Admin pair as the read directly above,
 	// and for the same reason -- being allowed to see that the account is

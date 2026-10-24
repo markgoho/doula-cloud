@@ -284,11 +284,14 @@ type Client interface {
 // snapshot path uses), its type, and the account the change concerns,
 // read off the notification's related_object. There is no payload to
 // unmarshal -- Stripe sends none, by design, so the handler calls
-// RetrieveAccount for the current state.
+// RetrieveAccount for the current state. Created is Stripe's own time for
+// the event, kept on the history row (#1812) beside the time it was
+// processed, because a retried delivery can arrive long after it.
 type AccountEvent struct {
 	ID        string
 	Type      string
 	AccountID string
+	Created   time.Time
 }
 
 // WebhookEvent is the subset of a verified Stripe event #80's Connect

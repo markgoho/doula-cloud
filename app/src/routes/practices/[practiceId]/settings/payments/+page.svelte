@@ -31,6 +31,7 @@
 		canConnectStatusStillMove,
 		pollConnectStatus,
 		nudgeOwnersToConnect,
+		recordConnectReturn,
 		CONNECT_STATUS_BADGES,
 		CONNECT_STATUS_CHECK_FAILED_MESSAGE,
 		CONNECT_NUDGE_OFFER_MESSAGE,
@@ -216,6 +217,12 @@
 		// only to decide whether the Connect button may be offered, and on
 		// this branch there is no button.
 		if (!isPracticeOwnerOrAdmin) return;
+		// #1812: only this screen sees her come back from Stripe's form,
+		// so it tells the server, once per landing. Not awaited, and it
+		// never fails for her: the record is ours, not her task.
+		if (connectParameter === 'return' && isPracticeOwner) {
+			void recordConnectReturn(apiFetchWithSession, page.params.practiceId!);
+		}
 		try {
 			status = await loadConnectStatus(apiFetchWithSession, page.params.practiceId!);
 			website = await loadWebsite(apiFetchWithSession, page.params.practiceId!);

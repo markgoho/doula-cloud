@@ -203,6 +203,7 @@ func (c *StripeAPIClient) ParseAccountEvent(payload []byte, sigHeader, secret st
 		ID:        header.ID,
 		Type:      header.Type,
 		AccountID: related.RelatedObject.ID,
+		Created:   header.Created,
 	}, nil
 }
 
