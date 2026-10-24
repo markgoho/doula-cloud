@@ -40,6 +40,7 @@
 	import { page } from '#lib/appState.svelte.js';
 	import { resolve } from '$app/paths';
 	import { afterNavigate } from '$app/navigation';
+	import type { RouteId } from '$app/types';
 	import { apiFetchWithSession } from '#lib/api.js';
 	import { searchClients, type ClientMatch, type ClientSearchFields } from '#lib/client.js';
 	import { displayName } from '#lib/clientDetail.js';
@@ -202,9 +203,15 @@
 	 * #1835: SvelteKit names the screen this one was opened from, as it
 	 * mounts. Only the name question gives the boxes back, and only what
 	 * the search typed into this Practice's draft: a name question opened
-	 * from the overview or the Clients list holds no search.
+	 * from the overview or the Clients list holds no search. The search
+	 * runs again rather than showing a kept result, so the result always
+	 * matches the boxes, and focus goes to its heading as after any
+	 * search, which announces it.
+	 *
+	 * `satisfies RouteId`, so a move of the name question's route fails
+	 * the type check here instead of silently opening the search empty.
 	 */
-	const NAME_QUESTION_ROUTE = '/practices/[practiceId]/clients/new/name';
+	const NAME_QUESTION_ROUTE = '/practices/[practiceId]/clients/new/name' satisfies RouteId;
 	afterNavigate(({ from }) => {
 		if (from?.route.id !== NAME_QUESTION_ROUTE) return;
 		if (intakeDraft.scope !== page.params.practiceId) return;

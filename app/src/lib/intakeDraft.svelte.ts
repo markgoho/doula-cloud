@@ -78,7 +78,12 @@ function readStoredSearch(key: string): ClientSearchFields | undefined {
 	try {
 		const raw = sessionStorage.getItem(key);
 		if (raw === null) return undefined;
-		return JSON.parse(raw) as ClientSearchFields;
+		const stored = JSON.parse(raw) as Partial<Record<keyof ClientSearchFields, unknown>>;
+		// The search fills its boxes from this, so a value that is not
+		// four strings (an older shape, a hand edit) is read as no search.
+		const { name, dateOfBirth, email, phone } = stored;
+		if ([name, dateOfBirth, email, phone].some((value) => typeof value !== 'string')) return undefined;
+		return stored as ClientSearchFields;
 	} catch {
 		return undefined;
 	}

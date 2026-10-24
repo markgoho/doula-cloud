@@ -116,6 +116,15 @@ describe('IntakeDraft', () => {
 		expect(reloaded.searched).toEqual(typed);
 	});
 
+	it('reads a stored search that is not four strings as no search', () => {
+		sessionStorage.setItem('doula-cloud:intake:p1:searched', JSON.stringify({ name: 'Yar Pell' }));
+
+		const draft = new IntakeDraft();
+		draft.start('p1');
+
+		expect(draft.searched).toBeUndefined();
+	});
+
 	it('carries nothing when the search handed nothing over', () => {
 		const draft = new IntakeDraft();
 		draft.start('p1');
