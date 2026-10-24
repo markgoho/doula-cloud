@@ -288,8 +288,11 @@
 		   window from 920px to about 1500px drew the wide tree wider than
 		   itself. The demo now holds the ten, and the wide tree is two rows,
 		   so what stops fitting here is the ten sections on a row of their
-		   own. On macOS they fit at 908px and need 908px at 904px. */
-		@container staff-top-bar (min-width: 56.75rem) {
+		   own. On macOS they fit at 908px and need 908px at 904px; on CI's
+		   Linux/Chromium they needed 912px at 908px. 57rem (912px) is the
+		   next step of the sweep's 4px resolution, measured in CI, again
+		   with no margin added beyond it. */
+		@container staff-top-bar (min-width: 57rem) {
 			.wide {
 				display: grid;
 			}
