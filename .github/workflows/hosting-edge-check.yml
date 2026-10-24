@@ -29,6 +29,8 @@ on:
       - api/cmd/hostingedge/**
       - api/internal/clientip/**
 
+# Unlike terraform-plan.yml, a newer run may cancel an older one: this
+# job holds no lock and writes nothing.
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
@@ -69,7 +71,24 @@ jobs:
             'resource.type="cloud_run_revision" AND resource.labels.service_name="doula-api" AND log_name="projects/doula-cloud/logs/run.googleapis.com%2Frequests" AND NOT httpRequest.requestUrl:"/api/internal/"' \
             --project doula-cloud --freshness=1d --limit 100000 \
             --format='value(httpRequest.remoteIp)' > "$RUNNER_TEMP/remote-ips.txt"
-          wc -l < "$RUNNER_TEMP/remote-ips.txt"
+          # A read cut off at --limit has not checked the whole day.
+          lines=$(wc -l < "$RUNNER_TEMP/remote-ips.txt")
+          echo "read $lines requests"
+          if [ "$lines" -ge 100000 ]; then
+            echo "::error::the log read reached --limit 100000, so part of the day was not checked; raise the limit"
+            exit 1
+          fi
+          # A quiet day can hold no Hosting request at all, so zero lines
+          # above is not by itself a fault. A read that works always finds
+          # Cloud Scheduler's drain, every five minutes; finding none means
+          # the read itself is broken, and a broken read must not pass.
+          probe=$(gcloud logging read \
+            'resource.type="cloud_run_revision" AND resource.labels.service_name="doula-api" AND log_name="projects/doula-cloud/logs/run.googleapis.com%2Frequests"' \
+            --project doula-cloud --freshness=1d --limit 1 --format='value(httpRequest.remoteIp)')
+          if [ -z "$probe" ]; then
+            echo "::error::doula-api's request log returned nothing for the last day, not even Cloud Scheduler's drain; the read is broken"
+            exit 1
+          fi
 
       - name: Fetch Google's published ranges
         run: |

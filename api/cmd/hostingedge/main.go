@@ -32,6 +32,10 @@
 //     overlaps cloud.json. Either way it is no longer Google's own
 //     egress, and in the second case a customer could rent an address
 //     in it and choose the address From returns.
+//
+// What it cannot see: a Hosting edge inside cloud.json. Such an address
+// looks like any customer's, and it could not be trusted anyway, since a
+// customer could rent the address next to it.
 package main
 
 import (
@@ -140,7 +144,6 @@ func run(args []string, stdin io.Reader, stdout io.Writer) error {
 // readRanges parses one of Google's published range lists.
 func readRanges(path string) ([]netip.Prefix, string, error) {
 	raw, err := os.ReadFile(path) //nolint:gosec // the path is this binary's own argument, named by the workflow that runs it
-
 	if err != nil {
 		return nil, "", fmt.Errorf("hostingedge: %w", err)
 	}
