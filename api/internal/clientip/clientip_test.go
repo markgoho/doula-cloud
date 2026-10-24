@@ -16,7 +16,7 @@ const (
 )
 
 // TestFrom reads X-Forwarded-For from the right, the side the proxies
-// write, and skips only the Firebase Hosting edge. Each row is one shape
+// write, and skips at most one Firebase Hosting edge. Each row is one shape
 // a request can arrive in.
 func TestFrom(t *testing.T) {
 	tests := []struct {
@@ -51,6 +51,11 @@ func TestFrom(t *testing.T) {
 			want: caller,
 		},
 		{
+			name: "two Hosting-edge entries on the right: only the one Hosting hop is skipped",
+			xff:  "198.51.100.4, 74.125.1.1, 66.102.8.131",
+			want: "74.125.1.1",
+		},
+		{
 			name: "every entry is a Hosting edge: the left-most one is the caller",
 			xff:  "192.178.11.4, 66.249.84.229",
 			want: "192.178.11.4",
@@ -62,7 +67,7 @@ func TestFrom(t *testing.T) {
 		},
 		{
 			name: "an entry that is not an address is never skipped as a proxy",
-			xff:  "198.51.100.4, not-an-address, 74.125.210.71",
+			xff:  "198.51.100.4, not-an-address",
 			want: "not-an-address",
 		},
 		{

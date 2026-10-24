@@ -26,10 +26,11 @@
 //     "<caller text>, <caller>, <Hosting edge>".
 //
 // A fixed count of hops to skip is right for only one of the two, so
-// From skips by address instead: walking from the right, it passes over
-// each entry inside hostingEdge and returns the first one outside it.
-// A direct caller cannot put a Hosting address in the right-most place,
-// because Google's front end writes that one from the TCP connection.
+// From decides by address instead: it skips the right-most entry only
+// when that entry is inside hostingEdgeRanges, and never more than that
+// one, since Hosting is one hop. A direct caller cannot put a Hosting
+// address in the right-most place, because Google's front end writes
+// that one from the TCP connection.
 //
 // # What was observed
 //
@@ -42,6 +43,12 @@
 // can rent (https://www.gstatic.com/ipranges/cloud.json, same date), so
 // no caller can open a connection from one with a VM of its own.
 //
+// What that does not rule out: the ranges are Google's shared egress,
+// not Hosting's alone. A Google-run fetcher that lets its user set a
+// header -- Apps Script's UrlFetchApp is one -- can call the run.app URL
+// from inside them with a forged entry, and From then returns the forged
+// entry. That residual, and the ranges going stale, are #1867.
+//
 // Not yet observed: the header itself, as the container receives it,
 // for a request with a caller-written entry. #1865 holds the probe that
 // settles it; record its result and date here.
@@ -51,14 +58,13 @@ import (
 	"net"
 	"net/http"
 	"net/netip"
-	"slices"
 	"strings"
 )
 
-// hostingEdge holds the address ranges the Firebase Hosting rewrite
-// connects to Cloud Run from -- the only proxy From skips past. See the
-// package comment for where each range was observed.
-var hostingEdge = []netip.Prefix{
+// hostingEdgeRanges holds the address ranges the Firebase Hosting
+// rewrite connects to Cloud Run from -- the only proxy From skips past.
+// See the package comment for where each range was observed.
+var hostingEdgeRanges = []netip.Prefix{
 	netip.MustParsePrefix("66.102.0.0/20"),
 	netip.MustParsePrefix("66.249.64.0/19"),
 	netip.MustParsePrefix("74.125.0.0/16"),
@@ -67,15 +73,17 @@ var hostingEdge = []netip.Prefix{
 
 // From returns the caller's address, for use as an ESIGN signer_ip
 // (contracts), the terms_accepted record (staffauth), or a rate-limit
-// dimension (ratelimit): the right-most X-Forwarded-For entry that is
-// not a Hosting edge, or the left-most entry if every one is. With no
-// header -- the local and e2e stack, with no proxy in front of the
-// process -- it is r.RemoteAddr's host.
+// dimension (ratelimit): the right-most X-Forwarded-For entry, or the
+// one before it when the right-most is a Hosting edge. With no header
+// -- the local and e2e stack, with no proxy in front of the process --
+// it is r.RemoteAddr's host.
 func From(r *http.Request) string {
-	for i, entry := range slices.Backward(forwardedFor(r)) {
-		if i == 0 || !isHostingEdge(entry) {
-			return entry
+	entries := forwardedFor(r)
+	if n := len(entries); n > 0 {
+		if n > 1 && isHostingEdge(entries[n-1]) {
+			return entries[n-2]
 		}
+		return entries[n-1]
 	}
 	host, _, err := net.SplitHostPort(r.RemoteAddr)
 	// coverage:ignore reason: net/http always sets RemoteAddr in host:port form, not exercised by unit tests
@@ -100,7 +108,7 @@ func forwardedFor(r *http.Request) []string {
 	return entries
 }
 
-// isHostingEdge reports whether entry is an address inside hostingEdge.
+// isHostingEdge reports whether entry is an address inside hostingEdgeRanges.
 // An entry that is not an address at all is caller-written text, never
 // a proxy, so it is not skipped.
 func isHostingEdge(entry string) bool {
@@ -109,7 +117,7 @@ func isHostingEdge(entry string) bool {
 		return false
 	}
 	addr = addr.Unmap()
-	for _, prefix := range hostingEdge {
+	for _, prefix := range hostingEdgeRanges {
 		if prefix.Contains(addr) {
 			return true
 		}
