@@ -4,6 +4,15 @@ import { describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import Link from './Link.svelte';
 import LinkInSentence from './harness/LinkInSentence.svelte';
+/*
+ * The app's real stylesheet (#1856). Without it there is no `reset`
+ * layer, so a global rule that undoes this atom's inline sentence styles
+ * -- `reset.css`'s `svg { display: block }` was the one -- cannot be
+ * seen here. It comes after the component imports on purpose: the layer
+ * order is declared before any spec's imports run (`vitest.setup.ts`),
+ * so where this line sits no longer changes the cascade.
+ */
+import '#lib/styles/app.css';
 
 type SetupOptions = Partial<ComponentProps<typeof Link>>;
 

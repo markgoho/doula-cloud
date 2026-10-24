@@ -90,6 +90,9 @@ export default defineConfig({
 					// each other -- #936, and docs/testing/gates.md's "Only one
 					// session runs this step at a time".
 					maxWorkers: BROWSER_WORKERS,
+					// The cascade layer order, before any spec imports a
+					// component (#1856): the setup file says why.
+					setupFiles: ['src/vitest.browser.setup.ts'],
 					browser: {
 						enabled: true,
 						provider: playwright(),

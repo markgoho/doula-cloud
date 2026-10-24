@@ -1,11 +1,8 @@
 /*
- * Project-wide cascade layer order -- ADR-0003. Declared exactly once, here,
- * so specificity conflicts between the reset, tokens, base element styling,
- * the layout-primitive utility layer, and components resolve by explicit
- * order rather than accident.
+ * The app's stylesheet. The cascade layer order comes first, from its own
+ * file (`layers.css` says why), and every layer's rules after it.
  */
-@layer reset, tokens, base, utilities, components;
-
+@import './layers.css';
 @import './fonts.css';
 @import './reset.css' layer(reset);
 @import './tokens.css' layer(tokens);

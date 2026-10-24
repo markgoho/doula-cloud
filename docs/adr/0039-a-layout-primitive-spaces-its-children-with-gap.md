@@ -4,7 +4,7 @@
 
 ## The mechanism this replaces, and why it could not stay
 
-A primitive's rules — both `primitives.css`'s zero-JS defaults and the per-instance rules `defineLayoutPrimitive` injects — live in `@layer utilities`. Every component's scoped Svelte `<style>` compiles into `@layer components`, which `app/src/lib/styles/app.css` declares *after* it: `@layer reset, tokens, base, utilities, components;`. A later layer beats an earlier one outright, whatever the specificity on either side.
+A primitive's rules — both `primitives.css`'s zero-JS defaults and the per-instance rules `defineLayoutPrimitive` injects — live in `@layer utilities`. Every component's scoped Svelte `<style>` compiles into `@layer components`, which `app/src/lib/styles/layers.css` (the first thing `app.css` imports, #1856) declares *after* it: `@layer reset, tokens, base, utilities, components;`. A later layer beats an earlier one outright, whatever the specificity on either side.
 
 So a component whose root element carried `margin: 0` — the ordinary reset for a bare `<p>` or `<h2>`, sitting in `Notice`, `Text`, `Heading`, `WarningText`, `DescriptionList` and roughly twenty others — canceled every ounce of spacing a Stack was trying to give it. Nothing about the CSS looks wrong at either end. The component is doing the normal thing; the primitive is doing the documented thing; the layer order is the one ADR-0003 chose on purpose. The spacing simply is not there, and #1105 measured it on `/signup` at 1440, 480 and 320: the `Notice` about the founder holding every role sat flush against the Password field while every `LabeledField` around it got its 27px / 21px / 20px.
 
