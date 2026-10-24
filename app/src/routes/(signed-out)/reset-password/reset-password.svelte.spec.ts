@@ -41,9 +41,24 @@ describe('the account a password manager saves the new password against (#1813)'
 		await expect.element(passwordField()).toHaveAttribute('autocomplete', 'new-password');
 	});
 
+	it('reads the email from the fragment, not the query string (#1827)', async () => {
+		const inQuery = new URL(fixture.url);
+		inQuery.hash = '';
+		inQuery.searchParams.set('email', 'anne-marie+reset@example.test');
+		pageState.url = inQuery;
+		try {
+			const { container } = await render(Page, {});
+
+			await expect.element(passwordField()).toBeVisible();
+			expect(container.querySelector('input[autocomplete="username"]')).toBeNull();
+		} finally {
+			pageState.url = new URL(fixture.url);
+		}
+	});
+
 	it('renders no username field for a link that carries no email', async () => {
 		const withoutEmail = new URL(fixture.url);
-		withoutEmail.searchParams.delete('email');
+		withoutEmail.hash = '';
 		pageState.url = withoutEmail;
 		try {
 			const { container } = await render(Page, {});

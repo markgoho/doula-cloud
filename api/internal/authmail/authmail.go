@@ -198,10 +198,17 @@ func verificationStaffIsLive(ctx context.Context, tx *sql.Tx, identityUID string
 // never reads it, and the token alone names the account, so an edited
 // address files the saved password under the wrong name and does
 // nothing else.
+//
+// It rides in the fragment, not the query string (#1827). A browser
+// never sends a fragment to a server or puts it in a Referer, so the
+// address stays out of hosting and proxy request logs, and only the
+// page that reads it ever sees it. QueryEscape is still the right
+// escaping: the screen parses the fragment with URLSearchParams, its
+// inverse. The token stays in the query string.
 func tokenMailCopy(kind TokenMailKind, appBaseURL, token, recipient string) (subject, text string) {
 	switch kind {
 	case KindPasswordReset:
-		link := appBaseURL + "/reset-password?token=" + token + "&email=" + url.QueryEscape(recipient)
+		link := appBaseURL + "/reset-password?token=" + token + "#email=" + url.QueryEscape(recipient)
 		return "Reset your DoulaCloud password", "Hello,\n\n" +
 			"We received a request to reset your DoulaCloud password.\n\n" +
 			link + "\n\n" +

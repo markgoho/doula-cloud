@@ -23,7 +23,10 @@
 	// #1813: the address the link was mailed to (authmail.tokenMailCopy),
 	// only so a password manager saves the new password against it. It is
 	// not sent anywhere: the token alone names the account to the BFF.
-	const accountEmail = page.url.searchParams.get('email') ?? '';
+	// #1827: it is in the fragment, which a browser never sends to a
+	// server, so it stays out of request logs. The mail escapes it with
+	// url.QueryEscape, and URLSearchParams is that escaping's inverse.
+	const accountEmail = new URLSearchParams(page.url.hash.slice(1)).get('email') ?? '';
 	const passwordId = 'reset-password-new';
 
 	let newPassword = $state('');
