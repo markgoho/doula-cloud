@@ -1,10 +1,11 @@
 /*
  * Reset-password, as the continuum check sees it (#595).
  *
- * A one-field form with no fetch on mount and no Practice-typed content:
+ * A short form with no fetch on mount and no Practice-typed content:
  * the token it reads off the URL is never rendered. The link's email
- * (#1813) is rendered only into a hidden username field for a password
- * manager; a `+` in it is what the link's own escaping has to survive.
+ * (#1813) is rendered into a visible, read-only Email field, the username
+ * a password manager saves the new password against; a `+` in it is what
+ * the link's own escaping has to survive.
  * It is in the fragment, not the query string (#1827), as the mail sends it.
  */
 import type { RouteFixture } from '../../routeFixture.js';
