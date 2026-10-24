@@ -45,6 +45,11 @@ type StripeClient interface {
 	// can credit the right Practice's ledger. Returns the Session's hosted
 	// checkout URL.
 	CreateCheckoutSession(ctx context.Context, req CheckoutSessionRequest) (string, error)
+	// CheckCreditPrice answers whether the credit Product has the active
+	// Price CreateCheckoutSession would charge at unitAmountCents, and
+	// fails when it has none. The publish act asks it before a version of
+	// the Terms that states that price is published (#1834).
+	CheckCreditPrice(ctx context.Context, unitAmountCents int64) error
 	// RefundPayment refunds amountCents against the PaymentIntent a
 	// credit purchase arrived on, and returns the Stripe Refund's id.
 	// idempotencyKey is what makes a retried request replay the first

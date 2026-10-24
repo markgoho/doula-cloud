@@ -23,6 +23,7 @@ type FakeStripeClient struct {
 	CreateCustomerErr        error
 	CreateCheckoutSessionErr error
 	RefundPaymentErr         error
+	CheckCreditPriceErr      error
 
 	// ReplayedRefundID, when set, is returned by every RefundPayment
 	// call -- what Stripe does when a retry carries an idempotency key
@@ -41,6 +42,14 @@ type RefundCall struct {
 // NewFakeStripeClient returns a FakeStripeClient with no recorded calls.
 func NewFakeStripeClient() *FakeStripeClient {
 	return &FakeStripeClient{}
+}
+
+// CheckCreditPrice answers CheckCreditPriceErr: nil, a Price at every
+// amount, unless a test set one.
+func (f *FakeStripeClient) CheckCreditPrice(_ context.Context, _ int64) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.CheckCreditPriceErr
 }
 
 // CreateCustomer returns a deterministic fake Stripe Customer id, or

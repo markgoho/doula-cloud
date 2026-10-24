@@ -26,9 +26,8 @@ type CreditPrice struct {
 // announced and has not started: the new price, and the date of the
 // version of the Terms it starts with.
 type ComingCreditPrice struct {
-	UnitAmountCents int64  `json:"unitAmountCents"`
-	Currency        string `json:"currency"`
-	Effective       string `json:"effective"`
+	CreditPrice
+	Effective string `json:"effective"`
 }
 
 // priceInForce is the price of a Credit at one instant: what checkout
@@ -64,7 +63,7 @@ func priceAt(terms legal.Document, published map[string]bool, at time.Time) (pri
 
 	var cents int64
 	for _, v := range started {
-		if !ok || allowed(v, cents, published) {
+		if !ok || maySetPrice(v, cents, published) {
 			cents, pricing.termsVersion, ok = v.CreditPriceCents, v.Effective, true
 		}
 	}
@@ -74,7 +73,7 @@ func priceAt(terms legal.Document, published map[string]bool, at time.Time) (pri
 	pricing.today = CreditPrice{UnitAmountCents: cents, Currency: creditCurrency}
 
 	for _, v := range coming {
-		if v.CreditPriceCents != cents && allowed(v, cents, published) {
+		if v.CreditPriceCents != cents && maySetPrice(v, cents, published) {
 			pricing.coming = &ComingCreditPrice{UnitAmountCents: v.CreditPriceCents, Currency: creditCurrency, Effective: v.Effective}
 			break
 		}
@@ -82,10 +81,10 @@ func priceAt(terms legal.Document, published map[string]bool, at time.Time) (pri
 	return pricing, true
 }
 
-// allowed answers whether version v may set the price of a Credit when
+// maySetPrice answers whether version v may set the price of a Credit when
 // it is cents now: always when it does not raise it, and when it does,
 // only once a version that gives the reason has been published.
-func allowed(v legal.Version, cents int64, published map[string]bool) bool {
+func maySetPrice(v legal.Version, cents int64, published map[string]bool) bool {
 	if v.CreditPriceCents <= cents {
 		return true
 	}

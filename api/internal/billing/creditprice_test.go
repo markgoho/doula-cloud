@@ -2,6 +2,7 @@ package billing_test
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"sync"
@@ -234,5 +235,19 @@ func TestNoVersionInForceRefusesBoth(t *testing.T) {
 	}
 	if len(fake.Calls()) != 0 {
 		t.Fatalf("checkout sessions = %d, want none", len(fake.Calls()))
+	}
+}
+
+// TestFakeStripeClient_CheckCreditPrice: the fake has a Price at every
+// amount unless a test says it has none, the answer the publish act
+// reads before a version of the Terms states a price (#1834).
+func TestFakeStripeClient_CheckCreditPrice(t *testing.T) {
+	fake := billing.NewFakeStripeClient()
+	if err := fake.CheckCreditPrice(t.Context(), 2500); err != nil {
+		t.Fatalf("CheckCreditPrice = %v, want nil", err)
+	}
+	fake.CheckCreditPriceErr = errStripeFake
+	if err := fake.CheckCreditPrice(t.Context(), 2500); !errors.Is(err, errStripeFake) {
+		t.Fatalf("CheckCreditPrice = %v, want %v", err, errStripeFake)
 	}
 }

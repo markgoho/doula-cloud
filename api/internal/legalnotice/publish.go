@@ -15,6 +15,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"log"
 	"net/http"
 	"strings"
 	"time"
@@ -36,6 +37,14 @@ const NoticeLead = 30 * 24 * time.Hour
 // promise it: "If the price of a Credit ever rises, we email each Owner
 // at least 60 days before, with the reason" (#1817).
 const PriceRiseLead = 60 * 24 * time.Hour
+
+// CreditPrices is the seam over the one Stripe question the publish act
+// asks: whether the credit Product has an active Price that checkout can
+// charge at unitAmountCents. billing.StripeAPIClient answers it in
+// production.
+type CreditPrices interface {
+	CheckCreditPrice(ctx context.Context, unitAmountCents int64) error
+}
 
 // PublishRequest is the body of a POST to PublishHandler: the document by
 // its address without the slash ("terms" or "privacy"), the version by
@@ -95,7 +104,13 @@ func find(docs []legal.Document, document, effective string) (legal.Document, le
 //
 // docs is the version history to publish from: legal.Terms and
 // legal.Privacy in production, a fixture in a test.
-func PublishHandler(db *sql.DB, auth *internalauth.Guard, docs []legal.Document) http.Handler {
+//
+// A version of the Terms states the price of a Credit, and from its
+// date checkout charges that price through a Stripe Price at the same
+// amount (#1834). prices checks that such a Price exists before the
+// version is published, so a forgotten Price is found 60 days ahead
+// instead of on the date, when every purchase would be refused.
+func PublishHandler(db *sql.DB, auth *internalauth.Guard, docs []legal.Document, prices CreditPrices) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if !auth.Require(w, r) {
 			return
@@ -128,6 +143,16 @@ func PublishHandler(db *sql.DB, auth *internalauth.Guard, docs []legal.Document)
 				"a material version must take effect at least 30 days after the emails are queued",
 				http.StatusUnprocessableEntity)
 			return
+		}
+
+		if version.CreditPriceCents > 0 {
+			if err := prices.CheckCreditPrice(r.Context(), version.CreditPriceCents); err != nil {
+				log.Printf("legalnotice: check credit price for %s %s: %v", req.Document, version.Effective, err)
+				apierr.WriteError(w,
+					"no Stripe Price charges the price of a Credit this version states: create it first (docs/environment.md, \"A rise in the price of a Credit\")",
+					http.StatusUnprocessableEntity)
+				return
+			}
 		}
 
 		tx, err := db.BeginTx(r.Context(), nil)

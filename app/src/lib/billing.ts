@@ -45,7 +45,7 @@ export interface Balance {
 	ledger: LedgerPage;
 	price: CreditPrice;
 	/**
-	There only while a new price is announced and has not started.
+	Present only while a new price is announced and has not started.
 	*/
 	comingPrice?: ComingCreditPrice;
 }

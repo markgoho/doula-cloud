@@ -1,6 +1,7 @@
 package legalnotice_test
 
 import (
+	"errors"
 	"net/http"
 	"sort"
 	"strings"
@@ -181,8 +182,12 @@ func TestPublish_PriceRiseEmailGivesTheReason(t *testing.T) {
 	harbor := testdb.SeedPractice(t, db, "Harbor Doulas")
 	testdb.SeedStaffAtPractice(t, db, harbor, "ana", owner, employee)
 
-	if p := publishOK(t, newPublishServer(t, db), "terms", "2026-12-31"); p.Queued != 1 {
+	prices := &fakePrices{}
+	if p := publishOK(t, newPublishServerWith(t, db, prices), "terms", "2026-12-31"); p.Queued != 1 {
 		t.Fatalf("queued = %d, want 1", p.Queued)
+	}
+	if len(prices.asked) != 1 || prices.asked[0] != 5000 {
+		t.Fatalf("asked Stripe about %v, want [5000]: the Price the new version charges", prices.asked)
 	}
 	sender := &mail.FakeSender{}
 	runWorker(t, db, sender, fixtureDocs)
@@ -192,6 +197,32 @@ func TestPublish_PriceRiseEmailGivesTheReason(t *testing.T) {
 	}
 	if !strings.Contains(sent[0].Text, "What changes: A Credit costs $50.\n\nWhy the price rises: Text messages cost more to send.\n\n") {
 		t.Fatalf("text does not give the reason for the rise:\n%s", sent[0].Text)
+	}
+}
+
+// A version whose price no Stripe Price charges is refused, and nothing
+// is recorded or queued: from its date every purchase would be refused,
+// so the missing Price is found now, 60 days ahead (#1834).
+func TestPublish_RefusesAPriceNoStripePriceCharges(t *testing.T) {
+	db := testdb.New(t)
+	harbor := testdb.SeedPractice(t, db, "Harbor Doulas")
+	testdb.SeedStaffAtPractice(t, db, harbor, "ana", owner, employee)
+
+	prices := &fakePrices{err: errors.New("billing: no active Price of 5000 cents")}
+	status, answer := publish(t, newPublishServerWith(t, db, prices), testSecret,
+		`{"document":"terms","version":"2026-12-31","publishedBy":"Mark"}`)
+	if status != http.StatusUnprocessableEntity {
+		t.Fatalf("status = %d, want 422", status)
+	}
+	if !strings.Contains(string(answer), "Stripe Price") {
+		t.Fatalf("refusal = %s, want it to name the missing Stripe Price", answer)
+	}
+	var n int
+	if err := db.Admin.QueryRowContext(t.Context(), `SELECT count(*) FROM legal_version_publications`).Scan(&n); err != nil {
+		t.Fatalf("count publications: %v", err)
+	}
+	if n != 0 || len(outboxRows(t, db)) != 0 {
+		t.Fatalf("publications = %d, outbox rows = %d, want none of either", n, len(outboxRows(t, db)))
 	}
 }
 

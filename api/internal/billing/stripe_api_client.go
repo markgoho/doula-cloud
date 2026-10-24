@@ -107,6 +107,27 @@ func (c *StripeAPIClient) pricing(ctx context.Context, unitAmountCents int64) (c
 	return pricing, nil
 }
 
+// CheckCreditPrice finds the Price pricing would charge at
+// unitAmountCents, and returns pricing's error when there is none.
+func (c *StripeAPIClient) CheckCreditPrice(ctx context.Context, unitAmountCents int64) error {
+	// coverage:ignore reason: requires a real Stripe API key and network access, not exercised by unit tests
+	_, err := c.pricing(ctx, unitAmountCents)
+	// coverage:ignore reason: requires a real Stripe API key and network access, not exercised by unit tests
+	return err
+}
+
+// forget drops the remembered Price at unitAmountCents, so the next
+// purchase reads it again: a Session Stripe refused may have named a
+// Price archived since it was remembered.
+func (c *StripeAPIClient) forget(unitAmountCents int64) {
+	// coverage:ignore reason: requires a real Stripe API key and network access, not exercised by unit tests
+	c.mu.Lock()
+	// coverage:ignore reason: requires a real Stripe API key and network access, not exercised by unit tests
+	defer c.mu.Unlock()
+	// coverage:ignore reason: requires a real Stripe API key and network access, not exercised by unit tests
+	delete(c.cachedPricing, unitAmountCents)
+}
+
 // CreateCustomer creates a Stripe Customer tagged with practiceID.
 func (c *StripeAPIClient) CreateCustomer(ctx context.Context, practiceID string) (string, error) {
 	// coverage:ignore reason: requires a real Stripe API key and network access, not exercised by unit tests
@@ -167,6 +188,7 @@ func (c *StripeAPIClient) CreateCheckoutSession(ctx context.Context, req Checkou
 	})
 	// coverage:ignore reason: requires a real Stripe API key and network access, not exercised by unit tests
 	if err != nil {
+		c.forget(req.UnitAmountCents)
 		return "", fmt.Errorf("billing: create checkout session: %w", err)
 	}
 	// coverage:ignore reason: requires a real Stripe API key and network access, not exercised by unit tests
