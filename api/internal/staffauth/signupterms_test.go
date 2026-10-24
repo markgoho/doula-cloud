@@ -118,9 +118,9 @@ func TestSignupHandler_RecordsTheOwnersAgreement(t *testing.T) {
 	terms, _ := legal.Terms.InForce(signedUpAt)
 	privacy, _ := legal.Privacy.InForce(signedUpAt)
 	assertDiff(t, r.diff, map[string]any{
-		"termsVersion":   terms.Effective,
-		"privacyVersion": privacy.Effective,
-		"ipAddress":      "127.0.0.1",
+		diffTermsVersion:   terms.Effective,
+		diffPrivacyVersion: privacy.Effective,
+		diffIPAddress:      loopbackIP,
 	})
 	if !r.createdAt.Equal(signedUpAt) {
 		t.Fatalf("created_at = %s, want the server's clock, %s", r.createdAt, signedUpAt)
@@ -152,10 +152,10 @@ func TestSignupHandler_DuringANoticeRecordsTheVersionInForceAndTheComingOne(t *t
 		t.Fatalf("terms_accepted rows = %d, want 1", len(rows))
 	}
 	assertDiff(t, rows[0].diff, map[string]any{
-		"termsVersion":   "2026-10-03",
-		"privacyVersion": "2026-10-03",
-		"privacyComing":  []any{"2026-10-22"},
-		"ipAddress":      "127.0.0.1",
+		diffTermsVersion:   "2026-10-03",
+		diffPrivacyVersion: "2026-10-03",
+		diffPrivacyComing:  []any{"2026-10-22"},
+		diffIPAddress:      loopbackIP,
 	})
 }
 

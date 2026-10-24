@@ -1,6 +1,6 @@
 import { redirect, error } from '@sveltejs/kit';
 import { resolve } from '$app/paths';
-import { apiFetch, isMFARequired } from '#lib/api.js';
+import { apiFetch, isMFARequired, isTermsAgreementRequired } from '#lib/api.js';
 import { apiErrorMessage } from '#lib/apiErrorMessage.js';
 import { decideLanding, type SessionInfo } from '#lib/landing.js';
 import { staffLoginAfterSessionEnded } from '#lib/sessionEnded.js';
@@ -37,7 +37,28 @@ export interface PracticeSession {
 	// predate it need not restate it; a screen reads it through
 	// `hasSecondFactor` (#lib/roles.ts), which counts only `false` as none.
 	secondFactor?: boolean;
+	// #1549 (ADR-0053): the material versions an Owner of this Practice
+	// has to agree to before she enters it. Only an Owner's session
+	// carries it, and only while something is due. This load sends her to
+	// the agreement screen while it is set; the BFF is what refuses.
+	agreementDue?: DueVersion[];
 }
+
+/**
+ * One material version of the Terms of Service or the Privacy Policy
+ * that has started and that no Owner of this Practice has agreed to
+ * (staffauth.DueVersion). `document` is `terms` or `privacy`, `version`
+ * the date it took effect, `change` the line from its own record that
+ * says what changed.
+ */
+export interface DueVersion {
+	document: 'terms' | 'privacy';
+	name: string;
+	version: string;
+	change: string;
+}
+
+const agreementPath = (practiceId: string) => resolve('/practices/[practiceId]/agreement', { practiceId });
 
 // The one route the deletion lockout leaves open regardless of role
 // (staffauth.Middleware's isPracticeSessionRoute) -- this load redirects
@@ -90,6 +111,11 @@ export const load: LayoutLoad = async ({ params, url }): Promise<{ session: Prac
 		redirect(303, staffLoginAfterSessionEnded());
 	} else if (await isMFARequired(response)) {
 		redirect(303, `${resolve('/(signed-out)/mfa/enroll')}?returnTo=${encodeURIComponent(url.pathname)}`);
+	} else if (await isTermsAgreementRequired(response)) {
+		// The session read is left open while an agreement is due, so this
+		// is not reached today; were it ever refused, it is still not a
+		// stale Membership.
+		redirect(303, agreementPath(params.practiceId));
 	} else if (response.status === 403 || response.status === 404) {
 		await redirectAwayFromStalePractice();
 	} else if (!response.ok) {
@@ -103,10 +129,22 @@ export const load: LayoutLoad = async ({ params, url }): Promise<{ session: Prac
 		isContractor: boolean;
 		pendingDeletion: boolean;
 		secondFactor: boolean;
+		agreementDue?: DueVersion[];
 	} = await response.json();
 
 	if (body.pendingDeletion && url.pathname !== deleteSettingsPath(params.practiceId)) {
 		redirect(303, deleteSettingsPath(params.practiceId));
+	}
+
+	// #1549: an Owner whose Practice waits on her agreement sees the one
+	// screen that asks, before anything else here. Deletion stays one
+	// press away from it (ADR-0048), so its screen is let through too.
+	if (
+		(body.agreementDue?.length ?? 0) > 0 &&
+		url.pathname !== agreementPath(params.practiceId) &&
+		url.pathname !== deleteSettingsPath(params.practiceId)
+	) {
+		redirect(303, agreementPath(params.practiceId));
 	}
 
 	return {
@@ -117,7 +155,8 @@ export const load: LayoutLoad = async ({ params, url }): Promise<{ session: Prac
 			roles: body.roles,
 			isContractor: body.isContractor,
 			pendingDeletion: body.pendingDeletion,
-			secondFactor: body.secondFactor
+			secondFactor: body.secondFactor,
+			agreementDue: body.agreementDue
 		}
 	};
 };

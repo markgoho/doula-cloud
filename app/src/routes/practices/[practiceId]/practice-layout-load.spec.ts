@@ -223,6 +223,48 @@ describe('practices/[practiceId]/+layout.ts load', () => {
 		});
 	});
 
+	// #1549: an Owner whose Practice waits on her agreement sees the
+	// agreement screen first; the deletion screen stays reachable from it.
+	describe('while an agreement is due', () => {
+		const due = [{ document: 'terms', name: 'Terms of Service', version: '2026-11-01', change: 'Raises the price of a Credit.' }];
+		const ownerSession = {
+			staffId: 'staff-9',
+			practiceName: 'Riverside Doula Collective',
+			roles: ['owner'],
+			isContractor: false,
+			agreementDue: due
+		};
+
+		it('redirects to the agreement screen', async () => {
+			const { load } = await import('./+layout.js');
+			setup({ '/api/practices/practice-1/session': { status: 200, body: ownerSession } });
+
+			await expect(load(loadArguments)).rejects.toMatchObject({ status: 303, location: '/practices/practice-1/agreement' });
+		});
+
+		it.each(['/practices/practice-1/agreement', '/practices/practice-1/settings/delete'])(
+			'lets %s render, carrying what is due',
+			async (pathname) => {
+				const { load } = await import('./+layout.js');
+				setup({ '/api/practices/practice-1/session': { status: 200, body: ownerSession } });
+
+				const result = await load({ ...loadArguments, url: new URL(`https://example.test${pathname}`) });
+
+				expect(result).toMatchObject({ session: { agreementDue: due } });
+			}
+		);
+
+		it('reads a refused session read as a wait on the agreement, not a stale Membership', async () => {
+			const { load } = await import('./+layout.js');
+			vi.stubGlobal(
+				'fetch',
+				vi.fn(async () => Response.json({ code: 'TERMS_AGREEMENT_REQUIRED', message: 'agree first' }, { status: 403 }))
+			);
+
+			await expect(load(loadArguments)).rejects.toMatchObject({ status: 303, location: '/practices/practice-1/agreement' });
+		});
+	});
+
 	it('throws with the response status on any other failure', async () => {
 		const { load } = await import('./+layout.js');
 		setup({ '/api/practices/practice-1/session': { status: 500, body: 'boom' } });

@@ -53,6 +53,10 @@
 
 	const navItems = $derived.by((): NavItem[] => {
 		if (practiceId === undefined) return [];
+		// #1549: while her Practice waits on her agreement, every section
+		// would only send her back to the agreement screen, so the bar
+		// offers none of them.
+		if ((practiceSession?.agreementDue?.length ?? 0) > 0) return [];
 		const path = page.url.pathname;
 		const overview = resolve('/practices/[practiceId]', { practiceId });
 		const items = [

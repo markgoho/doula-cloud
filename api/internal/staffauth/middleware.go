@@ -21,6 +21,7 @@ import (
 
 	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/authn"
+	"doula-cloud/api/internal/clock"
 	"doula-cloud/api/internal/tasknudge"
 )
 
@@ -234,6 +235,30 @@ func Middleware(db *sql.DB) func(http.Handler) http.Handler {
 				}
 			}
 
+			// #1549 (ADR-0053): after a material version of the Terms
+			// of Service or the Privacy Policy starts, an Owner of this
+			// Practice is refused until one of its Owners agrees, on
+			// everything but the few routes that must never wait on it
+			// (isAgreementExemptRoute). Only an Owner: a Staff member who
+			// is not one, and a Client (who never reaches this
+			// Middleware), work as usual meanwhile, because a doula must
+			// never lose a Client's record during a birth for a press
+			// that is not hers. Checked after the two gates above, so it
+			// never admits a request either of them refuses.
+			var agreementDue []DueVersion
+			if reader.Has(roleOwner) {
+				agreementDue, err = dueAgreement(r.Context(), tx, practiceID, clock.Now(r.Context()))
+				if err != nil {
+					// coverage:ignore reason: DB query failure, not exercised by unit tests
+					apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+					return
+				}
+				if len(agreementDue) > 0 && !isAgreementExemptRoute(r, practiceID) {
+					writeTermsAgreementRequired(w)
+					return
+				}
+			}
+
 			// last_active_at rides along with last_practice_id because
 			// both are the same act -- somebody from this Practice was
 			// here -- and neither is worth a second round trip.
@@ -286,6 +311,7 @@ func Middleware(db *sql.DB) func(http.Handler) http.Handler {
 			ctx = context.WithValue(ctx, readerKey, reader)
 			ctx = context.WithValue(ctx, pendingDeletionKey, pendingDeletion)
 			ctx = context.WithValue(ctx, secondFactorKey, secondFactor)
+			ctx = context.WithValue(ctx, agreementDueKey, agreementDue)
 			ctx = tasknudge.Begin(ctx)
 
 			next.ServeHTTP(w, r.WithContext(ctx))

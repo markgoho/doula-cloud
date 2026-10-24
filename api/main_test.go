@@ -41,7 +41,10 @@ const testWorkerFrom = "DoulaCloud <notifications@mg.example.test>"
 // roleDoula names the practice_role every routes() test that seeds a
 // plain roster member (not an Owner) uses, so goconst has one spelling
 // to point at rather than three string literals.
-const roleDoula = "doula"
+const (
+	roleDoula = "doula"
+	roleOwner = "owner"
+)
 
 // testWorkerReplyTo is every Platform-voice routes() test worker's
 // stand-in ReplyTo (ADR-0011's support@ inbox), shared by
@@ -474,7 +477,7 @@ func TestRoutes_StaffInviteSuppressedAddressRefused(t *testing.T) {
 
 	const identityUID = "e2e-owner-invites-suppressed"
 	practiceID := testdb.SeedPractice(t, db, "Suppressing Practice")
-	testdb.SeedStaffAtPractice(t, db, practiceID, identityUID, []string{"owner"}, "employee")
+	testdb.SeedStaffAtPractice(t, db, practiceID, identityUID, []string{roleOwner}, "employee")
 	sessionCookie := authntest.SeedSession(t, db.App, identityUID)
 	const email = "blocked@example.com"
 	if err := mailsuppress.Record(t.Context(), db.App, email, mailsuppress.CauseBounce, "evt-e2e-861"); err != nil {

@@ -199,6 +199,11 @@ func mountPracticeRoutes(g *GatedRouter, ir WriteRouter, verifier authn.Verifier
 	ir.ExemptGated("POST /api/practices/{practiceId}/second-factor-recommendation/close",
 		"one row per (Practice, Staff, act) under a primary key, written with ON CONFLICT DO NOTHING; a retry finds its rows already there and writes nothing",
 		false, OwnerOnly, CloseSecondFactorRecommendationHandler())
+	// #1549 (ADR-0053): an Owner agrees, for her Practice, to a material
+	// change that has started. Owner-only: nobody else is ever asked.
+	ir.ExemptGated("POST /api/practices/{practiceId}/terms-agreement",
+		"a press when nothing is due writes nothing, so a retry after the first press landed finds nothing due and writes no second row",
+		false, OwnerOnly, AgreeToTermsHandler())
 }
 
 // mountSessionRoutes is the pre-Practice half of Mount: sign-in, sign-up,

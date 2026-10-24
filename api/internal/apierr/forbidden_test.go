@@ -36,6 +36,7 @@ var forbiddenCodeIdents = map[string]apierr.Code{
 	"CodeMFARequired":             apierr.CodeMFARequired,
 	"CodeSecondFactorRequired":    apierr.CodeSecondFactorRequired,
 	"CodePilotNotOpen":            apierr.CodePilotNotOpen,
+	"CodeTermsAgreementRequired":  apierr.CodeTermsAgreementRequired,
 }
 
 // TestForbiddenCodesAreTheRecordedSet is the cross-check that keeps the

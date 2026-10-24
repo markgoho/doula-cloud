@@ -53,6 +53,13 @@ type PracticeSessionResponse struct {
 	// act needs a second factor, without a second call (#1532). A UX-only
 	// mirror: the act's own seam is what refuses.
 	SecondFactor bool `json:"secondFactor"`
+	// AgreementDue is #1549's: the material versions an Owner of this
+	// Practice has to agree to before she enters it. Middleware lets this
+	// one read through while anything is due (isAgreementExemptRoute), so
+	// app/'s +layout.ts load can send her to the screen that asks, and the
+	// screen can say what changed. Left out when nothing is due, and
+	// always for a Staff member who is not an Owner, who is never asked.
+	AgreementDue []DueVersion `json:"agreementDue,omitempty"`
 }
 
 // PracticeSessionHandler answers GET .../session: which Practice, which
@@ -88,6 +95,7 @@ func PracticeSessionHandler() http.Handler {
 			IsContractor:    reader.IsContractor(), //nolint:forbidigo // the Employment type as a fact, not reach -- see PracticeSessionResponse
 			PendingDeletion: pendingDeletionFrom(r.Context()),
 			SecondFactor:    SecondFactor(r.Context()),
+			AgreementDue:    agreementDueFrom(r.Context()),
 		}
 		apierr.WriteJSON(w, http.StatusOK, resp)
 	})

@@ -35,6 +35,7 @@
 	import { startHref } from './clients/new/intake.js';
 	import { activityLedgerColumns, loadPracticeActivityPage, type ActivityEntry } from '#lib/activityLedger.js';
 	import { formatActivityTimestamp } from '#lib/dates.js';
+	import { takeOutcome } from '#lib/outcome.js';
 	import type { PracticeSession } from './+layout.js';
 	import OfferInbox from '#lib/components/organisms/OfferInbox.svelte';
 	import OverviewHub from '#lib/components/templates/OverviewHub.svelte';
@@ -49,6 +50,11 @@
 
 	let landing = $state<PracticeLanding | undefined>();
 	let error = $state('');
+
+	// What the act that sent her here did (#1710) -- today only agreeing
+	// to a changed Terms of Service or Privacy Policy (#1549). Read once,
+	// while the page renders, so a reload says nothing.
+	const outcome = takeOutcome(page.url);
 
 	// #486's Recent-activity feed: cursor-paginated on its own, unlike the
 	// one-shot blocks loadPracticeLanding already merges into `landing`, so
@@ -439,4 +445,5 @@
 	{empty}
 	loading={landing || error ? undefined : 'Loading your Practice'}
 	loadError={error || undefined}
+	{outcome}
 />

@@ -121,6 +121,19 @@ describe('apiFetchWithSession', () => {
 		expect(response.status).toBe(403);
 	});
 
+	// JSON's own null, which the BFF never sends but a proxy might.
+	it.each([JSON.parse('null') as unknown, 'a bare string', { message: 'no code at all' }])(
+		'reads a 403 whose JSON body carries no code (%j) as no reason to redirect',
+		async (body) => {
+			setup();
+			vi.stubGlobal('fetch', vi.fn(async () => Response.json(body, { status: 403 })));
+
+			await apiFetchWithSession('/api/practices/prac-1/invoices');
+
+			expect(goto).not.toHaveBeenCalled();
+		}
+	);
+
 	it('reads a 403 with no JSON body as anything other than MFA_REQUIRED', async () => {
 		setup();
 		vi.stubGlobal('fetch', vi.fn(async () => new Response('only an Owner can do that', { status: 403 })));
@@ -201,6 +214,49 @@ describe('apiFetchWithSession', () => {
 		await apiFetchWithSession('/api/practices/prac-1/session');
 
 		expect(goto).toHaveBeenCalledTimes(2);
+	});
+
+	/*
+	 * #1549: an Owner whose Practice waits on her agreement to a material
+	 * change goes to the one screen that asks, for the Practice in the
+	 * address -- never to the login screen, and never out of her session.
+	 */
+	it('routes a 403 carrying TERMS_AGREEMENT_REQUIRED to the agreement screen for the Practice in the address', async () => {
+		setup({ pathname: '/practices/prac-1/clients' });
+		vi.stubGlobal('fetch', vi.fn(async () => Response.json({ code: 'TERMS_AGREEMENT_REQUIRED' }, { status: 403 })));
+
+		const response = await apiFetchWithSession('/api/practices/prac-1/clients');
+
+		expect(goto).toHaveBeenCalledWith('/practices/prac-1/agreement');
+		expect(signOut).not.toHaveBeenCalled();
+		expect(response.status).toBe(403);
+	});
+
+	it.each(['/practices/prac-1/agreement', '/account'])(
+		'stays put on a TERMS_AGREEMENT_REQUIRED refusal met at %s',
+		async (pathname) => {
+			setup({ pathname });
+			vi.stubGlobal('fetch', vi.fn(async () => Response.json({ code: 'TERMS_AGREEMENT_REQUIRED' }, { status: 403 })));
+
+			await apiFetchWithSession('/api/practices/prac-1/terms-agreement');
+
+			expect(goto).not.toHaveBeenCalled();
+		}
+	);
+
+	it('lets a second concurrent TERMS_AGREEMENT_REQUIRED refusal fall through instead of re-redirecting', async () => {
+		setup({ pathname: '/practices/prac-1' });
+		let resolveGoto!: () => void;
+		goto.mockImplementation(() => new Promise<void>((resolve) => (resolveGoto = resolve)));
+		vi.stubGlobal('fetch', vi.fn(async () => Response.json({ code: 'TERMS_AGREEMENT_REQUIRED' }, { status: 403 })));
+
+		const first = apiFetchWithSession('/api/practices/prac-1/clients');
+		await vi.waitFor(() => expect(goto).toHaveBeenCalledTimes(1));
+		await apiFetchWithSession('/api/practices/prac-1/schedule');
+
+		expect(goto).toHaveBeenCalledTimes(1);
+		resolveGoto();
+		await first;
 	});
 });
 
