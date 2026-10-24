@@ -66,7 +66,8 @@
 		inputmode,
 		autocomplete,
 		ariaLabel,
-		passwordLabel = 'password'
+		passwordLabel = 'password',
+		passwordrules
 	}: {
 		id?: string;
 		value: string;
@@ -152,6 +153,12 @@
 		 * (#470).
 		 */
 		passwordLabel?: string;
+		/*
+		 * The rule Safari reads when it generates a password (#1813). A
+		 * screen that sets a password passes `PASSWORD_RULES` from
+		 * passwordRule.ts; a screen that only reads one passes nothing.
+		 */
+		passwordrules?: string;
 	} = $props();
 
 	// Defaults to hidden (#470): a password field starts masked, and only
@@ -177,6 +184,7 @@
 		{step}
 		{inputmode}
 		{autocomplete}
+		{passwordrules}
 		aria-label={ariaLabel}
 		class:invalid
 		class:password-input={isPassword}

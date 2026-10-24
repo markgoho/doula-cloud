@@ -3,7 +3,12 @@
 	import { resolve } from '$app/paths';
 	import { apiBaseURL } from '#lib/api.js';
 	import { refusalErrors } from '#lib/formErrors.js';
-	import { PASSWORD_HINT, passwordRefusal, preloadCommonPasswords } from '#lib/passwordRule.js';
+	import {
+		PASSWORD_HINT,
+		PASSWORD_RULES,
+		passwordRefusal,
+		preloadCommonPasswords
+	} from '#lib/passwordRule.js';
 	import { FormSubmission, orServiceProblem } from '#lib/formSubmission.svelte.js';
 	import TextInput from '#lib/components/atoms/TextInput.svelte';
 	import Button from '#lib/components/atoms/Button.svelte';
@@ -15,6 +20,10 @@
 	import EntryPage from '#lib/components/templates/EntryPage.svelte';
 
 	const token = page.url.searchParams.get('token') ?? '';
+	// #1813: the address the link was mailed to (authmail.tokenMailCopy),
+	// only so a password manager saves the new password against it. It is
+	// not sent anywhere: the token alone names the account to the BFF.
+	const accountEmail = page.url.searchParams.get('email') ?? '';
 	const passwordId = 'reset-password-new';
 
 	let newPassword = $state('');
@@ -60,6 +69,17 @@
 		<Link href={resolve('/(signed-out)/login')} label="Continue to log in" />
 	{:else}
 		<StackedForm onSubmit={handleSubmit}>
+			{#if accountEmail}
+				<!--
+					#1813: a password manager saves a new password against the
+					field marked "username" in the same form. Chromium's own
+					pattern for a form that does not ask for it: a field that
+					holds it, not shown. `hidden` keeps it out of sight, out of
+					the tab order and out of the accessibility tree.
+				-->
+				<!-- eslint-disable-next-line svelte/no-restricted-html-elements -- a field nobody sees or types in: TextInput is a visible, labeled control, and this one has no label, no handler and no value but the link's -->
+				<input type="email" autocomplete="username" value={accountEmail} hidden />
+			{/if}
 			<LabeledField
 				id={passwordId}
 				label="New password"
@@ -76,6 +96,7 @@
 						onInput={(value) => (newPassword = value)}
 						required
 						autocomplete="new-password"
+						passwordrules={PASSWORD_RULES}
 					/>
 				{/snippet}
 			</LabeledField>

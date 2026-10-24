@@ -119,6 +119,12 @@ describe('the password rule (#1538)', () => {
 			.toBeVisible();
 	});
 
+	it('tells Safari the rule, so a generated password passes it (#1813)', async () => {
+		await setup();
+
+		await expect.element(testPage.getByLabelText('Password')).toHaveAttribute('passwordrules', 'minlength: 15;');
+	});
+
 	it('refuses a commonly used password before the account is created, and sends it nowhere (#1539)', async () => {
 		await setup();
 		await fillForm();

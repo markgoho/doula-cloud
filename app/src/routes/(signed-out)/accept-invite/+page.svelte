@@ -30,7 +30,12 @@
 	import { getFirebaseAuth } from '#lib/firebase.js';
 	import { apiBaseURL, apiFetch, apiFetchWithSession } from '#lib/api.js';
 	import { authRefusal, refusalErrors, refusalOrConfirmable } from '#lib/formErrors.js';
-	import { PASSWORD_HINT, passwordRefusal, preloadCommonPasswords } from '#lib/passwordRule.js';
+	import {
+		PASSWORD_HINT,
+		PASSWORD_RULES,
+		passwordRefusal,
+		preloadCommonPasswords
+	} from '#lib/passwordRule.js';
 	import { FormSubmission, orServiceProblem, type FormError } from '#lib/formSubmission.svelte.js';
 	import { decideLanding, type Membership, type SessionInfo } from '#lib/landing.js';
 	import TextInput from '#lib/components/atoms/TextInput.svelte';
@@ -105,6 +110,9 @@
 	// Only when she is setting a new password: an existing password does
 	// not retroactively follow a rule stated for the one being created.
 	const passwordHint = $derived(mode === 'signup' ? PASSWORD_HINT : undefined);
+	// The same reason for Safari's generator (#1813): it suggests nothing for
+	// a password she is typing back in.
+	const passwordRules = $derived(mode === 'signup' ? PASSWORD_RULES : undefined);
 
 	let credential = $state<UserCredential | undefined>();
 	// What the session read after sign-in found: an existing Staff record,
@@ -392,6 +400,7 @@
 						required
 						minlength={6}
 						autocomplete={passwordAutocomplete}
+						passwordrules={passwordRules}
 					/>
 				{/snippet}
 			</LabeledField>

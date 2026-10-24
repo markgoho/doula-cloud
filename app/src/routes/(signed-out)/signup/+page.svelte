@@ -28,7 +28,12 @@
 	import { workStateCode } from '#lib/workStates.js';
 	import { TIMEZONE_HINT, TIMEZONE_NEEDED, detectTimezone } from '#lib/timezones.js';
 	import { ROLE_LABELS } from '#lib/roles.js';
-	import { PASSWORD_HINT, passwordRefusal, preloadCommonPasswords } from '#lib/passwordRule.js';
+	import {
+		PASSWORD_HINT,
+		PASSWORD_RULES,
+		passwordRefusal,
+		preloadCommonPasswords
+	} from '#lib/passwordRule.js';
 
 	const practiceNameId = 'signup-practice-name';
 	const firstNameId = 'signup-first-name';
@@ -415,6 +420,7 @@
 					required
 					minlength={6}
 					autocomplete="new-password"
+					passwordrules={PASSWORD_RULES}
 				/>
 			{/snippet}
 		</LabeledField>

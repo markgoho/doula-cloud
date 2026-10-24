@@ -226,6 +226,18 @@ describe('TextInput.svelte', () => {
 	});
 
 	describe('type=password', () => {
+		it('reflects passwordrules, for Safari to generate a password that passes (#1813)', async () => {
+			await setup({ type: 'password', passwordrules: 'minlength: 15;' });
+
+			await expect.element(page.getByRole('textbox')).toHaveAttribute('passwordrules', 'minlength: 15;');
+		});
+
+		it('omits passwordrules when not provided', async () => {
+			await setup({ type: 'password' });
+
+			await expect.element(page.getByRole('textbox')).not.toHaveAttribute('passwordrules');
+		});
+
 		it('defaults to hidden (#470)', async () => {
 			await setup({ type: 'password', value: 'hunter2' });
 

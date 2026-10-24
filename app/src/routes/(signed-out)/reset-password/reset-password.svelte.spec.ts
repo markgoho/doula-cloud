@@ -28,6 +28,40 @@ beforeEach(() => {
 const passwordField = () => testPage.getByLabelText('New password');
 const submit = () => testPage.getByRole('button', { name: 'Reset password' }).click();
 
+describe('the account a password manager saves the new password against (#1813)', () => {
+	it('carries the account email from the link in a username field she cannot see or reach', async () => {
+		const { container } = await render(Page, {});
+
+		// querySelector, case 2 of svelte-tests.md: the field is deliberately
+		// out of the accessibility tree, so no accessible query can find it.
+		const username = container.querySelector<HTMLInputElement>('input[autocomplete="username"]');
+		expect(username?.value).toBe('anne-marie+reset@example.test');
+		// `hidden`: not painted, not in the tab order, not in the accessibility tree.
+		expect(username?.hidden).toBe(true);
+		await expect.element(passwordField()).toHaveAttribute('autocomplete', 'new-password');
+	});
+
+	it('renders no username field for a link that carries no email', async () => {
+		const withoutEmail = new URL(fixture.url);
+		withoutEmail.searchParams.delete('email');
+		pageState.url = withoutEmail;
+		try {
+			const { container } = await render(Page, {});
+
+			await expect.element(passwordField()).toBeVisible();
+			expect(container.querySelector('input[autocomplete="username"]')).toBeNull();
+		} finally {
+			pageState.url = new URL(fixture.url);
+		}
+	});
+
+	it('tells Safari the rule, so a generated password passes it', async () => {
+		await render(Page, {});
+
+		await expect.element(passwordField()).toHaveAttribute('passwordrules', 'minlength: 15;');
+	});
+});
+
 describe('the password rule on the reset screen (#1538)', () => {
 	it('states the rule before she types', async () => {
 		await render(Page, {});

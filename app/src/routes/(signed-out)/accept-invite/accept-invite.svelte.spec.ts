@@ -201,6 +201,22 @@ describe('step one -- autocomplete follows which mode is picked (#469)', () => {
 	});
 });
 
+describe('step one -- passwordrules follows which mode is picked (#1813)', () => {
+	it('tells Safari the rule when she is making a new account', async () => {
+		await setup();
+
+		await expect.element(passwordField()).toHaveAttribute('passwordrules', 'minlength: 15;');
+	});
+
+	it('states no rule for a password she is only typing back in', async () => {
+		await setup();
+
+		await testPage.getByRole('radio', { name: /I already have an account/ }).click();
+
+		await expect.element(passwordField()).not.toHaveAttribute('passwordrules');
+	});
+});
+
 describe('step one -- the password rule (#1538)', () => {
 	it('states the rule before she types when she is making a new account', async () => {
 		await setup();
