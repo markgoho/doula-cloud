@@ -19,7 +19,7 @@ None. Maya's journey starts at a cold `/signup`, so this plan builds its own fix
 | 1.3 | Land on `/practices/[practiceId]` | `Welcome to {practice name}`, with all seven tiles including the five owner-only ones | `automated (signup-form.e2e.ts)` |
 | 1.3-a | Read the credit balance on **Billing** | `Credit balance: 3`, one `signup_bonus` ledger row of `+3` | `automated (billing.e2e.ts)` |
 | 1.B-screens | Count the screens from the stage's entry to its end | **Screens**: 2 (Hick's Law, Flow). `/signup`, then the Practice landing | `manual` |
-| 1.B-decisions | On each screen, count the decisions visible at once; record the largest | **Decisions**: 5 (Hick's Law, Miller's Law). Four fields and **Create Practice** | `manual` |
+| 1.B-decisions | On each screen, count the decisions visible at once; record the largest | **Decisions**: 5 (Hick's Law, Miller's Law). The signup form's fields that are on the screen at one time, and **Create Practice** when it is | `manual` |
 | 1.B-memory | Note every later step that needs an earlier answer, and whether that answer is still on screen | **Memory**: yes (Working Memory) | `manual` |
 | 1.B-confirmation | Read the screen the stage ends on | **Confirmation**: yes (Peak-End Rule) | `manual` |
 | 1.B-cold | Walk the stage in a fresh browser profile, with nothing explained first | **Cold**: yes (Paradox of the Active User) | `manual` |
@@ -151,6 +151,23 @@ MO-G3 ([#252](https://github.com/markgoho/doula-cloud/issues/252)) is closed and
 MO-G5 to MO-G9 are experience-layer or infrastructure findings; they are observed inside the steps above (3.4, 7.1, 7.2-a) rather than given steps of their own. MO-G9 ([#257](https://github.com/markgoho/doula-cloud/issues/257)) is closed as well — 3.4 still meets a wall, but a paid one she can walk through, not the dead end that gap named.
 
 ## Run log
+
+### 2026-10-23 — the route walked as a solo Owner, against the spec ([#1649](https://github.com/markgoho/doula-cloud/issues/1649))
+
+`bun run dev:full` in `app/` on trunk at `6c1985d4`, walked in a fresh headless Chrome profile through `playwriter`, at 1280x900 and at 320x640, with a new throwaway account for each walk and **Practice name left empty**. Her stage 1 and the first Client of her stage 3 are the route that [`docs/onboarding-route.md`](../onboarding-route.md) specifies. No mark moved and no cell is rewritten; Renata Alvarez's plan has the agency Owner's walks and the step-by-step table for the same five screens, in its own Run log.
+
+| Walk | Width | Acts | Presses | Screens | Exits from the app |
+| --- | --- | --- | --- | --- | --- |
+| Solo Owner, "Maya Okonkwo" | 1280px | 3 | 4 | 5 | 0 |
+| Solo Owner, "Maya Okonkwo-Fairweather" | 320px | 3 | 4 | 5 | 0 |
+
+**The count agrees with the spec**: 3 acts and 4 presses on 5 screens, with no exit from the app, and no ticket is filed for it.
+
+- **1.2**: with Practice name empty, the heading was "Welcome to Maya Okonkwo" and "Welcome to Maya Okonkwo-Fairweather": her own name, first name then last name (#1536).
+- **3.2-b**: "Who is the Doula?" opened with "Maya Okonkwo (you)" selected and "No Doula yet" after it, so the question added no press. The Engagement's page named her as the Doula, and its On call section listed her.
+- **Sentences**: each sentence on the five screens agrees with the spec but two, and the spec was corrected for both because the product follows a recorded decision: the two links in the agreement sentence read "(opens in new tab)" after the document name (#1557), and the Start work form opens with "Pat saved as a Client." (#1710).
+- **1.B-screens**: 2, passes. **1.B-decisions**: 5 at most, passes; at 1280x900 the form shows five of its seven fields at once, and **Create Practice** is below them. **3.B-screens**: 4 from the empty Practice to the Engagement's page, under the budget of 5. **1.B-cold** and **3.B-cold**: yes, in a fresh profile with nothing explained first. The other budget steps of the two stages were not measured on this walk; they wait for [#329](https://github.com/markgoho/doula-cloud/issues/329).
+- **Layout**: at 1280px screens 2 to 5 scroll sideways by 57 to 62px ([#1803](https://github.com/markgoho/doula-cloud/issues/1803)); at 320px no screen does. At 320px **Create Practice**, **Save and continue** and **Start work with Pat Client** are 41.25 to 41.3px tall ([#1805](https://github.com/markgoho/doula-cloud/issues/1805)), and **Add your first Client** is 23.3px ([#1828](https://github.com/markgoho/doula-cloud/issues/1828)). None is a gap, so no gap ID is minted.
 
 ### 2026-10-02 — budget steps added ([#1683](https://github.com/markgoho/doula-cloud/issues/1683))
 

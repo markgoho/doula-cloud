@@ -4,7 +4,7 @@ This is the spec of the route that a new Owner walks from `/signup` to **First V
 
 This document decides nothing. Each sentence in it was decided on a ticket of that map or by a record that the ticket names, and each section says which. Where this document and a record disagree, the record is correct and this document has a defect.
 
-**It describes the route as decided, not the product as built.** On 2026-10-02 the product does not match it. [The build tickets](#the-build-tickets) are the difference.
+**It describes the route as decided, not the product as built.** On 2026-10-02 the product did not match it. [The build tickets](#the-build-tickets) were the difference. On 2026-10-23 the walk on #1649 found that the built route matches it: 3 acts and 4 presses on 5 screens, with no exit from the app, as a solo Owner and as an agency Owner, at 1280px and at 320px. The walk corrected two sentences in this document (Screen 1, row 8; Screen 4, the status message). The Run logs of `docs/test-plans/practice-owner.md` and `docs/test-plans/solo-birth-doula.md` hold the walk.
 
 ## The route in short
 
@@ -117,7 +117,7 @@ The words below are the words to build. Where a build ticket and this document d
 | 5 | Email | Label "Email". Refusal: "Enter your email address" | #1493; no change |
 | 6 | Password | Label "Password". Hint: "Must be 15 characters or more, and not a commonly used password". A show and hide control. No composition rule. No second field. Refusals: "Enter a password", "Password must be 15 characters or more", "Password is too common. Enter a different password" | #1493 (Mark, Q3), ADR-0026 amended; build #1538 and #1539 |
 | 7 | The role notice | "This account will hold every role — Owner, Admin and Doula — because a Practice's founder is usually its only Doula and needs to hold their own Visits. Anyone you invite later holds only the roles you choose for them. Roles are shown and changed on your Practice's staff roster." | [Signup grants Owner, Admin and Doula silently, and never says so (#290)](https://github.com/markgoho/doula-cloud/issues/290); stays before the button (#1493) |
-| 8 | The agreement sentence | "By creating your Practice, you agree to the Terms of Service and the Privacy Policy." Each document name is a link that opens in a new tab. No checkbox | #1494 (Mark, Q2); build #1547 |
+| 8 | The agreement sentence | "By creating your Practice, you agree to the Terms of Service and the Privacy Policy." Each document name is a link that opens in a new tab, and its words on the screen are "Terms of Service (opens in new tab)" and "Privacy Policy (opens in new tab)", as each link that opens a new tab says it does. No checkbox | #1494 (Mark, Q2); build #1547; the link words are the `Link` atom's rule from [#1557](https://github.com/markgoho/doula-cloud/issues/1557) |
 | 9 | The button | **Create Practice**. Its accessible description is the agreement sentence | #1494 (Mark, Q1) |
 
 - **The order** is Mark's answer on #1493. Her name is first because an empty Practice name copies it. The error summary lists refusals in the order of the fields.
@@ -164,6 +164,7 @@ The heading and the button are "Start work with (name)".
 
 | Part | Words | Decided by |
 | --- | --- | --- |
+| The status message | "(given name) saved as a Client.", first on the form, with focus on it when the form opens from the name question | [#1710](https://github.com/markgoho/doula-cloud/issues/1710) |
 | The Credits sentence | "Starting work with (name) uses 1 Credit. This Practice has 3 Welcome credits. After this, it has 2." | #1516 under delegation; the rule for "Welcome credits" settled on #1496; build #1612 |
 | Kind of work | "Birth" or "Postpartum", with no option selected. Refusal: "Select whether this is birth or postpartum work" | As built (ADR-0017) |
 | Due date | Needed for birth work. For postpartum work the hint is "Optional for postpartum work". Refusal: "Enter the due date" | As built |
