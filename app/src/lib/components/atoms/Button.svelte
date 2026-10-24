@@ -129,11 +129,20 @@
 			align-self: start;
 		}
 
+		/*
+		 * The brief's Density rule: no hit target under 44px, in either
+		 * direction, at any width (#1805). The fluid scale shrinks padding
+		 * and type at a narrow width, so the floor is a fixed
+		 * `min-*-size` on every variant rather than a sum of padding and
+		 * line height that a narrow screen can take below it.
+		 */
 		button {
 			display: inline-flex;
 			align-items: center;
 			justify-content: center;
 			gap: var(--space-2);
+			min-block-size: var(--hit-target-min);
+			min-inline-size: var(--hit-target-min);
 			font-family: var(--font-family-base);
 			font-weight: var(--font-weight-medium);
 			border-radius: var(--radius);
@@ -150,20 +159,21 @@
 			outline-offset: var(--focus-ring-offset);
 		}
 
+		/* `sm` and `md` differ in padding and type only: each is held to the
+		   44px floor above, which is taller than the 32px and 40px minimums
+		   they once had. */
 		button.size-sm {
-			min-height: 2rem;
 			padding: var(--space-1) var(--space-3);
 			font-size: var(--text-body-sm-size);
 		}
 
 		button.size-md {
-			min-height: 2.5rem;
 			padding: var(--space-2) var(--space-4);
 			font-size: var(--text-body-size);
 		}
 
 		button.size-lg {
-			min-height: 3rem;
+			min-block-size: 3rem;
 			padding: var(--space-3) var(--space-6);
 			font-size: var(--text-subheading-size);
 		}
@@ -230,7 +240,6 @@
 		 */
 		button.link {
 			display: inline;
-			min-block-size: 0;
 			padding: 0;
 			border: 0;
 			background-color: transparent;
@@ -244,14 +253,35 @@
 			color: var(--color-primary-hover);
 		}
 
+		/*
+		 * The 44px floor is kept for a `link` that stands on its own -- the
+		 * agreement screen's "Sign out", an entry in a list (#1828) -- and
+		 * dropped for one inside a paragraph, which is part of a sentence:
+		 * the brief excepts that one the way WCAG 2.2's 2.5.8 does
+		 * ("Inline"), and `Link.svelte` draws the same line at the same
+		 * place. A `<button>` is an atomic box even styled `inline`, so
+		 * here the floor has to be taken off rather than being ignored.
+		 */
+		:global(p) button.link {
+			min-block-size: 0;
+			min-inline-size: 0;
+		}
+
+		/* A table row is 40px (the brief's Density section), and a 44px
+		   target cannot sit in it without growing it. Until #1843 decides
+		   which rule wins, a button in a cell keeps the row's height. */
+		:global(td) button {
+			min-block-size: 0;
+			min-inline-size: 0;
+		}
+
 		/* Chrome controls: the shell's hamburger, avatar and Practice
 		   switcher. No border and no fill, because a top bar that draws a
 		   box round each of its own controls stops reading as one surface --
-		   but the hit area is still the 44px WCAG 2.5.5 target whatever the
-		   glyph inside measures (the avatar is 34px). */
+		   but the hit area is still the 44px floor every variant takes from
+		   the base rule, whatever the glyph inside measures (the avatar is
+		   34px). */
 		button.bare {
-			min-block-size: var(--hit-target-min);
-			min-inline-size: var(--hit-target-min);
 			padding: var(--space-1) var(--space-2);
 			border-color: transparent;
 			background-color: transparent;

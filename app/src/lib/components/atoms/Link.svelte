@@ -78,19 +78,21 @@
 	rel={isExternal ? 'noopener noreferrer' : undefined}
 	onclick={onClick}
 >
-	{#if icon}
-		<Icon name={icon} size={16} />
-	{/if}
 	<!--
 		The new-tab words are drawn inside the label, not hidden beside it
 		(#1557): GOV.UK's Links style puts "(opens in new tab)" in the link
 		text a sighted reader sees too. Inside `.label`, so the words wrap
 		with the label at 320px rather than being a flex item that cannot.
+
+		No whitespace between the icons and the label (#1808). In a
+		sentence the link is inline, so a space here would be a real space
+		in the sentence's accessible text: "(opens in new tab) ." The gap
+		is drawn by CSS instead.
 	-->
-	<span class="label">{text}</span>
-	{#if isExternal}
-		<Icon name="arrow-square-out" size={16} />
-	{/if}
+	{#if icon}<Icon name={icon} size={16} />{/if}<span class="label">{text}</span>{#if isExternal}<Icon
+			name="arrow-square-out"
+			size={16}
+		/>{/if}
 </a>
 
 <style>
@@ -102,12 +104,64 @@
 			align-self: start;
 		}
 
+		/*
+		 * A link on its own -- a screen's one action, a Back link, an entry
+		 * in a list -- is a target, and the brief's Density rule holds it
+		 * to 44px in both directions whatever its words measure (#1828).
+		 * `min-*-size` rather than padding, so the box grows to fit long
+		 * words but never shrinks below the floor; `align-items` keeps the
+		 * text centered in the taller box.
+		 */
 		a {
 			display: inline-flex;
 			align-items: center;
 			gap: var(--space-1);
+			min-block-size: var(--hit-target-min);
+			min-inline-size: var(--hit-target-min);
 			font-family: var(--font-family-base);
 			text-decoration: underline;
+		}
+
+		/*
+		 * A link inside a paragraph is part of a sentence, and the brief
+		 * excepts it from the 44px floor the way WCAG 2.2's 2.5.8 does
+		 * ("Inline"): a 44px box would push the sentence's lines apart.
+		 * So here it is plain inline text, not a flex box (#1808): an
+		 * inline-flex box is an item of its own in the accessible text, and
+		 * a full stop after it was read as " .". `display: inline` also
+		 * turns off `min-*-size`, which an inline box does not take.
+		 *
+		 * The rule is the paragraph, not the words beside the link: a link
+		 * that stands alone is not written inside a `<p>`.
+		 */
+		:global(p) a {
+			display: inline;
+		}
+
+		/* The icon is inline too, for the same reason: `Icon` draws it as
+		   an inline-block, and the accessible-text walk puts a space beside
+		   an inline-block even when it is hidden. `gap` has nothing to act
+		   on in an inline box, so the space between a label and its icon is
+		   a margin there instead. */
+		:global(p) a > :global(svg) {
+			display: inline;
+			vertical-align: middle;
+		}
+
+		/* A table row is 40px (the brief's Density section), and a 44px
+		   target cannot sit in it without growing it. Until #1843 decides
+		   which rule wins, a link in a cell keeps the row's height. */
+		:global(td) a {
+			min-block-size: 0;
+			min-inline-size: 0;
+		}
+
+		:global(p) a > :global(svg:first-child) {
+			margin-inline-end: var(--space-1);
+		}
+
+		:global(p) a > :global(svg:last-child) {
+			margin-inline-start: var(--space-1);
 		}
 
 		/*
