@@ -66,16 +66,22 @@ func TestComposeTokenMail_UnverifiedSendsVerificationLink(t *testing.T) {
 // its identity through Identity Platform, which also holds Client Portal
 // accounts, so this kind cannot read absence as deletion. Hence the nil
 // tx here: reaching for one would be a lie about what this path touches.
+//
+// The link carries the address it is mailed to (#1813), escaped so a `+`
+// in it survives, for the reset screen's hidden username field.
 func TestComposeTokenMail_PasswordResetSendsResetLink(t *testing.T) {
 	accounts := authntest.NewFakeAccountManager()
-	accounts.Seed("uid-2", "person@example.com", true)
+	accounts.Seed("uid-2", "person+reset@example.com", true)
 	r := tokenMailRow{identityUID: "uid-2", kind: KindPasswordReset, token: sql.NullString{String: "reset-token", Valid: true}}
 
-	_, _, text, err := runComposeTokenMail(t.Context(), nil, accounts, r)
+	to, _, text, err := runComposeTokenMail(t.Context(), nil, accounts, r)
 	if err != nil {
 		t.Fatalf("compose: %v", err)
 	}
-	wantLink := testComposeAppBaseURL + "/reset-password?token=reset-token"
+	if to != "person+reset@example.com" {
+		t.Fatalf("to = %q, want the address the link names", to)
+	}
+	wantLink := testComposeAppBaseURL + "/reset-password?token=reset-token&email=person%2Breset%40example.com\n"
 	if !strings.Contains(text, wantLink) {
 		t.Fatalf("text %q does not contain link %q", text, wantLink)
 	}

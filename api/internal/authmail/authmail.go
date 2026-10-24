@@ -24,6 +24,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"net/url"
 	"time"
 
 	"doula-cloud/api/internal/authn"
@@ -136,7 +137,7 @@ func composeTokenMail(mailer outbox.Mailer, accounts authn.AccountManager) func(
 			return "", "", "", &outbox.DeadLetterError{Reason: "outbox row carries no token"}
 		}
 
-		subject, text := tokenMailCopy(r.kind, mailer.AppBaseURL, r.token.String)
+		subject, text := tokenMailCopy(r.kind, mailer.AppBaseURL, r.token.String, account.Email)
 		return account.Email, subject, text, nil
 	}
 }
@@ -187,10 +188,18 @@ func verificationStaffIsLive(ctx context.Context, tx *sql.Tx, identityUID string
 
 // tokenMailCopy is verification and reset mail's fixed, content-free
 // copy (ADR-0009): no Staff name, no Practice name, only the link.
-func tokenMailCopy(kind TokenMailKind, appBaseURL, token string) (subject, text string) {
+//
+// The reset link also carries to, the address the mail is sent to
+// (#1813): the reset screen puts it in a hidden username field, so a
+// password manager saves the new password against the account. It
+// tells a holder of the link nothing new -- the link reaches only that
+// mailbox, and Mailgun's message log (ADR-0012) already holds the
+// recipient beside the token. It is a label, not a credential: the BFF
+// never reads it, and the token alone names the account.
+func tokenMailCopy(kind TokenMailKind, appBaseURL, token, to string) (subject, text string) {
 	switch kind {
 	case KindPasswordReset:
-		link := appBaseURL + "/reset-password?token=" + token
+		link := appBaseURL + "/reset-password?token=" + token + "&email=" + url.QueryEscape(to)
 		return "Reset your DoulaCloud password", "Hello,\n\n" +
 			"We received a request to reset your DoulaCloud password.\n\n" +
 			link + "\n\n" +

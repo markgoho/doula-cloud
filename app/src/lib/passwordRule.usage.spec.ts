@@ -30,3 +30,15 @@ describe('who checks a password against the common-password list', () => {
 		expect(readers).toEqual(SCREENS_THAT_SET_A_PASSWORD);
 	});
 });
+
+describe('who tells a password manager the rule (#1813)', () => {
+	it('is the three screens that set a password: a screen that reads one states no rule', () => {
+		const readers = globFiles('src/**/*.svelte', { cwd: appRoot })
+			// The atom only forwards the attribute it is given.
+			.filter((file) => file !== 'src/lib/components/atoms/TextInput.svelte')
+			.filter((file) => /PASSWORD_RULES|passwordrules=/.test(readFileSync(`${appRoot}${file}`, 'utf8')))
+			.toSorted((a, b) => a.localeCompare(b));
+
+		expect(readers).toEqual(SCREENS_THAT_SET_A_PASSWORD);
+	});
+});

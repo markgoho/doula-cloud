@@ -132,6 +132,13 @@ describe('Staff login -- the way back from a lost authenticator app (#694)', () 
 			.toHaveAttribute('href', '/recovery-code');
 	});
 
+	it('states no password rule on a password she is only typing back in (#1813)', async () => {
+		apiFetch.mockResolvedValue(jsonResponse('no session', 401));
+		await setup();
+
+		await expect.element(testPage.getByLabelText('Password')).not.toHaveAttribute('passwordrules');
+	});
+
 	it('says what a spent code did, since spending one mints no session', async () => {
 		apiFetch.mockResolvedValue(jsonResponse('no session', 401));
 		pageState.url = new URL('https://example.test/login?codeSpent=true');

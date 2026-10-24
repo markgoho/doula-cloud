@@ -20,6 +20,15 @@
 export const MIN_PASSWORD_LENGTH = 15;
 
 /*
+The rule in the form Safari reads when it generates a password (#1813), so
+the one it suggests already passes. Chrome and Firefox ignore the attribute;
+the passwords they generate are 15 characters or more already. Only the
+length is stated: there is no composition rule to state. A screen that only
+reads a password gets no rule.
+*/
+export const PASSWORD_RULES = `minlength: ${MIN_PASSWORD_LENGTH};`;
+
+/*
 The line under the field, shown before she types.
 */
 export const PASSWORD_HINT = `Must be ${MIN_PASSWORD_LENGTH} characters or more, and not a commonly used password`;

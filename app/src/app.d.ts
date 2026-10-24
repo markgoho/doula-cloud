@@ -36,4 +36,15 @@ declare global {
 	}
 }
 
+/*
+ * `passwordrules` is Safari's attribute (#1813): the rule its password
+ * generator reads, so a suggested password already passes. It is not in
+ * the HTML standard, so Svelte's element types do not know it.
+ */
+declare module 'svelte/elements' {
+	export interface HTMLInputAttributes {
+		passwordrules?: string | undefined | null;
+	}
+}
+
 export {};
