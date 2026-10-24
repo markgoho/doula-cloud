@@ -76,6 +76,12 @@ const MEANING: Record<string, Meaning> = {
     whileOpen:
       'This workflow builds and deploys the marketing site. It runs ONLY on a push to trunk, on a `practice-page-published` dispatch, and once a day after midnight UTC, so a green pull request says nothing about it. While this issue is open, **the live marketing site can be behind trunk**: a merged change to the site, a Practice page published or changed after the last passing run, or a version of the Terms or the Privacy Policy that started since then, is possibly not live.',
   },
+  '.github/workflows/hosting-edge-check.yml': {
+    unproven:
+      'the comparison of the Hosting edge ranges with the last day of traffic has',
+    whileOpen:
+      "This check runs once a day. It fails when the Firebase Hosting rewrite connects from an address of Google's own outside `hostingEdgeRanges` in `api/internal/clientip`, or a range in that list stops being Google's own. While this issue is open, **clientip.From can be returning Google's address for callers who come through Hosting**: they share one rate-limit bucket, and `signer_ip` and `terms_accepted` record the edge. The failed run's log names each address; see #1867 for how the ranges were chosen.",
+  },
 };
 
 const GENERIC: Meaning = {

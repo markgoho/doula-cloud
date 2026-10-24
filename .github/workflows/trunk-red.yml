@@ -29,6 +29,7 @@ on:
     workflows:
       - CI
       - Deploy the marketing site to Firebase Hosting on merge
+      - Hosting edge check
     types: [completed]
     # A `repository_dispatch` run of a watched workflow has `trunk` as
     # its head branch too, so this filter lets it through.

@@ -1,0 +1,81 @@
+# Hosting edge check (#1867).
+#
+# api/internal/clientip trusts a short list of address ranges as the
+# Firebase Hosting edge, and the list is observed, not published: from
+# 2026-09-27 to 2026-10-24 Hosting also connected from 64.233.172.x,
+# outside the list, and nothing said so. This reads the last day of
+# doula-api's request log and Google's two published range lists, and
+# api/cmd/hostingedge fails when an address from Google's own egress is
+# outside the list, or a range in the list stops being Google's own.
+#
+# A failed scheduled run opens a trunk-red issue: trunk-red.yml watches
+# this workflow by its `name:`.
+#
+# It authenticates as terraform-plan@, the read-only account: its
+# roles/viewer already reads the _Default log bucket, so this needs no
+# new grant. See docs/infrastructure.md, "Who may apply, and what CI may
+# read".
+name: Hosting edge check
+
+on:
+  schedule:
+    # Daily, off the hour (terraform-plan.yml has the reason), and after
+    # the day's traffic in US time zones.
+    - cron: '17 11 * * *'
+  workflow_dispatch: {}
+  pull_request:
+    paths:
+      - .github/workflows/hosting-edge-check.yml
+      - api/cmd/hostingedge/**
+      - api/internal/clientip/**
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    # Dependabot's pull requests cannot mint an OIDC token
+    # (terraform-plan.yml has the detail).
+    if: github.actor != 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: api/go.mod
+          cache-dependency-path: api/go.sum
+
+      - name: Authenticate to Google Cloud
+        uses: ./.github/actions/gcp-auth
+        with:
+          project_id: doula-cloud
+          workload_identity_provider: projects/850855848778/locations/global/workloadIdentityPools/github-actions/providers/github
+          service_account: terraform-plan@doula-cloud.iam.gserviceaccount.com
+
+      - uses: google-github-actions/setup-gcloud@v3
+
+      # /api/internal/** is left out: Cloud Scheduler and Cloud Tasks call
+      # it from Google's own egress, with a Google-signed token, and no
+      # route under it reads clientip. api/cmd/hostingedge has the detail.
+      - name: Read the last day of remote addresses
+        run: |
+          gcloud logging read \
+            'resource.type="cloud_run_revision" AND resource.labels.service_name="doula-api" AND log_name="projects/doula-cloud/logs/run.googleapis.com%2Frequests" AND NOT httpRequest.requestUrl:"/api/internal/"' \
+            --project doula-cloud --freshness=1d --limit 100000 \
+            --format='value(httpRequest.remoteIp)' > "$RUNNER_TEMP/remote-ips.txt"
+          wc -l < "$RUNNER_TEMP/remote-ips.txt"
+
+      - name: Fetch Google's published ranges
+        run: |
+          curl -fsS --retry 3 -o "$RUNNER_TEMP/goog.json" https://www.gstatic.com/ipranges/goog.json
+          curl -fsS --retry 3 -o "$RUNNER_TEMP/cloud.json" https://www.gstatic.com/ipranges/cloud.json
+
+      - name: Compare with clientip's Hosting edge ranges
+        working-directory: api
+        run: go run ./cmd/hostingedge "$RUNNER_TEMP/goog.json" "$RUNNER_TEMP/cloud.json" < "$RUNNER_TEMP/remote-ips.txt"
