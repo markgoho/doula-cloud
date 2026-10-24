@@ -5,6 +5,8 @@ import { render } from 'vitest-browser-svelte';
 import type { ClientSearchFields } from '#lib/client.js';
 import { intakeDraft } from '#lib/intakeDraft.svelte.js';
 import { handOffToIntake, takeIntakeHandoff } from '#lib/intakeHandoff.js';
+import { jsonResponse } from '#lib/testResponse.js';
+import { captureLanding } from '#lib/testOutcome.js';
 import Layout from './+layout.svelte';
 import { load as doorLoad } from './+page.js';
 import NamePage from './name/+page.svelte';
@@ -25,6 +27,9 @@ vi.mock('$app/state', () => ({ page: pageState }));
 
 const apiFetchWithSession = vi.hoisted(() => vi.fn());
 vi.mock('#lib/api.js', () => ({ apiFetchWithSession }));
+
+const goto = vi.hoisted(() => vi.fn());
+vi.mock('$app/navigation', () => ({ goto }));
 
 interface SetupOptions {
 	isContractor?: boolean;
@@ -67,6 +72,8 @@ async function enterFromSearch(fields: Partial<ClientSearchFields>) {
 
 beforeEach(() => {
 	apiFetchWithSession.mockReset();
+	goto.mockReset();
+	goto.mockResolvedValue(undefined);
 	seedIntake();
 });
 
@@ -169,6 +176,28 @@ describe('intake for everyone else', () => {
 		await expect.element(testPage.getByText('yar@example.com')).toBeVisible();
 		await expect.element(testPage.getByText('555-0100')).toBeVisible();
 		await expect.element(testPage.getByText('Jan 2, 1990')).toBeVisible();
+	});
+
+	// #1513: the whole path, from the search to the saved Client. She
+	// types the two parts into the fields herself, and the save sends
+	// them as she divided them, with nothing from the searched name.
+	it('saves a two-word name from the search as the parts typed into the fields', async () => {
+		await enterFromSearch({ name: 'Yar Pell', email: 'yar@example.com' });
+		await render(NamePage);
+		await expect.element(testPage.getByText(/You searched for "Yar Pell"/u)).toBeVisible();
+		apiFetchWithSession.mockResolvedValue(jsonResponse({ id: 'client-9' }, 201));
+
+		await testPage.getByLabelText('Given name').fill('Yar');
+		await testPage.getByLabelText('Family name (optional)').fill('Pell');
+		const landing = captureLanding(goto);
+		await testPage.getByRole('button', { name: 'Save and continue' }).click();
+
+		await expect
+			.poll(() => landing.href)
+			.toBe(`/practices/${practiceId}/clients/client-9/engagement-requests/new`);
+		const sent = JSON.parse(apiFetchWithSession.mock.calls[0][1].body as string) as Record<string, unknown>;
+		expect(sent).toMatchObject({ givenName: 'Yar', familyName: 'Pell', email: 'yar@example.com' });
+		expect(sent).not.toHaveProperty('searchedName');
 	});
 
 	// A click on "Add a new Client" whose navigation never arrived leaves
