@@ -50,7 +50,7 @@ test('A component rule beats the reset in the built app: a Link icon in a senten
 		.locator('p a svg')
 		.evaluateAll((icons) => icons.map((icon) => getComputedStyle(icon).display));
 	expect(iconDisplays.length).toBeGreaterThan(0);
-	expect(iconDisplays.every((display) => display === 'inline')).toBe(true);
+	expect(iconDisplays).toEqual(iconDisplays.map(() => 'inline'));
 
 	await expect(createPractice).toHaveAccessibleDescription(
 		'By creating your Practice, you agree to the Terms of Service (opens in new tab) and the Privacy Policy (opens in new tab).'
