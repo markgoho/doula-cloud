@@ -1,12 +1,14 @@
+import { randomUUID } from 'node:crypto';
 import AxeBuilder from '@axe-core/playwright';
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type APIRequestContext, type BrowserContext, type Cookie, type Page } from '@playwright/test';
 import { API_URL, PREVIEW_SERVER_ORIGIN } from './ports';
 import {
 	seedClient,
 	seedContractorDoula,
 	seedPortalClient,
 	signInPortalClient,
-	PORTAL_CLIENT_PASSWORD
+	PORTAL_CLIENT_PASSWORD,
+	type SeededPortalClient
 } from './portalClient';
 import { seedEngagement, seedEngagementRequest, seedInvoice } from './stack';
 import { enterPracticeAsEnrolled, verifyEmail } from './mfa';
@@ -23,20 +25,16 @@ import { WCAG_TAGS } from './wcag';
  */
 
 /*
- * Scanned elsewhere, against the same WCAG_TAGS (wcag.ts):
+ * Every `+page.svelte` under `app/src/routes` is a `key` in this file, or
+ * is named in the "Scanned elsewhere" or the "Not scanned" list in
+ * `axeInventory.ts` beside it, with the reason (#1810).
+ * `src/lib/axeInventory.usage.spec.ts` reads all three and fails the unit
+ * suite when a route is in none of them, so a new screen cannot be
+ * missed. The lists are a module of their own, not constants here,
+ * because a spec file may not export anything.
  *
- * - `/feedback` and `/feedback/[feedbackId]`, the founder read page
- *   (#1526), in founder-feedback.e2e.ts. One `staff` row is the founder,
- *   and seeding it re-points that row, so two spec files that each held
- *   the founder would take him from each other mid-test.
+ * Not a route, so in neither list, but a decision of the same kind:
  *
- * Not scanned, and each is a decision rather than an oversight:
- *
- * - `style-guide/*` -- sixty-odd component demo pages. They are not
- *   archetype routes, and scanning them would roughly triple the run for
- *   no additional archetype coverage. Every component on them is already
- *   scanned in the place a person meets it.
- * - `demo/*` -- SvelteKit's own scaffolding, not a screen in the product.
  * - `/`'s two picker states -- the Staff picker and the portal picker.
  *   `/` itself is scanned, in its signed-out state, in the archetype A
  *   batch below: #678 settled that it carries a shell and moved it into
@@ -206,37 +204,157 @@ async function scan(page: Page, route: Route) {
 	).toEqual([]);
 }
 
+/*
+ * The time budget (#1823). Each test has Playwright's default 30 seconds,
+ * and one scan -- `goto`, the three ready waits and axe -- takes one to
+ * three seconds on CI. So a row is a test of its own wherever the session
+ * it needs can be provisioned once and shared: the batches below seed in
+ * a `beforeAll` and give every row its own test, its own fresh page, and
+ * its own 30 seconds. A new row adds a test, and takes nothing from any
+ * other row's budget.
+ *
+ * Until #1823 the Staff batch was one test that looped over thirty rows,
+ * and the thirtieth ran out of the shared 30 seconds on CI. Playwright
+ * then closed the page under `page.goto('/account')`, which is the
+ * `net::ERR_ABORTED; maybe frame was detached?` that run reported.
+ *
+ * A test that still scans more than one row does so because each row is
+ * a later state of the same session, reached by what the row before it
+ * did (the no-Practice and verify-first tests, and the contractor's two
+ * rows). Each holds three rows or fewer, about ten seconds of the 30. A
+ * fourth row there is a test of its own, not a longer budget.
+ */
+
+/**
+ * Puts a Staff or portal session into the browser, the same injection
+ * mfa.ts's `enterPracticeAsEnrolled` makes: nothing here needs an
+ * interactive sign-in.
+ */
+async function enterSession(context: BrowserContext, token: string) {
+	await context.addCookies([
+		{
+			name: '__session',
+			value: token,
+			url: PREVIEW_SERVER_ORIGIN,
+			httpOnly: true,
+			secure: false,
+			sameSite: 'Lax'
+		}
+	]);
+}
+
+/**
+ * A row whose `url` and `reach` are built from what a batch's `beforeAll`
+ * seeded. A test's title is fixed when the file loads, before any seed
+ * exists, so the row carries a function of the seed rather than a URL.
+ */
+interface SeededRoute<Seed> extends Omit<Route, 'url' | 'reach'> {
+	url: (seed: Seed) => string;
+	reach?: (page: Page, seed: Seed) => Promise<void>;
+}
+
+function routeFor<Seed>(row: SeededRoute<Seed>, seed: Seed): Route {
+	const { reach } = row;
+	return {
+		...row,
+		url: row.url(seed),
+		reach: reach && ((page) => reach(page, seed))
+	};
+}
+
 // Archetype A, and the only batch that needs no fixtures at all: every
 // one of these is what a person meets before there is an account. The
-// two token-bearing screens are scanned in their no-token entry state,
-// which is the state a person actually arrives in when the link is
-// stale -- the form is the page.
-test('Archetype A -- the screens a person meets signed out', async ({ page }) => {
-	const routes: Route[] = [
-		{ key: '/', archetype: 'A', url: '/', h1: 'Sign in or set up a Practice' },
-		{ key: 'login', archetype: 'A', url: '/login', h1: 'Log in' },
-		{ key: 'signup', archetype: 'A', url: '/signup', h1: 'Sign up your Practice' },
-		{
-			key: 'accept-invite',
-			archetype: 'A',
-			url: '/accept-invite',
-			h1: 'Accept your Staff invite'
-		},
-		{
-			key: 'offers/[offerId]',
-			archetype: 'A',
-			url: '/offers/00000000-0000-0000-0000-000000000000',
-			h1: 'An offer of work'
-		},
-		{ key: 'portal/login', archetype: 'A', url: '/portal/login', h1: 'Log in' },
-		// #694: the way back for a locked-out person, and one of the few
-		// screens somebody meets while already in trouble -- which is
-		// exactly when an accessibility defect costs the most.
-		{ key: 'recovery-code', archetype: 'A', url: '/recovery-code', h1: 'Use a recovery code' }
-	];
+// Staff invitation is scanned in its no-token entry state, which is the
+// state a person actually arrives in when the link is stale -- the form
+// is the page.
+//
+// The four link screens below (#1810) read their token only when she
+// presses the button, never on arrival, so a made-up token shows exactly
+// the screen a fresh link shows. Each is scanned in that state, the one a
+// person opening the mail meets. `verify-email` is the exception: it
+// spends its token on arrival, so it is scanned here in its failed-link
+// state, with no token; the verified state is scanned in the verify-first
+// test below, signed in. Signed out, that state differs from it by one
+// link's label.
+const LINK_TOKEN = 'a11y-scan-token';
+const SIGNED_OUT_ROUTES: Route[] = [
+	{ key: '/', archetype: 'A', url: '/', h1: 'Sign in or set up a Practice' },
+	{ key: 'login', archetype: 'A', url: '/login', h1: 'Log in' },
+	{
+		key: 'signup',
+		archetype: 'A',
+		url: '/signup',
+		h1: 'Sign up your Practice'
+	},
+	{
+		key: 'accept-invite',
+		archetype: 'A',
+		url: '/accept-invite',
+		h1: 'Accept your Staff invite'
+	},
+	{
+		key: 'offers/[offerId]',
+		archetype: 'A',
+		url: '/offers/00000000-0000-0000-0000-000000000000',
+		h1: 'An offer of work'
+	},
+	{ key: 'portal/login', archetype: 'A', url: '/portal/login', h1: 'Log in' },
+	// #694: the way back for a locked-out person, and one of the few
+	// screens somebody meets while already in trouble -- which is
+	// exactly when an accessibility defect costs the most.
+	{
+		key: 'recovery-code',
+		archetype: 'A',
+		url: '/recovery-code',
+		h1: 'Use a recovery code'
+	},
+	{
+		key: 'forgot-password',
+		archetype: 'A',
+		url: '/forgot-password',
+		h1: 'Forgot your password?'
+	},
+	{
+		key: 'reset-password',
+		archetype: 'A',
+		url: `/reset-password?token=${LINK_TOKEN}`,
+		h1: 'Reset your password'
+	},
+	{
+		key: 'verify-email (signed out, failed link)',
+		archetype: 'A',
+		url: '/verify-email',
+		h1: 'Verify your email',
+		reach: (page) => expect(page.getByText('This link is missing its verification code.')).toBeVisible()
+	},
+	{
+		key: 'portal/accept-invite',
+		archetype: 'A',
+		url: `/portal/accept-invite?token=${LINK_TOKEN}`,
+		h1: 'Accept your portal invite',
+		reach: (page) => expect(page.getByRole('button', { name: 'Continue' })).toBeVisible()
+	},
+	{
+		key: 'portal/sign-in',
+		archetype: 'A',
+		url: `/portal/sign-in?token=${LINK_TOKEN}`,
+		h1: /^Sign in$/,
+		reach: (page) => expect(page.getByRole('button', { name: 'Continue' })).toBeVisible()
+	},
+	{
+		key: 'portal/confirm-sign-in-address',
+		archetype: 'A',
+		url: `/portal/confirm-sign-in-address?token=${LINK_TOKEN}`,
+		h1: 'Confirm your sign-in address',
+		reach: (page) => expect(page.getByRole('button', { name: 'Continue' })).toBeVisible()
+	}
+];
 
-	for (const route of routes) {
-		await scan(page, route);
+test.describe('Archetype A -- the screens a person meets signed out', () => {
+	for (const route of SIGNED_OUT_ROUTES) {
+		test(route.key, async ({ page }) => {
+			await scan(page, route);
+		});
 	}
 });
 
@@ -276,10 +394,7 @@ test('Archetype A -- the two screens behind a session with no Practice', async (
 	// two's QR code is reached only once the address is verified. The
 	// verify-first step itself is scanned in the next test (#1782).
 	await verifyEmail(request, localId);
-	const token = headers.Cookie.replace('__session=', '');
-	await context.addCookies([
-		{ name: '__session', value: token, url: PREVIEW_SERVER_ORIGIN, httpOnly: true, secure: false, sameSite: 'Lax' }
-	]);
+	await enterSession(context, headers.Cookie.replace('__session=', ''));
 
 	await scan(page, {
 		key: 'no-practice',
@@ -363,10 +478,7 @@ test('Archetype A -- the verify-first step and its link, for an Owner whose emai
 }) => {
 	const { email, password, idToken } = await seedFoundingOwner(request);
 	const headers = await signIn(request, API_URL, idToken);
-	const token = headers.Cookie.replace('__session=', '');
-	await context.addCookies([
-		{ name: '__session', value: token, url: PREVIEW_SERVER_ORIGIN, httpOnly: true, secure: false, sameSite: 'Lax' }
-	]);
+	await enterSession(context, headers.Cookie.replace('__session=', ''));
 
 	// Step one's password prompt is answered the same way the step-two row
 	// above answers it. The address is unverified, so the step that
@@ -380,7 +492,12 @@ test('Archetype A -- the verify-first step and its link, for an Owner whose emai
 		reach: async (page) => {
 			await page.getByLabel('Password').fill(password);
 			await page.getByRole('button', { name: 'Continue' }).click();
-			await expect(page.getByRole('heading', { level: 2, name: 'Verify your email address first' })).toBeVisible();
+			await expect(
+				page.getByRole('heading', {
+					level: 2,
+					name: 'Verify your email address first'
+				})
+			).toBeVisible();
 		}
 	});
 
@@ -411,11 +528,31 @@ test('Archetype A -- the verify-first step and its link, for an Owner whose emai
 	});
 });
 
-// Archetypes B, C, D, E, F and G, all behind one Staff session. Provisioned
-// once and looped rather than a test per route: signup + login is ~4s of
-// the same work every time, and none of these scans depends on any other
-// having run.
-test('Archetypes B, C, D, E, F, G -- the Staff side', async ({ page, request, context }) => {
+/**
+ * What the Staff batch's `beforeAll` seeds, and every one of its rows is
+ * built from.
+ */
+interface StaffSeed {
+	practiceId: string;
+	staffId: string;
+	engagementId: string;
+	// Jane Smith, the plain Client.
+	clientId: string;
+	// Casey Pending, the Client with a pending Engagement Request.
+	pendingRequestClientId: string;
+	pendingRequestId: string;
+	// Pat Client's email, which the edit-path duplicate row collides on.
+	patEmail: string;
+	// The Owner's `__session` value.
+	token: string;
+}
+
+// The one section the Practice's Client Field Template has, so the details
+// journey has a section page to scan (#1810). With no section the route
+// is never reached: SectionQuestion.svelte sends it to the check page.
+const CLIENT_FIELD_SECTION = 'Birth history';
+
+async function seedStaffSide(request: APIRequestContext): Promise<StaffSeed> {
 	const seeded = await seedPortalClient(request, 'Riverside Doulas');
 	const { practiceId, staffId, engagementId } = seeded;
 
@@ -462,251 +599,445 @@ test('Archetypes B, C, D, E, F, G -- the Staff side', async ({ page, request, co
 	});
 	const pendingRequestId = seedEngagementRequest(pendingRequestClientId, practiceId, staffId);
 
-	// #606: seedPortalClient's Owner is already enrolled (portalClient.ts),
-	// so entering her Practice is a cookie injection rather than the plain
-	// /login form -- see mfa.ts's enterPracticeAsEnrolled doc comment.
-	await enterPracticeAsEnrolled(context, page, seeded.staffHeaders, practiceId);
-	await expect(page).toHaveURL(new RegExp(`/practices/${practiceId}$`));
-
-	const routes: Route[] = [
-		{
-			key: 'practices/[practiceId]',
-			archetype: 'B',
-			url: `/practices/${practiceId}`,
-			h1: 'Welcome to Riverside Doulas'
-		},
-		{
-			key: 'practices/[practiceId]/clients',
-			archetype: 'C',
-			url: `/practices/${practiceId}/clients`,
-			h1: 'Clients'
-		},
-		{
-			key: 'practices/[practiceId]/invoices',
-			archetype: 'C',
-			url: `/practices/${practiceId}/invoices`,
-			h1: 'Invoices'
-		},
-		{
-			key: 'practices/[practiceId]/billing',
-			archetype: 'C',
-			url: `/practices/${practiceId}/billing`,
-			h1: 'Credits'
-		},
-		{
-			key: 'practices/[practiceId]/staff',
-			archetype: 'C',
-			url: `/practices/${practiceId}/staff`,
-			h1: 'Staff'
-		},
-		{
-			// #694: the Owner-vouch screen, scanned against the Owner's own
-			// roster row -- this Practice has exactly one Staff member, and
-			// the endpoint takes any Membership at the Practice, so no second
-			// person has to be seeded to realize the screen.
-			key: 'practices/[practiceId]/staff/[staffId]/mfa-recovery',
-			archetype: 'C',
-			url: `/practices/${practiceId}/staff/${staffId}/mfa-recovery`,
-			h1: 'Help Alex Owner sign in again'
-		},
-		{
-			key: 'practices/[practiceId]/offers',
-			archetype: 'C',
-			url: `/practices/${practiceId}/offers`,
-			h1: 'Your offers'
-		},
-		{
-			key: 'practices/[practiceId]/engagement-requests',
-			archetype: 'C',
-			url: `/practices/${practiceId}/engagement-requests`,
-			h1: 'Requests awaiting approval'
-		},
-		{
-			key: 'practices/[practiceId]/engagements/[engagementId]',
-			archetype: 'D',
-			url: `/practices/${practiceId}/engagements/${engagementId}`,
-			h1: 'Pat'
-		},
-		{
-			// #280: the Birth Plan's own address on the Practice side,
-			// mirroring the portal's own G-archetype Birth Plan route below.
-			key: 'practices/[practiceId]/engagements/[engagementId]/birth-plan',
-			archetype: 'G',
-			url: `/practices/${practiceId}/engagements/${engagementId}/birth-plan`,
-			// clientName is personname.Preferred(givenName, preferredName)
-			// (api/internal/personname) -- this seed sets no preferred
-			// name, so it resolves to the given name alone, the same as the
-			// hub's own 'Pat' row above.
-			h1: "Pat's Birth Plan"
-		},
-		{
-			key: 'practices/[practiceId]/clients/[clientId]',
-			archetype: 'D',
-			url: `/practices/${practiceId}/clients/${clientId}`,
-			h1: 'Jane Smith'
-		},
-		{
-			// #535: the same hub, scanned a second time for a Client whose
-			// pending Engagement Request was requested by this signed-in
-			// session -- the only state that puts the Withdraw Button and
-			// its surrounding pending-Request Notice in the DOM.
-			key: 'practices/[practiceId]/clients/[clientId] (pending request)',
-			archetype: 'D',
-			url: `/practices/${practiceId}/clients/${pendingRequestClientId}`,
-			h1: 'Casey Pending'
-		},
-		{
-			// #528: the approval screen for the same pending Request above.
-			// Unlike the Engagement Request form's anchored row below, no
-			// regex/exact match is needed here even though the h1 changes
-			// once the record loads (from "Approve an engagement request"
-			// to "Approve work with Casey Pending"): neither string is a
-			// substring of the other, so Playwright's default substring
-			// match can never lock onto the earlier, half-loaded heading.
-			key: 'practices/[practiceId]/engagement-requests/[requestId]',
-			archetype: 'D',
-			url: `/practices/${practiceId}/engagement-requests/${pendingRequestId}`,
-			h1: 'Approve work with Casey Pending'
-		},
-		{
-			key: 'practices/[practiceId]/clients/[clientId]/edit',
-			archetype: 'E',
-			url: `/practices/${practiceId}/clients/${clientId}/edit`,
-			h1: 'Edit Jane Smith'
-		},
-		{
-			// Anchored, unlike every other h1 here: the heading is the submit
-			// button's own label, and the Doula wording ("Ask to start work
-			// with Jane Smith") renders in the window between the Client
-			// landing and the session roles arriving. A substring match --
-			// Playwright's default -- would accept that intermediate heading
-			// and let axe scan a page still one fetch from done.
-			key: 'practices/[practiceId]/clients/[clientId]/engagement-requests/new',
-			archetype: 'E',
-			url: `/practices/${practiceId}/clients/${clientId}/engagement-requests/new`,
-			h1: /^Start work with Jane Smith$/
-		},
-		{
-			// #1610: her details journey, opened through its door the way
-			// her record's link opens it.
-			key: 'practices/[practiceId]/clients/[clientId]/details/date-of-birth',
-			archetype: 'E',
-			url: `/practices/${practiceId}/clients/${clientId}/details`,
-			h1: /date of birth\? \(optional\)$/
-		},
-		{
-			key: 'practices/[practiceId]/clients/[clientId]/details/check',
-			archetype: 'E',
-			url: `/practices/${practiceId}/clients/${clientId}/details/check`,
-			h1: /^Check Jane's details/
-		},
-		{
-			key: 'practices/[practiceId]/clients/search',
-			archetype: 'E',
-			url: `/practices/${practiceId}/clients/search`,
-			h1: 'Find a Client'
-		},
-		{
-			key: 'practices/[practiceId]/clients/new/name',
-			archetype: 'E',
-			url: `/practices/${practiceId}/clients/new/name`,
-			h1: "What is the Client's name?"
-		},
-		{
-			key: 'practices/[practiceId]/invite',
-			archetype: 'E',
-			url: `/practices/${practiceId}/invite`,
-			h1: 'Invite a Staff member'
-		},
-		{
-			key: 'practices/[practiceId]/settings',
-			archetype: 'F',
-			url: `/practices/${practiceId}/settings`,
-			h1: 'Settings'
-		},
-		{
-			key: 'practices/[practiceId]/settings/payments',
-			archetype: 'F',
-			url: `/practices/${practiceId}/settings/payments`,
-			h1: 'Getting paid'
-		},
-		{
-			key: 'practices/[practiceId]/settings/contract-template',
-			archetype: 'F',
-			url: `/practices/${practiceId}/settings/contract-template`,
-			h1: 'Contract Template'
-		},
-		// #966: scanned with no rate set at all, the state every fresh
-		// Practice actually starts in and the one its own AC names as
-		// valid -- not seeded through the API first, unlike the birth plan
-		// above, because the "none yet" state here is the representative
-		// one to prove accessible rather than one to skip past.
-		{
-			key: 'practices/[practiceId]/settings/rates',
-			archetype: 'F',
-			url: `/practices/${practiceId}/settings/rates`,
-			h1: 'Rates'
-		},
-		{
-			key: 'practices/[practiceId]/settings/plan-templates',
-			archetype: 'F',
-			url: `/practices/${practiceId}/settings/plan-templates`,
-			h1: 'Plan Templates'
-		},
-		// The settings screens from here down postdate #405's A-G survey --
-		// the first two arrived with #452's Settings hub -- so they are
-		// archetype F by shape rather than by that table.
-		{
-			key: 'practices/[practiceId]/settings/website',
-			archetype: 'F',
-			url: `/practices/${practiceId}/settings/website`,
-			h1: 'Your website'
-		},
-		{
-			key: 'practices/[practiceId]/settings/client-fields',
-			archetype: 'F',
-			url: `/practices/${practiceId}/settings/client-fields`,
-			h1: 'Client Fields'
-		},
-		{
-			// #871: postdates the #405 survey the same way website/client-fields
-			// do -- archetype F by shape. Nothing pending on this seeded
-			// Practice, so this scans the ordinary "ready to delete" state,
-			// not the locked one.
-			key: 'practices/[practiceId]/settings/delete',
-			archetype: 'F',
-			url: `/practices/${practiceId}/settings/delete`,
-			h1: 'Delete this Practice'
-		},
-		{
-			// #894: archetype F by shape, like the settings screens above
-			// that postdate #405's survey. This batch signs in as the
-			// founding Owner, so the screen renders its Owner branch -- the
-			// status Badge, the Staff-count sentence and the toggle -- and
-			// not the one-Notice screen a non-Owner meets. In its default
-			// "optional for other Staff" state, since a fresh Practice
-			// starts there and the required state differs by a Badge label
-			// and a Button label, not by a node axe reads differently.
-			key: 'practices/[practiceId]/settings/mfa',
-			archetype: 'F',
-			url: `/practices/${practiceId}/settings/mfa`,
-			h1: 'Multi-factor authentication'
-		},
-		{
-			// Scoped to the person, not this Practice (#437), so it sits
-			// outside the practiceId group every other route above is under
-			// -- the one route in this loop not built from `practiceId`. Now
-			// carries the same shell as the rest of them (#484).
-			key: 'account',
-			archetype: 'F',
-			url: '/account',
-			h1: 'Your account'
+	// #1810: one section, with one field under it, for the details
+	// journey's section page. It also puts a row in the Client Fields
+	// settings list, and the field on Jane's details, so those rows scan
+	// a Practice that has added something rather than none.
+	const fields = await request.put(`${API_URL}/api/practices/${practiceId}/client-field-template`, {
+		headers: seeded.staffHeaders,
+		data: {
+			fields: [
+				{
+					id: 'birth-history',
+					type: 'section_header',
+					label: CLIENT_FIELD_SECTION
+				},
+				{ id: 'earlier-births', type: 'short_text', label: 'Earlier births' }
+			]
 		}
-	];
+	});
+	expect(fields.ok(), `set client fields failed: ${fields.status()} ${await fields.text()}`).toBe(true);
 
-	for (const route of routes) {
-		await scan(page, route);
+	return {
+		practiceId,
+		staffId,
+		engagementId,
+		clientId,
+		pendingRequestClientId,
+		pendingRequestId,
+		patEmail: seeded.clientEmail,
+		// #606: seedPortalClient's Owner is already enrolled (portalClient.ts),
+		// so entering her Practice is a cookie injection rather than the
+		// plain /login form -- see mfa.ts's enterPracticeAsEnrolled doc
+		// comment.
+		token: seeded.staffHeaders.Cookie.replace('__session=', '')
+	};
+}
+
+const STAFF_ROUTES: SeededRoute<StaffSeed>[] = [
+	{
+		key: 'practices/[practiceId]',
+		archetype: 'B',
+		url: (s) => `/practices/${s.practiceId}`,
+		h1: 'Welcome to Riverside Doulas'
+	},
+	{
+		key: 'practices/[practiceId]/clients',
+		archetype: 'C',
+		url: (s) => `/practices/${s.practiceId}/clients`,
+		h1: 'Clients'
+	},
+	{
+		key: 'practices/[practiceId]/invoices',
+		archetype: 'C',
+		url: (s) => `/practices/${s.practiceId}/invoices`,
+		h1: 'Invoices'
+	},
+	{
+		key: 'practices/[practiceId]/billing',
+		archetype: 'C',
+		url: (s) => `/practices/${s.practiceId}/billing`,
+		h1: 'Credits'
+	},
+	{
+		key: 'practices/[practiceId]/staff',
+		archetype: 'C',
+		url: (s) => `/practices/${s.practiceId}/staff`,
+		h1: 'Staff'
+	},
+	{
+		// #694: the Owner-vouch screen, scanned against the Owner's own
+		// roster row -- this Practice has exactly one Staff member, and
+		// the endpoint takes any Membership at the Practice, so no second
+		// person has to be seeded to realize the screen.
+		key: 'practices/[practiceId]/staff/[staffId]/mfa-recovery',
+		archetype: 'C',
+		url: (s) => `/practices/${s.practiceId}/staff/${s.staffId}/mfa-recovery`,
+		h1: 'Help Alex Owner sign in again'
+	},
+	{
+		key: 'practices/[practiceId]/offers',
+		archetype: 'C',
+		url: (s) => `/practices/${s.practiceId}/offers`,
+		h1: 'Your offers'
+	},
+	{
+		key: 'practices/[practiceId]/engagement-requests',
+		archetype: 'C',
+		url: (s) => `/practices/${s.practiceId}/engagement-requests`,
+		h1: 'Requests awaiting approval'
+	},
+	{
+		key: 'practices/[practiceId]/engagements/[engagementId]',
+		archetype: 'D',
+		url: (s) => `/practices/${s.practiceId}/engagements/${s.engagementId}`,
+		h1: 'Pat'
+	},
+	{
+		// #280: the Birth Plan's own address on the Practice side,
+		// mirroring the portal's own G-archetype Birth Plan route below.
+		key: 'practices/[practiceId]/engagements/[engagementId]/birth-plan',
+		archetype: 'G',
+		url: (s) => `/practices/${s.practiceId}/engagements/${s.engagementId}/birth-plan`,
+		// clientName is personname.Preferred(givenName, preferredName)
+		// (api/internal/personname) -- this seed sets no preferred
+		// name, so it resolves to the given name alone, the same as the
+		// hub's own 'Pat' row above.
+		h1: "Pat's Birth Plan"
+	},
+	{
+		key: 'practices/[practiceId]/clients/[clientId]',
+		archetype: 'D',
+		url: (s) => `/practices/${s.practiceId}/clients/${s.clientId}`,
+		h1: 'Jane Smith'
+	},
+	{
+		// #535: the same hub, scanned a second time for a Client whose
+		// pending Engagement Request was requested by this signed-in
+		// session -- the only state that puts the Withdraw Button and
+		// its surrounding pending-Request Notice in the DOM.
+		key: 'practices/[practiceId]/clients/[clientId] (pending request)',
+		archetype: 'D',
+		url: (s) => `/practices/${s.practiceId}/clients/${s.pendingRequestClientId}`,
+		h1: 'Casey Pending'
+	},
+	{
+		// #528: the approval screen for the same pending Request above.
+		// Unlike the Engagement Request form's anchored row below, no
+		// regex/exact match is needed here even though the h1 changes
+		// once the record loads (from "Approve an engagement request"
+		// to "Approve work with Casey Pending"): neither string is a
+		// substring of the other, so Playwright's default substring
+		// match can never lock onto the earlier, half-loaded heading.
+		key: 'practices/[practiceId]/engagement-requests/[requestId]',
+		archetype: 'D',
+		url: (s) => `/practices/${s.practiceId}/engagement-requests/${s.pendingRequestId}`,
+		h1: 'Approve work with Casey Pending'
+	},
+	{
+		key: 'practices/[practiceId]/clients/[clientId]/edit',
+		archetype: 'E',
+		url: (s) => `/practices/${s.practiceId}/clients/${s.clientId}/edit`,
+		h1: 'Edit Jane Smith'
+	},
+	{
+		// Anchored, unlike every other h1 here: the heading is the submit
+		// button's own label, and the Doula wording ("Ask to start work
+		// with Jane Smith") renders in the window between the Client
+		// landing and the session roles arriving. A substring match --
+		// Playwright's default -- would accept that intermediate heading
+		// and let axe scan a page still one fetch from done.
+		key: 'practices/[practiceId]/clients/[clientId]/engagement-requests/new',
+		archetype: 'E',
+		url: (s) => `/practices/${s.practiceId}/clients/${s.clientId}/engagement-requests/new`,
+		h1: /^Start work with Jane Smith$/
+	},
+	{
+		// #1610: her details journey, opened through its door the way
+		// her record's link opens it.
+		key: 'practices/[practiceId]/clients/[clientId]/details/date-of-birth',
+		archetype: 'E',
+		url: (s) => `/practices/${s.practiceId}/clients/${s.clientId}/details`,
+		h1: /date of birth\? \(optional\)$/
+	},
+	{
+		key: 'practices/[practiceId]/clients/[clientId]/details/check',
+		archetype: 'E',
+		url: (s) => `/practices/${s.practiceId}/clients/${s.clientId}/details/check`,
+		h1: /^Check Jane's details/
+	},
+	{
+		key: 'practices/[practiceId]/clients/search',
+		archetype: 'E',
+		url: (s) => `/practices/${s.practiceId}/clients/search`,
+		h1: 'Find a Client'
+	},
+	{
+		key: 'practices/[practiceId]/clients/new/name',
+		archetype: 'E',
+		url: (s) => `/practices/${s.practiceId}/clients/new/name`,
+		h1: "What is the Client's name?"
+	},
+	{
+		key: 'practices/[practiceId]/invite',
+		archetype: 'E',
+		url: (s) => `/practices/${s.practiceId}/invite`,
+		h1: 'Invite a Staff member'
+	},
+	{
+		key: 'practices/[practiceId]/settings',
+		archetype: 'F',
+		url: (s) => `/practices/${s.practiceId}/settings`,
+		h1: 'Settings'
+	},
+	{
+		key: 'practices/[practiceId]/settings/payments',
+		archetype: 'F',
+		url: (s) => `/practices/${s.practiceId}/settings/payments`,
+		h1: 'Getting paid'
+	},
+	{
+		key: 'practices/[practiceId]/settings/contract-template',
+		archetype: 'F',
+		url: (s) => `/practices/${s.practiceId}/settings/contract-template`,
+		h1: 'Contract Template'
+	},
+	// #966: scanned with no rate set at all, the state every fresh
+	// Practice actually starts in and the one its own AC names as
+	// valid -- not seeded through the API first, unlike the birth plan
+	// above, because the "none yet" state here is the representative
+	// one to prove accessible rather than one to skip past.
+	{
+		key: 'practices/[practiceId]/settings/rates',
+		archetype: 'F',
+		url: (s) => `/practices/${s.practiceId}/settings/rates`,
+		h1: 'Rates'
+	},
+	{
+		key: 'practices/[practiceId]/settings/plan-templates',
+		archetype: 'F',
+		url: (s) => `/practices/${s.practiceId}/settings/plan-templates`,
+		h1: 'Plan Templates'
+	},
+	// The settings screens from here down postdate #405's A-G survey --
+	// the first two arrived with #452's Settings hub -- so they are
+	// archetype F by shape rather than by that table.
+	{
+		key: 'practices/[practiceId]/settings/website',
+		archetype: 'F',
+		url: (s) => `/practices/${s.practiceId}/settings/website`,
+		h1: 'Your website'
+	},
+	{
+		key: 'practices/[practiceId]/settings/client-fields',
+		archetype: 'F',
+		url: (s) => `/practices/${s.practiceId}/settings/client-fields`,
+		h1: 'Client Fields'
+	},
+	{
+		// #871: postdates the #405 survey the same way website/client-fields
+		// do -- archetype F by shape. Nothing pending on this seeded
+		// Practice, so this scans the ordinary "ready to delete" state,
+		// not the locked one.
+		key: 'practices/[practiceId]/settings/delete',
+		archetype: 'F',
+		url: (s) => `/practices/${s.practiceId}/settings/delete`,
+		h1: 'Delete this Practice'
+	},
+	{
+		// #894: archetype F by shape, like the settings screens above
+		// that postdate #405's survey. This batch signs in as the
+		// founding Owner, so the screen renders its Owner branch -- the
+		// status Badge, the Staff-count sentence and the toggle -- and
+		// not the one-Notice screen a non-Owner meets. In its default
+		// "optional for other Staff" state, since a fresh Practice
+		// starts there and the required state differs by a Badge label
+		// and a Button label, not by a node axe reads differently.
+		key: 'practices/[practiceId]/settings/mfa',
+		archetype: 'F',
+		url: (s) => `/practices/${s.practiceId}/settings/mfa`,
+		h1: 'Multi-factor authentication'
+	},
+	{
+		// Scoped to the person, not this Practice (#437), so it sits
+		// outside the practiceId group every other route above is under
+		// -- the one route in this loop not built from `practiceId`. Now
+		// carries the same shell as the rest of them (#484).
+		key: 'account',
+		archetype: 'F',
+		url: () => '/account',
+		h1: 'Your account'
+	},
+	// #1810: the screens that were in neither this inventory nor the
+	// not-scanned list. Archetype by shape: a ListPage is C, a
+	// FormPage under settings is F, a question page is E.
+	{
+		key: 'practices/[practiceId]/contracts',
+		archetype: 'C',
+		url: (s) => `/practices/${s.practiceId}/contracts`,
+		h1: 'Contracts'
+	},
+	{
+		key: 'practices/[practiceId]/on-call',
+		archetype: 'C',
+		url: (s) => `/practices/${s.practiceId}/on-call`,
+		h1: 'On call'
+	},
+	{
+		key: 'practices/[practiceId]/schedule',
+		archetype: 'C',
+		url: (s) => `/practices/${s.practiceId}/schedule`,
+		h1: 'Schedule'
+	},
+	{
+		key: 'practices/[practiceId]/settings/blocked-addresses',
+		archetype: 'F',
+		url: (s) => `/practices/${s.practiceId}/settings/blocked-addresses`,
+		h1: 'Blocked email addresses'
+	},
+	{
+		key: 'practices/[practiceId]/settings/name',
+		archetype: 'F',
+		url: (s) => `/practices/${s.practiceId}/settings/name`,
+		h1: 'Practice name'
+	},
+	{
+		key: 'practices/[practiceId]/settings/on-call',
+		archetype: 'F',
+		url: (s) => `/practices/${s.practiceId}/settings/on-call`,
+		h1: 'On call'
+	},
+	{
+		key: 'practices/[practiceId]/settings/timezone',
+		archetype: 'F',
+		url: (s) => `/practices/${s.practiceId}/settings/timezone`,
+		h1: 'Timezone'
+	},
+	{
+		key: 'practices/[practiceId]/clients/[clientId]/details/email',
+		archetype: 'E',
+		url: (s) => `/practices/${s.practiceId}/clients/${s.clientId}/details/email`,
+		h1: "What is Jane's email address? (optional)"
+	},
+	{
+		key: 'practices/[practiceId]/clients/[clientId]/details/phone',
+		archetype: 'E',
+		url: (s) => `/practices/${s.practiceId}/clients/${s.clientId}/details/phone`,
+		h1: "What is Jane's phone number? (optional)"
+	},
+	{
+		key: 'practices/[practiceId]/clients/[clientId]/details/address',
+		archetype: 'E',
+		url: (s) => `/practices/${s.practiceId}/clients/${s.clientId}/details/address`,
+		h1: "What is Jane's address? (optional)"
+	},
+	{
+		key: 'practices/[practiceId]/clients/[clientId]/details/sections/[sectionIndex]',
+		archetype: 'E',
+		url: (s) => `/practices/${s.practiceId}/clients/${s.clientId}/details/sections/0`,
+		h1: `${CLIENT_FIELD_SECTION} (optional)`
+	},
+	{
+		// Intake's duplicate question, reached the way a person reaches it:
+		// the name of a Client already on file, saved. Nothing is written --
+		// the save stops at the question (new/duplicate's doc comment).
+		key: 'practices/[practiceId]/clients/new/duplicate',
+		archetype: 'E',
+		url: (s) => `/practices/${s.practiceId}/clients/new/name`,
+		h1: 'Is this the same person?',
+		reach: async (page) => {
+			await expect(
+				page.getByRole('heading', {
+					level: 1,
+					name: "What is the Client's name?"
+				})
+			).toBeVisible();
+			await expect(page.locator(LOADING_AFFORDANCE_SELECTOR)).toHaveCount(0);
+			await page.getByLabel('Given name').fill('Jane');
+			await page.getByLabel('Family name (optional)').fill('Smith');
+			await page.getByRole('button', { name: 'Save and continue' }).click();
+			await expect(page).toHaveURL(/\/clients\/new\/duplicate$/);
+		}
+	},
+	{
+		// The edit path's possible-duplicate question (gate two, #814):
+		// Jane's email changed to Pat's collides on the email alone, which
+		// is not a name substitution, so the save goes to this page rather
+		// than to the substitution dialog. Nothing is written.
+		key: 'practices/[practiceId]/clients/[clientId]/edit/duplicate',
+		archetype: 'E',
+		url: (s) => `/practices/${s.practiceId}/clients/${s.clientId}/edit`,
+		h1: 'Is this the same person?',
+		reach: async (page, { patEmail }) => {
+			// The form fills in from her record once it loads, so it is
+			// typed into only after that.
+			await expect(page.getByRole('heading', { level: 1, name: 'Edit Jane Smith' })).toBeVisible();
+			await expect(page.locator(LOADING_AFFORDANCE_SELECTOR)).toHaveCount(0);
+			await page.getByLabel('Email').fill(patEmail);
+			await page.getByRole('button', { name: 'Save' }).click();
+			await expect(page).toHaveURL(/\/edit\/duplicate$/);
+		}
 	}
+];
+
+// Archetypes B, C, D, E, F and G, all behind one Staff session, seeded once
+// in `beforeAll`: signup + login is ~4s of the same work every time, and
+// none of these scans depends on any other having run. Each row is its
+// own test, for the budget the comment above `enterSession` gives.
+test.describe('Archetypes B, C, D, E, F, G -- the Staff side', () => {
+	let seed: StaffSeed;
+
+	test.beforeAll(async ({ request }) => {
+		seed = await seedStaffSide(request);
+	});
+
+	for (const row of STAFF_ROUTES) {
+		test(row.key, async ({ page, context }) => {
+			await enterSession(context, seed.token);
+			await scan(page, routeFor(row, seed));
+		});
+	}
+
+	// #1549 (ADR-0053): the screen an Owner meets after a material change
+	// to the Terms of Service or the Privacy Policy starts. The e2e stack
+	// has no such change -- the BFF reads them from `legal`'s own version
+	// list, and none is material yet -- so nothing makes the screen due.
+	// The Practice's session read is answered with one due version added
+	// to the real answer instead, the same network-boundary stand-in the
+	// `mfa/enroll` rows above use for `/api/staff/session`. That read is
+	// the only place the screen learns what is due (its own doc comment):
+	// everything else on it is the real session.
+	test('practices/[practiceId]/agreement', async ({ page, context }) => {
+		await page.route(
+			(url) => url.pathname === `/api/practices/${seed.practiceId}/session`,
+			async (route) => {
+				const response = await route.fetch();
+				const session = await response.json();
+				await route.fulfill({
+					response,
+					json: {
+						...session,
+						agreementDue: [
+							{
+								document: 'terms',
+								name: 'Terms of Service',
+								version: '2026-11-01',
+								change: 'Raises the price of a Credit, for every Credit bought from that day.'
+							}
+						]
+					}
+				});
+			}
+		);
+		await enterSession(context, seed.token);
+		await scan(page, {
+			key: 'practices/[practiceId]/agreement',
+			// EntryPage, the archetype A frame, though it is behind a session.
+			archetype: 'A',
+			url: `/practices/${seed.practiceId}/agreement`,
+			h1: 'The Terms of Service have changed'
+		});
+	});
 });
 
 // Archetype E's contractor branch (#525, #539, ADR-0017): the explainer
@@ -752,39 +1083,156 @@ test('Archetype E -- the contractor Doula door onto clients/search', async ({ pa
 // what a Client meets for as long as her Practice has not made one. The
 // Invoice page has no empty state -- a missing Invoice is a load error --
 // so it is scanned loaded only.
-test('Archetypes D, G -- the Client portal', async ({ page, request }) => {
-	const seeded = await seedPortalClient(request, 'Riverside Doulas');
+//
+// One Client is seeded and signed in once, in the outer `beforeAll`, and
+// each row is its own test (the budget comment above `enterSession`). The
+// order the two states need is the order Playwright runs a file's tests
+// in: the empty rows come first, and the nested describe's `beforeAll`,
+// which provisions the documents, runs only once they have.
+interface PortalSeed {
+	engagementId: string;
+	// The Invoice on the Stripe rail, the one the Invoice page shows.
+	invoiceId: string;
+}
+
+const PORTAL_EMPTY_ROUTES: SeededRoute<PortalSeed>[] = [
+	{
+		key: 'portal/engagements/[engagementId]/birth-plan (empty)',
+		archetype: 'G',
+		url: (s) => `/portal/engagements/${s.engagementId}/birth-plan`,
+		h1: 'Birth Plan',
+		reach: (p) => expect(p.getByText('No Birth Plan has been created for your care yet.')).toBeVisible()
+	},
+	{
+		key: 'portal/engagements/[engagementId]/contract (empty)',
+		archetype: 'G',
+		url: (s) => `/portal/engagements/${s.engagementId}/contract`,
+		h1: 'Contract',
+		reach: (p) => expect(p.getByText('No Contract has been sent for your care yet.')).toBeVisible()
+	}
+];
+
+const PORTAL_ROUTES: SeededRoute<PortalSeed>[] = [
+	{
+		key: 'portal/engagements/[engagementId]',
+		archetype: 'D',
+		url: (s) => `/portal/engagements/${s.engagementId}`,
+		h1: 'Your care'
+	},
+	{
+		key: 'portal/engagements/[engagementId]/birth-plan',
+		archetype: 'G',
+		url: (s) => `/portal/engagements/${s.engagementId}/birth-plan`,
+		h1: 'Birth Plan'
+	},
+	{
+		key: 'portal/engagements/[engagementId]/contract',
+		archetype: 'G',
+		url: (s) => `/portal/engagements/${s.engagementId}/contract`,
+		h1: 'Contract'
+	},
+	// Also younger than the archetype survey: Messages joined the
+	// portal nav on #431, and it is a RecordDetail like the hub above.
+	{
+		key: 'portal/engagements/[engagementId]/messages',
+		archetype: 'D',
+		url: (s) => `/portal/engagements/${s.engagementId}/messages`,
+		h1: 'Messages'
+	},
+	// #303: the notification-preference settings screen, a FormPage
+	// (archetype G) like Birth Plan and Contract above.
+	{
+		key: 'portal/engagements/[engagementId]/notifications',
+		archetype: 'G',
+		url: (s) => `/portal/engagements/${s.engagementId}/notifications`,
+		h1: 'Notifications'
+	},
+	// #1810: where she changes the address she signs in with (#619), a
+	// FormPage like Notifications.
+	{
+		key: 'portal/engagements/[engagementId]/sign-in-address',
+		archetype: 'G',
+		url: (s) => `/portal/engagements/${s.engagementId}/sign-in-address`,
+		h1: 'Sign-in address'
+	},
+	// #1564: the Client's money -- an index of Invoices (archetype D,
+	// like the hub) and a page per Invoice (archetype G, like the
+	// Contract it bills).
+	{
+		key: 'portal/engagements/[engagementId]/invoices',
+		archetype: 'D',
+		url: (s) => `/portal/engagements/${s.engagementId}/invoices`,
+		h1: 'Invoices'
+	},
+	{
+		key: 'portal/engagements/[engagementId]/invoices/[invoiceId]',
+		archetype: 'G',
+		url: (s) => `/portal/engagements/${s.engagementId}/invoices/${s.invoiceId}`,
+		h1: 'Invoice A4B2-0011'
+	}
+];
+
+test.describe('Archetypes D, G -- the Client portal', () => {
+	let seeded: SeededPortalClient;
+	let portalSession: Cookie;
+	const seed: PortalSeed = { engagementId: '', invoiceId: '' };
+
+	test.beforeAll(async ({ browser, request }) => {
+		seeded = await seedPortalClient(request, 'Riverside Doulas');
+		seed.engagementId = seeded.engagementId;
+
+		// The one real walk of the magic link, in a browser of its own, so
+		// each test can start from the session it leaves behind.
+		const signInContext = await browser.newContext({
+			baseURL: PREVIEW_SERVER_ORIGIN
+		});
+		const signInPage = await signInContext.newPage();
+		await signInPortalClient(signInPage, request, seeded.clientEmail);
+		await expect(signInPage).toHaveURL(new RegExp(`/portal/engagements/${seeded.engagementId}$`));
+		const cookies = await signInContext.cookies();
+		const cookie = cookies.find(({ name }) => name === '__session');
+		expect(cookie, 'the magic link left no __session cookie').toBeTruthy();
+		portalSession = cookie!;
+		await signInContext.close();
+	});
+
+	for (const row of PORTAL_EMPTY_ROUTES) {
+		test(row.key, async ({ page, context }) => {
+			await context.addCookies([portalSession]);
+			await scan(page, routeFor(row, seed));
+		});
+	}
+
+	test.describe('with the Birth Plan, the Contract and two Invoices', () => {
+		test.beforeAll(async ({ request }) => {
+			seed.invoiceId = await provisionPortalDocuments(request, seeded);
+		});
+
+		for (const row of PORTAL_ROUTES) {
+			test(row.key, async ({ page, context }) => {
+				await context.addCookies([portalSession]);
+				await scan(page, routeFor(row, seed));
+			});
+		}
+	});
+});
+
+/**
+ * Makes her Practice's Birth Plan, sends her Contract, and raises two
+ * Invoices on it. Returns the open Invoice's id.
+ */
+async function provisionPortalDocuments(request: APIRequestContext, seeded: SeededPortalClient): Promise<string> {
 	const { practiceId, engagementId, staffHeaders } = seeded;
 	const engagementURL = `${API_URL}/api/practices/${practiceId}/engagements/${engagementId}`;
 
-	await signInPortalClient(page, request, seeded.clientEmail);
-	await expect(page).toHaveURL(new RegExp(`/portal/engagements/${engagementId}$`));
-
-	const emptyRoutes: Route[] = [
-		{
-			key: 'portal/engagements/[engagementId]/birth-plan (empty)',
-			archetype: 'G',
-			url: `/portal/engagements/${engagementId}/birth-plan`,
-			h1: 'Birth Plan',
-			reach: (p) => expect(p.getByText('No Birth Plan has been created for your care yet.')).toBeVisible()
-		},
-		{
-			key: 'portal/engagements/[engagementId]/contract (empty)',
-			archetype: 'G',
-			url: `/portal/engagements/${engagementId}/contract`,
-			h1: 'Contract',
-			reach: (p) => expect(p.getByText('No Contract has been sent for your care yet.')).toBeVisible()
-		}
-	];
-
-	for (const route of emptyRoutes) {
-		await scan(page, route);
-	}
-
-	const plan = await request.post(`${engagementURL}/plans/birth_plan`, { headers: staffHeaders });
+	const plan = await request.post(`${engagementURL}/plans/birth_plan`, {
+		headers: staffHeaders
+	});
 	expect(plan.ok(), `create birth plan failed: ${plan.status()} ${await plan.text()}`).toBe(true);
 
-	const contract = await request.post(`${engagementURL}/contract`, { headers: staffHeaders });
+	const contract = await request.post(`${engagementURL}/contract`, {
+		headers: staffHeaders
+	});
 	expect(
 		contract.ok(),
 		`create contract failed: ${contract.status()} ${await contract.text()}`
@@ -813,69 +1261,24 @@ test('Archetypes D, G -- the Client portal', async ({ page, request }) => {
 		}
 	});
 	expect(filled.ok(), `fill contract values failed: ${filled.status()} ${await filled.text()}`).toBe(true);
-	const sent = await request.post(`${engagementURL}/contract/send`, { headers: staffHeaders });
+	const sent = await request.post(`${engagementURL}/contract/send`, {
+		headers: staffHeaders
+	});
 	expect(sent.ok(), `send contract failed: ${sent.status()} ${await sent.text()}`).toBe(true);
 
 	// #1564: the money screens read nothing until an Invoice exists.
-	const invoiceId = seedInvoice(practiceId, engagementId, { reference: 'A4B2-0011', stripeInvoiceId: 'in_a11y' });
-	seedInvoice(practiceId, engagementId, { status: 'paid', reference: 'INV-0002' });
-
-	const routes: Route[] = [
-		{
-			key: 'portal/engagements/[engagementId]',
-			archetype: 'D',
-			url: `/portal/engagements/${engagementId}`,
-			h1: 'Your care'
-		},
-		{
-			key: 'portal/engagements/[engagementId]/birth-plan',
-			archetype: 'G',
-			url: `/portal/engagements/${engagementId}/birth-plan`,
-			h1: 'Birth Plan'
-		},
-		{
-			key: 'portal/engagements/[engagementId]/contract',
-			archetype: 'G',
-			url: `/portal/engagements/${engagementId}/contract`,
-			h1: 'Contract'
-		},
-		// Also younger than the archetype survey: Messages joined the
-		// portal nav on #431, and it is a RecordDetail like the hub above.
-		{
-			key: 'portal/engagements/[engagementId]/messages',
-			archetype: 'D',
-			url: `/portal/engagements/${engagementId}/messages`,
-			h1: 'Messages'
-		},
-		// #303: the notification-preference settings screen, a FormPage
-		// (archetype G) like Birth Plan and Contract above.
-		{
-			key: 'portal/engagements/[engagementId]/notifications',
-			archetype: 'G',
-			url: `/portal/engagements/${engagementId}/notifications`,
-			h1: 'Notifications'
-		},
-		// #1564: the Client's money -- an index of Invoices (archetype D,
-		// like the hub) and a page per Invoice (archetype G, like the
-		// Contract it bills).
-		{
-			key: 'portal/engagements/[engagementId]/invoices',
-			archetype: 'D',
-			url: `/portal/engagements/${engagementId}/invoices`,
-			h1: 'Invoices'
-		},
-		{
-			key: 'portal/engagements/[engagementId]/invoices/[invoiceId]',
-			archetype: 'G',
-			url: `/portal/engagements/${engagementId}/invoices/${invoiceId}`,
-			h1: 'Invoice A4B2-0011'
-		}
-	];
-
-	for (const route of routes) {
-		await scan(page, route);
-	}
-});
+	const invoiceId = seedInvoice(practiceId, engagementId, {
+		reference: 'A4B2-0011',
+		// Unique per seed: the column is UNIQUE, so a fixed id fails every
+		// repeat after the first (`--repeat-each`).
+		stripeInvoiceId: `in_a11y_${randomUUID()}`
+	});
+	seedInvoice(practiceId, engagementId, {
+		status: 'paid',
+		reference: 'INV-0002'
+	});
+	return invoiceId;
+}
 
 // The guard on the gate itself (#1152), and the one test here that is not a
 // scan: it holds a screen in its loading state on purpose and asserts that
