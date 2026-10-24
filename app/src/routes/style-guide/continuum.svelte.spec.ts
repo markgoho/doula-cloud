@@ -40,6 +40,7 @@ import {
 	overflowReport,
 	OVERFLOWING,
 	revealDisclosures,
+	rowMarkup,
 	SETTLE_TURNS,
 	sweep
 } from './continuum.js';
@@ -409,6 +410,36 @@ describe('the sweep, over a box whose content is taller than the box (#1573)', (
 			expect(heading.scrollHeight).toBeGreaterThan(heading.clientHeight + 1);
 
 			expect(sweep(frame, run.clientWidth)).toBeUndefined();
+		} finally {
+			remove();
+		}
+	});
+});
+
+/*
+ * The inline half of the box criterion (#1851). A flex item with an
+ * explicit `min-inline-size` may shrink down to it, below its own words,
+ * and a label that does not wrap then draws over the next item -- while
+ * the row, every item of which fits, reports a `scrollWidth` exactly the
+ * frame's own. `rowMarkup` is that shape in miniature.
+ */
+describe('the sweep, over a row whose items shrink below their words (#1851)', () => {
+	it('finds a label drawn outside the item that holds it', () => {
+		const { run, frame, remove } = frameHolding(rowMarkup('2.75rem'));
+		try {
+			const found = sweep(frame, run.clientWidth);
+
+			expect(found).toMatchObject({ axis: 'inline-box', width: 320, element: 'a' });
+			expect(overflowReport('The row', found!)).toContain('its a needed');
+		} finally {
+			remove();
+		}
+	});
+
+	it('reads the same row as overflowing the frame once each item holds its words', () => {
+		const { run, frame, remove } = frameHolding(rowMarkup('auto'));
+		try {
+			expect(sweep(frame, run.clientWidth)).toMatchObject({ axis: 'inline', width: 320 });
 		} finally {
 			remove();
 		}

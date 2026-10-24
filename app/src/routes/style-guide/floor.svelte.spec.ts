@@ -87,6 +87,7 @@ import {
 	OVERFLOWING,
 	RESOLUTION,
 	revealDisclosures,
+	rowMarkup,
 	TOLERANCE
 } from './continuum.js';
 import { toDemos, type PageModule } from './drag-surface/dragSurface.js';
@@ -304,7 +305,11 @@ function atWidth(frame: HTMLElement, px: number) {
 }
 
 function isOverflowAcceptable(measurement: OverflowMeasurement): boolean {
-	return measurement.needed - measurement.given <= TOLERANCE && measurement.spill === undefined;
+	return (
+		measurement.needed - measurement.given <= TOLERANCE &&
+		measurement.spill === undefined &&
+		measurement.inlineSpill === undefined
+	);
 }
 
 /*
@@ -828,6 +833,32 @@ describe("the floor check's overflow measurement, over a box too short for its c
 
 			expect(measurement.spill).toBeUndefined();
 			expect(isOverflowAcceptable(measurement)).toBe(true);
+		} finally {
+			remove();
+		}
+	});
+});
+
+/*
+ * The inline half of the box criterion (#1851). The Staff bar's wide nav is
+ * only ever mounted here, and a link in it that shrank below its words drew
+ * over the next one while the row reported exactly the width it was given
+ * (#1850) -- which minimality read as a floor set too high.
+ */
+describe("the floor check's overflow measurement, over a row whose items shrink below their words (#1851)", () => {
+	const AT_WIDTH = CONFORMANCE_COMMITMENT;
+
+	it('finds the spill at a width where nothing overflows the frame', () => {
+		const { frame, remove } = frameHolding(rowMarkup('2.75rem'));
+		try {
+			atWidth(frame, AT_WIDTH);
+
+			const measurement = measureOverflow(frame, AT_WIDTH);
+
+			expect(measurement.needed).toBe(AT_WIDTH);
+			expect(measurement.inlineSpill?.element).toBe('a');
+			expect(isOverflowAcceptable(measurement)).toBe(false);
+			expect(overflowFloorReport('The row', measurement)).toContain('its a needed');
 		} finally {
 			remove();
 		}

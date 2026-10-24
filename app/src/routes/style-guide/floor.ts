@@ -19,8 +19,9 @@
 import {
 	CONFORMANCE_COMMITMENT,
 	findBlockSpill,
+	findInlineSpill,
 	openDisclosures,
-	type BlockSpill
+	type BoxSpill
 } from './continuum.js';
 import { styleLines } from '#lib/styles/styleLines.js';
 
@@ -318,11 +319,14 @@ export function scopeClasses(root: Element): string[] {
  * lets it draw out of its own height. The wide tree of a top bar is only
  * ever mounted above the continuum sweep's ceiling, here, so this is the
  * one instrument that can see a Practice name spilling out of it there.
+ * `inlineSpill` is the same criterion across (#1851): a box narrower than
+ * what it holds -- the Staff bar's nav links, each shrunk below its name.
  */
 export interface OverflowMeasurement {
 	readonly given: number;
 	readonly needed: number;
-	readonly spill?: BlockSpill;
+	readonly spill?: BoxSpill;
+	readonly inlineSpill?: BoxSpill;
 }
 
 /*
@@ -381,18 +385,26 @@ export interface OverflowMeasurement {
 export function measureOverflow(frame: HTMLElement, given: number): OverflowMeasurement {
 	const close = openDisclosures(frame);
 	try {
-		return { given, needed: frame.scrollWidth, spill: findBlockSpill(frame) };
+		return {
+			given,
+			needed: frame.scrollWidth,
+			spill: findBlockSpill(frame),
+			inlineSpill: findInlineSpill(frame)
+		};
 	} finally {
 		close();
 	}
 }
 
 export function overflowFloorReport(name: string, measurement: OverflowMeasurement): string {
-	const { spill } = measurement;
+	const { spill, inlineSpill } = measurement;
+	const inlineClause = inlineSpill
+		? `, and its ${inlineSpill.element} needed ${inlineSpill.needed}px of width inside ${inlineSpill.given}px`
+		: '';
 	const blockClause = spill
 		? `, and its ${spill.element} needed ${spill.needed}px of height inside ${spill.given}px`
 		: '';
-	return `${name}: given ${measurement.given}px, needed ${measurement.needed}px${blockClause} (overflow criterion).`;
+	return `${name}: given ${measurement.given}px, needed ${measurement.needed}px${inlineClause}${blockClause} (overflow criterion).`;
 }
 
 export interface CapMeasurement {

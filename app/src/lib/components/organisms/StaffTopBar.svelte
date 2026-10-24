@@ -291,8 +291,17 @@
 		   own. On macOS they fit at 908px and need 908px at 904px; on CI's
 		   Linux/Chromium they needed 912px at 908px. 57rem (912px) is the
 		   next step of the sweep's 4px resolution, measured in CI, again
-		   with no margin added beyond it. */
-		@container staff-top-bar (min-width: 57rem) {
+		   with no margin added beyond it.
+
+		   Re-measured 2026-10-24 (#1851), when the floor check learned to
+		   read a box narrower than what it holds. At 912px the ten sections
+		   needed 886px inside the nav's 866px: the row ran 20px into the
+		   bar's own gutter, which the frame's width could not see because
+		   the gutter is inside the frame. On macOS they fit the nav at
+		   936px and not at 932px, and so they did on CI's Linux/Chromium.
+		   58.5rem (936px) is that step of the sweep's 4px resolution,
+		   measured in CI, again with no margin added beyond it. */
+		@container staff-top-bar (min-width: 58.5rem) {
 			.wide {
 				display: grid;
 			}
@@ -320,17 +329,6 @@
 			display: flex;
 			grid-area: nav;
 			min-block-size: var(--nav-row-height);
-		}
-
-		/* A section's name is never squeezed. Link declares a 44px
-		   `min-inline-size` for its hit target (#1828), and a flex item with
-		   an explicit minimum may shrink down to it, below its own words:
-		   with ten sections in too little room each link shrank and its
-		   name drew over the next one's, while the row reported that it
-		   fit. Held at its own width, a link that does not fit overflows
-		   the row, which is what the floor below is measured against. */
-		.wide nav > :global(a) {
-			flex-shrink: 0;
 		}
 
 		/* Stretched to its row, so the switcher's and the avatar's menus --

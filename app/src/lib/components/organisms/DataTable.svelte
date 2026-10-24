@@ -502,10 +502,18 @@
 		}
 
 		/* One <dl> per record (#508, ADR-0024) rather than a mangled
-		   <table>, which strips table semantics in Safari and Firefox. */
+		   <table>, which strips table semantics in Safari and Firefox.
+
+		   `minmax(0, 1fr)` rather than a bare `1fr` (#1851): a bare track's
+		   automatic minimum is its content's min-content, and a row action
+		   that holds a `<select>` has the width of its longest option as
+		   that minimum, which no `overflow-wrap` can lower. The Engagement
+		   hub's Reassign control set the column 12px past the record at
+		   320px, which only the box criterion saw: the overflow landed in
+		   the page's own gutter, not past the frame. */
 		.record-view dl {
 			display: grid;
-			grid-template-columns: auto 1fr;
+			grid-template-columns: auto minmax(0, 1fr);
 			gap: 0 var(--space-4);
 			margin: 0;
 		}
