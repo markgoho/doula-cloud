@@ -76,8 +76,8 @@ func TestPublish_MaterialVersionQueuesOneEmailForEachOwnerOfEachPractice(t *test
 		if !strings.Contains(m.Text, "What changes: The price of a Credit changes to $40.") {
 			t.Errorf("text does not carry the version's one line:\n%s", m.Text)
 		}
-		if !strings.Contains(m.Text, "https://doula.cloud/terms") {
-			t.Errorf("text does not link the new text:\n%s", m.Text)
+		if !strings.Contains(m.Text, "\nhttps://doula.cloud/terms/2026-12-01\n") {
+			t.Errorf("text does not link the new version's own page:\n%s", m.Text)
 		}
 	}
 	sort.Strings(to)

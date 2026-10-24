@@ -60,6 +60,13 @@ export default defineConfig({
 			// section): route specs still run in the projects below, they
 			// are just not folded into the 100% requirement.
 			include: ['src/lib/**/*.{ts,svelte}'],
+			// The text of each version of the Terms and the Privacy Policy
+			// (#1816): prose that sat in src/routes/** until it needed one
+			// file per version, so it keeps the routes' exemption. Svelte
+			// compiles each bare {PRODUCT_NAME} beside text with a `?? ''`
+			// fallback that no render can reach; the route specs and
+			// legalTexts.svelte.spec.ts still render every text.
+			exclude: ['src/lib/legalTexts/**'],
 			thresholds: {
 				100: true
 			}

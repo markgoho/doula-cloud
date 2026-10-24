@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"testing"
 	"time"
 
@@ -23,16 +24,30 @@ var signedUpAt = time.Date(2026, 10, 23, 14, 30, 0, 0, time.UTC)
 // newClockedSignupServer is newSignupServer behind clock.Middleware, with
 // a fixed instant.
 func newClockedSignupServer(verifier authntest.Verifier, db *testdb.DB) *httptest.Server {
+	return newSignupServerAt(signedUpAt, verifier, db)
+}
+
+// newSignupServerAt is newClockedSignupServer at the instant at.
+func newSignupServerAt(at time.Time, verifier authntest.Verifier, db *testdb.DB) *httptest.Server {
 	mux := http.NewServeMux()
 	g := staffauth.NewGatedRouter(mux, db.App)
 	ir := idempotency.NewRouter(g, db.App)
 	staffauth.Mount(g, ir, db.App, verifier, authntest.NewFakeAccountManager(), tasknudge.NoOpEnqueuer{}, neverSuppressed)
-	return httptest.NewServer(clock.Middleware(func() time.Time { return signedUpAt })(mux))
+	return httptest.NewServer(clock.Middleware(func() time.Time { return at })(mux))
+}
+
+// assertDiff holds a terms_accepted diff to want, key for key, with no
+// key more or less.
+func assertDiff(t *testing.T, diff, want map[string]any) {
+	t.Helper()
+	if !reflect.DeepEqual(diff, want) {
+		t.Fatalf("diff = %v, want %v", diff, want)
+	}
 }
 
 type termsRow struct {
 	subjectKind, subjectID, actorKind, actorStaffID string
-	diff                                            map[string]string
+	diff                                            map[string]any
 	createdAt                                       time.Time
 }
 
@@ -100,22 +115,48 @@ func TestSignupHandler_RecordsTheOwnersAgreement(t *testing.T) {
 	if r.actorKind != "staff" || r.actorStaffID != out.StaffID {
 		t.Fatalf("actor = %s/%s, want staff/%s", r.actorKind, r.actorStaffID, out.StaffID)
 	}
-	want := map[string]string{
-		"termsVersion":   legal.Terms.Current().Effective,
-		"privacyVersion": legal.Privacy.Current().Effective,
+	terms, _ := legal.Terms.InForce(signedUpAt)
+	privacy, _ := legal.Privacy.InForce(signedUpAt)
+	assertDiff(t, r.diff, map[string]any{
+		"termsVersion":   terms.Effective,
+		"privacyVersion": privacy.Effective,
 		"ipAddress":      "127.0.0.1",
-	}
-	if len(r.diff) != len(want) {
-		t.Fatalf("diff = %v, want %v", r.diff, want)
-	}
-	for k, v := range want {
-		if r.diff[k] != v {
-			t.Fatalf("diff[%q] = %q, want %q (diff %v)", k, r.diff[k], v, r.diff)
-		}
-	}
+	})
 	if !r.createdAt.Equal(signedUpAt) {
 		t.Fatalf("created_at = %s, want the server's clock, %s", r.createdAt, signedUpAt)
 	}
+}
+
+// #1816: a Practice that signs up while a version is in the history but
+// has not started agrees to the version in force, and to the coming one,
+// which /terms and /privacy show beside it and the sentence links. The
+// email about the coming version went out before this Practice existed,
+// so the record of its agreement to that version is this row, and #1549
+// asks it nothing more after the date.
+//
+// On October 21, 2026 the Privacy Policy of October 3 is in force and
+// the one of October 22 is coming; no Terms version is coming.
+func TestSignupHandler_DuringANoticeRecordsTheVersionInForceAndTheComingOne(t *testing.T) {
+	duringNotice := time.Date(2026, 10, 21, 12, 0, 0, 0, time.UTC)
+	db := testdb.New(t)
+	srv := newSignupServerAt(duringNotice, authntest.Verifier{UID: "early-owner", Email: jamieEmail}, db)
+	defer srv.Close()
+
+	resp := postSignup(t, srv, "tok", staffauth.SignupRequest{WorkState: "NY", Timezone: signupZone, FirstName: jamieName, LastName: ownerLastName})
+	_ = resp.Body.Close()
+	if resp.StatusCode != http.StatusCreated {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusCreated)
+	}
+	rows := termsAcceptedRows(t, db)
+	if len(rows) != 1 {
+		t.Fatalf("terms_accepted rows = %d, want 1", len(rows))
+	}
+	assertDiff(t, rows[0].diff, map[string]any{
+		"termsVersion":   "2026-10-03",
+		"privacyVersion": "2026-10-03",
+		"privacyComing":  []any{"2026-10-22"},
+		"ipAddress":      "127.0.0.1",
+	})
 }
 
 // A signup that fails writes no agreement: the row is in the transaction

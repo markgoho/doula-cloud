@@ -74,7 +74,7 @@ const MEANING: Record<string, Meaning> = {
   '.github/workflows/firebase-hosting-merge.yml': {
     unproven: 'the build and the deploy of the marketing site have',
     whileOpen:
-      'This workflow builds and deploys the marketing site. It runs ONLY on a push to trunk and on a `practice-page-published` dispatch, so a green pull request says nothing about it. While this issue is open, **the live marketing site can be behind trunk**: a merged change to the site, or a Practice page published or changed after the last passing run, is possibly not live.',
+      'This workflow builds and deploys the marketing site. It runs ONLY on a push to trunk, on a `practice-page-published` dispatch, and once a day after midnight UTC, so a green pull request says nothing about it. While this issue is open, **the live marketing site can be behind trunk**: a merged change to the site, a Practice page published or changed after the last passing run, or a version of the Terms or the Privacy Policy that started since then, is possibly not live.',
   },
 };
 

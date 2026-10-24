@@ -1,7 +1,7 @@
 // Package legal holds the version history of the two documents a
 // Practice agrees to when its Owner creates it: the Terms of Service and
 // the Privacy Policy (ADR-0053). The text lives on the marketing site, at
-// each Document's Path; what the BFF needs is which version is current,
+// each Document's Path; what the BFF needs is which version is in force,
 // whether each version was a material change, and one line of what
 // changed, because the agreement recorded at signup (#1547), the email
 // before a material change (#1548) and the screen after it (#1549) read
@@ -14,6 +14,8 @@
 // Version literals below with a pattern, so each stays on one line with
 // its fields in this order.
 package legal
+
+import "time"
 
 // Version is one version of a document.
 type Version struct {
@@ -36,9 +38,42 @@ type Document struct {
 	Versions []Version
 }
 
-// Current is the version in force: the newest one.
-func (d Document) Current() Version {
-	return d.Versions[len(d.Versions)-1]
+// InForce is the version in force at the instant at: the newest one that
+// has started. A version starts at midnight UTC on its date, the same
+// reading legalnotice gives its 30 days of notice, so in the United
+// States it starts on the evening before. The newest version is not
+// always in force: a material one is in the history 30 days or more
+// before it starts (#1816).
+//
+// ok is false when no version has started at at. legal_test.go holds
+// that each shipped document has one in force today.
+func (d Document) InForce(at time.Time) (version Version, ok bool) {
+	for _, v := range d.Versions {
+		if !started(v, at) {
+			break
+		}
+		version, ok = v, true
+	}
+	return version, ok
+}
+
+// Coming is every version that has not started at the instant at, oldest
+// first: the ones a Practice has been told of, or is being told of, and
+// that do not apply to it yet.
+func (d Document) Coming(at time.Time) []Version {
+	var coming []Version
+	for _, v := range d.Versions {
+		if !started(v, at) {
+			coming = append(coming, v)
+		}
+	}
+	return coming
+}
+
+// started compares dates as text: Effective is YYYY-MM-DD, which sorts
+// the way the dates do, and at's date in UTC is the day that has begun.
+func started(v Version, at time.Time) bool {
+	return v.Effective <= at.UTC().Format(time.DateOnly)
 }
 
 // Terms is the Terms of Service, at doula.cloud/terms.
