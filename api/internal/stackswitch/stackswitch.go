@@ -104,10 +104,11 @@ func Clock(ctx context.Context, getenv func(string) string, db *sql.DB) (clock.C
 	}, nil
 }
 
-// appended is one version LegalVar adds. A price of a Credit and a price
-// rise are left out on purpose: publishing a version that states a price
-// asks Stripe for a Price at it, and the stack has no Stripe in CI.
-type appended struct {
+// appendedVersion is one version LegalVar adds. A price of a Credit and
+// a price rise are left out on purpose: publishing a version that states
+// a price asks Stripe for a Price at it, and the stack has no Stripe in
+// CI.
+type appendedVersion struct {
 	Document  string `json:"document"`
 	Effective string `json:"effective"`
 	Material  bool   `json:"material"`
@@ -128,7 +129,7 @@ func Legal(ctx context.Context, getenv func(string) string, db *sql.DB, shipped 
 	}
 	decoder := json.NewDecoder(strings.NewReader(raw))
 	decoder.DisallowUnknownFields()
-	var versions []appended
+	var versions []appendedVersion
 	if err := decoder.Decode(&versions); err != nil {
 		return nil, fmt.Errorf("stackswitch: %s: %w", LegalVar, err)
 	}
@@ -138,15 +139,15 @@ func Legal(ctx context.Context, getenv func(string) string, db *sql.DB, shipped 
 		history[i] = doc
 	}
 	for _, v := range versions {
-		if err := place(history, v); err != nil {
+		if err := appendVersion(history, v); err != nil {
 			return nil, err
 		}
 	}
 	return history, nil
 }
 
-// place appends v to its document in history.
-func place(history []legal.Document, v appended) error {
+// appendVersion appends v to its document in history.
+func appendVersion(history []legal.Document, v appendedVersion) error {
 	if _, err := time.Parse(time.DateOnly, v.Effective); err != nil {
 		return fmt.Errorf("stackswitch: %s: effective %q is not a date", LegalVar, v.Effective)
 	}
