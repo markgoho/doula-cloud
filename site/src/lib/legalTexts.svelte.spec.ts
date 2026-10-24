@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { PRIVACY, TERMS, type LegalDocument, versionInForce } from './legal.js';
-import { textDates, textedVersion, textedVersions, textOf } from './legalTexts.js';
+import { textDates, versionWithText, versionsWithText, textOf } from './legalTexts.js';
 
 describe('the text of each version (#1816)', () => {
 	it.each([TERMS, PRIVACY])('the $name: every text is a version in the history', (legalDocument) => {
@@ -11,7 +11,7 @@ describe('the text of each version (#1816)', () => {
 	// So a coming version always has a page, and a text is never dropped
 	// from the middle of the history.
 	it.each([TERMS, PRIVACY])('the $name: every version from the first text on has one', (legalDocument) => {
-		const texted = textedVersions(legalDocument);
+		const texted = versionsWithText(legalDocument);
 		expect(texted.length).toBeGreaterThan(0);
 		const fromFirstText = legalDocument.versions.indexOf(texted[0]);
 		expect(texted).toEqual(legalDocument.versions.slice(fromFirstText));
@@ -23,9 +23,9 @@ describe('the text of each version (#1816)', () => {
 	});
 
 	it('finds the version a page names, and no version without a text', () => {
-		expect(textedVersion(TERMS, '2026-10-03')).toBe(TERMS.versions.at(-1));
-		expect(textedVersion(TERMS, '2026-09-29')).toBeUndefined();
-		expect(textedVersion(TERMS, 'not-a-date')).toBeUndefined();
+		expect(versionWithText(TERMS, '2026-10-03')).toBe(TERMS.versions.at(-1));
+		expect(versionWithText(TERMS, '2026-09-29')).toBeUndefined();
+		expect(versionWithText(TERMS, 'not-a-date')).toBeUndefined();
 	});
 
 	it('refuses a version with no text, and a document it does not hold', () => {
@@ -34,7 +34,7 @@ describe('the text of each version (#1816)', () => {
 		expect(() => textOf(unknown, { effective: '2026-10-01', material: false, change: 'First version.' })).toThrow(
 			'the Cookie Policy has no text for 2026-10-01'
 		);
-		expect(textedVersions(unknown)).toEqual([]);
+		expect(versionsWithText(unknown)).toEqual([]);
 		expect(textDates(unknown)).toEqual([]);
 	});
 });

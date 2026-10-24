@@ -25,4 +25,4 @@ in sitemap.xml: /terms is the page a crawler lists.
 	<link rel="canonical" href="{SITE_ORIGIN}{versionPath(TERMS, data.version)}" />
 </svelte:head>
 
-<LegalPage legalDocument={TERMS} version={data.version} />
+<LegalPage legalDocument={TERMS} version={data.version} linkTheVersionInForce />

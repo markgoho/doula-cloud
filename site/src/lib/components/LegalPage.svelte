@@ -16,15 +16,24 @@ render the version in force at the build; /terms/<date> and
 	interface Properties {
 		legalDocument: LegalDocument;
 		version: LegalVersion;
+		// On a version's own page: a line that links the document's
+		// address, which always shows the version in force. It names no
+		// date, so it stays true whenever the page was built.
+		linkTheVersionInForce?: boolean;
 	}
 
-	let { legalDocument, version }: Properties = $props();
+	let { legalDocument, version, linkTheVersionInForce = false }: Properties = $props();
 
 	const Text = $derived(textOf(legalDocument, version));
 </script>
 
 <ReadingPage title={legalDocument.name} updated={version.effective}>
 	<NewVersionNotice {legalDocument} {version} />
+	{#if linkTheVersionInForce}
+		<p>
+			The version in force is always at <a href={legalDocument.path}>{`doula.cloud${legalDocument.path}`}</a>.
+		</p>
+	{/if}
 	<Text effective={version.effective} />
 	<VersionHistory {legalDocument} />
 </ReadingPage>

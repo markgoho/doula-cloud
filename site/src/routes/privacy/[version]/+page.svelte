@@ -25,4 +25,4 @@ in sitemap.xml: /privacy is the page a crawler lists.
 	<link rel="canonical" href="{SITE_ORIGIN}{versionPath(PRIVACY, data.version)}" />
 </svelte:head>
 
-<LegalPage legalDocument={PRIVACY} version={data.version} />
+<LegalPage legalDocument={PRIVACY} version={data.version} linkTheVersionInForce />

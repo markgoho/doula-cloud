@@ -14,6 +14,16 @@ describe('LegalPage (#1816)', () => {
 		await expect.element(testPage.getByRole('heading', { level: 2, name: 'Version history' })).toBeVisible();
 	});
 
+	it('links the version in force from a version of its own, and only there', async () => {
+		const version = TERMS.versions.at(-1)!;
+		await render(LegalPage, { legalDocument: TERMS, version, linkTheVersionInForce: true });
+		await expect.element(testPage.getByRole('link', { name: 'doula.cloud/terms' })).toHaveAttribute('href', '/terms');
+		document.body.replaceChildren();
+
+		await render(LegalPage, { legalDocument: TERMS, version });
+		expect(testPage.getByRole('link', { name: 'doula.cloud/terms' }).elements()).toEqual([]);
+	});
+
 	// During the 30 days: the version in force, and above its text the one
 	// that is coming.
 	it('puts a newer version above the text of the one it is given', async () => {

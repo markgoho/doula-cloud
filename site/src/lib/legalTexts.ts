@@ -25,15 +25,15 @@ const TEXTS = new Map<string, Record<string, LegalText>>([
 ]);
 
 // The dates in `legalDocument`'s history that have a text, oldest first.
-export function textedVersions(legalDocument: LegalDocument): LegalVersion[] {
+export function versionsWithText(legalDocument: LegalDocument): LegalVersion[] {
 	const texts = TEXTS.get(legalDocument.path) ?? {};
 	return legalDocument.versions.filter(({ effective }) => Object.hasOwn(texts, effective));
 }
 
 // The version a /terms/<date> or /privacy/<date> page names, when it has
 // a text; undefined is that page's 404.
-export function textedVersion(legalDocument: LegalDocument, date: string): LegalVersion | undefined {
-	return textedVersions(legalDocument).find(({ effective }) => effective === date);
+export function versionWithText(legalDocument: LegalDocument, date: string): LegalVersion | undefined {
+	return versionsWithText(legalDocument).find(({ effective }) => effective === date);
 }
 
 export function textOf(legalDocument: LegalDocument, version: LegalVersion): LegalText {
