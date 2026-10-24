@@ -1,7 +1,6 @@
 import { expect, type APIRequestContext, type Page } from '@playwright/test';
 import { API_URL, E2E_EMULATOR_HOST, E2E_EMULATOR_PORT } from './ports';
-import { sessionCookieFrom } from './auth';
-import { signInEnrolled } from './mfa';
+import { sessionCookieFrom, signIn } from './auth';
 import {
 	seedClientPortalUser,
 	seedEngagement,
@@ -106,7 +105,12 @@ export interface SeededPortalClient {
 	clientId: string;
 	engagementId: string;
 	staffEmail: string;
+	// A session with no second factor (see seedPortalClient).
 	staffHeaders: { Cookie: string };
+	// The Owner's signup idToken and localId, for a caller that enrolls a
+	// second factor of its own with mfa.ts's signInEnrolled.
+	staffIdToken: string;
+	staffLocalId: string;
 	clientEmail: string;
 }
 
@@ -249,13 +253,12 @@ export async function seedPortalClient(
 		staffName: 'Alex Owner'
 	});
 
-	// Since #1531 none of this fixture's calls needs a second factor: an
-	// Owner enters her Practice without one. It stays enrolled for one
-	// caller: accessibility.e2e.ts scans the Staff screens, settings/mfa
-	// among them, under this session, and those scans are of an Owner who
-	// has a second factor. #1802 records that this enrollment goes once
-	// that spec enrolls its own Owner.
-	const staffHeaders = await signInEnrolled(request, idToken, localId);
+	// No second factor. Since #1531 an Owner enters her Practice without
+	// one, and none of this fixture's calls is one of the five acts that
+	// refuse a session with none. A caller that needs a second factor
+	// enrolls it in its own setup, from staffIdToken and staffLocalId
+	// below: accessibility.e2e.ts's Staff batch does (#1854).
+	const staffHeaders = await signIn(request, API_URL, idToken);
 
 	const createClient = await request.post(`${API_URL}/api/practices/${practiceId}/clients`, {
 		headers: staffHeaders,
@@ -282,6 +285,8 @@ export async function seedPortalClient(
 		engagementId,
 		staffEmail,
 		staffHeaders,
+		staffIdToken: idToken,
+		staffLocalId: localId,
 		clientEmail
 	};
 }

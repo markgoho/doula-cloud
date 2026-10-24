@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test';
 import { API_URL } from './ports';
 import { signIn } from './auth';
-import { enterPracticeAsEnrolled } from './mfa';
+import { enterPractice } from './mfa';
 import { staffLandingSettled } from './mountSettled';
 import { seedFoundingOwner } from './staffSignup';
 
@@ -22,7 +22,7 @@ test('a Staff member signs out and can no longer reach an authenticated screen',
 	// whichever tab ended it. See mountSettled.ts.
 	await Promise.all([
 		staffLandingSettled(page, practiceId),
-		enterPracticeAsEnrolled(context, page, staffHeaders, practiceId)
+		enterPractice(context, page, staffHeaders, practiceId)
 	]);
 	await expect(page).toHaveURL(new RegExp(`/practices/${practiceId}$`));
 
@@ -74,7 +74,7 @@ test('a second tab signing out after the first shows no error', async ({ page, r
 	// #854: the wait mountSettled.ts explains, paired with the navigation.
 	await Promise.all([
 		staffLandingSettled(page, practiceId),
-		enterPracticeAsEnrolled(context, page, staffHeaders, practiceId)
+		enterPractice(context, page, staffHeaders, practiceId)
 	]);
 	await expect(page).toHaveURL(new RegExp(`/practices/${practiceId}$`));
 
@@ -121,7 +121,7 @@ test('a second tab loses access once the first tab signs out, without itself sig
 	// #854: the wait mountSettled.ts explains, paired with the navigation.
 	await Promise.all([
 		staffLandingSettled(page, practiceId),
-		enterPracticeAsEnrolled(context, page, staffHeaders, practiceId)
+		enterPractice(context, page, staffHeaders, practiceId)
 	]);
 	await expect(page).toHaveURL(new RegExp(`/practices/${practiceId}$`));
 

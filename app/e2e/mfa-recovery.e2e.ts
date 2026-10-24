@@ -3,7 +3,7 @@ import { API_URL } from './ports';
 import { readStaffInviteToken } from './stack';
 import { drainUntilMailArrives, readMailbox } from './outboxMail';
 import { signIn } from './auth';
-import { enrollSecondFactor, enterPracticeAsEnrolled, verifyEmail } from './mfa';
+import { enrollSecondFactor, enterPractice, verifyEmail } from './mfa';
 import { seedFoundingOwner, uniqueEmail, STAFF_PASSWORD } from './staffSignup';
 import { STUB_TOTP_CODE, stubTotpFactor } from './totpStub';
 
@@ -66,7 +66,7 @@ test('An Owner vouches for a locked-out doula, and the code reaches her and nobo
 	// posted by hand. Installed before the first navigation, since the
 	// screens it stands behind can be reached from any of them.
 	await stubTotpFactor(page, request);
-	await enterPracticeAsEnrolled(context, page, ownerHeaders, practiceId);
+	await enterPractice(context, page, ownerHeaders, practiceId);
 
 	// A second Staff member to vouch *for*: the roster action does not
 	// exist without one, and an Owner vouching for herself is not the act
@@ -74,7 +74,7 @@ test('An Owner vouches for a locked-out doula, and the code reaches her and nobo
 	const doulaStaffId = await inviteAndAcceptDoula();
 
 	// The Owner's way in is the roster, so that is where this starts.
-	await enterPracticeAsEnrolled(context, page, ownerHeaders, practiceId);
+	await enterPractice(context, page, ownerHeaders, practiceId);
 	await page.goto(`/practices/${practiceId}/staff`);
 	// By href rather than by accessible name: every member row carries a
 	// link reading "Send a recovery code", and which row it is comes from

@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
 import { openMagicLink, seedPortalClient, signInPortalClient } from './portalClient';
-import { enterPracticeAsEnrolled } from './mfa';
+import { enterPractice } from './mfa';
 import { API_URL } from './ports';
 
 test('Client-portal login lands on their engagement-scoped URL', async ({ page, request }) => {
@@ -51,7 +51,7 @@ test('Signing into the portal over a live Staff session warns first, then evicts
 
 	// The same browser that is about to redeem a sign-in link is already
 	// signed in to her Practice.
-	await enterPracticeAsEnrolled(context, page, staffHeaders, practiceId);
+	await enterPractice(context, page, staffHeaders, practiceId);
 	await expect(page).toHaveURL(new RegExp(`/practices/${practiceId}$`));
 
 	await openMagicLink(page, request, clientEmail);

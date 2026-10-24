@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test';
 import { API_URL } from './ports';
 import { signIn } from './auth';
-import { enterPracticeAsEnrolled } from './mfa';
+import { enterPractice } from './mfa';
 import { seedFoundingOwner } from './staffSignup';
 
 // Exercises the Credits screen from app/src/routes/practices/[practiceId]/billing end-to-end --
@@ -12,7 +12,7 @@ test('Staff member can view the signup-bonus balance and ledger history', async 
 	const { idToken, practiceId } = await seedFoundingOwner(request);
 
 	const staffHeaders = await signIn(request, API_URL, idToken);
-	await enterPracticeAsEnrolled(context, page, staffHeaders, practiceId);
+	await enterPractice(context, page, staffHeaders, practiceId);
 	await expect(page).toHaveURL(new RegExp(`/practices/${practiceId}$`));
 
 	await page.getByRole('link', { name: 'Credits' }).click();

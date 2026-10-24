@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test';
 import { API_URL } from './ports';
 import { signIn } from './auth';
-import { enterPracticeAsEnrolled } from './mfa';
+import { enterPractice } from './mfa';
 import { readStaffInviteToken } from './stack';
 import { seedFoundingOwner, uniqueEmail, STAFF_PASSWORD } from './staffSignup';
 
@@ -27,7 +27,7 @@ test('An Admin invited via the Staff invite route reaches the Credits and Staff 
 	const { idToken: ownerIdToken, practiceId } = await seedFoundingOwner(request);
 
 	const ownerHeaders = await signIn(request, API_URL, ownerIdToken);
-	await enterPracticeAsEnrolled(context, page, ownerHeaders, practiceId);
+	await enterPractice(context, page, ownerHeaders, practiceId);
 	await expect(page).toHaveURL(new RegExp(`/practices/${practiceId}$`));
 
 	// The invite form's Roles default is 'doula' alone: select Admin and

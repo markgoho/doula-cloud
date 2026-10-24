@@ -197,7 +197,7 @@ export async function readVerificationCode(request: APIRequestContext, sessionIn
  * screens cannot answer on their own -- a spec that wants those screens
  * driven installs totpStub.ts instead of calling this. Returns session
  * headers carrying second_factor -- good for calling any
- * Practice-scoped route directly, and for enterPracticeAsEnrolled below
+ * Practice-scoped route directly, and for enterPractice below
  * to hand the browser.
  */
 export async function signInEnrolled(
@@ -216,7 +216,9 @@ export async function signInEnrolled(
  * equivalent of a /login walk, for a fixture that has no interest in
  * spending one (totpStub.ts is what a spec that does want the walk
  * installs). headers come from signInEnrolled or from auth.ts's plain
- * signIn alike; the cookie has the same shape either way. A direct
+ * signIn alike; the cookie has the same shape either way, and the name
+ * says nothing about a second factor because the helper does not care
+ * whether the session has one (#1854). A direct
  * cookie injection rather than a second interactive sign-in on purpose:
  * Playwright's request-context
  * `secure: false` sidesteps whether its own cookie jar treats loopback
@@ -225,7 +227,7 @@ export async function signInEnrolled(
  * this attribute back off an inbound Cookie header, so it costs nothing
  * to relax here.
  */
-export async function enterPracticeAsEnrolled(
+export async function enterPractice(
 	context: BrowserContext,
 	page: Page,
 	headers: { Cookie: string },

@@ -2,7 +2,7 @@ import { expect, test } from '@playwright/test';
 import { API_URL } from './ports';
 import { seedEngagement } from './stack';
 import { signIn } from './auth';
-import { enterPracticeAsEnrolled } from './mfa';
+import { enterPractice } from './mfa';
 import { seedContractorDoula } from './portalClient';
 import { seedFoundingOwner, uniqueEmail } from './staffSignup';
 
@@ -38,7 +38,7 @@ test('Owner offers an Engagement to a Doula, who accepts it from her own inbox',
 	const { id: clientId } = JSON.parse(createClientBody);
 	const engagementId = seedEngagement(clientId, practiceId);
 
-	await enterPracticeAsEnrolled(context, page, headers, practiceId);
+	await enterPractice(context, page, headers, practiceId);
 	await expect(page).toHaveURL(new RegExp(`/practices/${practiceId}$`));
 
 	await page.goto(`/practices/${practiceId}/engagements/${engagementId}`);
@@ -63,7 +63,7 @@ test('Owner offers an Engagement to a Doula, who accepts it from her own inbox',
 	// And the Doula's own inbox carries the four decidable facts, with no
 	// Client name anywhere on it. Her session replaces the Owner's in this
 	// browser; a plain Doula has no second factor to pass (#606).
-	await enterPracticeAsEnrolled(context, page, doula.headers, practiceId);
+	await enterPractice(context, page, doula.headers, practiceId);
 	await page.goto(`/practices/${practiceId}/offers`);
 	await expect(page.getByRole('heading', { name: 'Your offers' })).toBeVisible();
 	// exact: true -- #515's hidden "North side, due 2027-01-04" sibling
@@ -87,7 +87,7 @@ test('Owner offers an Engagement to a Doula, who accepts it from her own inbox',
 	// because the page now also carries #486's own Activity ledger, whose
 	// "Offer accepted" row is a substring match for a bare 'Accepted'
 	// query too.
-	await enterPracticeAsEnrolled(context, page, headers, practiceId);
+	await enterPractice(context, page, headers, practiceId);
 	await page.goto(`/practices/${practiceId}/engagements/${engagementId}`);
 	await expect(page.getByText('Accepted', { exact: true })).toBeVisible();
 	// Her acceptance put her on the Engagement, and the summary names her.
@@ -124,7 +124,7 @@ test('A solo Owner who is a contractor Doula is named on the Start work form, an
 	const { id: clientId } = JSON.parse(createClientBody);
 	const engagementId = seedEngagement(clientId, practiceId);
 
-	await enterPracticeAsEnrolled(context, page, headers, practiceId);
+	await enterPractice(context, page, headers, practiceId);
 	await page.goto(`/practices/${practiceId}/engagements/${engagementId}`);
 
 	await expect(page.getByText('No Doula yet', { exact: true })).toBeVisible();
@@ -195,7 +195,7 @@ test('A solo Owner puts herself on an Engagement that started with no Doula', as
 	const { id: clientId } = JSON.parse(createClientBody);
 	const engagementId = seedEngagement(clientId, practiceId);
 
-	await enterPracticeAsEnrolled(context, page, headers, practiceId);
+	await enterPractice(context, page, headers, practiceId);
 	await page.goto(`/practices/${practiceId}/engagements/${engagementId}`);
 
 	await expect(page.getByText('No Doula yet', { exact: true })).toBeVisible();
