@@ -40,6 +40,8 @@ The route that `docs/onboarding-route.md` specifies: three acts, four presses, f
 * **Cold**: yes (Paradox of the Active User)
 * **320px**: yes (ADR-0024)
 
+The stage has no Time line, because signup and the first Client are not acts that she repeats.
+
 - **0.1** — Open `/signup`. The heading is "Sign up your Practice". The fields, in order: First name, Last name, Practice name (optional), the state she works from, Timezone, Email, Password. Then the role notice, then directly above **Create Practice** the sentence "By creating your Practice, you agree to the Terms of Service and the Privacy Policy.", whose two links open in a new tab. There is no checkbox, no second password field, and no question that asks if she is a solo Owner or an agency.
 - **0.2** — Fill the form, with "Rooted Birth Collective" as the Practice name because the agency does not work under her own name, and press **Create Practice** (`POST /api/staff/signup`). Act 1, press 1. Her membership holds Owner, Admin and Doula, with the Employment type `employee`, and the press writes the Practice's `terms_accepted` Activity row (#1547, ADR-0053).
 - **0.3** — Land on the empty Practice, `/practices/[practiceId]`, with no screen between and no second factor asked for (#1531). The heading is "Welcome to Rooted Birth Collective". The words, the Credits sentence ("Adding a Client is free. Starting work with a Client uses 1 Credit, and this Practice has 3 Welcome credits.") and one link, **Add your first Client**. No Getting paid card, no second-factor notice and no link to the Invitation form are on it.

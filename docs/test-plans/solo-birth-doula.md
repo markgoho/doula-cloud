@@ -154,7 +154,7 @@ MO-G5 to MO-G9 are experience-layer or infrastructure findings; they are observe
 
 ### 2026-10-23 — the route walked as a solo Owner, against the spec ([#1649](https://github.com/markgoho/doula-cloud/issues/1649))
 
-`bun run dev:full` in `app/` on trunk at `6c1985d4`, walked in a fresh headless Chrome profile through `playwriter`, at 1280x900 and at 320x640, with a new throwaway account for each walk and **Practice name left empty**. Her stage 1 and the first Client of her stage 3 are the route that [`docs/onboarding-route.md`](../onboarding-route.md) specifies. No mark moved and no cell is rewritten; Renata Alvarez's plan has the agency Owner's walks and the step-by-step table for the same five screens, in its own Run log.
+`bun run dev:full` in `app/` on trunk at `6c1985d4`, walked in a fresh headless Chrome profile through `playwriter`, at 1280x900 and at 320x640, with a new throwaway account for each walk and **Practice name left empty**. Her stage 1 and the first Client of her stage 3 are the route that [`docs/onboarding-route.md`](../onboarding-route.md) specifies. No mark moved. One cell is rewritten: the note on 1.B-decisions, which named the four fields of the old form, now names the rule it measures. Renata Alvarez's plan has the agency Owner's walks and the step-by-step table for the same five screens, in its own Run log.
 
 | Walk | Width | Acts | Presses | Screens | Exits from the app |
 | --- | --- | --- | --- | --- | --- |
