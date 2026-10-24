@@ -51,7 +51,7 @@ const (
 
 var fixtureTerms = legal.Document{
 	Name: termsName,
-	Path: "/terms",
+	Path: legal.Terms.Path,
 	Versions: []legal.Version{
 		{Effective: firstVersion, Material: false, Change: firstChange},
 		{Effective: termsMaterial, Material: true, Change: termsChange},
@@ -460,7 +460,7 @@ func TestAgreementGate_AsksNothingForAChangeThatIsNotMaterialOrNotPublished(t *t
 		db := testdb.New(t)
 		practiceID, _ := signedUpBefore(t, db, "owner-correction")
 		staffauth.AgreementDocuments = []legal.Document{{
-			Name: termsName, Path: "/terms",
+			Name: termsName, Path: legal.Terms.Path,
 			Versions: []legal.Version{
 				{Effective: firstVersion, Material: false, Change: firstChange},
 				{Effective: termsCorrection, Material: false, Change: "Corrects a typing error."},
@@ -489,7 +489,7 @@ func TestAgreementGate_AsksNothingForAChangeThatIsNotMaterialOrNotPublished(t *t
 func TestAgreementGate_AnUnpublishedNewerVersionDoesNotHideAPublishedOne(t *testing.T) {
 	useFixtureHistory(t)
 	staffauth.AgreementDocuments = []legal.Document{{
-		Name: termsName, Path: "/terms",
+		Name: termsName, Path: legal.Terms.Path,
 		Versions: []legal.Version{
 			{Effective: firstVersion, Material: false, Change: firstChange},
 			{Effective: termsMaterial, Material: true, Change: termsChange},
