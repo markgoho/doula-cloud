@@ -2,8 +2,11 @@ import { createRawSnippet } from 'svelte';
 import { page as testPage } from 'vitest/browser';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
+import type { ClientSearchFields } from '#lib/client.js';
 import { intakeDraft } from '#lib/intakeDraft.svelte.js';
+import { handOffToIntake, takeIntakeHandoff } from '#lib/intakeHandoff.js';
 import Layout from './+layout.svelte';
+import { load as doorLoad } from './+page.js';
 import NamePage from './name/+page.svelte';
 import { practiceId, seedIntake } from './intakeFixture.js';
 
@@ -44,6 +47,24 @@ async function setup({ isContractor = false, search = '' }: SetupOptions = {}) {
 	});
 }
 
+/*
+ * The way a reader arrives from the search (#1829), in the order a real
+ * pointer gives it: SvelteKit preloads the link as the pointer rests on
+ * it, so the door (`+page.ts`) clears the draft and redirects first; the
+ * click then hands over what was typed; and the layout opens the name
+ * question, with no Client field in its URL, and takes it.
+ */
+async function enterFromSearch(fields: Partial<ClientSearchFields>) {
+	expect(() =>
+		doorLoad({
+			params: { practiceId },
+			url: new URL(`https://example.test/practices/${practiceId}/clients/new`)
+		} as unknown as Parameters<typeof doorLoad>[0])
+	).toThrow();
+	handOffToIntake(practiceId, { name: '', dateOfBirth: '', email: '', phone: '', ...fields });
+	await setup();
+}
+
 beforeEach(() => {
 	apiFetchWithSession.mockReset();
 	seedIntake();
@@ -70,13 +91,13 @@ describe('intake for everyone else', () => {
 		expect(apiFetchWithSession).not.toHaveBeenCalled();
 	});
 
-	it('seeds the draft with what the search carried', async () => {
-		// The door (`+page.ts`) clears the draft before the question opens.
-		intakeDraft.clear();
-
-		await setup({ search: '?name=Ana&email=ana%40example.com&dateOfBirth=1990-01-02&phone=' });
+	// #1829: the search hands its fields to the door in module memory,
+	// and the URL the question opens at carries none of them.
+	it('keeps the draft the door seeded from the search', async () => {
+		await enterFromSearch({ name: 'Ana', email: 'ana@example.com', dateOfBirth: '1990-01-02' });
 
 		await expect.element(testPage.getByText('the name question')).toBeVisible();
+		expect(pageState.url.search).toBe('');
 		expect(intakeDraft.answers).toMatchObject({
 			givenName: 'Ana',
 			email: 'ana@example.com',
@@ -91,13 +112,12 @@ describe('intake for everyone else', () => {
 	 * name; two or more carry into neither field. The name question is
 	 * mounted after the layout, so these read the fields she sees.
 	 */
-	// The draft still holds an earlier search's name: a URL that names
-	// one word replaces it, so no old line sits over "Yar".
+	// The draft still holds an earlier search's name: the door clears it,
+	// so no old line sits over "Yar".
 	it('carries a one-word name into Given name', async () => {
-		intakeDraft.clear();
 		intakeDraft.searchedName = 'Yar Pell';
 
-		await setup({ search: '?name=Yar' });
+		await enterFromSearch({ name: 'Yar' });
 		await render(NamePage);
 
 		await expect.element(testPage.getByLabelText('Given name')).toHaveValue('Yar');
@@ -109,9 +129,7 @@ describe('intake for everyone else', () => {
 	// not have to be remembered. It fills no field and is not saved, so
 	// it sits apart from the list of what is saved with the name.
 	it('shows a two-word name the search typed, and fills no field with it', async () => {
-		intakeDraft.clear();
-
-		await setup({ search: '?name=Yar%20Pell&email=yar%40example.com' });
+		await enterFromSearch({ name: 'Yar Pell', email: 'yar@example.com' });
 		await render(NamePage);
 
 		await expect
@@ -126,8 +144,8 @@ describe('intake for everyone else', () => {
 		expect(intakeDraft.answers).not.toHaveProperty('searchedName');
 	});
 
-	// The duplicate page's Back opens the name question with no query
-	// string, so the name already read is kept, as the origin is.
+	// The duplicate page's Back opens the name question without passing
+	// the door, so the name already read is kept, as the origin is.
 	it('keeps the searched name it already read when the URL carries none', async () => {
 		intakeDraft.searchedName = 'Yar Pell';
 
@@ -138,9 +156,12 @@ describe('intake for everyone else', () => {
 	});
 
 	it('carries a two-word name into neither name field, and still carries the rest', async () => {
-		intakeDraft.clear();
-
-		await setup({ search: '?name=Yar%20Pell&email=yar%40example.com&phone=555-0100&dateOfBirth=1990-01-02' });
+		await enterFromSearch({
+			name: 'Yar Pell',
+			email: 'yar@example.com',
+			phone: '555-0100',
+			dateOfBirth: '1990-01-02'
+		});
 		await render(NamePage);
 
 		await expect.element(testPage.getByLabelText('Given name')).toHaveValue('');
@@ -148,6 +169,20 @@ describe('intake for everyone else', () => {
 		await expect.element(testPage.getByText('yar@example.com')).toBeVisible();
 		await expect.element(testPage.getByText('555-0100')).toBeVisible();
 		await expect.element(testPage.getByText('Jan 2, 1990')).toBeVisible();
+	});
+
+	// A click on "Add a new Client" whose navigation never arrived leaves
+	// a hand-off behind. A later visit from another screen does not take
+	// that old search's values into a new Client.
+	it('carries nothing into a visit another screen opened', async () => {
+		intakeDraft.clear();
+		handOffToIntake(practiceId, { name: 'Ana', dateOfBirth: '', email: '', phone: '' });
+
+		await setup({ search: '?from=overview' });
+
+		await expect.element(testPage.getByText('the name question')).toBeVisible();
+		expect(intakeDraft.answers.givenName).toBe('');
+		expect(takeIntakeHandoff(practiceId)).toBeUndefined();
 	});
 
 	it('reads the screen that opened intake directly', async () => {

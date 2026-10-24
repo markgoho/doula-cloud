@@ -59,6 +59,54 @@ describe('IntakeDraft', () => {
 		expect(draft.answers.phone).toBe('555-0100');
 	});
 
+	/*
+	 * #1829: the search hands what was typed to the intake door in module
+	 * memory, not the URL, so a reload of the name question has only the
+	 * draft's own mirror to read it back from.
+	 */
+	it('carries what the search typed into the draft and its mirror, so a reload keeps it', () => {
+		const draft = new IntakeDraft();
+		draft.start('p1');
+
+		draft.carry({ name: ' Yar ', dateOfBirth: '1990-01-02', email: 'yar@example.com', phone: '' });
+
+		expect(draft.answers).toMatchObject({
+			givenName: 'Yar',
+			dateOfBirth: '1990-01-02',
+			email: 'yar@example.com',
+			phone: ''
+		});
+		const reloaded = new IntakeDraft();
+		reloaded.start('p1');
+		expect(reloaded.answers).toEqual(draft.answers);
+		expect(reloaded.searchedName).toBeUndefined();
+	});
+
+	it('keeps a name of two or more words out of every field, and across a reload', () => {
+		const draft = new IntakeDraft();
+		draft.start('p1');
+
+		draft.carry({ name: 'Yar Pell', dateOfBirth: '', email: '', phone: '555-0100' });
+
+		expect(draft.answers.givenName).toBe('');
+		expect(draft.answers.phone).toBe('555-0100');
+		expect(draft.searchedName).toBe('Yar Pell');
+		const reloaded = new IntakeDraft();
+		reloaded.start('p1');
+		expect(reloaded.searchedName).toBe('Yar Pell');
+		expect(reloaded.answers).not.toHaveProperty('searchedName');
+	});
+
+	it('carries nothing when the search handed nothing over', () => {
+		const draft = new IntakeDraft();
+		draft.start('p1');
+
+		draft.carry(undefined);
+
+		expect(draft.answers).toEqual(blankAnswers());
+		expect(sessionStorage.getItem('doula-cloud:intake:p1')).toBeNull();
+	});
+
 	it('drops the draft when the Practice changes', () => {
 		const draft = new IntakeDraft();
 		draft.start('p1', { givenName: 'Sarah' });
@@ -96,13 +144,16 @@ describe('IntakeDraft', () => {
 		draft.visit('name');
 		draft.matches = [];
 		draft.origin = 'overview';
+		draft.carry({ name: 'Sarah Lee', dateOfBirth: '', email: '', phone: '' });
 
 		draft.clear();
 
 		expect(draft.answers).toEqual(blankAnswers());
 		expect(draft.visitedSteps).toEqual([]);
 		expect(draft.origin).toBeUndefined();
+		expect(draft.searchedName).toBeUndefined();
 		expect(sessionStorage.getItem('doula-cloud:intake:p1')).toBeNull();
+		expect(sessionStorage.getItem('doula-cloud:intake:p1:searched-name')).toBeNull();
 	});
 
 	it('exports one draft the whole flow shares', () => {
@@ -155,6 +206,8 @@ describe('IntakeDraft and the browser it runs in', () => {
 		const draft = new IntakeDraft();
 		draft.start('p1', { givenName: 'Sarah' });
 		draft.update({ email: 'sarah@example.com' });
+		draft.carry({ name: 'Sarah Lee', dateOfBirth: '', email: '', phone: '' });
+		expect(draft.searchedName).toBe('Sarah Lee');
 		draft.clear();
 
 		expect(draft.answers).toEqual(blankAnswers());

@@ -38,6 +38,14 @@
 		 * link's destination apart from the "Your care" nav item beside it.
 		 */
 		ariaLabel?: string;
+		/*
+		 * Runs as the link is followed, before the navigation. The link
+		 * still navigates by its `href`; this is for a screen that must
+		 * hand something to the next one outside the URL -- the Client
+		 * search gives intake what was typed this way (#1829), since a
+		 * Client's details do not belong in an address.
+		 */
+		onClick?: (event: MouseEvent) => void;
 	}
 
 	let {
@@ -47,7 +55,8 @@
 		icon,
 		current = false,
 		describedBy,
-		ariaLabel
+		ariaLabel,
+		onClick
 	}: Properties = $props();
 
 	// Absolute (http(s)) or protocol-relative hrefs leave the app; every
@@ -67,6 +76,7 @@
 	aria-label={ariaLabel}
 	target={isExternal ? '_blank' : undefined}
 	rel={isExternal ? 'noopener noreferrer' : undefined}
+	onclick={onClick}
 >
 	{#if icon}
 		<Icon name={icon} size={16} />

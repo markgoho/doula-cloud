@@ -12,14 +12,21 @@
 	 * such link (#539) -- her own attached-Clients list is already her
 	 * route to a Client, and an empty one links here instead.
 	 *
-	 * A miss carries every key that was typed into intake as query params
-	 * -- `clients/new/+layout.svelte` reads all four and the name question
-	 * shows them (#1611): a one-word name in Given name, and the other
-	 * three listed under the fields. A name of two or more words fills
-	 * neither name field, since it is never split on a space (#1716); the
-	 * name question shows it above the fields, read-only (#1758). All
-	 * four, not only the name, because a staff member holding nothing but
-	 * a phone number would otherwise lose the one thing she had.
+	 * A miss carries every key that was typed into intake, and the name
+	 * question shows them (#1611): a one-word name in Given name, and the
+	 * other three listed under the fields. A name of two or more words
+	 * fills neither name field, since it is never split on a space
+	 * (#1716); the name question shows it above the fields, read-only
+	 * (#1758). All four, not only the name, because a staff member holding
+	 * nothing but a phone number would otherwise lose the one thing she
+	 * had.
+	 *
+	 * None of the four is ever in a URL (#1829). The search posts them in
+	 * a request body (`searchClients`), and "Add a new Client" links to
+	 * the bare intake door and hands them over in module memory as it is
+	 * followed (`#lib/intakeHandoff.ts`). A query string would put a
+	 * Client's details in request logs, the browser history and any link
+	 * that was shared.
 	 */
 	import { page } from '#lib/appState.svelte.js';
 	import { resolve } from '$app/paths';
@@ -27,6 +34,7 @@
 	import { searchClients, type ClientMatch, type ClientSearchFields } from '#lib/client.js';
 	import { displayName } from '#lib/clientDetail.js';
 	import { carriedGivenName } from '#lib/intakeJourney.js';
+	import { handOffToIntake } from '#lib/intakeHandoff.js';
 	import PageTitle from '#lib/components/PageTitle.svelte';
 	import Heading from '#lib/components/atoms/Heading.svelte';
 	import Text from '#lib/components/atoms/Text.svelte';
@@ -70,7 +78,7 @@
 	 * (GOV.UK's Dates pattern, #466), not the native picker that made
 	 * somebody navigate to 1988. `parts` holds what was typed and
 	 * `dateOfBirth` the composed "YYYY-MM-DD" `client.SearchHandler`
-	 * reads off the query string; they are separate for intake's own
+	 * reads from the request body; they are separate for intake's own
 	 * reason, that `07` and `7` are the same date and rewriting one into
 	 * the other under the cursor is the defect this pattern avoids.
 	 */
@@ -78,9 +86,9 @@
 	/*
 	 * Derived rather than written on submit, because the boxes feed two
 	 * readers: the search itself, and the "Add a new Client" link a miss
-	 * offers, which is rendered from whatever is typed right now. A
-	 * snapshot taken at submit would leave that link carrying the previous
-	 * date beside the current name.
+	 * offers, which hands over whatever is typed at the moment it is
+	 * followed. A snapshot taken at submit would leave that link carrying
+	 * the previous date beside the current name.
 	 */
 	const composedDateOfBirth = $derived(joinDate(dateOfBirthParts));
 	const dateOfBirth = $derived(composedDateOfBirth.ok ? composedDateOfBirth.value : '');
@@ -127,34 +135,19 @@
 	}
 
 	/*
-	 * The miss's next step: intake's first page, carrying every key that
-	 * was typed here so none of it is retyped (see the module comment).
-	 * All four, not only the name -- a staff member with nothing but a
-	 * phone number searches on it, finds no one, and would otherwise lose
-	 * the one thing she had. Intake reads each on mount and shows it on
-	 * the page that asks for it.
+	 * The miss's next step: intake's door, with no Client field in its
+	 * URL (#1829). Every key typed here is handed over as the link is
+	 * followed, so none of it is retyped (see the module comment), and
+	 * intake seeds its draft with it.
 	 */
 	function startIntakeHref(): string {
-		const base = resolve('/practices/[practiceId]/clients/new', {
+		return resolve('/practices/[practiceId]/clients/new', {
 			practiceId: page.params.practiceId!
 		});
-		const fields = currentFields();
-		// Built by hand rather than through URLSearchParams: this is a
-		// throwaway local, and svelte/prefer-svelte-reactivity rightly
-		// refuses a mutable one. encodeURIComponent also writes a space as
-		// %20 rather than "+", which reads better in the address bar.
-		const query = (
-			[
-				['name', fields.name],
-				['dateOfBirth', fields.dateOfBirth],
-				['email', fields.email],
-				['phone', fields.phone]
-			] as const
-		)
-			.filter(([, value]) => value)
-			.map(([key, value]) => `${key}=${encodeURIComponent(value)}`)
-			.join('&');
-		return query ? `${base}?${query}` : base;
+	}
+
+	function handOffSearchFields(): void {
+		handOffToIntake(page.params.practiceId!, currentFields());
 	}
 
 	async function handleSearch(event: SubmitEvent) {
@@ -323,7 +316,7 @@
 											: 'Nothing at this Practice matches what was typed. Add a new Client instead.'}
 									/>
 									<cluster-l space="var(--space-3)" align="center">
-										<Link href={startIntakeHref()} label="Add a new Client" />
+										<Link href={startIntakeHref()} label="Add a new Client" onClick={handOffSearchFields} />
 									</cluster-l>
 								</stack-l>
 							{/if}

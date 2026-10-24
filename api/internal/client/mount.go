@@ -23,7 +23,14 @@ import (
 // CanAccessEngagement.
 func Mount(g *staffauth.GatedRouter, ir *idempotency.Router, nudge tasknudge.Enqueuer) {
 	g.Get("/api/practices/{practiceId}/clients", staffauth.AnyStaff, ListHandler())
-	g.Get("/api/practices/{practiceId}/clients/search", staffauth.AnyStaff, SearchHandler())
+	// #1829: a read sent as a POST, so the four fields a Client is
+	// searched on travel in the body and never in a request log's URL.
+	// AnyStaff is the declaration the GET it replaced carried; the
+	// contractor refusal stays inside the handler, as it is for the
+	// create below.
+	ir.ExemptGated("POST /api/practices/{practiceId}/clients/search",
+		"a read sent as a POST so a Client's details stay out of the URL (#1829): it writes nothing, so a repeat has nothing to replay",
+		false, staffauth.AnyStaff, SearchHandler())
 	ir.Replayable("POST /api/practices/{practiceId}/clients", false, CreateHandler())
 	g.Get("/api/practices/{practiceId}/clients/{clientId}", staffauth.AnyStaff, DetailHandler())
 	ir.Exempt("PUT /api/practices/{practiceId}/clients/{clientId}",

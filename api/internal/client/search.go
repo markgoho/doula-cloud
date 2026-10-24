@@ -7,6 +7,19 @@ import (
 	"doula-cloud/api/internal/staffauth"
 )
 
+// SearchRequest is what the search that fronts intake sends: the same
+// four keys FindMatches always uses, any of them blank. A body rather
+// than a query string (#1829): a query string is part of the request
+// URL, and the Firebase Hosting rewrite and Cloud Run's request log both
+// record the full URL, so a Client's name, date of birth, email and phone
+// would sit in logs nothing else treats as holding them.
+type SearchRequest struct {
+	Name        string `json:"name"`
+	DateOfBirth string `json:"dateOfBirth"`
+	Email       string `json:"email"`
+	Phone       string `json:"phone"`
+}
+
 // SearchResponse is the body of a Client search: every candidate
 // FindMatches turned up, name and history unrestricted inside the
 // Practice (ADR-0017).
@@ -15,12 +28,12 @@ type SearchResponse struct {
 }
 
 // SearchHandler is the search that fronts intake -- Clients -> Add a
-// Client -> search -- the only door to it (ADR-0017). Reads
-// ?name=&dateOfBirth=&email=&phone=, matching the same four keys
-// FindMatches always uses; name matches against both given/family/
-// preferred (see FindMatches). Refused to a contractor Doula, the same
-// as CreateHandler: she never originates a Client, so this search has no
-// destination for her to reach. Must be mounted behind
+// Client -> search -- the only door to it (ADR-0017). Reads a
+// SearchRequest body; name matches against both given/family/preferred
+// (see FindMatches). It writes nothing: it is a POST only so that what
+// was typed stays out of the URL (#1829). Refused to a contractor Doula,
+// the same as CreateHandler: she never originates a Client, so this
+// search has no destination for her to reach. Must be mounted behind
 // staffauth.Middleware.
 func SearchHandler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -40,9 +53,11 @@ func SearchHandler() http.Handler {
 			return
 		}
 
-		q := r.URL.Query()
-		name := q.Get("name")
-		matches, err := FindMatches(r.Context(), tx, practiceID, name, name, q.Get("dateOfBirth"), q.Get("email"), q.Get("phone"), "")
+		var req SearchRequest
+		if !apierr.DecodeJSON(w, r, &req) {
+			return
+		}
+		matches, err := FindMatches(r.Context(), tx, practiceID, req.Name, req.Name, req.DateOfBirth, req.Email, req.Phone, "")
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)

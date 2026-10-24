@@ -602,6 +602,32 @@ func TestRoutes_CrossOriginStateChangeRejected(t *testing.T) {
 	}
 }
 
+// TestRoutes_CrossOriginClientSearchRejected proves #1829's move of the
+// Client search from GET to POST put it behind the same origin check:
+// a cross-site search is refused before it reaches staffauth, so the
+// answer is the check's 403 rather than the 401 a missing session gives.
+func TestRoutes_CrossOriginClientSearchRejected(t *testing.T) {
+	mux, _, _ := routes(testDeps())
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost,
+		srv.URL+"/api/practices/00000000-0000-0000-0000-000000000001/clients/search", bytes.NewReader([]byte(`{"name":"Ana"}`)))
+	if err != nil {
+		t.Fatalf("build request: %v", err)
+	}
+	req.Header.Set("Origin", "https://evil.example")
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusForbidden {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusForbidden)
+	}
+}
+
 // TestRoutes_MatchingOriginAllowed proves a matching Origin header
 // doesn't get caught by the check -- the request still reaches the
 // handler, which rejects it for its own reason (401, no bearer token),

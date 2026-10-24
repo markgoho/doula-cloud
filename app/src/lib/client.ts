@@ -217,8 +217,8 @@ export async function createClient(
 }
 
 /** What the search that fronts intake (#498, ADR-0017) collects -- the
- * same four keys `client.SearchHandler` reads off the query string:
- * `?name=&dateOfBirth=&email=&phone=`. `name` matches given, family and
+ * same four keys `client.SearchHandler` reads from the request body
+ * (`client.SearchRequest`). `name` matches given, family and
  * preferred name alike (search.go passes it as both of FindMatches' two
  * name arguments), so this is a single free-text field rather than the
  * split `givenName`/`familyName` intake collects. */
@@ -229,19 +229,12 @@ export interface ClientSearchFields {
 	phone: string;
 }
 
-function searchPath(practiceId: string, fields: ClientSearchFields): string {
-	const query = new URLSearchParams();
-	if (fields.name) query.set('name', fields.name);
-	if (fields.dateOfBirth) query.set('dateOfBirth', fields.dateOfBirth);
-	if (fields.email) query.set('email', fields.email);
-	if (fields.phone) query.set('phone', fields.phone);
-	const queryString = query.toString();
-	return `${clientsPath(practiceId)}/search${queryString ? `?${queryString}` : ''}`;
-}
-
 /** Runs the search that fronts intake -- the only door to it (ADR-0017).
- * Blank fields are left off the query string entirely, matching
- * `FindMatches`' own "blank fields are ignored" contract. Throws with the
+ * A POST with the fields in its body, though it writes nothing (#1829): a
+ * query string is part of the URL, and every request log the call passes
+ * through -- the Hosting rewrite, Cloud Run -- records the URL, so a
+ * Client's name, date of birth, email and phone would be written there.
+ * A blank field is sent blank; `FindMatches` ignores it. Throws with the
  * response body text on a non-2xx response -- including a contractor
  * Doula's 403, which `SearchHandler` returns with a readable reason
  * rather than a bare status. */
@@ -250,7 +243,11 @@ export async function searchClients(
 	practiceId: string,
 	fields: ClientSearchFields
 ): Promise<ClientMatch[]> {
-	const response = await fetcher(searchPath(practiceId, fields));
+	const response = await fetcher(`${clientsPath(practiceId)}/search`, {
+		method: 'POST',
+		headers: { 'Content-Type': 'application/json' },
+		body: JSON.stringify(fields)
+	});
 	if (!response.ok) {
 		throw await refusalError(response);
 	}

@@ -124,35 +124,24 @@ describe('createClient', () => {
 });
 
 describe('searchClients', () => {
-	it('queries only the fields given, in order', async () => {
+	// #1829: what was typed goes in the body of a POST, never in the URL,
+	// so no request log records a Client's details.
+	it('posts every field in the body, and puts none in the URL', async () => {
 		const fetcher = vi.fn().mockResolvedValue(response({ matches: [] }));
-
-		await searchClients(fetcher, 'practice-1', { name: 'Ada', dateOfBirth: '', email: '', phone: '' });
-
-		expect(fetcher).toHaveBeenCalledWith('/api/practices/practice-1/clients/search?name=Ada');
-	});
-
-	it('queries every field when all four are given', async () => {
-		const fetcher = vi.fn().mockResolvedValue(response({ matches: [] }));
-
-		await searchClients(fetcher, 'practice-1', {
+		const fields = {
 			name: 'Ada',
 			dateOfBirth: '1815-12-10',
 			email: 'ada@example.com',
 			phone: '555-0100'
+		};
+
+		await searchClients(fetcher, 'practice-1', fields);
+
+		expect(fetcher).toHaveBeenCalledWith('/api/practices/practice-1/clients/search', {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify(fields)
 		});
-
-		expect(fetcher).toHaveBeenCalledWith(
-			'/api/practices/practice-1/clients/search?name=Ada&dateOfBirth=1815-12-10&email=ada%40example.com&phone=555-0100'
-		);
-	});
-
-	it('queries with no query string when every field is blank', async () => {
-		const fetcher = vi.fn().mockResolvedValue(response({ matches: [] }));
-
-		await searchClients(fetcher, 'practice-1', { name: '', dateOfBirth: '', email: '', phone: '' });
-
-		expect(fetcher).toHaveBeenCalledWith('/api/practices/practice-1/clients/search');
 	});
 
 	it('returns the decoded matches', async () => {

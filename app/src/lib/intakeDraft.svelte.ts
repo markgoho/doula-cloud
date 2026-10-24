@@ -22,8 +22,8 @@
  * that works exactly as it did before, one navigation at a time.
  */
 
-import type { ClientCreateFields, ClientMatch } from './client.js';
-import type { IntakeOrigin } from './intakeJourney.js';
+import type { ClientCreateFields, ClientMatch, ClientSearchFields } from './client.js';
+import { carriedGivenName, searchedName, type IntakeOrigin } from './intakeJourney.js';
 
 /** One answer to a Practice-defined question. The three shapes cover
  * the five field types intake collects: text and single-select are a
@@ -74,9 +74,17 @@ function readStored(key: string): IntakeAnswers | undefined {
 	}
 }
 
-function writeStored(key: string, answers: IntakeAnswers): void {
+function readStoredText(key: string): string | undefined {
 	try {
-		sessionStorage.setItem(key, JSON.stringify(answers));
+		return sessionStorage.getItem(key) ?? undefined;
+	} catch {
+		return undefined;
+	}
+}
+
+function writeStored(key: string, value: IntakeAnswers | string): void {
+	try {
+		sessionStorage.setItem(key, typeof value === 'string' ? value : JSON.stringify(value));
 	} catch {
 		// Nothing to recover: the draft still lives in module state.
 	}
@@ -119,15 +127,17 @@ export class IntakeDraft {
 	 * is where its Back goes. Undefined when intake was reached from the
 	 * search, which is then where Back goes. Module state only, not
 	 * mirrored: the name question's own URL carries it, so a reload of
-	 * that page reads it again.
+	 * that page reads it again. It names a screen, never a Client, so it
+	 * may sit in the URL.
 	 */
 	origin = $state<IntakeOrigin | undefined>();
 	/**
 	 * A name of two or more words the search typed, which carries into
 	 * neither name field (#1716) and which the name question shows
 	 * (#1758). Outside `answers` on purpose: `answers` is what the save
-	 * sends, and this is never saved. Not mirrored, for the reason
-	 * `origin` gives.
+	 * sends, and this is never saved. Mirrored under a key of its own
+	 * (#1829): the search hands it over in module memory, not the URL, so
+	 * the mirror is the only place a reload can read it back from.
 	 */
 	searchedName = $state<string | undefined>();
 
@@ -137,6 +147,10 @@ export class IntakeDraft {
 
 	get #storageKey(): string {
 		return `doula-cloud:${this.#namespace}:${this.scope}`;
+	}
+
+	get #searchedNameKey(): string {
+		return `${this.#storageKey}:searched-name`;
 	}
 
 	/** Whether the one fact ADR-0017 requires is here. Read by `start`,
@@ -151,21 +165,45 @@ export class IntakeDraft {
 	 * Opens the draft for a Practice, or in the details journey for a
 	 * Client.
 	 *
-	 * `carried` is what the search that fronts intake put in the query
-	 * string (#498, ADR-0017): it seeds a draft that has nothing in it
-	 * yet, and never overwrites one that does -- a reader who walked back
-	 * to the first question keeps what was typed over what was searched.
+	 * `carried` seeds a draft that has nothing in it yet, and never
+	 * overwrites one that does: the details journey opens it with the
+	 * answers already on her record (#1610). Intake seeds through `carry`
+	 * instead, as its layout mounts.
 	 */
 	start(scope: string, carried: Partial<IntakeAnswers> = {}): void {
 		if (this.scope !== scope) {
 			this.scope = scope;
 			this.answers = readStored(this.#storageKey) ?? blankAnswers();
+			this.searchedName = readStoredText(this.#searchedNameKey);
 			this.visitedSteps = [];
 			this.matches = [];
 		}
 		if (!this.hasGivenName) {
 			this.answers = { ...this.answers, ...carried };
 		}
+	}
+
+	/**
+	 * Seeds the draft with what the search that fronts intake typed
+	 * (#498, ADR-0017), handed over in module memory (#1829,
+	 * `#lib/intakeHandoff.ts`). A one-word name fills Given name; a name of
+	 * two or more words fills no field and is kept as `searchedName`
+	 * (#1716, #1758). A key the search left blank is left off, since a
+	 * blank would overwrite. Mirrored like any other answer, so a reload of
+	 * the name question keeps it.
+	 */
+	carry(fields: ClientSearchFields | undefined): void {
+		if (!fields) return;
+		const seeded: Partial<IntakeAnswers> = {};
+		const givenName = carriedGivenName(fields.name);
+		if (givenName) seeded.givenName = givenName;
+		for (const key of ['dateOfBirth', 'email', 'phone'] as const) {
+			const value = fields[key].trim();
+			if (value) seeded[key] = value;
+		}
+		this.update(seeded);
+		this.searchedName = searchedName(fields.name);
+		if (this.searchedName) writeStored(this.#searchedNameKey, this.searchedName);
 	}
 
 	/** Records an answer and mirrors the draft, so the next page and the
@@ -191,6 +229,7 @@ export class IntakeDraft {
 	 * leaves behind, so the next Client starts blank. */
 	clear(): void {
 		clearStored(this.#storageKey);
+		clearStored(this.#searchedNameKey);
 		this.answers = blankAnswers();
 		this.visitedSteps = [];
 		this.matches = [];

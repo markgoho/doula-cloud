@@ -2,7 +2,8 @@ import { page as testPage } from 'vitest/browser';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import { jsonResponse } from '#lib/testResponse.js';
-import type { ClientMatch } from '#lib/client.js';
+import type { ClientMatch, ClientSearchFields } from '#lib/client.js';
+import { takeIntakeHandoff } from '#lib/intakeHandoff.js';
 import Page from './+page.svelte';
 import { toPageState } from '../../../../routeFixture.js';
 import { fixture } from './page.fixture.js';
@@ -65,8 +66,38 @@ async function setup(isContractor = fixtureData.isContractor) {
 	});
 }
 
-function requestUrl(callIndex = 0): string {
-	return apiFetchWithSession.mock.calls[callIndex][0] as string;
+const searchPath = `/api/practices/${practiceId}/clients/search`;
+const intakeDoor = `/practices/${practiceId}/clients/new`;
+const blankFields: ClientSearchFields = { name: '', dateOfBirth: '', email: '', phone: '' };
+
+/*
+ * #1829: the request URL carries no Client field -- what was typed is in
+ * the body of a POST. Returns the URL and the parsed body of one call.
+ */
+function request(callIndex = 0): { url: string; method: string; body: unknown } {
+	const [url, init] = apiFetchWithSession.mock.calls[callIndex] as [string, RequestInit];
+	return { url, method: init.method ?? 'GET', body: JSON.parse(init.body as string) };
+}
+
+function stay(event: Event): void {
+	event.preventDefault();
+}
+
+/*
+ * Follows "Add a new Client" and returns what it handed to intake
+ * (#1829). The click's navigation is stopped after the link's own
+ * handler runs, so the test page stays where it is.
+ */
+async function followAddNewClient(): Promise<ClientSearchFields | undefined> {
+	const link = testPage.getByRole('link', { name: 'Add a new Client' });
+	await expect.element(link).toHaveAttribute('href', intakeDoor);
+	document.addEventListener('click', stay);
+	try {
+		await link.click();
+	} finally {
+		document.removeEventListener('click', stay);
+	}
+	return takeIntakeHandoff(practiceId);
 }
 
 describe('the search that fronts intake (#498)', () => {
@@ -94,9 +125,11 @@ describe('the search that fronts intake (#498)', () => {
 		await testPage.getByLabelText('Phone').fill('555-0100');
 		await testPage.getByRole('button', { name: 'Search' }).click();
 
-		expect(requestUrl()).toBe(
-			`/api/practices/${practiceId}/clients/search?name=Ada&dateOfBirth=1815-12-10&email=ada%40example.com&phone=555-0100`
-		);
+		expect(request()).toEqual({
+			url: searchPath,
+			method: 'POST',
+			body: { name: 'Ada', dateOfBirth: '1815-12-10', email: 'ada@example.com', phone: '555-0100' }
+		});
 	});
 
 	it('prints each result\'s name and history unrestricted, linking to the Client detail hub (#494)', async () => {
@@ -126,12 +159,10 @@ describe('the search that fronts intake (#498)', () => {
 		await testPage.getByRole('button', { name: 'Search' }).click();
 
 		await expect.element(testPage.getByRole('heading', { level: 2, name: 'No matches' })).toBeVisible();
-		await expect
-			.element(testPage.getByRole('link', { name: 'Add a new Client' }))
-			.toHaveAttribute('href', `/practices/${practiceId}/clients/new?name=Nadia%20Haddad`);
 		// #1716: a name of two words is not split, so it fills no name field
 		// and the page does not promise that it carries.
 		await expect.element(testPage.getByText(/carries onto intake/)).not.toBeInTheDocument();
+		expect(await followAddNewClient()).toEqual({ ...blankFields, name: 'Nadia Haddad' });
 	});
 
 	it('says a one-word name carries onto the name question (#1716)', async () => {
@@ -156,9 +187,7 @@ describe('the search that fronts intake (#498)', () => {
 		await testPage.getByLabelText('Phone').fill('555-0100');
 		await testPage.getByRole('button', { name: 'Search' }).click();
 
-		await expect
-			.element(testPage.getByRole('link', { name: 'Add a new Client' }))
-			.toHaveAttribute('href', `/practices/${practiceId}/clients/new?phone=555-0100`);
+		expect(await followAddNewClient()).toEqual({ ...blankFields, phone: '555-0100' });
 	});
 
 	it('carries every key that was typed, not only the name', async () => {
@@ -173,12 +202,12 @@ describe('the search that fronts intake (#498)', () => {
 		await testPage.getByLabelText('Phone').fill('555-0100');
 		await testPage.getByRole('button', { name: 'Search' }).click();
 
-		await expect
-			.element(testPage.getByRole('link', { name: 'Add a new Client' }))
-			.toHaveAttribute(
-				'href',
-				`/practices/${practiceId}/clients/new?name=Nadia&dateOfBirth=1994-02-11&email=nadia%40example.com&phone=555-0100`
-			);
+		expect(await followAddNewClient()).toEqual({
+			name: 'Nadia',
+			dateOfBirth: '1994-02-11',
+			email: 'nadia@example.com',
+			phone: '555-0100'
+		});
 	});
 
 	/*
@@ -196,16 +225,14 @@ describe('the search that fronts intake (#498)', () => {
 		await testPage.getByLabelText('Year').fill('88');
 		await testPage.getByRole('button', { name: 'Search' }).click();
 
-		expect(requestUrl()).toBe(`/api/practices/${practiceId}/clients/search?dateOfBirth=1988-03-12`);
-		await expect
-			.element(testPage.getByRole('link', { name: 'Add a new Client' }))
-			.toHaveAttribute('href', `/practices/${practiceId}/clients/new?dateOfBirth=1988-03-12`);
+		expect(request().body).toEqual({ ...blankFields, dateOfBirth: '1988-03-12' });
+		expect(await followAddNewClient()).toEqual({ ...blankFields, dateOfBirth: '1988-03-12' });
 	});
 
 	/*
 	 * The boxes feed two readers -- the search, and the link a miss offers
-	 * into intake, which is rendered from whatever is typed right now. A
-	 * date snapshotted at submit would leave that link carrying the
+	 * into intake, which hands over whatever is typed when it is followed.
+	 * A date snapshotted at submit would leave that link carrying the
 	 * previous one beside the current name.
 	 */
 	it('carries the date currently in the boxes into intake, not the one the last search ran on', async () => {
@@ -216,15 +243,11 @@ describe('the search that fronts intake (#498)', () => {
 		await testPage.getByLabelText('Day').fill('11');
 		await testPage.getByLabelText('Year').fill('1994');
 		await testPage.getByRole('button', { name: 'Search' }).click();
-		await expect
-			.element(testPage.getByRole('link', { name: 'Add a new Client' }))
-			.toHaveAttribute('href', `/practices/${practiceId}/clients/new?dateOfBirth=1994-02-11`);
+		await expect.element(testPage.getByRole('heading', { level: 2, name: 'No matches' })).toBeVisible();
 
 		await testPage.getByLabelText('Year').fill('1995');
 
-		await expect
-			.element(testPage.getByRole('link', { name: 'Add a new Client' }))
-			.toHaveAttribute('href', `/practices/${practiceId}/clients/new?dateOfBirth=1995-02-11`);
+		expect(await followAddNewClient()).toEqual({ ...blankFields, dateOfBirth: '1995-02-11' });
 	});
 
 	it('refuses a date that is not one, announcing it once and linking to the box that has to change', async () => {

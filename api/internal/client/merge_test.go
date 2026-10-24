@@ -137,7 +137,7 @@ func TestMergeHandler_AbsorbsUnattachedIntoAttachedMatch(t *testing.T) {
 	}
 
 	// Excluded from search.
-	searchResp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/clients/search?name=Maya")
+	searchResp := authedJSON(t, session, http.MethodPost, srv.URL+"/api/practices/"+practiceID+"/clients/search", client.SearchRequest{Name: "Maya"})
 	var search client.SearchResponse
 	if err := json.NewDecoder(searchResp.Body).Decode(&search); err != nil {
 		t.Fatalf("decode search: %v", err)

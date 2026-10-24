@@ -225,8 +225,8 @@ func TestSearchHandler_MatchesNameDOBEmailPhoneWithinPractice(t *testing.T) {
 	const identityUID = "staff-searching"
 	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, "employee")
 	otherPracticeID, _ := testdb.SeedStaffAtNewPractice(t, db, "staff-other-practice-search", []string{doulaRole}, "employee")
-	inPractice := testdb.SeedNamedClient(t, db, practiceID, "Nadia Haddad", "nadia@example.com")
-	testdb.SeedNamedClient(t, db, otherPracticeID, "Nadia Haddad", "nadia@example.com")
+	inPractice := testdb.SeedNamedClient(t, db, practiceID, "Nadia Haddad", testNadiaEmail)
+	testdb.SeedNamedClient(t, db, otherPracticeID, "Nadia Haddad", testNadiaEmail)
 	if _, err := db.Admin.ExecContext(t.Context(), `UPDATE clients SET phone = '555-0100', date_of_birth = '1990-03-02' WHERE id = $1`, inPractice); err != nil {
 		t.Fatalf("set phone/dob: %v", err)
 	}
@@ -234,22 +234,60 @@ func TestSearchHandler_MatchesNameDOBEmailPhoneWithinPractice(t *testing.T) {
 	srv, session := newServer(t, db, identityUID)
 	defer srv.Close()
 
-	cases := []string{
-		"?name=Nadia",
-		"?dateOfBirth=1990-03-02",
-		"?email=nadia@example.com",
-		"?phone=555-0100",
+	cases := []client.SearchRequest{
+		{Name: "Nadia"},
+		{DateOfBirth: "1990-03-02"},
+		{Email: testNadiaEmail},
+		{Phone: "555-0100"},
 	}
 	for _, q := range cases {
-		resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/clients/search"+q)
+		resp := authedJSON(t, session, http.MethodPost, srv.URL+"/api/practices/"+practiceID+"/clients/search", q)
 		var out client.SearchResponse
 		if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
-			t.Fatalf("decode response for %q: %v", q, err)
+			t.Fatalf("decode response for %+v: %v", q, err)
 		}
 		_ = resp.Body.Close()
 		if len(out.Matches) != 1 || out.Matches[0].ID != inPractice {
-			t.Fatalf("query %q: matches = %+v, want exactly the in-practice client", q, out.Matches)
+			t.Fatalf("search %+v: matches = %+v, want exactly the in-practice client", q, out.Matches)
 		}
+	}
+}
+
+// TestSearchHandler_ReadsTheBodyNotTheURL proves #1829: what was typed
+// travels in the request body, so a Client's details never reach a
+// request log. A query string is not read at all, and a body that is
+// not JSON is refused the way the create beside it refuses one.
+func TestSearchHandler_ReadsTheBodyNotTheURL(t *testing.T) {
+	db := testdb.New(t)
+	const identityUID = "staff-search-body"
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, "employee")
+	testdb.SeedNamedClient(t, db, practiceID, "Nadia Haddad", "haddad@example.com")
+	srv, session := newServer(t, db, identityUID)
+	defer srv.Close()
+
+	queried := authedJSON(t, session, http.MethodPost, srv.URL+"/api/practices/"+practiceID+"/clients/search?name=Nadia", client.SearchRequest{})
+	defer queried.Body.Close()
+	var out client.SearchResponse
+	if err := json.NewDecoder(queried.Body).Decode(&out); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if len(out.Matches) != 0 {
+		t.Fatalf("matches = %+v, want none: a name in the query string is not read", out.Matches)
+	}
+
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, srv.URL+"/api/practices/"+practiceID+"/clients/search", bytes.NewReader([]byte(`{`)))
+	if err != nil {
+		t.Fatalf("build request: %v", err)
+	}
+	authntest.AddSessionCookie(req, session)
+	req.Header.Set("Content-Type", "application/json")
+	malformed, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer malformed.Body.Close()
+	if malformed.StatusCode != http.StatusBadRequest {
+		t.Fatalf("malformed body status = %d, want %d", malformed.StatusCode, http.StatusBadRequest)
 	}
 }
 
@@ -291,21 +329,21 @@ func TestEditHandler_RefusesOnMatchWithDifferentClientAndOverrideProceeds(t *tes
 	db := testdb.New(t)
 	const identityUID = "staff-edit-match"
 	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, "employee")
-	testdb.SeedNamedClient(t, db, practiceID, "Nadia Haddad", "nadia@example.com")
+	testdb.SeedNamedClient(t, db, practiceID, "Nadia Haddad", testNadiaEmail)
 	editingID := testdb.SeedNamedClient(t, db, practiceID, "Sara Beck", "sara@example.com")
 
 	srv, session := newServer(t, db, identityUID)
 	defer srv.Close()
 
 	resp := authedJSON(t, session, http.MethodPut, srv.URL+"/api/practices/"+practiceID+"/clients/"+editingID,
-		client.EditRequest{GivenName: testNadia, FamilyName: testHaddad, Email: "nadia@example.com"})
+		client.EditRequest{GivenName: testNadia, FamilyName: testHaddad, Email: testNadiaEmail})
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusConflict {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusConflict)
 	}
 
 	overridden := authedJSON(t, session, http.MethodPut, srv.URL+"/api/practices/"+practiceID+"/clients/"+editingID,
-		client.EditRequest{GivenName: testNadia, FamilyName: testHaddad, Email: "nadia@example.com", Override: true})
+		client.EditRequest{GivenName: testNadia, FamilyName: testHaddad, Email: testNadiaEmail, Override: true})
 	defer overridden.Body.Close()
 	if overridden.StatusCode != http.StatusOK {
 		t.Fatalf("overridden status = %d, want %d", overridden.StatusCode, http.StatusOK)
@@ -871,7 +909,7 @@ func TestSearchHandler_RefusesContractorAndEmptyQueryReturnsNoMatches(t *testing
 
 	srvContractor, sessionContractor := newServer(t, db, contractorUID)
 	defer srvContractor.Close()
-	respContractor := authedGet(t, sessionContractor, srvContractor.URL+"/api/practices/"+practiceID+"/clients/search?name=Anyone")
+	respContractor := authedJSON(t, sessionContractor, http.MethodPost, srvContractor.URL+"/api/practices/"+practiceID+"/clients/search", client.SearchRequest{Name: "Anyone"})
 	defer respContractor.Body.Close()
 	if respContractor.StatusCode != http.StatusForbidden {
 		t.Fatalf("contractor search status = %d, want %d", respContractor.StatusCode, http.StatusForbidden)
@@ -881,7 +919,7 @@ func TestSearchHandler_RefusesContractorAndEmptyQueryReturnsNoMatches(t *testing
 	testdb.SeedStaffAtPractice(t, db, practiceID, ownerUID, []string{doulaRole}, "employee")
 	srv, session := newServer(t, db, ownerUID)
 	defer srv.Close()
-	resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/clients/search")
+	resp := authedJSON(t, session, http.MethodPost, srv.URL+"/api/practices/"+practiceID+"/clients/search", client.SearchRequest{})
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("empty query status = %d, want %d", resp.StatusCode, http.StatusOK)
