@@ -77,12 +77,18 @@ func compose(mailer outbox.Mailer, docs []legal.Document) func(context.Context, 
 			return "", "", "", &outbox.DeadLetterError{Reason: "no version " + p.version + " of " + p.document + " in the history"}
 		}
 		settings := mailer.AppBaseURL + "/practices/" + p.practiceID + "/settings"
+		// The version's own page, not the document's: until the date,
+		// /terms and /privacy show the version in force, and "Read the new
+		// version" has to land on the new one (#1816).
+		// site/src/routes/terms/[version] and privacy/[version] build one
+		// page for each version.
+		documentURL := website.SiteBaseURL + doc.Path + "/" + version.Effective
 		subject, text := Compose(Values{
 			Document:    doc.Name,
 			Date:        longDate(version.Effective),
 			Practice:    p.practiceName,
 			Change:      version.Change,
-			DocumentURL: website.SiteBaseURL + doc.Path,
+			DocumentURL: documentURL,
 			SettingsURL: settings,
 			DeleteURL:   settings + "/delete",
 		})

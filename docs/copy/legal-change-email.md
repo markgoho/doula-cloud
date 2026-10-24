@@ -18,7 +18,7 @@ The copy below is the email each Owner of each Practice gets when DoulaCloud pub
 
 ## The copy
 
-`{Document}` is "Terms of Service" or "Privacy Policy". `{Date}` is the date the version takes effect. `{Practice}` is the Practice's name. `{Change}` is the version's one line. `{DocumentURL}` is `https://doula.cloud/terms` or `https://doula.cloud/privacy`. `{SettingsURL}` and `{DeleteURL}` are the Practice's settings screen and its deletion screen in the app.
+`{Document}` is "Terms of Service" or "Privacy Policy". `{Date}` is the date the version takes effect. `{Practice}` is the Practice's name. `{Change}` is the version's one line. `{DocumentURL}` is the new version's own page, `https://doula.cloud/terms/{version}` or `https://doula.cloud/privacy/{version}`, where `{version}` is the date it takes effect, for example `2026-12-01` (#1816): until that date `/terms` and `/privacy` show the version in force. `{SettingsURL}` and `{DeleteURL}` are the Practice's settings screen and its deletion screen in the app.
 
 **Subject:** DoulaCloud: a new version of the {Document} starts on {Date}
 

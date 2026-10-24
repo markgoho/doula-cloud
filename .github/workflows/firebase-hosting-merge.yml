@@ -24,6 +24,15 @@ on:
   # this and to nothing else anyone might send.
   repository_dispatch:
     types: [practice-page-published]
+  # /terms and /privacy show the version in force at the moment of the
+  # build (site/src/lib/legal.ts, #1816), and a version starts at
+  # midnight UTC on its date with no commit to mark it. A daily build
+  # soon after midnight UTC moves each page to the new version within a
+  # day; until then the page still says only true things, because every
+  # dated sentence says when a version takes effect. Off the top of the
+  # hour, where GitHub delays or drops scheduled runs under load.
+  schedule:
+    - cron: '23 0 * * *'
 
 permissions:
   contents: read

@@ -2,7 +2,7 @@
 
 The copy below is **final and verbatim**. It was written on [Publish the Terms of Service and the Privacy Policy at /terms and /privacy (#1556)](https://github.com/markgoho/doula-cloud/issues/1556), from the two research files ADR-0053 names and the ADRs each clause cites below. The decisions no record held before 2026-09-28 are [ADR-0054](../adr/0054-the-terms-hold-the-refund-rule-a-dispute-goes-to-court-and-only-an-owner-agrees.md)'s.
 
-Built as `site/src/routes/terms/+page.svelte` on `site/src/lib/components/ReadingPage.svelte`. The spec beside it asserts the sentences that do legal work by their words.
+The text of the version of 2026-10-03 is `site/src/lib/legalTexts/TermsOfService20261003.svelte`, shown at `/terms` and at `/terms/2026-10-03` by `site/src/lib/components/LegalPage.svelte` (#1816). The spec beside `site/src/routes/terms/+page.svelte` asserts the sentences that do legal work by their words.
 
 Do not reword a clause without reading its row under [Why each clause says what it says](#why-each-clause-says-what-it-says). Several read like ordinary prose while they do legal work, and a sentence removed because it looked redundant can be the one a court reads.
 

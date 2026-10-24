@@ -10,7 +10,7 @@
  * records the version an Owner agreed to. The two must agree, and
  * `legal.spec.ts` beside this file fails when they do not: a new version
  * is one entry here and the same entry there, in the same commit as the
- * new text.
+ * new text, which is its own component in `legalTexts.ts`.
  */
 export interface LegalVersion {
 	effective: string;
@@ -53,7 +53,40 @@ export const PRIVACY: LegalDocument = {
 	]
 };
 
-// The version in force: the newest one.
-export function currentVersion(legalDocument: LegalDocument): LegalVersion {
-	return legalDocument.versions.at(-1)!;
+/**
+ * The version in force at `now`: the newest one that has started, which
+ * is not always the newest one. A material version is in the history 30
+ * days or more before it starts (#1816). A version starts at midnight UTC
+ * on its date, the reading the BFF gives it too, so in the United States
+ * it starts on the evening before.
+ *
+ * The site has no clock of its own: every page is HTML built ahead of
+ * time and ships no JavaScript, so `now` is the moment of the build, and
+ * a daily build moves /terms and /privacy to a new version within a day
+ * of its start (`.github/workflows/firebase-hosting-merge.yml`). Every
+ * sentence that carries a date says when a version takes effect, never
+ * that it is or is not in force yet, so a page built the day before
+ * still says what is true.
+ */
+export function versionInForce(legalDocument: LegalDocument, now: Date): LegalVersion {
+	const today = now.toISOString().slice(0, 10);
+	const version = legalDocument.versions.findLast(({ effective }) => effective <= today);
+	if (!version) throw new Error(`no version of the ${legalDocument.name} is in force on ${today}`);
+	return version;
+}
+
+// Every version after `version`, oldest first, by date rather than by
+// identity, so a version that came through a load function is matched
+// too. It reads no clock: a version's page names the versions after it
+// whenever it was built.
+export function laterVersions(legalDocument: LegalDocument, version: LegalVersion): LegalVersion[] {
+	return legalDocument.versions.filter(({ effective }) => effective > version.effective);
+}
+
+// The address of one version's own text, such as /terms/2026-11-01. The
+// email before a material change links it (api/internal/legalnotice), so
+// it is the new text itself and not /terms, which shows the version in
+// force until the date.
+export function versionPath(legalDocument: LegalDocument, version: LegalVersion): string {
+	return `${legalDocument.path}/${version.effective}`;
 }

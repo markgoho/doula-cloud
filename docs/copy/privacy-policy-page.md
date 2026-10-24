@@ -2,7 +2,7 @@
 
 The copy below is **final and verbatim**. It was written on [Publish the Terms of Service and the Privacy Policy at /terms and /privacy (#1556)](https://github.com/markgoho/doula-cloud/issues/1556), with [ADR-0054](../adr/0054-the-terms-hold-the-refund-rule-a-dispute-goes-to-court-and-only-an-owner-agrees.md) for the decisions no record held before 2026-09-28.
 
-Built as `site/src/routes/privacy/+page.svelte` on `site/src/lib/components/ReadingPage.svelte`. The spec beside it asserts the sentences that do legal work by their words.
+The text of the version of 2026-10-22 is `site/src/lib/legalTexts/PrivacyPolicy20261022.svelte`, shown at `/privacy` and at `/privacy/2026-10-22` by `site/src/lib/components/LegalPage.svelte` (#1816). The spec beside `site/src/routes/privacy/+page.svelte` asserts the sentences that do legal work by their words.
 
 **Every claim about a company, a cookie or how long something is kept was checked against the code and the ADR that owns it before it was written.** The table under [Where each claim was checked](#where-each-claim-was-checked) names the source of each. A change to the product that makes a sentence false is a new version of this policy, in the same commit as the change.
 
