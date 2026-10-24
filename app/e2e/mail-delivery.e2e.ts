@@ -1,7 +1,9 @@
 import { expect, test } from '@playwright/test';
 import { MAILBOX_DOMAIN, MAILBOX_URL } from './stack';
 import { drainOutbox, drainUntilMailArrives, readMailbox } from './outboxMail';
-import { signInEnrolled, enterPracticeAsEnrolled } from './mfa';
+import { API_URL } from './ports';
+import { signIn } from './auth';
+import { enterPracticeAsEnrolled } from './mfa';
 import { seedFoundingOwner, uniqueEmail, STAFF_PASSWORD } from './staffSignup';
 
 const STAFF_INVITE_OUTBOX = 'process-staff-invite-outbox';
@@ -30,12 +32,12 @@ test('An invitation arrives as readable mail, and a complaint stops the next one
 	const password = STAFF_PASSWORD;
 
 	// Fixture setup, not the seam under test (#207).
-	const { idToken: ownerIdToken, localId: ownerUID, practiceId } = await seedFoundingOwner(request, {
+	const { idToken: ownerIdToken, practiceId } = await seedFoundingOwner(request, {
 		practiceName: 'Rooted Birth Collective',
 		staffName: 'Renata Vela'
 	});
 
-	const ownerHeaders = await signInEnrolled(request, ownerIdToken, ownerUID);
+	const ownerHeaders = await signIn(request, API_URL, ownerIdToken);
 	await enterPracticeAsEnrolled(context, page, ownerHeaders, practiceId);
 
 	await page.goto(`/practices/${practiceId}/invite`);

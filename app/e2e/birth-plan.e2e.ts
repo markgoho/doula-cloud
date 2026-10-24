@@ -1,7 +1,8 @@
 import { expect, test } from '@playwright/test';
 import { API_URL } from './ports';
 import { seedClientPortalUser, seedEngagement } from './stack';
-import { signInEnrolled, enterPracticeAsEnrolled } from './mfa';
+import { signIn } from './auth';
+import { enterPracticeAsEnrolled } from './mfa';
 import { signInPortalClient } from './portalClient';
 import { seedFoundingOwner, uniqueEmail } from './staffSignup';
 
@@ -19,12 +20,9 @@ test('Staff fills a Birth Plan, and the Client portal shows the matching read-on
 }) => {
 	const clientEmail = uniqueEmail('client');
 
-	const { idToken: staffIdToken, localId: staffUID, practiceId } = await seedFoundingOwner(request);
+	const { idToken: staffIdToken, practiceId } = await seedFoundingOwner(request);
 
-	// #606: an Owner is gated behind a second factor at every Practice-scoped
-	// route (see mfa.ts's signInEnrolled doc comment), including the
-	// createClient call right below.
-	const staffHeaders = await signInEnrolled(request, staffIdToken, staffUID);
+	const staffHeaders = await signIn(request, API_URL, staffIdToken);
 
 	const createClient = await request.post(`${API_URL}/api/practices/${practiceId}/clients`, {
 		headers: staffHeaders,
@@ -87,10 +85,10 @@ test('Staff fills a Birth Plan, and the Client portal shows the matching read-on
 	// session the browser's cookie already named the moment that Client
 	// sign-in happened -- so the original Staff session is gone server-
 	// side, not just shadowed client-side (a raw request with the old
-	// staffHeaders now 401s). A fresh signInEnrolled call, issued over
+	// staffHeaders now 401s). A fresh signIn call, issued over
 	// `request` rather than through `page`, mints an unrelated session
 	// nothing here evicts.
-	const freshStaffHeaders = await signInEnrolled(request, staffIdToken, staffUID);
+	const freshStaffHeaders = await signIn(request, API_URL, staffIdToken);
 	const staffPlanResponse = await request.get(
 		`${API_URL}/api/practices/${practiceId}/engagements/${engagementId}/plans/birth_plan`,
 		{ headers: freshStaffHeaders }

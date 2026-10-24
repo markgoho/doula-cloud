@@ -1,5 +1,7 @@
 import { expect, test } from '@playwright/test';
-import { signInEnrolled, enterPracticeAsEnrolled } from './mfa';
+import { API_URL } from './ports';
+import { signIn } from './auth';
+import { enterPracticeAsEnrolled } from './mfa';
 import { staffLandingSettled } from './mountSettled';
 import { seedFoundingOwner } from './staffSignup';
 
@@ -8,14 +10,12 @@ test('a Staff member signs out and can no longer reach an authenticated screen',
 	request,
 	context
 }) => {
-	const { idToken, localId, practiceId } = await seedFoundingOwner(request, {
+	const { idToken, practiceId } = await seedFoundingOwner(request, {
 		practiceName: 'Lakeside Doulas',
 		staffName: 'Robin Owner'
 	});
 
-	// #606: an Owner is gated behind a second factor at every Practice-scoped
-	// route (see mfa.ts's signInEnrolled doc comment).
-	const staffHeaders = await signInEnrolled(request, idToken, localId);
+	const staffHeaders = await signIn(request, API_URL, idToken);
 	// #854: paired with the navigation, so the wait is in place before the
 	// page can answer -- a tab still inside the landing screen's mount chain
 	// when a session ends is taken to `?sessionEnded=true` by the refusal,
@@ -65,14 +65,12 @@ test('a Staff member signs out and can no longer reach an authenticated screen',
 // on the login screen like any other sign-out, not report an error --
 // the end-session endpoint is idempotent.
 test('a second tab signing out after the first shows no error', async ({ page, request, context }) => {
-	const { idToken, localId, practiceId } = await seedFoundingOwner(request, {
+	const { idToken, practiceId } = await seedFoundingOwner(request, {
 		practiceName: 'Hillcrest Doulas',
 		staffName: 'Sam Owner'
 	});
 
-	// #606: an Owner is gated behind a second factor at every Practice-scoped
-	// route (see mfa.ts's signInEnrolled doc comment).
-	const staffHeaders = await signInEnrolled(request, idToken, localId);
+	const staffHeaders = await signIn(request, API_URL, idToken);
 	// #854: the wait mountSettled.ts explains, paired with the navigation.
 	await Promise.all([
 		staffLandingSettled(page, practiceId),
@@ -114,14 +112,12 @@ test('a second tab loses access once the first tab signs out, without itself sig
 	request,
 	context
 }) => {
-	const { idToken, localId, practiceId } = await seedFoundingOwner(request, {
+	const { idToken, practiceId } = await seedFoundingOwner(request, {
 		practiceName: 'Elm Street Doulas',
 		staffName: 'Robin Owner'
 	});
 
-	// #606: an Owner is gated behind a second factor at every Practice-scoped
-	// route (see mfa.ts's signInEnrolled doc comment).
-	const staffHeaders = await signInEnrolled(request, idToken, localId);
+	const staffHeaders = await signIn(request, API_URL, idToken);
 	// #854: the wait mountSettled.ts explains, paired with the navigation.
 	await Promise.all([
 		staffLandingSettled(page, practiceId),

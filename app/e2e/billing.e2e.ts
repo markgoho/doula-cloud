@@ -1,5 +1,7 @@
 import { expect, test } from '@playwright/test';
-import { signInEnrolled, enterPracticeAsEnrolled } from './mfa';
+import { API_URL } from './ports';
+import { signIn } from './auth';
+import { enterPracticeAsEnrolled } from './mfa';
 import { seedFoundingOwner } from './staffSignup';
 
 // Exercises the Credits screen from app/src/routes/practices/[practiceId]/billing end-to-end --
@@ -7,11 +9,9 @@ import { seedFoundingOwner } from './staffSignup';
 // and hits the real API, proving the signup-bonus grant (#74) surfaces through GetBalanceHandler
 // (#75) and the page.
 test('Staff member can view the signup-bonus balance and ledger history', async ({ page, request, context }) => {
-	const { idToken, localId, practiceId } = await seedFoundingOwner(request);
+	const { idToken, practiceId } = await seedFoundingOwner(request);
 
-	// #606: an Owner is gated behind a second factor at every Practice-scoped
-	// route (see mfa.ts's signInEnrolled doc comment).
-	const staffHeaders = await signInEnrolled(request, idToken, localId);
+	const staffHeaders = await signIn(request, API_URL, idToken);
 	await enterPracticeAsEnrolled(context, page, staffHeaders, practiceId);
 	await expect(page).toHaveURL(new RegExp(`/practices/${practiceId}$`));
 

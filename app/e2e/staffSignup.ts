@@ -64,9 +64,10 @@ export interface SeededFoundingOwner {
 /**
  * Provisions a Practice's founding Owner: an Identity Platform account,
  * then POST /api/staff/signup with it. Returns the raw (unenrolled)
- * idToken -- #606's MFA gate is a separate concern a caller opts into
- * via mfa.ts's signInEnrolled, since one spec (mfa-required.e2e.ts's
- * split-Owner case) deliberately needs this Owner to stay unenrolled.
+ * idToken, the one a new Owner has. auth.ts's signIn turns it into a
+ * session that enters her Practice (#1531); a caller that drives one of
+ * the acts that need a second factor, or the mfa-required switch, signs
+ * in through mfa.ts's signInEnrolled instead.
  */
 export async function seedFoundingOwner(
 	request: APIRequestContext,

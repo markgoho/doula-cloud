@@ -9,9 +9,15 @@ import { signIn } from './auth';
 // drive against it. #606 ships TOTP as the product's only second factor
 // (SMS is never reachable anywhere in the real flow -- see the product's
 // own login/enroll screens), so this file exists purely to get a session
-// carrying `firebase.sign_in_second_factor` for a fixture identity: the
-// gate in api/internal/staffauth/middleware.go reads exactly that claim,
-// off the session row, and does not care which provider produced it.
+// carrying `firebase.sign_in_second_factor` for a fixture identity. The
+// session row records that claim, and the three things that read it
+// back do not care which provider produced it: the five acts in
+// api/internal/staffauth/secondfactor.go's SecondFactorActs, the
+// Practice boundary in middleware.go when the Practice's mfa-required
+// switch is on, and staffauth.FounderOnly. Since #1531 nothing else
+// reads it -- an Owner enters her Practice with no second factor -- so
+// a spec that only has to enter a Practice signs in with auth.ts's
+// signIn and enrolls nothing.
 //
 // #1132 re-ran that check rather than inheriting it, across
 // firebase-tools 15.27.0 (vendored here), 15.28.1 (what the repo root
@@ -180,9 +186,12 @@ export async function readVerificationCode(request: APIRequestContext, sessionIn
 
 /**
  * verifyEmail + enrollSecondFactor + signIn, composed: the one call a
- * fixture makes when it wants an enrolled Owner's session (or any
- * Staff's, at a Practice that now requires MFA of everyone) without
- * spending a browser on the walk. Every future signInWithPassword for
+ * fixture makes when it wants a session that shows a second factor
+ * without spending a browser on the walk. Only a spec that drives one of
+ * SecondFactorActs, turns the mfa-required switch on (or enters a
+ * Practice where it is on), or opens the founder's page needs one; a
+ * spec that only enters a Practice calls auth.ts's signIn and enrolls
+ * nothing, since #1531. Every future signInWithPassword for
  * that account demands a second-factor challenge, and against this
  * emulator the factor is PHONE_SMS, which the product's TOTP-only
  * screens cannot answer on their own -- a spec that wants those screens
@@ -205,7 +214,8 @@ export async function signInEnrolled(
  * Puts headers' session cookie directly into context's cookie jar and
  * navigates page to practiceId's landing route -- the browser-level
  * equivalent of a /login walk, for a fixture that has no interest in
- * spending one (totpStub.ts is what a spec that does want the walk
+ * spending one. headers come from signInEnrolled or from auth.ts's plain
+ * signIn alike; the cookie has the same shape either way (totpStub.ts is what a spec that does want the walk
  * installs). A direct cookie injection rather than a
  * second interactive sign-in on purpose: Playwright's request-context
  * `secure: false` sidesteps whether its own cookie jar treats loopback

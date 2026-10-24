@@ -1,7 +1,8 @@
 import { expect, test } from '@playwright/test';
 import { API_URL } from './ports';
 import { seedEngagement } from './stack';
-import { signInEnrolled, enterPracticeAsEnrolled } from './mfa';
+import { signIn } from './auth';
+import { enterPracticeAsEnrolled } from './mfa';
 import { seedContractorDoula } from './portalClient';
 import { seedFoundingOwner, uniqueEmail } from './staffSignup';
 
@@ -21,12 +22,9 @@ test('Owner offers an Engagement to a Doula, who accepts it from her own inbox',
 	request,
 	context
 }) => {
-	const { idToken, localId, practiceId } = await seedFoundingOwner(request);
+	const { idToken, practiceId } = await seedFoundingOwner(request);
 
-	// #606: an Owner is gated behind a second factor at every Practice-scoped
-	// route (see mfa.ts's signInEnrolled doc comment), including the
-	// invitation and createClient calls right below.
-	const headers = await signInEnrolled(request, idToken, localId);
+	const headers = await signIn(request, API_URL, idToken);
 
 	// A contractor, which is what makes the fee required.
 	const doula = await seedContractorDoula(request, practiceId, headers);
@@ -107,8 +105,8 @@ test('A solo Owner who is a contractor Doula is named on the Start work form, an
 	request,
 	context
 }) => {
-	const { idToken, localId, practiceId, staffId } = await seedFoundingOwner(request);
-	const headers = await signInEnrolled(request, idToken, localId);
+	const { idToken, practiceId, staffId } = await seedFoundingOwner(request);
+	const headers = await signIn(request, API_URL, idToken);
 
 	const editMembership = await request.patch(`${API_URL}/api/practices/${practiceId}/staff/${staffId}/membership`, {
 		headers,
@@ -185,8 +183,8 @@ test('A solo Owner puts herself on an Engagement that started with no Doula', as
 	request,
 	context
 }) => {
-	const { idToken, localId, practiceId } = await seedFoundingOwner(request);
-	const headers = await signInEnrolled(request, idToken, localId);
+	const { idToken, practiceId } = await seedFoundingOwner(request);
+	const headers = await signIn(request, API_URL, idToken);
 
 	const createClient = await request.post(`${API_URL}/api/practices/${practiceId}/clients`, {
 		headers,

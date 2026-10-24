@@ -1,5 +1,7 @@
 import { expect, test } from '@playwright/test';
-import { signInEnrolled, enterPracticeAsEnrolled } from './mfa';
+import { API_URL } from './ports';
+import { signIn } from './auth';
+import { enterPracticeAsEnrolled } from './mfa';
 import { readStaffInviteToken } from './stack';
 import { seedFoundingOwner, uniqueEmail, STAFF_PASSWORD } from './staffSignup';
 
@@ -22,11 +24,9 @@ test('An Admin invited via the Staff invite route reaches the Credits and Staff 
 
 	// Fixture setup, not the seam under test (#207): the Owner side is
 	// provisioned the way every other spec provisions its Practice.
-	const { idToken: ownerIdToken, localId: ownerUID, practiceId } = await seedFoundingOwner(request);
+	const { idToken: ownerIdToken, practiceId } = await seedFoundingOwner(request);
 
-	// #606: an Owner is gated behind a second factor at every Practice-scoped
-	// route (see mfa.ts's signInEnrolled doc comment).
-	const ownerHeaders = await signInEnrolled(request, ownerIdToken, ownerUID);
+	const ownerHeaders = await signIn(request, API_URL, ownerIdToken);
 	await enterPracticeAsEnrolled(context, page, ownerHeaders, practiceId);
 	await expect(page).toHaveURL(new RegExp(`/practices/${practiceId}$`));
 
