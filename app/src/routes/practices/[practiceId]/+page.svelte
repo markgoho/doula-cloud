@@ -20,6 +20,7 @@
 	} from '#lib/pushRegistration.js';
 	import { decideOffer } from '#lib/offer.js';
 	import {
+		closeSecondFactorRecommendation,
 		hasSecondary,
 		isConnectCardShown,
 		loadPracticeLanding,
@@ -37,6 +38,7 @@
 	import type { PracticeSession } from './+layout.js';
 	import OfferInbox from '#lib/components/organisms/OfferInbox.svelte';
 	import OverviewHub from '#lib/components/templates/OverviewHub.svelte';
+	import SecondFactorRecommendation from '#lib/components/molecules/SecondFactorRecommendation.svelte';
 	import DataTable from '#lib/components/organisms/DataTable.svelte';
 	import DescriptionList from '#lib/components/molecules/DescriptionList.svelte';
 	import Badge from '#lib/components/atoms/Badge.svelte';
@@ -126,6 +128,15 @@
 		);
 	});
 
+	// #1533: the close is the BFF's to keep, so it holds on every device.
+	// The control is gone once it works, so focus goes to the start of the
+	// main content rather than falling to the document.
+	async function closeRecommendation() {
+		await closeSecondFactorRecommendation(apiFetchWithSession, page.params.practiceId!);
+		landing!.secondFactorRecommended = false;
+		document.querySelector<HTMLElement>('#main')?.focus();
+	}
+
 	// The whole hub is reloaded rather than the one Offer patched out:
 	// accepting an Offer supersedes every other open Offer on the same
 	// Engagement, and it can spend a credit, so the rail is stale too.
@@ -174,6 +185,17 @@
 </script>
 
 {#snippet primary()}
+	<!--
+		#1533: first in the column, where she reads it before her work. Only
+		in `primary`, which the empty Practice never draws (ADR-0048); the
+		BFF also says no before First Value.
+	-->
+	{#if landing!.secondFactorRecommended}
+		<SecondFactorRecommendation
+			returnTo={resolve('/practices/[practiceId]', { practiceId: page.params.practiceId! })}
+			onClose={closeRecommendation}
+		/>
+	{/if}
 	<Heading level={2} variant="section" text="Offers awaiting your answer" />
 	<Text
 		text="Work you have been offered. Accepting puts you on the birth; declining is final for that offer."

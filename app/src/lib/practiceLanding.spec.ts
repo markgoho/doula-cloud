@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
+	canBeRecommendedASecondFactor,
 	canReadConnect,
+	closeSecondFactorRecommendation,
 	canReadRoster,
 	hasSecondary,
 	isConnectCardShown,
@@ -231,6 +233,60 @@ describe('loadPracticeLanding', () => {
 		const fetcher = fetcherFor({ [endpoint]: refusal('nope') });
 
 		await expect(loadPracticeLanding(fetcher, 'practice-1', session)).rejects.toThrow('nope');
+	});
+});
+
+// #1533: the notice that recommends a second factor.
+describe('the second-factor recommendation', () => {
+	const recommendationPath = '/api/practices/practice-1/second-factor-recommendation';
+
+	it.each([
+		[['owner'], false, true],
+		[['owner'], true, false],
+		[['owner'], undefined, false],
+		[['admin'], false, false],
+		[['doula'], false, false]
+	] as const)('roles %s with secondFactor %s is asked: %s', (roles, secondFactor, asked) => {
+		expect(canBeRecommendedASecondFactor({ roles: [...roles], secondFactor })).toBe(asked);
+	});
+
+	it('reads the BFF answer for an Owner with no second factor', async () => {
+		const fetcher = fetcherFor({ 'second-factor-recommendation': jsonResponse({ recommended: true }) });
+
+		const landing = await loadPracticeLanding(fetcher, 'practice-1', { ...session, secondFactor: false });
+
+		expect(landing.secondFactorRecommended).toBe(true);
+		expect(fetcher).toHaveBeenCalledWith(recommendationPath);
+	});
+
+	it('does not ask for anyone else', async () => {
+		const fetcher = fetcherFor();
+
+		const landing = await loadPracticeLanding(fetcher, 'practice-1', { ...session, roles: ['admin'], secondFactor: false });
+
+		expect(landing.secondFactorRecommended).toBe(false);
+		expect(fetcher).not.toHaveBeenCalledWith(recommendationPath);
+	});
+
+	it.each([
+		['a refusal', () => Promise.resolve(refusal('nope'))],
+		['a network failure', () => Promise.reject(new Error('offline'))]
+	])('shows nothing after %s', async (_name, answer) => {
+		const base = fetcherFor();
+		const fetcher = vi.fn((path: string) => (path === recommendationPath ? answer() : base(path)));
+
+		const landing = await loadPracticeLanding(fetcher, 'practice-1', { ...session, secondFactor: false });
+
+		expect(landing.secondFactorRecommended).toBe(false);
+	});
+
+	it('closes it with a POST, and throws a refusal', async () => {
+		const fetcher = vi.fn().mockResolvedValue(new Response(undefined, { status: 204 }));
+		await closeSecondFactorRecommendation(fetcher, 'practice-1');
+		expect(fetcher).toHaveBeenCalledWith(`${recommendationPath}/close`, { method: 'POST' });
+
+		fetcher.mockResolvedValue(refusal('nope'));
+		await expect(closeSecondFactorRecommendation(fetcher, 'practice-1')).rejects.toThrow('nope');
 	});
 });
 

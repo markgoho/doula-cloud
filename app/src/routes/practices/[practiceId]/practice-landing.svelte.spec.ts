@@ -72,12 +72,18 @@ interface SetupOptions {
 	roles?: string[];
 	clients?: unknown[];
 	overrides?: Record<string, Response>;
+	secondFactor?: boolean;
 }
 
-async function setup({ roles = ['owner'], clients = [{ clientId: 'c1' }], overrides = {} }: SetupOptions = {}) {
+async function setup({
+	roles = ['owner'],
+	clients = [{ clientId: 'c1' }],
+	overrides = {},
+	secondFactor
+}: SetupOptions = {}) {
 	// The Membership (roles, practiceName) comes off page.data.session
 	// (#835), not a fetch this mock has to answer.
-	pageState.data = { session: { practiceId, practiceName, roles, isContractor: false } };
+	pageState.data = { session: { practiceId, practiceName, roles, isContractor: false, secondFactor } };
 	const answers: Record<string, Response> = {
 		// The declined Offer has no counterpart in the fixture, which
 		// answers `/offers` with only the still-open one -- so it is
@@ -104,6 +110,7 @@ async function setup({ roles = ['owner'], clients = [{ clientId: 'c1' }], overri
 		}),
 		'awaiting-reply': jsonResponse({ items: [], hasMore: false }),
 		activity: jsonResponse({ items: [], hasMore: false }),
+		'second-factor-recommendation': jsonResponse({ recommended: true }),
 		...overrides
 	};
 
@@ -115,6 +122,11 @@ async function setup({ roles = ['owner'], clients = [{ clientId: 'c1' }], overri
 	});
 
 	await render(Page, {});
+}
+
+// #1533's notice, found by its heading.
+function notice() {
+	return testPage.getByRole('region', { name: 'Add a second step when you sign in' });
 }
 
 beforeEach(() => {
@@ -336,6 +348,62 @@ describe('the Practice landing page', () => {
 
 			await expect.element(testPage.getByRole('link', { name: 'Add your first Client' })).toBeVisible();
 			expect(testPage.getByRole('heading', { name: 'Getting paid' }).elements()).toHaveLength(0);
+		});
+	});
+
+	// #1533: the notice that recommends a second factor.
+	describe('the second-factor recommendation', () => {
+		const closePath = `/api/practices/${practiceId}/second-factor-recommendation/close`;
+
+		it('is shown to an Owner with no second factor when the BFF recommends it', async () => {
+			await setup({ secondFactor: false });
+
+			await expect.element(notice()).toBeVisible();
+			await expect
+				.element(testPage.getByRole('link', { name: 'Set up two-factor authentication' }))
+				.toHaveAttribute('href', `/mfa/enroll?returnTo=${encodeURIComponent(`/practices/${practiceId}`)}`);
+		});
+
+		it('is not shown when the BFF does not recommend it', async () => {
+			await setup({
+				secondFactor: false,
+				overrides: { 'second-factor-recommendation': jsonResponse({ recommended: false }) }
+			});
+
+			await expect.element(testPage.getByRole('heading', { name: 'Offers awaiting your answer' })).toBeVisible();
+			expect(notice().elements()).toHaveLength(0);
+		});
+
+		it.each([
+			['an Owner with a second factor', ['owner'], true],
+			['an Admin', ['admin'], false],
+			['a Doula', ['doula'], false]
+		])('is not shown to %s', async (_name, roles, secondFactor) => {
+			await setup({ roles, secondFactor });
+
+			await expect.element(testPage.getByRole('heading', { name: 'Offers awaiting your answer' })).toBeVisible();
+			expect(notice().elements()).toHaveLength(0);
+		});
+
+		it('is not shown on the empty Practice', async () => {
+			await setup({ secondFactor: false, clients: [] });
+
+			await expect.element(testPage.getByRole('link', { name: 'Add your first Client' })).toBeVisible();
+			expect(notice().elements()).toHaveLength(0);
+		});
+
+		it('closes, records the close, and leaves the rest of the page', async () => {
+			await setup({ secondFactor: false });
+			const answer = apiFetchWithSession.getMockImplementation()!;
+			apiFetchWithSession.mockImplementation((path: string, init?: RequestInit) =>
+				path === closePath ? Promise.resolve(new Response(undefined, { status: 204 })) : answer(path, init)
+			);
+
+			await testPage.getByRole('button', { name: 'Close' }).click();
+
+			await expect.element(notice()).not.toBeInTheDocument();
+			expect(apiFetchWithSession).toHaveBeenCalledWith(closePath, { method: 'POST' });
+			await expect.element(testPage.getByRole('heading', { name: 'Offers awaiting your answer' })).toBeVisible();
 		});
 	});
 
