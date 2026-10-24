@@ -63,6 +63,7 @@ function loadEvent(search = '', roles: string[] = ['owner']) {
 
 afterEach(() => {
 	vi.unstubAllGlobals();
+	vi.useRealTimers();
 });
 
 describe('schedule/+page.ts load', () => {
@@ -87,17 +88,23 @@ describe('schedule/+page.ts load', () => {
 	});
 
 	it('falls back to the default window when the URL names no range', async () => {
+		// A fixed instant, not the wall clock (#1605): 9am local on October
+		// 2, so the window reaches across the night daylight saving ends in
+		// a zone that has one. Only `Date` is faked; the load's own promises
+		// still settle.
+		vi.useFakeTimers({ toFake: ['Date'] });
+		vi.setSystemTime(new Date(2026, 9, 2, 9, 0));
 		const { load } = await import('./+page.js');
 		const { fetchMock } = setup(200, emptyPage);
 
 		const result = (await load(loadEvent() as Parameters<typeof load>[0])) as SchedulePageData;
 
 		const url = new URL(fetchMock.mock.calls[0][0], 'https://example.test');
-		const from = new Date(url.searchParams.get('from')!);
-		const to = new Date(url.searchParams.get('to')!);
-		// Thirty days plus the one the exclusive upper bound adds.
-		expect(Math.round((to.getTime() - from.getTime()) / 86_400_000)).toBe(31);
-		expect(result.filters.staffId).toBeUndefined();
+		expect(result.filters).toEqual({ from: '2026-10-02', to: '2026-11-01', staffId: undefined });
+		// Thirty days, then the start of the day after the last one, which
+		// the exclusive upper bound needs so November 1 is all inside.
+		expect(new Date(url.searchParams.get('from')!)).toEqual(new Date(2026, 9, 2));
+		expect(new Date(url.searchParams.get('to')!)).toEqual(new Date(2026, 10, 2));
 	});
 
 	it('offers an Owner the Doulas on the roster, and never a Staff member a Visit cannot be assigned to', async () => {
