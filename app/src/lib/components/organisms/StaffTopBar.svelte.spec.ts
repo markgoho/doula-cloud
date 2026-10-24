@@ -40,12 +40,13 @@ async function setup({
 	firstName = 'Mark',
 	lastName = 'Goho',
 	practices = PRACTICES,
-	currentPracticeId = 'p1'
+	currentPracticeId = 'p1',
+	navItems = NAV_ITEMS
 } = {}) {
 	await page.viewport(...WIDE);
 	const signOut = vi.fn<() => Promise<SignOutOutcome>>().mockResolvedValue({ ok: true });
 	await render(StaffTopBar, {
-		navItems: NAV_ITEMS,
+		navItems,
 		practices,
 		currentPracticeId,
 		firstName,
@@ -240,13 +241,40 @@ describe('the narrow sheet', () => {
 });
 
 /*
+ * #1837: the agreement screen while an agreement is due (#1549) and
+ * /account both hand the bar no section. A Menu button there opened a
+ * sheet whose only landmark held no link, and the one thing the sheet
+ * could still offer -- the Practice switcher -- is already in the narrow
+ * bar itself.
+ */
+describe('StaffTopBar, on a screen that offers no section (#1837)', () => {
+	it('draws no Practice nav at the wide end', async () => {
+		await setup({ navItems: [] });
+
+		await expect
+			.element(page.getByRole('navigation', { name: 'Practice' }))
+			.not.toBeInTheDocument();
+	});
+
+	it('draws no Menu button under the narrow floor, and keeps the switcher in the bar', async () => {
+		await setupNarrow({ navItems: [] });
+
+		await expect.element(page.getByRole('button', { name: 'Menu' })).not.toBeInTheDocument();
+		await expect
+			.element(page.getByRole('button', { name: 'Riverside Doula Collective' }))
+			.toBeVisible();
+		await expect.element(page.getByRole('navigation', { name: 'Practice' })).not.toBeInTheDocument();
+	});
+});
+
+/*
  * #1573: the bar held a fixed 3.75rem, so a long Practice name wrapped in
  * the switcher and drew out of the bar, above and below it. The bar is a
  * minimum now, and grows. 320px is the narrow tree at the conformance
  * commitment; 972px puts the bar's content box (the header less its two
  * gutters, which is what the container query reads) just above its
- * 57.5rem floor, where the wide tree leaves the name the least room it
- * ever gets. The names are the style-guide demo's own.
+ * floor, where the wide tree leaves the name the least room it ever gets.
+ * The names are the style-guide demo's own.
  */
 const LONG_NAME = 'Highland Midwifery & Birth Support Collective of Western New York';
 const LONG_PRACTICES: PracticeOption[] = [
@@ -276,6 +304,17 @@ async function setupLong(width: number) {
 	return { ...result, header };
 }
 
+/*
+ * #1772 made the wide bar two rows, and the switcher and the avatar are on
+ * the first. Their panels open below that row -- over the nav row, the way
+ * a menu opens over a page -- rather than from the middle of a row grown
+ * tall by a wrapped name (#1573). The nav's top edge is that row's bottom
+ * edge.
+ */
+function firstRowBottom(): number {
+	return page.getByRole('navigation', { name: 'Practice' }).element().getBoundingClientRect().top;
+}
+
 describe('StaffTopBar, with a Practice name long enough to wrap (#1573)', () => {
 	it.each([CONFORMANCE_COMMITMENT, JUST_ABOVE_THE_FLOOR])(
 		'grows to hold the whole name at %ipx',
@@ -300,31 +339,29 @@ describe('StaffTopBar, with a Practice name long enough to wrap (#1573)', () => 
 		expect(current.element().getBoundingClientRect().bottom).toBeCloseTo(contentBottom(header), 0);
 	});
 
-	it.each(PANELS)('opens the %s panel below the bar', async (trigger, role, inside) => {
-		const { header } = await setupLong(JUST_ABOVE_THE_FLOOR);
+	it.each(PANELS)('opens the %s panel below its own row', async (trigger, role, inside) => {
+		await setupLong(JUST_ABOVE_THE_FLOOR);
 
 		await page.getByRole('button', { name: trigger }).click();
 
 		const content = page.getByRole(role, { name: inside });
 		await expect.element(content).toBeVisible();
 		expect(panelHolding(content).getBoundingClientRect().top).toBeGreaterThanOrEqual(
-			contentBottom(header)
+			firstRowBottom()
 		);
 	});
 
 	it.each(PANELS)(
-		'opens the %s panel below the bar where there is no anchor positioning',
+		'opens the %s panel below its own row where there is no anchor positioning',
 		async (trigger, role, inside) => {
-			const { header } = await setupLong(JUST_ABOVE_THE_FLOOR);
+			await setupLong(JUST_ABOVE_THE_FLOOR);
 			const withoutAnchors = withoutAnchorPositioning();
 			try {
 				await page.getByRole('button', { name: trigger }).click();
 
 				const content = page.getByRole(role, { name: inside });
 				await expect.element(content).toBeVisible();
-				expect(panelHolding(content).getBoundingClientRect().top).toBeCloseTo(
-					contentBottom(header), 0
-				);
+				expect(panelHolding(content).getBoundingClientRect().top).toBeCloseTo(firstRowBottom(), 0);
 			} finally {
 				withoutAnchors.remove();
 			}

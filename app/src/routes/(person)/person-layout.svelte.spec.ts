@@ -99,27 +99,28 @@ describe('the account route layout', () => {
 			.toHaveAttribute('href', '#main');
 	});
 
-	it('offers no Practice-scoped nav items -- there is no Practice on this route', async () => {
+	// #1837: an empty landmark announces a section with nothing in it.
+	it('offers no Practice nav at all -- there is no Practice on this route', async () => {
 		await renderLayout();
 
-		const practiceNav = testPage.getByRole('navigation', { name: 'Practice' });
-		expect(practiceNav.getByRole('link').elements()).toHaveLength(0);
+		await expect
+			.element(testPage.getByRole('navigation', { name: 'Practice', exact: true }))
+			.not.toBeInTheDocument();
 	});
 
 	/*
-	 * #673. /account is scoped to the person, so it hands the bar no
-	 * Practice at all -- and under the bar's content floor the nav and the
-	 * switcher move into a sheet. The sheet has to drop its Practice
-	 * heading here, not print it over an empty slot.
+	 * #673, then #1837. /account is scoped to the person, so it hands the
+	 * bar no Practice and no section. Under the bar's content floor a Menu
+	 * button would open a sheet with nothing in it, so the bar draws none,
+	 * and the avatar stays the way back to the account and to sign-out.
 	 */
-	it('shows no bare Practice heading in the narrow sheet', async () => {
+	it('draws no Menu button under the narrow floor', async () => {
 		await renderLayout({ viewport: NARROW });
 
-		await testPage.getByRole('button', { name: 'Menu' }).click();
-
-		const sheet = testPage.getByRole('dialog');
-		await expect.element(sheet).toBeVisible();
-		await expect.element(sheet.getByText('Practice', { exact: true })).not.toBeInTheDocument();
+		await expect
+			.element(testPage.getByRole('button', { name: 'Your account, Priya Sharma' }))
+			.toBeVisible();
+		await expect.element(testPage.getByRole('button', { name: 'Menu' })).not.toBeInTheDocument();
 	});
 
 	it('offers a way back to every Practice she belongs to', async () => {
