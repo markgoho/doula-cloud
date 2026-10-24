@@ -16,7 +16,7 @@ One worktree per unit of work, landed by a squash-merged PR, never a direct push
    gh pr view <PR> --json state,mergeStateStatus
    ```
 
-   `state` becomes `MERGED`. If every required check has passed, `mergeStateStatus` is `CLEAN`, and the PR is still `OPEN` a few minutes later, auto-merge has stalled: land it with `gh pr merge <PR> --squash`.
+   `state` becomes `MERGED`. A PR must be up to date with trunk before it merges ([#1327](https://github.com/markgoho/doula-cloud/issues/1327)), so when another PR lands first, `mergeStateStatus` reads `BEHIND`: run `gh pr update-branch <PR> --rebase` (never the default, which writes a merge commit), and auto-merge lands it once the required checks pass on the new head. If every required check has passed, `mergeStateStatus` is `CLEAN`, and the PR is still `OPEN` a few minutes later, auto-merge has stalled: land it with `gh pr merge <PR> --squash`.
 8. **Wait for the trunk run** when the change touches what only trunk runs (`migrate`, `deploy-api`, `deploy-app`, the site deploy). Each command is its own tool call; read `conclusion`, never the exit status of `gh run watch`, which exits 0 on a canceled run:
 
    ```sh
