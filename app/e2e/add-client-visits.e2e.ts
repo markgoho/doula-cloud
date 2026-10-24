@@ -1,7 +1,6 @@
 import { expect, test } from '@playwright/test';
 import { API_URL } from './ports';
-import { signIn } from './auth';
-import { enterPractice } from './mfa';
+import { enterPractice, signIn } from './auth';
 import { seedFoundingOwner } from './staffSignup';
 
 // birth-plan.e2e.ts creates its Client with POST /api/practices/{id}/clients

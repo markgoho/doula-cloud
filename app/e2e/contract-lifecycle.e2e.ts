@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
 import { seedPortalClient, signInPortalClient } from './portalClient';
-import { enterPractice } from './mfa';
+import { enterPractice } from './auth';
 
 // Contract signing became testable at #234, which put a fake-gcs-server in
 // compose.e2e.yaml -- before that the object store made signing 500. This is
@@ -20,7 +20,7 @@ test('A Contract can be built, sent, signed by the Client, and its Signed PDF re
 	);
 
 	// Entering her Practice is a cookie injection rather than the /login
-	// form, which this spec does not test -- see mfa.ts's enterPractice
+	// form, which this spec does not test -- see auth.ts's enterPractice
 	// doc comment.
 	//
 	// The Practice side: build and send, walked through the real Engagement

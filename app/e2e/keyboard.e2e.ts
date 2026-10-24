@@ -7,7 +7,7 @@ import {
 } from './portalClient';
 import { seedEngagementRequest } from './stack';
 import { STAFF_PASSWORD, uniqueEmail } from './staffSignup';
-import { enterPractice } from './mfa';
+import { enterPractice } from './auth';
 
 /**
  * The half of the accessibility gate axe cannot see (#447): whether a

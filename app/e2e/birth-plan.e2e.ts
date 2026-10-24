@@ -1,8 +1,7 @@
 import { expect, test } from '@playwright/test';
 import { API_URL } from './ports';
 import { seedClientPortalUser, seedEngagement } from './stack';
-import { signIn } from './auth';
-import { enterPractice } from './mfa';
+import { enterPractice, signIn } from './auth';
 import { signInPortalClient } from './portalClient';
 import { seedFoundingOwner, uniqueEmail } from './staffSignup';
 

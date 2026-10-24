@@ -2,8 +2,8 @@ import { expect, test, type APIRequestContext } from '@playwright/test';
 import { API_URL } from './ports';
 import { readStaffInviteToken } from './stack';
 import { drainUntilMailArrives, readMailbox } from './outboxMail';
-import { signIn } from './auth';
-import { enrollSecondFactor, enterPractice, verifyEmail } from './mfa';
+import { enterPractice, signIn } from './auth';
+import { enrollSecondFactor, verifyEmail } from './mfa';
 import { seedFoundingOwner, uniqueEmail, STAFF_PASSWORD } from './staffSignup';
 import { STUB_TOTP_CODE, stubTotpFactor } from './totpStub';
 

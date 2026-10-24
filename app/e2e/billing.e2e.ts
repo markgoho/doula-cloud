@@ -1,7 +1,6 @@
 import { expect, test } from '@playwright/test';
 import { API_URL } from './ports';
-import { signIn } from './auth';
-import { enterPractice } from './mfa';
+import { enterPractice, signIn } from './auth';
 import { seedFoundingOwner } from './staffSignup';
 
 // Exercises the Credits screen from app/src/routes/practices/[practiceId]/billing end-to-end --

@@ -2,8 +2,7 @@ import { expect, test } from '@playwright/test';
 import { MAILBOX_DOMAIN, MAILBOX_URL } from './stack';
 import { drainOutbox, drainUntilMailArrives, readMailbox } from './outboxMail';
 import { API_URL } from './ports';
-import { signIn } from './auth';
-import { enterPractice } from './mfa';
+import { enterPractice, signIn } from './auth';
 import { seedFoundingOwner, uniqueEmail, STAFF_PASSWORD } from './staffSignup';
 
 const STAFF_INVITE_OUTBOX = 'process-staff-invite-outbox';

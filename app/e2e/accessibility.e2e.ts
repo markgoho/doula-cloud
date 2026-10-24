@@ -11,9 +11,9 @@ import {
 	type SeededPortalClient
 } from './portalClient';
 import { seedEngagement, seedEngagementRequest, seedInvoice } from './stack';
-import { enterPractice, signInEnrolled, verifyEmail } from './mfa';
+import { signInEnrolled, verifyEmail } from './mfa';
 import { seedAccountWithNoPractice, seedFoundingOwner } from './staffSignup';
-import { signIn } from './auth';
+import { enterPractice, signIn } from './auth';
 import { drainUntilMailArrives } from './outboxMail';
 import { stubTotpFactor } from './totpStub';
 import { WCAG_TAGS } from './wcag';
@@ -227,7 +227,7 @@ async function scan(page: Page, route: Route) {
 
 /**
  * Puts a Staff or portal session into the browser, the same injection
- * mfa.ts's `enterPractice` makes: nothing here needs an
+ * auth.ts's `enterPractice` makes: nothing here needs an
  * interactive sign-in.
  */
 async function enterSession(context: BrowserContext, token: string) {
@@ -367,7 +367,7 @@ test.describe('Archetype A -- the screens a person meets signed out', () => {
 // seedAccountWithNoPractice (staffSignup.ts) provisions exactly that: an
 // Identity Platform account exchanged for a session with no POST
 // /api/staff/signup in between. The cookie is injected straight into the
-// browser context -- the same shape mfa.ts's enterPractice
+// browser context -- the same shape auth.ts's enterPractice
 // uses -- since nothing here needs an interactive sign-in.
 //
 // Both behind one seed rather than a test each: they want the identical
@@ -630,13 +630,16 @@ async function seedStaffSide(request: APIRequestContext): Promise<StaffSeed> {
 		patEmail: seeded.clientEmail,
 		// The rows are scanned as an Owner WITH a second factor, enrolled
 		// here rather than in seedPortalClient, whose Owner has none
-		// (#1854). Four rows draw their full Owner branch only for her:
-		// `settings/mfa` (the toggle), `settings/delete` (the delete form),
-		// `staff/[staffId]/mfa-recovery` (the vouch form) and `settings`
-		// (the export action). For an Owner with no second factor each draws
-		// SecondFactorNeeded instead, and the landing page adds a
-		// recommendation; #1857 scans those branches. The setup calls above
-		// need no second factor, so they use seedPortalClient's own session.
+		// (#1854). The rows that reach one of the five acts draw their full
+		// Owner branch only for her: `settings/mfa` (the toggle),
+		// `settings/delete` (the delete form), `staff/[staffId]/mfa-recovery`
+		// (the vouch form), `settings` and `agreement` (the export action),
+		// and `clients/[clientId]` (erasure). For an Owner with no second
+		// factor each draws SecondFactorNeeded instead, and the landing page
+		// adds a recommendation; #1857 scans those branches. The setup calls
+		// above need no second factor, so they use seedPortalClient's own
+		// session. Every other test in this file that calls seedPortalClient
+		// runs under that session, with no second factor.
 		token: enrolledHeaders.Cookie.replace('__session=', '')
 	};
 }
@@ -1313,7 +1316,9 @@ async function provisionPortalDocuments(request: APIRequestContext, seeded: Seed
 // It costs its own session rather than joining the Staff loop above. A
 // deliberately stalled route must never share a page with a real scan --
 // the interception would outlive the row that wanted it and quietly gate
-// another one.
+// another one. The session is seedPortalClient's, with no second factor:
+// the loading and loadError branches are drawn before the page reads it,
+// so either Owner gives the same screen here.
 test('the sweep refuses a screen whose loading affordance is still up', async ({
 	page,
 	request,

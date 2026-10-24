@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
 import { openMagicLink, seedPortalClient, signInPortalClient } from './portalClient';
-import { enterPractice } from './mfa';
+import { enterPractice } from './auth';
 import { API_URL } from './ports';
 
 test('Client-portal login lands on their engagement-scoped URL', async ({ page, request }) => {

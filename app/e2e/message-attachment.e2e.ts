@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
 import { seedPortalClient } from './portalClient';
-import { enterPractice } from './mfa';
+import { enterPractice } from './auth';
 import { seedMessageWithMissingAttachment } from './stack';
 
 // #305: contract-lifecycle.e2e.ts already proves a Signed PDF round-trips
