@@ -21,11 +21,38 @@ import (
 	"math"
 	"net/http"
 	"strconv"
+	"sync/atomic"
 	"time"
 
 	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/clock"
 )
+
+// addressDimension is IPRule's Dimension, the one SetAddressScale scales.
+const addressDimension = "ip"
+
+// addressScale is what Wrap multiplies every IPRule's Max by. Read on
+// every request and set once at startup, so it is atomic rather than a
+// plain int a racing read could tear.
+var addressScale atomic.Int64
+
+func init() { addressScale.Store(1) }
+
+// SetAddressScale multiplies the cap of every IPRule by scale, and no
+// other dimension's. main sets it from stackswitch.AddressScale, which is
+// 1 everywhere but the end-to-end stack: there every request the suite
+// makes arrives from one loopback address, so one pass of the suite
+// spends a per-address cap sized for one caller many times over (#1858).
+// The scaled cap still counts and still refuses.
+func SetAddressScale(scale int) { addressScale.Store(int64(scale)) }
+
+// limit is rule's cap after the address scale.
+func limit(rule Rule) int {
+	if rule.Dimension == addressDimension {
+		return rule.Max * int(addressScale.Load())
+	}
+	return rule.Max
+}
 
 // Rule is one dimension a request is checked and counted against,
 // independently of every other Rule passed to Wrap alongside it. An
@@ -81,7 +108,8 @@ func Wrap(db *sql.DB, endpoint string, rules []Rule) func(http.Handler) http.Han
 					return
 				}
 
-				if count > rule.Max {
+				maxRequests := limit(rule)
+				if count > maxRequests {
 					retryAfter := retryAfterSeconds(windowStart, clock.Now(r.Context()), rule.Window)
 					// coverage:ignore reason: DB query failure, not exercised by unit tests
 					if err := recordRefusal(r.Context(), db, endpoint, rule.Dimension, key); err != nil {
@@ -92,16 +120,16 @@ func Wrap(db *sql.DB, endpoint string, rules []Rule) func(http.Handler) http.Han
 						log.Printf("ratelimit: record refusal: %v", err)
 					}
 					w.Header().Set("Retry-After", strconv.Itoa(retryAfter))
-					w.Header().Set("RateLimit-Limit", strconv.Itoa(rule.Max))
+					w.Header().Set("RateLimit-Limit", strconv.Itoa(maxRequests))
 					w.Header().Set("RateLimit-Remaining", "0")
 					apierr.WriteError(w, fmt.Sprintf("too many requests -- try again in %d seconds", retryAfter),
 						http.StatusTooManyRequests)
 					return
 				}
 
-				remaining := rule.Max - count
+				remaining := maxRequests - count
 				if tightestRemaining < 0 || remaining < tightestRemaining {
-					tightestLimit, tightestRemaining = rule.Max, remaining
+					tightestLimit, tightestRemaining = maxRequests, remaining
 				}
 			}
 
