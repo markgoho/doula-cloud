@@ -348,6 +348,14 @@
 		 * wrap onto a second line below 388px and sit on one line from
 		 * 388px up. 24.25rem is that width. A fifth chip, or a longer
 		 * section name, moves it.
+		 *
+		 * Re-measured 2026-10-24 (#1851). 388px was the floor check's
+		 * frame, and the frame held the style-guide page around this block,
+		 * so the block itself had less: the query reads `.contents`' own
+		 * width, and the check now sizes the frame until that is the floor.
+		 * Measured that way on macOS, the four chips sit on one line at
+		 * 352px and wrap at 348px. 22rem is that width, with no margin
+		 * added beyond it.
 		 */
 		.contents-rail {
 			display: block;
@@ -357,7 +365,7 @@
 			display: none;
 		}
 
-		@container record-contents (min-width: 24.25rem) {
+		@container record-contents (min-width: 22rem) {
 			.contents-rail {
 				display: none;
 			}

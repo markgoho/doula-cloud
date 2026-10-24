@@ -304,6 +304,50 @@ function atWidth(frame: HTMLElement, px: number) {
 	void frame.offsetWidth;
 }
 
+/*
+ * Sizes the frame so the condition's own container has `px` of CONTENT box,
+ * and returns the frame's width (#1851). A container query reads the content
+ * box of the element that declares the container, so a container with its
+ * own padding -- the Staff bar's header carries the page gutter -- turns its
+ * wide tree on when the room INSIDE that padding reaches the floor. A frame
+ * set to the floor gave the header that much border box, which is the bar
+ * one gutter pair narrower than any the app renders with the wide tree on:
+ * the nav got 866px where the app gives it 912px. The frame-width overflow
+ * read could not see the difference, because what spilled landed in the
+ * header's own padding; the box criterion can.
+ *
+ * The gutter is sized against its own container, so one correction can move
+ * it again; a few turns settle it. An unnamed condition, or a container the
+ * frame is itself, keeps the frame at `px`.
+ */
+// A computed padding is always a px length.
+function padding(value: string): number {
+	return Number(value.replace('px', ''));
+}
+
+function atConditionWidth(frame: HTMLElement, condition: Condition, px: number): number {
+	atWidth(frame, px);
+	const { containerName } = condition;
+	if (containerName === undefined) return px;
+	const container = [...frame.querySelectorAll<HTMLElement>('*')].find((element) =>
+		getComputedStyle(element).containerName.split(' ').includes(containerName)
+	);
+	if (!container) return px;
+	let width = px;
+	for (let turn = 0; turn < 5; turn += 1) {
+		const style = getComputedStyle(container);
+		const content =
+			container.clientWidth -
+			padding(style.paddingInlineStart) -
+			padding(style.paddingInlineEnd);
+		const shortfall = px - content;
+		if (Math.abs(shortfall) <= TOLERANCE) break;
+		width += shortfall;
+		atWidth(frame, width);
+	}
+	return width;
+}
+
 function isOverflowAcceptable(measurement: OverflowMeasurement): boolean {
 	return (
 		measurement.needed - measurement.given <= TOLERANCE &&
@@ -369,17 +413,18 @@ function isWrapAcceptable(measurement: WrapMeasurement): boolean {
  */
 function assertCriterionAt(
 	frame: HTMLElement,
-	key: string,
+	condition: Condition,
 	criterion: Criterion,
 	px: number,
 	isExpected: boolean
 ): void {
+	const { key } = condition;
 	switch (criterion.kind) {
 		case 'overflow': {
 			const wrap = neutralizeWrap();
 			try {
-				atWidth(frame, px);
-				const measurement = measureOverflow(frame, px);
+				const given = atConditionWidth(frame, condition, px);
+				const measurement = measureOverflow(frame, given);
 				expect(isOverflowAcceptable(measurement), overflowFloorReport(key, measurement)).toBe(
 					isExpected
 				);
@@ -389,13 +434,13 @@ function assertCriterionAt(
 			break;
 		}
 		case 'no-wrap': {
-			atWidth(frame, px);
+			atConditionWidth(frame, condition, px);
 			const measurement = measureWrap(frame, px, criterion.selectors, lineCount);
 			expect(isWrapAcceptable(measurement), wrapFloorReport(key, measurement)).toBe(isExpected);
 			break;
 		}
 		case 'single-row': {
-			atWidth(frame, px);
+			atConditionWidth(frame, condition, px);
 			const row = frame.querySelector(criterion.selector);
 			expect(row, `${criterion.selector} not found for ${key}`).not.toBeNull();
 			const items = [...row!.children] as HTMLElement[];
@@ -416,7 +461,7 @@ function assertCriterionAt(
 			const target = frame.querySelector(criterion.target);
 			expect(target, `${criterion.target} not found for ${key}`).not.toBeNull();
 			const capLabel = capCustomProperty(criterion.cap);
-			atWidth(frame, px);
+			atConditionWidth(frame, condition, px);
 			const measurement = measureCap(px, capLabel, target!, probe);
 			expect(isCapAcceptable(measurement), capFloorReport(key, measurement)).toBe(isExpected);
 		}
@@ -533,7 +578,7 @@ describe('the floor check (#564)', () => {
 			const { run, frame } = await mountInFrame(demoForCondition(condition).component);
 			try {
 				forceLive(condition, scopeClasses(frame));
-				assertCriterionAt(frame, key, criterion, floorPx, true);
+				assertCriterionAt(frame, condition, criterion, floorPx, true);
 			} finally {
 				run.remove();
 			}
@@ -554,7 +599,7 @@ describe('the floor check (#564)', () => {
 				const { run, frame } = await mountInFrame(demoForCondition(condition).component);
 				try {
 					forceLive(condition, scopeClasses(frame));
-					assertCriterionAt(frame, key, criterion, belowFloorPx, false);
+					assertCriterionAt(frame, condition, criterion, belowFloorPx, false);
 				} finally {
 					run.remove();
 				}

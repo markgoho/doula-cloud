@@ -291,17 +291,8 @@
 		   own. On macOS they fit at 908px and need 908px at 904px; on CI's
 		   Linux/Chromium they needed 912px at 908px. 57rem (912px) is the
 		   next step of the sweep's 4px resolution, measured in CI, again
-		   with no margin added beyond it.
-
-		   Re-measured 2026-10-24 (#1851), when the floor check learned to
-		   read a box narrower than what it holds. At 912px the ten sections
-		   needed 886px inside the nav's 866px: the row ran 20px into the
-		   bar's own gutter, which the frame's width could not see because
-		   the gutter is inside the frame. On macOS they fit the nav at
-		   936px and not at 932px, and so they did on CI's Linux/Chromium.
-		   58.5rem (936px) is that step of the sweep's 4px resolution,
-		   measured in CI, again with no margin added beyond it. */
-		@container staff-top-bar (min-width: 58.5rem) {
+		   with no margin added beyond it. */
+		@container staff-top-bar (min-width: 57rem) {
 			.wide {
 				display: grid;
 			}

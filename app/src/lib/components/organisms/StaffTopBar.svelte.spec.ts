@@ -286,7 +286,7 @@ const LONG_PRACTICES: PracticeOption[] = [
 		href: '/p2'
 	}
 ];
-const JUST_ABOVE_THE_FLOOR = 996;
+const JUST_ABOVE_THE_FLOOR = 972;
 
 // Each panel the bar opens, by its trigger, and something only that panel
 // holds -- the other Practice's link, or the avatar menu's sign-out.
