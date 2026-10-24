@@ -196,3 +196,97 @@ func TestSignupHandler_AFailedSignupRecordsNoAgreement(t *testing.T) {
 		}
 	})
 }
+
+// getComingVersions reads GET /api/legal/coming, the read the signup form
+// names each coming version from (#1824), and decodes it loosely, so a
+// test can tell an empty list from a null.
+func getComingVersions(t *testing.T, srv *httptest.Server) map[string]any {
+	t.Helper()
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, srv.URL+"/api/legal/coming", nil)
+	if err != nil {
+		t.Fatalf("build request: %v", err)
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("GET /api/legal/coming: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
+	}
+	var out map[string]any
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	return out
+}
+
+// comingDocument is the key of a coming version's document in the read.
+const comingDocument = "document"
+
+// comingVersion is one entry of the read's coming list, as JSON decodes it.
+func comingVersion(document, name, version string) map[string]any {
+	return map[string]any{comingDocument: document, "name": name, "version": version}
+}
+
+// #1824: the versions the signup form names as coming are the versions
+// the terms_accepted row records as coming, because both are read from
+// the one history the BFF holds (AgreementDocuments) at the server's
+// instant. The read answers each one by document, name and date, in the
+// order of the history: the Terms before the Privacy Policy, and oldest
+// first within each.
+//
+// On October 31, 2026, in the fixture history, two versions of the Terms
+// are coming and one of the Privacy Policy.
+func TestComingVersions_TheFormNamesTheVersionsTheRecordRecords(t *testing.T) {
+	useFixtureHistory(t)
+	db := testdb.New(t)
+	srv := newSignupServerAt(beforeTermsChange, authntest.Verifier{UID: "told-owner", Email: jamieEmail}, db)
+	defer srv.Close()
+
+	form := getComingVersions(t, srv)
+	want := []any{
+		comingVersion(termsKey, termsName, termsMaterial),
+		comingVersion(termsKey, termsName, termsCorrection),
+		comingVersion(privacyKey, "Privacy Policy", privacyMaterial),
+	}
+	if !reflect.DeepEqual(form, map[string]any{"coming": want}) {
+		t.Fatalf("body = %v, want {coming: %v}", form, want)
+	}
+
+	resp := postSignup(t, srv, "tok", staffauth.SignupRequest{WorkState: "NY", Timezone: signupZone, FirstName: jamieName, LastName: ownerLastName})
+	_ = resp.Body.Close()
+	if resp.StatusCode != http.StatusCreated {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusCreated)
+	}
+	rows := termsAcceptedRows(t, db)
+	if len(rows) != 1 {
+		t.Fatalf("terms_accepted rows = %d, want 1", len(rows))
+	}
+	// The row's key for a document's coming versions is the document's
+	// key in the read followed by "Coming" (termsAcceptedDiff).
+	named := map[string]any{}
+	for _, v := range form["coming"].([]any) {
+		version := v.(map[string]any)
+		key := version[comingDocument].(string) + "Coming"
+		list, _ := named[key].([]any)
+		named[key] = append(list, version["version"])
+	}
+	for _, key := range []string{diffTermsComing, diffPrivacyComing} {
+		if !reflect.DeepEqual(rows[0].diff[key], named[key]) {
+			t.Errorf("%s = %v in the row, but the form named %v", key, rows[0].diff[key], named[key])
+		}
+	}
+}
+
+// Outside a notice period the read names nothing, as an empty list
+// rather than null, so the form shows nothing more than the agreement
+// sentence. On October 23, 2026 no version of either shipped document
+// is coming.
+func TestComingVersions_OutsideANoticeNamesNothing(t *testing.T) {
+	srv := newSignupServerAt(signedUpAt, authntest.Verifier{}, testdb.New(t))
+	defer srv.Close()
+	if body := getComingVersions(t, srv); !reflect.DeepEqual(body, map[string]any{"coming": []any{}}) {
+		t.Fatalf("body = %v, want {coming: []}", body)
+	}
+}

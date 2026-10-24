@@ -4,6 +4,7 @@ import { render } from 'vitest-browser-svelte';
 import { jsonResponse } from '#lib/testResponse.js';
 import { privacyPolicyUrl, termsOfServiceUrl } from '#lib/legal.js';
 import Page from './+page.svelte';
+import { data } from './page.fixture.js';
 
 /*
  * #745: creating the Identity Platform account and creating the Practice
@@ -59,7 +60,7 @@ async function fillForm() {
 const submit = () => testPage.getByRole('button', { name: 'Create Practice' }).click();
 
 async function setup() {
-	await render(Page, {});
+	await render(Page, { params: {}, data });
 }
 
 describe('signing up when the account half-landed (#745)', () => {
@@ -206,7 +207,7 @@ describe('the password rule (#1538)', () => {
 
 describe('the roles statement (#290)', () => {
 	it('names Owner, Admin and Doula before any submit, on first paint', async () => {
-		await render(Page, {});
+		await render(Page, { params: {}, data });
 
 		await expect
 			.element(
@@ -220,12 +221,16 @@ describe('the roles statement (#290)', () => {
 	});
 });
 
+// The form outside a notice period: no version of either document is
+// coming, which is every day but the 30 before a material change (#1824).
+const outsideANotice = { ...data, coming: [] };
+
 describe('the agreement sentence (#1547)', () => {
 	const sentence =
 		'By creating your Practice, you agree to the Terms of Service (opens in new tab) and the Privacy Policy (opens in new tab).';
 
 	it('sits after the role notice and directly above the button, which it describes', async () => {
-		await render(Page, {});
+		await render(Page, { params: {}, data: outsideANotice });
 
 		const button = testPage.getByRole('button', { name: 'Create Practice' });
 		// The Link atom is inline-flex, and the accessible-name computation
@@ -241,7 +246,7 @@ describe('the agreement sentence (#1547)', () => {
 	});
 
 	it('links each document on the marketing site, in a new tab', async () => {
-		await render(Page, {});
+		await render(Page, { params: {}, data });
 
 		for (const [name, href] of [
 			['Terms of Service (opens in new tab)', termsOfServiceUrl],
@@ -254,9 +259,66 @@ describe('the agreement sentence (#1547)', () => {
 	});
 });
 
+describe('the coming versions, during a notice period (#1824)', () => {
+	const leadIn = testPage.getByText('You also agree to:');
+	const comingList = testPage.getByRole('list');
+
+	it('names each coming version with the date it starts, between the sentence and the button', async () => {
+		await render(Page, { params: {}, data });
+
+		await expect.element(leadIn).toBeVisible();
+		const items = comingList.getByRole('listitem').elements();
+		expect(items.map((item) => item.textContent?.trim())).toEqual([
+			'Terms of Service from Nov 30, 2026 (opens in new tab)',
+			'Terms of Service from Dec 15, 2026 (opens in new tab)',
+			'Privacy Policy from Dec 1, 2026 (opens in new tab)'
+		]);
+		const sentence = testPage.getByRole('paragraph').filter({ hasText: 'By creating your Practice' }).element();
+		const button = testPage.getByRole('button', { name: 'Create Practice' }).element();
+		// The lead-in and the list are one block, directly after the
+		// sentence and directly before the button, so they are read in
+		// that order.
+		const block = sentence.nextElementSibling;
+		expect(block?.contains(leadIn.element())).toBe(true);
+		expect(block?.contains(comingList.element())).toBe(true);
+		expect(block?.nextElementSibling).toBe(button);
+	});
+
+	it('links each coming version to its own page, in a new tab', async () => {
+		await render(Page, { params: {}, data });
+
+		for (const [name, href] of [
+			['Terms of Service from Nov 30, 2026 (opens in new tab)', 'https://doula.cloud/terms/2026-11-30'],
+			['Terms of Service from Dec 15, 2026 (opens in new tab)', 'https://doula.cloud/terms/2026-12-15'],
+			['Privacy Policy from Dec 1, 2026 (opens in new tab)', 'https://doula.cloud/privacy/2026-12-01']
+		]) {
+			const link = testPage.getByRole('link', { name });
+			await expect.element(link).toHaveAttribute('href', href);
+			await expect.element(link).toHaveAttribute('target', '_blank');
+		}
+	});
+
+	it('is read after the agreement sentence in the description of the button', async () => {
+		await render(Page, { params: {}, data });
+
+		await expect
+			.element(testPage.getByRole('button', { name: 'Create Practice' }))
+			.toHaveAccessibleDescription(
+				/^By creating your Practice, you agree to .+ You also agree to: Terms of Service from Nov 30, 2026 .+ Privacy Policy from Dec 1, 2026 \(opens in new tab\)$/
+			);
+	});
+
+	it('shows nothing more than the agreement sentence outside a notice period', async () => {
+		await render(Page, { params: {}, data: outsideANotice });
+
+		expect(leadIn.elements()).toHaveLength(0);
+		expect(comingList.elements()).toHaveLength(0);
+	});
+});
+
 describe('the address the Practice is created with (#614)', () => {
 	it('sends no address in the body, leaving the ID token as the only copy', async () => {
-		await render(Page, {});
+		await render(Page, { params: {}, data });
 		await fillForm();
 
 		createUserWithEmailAndPassword.mockResolvedValueOnce(credential);

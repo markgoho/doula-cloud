@@ -247,6 +247,13 @@ func mountSessionRoutes(g *GatedRouter, db *sql.DB, verifier authn.Verifier, acc
 	// -- there is no bootstrap window here for an attacker to spend.
 	g.Write("POST /api/staff/signup",
 		ratelimit.Wrap(db, "staff_signup", bootstrapRules)(SignupHandler(verifier, db, enq)))
+	// The versions of the Terms and the Privacy Policy that have not
+	// started, which the signup form names (#1824). Outside /api/staff/
+	// because it reads no credential at all, so staffFamilyGroups has no
+	// refusal to hold it to. Not rate limited: no input, no database.
+	g.OpenGet("/api/legal/coming",
+		"before any account exists -- the signup form names the coming versions of the Terms and the Privacy Policy, which /terms and /privacy already print",
+		ComingVersionsHandler())
 	// Not rate limited: gated by authn.Begin's own __session cookie check
 	// -- there is no bootstrap window here for an attacker to spend.
 	g.OpenGet("/api/staff/session",
