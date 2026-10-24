@@ -44,17 +44,22 @@ type termsAcceptedDiff struct {
 // so the Practice and the record of its agreement land together or not
 // at all. The versions are legal's -- the one place the BFF holds them --
 // read at the server's instant, and never anything the request carried.
+// It reads the same history the agreement gate does (AgreementDocuments),
+// so the row an Owner's press writes names the versions the gate asked
+// her about (#1549).
 func recordTermsAccepted(ctx context.Context, tx *sql.Tx, r *http.Request, practiceID, ownerStaffID string) error {
 	now := clock.Now(ctx)
-	terms, termsComing := agreedVersions(legal.Terms, now)
-	privacy, privacyComing := agreedVersions(legal.Privacy, now)
-	diff, err := json.Marshal(termsAcceptedDiff{
-		TermsVersion:   terms,
-		TermsComing:    termsComing,
-		PrivacyVersion: privacy,
-		PrivacyComing:  privacyComing,
-		IPAddress:      clientip.From(r),
-	})
+	record := termsAcceptedDiff{IPAddress: clientip.From(r)}
+	for _, doc := range AgreementDocuments {
+		inForce, coming := agreedVersions(doc, now)
+		switch doc.Path {
+		case legal.Terms.Path:
+			record.TermsVersion, record.TermsComing = inForce, coming
+		case legal.Privacy.Path:
+			record.PrivacyVersion, record.PrivacyComing = inForce, coming
+		}
+	}
+	diff, err := json.Marshal(record)
 	// coverage:ignore reason: json.Marshal of a struct of three strings cannot fail
 	if err != nil {
 		return fmt.Errorf("staffauth: marshal terms_accepted diff: %w", err)

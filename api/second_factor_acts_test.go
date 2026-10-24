@@ -70,7 +70,7 @@ func TestSecondFactorActs_RefusedWithoutASecondFactor(t *testing.T) {
 			t.Run(name, func(t *testing.T) {
 				db := testdb.New(t)
 				const ownerUID = "owner-second-factor-act"
-				practiceID, ownerID := testdb.SeedStaffAtNewPractice(t, db, ownerUID, []string{"owner"}, "employee")
+				practiceID, ownerID := testdb.SeedStaffAtNewPractice(t, db, ownerUID, []string{roleOwner}, "employee")
 				clientID := testdb.SeedNamedClient(t, db, practiceID, "Sarah", "sarah@example.test")
 				memberID := testdb.SeedStaffAtPractice(t, db, practiceID, "member-lost-factor", []string{roleDoula}, "employee")
 

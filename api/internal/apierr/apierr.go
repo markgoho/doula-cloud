@@ -127,6 +127,14 @@ const (
 	// opens in January 2027, and the waitlist -- rather than with an error
 	// beside a field. Nothing is written on the refusal.
 	CodePilotNotOpen Code = "PILOT_NOT_OPEN"
+	// CodeTermsAgreementRequired is #1549's Practice-scoped boundary
+	// refusal (ADR-0053): a material version of the Terms of Service or
+	// the Privacy Policy has started, and no Owner of this Practice has
+	// agreed to it yet. Only an Owner meets it, and never on the session
+	// read, export or deletion. Its own code, so the app sends her to the
+	// one screen where she agrees, rather than reading it as a role
+	// refusal or a stale Membership.
+	CodeTermsAgreementRequired Code = "TERMS_AGREEMENT_REQUIRED"
 )
 
 // ForbiddenCodes is the recorded set of reason codes a 403 may carry
@@ -137,7 +145,7 @@ const (
 // across the wire, so the error page asserted the one cause a status
 // code cannot actually name -- "your role does not have permission" --
 // for every 403 alike, including two that are not about a role at all.
-// Five codes, one per kind of thing a reader can do about it:
+// Six codes, one per kind of thing a reader can do about it:
 //
 //   - CodeForbidden -- a role refusal. CodeForStatus hands this to every
 //     403 that names no more specific reason, so it is also the default,
@@ -153,8 +161,13 @@ const (
 //     refuses an address the founder has not let into the pilot. The
 //     signup screen answers it with a screen of its own, so the error
 //     page has no state for it and never meets it.
+//   - CodeTermsAgreementRequired -- a step only an Owner can take
+//     (#1549). A material change to the Terms or the Privacy Policy has
+//     started; pressing Agree and continue on its screen opens the
+//     Practice to her again. The app sends her to that screen, so the
+//     error page has no state for it.
 //
-// A sixth kind of 403 needs a sixth code here and, if the error page
+// A seventh kind of 403 needs a seventh code here and, if the error page
 // can meet it, a state there too, not another shade of the role-refusal
 // copy.
 // TestEveryForbiddenWriteCarriesARecordedCode holds the set closed: a
@@ -166,6 +179,7 @@ var ForbiddenCodes = map[Code]bool{
 	CodeMFARequired:             true,
 	CodeSecondFactorRequired:    true,
 	CodePilotNotOpen:            true,
+	CodeTermsAgreementRequired:  true,
 }
 
 // APIError is docs/api-design.md section 7's structured error shape.
