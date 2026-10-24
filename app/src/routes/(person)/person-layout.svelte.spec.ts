@@ -121,6 +121,10 @@ describe('the account route layout', () => {
 			.element(testPage.getByRole('button', { name: 'Your account, Priya Sharma' }))
 			.toBeVisible();
 		await expect.element(testPage.getByRole('button', { name: 'Menu' })).not.toBeInTheDocument();
+		// The lockup takes the room the Menu button left, as on every other
+		// Staff screen's bar. `.last()`: the wide tree's lockup comes first in
+		// the document and is display:none here.
+		await expect.element(testPage.getByRole('banner').getByText('DoulaCloud').last()).toBeVisible();
 	});
 
 	it('offers a way back to every Practice she belongs to', async () => {

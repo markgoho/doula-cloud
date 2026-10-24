@@ -120,6 +120,11 @@
 	<div class="narrow">
 		{#if hasSections}
 			<Button label="Menu" icon="list" iconOnly variant="bare" onClick={openSheet} />
+		{:else if !hasPracticeToName}
+			<!-- /account (#1837): no section and no Practice, so the room the
+				Menu button and the switcher took holds the lockup, which the
+				sheet used to be the only narrow place to show. -->
+			<BrandLockup />
 		{/if}
 		<PracticeSwitcher {practices} {currentPracticeId} />
 		<AvatarMenu {firstName} {lastName} {email} {accountHref} {signOut} />
@@ -221,13 +226,6 @@
 			/* The Practice name takes the room the nav does not need here, so
 			   the hamburger and the avatar stay pinned to the two edges. */
 			justify-content: space-between;
-		}
-
-		/* With no Menu button (#1837) the avatar may be the only thing in
-		   the bar (/account has no Practice to name), and it stays at the
-		   far end rather than sliding to the start. */
-		.narrow > :global(:last-child) {
-			margin-inline-start: auto;
 		}
 
 		/* Unavoidable (#564): the wide nav row and the menu-button sheet
