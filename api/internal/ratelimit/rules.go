@@ -14,7 +14,9 @@ import (
 	"doula-cloud/api/internal/clientip"
 )
 
-// IPRule limits by clientip.From(r), Cloud Run's caller address. Applies
+// IPRule limits by clientip.From(r), the caller address the proxies in
+// front of Cloud Run appended -- not one the caller wrote into
+// X-Forwarded-For itself (#1865). Applies
 // to every request -- there is always an IP -- so it is the dimension
 // that still catches an attacker who evades every other rule by varying
 // what that rule keys on (a fresh Bearer token per request, a new
