@@ -11,6 +11,7 @@
 		type LedgerEntry
 	} from '#lib/billing.js';
 	import { formatMoney } from '#lib/money.js';
+	import { formatCalendarDay } from '#lib/dates.js';
 	import { readApprovalReturn } from '#lib/engagementRequest.js';
 	import { FormSubmission, orThrownMessage } from '#lib/formSubmission.svelte.js';
 	import type { FormError } from '#lib/formErrors.js';
@@ -72,19 +73,21 @@
 	let quantity = $state(5);
 	const purchaseSubmission = new FormSubmission();
 
-	// Undefined, not zero, when the BFF couldn't read the Price off Stripe
-	// (#285) -- the price region below says so in words instead of
-	// pretending a Credit is free.
-	const priceItems = $derived(
-		data.price
-			? [
-					{ label: 'Price per Credit', value: formatMoney(data.price.unitAmountCents, data.price.currency) },
-					{
-						label: 'Subtotal',
-						value: formatMoney(data.price.unitAmountCents * quantity, data.price.currency)
-					}
-				]
-			: []
+	// The price checkout charges today, from the version of the Terms in
+	// force (#1834) -- the BFF reads it the same way the purchase does,
+	// so it is always there and needs no Stripe call.
+	const unitPrice = $derived(formatMoney(data.price.unitAmountCents, data.price.currency));
+	const priceItems = $derived([
+		{ label: 'Price per Credit', value: unitPrice },
+		{ label: 'Subtotal', value: formatMoney(data.price.unitAmountCents * quantity, data.price.currency) }
+	]);
+	// A new price that has been announced and has not started: the Terms
+	// promise "until the new price starts you can buy as many Credits as
+	// you like at the old one", so the screen says when it starts.
+	const comingPrice = $derived(
+		data.comingPrice
+			? `From ${formatCalendarDay(data.comingPrice.effective)}, one Credit costs ${formatMoney(data.comingPrice.unitAmountCents, data.comingPrice.currency)}. Until then, you pay ${unitPrice}.`
+			: ''
 	);
 
 	onMount(() => {
@@ -125,7 +128,10 @@
 	<Text
 		text="One Credit covers one Engagement — a single Client relationship centered on one baby, from intake through the end of care."
 	/>
-	<Text text="One Credit costs $20.00." />
+	<Text text={`One Credit costs ${unitPrice}.`} />
+	{#if comingPrice}
+		<Text text={comingPrice} />
+	{/if}
 	<Text text="Getting paid is a separate screen, where this Practice connects Stripe so its Clients can pay it directly." />
 	<Text text={`Credit balance: ${data.balance}`} />
 {/snippet}
@@ -180,22 +186,8 @@
 			{/snippet}
 		</LabeledField>
 
-		{#if data.price}
-			<DescriptionList items={priceItems} />
-			<Text
-				text="New York sales tax is added at checkout where it applies."
-				step="body-sm"
-				tone="variant"
-			/>
-		{:else}
-			<!--
-				#256's intro above now states the ordinary $20.00 price as a
-				fixed fact, so this sentence is scoped to what is actually
-				missing -- today's checkout total from Stripe -- rather than
-				repeating "price" and reading as a contradiction of it.
-			-->
-			<Text text="This purchase's exact price could not be confirmed with Stripe right now." step="body-sm" tone="variant" />
-		{/if}
+		<DescriptionList items={priceItems} />
+		<Text text="New York sales tax is added at checkout where it applies." step="body-sm" tone="variant" />
 
 		<!--
 			Unconditional, and this screen reads no role of its own

@@ -177,14 +177,28 @@ describe('what a Credit costs (#285)', () => {
 		await expect.element(testPage.getByText('$60.00')).toBeVisible();
 	});
 
-	it('says the price is unavailable, and still renders the balance and buy form, when Stripe could not be read', async () => {
-		await renderBilling({ price: undefined });
+	it('states the price checkout charges today, not a fixed $20.00', async () => {
+		await renderBilling({ price: { unitAmountCents: 2500, currency: 'usd' } });
+
+		await expect.element(testPage.getByText('One Credit costs $25.00.')).toBeVisible();
+		await expect.element(testPage.getByText('$125.00')).toBeVisible();
+	});
+
+	it('says nothing of a new price while none is announced', async () => {
+		await renderBilling();
+
+		await expect.element(testPage.getByText(/^From /)).not.toBeInTheDocument();
+	});
+});
+
+describe('a rise in the price of a Credit that has been announced (#1834)', () => {
+	it('states the new price and its date beside the price checkout charges until then', async () => {
+		await renderBilling({ comingPrice: { unitAmountCents: 2500, currency: 'usd', effective: '2027-03-01' } });
 
 		await expect
-			.element(testPage.getByText("This purchase's exact price could not be confirmed with Stripe right now."))
+			.element(testPage.getByText('From Mar 1, 2027, one Credit costs $25.00. Until then, you pay $20.00.'))
 			.toBeVisible();
-		await expect.element(testPage.getByText(`Credit balance: ${data.balance}`)).toBeVisible();
-		await expect.element(testPage.getByRole('button', { name: 'Buy credits' })).toBeVisible();
+		await expect.element(testPage.getByText('$100.00')).toBeVisible();
 	});
 });
 

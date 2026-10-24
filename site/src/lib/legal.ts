@@ -5,6 +5,9 @@
  * A version is the date it takes effect (ADR-0053). `material` is true
  * when the version changes what a Practice pays, what she gets, or what
  * occurs with her data, and `change` is one line of what changed.
+ * `creditPriceCents` is the price of a Credit a version of the Terms
+ * states, in cents before tax; checkout charges the one in force (#1834),
+ * and the Privacy Policy leaves it out.
  * `priceRise` is there only on a version that raises the price of a
  * Credit, and it is the reason the email before the version gives: the
  * Terms promise "at least 60 days before, with the reason" (#1817).
@@ -19,6 +22,7 @@ export interface LegalVersion {
 	effective: string;
 	material: boolean;
 	change: string;
+	creditPriceCents?: number;
 	priceRise?: string;
 }
 
@@ -33,8 +37,13 @@ export const TERMS: LegalDocument = {
 	name: 'Terms of Service',
 	path: '/terms',
 	versions: [
-		{ effective: '2026-09-29', material: false, change: 'First version.' },
-		{ effective: '2026-10-03', material: false, change: 'Writes the name of the product as one word, DoulaCloud.' }
+		{ effective: '2026-09-29', material: false, change: 'First version.', creditPriceCents: 2000 },
+		{
+			effective: '2026-10-03',
+			material: false,
+			change: 'Writes the name of the product as one word, DoulaCloud.',
+			creditPriceCents: 2000
+		}
 	]
 };
 

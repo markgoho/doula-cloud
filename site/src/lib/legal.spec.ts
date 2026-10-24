@@ -17,18 +17,22 @@ const goSource = readFileSync(
 	'utf8'
 );
 
-// A version that raises the price of a Credit carries a fourth field,
+// A version of the Terms carries the price of a Credit, CreditPriceCents,
+// after Change (#1834). A version that raises it carries one more field,
 // PriceRise, last; one that does not leaves it out, and so does its
 // mirror here.
 function goHistory(variable: string, source = goSource): LegalVersion[] {
 	const block = new RegExp(String.raw`^var ${variable} = Document\{\n([\s\S]*?)^\}`, 'm').exec(source);
 	if (!block) throw new Error(`api/internal/legal/legal.go declares no ${variable}`);
 	return block[1]
-		.matchAll(/\{Effective: "([^"]+)", Material: (true|false), Change: "([^"]+)"(?:, PriceRise: "([^"]+)")?\}/g)
-		.map(([, effective, material, change, priceRise]) => ({
+		.matchAll(
+			/\{Effective: "([^"]+)", Material: (true|false), Change: "([^"]+)"(?:, CreditPriceCents: (\d+))?(?:, PriceRise: "([^"]+)")?\}/g
+		)
+		.map(([, effective, material, change, creditPriceCents, priceRise]) => ({
 			effective,
 			material: material === 'true',
 			change,
+			...(creditPriceCents !== undefined && { creditPriceCents: Number(creditPriceCents) }),
 			...(priceRise !== undefined && { priceRise })
 		}))
 		.toArray();
@@ -49,13 +53,19 @@ describe('the version of each document, on the site and in the BFF', () => {
 	it('reads the reason for a rise in the price of a Credit', () => {
 		const source = [
 			'var Terms = Document{',
-			'\t\t{Effective: "2026-09-29", Material: false, Change: "First version."},',
-			'\t\t{Effective: "2027-03-01", Material: true, Change: "A Credit costs $50.", PriceRise: "Card fees went up."},',
+			'\t\t{Effective: "2026-09-29", Material: false, Change: "First version.", CreditPriceCents: 2000},',
+			'\t\t{Effective: "2027-03-01", Material: true, Change: "A Credit costs $50.", CreditPriceCents: 5000, PriceRise: "Card fees went up."},',
 			'}'
 		].join('\n');
 		expect(goHistory('Terms', source)).toEqual([
-			{ effective: '2026-09-29', material: false, change: 'First version.' },
-			{ effective: '2027-03-01', material: true, change: 'A Credit costs $50.', priceRise: 'Card fees went up.' }
+			{ effective: '2026-09-29', material: false, change: 'First version.', creditPriceCents: 2000 },
+			{
+				effective: '2027-03-01',
+				material: true,
+				change: 'A Credit costs $50.',
+				creditPriceCents: 5000,
+				priceRise: 'Card fees went up.'
+			}
 		]);
 	});
 

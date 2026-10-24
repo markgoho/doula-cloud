@@ -13,7 +13,8 @@
 // file and fails when they differ, the same kind of mirrored pair as
 // website.SiteBaseURL and the site's SITE_ORIGIN. That spec reads the
 // Version literals below with a pattern, so each stays on one line with
-// its fields in this order, and PriceRise, when a version has one, last.
+// its fields in this order: CreditPriceCents after Change on a version of
+// the Terms, and PriceRise, when a version has one, last.
 package legal
 
 import "time"
@@ -30,6 +31,13 @@ type Version struct {
 	Material bool
 	// Change is one line that says what changed.
 	Change string
+	// CreditPriceCents is the price of one Credit, in cents before sales
+	// tax, that a version of the Terms states ("A Credit costs $20.00").
+	// Checkout charges the price of the version in force (#1834), so a
+	// new price starts on the date of its version, not when someone
+	// moves a Stripe Price. Every version of the Terms sets it; the
+	// Privacy Policy says nothing about price and leaves it out.
+	CreditPriceCents int64
 	// PriceRise is empty unless the version raises the price of a
 	// Credit, and then it is the reason, one line the email before the
 	// version prints. The Terms promise "If the price of a Credit ever
@@ -91,8 +99,8 @@ var Terms = Document{
 	Name: "Terms of Service",
 	Path: "/terms",
 	Versions: []Version{
-		{Effective: "2026-09-29", Material: false, Change: "First version."},
-		{Effective: "2026-10-03", Material: false, Change: "Writes the name of the product as one word, DoulaCloud."},
+		{Effective: "2026-09-29", Material: false, Change: "First version.", CreditPriceCents: 2000},
+		{Effective: "2026-10-03", Material: false, Change: "Writes the name of the product as one word, DoulaCloud.", CreditPriceCents: 2000},
 	},
 }
 

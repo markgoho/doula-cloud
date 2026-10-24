@@ -2,9 +2,12 @@ package billing
 
 import (
 	"database/sql"
+	"log"
 	"net/http"
 
 	"doula-cloud/api/internal/apierr"
+	"doula-cloud/api/internal/clock"
+	"doula-cloud/api/internal/legal"
 	"doula-cloud/api/internal/staffauth"
 )
 
@@ -37,7 +40,10 @@ type PurchaseResponse struct {
 // staffauth.RequireOwnerOrAdmin, because a Doula is refused by the gate
 // before this runs. Widening or narrowing this route means editing its
 // role list in mount.go.
-func PostPurchaseHandler(stripeClient StripeClient) http.Handler {
+//
+// terms is the version history the price of a Credit is read from:
+// legal.Terms in production, a fixture in a test.
+func PostPurchaseHandler(stripeClient StripeClient, terms legal.Document) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		tx, practiceID, ok := staffauth.RequireTx(w, r)
 		// coverage:ignore reason: staffauth.Middleware always sets a tx before this handler runs
@@ -106,12 +112,25 @@ func PostPurchaseHandler(stripeClient StripeClient) http.Handler {
 			return
 		}
 
+		// The price is the one the version of the Terms in force states,
+		// read at this instant (#1834): a published rise starts on its
+		// date, and nothing a Stripe Price or an environment variable
+		// does can charge more than the Terms allow.
+		pricing, err := creditPriceNow(r.Context(), tx, terms, clock.Now(r.Context()))
+		if err != nil {
+			log.Printf("billing: read credit price: %v", err)
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+			return
+		}
+
 		checkoutURL, err := stripeClient.CreateCheckoutSession(r.Context(), CheckoutSessionRequest{
-			CustomerID:   customerID.String,
-			PracticeID:   practiceID,
-			Quantity:     req.Quantity,
-			NewYorkStaff: newYorkStaff,
-			TotalStaff:   totalStaff,
+			CustomerID:      customerID.String,
+			PracticeID:      practiceID,
+			Quantity:        req.Quantity,
+			NewYorkStaff:    newYorkStaff,
+			TotalStaff:      totalStaff,
+			UnitAmountCents: pricing.today.UnitAmountCents,
+			TermsVersion:    pricing.termsVersion,
 		})
 		if err != nil {
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
