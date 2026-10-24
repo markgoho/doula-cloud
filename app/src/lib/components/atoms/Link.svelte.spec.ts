@@ -9,7 +9,7 @@ import LinkInSentence from './harness/LinkInSentence.svelte';
  * layer, so a global rule that undoes this atom's inline sentence styles
  * -- `reset.css`'s `svg { display: block }` was the one -- cannot be
  * seen here. It comes after the component imports on purpose: the layer
- * order is declared before any spec's imports run (`vitest.setup.ts`),
+ * order is declared before any spec's imports run (`src/vitest.browser.setup.ts`),
  * so where this line sits no longer changes the cascade.
  */
 import '#lib/styles/app.css';
