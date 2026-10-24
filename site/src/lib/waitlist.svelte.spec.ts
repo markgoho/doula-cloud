@@ -6,6 +6,8 @@ function hiddenInputs(): HTMLInputElement[] {
 		const input = document.createElement('input');
 		input.type = 'hidden';
 		input.name = `metadata__${name}`;
+		// As the card renders them: off until the script fills one (#1771).
+		input.disabled = true;
 		document.body.append(input);
 		return input;
 	});
@@ -26,6 +28,18 @@ describe('fillUtmFields', () => {
 		const inputs = hiddenInputs();
 		fillUtmFields('?utm_source=fb-rochester-birth-workers');
 		expect(inputs.map((input) => input.value)).toEqual(['fb-rochester-birth-workers', '', '', '']);
+	});
+
+	it('turns on each input it fills, so that the form posts it (#1771)', () => {
+		const inputs = hiddenInputs();
+		fillUtmFields('?utm_source=dona-summit-2026&utm_content=booth');
+		expect(inputs.map((input) => input.disabled)).toEqual([false, true, true, false]);
+	});
+
+	it('leaves every input off when the address carries no campaign value (#1771)', () => {
+		const inputs = hiddenInputs();
+		fillUtmFields('?other=e&utm_medium=');
+		expect(inputs.map((input) => input.disabled)).toEqual([true, true, true, true]);
 	});
 
 	it('does nothing on a page with no form', () => {
