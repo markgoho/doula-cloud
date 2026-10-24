@@ -68,7 +68,9 @@ func TestComposeTokenMail_UnverifiedSendsVerificationLink(t *testing.T) {
 // tx here: reaching for one would be a lie about what this path touches.
 //
 // The link carries the address it is mailed to (#1813), escaped so a `+`
-// in it survives, for the reset screen's hidden username field.
+// in it survives, for the reset screen's hidden username field. It is in
+// the fragment, not the query string (#1827), so no server request log
+// records it; the token alone stays in the query.
 func TestComposeTokenMail_PasswordResetSendsResetLink(t *testing.T) {
 	accounts := authntest.NewFakeAccountManager()
 	accounts.Seed("uid-2", "person+reset@example.com", true)
@@ -81,7 +83,7 @@ func TestComposeTokenMail_PasswordResetSendsResetLink(t *testing.T) {
 	if to != "person+reset@example.com" {
 		t.Fatalf("to = %q, want the address the link names", to)
 	}
-	wantLink := testComposeAppBaseURL + "/reset-password?token=reset-token&email=person%2Breset%40example.com\n"
+	wantLink := testComposeAppBaseURL + "/reset-password?token=reset-token#email=person%2Breset%40example.com\n"
 	if !strings.Contains(text, wantLink) {
 		t.Fatalf("text %q does not contain link %q", text, wantLink)
 	}
