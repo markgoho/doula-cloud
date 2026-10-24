@@ -1,6 +1,7 @@
 // Package legalnotice tells each Owner of each Practice, 30 days or more
 // ahead, that a material version of the Terms of Service or the Privacy
-// Policy is coming (ADR-0053, #1548). A change posted with no notice does
+// Policy is coming (ADR-0053, #1548), and 60 days or more ahead when it
+// raises the price of a Credit (#1817). A change posted with no notice does
 // not bind a Practice (Douglas v. Talk America), so the notice is the
 // first half of how a material change takes effect; the screen an Owner
 // agrees on after the date is the second (#1549).
@@ -29,6 +30,12 @@ import (
 // material version takes effect. The Terms promise it: "we email each
 // Owner at least 30 days before the new version takes effect".
 const NoticeLead = 30 * 24 * time.Hour
+
+// PriceRiseLead is the least time between the emails and the date a
+// version that raises the price of a Credit takes effect. The Terms
+// promise it: "If the price of a Credit ever rises, we email each Owner
+// at least 60 days before, with the reason" (#1817).
+const PriceRiseLead = 60 * 24 * time.Hour
 
 // PublishRequest is the body of a POST to PublishHandler: the document by
 // its address without the slash ("terms" or "privacy"), the version by
@@ -81,7 +88,8 @@ func find(docs []legal.Document, document, effective string) (legal.Document, le
 //
 // A material version queues one email for each Owner of each Practice
 // that is not deleted and not in its deletion window, and is refused
-// when it takes effect fewer than NoticeLead after now. A version that
+// when it takes effect fewer than NoticeLead after now, or fewer than
+// PriceRiseLead when it raises the price of a Credit. A version that
 // is not material is recorded and queues nothing. Publishing a version
 // twice keeps the first record and queues nothing more.
 //
@@ -109,7 +117,13 @@ func PublishHandler(db *sql.DB, auth *internalauth.Guard, docs []legal.Document)
 		}
 
 		now := clock.Now(r.Context())
-		if version.Material && !leavesNotice(version.Effective, now) {
+		if version.PriceRise != "" && !leavesNotice(version.Effective, now, PriceRiseLead) {
+			apierr.WriteError(w,
+				"a version that raises the price of a Credit must take effect at least 60 days after the emails are queued",
+				http.StatusUnprocessableEntity)
+			return
+		}
+		if version.Material && !leavesNotice(version.Effective, now, NoticeLead) {
 			apierr.WriteError(w,
 				"a material version must take effect at least 30 days after the emails are queued",
 				http.StatusUnprocessableEntity)
@@ -142,17 +156,17 @@ func PublishHandler(db *sql.DB, auth *internalauth.Guard, docs []legal.Document)
 }
 
 // leavesNotice answers whether a version that takes effect on effective
-// leaves NoticeLead between now and its start. The version is a date
-// with no zone, so it is taken to start at midnight UTC, which is before
+// leaves lead between now and its start. The version is a date with no
+// zone, so it is taken to start at midnight UTC, which is before
 // midnight anywhere in the United States: the reading that never gives
-// an Owner less than 30 days.
-func leavesNotice(effective string, now time.Time) bool {
+// an Owner less than the lead.
+func leavesNotice(effective string, now time.Time, lead time.Duration) bool {
 	start, err := time.Parse(time.DateOnly, effective)
 	// coverage:ignore reason: legal_test.go holds every version's Effective to a date, and a fixture is written the same way
 	if err != nil {
 		return false
 	}
-	return start.Sub(now) >= NoticeLead
+	return start.Sub(now) >= lead
 }
 
 // record writes the publication and, for the first publication of a

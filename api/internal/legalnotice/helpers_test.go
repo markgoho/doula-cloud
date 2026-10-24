@@ -43,6 +43,9 @@ var publishedAt = time.Date(2026, time.October, 23, 15, 0, 0, 0, time.UTC)
 //
 // 2026-12-01 is 38 days after publishedAt, so it may be published.
 // 2026-11-15 is 23 days after it, too soon for a material version.
+// 2026-12-07 raises the price of a Credit 45 days after it: enough for a
+// material version, too soon for a rise, which the Terms give 60 days.
+// 2026-12-31 raises the price 68 days after it, so it may be published.
 var (
 	fixtureTerms = legal.Document{
 		Name: "Terms of Service",
@@ -51,6 +54,8 @@ var (
 			{Effective: "2026-09-29", Material: false, Change: "First version."},
 			{Effective: "2026-11-15", Material: true, Change: "Says what a Credit costs from November."},
 			{Effective: "2026-12-01", Material: true, Change: "The price of a Credit changes to $40."},
+			{Effective: "2026-12-07", Material: true, Change: "A Credit costs $45.", PriceRise: "Card fees went up."},
+			{Effective: "2026-12-31", Material: true, Change: "A Credit costs $50.", PriceRise: "Text messages cost more to send."},
 		},
 	}
 	fixturePrivacy = legal.Document{

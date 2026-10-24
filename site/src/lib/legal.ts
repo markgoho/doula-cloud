@@ -5,6 +5,9 @@
  * A version is the date it takes effect (ADR-0053). `material` is true
  * when the version changes what a Practice pays, what she gets, or what
  * occurs with her data, and `change` is one line of what changed.
+ * `priceRise` is there only on a version that raises the price of a
+ * Credit, and it is the reason the email before the version gives: the
+ * Terms promise "at least 60 days before, with the reason" (#1817).
  *
  * `api/internal/legal` holds the same histories for the BFF, which
  * records the version an Owner agreed to. The two must agree, and
@@ -16,6 +19,7 @@ export interface LegalVersion {
 	effective: string;
 	material: boolean;
 	change: string;
+	priceRise?: string;
 }
 
 export interface LegalDocument {

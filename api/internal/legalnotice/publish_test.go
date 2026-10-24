@@ -149,6 +149,52 @@ func TestPublish_RefusesAMaterialVersionFewerThan30DaysOut(t *testing.T) {
 	}
 }
 
+// A rise in the price of a Credit 45 days out is refused, though a
+// material version may be published 30 days out: the Terms promise each
+// Owner 60 days before a price rise (#1817).
+func TestPublish_RefusesAPriceRiseFewerThan60DaysOut(t *testing.T) {
+	db := testdb.New(t)
+	harbor := testdb.SeedPractice(t, db, "Harbor Doulas")
+	testdb.SeedStaffAtPractice(t, db, harbor, "ana", owner, employee)
+
+	status, answer := publish(t, newPublishServer(t, db), testSecret,
+		`{"document":"terms","version":"2026-12-07","publishedBy":"Mark"}`)
+	if status != http.StatusUnprocessableEntity {
+		t.Fatalf("status = %d, want 422", status)
+	}
+	if !strings.Contains(string(answer), "60 days") {
+		t.Fatalf("refusal = %s, want it to name the 60 days a price rise is owed", answer)
+	}
+	var n int
+	if err := db.Admin.QueryRowContext(t.Context(), `SELECT count(*) FROM legal_version_publications`).Scan(&n); err != nil {
+		t.Fatalf("count publications: %v", err)
+	}
+	if n != 0 || len(outboxRows(t, db)) != 0 {
+		t.Fatalf("publications = %d, outbox rows = %d, want none of either", n, len(outboxRows(t, db)))
+	}
+}
+
+// A price rise 60 days or more out is published, and its email gives the
+// reason, as the Terms promise.
+func TestPublish_PriceRiseEmailGivesTheReason(t *testing.T) {
+	db := testdb.New(t)
+	harbor := testdb.SeedPractice(t, db, "Harbor Doulas")
+	testdb.SeedStaffAtPractice(t, db, harbor, "ana", owner, employee)
+
+	if p := publishOK(t, newPublishServer(t, db), "terms", "2026-12-31"); p.Queued != 1 {
+		t.Fatalf("queued = %d, want 1", p.Queued)
+	}
+	sender := &mail.FakeSender{}
+	runWorker(t, db, sender, fixtureDocs)
+	sent := sender.Sent()
+	if len(sent) != 1 {
+		t.Fatalf("sent %d emails, want 1", len(sent))
+	}
+	if !strings.Contains(sent[0].Text, "What changes: A Credit costs $50.\n\nWhy the price rises: Text messages cost more to send.\n\n") {
+		t.Fatalf("text does not give the reason for the rise:\n%s", sent[0].Text)
+	}
+}
+
 // Publishing a version twice keeps the first record and queues nothing
 // more: an Owner is told once.
 func TestPublish_TwiceKeepsTheFirstRecord(t *testing.T) {

@@ -86,6 +86,12 @@ func TestEachDocumentsHistory(t *testing.T) {
 				if v.Change == "" {
 					t.Fatalf("version %d: says nothing about what changed", i)
 				}
+				// A rise in the price of a Credit changes what a
+				// Practice pays, so it is material: each Owner is
+				// emailed and asked again (#1817).
+				if v.PriceRise != "" && !v.Material {
+					t.Fatalf("version %d: raises the price of a Credit but is not marked material", i)
+				}
 				previous = effective
 			}
 			// A first version changes nothing anybody agreed to, so no

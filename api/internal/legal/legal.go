@@ -2,17 +2,18 @@
 // Practice agrees to when its Owner creates it: the Terms of Service and
 // the Privacy Policy (ADR-0053). The text lives on the marketing site, at
 // each Document's Path; what the BFF needs is which version is in force,
-// whether each version was a material change, and one line of what
-// changed, because the agreement recorded at signup (#1547), the email
-// before a material change (#1548) and the screen after it (#1549) read
-// those facts and must not invent them.
+// whether each version was a material change, one line of what changed,
+// and the reason for a rise in the price of a Credit, because the
+// agreement recorded at signup (#1547), the email before a material
+// change (#1548) and the screen after it (#1549) read those facts and
+// must not invent them.
 //
 // site/src/lib/legal.ts carries the same histories for the pages to
 // print, and the two have to agree: site/src/lib/legal.spec.ts reads this
 // file and fails when they differ, the same kind of mirrored pair as
 // website.SiteBaseURL and the site's SITE_ORIGIN. That spec reads the
 // Version literals below with a pattern, so each stays on one line with
-// its fields in this order.
+// its fields in this order, and PriceRise, when a version has one, last.
 package legal
 
 import "time"
@@ -29,6 +30,15 @@ type Version struct {
 	Material bool
 	// Change is one line that says what changed.
 	Change string
+	// PriceRise is empty unless the version raises the price of a
+	// Credit, and then it is the reason, one line the email before the
+	// version prints. The Terms promise "If the price of a Credit ever
+	// rises, we email each Owner at least 60 days before, with the
+	// reason" (ADR-0042), so a rise is published 60 days or more before
+	// Effective, not 30, and a rise is always Material (#1817). It is
+	// the last field of a literal, and a literal that is not a rise
+	// leaves it out.
+	PriceRise string
 }
 
 // Document is one of the two documents, with its versions oldest first.
