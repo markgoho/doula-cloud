@@ -117,6 +117,18 @@ describe('TextInput.svelte', () => {
 		await expect.element(page.getByRole('textbox')).toBeDisabled();
 	});
 
+	it('reflects readonly (#1813)', async () => {
+		await setup({ value: 'anne@example.test', readonly: true });
+
+		await expect.element(page.getByRole('textbox')).toHaveAttribute('readonly');
+	});
+
+	it('is not read-only by default', async () => {
+		await setup();
+
+		await expect.element(page.getByRole('textbox')).not.toHaveAttribute('readonly');
+	});
+
 	it('reflects required', async () => {
 		await setup({ required: true });
 

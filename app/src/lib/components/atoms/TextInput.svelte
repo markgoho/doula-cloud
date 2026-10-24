@@ -57,6 +57,7 @@
 		placeholder,
 		required = false,
 		disabled = false,
+		readonly = false,
 		invalid = false,
 		describedBy,
 		minlength,
@@ -94,6 +95,14 @@
 		placeholder?: string;
 		required?: boolean;
 		disabled?: boolean;
+		/*
+		 * A value the person can read, select and copy, but not change.
+		 * Unlike `disabled`, the field stays in the tab order and is still
+		 * submitted with its form. `/reset-password`'s Email field is the
+		 * one caller (#1813): it names the account, and a password manager
+		 * saves the new password against it.
+		 */
+		readonly?: boolean;
 		invalid?: boolean;
 		describedBy?: string;
 		minlength?: number;
@@ -178,6 +187,7 @@
 		{placeholder}
 		{required}
 		{disabled}
+		{readonly}
 		{minlength}
 		{maxlength}
 		{min}

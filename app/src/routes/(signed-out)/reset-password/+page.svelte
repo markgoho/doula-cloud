@@ -21,12 +21,14 @@
 
 	const token = page.url.searchParams.get('token') ?? '';
 	// #1813: the address the link was mailed to (authmail.tokenMailCopy),
-	// only so a password manager saves the new password against it. It is
-	// not sent anywhere: the token alone names the account to the BFF.
+	// shown read-only so the person sees which account this is, and so a
+	// password manager saves the new password against it. It is not sent
+	// anywhere: the token alone names the account to the BFF.
 	// #1827: it is in the fragment, which a browser never sends to a
 	// server, so it stays out of request logs. The mail escapes it with
 	// url.QueryEscape, and URLSearchParams is that escaping's inverse.
 	const accountEmail = new URLSearchParams(page.url.hash.slice(1)).get('email') ?? '';
+	const emailId = 'reset-password-email';
 	const passwordId = 'reset-password-new';
 
 	let newPassword = $state('');
@@ -75,13 +77,28 @@
 			{#if accountEmail}
 				<!--
 					#1813: a password manager saves a new password against the
-					field marked "username" in the same form. Chromium's own
-					pattern for a form that does not ask for it: a field that
-					holds it, not shown. `hidden` keeps it out of sight, out of
-					the tab order and out of the accessibility tree.
+					field marked "username" in the same form. This field is
+					visible, and not `hidden`, because of the real-Chrome walk on
+					2026-10-24: with `hidden` (display: none), Chrome ignored the
+					field and saved the new password with no username. A visible
+					field also tells the person which account they are resetting.
+					It is read-only: the token, not this value, names the account
+					to the BFF, so a changed email would only mislead the
+					password manager.
 				-->
-				<!-- eslint-disable-next-line svelte/no-restricted-html-elements -- a field nobody sees or types in: TextInput is a visible, labeled control, and this one has no label, no handler and no value but the link's -->
-				<input type="email" autocomplete="username" value={accountEmail} hidden />
+				<LabeledField id={emailId} label="Email">
+					{#snippet children({ id, describedBy })}
+						<TextInput
+							{id}
+							{describedBy}
+							type="email"
+							value={accountEmail}
+							onInput={() => {}}
+							readonly
+							autocomplete="username"
+						/>
+					{/snippet}
+				</LabeledField>
 			{/if}
 			<LabeledField
 				id={passwordId}

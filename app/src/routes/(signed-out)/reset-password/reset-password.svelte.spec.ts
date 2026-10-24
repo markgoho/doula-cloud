@@ -28,49 +28,61 @@ beforeEach(() => {
 const passwordField = () => testPage.getByLabelText('New password');
 const submit = () => testPage.getByRole('button', { name: 'Reset password' }).click();
 
+const emailField = () => testPage.getByRole('textbox', { name: 'Email' });
+
 /**
 Renders the screen as opened from `url` (the fixture's own link by
-default) and returns its username field, or null when it renders none.
-The screen reads the link once, as it mounts, so the fixture's URL goes
-back in place as soon as it has rendered.
-
-querySelector, case 2 of svelte-tests.md: the field is deliberately out
-of the accessibility tree, so no accessible query can find it.
+default). The screen reads the link once, as it mounts, so the fixture's
+URL goes back in place as soon as it has rendered.
 */
-async function setupUsernameField(url = new URL(fixture.url)) {
+async function setupFromLink(url = new URL(fixture.url)) {
 	pageState.url = url;
 	try {
-		const { container } = await render(Page, {});
+		await render(Page, {});
 		await expect.element(passwordField()).toBeVisible();
-		return container.querySelector<HTMLInputElement>('input[autocomplete="username"]');
 	} finally {
 		pageState.url = new URL(fixture.url);
 	}
 }
 
 describe('the account a password manager saves the new password against (#1813)', () => {
-	it('carries the account email from the link in a username field she cannot see or reach', async () => {
-		const username = await setupUsernameField();
+	it('shows the account email from the link in a read-only Email field, the username of the form', async () => {
+		await setupFromLink();
 
-		expect(username?.value).toBe('anne-marie+reset@example.test');
-		// `hidden`: not painted, not in the tab order, not in the accessibility tree.
-		expect(username?.hidden).toBe(true);
+		// Visible, not `hidden`: on the 2026-10-24 real-Chrome walk, Chrome
+		// ignored a display:none username field and saved the password with none.
+		await expect.element(emailField()).toBeVisible();
+		await expect.element(emailField()).toHaveValue('anne-marie+reset@example.test');
+		await expect.element(emailField()).toHaveAttribute('readonly');
+		await expect.element(emailField()).toHaveAttribute('type', 'email');
+		await expect.element(emailField()).toHaveAttribute('autocomplete', 'username');
 		await expect.element(passwordField()).toHaveAttribute('autocomplete', 'new-password');
+	});
+
+	it('puts the Email field in the same form as the new password', async () => {
+		await setupFromLink();
+
+		const email = emailField().element() as HTMLInputElement;
+		const password = passwordField().element() as HTMLInputElement;
+		expect(email.form).not.toBeNull();
+		expect(email.form).toBe(password.form);
 	});
 
 	it('reads the email from the fragment, not the query string (#1827)', async () => {
 		const inQuery = new URL(fixture.url);
 		inQuery.hash = '';
 		inQuery.searchParams.set('email', 'anne-marie+reset@example.test');
+		await setupFromLink(inQuery);
 
-		expect(await setupUsernameField(inQuery)).toBeNull();
+		await expect.element(emailField()).not.toBeInTheDocument();
 	});
 
-	it('renders no username field for a link that carries no email', async () => {
+	it('renders no Email field for a link that carries no email', async () => {
 		const withoutEmail = new URL(fixture.url);
 		withoutEmail.hash = '';
+		await setupFromLink(withoutEmail);
 
-		expect(await setupUsernameField(withoutEmail)).toBeNull();
+		await expect.element(emailField()).not.toBeInTheDocument();
 	});
 
 	it('tells Safari the rule, so a generated password passes it', async () => {
