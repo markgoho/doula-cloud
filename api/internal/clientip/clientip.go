@@ -6,10 +6,10 @@
 //
 // # Why the header is read from the right (#1865)
 //
-// X-Forwarded-For is a list every hop appends to. A proxy does not check
-// or remove what the caller sent: Google's load balancer documentation
-// says it appends after "any value already present" and "does not verify
-// any IP addresses that precede" its own entries
+// X-Forwarded-For is a list every hop appends to. Google's front end
+// does not check or remove what the caller sent: its load balancer
+// documentation says it appends after "any value already present" and
+// "does not verify any IP addresses that precede" its own entries
 // (https://docs.cloud.google.com/load-balancing/docs/https, read
 // 2026-10-24). So the left-most entry is whatever text the caller chose,
 // and only the entries on the right, written by a proxy from the address
@@ -22,9 +22,10 @@
 //     webhooks and Cloud Scheduler call it there, and because the
 //     Hosting rewrite itself needs it (see below). Google's front end
 //     appends the caller's address: "<caller text>, <caller>".
-//   - Through the Firebase Hosting rewrite of /api/**. Hosting appends
-//     the browser's address, then Google's front end appends Hosting's:
-//     "<caller text>, <caller>, <Hosting edge>".
+//   - Through the Firebase Hosting rewrite of /api/**. Hosting does not
+//     pass the caller's text on (observed, below): it writes the
+//     browser's address, then Google's front end appends Hosting's:
+//     "<caller>, <Hosting edge>".
 //
 // A fixed count of hops to skip is right for only one of the two, so
 // From decides by address instead: it skips the right-most entry only
@@ -76,9 +77,23 @@
 // the six 64.233.172.x addresses. A failure is a range to add
 // here, with its evidence above, or the residual in use.
 //
-// Not yet observed: the header itself, as the container receives it,
-// for a request with a caller-written entry. #1865 holds the probe that
-// settles it; record its result and date here.
+// 2026-10-24, a request with a caller-written entry, on each path and
+// on each side of the #1865 fix: four GET /api/offers/{offerId}
+// requests from 8.47.98.19, each with a made-up first X-Forwarded-For
+// entry, read back from rate_limit_buckets' offer_read:ip:* rows (#1865
+// has the probe and the rows):
+//
+//   - Old code (first entry), through Hosting, sent 198.51.100.186:
+//     counted against 8.47.98.19. Hosting dropped the caller's text.
+//   - Old code, direct to run.app, sent 198.51.100.187: a row keyed
+//     198.51.100.187. Google's front end kept the caller's text, so the
+//     old code returned an address the caller chose.
+//   - New code, through Hosting (198.51.100.188) and direct
+//     (198.51.100.189): no row for either; both counted against
+//     8.47.98.19, in the same row as the first request (count 3).
+//
+// So Hosting adds exactly one hop on the right, and From returns the
+// connecting address on both paths.
 package clientip
 
 import (
