@@ -12,9 +12,15 @@ thing being avoided.
 <script lang="ts">
 	import PageSection from '#lib/components/PageSection.svelte';
 	import ReadingPage from '#lib/components/ReadingPage.svelte';
+	import { TERMS, creditPrice, versionInForce } from '#lib/legal.js';
 	import { PRODUCT_NAME, SITE_ORIGIN } from '#lib/product.js';
 
 	const title = 'Pilot terms';
+
+	// The price the Terms in force state, at the moment of the build, the
+	// same read /terms makes (#1841). Typed here, it was one more copy a
+	// rise had to find by hand.
+	const price = creditPrice(versionInForce(TERMS, new Date()));
 </script>
 
 <svelte:head>
@@ -57,7 +63,7 @@ thing being avoided.
 			intake through the end of care. Birth and postpartum engagements cost the same.
 		</p>
 		<p>
-			A Credit costs <strong>$20.00</strong>, plus sales tax where it applies. That is the ordinary
+			A Credit costs <strong>{price}</strong>, plus sales tax where it applies. That is the ordinary
 			price of a Credit, not a pilot price, and it is what a practice pays for every Credit beyond its
 			grant.
 		</p>
@@ -70,7 +76,7 @@ thing being avoided.
 	<PageSection heading="What happens when the pilot ends">
 		<p>Nothing changes when {PRODUCT_NAME} opens to everyone in January 2027.</p>
 		<ul>
-			<li>A Credit still costs $20.00.</li>
+			<li>A Credit still costs {price}.</li>
 			<li>Unused Credits stay, granted and purchased alike.</li>
 			<li>The account carries on. There is nothing to renew, and nothing to cancel.</li>
 		</ul>

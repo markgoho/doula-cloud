@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { PRIVACY, TERMS, type LegalDocument, versionInForce } from './legal.js';
+import { render } from 'vitest-browser-svelte';
+import { PRIVACY, TERMS, type LegalDocument, creditPrice, versionInForce } from './legal.js';
 import { textDates, versionWithText, versionsWithText, textOf } from './legalTexts.js';
 
 describe('the text of each version (#1816)', () => {
@@ -20,6 +21,15 @@ describe('the text of each version (#1816)', () => {
 	it.each([TERMS, PRIVACY])('the $name: the version in force today has a text', (legalDocument) => {
 		const inForce = versionInForce(legalDocument, new Date());
 		expect(textOf(legalDocument, inForce)).toBeDefined();
+	});
+
+	// A version's text is the words a Practice agreed to, so it is typed,
+	// not printed from the history; this holds the two to one price, so a
+	// new version that changes `creditPriceCents` and not its text, or the
+	// other way round, fails here (#1841).
+	it.each(versionsWithText(TERMS))('the Terms of $effective state the price of a Credit their version carries', async (version) => {
+		const { container } = await render(textOf(TERMS, version), { effective: version.effective });
+		expect(container.textContent).toContain(`A Credit costs ${creditPrice(version)},`);
 	});
 
 	it('finds the version a page names, and no version without a text', () => {

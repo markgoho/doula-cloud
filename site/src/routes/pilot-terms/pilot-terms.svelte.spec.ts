@@ -1,6 +1,7 @@
 import { page as testPage } from 'vitest/browser';
 import { describe, expect, it } from 'vitest';
 import { render } from 'vitest-browser-svelte';
+import { TERMS, creditPrice, versionInForce } from '#lib/legal.js';
 import PageInLayout from '../PageInLayout.svelte';
 import { expectTheSiteFooter } from '../siteFooter.expect.js';
 import Page from './+page.svelte';
@@ -21,6 +22,16 @@ describe('the pilot terms at /pilot-terms (#444)', () => {
 		await expect.element(testPage.getByRole('heading', { level: 1, name: 'Pilot terms' })).toBeVisible();
 		await expect.element(testPage.getByText('three free Credits for each person on its staff')).toBeVisible();
 		await expect.element(testPage.getByRole('heading', { level: 2, name: 'Refunds' })).toBeVisible();
+	});
+
+	// The price is the one the Terms in force state, printed from
+	// site/src/lib/legal.ts, so a rise changes this page with no edit to
+	// it (#1841).
+	it('states the price of a Credit that the Terms in force state', async () => {
+		await render(Page);
+		const price = creditPrice(versionInForce(TERMS, new Date()));
+		await expect.element(testPage.getByText(price, { exact: true })).toBeVisible();
+		await expect.element(testPage.getByText(`A Credit still costs ${price}.`)).toBeVisible();
 	});
 
 	it('says when the terms last changed, under its main content', async () => {
