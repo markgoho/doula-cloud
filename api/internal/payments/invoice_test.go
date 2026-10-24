@@ -1111,13 +1111,19 @@ func TestPostInvoiceHandler_BillingModeRequiredWhenUnset(t *testing.T) {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusUnprocessableEntity)
 	}
 	var out struct {
-		Message string `json:"message"`
+		Message string            `json:"message"`
+		Details map[string]string `json:"details"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
 	if out.Message != payments.MsgBillingModeRequired {
 		t.Fatalf("message = %q, want %q", out.Message, payments.MsgBillingModeRequired)
+	}
+	// #1775: the refusal names the field, so the app shows it against
+	// the billing-mode question as well as in its error summary.
+	if got := out.Details["billingMode"]; got != payments.DetailBillingModeRequired {
+		t.Fatalf("details.billingMode = %q, want %q", got, payments.DetailBillingModeRequired)
 	}
 	if got := invoiceCount(t, db); got != 0 {
 		t.Fatalf("invoices row count = %d, want 0", got)

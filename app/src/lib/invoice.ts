@@ -198,8 +198,11 @@ export async function createInvoice(
 		headers: { 'Content-Type': 'application/json' },
 		body: JSON.stringify({ billingMode })
 	});
+	// refusalError, matching recordPayment below: InvoiceSection reads
+	// PostInvoiceHandler's `details.billingMode` (#1775) onto the
+	// billing-mode question, and apiErrorMessage would discard it.
 	if (!response.ok) {
-		throw new Error(await apiErrorMessage(response));
+		throw await refusalError(response);
 	}
 	return response.json();
 }
