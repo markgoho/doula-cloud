@@ -832,6 +832,21 @@ describe("the Contract's merge-field completeness block and filled-text render (
 
 		await expect.element(testPage.getByRole('button', { name: 'Send Contract' })).toBeEnabled();
 	});
+
+	// #1776: a Practice's template can hold no merge field at all. The BFF
+	// answers such a Contract with `mergeFields: []`, and the page must
+	// render it with nothing to fill in rather than fail.
+	it('renders a Contract whose prose holds no merge field, with Send Contract enabled', async () => {
+		const prose = 'This agreement has no fields to fill in.';
+		await setupWithContract(
+			() => mockContract(draftOf({ prose, mergeFields: [], values: {} })),
+			{ ...fixtureDetail, clientPortalInviteStatus: 'accepted' }
+		);
+
+		await expect.element(testPage.getByText(prose)).toBeVisible();
+		await expect.element(testPage.getByRole('button', { name: 'Send Contract' })).toBeEnabled();
+		expect(testPage.getByText(/fill in every merge field/i).elements()).toHaveLength(0);
+	});
 });
 
 /*

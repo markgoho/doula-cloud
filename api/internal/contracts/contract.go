@@ -109,9 +109,12 @@ var mergeFieldPattern = regexp.MustCompile(`\{\{\s*([A-Za-z0-9_]+)\s*\}\}`)
 // pure function of prose, so this runs on every read/write rather than
 // storing the list in a second column -- prose is itself frozen at
 // Contract creation, so the result is stable for the row's lifetime.
+// Prose with no merge field gives an empty, non-nil slice, so every
+// Contract response marshals mergeFields as `[]` and never as null
+// (#1776).
 func extractMergeFields(prose string) []string {
 	seen := make(map[string]bool)
-	var keys []string
+	keys := []string{}
 	for _, match := range mergeFieldPattern.FindAllStringSubmatch(prose, -1) {
 		key := match[1]
 		if seen[key] {
