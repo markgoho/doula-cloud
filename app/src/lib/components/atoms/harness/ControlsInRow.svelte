@@ -21,7 +21,7 @@
 <div class="row" style:inline-size={inlineSize}>
 	{#each ['first', 'second', 'third'] as key (key)}
 		{#if kind === 'link'}
-			<Link href="#{key}" {label} variant="nav" />
+			<Link href="#row" {label} variant="nav" />
 		{:else}
 			<Button {label} variant="secondary" />
 		{/if}
