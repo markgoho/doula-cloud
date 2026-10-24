@@ -1,6 +1,9 @@
 import { page } from 'vitest/browser';
 import { describe, expect, it } from 'vitest';
 import { render } from 'vitest-browser-svelte';
+// A row's height is `--row-height` (#1843), which only the real token
+// sheet defines.
+import '#lib/styles/app.css';
 import Skeleton from './Skeleton.svelte';
 
 interface SetupOptions {

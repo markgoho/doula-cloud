@@ -172,7 +172,13 @@
 	/* Fixed dimensions the brief states as numbers. Tokens rather than magic
 	   numbers, so #431's shell and #422's Templates share one source. */
 	--control-height: 2.5rem;
+	/* A table row's whole box, its 1px rule included: 40px when every
+	   input is fine, and raised by the coarse-pointer block below (#1843).
+	   --row-target-min is what is left inside the rule, which is the floor
+	   of a link or a button in a row, so a target is always the row's own
+	   height. */
 	--row-height: 2.5rem;
+	--row-target-min: calc(var(--row-height) - var(--border-thin));
 	--top-bar-height: 3.75rem;
 	/* Carved out of the ramp on purpose (#531): a value that may shrink
 	   cannot be a minimum. WCAG 2.5.5 states 44px as a floor, so this one
@@ -301,6 +307,29 @@
 	   conversation and the thread does not jump as images decode. */
 	--thumb-max-inline: 15rem;
 	--thumb-max-block: 11.25rem;
+}
+
+/*
+ * A table row is input-aware (#1843, the brief's Density section). 44px is
+ * a touch measure, and density is what a person at a desk wants from a
+ * table, so a row is 40px when every input is fine, and holds a 44px target
+ * when any input can tap. The row's 1px rule is inside its box (the
+ * collapsed-border model), so the coarse row is 44px of target plus that
+ * rule, 45px: the target is the exact number because 44px is the floor and
+ * the row's density is a preference. A link or a button in a row takes
+ * --row-target-min as its floor, so the row and its targets are always the
+ * same height, and `Skeleton` reserves the same row because it reads
+ * --row-height too.
+ *
+ * `any-pointer`, not `pointer`: a touchscreen laptop or an iPad with a
+ * trackpad reports a fine primary pointer, and a person can still tap it.
+ * A stated input capability is what ADR-0024 rule 3 keeps a media query
+ * for; `RecordDetail.svelte`'s chip switch (#564) is the precedent.
+ */
+@media (any-pointer: coarse) {
+	:root {
+		--row-height: calc(var(--hit-target-min) + var(--border-thin));
+	}
 }
 
 /*
