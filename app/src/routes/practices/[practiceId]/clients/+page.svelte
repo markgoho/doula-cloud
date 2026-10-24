@@ -321,7 +321,7 @@
 				needs to come back here -- once she has an attached Client, the
 				narrowed list above is already her route to it.
 			-->
-			<p><Link href={searchHref()} label="How to add Clients of your own" /></p>
+			<Link href={searchHref()} label="How to add Clients of your own" />
 		{/if}
 	{:else}
 		<Skeleton variant="row" lines={8} label="Loading Clients" />

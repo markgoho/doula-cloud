@@ -153,7 +153,7 @@ The survey behind [#406](https://github.com/markgoho/doula-cloud/issues/406) lan
 - **Forms are comfortable.** A form control is `40px` tall with `12px` of horizontal padding; consecutive fields are `20px` apart; a labeled field group is `28px` from the next. Filling in an intake form is careful work and is not the place to save vertical space.
 - **The spacing scale stays on a 4px base.** The existing `--space-*` ramp is correct and is kept. Page gutters are `40px` at desktop width; card padding is `20px 22px`.
 - **The top bar is `60px`.** It carries the product name, the flat nav, the Practice switcher and the avatar menu on one line, and it does not grow.
-- **Hit targets never fall below 44px** in any pointer or touch context, whatever the visual height of the control.
+- **Hit targets never fall below 44px** in any pointer or touch context, whatever the visual height of the control. One exception, the one WCAG 2.2's 2.5.8 makes ("Inline"): a link inside a sentence is as tall as its line of text, because a 44px box would push the lines of the sentence apart. A link on its own line, as a screen's action, a Back link or an entry in a list, is not inside a sentence and takes the full 44px. In the code the line is the paragraph: `Link` and the `link` variant of `Button` drop the floor inside a `<p>` and keep it everywhere else, so a link that stands alone is not written inside a `<p>` ([#1828](https://github.com/markgoho/doula-cloud/issues/1828)). A target in a table row is not yet settled, because the 40px row above cannot hold a 44px target: until [#1843](https://github.com/markgoho/doula-cloud/issues/1843) decides, a link or a button in a table cell keeps the row's 40px.
 
 ## Depth and shape
 

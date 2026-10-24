@@ -233,10 +233,8 @@ describe('the agreement sentence (#1547)', () => {
 		await render(Page, { params: {}, data: outsideANotice });
 
 		const button = testPage.getByRole('button', { name: 'Create Practice' });
-		// The Link atom is inline-flex, and the accessible-name computation
-		// puts a space after an inline-block element, so the full stop
-		// arrives as " ." -- a screen reader reads it the same.
-		await expect.element(button).toHaveAccessibleDescription(sentence.replace(/\.$/, ' .'));
+		// The full stop follows the last link with no space before it (#1808).
+		await expect.element(button).toHaveAccessibleDescription(sentence);
 		const paragraph = testPage.getByRole('paragraph').filter({ hasText: 'By creating your Practice' });
 		await expect.element(paragraph).toBeVisible();
 

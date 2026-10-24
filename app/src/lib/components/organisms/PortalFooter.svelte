@@ -33,12 +33,8 @@
 			font-size: var(--text-body-sm-size);
 		}
 
-		/* The brief's Density rule: no hit target under 44px. The link is
-		   alone on its row, not inside a sentence, so its own box takes
-		   the full height; `Link` is an inline-flex row, so the text stays
-		   centered in it. */
-		footer :global(a) {
-			min-block-size: var(--hit-target-min);
-		}
+		/* The brief's Density rule (no hit target under 44px) is the `Link`
+		   atom's own since #1828: the link is alone on its row, not inside
+		   a paragraph, so the atom gives it the full 44px. */
 	}
 </style>

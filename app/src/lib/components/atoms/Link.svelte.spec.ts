@@ -3,6 +3,7 @@ import { page } from 'vitest/browser';
 import { describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import Link from './Link.svelte';
+import LinkInSentence from './harness/LinkInSentence.svelte';
 
 type SetupOptions = Partial<ComponentProps<typeof Link>>;
 
@@ -83,6 +84,17 @@ describe('Link.svelte', () => {
 		await setup({ href: 'https://example.com', label: 'Visit site' });
 
 		await expect.element(page.getByText('Visit site (opens in new tab)')).toBeVisible();
+	});
+
+	// #1808: a sentence that ends with an external link reads its full
+	// stop straight after the link, not as an item of its own after a
+	// space.
+	it('reads a sentence that ends with an external link with no space before its full stop', async () => {
+		await render(LinkInSentence, { href: 'https://example.com', label: 'Privacy Policy' });
+
+		await expect
+			.element(page.getByRole('button', { name: 'Continue' }))
+			.toHaveAccessibleDescription('Read the Privacy Policy (opens in new tab).');
 	});
 
 	it('renders no icon and no "opens in new tab" text for an internal link', async () => {
