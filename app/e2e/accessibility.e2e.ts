@@ -10,7 +10,9 @@ import {
 } from './portalClient';
 import { seedEngagement, seedEngagementRequest, seedInvoice } from './stack';
 import { enterPracticeAsEnrolled, verifyEmail } from './mfa';
-import { seedAccountWithNoPractice } from './staffSignup';
+import { seedAccountWithNoPractice, seedFoundingOwner } from './staffSignup';
+import { signIn } from './auth';
+import { drainUntilMailArrives } from './outboxMail';
 import { stubTotpFactor } from './totpStub';
 import { WCAG_TAGS } from './wcag';
 
@@ -271,7 +273,8 @@ test('Archetype A -- the two screens behind a session with no Practice', async (
 }) => {
 	const { headers, password, email, localId } = await seedAccountWithNoPractice(request);
 	// #1504: an unverified address is shown the verify-first step, so step
-	// two's QR code is reached only once the address is verified.
+	// two's QR code is reached only once the address is verified. The
+	// verify-first step itself is scanned in the next test (#1782).
 	await verifyEmail(request, localId);
 	const token = headers.Cookie.replace('__session=', '');
 	await context.addCookies([
@@ -338,6 +341,74 @@ test('Archetype A -- the two screens behind a session with no Practice', async (
 	await expect(page.getByRole('link', { name: 'Skip to main content' })).toBeAttached();
 	await expect(page.getByRole('banner')).toBeVisible();
 	await expect(page.getByRole('main')).toBeVisible();
+});
+
+// #1782: the verify-first step of `mfa/enroll` (#1504), and the link that
+// ends it. Since #1531 a new Owner enters her Practice straight after
+// signup with an unverified address and no second factor, so the person
+// who meets this step is that Owner, opening enrollment from `/account`
+// or a `SecondFactorNeeded` link. A founding Owner is seeded for it
+// rather than the Practice-less session above: her session lookup is
+// real, so neither screen needs the stand-in answer that test installs,
+// and signup itself queues the verification mail whose link
+// `/verify-email` is scanned with.
+//
+// No `stubTotpFactor`: the verify-first step is shown before any TOTP
+// enrollment session is opened, so nothing here reaches the path the
+// emulator lacks.
+test('Archetype A -- the verify-first step and its link, for an Owner whose email is not verified', async ({
+	page,
+	request,
+	context
+}) => {
+	const { email, password, idToken } = await seedFoundingOwner(request);
+	const headers = await signIn(request, API_URL, idToken);
+	const token = headers.Cookie.replace('__session=', '');
+	await context.addCookies([
+		{ name: '__session', value: token, url: PREVIEW_SERVER_ORIGIN, httpOnly: true, secure: false, sameSite: 'Lax' }
+	]);
+
+	// Step one's password prompt is answered the same way the step-two row
+	// above answers it. The address is unverified, so the step that
+	// follows is the verify-first one, which the `<h2>` names: the `<h1>`
+	// is the same on every step.
+	await scan(page, {
+		key: 'mfa/enroll (verify-first)',
+		archetype: 'A',
+		url: '/mfa/enroll',
+		h1: 'Set up two-factor authentication',
+		reach: async (page) => {
+			await page.getByLabel('Password').fill(password);
+			await page.getByRole('button', { name: 'Continue' }).click();
+			await expect(page.getByRole('heading', { level: 2, name: 'Verify your email address first' })).toBeVisible();
+		}
+	});
+
+	// The verification mail signup queued for her. Drained until it
+	// arrives, not once (#1141): outboxMail.ts says why.
+	const message = await drainUntilMailArrives(
+		request,
+		'process-staff-token-mail-outbox',
+		email,
+		'Verify your email address'
+	);
+	const linkToken = /\/verify-email\?token=(\S+)/.exec(message.text)?.[1];
+	expect(linkToken, `no verification link in the mail:\n${message.text}`).toBeTruthy();
+
+	// The link opened in the browser she signed up in, so she is still
+	// signed in. `reach` waits for the verified state: "Checking your
+	// link…" is an info Notice, not a Skeleton, and every state shares the
+	// `<h1>`, so neither ready wait in `scan` can tell the two apart.
+	await scan(page, {
+		key: 'verify-email (signed in)',
+		archetype: 'A',
+		url: `/verify-email?token=${linkToken}`,
+		h1: 'Verify your email',
+		reach: async (page) => {
+			await expect(page.getByText('Your email address is verified.')).toBeVisible();
+			await expect(page.getByRole('link', { name: 'Go to your Practice' })).toBeVisible();
+		}
+	});
 });
 
 // Archetypes B, C, D, E, F and G, all behind one Staff session. Provisioned
