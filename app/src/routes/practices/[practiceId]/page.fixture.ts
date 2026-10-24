@@ -107,6 +107,12 @@ function respondForPopulatedPractice(path: string): Response {
 	if (path.includes('/push-subscriptions')) {
 		return jsonResponse({});
 	}
+	// #1533: answered here, not by the variant that asks, because a read
+	// that fails draws no notice and the sweep would stay green about it.
+	// Only `asOwnerWithNoSecondFactor` asks.
+	if (path.includes('/second-factor-recommendation')) {
+		return jsonResponse({ recommended: true });
+	}
 	// #486: the Recent-activity feed, with one row long enough to
 	// exercise the ledger's own overflow handling (ADR-0024/0025) --
 	// #530's own URL again, this time as the diff a Practice's own
@@ -301,6 +307,17 @@ export const asOwnerNotConnected: RouteVariant = {
 	}
 };
 
+/*
+ * The notice that recommends a second factor (#1533): an Owner whose
+ * session has none, at a Practice past First Value. It is the first thing
+ * in the primary column, so the sweep measures its heading, its list of
+ * five acts and its two controls at 320px.
+ */
+export const asOwnerWithNoSecondFactor: RouteVariant = {
+	name: 'The Practice landing hub, as an Owner with no second factor',
+	pageData: practiceSession(['owner'], { practiceName, secondFactor: false })
+};
+
 export const fixture: RouteFixture = {
 	name: 'The Practice landing hub, as a Doula',
 	component: Page,
@@ -309,5 +326,5 @@ export const fixture: RouteFixture = {
 	pageData: practiceSession(['doula'], { practiceName }),
 	respond: respondForPopulatedPractice,
 	readyText: `Welcome to ${practiceName}`,
-	variants: [asOwner, asOwnerWithNoClient, asOwnerNotConnected]
+	variants: [asOwner, asOwnerWithNoClient, asOwnerNotConnected, asOwnerWithNoSecondFactor]
 };

@@ -20,6 +20,7 @@ import { creditCount, loadBalance } from './billing.js';
 import { loadConnectStatus, type ConnectStatus } from './payments.js';
 import { loadBillingMode, type BillingMode } from './invoice.js';
 import type { Fetcher } from './fetcher.js';
+import { hasSecondFactor, isOwner } from './roles.js';
 import type { CursorPage } from './paginatedList.svelte.js';
 
 /*
@@ -124,6 +125,44 @@ export interface PracticeLanding {
 	credit: Block<CreditHealth>;
 	connect: Block<ConnectHealth>;
 	requests: Block<RequestHealth>;
+	/** Whether the hub shows the notice that recommends a second factor
+	 * (#1533). The BFF decides it; see `isSecondFactorRecommended`. */
+	secondFactorRecommended: boolean;
+}
+
+/** Who is asked about the second-factor notice (#1533): an Owner whose
+ * session has no second factor. `GET .../second-factor-recommendation`
+ * is Owner-only, and it never recommends to a session that has one, so
+ * nobody else is asked. */
+export function canBeRecommendedASecondFactor(session: { roles: string[]; secondFactor?: boolean }): boolean {
+	return isOwner(session) && !hasSecondFactor(session);
+}
+
+const secondFactorRecommendationPath = (practiceId: string) =>
+	`/api/practices/${practiceId}/second-factor-recommendation`;
+
+/** Whether the notice shows. A failed read shows nothing: the notice is a
+ * recommendation, and the five acts that need a second factor say so on
+ * their own screens whatever this answers. */
+async function isSecondFactorRecommended(fetcher: Fetcher, practiceId: string): Promise<boolean> {
+	try {
+		const response = await fetcher(secondFactorRecommendationPath(practiceId));
+		if (!response.ok) return false;
+		const body: { recommended?: boolean } = await response.json();
+		return body.recommended === true;
+	} catch {
+		return false;
+	}
+}
+
+/** Closes the notice for every act on the list she has reached now
+ * (#1533). The BFF keeps the close, so it holds on every device and
+ * after sign-out, and the notice comes back once at each new act. */
+export async function closeSecondFactorRecommendation(fetcher: Fetcher, practiceId: string): Promise<void> {
+	const response = await fetcher(`${secondFactorRecommendationPath(practiceId)}/close`, { method: 'POST' });
+	if (!response.ok) {
+		throw new Error(await apiErrorMessage(response));
+	}
 }
 
 /*
@@ -216,11 +255,11 @@ async function loadRoster(fetcher: Fetcher, practiceId: string): Promise<RosterH
 export async function loadPracticeLanding(
 	fetcher: Fetcher,
 	practiceId: string,
-	session: { practiceName: string; roles: string[] }
+	session: { practiceName: string; roles: string[]; secondFactor?: boolean }
 ): Promise<PracticeLanding> {
 	const { roles } = session;
 
-	const [openOffers, hasClients, roster, credit, connect, requests] = await Promise.all([
+	const [openOffers, hasClients, roster, credit, connect, requests, secondFactorRecommended] = await Promise.all([
 		readOpenOffers(fetcher, practiceId),
 		hasAnyClient(fetcher, practiceId),
 		canReadRoster(roles) ? block(() => loadRoster(fetcher, practiceId)) : undefined,
@@ -246,7 +285,10 @@ export async function loadPracticeLanding(
 					const page = await loadPendingRequests(fetcher, practiceId);
 					return { count: page.items.length, hasMore: page.hasMore };
 				})
-			: undefined
+			: undefined,
+		canBeRecommendedASecondFactor(session)
+			? isSecondFactorRecommended(fetcher, practiceId)
+			: false
 	]);
 
 	return {
@@ -257,6 +299,7 @@ export async function loadPracticeLanding(
 		roster,
 		credit,
 		connect,
-		requests
+		requests,
+		secondFactorRecommended
 	};
 }
