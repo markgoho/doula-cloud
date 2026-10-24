@@ -34,6 +34,21 @@ describe('OverviewHub.svelte', () => {
 			.toBeVisible();
 	});
 
+	// #1549: what the act that led here did, before the h1 and focused.
+	it('renders the outcome as a focused status before the title', async () => {
+		await setup({ outcome: 'You agreed to the Terms of Service for Willow Birth Collective.' });
+
+		const status = page.getByRole('status');
+		await expect.element(status).toHaveTextContent('You agreed to the Terms of Service for Willow Birth Collective.');
+		await expect.element(status).toHaveFocus();
+	});
+
+	it('renders no outcome while the hub loads', async () => {
+		await setup({ outcome: 'You agreed.', loading: 'Loading your Practice' });
+
+		await expect.element(page.getByText('You agreed.')).not.toBeInTheDocument();
+	});
+
 	it('renders the primary region and not the empty region when there is data', async () => {
 		await setup();
 

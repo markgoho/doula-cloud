@@ -42,64 +42,66 @@ func agreementDueFrom(ctx context.Context) []DueVersion {
 	return due
 }
 
-// dueCandidates is, for each document, the newest material version that
-// has started at now. A Practice that agreed to it, or to any later
-// version, has agreed to every change before it too, so only the newest
-// one is asked about. A document with no material version started asks
-// nothing.
+// dueCandidates is every material version, of every document, that has
+// started at now, oldest first within each document. dueAgreementQuery
+// picks which of them, if any, a Practice is asked about.
 func dueCandidates(docs []legal.Document, now time.Time) []DueVersion {
+	today := now.UTC().Format(time.DateOnly)
 	var candidates []DueVersion
 	for _, doc := range docs {
-		var newest legal.Version
-		found := false
 		for _, v := range doc.Versions {
-			if v.Material && v.Effective <= now.UTC().Format(time.DateOnly) {
-				newest, found = v, true
+			if v.Material && v.Effective <= today {
+				candidates = append(candidates, DueVersion{
+					Document: strings.TrimPrefix(doc.Path, "/"),
+					Name:     doc.Name,
+					Version:  v.Effective,
+					Change:   v.Change,
+				})
 			}
-		}
-		if found {
-			candidates = append(candidates, DueVersion{
-				Document: strings.TrimPrefix(doc.Path, "/"),
-				Name:     doc.Name,
-				Version:  newest.Effective,
-				Change:   newest.Change,
-			})
 		}
 	}
 	return candidates
 }
 
-// dueAgreementQuery keeps each candidate that was published as material
-// -- the email went out before it started (#1548), so the screen is never
-// the first notice of a change (ADR-0053) -- and that no terms_accepted
-// row of this Practice has agreed to. A row agrees to a version when it
-// names that version, or a later one, as the version in force
-// (termsVersion, privacyVersion) or as a version still coming
-// (termsComing, privacyComing): the rule ADR-0053's #1816 amendment
-// gives. "Or a later one" is what lets a Practice that signed up after
-// a material version and a later correction alone: its row names the
-// correction, whose text holds the material change.
+// dueAgreementQuery answers, for each document, the newest candidate
+// that was published as material -- the email went out before it started
+// (#1548), so the screen is never the first notice of a change
+// (ADR-0053) -- when no terms_accepted row of this Practice has agreed to
+// it. A candidate the operator never published is passed over for an
+// older one that was, never treated as nothing due. A Practice that
+// agreed to the newest has agreed to every change before it, so only the
+// newest is asked about.
 //
-// Versions compare as text: each is YYYY-MM-DD, which sorts the way the
-// dates do.
+// A row agrees to a version when it names it as a version still coming
+// (termsComing, privacyComing), the rule ADR-0053's #1816 amendment
+// gives, or names it or a later one as the version in force
+// (termsVersion, privacyVersion). A later one in force counts because its
+// text holds every change before it: a Practice that signed up after a
+// material version and a later correction names only the correction. A
+// later coming version does not count, because that row was written
+// before the version in question started.
+//
+// The keys are the document's address and the diff's own JSON names
+// (termsAcceptedDiff): "terms" || 'Version' is termsVersion. Versions
+// compare as text: each is YYYY-MM-DD, which sorts the way the dates do.
 const dueAgreementQuery = `
-SELECT c.document
-  FROM unnest($2::text[], $3::text[]) AS c (document, version)
- WHERE EXISTS (
-         SELECT 1 FROM legal_version_publications p
-          WHERE p.document = c.document AND p.version = c.version::date AND p.material)
-   AND NOT EXISTS (
-         SELECT 1
-           FROM activity a
-          CROSS JOIN LATERAL jsonb_array_elements_text(
-                  jsonb_build_array(a.diff -> (c.document || 'Version'))
-                  || coalesce(a.diff -> (c.document || 'Coming'), '[]'::jsonb)) AS named (version)
+SELECT n.document, n.version
+  FROM (SELECT DISTINCT ON (c.document) c.document, c.version
+          FROM unnest($2::text[], $3::text[]) AS c (document, version)
+         WHERE EXISTS (
+                 SELECT 1 FROM legal_version_publications p
+                  WHERE p.document = c.document AND p.version = c.version::date AND p.material)
+         ORDER BY c.document, c.version DESC) AS n
+ WHERE NOT EXISTS (
+         SELECT 1 FROM activity a
           WHERE a.practice_id = $1 AND a.subject_kind = 'practice' AND a.subject_id = $1
-            AND a.action = 'terms_accepted' AND named.version >= c.version)`
+            AND a.action = 'terms_accepted'
+            AND (a.diff ->> (n.document || 'Version') >= n.version
+                 OR coalesce(a.diff -> (n.document || 'Coming'), '[]'::jsonb) ? n.version))`
 
-// dueAgreement is what an Owner of practiceID has to agree to at now.
-// With no material version started -- every day until the first one --
-// it costs no query.
+// dueAgreement is what an Owner of practiceID has to agree to at now, in
+// the order of AgreementDocuments. With no material version started --
+// every day until the first one -- it costs no query.
 func dueAgreement(ctx context.Context, tx *sql.Tx, practiceID string, now time.Time) ([]DueVersion, error) {
 	candidates := dueCandidates(AgreementDocuments, now)
 	if len(candidates) == 0 {
@@ -116,14 +118,14 @@ func dueAgreement(ctx context.Context, tx *sql.Tx, practiceID string, now time.T
 		return nil, fmt.Errorf("staffauth: read terms agreement due: %w", err)
 	}
 	defer func() { _ = rows.Close() }()
-	due := map[string]bool{}
+	due := map[[2]string]bool{}
 	for rows.Next() {
-		var document string
-		if err := rows.Scan(&document); err != nil {
-			// coverage:ignore reason: a text column always scans into a string
+		var document, version string
+		if err := rows.Scan(&document, &version); err != nil {
+			// coverage:ignore reason: two text columns always scan into strings
 			return nil, fmt.Errorf("staffauth: scan terms agreement due: %w", err)
 		}
-		due[document] = true
+		due[[2]string{document, version}] = true
 	}
 	if err := rows.Err(); err != nil {
 		// coverage:ignore reason: DB iteration failure, not exercised by unit tests
@@ -131,7 +133,7 @@ func dueAgreement(ctx context.Context, tx *sql.Tx, practiceID string, now time.T
 	}
 	var out []DueVersion
 	for _, c := range candidates {
-		if due[c.Document] {
+		if due[[2]string{c.Document, c.Version}] {
 			out = append(out, c)
 		}
 	}

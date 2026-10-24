@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import Page from './+page.svelte';
 import { toPageState, type RouteFixture } from '../../../routeFixture.js';
+import { captureLanding } from '#lib/testOutcome.js';
 import { bothDue, fixture, privacyOnly, termsDue, withoutSecondFactor } from './page.fixture.js';
 
 const pageState = vi.hoisted(() => ({
@@ -41,7 +42,7 @@ describe('The agreement screen (#1549)', () => {
 		await expect.element(testPage.getByText(`Terms of Service, from Nov 1, 2026: ${termsDue.change}`)).toBeVisible();
 	});
 
-	it('names both documents when both changed, and the Privacy Policy alone when only it did', async () => {
+	it('names both documents when both changed, with a line for each', async () => {
 		await setup(bothDue);
 		await expect
 			.element(testPage.getByRole('heading', { level: 1, name: 'The Terms of Service and the Privacy Policy have changed' }))
@@ -80,13 +81,17 @@ describe('The agreement screen (#1549)', () => {
 		await expect.element(testPage.getByText(/not now/i)).not.toBeInTheDocument();
 	});
 
-	it('records the agreement and goes on to the Practice, reloading its session', async () => {
+	it('records the agreement and goes on to the Practice, which says what she agreed to', async () => {
 		apiFetchWithSession.mockResolvedValue(new Response(undefined, { status: 204 }));
-		await setup();
+		await setup(bothDue);
+		const landing = captureLanding(goto);
 
 		await testPage.getByRole('button', { name: 'Agree and continue' }).click();
 
-		await vi.waitFor(() => expect(goto).toHaveBeenCalledWith('/practices/practice-1', { invalidateAll: true }));
+		await vi.waitFor(() => expect(landing.href).toBe('/practices/practice-1'));
+		expect(landing.message).toBe(
+			'You agreed to the Terms of Service and the Privacy Policy for The Finger Lakes Birth and Postpartum Support Collective of Rochester.'
+		);
 		expect(apiFetchWithSession).toHaveBeenCalledWith('/api/practices/practice-1/terms-agreement', { method: 'POST' });
 	});
 

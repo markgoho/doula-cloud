@@ -20,6 +20,7 @@
 	import { apiBaseURL, apiFetch, apiFetchWithSession } from '#lib/api.js';
 	import { apiErrorMessage } from '#lib/apiErrorMessage.js';
 	import { formatCalendarDay } from '#lib/dates.js';
+	import { gotoWithOutcome } from '#lib/outcome.js';
 	import { legalVersionUrl, privacyPolicyUrl, termsOfServiceUrl } from '#lib/legal.js';
 	import { practicePushSubscriptionsPath, unregisterPushSubscription } from '#lib/pushRegistration.js';
 	import { hasSecondFactor as checkHasSecondFactor } from '#lib/roles.js';
@@ -40,11 +41,12 @@
 	const privacy = $derived(due.find((version) => version.document === 'privacy'));
 	const hasSecondFactor = $derived(checkHasSecondFactor(session));
 
-	const title = $derived.by(() => {
-		if (terms && privacy) return 'The Terms of Service and the Privacy Policy have changed';
-		if (privacy) return 'The Privacy Policy has changed';
-		return 'The Terms of Service have changed';
+	const changed = $derived.by(() => {
+		if (terms && privacy) return { names: 'the Terms of Service and the Privacy Policy', verb: 'have' };
+		if (privacy) return { names: 'the Privacy Policy', verb: 'has' };
+		return { names: 'the Terms of Service', verb: 'have' };
 	});
+	const title = $derived(`The ${changed.names.slice('the '.length)} ${changed.verb} changed`);
 
 	// Each link opens the version she agrees to, not whatever the page
 	// for the document shows that day; a document that did not change
@@ -66,7 +68,14 @@
 				failure = await apiErrorMessage(response);
 				return;
 			}
-			await goto(resolve('/practices/[practiceId]', { practiceId }), { invalidateAll: true });
+			// The Practice's layout load reads the session on every
+			// navigation, so it finds nothing due and lets her in. The
+			// landing page says what she did (#1710): she agreed for the
+			// whole Practice, and nobody else there is asked again.
+			await gotoWithOutcome(
+				resolve('/practices/[practiceId]', { practiceId }),
+				`You agreed to ${changed.names} for ${session.practiceName}.`
+			);
 		} catch {
 			failure = 'Your agreement could not be saved. Try again.';
 		} finally {

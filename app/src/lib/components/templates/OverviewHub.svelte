@@ -55,9 +55,18 @@
 		Same shape as `loading`: presence is the state, value is the message.
 		*/
 		loadError?: string;
+		/**
+		 * What the act that led here did (#1710): `takeOutcome`'s message.
+		 * A status `Notice` before the <h1>, focused on arrival, and only
+		 * once the hub has loaded -- the same as `FormPage`'s and
+		 * `RecordDetail`'s own `outcome`. The Practice landing page is its
+		 * first reader: agreeing to a changed Terms of Service lands there
+		 * (#1549).
+		 */
+		outcome?: string;
 	}
 
-	let { title, serviceName, primary, secondary, feed, isEmpty, empty, loading, loadError }: Properties =
+	let { title, serviceName, primary, secondary, feed, isEmpty, empty, loading, loadError, outcome }: Properties =
 		$props();
 </script>
 
@@ -74,6 +83,9 @@
 			<Skeleton variant="text" lines={6} label={loading} />
 		{:else}
 			<stack-l space="var(--space-8)">
+				{#if outcome}
+					<Notice variant="status" message={outcome} isFocusedOnAppear />
+				{/if}
 				<h1>{title}</h1>
 
 				{#if isEmpty}

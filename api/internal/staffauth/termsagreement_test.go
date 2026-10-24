@@ -483,6 +483,31 @@ func TestAgreementGate_AsksNothingForAChangeThatIsNotMaterialOrNotPublished(t *t
 	})
 }
 
+// A newer material version the operator never published is passed over
+// for the older one that was: the Practice is still asked about that one,
+// and the screen names it.
+func TestAgreementGate_AnUnpublishedNewerVersionDoesNotHideAPublishedOne(t *testing.T) {
+	useFixtureHistory(t)
+	staffauth.AgreementDocuments = []legal.Document{{
+		Name: termsName, Path: "/terms",
+		Versions: []legal.Version{
+			{Effective: firstVersion, Material: false, Change: firstChange},
+			{Effective: termsMaterial, Material: true, Change: termsChange},
+			{Effective: termsCorrection, Material: true, Change: "Changes the refund window."},
+		},
+	}}
+	db := testdb.New(t)
+	practiceID, _ := signedUpBefore(t, db, "owner-unpublished-newer")
+	publish(t, db, termsKey, termsMaterial, true)
+	s := newAgreementServer(t, db, afterBothChanges)
+	session := s.session("owner-unpublished-newer")
+
+	due := s.due(session, practiceID)
+	if len(due) != 1 || due[0].Version != termsMaterial {
+		t.Fatalf("due = %v, want the published %s", due, termsMaterial)
+	}
+}
+
 // #1549's seventh box, as #1816 reads it: a Practice that signed up on
 // the version, during its 30 days of notice, or after a later version,
 // has agreed to it and is not asked. A Practice whose only row names an
@@ -498,6 +523,9 @@ func TestAgreementGate_APracticeThatAgreedAtSignupIsNotAsked(t *testing.T) {
 		{"signed up during the notice", map[string]any{diffTermsVersion: firstVersion, diffTermsComing: []string{termsMaterial, termsCorrection}, diffPrivacyVersion: firstVersion}, false},
 		{"signed up after the correction", map[string]any{diffTermsVersion: termsCorrection, diffPrivacyVersion: firstVersion}, false},
 		{"signed up before the version", map[string]any{diffTermsVersion: firstVersion, diffPrivacyVersion: firstVersion, diffPrivacyComing: []string{privacyMaterial}}, true},
+		// A later version still coming is not this one: that row was
+		// written before this version was in the history.
+		{"named only a later version as coming", map[string]any{diffTermsVersion: firstVersion, diffTermsComing: []string{termsCorrection}, diffPrivacyVersion: firstVersion}, true},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
