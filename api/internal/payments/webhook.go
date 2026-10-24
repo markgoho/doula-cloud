@@ -579,7 +579,7 @@ func handleCapabilityStatusUpdated(w http.ResponseWriter, r *http.Request, db *s
 	// also leaves one append-only row -- on this same tx, so the history
 	// and the row it explains cannot disagree. Only an applied event gets
 	// here: the replay and unrecognized-account branches above have
-	// already returned. See 00127_stripe_connect_status_history.sql for
+	// already returned. See 00128_stripe_connect_status_history.sql for
 	// why both Stripe's time and ours are kept.
 	if _, err := tx.ExecContext(r.Context(),
 		`INSERT INTO stripe_connect_status_history

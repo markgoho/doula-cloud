@@ -149,7 +149,7 @@ func TestPostConnectReturnHandler_RefusesAnAdmin(t *testing.T) {
 //   - active_at: the first history row with card_payments active.
 //     processed_at, not stripe_event_created_at, because a thin event's
 //     statuses are true at the moment it was processed
-//     (00127_stripe_connect_status_history.sql).
+//     (00128_stripe_connect_status_history.sql).
 //   - returned_at: her first return from Stripe's form after the last row
 //     that still had something outstanding, and at or before active_at.
 //     Not her first return ever: a return can mean she left the form
