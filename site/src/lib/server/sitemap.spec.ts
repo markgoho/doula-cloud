@@ -38,6 +38,12 @@ describe('renderSitemap', () => {
 		expect(xml).not.toContain('https://doula.cloud/p/</loc>');
 	});
 
+	it('never lists the noindexed waitlist landing pages (#1799)', () => {
+		const xml = renderSitemap([page]);
+		expect(xml).not.toContain('check-your-inbox');
+		expect(xml).not.toContain('on-the-list');
+	});
+
 	it('is still a valid sitemap with no Practice pages at all', () => {
 		expect(renderSitemap([])).toMatch(
 			/<urlset[^>]*>\n<url><loc>https:\/\/doula.cloud\/<\/loc><\/url>\n(?:<url>.*<\/url>\n)*<\/urlset>/

@@ -9,7 +9,9 @@ import { SITE_ORIGIN } from '#lib/product.js';
  * Listed explicitly rather than discovered, so what a crawler is pointed
  * at is a decision in one place. /pilot-terms is left out on purpose
  * (#444): it is noindexed, and listing a noindexed page publishes the URL
- * the tag exists to withhold. There is no /p/ index to list either.
+ * the tag exists to withhold. /check-your-inbox and /on-the-list, where
+ * Buttondown sends a person after the waitlist form (#1799), are left out
+ * for the same reason. There is no /p/ index to list either.
  *
  * A Practice page's `lastmod` is when she last published it, which is the
  * honest date for a page that changes only when she republishes.
