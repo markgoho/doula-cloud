@@ -564,6 +564,11 @@
 		contract ? missingMergeFieldKeys(contract.mergeFields, contract.values) : []
 	);
 
+	// #1876: the merge fields ContractForm offers for editing. Save sends
+	// only these (editableValues removes price), so a Draft with none of
+	// them has nothing to save, and the page does not offer Save.
+	const contractEditableFields = $derived(contract ? editableMergeFields(contract.mergeFields) : []);
+
 	// Named invoicesState for the same reason as contractState above.
 	const invoicesState = new SectionState<Invoice[]>([]);
 	const invoices = $derived(invoicesState.value);
@@ -1854,13 +1859,15 @@
 			<Text text="Contract text" />
 			<ContractView prose={contract.prose} values={contract.values} />
 			<ContractForm
-				mergeFields={editableMergeFields(contract.mergeFields)}
+				mergeFields={contractEditableFields}
 				values={contract.values}
 				readOnly={contract.status !== 'draft'}
 				onValueChange={handleContractValueChange}
 			/>
 			{#if contract.status === 'draft'}
-				<Button label="Save Contract" onClick={handleSaveContract} loading={isContractBusy} variant="secondary" />
+				{#if contractEditableFields.length > 0}
+					<Button label="Save Contract" onClick={handleSaveContract} loading={isContractBusy} variant="secondary" />
+				{/if}
 				<!--
 					#258: block over warn -- a blank merge field is a legal
 					document defect, so the Send control is withheld with the

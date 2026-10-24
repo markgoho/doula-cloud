@@ -849,6 +849,47 @@ describe("the Contract's merge-field completeness block and filled-text render (
 	});
 });
 
+// #1876: Save sends only the merge fields ContractForm offers for editing,
+// and price is never one of them, so a Draft with no other merge field has
+// nothing to save. The page must not offer a Save control that does nothing.
+describe('the Save Contract control on a Draft with no editable merge field (#1876)', () => {
+	beforeEach(() => {
+		apiFetchWithSession.mockReset();
+	});
+
+	it('does not offer Save Contract when the Draft holds no merge field', async () => {
+		await setupWithContract(
+			() => mockContract(draftOf({ prose: 'This agreement has no fields to fill in.', mergeFields: [], values: {} })),
+			{ ...fixtureDetail, clientPortalInviteStatus: 'accepted' }
+		);
+
+		await expect.element(testPage.getByRole('button', { name: 'Send Contract' })).toBeEnabled();
+		expect(testPage.getByRole('button', { name: 'Save Contract' }).elements()).toHaveLength(0);
+	});
+
+	it('does not offer Save Contract when price is the only merge field', async () => {
+		await setupWithContract(
+			() =>
+				mockContract(
+					draftOf({ prose: 'The fee is {{price}}.', mergeFields: ['price'], values: { price: '$1,200.00' } })
+				),
+			{ ...fixtureDetail, clientPortalInviteStatus: 'accepted' }
+		);
+
+		await expect.element(testPage.getByRole('button', { name: 'Send Contract' })).toBeEnabled();
+		expect(testPage.getByRole('button', { name: 'Save Contract' }).elements()).toHaveLength(0);
+	});
+
+	it('offers Save Contract when the Draft holds an editable merge field', async () => {
+		await setupWithContract(
+			() => mockContract(draftOf()),
+			{ ...fixtureDetail, clientPortalInviteStatus: 'accepted' }
+		);
+
+		await expect.element(testPage.getByRole('button', { name: 'Save Contract' })).toBeVisible();
+	});
+});
+
 /*
  * #885: the fixture's own Contract section, mounted the way the continuum
  * sweep mounts it -- the fixture's `respond` and the fixture's own
