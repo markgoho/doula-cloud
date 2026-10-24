@@ -214,10 +214,11 @@ export async function signInEnrolled(
  * Puts headers' session cookie directly into context's cookie jar and
  * navigates page to practiceId's landing route -- the browser-level
  * equivalent of a /login walk, for a fixture that has no interest in
- * spending one. headers come from signInEnrolled or from auth.ts's plain
- * signIn alike; the cookie has the same shape either way (totpStub.ts is what a spec that does want the walk
- * installs). A direct cookie injection rather than a
- * second interactive sign-in on purpose: Playwright's request-context
+ * spending one (totpStub.ts is what a spec that does want the walk
+ * installs). headers come from signInEnrolled or from auth.ts's plain
+ * signIn alike; the cookie has the same shape either way. A direct
+ * cookie injection rather than a second interactive sign-in on purpose:
+ * Playwright's request-context
  * `secure: false` sidesteps whether its own cookie jar treats loopback
  * as a trustworthy origin the way a real browser does (see auth.ts's
  * signIn doc comment on the same question) -- the server never reads
