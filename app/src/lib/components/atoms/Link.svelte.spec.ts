@@ -1,6 +1,6 @@
 import type { ComponentProps } from 'svelte';
 import { page } from 'vitest/browser';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import Link from './Link.svelte';
 
@@ -22,6 +22,18 @@ describe('Link.svelte', () => {
 		await setup({ href: '/practices/1' });
 
 		await expect.element(page.getByRole('link')).toHaveAttribute('href', '/practices/1');
+	});
+
+	// #1829: the Client search hands intake what was typed as its link is
+	// followed. The href in this spec goes nowhere, so the click is
+	// stopped to keep the test page where it is.
+	it('calls onClick as the link is followed', async () => {
+		const onClick = vi.fn((event: MouseEvent) => event.preventDefault());
+		await setup({ href: '#nowhere', onClick });
+
+		await page.getByRole('link').click();
+
+		expect(onClick).toHaveBeenCalledOnce();
 	});
 
 	it('defaults to the primary variant class', async () => {

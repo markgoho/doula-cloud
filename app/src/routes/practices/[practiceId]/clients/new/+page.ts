@@ -3,9 +3,9 @@
  * per route, and this is the door to it (ADR-0017, #498). The search
  * links here on a miss; while a Practice holds no Client record, the
  * overview and the Clients list link here directly (#1609). It sends the
- * reader to the first question and carries the query string with it, so
- * what was typed into the search still seeds the draft, and the screen
- * that opened intake (`from`) still decides where Back goes.
+ * reader to the first question, and the screen that opened intake
+ * (`from`) rides along in the query string so it still decides where
+ * Back goes.
  *
  * ## Why the draft is cleared here
  *
@@ -15,20 +15,27 @@
  * through this one.
  *
  * Without this, the second Client of the day was the first one again:
- * `intakeDraft.start` seeds the query string only into a draft with
- * nothing in it, and the draft is mirrored to sessionStorage, so a
- * search for Anne after a search for Sarah reopened Sarah's half-typed
- * record. Clearing at the door is what makes "the empty state carries
- * whatever was typed" true on the second attempt as well as the first.
+ * the draft is mirrored to sessionStorage, so a search for Anne after a
+ * search for Sarah reopened Sarah's half-typed record.
+ *
+ * ## Why the search's values arrive here, and not in the URL
+ *
+ * What the search typed is a Client's name, date of birth, email and
+ * phone. Carried as query params (#498's first shape) they were in the
+ * address bar, the browser history and any reload's request (#1829). The
+ * search now hands them over in module memory (`#lib/intakeHandoff.ts`),
+ * and the door takes them, once, into the draft it has just cleared.
  */
 import { redirect } from '@sveltejs/kit';
 import { resolve } from '$app/paths';
 import { intakeDraft } from '#lib/intakeDraft.svelte.js';
+import { takeIntakeHandoff } from '#lib/intakeHandoff.js';
 import type { PageLoad } from './$types';
 
 export const load: PageLoad = ({ params, url }) => {
 	intakeDraft.scope = params.practiceId;
 	intakeDraft.clear();
+	intakeDraft.carry(takeIntakeHandoff(params.practiceId));
 	redirect(
 		307,
 		`${resolve('/practices/[practiceId]/clients/new/name', { practiceId: params.practiceId })}${url.search}`

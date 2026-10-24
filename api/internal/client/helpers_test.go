@@ -27,6 +27,9 @@ const (
 	testStub     = "Stub"
 	testNadia    = "Nadia"
 	testFletcher = "Fletcher"
+	// testNadiaEmail crossed the threshold when #1829 moved the search's
+	// cases from query strings into SearchRequest bodies.
+	testNadiaEmail = "nadia@example.com"
 )
 
 // newServer mounts this package's whole surface through client.Mount --
