@@ -9,8 +9,7 @@ vi.mock('firebase/auth', () => ({ signOut }));
 const getFirebaseAuth = vi.fn(() => 'the-auth-instance');
 vi.mock('./firebase.js', () => ({ getFirebaseAuth }));
 
-const { apiBaseURL, apiFetch, apiFetchWithSession, probeSession } =
-	await import('./api');
+const { apiBaseURL, apiFetch, apiFetchWithSession, probeSession } = await import('./api');
 
 describe('apiBaseURL', () => {
 	it('defaults to same-origin (empty string) when unset', () => {
@@ -24,10 +23,7 @@ describe('apiFetchWithSession', () => {
 		pathname?: string;
 	}
 
-	function setup({
-		status = 200,
-		pathname = '/practices/prac-1',
-	}: SetupOptions = {}) {
+	function setup({ status = 200, pathname = '/practices/prac-1' }: SetupOptions = {}) {
 		// mockReset, not mockClear: a prior test in this block can leave a
 		// pending-promise implementation behind (the concurrent-refusal test
 		// below controls goto's own resolution), which would otherwise hang
@@ -49,19 +45,13 @@ describe('apiFetchWithSession', () => {
 	it('sends credentials and returns the response on a non-401', async () => {
 		const { fetchMock } = setup({ status: 200 });
 
-		const response = await apiFetchWithSession(
-			'/api/practices/prac-1/session',
-			{
-				headers: { 'X-Test': 'yes' },
-			}
-		);
+		const response = await apiFetchWithSession('/api/practices/prac-1/session', {
+			headers: { 'X-Test': 'yes' }
+		});
 
 		expect(fetchMock).toHaveBeenCalledWith(
 			'/api/practices/prac-1/session',
-			expect.objectContaining({
-				headers: { 'X-Test': 'yes' },
-				credentials: 'include',
-			})
+			expect.objectContaining({ headers: { 'X-Test': 'yes' }, credentials: 'include' })
 		);
 		expect(response.status).toBe(200);
 		expect(goto).not.toHaveBeenCalled();
@@ -71,14 +61,10 @@ describe('apiFetchWithSession', () => {
 	it('clears the signed-in Identity Platform user before redirecting on a 401', async () => {
 		let resolveSignOut!: () => void;
 		setup({ status: 401 });
-		signOut.mockImplementation(
-			() => new Promise<void>((resolve) => (resolveSignOut = resolve))
-		);
+		signOut.mockImplementation(() => new Promise<void>((resolve) => (resolveSignOut = resolve)));
 
 		const pending = apiFetchWithSession('/api/practices/prac-1/session');
-		await vi.waitFor(() =>
-			expect(signOut).toHaveBeenCalledWith('the-auth-instance')
-		);
+		await vi.waitFor(() => expect(signOut).toHaveBeenCalledWith('the-auth-instance'));
 		expect(goto).not.toHaveBeenCalled();
 
 		resolveSignOut();
@@ -113,16 +99,12 @@ describe('apiFetchWithSession', () => {
 		setup({ pathname: '/practices/prac-1/invoices' });
 		vi.stubGlobal(
 			'fetch',
-			vi.fn(async () =>
-				Response.json({ code: 'MFA_REQUIRED' }, { status: 403 })
-			)
+			vi.fn(async () => Response.json({ code: 'MFA_REQUIRED' }, { status: 403 }))
 		);
 
 		await apiFetchWithSession('/api/practices/prac-1/invoices');
 
-		expect(goto).toHaveBeenCalledWith(
-			'/mfa/enroll?returnTo=%2Fpractices%2Fprac-1%2Finvoices'
-		);
+		expect(goto).toHaveBeenCalledWith('/mfa/enroll?returnTo=%2Fpractices%2Fprac-1%2Finvoices');
 		expect(signOut).not.toHaveBeenCalled();
 	});
 
@@ -133,27 +115,18 @@ describe('apiFetchWithSession', () => {
 			vi.fn(async () => Response.json({ code: 'FORBIDDEN' }, { status: 403 }))
 		);
 
-		const response = await apiFetchWithSession(
-			'/api/practices/prac-1/invoices'
-		);
+		const response = await apiFetchWithSession('/api/practices/prac-1/invoices');
 
 		expect(goto).not.toHaveBeenCalled();
 		expect(response.status).toBe(403);
 	});
 
 	// JSON's own null, which the BFF never sends but a proxy might.
-	it.each([
-		JSON.parse('null') as unknown,
-		'a bare string',
-		{ message: 'no code at all' },
-	])(
+	it.each([JSON.parse('null') as unknown, 'a bare string', { message: 'no code at all' }])(
 		'reads a 403 whose JSON body carries no code (%j) as no reason to redirect',
 		async (body) => {
 			setup();
-			vi.stubGlobal(
-				'fetch',
-				vi.fn(async () => Response.json(body, { status: 403 }))
-			);
+			vi.stubGlobal('fetch', vi.fn(async () => Response.json(body, { status: 403 })));
 
 			await apiFetchWithSession('/api/practices/prac-1/invoices');
 
@@ -163,12 +136,7 @@ describe('apiFetchWithSession', () => {
 
 	it('reads a 403 with no JSON body as anything other than MFA_REQUIRED', async () => {
 		setup();
-		vi.stubGlobal(
-			'fetch',
-			vi.fn(
-				async () => new Response('only an Owner can do that', { status: 403 })
-			)
-		);
+		vi.stubGlobal('fetch', vi.fn(async () => new Response('only an Owner can do that', { status: 403 })));
 
 		await apiFetchWithSession('/api/practices/prac-1/invoices');
 
@@ -186,14 +154,10 @@ describe('apiFetchWithSession', () => {
 	it('lets a second concurrent MFA_REQUIRED refusal fall through instead of re-redirecting', async () => {
 		setup({ pathname: '/practices/prac-1' });
 		let resolveGoto!: () => void;
-		goto.mockImplementation(
-			() => new Promise<void>((resolve) => (resolveGoto = resolve))
-		);
+		goto.mockImplementation(() => new Promise<void>((resolve) => (resolveGoto = resolve)));
 		vi.stubGlobal(
 			'fetch',
-			vi.fn(async () =>
-				Response.json({ code: 'MFA_REQUIRED' }, { status: 403 })
-			)
+			vi.fn(async () => Response.json({ code: 'MFA_REQUIRED' }, { status: 403 }))
 		);
 
 		const first = apiFetchWithSession('/api/practices/prac-1/session');
@@ -204,9 +168,7 @@ describe('apiFetchWithSession', () => {
 		const second = await apiFetchWithSession('/api/practices/prac-1/invoices');
 
 		expect(goto).toHaveBeenCalledTimes(1);
-		expect(goto).toHaveBeenCalledWith(
-			'/mfa/enroll?returnTo=%2Fpractices%2Fprac-1'
-		);
+		expect(goto).toHaveBeenCalledWith('/mfa/enroll?returnTo=%2Fpractices%2Fprac-1');
 		expect(second.status).toBe(403);
 
 		resolveGoto();
@@ -229,18 +191,14 @@ describe('apiFetchWithSession', () => {
 		});
 		vi.stubGlobal(
 			'fetch',
-			vi.fn(async () =>
-				Response.json({ code: 'MFA_REQUIRED' }, { status: 403 })
-			)
+			vi.fn(async () => Response.json({ code: 'MFA_REQUIRED' }, { status: 403 }))
 		);
 
 		const first = await apiFetchWithSession('/api/practices/prac-1/session');
 		const second = await apiFetchWithSession('/api/practices/prac-1/invoices');
 
 		expect(goto).toHaveBeenCalledTimes(1);
-		expect(goto).toHaveBeenCalledWith(
-			'/mfa/enroll?returnTo=%2Fpractices%2Fprac-1'
-		);
+		expect(goto).toHaveBeenCalledWith('/mfa/enroll?returnTo=%2Fpractices%2Fprac-1');
 		expect(first.status).toBe(403);
 		expect(second.status).toBe(403);
 	});
@@ -249,9 +207,7 @@ describe('apiFetchWithSession', () => {
 		setup({ pathname: '/practices/prac-1' });
 		vi.stubGlobal(
 			'fetch',
-			vi.fn(async () =>
-				Response.json({ code: 'MFA_REQUIRED' }, { status: 403 })
-			)
+			vi.fn(async () => Response.json({ code: 'MFA_REQUIRED' }, { status: 403 }))
 		);
 
 		await apiFetchWithSession('/api/practices/prac-1/session');
@@ -267,12 +223,7 @@ describe('apiFetchWithSession', () => {
 	 */
 	it('routes a 403 carrying TERMS_AGREEMENT_REQUIRED to the agreement screen for the Practice in the address', async () => {
 		setup({ pathname: '/practices/prac-1/clients' });
-		vi.stubGlobal(
-			'fetch',
-			vi.fn(async () =>
-				Response.json({ code: 'TERMS_AGREEMENT_REQUIRED' }, { status: 403 })
-			)
-		);
+		vi.stubGlobal('fetch', vi.fn(async () => Response.json({ code: 'TERMS_AGREEMENT_REQUIRED' }, { status: 403 })));
 
 		const response = await apiFetchWithSession('/api/practices/prac-1/clients');
 
@@ -281,40 +232,23 @@ describe('apiFetchWithSession', () => {
 		expect(response.status).toBe(403);
 	});
 
-	it('stays put on a TERMS_AGREEMENT_REQUIRED refusal met on the agreement screen itself, or with no Practice in the address', async () => {
-		vi.stubGlobal(
-			'fetch',
-			vi.fn(async () =>
-				Response.json({ code: 'TERMS_AGREEMENT_REQUIRED' }, { status: 403 })
-			)
-		);
-		for (const pathname of ['/practices/prac-1/agreement', '/account']) {
+	it.each(['/practices/prac-1/agreement', '/account'])(
+		'stays put on a TERMS_AGREEMENT_REQUIRED refusal met at %s',
+		async (pathname) => {
 			setup({ pathname });
-			vi.stubGlobal(
-				'fetch',
-				vi.fn(async () =>
-					Response.json({ code: 'TERMS_AGREEMENT_REQUIRED' }, { status: 403 })
-				)
-			);
+			vi.stubGlobal('fetch', vi.fn(async () => Response.json({ code: 'TERMS_AGREEMENT_REQUIRED' }, { status: 403 })));
 
 			await apiFetchWithSession('/api/practices/prac-1/terms-agreement');
 
 			expect(goto).not.toHaveBeenCalled();
 		}
-	});
+	);
 
 	it('lets a second concurrent TERMS_AGREEMENT_REQUIRED refusal fall through instead of re-redirecting', async () => {
 		setup({ pathname: '/practices/prac-1' });
 		let resolveGoto!: () => void;
-		goto.mockImplementation(
-			() => new Promise<void>((resolve) => (resolveGoto = resolve))
-		);
-		vi.stubGlobal(
-			'fetch',
-			vi.fn(async () =>
-				Response.json({ code: 'TERMS_AGREEMENT_REQUIRED' }, { status: 403 })
-			)
-		);
+		goto.mockImplementation(() => new Promise<void>((resolve) => (resolveGoto = resolve)));
+		vi.stubGlobal('fetch', vi.fn(async () => Response.json({ code: 'TERMS_AGREEMENT_REQUIRED' }, { status: 403 })));
 
 		const first = apiFetchWithSession('/api/practices/prac-1/clients');
 		await vi.waitFor(() => expect(goto).toHaveBeenCalledTimes(1));
@@ -330,17 +264,11 @@ describe('apiFetch', () => {
 	it('hands a 401 straight back instead of sending the caller to the login screen', async () => {
 		goto.mockClear();
 		signOut.mockClear();
-		vi.stubGlobal(
-			'fetch',
-			vi.fn(async () => new Response(undefined, { status: 401 }))
-		);
+		vi.stubGlobal('fetch', vi.fn(async () => new Response(undefined, { status: 401 })));
 
-		const response = await apiFetch(
-			'/api/practices/prac-1/push-subscriptions',
-			{
-				method: 'DELETE',
-			}
-		);
+		const response = await apiFetch('/api/practices/prac-1/push-subscriptions', {
+			method: 'DELETE'
+		});
 
 		expect(response.status).toBe(401);
 		expect(goto).not.toHaveBeenCalled();
@@ -360,9 +288,7 @@ describe('probeSession', () => {
 			vi.fn(async () => Response.json({ memberships: [] }))
 		);
 
-		await expect(probeSession('/api/staff/session')).resolves.toEqual({
-			memberships: [],
-		});
+		await expect(probeSession('/api/staff/session')).resolves.toEqual({ memberships: [] });
 	});
 
 	it('reads a non-OK response as no session of this kind, not a failure', async () => {

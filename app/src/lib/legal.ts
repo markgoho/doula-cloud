@@ -11,9 +11,6 @@ export const privacyPolicyUrl = 'https://doula.cloud/privacy';
 /**
 The page of one version of a document on the marketing site, at `/terms/<date>` or `/privacy/<date>` (#1816). The screen that asks an Owner to agree to a material change links the version she agrees to, so she reads its own text and not whatever `/terms` shows that day (#1549).
 */
-export function legalVersionUrl(
-	document: 'terms' | 'privacy',
-	version: string
-): string {
+export function legalVersionUrl(document: 'terms' | 'privacy', version: string): string {
 	return `${document === 'terms' ? termsOfServiceUrl : privacyPolicyUrl}/${version}`;
 }

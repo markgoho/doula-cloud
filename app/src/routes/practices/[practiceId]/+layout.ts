@@ -58,8 +58,7 @@ export interface DueVersion {
 	change: string;
 }
 
-const agreementPath = (practiceId: string) =>
-	resolve('/practices/[practiceId]/agreement', { practiceId });
+const agreementPath = (practiceId: string) => resolve('/practices/[practiceId]/agreement', { practiceId });
 
 // The one route the deletion lockout leaves open regardless of role
 // (staffauth.Middleware's isPracticeSessionRoute) -- this load redirects
@@ -105,21 +104,13 @@ const deleteSettingsPath = (practiceId: string) =>
  * she lands, and `/no-practice` is the fallback only once there truly is
  * nowhere else.
  */
-export const load: LayoutLoad = async ({
-	params,
-	url,
-}): Promise<{ session: PracticeSession }> => {
-	const response = await apiFetch(
-		`/api/practices/${params.practiceId}/session`
-	);
+export const load: LayoutLoad = async ({ params, url }): Promise<{ session: PracticeSession }> => {
+	const response = await apiFetch(`/api/practices/${params.practiceId}/session`);
 
 	if (response.status === 401) {
 		redirect(303, staffLoginAfterSessionEnded());
 	} else if (await isMFARequired(response)) {
-		redirect(
-			303,
-			`${resolve('/(signed-out)/mfa/enroll')}?returnTo=${encodeURIComponent(url.pathname)}`
-		);
+		redirect(303, `${resolve('/(signed-out)/mfa/enroll')}?returnTo=${encodeURIComponent(url.pathname)}`);
 	} else if (await isTermsAgreementRequired(response)) {
 		// The session read is left open while an agreement is due, so this
 		// is not reached today; were it ever refused, it is still not a
@@ -141,10 +132,7 @@ export const load: LayoutLoad = async ({
 		agreementDue?: DueVersion[];
 	} = await response.json();
 
-	if (
-		body.pendingDeletion &&
-		url.pathname !== deleteSettingsPath(params.practiceId)
-	) {
+	if (body.pendingDeletion && url.pathname !== deleteSettingsPath(params.practiceId)) {
 		redirect(303, deleteSettingsPath(params.practiceId));
 	}
 
@@ -168,8 +156,8 @@ export const load: LayoutLoad = async ({
 			isContractor: body.isContractor,
 			pendingDeletion: body.pendingDeletion,
 			secondFactor: body.secondFactor,
-			agreementDue: body.agreementDue,
-		},
+			agreementDue: body.agreementDue
+		}
 	};
 };
 
@@ -189,10 +177,7 @@ async function redirectAwayFromStalePractice(): Promise<never> {
 		const session: SessionInfo = await staffResponse.json();
 		const landing = decideLanding(session);
 		if (landing.type === 'redirect') {
-			redirect(
-				303,
-				resolve('/practices/[practiceId]', { practiceId: landing.practiceId })
-			);
+			redirect(303, resolve('/practices/[practiceId]', { practiceId: landing.practiceId }));
 		} else if (landing.type === 'picker') {
 			// `/` re-probes and renders the picker itself (#357) -- reusing
 			// its own load rather than a second copy of the same list here.
