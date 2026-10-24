@@ -2,14 +2,18 @@ package legalnotice
 
 // Values is what one email names: which document, the date its new
 // version takes effect, which Practice, the version's one line of what
-// changed, and the three links. docs/copy/legal-change-email.md is the
-// copy this fills, and TestCopy_MatchesTheCopyDocument fails when the
-// two differ.
+// changed, the reason for a rise in the price of a Credit, and the three
+// links. docs/copy/legal-change-email.md is the copy this fills, and
+// TestCopy_MatchesTheCopyDocument fails when the two differ.
 type Values struct {
-	Document    string
-	Date        string
-	Practice    string
-	Change      string
+	Document string
+	Date     string
+	Practice string
+	Change   string
+	// Reason is the version's legal.Version.PriceRise: empty unless the
+	// version raises the price of a Credit, and then the email prints it
+	// under the change, because the Terms promise the reason.
+	Reason      string
 	DocumentURL string
 	SettingsURL string
 	DeleteURL   string
@@ -20,9 +24,14 @@ type Values struct {
 // promise, not a message anybody measures.
 func Compose(v Values) (subject, text string) {
 	subject = "DoulaCloud: a new version of the " + v.Document + " starts on " + v.Date
+	var reason string
+	if v.Reason != "" {
+		reason = "Why the price rises: " + v.Reason + "\n\n"
+	}
 	text = "Hello,\n\n" +
 		"A new version of the DoulaCloud " + v.Document + " starts on " + v.Date + ". This email is about your practice, " + v.Practice + ".\n\n" +
 		"What changes: " + v.Change + "\n\n" +
+		reason +
 		"Read the new version:\n" +
 		v.DocumentURL + "\n\n" +
 		"From " + v.Date + ", the new version applies to " + v.Practice + ". The first Owner of " + v.Practice + " who signs in after that date is asked to agree.\n\n" +

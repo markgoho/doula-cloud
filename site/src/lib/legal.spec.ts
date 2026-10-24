@@ -17,12 +17,20 @@ const goSource = readFileSync(
 	'utf8'
 );
 
-function goHistory(variable: string): LegalVersion[] {
-	const block = new RegExp(String.raw`^var ${variable} = Document\{\n([\s\S]*?)^\}`, 'm').exec(goSource);
+// A version that raises the price of a Credit carries a fourth field,
+// PriceRise, last; one that does not leaves it out, and so does its
+// mirror here.
+function goHistory(variable: string, source = goSource): LegalVersion[] {
+	const block = new RegExp(String.raw`^var ${variable} = Document\{\n([\s\S]*?)^\}`, 'm').exec(source);
 	if (!block) throw new Error(`api/internal/legal/legal.go declares no ${variable}`);
 	return block[1]
-		.matchAll(/\{Effective: "([^"]+)", Material: (true|false), Change: "([^"]+)"\}/g)
-		.map(([, effective, material, change]) => ({ effective, material: material === 'true', change }))
+		.matchAll(/\{Effective: "([^"]+)", Material: (true|false), Change: "([^"]+)"(?:, PriceRise: "([^"]+)")?\}/g)
+		.map(([, effective, material, change, priceRise]) => ({
+			effective,
+			material: material === 'true',
+			change,
+			...(priceRise !== undefined && { priceRise })
+		}))
 		.toArray();
 }
 
@@ -34,6 +42,21 @@ describe('the version of each document, on the site and in the BFF', () => {
 		const bff = goHistory(variable);
 		expect(bff.length).toBeGreaterThan(0);
 		expect(legalDocument.versions).toEqual(bff);
+	});
+
+	// No shipped version raises the price yet, so a Go literal stands in
+	// for the first one that will.
+	it('reads the reason for a rise in the price of a Credit', () => {
+		const source = [
+			'var Terms = Document{',
+			'\t\t{Effective: "2026-09-29", Material: false, Change: "First version."},',
+			'\t\t{Effective: "2027-03-01", Material: true, Change: "A Credit costs $50.", PriceRise: "Card fees went up."},',
+			'}'
+		].join('\n');
+		expect(goHistory('Terms', source)).toEqual([
+			{ effective: '2026-09-29', material: false, change: 'First version.' },
+			{ effective: '2027-03-01', material: true, change: 'A Credit costs $50.', priceRise: 'Card fees went up.' }
+		]);
 	});
 
 	it('finds nothing to compare for a variable the Go file does not declare', () => {

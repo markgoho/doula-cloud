@@ -92,10 +92,11 @@ func TestCopy_MatchesTheCopyDocument(t *testing.T) {
 	}
 	doc := string(raw)
 
-	subject, text := legalnotice.Compose(legalnotice.Values{
-		Document: "{Document}", Date: "{Date}", Practice: "{Practice}", Change: "{Change}",
+	values := legalnotice.Values{
+		Document: "{Document}", Date: "{Date}", Practice: "{Practice}", Change: "{Change}", Reason: "{Reason}",
 		DocumentURL: "{DocumentURL}", SettingsURL: "{SettingsURL}", DeleteURL: "{DeleteURL}",
-	})
+	}
+	subject, text := legalnotice.Compose(values)
 
 	if !strings.Contains(doc, "**Subject:** "+subject+"\n") {
 		t.Errorf("the copy document's subject is not %q", subject)
@@ -108,5 +109,13 @@ func TestCopy_MatchesTheCopyDocument(t *testing.T) {
 	}
 	if text != want {
 		t.Errorf("email body and copy document differ.\nemail:\n%s\ncopy document:\n%s", text, want)
+	}
+
+	// A version that does not raise the price of a Credit has no reason,
+	// and its email leaves the line out, blank line and all.
+	const reasonLine = "Why the price rises: {Reason}\n\n"
+	values.Reason = ""
+	if _, plain := legalnotice.Compose(values); plain != strings.Replace(want, reasonLine, "", 1) || !strings.Contains(want, reasonLine) {
+		t.Errorf("without a reason, the email is not the copy document with the reason line left out:\n%s", plain)
 	}
 }
