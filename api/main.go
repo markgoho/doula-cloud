@@ -21,7 +21,6 @@ import (
 	"doula-cloud/api/internal/billing"
 	"doula-cloud/api/internal/client"
 	"doula-cloud/api/internal/clientauth"
-	"doula-cloud/api/internal/clock"
 	"doula-cloud/api/internal/engagementrequest"
 	"doula-cloud/api/internal/feedback"
 	"doula-cloud/api/internal/internalauth"
@@ -39,6 +38,7 @@ import (
 	"doula-cloud/api/internal/push"
 	"doula-cloud/api/internal/sessionnotice"
 	"doula-cloud/api/internal/sitebuild"
+	"doula-cloud/api/internal/stackswitch"
 	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/staffinvite"
 	"doula-cloud/api/internal/tasknudge"
@@ -124,10 +124,6 @@ func internalCallerAuth(getenv func(string) string) tasknudge.CallerAuth {
 
 func main() {
 	port := resolvePort()
-	// now is #773's Clock seam, wired once here and threaded to every
-	// worker that already carried its own Now field, plus Deps.Now,
-	// which routes() seeds into every request's context (clock.Middleware).
-	now := clock.Real
 
 	// coverage:ignore reason: requires a real DATABASE_URL and network access, not exercised by unit tests
 	db, err := sql.Open("pgx", os.Getenv("DATABASE_URL"))
@@ -135,6 +131,33 @@ func main() {
 		// coverage:ignore reason: requires a real DATABASE_URL and network access, not exercised by unit tests
 		log.Fatalf("open db: %v", err)
 	}
+
+	// now is #773's Clock seam, wired once here and threaded to every
+	// worker that already carried its own Now field, plus Deps.Now,
+	// which routes() seeds into every request's context (clock.Middleware).
+	// It is clock.Real everywhere but the end-to-end stack, where it
+	// follows sim.offset_row (#1833); stackswitch refuses to start the
+	// process when that switch is set anywhere else.
+	//
+	// coverage:ignore reason: main's wiring; stackswitch's own tests cover both switches and the gate
+	now, err := stackswitch.Clock(context.Background(), os.Getenv, db)
+	if err != nil {
+		// coverage:ignore reason: main's wiring; stackswitch's own tests cover the refusal
+		log.Fatalf("clock: %v", err)
+	}
+	// legalHistory is the shipped Terms and Privacy Policy, or on the
+	// end-to-end stack a copy with a version appended (#1833), so a spec
+	// can publish a material version. Every reader of the history reads
+	// this one: publish, the email before a change, the agreement gate,
+	// signup's record and the price of a Credit.
+	//
+	// coverage:ignore reason: main's wiring; stackswitch's own tests cover both switches and the gate
+	legalHistory, err := stackswitch.Legal(context.Background(), os.Getenv, db, legalDocuments)
+	if err != nil {
+		// coverage:ignore reason: main's wiring; stackswitch's own tests cover the refusal
+		log.Fatalf("legal history: %v", err)
+	}
+	staffauth.AgreementDocuments = legalHistory
 
 	// coverage:ignore reason: requires real GCP credentials and network access, not exercised by unit tests
 	verifier, err := authn.NewFirebaseVerifier(context.Background(), os.Getenv("GCP_PROJECT_ID"))
@@ -258,7 +281,7 @@ func main() {
 	// #1548: the email before a material change to the Terms or the
 	// Privacy Policy, Platform voice, so a reply asking for a refund
 	// reaches support@.
-	legalNoticeOutboxWorker := legalnotice.NewWorker(platformMailer, legalDocuments)
+	legalNoticeOutboxWorker := legalnotice.NewWorker(platformMailer, legalHistory)
 
 	// #443. The HTTP client is shared by both and is deliberately
 	// short-timeout: a probe is a CDN fetch of a static file, and a
@@ -366,6 +389,7 @@ func main() {
 		LegalNoticeWorker:      legalNoticeOutboxWorker,
 		FeedbackIssueWorker:    feedbackIssueWorker,
 
+		LegalDocuments:  legalHistory,
 		ExpectedOrigins: resolveExpectedOrigins(),
 		Founder:         founderConfig(os.Getenv),
 		Now:             now,

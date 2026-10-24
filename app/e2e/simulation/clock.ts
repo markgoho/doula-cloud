@@ -4,6 +4,7 @@
 // happen together on every jump, in that order, so a nudge queued by the
 // advance is drained before the mailbox's arrival order is asked to mean
 // anything.
+import { requireClockProject } from '../clockProject';
 import { API_URL } from '../ports';
 import { MAILBOX_URL, advanceOffset, readSimulatedNow } from '../stack';
 
@@ -61,7 +62,11 @@ async function postJSON(url: string, body: unknown, headers: Record<string, stri
 // label the messages it receives next. It does not sign anyone back in --
 // that is the caller's job, gated on crossedReauthThreshold, because only
 // the caller knows which persona sessions are open.
+//
+// The BFF's clock follows the offset too (#1833), so a jump runs only in
+// the clock project (e2e/clockProject.ts), with nothing beside it.
 export async function jump(amount: JumpAmount, options: { label: string; workerSecret: string }): Promise<JumpResult> {
+	requireClockProject('A jump');
 	advanceOffset(toIntervalLiteral(amount));
 
 	const drained = await fetch(`${API_URL}${DRAIN_PATH}`, {

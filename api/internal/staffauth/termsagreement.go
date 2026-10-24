@@ -13,10 +13,11 @@ import (
 )
 
 // AgreementDocuments is the version history the agreement gate reads:
-// legal's two documents. Production never assigns it. It is a variable,
-// and exported, so a test here or in main can hand the gate a history
-// with a material version in it, because the shipped history holds none
-// yet.
+// legal's two documents. It is a variable, and exported, so a test here
+// or in main can hand the gate a history with a material version in it,
+// because the shipped history holds none yet. main assigns it the
+// history stackswitch.Legal returns: the shipped one everywhere but the
+// end-to-end stack (#1833).
 var AgreementDocuments = []legal.Document{legal.Terms, legal.Privacy}
 
 // agreementDueKey carries what Middleware found due for this request's

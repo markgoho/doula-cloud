@@ -15,6 +15,7 @@ import (
 	"doula-cloud/api/internal/feedback"
 	"doula-cloud/api/internal/idempotency"
 	"doula-cloud/api/internal/internalauth"
+	"doula-cloud/api/internal/legal"
 	"doula-cloud/api/internal/legalnotice"
 	"doula-cloud/api/internal/mailsuppress"
 	"doula-cloud/api/internal/mfarecoverymail"
@@ -152,6 +153,32 @@ type Deps struct {
 	// table's zero value before this field existed) falls back to
 	// clock.Real -- see clock.Middleware's own doc comment for why.
 	Now clock.Clock
+
+	// LegalDocuments is the version history of the Terms of Service and
+	// the Privacy Policy the routes publish from and read the price of a
+	// Credit from. Nil, every test's zero value and Cloud Run's, is the
+	// shipped history in api/internal/legal; the end-to-end stack hands
+	// main one with a version appended (stackswitch.Legal, #1833).
+	LegalDocuments []legal.Document
+}
+
+// legalHistory is d.LegalDocuments, or the shipped history when unset.
+func (d Deps) legalHistory() []legal.Document {
+	if d.LegalDocuments != nil {
+		return d.LegalDocuments
+	}
+	return legalDocuments
+}
+
+// termsIn is the Terms of Service in history.
+func termsIn(history []legal.Document) legal.Document {
+	for _, doc := range history {
+		if doc.Path == legal.Terms.Path {
+			return doc
+		}
+	}
+	// coverage:ignore reason: every history holds the Terms -- the shipped one, and stackswitch.Legal's copy of it
+	return legal.Terms
 }
 
 // routes builds the BFF's route table.

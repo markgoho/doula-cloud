@@ -10,6 +10,7 @@ import type { APIRequestContext } from '@playwright/test';
 // reach for the other's export inside a function body, never at module
 // scope, so neither is read before the whole graph has finished loading.
 import { readMailbox } from './outboxMail';
+import { requireClockProject } from './clockProject';
 import {
 	E2E_API_HOST,
 	E2E_API_PORT,
@@ -702,6 +703,15 @@ export function readSimulatedNow(): string {
 	return querySQLValue('SELECT sim.now()');
 }
 
+// The simulated date in UTC, days after today, as YYYY-MM-DD: the form a
+// legal version's date takes, which starts at midnight UTC (#1833).
+export function simulatedDateAfter(days: number): string {
+	if (!Number.isSafeInteger(days) || days < 0) {
+		throw new Error(`stack: invalid day count ${days}`);
+	}
+	return querySQLValue(`SELECT to_char((sim.now() AT TIME ZONE 'UTC')::date + ${days}, 'YYYY-MM-DD')`);
+}
+
 // stopStack tears the stack down. keepVolume leaves the Postgres volume,
 // the fake GCS bucket and every host-process pidfile's target already
 // dead -- the shape a resumed run needs (#763): the world (rows,
@@ -786,6 +796,43 @@ async function startAPI(appOrigin: string) {
 		timeout: BUILD_TIMEOUT_MS
 	});
 
+	await spawnAPI(appOrigin, {});
+}
+
+// Stops the BFF and starts the binary startAPI built again, with
+// extraEnvironment on top of its usual environment: the shape of a
+// deploy, for a spec that needs the BFF to start knowing something it did
+// not know before (#1833's legal history, stackswitch.LegalVar). Every
+// other spec on the stack would see its requests refused while the BFF
+// is down, so this runs only in the clock project, alone. A later call
+// with {} puts the usual BFF back.
+export async function restartAPI(appOrigin: string, extraEnvironment: Record<string, string>) {
+	requireClockProject('Restarting the BFF');
+	await stopAPIProcess();
+	await spawnAPI(appOrigin, extraEnvironment);
+}
+
+// Kills the BFF and waits for the process to be gone, so the next one
+// can bind its port.
+async function stopAPIProcess() {
+	if (!existsSync(API_PIDFILE)) return;
+	const pid = Number(readFileSync(API_PIDFILE, 'utf8'));
+	killPidfile(API_PIDFILE);
+	const deadline = Date.now() + READY_TIMEOUT_MS;
+	for (;;) {
+		try {
+			process.kill(pid, 0);
+		} catch {
+			return;
+		}
+		if (Date.now() > deadline) {
+			throw new Error(`stack: the BFF (pid ${pid}) did not stop within ${READY_TIMEOUT_MS}ms`);
+		}
+		await new Promise((resolve) => setTimeout(resolve, 100));
+	}
+}
+
+async function spawnAPI(appOrigin: string, extraEnvironment: Record<string, string>) {
 	const child = spawn(API_BINARY_PATH, [], {
 		// Unlike the emulator, the BFF's own logs are worth seeing inline
 		// in CI when an e2e run fails -- 'inherit' rather than 'ignore'.
@@ -817,7 +864,14 @@ async function startAPI(appOrigin: string) {
 			MAILGUN_WEBHOOK_SIGNING_KEY,
 			NOTIFICATION_WORKER_SECRET,
 			FOUNDER_STAFF_ID,
-			PORT: String(E2E_API_PORT)
+			// #1833: the BFF's clock is real time plus sim.offset_row's
+			// delta, so a jump moves clock.Now(ctx) the way it moves the
+			// database's now(). api/internal/stackswitch refuses to start
+			// with this set unless FIREBASE_AUTH_EMULATOR_HOST is set and
+			// the database carries the sim schema; Cloud Run has neither.
+			E2E_CLOCK_FOLLOWS_SIM_OFFSET: '1',
+			PORT: String(E2E_API_PORT),
+			...extraEnvironment
 		}
 	});
 	child.unref();

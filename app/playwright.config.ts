@@ -1,5 +1,6 @@
 import { cpus } from 'node:os';
 import { defineConfig } from '@playwright/test';
+import { CLOCK_PROJECT, CLOCK_SPECS, PARALLEL_PROJECT } from './e2e/clockProject';
 import { E2E_EMULATOR_HOST, E2E_EMULATOR_PORT, PREVIEW_SERVER_PORT } from './e2e/ports';
 
 // Playwright's own default, restated so the clamp below can never raise
@@ -54,5 +55,19 @@ export default defineConfig({
 		// be set before `bun run build` runs, not just at request time.
 		env: { VITE_FIREBASE_AUTH_EMULATOR_HOST: `${E2E_EMULATOR_HOST}:${E2E_EMULATOR_PORT}` }
 	},
-	testMatch: '**/*.e2e.{ts,js}'
+	testMatch: '**/*.e2e.{ts,js}',
+	// #1833: a spec that moves the stack's clock runs alone, after every
+	// other spec, in a project of one worker -- e2e/clockProject.ts says
+	// why and holds the list. A failure in the parallel project skips the
+	// clock project (Playwright runs no project whose dependency failed).
+	// To run one clock spec by itself: `--project=clock --no-deps`.
+	projects: [
+		{ name: PARALLEL_PROJECT, testIgnore: CLOCK_SPECS.map((file) => `**/${file}`) },
+		{
+			name: CLOCK_PROJECT,
+			testMatch: CLOCK_SPECS.map((file) => `**/${file}`),
+			dependencies: [PARALLEL_PROJECT],
+			workers: 1
+		}
+	]
 });
