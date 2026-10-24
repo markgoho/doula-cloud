@@ -97,6 +97,34 @@ describe('IntakeDraft', () => {
 		expect(reloaded.answers).not.toHaveProperty('searchedName');
 	});
 
+	/*
+	 * #1835: the search reads them back when the name question's Back
+	 * returns to it, so the four boxes show what was typed there -- the
+	 * typed words, not what the name question has made of them since.
+	 */
+	it('keeps the four values the search typed, as typed, across a reload', () => {
+		const typed = { name: 'Yar Pell', dateOfBirth: '1990-01-02', email: 'yar@example.com', phone: '' };
+		const draft = new IntakeDraft();
+		draft.start('p1');
+		draft.carry(typed);
+
+		draft.update({ givenName: 'Yara', email: 'yara@example.com' });
+
+		expect(draft.searched).toEqual(typed);
+		const reloaded = new IntakeDraft();
+		reloaded.start('p1');
+		expect(reloaded.searched).toEqual(typed);
+	});
+
+	it('reads a stored search that is not four strings as no search', () => {
+		sessionStorage.setItem('doula-cloud:intake:p1:searched', JSON.stringify({ name: 'Yar Pell' }));
+
+		const draft = new IntakeDraft();
+		draft.start('p1');
+
+		expect(draft.searched).toBeUndefined();
+	});
+
 	it('carries nothing when the search handed nothing over', () => {
 		const draft = new IntakeDraft();
 		draft.start('p1');
@@ -152,8 +180,9 @@ describe('IntakeDraft', () => {
 		expect(draft.visitedSteps).toEqual([]);
 		expect(draft.origin).toBeUndefined();
 		expect(draft.searchedName).toBeUndefined();
+		expect(draft.searched).toBeUndefined();
 		expect(sessionStorage.getItem('doula-cloud:intake:p1')).toBeNull();
-		expect(sessionStorage.getItem('doula-cloud:intake:p1:searched-name')).toBeNull();
+		expect(sessionStorage.getItem('doula-cloud:intake:p1:searched')).toBeNull();
 	});
 
 	it('exports one draft the whole flow shares', () => {

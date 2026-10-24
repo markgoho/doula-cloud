@@ -74,17 +74,24 @@ function readStored(key: string): IntakeAnswers | undefined {
 	}
 }
 
-function readStoredText(key: string): string | undefined {
+function readStoredSearch(key: string): ClientSearchFields | undefined {
 	try {
-		return sessionStorage.getItem(key) ?? undefined;
+		const raw = sessionStorage.getItem(key);
+		if (raw === null) return undefined;
+		const stored = JSON.parse(raw) as Partial<Record<keyof ClientSearchFields, unknown>>;
+		// The search fills its boxes from this, so a value that is not
+		// four strings (an older shape, a hand edit) is read as no search.
+		const { name, dateOfBirth, email, phone } = stored;
+		if ([name, dateOfBirth, email, phone].some((value) => typeof value !== 'string')) return undefined;
+		return stored as ClientSearchFields;
 	} catch {
 		return undefined;
 	}
 }
 
-function writeStored(key: string, value: IntakeAnswers | string): void {
+function writeStored(key: string, value: IntakeAnswers | ClientSearchFields): void {
 	try {
-		sessionStorage.setItem(key, typeof value === 'string' ? value : JSON.stringify(value));
+		sessionStorage.setItem(key, JSON.stringify(value));
 	} catch {
 		// Nothing to recover: the draft still lives in module state.
 	}
@@ -132,14 +139,17 @@ export class IntakeDraft {
 	 */
 	origin = $state<IntakeOrigin | undefined>();
 	/**
-	 * A name of two or more words the search typed, which carries into
-	 * neither name field (#1716) and which the name question shows
-	 * (#1758). Outside `answers` on purpose: `answers` is what the save
-	 * sends, and this is never saved. Mirrored under a key of its own
-	 * (#1829): the search hands it over in module memory, not the URL, so
-	 * the mirror is the only place a reload can read it back from.
+	 * The four values the search typed, as typed, when the search opened
+	 * intake. Outside `answers` on purpose: `answers` is what the save
+	 * sends and what the name question edits, and this is neither. Two
+	 * screens read it. The name question shows a name of two or more
+	 * words from it (`searchedName`), and the search fills its boxes
+	 * from it again when the name question's Back returns there (#1835),
+	 * so nothing has to be retyped. Mirrored under a key of its own
+	 * (#1829): the search hands it over in module memory, not the URL,
+	 * so the mirror is the only place a reload can read it back from.
 	 */
-	searchedName = $state<string | undefined>();
+	searched = $state<ClientSearchFields | undefined>();
 
 	constructor(namespace = 'intake') {
 		this.#namespace = namespace;
@@ -149,8 +159,17 @@ export class IntakeDraft {
 		return `doula-cloud:${this.#namespace}:${this.scope}`;
 	}
 
-	get #searchedNameKey(): string {
-		return `${this.#storageKey}:searched-name`;
+	get #searchedKey(): string {
+		return `${this.#storageKey}:searched`;
+	}
+
+	/**
+	 * A name of two or more words the search typed, which carries into
+	 * neither name field (#1716) and which the name question shows
+	 * (#1758). It is never saved.
+	 */
+	get searchedName(): string | undefined {
+		return searchedName(this.searched?.name);
 	}
 
 	/** Whether the one fact ADR-0017 requires is here. Read by `start`,
@@ -174,7 +193,7 @@ export class IntakeDraft {
 		if (this.scope !== scope) {
 			this.scope = scope;
 			this.answers = readStored(this.#storageKey) ?? blankAnswers();
-			this.searchedName = readStoredText(this.#searchedNameKey);
+			this.searched = readStoredSearch(this.#searchedKey);
 			this.visitedSteps = [];
 			this.matches = [];
 		}
@@ -187,7 +206,7 @@ export class IntakeDraft {
 	 * Seeds the draft with what the search that fronts intake typed
 	 * (#498, ADR-0017), handed over in module memory (#1829,
 	 * `#lib/intakeHandoff.ts`). A one-word name fills Given name; a name of
-	 * two or more words fills no field and is kept as `searchedName`
+	 * two or more words fills no field and is shown from `searched`
 	 * (#1716, #1758). A key the search left blank is left off, since a
 	 * blank would overwrite. Mirrored like any other answer, so a reload of
 	 * the name question keeps it.
@@ -202,8 +221,8 @@ export class IntakeDraft {
 			if (value) seeded[key] = value;
 		}
 		this.update(seeded);
-		this.searchedName = searchedName(fields.name);
-		if (this.searchedName) writeStored(this.#searchedNameKey, this.searchedName);
+		this.searched = { ...fields };
+		writeStored(this.#searchedKey, this.searched);
 	}
 
 	/** Records an answer and mirrors the draft, so the next page and the
@@ -229,12 +248,12 @@ export class IntakeDraft {
 	 * leaves behind, so the next Client starts blank. */
 	clear(): void {
 		clearStored(this.#storageKey);
-		clearStored(this.#searchedNameKey);
+		clearStored(this.#searchedKey);
 		this.answers = blankAnswers();
 		this.visitedSteps = [];
 		this.matches = [];
 		this.origin = undefined;
-		this.searchedName = undefined;
+		this.searched = undefined;
 	}
 }
 

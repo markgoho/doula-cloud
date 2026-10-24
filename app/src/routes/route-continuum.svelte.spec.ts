@@ -155,6 +155,7 @@ vi.mock('$app/state', () => ({ page: pageState }));
  * to be importable, not to be asserted on.
  */
 vi.mock('$app/navigation', () => ({
+	afterNavigate: vi.fn(),
 	goto: vi.fn(),
 	invalidate: vi.fn(),
 	invalidateAll: vi.fn(),

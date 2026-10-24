@@ -21,6 +21,12 @@
  * keeps the values because the layout wrote them into the draft's own
  * sessionStorage mirror (`intakeDraft.carry`), not because this module
  * kept them.
+ *
+ * The way back is the draft too, not this module (#1835): the draft
+ * keeps the four values as typed (`intakeDraft.searched`), and the
+ * search fills its boxes from them when the name question's Back
+ * returns there. This module is already empty by then, since the
+ * layout took the values once.
  */
 import type { ClientSearchFields } from './client.js';
 
