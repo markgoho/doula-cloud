@@ -88,6 +88,20 @@ export function versionInForce(legalDocument: LegalDocument, now: Date): LegalVe
 	return version;
 }
 
+// The price of a Credit that a version of the Terms states, the way the
+// Terms write it: "$20.00". Every page that states the price prints it
+// from here rather than typing it, so a rise is one new version and not
+// a search for each copy (#1841). The locale is fixed, so the page is the
+// same whichever machine builds it.
+const CREDIT_PRICE = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' });
+
+export function creditPrice(version: LegalVersion): string {
+	if (version.creditPriceCents === undefined) {
+		throw new Error(`the version of ${version.effective} states no price of a Credit`);
+	}
+	return CREDIT_PRICE.format(version.creditPriceCents / 100);
+}
+
 // Every version after `version`, oldest first, by date rather than by
 // identity, so a version that came through a load function is matched
 // too. It reads no clock: a version's page names the versions after it

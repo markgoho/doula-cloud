@@ -1,6 +1,7 @@
 import { page as testPage } from 'vitest/browser';
 import { describe, expect, it } from 'vitest';
 import { render } from 'vitest-browser-svelte';
+import { TERMS, creditPrice, versionInForce } from '#lib/legal.js';
 import PageInLayout from '../PageInLayout.svelte';
 import PilotTerms from '../pilot-terms/+page.svelte';
 import { expectTheSiteFooter } from '../siteFooter.expect.js';
@@ -44,7 +45,9 @@ describe('the Terms of Service at /terms (#1556)', () => {
 
 	it('states the price of a Credit, and that there is nothing else to pay', async () => {
 		await render(Page);
-		await expect.element(testPage.getByText('$20.00')).toBeVisible();
+		// The price of the version in force, so a rise needs no edit here (#1841).
+		const price = creditPrice(versionInForce(TERMS, new Date()));
+		await expect.element(testPage.getByText(price)).toBeVisible();
 		await expect
 			.element(testPage.getByText('There is no subscription, no minimum and no recurring charge.', { exact: false }))
 			.toBeVisible();

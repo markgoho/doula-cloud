@@ -1,7 +1,16 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { PRIVACY, TERMS, laterVersions, type LegalDocument, type LegalVersion, versionInForce, versionPath } from './legal.js';
+import {
+	PRIVACY,
+	TERMS,
+	creditPrice,
+	laterVersions,
+	type LegalDocument,
+	type LegalVersion,
+	versionInForce,
+	versionPath
+} from './legal.js';
 
 /*
  * The version agreement (#1556's third seam). The BFF records which
@@ -121,5 +130,22 @@ describe('versionPath', () => {
 	// The BFF's email links this address (api/internal/legalnotice).
 	it('is the document address and the date the version takes effect', () => {
 		expect(versionPath(HISTORY, HISTORY.versions[2])).toBe('/terms/2026-11-01');
+	});
+});
+
+describe('creditPrice', () => {
+	// In dollars and cents, the way a version of the Terms writes it, and
+	// the same on every build machine whatever its locale (#1841).
+	it('is the price a version of the Terms states, as the Terms write it', () => {
+		expect(creditPrice({ effective: '2026-09-29', material: false, change: 'First version.', creditPriceCents: 2000 })).toBe(
+			'$20.00'
+		);
+		expect(creditPrice({ effective: '2027-03-01', material: true, change: 'A rise.', creditPriceCents: 125_050 })).toBe(
+			'$1,250.50'
+		);
+	});
+
+	it('refuses a version that states no price, such as one of the Privacy Policy', () => {
+		expect(() => creditPrice(PRIVACY.versions[0])).toThrow('the version of 2026-09-29 states no price of a Credit');
 	});
 });
