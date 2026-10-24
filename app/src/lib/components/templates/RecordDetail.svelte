@@ -353,9 +353,10 @@
 		 * frame, and the frame held the style-guide page around this block,
 		 * so the block itself had less: the query reads `.contents`' own
 		 * width, and the check now sizes the frame until that is the floor.
-		 * Measured that way on macOS, the four chips sit on one line at
-		 * 352px and wrap at 348px. 22rem is that width, with no margin
-		 * added beyond it.
+		 * Measured that way, the four chips sit on one line at 352px on
+		 * macOS, and CI's Linux/Chromium draws them wider: they wrapped
+		 * there at 352px. 22.25rem (356px) is the next step of the sweep's
+		 * 4px resolution, measured in CI, with no margin added beyond it.
 		 */
 		.contents-rail {
 			display: block;
@@ -365,7 +366,7 @@
 			display: none;
 		}
 
-		@container record-contents (min-width: 22rem) {
+		@container record-contents (min-width: 22.25rem) {
 			.contents-rail {
 				display: none;
 			}
