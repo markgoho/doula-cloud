@@ -1,7 +1,6 @@
 import { expect, test } from '@playwright/test';
 import { API_URL } from './ports';
-import { signIn } from './auth';
-import { enterPracticeAsEnrolled } from './mfa';
+import { enterPractice, signIn } from './auth';
 import { seedFoundingOwner } from './staffSignup';
 
 // Exercises the settings screen from app/src/routes/practices/[practiceId]/settings/plan-templates
@@ -16,7 +15,7 @@ test('Practice Owner can view seeded plan templates and add/save a field', async
 	const { idToken, practiceId } = await seedFoundingOwner(request);
 
 	const staffHeaders = await signIn(request, API_URL, idToken);
-	await enterPracticeAsEnrolled(context, page, staffHeaders, practiceId);
+	await enterPractice(context, page, staffHeaders, practiceId);
 	await expect(page).toHaveURL(new RegExp(`/practices/${practiceId}$`));
 
 	// Through Settings, which is where these screens live now that the

@@ -1,7 +1,6 @@
 import { expect, test } from '@playwright/test';
 import { API_URL } from './ports';
-import { signIn } from './auth';
-import { enterPracticeAsEnrolled } from './mfa';
+import { enterPractice, signIn } from './auth';
 import { portalEngagementSettled } from './mountSettled';
 import { seedPortalClient, signInPortalClient } from './portalClient';
 import { seedFoundingOwner } from './staffSignup';
@@ -18,7 +17,7 @@ test('sends a piece of Feedback from a Staff screen', async ({ page, request, co
 	const owner = await seedFoundingOwner(request, { practiceName: 'Riverside Doulas' });
 	const staffHeaders = await signIn(request, API_URL, owner.idToken);
 
-	await enterPracticeAsEnrolled(context, page, staffHeaders, owner.practiceId);
+	await enterPractice(context, page, staffHeaders, owner.practiceId);
 	await expect(page).toHaveURL(new RegExp(`/practices/${owner.practiceId}$`));
 
 	await page.getByRole('button', { name: 'Tell us what is not working or what you need.' }).click();

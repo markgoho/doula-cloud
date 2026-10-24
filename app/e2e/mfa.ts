@@ -1,5 +1,5 @@
-import { expect, type APIRequestContext, type BrowserContext, type Page } from '@playwright/test';
-import { API_URL, E2E_EMULATOR_HOST, E2E_EMULATOR_PORT, PREVIEW_SERVER_ORIGIN } from './ports';
+import { expect, type APIRequestContext } from '@playwright/test';
+import { API_URL, E2E_EMULATOR_HOST, E2E_EMULATOR_PORT } from './ports';
 import { signIn } from './auth';
 
 // The Firebase Auth emulator (firebase-tools 15.27, vendored in
@@ -197,7 +197,7 @@ export async function readVerificationCode(request: APIRequestContext, sessionIn
  * screens cannot answer on their own -- a spec that wants those screens
  * driven installs totpStub.ts instead of calling this. Returns session
  * headers carrying second_factor -- good for calling any
- * Practice-scoped route directly, and for enterPracticeAsEnrolled below
+ * Practice-scoped route directly, and for auth.ts's enterPractice
  * to hand the browser.
  */
 export async function signInEnrolled(
@@ -208,34 +208,6 @@ export async function signInEnrolled(
 	await verifyEmail(request, localId);
 	const enrolledIdToken = await enrollSecondFactor(request, idToken);
 	return signIn(request, API_URL, enrolledIdToken);
-}
-
-/**
- * Puts headers' session cookie directly into context's cookie jar and
- * navigates page to practiceId's landing route -- the browser-level
- * equivalent of a /login walk, for a fixture that has no interest in
- * spending one (totpStub.ts is what a spec that does want the walk
- * installs). headers come from signInEnrolled or from auth.ts's plain
- * signIn alike; the cookie has the same shape either way. A direct
- * cookie injection rather than a second interactive sign-in on purpose:
- * Playwright's request-context
- * `secure: false` sidesteps whether its own cookie jar treats loopback
- * as a trustworthy origin the way a real browser does (see auth.ts's
- * signIn doc comment on the same question) -- the server never reads
- * this attribute back off an inbound Cookie header, so it costs nothing
- * to relax here.
- */
-export async function enterPracticeAsEnrolled(
-	context: BrowserContext,
-	page: Page,
-	headers: { Cookie: string },
-	practiceId: string
-): Promise<void> {
-	const token = headers.Cookie.replace('__session=', '');
-	await context.addCookies([
-		{ name: '__session', value: token, url: PREVIEW_SERVER_ORIGIN, httpOnly: true, secure: false, sameSite: 'Lax' }
-	]);
-	await page.goto(`/practices/${practiceId}`);
 }
 
 /**

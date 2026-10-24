@@ -1,8 +1,7 @@
 import { expect, test } from '@playwright/test';
 import { API_URL } from './ports';
 import { seedClientPortalUser, seedEngagement } from './stack';
-import { signIn } from './auth';
-import { enterPracticeAsEnrolled } from './mfa';
+import { enterPractice, signIn } from './auth';
 import { signInPortalClient } from './portalClient';
 import { seedFoundingOwner, uniqueEmail } from './staffSignup';
 
@@ -37,7 +36,7 @@ test('Staff fills a Birth Plan, and the Client portal shows the matching read-on
 
 	// Staff side: create the Birth Plan (signup seeds a default template
 	// per Practice per #63), fill one field, and save.
-	await enterPracticeAsEnrolled(context, page, staffHeaders, practiceId);
+	await enterPractice(context, page, staffHeaders, practiceId);
 	await expect(page).toHaveURL(new RegExp(`/practices/${practiceId}$`));
 
 	// The Clients list no longer links each row to an Engagement (#397 --

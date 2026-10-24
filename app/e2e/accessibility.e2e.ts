@@ -11,9 +11,9 @@ import {
 	type SeededPortalClient
 } from './portalClient';
 import { seedEngagement, seedEngagementRequest, seedInvoice } from './stack';
-import { enterPracticeAsEnrolled, verifyEmail } from './mfa';
+import { signInEnrolled, verifyEmail } from './mfa';
 import { seedAccountWithNoPractice, seedFoundingOwner } from './staffSignup';
-import { signIn } from './auth';
+import { enterPractice, signIn } from './auth';
 import { drainUntilMailArrives } from './outboxMail';
 import { stubTotpFactor } from './totpStub';
 import { WCAG_TAGS } from './wcag';
@@ -227,7 +227,7 @@ async function scan(page: Page, route: Route) {
 
 /**
  * Puts a Staff or portal session into the browser, the same injection
- * mfa.ts's `enterPracticeAsEnrolled` makes: nothing here needs an
+ * auth.ts's `enterPractice` makes: nothing here needs an
  * interactive sign-in.
  */
 async function enterSession(context: BrowserContext, token: string) {
@@ -367,7 +367,7 @@ test.describe('Archetype A -- the screens a person meets signed out', () => {
 // seedAccountWithNoPractice (staffSignup.ts) provisions exactly that: an
 // Identity Platform account exchanged for a session with no POST
 // /api/staff/signup in between. The cookie is injected straight into the
-// browser context -- the same shape mfa.ts's enterPracticeAsEnrolled
+// browser context -- the same shape auth.ts's enterPractice
 // uses -- since nothing here needs an interactive sign-in.
 //
 // Both behind one seed rather than a test each: they want the identical
@@ -618,6 +618,8 @@ async function seedStaffSide(request: APIRequestContext): Promise<StaffSeed> {
 	});
 	expect(fields.ok(), `set client fields failed: ${fields.status()} ${await fields.text()}`).toBe(true);
 
+	const enrolledHeaders = await signInEnrolled(request, seeded.staffIdToken, seeded.staffLocalId);
+
 	return {
 		practiceId,
 		staffId,
@@ -626,11 +628,19 @@ async function seedStaffSide(request: APIRequestContext): Promise<StaffSeed> {
 		pendingRequestClientId,
 		pendingRequestId,
 		patEmail: seeded.clientEmail,
-		// #606: seedPortalClient's Owner is already enrolled (portalClient.ts),
-		// so entering her Practice is a cookie injection rather than the
-		// plain /login form -- see mfa.ts's enterPracticeAsEnrolled doc
-		// comment.
-		token: seeded.staffHeaders.Cookie.replace('__session=', '')
+		// The rows are scanned as an Owner WITH a second factor, enrolled
+		// here rather than in seedPortalClient, whose Owner has none
+		// (#1854). The rows that reach one of the five acts draw their full
+		// Owner branch only for her: `settings/mfa` (the toggle),
+		// `settings/delete` (the delete form), `staff/[staffId]/mfa-recovery`
+		// (the vouch form), `settings` and `agreement` (the export action),
+		// and `clients/[clientId]` (erasure). For an Owner with no second
+		// factor each draws SecondFactorNeeded instead, and the landing page
+		// adds a recommendation; #1857 scans those branches. The setup calls
+		// above need no second factor, so they use seedPortalClient's own
+		// session. Every other test in this file that calls seedPortalClient
+		// runs under that session, with no second factor.
+		token: enrolledHeaders.Cookie.replace('__session=', '')
 	};
 }
 
@@ -1306,7 +1316,9 @@ async function provisionPortalDocuments(request: APIRequestContext, seeded: Seed
 // It costs its own session rather than joining the Staff loop above. A
 // deliberately stalled route must never share a page with a real scan --
 // the interception would outlive the row that wanted it and quietly gate
-// another one.
+// another one. The session is seedPortalClient's, with no second factor:
+// the loading and loadError branches are drawn before the page reads it,
+// so either Owner gives the same screen here.
 test('the sweep refuses a screen whose loading affordance is still up', async ({
 	page,
 	request,
@@ -1314,7 +1326,7 @@ test('the sweep refuses a screen whose loading affordance is still up', async ({
 }) => {
 	const seeded = await seedPortalClient(request, 'Riverside Doulas');
 	const { practiceId } = seeded;
-	await enterPracticeAsEnrolled(context, page, seeded.staffHeaders, practiceId);
+	await enterPractice(context, page, seeded.staffHeaders, practiceId);
 
 	await page.route('**/mfa-required/impact', () => {
 		// Deliberately unanswered. Fulfilling, continuing or aborting here
@@ -1354,7 +1366,7 @@ test('the sweep refuses a screen whose Template is in its loadError branch', asy
 }) => {
 	const seeded = await seedPortalClient(request, 'Riverside Doulas');
 	const { practiceId } = seeded;
-	await enterPracticeAsEnrolled(context, page, seeded.staffHeaders, practiceId);
+	await enterPractice(context, page, seeded.staffHeaders, practiceId);
 
 	await page.route('**/mfa-required/impact', (route) =>
 		route.fulfill({ status: 500, contentType: 'application/json', body: '{}' })

@@ -1,7 +1,6 @@
 import { expect, test } from '@playwright/test';
 import { API_URL } from './ports';
-import { signIn } from './auth';
-import { enterPracticeAsEnrolled } from './mfa';
+import { enterPractice, signIn } from './auth';
 import { readStaffInviteToken } from './stack';
 import { seedFoundingOwner, uniqueEmail, STAFF_PASSWORD } from './staffSignup';
 
@@ -28,7 +27,7 @@ test('A Doula invited via the Staff invite route is refused an Owner-only action
 	// role selection is 'doula' alone, which is the non-Owner bundle this
 	// spec needs.
 	const ownerHeaders = await signIn(request, API_URL, ownerIdToken);
-	await enterPracticeAsEnrolled(context, page, ownerHeaders, practiceId);
+	await enterPractice(context, page, ownerHeaders, practiceId);
 	await expect(page).toHaveURL(new RegExp(`/practices/${practiceId}$`));
 
 	await page.goto(`/practices/${practiceId}/invite`);

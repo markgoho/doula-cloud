@@ -1,4 +1,11 @@
-import { expect, type APIRequestContext, type APIResponse } from '@playwright/test';
+import {
+	expect,
+	type APIRequestContext,
+	type APIResponse,
+	type BrowserContext,
+	type Page
+} from '@playwright/test';
+import { PREVIEW_SERVER_ORIGIN } from './ports';
 import { retryPastRateLimit } from './rateLimit';
 
 // Since #151 the BFF reads a Bearer ID token on three bootstrap endpoints
@@ -35,6 +42,34 @@ export async function signIn(
 	).toBe(true);
 
 	return sessionCookieFrom(created, 'create-session');
+}
+
+/**
+ * Puts headers' session cookie directly into context's cookie jar and
+ * navigates page to practiceId's landing route -- the browser-level
+ * equivalent of a /login walk, for a fixture that has no interest in
+ * spending one (totpStub.ts is what a spec that does want the walk
+ * installs). headers come from signIn above or from mfa.ts's
+ * signInEnrolled alike: the cookie has the same shape whether or not the
+ * session has a second factor (#1854). A direct cookie injection rather
+ * than a second interactive sign-in on purpose: Playwright's
+ * request-context `secure: false` sidesteps whether its own cookie jar
+ * treats loopback as a trustworthy origin the way a real browser does
+ * (see signIn's doc comment above on the same question) -- the server
+ * never reads this attribute back off an inbound Cookie header, so it
+ * costs nothing to relax here.
+ */
+export async function enterPractice(
+	context: BrowserContext,
+	page: Page,
+	headers: { Cookie: string },
+	practiceId: string
+): Promise<void> {
+	const token = headers.Cookie.replace('__session=', '');
+	await context.addCookies([
+		{ name: '__session', value: token, url: PREVIEW_SERVER_ORIGIN, httpOnly: true, secure: false, sameSite: 'Lax' }
+	]);
+	await page.goto(`/practices/${practiceId}`);
 }
 
 /**

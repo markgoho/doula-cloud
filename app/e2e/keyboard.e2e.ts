@@ -6,8 +6,8 @@ import {
 	PORTAL_CLIENT_PASSWORD
 } from './portalClient';
 import { seedEngagementRequest } from './stack';
-import { uniqueEmail } from './staffSignup';
-import { enterPracticeAsEnrolled } from './mfa';
+import { STAFF_PASSWORD, uniqueEmail } from './staffSignup';
+import { enterPractice } from './auth';
 
 /**
  * The half of the accessibility gate axe cannot see (#447): whether a
@@ -77,7 +77,7 @@ async function tabTo(page: Page, target: Locator, description: string): Promise<
  * asserted here rather than in a caller, because they are the same defect
  * whichever journey meets them first.
  */
-async function signInByKeyboard(page: Page, email: string, practiceId: string) {
+async function signInByKeyboard(page: Page, email: string, password: string, practiceId: string) {
 	await page.goto('/login');
 	await expect(page.getByRole('heading', { level: 1, name: 'Log in' })).toBeVisible();
 
@@ -94,7 +94,7 @@ async function signInByKeyboard(page: Page, email: string, practiceId: string) {
 	// does not follow its email is a real defect, not a preference.
 	await page.keyboard.press('Tab');
 	await expect(page.getByLabel('Password')).toBeFocused();
-	await page.keyboard.type(PORTAL_CLIENT_PASSWORD);
+	await page.keyboard.type(password);
 
 	await tabTo(page, page.getByRole('button', { name: 'Log in' }), 'the Log in button');
 	await page.keyboard.press('Enter');
@@ -103,8 +103,7 @@ async function signInByKeyboard(page: Page, email: string, practiceId: string) {
 
 test('Renata signs in and invites a Doula, with no pointer at any step', async ({
 	page,
-	request,
-	context
+	request
 }) => {
 	// A Practice with a Client already in it: Renata's journey opens on a
 	// working Practice, not an empty one, and the hub renders its primary
@@ -113,16 +112,10 @@ test('Renata signs in and invites a Doula, with no pointer at any step', async (
 	const { practiceId } = seeded;
 	const invited = uniqueEmail('doula');
 
-	// Stage 1 -- sign in. #606: seedPortalClient's Owner is enrolled
-	// (portalClient.ts), and an enrolled account can no longer complete
-	// signInByKeyboard's plain-password walk -- every sign-in now demands
-	// a PHONE_SMS challenge the emulator issued it with, which is not a
-	// keyboard-navigation question this walk is testing (that is Stage
-	// 1's own login-form conformance; the TOTP challenge screen is
-	// separate, still-landing work). A cookie injection stands in for
-	// Stage 1 here, same as mfa-required.e2e.ts's own admitted-Doula spec.
-	await enterPracticeAsEnrolled(context, page, seeded.staffHeaders, practiceId);
-	await expect(page).toHaveURL(new RegExp(`/practices/${practiceId}$`));
+	// Stage 1 -- sign in by keyboard. seedPortalClient's Owner has no
+	// second factor (#1854), so the plain password walk admits her with
+	// no challenge, as it does a real Owner straight after signup.
+	await signInByKeyboard(page, seeded.staffEmail, STAFF_PASSWORD, practiceId);
 
 	// Stage 2 -- reach the roster through the shell's own nav, and invite.
 	await tabTo(
@@ -183,9 +176,10 @@ test('A doula edits a Client and starts new work, with no pointer at any step', 
 	// name needs the same family name here to still trigger it.
 	await seedClient(request, practiceId, staffHeaders, { givenName: 'Jane', familyName: 'Client' });
 
-	// #606: see the "Renata" walk above for why this is a cookie injection
-	// rather than signInByKeyboard for an enrolled Owner.
-	await enterPracticeAsEnrolled(context, page, staffHeaders, practiceId);
+	// A cookie injection rather than signInByKeyboard: the "Renata" walk
+	// above already walks the login form by keyboard, and this walk starts
+	// at the hub.
+	await enterPractice(context, page, staffHeaders, practiceId);
 	await expect(page).toHaveURL(new RegExp(`/practices/${practiceId}$`));
 
 	// The one `goto` inside a walk, and it is an entry point rather than a
@@ -285,7 +279,7 @@ test('A contractor Doula reaches the explainer\'s "Set up a Practice" link, with
 	const { practiceId } = seeded;
 	const contractor = await seedContractorDoula(request, practiceId, seeded.staffHeaders);
 
-	await signInByKeyboard(page, contractor.email, practiceId);
+	await signInByKeyboard(page, contractor.email, PORTAL_CLIENT_PASSWORD, practiceId);
 
 	// Entry point, same as the edit-form walk's own hubURL goto above: a
 	// contractor Doula does not see "Find or add a Client" on her Clients
@@ -331,9 +325,10 @@ test('An Owner decides a pending Engagement Request, with no pointer at any step
 	});
 	const requestId = seedEngagementRequest(clientId, practiceId, staffId);
 
-	// #606: see the "Renata" walk above for why this is a cookie injection
-	// rather than signInByKeyboard for an enrolled Owner.
-	await enterPracticeAsEnrolled(context, page, staffHeaders, practiceId);
+	// A cookie injection rather than signInByKeyboard: the "Renata" walk
+	// above already walks the login form by keyboard, and this walk starts
+	// at the hub.
+	await enterPractice(context, page, staffHeaders, practiceId);
 	await expect(page).toHaveURL(new RegExp(`/practices/${practiceId}$`));
 
 	// Stage 2 -- the Overview hub's own "Review requests" link is the

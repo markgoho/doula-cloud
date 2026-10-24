@@ -1,7 +1,6 @@
 import { expect, test } from '@playwright/test';
 import { API_URL } from './ports';
-import { signIn } from './auth';
-import { enterPracticeAsEnrolled } from './mfa';
+import { enterPractice, signIn } from './auth';
 import { seedFoundingOwner } from './staffSignup';
 
 // birth-plan.e2e.ts creates its Client with POST /api/practices/{id}/clients
@@ -13,7 +12,7 @@ test('The first Client in three presses, then the Visits section', async ({ page
 	const { idToken, practiceId } = await seedFoundingOwner(request);
 
 	const staffHeaders = await signIn(request, API_URL, idToken);
-	await enterPracticeAsEnrolled(context, page, staffHeaders, practiceId);
+	await enterPractice(context, page, staffHeaders, practiceId);
 	await expect(page).toHaveURL(new RegExp(`/practices/${practiceId}$`));
 
 	// docs/onboarding-route.md: from the empty Practice to First Value is

@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
 import { seedPortalClient } from './portalClient';
-import { enterPracticeAsEnrolled } from './mfa';
+import { enterPractice } from './auth';
 import { seedMessageWithMissingAttachment } from './stack';
 
 // #305: contract-lifecycle.e2e.ts already proves a Signed PDF round-trips
@@ -15,7 +15,7 @@ import { seedMessageWithMissingAttachment } from './stack';
 test('A Message attachment uploads and downloads through the real object store', async ({ page }) => {
 	const { practiceId, engagementId, staffHeaders } = await seedPortalClient(page.request, 'Riverside Doulas');
 
-	await enterPracticeAsEnrolled(page.context(), page, staffHeaders, practiceId);
+	await enterPractice(page.context(), page, staffHeaders, practiceId);
 	await expect(page).toHaveURL(new RegExp(`/practices/${practiceId}$`));
 
 	await page.goto(`/practices/${practiceId}/engagements/${engagementId}`);
@@ -78,7 +78,7 @@ test('A Message whose attachment object is missing from the store 404s', async (
 		page.request,
 		'Riverside Doulas'
 	);
-	await enterPracticeAsEnrolled(page.context(), page, staffHeaders, practiceId);
+	await enterPractice(page.context(), page, staffHeaders, practiceId);
 
 	const messageId = seedMessageWithMissingAttachment(engagementId, staffId, 'ghost.png');
 

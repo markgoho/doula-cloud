@@ -2,8 +2,7 @@ import { expect, test } from '@playwright/test';
 import { MAILBOX_DOMAIN, MAILBOX_URL } from './stack';
 import { drainOutbox, drainUntilMailArrives, readMailbox } from './outboxMail';
 import { API_URL } from './ports';
-import { signIn } from './auth';
-import { enterPracticeAsEnrolled } from './mfa';
+import { enterPractice, signIn } from './auth';
 import { seedFoundingOwner, uniqueEmail, STAFF_PASSWORD } from './staffSignup';
 
 const STAFF_INVITE_OUTBOX = 'process-staff-invite-outbox';
@@ -38,7 +37,7 @@ test('An invitation arrives as readable mail, and a complaint stops the next one
 	});
 
 	const ownerHeaders = await signIn(request, API_URL, ownerIdToken);
-	await enterPracticeAsEnrolled(context, page, ownerHeaders, practiceId);
+	await enterPractice(context, page, ownerHeaders, practiceId);
 
 	await page.goto(`/practices/${practiceId}/invite`);
 	await page.getByLabel('Their email').fill(doulaEmail);
@@ -94,7 +93,7 @@ test('An invitation arrives as readable mail, and a complaint stops the next one
 	const complaintResult = await complaint.json();
 	expect(complaintResult.status, 'the BFF rejected the signed Mailgun webhook').toBe(200);
 
-	await enterPracticeAsEnrolled(context, page, ownerHeaders, practiceId);
+	await enterPractice(context, page, ownerHeaders, practiceId);
 	await page.goto(`/practices/${practiceId}/invite`);
 	await page.getByLabel('Their email').fill(complainerEmail);
 	await page.getByRole('button', { name: 'Send invite' }).click();
