@@ -348,3 +348,51 @@ func TestWrap_SkippedRuleIsNotCounted(t *testing.T) {
 		}
 	}
 }
+
+// TestWrap_ForgedForwardedForDoesNotOpenAFreshBucket proves a caller who
+// writes a new X-Forwarded-For value on every request is still refused
+// by IPRule (#1865): the proxies append the real caller after that text,
+// and IPRule keys on the appended address, not on the caller's own. The
+// two shapes are the two ways in -- direct to Cloud Run, and through the
+// Firebase Hosting rewrite with its edge on the right.
+func TestWrap_ForgedForwardedForDoesNotOpenAFreshBucket(t *testing.T) {
+	shapes := []struct {
+		name   string
+		suffix string
+	}{
+		{name: "direct to Cloud Run", suffix: ", 203.0.113.7"},
+		{name: "through the Hosting rewrite", suffix: ", 203.0.113.7, 74.125.210.71"},
+	}
+	for _, shape := range shapes {
+		t.Run(shape.name, func(t *testing.T) {
+			db := testdb.New(t)
+			handler := ratelimit.Wrap(db.App, "test_forged_xff", []ratelimit.Rule{ratelimit.IPRule(3, time.Hour)})(okHandler())
+
+			forged := []string{"198.51.100.1", "198.51.100.2", "198.51.100.3", "198.51.100.4"}
+			for i, first := range forged {
+				req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/", nil)
+				req.Header.Set("X-Forwarded-For", first+shape.suffix)
+				rec := httptest.NewRecorder()
+				handler.ServeHTTP(rec, req)
+
+				want := http.StatusOK
+				if i == len(forged)-1 {
+					want = http.StatusTooManyRequests
+				}
+				if rec.Code != want {
+					t.Fatalf("request %d with forged first entry %s: status = %d, want %d", i+1, first, rec.Code, want)
+				}
+			}
+
+			var key string
+			if err := db.Admin.QueryRowContext(t.Context(),
+				`SELECT key_value FROM rate_limit_refusals WHERE endpoint = 'test_forged_xff'`,
+			).Scan(&key); err != nil {
+				t.Fatalf("read refusal: %v", err)
+			}
+			if key != "203.0.113.7" {
+				t.Fatalf("refusal recorded against %q, want the appended caller 203.0.113.7", key)
+			}
+		})
+	}
+}

@@ -172,8 +172,9 @@ func TestClientPostSignContractHandler_Success(t *testing.T) {
 // proves signed_at and signer_ip are always server-derived: a request
 // body that tries to smuggle its own values for either field has no
 // effect, since SignContractRequest has no fields for them -- signer_ip
-// comes from X-Forwarded-For (set by Cloud Run's Google Front End, not
-// the caller) rather than the body's "signerIp"/"ip" keys.
+// comes from the X-Forwarded-For entry the proxies appended, not the
+// body's "signerIp"/"ip" keys nor a first entry the caller wrote into
+// the header itself (#1865).
 func TestClientPostSignContractHandler_ClientSuppliedSignedAtAndIPIgnored(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "client-spoofing-signed-at"
@@ -187,7 +188,7 @@ func TestClientPostSignContractHandler_ClientSuppliedSignedAtAndIPIgnored(t *tes
 
 	spoofed := `{"fullLegalName":"Jordan Client","attestation":true,"signedAt":"1999-01-01T00:00:00Z","signerIp":"10.0.0.1","ip":"10.0.0.1"}`
 	before := time.Now().Add(-time.Minute)
-	resp := postSignContractRawWithXFF(t, srv, session, engagementID, []byte(spoofed), "203.0.113.7, 10.0.0.1")
+	resp := postSignContractRawWithXFF(t, srv, session, engagementID, []byte(spoofed), "10.0.0.2, 203.0.113.7, 74.125.210.71")
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
@@ -199,7 +200,7 @@ func TestClientPostSignContractHandler_ClientSuppliedSignedAtAndIPIgnored(t *tes
 		t.Fatalf("persisted signed_at = %v, want a server-derived timestamp, not the spoofed 1999 value", row.signedAt)
 	}
 	if !row.signerIP.Valid || row.signerIP.String != "203.0.113.7" {
-		t.Fatalf("persisted signer_ip = %+v, want the GFE-set X-Forwarded-For first entry 203.0.113.7, not the body-spoofed 10.0.0.1", row.signerIP)
+		t.Fatalf("persisted signer_ip = %+v, want the caller the proxies appended, 203.0.113.7, not the body-spoofed 10.0.0.1 or the header-spoofed 10.0.0.2", row.signerIP)
 	}
 }
 
