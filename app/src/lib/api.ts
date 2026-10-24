@@ -55,8 +55,52 @@ export async function apiFetchWithSession(path: string, init: RequestInit = {}):
 		redirectGuard.isRedirecting = true;
 		await goto(`${resolve('/(signed-out)/mfa/enroll')}?returnTo=${encodeURIComponent(location.pathname)}`);
 		redirectGuard.isRedirecting = false;
+	} else if (await isTermsAgreementRequired(response)) {
+		await goToAgreement();
 	}
 	return response;
+}
+
+/**
+#1549: a 403 carrying `TERMS_AGREEMENT_REQUIRED` is an Owner whose
+Practice waits on her agreement to a material change. She goes to the one
+screen that asks, for the Practice in the current address. A refusal met
+on that screen itself, or with no Practice in the address, stays where it
+is.
+*/
+async function goToAgreement(): Promise<void> {
+	const practiceId = /^\/practices\/([^/]+)/.exec(location.pathname)?.[1];
+	if (practiceId === undefined) return;
+	const agreement = resolve('/practices/[practiceId]/agreement', { practiceId });
+	if (redirectGuard.isRedirecting || location.pathname === agreement) return;
+	redirectGuard.isRedirecting = true;
+	await goto(agreement);
+	redirectGuard.isRedirecting = false;
+}
+
+/**
+The machine-readable code a refusal carries, or `undefined` when the
+response is not a 403 or its body is not the BFF's JSON envelope. Reads a
+clone, so the caller can still read the body itself.
+*/
+async function forbiddenCode(response: Response): Promise<unknown> {
+	if (response.status !== 403) return undefined;
+	try {
+		const body: unknown = await response.clone().json();
+		return body !== null && typeof body === 'object' && 'code' in body ? body.code : undefined;
+	} catch {
+		return undefined;
+	}
+}
+
+/**
+Reports whether response is #1549's refusal: an Owner whose Practice
+waits on her agreement to a material change of the Terms of Service or
+the Privacy Policy. Exported for `practices/[practiceId]/+layout.ts`, for
+the reason `isMFARequired` is.
+*/
+export async function isTermsAgreementRequired(response: Response): Promise<boolean> {
+	return (await forbiddenCode(response)) === 'TERMS_AGREEMENT_REQUIRED';
 }
 
 /**
@@ -71,18 +115,7 @@ itself before treating a 403 as a stale Membership rather than a live
 session barred from this one Practice.
 */
 export async function isMFARequired(response: Response): Promise<boolean> {
-	if (response.status !== 403) return false;
-	try {
-		const body: unknown = await response.clone().json();
-		return (
-			body !== null &&
-			typeof body === 'object' &&
-			'code' in body &&
-			body.code === 'MFA_REQUIRED'
-		);
-	} catch {
-		return false;
-	}
+	return (await forbiddenCode(response)) === 'MFA_REQUIRED';
 }
 
 /**
