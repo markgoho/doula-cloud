@@ -322,17 +322,6 @@
 			min-block-size: var(--nav-row-height);
 		}
 
-		/* A section's name is never squeezed. Link declares a 44px
-		   `min-inline-size` for its hit target (#1828), and a flex item with
-		   an explicit minimum may shrink down to it, below its own words:
-		   with ten sections in too little room each link shrank and its
-		   name drew over the next one's, while the row reported that it
-		   fit. Held at its own width, a link that does not fit overflows
-		   the row, which is what the floor below is measured against. */
-		.wide nav > :global(a) {
-			flex-shrink: 0;
-		}
-
 		/* Stretched to its row, so the switcher's and the avatar's menus --
 		   which stretch to the row holding them -- open below that row rather
 		   than below a centered group (#1573), over the nav row the way a

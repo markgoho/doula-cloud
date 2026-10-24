@@ -92,6 +92,7 @@
 <button
 	{type}
 	class={buttonClass}
+	class:icon-only={iconOnly}
 	disabled={isDisabled}
 	aria-busy={loading}
 	aria-expanded={expanded}
@@ -107,7 +108,7 @@
 	{:else if icon && iconPosition === 'start'}
 		<Icon name={icon} size={iconSize} weight="light" />
 	{/if}
-	<span class:visually-hidden={iconOnly}>{label}</span>
+	<span class="label" class:visually-hidden={iconOnly}>{label}</span>
 	{#if !loading && !visual && icon && iconPosition === 'end'}
 		<Icon name={icon} size={iconSize} weight="light" />
 	{/if}
@@ -135,6 +136,12 @@
 		 * and type at a narrow width, so the floor is a fixed
 		 * `min-*-size` on every variant rather than a sum of padding and
 		 * line height that a narrow screen can take below it.
+		 *
+		 * The inline floor is on `.label` below, not here, for the reason
+		 * `Link.svelte`'s own `a` rule gives (#1851): an explicit
+		 * `min-inline-size` on a flex item replaces its own minimum, its
+		 * longest word, so a button in a row with too little room shrank to
+		 * 44px and that word drew over the next control.
 		 */
 		button {
 			display: inline-flex;
@@ -142,7 +149,6 @@
 			justify-content: center;
 			gap: var(--space-2);
 			min-block-size: var(--hit-target-min);
-			min-inline-size: var(--hit-target-min);
 			font-family: var(--font-family-base);
 			font-weight: var(--font-weight-medium);
 			border-radius: var(--radius);
@@ -159,22 +165,43 @@
 			outline-offset: var(--focus-ring-offset);
 		}
 
+		/*
+		 * The 44px inline floor, on the words (#1851). `--button-inset` is
+		 * each variant's own inline padding, so the label's floor is what
+		 * is left of 44px once both sides of it are drawn: a short label
+		 * takes exactly the 44px box it did, and a long one takes no room
+		 * it did not.
+		 */
+		.label {
+			min-inline-size: calc(var(--hit-target-min) - 2 * var(--button-inset, 0rem));
+		}
+
+		/* A button that is only a glyph has no visible label to hold the
+		   floor, so it holds it itself. It has no words to shrink below:
+		   at 44px its glyph still sits inside its own padding. */
+		button.icon-only {
+			min-inline-size: var(--hit-target-min);
+		}
+
 		/* `sm` and `md` differ in padding and type only: each is held to the
 		   44px floor above, which is taller than the 32px and 40px minimums
 		   they once had. */
 		button.size-sm {
-			padding: var(--space-1) var(--space-3);
+			--button-inset: var(--space-3);
+			padding: var(--space-1) var(--button-inset);
 			font-size: var(--text-body-sm-size);
 		}
 
 		button.size-md {
-			padding: var(--space-2) var(--space-4);
+			--button-inset: var(--space-4);
+			padding: var(--space-2) var(--button-inset);
 			font-size: var(--text-body-size);
 		}
 
 		button.size-lg {
+			--button-inset: var(--space-6);
 			min-block-size: 3rem;
-			padding: var(--space-3) var(--space-6);
+			padding: var(--space-3) var(--button-inset);
 			font-size: var(--text-subheading-size);
 		}
 
@@ -264,6 +291,9 @@
 		 */
 		:global(p) button.link {
 			min-block-size: 0;
+		}
+
+		:global(p) button.link .label {
 			min-inline-size: 0;
 		}
 
@@ -272,6 +302,10 @@
 		   which rule wins, a button in a cell keeps the row's height. */
 		:global(td) button {
 			min-block-size: 0;
+		}
+
+		:global(td) button.icon-only,
+		:global(td) .label {
 			min-inline-size: 0;
 		}
 
@@ -282,7 +316,8 @@
 		   the base rule, whatever the glyph inside measures (the avatar is
 		   34px). */
 		button.bare {
-			padding: var(--space-1) var(--space-2);
+			--button-inset: var(--space-2);
+			padding: var(--space-1) var(--button-inset);
 			border-color: transparent;
 			background-color: transparent;
 			color: var(--color-on-surface);

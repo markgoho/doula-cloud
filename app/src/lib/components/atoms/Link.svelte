@@ -111,13 +111,25 @@
 		 * `min-*-size` rather than padding, so the box grows to fit long
 		 * words but never shrinks below the floor; `align-items` keeps the
 		 * text centered in the taller box.
+		 *
+		 * The inline floor is on `.label` below, not here (#1851). A flex
+		 * item's own minimum is its min-content -- its words -- and an
+		 * explicit `min-inline-size` on the link replaces it rather than
+		 * adding to it, so a link in a row with too little room shrank to
+		 * 44px and its words drew over the next item's. What the link needs
+		 * is the larger of the two, and `max(44px, min-content)` is not CSS:
+		 * a math function takes no sizing keyword, and `calc-size()`, which
+		 * would, is Chromium's alone. A floor on the label is part of the
+		 * link's min-content instead, so the link's own minimum is its words
+		 * or 44px, whichever is wider, in every engine.
 		 */
 		a {
 			display: inline-flex;
 			align-items: center;
 			gap: var(--space-1);
 			min-block-size: var(--hit-target-min);
-			min-inline-size: var(--hit-target-min);
+			/* Never wider than its container: `.label` says why. */
+			max-inline-size: 100%;
 			font-family: var(--font-family-base);
 			text-decoration: underline;
 		}
@@ -162,20 +174,40 @@
 		   which rule wins, a link in a cell keeps the row's height. */
 		:global(td) a {
 			min-block-size: 0;
+		}
+
+		:global(td) .label {
 			min-inline-size: 0;
 		}
 
 		/*
+		 * The 44px inline floor (#1828), held here rather than on the link
+		 * for the reason the `a` rule gives (#1851). `--link-inset-start`
+		 * and `--link-inset-end` are a variant's own inline padding, which
+		 * its `padding-inline` reads too, so the label's floor is what is
+		 * left of 44px once that padding is drawn: a short label
+		 * takes the 44px box it did, and a long one takes no room it did
+		 * not. A label shorter than its floor leaves the rest of its box
+		 * empty after the words, which draws as nothing.
+		 *
 		 * A flex item's automatic minimum size is its min-content size
 		 * (the CSS spec's own default), and a URL used as a label has no
-		 * character a browser will break a line on -- so without this the
-		 * label refuses to shrink below the URL's full width and pushes
-		 * the anchor past its frame (#548). `min-inline-size: 0` overrides
-		 * that floor -- the same override `TextInput`, `MembershipFields`,
-		 * `QuestionPage` and `FormPage` already use on their own shrinking
-		 * flex item. `overflow-wrap: anywhere` is what then lets the text
-		 * itself break inside the width flexbox now allows it to take,
-		 * since a URL still has no space or hyphen to wrap at normally.
+		 * character a browser will break a line on -- so the label refused
+		 * to shrink below the URL's full width and pushed the anchor past
+		 * its frame (#548). An explicit `min-inline-size` overrides that
+		 * floor -- the same override `TextInput`, `MembershipFields`,
+		 * `QuestionPage` and `FormPage` use on their own shrinking flex
+		 * item -- so the label shrinks to its floor and no further.
+		 *
+		 * `break-word`, not `anywhere` (#1851). Both break a URL, which has
+		 * no space or hyphen to wrap at, inside the width the label is
+		 * given. `anywhere` also counts every character as a break when the
+		 * label's min-content is measured, so a link in a row with too
+		 * little room broke its words mid-letter before the row ever
+		 * overflowed. `break-word` leaves the min-content at the longest
+		 * word, so the link keeps its words and the row wraps or
+		 * overflows. The link's own `max-inline-size: 100%` is what stops
+		 * that longest "word" -- a URL -- from pushing it past its frame.
 		 * The anchor stays a `nowrap` flex row (no `flex-wrap` here), so
 		 * the label is the only thing that wraps -- the leading icon and the
 		 * trailing external-link icon stay pinned beside it rather than ever
@@ -183,8 +215,10 @@
 		 * part of the label (#1557), so they wrap with it.
 		 */
 		.label {
-			min-inline-size: 0;
-			overflow-wrap: anywhere;
+			min-inline-size: calc(
+				var(--hit-target-min) - var(--link-inset-start, 0rem) - var(--link-inset-end, 0rem)
+			);
+			overflow-wrap: break-word;
 		}
 
 		/* A link carrying its own icon (a nav item, a card) reads as a
@@ -258,7 +292,10 @@
 			align-items: flex-start;
 			gap: var(--space-4);
 			inline-size: 100%;
-			padding: var(--space-5);
+			--link-inset-start: var(--space-5);
+			--link-inset-end: var(--space-5);
+			padding-block: var(--space-5);
+			padding-inline: var(--link-inset-start) var(--link-inset-end);
 			border: var(--border-thin) solid var(--color-outline-variant);
 			border-radius: var(--radius);
 			background-color: var(--color-surface-bright);
@@ -291,7 +328,8 @@
 			display: flex;
 			inline-size: 100%;
 			padding-block: var(--space-2);
-			padding-inline-start: var(--space-3);
+			--link-inset-start: var(--space-3);
+			padding-inline-start: var(--link-inset-start);
 			border-inline-start: var(--border-thin) solid var(--color-outline-variant);
 			color: var(--color-on-surface-variant);
 			font-size: var(--text-body-sm-size);
@@ -309,7 +347,10 @@
 		   rail entry because it has to survive being read at arm's length in
 		   a hospital corridor -- PR-G5, the moment that earned the region. */
 		a.chip {
-			padding: var(--space-2) var(--space-3);
+			--link-inset-start: var(--space-3);
+			--link-inset-end: var(--space-3);
+			padding-block: var(--space-2);
+			padding-inline: var(--link-inset-start) var(--link-inset-end);
 			border: var(--border-thin) solid var(--color-outline);
 			border-radius: var(--radius);
 			background-color: var(--color-surface-bright);
@@ -333,11 +374,16 @@
 		a.nav {
 			align-self: stretch;
 			align-items: center;
-			padding-inline: var(--space-4);
+			--link-inset-start: var(--space-4);
+			--link-inset-end: var(--space-4);
+			max-inline-size: none;
+			padding-inline: var(--link-inset-start) var(--link-inset-end);
 			border-block-end: var(--border-active) solid transparent;
 			color: var(--color-on-surface-variant);
 			font-size: var(--text-body-sm-size);
 			text-decoration: none;
+			/* Its words never wrap, so nothing caps it below them: a row
+			   with too little room for its sections overflows instead. */
 			white-space: nowrap;
 		}
 
@@ -356,7 +402,9 @@
 		a.sheet {
 			align-items: center;
 			min-block-size: var(--nav-row-height);
-			padding-inline: var(--space-5);
+			--link-inset-start: var(--space-5);
+			--link-inset-end: var(--space-5);
+			padding-inline: var(--link-inset-start) var(--link-inset-end);
 			border-inline-start: var(--border-active) solid transparent;
 			color: var(--color-on-surface);
 			font-size: var(--text-subheading-size);
@@ -386,7 +434,8 @@
 			align-items: baseline;
 			inline-size: 100%;
 			padding-block: var(--space-2);
-			padding-inline-start: var(--space-4);
+			--link-inset-start: var(--space-4);
+			padding-inline-start: var(--link-inset-start);
 			border-inline-start: var(--border-active) solid transparent;
 			color: var(--color-on-surface);
 			font-size: var(--text-body-sm-size);
@@ -413,7 +462,10 @@
 			z-index: 1;
 			inset-block-start: var(--space-2);
 			inset-inline-start: var(--space-2);
-			padding: var(--space-2) var(--space-4);
+			--link-inset-start: var(--space-4);
+			--link-inset-end: var(--space-4);
+			padding-block: var(--space-2);
+			padding-inline: var(--link-inset-start) var(--link-inset-end);
 			transform: translateY(calc(-100% - var(--space-4)));
 			border: var(--border-thin) solid var(--color-primary);
 			border-radius: var(--radius);

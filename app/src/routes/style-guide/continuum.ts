@@ -54,13 +54,15 @@ export function isCanonicalEnvironment(): boolean {
  * frame has. `block` is the one #1573 added: some box under the frame holds
  * content taller than itself and lets it draw outside, over whatever is
  * beside it -- `width` is where that was seen, `needed` and `given` are that
- * box's own heights, and `element` names it.
+ * box's own heights, and `element` names it. `inline-box` is the same
+ * criterion across (#1851): a box narrower than what it holds, with `needed`
+ * and `given` its own widths.
  */
 export type Break =
 	| { axis: 'inline'; width: number; needed: number }
-	| ({ axis: 'block'; width: number } & BlockSpill);
+	| ({ axis: 'block' | 'inline-box'; width: number } & BoxSpill);
 
-export interface BlockSpill {
+export interface BoxSpill {
 	element: string;
 	given: number;
 	needed: number;
@@ -92,16 +94,57 @@ export interface BlockSpill {
  * naming the Svelte wrapper `render` made would point at nothing in the
  * component's source.
  */
-export function findBlockSpill(frame: HTMLElement): BlockSpill | undefined {
-	let found: { box: HTMLElement; spill: BlockSpill } | undefined;
+export function findBlockSpill(frame: HTMLElement): BoxSpill | undefined {
+	return findSpill(
+		frame,
+		(element) => [element.clientHeight, element.scrollHeight],
+		(style) => style.overflowY,
+		hasChildBoxPast
+	);
+}
+
+/*
+ * The same criterion across the inline axis (#1851): the first box under
+ * `frame` whose content is wider than the box and is drawn outside it.
+ *
+ * Why the frame's `scrollWidth` could not see this. `Link` and `Button`
+ * declare a 44px `min-inline-size` for their hit target (#1828, #1805), and
+ * a flex item with an explicit minimum may shrink down to it, below its own
+ * words. The Staff bar's nav did exactly that (#1850): each link shrank,
+ * its unwrapped name drew over the next one's, and the row -- every item of
+ * which fit -- reported exactly the width it was given. A box narrower than
+ * what it holds is the same failure as a box shorter than what it holds,
+ * so it is asked of every box the same way.
+ *
+ * One difference from the block criterion, and it is measured: text counts
+ * here. A line's width is the advance of its glyphs, never their ink, so
+ * text wider than its box is the words themselves running out of it -- the
+ * nav link's own label did, inside a span that had shrunk with it. There is
+ * no inline counterpart of a heading's glyphs overhanging its line-height.
+ */
+export function findInlineSpill(frame: HTMLElement): BoxSpill | undefined {
+	return findSpill(
+		frame,
+		(element) => [element.clientWidth, element.scrollWidth],
+		(style) => style.overflowX,
+		() => true
+	);
+}
+
+function findSpill(
+	frame: HTMLElement,
+	measure: (element: HTMLElement) => [given: number, needed: number],
+	overflow: (style: CSSStyleDeclaration) => string,
+	isPast: (element: HTMLElement, given: number) => boolean
+): BoxSpill | undefined {
+	let found: { box: HTMLElement; spill: BoxSpill } | undefined;
 	for (const element of frame.querySelectorAll<HTMLElement>('*')) {
 		if (found && !found.box.contains(element)) break;
-		const given = element.clientHeight;
+		const [given, needed] = measure(element);
 		if (given === 0) continue;
-		const needed = element.scrollHeight;
 		if (needed - given <= TOLERANCE) continue;
-		if (getComputedStyle(element).overflowY !== 'visible') continue;
-		if (!hasChildBoxPast(element, given)) continue;
+		if (overflow(getComputedStyle(element)) !== 'visible') continue;
+		if (!isPast(element, given)) continue;
 		found = { box: element, spill: { element: describeElement(element), given, needed } };
 	}
 	return found?.spill;
@@ -191,6 +234,8 @@ export function sweep(frame: HTMLElement, availableSpace: number): Break | undef
 			if (frame.scrollWidth - width > TOLERANCE) {
 				return { axis: 'inline', width, needed: frame.scrollWidth };
 			}
+			const across = findInlineSpill(frame);
+			if (across) return { axis: 'inline-box', width, ...across };
 			const spill = findBlockSpill(frame);
 			if (spill) return { axis: 'block', width, ...spill };
 		}
@@ -485,6 +530,24 @@ export function barMarkup(
 }
 
 /*
+ * A row of links in miniature (#1851): three items whose labels do not
+ * wrap, and after them a paragraph that gives up its own room, so the row
+ * always fits the frame at the box level. `minimum` is each item's
+ * `min-inline-size`: `auto` is a flex item's own minimum (its words), and a
+ * length is what `Link`'s 44px hit target once replaced that with. Both
+ * checks measure it, for the reason `barMarkup` gives.
+ */
+export function rowMarkup(minimum: string): string {
+	const item =
+		`<a style="display: inline-flex; min-inline-size: ${minimum}">` +
+		'<span style="white-space: nowrap">A section with a long name</span></a>';
+	return (
+		`<div style="display: flex">${item}${item}${item}` +
+		'<p style="flex: 1 1 40rem; min-inline-size: 0; margin: 0">The rest of the bar</p></div>'
+	);
+}
+
+/*
  * The Staff roster's work-state history in miniature (#1126): a closed
  * disclosure holding nothing but the word `Loading...`, which asks for its
  * own content the first time it is opened and lays out something far wider
@@ -662,6 +725,14 @@ export async function mountInFrame(
 }
 
 export function overflowReport(name: string, found: Break): string {
+	if (found.axis === 'inline-box') {
+		return [
+			`${name}: its ${found.element} needed ${found.needed}px of width and holds`,
+			`${found.given}px at ${found.width}px, so what is inside it draws over what is beside it.`,
+			'A flex item with an explicit min-inline-size may shrink below its own words',
+			"(#1851). Leave the item's minimum to its content, and let the row wrap or overflow."
+		].join(' ');
+	}
 	if (found.axis === 'block') {
 		return [
 			`${name}: its ${found.element} needed ${found.needed}px of height and holds`,
