@@ -56,7 +56,8 @@ const SubjectClient = "client"
 // export.Handler (#288's whole-Practice export), practicedeletion's
 // initiate/restore/finalize, and payments', practicerate's,
 // practicetimezone's and oncall's own settings writes (billing mode,
-// payment terms, the Connect nudge, the rate card, the timezone, the
+// payment terms, the Connect nudge, the Owner's return from Stripe's
+// form (#1812), the rate card, the timezone, the
 // on-call settings), and staffauth's second-factor act seam (#1532's
 // refusal of one of the five acts) and its signup (#1547's terms_accepted,
 // the Practice's agreement to the Terms of Service and the Privacy

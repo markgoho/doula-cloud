@@ -5,6 +5,7 @@ import {
 	loadConnectStatus,
 	nudgeOwnersToConnect,
 	pollConnectStatus,
+	recordConnectReturn,
 	type ConnectStatusResult
 } from './payments.js';
 import { jsonResponse } from './testResponse.js';
@@ -88,6 +89,28 @@ describe('nudgeOwnersToConnect', () => {
 		const fetcher = vi.fn().mockResolvedValue(jsonResponse('asked already this week', 409));
 
 		await expect(nudgeOwnersToConnect(fetcher, 'practice-1')).rejects.toThrow('asked already this week');
+	});
+});
+
+describe('recordConnectReturn', () => {
+	it('posts to the return path under the connect path', async () => {
+		const fetcher = vi.fn().mockResolvedValue(new Response(undefined, { status: 204 }));
+
+		await recordConnectReturn(fetcher, 'practice-1');
+
+		expect(fetcher).toHaveBeenCalledWith('/api/practices/practice-1/payments/connect/return', { method: 'POST' });
+	});
+
+	it('resolves when the server refuses', async () => {
+		const fetcher = vi.fn().mockResolvedValue(jsonResponse('no account', 409));
+
+		await expect(recordConnectReturn(fetcher, 'practice-1')).resolves.toBeUndefined();
+	});
+
+	it('resolves when the request never arrives', async () => {
+		const fetcher = vi.fn().mockRejectedValue(new TypeError('Failed to fetch'));
+
+		await expect(recordConnectReturn(fetcher, 'practice-1')).resolves.toBeUndefined();
 	});
 });
 

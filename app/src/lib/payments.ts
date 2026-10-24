@@ -252,3 +252,18 @@ export async function nudgeOwnersToConnect(fetcher: Fetcher, practiceId: string)
 		throw new Error(await apiErrorMessage(response));
 	}
 }
+
+/** Tells the server the Owner has just come back from Stripe's form
+ * (#1812). Only the browser sees that landing, and #1591 measures Stripe's
+ * review from it.
+ *
+ * It never fails for her. The record is ours, not a task she set out to
+ * do, so a refusal or a dropped connection is swallowed here and the
+ * screen goes on as if nothing was asked. */
+export async function recordConnectReturn(fetcher: Fetcher, practiceId: string): Promise<void> {
+	try {
+		await fetcher(`${connectPath(practiceId)}/return`, { method: 'POST' });
+	} catch {
+		// A lost record changes nothing she can see or do.
+	}
+}

@@ -15,6 +15,7 @@ import (
 
 	"doula-cloud/api/internal/activity"
 	"doula-cloud/api/internal/apierr"
+	"doula-cloud/api/internal/clock"
 	"doula-cloud/api/internal/tasknudge"
 )
 
@@ -489,7 +490,8 @@ func PostAccountWebhookHandler(db *sql.DB, client Client, webhookSecret string, 
 // capability_status_updated thin event: fetches the account's current
 // capability statuses and outstanding requirements from Stripe, writes
 // them onto the matching practices row along with the event id and time
-// that caused the change, and queues #343's payout-incomplete
+// that caused the change, appends the same facts to
+// stripe_connect_status_history (#1812), and queues #343's payout-incomplete
 // Notification on the requirements_due empty -> non-empty transition
 // (see 00034_payout_outbox.sql for the trigger/cadence reasoning).
 func handleCapabilityStatusUpdated(w http.ResponseWriter, r *http.Request, db *sql.DB, client Client, event AccountEvent, enq tasknudge.Enqueuer) {
@@ -551,15 +553,32 @@ func handleCapabilityStatusUpdated(w http.ResponseWriter, r *http.Request, db *s
 	}
 
 	newRequirementsDue := requirementsOrEmpty(status.RequirementsDue)
+	processedAt := clock.Now(r.Context())
 	if _, err := tx.ExecContext(r.Context(),
 		`UPDATE practices SET
 			stripe_connect_card_payments_status = $1,
 			stripe_connect_payouts_status = $2,
 			stripe_connect_requirements_due = $3,
 			stripe_connect_status_event_id = $4,
-			stripe_connect_status_updated_at = now()
-		WHERE id = $5`,
-		string(status.CardPayments), string(status.Payouts), newRequirementsDue, event.ID, practiceID,
+			stripe_connect_status_updated_at = $5
+		WHERE id = $6`,
+		string(status.CardPayments), string(status.Payouts), newRequirementsDue, event.ID, processedAt, practiceID,
+	); err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+		return
+	}
+	// #1812: practices keeps only the latest state, so each applied event
+	// also leaves one append-only row -- on this same tx, so the history
+	// and the row it explains cannot disagree. Only an applied event gets
+	// here: the replay and unrecognized-account branches above have
+	// already returned. See 00126_stripe_connect_status_history.sql for
+	// why both Stripe's time and ours are kept.
+	if _, err := tx.ExecContext(r.Context(),
+		`INSERT INTO stripe_connect_status_history
+			(practice_id, stripe_event_id, card_payments_status, payouts_status, requirements_due, stripe_event_created_at, processed_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+		practiceID, event.ID, string(status.CardPayments), string(status.Payouts), newRequirementsDue, event.Created, processedAt,
 	); err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)

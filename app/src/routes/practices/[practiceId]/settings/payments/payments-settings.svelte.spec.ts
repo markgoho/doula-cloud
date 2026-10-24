@@ -30,6 +30,8 @@ const pageState = vi.hoisted(() => ({
 vi.mock('$app/state', () => ({ page: pageState }));
 Object.assign(pageState, toPageState(fixture));
 
+const RETURN_PATH_SUFFIX = '/payments/connect/return';
+
 function returnedFromStripe(parameter: 'return' | 'refresh') {
 	pageState.url = new URL(`${fixture.url}?connect=${parameter}`);
 }
@@ -113,6 +115,11 @@ function mockApi({
 					: new Response(nudgeRefusal, { status: 409 })
 			);
 		}
+		// #1812: the return record, answered before the status fallback
+		// so it is never given a status body.
+		if (path.endsWith(RETURN_PATH_SUFFIX)) {
+			return Promise.resolve(new Response(undefined, { status: 204 }));
+		}
 		if (path.endsWith('/website')) {
 			return Promise.resolve(
 				jsonResponse({
@@ -157,9 +164,15 @@ function connectCallCount(): number {
 		return (
 			!path.endsWith('/website') &&
 			!path.endsWith('/payments/billing-mode') &&
-			!path.endsWith('/payments/payment-terms')
+			!path.endsWith('/payments/payment-terms') &&
+			!path.endsWith(RETURN_PATH_SUFFIX)
 		);
 	}).length;
+}
+
+// The calls that recorded a return from Stripe's form (#1812).
+function returnRecordCalls(): unknown[][] {
+	return apiFetchWithSession.mock.calls.filter((call: unknown[]) => (call[0] as string).endsWith(RETURN_PATH_SUFFIX));
 }
 
 type StatusReply = 'error' | { status: string; requirementsDue?: string[] };
@@ -185,6 +198,10 @@ function mockApiSequence(replies: StatusReply[], { roles = ['owner'] }: { roles?
 		}
 		if (path.endsWith('/payments/payment-terms')) {
 			return Promise.resolve(jsonResponse({ netDays: 30, isDefault: true }));
+		}
+		// #1812: nor may the return record.
+		if (path.endsWith(RETURN_PATH_SUFFIX)) {
+			return Promise.resolve(new Response(undefined, { status: 204 }));
 		}
 		if (path.endsWith('/website')) {
 			return Promise.resolve(
@@ -848,5 +865,38 @@ describe('payments settings screen: billing mode (#271)', () => {
 		await expect
 			.element(testPage.getByText('Not chosen yet -- this is asked the first time Staff raises an Invoice.'))
 			.toBeVisible();
+	});
+});
+
+describe("payments settings screen: recording an Owner's return from Stripe's form (#1812)", () => {
+	it('records the return once when an Owner lands back from Stripe', async () => {
+		returnedFromStripe('return');
+		await setup({ status: 'pending', roles: ['owner'] });
+
+		await expect.element(testPage.getByText('Awaiting Stripe review')).toBeVisible();
+		expect(returnRecordCalls()).toEqual([['/api/practices/practice-1/payments/connect/return', { method: 'POST' }]]);
+	});
+
+	it('records nothing on an ordinary visit', async () => {
+		await setup({ status: 'pending', roles: ['owner'] });
+
+		await expect.element(testPage.getByText('Awaiting Stripe review')).toBeVisible();
+		expect(returnRecordCalls()).toEqual([]);
+	});
+
+	it('records nothing when Stripe sends her back to start a fresh link', async () => {
+		returnedFromStripe('refresh');
+		await setup({ status: 'onboarding_incomplete', roles: ['owner'], requirementsDue: ['defaults.profile.business_url'] });
+
+		await expect.element(testPage.getByRole('button', { name: 'Continue Stripe onboarding' })).toBeVisible();
+		expect(returnRecordCalls()).toEqual([]);
+	});
+
+	it('records nothing for an Admin, who never opened the form', async () => {
+		returnedFromStripe('return');
+		await setup({ status: 'pending', roles: ['admin'] });
+
+		await expect.element(testPage.getByText('Awaiting Stripe review')).toBeVisible();
+		expect(returnRecordCalls()).toEqual([]);
 	});
 });
