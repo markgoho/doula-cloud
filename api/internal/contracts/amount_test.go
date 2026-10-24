@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"testing"
 
 	"doula-cloud/api/internal/activity"
@@ -69,8 +68,10 @@ func TestPostContractHandler_NoRateSet(t *testing.T) {
 	if out.Code != apierr.CodeFailedPrecondition {
 		t.Fatalf("code = %q, want %q", out.Code, apierr.CodeFailedPrecondition)
 	}
-	if !strings.Contains(out.Message, "birth") {
-		t.Fatalf("message = %q, want it to name the missing kind %q", out.Message, "birth")
+	// #1885: the full sentence, so a reword is a deliberate test change.
+	const want = "Your Practice has no birth rate yet. Set one on the Rates page in Settings before you create a Contract."
+	if out.Message != want {
+		t.Fatalf("message = %q, want %q", out.Message, want)
 	}
 }
 

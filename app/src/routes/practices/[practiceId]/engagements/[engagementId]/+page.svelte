@@ -101,6 +101,7 @@
 		type RefundPaymentInput
 	} from '#lib/invoice.js';
 	import { loadPracticeTimezone } from '#lib/practiceTimezone.js';
+	import { loadRates, type Rate } from '#lib/rates.js';
 	import OfferSection from '#lib/components/organisms/OfferSection.svelte';
 	import { createOffer, loadEngagementOffers, withdrawOffer, type NewOffer, type Offer } from '#lib/offer.js';
 	import { resolve } from '$app/paths';
@@ -569,6 +570,25 @@
 	// them has nothing to save, and the page does not offer Save.
 	const contractEditableFields = $derived(contract ? editableMergeFields(contract.mergeFields) : []);
 
+	// #1885: block over warn -- PostContractHandler refuses a Contract when
+	// the Practice has no rate for the Engagement's kind (#967), so "Create
+	// Draft Contract" is live only once the rates are known and this kind
+	// has one. Read only while there is no Contract (loadContractSection),
+	// and from displayKind, so a kind change on this page moves the block
+	// with no second read: the response always holds both kinds.
+	const ratesState = new SectionState<Rate[] | undefined>(undefined);
+	const hasRateForKind = $derived(
+		typeof ratesState.value?.find((rate) => rate.kind === displayKind)?.amountCents === 'number'
+	);
+	const isRateMissing = $derived(ratesState.value !== undefined && !hasRateForKind);
+	// The settings hub lists Rates only for an Owner or Admin, so only they
+	// get the link; anyone else is told who can set the rate.
+	const noRateMessage = $derived(
+		isPracticeOwnerOrAdmin
+			? `Your Practice has no ${displayKind} rate yet, so you cannot create a Contract.`
+			: `Your Practice has no ${displayKind} rate yet, so you cannot create a Contract. Ask an owner or admin to set one.`
+	);
+
 	// Named invoicesState for the same reason as contractState above.
 	const invoicesState = new SectionState<Invoice[]>([]);
 	const invoices = $derived(invoicesState.value);
@@ -877,6 +897,15 @@
 			'Failed to load contract'
 		);
 		isContractLoaded = true;
+		if (contractState.value === undefined) {
+			await ratesState.load(
+				async () => {
+					const { rates } = await loadRates(apiFetchWithSession, page.params.practiceId!);
+					return rates;
+				},
+				'Failed to load rates'
+			);
+		}
 	}
 
 	async function handleCreateContract() {
@@ -1904,7 +1933,28 @@
 				{/if}
 			{/if}
 		{:else}
-			<Button label="Create Draft Contract" onClick={handleCreateContract} loading={isContractBusy} />
+			<!--
+				#1885: block over warn, the shape the Send Contract blocks above
+				have -- the reason before the click, and the way out. Until the
+				rates are known the control stays withheld too: a click then
+				could meet the same refusal.
+			-->
+			{#if ratesState.error}
+				<Notice variant="error" message={ratesState.error} />
+			{:else if isRateMissing}
+				<Notice variant="info" message={noRateMessage} />
+				{#if isPracticeOwnerOrAdmin}
+					<Link
+						href={resolve('/practices/[practiceId]/settings/rates', { practiceId: page.params.practiceId! })}
+						label={`Set the ${displayKind} rate`}
+					/>
+				{/if}
+			{/if}
+			{#if hasRateForKind}
+				<Button label="Create Draft Contract" onClick={handleCreateContract} loading={isContractBusy} />
+			{:else}
+				<Button label="Create Draft Contract" disabled loading={isContractBusy} />
+			{/if}
 		{/if}
 	{/if}
 {/snippet}
