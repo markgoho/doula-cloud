@@ -132,8 +132,9 @@ func ComingVersionsHandler() http.Handler {
 // agreedVersions is the version of doc in force at now and the versions
 // still to come, each by its date. recordTermsAccepted and
 // ComingVersionsHandler both read it, so the row and the signup form
-// cannot disagree about which versions are coming (#1824). legal_test.go holds that each shipped
-// document has a version in force today, so the version is never empty.
+// cannot disagree about which versions are coming (#1824).
+// legal_test.go holds that each shipped document has a version in force
+// today, so the version is never empty.
 func agreedVersions(doc legal.Document, now time.Time) (inForce string, coming []string) {
 	version, _ := doc.InForce(now)
 	for _, v := range doc.Coming(now) {
