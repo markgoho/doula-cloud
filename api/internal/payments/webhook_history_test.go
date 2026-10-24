@@ -145,6 +145,25 @@ func TestPostAccountWebhookHandler_HistoryKeepsEveryAppliedEvent(t *testing.T) {
 	}
 }
 
+// TestPostAccountWebhookHandler_MissingEventTimeFallsBackToProcessedTime:
+// a notification with no `created` must not be stored as year 1, where
+// it would read as the earliest event of all.
+func TestPostAccountWebhookHandler_MissingEventTimeFallsBackToProcessedTime(t *testing.T) {
+	db := testdb.New(t)
+	practiceID := seedConnectedPractice(t, db, "History No Time Practice", "acct_history_no_time")
+	client := activeAccountClient()
+
+	postCapabilityStatusAt(t, db, client, "evt_history_no_time", "acct_history_no_time", time.Time{})
+
+	history := connectHistory(t, db, practiceID)
+	if len(history) != 1 {
+		t.Fatalf("history rows = %d, want 1", len(history))
+	}
+	if !history[0].eventCreatedAt.Equal(history[0].processedAt) {
+		t.Fatalf("stripe_event_created_at = %v, want the processed time %v", history[0].eventCreatedAt, history[0].processedAt)
+	}
+}
+
 // TestPostAccountWebhookHandler_ReplayWritesNoHistoryRow is the first half
 // of #1812's second criterion: a delivery already in stripe_webhook_events
 // changes nothing, so it records nothing.

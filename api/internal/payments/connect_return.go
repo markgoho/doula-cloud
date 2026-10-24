@@ -27,13 +27,14 @@ const actionConnectFormReturned = "stripe_connect_form_returned"
 // account behind it. Only a hand-typed address reaches it: Stripe sends
 // an Owner back only from a form PostConnectHandler opened, and that
 // handler stores the account first.
-const MsgConnectReturnNoAccount = "This Practice has not started connecting Stripe, so there is no return to record."
+const MsgConnectReturnNoAccount = "You have not started connecting Stripe yet."
 
 // PostConnectReturnHandler records that the signed-in Owner came back from
 // Stripe's form (`?connect=return`). The browser is the only place that
 // sees the landing, so the Payments settings screen calls this once on
 // arrival. Each call records one landing; a reload records another, and
-// the reader picks the one it needs by time.
+// the reader picks the one it needs by time (#1591's query takes the
+// first landing after Stripe last had something outstanding).
 //
 // Owner-only is declared at the mount, for the reason PostConnectHandler
 // gives: only an Owner can open the form, so only an Owner comes back

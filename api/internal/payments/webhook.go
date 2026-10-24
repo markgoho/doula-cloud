@@ -554,6 +554,13 @@ func handleCapabilityStatusUpdated(w http.ResponseWriter, r *http.Request, db *s
 
 	newRequirementsDue := requirementsOrEmpty(status.RequirementsDue)
 	processedAt := clock.Now(r.Context())
+	// Stripe always sends `created`; a notification without one would
+	// otherwise be stored as year 1 and read as the earliest event of all.
+	// Our own time is the closest truthful stand-in.
+	eventCreatedAt := event.Created
+	if eventCreatedAt.IsZero() {
+		eventCreatedAt = processedAt
+	}
 	if _, err := tx.ExecContext(r.Context(),
 		`UPDATE practices SET
 			stripe_connect_card_payments_status = $1,
@@ -578,7 +585,7 @@ func handleCapabilityStatusUpdated(w http.ResponseWriter, r *http.Request, db *s
 		`INSERT INTO stripe_connect_status_history
 			(practice_id, stripe_event_id, card_payments_status, payouts_status, requirements_due, stripe_event_created_at, processed_at)
 		VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-		practiceID, event.ID, string(status.CardPayments), string(status.Payouts), newRequirementsDue, event.Created, processedAt,
+		practiceID, event.ID, string(status.CardPayments), string(status.Payouts), newRequirementsDue, eventCreatedAt, processedAt,
 	); err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)

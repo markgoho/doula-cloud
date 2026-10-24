@@ -150,9 +150,11 @@ func TestPostConnectReturnHandler_RefusesAnAdmin(t *testing.T) {
 //     processed_at, not stripe_event_created_at, because a thin event's
 //     statuses are true at the moment it was processed
 //     (00126_stripe_connect_status_history.sql).
-//   - returned_at: her last return from Stripe's form at or before
-//     active_at -- the last, because a return can also mean she left the
-//     form early and came back to it later.
+//   - returned_at: her first return from Stripe's form after the last row
+//     that still had something outstanding, and at or before active_at.
+//     Not her first return ever: a return can mean she left the form
+//     early, and Stripe then still asked for more. Not her last: a reload
+//     of the page while Stripe reviews records another landing.
 //   - finished_at: the first row with nothing outstanding and
 //     card_payments not yet active, the moment the data can prove she
 //     finished the form.
@@ -174,13 +176,23 @@ finished AS (
       AND h.processed_at <= a.active_at
     GROUP BY h.practice_id
 ),
+last_outstanding AS (
+    SELECT h.practice_id, max(h.processed_at) AS outstanding_at
+    FROM stripe_connect_status_history h
+    JOIN active a ON a.practice_id = h.practice_id
+    WHERE cardinality(h.requirements_due) > 0
+      AND h.processed_at <= a.active_at
+    GROUP BY h.practice_id
+),
 returned AS (
-    SELECT act.practice_id, max(act.created_at) AS returned_at
+    SELECT act.practice_id, min(act.created_at) AS returned_at
     FROM activity act
     JOIN active a ON a.practice_id = act.practice_id
+    LEFT JOIN last_outstanding o ON o.practice_id = act.practice_id
     WHERE act.subject_kind = 'practice'
       AND act.action = 'stripe_connect_form_returned'
       AND act.created_at <= a.active_at
+      AND (o.outstanding_at IS NULL OR act.created_at >= o.outstanding_at)
     GROUP BY act.practice_id
 )
 SELECT a.practice_id, r.returned_at, f.finished_at, a.active_at,
@@ -218,7 +230,8 @@ func seedReturn(t *testing.T, db *testdb.DB, practiceID, staffID string, at time
 
 // TestReviewIntervalQuery_GivesBothMoments proves the query #1591 runs:
 // the return wins where one was recorded, the first finished row stands
-// in where none was, and a return after activation is not counted.
+// in where none was, and neither an early exit, a reload during review,
+// nor a return after activation moves her return.
 func TestReviewIntervalQuery_GivesBothMoments(t *testing.T) {
 	db := testdb.New(t)
 	day := func(d, h int) time.Time { return time.Date(2026, 10, d, h, 0, 0, 0, time.UTC) }
@@ -228,6 +241,7 @@ func TestReviewIntervalQuery_GivesBothMoments(t *testing.T) {
 	seedHistory(t, db, withReturn, "evt_a1", "restricted", []string{requirementMCC}, day(1, 10))
 	seedReturn(t, db, withReturn, owner, day(2, 9)) // came back and finished
 	seedHistory(t, db, withReturn, "evt_a2", "pending", nil, day(2, 10))
+	seedReturn(t, db, withReturn, owner, day(3, 9)) // reloaded the page during review
 	seedHistory(t, db, withReturn, "evt_a3", "active", nil, day(4, 9))
 	seedReturn(t, db, withReturn, owner, day(5, 9)) // a later visit, after activation
 	seedHistory(t, db, withReturn, "evt_a4", "active", nil, day(6, 9))
@@ -271,7 +285,7 @@ func TestReviewIntervalQuery_GivesBothMoments(t *testing.T) {
 	}
 	first := got[0]
 	if first.practiceID != withReturn || first.returnedAt == nil || !first.returnedAt.Equal(day(2, 9)) {
-		t.Fatalf("first = %+v, want the last return before activation", first)
+		t.Fatalf("first = %+v, want the return that followed the last outstanding row", first)
 	}
 	if !first.activeAt.Equal(day(4, 9)) || first.reviewTook != "2 days" {
 		t.Fatalf("first = %+v, want active on the first active row and 2 days of review", first)
