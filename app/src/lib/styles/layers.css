@@ -16,5 +16,12 @@
  * project loads it in its setup file too (`src/vitest.browser.setup.ts`),
  * before any spec imports a component, so where a spec imports `app.css`
  * cannot change the cascade.
+ *
+ * In the app itself the order also has to come before the first `<link>`,
+ * which no file Vite bundles can promise, and the production build's
+ * minifier (Lightning CSS) removes this statement's names from `app.css`'s
+ * output once that file's own blocks already meet them in this order. So
+ * `src/app.html` repeats the list in an inline `<style>` ahead of
+ * `%sveltekit.head%` (#1863), and `layers.usage.spec.ts` holds the two equal.
  */
 @layer reset, tokens, base, utilities, components;

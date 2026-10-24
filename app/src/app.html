@@ -5,6 +5,15 @@
 		<meta name="viewport" content="width=device-width, initial-scale=1" />
 		<meta name="text-scale" content="scale" />
 		<link rel="manifest" href="%sveltekit.assets%/manifest.webmanifest" />
+		<!--
+			The cascade layer order (ADR-0003, #1863), ahead of every stylesheet
+			SvelteKit links below, so no chunk's load order can change it.
+			src/lib/styles/layers.css says why the order must come first, and
+			layers.usage.spec.ts holds the two lists equal.
+		-->
+		<style>
+			@layer reset, tokens, base, utilities, components;
+		</style>
 		%sveltekit.head%
 	</head>
 	<body data-sveltekit-preload-data="hover">
