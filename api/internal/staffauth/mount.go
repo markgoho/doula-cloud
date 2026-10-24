@@ -192,6 +192,13 @@ func mountPracticeRoutes(g *GatedRouter, ir WriteRouter, verifier authn.Verifier
 	ir.ExemptGated("PUT /api/practices/{practiceId}/mfa-required",
 		"idempotent by construction: the handler reads the current value first and updates/records only when the given value actually differs from it",
 		false, OwnerOnly, PutMFARequiredHandler())
+	// #1533: the notice that recommends a second factor to an Owner with
+	// none, after First Value, her first Invitation, and Stripe
+	// connected. Owner-only: an Admin or a Doula is not shown it.
+	g.Get("/api/practices/{practiceId}/second-factor-recommendation", OwnerOnly, GetSecondFactorRecommendationHandler())
+	ir.ExemptGated("POST /api/practices/{practiceId}/second-factor-recommendation/close",
+		"one row per (Practice, Staff, act) under a primary key, written with ON CONFLICT DO NOTHING; a retry finds its rows already there and writes nothing",
+		false, OwnerOnly, CloseSecondFactorRecommendationHandler())
 }
 
 // mountSessionRoutes is the pre-Practice half of Mount: sign-in, sign-up,
