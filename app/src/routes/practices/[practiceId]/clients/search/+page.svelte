@@ -27,14 +27,25 @@
 	 * followed (`#lib/intakeHandoff.ts`). A query string would put a
 	 * Client's details in request logs, the browser history and any link
 	 * that was shared.
+	 *
+	 * The name question's Back returns here, and the four boxes show what
+	 * was typed, with the search run again (#1835), so correcting one typo
+	 * does not mean retyping the other three. The values come back the way
+	 * they went: from the intake draft the hand-off seeded, which mirrors
+	 * them in per-tab sessionStorage, never from a URL. They come back only
+	 * when the screen is opened from the name question -- its Back link or
+	 * the browser's Back button. Opened from anywhere else, such as the
+	 * Clients list, it starts empty.
 	 */
 	import { page } from '#lib/appState.svelte.js';
 	import { resolve } from '$app/paths';
+	import { afterNavigate } from '$app/navigation';
 	import { apiFetchWithSession } from '#lib/api.js';
 	import { searchClients, type ClientMatch, type ClientSearchFields } from '#lib/client.js';
 	import { displayName } from '#lib/clientDetail.js';
 	import { carriedGivenName } from '#lib/intakeJourney.js';
 	import { handOffToIntake } from '#lib/intakeHandoff.js';
+	import { intakeDraft } from '#lib/intakeDraft.svelte.js';
 	import PageTitle from '#lib/components/PageTitle.svelte';
 	import Heading from '#lib/components/atoms/Heading.svelte';
 	import Text from '#lib/components/atoms/Text.svelte';
@@ -51,6 +62,7 @@
 		dateFieldId,
 		dateGroupRefusal,
 		joinDate,
+		splitDate,
 		type DateParts
 	} from '#lib/intakeDate.js';
 	import { FormSubmission, orThrownMessage } from '#lib/formSubmission.svelte.js';
@@ -152,6 +164,10 @@
 
 	async function handleSearch(event: SubmitEvent) {
 		event.preventDefault();
+		await search();
+	}
+
+	async function search() {
 		await submission.run(async () => {
 			// Refused before the "nothing typed" check below, so a
 			// half-typed date is named as a date rather than read as an
@@ -181,6 +197,25 @@
 			searchToken += 1;
 		}, orThrownMessage);
 	}
+
+	/*
+	 * #1835: SvelteKit names the screen this one was opened from, as it
+	 * mounts. Only the name question gives the boxes back, and only what
+	 * the search typed into this Practice's draft: a name question opened
+	 * from the overview or the Clients list holds no search.
+	 */
+	const NAME_QUESTION_ROUTE = '/practices/[practiceId]/clients/new/name';
+	afterNavigate(({ from }) => {
+		if (from?.route.id !== NAME_QUESTION_ROUTE) return;
+		if (intakeDraft.scope !== page.params.practiceId) return;
+		const typed = intakeDraft.searched;
+		if (!typed) return;
+		name = typed.name;
+		dateOfBirthParts = splitDate(typed.dateOfBirth);
+		email = typed.email;
+		phone = typed.phone;
+		void search();
+	});
 
 	function resultsHeading(): string {
 		if (matches.length === 0) return 'No matches';

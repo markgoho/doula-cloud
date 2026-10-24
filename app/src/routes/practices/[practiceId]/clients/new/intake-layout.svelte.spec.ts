@@ -115,7 +115,7 @@ describe('intake for everyone else', () => {
 	// The draft still holds an earlier search's name: the door clears it,
 	// so no old line sits over "Yar".
 	it('carries a one-word name into Given name', async () => {
-		intakeDraft.searchedName = 'Yar Pell';
+		intakeDraft.searched = { name: 'Yar Pell', dateOfBirth: '', email: '', phone: '' };
 
 		await enterFromSearch({ name: 'Yar' });
 		await render(NamePage);
@@ -147,7 +147,7 @@ describe('intake for everyone else', () => {
 	// The duplicate page's Back opens the name question without passing
 	// the door, so the name already read is kept, as the origin is.
 	it('keeps the searched name it already read when the URL carries none', async () => {
-		intakeDraft.searchedName = 'Yar Pell';
+		intakeDraft.searched = { name: 'Yar Pell', dateOfBirth: '', email: '', phone: '' };
 
 		await setup();
 		await render(NamePage);

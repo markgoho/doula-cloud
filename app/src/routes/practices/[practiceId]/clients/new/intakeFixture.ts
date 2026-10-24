@@ -102,5 +102,5 @@ export function seedIntake(): void {
 	// The search typed the whole name, which carried into neither field
 	// (#1716), and the name question shows it above them (#1758). The
 	// fields hold it too: the state where both are on screen at once.
-	intakeDraft.searchedName = 'Anne-Marie Ochieng-Whitfield';
+	intakeDraft.searched = { name: 'Anne-Marie Ochieng-Whitfield', dateOfBirth: '', email: '', phone: '' };
 }

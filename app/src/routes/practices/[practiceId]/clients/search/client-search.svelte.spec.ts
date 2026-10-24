@@ -4,6 +4,7 @@ import { render } from 'vitest-browser-svelte';
 import { jsonResponse } from '#lib/testResponse.js';
 import type { ClientMatch, ClientSearchFields } from '#lib/client.js';
 import { takeIntakeHandoff } from '#lib/intakeHandoff.js';
+import { intakeDraft } from '#lib/intakeDraft.svelte.js';
 import Page from './+page.svelte';
 import { toPageState } from '../../../../routeFixture.js';
 import { fixture } from './page.fixture.js';
@@ -48,8 +49,32 @@ const adaMatch: ClientMatch = {
 	engagements: [{ engagementId: 'engagement-1', kind: 'birth', status: 'active', createdAt: '2024-01-01' }]
 };
 
+/*
+ * #1835: the screen asks SvelteKit which screen it was opened from.
+ * There is no router in this spec, so the mock keeps the callback the
+ * screen registers, and `arriveFrom` calls it the way SvelteKit does as
+ * the screen mounts.
+ */
+const navigation = vi.hoisted(() => ({
+	afterNavigate: undefined as ((navigation: { from: { route: { id: string } } | null }) => void) | undefined
+}));
+vi.mock('$app/navigation', () => ({
+	afterNavigate: (callback: typeof navigation.afterNavigate) => {
+		navigation.afterNavigate = callback;
+	}
+}));
+
+/** `undefined` for a first load, which SvelteKit reports as a `from` of
+ * null: no screen opened this one. */
+function arriveFrom(routeId?: string): void {
+	// eslint-disable-next-line unicorn/no-null -- SvelteKit's own shape for a first load
+	navigation.afterNavigate?.({ from: routeId === undefined ? null : { route: { id: routeId } } });
+}
+
 beforeEach(() => {
 	apiFetchWithSession.mockReset();
+	navigation.afterNavigate = undefined;
+	intakeDraft.clear();
 });
 
 // The generated `data` prop merges practices/[practiceId]/+layout.ts's
@@ -282,6 +307,87 @@ describe('the search that fronts intake (#498)', () => {
 		await expect
 			.element(testPage.getByText('a contractor doula does not search for clients at a practice she contracts for'))
 			.toBeVisible();
+	});
+});
+
+/*
+ * #1835: a miss opens the name question, and its Back returns here. The
+ * four boxes show what was typed, and the search runs again, so one typo
+ * is corrected without retyping the other three. What was typed comes
+ * from the intake draft, which the hand-off seeded (#1829): never from a
+ * URL.
+ */
+const nameQuestionRoute = '/practices/[practiceId]/clients/new/name';
+const typed: ClientSearchFields = {
+	name: 'Nadia Haddad',
+	dateOfBirth: '1994-02-11',
+	email: 'nadia@example.com',
+	phone: '555-0100'
+};
+
+function searchedIntoIntake(scope = practiceId): void {
+	intakeDraft.start(scope);
+	intakeDraft.carry(typed);
+}
+
+describe('Back from the name question (#1835)', () => {
+	it('shows the four boxes as they were typed, and runs the search again', async () => {
+		apiFetchWithSession.mockResolvedValue(jsonResponse({ matches: [] }));
+		searchedIntoIntake();
+		await setup();
+
+		arriveFrom(nameQuestionRoute);
+
+		await expect.element(testPage.getByLabelText('Name')).toHaveValue('Nadia Haddad');
+		await expect.element(testPage.getByLabelText('Month')).toHaveValue('02');
+		await expect.element(testPage.getByLabelText('Day')).toHaveValue('11');
+		await expect.element(testPage.getByLabelText('Year')).toHaveValue('1994');
+		await expect.element(testPage.getByLabelText('Email')).toHaveValue('nadia@example.com');
+		await expect.element(testPage.getByLabelText('Phone')).toHaveValue('555-0100');
+		await expect.element(testPage.getByRole('heading', { level: 2, name: 'No matches' })).toBeVisible();
+		expect(apiFetchWithSession).toHaveBeenCalledOnce();
+		expect(request()).toEqual({ url: searchPath, method: 'POST', body: typed });
+	});
+
+	it('opens empty when another screen opened it, such as the Clients list', async () => {
+		searchedIntoIntake();
+		await setup();
+
+		arriveFrom('/practices/[practiceId]/clients');
+
+		await expect.element(testPage.getByLabelText('Name')).toHaveValue('');
+		await expect.element(testPage.getByLabelText('Phone')).toHaveValue('');
+		expect(apiFetchWithSession).not.toHaveBeenCalled();
+	});
+
+	it('opens empty on a first load, which no screen opened', async () => {
+		searchedIntoIntake();
+		await setup();
+
+		arriveFrom();
+
+		await expect.element(testPage.getByLabelText('Name')).toHaveValue('');
+		expect(apiFetchWithSession).not.toHaveBeenCalled();
+	});
+
+	it('opens empty when the name question was reached without a search', async () => {
+		intakeDraft.start(practiceId);
+		await setup();
+
+		arriveFrom(nameQuestionRoute);
+
+		await expect.element(testPage.getByLabelText('Name')).toHaveValue('');
+		expect(apiFetchWithSession).not.toHaveBeenCalled();
+	});
+
+	it("never fills the boxes from another Practice's draft", async () => {
+		searchedIntoIntake('another-practice');
+		await setup();
+
+		arriveFrom(nameQuestionRoute);
+
+		await expect.element(testPage.getByLabelText('Name')).toHaveValue('');
+		expect(apiFetchWithSession).not.toHaveBeenCalled();
 	});
 });
 
