@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test';
 import { API_URL } from './ports';
 import { seedEngagement } from './stack';
-import { signInEnrolled } from './mfa';
+import { signIn } from './auth';
 import { seedFoundingOwner, uniqueEmail } from './staffSignup';
 
 // This test drives the real provisioning path #90 added -- invite via the
@@ -17,12 +17,9 @@ test('Client-portal invite -> accept -> login lands on their engagement-scoped U
 }) => {
 	const clientEmail = uniqueEmail('client');
 
-	const { idToken: staffIdToken, localId: staffUID, practiceId } = await seedFoundingOwner(request);
+	const { idToken: staffIdToken, practiceId } = await seedFoundingOwner(request);
 
-	// #606: an Owner is gated behind a second factor at every Practice-scoped
-	// route (see mfa.ts's signInEnrolled doc comment), including the
-	// createClient and portal-invite calls below.
-	const staffHeaders = await signInEnrolled(request, staffIdToken, staffUID);
+	const staffHeaders = await signIn(request, API_URL, staffIdToken);
 
 	const createClient = await request.post(`${API_URL}/api/practices/${practiceId}/clients`, {
 		headers: staffHeaders,

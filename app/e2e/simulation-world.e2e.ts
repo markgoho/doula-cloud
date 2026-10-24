@@ -7,8 +7,7 @@ import { readFileSync, rmSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { expect, test } from '@playwright/test';
-import { sessionCookieFrom } from './auth';
-import { signInEnrolled } from './mfa';
+import { signIn, sessionCookieFrom } from './auth';
 import { API_URL, E2E_EMULATOR_HOST, E2E_EMULATOR_PORT } from './ports';
 import { provisionTail, standUpRidgeline, writeWorldRecord } from './simulation/provision';
 import { describeWorld, ROOTED_TAIL_TOTAL, type SeededClient } from './simulation/world';
@@ -67,10 +66,7 @@ test.describe.serial('The World stands up: description, Ridgeline, the tail', ()
 
 	test('provisionTail creates a real Client, Engagement and doula Attachment for a slice of the tail, without a Credit purchase', async ({ request }) => {
 		const owner = await seedFoundingOwner(request, { practiceName: 'Tail Rehearsal Practice', staffName: 'Test Owner', workState: 'NY' });
-		// An Owner always needs a second factor to make a Practice-scoped
-		// call (#606, api/internal/staffauth/middleware.go), regardless of
-		// the Practice's own MFA switch.
-		const ownerHeaders = await signInEnrolled(request, owner.idToken, owner.localId);
+		const ownerHeaders = await signIn(request, API_URL, owner.idToken);
 
 		// A plain employee Doula, distinct from the founding Owner --
 		// staffauth.AttachingWrite never accrues an Owner or Admin to an

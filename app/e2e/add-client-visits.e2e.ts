@@ -1,5 +1,7 @@
 import { expect, test } from '@playwright/test';
-import { signInEnrolled, enterPracticeAsEnrolled } from './mfa';
+import { API_URL } from './ports';
+import { signIn } from './auth';
+import { enterPracticeAsEnrolled } from './mfa';
 import { seedFoundingOwner } from './staffSignup';
 
 // birth-plan.e2e.ts creates its Client with POST /api/practices/{id}/clients
@@ -8,12 +10,9 @@ import { seedFoundingOwner } from './staffSignup';
 // the empty Practice to her Engagement's page (#1611), and then the
 // Visits section there.
 test('The first Client in three presses, then the Visits section', async ({ page, request, context }) => {
-	const { idToken, localId, practiceId } = await seedFoundingOwner(request);
+	const { idToken, practiceId } = await seedFoundingOwner(request);
 
-	// #606: an Owner is gated behind a second factor at every Practice-scoped
-	// route, so entering her own Practice can no longer be driven through the
-	// plain /login form (see mfa.ts's signInEnrolled doc comment).
-	const staffHeaders = await signInEnrolled(request, idToken, localId);
+	const staffHeaders = await signIn(request, API_URL, idToken);
 	await enterPracticeAsEnrolled(context, page, staffHeaders, practiceId);
 	await expect(page).toHaveURL(new RegExp(`/practices/${practiceId}$`));
 

@@ -11,7 +11,7 @@ import path from 'node:path';
 import { type APIRequestContext, expect } from '@playwright/test';
 import { API_URL, E2E_EMULATOR_HOST, E2E_EMULATOR_PORT } from '../ports';
 import { MAILBOX_URL, readStaffInviteToken } from '../stack';
-import { signInEnrolled } from '../mfa';
+import { signIn } from '../auth';
 import { seedFoundingOwner, uniqueEmail } from '../staffSignup';
 import type { SeededClient, WorldDescription } from './world';
 
@@ -68,12 +68,7 @@ export async function standUpRidgeline(request: APIRequestContext): Promise<Ridg
 		staffName: 'Deborah Ridge',
 		workState: 'NY'
 	});
-	// staffauth.Middleware refuses any Practice-scoped call from an
-	// unenrolled Owner (#606) regardless of the Practice's own MFA
-	// switch, so Deborah needs a second factor before she can invite
-	// anyone -- signInEnrolled is mfa.ts's fixture-only route to a
-	// session carrying that claim.
-	const ownerHeaders = await signInEnrolled(request, owner.idToken, owner.localId);
+	const ownerHeaders = await signIn(request, API_URL, owner.idToken);
 
 	// Unique per call, not a literal (#958) -- uniqueEmail's own docblock
 	// says why per *call* is the bar. Callers read the address off the

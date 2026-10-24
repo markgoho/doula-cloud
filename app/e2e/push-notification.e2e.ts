@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test';
 import { API_URL } from './ports';
 import { seedClientPortalUser, seedEngagement } from './stack';
-import { signInEnrolled } from './mfa';
+import { signIn } from './auth';
 import { signInPortalClient } from './portalClient';
 import { seedFoundingOwner, uniqueEmail } from './staffSignup';
 
@@ -29,12 +29,9 @@ test('a synthetic push event wakes the open thread tab and it refetches', async 
 	// Practice, and a Client-portal login -- the same setup
 	// client-portal-login.e2e.ts uses, since this test needs a real
 	// Engagement thread to push a Message into.
-	const { idToken: staffIdToken, localId: staffUID, practiceId } = await seedFoundingOwner(request);
+	const { idToken: staffIdToken, practiceId } = await seedFoundingOwner(request);
 
-	// #606: an Owner is gated behind a second factor at every Practice-scoped
-	// route (see mfa.ts's signInEnrolled doc comment), including the
-	// createClient and createMessage calls below.
-	const staffHeaders = await signInEnrolled(request, staffIdToken, staffUID);
+	const staffHeaders = await signIn(request, API_URL, staffIdToken);
 
 	const createClient = await request.post(`${API_URL}/api/practices/${practiceId}/clients`, {
 		headers: staffHeaders,

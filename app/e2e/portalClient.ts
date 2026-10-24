@@ -249,13 +249,12 @@ export async function seedPortalClient(
 		staffName: 'Alex Owner'
 	});
 
-	// #606: every Practice-scoped call this fixture and its callers go on
-	// to make -- including the createClient call right below -- runs
-	// behind staffauth.Middleware, which refuses an Owner with no second
-	// factor regardless of the Practice's own require_mfa_for_all_staff
-	// switch. Enrolled here, once, the same way mfa-required.e2e.ts's own
-	// fixtures are, rather than leaving every one of this helper's six
-	// callers to rediscover the 403 on their own.
+	// Since #1531 none of this fixture's calls needs a second factor: an
+	// Owner enters her Practice without one. It stays enrolled for one
+	// caller: accessibility.e2e.ts scans the Staff screens, settings/mfa
+	// among them, under this session, and those scans are of an Owner who
+	// has a second factor. #1802 records that this enrollment goes once
+	// that spec enrolls its own Owner.
 	const staffHeaders = await signInEnrolled(request, idToken, localId);
 
 	const createClient = await request.post(`${API_URL}/api/practices/${practiceId}/clients`, {

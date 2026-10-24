@@ -1,7 +1,7 @@
 import { expect, test, type APIRequestContext } from '@playwright/test';
 import { API_URL, PREVIEW_SERVER_ORIGIN } from './ports';
 import { seedFoundingOwner } from './staffSignup';
-import { signInEnrolled } from './mfa';
+import { signIn } from './auth';
 import { seedContractorDoula } from './portalClient';
 
 // #892: a Staff person deleting her own login -- ADR-0033's rule. This
@@ -27,9 +27,9 @@ async function useSession(
 	]);
 }
 
-async function seedEnrolledOwner(request: APIRequestContext, practiceName: string) {
-	const { idToken, localId, practiceId } = await seedFoundingOwner(request, { practiceName });
-	const headers = await signInEnrolled(request, idToken, localId);
+async function seedOwner(request: APIRequestContext, practiceName: string) {
+	const { idToken, practiceId } = await seedFoundingOwner(request, { practiceName });
+	const headers = await signIn(request, API_URL, idToken);
 	return { practiceId, headers };
 }
 
@@ -38,7 +38,7 @@ test('a doula deletes her own login from /account, and cannot get back in', asyn
 	context,
 	request
 }) => {
-	const { practiceId, headers: ownerHeaders } = await seedEnrolledOwner(request, 'Genesee Doulas');
+	const { practiceId, headers: ownerHeaders } = await seedOwner(request, 'Genesee Doulas');
 	const doula = await seedContractorDoula(request, practiceId, ownerHeaders);
 	await useSession(context, doula.headers);
 
@@ -78,7 +78,7 @@ test('a sole Owner is refused, with the practice in the way named', async ({
 	context,
 	request
 }) => {
-	const { headers } = await seedEnrolledOwner(request, 'Lakeshore Birth Partners');
+	const { headers } = await seedOwner(request, 'Lakeshore Birth Partners');
 	await useSession(context, headers);
 
 	await page.goto('/account');
