@@ -51,13 +51,18 @@
 			// SvelteKit runs that load to preload a link the pointer rests
 			// on, before the click that hands the values over. Only a click
 			// on the search's "Add a new Client" hands anything over, and it
-			// always passes the door, which has cleared the draft.
-			intakeDraft.carry(takeIntakeHandoff(practiceId));
+			// always passes the door, which has cleared the draft. Always
+			// taken, so nothing is left over; used only when no other screen
+			// opened intake, so a click that never arrived cannot seed a
+			// later visit from the overview or the Clients list.
+			const handedOver = takeIntakeHandoff(practiceId);
 			// #1609: a link that opens the name question directly names the
 			// screen it is on, and the name question's Back goes there. A
 			// later visit that carries none -- the duplicate page's Back, a
 			// reload -- keeps the one already read.
-			intakeDraft.origin = intakeOrigin(page.url.searchParams) ?? intakeDraft.origin;
+			const origin = intakeOrigin(page.url.searchParams);
+			if (!origin) intakeDraft.carry(handedOver);
+			intakeDraft.origin = origin ?? intakeDraft.origin;
 		});
 	});
 </script>

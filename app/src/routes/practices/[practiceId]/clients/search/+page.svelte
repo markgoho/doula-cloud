@@ -146,7 +146,7 @@
 		});
 	}
 
-	function handOffTyped(): void {
+	function handOffSearchFields(): void {
 		handOffToIntake(page.params.practiceId!, currentFields());
 	}
 
@@ -316,7 +316,7 @@
 											: 'Nothing at this Practice matches what was typed. Add a new Client instead.'}
 									/>
 									<cluster-l space="var(--space-3)" align="center">
-										<Link href={startIntakeHref()} label="Add a new Client" onClick={handOffTyped} />
+										<Link href={startIntakeHref()} label="Add a new Client" onClick={handOffSearchFields} />
 									</cluster-l>
 								</stack-l>
 							{/if}

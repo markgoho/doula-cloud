@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import type { ClientSearchFields } from '#lib/client.js';
 import { intakeDraft } from '#lib/intakeDraft.svelte.js';
-import { handOffToIntake } from '#lib/intakeHandoff.js';
+import { handOffToIntake, takeIntakeHandoff } from '#lib/intakeHandoff.js';
 import Layout from './+layout.svelte';
 import { load as doorLoad } from './+page.js';
 import NamePage from './name/+page.svelte';
@@ -169,6 +169,20 @@ describe('intake for everyone else', () => {
 		await expect.element(testPage.getByText('yar@example.com')).toBeVisible();
 		await expect.element(testPage.getByText('555-0100')).toBeVisible();
 		await expect.element(testPage.getByText('Jan 2, 1990')).toBeVisible();
+	});
+
+	// A click on "Add a new Client" whose navigation never arrived leaves
+	// a hand-off behind. A later visit from another screen does not take
+	// that old search's values into a new Client.
+	it('carries nothing into a visit another screen opened', async () => {
+		intakeDraft.clear();
+		handOffToIntake(practiceId, { name: 'Ana', dateOfBirth: '', email: '', phone: '' });
+
+		await setup({ search: '?from=overview' });
+
+		await expect.element(testPage.getByText('the name question')).toBeVisible();
+		expect(intakeDraft.answers.givenName).toBe('');
+		expect(takeIntakeHandoff(practiceId)).toBeUndefined();
 	});
 
 	it('reads the screen that opened intake directly', async () => {
