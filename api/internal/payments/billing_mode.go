@@ -49,6 +49,13 @@ var errBillingModeInvalid = errors.New("payments: billing mode invalid")
 // silently defaulting to a rail nobody chose.
 const MsgBillingModeRequired = "This Practice has not chosen how it bills Clients yet. Choose Stripe or by-hand billing to raise this Invoice."
 
+// DetailBillingModeRequired is the same refusal's `details.billingMode`
+// entry (#1775): the words InvoiceSection shows against its "How does
+// this Practice bill Clients?" group and in its error summary. It is the
+// sentence the app's own empty-submit check already says, so a refusal
+// from the BFF and one from the browser read the same.
+const DetailBillingModeRequired = "Select how this Practice bills Clients"
+
 // fetchBillingMode reads practiceID's current billing_mode, unset (ok=false)
 // when the Practice has never chosen one.
 func fetchBillingMode(ctx context.Context, tx *sql.Tx, practiceID string) (mode BillingMode, ok bool, err error) {

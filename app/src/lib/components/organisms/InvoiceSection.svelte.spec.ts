@@ -174,13 +174,16 @@ describe('InvoiceSection.svelte', () => {
 		expect(onCreate).toHaveBeenCalledWith();
 	});
 
-	it('shows an error when onCreate throws', async () => {
+	// #1775: a refusal is an error summary, as the Record payment form's
+	// is, never a bare alert line under the button.
+	it('shows a refusal from onCreate in an error summary', async () => {
 		const onCreate = vi.fn().mockRejectedValue(new Error('engagement not found'));
 		await setup({ onCreate });
 
 		await page.getByRole('button', { name: 'Create Invoice' }).click();
 
-		await expect.element(page.getByText('engagement not found')).toBeInTheDocument();
+		await expect.element(page.getByRole('heading', { name: 'There is a problem' })).toBeVisible();
+		await expect.element(page.getByRole('alert')).toHaveTextContent('engagement not found');
 	});
 
 	it('falls back to a generic message when onCreate rejects with a non-Error', async () => {
@@ -189,7 +192,23 @@ describe('InvoiceSection.svelte', () => {
 
 		await page.getByRole('button', { name: 'Create Invoice' }).click();
 
-		await expect.element(page.getByText('Failed to create invoice')).toBeInTheDocument();
+		await expect.element(page.getByRole('alert')).toHaveTextContent('Failed to create invoice');
+	});
+
+	// The question is not on screen once a billing mode is set, so there
+	// is no control to link to: the refusal stays an untargeted entry.
+	it('shows a billingMode refusal as an untargeted entry when the question is not on screen', async () => {
+		const onCreate = vi
+			.fn()
+			.mockRejectedValue(
+				new RefusalError('refused', { billingMode: 'Select how this Practice bills Clients' })
+			);
+		await setup({ onCreate });
+
+		await page.getByRole('button', { name: 'Create Invoice' }).click();
+
+		await expect.element(page.getByRole('alert')).toHaveTextContent('refused');
+		await expect.element(page.getByRole('link', { name: 'Select how this Practice bills Clients' })).not.toBeInTheDocument();
 	});
 
 	// #270: clientsCanPay is a standing fact read before the form ever
@@ -347,14 +366,43 @@ describe('InvoiceSection.svelte', () => {
 			await expect.element(page.getByRole('link', { name: 'Select how this Practice bills Clients' })).not.toBeInTheDocument();
 		});
 
-		it('shows an error when onCreate throws from the billing-mode ask', async () => {
-			const onCreate = vi.fn().mockRejectedValue(new Error('billing mode invalid'));
+		// #1775: the 409 #1590 names (Stripe not connected) names no field,
+		// so it is the summary's one untargeted entry.
+		it('shows a refusal from the billing-mode ask in the error summary', async () => {
+			const onCreate = vi
+				.fn()
+				.mockRejectedValue(
+					new RefusalError('Clients cannot pay this Practice yet. A Practice Owner has to connect Stripe.')
+				);
+			await setup({ billingMode: 'unset', onCreate });
+
+			await page.getByLabelText('By card, through Stripe.').click();
+			await page.getByRole('button', { name: 'Create Invoice' }).click();
+
+			await expect.element(page.getByRole('heading', { name: 'There is a problem' })).toBeVisible();
+			await expect
+				.element(page.getByRole('alert'))
+				.toHaveTextContent('Clients cannot pay this Practice yet. A Practice Owner has to connect Stripe.');
+		});
+
+		it('shows a refusal that names the billing-mode question against the group and in the summary (#1775)', async () => {
+			const onCreate = vi.fn().mockRejectedValue(
+				new RefusalError('This Practice has not chosen how it bills Clients yet.', {
+					billingMode: 'Select how this Practice bills Clients'
+				})
+			);
 			await setup({ billingMode: 'unset', onCreate });
 
 			await page.getByLabelText('By hand.').click();
 			await page.getByRole('button', { name: 'Create Invoice' }).click();
 
-			await expect.element(page.getByText('billing mode invalid')).toBeVisible();
+			await expect
+				.element(page.getByRole('link', { name: 'Select how this Practice bills Clients' }))
+				.toHaveAttribute('href', '#invoice-billing-mode-stripe');
+			await expect
+				.element(page.getByRole('group', { name: 'How does this Practice bill Clients?' }))
+				.toHaveTextContent('Select how this Practice bills Clients');
+			await expect.element(page.getByText('This Practice has not chosen how it bills Clients yet.')).not.toBeInTheDocument();
 		});
 	});
 

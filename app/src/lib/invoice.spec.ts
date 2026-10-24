@@ -102,6 +102,28 @@ describe('createInvoice', () => {
 		await expect(createInvoice(fetcher, 'practice-1', 'eng-1')).rejects.toThrow('engagement not found');
 	});
 
+	// #1775: InvoiceSection reads details.billingMode onto the billing-mode
+	// question, so this has to throw a RefusalError that keeps the map.
+	it('throws a RefusalError carrying the refused field when no billing mode is chosen', async () => {
+		const fetcher = vi.fn().mockResolvedValue(
+			jsonResponse(
+				{
+					code: 'FAILED_PRECONDITION',
+					message: 'This Practice has not chosen how it bills Clients yet.',
+					details: { billingMode: 'Select how this Practice bills Clients' }
+				},
+				422
+			)
+		);
+
+		const rejection = createInvoice(fetcher, 'practice-1', 'eng-1');
+
+		await expect(rejection).rejects.toBeInstanceOf(RefusalError);
+		await expect(rejection).rejects.toMatchObject({
+			details: { billingMode: 'Select how this Practice bills Clients' }
+		});
+	});
+
 	it('carries billingMode when the caller supplies it (the inline "ask once")', async () => {
 		const invoice = {
 			id: 'inv-1',

@@ -179,7 +179,8 @@ func PostInvoiceHandler(client Client) http.Handler {
 
 		mode, billingModeAlreadySet, err := resolveBillingMode(r.Context(), tx, practiceID, req.BillingMode)
 		if errors.Is(err, errBillingModeRequired) {
-			apierr.Write(w, http.StatusUnprocessableEntity, apierr.CodeFailedPrecondition, MsgBillingModeRequired, nil)
+			apierr.Write(w, http.StatusUnprocessableEntity, apierr.CodeFailedPrecondition, MsgBillingModeRequired,
+				map[string]string{"billingMode": DetailBillingModeRequired})
 			return
 		}
 		if errors.Is(err, errBillingModeInvalid) {

@@ -114,6 +114,10 @@
 	// carries authority, and a Staff member who presses the button without
 	// reading would otherwise set the Practice's billing mode unchosen.
 	let chosenBillingMode = $state<BillingMode | undefined>();
+	// billingModeError is the billing-mode question's own error, from the
+	// empty-submit check or a BFF refusal naming `billingMode` (#1775).
+	// createError is the untargeted summary fallback: a refusal that names
+	// no field on screen, such as Stripe not connected.
 	let billingModeError = $state('');
 	let isCreating = $state(false);
 	let createError = $state('');
@@ -122,9 +126,28 @@
 	// The first option's id, as the payment form's Method does: the summary
 	// link lands on the first option, whichever one is checked.
 	const billingModeFieldId = radioFieldId(billingModeName, 'stripe');
-	const billingModeErrors = $derived<FormError[]>(
-		billingModeError ? [{ message: billingModeError, targetId: billingModeFieldId }] : []
+	// One list for both Create Invoice forms (#1775), the same shape as
+	// paymentFormErrors below, so a refusal is one ErrorSummary and never
+	// a second, bare alert line beside it.
+	const createFormErrors = $derived<FormError[]>(
+		[
+			billingModeError ? { message: billingModeError, targetId: billingModeFieldId } : undefined,
+			createError ? { message: createError } : undefined
+		].filter((entry) => entry !== undefined)
 	);
+
+	/** Reads a caught Create Invoice refusal into the form's error state,
+	 * as applyPaymentRefusal does below. A `details.billingMode` is read
+	 * onto the question only while the question is on screen (a
+	 * field-level error is only wired into a field that is there); any
+	 * other refusal is the untargeted summary entry. */
+	function applyCreateRefusal(error_: unknown) {
+		if (billingMode === undefined && error_ instanceof RefusalError && error_.details?.billingMode) {
+			billingModeError = error_.details.billingMode;
+			return;
+		}
+		createError = error_ instanceof Error ? error_.message : 'Failed to create invoice';
+	}
 
 	const billingModeOptions = $derived([
 		{
@@ -162,7 +185,7 @@
 				await onCreate();
 			}
 		} catch (error_) {
-			createError = error_ instanceof Error ? error_.message : 'Failed to create invoice';
+			applyCreateRefusal(error_);
 		} finally {
 			isCreating = false;
 		}
@@ -685,8 +708,8 @@
 	<Notice variant="info" message={unbillableContractMessage(contractStatus)} />
 {:else if billingMode === undefined}
 	<StackedForm onSubmit={handleCreate}>
-		{#if billingModeErrors.length > 0}
-			<ErrorSummary errors={billingModeErrors} />
+		{#if createFormErrors.length > 0}
+			<ErrorSummary errors={createFormErrors} />
 		{/if}
 		<RadioGroup
 			legend="How does this Practice bill Clients?"
@@ -699,9 +722,6 @@
 		/>
 		<Button label="Create Invoice" type="submit" loading={isCreating} />
 	</StackedForm>
-	{#if createError}
-		<p role="alert">{createError}</p>
-	{/if}
 {:else if billingMode === 'stripe' && !clientsCanPay}
 	<Notice variant="info" message={clientsCannotPayMessage} />
 	{#if isOwner}
@@ -710,11 +730,11 @@
 {:else if billingMode === 'stripe' && !hasClientEmail}
 	<Notice variant="info" message={clientHasNoEmailMessage} />
 {:else}
-	<!-- stacked-form:ignore: #1108 -- one button and nothing else. There is no run of fields for a stack to space, and the `<form>` is here so the raise is a submit rather than a click. -->
-	<form onsubmit={handleCreate}>
+	<!-- A StackedForm since #1775: a refusal puts an ErrorSummary above the button, so the form has a run to space, which #1108's bare `<form>` did not. -->
+	<StackedForm onSubmit={handleCreate}>
+		{#if createFormErrors.length > 0}
+			<ErrorSummary errors={createFormErrors} />
+		{/if}
 		<Button label="Create Invoice" type="submit" loading={isCreating} />
-	</form>
-	{#if createError}
-		<p role="alert">{createError}</p>
-	{/if}
+	</StackedForm>
 {/if}
