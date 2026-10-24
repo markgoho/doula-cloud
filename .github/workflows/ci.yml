@@ -608,8 +608,8 @@ jobs:
 
       - name: E2e test
         working-directory: app
-        run: bunx playwright test accessibility --grep "the Staff side" --repeat-each 20
-        timeout-minutes: 40
+        run: bunx playwright test
+        timeout-minutes: 10
 
       - name: Upload Playwright report
         if: ${{ !cancelled() }}
