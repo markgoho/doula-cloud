@@ -65,6 +65,20 @@ test('The first Client in three presses, then the Visits section', async ({ page
 	await expect(page.getByRole('heading', { level: 1, name: 'Pat' })).toBeVisible();
 	await expect(page.getByText('Work with Pat started.')).toHaveCount(0);
 
+	// #1511: the new Engagement has no Visit, Contract or Invoice yet, so
+	// Schedule, Contracts and Invoices have no row for it. The Clients
+	// list and her record each link to it.
+	const engagementUrl = page.url();
+	await page.getByRole('link', { name: 'Clients', exact: true }).click();
+	await page.getByRole('link', { name: 'Birth', exact: true }).click();
+	await expect(page).toHaveURL(engagementUrl);
+	await page.getByRole('link', { name: 'Clients', exact: true }).click();
+	await page.getByRole('link', { name: /^Pat/ }).click();
+	await expect(page).toHaveURL(new RegExp(`/practices/${practiceId}/clients/[^/?]+$`));
+	await page.getByRole('link', { name: 'Birth', exact: true }).click();
+	await expect(page).toHaveURL(engagementUrl);
+	await expect(page.getByRole('heading', { level: 1, name: 'Pat' })).toBeVisible();
+
 	// DataTable renders a <table> and a card-view <dl> together for every
 	// row (#564, responsive layout) -- getByRole('cell', ...) targets the
 	// <table> tree specifically, since a plain getByText match on either

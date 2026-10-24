@@ -4,13 +4,13 @@
 	import { resolve } from '$app/paths';
 	import { apiFetchWithSession } from '#lib/api.js';
 	import { loadClients, type ClientListItem, type OpenEngagement } from '#lib/client.js';
-	import { NO_DOULA_YET_LABEL } from '#lib/engagementRequest.js';
+	import { NO_DOULA_YET_LABEL, kindLabel } from '#lib/engagementRequest.js';
 	import { engagementStatusText } from '#lib/engagementDetail.js';
 	import { startHref } from './new/intake.js';
 	import { isBlockedInvite, portalInviteStatusText } from '#lib/portalInvite.js';
 	import { formatAmount, invoiceStatusLabel } from '#lib/invoice.js';
 	import { PaginatedList } from '#lib/paginatedList.svelte.js';
-	import DataTable from '#lib/components/organisms/DataTable.svelte';
+	import DataTable, { type DataTableView } from '#lib/components/organisms/DataTable.svelte';
 	import Checkbox from '#lib/components/atoms/Checkbox.svelte';
 	import Link from '#lib/components/atoms/Link.svelte';
 	import Notice from '#lib/components/atoms/Notice.svelte';
@@ -149,7 +149,9 @@
 			// nothing exercises). Computed for real anyway, as the same
 			// summary `content` renders, so it is never a stray empty value.
 			accessor: (client: ClientListItem) =>
-				(client.openEngagements ?? []).map((line) => engagementLineText(line)).join('; '),
+				(client.openEngagements ?? [])
+					.map((line) => `${kindLabel(line.kind)} · ${engagementLineText(line)}`)
+					.join('; '),
 			content: engagementRollup
 		},
 		{ label: 'Pending request', accessor: pendingRequestText },
@@ -163,6 +165,14 @@
 		return resolve('/practices/[practiceId]/clients/[clientId]', {
 			practiceId: page.params.practiceId!,
 			clientId: client.clientId
+		});
+	}
+
+	// #1511: the Engagement page a rollup line's kind opens.
+	function engagementHref(line: OpenEngagement): string {
+		return resolve('/practices/[practiceId]/engagements/[engagementId]', {
+			practiceId: page.params.practiceId!,
+			engagementId: line.engagementId
 		});
 	}
 
@@ -229,7 +239,7 @@
 	});
 </script>
 
-{#snippet engagementRollup(client: ClientListItem)}
+{#snippet engagementRollup(client: ClientListItem, view: DataTableView)}
 	<!--
 		#264: one <li> per open Engagement -- ADR-0017's "a Client can hold
 		more than one concurrent open Engagement" is why this is a list
@@ -240,9 +250,25 @@
 		Request with no Engagement yet.
 	-->
 	{#if client.openEngagements && client.openEngagements.length > 0}
+		<!--
+			#1511: each line's kind opens the Engagement's page. A new
+			Engagement has no Visit, Contract or Invoice, so no other screen
+			links to it yet. The link's description names the Client, so a
+			list of links read out of the table still tells one Client's
+			"Birth" from the next. The name is `hidden`: a description can
+			read hidden text, and the cell's own name then stays the line.
+			DataTable draws this cell once per view, hence the view in the id.
+		-->
+		<span id="rollup-{view}-{client.clientId}" hidden>{client.name}</span>
 		<ul class="rollup-list">
 			{#each client.openEngagements as line (line.engagementId)}
-				<li>{engagementLineText(line)}</li>
+				<li>
+					<Link
+						href={engagementHref(line)}
+						label={kindLabel(line.kind)}
+						describedBy="rollup-{view}-{client.clientId}"
+					/> · {engagementLineText(line)}
+				</li>
 			{/each}
 		</ul>
 	{/if}

@@ -402,6 +402,17 @@ describe('the Engagements rollup column (#264)', () => {
 			.toBeVisible();
 	});
 
+	// #1511: a new Engagement has no Visit, Contract or Invoice, so its
+	// line here is one of the two ways to its page.
+	it("links each line's kind to its Engagement, naming the Client", async () => {
+		await setup();
+
+		const link = testPage.getByRole('link', { name: 'Postpartum', exact: true });
+		await expect.element(link).toBeVisible();
+		await expect.element(link).toHaveAttribute('href', '/practices/practice-1/engagements/engagement-2');
+		await expect.element(link).toHaveAccessibleDescription(clients[0]!.name);
+	});
+
 	it('shows no rollup lines for a Client with zero open Engagements', async () => {
 		// The fixture's second Client carries no openEngagements at all.
 		await setup(jsonResponse({ items: [clients[1]], hasMore: false }));
@@ -419,7 +430,7 @@ describe('the Engagements rollup column (#264)', () => {
 					{
 						...clients[1],
 						openEngagements: [
-							{ engagementId: 'engagement-fee', engagementStatus: 'active', feeCents: 120_000 }
+							{ engagementId: 'engagement-fee', kind: 'birth', engagementStatus: 'active', feeCents: 120_000 }
 						]
 					}
 				],

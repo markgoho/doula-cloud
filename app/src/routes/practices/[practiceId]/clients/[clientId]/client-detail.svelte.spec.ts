@@ -227,6 +227,21 @@ describe('client detail hub', () => {
 		await expect.element(testPage.getByRole('cell', { name: 'Active' })).toBeVisible();
 	});
 
+	// #1511: a new Engagement has no Visit, Contract or Invoice, so no
+	// Schedule, Contracts or Invoices row links to it. Its row here does.
+	it("links each Engagement's kind to that Engagement's page", async () => {
+		await setup({
+			overrides: {
+				engagements: [{ engagementId: 'e1', kind: 'postpartum', status: 'intake', createdAt: '2026-01-01T00:00:00Z' }],
+				history: []
+			}
+		});
+
+		const link = testPage.getByRole('link', { name: 'Postpartum' });
+		await expect.element(link).toBeVisible();
+		await expect.element(link).toHaveAttribute('href', '/practices/practice-1/engagements/e1');
+	});
+
 	it('renders client_events and engagement_requests as one merged timeline', async () => {
 		await setup({
 			overrides: {

@@ -37,6 +37,7 @@ export const clients: ClientListItem[] = [
 		openEngagements: [
 			{
 				engagementId: 'engagement-1',
+				kind: 'birth',
 				engagementStatus: 'active',
 				contractStatus: 'sent',
 				doulaName: 'Yolanda Okonkwo-Fitzgerald',
@@ -61,6 +62,7 @@ export const clients: ClientListItem[] = [
 			},
 			{
 				engagementId: 'engagement-2',
+				kind: 'postpartum',
 				engagementStatus: 'intake'
 			},
 			/*
@@ -71,6 +73,7 @@ export const clients: ClientListItem[] = [
 			 */
 			{
 				engagementId: 'engagement-3',
+				kind: 'birth',
 				engagementStatus: 'active',
 				invoiceStatus: 'paid',
 				invoiceAmountCents: 100_000

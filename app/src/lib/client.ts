@@ -46,6 +46,9 @@ export interface ClientListItem {
  * see a given field receives. */
 export interface OpenEngagement {
 	engagementId: string;
+	/** 'birth' or 'postpartum' -- the words that name the line's link to
+	 * its Engagement (#1511). */
+	kind: string;
 	engagementStatus: string;
 	/**
 	 * Absent when no Contract has been created yet for this Engagement.
