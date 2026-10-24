@@ -169,15 +169,21 @@
 			margin-inline-start: var(--space-1);
 		}
 
-		/* A table row is 40px (the brief's Density section), and a 44px
-		   target cannot sit in it without growing it. Until #1843 decides
-		   which rule wins, a link in a cell keeps the row's height. */
+		/* A link in a table row takes the row's height as its floor, in
+		   both directions (#1843, the brief's Density section):
+		   `--row-target-min` is the row less its 1px rule, 39px when every
+		   input is fine and 44px when any input can tap, so the row and
+		   its targets are always the same height. The inline floor
+		   subtracts the variant's own padding, as the 44px rule on
+		   `.label` below does. */
 		:global(td) a {
-			min-block-size: 0;
+			min-block-size: var(--row-target-min);
 		}
 
 		:global(td) .label {
-			min-inline-size: 0;
+			min-inline-size: calc(
+				var(--row-target-min) - var(--link-inset-start, 0rem) - var(--link-inset-end, 0rem)
+			);
 		}
 
 		/*

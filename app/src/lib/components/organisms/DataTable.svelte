@@ -362,12 +362,14 @@
 
 		/* "Compact rows, airy forms": the brief's Density section fixes a
 		   table row at 40px and body-sm, so a person scanning fifty Clients
-		   sees as many as will fit. The height is set here rather than left
-		   to padding because a Skeleton has to reserve exactly this much
-		   space before the rows arrive -- see Skeleton.layoutShift.svelte.spec.ts. */
+		   sees as many as will fit, and at 44px when any input can tap
+		   (#1843) -- `--row-height` in tokens.css makes that switch. The
+		   height is set here rather than left to padding because a Skeleton
+		   has to reserve exactly this much space before the rows arrive --
+		   see Skeleton.layoutShift.svelte.spec.ts. */
 		th,
 		td {
-			block-size: 2.5rem;
+			block-size: var(--row-height);
 			padding: 0 var(--space-3);
 			font-size: var(--text-body-sm-size);
 			text-align: start;
@@ -459,6 +461,15 @@
 		   height at all, so a rule there would override nothing. */
 		td.content {
 			padding-block: var(--space-1);
+		}
+
+		/* A content cell that holds a link or a button drops that padding
+		   (#1843). The target takes `--row-height` as its floor, so the
+		   padding would make the row taller than its targets, and the
+		   target's own box already keeps its words off the row rule. The
+		   Clients list's "Blocked email addresses" link is this case. */
+		td.content:has(:global(a), :global(button)) {
+			padding-block: 0;
 		}
 
 		/* Unavoidable (#564): a <table> and one <dl> per record are

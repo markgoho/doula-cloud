@@ -1,6 +1,7 @@
 import { createRawSnippet } from 'svelte';
-import { page } from 'vitest/browser';
-import { describe, expect, it, vi } from 'vitest';
+import type { CDPSession } from '@vitest/browser-playwright';
+import { cdp, page } from 'vitest/browser';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import DataTable, { type DataTableView } from './DataTable.svelte';
 import { findDuplicateIds } from '#lib/duplicateIds.js';
@@ -107,9 +108,28 @@ const oneLineContentColumns = [
 ];
 
 // The brief's Density section, and what Skeleton reserves before rows
-// arrive: `th, td { block-size: 2.5rem }`, which is 40px at any container
-// size because `rem` is root-relative.
+// arrive: `th, td { block-size: var(--row-height) }`, which is 40px at any
+// container size with a fine pointer because `rem` is root-relative. The
+// headless runner has only a mouse; the coarse-pointer row is
+// COARSE_ROW_HEIGHT, in its own describe block (#1843). A target in a row
+// is the row less its 1px rule, which the collapsed-border model draws
+// inside the row's box.
 const ROW_HEIGHT = 40;
+const ROW_TARGET = 39;
+const COARSE_ROW_HEIGHT = 45;
+const COARSE_ROW_TARGET = 44;
+
+function linkSnippet() {
+	return createRawSnippet<[Row]>(() => ({
+		render: () =>
+			`<span data-testid="column-content">Blocked <a href="/settings/blocked-addresses">Blocked email addresses</a></span>`
+	}));
+}
+
+const linkContentColumns = [
+	{ label: 'Name', accessor: (row: Row) => row.name },
+	{ label: 'Portal invite', accessor: (row: Row) => row.status, content: linkSnippet() }
+];
 
 interface SetupOptions {
 	columns?: typeof columns;
@@ -592,6 +612,64 @@ describe('a cell that renders a column snippet (#740)', () => {
 		const [linked] = firstRowCells(container);
 		expect(toPixels(getComputedStyle(linked).paddingBlockStart)).toBe(0);
 		expect(firstRow(container).getBoundingClientRect().height).toBe(ROW_HEIGHT);
+	});
+
+	/*
+	 * #1843: a target in a row takes the row's height as its floor, so a
+	 * content cell's padding would make the row taller than its target.
+	 * The Clients list's "Blocked email addresses" link is this cell.
+	 */
+	it('drops the padding of a content cell that holds a link', async () => {
+		const { container } = await setup({ columns: linkContentColumns });
+
+		const [, content] = firstRowCells(container);
+		expect(toPixels(getComputedStyle(content).paddingBlockStart)).toBe(0);
+		expect(toPixels(getComputedStyle(content).paddingBlockEnd)).toBe(0);
+	});
+});
+
+// A role query skips the record view's copy of the link, which CSS hides
+// at this width, so the element it returns is the row's own.
+async function rowLinkHeight(): Promise<number> {
+	const link = await page.getByRole('link', { name: 'Ada Lovelace' }).element();
+	return link.getBoundingClientRect().height;
+}
+
+/*
+ * #1843, the brief's Density section: a row is 40px when every input is
+ * fine and holds a 44px target when any input can tap, and the row link is
+ * always the row's height less its 1px rule. Chromium's touch emulation is
+ * what makes `(any-pointer: coarse)` match in the headless runner; the
+ * spec checks the media query itself before it measures, so a runner that
+ * ignored the emulation fails here rather than passing on the fine row.
+ */
+// Chromium's touch emulation, through the Playwright provider's session:
+// `vitest/browser` alone declares a session with no `send`.
+async function emulateTouch(isEnabled: boolean): Promise<void> {
+	const session: CDPSession = cdp();
+	await session.send('Emulation.setTouchEmulationEnabled', { enabled: isEnabled, maxTouchPoints: 1 });
+}
+
+describe('a target in a table row (#1843)', () => {
+	afterEach(async () => {
+		await emulateTouch(false);
+	});
+
+	it('is the 40px row less its rule with a fine pointer', async () => {
+		const { container } = await setup({ rowHref: (row) => `/clients/${row.name}` });
+
+		expect(matchMedia('(any-pointer: coarse)').matches).toBe(false);
+		expect(await rowLinkHeight()).toBe(ROW_TARGET);
+		expect(firstRow(container).getBoundingClientRect().height).toBe(ROW_HEIGHT);
+	});
+
+	it('is 44px, and the row 44px plus its rule, when any input can tap', async () => {
+		await emulateTouch(true);
+		const { container } = await setup({ rowHref: (row) => `/clients/${row.name}` });
+
+		expect(matchMedia('(any-pointer: coarse)').matches).toBe(true);
+		expect(await rowLinkHeight()).toBe(COARSE_ROW_TARGET);
+		expect(firstRow(container).getBoundingClientRect().height).toBe(COARSE_ROW_HEIGHT);
 	});
 });
 

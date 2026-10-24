@@ -52,8 +52,9 @@
 			border-radius: var(--radius);
 		}
 
-		/* 40px, the row height the brief's Density section fixes for a
-		   table, with no gap between spans -- DataTable's own rows are
+		/* `--row-height`, the token DataTable's own rows read: 40px with a
+		   fine pointer and 44px when any input can tap (#1843). No gap
+		   between spans -- DataTable's own rows are
 		   border-collapsed and adjacent, not gapped, and a placeholder
 		   that reserves more than the real row costs is exactly the
 		   layout shift this component exists to prevent. */
@@ -62,7 +63,7 @@
 		}
 
 		.row span {
-			block-size: 2.5rem;
+			block-size: var(--row-height);
 		}
 
 		/* A line of body copy, so a paragraph placeholder reserves the same

@@ -297,16 +297,21 @@
 			min-inline-size: 0;
 		}
 
-		/* A table row is 40px (the brief's Density section), and a 44px
-		   target cannot sit in it without growing it. Until #1843 decides
-		   which rule wins, a button in a cell keeps the row's height. */
+		/* A button in a table row takes the row's height as its floor, in
+		   both directions (#1843, the brief's Density section):
+		   `--row-target-min` is the row less its 1px rule, 39px when every
+		   input is fine and 44px when any input can tap, so the row and
+		   its targets are always the same height. */
 		:global(td) button {
-			min-block-size: 0;
+			min-block-size: var(--row-target-min);
 		}
 
-		:global(td) button.icon-only,
+		:global(td) button.icon-only {
+			min-inline-size: var(--row-target-min);
+		}
+
 		:global(td) .label {
-			min-inline-size: 0;
+			min-inline-size: calc(var(--row-target-min) - 2 * var(--button-inset, 0rem));
 		}
 
 		/* Chrome controls: the shell's hamburger, avatar and Practice
