@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { jsonResponse } from './testResponse.js';
 import {
 	DEFAULT_SCHEDULE_DAYS,
@@ -17,6 +17,25 @@ import {
 // `new Date('2026-09-12')`, which is UTC midnight and is the exact
 // mistake these helpers exist to prevent.
 const localDay = (year: number, month: number, date: number) => new Date(year, month - 1, date);
+
+/**
+ * Pins the enclosing block to America/New_York, a zone with a 25-hour
+ * and a 23-hour day each year, and puts the machine's own zone back
+ * after it (#1605). CI runs in UTC, where every day is 24 hours long, so
+ * a daylight-saving case that read the machine's zone would pass there
+ * whether the arithmetic was right or not. Node reads `process.env.TZ`
+ * again each time it is assigned, so the change reaches `Date` at once.
+ */
+function inNewYork(): void {
+	const machineZone = process.env.TZ;
+	beforeAll(() => {
+		process.env.TZ = 'America/New_York';
+	});
+	afterAll(() => {
+		if (machineZone === undefined) delete process.env.TZ;
+		else process.env.TZ = machineZone;
+	});
+}
 
 describe('toDateInputValue', () => {
 	it('names the reader’s own day, zero-padded', () => {
@@ -44,16 +63,18 @@ describe('addDays', () => {
 		expect(addDays('2026-03-01', -1)).toBe('2026-02-28');
 	});
 
-	// These two only fail in a zone that observes daylight saving (for
-	// example TZ=America/New_York); in UTC every day is 24 hours long.
-	it('counts calendar days across the end of daylight saving (a 25-hour day)', () => {
-		expect(addDays('2026-10-02', 30)).toBe('2026-11-01');
-		expect(addDays('2026-11-01', 1)).toBe('2026-11-02');
-	});
+	describe('in a zone that observes daylight saving', () => {
+		inNewYork();
 
-	it('counts calendar days across the start of daylight saving (a 23-hour day)', () => {
-		expect(addDays('2026-03-07', 1)).toBe('2026-03-08');
-		expect(addDays('2026-03-08', 1)).toBe('2026-03-09');
+		it('counts calendar days across the end of daylight saving (a 25-hour day)', () => {
+			expect(addDays('2026-10-02', 30)).toBe('2026-11-01');
+			expect(addDays('2026-11-01', 1)).toBe('2026-11-02');
+		});
+
+		it('counts calendar days across the start of daylight saving (a 23-hour day)', () => {
+			expect(addDays('2026-03-07', 1)).toBe('2026-03-08');
+			expect(addDays('2026-03-08', 1)).toBe('2026-03-09');
+		});
 	});
 });
 
@@ -70,6 +91,26 @@ describe('toInstantRange', () => {
 		const range = toInstantRange('2026-09-12', '2026-09-19');
 		expect(new Date(range.from)).toEqual(localDay(2026, 9, 12));
 		expect(new Date(range.to)).toEqual(localDay(2026, 9, 20));
+	});
+
+	describe('in a zone that observes daylight saving', () => {
+		inNewYork();
+
+		it('includes the whole of the fall-back day, all 25 hours of it', () => {
+			// Clocks in New York go back at 2am on 2026-11-01: that day starts
+			// at 04:00 UTC (still EDT) and the next one at 05:00 UTC (EST).
+			expect(toInstantRange('2026-11-01', '2026-11-01')).toEqual({
+				from: '2026-11-01T04:00:00.000Z',
+				to: '2026-11-02T05:00:00.000Z'
+			});
+		});
+
+		it('includes the whole of the spring-forward day, all 23 hours of it', () => {
+			expect(toInstantRange('2026-03-08', '2026-03-08')).toEqual({
+				from: '2026-03-08T05:00:00.000Z',
+				to: '2026-03-09T04:00:00.000Z'
+			});
+		});
 	});
 });
 
