@@ -161,7 +161,10 @@
 			flex: 1 1 auto;
 			justify-content: center;
 			min-block-size: var(--nav-row-height);
-			padding-inline: var(--space-2);
+			/* The link's own inset, which its padding and its label's 44px
+			   floor both read (#1851), rather than the padding alone. */
+			--link-inset-start: var(--space-2);
+			--link-inset-end: var(--space-2);
 		}
 
 		/* Unavoidable (#564): the same shape as StaffTopBar's own -- a wide

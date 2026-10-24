@@ -17,11 +17,35 @@ import '#lib/styles/app.css';
 import { findInlineSpill, TOLERANCE } from '../../../routes/style-guide/continuum.js';
 import ControlsInRow from './harness/ControlsInRow.svelte';
 
-async function setup(kind: 'link' | 'button', label: string) {
-	const { container } = await render(ControlsInRow, { kind, label, inlineSize: '8rem' });
+async function setup(kind: 'link' | 'button', label: string, variant?: 'nav' | 'primary') {
+	const { container } = await render(ControlsInRow, { kind, label, inlineSize: '8rem', variant });
 	// The row has no role of its own: it is the harness's layout box.
 	return { row: container.querySelector<HTMLElement>('.row')! };
 }
+
+// How many lines a control's words were drawn on: one per line box of its
+// text. A word broken mid-letter adds a line the words alone would not.
+function linesOf(control: Element): number {
+	const tops = new Set<number>();
+	const text = document.createTreeWalker(control, NodeFilter.SHOW_TEXT);
+	while (text.nextNode()) {
+		const range = document.createRange();
+		range.selectNodeContents(text.currentNode);
+		for (const rect of range.getClientRects()) tops.add(Math.round(rect.top));
+	}
+	return tops.size;
+}
+
+describe('a link whose words wrap, in a row with too little room for it (#1851)', () => {
+	it('wraps between its words and never inside one', async () => {
+		const { row } = await setup('link', 'Reassign everything', 'primary');
+
+		const link = page.getByRole('link').first();
+		await expect.element(link).toBeVisible();
+		expect(linesOf(link.element())).toBe(2);
+		expect(findInlineSpill(row)).toBeUndefined();
+	});
+});
 
 describe.each([
 	['link', 'A section with a long name'],

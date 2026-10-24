@@ -14,14 +14,20 @@
 	let {
 		kind,
 		label,
-		inlineSize
-	}: { kind: 'link' | 'button'; label: string; inlineSize: string } = $props();
+		inlineSize,
+		variant = 'nav'
+	}: {
+		kind: 'link' | 'button';
+		label: string;
+		inlineSize: string;
+		variant?: 'nav' | 'primary';
+	} = $props();
 </script>
 
 <div class="row" style:inline-size={inlineSize}>
 	{#each ['first', 'second', 'third'] as key (key)}
 		{#if kind === 'link'}
-			<Link href="#row" {label} variant="nav" />
+			<Link href="#row" {label} {variant} />
 		{:else}
 			<Button {label} variant="secondary" />
 		{/if}
