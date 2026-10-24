@@ -10,7 +10,8 @@
 	import { resolve } from '$app/paths';
 	import { getFirebaseAuth } from '#lib/firebase.js';
 	import { apiBaseURL } from '#lib/api.js';
-	import { privacyPolicyUrl, termsOfServiceUrl } from '#lib/legal.js';
+	import { legalVersionUrl, privacyPolicyUrl, termsOfServiceUrl } from '#lib/legal.js';
+	import { formatCalendarDay } from '#lib/dates.js';
 	import TextInput from '#lib/components/atoms/TextInput.svelte';
 	import Button from '#lib/components/atoms/Button.svelte';
 	import Link from '#lib/components/atoms/Link.svelte';
@@ -34,6 +35,9 @@
 		passwordRefusal,
 		preloadCommonPasswords
 	} from '#lib/passwordRule.js';
+	import type { PageProps as PageProperties } from './$types';
+
+	let { data }: PageProperties = $props();
 
 	const practiceNameId = 'signup-practice-name';
 	const firstNameId = 'signup-first-name';
@@ -43,6 +47,12 @@
 	const emailId = 'signup-email';
 	const passwordId = 'signup-password';
 	const agreementId = 'signup-agreement';
+	const comingId = 'signup-agreement-coming';
+
+	// #1824: the button is described by the sentence, and during a notice
+	// period by the list of coming versions after it, so a person who
+	// moves to the button hears both, in the order they read.
+	const buttonDescription = $derived(data.coming.length > 0 ? `${agreementId} ${comingId}` : agreementId);
 
 	// #290: read off ROLE_LABELS -- the same source MembershipFields draws
 	// its checkboxes from -- rather than spelling the three words out here
@@ -447,11 +457,36 @@
 				label="Terms of Service"
 			/> and the <Link href={privacyPolicyUrl} label="Privacy Policy" />.
 		</p>
+		<!--
+			#1824 (ADR-0053): during the 30 days before a version starts, a
+			Practice that signs up agrees to it too, and the BFF records it in
+			the same row. This list names each such version by the date it
+			starts and links its own page, from the versions the BFF read
+			(+page.ts). A list and not a sentence: each link is a box of its
+			own (the Link atom is inline-flex), so at 320px a sentence of
+			three of them strands its commas and its full stop on lines of
+			their own. Outside a notice period there is no list.
+		-->
+		{#if data.coming.length > 0}
+			<div id={comingId}>
+				<p>You also agree to:</p>
+				<ul>
+					{#each data.coming as version (`${version.document}-${version.version}`)}
+						<li>
+							<Link
+								href={legalVersionUrl(version.document, version.version)}
+								label={`${version.name} from ${formatCalendarDay(version.version)}`}
+							/>
+						</li>
+					{/each}
+				</ul>
+			</div>
+		{/if}
 		<Button
 			type="submit"
 			label="Create Practice"
 			loading={submission.isSubmitting}
-			describedBy={agreementId}
+			describedBy={buttonDescription}
 		/>
 	</StackedForm>
 	{/if}
@@ -462,3 +497,13 @@
 	errorSummary={submission.errors.length > 0 ? errorSummary : undefined}
 	{content}
 />
+
+<style>
+	@layer components {
+		/* #1824: the coming versions sit apart from each other the way the
+		   links under the agreement screen do, so each is its own target. */
+		li + li {
+			margin-block-start: var(--space-3);
+		}
+	}
+</style>

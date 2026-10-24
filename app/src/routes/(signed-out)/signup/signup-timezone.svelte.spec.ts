@@ -2,6 +2,7 @@ import { page as testPage } from 'vitest/browser';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import Page from './+page.svelte';
+import { data } from './page.fixture.js';
 
 /*
  * #1166: the zone the founder states for her Practice.
@@ -56,7 +57,7 @@ async function fillEverythingButTheZone() {
 const submit = () => testPage.getByRole('button', { name: 'Create Practice' }).click();
 
 async function setup() {
-	await render(Page, {});
+	await render(Page, { params: {}, data });
 }
 
 describe('the zone a Practice is created in (#1166)', () => {

@@ -6,9 +6,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"doula-cloud/api/internal/activity"
+	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/clientip"
 	"doula-cloud/api/internal/clock"
 	"doula-cloud/api/internal/legal"
@@ -79,8 +81,58 @@ func recordTermsAccepted(ctx context.Context, tx *sql.Tx, r *http.Request, pract
 	return nil
 }
 
+// ComingVersion is one version of a document that has not started yet,
+// which a Practice that signs up now agrees to as well (#1824): the
+// document by its address without the slash ("terms" or "privacy"), its
+// name, and the version by the date it starts -- the same three fields
+// DueVersion gives the screen after a material change, so the app links
+// each one's own page the same way.
+type ComingVersion struct {
+	Document string `json:"document"`
+	Name     string `json:"name"`
+	Version  string `json:"version"`
+}
+
+// comingVersionsResponse is GET /api/legal/coming's body. Coming is
+// never null: an empty list is the ordinary answer outside a notice
+// period.
+type comingVersionsResponse struct {
+	Coming []ComingVersion `json:"coming"`
+}
+
+// ComingVersionsHandler answers GET /api/legal/coming: every version of
+// the Terms of Service and the Privacy Policy that has not started at the
+// server's instant, in the order of AgreementDocuments and oldest first
+// within each document. The signup form names each one beside its
+// agreement sentence (#1824, ADR-0053), and reads them here, not from a
+// copy built into the app, so that the form and the terms_accepted row
+// the press writes name the same versions: both walk AgreementDocuments
+// through agreedVersions at clock.Now(ctx).
+//
+// Open to anyone: it says only what /terms and /privacy already print,
+// reads no input and no database, and holds a few entries.
+func ComingVersionsHandler() http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		now := clock.Now(r.Context())
+		out := comingVersionsResponse{Coming: []ComingVersion{}}
+		for _, doc := range AgreementDocuments {
+			_, coming := agreedVersions(doc, now)
+			for _, version := range coming {
+				out.Coming = append(out.Coming, ComingVersion{
+					Document: strings.TrimPrefix(doc.Path, "/"),
+					Name:     doc.Name,
+					Version:  version,
+				})
+			}
+		}
+		apierr.WriteJSON(w, http.StatusOK, out)
+	})
+}
+
 // agreedVersions is the version of doc in force at now and the versions
-// still to come, each by its date. legal_test.go holds that each shipped
+// still to come, each by its date. recordTermsAccepted and
+// ComingVersionsHandler both read it, so the row and the signup form
+// cannot disagree about which versions are coming (#1824). legal_test.go holds that each shipped
 // document has a version in force today, so the version is never empty.
 func agreedVersions(doc legal.Document, now time.Time) (inForce string, coming []string) {
 	version, _ := doc.InForce(now)
