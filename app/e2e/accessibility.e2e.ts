@@ -543,8 +543,11 @@ interface StaffSeed {
 	pendingRequestId: string;
 	// Pat Client's email, which the edit-path duplicate row collides on.
 	patEmail: string;
-	// The Owner's `__session` value.
-	token: string;
+	// The Owner's `__session` value, with a second factor.
+	enrolledToken: string;
+	// The same Owner's `__session` value from before she enrolled one, with
+	// no second factor: the session a new Owner holds since #1531 (#1857).
+	noSecondFactorToken: string;
 }
 
 // The one section the Practice's Client Field Template has, so the details
@@ -636,11 +639,13 @@ async function seedStaffSide(request: APIRequestContext): Promise<StaffSeed> {
 		// (the vouch form), `settings` and `agreement` (the export action),
 		// and `clients/[clientId]` (erasure). For an Owner with no second
 		// factor each draws SecondFactorNeeded instead, and the landing page
-		// adds a recommendation; #1857 scans those branches. The setup calls
-		// above need no second factor, so they use seedPortalClient's own
-		// session. Every other test in this file that calls seedPortalClient
-		// runs under that session, with no second factor.
-		token: enrolledHeaders.Cookie.replace('__session=', '')
+		// adds a recommendation; the NO_SECOND_FACTOR_ROUTES rows scan those
+		// branches (#1857), under seedPortalClient's own session, from before
+		// she enrolled. The setup calls above need no second factor, so they
+		// use that session too. Every other test in this file that calls
+		// seedPortalClient runs under it, with no second factor.
+		enrolledToken: enrolledHeaders.Cookie.replace('__session=', ''),
+		noSecondFactorToken: seeded.staffHeaders.Cookie.replace('__session=', '')
 	};
 }
 
@@ -990,6 +995,111 @@ const STAFF_ROUTES: SeededRoute<StaffSeed>[] = [
 	}
 ];
 
+/**
+ * The wait for SecondFactorNeeded's own link, which the branch with a
+ * second factor never draws.
+ */
+const awaitSecondFactorNeeded = (page: Page) =>
+	expect(page.getByRole('link', { name: 'Set up two-factor authentication' })).toBeVisible();
+
+/*
+ * The screens an Owner with no second factor meets (#1857), scanned under
+ * `noSecondFactorToken`. Since #1531 a new Owner enters her Practice with
+ * none, so these are the branches she meets first: SecondFactorNeeded in
+ * place of each act that needs one, and the recommendation on the landing
+ * page.
+ *
+ * Every row has a `reach`, because each branch has the same `<h1>` as the
+ * one STAFF_ROUTES scans, and on the landing page, `settings/mfa` and
+ * `clients/[clientId]` the branch is drawn from a read that lands after
+ * it. Without the wait, axe could read the screen before the branch is on
+ * it. Each screen but the landing page has one "Set up two-factor
+ * authentication" link, the one SecondFactorNeeded draws, so the link is
+ * the wait (`awaitSecondFactorNeeded`, above). The agreement row is a
+ * test of its own below, because its stand-in has to be in place before
+ * `goto`.
+ */
+const NO_SECOND_FACTOR_ROUTES: SeededRoute<StaffSeed>[] = [
+	{
+		// #1533: seedPortalClient's Engagement is First Value, so the
+		// recommendation shows, and nothing in this file closes it.
+		key: 'practices/[practiceId] (no second factor)',
+		archetype: 'B',
+		url: (s) => `/practices/${s.practiceId}`,
+		h1: 'Welcome to Riverside Doulas',
+		reach: (page) =>
+			expect(page.getByRole('heading', { level: 2, name: 'Add a second step when you sign in' })).toBeVisible()
+	},
+	{
+		key: 'practices/[practiceId]/staff/[staffId]/mfa-recovery (no second factor)',
+		archetype: 'C',
+		url: (s) => `/practices/${s.practiceId}/staff/${s.staffId}/mfa-recovery`,
+		h1: 'Help Alex Owner sign in again',
+		reach: awaitSecondFactorNeeded
+	},
+	{
+		key: 'practices/[practiceId]/clients/[clientId] (no second factor)',
+		archetype: 'D',
+		url: (s) => `/practices/${s.practiceId}/clients/${s.clientId}`,
+		h1: 'Jane Smith',
+		reach: awaitSecondFactorNeeded
+	},
+	{
+		key: 'practices/[practiceId]/settings (no second factor)',
+		archetype: 'F',
+		url: (s) => `/practices/${s.practiceId}/settings`,
+		h1: 'Settings',
+		reach: awaitSecondFactorNeeded
+	},
+	{
+		key: 'practices/[practiceId]/settings/delete (no second factor)',
+		archetype: 'F',
+		url: (s) => `/practices/${s.practiceId}/settings/delete`,
+		h1: 'Delete this Practice',
+		reach: awaitSecondFactorNeeded
+	},
+	{
+		key: 'practices/[practiceId]/settings/mfa (no second factor)',
+		archetype: 'F',
+		url: (s) => `/practices/${s.practiceId}/settings/mfa`,
+		h1: 'Multi-factor authentication',
+		reach: awaitSecondFactorNeeded
+	}
+];
+
+/**
+ * Makes the agreement screen due (#1549). The e2e stack has no material
+ * change to the Terms of Service or the Privacy Policy, so the Practice's
+ * session read is answered with one due version added to the real
+ * answer: the same network-boundary stand-in the `mfa/enroll` rows use for
+ * `/api/staff/session`. That read is the only place the screen learns
+ * what is due (its own doc comment); everything else on it is the real
+ * session.
+ */
+async function makeAgreementDue(page: Page, practiceId: string) {
+	await page.route(
+		(url) => url.pathname === `/api/practices/${practiceId}/session`,
+		async (route) => {
+			const response = await route.fetch();
+			const session = await response.json();
+			await route.fulfill({
+				response,
+				json: {
+					...session,
+					agreementDue: [
+						{
+							document: 'terms',
+							name: 'Terms of Service',
+							version: '2026-11-01',
+							change: 'Raises the price of a Credit, for every Credit bought from that day.'
+						}
+					]
+				}
+			});
+		}
+	);
+}
+
 // Archetypes B, C, D, E, F and G, all behind one Staff session, seeded once
 // in `beforeAll`: signup + login is ~4s of the same work every time, and
 // none of these scans depends on any other having run. Each row is its
@@ -1007,49 +1117,47 @@ test.describe('Archetypes B, C, D, E, F, G -- the Staff side', () => {
 	// its own, and does not grow with the rows.
 	for (const row of STAFF_ROUTES) {
 		test(row.key, async ({ page, context }) => {
-			await enterSession(context, seed.token);
+			await enterSession(context, seed.enrolledToken);
 			await scan(page, routeFor(row, seed));
 		});
 	}
 
 	// #1549 (ADR-0053): the screen an Owner meets after a material change
-	// to the Terms of Service or the Privacy Policy starts. The e2e stack
-	// has no such change -- the BFF reads them from `legal`'s own version
-	// list, and none is material yet -- so nothing makes the screen due.
-	// The Practice's session read is answered with one due version added
-	// to the real answer instead, the same network-boundary stand-in the
-	// `mfa/enroll` rows above use for `/api/staff/session`. That read is
-	// the only place the screen learns what is due (its own doc comment):
-	// everything else on it is the real session.
+	// to the Terms of Service or the Privacy Policy starts. The BFF reads
+	// them from `legal`'s own version list, and none is material yet, so
+	// `makeAgreementDue` makes the screen due.
 	test('practices/[practiceId]/agreement', async ({ page, context }) => {
-		await page.route(
-			(url) => url.pathname === `/api/practices/${seed.practiceId}/session`,
-			async (route) => {
-				const response = await route.fetch();
-				const session = await response.json();
-				await route.fulfill({
-					response,
-					json: {
-						...session,
-						agreementDue: [
-							{
-								document: 'terms',
-								name: 'Terms of Service',
-								version: '2026-11-01',
-								change: 'Raises the price of a Credit, for every Credit bought from that day.'
-							}
-						]
-					}
-				});
-			}
-		);
-		await enterSession(context, seed.token);
+		await makeAgreementDue(page, seed.practiceId);
+		await enterSession(context, seed.enrolledToken);
 		await scan(page, {
 			key: 'practices/[practiceId]/agreement',
 			// EntryPage, the archetype A frame, though it is behind a session.
 			archetype: 'A',
 			url: `/practices/${seed.practiceId}/agreement`,
 			h1: 'The Terms of Service have changed'
+		});
+	});
+
+	// #1857: the same Owner, with no second factor. Her session is put in
+	// each test's own fresh page, the same as the rows above.
+	for (const row of NO_SECOND_FACTOR_ROUTES) {
+		test(row.key, async ({ page, context }) => {
+			await enterSession(context, seed.noSecondFactorToken);
+			await scan(page, routeFor(row, seed));
+		});
+	}
+
+	// The agreement screen's export line, which gives way to
+	// SecondFactorNeeded for her.
+	test('practices/[practiceId]/agreement (no second factor)', async ({ page, context }) => {
+		await makeAgreementDue(page, seed.practiceId);
+		await enterSession(context, seed.noSecondFactorToken);
+		await scan(page, {
+			key: 'practices/[practiceId]/agreement (no second factor)',
+			archetype: 'A',
+			url: `/practices/${seed.practiceId}/agreement`,
+			h1: 'The Terms of Service have changed',
+			reach: awaitSecondFactorNeeded
 		});
 	});
 });
