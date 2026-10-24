@@ -13,7 +13,7 @@ import { styleLines } from './styleLines';
  *
  * A primitive's rules are injected into `@layer utilities`, and every
  * component's scoped `<style>` compiles into `@layer components`, which
- * `app.css` declares after it. So a margin a primitive writes onto a child
+ * `layers.css` declares after it. So a margin a primitive writes onto a child
  * loses outright to any margin that child writes on itself -- and `margin:
  * 0` on a root element is the most ordinary line in this codebase, sitting
  * in `Notice`, `Text`, `Heading`, `WarningText` and roughly twenty others.

@@ -1,0 +1,20 @@
+/*
+ * Project-wide cascade layer order -- ADR-0003. Declared exactly once, here,
+ * so specificity conflicts between the reset, tokens, base element styling,
+ * the layout-primitive utility layer, and components resolve by explicit
+ * order rather than accident.
+ *
+ * Its own file so that it can come first everywhere (#1856). A browser
+ * fixes the order of cascade layers by the first time it meets each name,
+ * in stylesheet order. Every component's `<style>` is `@layer components`,
+ * so a component stylesheet that reaches the document before this line
+ * makes `components` the lowest layer, and the reset beats every
+ * component: `reset.css`'s `svg { display: block }` then undid `Link`'s
+ * inline icon in a sentence, and its full stop was read as " .".
+ *
+ * `app.css` imports this file before anything else. The browser test
+ * project loads it in its setup file too (`src/vitest.browser.setup.ts`),
+ * before any spec imports a component, so where a spec imports `app.css`
+ * cannot change the cascade.
+ */
+@layer reset, tokens, base, utilities, components;
