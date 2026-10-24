@@ -228,3 +228,60 @@ func TestLegal_RefusesAVersionItCannotPlace(t *testing.T) {
 		})
 	}
 }
+
+func TestAddressScale_UnsetIsOneAndReadsNoDatabase(t *testing.T) {
+	got, err := stackswitch.AddressScale(t.Context(), env(map[string]string{stackswitch.MarkerVar: marker}), nil)
+	if err != nil {
+		t.Fatalf("AddressScale: %v", err)
+	}
+	if got != 1 {
+		t.Fatalf("AddressScale with the switch unset = %d, want 1", got)
+	}
+}
+
+func TestAddressScale_ReadsTheScaleOnTheStack(t *testing.T) {
+	db := stackDB(t, "0")
+	got, err := stackswitch.AddressScale(t.Context(), env(map[string]string{
+		stackswitch.MarkerVar:       marker,
+		stackswitch.AddressScaleVar: "20",
+	}), db.App)
+	if err != nil {
+		t.Fatalf("AddressScale: %v", err)
+	}
+	if got != 20 {
+		t.Fatalf("AddressScale = %d, want 20", got)
+	}
+}
+
+func TestAddressScale_RefusesWithoutTheStackMarker(t *testing.T) {
+	db := stackDB(t, "0")
+	_, err := stackswitch.AddressScale(t.Context(), env(map[string]string{stackswitch.AddressScaleVar: "20"}), db.App)
+	if !errors.Is(err, stackswitch.ErrNotTheStack) {
+		t.Fatalf("AddressScale without %s = %v, want ErrNotTheStack", stackswitch.MarkerVar, err)
+	}
+}
+
+func TestAddressScale_RefusesADatabaseWithNoSimSchema(t *testing.T) {
+	db := testdb.New(t)
+	_, err := stackswitch.AddressScale(t.Context(), env(map[string]string{
+		stackswitch.MarkerVar:       marker,
+		stackswitch.AddressScaleVar: "20",
+	}), db.App)
+	if !errors.Is(err, stackswitch.ErrNotTheStack) {
+		t.Fatalf("AddressScale on a database with no sim schema = %v, want ErrNotTheStack", err)
+	}
+}
+
+func TestAddressScale_RefusesAValueThatIsNotAWholeNumberAboveZero(t *testing.T) {
+	for _, value := range []string{"x", "2.5", "0", "-3"} {
+		t.Run(value, func(t *testing.T) {
+			_, err := stackswitch.AddressScale(t.Context(), env(map[string]string{
+				stackswitch.MarkerVar:       marker,
+				stackswitch.AddressScaleVar: value,
+			}), nil)
+			if err == nil {
+				t.Fatalf("AddressScale accepted %q", value)
+			}
+		})
+	}
+}

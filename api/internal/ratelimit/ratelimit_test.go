@@ -289,6 +289,49 @@ func TestPathValueRule_KeysByNamedPathParameter(t *testing.T) {
 	}
 }
 
+// TestWrap_AddressScaleMultipliesOnlyTheAddressCap proves the e2e stack's
+// switch (#1858): with a scale of 3, an IPRule of 2 lets six requests
+// through and refuses the seventh, while a Bearer-token rule of 2 on the
+// same endpoint is held to 2.
+func TestWrap_AddressScaleMultipliesOnlyTheAddressCap(t *testing.T) {
+	db := testdb.New(t)
+	ratelimit.SetAddressScale(3)
+	t.Cleanup(func() { ratelimit.SetAddressScale(1) })
+
+	address := httptest.NewServer(ratelimit.Wrap(db.App, "test_scaled_ip", []ratelimit.Rule{ratelimit.IPRule(2, time.Hour)})(okHandler()))
+	t.Cleanup(address.Close)
+	for i := 1; i <= 6; i++ {
+		resp := get(t, address)
+		_ = resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("request %d: status = %d, want 200 under a scaled cap of 6", i, resp.StatusCode)
+		}
+		if i == 6 && resp.Header.Get("RateLimit-Limit") != "6" {
+			t.Fatalf("RateLimit-Limit = %q, want the scaled 6", resp.Header.Get("RateLimit-Limit"))
+		}
+	}
+	resp := get(t, address)
+	_ = resp.Body.Close()
+	if resp.StatusCode != http.StatusTooManyRequests {
+		t.Fatalf("request 7: status = %d, want 429", resp.StatusCode)
+	}
+
+	token := ratelimit.Wrap(db.App, "test_scaled_token", []ratelimit.Rule{ratelimit.BearerTokenRule(2, time.Hour)})(okHandler())
+	for i := 1; i <= 3; i++ {
+		req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/", nil)
+		req.Header.Set("Authorization", "Bearer one-token")
+		rec := httptest.NewRecorder()
+		token.ServeHTTP(rec, req)
+		want := http.StatusOK
+		if i == 3 {
+			want = http.StatusTooManyRequests
+		}
+		if rec.Code != want {
+			t.Fatalf("token request %d: status = %d, want %d (a token cap is not scaled)", i, rec.Code, want)
+		}
+	}
+}
+
 // TestWrap_SkippedRuleIsNotCounted proves a Rule whose Key reports ok=false
 // is skipped rather than counted against an empty key -- a request with no
 // Bearer token must not spend BearerTokenRule's budget.

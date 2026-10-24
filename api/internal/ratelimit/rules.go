@@ -21,7 +21,7 @@ import (
 // invitation token).
 func IPRule(maxRequests int, window time.Duration) Rule {
 	return Rule{
-		Dimension: "ip",
+		Dimension: addressDimension,
 		Key:       func(r *http.Request) (string, bool) { return clientip.From(r), true },
 		Max:       maxRequests,
 		Window:    window,

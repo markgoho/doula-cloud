@@ -36,6 +36,7 @@ import (
 	"doula-cloud/api/internal/portalinvite"
 	"doula-cloud/api/internal/practicedeletion"
 	"doula-cloud/api/internal/push"
+	"doula-cloud/api/internal/ratelimit"
 	"doula-cloud/api/internal/sessionnotice"
 	"doula-cloud/api/internal/sitebuild"
 	"doula-cloud/api/internal/stackswitch"
@@ -158,6 +159,17 @@ func main() {
 		log.Fatalf("legal history: %v", err)
 	}
 	staffauth.AgreementDocuments = legalHistory
+	// addressScale is 1 everywhere but the end-to-end stack, where every
+	// request arrives from one loopback address and a single pass of the
+	// suite spends a per-address rate-limit cap many times over (#1858).
+	//
+	// coverage:ignore reason: main's wiring; stackswitch's own tests cover the switch and the gate
+	addressScale, err := stackswitch.AddressScale(context.Background(), os.Getenv, db)
+	if err != nil {
+		// coverage:ignore reason: main's wiring; stackswitch's own tests cover the refusal
+		log.Fatalf("address rate-limit scale: %v", err)
+	}
+	ratelimit.SetAddressScale(addressScale)
 
 	// coverage:ignore reason: requires real GCP credentials and network access, not exercised by unit tests
 	verifier, err := authn.NewFirebaseVerifier(context.Background(), os.Getenv("GCP_PROJECT_ID"))

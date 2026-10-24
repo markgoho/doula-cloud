@@ -1,4 +1,4 @@
-// Package stackswitch holds the two switches only the end-to-end stack
+// Package stackswitch holds the switches only the end-to-end stack
 // (app/e2e/stack.ts) turns on, and the gate that keeps them off
 // everywhere else (#1833):
 //
@@ -8,10 +8,13 @@
 //   - LegalVar appends versions to the shipped legal history
 //     (api/internal/legal), so a spec can publish a material version the
 //     shipped history does not have, without a fixture in legal.go.
+//   - AddressScaleVar multiplies the cap of every per-address rate limit
+//     (ratelimit.IPRule), since every request the suite makes arrives
+//     from the one loopback address (#1858).
 //
 // # The gate
 //
-// Either switch set, the BFF refuses to start unless both of the stack's
+// Any switch set, the BFF refuses to start unless both of the stack's
 // own marks are present: FIREBASE_AUTH_EMULATOR_HOST is set, and the
 // database carries the sim schema. Cloud Run sets neither. The first
 // would send every sign-in to an emulator that does not exist there, and
@@ -20,8 +23,9 @@
 // database never is. A switch set without both is a mistake, so it stops
 // the process rather than being ignored.
 //
-// Unset, neither switch reads the database or the environment past its
-// own name: the clock is clock.Real and the history is the shipped one.
+// Unset, no switch reads the database or the environment past its own
+// name: the clock is clock.Real, the history is the shipped one, and the
+// per-address caps are the ones the code states.
 package stackswitch
 
 import (
@@ -31,6 +35,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"strconv"
 	"sync/atomic"
 	"time"
 
@@ -45,6 +50,9 @@ const (
 	// LegalVar is the switch holding a JSON list of versions to append to the shipped
 	// history, each {"document", "effective", "material", "change"}.
 	LegalVar = "E2E_LEGAL_VERSIONS"
+	// AddressScaleVar is the switch holding a whole number above zero
+	// that every per-address rate-limit cap is multiplied by.
+	AddressScaleVar = "E2E_ADDRESS_RATE_LIMIT_SCALE"
 	// MarkerVar is the stack's mark in the environment: the Firebase
 	// Auth emulator's address.
 	MarkerVar = "FIREBASE_AUTH_EMULATOR_HOST"
@@ -191,6 +199,28 @@ func appendVersion(history []legal.Document, v appendedVersion) error {
 		return nil
 	}
 	return fmt.Errorf("stackswitch: %s: no document %q", LegalVar, v.Document)
+}
+
+// AddressScale returns what every per-address rate-limit cap is
+// multiplied by: 1 with AddressScaleVar unset, and on the stack the
+// switch's value. The whole suite reaches the BFF from one address, so a
+// single pass spends more of a cap sized for one caller than that caller
+// ever would (#1858). Only the address dimension is scaled
+// (ratelimit.SetAddressScale): a Bearer token, a session or an email is
+// still held to its own cap, and the scaled cap still refuses.
+func AddressScale(ctx context.Context, getenv func(string) string, db *sql.DB) (int, error) {
+	raw := getenv(AddressScaleVar)
+	if raw == "" {
+		return 1, nil
+	}
+	scale, err := strconv.Atoi(raw)
+	if err != nil || scale < 1 {
+		return 0, fmt.Errorf("stackswitch: %s must be a whole number above zero or unset, not %q", AddressScaleVar, raw)
+	}
+	if err := requireStack(ctx, getenv, db); err != nil {
+		return 0, err
+	}
+	return scale, nil
 }
 
 // requireStack is the gate: both of the stack's marks, or ErrNotTheStack.

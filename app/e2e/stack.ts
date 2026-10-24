@@ -870,6 +870,12 @@ async function spawnAPI(appOrigin: string, extraEnvironment: Record<string, stri
 			// with this set unless FIREBASE_AUTH_EMULATOR_HOST is set and
 			// the database carries the sim schema; Cloud Run has neither.
 			E2E_CLOCK_FOLLOWS_SIM_OFFSET: '1',
+			// #1858: every request the suite makes arrives from 127.0.0.1,
+			// so one pass spends more than one caller's hour of signups.
+			// This multiplies every per-address cap (ratelimit.IPRule) by
+			// ten and no other dimension's; rateLimit.ts has the counts it
+			// is sized from. Same gate as the switch above.
+			E2E_ADDRESS_RATE_LIMIT_SCALE: '10',
 			PORT: String(E2E_API_PORT),
 			...extraEnvironment
 		}
