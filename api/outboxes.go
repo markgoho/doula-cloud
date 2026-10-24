@@ -22,6 +22,10 @@ const (
 	// #871's Practice-deletion outbox, not nudged for the same reason as
 	// the two above.
 	practiceDeletionOutboxPath = "/api/internal/notifications/process-practice-deletion-outbox"
+	// #1548's email before a material change to the Terms or the
+	// Privacy Policy, not nudged for the same reason: it goes out 30 days
+	// or more before the date it is about.
+	legalNoticeOutboxPath = "/api/internal/notifications/process-legal-notice-outbox"
 	// #1524's private-GitHub-issue outbox, under /api/internal/feedback
 	// rather than /notifications because it notifies nobody -- it opens
 	// an issue in a private GitHub repo.
@@ -186,6 +190,17 @@ func outboxRegistrations(d Deps) []outbox.Registration {
 			Path:   practiceDeletionOutboxPath,
 			Door:   outbox.NotificationDoor,
 			Worker: d.PracticeDeletionWorker,
+		},
+		{
+			// #1548's email to each Owner before a material change to the
+			// Terms or the Privacy Policy, whose write site is
+			// legalnotice.PublishHandler. No Nudge, for the same reason as
+			// #871's above: the email is due 30 days or more before the
+			// date it is about, so Cloud Scheduler's cadence is soon
+			// enough.
+			Path:   legalNoticeOutboxPath,
+			Door:   outbox.NotificationDoor,
+			Worker: d.LegalNoticeWorker,
 		},
 		{
 			// #1524's private-GitHub-issue outbox, whose write sites are

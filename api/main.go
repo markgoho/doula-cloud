@@ -25,6 +25,7 @@ import (
 	"doula-cloud/api/internal/engagementrequest"
 	"doula-cloud/api/internal/feedback"
 	"doula-cloud/api/internal/internalauth"
+	"doula-cloud/api/internal/legalnotice"
 	"doula-cloud/api/internal/mail"
 	"doula-cloud/api/internal/mailsuppress"
 	"doula-cloud/api/internal/mfarecoverymail"
@@ -254,6 +255,10 @@ func main() {
 	// voice, the same voice every other Practice-wide Notification here
 	// speaks.
 	practiceDeletionOutboxWorker := practicedeletion.Worker{Mailer: platformMailer}
+	// #1548: the email before a material change to the Terms or the
+	// Privacy Policy, Platform voice, so a reply asking for a refund
+	// reaches support@.
+	legalNoticeOutboxWorker := legalnotice.NewWorker(platformMailer, legalDocuments)
 
 	// #443. The HTTP client is shared by both and is deliberately
 	// short-timeout: a probe is a CDN fetch of a static file, and a
@@ -358,6 +363,7 @@ func main() {
 			Now:    now,
 		},
 		PracticeDeletionWorker: practiceDeletionOutboxWorker,
+		LegalNoticeWorker:      legalNoticeOutboxWorker,
 		FeedbackIssueWorker:    feedbackIssueWorker,
 
 		ExpectedOrigins: resolveExpectedOrigins(),

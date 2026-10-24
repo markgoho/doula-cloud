@@ -15,6 +15,7 @@ import (
 	"doula-cloud/api/internal/feedback"
 	"doula-cloud/api/internal/idempotency"
 	"doula-cloud/api/internal/internalauth"
+	"doula-cloud/api/internal/legalnotice"
 	"doula-cloud/api/internal/mailsuppress"
 	"doula-cloud/api/internal/mfarecoverymail"
 	"doula-cloud/api/internal/objectstore"
@@ -127,6 +128,9 @@ type Deps struct {
 	// PracticeDeletionWorker is #871's day-23 reminder and day-30
 	// finalization for a Practice deleting itself.
 	PracticeDeletionWorker practicedeletion.Worker
+	// LegalNoticeWorker is #1548's email to each Owner before a material
+	// change to the Terms or the Privacy Policy takes effect.
+	LegalNoticeWorker legalnotice.Worker
 	// FeedbackIssueWorker is #1524's second worker that mails nobody: it
 	// opens a private GitHub issue for a piece of Feedback.
 	FeedbackIssueWorker feedback.IssueWorker
