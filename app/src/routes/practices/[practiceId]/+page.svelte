@@ -128,9 +128,6 @@
 		);
 	});
 
-	// The whole hub is reloaded rather than the one Offer patched out:
-	// accepting an Offer supersedes every other open Offer on the same
-	// Engagement, and it can spend a credit, so the rail is stale too.
 	// #1533: the close is the BFF's to keep, so it holds on every device.
 	// The control is gone once it works, so focus goes to the start of the
 	// main content rather than falling to the document.
@@ -140,6 +137,9 @@
 		document.querySelector<HTMLElement>('#main')?.focus();
 	}
 
+	// The whole hub is reloaded rather than the one Offer patched out:
+	// accepting an Offer supersedes every other open Offer on the same
+	// Engagement, and it can spend a credit, so the rail is stale too.
 	async function handleDecide(offerId: string, action: 'accept' | 'decline') {
 		await decideOffer(apiFetchWithSession, page.params.practiceId!, offerId, action);
 		await load();
