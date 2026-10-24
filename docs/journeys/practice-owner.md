@@ -2,7 +2,7 @@
 
 - **Persona**: [practice-owner.md](../personas/practice-owner.md)
 - **Goal**: see the whole Practice at once — who is on which Engagement, which Contracts are unsigned, which Invoices are unpaid — without asking four people
-- **Entry point**: already has a Practice; signs in at `/login`
+- **Entry point**: cold signup at `/signup` (Stage 0); from Stage 1 on she already has a Practice and signs in at `/login`
 - **Done looks like**: a new Doula has accepted an invitation, holds the Doula role, and is on a live Engagement. Renata can see, in one place, every Engagement in the Practice and its Contract and Invoice state.
 
 > **This persona is contradicted by the schema.** Her file once stated that she puts a Doula on an Engagement and that the new Doula is then on a live Engagement. The `engagements` table has no staff column (`00005_client_engagement.sql`); only `visits.staff_id` exists. The need is real and stays in this map as Stage 4. The persona sentence that asserted the capability exists has since been revised. See RA-G4.
@@ -24,6 +24,31 @@ Renata is a domain expert. Her language and `GLOSSARY.md` mostly agree, which is
 | Attachment | "the assignment", "who is assigned to whom" | `GLOSSARY.md` avoids "Assignment" for an Attachment, the record that a Doula is on an Engagement, and keeps the word for a Visit, whose `staff_id` is assigned |
 
 ## Stages
+
+### Stage 0 — Sign up the agency and start work with the first Client
+
+The route that `docs/onboarding-route.md` specifies: three acts, four presses, five screens, from `/signup` to the Engagement's page, which is First Value ([ADR-0048](../adr/0048-nothing-holds-a-practice-here-but-the-next-family.md)). It is the same route that Maya Okonkwo walks in her stages 1 and 3, with one answer that differs. The stage is numbered 0 so that stages 1 to 9, and each step id that another document cites, keep their numbers.
+
+**Thinking**: "I have a team and a waiting list. Is this for an agency, or for one doula on her own?" **Pain points**: nothing on the route says that the Practice is for a team, by decision (#1515): the form and the empty Practice are one set of words for a solo Owner and for her. The one place where her Practice differs is the fourth screen, where "Who is the Doula?" waits for her answer because her Practice holds more than one employee Doula. Her Doulas are on the list only if they accepted an Invitation before she starts work; the route itself sends no Invitation, and nothing on it says that a Doula can be put on the Engagement later.
+
+**Budget**:
+
+* **Screens**: 5 (Hick's Law, Flow)
+* **Decisions**: 7 (Hick's Law, Miller's Law)
+* **Memory**: yes (Working Memory)
+* **Confirmation**: yes (Peak-End Rule)
+* **Cold**: yes (Paradox of the Active User)
+* **320px**: yes (ADR-0024)
+
+The stage has no Time line, because signup and the first Client are not acts that she repeats.
+
+- **0.1** — Open `/signup`. The heading is "Sign up your Practice". The fields, in order: First name, Last name, Practice name (optional), the state she works from, Timezone, Email, Password. Then the role notice, then directly above **Create Practice** the sentence "By creating your Practice, you agree to the Terms of Service and the Privacy Policy.", whose two links open in a new tab. There is no checkbox, no second password field, and no question that asks if she is a solo Owner or an agency.
+- **0.2** — Fill the form, with "Rooted Birth Collective" as the Practice name because the agency does not work under her own name, and press **Create Practice** (`POST /api/staff/signup`). Act 1, press 1. Her membership holds Owner, Admin and Doula, with the Employment type `employee`, and the press writes the Practice's `terms_accepted` Activity row (#1547, ADR-0053).
+- **0.3** — Land on the empty Practice, `/practices/[practiceId]`, with no screen between and no second factor asked for (#1531). The heading is "Welcome to Rooted Birth Collective". The words, the Credits sentence ("Adding a Client is free. Starting work with a Client uses 1 Credit, and this Practice has 3 Welcome credits.") and one link, **Add your first Client**. No Getting paid card, no second-factor notice and no link to the Invitation form are on it.
+- **0.4** — Press **Add your first Client**. Act 2, press 2. The name question opens, "What is the Client's name?", with no search in front of it (#1609).
+- **0.5** — Answer the name and press **Save and continue**. Press 3. The Client is saved, and nothing is spent. The Start work form opens and says "{given name} saved as a Client." (#1710), then "Starting work with {name} uses 1 Credit. This Practice has 3 Welcome credits. After this, it has 2." (#1612).
+- **0.6** — Read "Who is the Doula?". Her two Doulas, Priya Raman and Jo Mercer, accepted Invitations as employee Doulas before she added her first Client, so the Practice holds three employee Doulas: "Renata Alvarez (you)" first, then each employee Doula, then "No Doula yet". **No option is selected**, so this is the one answer that she gives and a solo Owner does not (#1515, #1596). A press of **Start work with {name}** with no answer is refused: "Select who the Doula is, or select No Doula yet".
+- **0.7** — Answer **No Doula yet**, with the kind of work and the due date, and press **Start work with {name}**. Act 3, press 4. She is her own approver, so the Engagement exists, one Credit is locked, and nobody is attached. She lands on the Engagement's page, which says "Work with {name} started.": First Value. The Doula is "No Doula yet", and the On call section says "Nobody is on this birth yet." A Doula is put on the Engagement after First Value, by an Offer or from the Engagement's page (#1598), and that is not on this route.
 
 ### Stage 1 — Sign in and choose the Practice
 
