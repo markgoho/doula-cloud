@@ -211,6 +211,7 @@ func TestLegal_RefusesAVersionItCannotPlace(t *testing.T) {
 	for name, value := range map[string]string{
 		"not JSON":         `terms`,
 		"an unknown field": `[{"document":"terms","effective":"2099-01-01","material":true,"change":"x","priceRise":"y"}]`,
+		"a wrong type":     `[{"document":"terms","effective":"2099-01-01","material":"yes","change":"x"}]`,
 		"no such document": `[{"document":"cookies","effective":"2099-01-01","material":true,"change":"x"}]`,
 		"not a date":       `[{"document":"terms","effective":"next year","material":true,"change":"x"}]`,
 		"not later":        `[{"document":"terms","effective":"2026-09-29","material":true,"change":"x"}]`,

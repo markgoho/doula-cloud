@@ -31,7 +31,6 @@ import (
 	"errors"
 	"fmt"
 	"log"
-	"strings"
 	"sync/atomic"
 	"time"
 
@@ -127,11 +126,9 @@ func Legal(ctx context.Context, getenv func(string) string, db *sql.DB, shipped 
 	if err := requireStack(ctx, getenv, db); err != nil {
 		return nil, err
 	}
-	decoder := json.NewDecoder(strings.NewReader(raw))
-	decoder.DisallowUnknownFields()
-	var versions []appendedVersion
-	if err := decoder.Decode(&versions); err != nil {
-		return nil, fmt.Errorf("stackswitch: %s: %w", LegalVar, err)
+	versions, err := decodeVersions(raw)
+	if err != nil {
+		return nil, err
 	}
 	history := make([]legal.Document, len(shipped))
 	for i, doc := range shipped {
@@ -144,6 +141,34 @@ func Legal(ctx context.Context, getenv func(string) string, db *sql.DB, shipped 
 		}
 	}
 	return history, nil
+}
+
+// knownFields is appendedVersion's JSON names. A field outside them, such
+// as a price, is refused rather than dropped: a version that silently
+// lost a field would publish something other than what the spec wrote.
+var knownFields = map[string]bool{"document": true, "effective": true, "material": true, "change": true}
+
+// decodeVersions reads LegalVar's list. json.Unmarshal, not a Decoder
+// with DisallowUnknownFields: a Decoder outside apierr is what
+// apierr's TestNoDirectJSONUsage refuses, so the field names are
+// checked by hand instead.
+func decodeVersions(raw string) ([]appendedVersion, error) {
+	var fields []map[string]json.RawMessage
+	if err := json.Unmarshal([]byte(raw), &fields); err != nil {
+		return nil, fmt.Errorf("stackswitch: %s: %w", LegalVar, err)
+	}
+	for _, f := range fields {
+		for name := range f {
+			if !knownFields[name] {
+				return nil, fmt.Errorf("stackswitch: %s: unknown field %q", LegalVar, name)
+			}
+		}
+	}
+	var versions []appendedVersion
+	if err := json.Unmarshal([]byte(raw), &versions); err != nil {
+		return nil, fmt.Errorf("stackswitch: %s: %w", LegalVar, err)
+	}
+	return versions, nil
 }
 
 // appendVersion appends v to its document in history.
