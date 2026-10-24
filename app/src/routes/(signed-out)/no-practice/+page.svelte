@@ -80,9 +80,14 @@
 	</p>
 	<p>There are two ways on from here.</p>
 	<ul>
+		<!-- A `<p>`, because the link is inside a sentence: `Link` reads the
+		     paragraph as that, and draws inline rather than as a 44px box
+		     that would push the sentence's lines apart (#1828). -->
 		<li>
-			<Link href={resolve('/(signed-out)/signup')} label="Set up a Practice" /> — you keep this email
-			address and password, and this account becomes its Owner.
+			<p>
+				<Link href={resolve('/(signed-out)/signup')} label="Set up a Practice" /> — you keep this
+				email address and password, and this account becomes its Owner.
+			</p>
 		</li>
 		<li>
 			Wait for an invitation. An Owner at an existing Practice can invite this email address, and

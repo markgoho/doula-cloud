@@ -132,7 +132,8 @@
 		 * turns off `min-*-size`, which an inline box does not take.
 		 *
 		 * The rule is the paragraph, not the words beside the link: a link
-		 * that stands alone is not written inside a `<p>`.
+		 * that stands alone is not written inside a `<p>`, which
+		 * `standaloneLink.usage.spec.ts` holds.
 		 */
 		:global(p) a {
 			display: inline;
@@ -148,20 +149,20 @@
 			vertical-align: middle;
 		}
 
-		/* A table row is 40px (the brief's Density section), and a 44px
-		   target cannot sit in it without growing it. Until #1843 decides
-		   which rule wins, a link in a cell keeps the row's height. */
-		:global(td) a {
-			min-block-size: 0;
-			min-inline-size: 0;
-		}
-
 		:global(p) a > :global(svg:first-child) {
 			margin-inline-end: var(--space-1);
 		}
 
 		:global(p) a > :global(svg:last-child) {
 			margin-inline-start: var(--space-1);
+		}
+
+		/* A table row is 40px (the brief's Density section), and a 44px
+		   target cannot sit in it without growing it. Until #1843 decides
+		   which rule wins, a link in a cell keeps the row's height. */
+		:global(td) a {
+			min-block-size: 0;
+			min-inline-size: 0;
 		}
 
 		/*
