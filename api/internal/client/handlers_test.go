@@ -1275,6 +1275,9 @@ func TestListHandler_OpenEngagementsRollup_MultipleOpenNoneDroppedCompletedExclu
 	}
 
 	birth := byID[birthEngagement]
+	if birth.Kind != "birth" {
+		t.Fatalf("birth line kind = %q, want birth", birth.Kind)
+	}
 	if birth.EngagementStatus != "active" {
 		t.Fatalf("birth line status = %q, want active", birth.EngagementStatus)
 	}
@@ -1297,6 +1300,9 @@ func TestListHandler_OpenEngagementsRollup_MultipleOpenNoneDroppedCompletedExclu
 	postpartum, ok := byID[postpartumEngagement]
 	if !ok {
 		t.Fatalf("postpartum Engagement missing from rollup: %+v", rollup)
+	}
+	if postpartum.Kind != "postpartum" {
+		t.Fatalf("postpartum line kind = %q, want postpartum", postpartum.Kind)
 	}
 	if postpartum.EngagementStatus != "intake" {
 		t.Fatalf("postpartum line status = %q, want intake", postpartum.EngagementStatus)

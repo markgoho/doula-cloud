@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
+	import { resolve } from '$app/paths';
 	import { page } from '#lib/appState.svelte.js';
 	import { apiFetchWithSession } from '#lib/api.js';
 	import {
@@ -493,6 +494,11 @@
 {/snippet}
 
 {#snippet engagementsSection()}
+	<!--
+		#1511: each row's kind opens that Engagement's page, which holds
+		its Contract, Care Plan, Birth Plan, Visits and Messages. A new
+		Engagement has none of them, so no other screen links to it yet.
+	-->
 	<DataTable
 		columns={[
 			{ label: 'Kind', accessor: (row: EngagementSummary) => (row.kind === 'birth' ? 'Birth' : 'Postpartum') },
@@ -500,6 +506,11 @@
 			{ label: 'Started', accessor: (row: EngagementSummary) => formattedDate(row.createdAt) }
 		]}
 		rows={detail!.engagements}
+		rowHref={(row: EngagementSummary) =>
+			resolve('/practices/[practiceId]/engagements/[engagementId]', {
+				practiceId: page.params.practiceId!,
+				engagementId: row.engagementId
+			})}
 		hasMore={false}
 		emptyMessage="No Engagements yet."
 	/>

@@ -81,7 +81,11 @@ type ListItem struct {
 // a "fetch full, shape by role" split: Go, not SQL, is where the role
 // check is easiest to see and to test.
 type OpenEngagement struct {
-	EngagementID     string  `json:"engagementId"`
+	EngagementID string `json:"engagementId"`
+	// Kind is 'birth' or 'postpartum'. A Client can hold one open
+	// Engagement of each kind at once (ADR-0017), so the kind is what
+	// names a rollup line and its link to the Engagement (#1511).
+	Kind             string  `json:"kind"`
 	EngagementStatus string  `json:"engagementStatus"`
 	ContractStatus   *string `json:"contractStatus,omitempty"`
 	DoulaName        *string `json:"doulaName,omitempty"`
@@ -312,6 +316,7 @@ func listAttachedClients(ctx context.Context, tx *sql.Tx, practiceID, staffID st
 type rawOpenEngagement struct {
 	clientID           string
 	engagementID       string
+	kind               string
 	engagementStatus   string
 	contractStatus     sql.NullString
 	doulaName          sql.NullString
@@ -356,7 +361,7 @@ func attachOpenEngagements(ctx context.Context, tx *sql.Tx, list []ListItem, rea
 // how many clientIDs the caller passes -- staffIdx and attachedOnlyIdx
 // below always come after every clientID placeholder, never before.
 const openEngagementRollupQueryTemplate = `
-	SELECT e.client_id, e.id, e.status, ct.status,
+	SELECT e.client_id, e.id, e.kind, e.status, ct.status,
 	       (SELECT string_agg(s.name, ', ' ORDER BY s.last_name, s.first_name)
 	        FROM engagement_attachments ea
 	        JOIN staff s ON s.id = ea.staff_id
@@ -455,7 +460,7 @@ func fetchOpenEngagements(ctx context.Context, tx *sql.Tx, clientIDs []string, s
 	for rows.Next() {
 		var raw rawOpenEngagement
 		if err := rows.Scan(
-			&raw.clientID, &raw.engagementID, &raw.engagementStatus, &raw.contractStatus,
+			&raw.clientID, &raw.engagementID, &raw.kind, &raw.engagementStatus, &raw.contractStatus,
 			&raw.doulaName, &raw.invoiceStatus, &raw.invoiceAmountCents, &raw.feeCents,
 		); err != nil {
 			// coverage:ignore reason: row scan failure, not exercised by unit tests
@@ -484,6 +489,7 @@ func fetchOpenEngagements(ctx context.Context, tx *sql.Tx, clientIDs []string, s
 func shapeOpenEngagement(reader staffauth.Reader, raw rawOpenEngagement) OpenEngagement {
 	oe := OpenEngagement{
 		EngagementID:     raw.engagementID,
+		Kind:             raw.kind,
 		EngagementStatus: raw.engagementStatus,
 	}
 	if raw.contractStatus.Valid {
