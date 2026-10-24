@@ -23,6 +23,7 @@ var wantOutboxPaths = []string{
 	"/api/internal/notifications/process-connect-nudge-outbox",
 	"/api/internal/notifications/process-coverage-gap-outbox",
 	"/api/internal/notifications/process-engagement-request-outbox",
+	legalNoticeOutboxPath,
 	"/api/internal/notifications/process-low-credit-outbox",
 	"/api/internal/notifications/process-mfa-recovery-outbox",
 	"/api/internal/notifications/process-offer-outbox",
@@ -113,7 +114,7 @@ func TestOutboxRegistrations_OnlyTheAuthMailOutboxesAreUnnudged(t *testing.T) {
 	want := []string{
 		staffEmailChangeOutboxPath, staffTokenMailOutboxPath,
 		portalMagicLinkOutboxPath, portalAddressChangeOutboxPath,
-		practiceDeletionOutboxPath,
+		practiceDeletionOutboxPath, legalNoticeOutboxPath,
 	}
 	sort.Strings(want)
 	if !reflect.DeepEqual(unnudged, want) {

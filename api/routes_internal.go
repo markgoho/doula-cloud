@@ -2,6 +2,8 @@ package main
 
 import (
 	"doula-cloud/api/internal/billing"
+	"doula-cloud/api/internal/legal"
+	"doula-cloud/api/internal/legalnotice"
 	"doula-cloud/api/internal/outbox"
 	"doula-cloud/api/internal/sitebuild"
 	"doula-cloud/api/internal/staffauth"
@@ -61,4 +63,15 @@ func registerInternalRoutes(g *staffauth.GatedRouter, d Deps) {
 	// record who acted and when; there is no endpoint that undoes either.
 	g.Write("POST /api/internal/staffauth/pilot-allowlist", staffauth.PilotAllowlistHandler(d.DB, d.InternalAuth))
 	g.Write("POST /api/internal/staffauth/pilot-gate/open", staffauth.PilotGateOpenHandler(d.DB, d.InternalAuth))
+	// #1548's publish act, on the same guard and in the pilot gate's
+	// shape: a new version of the Terms or the Privacy Policy is written
+	// into api/internal/legal, and the founder then publishes it by name.
+	// A material version queues the email to each Owner, and is refused
+	// fewer than 30 days before it takes effect.
+	g.Write("POST /api/internal/legal/publish", legalnotice.PublishHandler(d.DB, d.InternalAuth, legalDocuments))
 }
+
+// legalDocuments is the version history the BFF publishes and mails
+// from: the two documents in api/internal/legal, the one place it holds
+// them (#1556).
+var legalDocuments = []legal.Document{legal.Terms, legal.Privacy}
