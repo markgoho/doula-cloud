@@ -7,10 +7,10 @@
 	 *
 	 * There is no server record until the save, so there is nothing for a
 	 * `load` to return. `intakeDraft.svelte.ts` holds what has been typed
-	 * and this layout opens it. What the search typed is already in it:
-	 * the door (`+page.ts`) seeds the draft from the search's hand-off,
-	 * which never touches the URL (#1829). Its own `+layout.ts` is only
-	 * the contractor gate (#1609).
+	 * and this layout opens it, seeded from what the search handed over in
+	 * module memory, which never touches the URL (#1829,
+	 * `#lib/intakeHandoff.ts`). Its own `+layout.ts` is only the
+	 * contractor gate (#1609).
 	 *
 	 * Intake reads nothing from the server before it asks (#1611): the
 	 * name question is the same at every Practice, and the Practice's own
@@ -21,6 +21,7 @@
 	import { page } from '#lib/appState.svelte.js';
 	import { intakeDraft } from '#lib/intakeDraft.svelte.js';
 	import { intakeOrigin } from '#lib/intakeJourney.js';
+	import { takeIntakeHandoff } from '#lib/intakeHandoff.js';
 	import ContractorDoor from '../ContractorDoor.svelte';
 	import type { LayoutProps as LayoutProperties } from './$types';
 
@@ -42,11 +43,16 @@
 		// The door asks nothing, so it opens no draft.
 		if (isContractor) return;
 		untrack(() => {
-			// After the door, the draft is already open for this Practice and
-			// this keeps it. After a reload, the module is empty, and this
-			// reads the draft back from its sessionStorage mirror -- the
-			// search's values with it (#1829).
+			// After a reload the module is empty, and this reads the draft
+			// back from its sessionStorage mirror -- the search's values with
+			// it, since `carry` mirrors them (#1829).
 			intakeDraft.start(practiceId);
+			// Taken here, as the question mounts, and not in the door's load:
+			// SvelteKit runs that load to preload a link the pointer rests
+			// on, before the click that hands the values over. Only a click
+			// on the search's "Add a new Client" hands anything over, and it
+			// always passes the door, which has cleared the draft.
+			intakeDraft.carry(takeIntakeHandoff(practiceId));
 			// #1609: a link that opens the name question directly names the
 			// screen it is on, and the name question's Back goes there. A
 			// later visit that carries none -- the duplicate page's Back, a

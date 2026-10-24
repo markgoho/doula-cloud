@@ -13,11 +13,14 @@
  * redirect does not carry it.
  *
  * The search sets the hand-off as its "Add a new Client" link is
- * followed, and the door takes it once -- the same take-once shape as
- * `#lib/outcome.ts`. A link opened in a new tab gets an empty module, so
- * intake there starts blank. A reload of the name question keeps the
- * values because the door wrote them into the draft's own sessionStorage
- * mirror (`intakeDraft.carry`), not because this module kept them.
+ * followed, and the intake layout takes it once as the name question
+ * mounts -- the same take-once shape as `#lib/outcome.ts`. Not the
+ * door's load: SvelteKit runs that to preload a link the pointer rests
+ * on, before the click. A link opened in a new tab gets an empty
+ * module, so intake there starts blank. A reload of the name question
+ * keeps the values because the layout wrote them into the draft's own
+ * sessionStorage mirror (`intakeDraft.carry`), not because this module
+ * kept them.
  */
 import type { ClientSearchFields } from './client.js';
 

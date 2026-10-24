@@ -48,19 +48,20 @@ async function setup({ isContractor = false, search = '' }: SetupOptions = {}) {
 }
 
 /*
- * The way a reader arrives from the search (#1829): the search hands
- * what was typed to the door, the door (`+page.ts`) clears the draft,
- * seeds it from the hand-off and redirects to the name question, and
- * the layout opens there with no Client field in its URL.
+ * The way a reader arrives from the search (#1829), in the order a real
+ * pointer gives it: SvelteKit preloads the link as the pointer rests on
+ * it, so the door (`+page.ts`) clears the draft and redirects first; the
+ * click then hands over what was typed; and the layout opens the name
+ * question, with no Client field in its URL, and takes it.
  */
 async function enterFromSearch(fields: Partial<ClientSearchFields>) {
-	handOffToIntake(practiceId, { name: '', dateOfBirth: '', email: '', phone: '', ...fields });
 	expect(() =>
 		doorLoad({
 			params: { practiceId },
 			url: new URL(`https://example.test/practices/${practiceId}/clients/new`)
 		} as unknown as Parameters<typeof doorLoad>[0])
 	).toThrow();
+	handOffToIntake(practiceId, { name: '', dateOfBirth: '', email: '', phone: '', ...fields });
 	await setup();
 }
 

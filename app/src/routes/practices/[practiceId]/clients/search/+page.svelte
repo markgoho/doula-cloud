@@ -138,7 +138,7 @@
 	 * The miss's next step: intake's door, with no Client field in its
 	 * URL (#1829). Every key typed here is handed over as the link is
 	 * followed, so none of it is retyped (see the module comment), and
-	 * the door seeds the draft with it.
+	 * intake seeds its draft with it.
 	 */
 	function startIntakeHref(): string {
 		return resolve('/practices/[practiceId]/clients/new', {

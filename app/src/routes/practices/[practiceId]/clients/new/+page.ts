@@ -18,24 +18,24 @@
  * the draft is mirrored to sessionStorage, so a search for Anne after a
  * search for Sarah reopened Sarah's half-typed record.
  *
- * ## Why the search's values arrive here, and not in the URL
+ * ## Why the search's values are not read here
  *
  * What the search typed is a Client's name, date of birth, email and
  * phone. Carried as query params (#498's first shape) they were in the
  * address bar, the browser history and any reload's request (#1829). The
  * search now hands them over in module memory (`#lib/intakeHandoff.ts`),
- * and the door takes them, once, into the draft it has just cleared.
+ * and the layout takes them as the name question mounts, not this load:
+ * SvelteKit runs a load to preload a link the pointer rests on, before
+ * the click that hands the values over.
  */
 import { redirect } from '@sveltejs/kit';
 import { resolve } from '$app/paths';
 import { intakeDraft } from '#lib/intakeDraft.svelte.js';
-import { takeIntakeHandoff } from '#lib/intakeHandoff.js';
 import type { PageLoad } from './$types';
 
 export const load: PageLoad = ({ params, url }) => {
 	intakeDraft.scope = params.practiceId;
 	intakeDraft.clear();
-	intakeDraft.carry(takeIntakeHandoff(params.practiceId));
 	redirect(
 		307,
 		`${resolve('/practices/[practiceId]/clients/new/name', { practiceId: params.practiceId })}${url.search}`

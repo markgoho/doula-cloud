@@ -168,7 +168,7 @@ export class IntakeDraft {
 	 * `carried` seeds a draft that has nothing in it yet, and never
 	 * overwrites one that does: the details journey opens it with the
 	 * answers already on her record (#1610). Intake seeds through `carry`
-	 * instead, at its door.
+	 * instead, as its layout mounts.
 	 */
 	start(scope: string, carried: Partial<IntakeAnswers> = {}): void {
 		if (this.scope !== scope) {

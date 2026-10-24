@@ -1,7 +1,7 @@
 import { isRedirect } from '@sveltejs/kit';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { blankAnswers, intakeDraft } from '#lib/intakeDraft.svelte.js';
-import { handOffToIntake } from '#lib/intakeHandoff.js';
+import { handOffToIntake, takeIntakeHandoff } from '#lib/intakeHandoff.js';
 import { load } from './+page.js';
 import { practiceId } from './intakeFixture.js';
 
@@ -25,25 +25,19 @@ beforeEach(() => {
 });
 
 describe('the intake door, clients/new/+page.ts', () => {
-	// #1829: the search's fields reach intake in module memory, so the
-	// URL the door sends the reader to carries none of them.
-	it('seeds the draft with what the search handed over, and puts none of it in the URL', () => {
-		handOffToIntake(practiceId, {
-			name: 'Ana',
-			dateOfBirth: '1990-01-02',
-			email: 'ana@example.com',
-			phone: '555-0100'
-		});
+	/*
+	 * #1829: the search's fields reach intake in module memory, so the
+	 * URL the door sends the reader to carries none of them. The door
+	 * leaves the hand-off for the layout to take: SvelteKit runs this
+	 * load to preload a link, before the click that hands anything over.
+	 */
+	it('puts no Client field in the URL, and leaves the hand-off for the layout', () => {
+		const fields = { name: 'Ana', dateOfBirth: '1990-01-02', email: 'ana@example.com', phone: '555-0100' };
+		handOffToIntake(practiceId, fields);
 
-		const location = enter();
-
-		expect(location).toBe(`/practices/${practiceId}/clients/new/name`);
-		expect(intakeDraft.answers).toMatchObject({
-			givenName: 'Ana',
-			dateOfBirth: '1990-01-02',
-			email: 'ana@example.com',
-			phone: '555-0100'
-		});
+		expect(enter()).toBe(`/practices/${practiceId}/clients/new/name`);
+		expect(intakeDraft.answers).toEqual(blankAnswers());
+		expect(takeIntakeHandoff(practiceId)).toEqual(fields);
 	});
 
 	// The second Client of the day is not the first one again.
