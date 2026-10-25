@@ -67,7 +67,8 @@ async function setup(options: MockOptions = {}) {
 	// 46rem. Every assertion here is about the <table>, and the stacked
 	// copy of a row's actions is hidden rather than absent, so the wider
 	// viewport is what keeps one accessible name per control.
-	await testPage.viewport(1024, 800);
+	// Above this route's own table floor (#1945, its +page.svelte), so the <table> renders.
+	await testPage.viewport(3200, 800);
 	mockApi(options);
 	await render(Page, {});
 }

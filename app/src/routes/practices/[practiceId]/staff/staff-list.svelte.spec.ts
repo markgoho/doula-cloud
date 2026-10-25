@@ -206,7 +206,8 @@ function invitationsTable() {
 async function setup(options: MockOptions = {}) {
 	// DataTable's own content floor (#508) stacks it into a <dl> below
 	// 46rem, and this file's assertions are about the <table> specifically.
-	await testPage.viewport(1024, 800);
+	// Above this route's own table floor (#1945, its +page.svelte), so the <table> renders.
+	await testPage.viewport(3200, 800);
 	mockApi(options);
 	await render(Page, {});
 	// The roster arrives from onMount, so `render` returning is not the

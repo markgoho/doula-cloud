@@ -569,29 +569,33 @@
 			<!-- hasMore is always false: the roster is a bounded population
 			     (server-capped at maxMembers, #446) and never paginates, unlike
 			     Invitations below. -->
-			<DataTable
-				columns={memberColumns}
-				rows={members}
-				rowActions={{ label: 'Actions', content: memberActions }}
-				hasMore={false}
-				emptyMessage="No Staff yet."
-			/>
+			<div class="members-table">
+				<DataTable
+					columns={memberColumns}
+					rows={members}
+					rowActions={{ label: 'Actions', content: memberActions }}
+					hasMore={false}
+					emptyMessage="No Staff yet."
+				/>
+			</div>
 		{/if}
 
 		<Heading level={2} text="Pending invitations" />
 		{#if invitations.items.length === 0}
 			<Text text="No pending invitations." />
 		{:else}
-			<DataTable
-				columns={invitationColumns}
-				rows={invitations.items}
-				rowActions={{ label: 'Actions', content: invitationActions }}
-				hasMore={invitations.hasMore}
-				onLoadMore={() => invitations.loadMore()}
-				isLoadingMore={invitations.isLoadingMore}
-				loadMoreError={invitations.loadMoreError}
-				emptyMessage="No pending invitations."
-			/>
+			<div class="invitations-table">
+				<DataTable
+					columns={invitationColumns}
+					rows={invitations.items}
+					rowActions={{ label: 'Actions', content: invitationActions }}
+					hasMore={invitations.hasMore}
+					onLoadMore={() => invitations.loadMore()}
+					isLoadingMore={invitations.isLoadingMore}
+					loadMoreError={invitations.loadMoreError}
+					emptyMessage="No pending invitations."
+				/>
+			</div>
 		{/if}
 	{/if}
 {/snippet}
@@ -600,6 +604,54 @@
 
 <style>
 	@layer components {
+		/* The Pending invitations table's content floor (#1945): below it the table's cells
+		   wrap to more lines than at the old type floors, so it shows its
+		   records -- the founder's answer on #1945. Measured 2026-10-25 on
+		   this route's fixture on the drag surface:
+		   its natural width fits its column from 1459px.
+		   `DataTable.svelte`'s floor comment says why the floor is the
+		   route's own. */
+		.invitations-table {
+			container: invitations-table / inline-size;
+		}
+
+		.invitations-table > :global(*) {
+			font-size: var(--text-body-size);
+			--data-table-table-display: none;
+			--data-table-records-display: block;
+		}
+
+		@container invitations-table (min-width: 91.25rem) {
+			.invitations-table > :global(*) {
+				--data-table-table-display: table;
+				--data-table-records-display: none;
+			}
+		}
+
+		/* The members table's content floor (#1945): below it the table's cells
+		   wrap to more lines than at the old type floors, so it shows its
+		   records -- the founder's answer on #1945. Measured 2026-10-25 on
+		   this route's fixture on the drag surface:
+		   its natural width fits its column from 2416px.
+		   `DataTable.svelte`'s floor comment says why the floor is the
+		   route's own. */
+		.members-table {
+			container: members-table / inline-size;
+		}
+
+		.members-table > :global(*) {
+			font-size: var(--text-body-size);
+			--data-table-table-display: none;
+			--data-table-records-display: block;
+		}
+
+		@container members-table (min-width: 151rem) {
+			.members-table > :global(*) {
+				--data-table-table-display: table;
+				--data-table-records-display: none;
+			}
+		}
+
 		/* The list, its items and the summary are HistoryDisclosure's own
 		   (#872), since both disclosures on this row want them identical.
 		   What stays here is what belongs to one entry's own words. */

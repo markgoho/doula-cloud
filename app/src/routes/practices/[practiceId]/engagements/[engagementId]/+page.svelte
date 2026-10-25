@@ -1848,21 +1848,23 @@
 		<Notice variant="error" message={visitsError} />
 	{/if}
 
-	<DataTable
-		columns={[
-			{ label: 'Staff', accessor: (visit: Visit) => visit.staffName },
-			{ label: 'Type', accessor: (visit: Visit) => visitTypeLabel(visit.type) },
-			{ label: 'Date', accessor: (visit: Visit) => formatScheduledVisit(visit.scheduledAt) },
-			{ label: 'Notes', accessor: (visit: Visit) => visit.notes || 'No notes yet.' }
-		]}
-		rows={visits.items}
-		rowActions={{ label: 'Actions', content: visitActions }}
-		hasMore={visits.hasMore}
-		onLoadMore={() => visits.loadMore()}
-		isLoadingMore={visits.isLoadingMore}
-		loadMoreError={visits.loadMoreError}
-		emptyMessage="No Visits yet."
-	/>
+	<div class="visits-table">
+		<DataTable
+			columns={[
+				{ label: 'Staff', accessor: (visit: Visit) => visit.staffName },
+				{ label: 'Type', accessor: (visit: Visit) => visitTypeLabel(visit.type) },
+				{ label: 'Date', accessor: (visit: Visit) => formatScheduledVisit(visit.scheduledAt) },
+				{ label: 'Notes', accessor: (visit: Visit) => visit.notes || 'No notes yet.' }
+			]}
+			rows={visits.items}
+			rowActions={{ label: 'Actions', content: visitActions }}
+			hasMore={visits.hasMore}
+			onLoadMore={() => visits.loadMore()}
+			isLoadingMore={visits.isLoadingMore}
+			loadMoreError={visits.loadMoreError}
+			emptyMessage="No Visits yet."
+		/>
+	</div>
 {/snippet}
 
 <!--
@@ -2283,15 +2285,17 @@
 	{#if activityError}
 		<Notice variant="error" message={activityError} />
 	{/if}
-	<DataTable
-		columns={activityLedgerColumns()}
-		rows={activity.items}
-		hasMore={activity.hasMore}
-		onLoadMore={() => activity.loadMore()}
-		isLoadingMore={activity.isLoadingMore}
-		loadMoreError={activity.loadMoreError}
-		emptyMessage="Nothing has happened yet."
-	/>
+	<div class="activity-table">
+		<DataTable
+			columns={activityLedgerColumns()}
+			rows={activity.items}
+			hasMore={activity.hasMore}
+			onLoadMore={() => activity.loadMore()}
+			isLoadingMore={activity.isLoadingMore}
+			loadMoreError={activity.loadMoreError}
+			emptyMessage="Nothing has happened yet."
+		/>
+	</div>
 {/snippet}
 
 <!--
@@ -2326,3 +2330,55 @@
 		{ heading: 'Activity', content: activitySection }
 	]}
 />
+
+<style>
+	@layer components {
+		/* The activity ledger's content floor (#1945): below it the table's cells
+		   wrap to more lines than at the old type floors, so it shows its
+		   records -- the founder's answer on #1945. Measured 2026-10-25 on
+		   this route's fixture on the drag surface:
+		   its natural width fits its column from 1108px, for every session, in UTC (CI's zone, where the fixture's times print widest).
+		   `DataTable.svelte`'s floor comment says why the floor is the
+		   route's own. */
+		.activity-table {
+			container: activity-table / inline-size;
+		}
+
+		.activity-table > :global(*) {
+			font-size: var(--text-body-size);
+			--data-table-table-display: none;
+			--data-table-records-display: block;
+		}
+
+		@container activity-table (min-width: 69.25rem) {
+			.activity-table > :global(*) {
+				--data-table-table-display: table;
+				--data-table-records-display: none;
+			}
+		}
+
+		/* The Visits table's content floor (#1945): below it the table's cells
+		   wrap to more lines than at the old type floors, so it shows its
+		   records -- the founder's answer on #1945. Measured 2026-10-25 on
+		   this route's fixture on the drag surface:
+		   its natural width fits its column from 2066px, for every session.
+		   `DataTable.svelte`'s floor comment says why the floor is the
+		   route's own. */
+		.visits-table {
+			container: visits-table / inline-size;
+		}
+
+		.visits-table > :global(*) {
+			font-size: var(--text-body-size);
+			--data-table-table-display: none;
+			--data-table-records-display: block;
+		}
+
+		@container visits-table (min-width: 129.25rem) {
+			.visits-table > :global(*) {
+				--data-table-table-display: table;
+				--data-table-records-display: none;
+			}
+		}
+	}
+</style>

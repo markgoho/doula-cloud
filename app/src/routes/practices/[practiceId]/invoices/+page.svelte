@@ -171,17 +171,19 @@
 		<Notice variant="info" message={clientsCannotPayMessage} />
 	{/if}
 
-	<DataTable
-		{columns}
-		rows={invoices.items}
-		rowHref={engagementHref}
-		hasMore={invoices.hasMore}
-		onLoadMore={() => invoices.loadMore()}
-		isLoadingMore={invoices.isLoadingMore}
-		emptyMessage={data.isNarrowedToOverdue
-			? 'Nothing is overdue. Every unpaid invoice is still within its payment terms.'
-			: 'No invoices yet. One appears here as soon as a contract is billed.'}
-	/>
+	<div class="invoices-table">
+		<DataTable
+			{columns}
+			rows={invoices.items}
+			rowHref={engagementHref}
+			hasMore={invoices.hasMore}
+			onLoadMore={() => invoices.loadMore()}
+			isLoadingMore={invoices.isLoadingMore}
+			emptyMessage={data.isNarrowedToOverdue
+				? 'Nothing is overdue. Every unpaid invoice is still within its payment terms.'
+				: 'No invoices yet. One appears here as soon as a contract is billed.'}
+		/>
+	</div>
 
 	{#if invoices.loadMoreError}
 		<Notice message={invoices.loadMoreError} variant="error" />
@@ -189,3 +191,31 @@
 {/snippet}
 
 <ListPage title="Invoices" {intro} {content} />
+
+<style>
+	@layer components {
+		/* The invoice list's content floor (#1945): below it the table's cells
+		   wrap to more lines than at the old type floors, so it shows its
+		   records -- the founder's answer on #1945. Measured 2026-10-25 on
+		   this route's fixture on the drag surface:
+		   its natural width fits its column from 1702px.
+		   `DataTable.svelte`'s floor comment says why the floor is the
+		   route's own. */
+		.invoices-table {
+			container: invoices-table / inline-size;
+		}
+
+		.invoices-table > :global(*) {
+			font-size: var(--text-body-size);
+			--data-table-table-display: none;
+			--data-table-records-display: block;
+		}
+
+		@container invoices-table (min-width: 106.5rem) {
+			.invoices-table > :global(*) {
+				--data-table-table-display: table;
+				--data-table-records-display: none;
+			}
+		}
+	}
+</style>

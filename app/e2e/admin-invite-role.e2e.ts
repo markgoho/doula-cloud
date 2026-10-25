@@ -70,7 +70,9 @@ test('An Admin invited via the Staff invite route reaches the Credits and Staff 
 
 	// Still signed in as the Admin. The Staff roster is OwnerAndAdmin, and
 	// her own row carries exactly the role that was selected: Admin, and
-	// neither Owner nor Doula.
+	// neither Owner nor Doula. Wider than the members table's own floor
+	// (#1945), so it draws its <table> and her row is a row.
+	await page.setViewportSize({ width: 3200, height: 900 });
 	await page.goto(`/practices/${practiceId}/staff`);
 	const ownRow = page.getByRole('row', { name: /Avery Admin/ });
 	await expect(ownRow).toBeVisible();

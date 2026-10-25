@@ -196,15 +196,17 @@
 
 		<p aria-live="polite" class="summary">{summary}</p>
 
-		<DataTable
-			{columns}
-			rows={schedule.items}
-			rowHref={engagementHref}
-			hasMore={schedule.hasMore}
-			onLoadMore={() => schedule.loadMore()}
-			isLoadingMore={schedule.isLoadingMore}
-			emptyMessage="No visits are scheduled in this range. Widen the dates, or choose every doula, to see more."
-		/>
+		<div class="schedule-table">
+			<DataTable
+				{columns}
+				rows={schedule.items}
+				rowHref={engagementHref}
+				hasMore={schedule.hasMore}
+				onLoadMore={() => schedule.loadMore()}
+				isLoadingMore={schedule.isLoadingMore}
+				emptyMessage="No visits are scheduled in this range. Widen the dates, or choose every doula, to see more."
+			/>
+		</div>
 
 		{#if schedule.loadMoreError}
 			<Notice message={schedule.loadMoreError} variant="error" />
@@ -214,6 +216,30 @@
 
 <style>
 	@layer components {
+		/* The schedule's content floor (#1945): below it the table's cells
+		   wrap to more lines than at the old type floors, so it shows its
+		   records -- the founder's answer on #1945. Measured 2026-10-25 on
+		   this route's fixture on the drag surface:
+		   its natural width fits its column from 1307px.
+		   `DataTable.svelte`'s floor comment says why the floor is the
+		   route's own. */
+		.schedule-table {
+			container: schedule-table / inline-size;
+		}
+
+		.schedule-table > :global(*) {
+			font-size: var(--text-body-size);
+			--data-table-table-display: none;
+			--data-table-records-display: block;
+		}
+
+		@container schedule-table (min-width: 81.75rem) {
+			.schedule-table > :global(*) {
+				--data-table-table-display: table;
+				--data-table-records-display: none;
+			}
+		}
+
 		fieldset {
 			margin: 0;
 			padding: 0;

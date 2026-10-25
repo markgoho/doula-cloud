@@ -82,7 +82,9 @@ test('The first Client in three presses, then the Visits section', async ({ page
 	// DataTable renders a <table> and a card-view <dl> together for every
 	// row (#564, responsive layout) -- getByRole('cell', ...) targets the
 	// <table> tree specifically, since a plain getByText match on either
-	// empty message is ambiguous between the two trees.
+	// empty message is ambiguous between the two trees. Wider than the
+	// Visits table's own floor (#1945), so the <table> is the tree on screen.
+	await page.setViewportSize({ width: 3200, height: 900 });
 	await expect(page.getByRole('cell', { name: 'No Visits yet.' })).toBeVisible();
 	await page.getByRole('button', { name: 'Add a Visit' }).click();
 

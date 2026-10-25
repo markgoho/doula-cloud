@@ -47,7 +47,8 @@ async function setup(pageData: OnCallPageData = data) {
 	// view its content floor stacks into below 46rem (#508) -- the same
 	// call the schedule list's own spec makes, for the same reason. The
 	// record view is swept at 320px by the continuum check instead.
-	await testPage.viewport(1440, 900);
+	// Above this route's own table floor (#1945, its +page.svelte), so the <table> renders.
+	await testPage.viewport(3200, 900);
 	return render(Page, {
 		params: fixture.params,
 		data: { ...pageData, session: sessionStub },

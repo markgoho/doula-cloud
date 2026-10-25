@@ -157,6 +157,122 @@ export function remToPx(rem: number): number {
 	return rem * 16;
 }
 
+export function atWidth(frame: HTMLElement, px: number): void {
+	frame.style.inlineSize = `${px}px`;
+	void frame.offsetWidth;
+}
+
+/*
+ * The element under `frame` that declares the condition's named container,
+ * or undefined for an unnamed condition or one the frame itself answers.
+ */
+export function conditionContainer(
+	frame: HTMLElement,
+	condition: Condition
+): HTMLElement | undefined {
+	const { containerName } = condition;
+	if (containerName === undefined) return undefined;
+	return [...frame.querySelectorAll<HTMLElement>('*')].find((element) =>
+		getComputedStyle(element).containerName.split(' ').includes(containerName)
+	);
+}
+
+// A computed padding is always a px length.
+function padding(value: string): number {
+	return Number(value.replace('px', ''));
+}
+
+function contentInlineSize(container: HTMLElement): number {
+	const style = getComputedStyle(container);
+	return (
+		container.clientWidth - padding(style.paddingInlineStart) - padding(style.paddingInlineEnd)
+	);
+}
+
+/*
+ * Sizes the frame so the condition's own container has `px` of CONTENT box,
+ * and returns the frame's width (#1851). A container query reads the content
+ * box of the element that declares the container, so a container with its
+ * own padding -- the Staff bar's header carries the page gutter -- turns its
+ * wide tree on when the room INSIDE that padding reaches the floor. A frame
+ * set to the floor gave the header that much border box, which is the bar
+ * one gutter pair narrower than any the app renders with the wide tree on:
+ * the nav got 866px where the app gives it 912px. The frame-width overflow
+ * read could not see the difference, because what spilled landed in the
+ * header's own padding; the box criterion can.
+ *
+ * The gutter is sized against its own container, so one correction can move
+ * it again; a few turns settle it. An unnamed condition, or a container the
+ * frame is itself, keeps the frame at `px`. A route's container sits inside
+ * the route's own page gutters (#1945), which this closes the same way.
+ * How close is close enough is the caller's `tolerance`, for the reason
+ * the measurements below give for taking none of their own.
+ */
+export function atConditionWidth(
+	frame: HTMLElement,
+	condition: Condition,
+	px: number,
+	tolerance: number
+): number {
+	atWidth(frame, px);
+	const container = conditionContainer(frame, condition);
+	if (!container) return px;
+	let width = px;
+	for (let turn = 0; turn < 5; turn += 1) {
+		const shortfall = px - contentInlineSize(container);
+		if (Math.abs(shortfall) <= tolerance) break;
+		width += shortfall;
+		atWidth(frame, width);
+	}
+	return width;
+}
+
+/*
+ * The table-fit criterion (#1945): does every `<table>` inside the
+ * container fit it at its own natural width -- `max-content`, which the
+ * cells' `--measure` cap still bounds -- so no cell is narrowed past its
+ * one line by the room the table was given? Measured by asking each
+ * table for that width and reading it back, then restoring its own
+ * inline size. A table that is narrowed wraps its words at spaces, and
+ * the overflow criterion never sees that, because a wrapped table
+ * overflows nothing. The table is shown while it is measured: a floor
+ * just above `DataTable`'s own probes below it, where the component's
+ * rule still hides the table, and a hidden table has no width at all.
+ */
+export interface TableFitMeasurement {
+	readonly given: number;
+	readonly needed: readonly number[];
+}
+
+export function measureTableFit(container: HTMLElement): TableFitMeasurement {
+	const needed = [...container.querySelectorAll<HTMLElement>('table')].map((table) => {
+		const { display, inlineSize } = table.style;
+		table.style.display = 'table';
+		table.style.inlineSize = 'max-content';
+		const width = table.getBoundingClientRect().width;
+		table.style.display = display;
+		table.style.inlineSize = inlineSize;
+		return Math.ceil(width);
+	});
+	return { given: contentInlineSize(container), needed };
+}
+
+// A container with no table fails: it is the wrong container, not one that fits.
+export function isTableFitAcceptable(measurement: TableFitMeasurement, tolerance: number): boolean {
+	return (
+		measurement.needed.length > 0 &&
+		measurement.needed.every((width) => width - measurement.given <= tolerance)
+	);
+}
+
+export function tableFitReport(name: string, measurement: TableFitMeasurement): string {
+	const found =
+		measurement.needed.length === 0
+			? 'it holds no table'
+			: `its tables need ${measurement.needed.join('px, ')}px`;
+	return `${name}: given ${measurement.given}px, ${found} (table-fit criterion).`;
+}
+
 /*
  * Every discovered `(min-width: …rem)` condition whose literal resolves
  * BELOW `CONFORMANCE_COMMITMENT` (320px, ADR-0024) -- a floor that fires

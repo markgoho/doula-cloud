@@ -75,7 +75,8 @@ interface Caller {
 async function setup(response?: Response, { isContractor = false, hasAnyClient = true }: Caller = {}) {
 	// DataTable's own content floor (#508) stacks it into a <dl> below
 	// 46rem, and this file's assertions are about the <table> specifically.
-	await testPage.viewport(1440, 900);
+	// Above this route's own table floor (#1945, its +page.svelte), so the <table> renders.
+	await testPage.viewport(3200, 900);
 	if (response) {
 		apiFetchWithSession.mockResolvedValue(response);
 	} else {
