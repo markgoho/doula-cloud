@@ -47,6 +47,43 @@ describe('fillUtmFields', () => {
 	});
 });
 
+function waitlistForm(firstName: string): HTMLFormElement {
+	const form = document.createElement('form');
+	const name = document.createElement('input');
+	name.name = 'metadata__first_name';
+	name.value = firstName;
+	const email = document.createElement('input');
+	email.name = 'email';
+	email.value = 'ada@example.com';
+	form.append(name, email);
+	document.body.append(form);
+	return form;
+}
+
+describe('fillUtmFields, on the first name (#1898)', () => {
+	it('keeps a filled first name in the submission', () => {
+		const form = waitlistForm('Ada');
+		fillUtmFields('');
+		expect([...new FormData(form)]).toEqual([
+			['metadata__first_name', 'Ada'],
+			['email', 'ada@example.com']
+		]);
+	});
+
+	it('leaves a blank first name out of the submission, and always keeps the address', () => {
+		const form = waitlistForm(' ');
+		fillUtmFields('');
+		expect([...new FormData(form)]).toEqual([['email', 'ada@example.com']]);
+	});
+
+	it('does nothing to a first-name input outside a form', () => {
+		const name = document.createElement('input');
+		name.name = 'metadata__first_name';
+		document.body.append(name);
+		expect(() => fillUtmFields('')).not.toThrow();
+	});
+});
+
 describe('utmScript', () => {
 	it('is the function itself, called on the address bar, so it runs with nothing else loaded', () => {
 		const inputs = hiddenInputs();

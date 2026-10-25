@@ -71,11 +71,25 @@ describe('WaitlistCard, with Buttondown’s address (#358)', () => {
 		await testPage.getByLabelText('Email address').fill('ada@example.com');
 		fillUtmFields('?utm_source=dona-summit-2026&utm_campaign=booth');
 		expect([...new FormData(container.querySelector('form')!)]).toEqual([
-			['metadata__first_name', ''],
 			['email', 'ada@example.com'],
 			['metadata__utm_source', 'dona-summit-2026'],
 			['metadata__utm_campaign', 'booth']
 		]);
+	});
+
+	// A blank first name would clear the name Buttondown already holds for
+	// that address (#1898), so the script leaves it out of the submission.
+	it('submits a blank first name only while the script is blocked (#1898)', async () => {
+		const { container } = await render(WaitlistCard, { action });
+		await testPage.getByLabelText('Email address').fill('ada@example.com');
+		await expect.element(testPage.getByLabelText('First name')).toBeVisible();
+		const form = container.querySelector('form')!;
+		expect([...new FormData(form)]).toEqual([
+			['metadata__first_name', ''],
+			['email', 'ada@example.com']
+		]);
+		fillUtmFields('');
+		expect([...new FormData(form)]).toEqual([['email', 'ada@example.com']]);
 	});
 
 	it('carries the script that fills the hidden inputs, after them', async () => {
