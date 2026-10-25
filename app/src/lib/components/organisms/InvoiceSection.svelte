@@ -212,8 +212,15 @@
 	// Invoice's form is ever open at a time.
 	let payingInvoiceId = $state('');
 	let paymentStep = $state<'form' | 'review'>('form');
-	let paymentMethod = $state<PaymentMethod>('check');
+	// No method is chosen when the form opens (#1913, ADR-0055): how a
+	// Client paid is a fact the service does not know, and a Staff member
+	// who went straight to Continue used to record a check unasked.
+	let paymentMethod = $state<PaymentMethod | undefined>();
 	let paymentNote = $state('');
+	// Pre-filled with today on purpose: a recorded departure from GOV.UK's
+	// "nothing pre-filled" rule, decided 2026-10-24 on #1923 -- see "A
+	// pre-filled answer: Date received" under Where we depart on purpose in
+	// docs/design/govuk-alignment.md.
 	let paymentDate = $state(todayIsoDate());
 	// paymentError is the untargeted GOV.UK summary fallback (#1038): a
 	// refusal naming no field of this form -- a Stripe-side failure, an
@@ -285,7 +292,7 @@
 	function startRecordingPayment(invoiceId: string) {
 		payingInvoiceId = invoiceId;
 		paymentStep = 'form';
-		paymentMethod = 'check';
+		paymentMethod = undefined;
 		paymentNote = '';
 		paymentDate = todayIsoDate();
 		resetPaymentErrors();
@@ -311,6 +318,12 @@
 	function reviewPayment(event: SubmitEvent) {
 		event.preventDefault();
 		resetPaymentErrors();
+		// Method first: it is the form's first question, and GOV.UK lists
+		// refusals in the order the fields are on the page.
+		if (paymentMethod === undefined) {
+			paymentMethodError = 'Select how the payment was made';
+			return;
+		}
 		if (paymentDate.trim() === '') {
 			paymentDateError = 'Enter the date the payment was received';
 			return;
@@ -331,7 +344,9 @@
 		resetPaymentErrors();
 		try {
 			await onRecordPayment(payingInvoiceId, {
-				method: paymentMethod,
+				// Set: reviewPayment refuses an empty Method before the
+				// review step, the only place this button is drawn.
+				method: paymentMethod!,
 				note: paymentNote.trim() === '' ? undefined : paymentNote.trim(),
 				paidOn: paymentDate
 			});
@@ -633,7 +648,7 @@
 				<DescriptionList
 					items={[
 						{ label: 'Amount', value: formatAmount(invoice.amountCents) },
-						{ label: 'Method', value: paymentMethodLabels[paymentMethod] },
+						{ label: 'Method', value: paymentMethodLabels[paymentMethod!] },
 						{ label: 'Note', value: paymentNote.trim() === '' ? '—' : paymentNote },
 						{
 							label: 'Date received',

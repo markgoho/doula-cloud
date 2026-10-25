@@ -218,8 +218,47 @@ func TestPostManualPaymentHandler_InvalidMethodRefused(t *testing.T) {
 	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
-	if want := "Select a method from the list"; out.Details["method"] != want {
+	if want := "Select how the payment was made"; out.Details["method"] != want {
 		t.Fatalf("details[method] = %q, want %q", out.Details["method"], want)
+	}
+}
+
+// TestPostManualPaymentHandler_MissingMethodRefused proves a request
+// with no method at all 400s with the same field-level words the
+// payment form shows (#1913): the form's Method opens with nothing
+// chosen, so a send that skips it is refused here as well as on the page.
+func TestPostManualPaymentHandler_MissingMethodRefused(t *testing.T) {
+	db := testdb.New(t)
+	const uid = "manual-payment-missing-method"
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
+	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jane Client", "jane@example.com")
+	contractID := seedSignedContract(t, db, engagementID)
+	invoiceID := seedByHandInvoice(t, db, practiceID, contractID)
+	srv, session := newInvoiceServer(t, db, uid, payments.NewFakeClient())
+	defer srv.Close()
+
+	// No "method" key at all, the body a form with nothing chosen would send.
+	resp := postPaymentBody(t, srv, session, practiceID, invoiceID, `{"paidOn":"`+isoDate(time.Now().UTC())+`"}`)
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
+	}
+	var out struct {
+		Details map[string]string `json:"details"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if want := "Select how the payment was made"; out.Details["method"] != want {
+		t.Fatalf("details[method] = %q, want %q", out.Details["method"], want)
+	}
+	var count int
+	if err := db.Admin.QueryRowContext(t.Context(), `SELECT count(*) FROM payments WHERE invoice_id = $1`, invoiceID).Scan(&count); err != nil {
+		t.Fatalf("count payments: %v", err)
+	}
+	if count != 0 {
+		t.Fatalf("payments = %d, want 0", count)
 	}
 }
 

@@ -199,10 +199,13 @@ func PostManualPaymentHandler(client Client) http.Handler {
 			// Write, not WriteFieldError: the details value opens with
 			// "Select", not "method" -- the wire's own name for the field
 			// -- so it genuinely differs from the summary Message, which
-			// stays exactly as it was (#1037, #1189).
+			// stays exactly as it was (#1037, #1189). The details value is
+			// the payment form's own empty-Method words (#1913): the form
+			// opens with no method chosen, so an absent method is the
+			// likeliest way here, and both places say the same thing.
 			apierr.Write(w, http.StatusBadRequest, apierr.CodeInvalidArgument,
 				`method must be "check", "bank_transfer", "cash", or "other"`,
-				map[string]string{fieldMethod: "Select a method from the list"})
+				map[string]string{fieldMethod: "Select how the payment was made"})
 			return
 		}
 		if req.Method == PaymentMethodOther && req.Note == "" {
