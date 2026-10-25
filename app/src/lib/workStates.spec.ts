@@ -45,12 +45,8 @@ describe('workStates', () => {
 	// The date is the only staleness signal the design has, so every
 	// screen that shows it has to show it the same way.
 	it('formats the day a work state was reported', () => {
-		expect(workStateReportedOn('2026-08-28T14:02:11Z')).toBe(
-			new Date('2026-08-28T14:02:11Z').toLocaleDateString(undefined, {
-				year: 'numeric',
-				month: 'short',
-				day: 'numeric'
-			})
-		);
+		// 14:02 UTC is Aug 28 in every US zone, so the fixture's day holds
+		// wherever the suite runs.
+		expect(workStateReportedOn('2026-08-28T14:02:11Z')).toBe('Aug 28, 2026');
 	});
 });

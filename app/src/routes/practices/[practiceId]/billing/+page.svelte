@@ -11,7 +11,7 @@
 		type LedgerEntry
 	} from '#lib/billing.js';
 	import { formatMoney } from '#lib/money.js';
-	import { formatCalendarDay } from '#lib/dates.js';
+	import { formatCalendarDay, formatInstantWithClock } from '#lib/dates.js';
 	import { readApprovalReturn } from '#lib/engagementRequest.js';
 	import { FormSubmission, orThrownMessage } from '#lib/formSubmission.svelte.js';
 	import type { FormError } from '#lib/formErrors.js';
@@ -48,7 +48,8 @@
 	let checkoutStatus = $derived(page.url.searchParams.get('checkout'));
 
 	const columns = [
-		{ label: 'Date', accessor: (entry: LedgerEntry) => new Date(entry.createdAt).toLocaleString() },
+		// createdAt is an instant (billing/balance.go), to the minute.
+		{ label: 'Date', accessor: (entry: LedgerEntry) => formatInstantWithClock(entry.createdAt) },
 		{ label: 'Origin', accessor: (entry: LedgerEntry) => originLabel(entry.origin) },
 		{
 			label: 'Quantity',

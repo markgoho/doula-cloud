@@ -34,7 +34,7 @@
 	import HistoryDisclosure from '#lib/components/molecules/HistoryDisclosure.svelte';
 	import StackedForm from '#lib/components/molecules/StackedForm.svelte';
 	import ListPage from '#lib/components/templates/ListPage.svelte';
-	import { formatActivityTimestamp } from '#lib/dates.js';
+	import { formatActivityTimestamp, formatInstant } from '#lib/dates.js';
 	import { membershipChangeSentence } from '#lib/membershipHistory.js';
 	import { workStateName, workStateReportedOn } from '#lib/workStates.js';
 	import { isOwner, rolesLabel, employmentTypeLabel, type EmploymentType } from '#lib/roles.js';
@@ -141,8 +141,8 @@
 		},
 		{
 			label: 'Expires',
-			accessor: (invitation: InvitationSummary) =>
-				new Date(invitation.expiresAt).toLocaleDateString()
+			// expiresAt is an instant (staffauth/staff.go, RFC 3339).
+			accessor: (invitation: InvitationSummary) => formatInstant(invitation.expiresAt)
 		}
 	];
 

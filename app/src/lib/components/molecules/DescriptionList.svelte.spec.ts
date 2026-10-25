@@ -14,7 +14,7 @@ type SetupOptions = Partial<ComponentProps<typeof DescriptionList>>;
 
 const defaultItems = [
 	{ label: 'Status', value: 'Active' },
-	{ label: 'Created', value: '1/1/2026' }
+	{ label: 'Created', value: 'Jan 1, 2026' }
 ];
 
 async function setup({ items = defaultItems, ...rest }: SetupOptions = {}) {
@@ -48,7 +48,7 @@ describe('DescriptionList.svelte', () => {
 		await expect.element(page.getByText('Status')).toBeVisible();
 		await expect.element(page.getByText('Active')).toBeVisible();
 		await expect.element(page.getByText('Created')).toBeVisible();
-		await expect.element(page.getByText('1/1/2026')).toBeVisible();
+		await expect.element(page.getByText('Jan 1, 2026')).toBeVisible();
 	});
 
 	it('renders as a semantic description list', async () => {

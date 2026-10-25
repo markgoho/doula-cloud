@@ -10,6 +10,7 @@
 import type { Fetcher } from './fetcher.js';
 
 import { apiErrorMessage } from './apiErrorMessage.js';
+import { formatInstant } from './dates.js';
 import { refusalError } from './formErrors.js';
 import { formatMoney } from './money.js';
 
@@ -543,7 +544,8 @@ const MS_PER_DAY = 24 * 60 * 60 * 1000;
  * "Payment due", never "due date": in this domain a due date is the
  * pregnancy's (ADR-0015), and the two must not share a word. */
 export function dueLabel(invoice: Pick<Invoice, 'status' | 'dueAt'>, now: Date): string {
-	const due = new Date(invoice.dueAt).toLocaleDateString();
+	// due_at is an instant (payment_terms.go compares it with now()).
+	const due = formatInstant(invoice.dueAt);
 	if (invoice.status !== 'open') {
 		return due;
 	}

@@ -400,7 +400,7 @@ describe('client detail hub', () => {
 		});
 
 		await expect
-			.element(testPage.getByText('Postpartum Engagement requested by Jamie Doula on 1/2/2026'))
+			.element(testPage.getByText('Postpartum Engagement requested by Jamie Doula on Jan 2, 2026'))
 			.toBeVisible();
 	});
 

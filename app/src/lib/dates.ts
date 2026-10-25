@@ -11,30 +11,64 @@
  * where it belongs.
  */
 
+/*
+ * Every screen that prints a date prints it through this file (#1958):
+ * `dates.usage.spec.ts` fails the build on a `toLocaleDateString`,
+ * `toLocaleString` or `toLocaleTimeString` anywhere else in `app/src`.
+ * Each formatter below reads month-day ("Oct 25, 2026"), the order
+ * ADR-0022's 2026-10-24 amendment (#1940) sets for every absolute day the
+ * product prints, whatever locale the reader's browser reports.
+ */
+
 /**
  * A timestamp is an instant, and reads correctly in the reader's own
- * zone.
+ * zone: "Oct 25, 2026".
  */
 export function formatInstant(value: string): string {
-	return new Date(value).toLocaleDateString(undefined, {
-		year: 'numeric',
-		month: 'short',
-		day: 'numeric'
-	});
+	return formatDay(new Date(value));
+}
+
+/**
+ * An instant to the minute, in the reader's own zone: "Oct 25, 2026,
+ * 3:04pm" -- the same day and the same 12-hour clock the Activity
+ * ledger's absolute branch prints (ADR-0022), for a value that is never
+ * shown relative (a message's own sent time, a ledger row).
+ */
+export function formatInstantWithClock(value: string): string {
+	const date = new Date(value);
+	return `${formatDay(date)}, ${formatClock(date)}`;
 }
 
 /**
  * A due date is a calendar day, not an instant: it must not shift by one
  * when the reader's zone is behind UTC, so the day is built from its own
- * parts rather than parsed as UTC midnight.
+ * parts rather than parsed as UTC midnight. `value` is the date-only
+ * `YYYY-MM-DD` form a `type="date"` control posts.
  */
 export function formatCalendarDay(value: string): string {
 	const [year, month, day] = value.split('-').map(Number);
-	return new Date(year!, month! - 1, day!).toLocaleDateString(undefined, {
-		year: 'numeric',
-		month: 'short',
-		day: 'numeric'
-	});
+	return formatDay(new Date(year!, month! - 1, day!));
+}
+
+/**
+ * A calendar day that arrives as a full timestamp at UTC midnight of that
+ * day, read as the day it names (#1958). An Invoice's `paidAt` is the
+ * case: `invoices.paid_at` is a timestamptz, and the by-hand rail
+ * (`manual_payment.go`) writes the recorder's date-only `paidOn` into it
+ * as `2026-10-25T00:00:00Z`. Read as an instant, that is Oct 24 in any
+ * zone behind UTC -- a Payment shown a day before it was recorded. So the
+ * day is built from the timestamp's own UTC parts, the way
+ * `formatCalendarDay` builds it from a date-only string's.
+ *
+ * The Stripe rail writes Stripe's own instant into the same column, so a
+ * card Payment made late in a US evening reads here as the UTC day,
+ * which is the next one. The BFF sending the day itself is the whole
+ * fix; until then the recorded day is the one the person typed, and it
+ * is never wrong.
+ */
+export function formatUtcCalendarDay(value: string): string {
+	const instant = new Date(value);
+	return formatDay(new Date(instant.getUTCFullYear(), instant.getUTCMonth(), instant.getUTCDate()));
 }
 
 /**
@@ -71,7 +105,7 @@ export function formatActivityTimestamp(value: string, now: Date = new Date()): 
 		const weekday = date.toLocaleDateString('en-US', { weekday: 'long' });
 		return `${weekday}, ${formatClock(date)}`;
 	}
-	return `${formatDay(date)}, ${formatClock(date)}`;
+	return formatInstantWithClock(value);
 }
 
 /**
@@ -86,8 +120,7 @@ export function formatActivityTimestamp(value: string, now: Date = new Date()): 
  */
 export function formatScheduledVisit(value: string | undefined): string {
 	if (!value) return 'Not yet scheduled';
-	const date = new Date(value);
-	return `${formatDay(date)}, ${formatClock(date)}`;
+	return formatInstantWithClock(value);
 }
 
 /**

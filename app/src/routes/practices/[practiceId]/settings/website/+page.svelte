@@ -29,6 +29,7 @@
 	import { onMount } from 'svelte';
 	import { page } from '#lib/appState.svelte.js';
 	import { apiFetchWithSession } from '#lib/api.js';
+	import { formatInstant } from '#lib/dates.js';
 	import { isOwner } from '#lib/roles.js';
 	import {
 		loadWebsite,
@@ -221,11 +222,9 @@
 		if (iso === '') {
 			return '';
 		}
-		return new Date(iso).toLocaleDateString('en-US', {
-			day: 'numeric',
-			month: 'long',
-			year: 'numeric'
-		});
+		// An audit timestamp, an instant (website.FormatUpdatedAt), read
+		// month first like every other date (#1958).
+		return formatInstant(iso);
 	}
 </script>
 

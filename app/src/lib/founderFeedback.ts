@@ -8,6 +8,7 @@
  * and only one person ever reaches it (`staffauth.FounderOnly`).
  */
 import { apiErrorMessage } from './apiErrorMessage.js';
+import { formatInstantWithClock } from './dates.js';
 import { kindOptions, type Kind } from './feedback.js';
 import type { Fetcher } from './fetcher.js';
 import type { CursorPage } from './paginatedList.svelte.js';
@@ -129,7 +130,7 @@ export function issueLabel(issue: IssueStatus): string {
 The instant a piece was sent, to the minute, in the reader's zone.
 */
 export function formatSentAt(value: string): string {
-	return new Date(value).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
+	return formatInstantWithClock(value);
 }
 
 /**

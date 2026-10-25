@@ -768,7 +768,8 @@
 			// one place the Engagement hub prints 'Birth'/'Postpartum' at all.
 			{ label: 'What the Practice sold', value: kindLabel(kind) },
 			{ label: 'Portal invite', value: portalInviteSummaryText(portalState, hasClientEmail) },
-			{ label: 'Created', value: new Date(d.createdAt).toLocaleDateString() }
+			// createdAt is an instant (engagement/detail.go).
+			{ label: 'Created', value: formatInstant(d.createdAt) }
 		];
 		if (d.dueDate) {
 			items.push({ label: 'Due date', value: formatCalendarDay(d.dueDate) });

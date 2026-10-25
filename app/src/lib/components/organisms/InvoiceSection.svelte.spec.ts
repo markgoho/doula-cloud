@@ -144,12 +144,14 @@ describe('InvoiceSection.svelte', () => {
 		await expect.element(page.getByText('$150.00 — Open')).toBeInTheDocument();
 	});
 
-	it('shows a paid Invoice with its paid date', async () => {
+	// #1958: paidAt is UTC midnight of the day the Payment was recorded,
+	// the form the by-hand rail writes, so it reads as that day in any
+	// zone -- not Jan 4, as an instant read in a US zone would.
+	it('shows a paid Invoice on the day its Payment was recorded, month first', async () => {
 		await setup({ invoices: [invoicePaid] });
 
-		const expectedDate = new Date(invoicePaid.paidAt!).toLocaleDateString();
-		await expect.element(page.getByText(/\$200\.00 — Paid/)).toBeInTheDocument();
-		await expect.element(page.getByText(`(paid ${expectedDate})`)).toBeInTheDocument();
+		await expect.element(page.getByText(/\$200\.00 — Paid/)).toBeVisible();
+		await expect.element(page.getByText('(paid Jan 5, 2026)')).toBeVisible();
 	});
 
 	it('falls back to the raw status string for a status with no known label', async () => {
@@ -440,6 +442,8 @@ describe('InvoiceSection.svelte', () => {
 
 			await expect.element(page.getByText('Bank transfer')).toBeVisible();
 			await expect.element(page.getByText('Zelle, screenshot on file')).toBeVisible();
+			// The day typed, month first (#1958), never one day earlier.
+			await expect.element(page.getByText('Jan 2, 2026', { exact: true })).toBeVisible();
 
 			await page.getByRole('button', { name: 'Confirm and record' }).click();
 

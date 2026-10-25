@@ -10,6 +10,7 @@
  * comes back from it.
  */
 import { describe, expect, it, vi } from 'vitest';
+import { formatInstant } from './dates.js';
 import {
 	daysOverdue,
 	dueLabel,
@@ -64,6 +65,14 @@ describe('dueLabel', () => {
 
 	it('says only the date while an invoice is still within its terms', () => {
 		expect(dueLabel(openInvoice, new Date('2026-09-15T00:00:00Z'))).not.toContain('overdue');
+	});
+
+	// `due_at` is a timestamptz the BFF compares as an instant
+	// (payment_terms.go), so the date is the instant in the reader's zone,
+	// month first (#1958), never "10/1/2026".
+	it('prints the due date as an instant, month first', () => {
+		expect(dueLabel(openInvoice, new Date('2026-09-15T00:00:00Z'))).toBe(formatInstant(openInvoice.dueAt));
+		expect(dueLabel(openInvoice, new Date('2026-09-15T00:00:00Z'))).toMatch(/^[A-Z][a-z]{2} \d{1,2}, 2026$/);
 	});
 
 	it('never calls a settled invoice late, however long ago its date passed', () => {

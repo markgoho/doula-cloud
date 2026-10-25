@@ -66,6 +66,16 @@ async function setup(page: PracticeInvoiceListData = data) {
 	await render(Page, { params: fixture.params, data: { ...page, session: sessionStub } });
 }
 
+describe('the dates the Practice-wide invoice list prints (#1958)', () => {
+	// The fixture's paidAt is UTC midnight of a recorded day, the form the
+	// by-hand rail writes; read as an instant it is Jul 3 in any US zone.
+	it('shows a paid Invoice on the day its Payment was recorded, month first', async () => {
+		await setup();
+
+		await expect.element(testPage.getByRole('cell', { name: 'Jul 4, 2026', exact: true })).toBeVisible();
+	});
+});
+
 describe('the Practice-wide invoice list (#265)', () => {
 	it('answers "who owes us money" with the whole book, not one Engagement', async () => {
 		await setup();
