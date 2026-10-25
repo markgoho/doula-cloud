@@ -205,9 +205,22 @@
 		   Re-measured 2026-10-25 (#1943), when the type floors moved to
 		   16px (ADR-0060): the five items needed 770px at 712px on macOS
 		   and 779px at 772px, and 49rem (784px) holds in CI's Linux/
-		   Chromium, with no margin added beyond it. #1945 checks the nav
-		   at `label` 16px and measures again. */
-		@container portal-top-bar (min-width: 49rem) {
+		   Chromium, with no margin added beyond it.
+
+		   Raised 2026-10-25 (#1945), and the criterion changed with it:
+		   the 60px bar holds ONE line (#1945's fourth box), so the bar
+		   moves to its two-row layout before the Practice's name wraps,
+		   not only before the nav overflows. Measured on
+		   /style-guide/portal-top-bar's own demo, whose name is the
+		   fixture's longest, "Highland Midwifery & Birth Support
+		   Collective of Western New York": with the wide tree forced on,
+		   the name took two lines up to a 1530px bar and one line from
+		   1532px on macOS/Chromium. 95.75rem (1532px) is that fixed
+		   point, with no margin added beyond it. The nav needs 784px of
+		   it, so the name is what sets this floor now. A longer name
+		   still wraps above it, and the bar still grows to hold it
+		   (#1573). */
+		@container portal-top-bar (min-width: 95.75rem) {
 			.wide {
 				display: flex;
 			}

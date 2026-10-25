@@ -96,7 +96,7 @@ function sessionFor(roles: string[] = [], staffId = 'staff-1', isContractor = fa
 }
 
 async function setup(detail: Detail, activityResponse?: Response) {
-	await testPage.viewport(1440, 900);
+	await testPage.viewport(3200, 900);
 	if (activityResponse) {
 		apiFetchWithSession.mockImplementation((path: string) =>
 			Promise.resolve(path.includes('/activity') ? activityResponse : jsonResponse('not available', 403))
@@ -124,7 +124,7 @@ async function renderWithFixtureResponder(
 	respondOverride?: (path: string, init?: RequestInit) => Promise<Response> | undefined,
 	detail: Detail = fixtureDetail
 ) {
-	await testPage.viewport(1440, 900);
+	await testPage.viewport(3200, 900);
 	const respond = toApiResponder(fixture);
 	apiFetchWithSession.mockImplementation((path: string, init?: RequestInit) => {
 		const overridden = respondOverride?.(path, init);
@@ -150,7 +150,7 @@ async function setupWithRoster(
 	roles: string[] = ['owner', 'doula'],
 	staffId = 'staff-1'
 ) {
-	await testPage.viewport(1440, 900);
+	await testPage.viewport(3200, 900);
 	const respond = toApiResponder(fixture);
 	apiFetchWithSession.mockImplementation((path: string) => {
 		if (rosterResponse && path.endsWith('/visit-assignees')) return Promise.resolve(rosterResponse);
@@ -173,7 +173,7 @@ async function setupWithContract(
 	detail: Detail = fixtureDetail,
 	contractSession: typeof session = sessionFor()
 ) {
-	await testPage.viewport(1440, 900);
+	await testPage.viewport(3200, 900);
 	prepareApi();
 	await render(Page, {
 		data: { ...detail, session: contractSession },
@@ -615,7 +615,7 @@ describe('a section fails on its own, independent of the others (#841)', () => {
 	});
 
 	it("shows the Contract section's own failure while Visits still renders its fixture row", async () => {
-		await testPage.viewport(1440, 900);
+		await testPage.viewport(3200, 900);
 		const respond = toApiResponder(fixture);
 		apiFetchWithSession.mockImplementation((path: string) =>
 			path.endsWith('/contract') ? Promise.resolve(jsonResponse('contract is down', 500)) : respond(path)
@@ -1035,7 +1035,7 @@ function mockSignedContract(pdfResponse: Response) {
 }
 
 async function setupWithRoles(roles: string[], pdfResponse: Response, isContractor = false) {
-	await testPage.viewport(1440, 900);
+	await testPage.viewport(3200, 900);
 	mockSignedContract(pdfResponse);
 	await render(Page, {
 		data: { ...fixtureDetail, session: sessionFor(roles, 'staff-1', isContractor) },
@@ -1165,7 +1165,7 @@ describe('a recreated Draft names the PDF as a previous Contract\'s (#1229)', ()
 async function setupBirthPlanLink(
 	respondOverride?: (path: string) => Promise<Response> | undefined
 ) {
-	await testPage.viewport(1440, 900);
+	await testPage.viewport(3200, 900);
 	if (respondOverride) {
 		const respond = toApiResponder(fixture);
 		apiFetchWithSession.mockImplementation((path: string) => respondOverride(path) ?? respond(path));
@@ -1575,7 +1575,7 @@ const attachSelfPath = '/api/practices/practice-1/engagements/engagement-1/attac
 const putMeOnIt = () => testPage.getByRole('button', { name: 'Put me on this Engagement' });
 
 async function setupWhoIsOn(detail: Detail, attachResponse?: () => Response) {
-	await testPage.viewport(1440, 900);
+	await testPage.viewport(3200, 900);
 	apiFetchWithSession.mockImplementation((path: string) =>
 		Promise.resolve(
 			attachResponse && path.endsWith('/attachments/me') ? attachResponse() : jsonResponse('not available', 403)
@@ -1615,7 +1615,7 @@ describe('who is on the Engagement, and putting yourself on it (#1598)', () => {
 	// The BFF offers her the control, and the page holds no rule of its
 	// own that takes it away for her Employment type.
 	it('offers the control to an Owner who is a contractor Doula, where the BFF says the press would be accepted', async () => {
-		await testPage.viewport(1440, 900);
+		await testPage.viewport(3200, 900);
 		apiFetchWithSession.mockImplementation(() => Promise.resolve(jsonResponse('not available', 403)));
 		expect(session).toMatchObject({ roles: ['owner', 'doula'], isContractor: true });
 		await render(Page, { data: { ...nobodyOnIt, session }, params: fixture.params });
@@ -1678,7 +1678,7 @@ describe('who is on the Engagement, and putting yourself on it (#1598)', () => {
 	// Engagement is read again after the write: the reader who logs her own
 	// Visit is on the Engagement, and the control goes.
 	it('reads who is on the Engagement again after a Visit is added', async () => {
-		await testPage.viewport(1440, 900);
+		await testPage.viewport(3200, 900);
 		const respond = toApiResponder(fixture);
 		let isVisitAdded = false;
 		apiFetchWithSession.mockImplementation((path: string, init?: RequestInit) => {
@@ -1870,7 +1870,7 @@ describe('the birth outcome section', () => {
 		roles = ['owner', 'doula'],
 		isContractor = false
 	}: OutcomeOptions = {}) {
-		await testPage.viewport(1440, 900);
+		await testPage.viewport(3200, 900);
 		apiFetchWithSession.mockResolvedValue(jsonResponse('not available', 403));
 		await render(Page, {
 			data: { ...detail, session: { ...sessionFor(roles), isContractor } },
@@ -1935,7 +1935,7 @@ describe('the Kind section (#874)', () => {
 		roles = ['owner', 'doula'],
 		isContractor = false
 	}: KindOptions = {}) {
-		await testPage.viewport(1440, 900);
+		await testPage.viewport(3200, 900);
 		apiFetchWithSession.mockResolvedValue(jsonResponse('not available', 403));
 		await render(Page, {
 			data: { ...detail, session: { ...sessionFor(roles), isContractor } },

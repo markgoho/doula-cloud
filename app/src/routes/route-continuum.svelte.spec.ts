@@ -114,12 +114,29 @@ import { registerLayoutPrimitives } from '#lib/primitives/index.js';
 import '#lib/styles/app.css';
 import {
 	awaitSettled,
+	isCanonicalEnvironment,
 	mountInFrame,
 	overflowReport,
 	quiescence,
+	RESOLUTION,
 	revealDisclosures,
-	sweep
+	sweep,
+	TOLERANCE,
+	type Mounted
 } from './style-guide/continuum.js';
+import {
+	atConditionWidth,
+	conditionContainer,
+	findConditions,
+	forceLive,
+	isTableFitAcceptable,
+	measureTableFit,
+	remToPx,
+	scopeClasses,
+	tableFitReport,
+	type Condition,
+	type TableFitMeasurement
+} from './style-guide/floor.js';
 import {
 	toApiResponder,
 	toPageState,
@@ -246,6 +263,128 @@ beforeEach(() => {
 	apiFetch.mockReset();
 });
 
+/*
+ * One route's screen, mounted the way the sweep below measures it: its
+ * `page` and its answers installed, its heading up, its fetches quiet and
+ * its disclosures open and filled in. The floor check over routes (#1945)
+ * mounts the same screen through this, so the two read one screen.
+ */
+async function mountRoute(fixture: RouteFixture): Promise<Mounted> {
+	// Which fields a fixture contributes is `toPageState`'s to say, so
+	// the drag surface installs the same `page` this does (#597); how
+	// it gets installed is each half's own business, since only this
+	// half has a module to mock.
+	Object.assign(pageState, toPageState(fixture));
+	// And how a fixture's fetches get answered is `toApiResponder`'s
+	// to say, for the same reason: since #596 every route spec that
+	// fetches installs the same implementation, so unwrapping
+	// `respond` here as well would be the third copy.
+	let answered = 0;
+	if (fixture.respond) {
+		const respond = toApiResponder(fixture);
+		const counted = (path: string) => {
+			answered += 1;
+			return respond(path);
+		};
+		apiFetchWithSession.mockImplementation(counted);
+		apiFetch.mockImplementation(counted);
+	}
+
+	/*
+	 * The one cast, and it is where a route's props actually arrive:
+	 * `mountInFrame` takes the component tier's propless `Component`,
+	 * and a route's `PageProps` is not assignable to it (see
+	 * `routeFixture.ts`). The props themselves are the fixture's own
+	 * `props`, checked against nothing here for the same reason a
+	 * route's `load` output is checked by its own `+page.ts`.
+	 */
+	const mounted = await mountInFrame(fixture.component as Component, {
+		...fixture.props
+	});
+	const { frame } = mounted;
+	try {
+		/*
+		 * A route that loads in `onMount` draws a Skeleton first, and a
+		 * sweep taken then measures the loading state -- which fits at
+		 * any width and would report every such route as passing. The
+		 * fixture names the screen's own heading, so this waits for the
+		 * subject rather than for a timeout.
+		 *
+		 * By role rather than by text: a screen's heading words turn up
+		 * again in its own content -- `Invoices` is both the `<h1>` and
+		 * part of the `Unpaid invoices` label beside the total -- and a
+		 * text query matching two elements fails as a strict-mode
+		 * violation rather than as a fixture that named the wrong thing.
+		 */
+		await expect
+			.element(testPage.getByRole('heading', { name: fixture.readyText, level: 1 }))
+			.toBeVisible();
+		/*
+		 * And then for the rest of the screen (#885). The heading
+		 * above is on the page from the first paint on a route whose
+		 * `load` already handed it one, so waiting for it says nothing
+		 * about the sections that fill in behind it: this route's
+		 * `onMount` awaits eight reads in order, and the sweep was
+		 * taken after the first of them, measuring a screen whose
+		 * Contract section had not been drawn at all. A fixture cannot
+		 * close that -- the order is the route's -- so the instrument
+		 * waits instead, the same reasoning #710 used for a closed
+		 * disclosure: a hole in what the sweep can see belongs to the
+		 * sweep.
+		 *
+		 * The wait is the fixture's own answering going quiet, not a
+		 * duration: every response is served synchronously from
+		 * `respond`, so one macrotask drains however many `await`s a
+		 * section chains, and a cascade advances by at least one read
+		 * per turn. The loop ends the first turn that asks for nothing
+		 * new, and the bound is a guard against a route that polls
+		 * rather than a budget anything is expected to spend.
+		 */
+		// A fresh reader per wait, rather than one closure serving both:
+		// a `quiescence` carries the last count it saw, so a reused one
+		// can report quiet without ever yielding a turn, and a wait that
+		// can return without waiting is not the same wait twice.
+		const answering = quiescence(() => answered);
+		/*
+		 * A bound that ran out is a screen still arriving, and
+		 * measuring it anyway would reopen the hole this wait exists
+		 * to close -- silently, which is the one way this file must
+		 * not fail. `awaitSettled` throws instead, and it is the same
+		 * bounded wait the disclosures below are revealed through:
+		 * #1126 made it one function rather than two loops that would
+		 * have had to be got right separately.
+		 */
+		await awaitSettled(answering, `${fixture.name} was still fetching`);
+		/*
+		 * And then the screen's own disclosures, opened and filled in
+		 * (#1126). This is the second call -- `mountInFrame` made the
+		 * first, before the route had fetched anything, and a route
+		 * keeps its disclosures behind rows that only exist once the
+		 * cascade above has run. The Staff roster is that case: two
+		 * `HistoryDisclosure`s per Member, each fetching its own
+		 * history when it opens, none of them in the DOM at mount.
+		 *
+		 * It happens HERE, in preparation, and not inside `sweep` --
+		 * which still opens and closes inside one task and still fires
+		 * no handler, so the measurement itself asks the screen for
+		 * nothing. What a fixture answers during this reveal is the
+		 * route's own request, made because a disclosure is open, the
+		 * same way a person opening one on the drag surface makes it.
+		 */
+		await revealDisclosures(frame, fixture.name);
+		// What the reveal asked for, drained through the same wait the
+		// cascade above used -- a history is a fetch like any other.
+		await awaitSettled(
+			quiescence(() => answered),
+			`${fixture.name} was still fetching a disclosure's content`
+		);
+	} catch (error) {
+		mounted.remove();
+		throw error;
+	}
+	return mounted;
+}
+
 describe('the continuum check, over routes', () => {
 	it('sweeps or names every route this repo ships', () => {
 		const unaccounted = routePaths.filter(
@@ -299,113 +438,8 @@ describe('the continuum check, over routes', () => {
 
 	for (const [routePath, fixture] of swept) {
 		async function assertion() {
-			// Which fields a fixture contributes is `toPageState`'s to say, so
-			// the drag surface installs the same `page` this does (#597); how
-			// it gets installed is each half's own business, since only this
-			// half has a module to mock.
-			Object.assign(pageState, toPageState(fixture));
-			// And how a fixture's fetches get answered is `toApiResponder`'s
-			// to say, for the same reason: since #596 every route spec that
-			// fetches installs the same implementation, so unwrapping
-			// `respond` here as well would be the third copy.
-			let answered = 0;
-			if (fixture.respond) {
-				const respond = toApiResponder(fixture);
-				const counted = (path: string) => {
-					answered += 1;
-					return respond(path);
-				};
-				apiFetchWithSession.mockImplementation(counted);
-				apiFetch.mockImplementation(counted);
-			}
-
-			/*
-			 * The one cast, and it is where a route's props actually arrive:
-			 * `mountInFrame` takes the component tier's propless `Component`,
-			 * and a route's `PageProps` is not assignable to it (see
-			 * `routeFixture.ts`). The props themselves are the fixture's own
-			 * `props`, checked against nothing here for the same reason a
-			 * route's `load` output is checked by its own `+page.ts`.
-			 */
-			const { run, frame, remove } = await mountInFrame(fixture.component as Component, {
-				...fixture.props
-			});
+			const { run, frame, remove } = await mountRoute(fixture);
 			try {
-				/*
-				 * A route that loads in `onMount` draws a Skeleton first, and a
-				 * sweep taken then measures the loading state -- which fits at
-				 * any width and would report every such route as passing. The
-				 * fixture names the screen's own heading, so this waits for the
-				 * subject rather than for a timeout.
-				 *
-				 * By role rather than by text: a screen's heading words turn up
-				 * again in its own content -- `Invoices` is both the `<h1>` and
-				 * part of the `Unpaid invoices` label beside the total -- and a
-				 * text query matching two elements fails as a strict-mode
-				 * violation rather than as a fixture that named the wrong thing.
-				 */
-				await expect
-					.element(testPage.getByRole('heading', { name: fixture.readyText, level: 1 }))
-					.toBeVisible();
-				/*
-				 * And then for the rest of the screen (#885). The heading
-				 * above is on the page from the first paint on a route whose
-				 * `load` already handed it one, so waiting for it says nothing
-				 * about the sections that fill in behind it: this route's
-				 * `onMount` awaits eight reads in order, and the sweep was
-				 * taken after the first of them, measuring a screen whose
-				 * Contract section had not been drawn at all. A fixture cannot
-				 * close that -- the order is the route's -- so the instrument
-				 * waits instead, the same reasoning #710 used for a closed
-				 * disclosure: a hole in what the sweep can see belongs to the
-				 * sweep.
-				 *
-				 * The wait is the fixture's own answering going quiet, not a
-				 * duration: every response is served synchronously from
-				 * `respond`, so one macrotask drains however many `await`s a
-				 * section chains, and a cascade advances by at least one read
-				 * per turn. The loop ends the first turn that asks for nothing
-				 * new, and the bound is a guard against a route that polls
-				 * rather than a budget anything is expected to spend.
-				 */
-				// A fresh reader per wait, rather than one closure serving both:
-				// a `quiescence` carries the last count it saw, so a reused one
-				// can report quiet without ever yielding a turn, and a wait that
-				// can return without waiting is not the same wait twice.
-				const answering = quiescence(() => answered);
-				/*
-				 * A bound that ran out is a screen still arriving, and
-				 * measuring it anyway would reopen the hole this wait exists
-				 * to close -- silently, which is the one way this file must
-				 * not fail. `awaitSettled` throws instead, and it is the same
-				 * bounded wait the disclosures below are revealed through:
-				 * #1126 made it one function rather than two loops that would
-				 * have had to be got right separately.
-				 */
-				await awaitSettled(answering, `${fixture.name} was still fetching`);
-				/*
-				 * And then the screen's own disclosures, opened and filled in
-				 * (#1126). This is the second call -- `mountInFrame` made the
-				 * first, before the route had fetched anything, and a route
-				 * keeps its disclosures behind rows that only exist once the
-				 * cascade above has run. The Staff roster is that case: two
-				 * `HistoryDisclosure`s per Member, each fetching its own
-				 * history when it opens, none of them in the DOM at mount.
-				 *
-				 * It happens HERE, in preparation, and not inside `sweep` --
-				 * which still opens and closes inside one task and still fires
-				 * no handler, so the measurement itself asks the screen for
-				 * nothing. What a fixture answers during this reveal is the
-				 * route's own request, made because a disclosure is open, the
-				 * same way a person opening one on the drag surface makes it.
-				 */
-				await revealDisclosures(frame, fixture.name);
-				// What the reveal asked for, drained through the same wait the
-				// cascade above used -- a history is a fetch like any other.
-				await awaitSettled(
-					quiescence(() => answered),
-					`${fixture.name} was still fetching a disclosure's content`
-				);
 				const found = sweep(frame, run.clientWidth);
 				expect(found, found && overflowReport(fixture.name, found)).toBeUndefined();
 			} finally {
@@ -418,6 +452,178 @@ describe('the continuum check, over routes', () => {
 			it.fails(`${fixture.name} (${brokenOn}) still needs more room than it is given`, assertion);
 		} else {
 			it(`${fixture.name} never needs more room than it is given`, assertion);
+		}
+	}
+});
+
+/*
+ * The floor check, over routes (#1945).
+ *
+ * `style-guide/floor.svelte.spec.ts` checks every `@container` floor under
+ * `src/lib/components` against that component's own demo. Since #1945 a
+ * route can set a floor too: a `DataTable` shows its records until the
+ * route's own containment context reaches the width at which that route's
+ * table fits at its natural width, because below it the table's cells wrap
+ * to more lines than they did at the old type floors -- the founder's
+ * answer on #1945, and `DataTable.svelte`'s floor comment says why the
+ * floor is the route's and not the component's. A route's floor is read
+ * off its own fixture, which is the content #537 makes hostile on purpose,
+ * so this file is the one that can mount it.
+ *
+ * The same discovery as the component check -- `floor.ts`'s
+ * `findConditions` over the raw source, never a list -- and the same two
+ * halves: sufficient in every environment, and minimal in the canonical
+ * one, where some width in the 5% below the floor does not fit (every
+ * step of it, for the reason given where it is built). A route condition with no entry in `ROUTE_FLOORS` fails,
+ * and so does an entry with no condition.
+ */
+const routeSources = import.meta.glob('./**/+page.svelte', {
+	eager: true,
+	query: '?raw',
+	import: 'default'
+}) as Record<string, string>;
+
+const routeConditions = findConditions(
+	Object.fromEntries(
+		Object.entries(routeSources).filter(([modulePath]) => !modulePath.startsWith('./style-guide/'))
+	)
+);
+
+// By the container's name, which a route gives each table it floors, and
+// never by a width; an unnamed one falls back to its place in the file.
+function toRouteFloorKey(condition: Condition): string {
+	return `${toRoutePath(condition.file)}#${condition.containerName ?? condition.index}`;
+}
+
+/*
+ * Which table each route floor is for. Every one is the table-fit
+ * criterion (`floor.ts`'s `measureTableFit`), so the entry names the
+ * table rather than a criterion.
+ */
+const ROUTE_FLOORS: Readonly<Record<string, string>> = {
+	'(person)/feedback#unopened-table': 'Issue not opened',
+	'(person)/feedback#feedback-table': 'All feedback',
+	'practices/[practiceId]#activity-table': 'The Practice-wide activity ledger',
+	'practices/[practiceId]/clients#clients-table': 'The Clients list',
+	'practices/[practiceId]/clients/[clientId]#history-table': "The Client's history",
+	'practices/[practiceId]/contracts#contracts-table': 'Contracts awaiting signature',
+	'practices/[practiceId]/contracts#void-requests-table': 'Void requests',
+	'practices/[practiceId]/engagement-requests#requests-table': 'Engagement Requests',
+	'practices/[practiceId]/engagements/[engagementId]#visits-table': 'Visits',
+	'practices/[practiceId]/engagements/[engagementId]#activity-table':
+		"The Engagement's activity ledger",
+	'practices/[practiceId]/invoices#invoices-table': 'The invoice list',
+	'practices/[practiceId]/on-call#roster-table': 'The on-call roster',
+	'practices/[practiceId]/schedule#schedule-table': 'The schedule',
+	'practices/[practiceId]/settings/blocked-addresses#blocked-table': 'Blocked email addresses',
+	'practices/[practiceId]/staff#members-table': 'Staff members',
+	'practices/[practiceId]/staff#invitations-table': 'Pending invitations'
+};
+
+describe('the floor check, over routes (#1945)', () => {
+	it('names the table of every route floor it discovers', () => {
+		const unregistered = routeConditions
+			.map((condition) => toRouteFloorKey(condition))
+			.filter((key) => !Object.hasOwn(ROUTE_FLOORS, key));
+		expect(unregistered, unregistered.join(', ')).toEqual([]);
+	});
+
+	it('names no route floor the source no longer has', () => {
+		const discovered = new Set(routeConditions.map((condition) => toRouteFloorKey(condition)));
+		const stale = Object.keys(ROUTE_FLOORS).filter((key) => !discovered.has(key));
+		expect(stale, stale.join(', ')).toEqual([]);
+	});
+
+	it('finds every route floor in a route that has a fixture', () => {
+		const unfixtured = routeConditions
+			.filter((condition) => !fixtures.has(toRoutePath(condition.file)))
+			.map((condition) => toRouteFloorKey(condition));
+		expect(unfixtured, unfixtured.join(', ')).toEqual([]);
+	});
+
+	for (const condition of routeConditions) {
+		const key = toRouteFloorKey(condition);
+		const declared = fixtures.get(toRoutePath(condition.file));
+		if (!declared || !Object.hasOwn(ROUTE_FLOORS, key)) continue; // reported above
+		const screens = toSweptFixtures(declared);
+		const floorPx = remToPx(condition.floorRem);
+		// The component check's depth, for its reason: 5%, never less than
+		// two steps of the sweep.
+		const belowFloorPx = floorPx - Math.max(2 * RESOLUTION, Math.round(floorPx * 0.05));
+
+		/*
+		 * Every screen of the route that renders this table, measured at
+		 * `px`. A screen that does not render it -- the landing hub with no
+		 * Client yet draws its empty state, not its ledger -- is left out,
+		 * and a floor no screen renders is reported by the caller.
+		 */
+		async function measureAt(widths: readonly number[]): Promise<TableFitMeasurement[]> {
+			const measurements: TableFitMeasurement[] = [];
+			for (const fixture of screens) {
+				const { frame, remove } = await mountRoute(fixture);
+				try {
+					if (!conditionContainer(frame, condition)) continue;
+					forceLive(condition, scopeClasses(frame));
+					for (const px of widths) {
+						atConditionWidth(frame, condition, px, TOLERANCE);
+						/*
+						 * A fixture's rows arrive after `mountInFrame` waited
+						 * for the face, and the table is only shown from the
+						 * sizing above, so any face its text asks for is
+						 * requested now. Measuring before it lands reads the
+						 * fallback.
+						 */
+						await document.fonts.ready;
+						measurements.push(measureTableFit(conditionContainer(frame, condition)!));
+					}
+				} finally {
+					remove();
+				}
+			}
+			return measurements;
+		}
+
+		/*
+		 * Every step of the sweep's resolution from the probe depth up to
+		 * just under the floor, not the one probe the component check
+		 * takes. A table's natural width is not monotonic in the width it
+		 * is given: measured in CI, the invoice list needed 1647px of a
+		 * 1668px column and 1745px of a 1703px one, so a single probe 5%
+		 * down can land in a width that fits while the floor is still the
+		 * width above which the table always fits. Minimal means some
+		 * width in that band does not fit.
+		 */
+		const belowFloorWidths = Array.from(
+			{ length: Math.floor((floorPx - belowFloorPx) / RESOLUTION) },
+			(_, step) => belowFloorPx + step * RESOLUTION
+		);
+
+		function report(measurements: TableFitMeasurement[]): string {
+			return measurements.length === 0
+				? `${key}: no screen of the route renders its ${condition.containerName} container.`
+				: measurements.map((measurement) => tableFitReport(key, measurement)).join(' ');
+		}
+
+		it(`${key} is sufficient at its floor (${condition.floorRem}rem) on every screen`, async () => {
+			const measurements = await measureAt([floorPx]);
+			expect(
+				measurements.length > 0 &&
+					measurements.every((measurement) => isTableFitAcceptable(measurement, TOLERANCE)),
+				report(measurements)
+			).toBe(true);
+		});
+
+		const minimalityName = `${key} is minimal: some screen's table does not fit somewhere in the ${floorPx - belowFloorPx}px below its floor`;
+		if (isCanonicalEnvironment()) {
+			it(minimalityName, async () => {
+				const measurements = await measureAt(belowFloorWidths);
+				expect(
+					measurements.some((measurement) => !isTableFitAcceptable(measurement, TOLERANCE)),
+					report(measurements.filter((_, index) => index % belowFloorWidths.length === 0))
+				).toBe(true);
+			});
+		} else {
+			it.skip(`${minimalityName} (skipped outside the canonical environment)`, () => {});
 		}
 	}
 });

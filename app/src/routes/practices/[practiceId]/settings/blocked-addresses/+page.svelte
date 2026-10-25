@@ -196,13 +196,15 @@
 			Practice with enough of these to page through has a mail
 			problem no list would fix.
 		-->
-		<DataTable
-			{columns}
-			rows={suppressions}
-			rowActions={{ label: 'Actions', content: rowActions }}
-			hasMore={false}
-			emptyMessage="No blocked addresses."
-		/>
+		<div class="blocked-table">
+			<DataTable
+				{columns}
+				rows={suppressions}
+				rowActions={{ label: 'Actions', content: rowActions }}
+				hasMore={false}
+				emptyMessage="No blocked addresses."
+			/>
+		</div>
 	{/if}
 {/snippet}
 
@@ -213,3 +215,31 @@
 	loading={isLoaded ? undefined : 'Loading the blocked addresses'}
 	loadError={loadError || undefined}
 />
+
+<style>
+	@layer components {
+		/* The blocked addresses table's content floor (#1945): below it the table's cells
+		   wrap to more lines than at the old type floors, so it shows its
+		   records -- the founder's answer on #1945. Measured 2026-10-25 on
+		   this route's fixture on the drag surface:
+		   its natural width fits its column from 1520px.
+		   `DataTable.svelte`'s floor comment says why the floor is the
+		   route's own. */
+		.blocked-table {
+			container: blocked-table / inline-size;
+		}
+
+		.blocked-table > :global(*) {
+			font-size: var(--text-body-size);
+			--data-table-table-display: none;
+			--data-table-records-display: block;
+		}
+
+		@container blocked-table (min-width: 95rem) {
+			.blocked-table > :global(*) {
+				--data-table-table-display: table;
+				--data-table-records-display: none;
+			}
+		}
+	}
+</style>

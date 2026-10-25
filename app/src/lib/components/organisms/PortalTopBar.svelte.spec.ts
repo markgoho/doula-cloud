@@ -146,13 +146,15 @@ describe('PortalTopBar', () => {
  * #1573: the bar held a fixed 3.75rem, so a long Practice name wrapped onto
  * several lines and drew out of it over the page under it. The bar is a
  * minimum now, and grows. 320px is the narrow tree at the conformance
- * commitment; 816px puts the bar (the header is the container, and its
- * gutters sit on the row inside it) just above its 49rem floor, where the
- * wide tree leaves the name the least room it ever gets.
+ * commitment; 1540px puts the bar (the header is the container, and its
+ * gutters sit on the row inside it) just above its 95.75rem floor, where
+ * the wide tree leaves the name the least room it ever gets. Since #1945
+ * that floor is where this name stops wrapping, so a name longer than it
+ * is what wraps there now.
  */
 describe('PortalTopBar, with a Practice name long enough to wrap (#1573)', () => {
 	const LONG_NAME = 'Highland Midwifery & Birth Support Collective of Western New York';
-	const JUST_ABOVE_THE_FLOOR = 816;
+	const JUST_ABOVE_THE_FLOOR = 1540;
 
 	async function setupLong(width: number) {
 		const result = await setup({

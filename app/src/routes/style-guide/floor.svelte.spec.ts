@@ -92,17 +92,22 @@ import {
 } from './continuum.js';
 import { toDemos, type PageModule } from './drag-surface/dragSurface.js';
 import {
+	atConditionWidth,
+	atWidth,
 	capFloorReport,
 	findConditions,
 	findConditionsBelowConformance,
 	findMalformedConditions,
 	forceLive,
+	isTableFitAcceptable,
 	measureCap,
 	measureOverflow,
+	measureTableFit,
 	measureWrap,
 	overflowFloorReport,
 	remToPx,
 	scopeClasses,
+	tableFitReport,
 	wrapFloorReport,
 	type CapMeasurement,
 	type Condition,
@@ -185,11 +190,20 @@ const CRITERIA: Readonly<Record<string, Criterion>> = {
 			'display:none -- for the same reason DataTable keeps its own query: no intrinsic mechanism ' +
 			'swaps markup, only a query can pick which tree renders.'
 	},
+	/*
+	 * `no-wrap` on the Practice's name since #1945, the one value this
+	 * criterion reads: the bar holds one line, so the floor is where the
+	 * demo's longest name stops wrapping beside the nav, and the nav's own
+	 * overflow, at 784px, is far below it. The span, not the link: a
+	 * Range over the link would count the span's box and its text as two.
+	 */
 	'organisms/PortalTopBar.svelte#1': {
-		kind: 'overflow',
+		kind: 'no-wrap',
+		selectors: ['.brand-and-nav > a > .label', '.wide a > .label'],
 		justification:
 			'The same shape as StaffTopBar: a wide nav row versus a narrow stacked row is a different DOM ' +
-			'tree, and no intrinsic mechanism swaps markup.'
+			'tree, and no intrinsic mechanism swaps markup. The 60px bar holds one line (#1945), so the ' +
+			'wide tree waits until the Practice name fits on one line beside the nav.'
 	},
 	'templates/RecordDetail.svelte#1': {
 		kind: 'single-row',
@@ -299,55 +313,6 @@ function neutralizeWrap(): HTMLStyleElement {
 	return style;
 }
 
-function atWidth(frame: HTMLElement, px: number) {
-	frame.style.inlineSize = `${px}px`;
-	void frame.offsetWidth;
-}
-
-/*
- * Sizes the frame so the condition's own container has `px` of CONTENT box,
- * and returns the frame's width (#1851). A container query reads the content
- * box of the element that declares the container, so a container with its
- * own padding -- the Staff bar's header carries the page gutter -- turns its
- * wide tree on when the room INSIDE that padding reaches the floor. A frame
- * set to the floor gave the header that much border box, which is the bar
- * one gutter pair narrower than any the app renders with the wide tree on:
- * the nav got 866px where the app gives it 912px. The frame-width overflow
- * read could not see the difference, because what spilled landed in the
- * header's own padding; the box criterion can.
- *
- * The gutter is sized against its own container, so one correction can move
- * it again; a few turns settle it. An unnamed condition, or a container the
- * frame is itself, keeps the frame at `px`.
- */
-// A computed padding is always a px length.
-function padding(value: string): number {
-	return Number(value.replace('px', ''));
-}
-
-function atConditionWidth(frame: HTMLElement, condition: Condition, px: number): number {
-	atWidth(frame, px);
-	const { containerName } = condition;
-	if (containerName === undefined) return px;
-	const container = [...frame.querySelectorAll<HTMLElement>('*')].find((element) =>
-		getComputedStyle(element).containerName.split(' ').includes(containerName)
-	);
-	if (!container) return px;
-	let width = px;
-	for (let turn = 0; turn < 5; turn += 1) {
-		const style = getComputedStyle(container);
-		const content =
-			container.clientWidth -
-			padding(style.paddingInlineStart) -
-			padding(style.paddingInlineEnd);
-		const shortfall = px - content;
-		if (Math.abs(shortfall) <= TOLERANCE) break;
-		width += shortfall;
-		atWidth(frame, width);
-	}
-	return width;
-}
-
 function isOverflowAcceptable(measurement: OverflowMeasurement): boolean {
 	return (
 		measurement.needed - measurement.given <= TOLERANCE &&
@@ -423,7 +388,7 @@ function assertCriterionAt(
 		case 'overflow': {
 			const wrap = neutralizeWrap();
 			try {
-				const given = atConditionWidth(frame, condition, px);
+				const given = atConditionWidth(frame, condition, px, TOLERANCE);
 				const measurement = measureOverflow(frame, given);
 				expect(isOverflowAcceptable(measurement), overflowFloorReport(key, measurement)).toBe(
 					isExpected
@@ -434,13 +399,13 @@ function assertCriterionAt(
 			break;
 		}
 		case 'no-wrap': {
-			atConditionWidth(frame, condition, px);
+			atConditionWidth(frame, condition, px, TOLERANCE);
 			const measurement = measureWrap(frame, px, criterion.selectors, lineCount);
 			expect(isWrapAcceptable(measurement), wrapFloorReport(key, measurement)).toBe(isExpected);
 			break;
 		}
 		case 'single-row': {
-			atConditionWidth(frame, condition, px);
+			atConditionWidth(frame, condition, px, TOLERANCE);
 			const row = frame.querySelector(criterion.selector);
 			expect(row, `${criterion.selector} not found for ${key}`).not.toBeNull();
 			const items = [...row!.children] as HTMLElement[];
@@ -461,7 +426,7 @@ function assertCriterionAt(
 			const target = frame.querySelector(criterion.target);
 			expect(target, `${criterion.target} not found for ${key}`).not.toBeNull();
 			const capLabel = capCustomProperty(criterion.cap);
-			atConditionWidth(frame, condition, px);
+			atConditionWidth(frame, condition, px, TOLERANCE);
 			const measurement = measureCap(px, capLabel, target!, probe);
 			expect(isCapAcceptable(measurement), capFloorReport(key, measurement)).toBe(isExpected);
 		}
@@ -904,6 +869,50 @@ describe("the floor check's overflow measurement, over a row whose items shrink 
 			expect(measurement.inlineSpill?.element).toBe('a');
 			expect(isOverflowAcceptable(measurement)).toBe(false);
 			expect(overflowFloorReport('The row', measurement)).toContain('its a needed');
+		} finally {
+			remove();
+		}
+	});
+});
+
+/*
+ * The table-fit criterion a route's floor is judged by (#1945), run by
+ * `route-continuum.svelte.spec.ts` against each route's fixture. These are
+ * its two edges, on hand-built markup: a table wider than its container,
+ * which the overflow criterion cannot see once its words wrap, and a
+ * container with no table at all, which must not pass for one that fits.
+ */
+describe('the table-fit criterion (#1945)', () => {
+	const AT_WIDTH = CONFORMANCE_COMMITMENT;
+
+	it('reads a table narrowed below its natural width as not fitting', () => {
+		const words = 'A Practice name long enough to wrap in its cell '.repeat(3);
+		const { frame, remove } = frameHolding(
+			`<table><tr><td>${words}</td><td>${words}</td></tr></table>`
+		);
+		try {
+			atWidth(frame, AT_WIDTH);
+
+			const measurement = measureTableFit(frame);
+
+			expect(measurement.given).toBe(AT_WIDTH);
+			expect(measurement.needed[0]).toBeGreaterThan(AT_WIDTH);
+			expect(isTableFitAcceptable(measurement, TOLERANCE)).toBe(false);
+			expect(tableFitReport('The table', measurement)).toContain('its tables need');
+		} finally {
+			remove();
+		}
+	});
+
+	it('refuses a container that holds no table', () => {
+		const { frame, remove } = frameHolding('<p>Nothing here.</p>');
+		try {
+			atWidth(frame, AT_WIDTH);
+
+			const measurement = measureTableFit(frame);
+
+			expect(isTableFitAcceptable(measurement, TOLERANCE)).toBe(false);
+			expect(tableFitReport('The table', measurement)).toContain('it holds no table');
 		} finally {
 			remove();
 		}

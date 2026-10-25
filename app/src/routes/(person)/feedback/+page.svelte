@@ -94,15 +94,17 @@
 	-->
 	<stack-l space="var(--space-4)" data-sveltekit-preload-data="false">
 		<Heading level={2} variant="section" text="Issue not opened" />
-		<DataTable
-			columns={unopenedColumns}
-			rows={unopened.items}
-			rowHref={pieceHref}
-			hasMore={unopened.hasMore}
-			onLoadMore={() => unopened.loadMore()}
-			isLoadingMore={unopened.isLoadingMore}
-			emptyMessage="No attempt to open an issue has failed."
-		/>
+		<div class="unopened-table">
+			<DataTable
+				columns={unopenedColumns}
+				rows={unopened.items}
+				rowHref={pieceHref}
+				hasMore={unopened.hasMore}
+				onLoadMore={() => unopened.loadMore()}
+				isLoadingMore={unopened.isLoadingMore}
+				emptyMessage="No attempt to open an issue has failed."
+			/>
+		</div>
 		{#if unopened.loadMoreError}
 			<Notice message={unopened.loadMoreError} variant="error" />
 		{/if}
@@ -110,15 +112,17 @@
 
 	<stack-l space="var(--space-4)" data-sveltekit-preload-data="false">
 		<Heading level={2} variant="section" text="All feedback" />
-		<DataTable
-			{columns}
-			rows={all.items}
-			rowHref={pieceHref}
-			hasMore={all.hasMore}
-			onLoadMore={() => all.loadMore()}
-			isLoadingMore={all.isLoadingMore}
-			emptyMessage="No feedback yet. A piece appears here as soon as somebody sends one."
-		/>
+		<div class="feedback-table">
+			<DataTable
+				{columns}
+				rows={all.items}
+				rowHref={pieceHref}
+				hasMore={all.hasMore}
+				onLoadMore={() => all.loadMore()}
+				isLoadingMore={all.isLoadingMore}
+				emptyMessage="No feedback yet. A piece appears here as soon as somebody sends one."
+			/>
+		</div>
 		{#if all.loadMoreError}
 			<Notice message={all.loadMoreError} variant="error" />
 		{/if}
@@ -126,3 +130,57 @@
 {/snippet}
 
 <ListPage title="Feedback" {intro} {content} />
+
+<style>
+	@layer components {
+		/* The All feedback table's content floor (#1945): below it the table's cells
+		   wrap to more lines than at the old type floors, so it shows its
+		   records -- the founder's answer on #1945. Measured 2026-10-25 on
+		   this route's fixture on the drag surface:
+		   its natural width fits its column from 1398px.
+		   `DataTable.svelte`'s floor comment says why the floor is the
+		   route's own. */
+		.feedback-table {
+			container: feedback-table / inline-size;
+		}
+
+		.feedback-table > :global(*) {
+			font-size: var(--text-body-size);
+			--data-table-table-display: none;
+			--data-table-records-display: block;
+		}
+
+		@container feedback-table (min-width: 87.5rem) {
+			.feedback-table > :global(*) {
+				--data-table-table-display: table;
+				--data-table-records-display: none;
+			}
+		}
+
+		/* The Issue not opened table's content floor (#1945): below it the table's cells
+		   wrap to more lines than at the old type floors, so it shows its
+		   records -- the founder's answer on #1945. Measured 2026-10-25 on
+		   this route's fixture on the drag surface:
+		   its natural width fits its column from 2192px on macOS/Chromium and
+		   from 2220px in CI's Linux/Chromium, the canonical environment,
+		   with no margin beyond it.
+		   `DataTable.svelte`'s floor comment says why the floor is the
+		   route's own. */
+		.unopened-table {
+			container: unopened-table / inline-size;
+		}
+
+		.unopened-table > :global(*) {
+			font-size: var(--text-body-size);
+			--data-table-table-display: none;
+			--data-table-records-display: block;
+		}
+
+		@container unopened-table (min-width: 138.75rem) {
+			.unopened-table > :global(*) {
+				--data-table-table-display: table;
+				--data-table-records-display: none;
+			}
+		}
+	}
+</style>

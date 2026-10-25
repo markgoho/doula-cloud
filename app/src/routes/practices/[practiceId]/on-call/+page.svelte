@@ -198,13 +198,15 @@
 			Doula's concurrent windows, since both are counted over the whole
 			answer rather than over whatever page arrived.
 		-->
-		<DataTable
-			{columns}
-			rows={data.roster.windows}
-			rowHref={engagementHref}
-			hasMore={false}
-			emptyMessage="No birth is on call in these days. Widen the dates to see more."
-		/>
+		<div class="roster-table">
+			<DataTable
+				{columns}
+				rows={data.roster.windows}
+				rowHref={engagementHref}
+				hasMore={false}
+				emptyMessage="No birth is on call in these days. Widen the dates to see more."
+			/>
+		</div>
 
 		{#if data.roster.noWindow.length > 0}
 			<section>
@@ -252,6 +254,32 @@
 
 <style>
 	@layer components {
+		/* The on-call roster's content floor (#1945): below it the table's cells
+		   wrap to more lines than at the old type floors, so it shows its
+		   records -- the founder's answer on #1945. Measured 2026-10-25 on
+		   this route's fixture on the drag surface:
+		   its natural width fits its column from 2160px on macOS/Chromium and
+		   from 2192px in CI's Linux/Chromium, the canonical environment,
+		   with no margin beyond it.
+		   `DataTable.svelte`'s floor comment says why the floor is the
+		   route's own. */
+		.roster-table {
+			container: roster-table / inline-size;
+		}
+
+		.roster-table > :global(*) {
+			font-size: var(--text-body-size);
+			--data-table-table-display: none;
+			--data-table-records-display: block;
+		}
+
+		@container roster-table (min-width: 137rem) {
+			.roster-table > :global(*) {
+				--data-table-table-display: table;
+				--data-table-records-display: none;
+			}
+		}
+
 		fieldset {
 			margin: 0;
 			padding: 0;

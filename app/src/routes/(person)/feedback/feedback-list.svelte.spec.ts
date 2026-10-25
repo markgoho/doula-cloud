@@ -33,7 +33,8 @@ async function setup(list: FeedbackListData = data) {
 	// Wide enough for DataTable's <table> rather than the record view it
 	// stacks into in a narrow container (#508). What the lists say is
 	// asserted here; that they say it at 320px is the continuum sweep's job.
-	await testPage.viewport(1440, 900);
+	// Above this route's own table floor (#1945, its +page.svelte), so the <table> renders.
+	await testPage.viewport(3200, 900);
 	await render(Page, { params: {}, data: list });
 }
 

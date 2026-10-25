@@ -411,13 +411,21 @@
 		/* The activity ledger's three body-cell treatments (brief.md's
 		   #433 amendment). Body-only, unlike .numeric above: the header
 		   keeps this table's one heading style regardless of what a
-		   column's values look like. */
+		   column's values look like.
+
+		   `nowrap` is the brief's "a fixed date column" (#1945): the date
+		   holds one line and the event beside it takes the wrap. A meta
+		   value is a date or a date range, never a Practice's prose, so its
+		   one line is short and bounded -- the longest built today is an
+		   on-call window, "Oct 1, 2026 – Nov 1, 2026". The record view's
+		   `dd.meta` below does not take it: a `<dd>` at 320px has to wrap. */
 		td.meta {
 			font-size: var(--text-meta-size);
 			font-weight: var(--text-meta-weight);
 			line-height: var(--text-meta-leading);
 			letter-spacing: var(--text-meta-tracking);
 			font-variant-numeric: tabular-nums;
+			white-space: nowrap;
 		}
 
 		td.variant-body {
@@ -521,15 +529,33 @@
 		   Re-measured 2026-10-25 (#1943), when the type floors moved to
 		   16px (ADR-0060): the same demo needed 876px at 868px in CI's
 		   Linux/Chromium. 55rem (880px) is the next step that holds there,
-		   with no margin added beyond it. #1945 shortens table words and
-		   measures again. */
+		   with no margin added beyond it.
+
+		   Not raised by #1945, measured 2026-10-25 on every route's
+		   fixture on the drag surface. At the 16px floors a table whose
+		   cells wrap to more lines than at the old floors shows its records
+		   instead, the founder's answer on #1945. Swept from 880px to 2560px
+		   at both type ramps, a table's cells stop wrapping more at the
+		   width its own natural (max-content) width fits, and no sooner:
+		   that width is the table's content floor. It runs from under 880px
+		   (the Billing screen, the portal's tables, a Client's first table)
+		   to 2988px in CI (the Clients list), so one floor here would have to
+		   be 2988px and would put every table that fits into its records on
+		   every screen. So this floor stays the least any table needs, and
+		   a route whose table needs more sets its own floor on these two
+		   properties from its own containment context: below its floor,
+		   `--data-table-table-display: none` and
+		   `--data-table-records-display: block`; at it, `table` and
+		   `none`, or nothing, which is these defaults. Each such floor is
+		   checked against its route's own fixture by
+		   `route-continuum.svelte.spec.ts`. */
 		@container data-table (min-width: 55rem) {
 			.table-view {
-				display: table;
+				display: var(--data-table-table-display, table);
 			}
 
 			.record-view {
-				display: none;
+				display: var(--data-table-records-display, none);
 			}
 		}
 

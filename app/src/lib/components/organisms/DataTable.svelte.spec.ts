@@ -462,6 +462,52 @@ describe('the activity ledger treatment (#486)', () => {
 		expect(container.querySelectorAll(':scope .table-view td.muted')).toHaveLength(rows.length);
 	});
 
+	/*
+	 * #1945, the brief's "a fixed date column in `meta`": in a table too
+	 * narrow for its words, the event takes the wrap and the date keeps one
+	 * line. Line count by the distinct tops of the cell's own Range rects,
+	 * which a `<time>` inside it does not double.
+	 */
+	it('keeps the date on one line when the table is narrowed', async () => {
+		await page.viewport(...WIDE);
+		const host = document.createElement('div');
+		host.style.inlineSize = '56rem';
+		document.body.append(host);
+		const event = 'Employment type changed from contractor to employee, '.repeat(6);
+		try {
+			const { container } = await render(
+				DataTable<Row>,
+				{
+					columns: [
+						{
+							label: 'When',
+							accessor: () => 'Jul 31, 2026, 8:00pm',
+							variant: 'meta' as const
+						},
+						{ label: 'What', accessor: () => event, variant: 'body' as const },
+						{ label: 'Who', accessor: () => event, variant: 'muted' as const }
+					],
+					rows: rows.slice(0, 1),
+					emptyMessage: 'No records yet.'
+				},
+				{ baseElement: host }
+			);
+			const lines = (cell: Element) => {
+				const range = document.createRange();
+				range.selectNodeContents(cell);
+				return new Set([...range.getClientRects()].map((rect) => Math.round(rect.top))).size;
+			};
+
+			// Geometry, which the accessible tree does not carry (svelte-tests.md, case 1's reason).
+			expect(lines(container.querySelector(':scope .table-view td.variant-body')!)).toBeGreaterThan(
+				1
+			);
+			expect(lines(container.querySelector(':scope .table-view td.meta')!)).toBe(1);
+		} finally {
+			host.remove();
+		}
+	});
+
 	it('applies no variant class when a column asks for none', async () => {
 		const { container } = await setup();
 
@@ -722,6 +768,32 @@ describe('the record view (#508, ADR-0024)', () => {
 			expect(getComputedStyle(container.querySelector('.record-view')!).display).not.toBe('none');
 		} finally {
 			parent.remove();
+		}
+	});
+
+	/*
+	 * #1945: a route whose table needs more room than this component's own
+	 * floor keeps the records past it, from its own containment context.
+	 * The two properties are the whole of that contract, so this sets them
+	 * on a host the way a route's rule does.
+	 */
+	it('keeps the record view past its own floor while its host asks for it', async () => {
+		await page.viewport(...WIDE);
+		const host = document.createElement('div');
+		host.style.setProperty('--data-table-table-display', 'none');
+		host.style.setProperty('--data-table-records-display', 'block');
+		document.body.append(host);
+		try {
+			const { container } = await render(
+				DataTable<Row>,
+				{ columns, rows, emptyMessage: 'No records yet.' },
+				{ baseElement: host }
+			);
+
+			expect(getComputedStyle(container.querySelector('.table-view')!).display).toBe('none');
+			expect(getComputedStyle(container.querySelector('.record-view')!).display).toBe('block');
+		} finally {
+			host.remove();
 		}
 	});
 

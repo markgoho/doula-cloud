@@ -104,15 +104,17 @@
 {/snippet}
 
 {#snippet content()}
-	<DataTable
-		{columns}
-		rows={contracts.items}
-		rowHref={engagementHref}
-		hasMore={contracts.hasMore}
-		onLoadMore={() => contracts.loadMore()}
-		isLoadingMore={contracts.isLoadingMore}
-		emptyMessage="Nothing is waiting. Every contract has been signed or voided."
-	/>
+	<div class="contracts-table">
+		<DataTable
+			{columns}
+			rows={contracts.items}
+			rowHref={engagementHref}
+			hasMore={contracts.hasMore}
+			onLoadMore={() => contracts.loadMore()}
+			isLoadingMore={contracts.isLoadingMore}
+			emptyMessage="Nothing is waiting. Every contract has been signed or voided."
+		/>
+	</div>
 
 	{#if contracts.loadMoreError}
 		<Notice message={contracts.loadMoreError} variant="error" />
@@ -124,15 +126,17 @@
 		tone="muted"
 	/>
 
-	<DataTable
-		columns={voidRequestColumns}
-		rows={voidRequests.items}
-		rowHref={voidRequestEngagementHref}
-		hasMore={voidRequests.hasMore}
-		onLoadMore={() => voidRequests.loadMore()}
-		isLoadingMore={voidRequests.isLoadingMore}
-		emptyMessage="No void request is waiting on you."
-	/>
+	<div class="void-requests-table">
+		<DataTable
+			columns={voidRequestColumns}
+			rows={voidRequests.items}
+			rowHref={voidRequestEngagementHref}
+			hasMore={voidRequests.hasMore}
+			onLoadMore={() => voidRequests.loadMore()}
+			isLoadingMore={voidRequests.isLoadingMore}
+			emptyMessage="No void request is waiting on you."
+		/>
+	</div>
 
 	{#if voidRequests.loadMoreError}
 		<Notice message={voidRequests.loadMoreError} variant="error" />
@@ -140,3 +144,57 @@
 {/snippet}
 
 <ListPage title="Contracts" {intro} {content} />
+
+<style>
+	@layer components {
+		/* The Void requests table's content floor (#1945): below it the table's cells
+		   wrap to more lines than at the old type floors, so it shows its
+		   records -- the founder's answer on #1945. Measured 2026-10-25 on
+		   this route's fixture on the drag surface:
+		   its natural width fits its column from 1231px.
+		   `DataTable.svelte`'s floor comment says why the floor is the
+		   route's own. */
+		.void-requests-table {
+			container: void-requests-table / inline-size;
+		}
+
+		.void-requests-table > :global(*) {
+			font-size: var(--text-body-size);
+			--data-table-table-display: none;
+			--data-table-records-display: block;
+		}
+
+		@container void-requests-table (min-width: 77rem) {
+			.void-requests-table > :global(*) {
+				--data-table-table-display: table;
+				--data-table-records-display: none;
+			}
+		}
+
+		/* The Contracts awaiting signature table's content floor (#1945): below it the table's cells
+		   wrap to more lines than at the old type floors, so it shows its
+		   records -- the founder's answer on #1945. Measured 2026-10-25 on
+		   this route's fixture on the drag surface:
+		   its natural width fits its column from 912px on macOS/Chromium and
+		   from 936px in CI's Linux/Chromium, the canonical environment,
+		   with no margin beyond it.
+		   `DataTable.svelte`'s floor comment says why the floor is the
+		   route's own. */
+		.contracts-table {
+			container: contracts-table / inline-size;
+		}
+
+		.contracts-table > :global(*) {
+			font-size: var(--text-body-size);
+			--data-table-table-display: none;
+			--data-table-records-display: block;
+		}
+
+		@container contracts-table (min-width: 58.5rem) {
+			.contracts-table > :global(*) {
+				--data-table-table-display: table;
+				--data-table-records-display: none;
+			}
+		}
+	}
+</style>
