@@ -117,14 +117,17 @@
 	let billingMode = $state<BillingMode | undefined>();
 	let isBillingModeLoaded = $state(false);
 	let billingModeLoadError = $state('');
-	let chosenBillingMode = $state<BillingMode>('stripe');
+	// No fallback (#1922): with no mode stored nothing is chosen, and the
+	// question is not drawn at all -- #271 asks it on the first Invoice.
+	let chosenBillingMode = $state<BillingMode | undefined>();
 	let isSavingBillingMode = $state(false);
 	let billingModeSaveError = $state('');
+	let isBillingModeSaved = $state(false);
 
 	onMount(async () => {
 		try {
 			billingMode = await loadBillingMode(apiFetchWithSession, page.params.practiceId!);
-			chosenBillingMode = billingMode ?? 'stripe';
+			chosenBillingMode = billingMode;
 			isBillingModeLoaded = true;
 		} catch (error_) {
 			billingModeLoadError = error_ instanceof Error ? error_.message : 'Failed to load billing mode';
@@ -143,6 +146,7 @@
 	let typedNetDays = $state('');
 	let isSavingPaymentTerms = $state(false);
 	let paymentTermsError = $state('');
+	let isPaymentTermsSaved = $state(false);
 
 	/*
 	 * GOV.UK's Recover from validation errors pattern (ADR-0021,
@@ -172,6 +176,7 @@
 		// Refused client-side before it is refused at the boundary, so the
 		// reader is told what is wrong in the words of the field rather
 		// than in the words of an API. The BFF refuses the same range.
+		isPaymentTermsSaved = false;
 		const netDays = Number(typedNetDays);
 		if (
 			!Number.isSafeInteger(netDays) ||
@@ -186,6 +191,7 @@
 		try {
 			paymentTerms = await setPaymentTerms(apiFetchWithSession, page.params.practiceId!, netDays);
 			typedNetDays = String(paymentTerms.netDays);
+			isPaymentTermsSaved = true;
 		} catch (error_) {
 			paymentTermsError = error_ instanceof Error ? error_.message : 'Failed to save payment terms';
 		} finally {
@@ -196,11 +202,21 @@
 	// Owner-only (#271, by analogy to Connect onboarding) -- changing an
 	// already-established mode. The initial "ask once" instead rides
 	// InvoiceSection's own first-Invoice request, never this screen.
+	//
+	// Save is always offered (#1968, ADR-0055: no disabled submit
+	// button). A press with nothing changed sends the stored mode back;
+	// the BFF writes nothing and records nothing for it, and the screen
+	// says "Saved." as Timezone and Rates do.
 	async function handleChangeBillingMode() {
 		isSavingBillingMode = true;
 		billingModeSaveError = '';
+		isBillingModeSaved = false;
 		try {
-			billingMode = await setBillingMode(apiFetchWithSession, page.params.practiceId!, chosenBillingMode);
+			// A non-null assertion, not a guard: the question is drawn only
+			// once a mode is stored, and `chosenBillingMode` starts as it,
+			// so a guard would be a branch that never runs.
+			billingMode = await setBillingMode(apiFetchWithSession, page.params.practiceId!, chosenBillingMode!);
+			isBillingModeSaved = true;
 		} catch (error_) {
 			billingModeSaveError = error_ instanceof Error ? error_.message : 'Failed to change billing mode';
 		} finally {
@@ -490,10 +506,11 @@
 				label="Save"
 				onClick={handleChangeBillingMode}
 				loading={isSavingBillingMode}
-				disabled={chosenBillingMode === billingMode}
 			/>
 			{#if billingModeSaveError}
 				<Notice variant="error" message={billingModeSaveError} />
+			{:else if isBillingModeSaved}
+				<Text text="Saved." />
 			{/if}
 		{/if}
 	{/if}
@@ -544,8 +561,13 @@
 				label="Update payment terms"
 				onClick={handleSavePaymentTerms}
 				loading={isSavingPaymentTerms}
-				disabled={typedNetDays === String(paymentTerms.netDays) && !paymentTerms.isDefault}
 			/>
+			<!-- Always offered (#1968, ADR-0055). The same number again is a
+			     save with no effect: the BFF writes nothing for it, and the
+			     screen says "Saved." as Timezone and Rates do. -->
+			{#if isPaymentTermsSaved}
+				<Text text="Saved." />
+			{/if}
 		{/if}
 	{/if}
 {/snippet}

@@ -133,6 +133,45 @@ func TestPutBillingModeHandler_OwnerCanChangeEstablishedMode(t *testing.T) {
 	}
 }
 
+// TestPutBillingModeHandler_SameModeRecordsNothing proves a save that
+// names the mode already stored answers 200 with that mode and writes no
+// Activity row (#1968). Settings > Payments always offers its Save, so a
+// press with nothing changed is ordinary, and the ledger must not say the
+// billing mode changed when it did not.
+func TestPutBillingModeHandler_SameModeRecordsNothing(t *testing.T) {
+	db := testdb.New(t)
+	const uid = "billing-mode-owner-same"
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
+	testdb.SeedBillingMode(t, db, practiceID, string(payments.BillingModeStripe))
+	srv, session := newInvoiceServer(t, db, uid, payments.NewFakeClient())
+	defer srv.Close()
+
+	resp := putBillingMode(t, srv, session, practiceID, string(payments.BillingModeStripe))
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
+	}
+	var out payments.BillingModeView
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if out.BillingMode == nil || *out.BillingMode != string(payments.BillingModeStripe) {
+		t.Fatalf("billingMode = %v, want %q", out.BillingMode, payments.BillingModeStripe)
+	}
+
+	var actionCount int
+	if err := db.Admin.QueryRowContext(t.Context(),
+		`SELECT count(*) FROM activity WHERE practice_id = $1 AND subject_kind = 'practice' AND action = 'billing_mode_changed'`,
+		practiceID,
+	).Scan(&actionCount); err != nil {
+		t.Fatalf("query activity: %v", err)
+	}
+	if actionCount != 0 {
+		t.Fatalf("billing_mode_changed activity rows = %d, want 0 for a save that changed nothing", actionCount)
+	}
+}
+
 // TestPutBillingModeHandler_NonOwnerForbidden proves an Admin -- who may
 // read this fact -- may not change it once established; only an Owner
 // may (#271, by analogy to Connect onboarding).

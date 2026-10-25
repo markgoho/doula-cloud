@@ -59,8 +59,8 @@
 	// Both come off practices/[practiceId]/+layout.ts's already-resolved
 	// read (#835), not a fetch this page makes itself: the Practice's
 	// name -- which the hosted page shows as the business name -- and the
-	// caller's roles, whose button-enabled state mirrors the payments
-	// screen's Owner gating.
+	// caller's roles: only an Owner is offered the questions and their
+	// buttons, which are absent for anybody else, never disabled (#1968).
 	const session = $derived((page.data as { session: PracticeSession }).session);
 	let practiceName = $derived(session.practiceName);
 	let isPracticeOwner = $derived(isOwner(session));
@@ -96,6 +96,13 @@
 		cancellationPolicy = current.cancellationPolicy;
 		if (current.mode !== 'undeclared') {
 			choice = current.mode;
+			step = 'saved';
+		} else if (!isPracticeOwner) {
+			/* #1968 (ADR-0055: no disabled submit button). Only an Owner
+			   answers this, so anybody else is never handed the questions
+			   and a Save or Publish page she cannot press: she reads that
+			   it is not answered yet, under the Notice saying whose it is.
+			   The BFF refuses her PUT whatever the screen draws. */
 			step = 'saved';
 		}
 	});
@@ -334,7 +341,6 @@
 		type="submit"
 		label={choice === 'hosted' ? 'Continue' : 'Save'}
 		loading={isSubmitting}
-		disabled={!isPracticeOwner}
 	/>
 	{#if step === 'answers' && current && current.mode !== 'undeclared'}
 		<Button variant="secondary" label="Cancel" onClick={() => (step = 'saved')} />
@@ -399,7 +405,7 @@
 					/>
 
 					<cluster-l space="var(--space-3)" align="center">
-						<Button label="Publish page" loading={isSubmitting} onClick={save} disabled={!isPracticeOwner} />
+						<Button label="Publish page" loading={isSubmitting} onClick={save} />
 						<Button variant="secondary" label="Back" onClick={() => (step = 'answers')} />
 					</cluster-l>
 				</stack-l>
@@ -411,7 +417,11 @@
 				<stack-l space="var(--space-7)">
 					<Heading level={1} variant="page" text="Your website" />
 
-					{#if current.mode === 'own'}
+					{#if current.mode === 'undeclared'}
+						<!-- Reached only by a non-Owner (onMount above): an Owner
+						     with no answer is on the questions instead. -->
+						<Text text="Not answered yet. A Practice Owner answers this before Stripe can be connected." />
+					{:else if current.mode === 'own'}
 						<DescriptionList
 							items={[
 								{ label: 'What Stripe will be told', value: current.ownUrl },

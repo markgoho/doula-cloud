@@ -204,11 +204,24 @@ func PutBillingModeHandler() http.Handler {
 			apierr.WriteError(w, `billingMode must be "stripe" or "by_hand"`, http.StatusBadRequest)
 			return
 		}
-		staffID, _ := staffauth.StaffID(r.Context())
-		if err := setBillingMode(r.Context(), tx, practiceID, mode, staffID); err != nil {
+		current, has, err := fetchBillingMode(r.Context(), tx, practiceID)
+		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
+		}
+		// A save that names the mode already stored writes nothing and
+		// records nothing (#1968), the way PutPaymentTermsHandler and the
+		// timezone PUT already behave: Settings > Payments always offers
+		// its Save, and the Activity log must not say the mode changed
+		// when it did not.
+		if !has || current != mode {
+			staffID, _ := staffauth.StaffID(r.Context())
+			if err := setBillingMode(r.Context(), tx, practiceID, mode, staffID); err != nil {
+				// coverage:ignore reason: DB query failure, not exercised by unit tests
+				apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+				return
+			}
 		}
 		s := string(mode)
 		apierr.WriteJSON(w, http.StatusOK, BillingModeView{BillingMode: &s})

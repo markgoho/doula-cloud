@@ -865,6 +865,28 @@ describe('payments settings screen: billing mode (#271)', () => {
 		await expect
 			.element(testPage.getByText('Not chosen yet -- this is asked the first time Staff raises an Invoice.'))
 			.toBeVisible();
+		// #1922: nothing is chosen, because the question is not asked here
+		// at all -- no radio, Stripe or otherwise, and no Save.
+		await expect.element(testPage.getByRole('radio', { name: 'Stripe' })).not.toBeInTheDocument();
+		await expect.element(testPage.getByRole('button', { name: 'Save' })).not.toBeInTheDocument();
+	});
+
+	it('offers Save with nothing changed, and says Saved after a press (#1968)', async () => {
+		await setup({ roles: ['owner'] });
+
+		await expect.element(testPage.getByText('This Practice bills Clients through Stripe.')).toBeVisible();
+		await expect.element(testPage.getByRole('button', { name: 'Save' })).toBeEnabled();
+		await testPage.getByRole('button', { name: 'Save' }).click();
+
+		await expect.element(testPage.getByText('Saved.')).toBeVisible();
+		await expect.element(testPage.getByText('This Practice bills Clients through Stripe.')).toBeVisible();
+		const puts = apiFetchWithSession.mock.calls.filter(
+			(call: unknown[]) =>
+				call[0] === '/api/practices/practice-1/payments/billing-mode' &&
+				(call[1] as RequestInit | undefined)?.method === 'PUT'
+		);
+		expect(puts).toHaveLength(1);
+		expect(JSON.parse(String((puts[0]![1] as RequestInit).body))).toEqual({ billingMode: 'stripe' });
 	});
 });
 

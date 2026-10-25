@@ -143,6 +143,22 @@ describe('payments settings screen: payment terms (#768)', () => {
 		).toBe(false);
 	});
 
+	it('offers Update payment terms with nothing changed, and says Saved after a press (#1968)', async () => {
+		await setup({ netDays: 45, isDefault: false });
+
+		await expect.element(testPage.getByText('Invoices are due 45 days after they are raised.')).toBeVisible();
+		await expect.element(testPage.getByRole('button', { name: 'Update payment terms' })).toBeEnabled();
+		await testPage.getByRole('button', { name: 'Update payment terms' }).click();
+
+		await expect.element(testPage.getByText('Saved.')).toBeVisible();
+		await expect.element(testPage.getByText('Invoices are due 45 days after they are raised.')).toBeVisible();
+		const puts = apiFetchWithSession.mock.calls.filter(
+			(call: unknown[]) => call[0] === termsPath && (call[1] as RequestInit | undefined)?.method === 'PUT'
+		);
+		expect(puts).toHaveLength(1);
+		expect(JSON.parse(String((puts[0]![1] as RequestInit).body))).toEqual({ netDays: 45 });
+	});
+
 	it('shows a Doula the terms without a control to change them', async () => {
 		await setup({ netDays: 45, isDefault: false }, ['doula']);
 

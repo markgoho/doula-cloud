@@ -10,8 +10,11 @@
  * Two sessions (#928). `isOwner` decides three things here, and one of
  * them is additive: anybody else reads a Notice above the whole screen
  * saying the setting is not hers to change, which no Owner branch draws.
- * The other two only withhold -- the Change button and the Publish
- * button's enabled state.
+ * The other two only withhold: the Change button, and, for a Practice
+ * that has not answered, the questions themselves (#1968), so a non-Owner
+ * never meets a Save or Publish page she cannot press. That undeclared
+ * non-Owner tree is the Notice and one sentence in the saved frame, a
+ * subset of the variant below, so it is left out of the sweep on purpose.
  */
 import { jsonResponse } from '#lib/testResponse.js';
 import type { PracticeWebsite } from '#lib/website.js';
