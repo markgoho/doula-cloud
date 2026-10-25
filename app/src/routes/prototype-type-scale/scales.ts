@@ -83,8 +83,19 @@ export const SCALES: readonly Scale[] = [
 		name: 'Two ratios, 1.067 below body and 1.25 above',
 		note: 'A tight ratio for the dense steps under body, a larger one for the headings over it.',
 		floors: fromRatios(1.067, 1.25)
+	},
+	{
+		key: 'floor16',
+		name: 'Nothing under 16px, 1.25 above',
+		note: "The founder's pick to try: meta, label, body-sm and body all at 16px, the headings at 1.25 from there. Below body the roles differ only by weight and color, as tokens.css has them.",
+		floors: [16, 16, 16, 16, 20, 25, 31.25, 39.06]
 	}
 ];
+
+/**
+The candidate the page opens on.
+*/
+export const OPENING_KEY = 'floor16';
 
 /**
  * The same arithmetic tokens.spec.ts holds tokens.css to: with the ramp

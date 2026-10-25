@@ -1,7 +1,7 @@
 <script lang="ts">
 	/*
 	 * PROTOTYPE -- throwaway, ticket #1926, for the type-scale question on
-	 * #1722. Five candidate scales, each with body at 16px and the same 1.2
+	 * #1722. Six candidate scales, each with body at 16px and the same 1.2
 	 * fluid growth, rendered on real screens built from the real components
 	 * in a narrow and a wide column side by side. The candidate switches in
 	 * page state with the floating bar or the arrow keys; `?variant=` is read
@@ -13,7 +13,7 @@
 	import Frame from './Frame.svelte';
 	import ScaleReadout from './ScaleReadout.svelte';
 	import type { ScreenKey } from './fixtures.js';
-	import { SCALES, tokenStyle } from './scales.js';
+	import { OPENING_KEY, SCALES, tokenStyle } from './scales.js';
 
 	const SCREENS: { key: ScreenKey | 'all'; name: string }[] = [
 		{ key: 'clients', name: 'Clients list' },
@@ -25,7 +25,7 @@
 	const NARROW_WIDTHS = [320, 360, 400];
 
 	const initial = new URLSearchParams(globalThis.location?.search ?? '');
-	let scaleKey = $state(initial.get('variant') ?? SCALES[0]!.key);
+	let scaleKey = $state(initial.get('variant') ?? OPENING_KEY);
 	let screenKey = $state<ScreenKey | 'all'>('clients');
 	let narrowPx = $state(360);
 	let narrowWidth = $state(0);
@@ -57,7 +57,7 @@
 	<header>
 		<h1>Pick a type scale</h1>
 		<p>
-			Five candidate scales, each with body text at 16px and the same 1.2 growth from a 320px
+			Six candidate scales, each with body text at 16px and the same 1.2 growth from a 320px
 			column to a 1920px one. The screens below are the real components with a Practice's content
 			in them. Use the bar at the bottom or the left and right arrow keys to switch scale.
 		</p>
