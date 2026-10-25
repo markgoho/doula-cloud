@@ -319,6 +319,24 @@
 			min-block-size: var(--row-target-min);
 		}
 
+		/* Written on the two sizes because each size's own `padding`
+		   rule above is more specific than a bare `td button`. */
+		:global(td) button:is(.size-sm, .size-md) {
+			/* What the target leaves around one line, over its two edges,
+			   not the size's own `--space-1` (#1945): at the 16px type
+			   floors (ADR-0060) one line of `body-sm` plus that padding and
+			   the two borders came to 42.8px at the ramp's ceiling, so the
+			   row grew past 40px. Derived from `1lh`, one line fits the
+			   target at every width, and a label that wraps keeps the same
+			   gap. Rounded down to a whole pixel for the reason
+			   `DataTable.svelte`'s `td.content` gives. */
+			padding-block: round(
+				down,
+				calc((var(--row-target-min) - 2 * var(--border-thin) - 1lh) / 2),
+				var(--border-thin)
+			);
+		}
+
 		:global(td) button.icon-only {
 			min-inline-size: var(--row-target-min);
 		}

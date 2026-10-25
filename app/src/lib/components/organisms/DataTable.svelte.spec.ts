@@ -585,21 +585,16 @@ describe('a cell that renders a column snippet (#740)', () => {
 	});
 
 	/*
-	 * The other side of that padding, and the reason it is `--space-1`
-	 * rather than the `--space-2` the record view spends: the Clients
+	 * The other side of that padding, and the reason it is what the row
+	 * leaves around one line rather than a spacing step: the Clients
 	 * list's Portal invite column is a ONE-line snippet, and a table whose
 	 * every row grew because one column declared `content` would break the
 	 * brief's Density section and stop Skeleton reserving the right space.
-	 *
-	 * Known broken since the 16px type floors (ADR-0060, #1943), and owned
-	 * by #1945 ("fix tables"). The cell inherits `body`'s 1.55 line height
-	 * at `body-sm`, so one line plus 2 x --space-1 and the 1px rule is
-	 * 1.55 x 19.2 + 2 x 6 + 1 = 42.8px at the ramp's ceiling, over the
-	 * 40px row; it passes 40px at a frame of about 1430px, and this
-	 * describe's 1440px viewport reads 40.03px. `it.fails` turns red the
-	 * day the row holds 40px again, which forces this marker out.
+	 * With `--space-1` and the 16px type floors (ADR-0060, #1943) this row
+	 * read 40.03px at this describe's 1440px viewport and 42.8px at the
+	 * ramp's ceiling; #1945 derived the padding from `1lh`.
 	 */
-	it.fails('leaves the fixed row height alone for a snippet of a single line', async () => {
+	it('leaves the fixed row height alone for a snippet of a single line', async () => {
 		const { container } = await setup({ columns: oneLineContentColumns });
 
 		expect(firstRow(container).getBoundingClientRect().height).toBe(ROW_HEIGHT);

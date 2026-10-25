@@ -50,12 +50,15 @@
 		}
 
 		/* The one size whose mark and name together are wider than the
-		   320px commitment: 120px of mark, the gap, and about 193px of name
+		   320px commitment: 120px of mark, the gap, and about 200px of name
 		   at the display step. Where the row cannot hold both, the name
 		   goes under the mark, whole, rather than either one shrinking.
 		   Only `lg`: `sm` and `md` fit at 320px, and a bar holding `sm`
 		   must overflow where it is short, not grow a second line the
-		   floor check cannot see. */
+		   floor check cannot see. Measured again at the 16px type floors
+		   (ADR-0060, #1945), in a 320px window's 286px column: `sm` is
+		   157px wide with its 20px name and `md` 202px with its 25px name,
+		   each on one row. */
 		.size-lg {
 			flex-wrap: wrap;
 		}
