@@ -51,7 +51,7 @@
 
 {#snippet errorSummary()}
 	<ErrorSummary
-		errors={[{ message: 'Enter a due date, like 2 April 2027', targetId: dueDateId }]}
+		errors={[{ message: 'Enter a due date, like April 2, 2027', targetId: dueDateId }]}
 	/>
 {/snippet}
 
@@ -79,8 +79,8 @@
 	<LabeledField
 		id={dueDateId}
 		label="Estimated due date"
-		hint="For example, 2 April 2027"
-		error={hasError ? 'Enter a due date, like 2 April 2027' : undefined}
+		hint="For example, April 2, 2027"
+		error={hasError ? 'Enter a due date, like April 2, 2027' : undefined}
 	>
 		{#snippet children({ id, describedBy, invalid })}
 			<TextInput
