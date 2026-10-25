@@ -53,7 +53,7 @@
 	 * unchanged.
 	 *
 	 * This demonstrates the component's contract, NOT a recommended
-	 * column order: a link named "12 Sep 2026, 10:30am" says nothing
+	 * column order: a link named "Sep 12, 2026, 10:30am" says nothing
 	 * about where it goes (#513), which is why the real Practice-wide
 	 * schedule leads with the Client and keeps When second.
 	 */
@@ -74,12 +74,12 @@
 
 	const occurrences: Occurrence[] = [
 		{
-			display: '12 Sep 2026, 10:30am',
+			display: 'Sep 12, 2026, 10:30am',
 			instant: '2026-09-12T14:30:00Z',
 			client: 'Persephone Adeyemi-Wollstonecraft'
 		},
 		{
-			display: '14 Sep 2026, 09:00am',
+			display: 'Sep 14, 2026, 9:00am',
 			instant: '2026-09-14T13:00:00Z',
 			client: 'Anne-Marie Ochieng-Whitfield'
 		}
@@ -216,17 +216,17 @@
 
 	const history: HistoryRow[] = [
 		{
-			when: '31 August 2026, 09:14',
+			when: 'Aug 31, 2026, 9:14am',
 			who: 'Persephone Adeyemi-Wollstonecraft',
 			what: 'Birth Engagement refused: we are already carrying two clients due the same fortnight and cannot promise attendance at a third birth without putting the other two at risk'
 		},
 		{
-			when: '30 August 2026, 16:02',
+			when: 'Aug 30, 2026, 4:02pm',
 			who: 'Anne-Marie Ochieng-Whitfield',
 			what: 'Postpartum Engagement refused: https://highland-midwifery-group.example.org/policies/scheduling-and-availability#postpartum-capacity-window'
 		},
 		{
-			when: '28 August 2026, 11:47',
+			when: 'Aug 28, 2026, 11:47am',
 			who: 'Persephone Adeyemi-Wollstonecraft',
 			what: 'Record updated'
 		}

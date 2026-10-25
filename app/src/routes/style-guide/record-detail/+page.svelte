@@ -26,20 +26,20 @@
 	 */
 	const visits: Visit[] = [
 		{
-			date: '18 February 2027',
+			date: 'Feb 18, 2027',
 			doula: 'Persephone Adeyemi-Wollstonecraft',
 			kind: 'Prenatal visit at home'
 		},
 		{
-			date: '4 March 2027',
+			date: 'Mar 4, 2027',
 			doula: 'Renata Chiamaka Okonkwo-Adeyemi',
 			kind: 'Prenatal visit at home'
 		},
-		{ date: '21 March 2027', doula: 'Unassigned', kind: 'Postpartum visit at home' }
+		{ date: 'Mar 21, 2027', doula: 'Unassigned', kind: 'Postpartum visit at home' }
 	];
 
 	const summaryItems = [
-		{ label: 'Due date', value: '2 April 2027' },
+		{ label: 'Due date', value: 'Apr 2, 2027' },
 		{ label: 'Lead doula', value: 'Persephone Adeyemi-Wollstonecraft' },
 		{ label: 'Package', value: 'Full birth support, $4,250.00' }
 	];
@@ -52,7 +52,7 @@
 {/snippet}
 
 {#snippet actions()}
-	<Badge label="Engagement active since 12 January 2027" variant="success" />
+	<Badge label="Engagement active since Jan 12, 2027" variant="success" />
 	<Button label="Message" variant="secondary" size="sm" onClick={noop} />
 	<Button label="Send this invoice to the Client" size="sm" onClick={noop} />
 {/snippet}
@@ -76,7 +76,7 @@
 {#snippet contractSection()}
 	<stack-l space="var(--space-3)">
 		<Text
-			text="Signed 12 January 2027 by Anne-Marie Ochieng-Whitfield."
+			text="Signed Jan 12, 2027 by Anne-Marie Ochieng-Whitfield."
 			step="body-sm"
 			tone="variant"
 		/>
@@ -88,7 +88,7 @@
 
 {#snippet invoicesSection()}
 	<Text
-		text="One invoice outstanding — $4,250.00, due 15 March 2027."
+		text="One invoice outstanding — $4,250.00, due Mar 15, 2027."
 		step="body-sm"
 		tone="variant"
 	/>

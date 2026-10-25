@@ -45,7 +45,7 @@ function local(year: number, month: number, day: number, hour = 0, minute = 0, s
 }
 
 describe('formatActivityTimestamp (ADR-0022)', () => {
-	const now = new Date(2026, 7, 14, 20, 12, 0); // Friday 14 Aug 2026, 8:12pm local
+	const now = new Date(2026, 7, 14, 20, 12, 0); // Friday Aug 14, 2026, 8:12pm local
 
 	it.each([
 		['30 seconds ago reads as just now', local(2026, 8, 14, 20, 11, 30), 'just now'],
@@ -57,7 +57,7 @@ describe('formatActivityTimestamp (ADR-0022)', () => {
 		['2-7 days ago reads as the weekday name', local(2026, 8, 11, 16, 40), 'Tuesday, 4:40pm'],
 		['midnight is 12, not 0, on the 12-hour clock', local(2026, 8, 11, 0, 0), 'Tuesday, 12:00am'],
 		['noon is 12pm, not 0pm', local(2026, 8, 11, 12, 0), 'Tuesday, 12:00pm'],
-		['7+ days ago is the absolute date', local(2026, 7, 31, 20, 0), '31 Jul 2026, 8:00pm']
+		['7+ days ago is the absolute date', local(2026, 7, 31, 20, 0), 'Jul 31, 2026, 8:00pm']
 	])('%s', (_name, iso, want) => {
 		expect(formatActivityTimestamp(iso, now)).toBe(want);
 	});
@@ -76,19 +76,19 @@ describe('formatScheduledVisit', () => {
 		const iso = local(2027, 3, 15, 14, 30);
 		const expected = new Date(iso);
 		expect(formatScheduledVisit(iso)).toBe(
-			`${expected.getDate()} ${expected.toLocaleDateString('en-US', { month: 'short' })} ${expected.getFullYear()}, ${expected.getHours() % 12 === 0 ? 12 : expected.getHours() % 12}:${expected.getMinutes().toString().padStart(2, '0')}${expected.getHours() < 12 ? 'am' : 'pm'}`
+			`${expected.toLocaleDateString('en-US', { month: 'short' })} ${expected.getDate()}, ${expected.getFullYear()}, ${expected.getHours() % 12 === 0 ? 12 : expected.getHours() % 12}:${expected.getMinutes().toString().padStart(2, '0')}${expected.getHours() < 12 ? 'am' : 'pm'}`
 		);
 	});
 });
 
 // #478: the two things a Client is shown about a Visit, and the whole of
-// what tells "Thursday at 2pm" from "she came on 18 August".
+// what tells "Thursday at 2pm" from "she came on August 18".
 describe('formatPortalVisit', () => {
 	it('reads a Visit still to come as a weekday and a clock', () => {
 		const iso = local(2027, 2, 18, 14, 0);
 		const expected = new Date(iso);
 		expect(formatPortalVisit(iso, false)).toBe(
-			`${expected.toLocaleDateString('en-US', { weekday: 'short' })} ${expected.getDate()} ${expected.toLocaleDateString('en-US', { month: 'short' })}, 2:00pm`
+			`${expected.toLocaleDateString('en-US', { weekday: 'short' })} ${expected.toLocaleDateString('en-US', { month: 'short' })} ${expected.getDate()}, 2:00pm`
 		);
 	});
 
@@ -96,7 +96,7 @@ describe('formatPortalVisit', () => {
 		const iso = local(2026, 8, 18, 14, 30);
 		const expected = new Date(iso);
 		expect(formatPortalVisit(iso, true)).toBe(
-			`${expected.getDate()} ${expected.toLocaleDateString('en-US', { month: 'short' })} ${expected.getFullYear()}`
+			`${expected.toLocaleDateString('en-US', { month: 'short' })} ${expected.getDate()}, ${expected.getFullYear()}`
 		);
 	});
 

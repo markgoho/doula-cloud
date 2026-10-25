@@ -14,10 +14,10 @@
 		<stack-l space="var(--space-4)">
 			<Heading level={1} text="Level 1, page — Anne-Marie Ochieng-Whitfield" />
 			<Heading level={2} text="Level 2, section — Engagement with Highland Midwifery &amp; Birth Support" />
-			<Heading level={3} text="Level 3, card — Contract signed 14 September 2027" />
-			<Heading level={4} text="Level 4, card — Contract signed 14 September 2027" />
-			<Heading level={5} text="Level 5, card — Contract signed 14 September 2027" />
-			<Heading level={6} text="Level 6, card — Contract signed 14 September 2027" />
+			<Heading level={3} text="Level 3, card — Contract signed Sep 14, 2027" />
+			<Heading level={4} text="Level 4, card — Contract signed Sep 14, 2027" />
+			<Heading level={5} text="Level 5, card — Contract signed Sep 14, 2027" />
+			<Heading level={6} text="Level 6, card — Contract signed Sep 14, 2027" />
 		</stack-l>
 	</section>
 
@@ -31,7 +31,7 @@
 		<stack-l space="var(--space-4)">
 			<Heading level={2} variant="page" text="Page — Anne-Marie Ochieng-Whitfield" />
 			<Heading level={2} variant="section" text="Section — Engagement with Highland Midwifery &amp; Birth Support" />
-			<Heading level={2} variant="card" text="Card — Contract signed 14 September 2027" />
+			<Heading level={2} variant="card" text="Card — Contract signed Sep 14, 2027" />
 		</stack-l>
 	</section>
 </stack-l>

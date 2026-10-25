@@ -39,6 +39,8 @@ An entry displays a relative time under seven days — *12 minutes ago*, *2 hour
 
 The clock is **12-hour with a lowercase `am`/`pm` and no periods**, because this product is used in the United States by people who say "she came at two in the morning". The brief's tabular-figures rule still applies to the numerals; `am`/`pm` is not a numeral and does not need to align.
 
+**Amended, 2026-10-24 ([#1940](https://github.com/markgoho/doula-cloud/issues/1940)):** the absolute time reads month-day, *Aug 14, 2026, 8:12pm*, not the day-month *14 Aug 2026, 8:12pm* above. The founder decided it on 2026-10-24: DoulaCloud is an American product, and a person in the United States reads and says a date month first. Every absolute day the product prints follows it, a Visit's own date included (*Thu Sep 4, 2:00pm*, *Aug 18, 2026*). The decision above stands: relative under seven days, absolute beyond, a 12-hour clock, and the exact instant underneath.
+
 The exact instant is **carried underneath and never replaced** — the rendered element keeps the full timestamp as its machine-readable value, so a screen reader, a hover and a copy-paste all get the real one. An audit trail whose only surviving form is *"2 hours ago"* is not an audit trail. This is the one place where the ledger's two jobs — being readable and being evidence — actually conflict, and both are served rather than one traded for the other.
 
 ## The fourth event table, and why it stays

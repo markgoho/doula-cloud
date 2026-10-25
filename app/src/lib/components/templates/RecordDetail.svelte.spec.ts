@@ -63,15 +63,15 @@ describe('RecordDetail.svelte', () => {
 	it('omits the summary and the actions when neither is given', async () => {
 		await setup();
 
-		await expect.element(page.getByText('Due 4 March')).not.toBeInTheDocument();
+		await expect.element(page.getByText('Due Mar 4')).not.toBeInTheDocument();
 		await expect.element(page.getByText('Edit')).not.toBeInTheDocument();
 	});
 
 	it('renders the summary between the title and the first section', async () => {
-		await setup({ summary: textSnippet('Due 4 March') });
+		await setup({ summary: textSnippet('Due Mar 4') });
 
 		const title = page.getByRole('heading', { level: 1, name: 'Ada Lovelace' }).element();
-		const summary = page.getByText('Due 4 March').element();
+		const summary = page.getByText('Due Mar 4').element();
 		const firstSection = page.getByRole('heading', { level: 2, name: 'Visits' }).element();
 
 		expect(title.compareDocumentPosition(summary) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();

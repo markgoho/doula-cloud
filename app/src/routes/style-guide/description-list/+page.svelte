@@ -10,7 +10,7 @@
 		<DescriptionList
 			items={[
 				{ label: 'Status', value: 'Stripe onboarding incomplete' },
-				{ label: 'Contract signed', value: '14 September 2027 at 09:42' },
+				{ label: 'Contract signed', value: 'Sep 14, 2027, 9:42am' },
 				{ label: 'Client', value: 'Anne-Marie Ochieng-Whitfield' },
 				{
 					label: 'Address',

@@ -418,7 +418,7 @@ describe('Your visits (#478)', () => {
 	});
 
 	// The acceptance criterion in the ticket's own words: "Thursday at
-	// 2pm" and "she came on 18 August" must render differently. The server
+	// 2pm" and "she came on August 18" must render differently. The server
 	// sends `hasHappened`; the two formats are what a Client sees, so
 	// this asserts the strings rather than the flag. Both are read out of
 	// the fixture in the runner's own zone, which is what a Client's
@@ -438,20 +438,20 @@ describe('Your visits (#478)', () => {
 		const month = upcoming.toLocaleDateString('en-US', { month: 'short' });
 		await expect
 			.poll(text)
-			.toMatch(new RegExp(`${weekday} ${upcoming.getDate()} ${month}, ${String.raw`\d+:\d\d[ap]m`}`));
+			.toMatch(new RegExp(`${weekday} ${month} ${upcoming.getDate()}, ${String.raw`\d+:\d\d[ap]m`}`));
 		expect(text()).toContain(visits[0]!.doulaName);
 
 		// The past one: the calendar day it was on, no weekday and no
 		// clock -- neither is what she is checking a month later.
 		const happened = new Date(visits[1]!.scheduledAt);
 		const happenedMonth = happened.toLocaleDateString('en-US', { month: 'short' });
-		expect(text()).toContain(`${happened.getDate()} ${happenedMonth} ${happened.getFullYear()}`);
+		expect(text()).toContain(`${happenedMonth} ${happened.getDate()}, ${happened.getFullYear()}`);
 		expect(text()).toContain(visits[1]!.doulaName);
 		// The past row carries no weekday and no clock of its own -- the
 		// whole of what tells the two apart on the page.
-		const pastDay = `${happened.getDate()} ${happenedMonth}`;
+		const pastDay = `${happenedMonth} ${happened.getDate()}`;
 		expect(text()).not.toMatch(
-			new RegExp(`${String.raw`\w{3} `}${pastDay}|${pastDay} ${String.raw`\d{4}, \d`}`)
+			new RegExp(`${String.raw`\w{3} `}${pastDay}|${pastDay}${String.raw`, \d{4}, \d`}`)
 		);
 	});
 
@@ -500,9 +500,9 @@ describe('Your visits (#478)', () => {
 		const text = visitsTableText(container);
 
 		const soonest = new Date(visits[0]!.scheduledAt);
-		const soonestDay = `${soonest.getDate()} ${soonest.toLocaleDateString('en-US', { month: 'short' })}`;
+		const soonestDay = `${soonest.toLocaleDateString('en-US', { month: 'short' })} ${soonest.getDate()}`;
 		const furthest = new Date(later.scheduledAt);
-		const furthestDay = `${furthest.getDate()} ${furthest.toLocaleDateString('en-US', { month: 'short' })}`;
+		const furthestDay = `${furthest.toLocaleDateString('en-US', { month: 'short' })} ${furthest.getDate()}`;
 		await expect.poll(text).toContain(furthestDay);
 		expect(text()!.indexOf(soonestDay)).toBeLessThan(text()!.indexOf(furthestDay));
 	});

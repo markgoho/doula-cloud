@@ -16,7 +16,7 @@
 	];
 
 	const clientOptions: { value: 'existing' | 'new'; label: string; description?: string }[] = [
-		{ value: 'existing', label: 'Sarah Whitfield', description: 'Added 4 March 2026. Due 12 June 2026.' },
+		{ value: 'existing', label: 'Sarah Whitfield', description: 'Added Mar 4, 2026. Due Jun 12, 2026.' },
 		{ value: 'new', label: 'No, this is a different person' }
 	];
 
