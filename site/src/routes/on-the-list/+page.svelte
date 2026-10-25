@@ -8,6 +8,11 @@ founder approved for the Welcome email itself.
 The pilot terms are not linked here: /pilot-terms stays unlisted (#444),
 and the Welcome email carries the link. Unlisted, as /pilot-terms is:
 noindex, and left out of sitemap.xml.
+
+The redirect set in Buttondown is https://doula.cloud/on-the-list#_
+(#1897), for the reason /check-your-inbox gives: Buttondown can append
+"?email_address=<address>", and behind the "#" it never reaches Firebase
+Hosting.
 -->
 <script lang="ts">
 	import SignedNote from '#lib/components/SignedNote.svelte';
