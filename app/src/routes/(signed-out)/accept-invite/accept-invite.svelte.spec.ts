@@ -166,11 +166,13 @@ const stateField = () => testPage.getByRole('combobox', { name: 'Which state do 
 
 const newHereRadio = () => testPage.getByRole('radio', { name: /I'm new here/ });
 const hasAccountRadio = () => testPage.getByRole('radio', { name: /I already have an account/ });
+const accountQuestion = () =>
+	testPage.getByRole('group', { name: 'Do you already have a DoulaCloud account?' });
 
 async function identify(mode: 'signup' | 'login' = 'signup') {
+	await (mode === 'login' ? hasAccountRadio() : newHereRadio()).click();
 	await emailField().fill('priya@example.com');
 	await passwordField().fill('correct horse battery');
-	await (mode === 'login' ? hasAccountRadio() : newHereRadio()).click();
 	await continueButton().click();
 }
 
@@ -224,9 +226,9 @@ describe('step one -- the account question opens with nothing chosen (#1915)', (
 		expect(apiFetch).not.toHaveBeenCalled();
 	});
 
-	// Field order: the question sits under the password, so its entry is
-	// listed after the empty fields above it.
-	it('lists the empty fields and the unanswered question in field order', async () => {
+	// Field order: the question comes first (#1959), so its entry is
+	// listed before the empty fields under it.
+	it('lists the unanswered question and the empty fields in field order', async () => {
 		await setup();
 
 		await continueButton().click();
@@ -238,10 +240,29 @@ describe('step one -- the account question opens with nothing chosen (#1915)', (
 			.elements()
 			.map((link) => link.textContent.trim());
 		expect(links).toEqual([
+			'Select whether you are new here or already have an account',
 			'Enter your email address',
-			'Enter your password',
-			'Select whether you are new here or already have an account'
+			'Enter your password'
 		]);
+	});
+});
+
+describe('step one -- the account question comes first (#1959)', () => {
+	it('asks the question in words a person would say', async () => {
+		await setup();
+
+		await expect.element(accountQuestion()).toBeVisible();
+	});
+
+	// The answer says what the password is for, so it is asked before she
+	// types one.
+	it('asks it before the email and the password', async () => {
+		await setup();
+
+		await expect.element(accountQuestion()).toBeVisible();
+		const question = accountQuestion().element();
+		for (const field of [emailField().element(), passwordField().element()])
+			expect(question.compareDocumentPosition(field) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 	});
 });
 
