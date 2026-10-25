@@ -455,6 +455,7 @@ describe('InvoiceSection.svelte', () => {
 			await setup({ invoices: [invoiceOpen], isOwnerOrAdmin: true });
 
 			await page.getByRole('button', { name: 'Record payment' }).click();
+			await page.getByRole('radio', { name: 'Check' }).click();
 			await page.getByLabelText('Date received').fill('2026-01-02');
 			await page.getByRole('button', { name: 'Continue' }).click();
 			await page.getByRole('button', { name: 'Change' }).click();
@@ -470,6 +471,49 @@ describe('InvoiceSection.svelte', () => {
 
 			expect(onRecordPayment).not.toHaveBeenCalled();
 			await expect.element(page.getByLabelText('Date received')).not.toBeInTheDocument();
+		});
+
+		// #1913, ADR-0055: how a Client paid is a question, so it opens
+		// with nothing chosen. The date is pre-filled on purpose (#1923).
+		it('opens with no method chosen, and today as the date received', async () => {
+			vi.useFakeTimers();
+			vi.setSystemTime(new Date('2026-06-15T15:00:00Z'));
+			await setup({ invoices: [invoiceOpen], isOwnerOrAdmin: true, practiceTimezone: 'America/New_York' });
+
+			await page.getByRole('button', { name: 'Record payment' }).click();
+
+			for (const name of ['Check', 'Bank transfer', 'Cash', 'Other']) {
+				await expect.element(page.getByRole('radio', { name })).not.toBeChecked();
+			}
+			await expect.element(page.getByLabelText('Date received')).toHaveValue('2026-06-15');
+		});
+
+		it('refuses Continue with no method chosen, names the question, and does not reach the review step', async () => {
+			const { onRecordPayment } = await setup({ invoices: [invoiceOpen], isOwnerOrAdmin: true });
+
+			await page.getByRole('button', { name: 'Record payment' }).click();
+			await page.getByRole('button', { name: 'Continue' }).click();
+
+			await expect
+				.element(page.getByRole('link', { name: 'Select how the payment was made' }))
+				.toHaveAttribute('href', '#record-payment-method-check');
+			await expect
+				.element(page.getByRole('group', { name: 'Method' }))
+				.toHaveTextContent('Select how the payment was made');
+			await expect.element(page.getByRole('button', { name: 'Continue' })).toBeVisible();
+			expect(page.getByRole('button', { name: 'Confirm and record' }).all()).toHaveLength(0);
+			expect(onRecordPayment).not.toHaveBeenCalled();
+		});
+
+		it('opens with no method chosen again when the form is closed and opened', async () => {
+			await setup({ invoices: [invoiceOpen], isOwnerOrAdmin: true });
+
+			await page.getByRole('button', { name: 'Record payment' }).click();
+			await page.getByRole('radio', { name: 'Cash' }).click();
+			await page.getByRole('button', { name: 'Cancel' }).click();
+			await page.getByRole('button', { name: 'Record payment' }).click();
+
+			await expect.element(page.getByRole('radio', { name: 'Cash' })).not.toBeChecked();
 		});
 
 		// #1038: the message is wired into the Note field itself -- marked
@@ -499,6 +543,7 @@ describe('InvoiceSection.svelte', () => {
 			future.setDate(future.getDate() + 1);
 
 			await page.getByRole('button', { name: 'Record payment' }).click();
+			await page.getByRole('radio', { name: 'Check' }).click();
 			await page.getByLabelText('Date received').fill(future.toISOString().slice(0, 10));
 			await page.getByRole('button', { name: 'Continue' }).click();
 
@@ -522,6 +567,7 @@ describe('InvoiceSection.svelte', () => {
 			await setup({ invoices: [invoiceOpen], isOwnerOrAdmin: true, practiceTimezone: 'America/New_York' });
 
 			await page.getByRole('button', { name: 'Record payment' }).click();
+			await page.getByRole('radio', { name: 'Check' }).click();
 			// The default -- todayIsoDate() feeds paymentDate's own initial
 			// value (startRecordingPayment).
 			await expect.element(page.getByLabelText('Date received')).toHaveValue('2026-06-15');
@@ -547,6 +593,7 @@ describe('InvoiceSection.svelte', () => {
 			const { onRecordPayment } = await setup({ invoices: [invoiceOpen], isOwnerOrAdmin: true });
 
 			await page.getByRole('button', { name: 'Record payment' }).click();
+			await page.getByRole('radio', { name: 'Check' }).click();
 			await page.getByLabelText('Date received').fill('');
 			await page.getByRole('button', { name: 'Continue' }).click();
 
@@ -562,6 +609,7 @@ describe('InvoiceSection.svelte', () => {
 			await setup({ invoices: [invoiceOpen], isOwnerOrAdmin: true, onRecordPayment });
 
 			await page.getByRole('button', { name: 'Record payment' }).click();
+			await page.getByRole('radio', { name: 'Check' }).click();
 			await page.getByLabelText('Date received').fill('2026-01-02');
 			await page.getByRole('button', { name: 'Continue' }).click();
 			await page.getByRole('button', { name: 'Confirm and record' }).click();
@@ -576,6 +624,7 @@ describe('InvoiceSection.svelte', () => {
 			await setup({ invoices: [invoiceOpen], isOwnerOrAdmin: true, onRecordPayment });
 
 			await page.getByRole('button', { name: 'Record payment' }).click();
+			await page.getByRole('radio', { name: 'Check' }).click();
 			await page.getByLabelText('Date received').fill('2026-01-02');
 			await page.getByRole('button', { name: 'Continue' }).click();
 			await page.getByRole('button', { name: 'Confirm and record' }).click();
@@ -597,6 +646,7 @@ describe('InvoiceSection.svelte', () => {
 			await setup({ invoices: [invoiceOpen], isOwnerOrAdmin: true, onRecordPayment });
 
 			await page.getByRole('button', { name: 'Record payment' }).click();
+			await page.getByRole('radio', { name: 'Check' }).click();
 			await page.getByLabelText('Date received').fill('2026-01-02');
 			await page.getByRole('button', { name: 'Continue' }).click();
 			await page.getByRole('button', { name: 'Confirm and record' }).click();
@@ -616,6 +666,7 @@ describe('InvoiceSection.svelte', () => {
 			await setup({ invoices: [invoiceOpen], isOwnerOrAdmin: true, onRecordPayment });
 
 			await page.getByRole('button', { name: 'Record payment' }).click();
+			await page.getByRole('radio', { name: 'Check' }).click();
 			await page.getByLabelText('Date received').fill('2026-01-02');
 			await page.getByRole('button', { name: 'Continue' }).click();
 			await page.getByRole('button', { name: 'Confirm and record' }).click();
@@ -629,17 +680,18 @@ describe('InvoiceSection.svelte', () => {
 		it('wires a method refusal from the BFF onto the Method group', async () => {
 			const onRecordPayment = vi.fn().mockRejectedValue(
 				new RefusalError('method must be "check", "bank_transfer", "cash", or "other"', {
-					method: 'Select a method from the list'
+					method: 'Select how the payment was made'
 				})
 			);
 			await setup({ invoices: [invoiceOpen], isOwnerOrAdmin: true, onRecordPayment });
 
 			await page.getByRole('button', { name: 'Record payment' }).click();
+			await page.getByRole('radio', { name: 'Check' }).click();
 			await page.getByLabelText('Date received').fill('2026-01-02');
 			await page.getByRole('button', { name: 'Continue' }).click();
 			await page.getByRole('button', { name: 'Confirm and record' }).click();
 
-			await expect.element(page.getByText('Select a method from the list').first()).toBeVisible();
+			await expect.element(page.getByText('Select how the payment was made').first()).toBeVisible();
 		});
 
 		// #1038's second shape: a refusal naming no field of this form --
@@ -654,6 +706,7 @@ describe('InvoiceSection.svelte', () => {
 			await setup({ invoices: [invoiceOpen], isOwnerOrAdmin: true, onRecordPayment });
 
 			await page.getByRole('button', { name: 'Record payment' }).click();
+			await page.getByRole('radio', { name: 'Check' }).click();
 			await page.getByLabelText('Date received').fill('2026-01-02');
 			await page.getByRole('button', { name: 'Continue' }).click();
 			await page.getByRole('button', { name: 'Confirm and record' }).click();
@@ -673,6 +726,7 @@ describe('InvoiceSection.svelte', () => {
 			await setup({ invoices: [invoiceOpen], isOwnerOrAdmin: true, onRecordPayment });
 
 			await page.getByRole('button', { name: 'Record payment' }).click();
+			await page.getByRole('radio', { name: 'Check' }).click();
 			await page.getByLabelText('Date received').fill('2026-01-02');
 			await page.getByRole('button', { name: 'Continue' }).click();
 			await page.getByRole('button', { name: 'Confirm and record' }).click();
@@ -927,6 +981,7 @@ describe('InvoiceSection.svelte', () => {
 			const { onRefundPayment } = await setup({ invoices: [invoicePaidByHand], isOwnerOrAdmin: true });
 
 			await page.getByRole('button', { name: 'Return money' }).click();
+			await page.getByRole('radio', { name: 'Check' }).click();
 			await page.getByLabelText('Amount to return (USD)').fill('100');
 			await page.getByRole('button', { name: 'Continue' }).click();
 			await page.getByRole('button', { name: 'Confirm and return money' }).click();
@@ -944,6 +999,7 @@ describe('InvoiceSection.svelte', () => {
 			await setup({ invoices: [invoicePaidByHand], isOwnerOrAdmin: true, onRefundPayment });
 
 			await page.getByRole('button', { name: 'Return money' }).click();
+			await page.getByRole('radio', { name: 'Check' }).click();
 			await page.getByLabelText('Amount to return (USD)').fill('100');
 			await page.getByRole('button', { name: 'Continue' }).click();
 			await page.getByRole('button', { name: 'Confirm and return money' }).click();

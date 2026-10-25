@@ -38,13 +38,14 @@
 		type PaymentMethod,
 		type RefundPaymentInput
 	} from '#lib/invoice.js';
-	import { RefusalError } from '#lib/formErrors.js';
+	import { RefusalError, type FormError } from '#lib/formErrors.js';
 	import Button from '#lib/components/atoms/Button.svelte';
 	import TextInput from '#lib/components/atoms/TextInput.svelte';
 	import Textarea from '#lib/components/atoms/Textarea.svelte';
 	import WarningText from '#lib/components/atoms/WarningText.svelte';
+	import ErrorSummary from '#lib/components/molecules/ErrorSummary.svelte';
 	import LabeledField from '#lib/components/molecules/LabeledField.svelte';
-	import RadioGroup from '#lib/components/molecules/RadioGroup.svelte';
+	import RadioGroup, { radioFieldId } from '#lib/components/molecules/RadioGroup.svelte';
 	import StackedForm from '#lib/components/molecules/StackedForm.svelte';
 	import DescriptionList from '#lib/components/molecules/DescriptionList.svelte';
 
@@ -71,7 +72,9 @@
 	/** The amount in cents as it passed review -- what the review step
 	 * shows and what confirm sends, so the two can never disagree. */
 	let reviewedCents = $state(0);
-	let method = $state<PaymentMethod>('check');
+	// No method is chosen when the form opens (#1913, ADR-0055): how the
+	// money went back is a fact the service does not know.
+	let method = $state<PaymentMethod | undefined>();
 	let note = $state('');
 	// The untargeted summary (#1038) for a refusal naming no field here --
 	// a Stripe failure, or more than is left once another Refund landed
@@ -81,6 +84,27 @@
 	let methodError = $state('');
 	let noteError = $state('');
 	let isSubmitting = $state(false);
+
+	const amountFieldId = 'refund-payment-amount';
+	const methodName = 'refund-payment-method';
+	// The first option's id, as InvoiceSection's Method does: a radio
+	// group's refusal belongs to the question, so the summary link lands
+	// on the first option whichever one is checked.
+	const methodFieldId = radioFieldId(methodName, paymentMethodOptions[0]!.value);
+	const noteFieldId = 'refund-payment-note';
+
+	// One GOV.UK error summary for the form (#1913), built from the same
+	// strings the fields show, in field order, with the untargeted refusal
+	// as its one unlinked entry -- the shape InvoiceSection's
+	// paymentFormErrors has.
+	const formErrors = $derived<FormError[]>(
+		[
+			amountError ? { message: amountError, targetId: amountFieldId } : undefined,
+			methodError ? { message: methodError, targetId: methodFieldId } : undefined,
+			noteError ? { message: noteError, targetId: noteFieldId } : undefined,
+			error ? { message: error } : undefined
+		].filter((entry) => entry !== undefined)
+	);
 
 	function resetErrors() {
 		error = '';
@@ -111,6 +135,10 @@
 		}
 		if (cents > remainingCents) {
 			amountError = `Amount to return must be ${formatAmount(remainingCents)} or less`;
+			return;
+		}
+		if (!isCardPayment && method === undefined) {
+			methodError = 'Select how the money was returned';
 			return;
 		}
 		if (!isCardPayment && method === 'other' && note.trim() === '') {
@@ -145,7 +173,8 @@
 			await onConfirm(
 				isCardPayment
 					? { amountCents: reviewedCents }
-					: { amountCents: reviewedCents, method, note: note.trim() === '' ? undefined : note.trim() }
+					: // Set: review refuses an empty method before this step.
+						{ amountCents: reviewedCents, method: method!, note: note.trim() === '' ? undefined : note.trim() }
 			);
 		} catch (error_) {
 			applyRefusal(error_);
@@ -159,9 +188,16 @@
 	<!-- v8 ignore start: Svelte's compiled null-guard on this text node is unreachable -- formatAmount always returns a string -->
 	<h3>Return money from a payment of {formatAmount(invoice.amountCents)}</h3>
 	<!-- v8 ignore stop -->
+	<!-- Above the step switch, as on InvoiceSection's payment form: an
+	     untargeted refusal leaves the review step on screen, and it has to
+	     show there too. One region for the whole form. -->
+	{#if formErrors.length > 0}
+		<ErrorSummary errors={formErrors} />
+	{/if}
 	{#if step === 'form'}
 		<StackedForm onSubmit={review}>
 			<LabeledField
+				id={amountFieldId}
 				label="Amount to return (USD)"
 				hint="Up to {formatAmount(remainingCents)} is left to return on this payment."
 				error={amountError || undefined}
@@ -182,12 +218,13 @@
 			{#if !isCardPayment}
 				<RadioGroup
 					legend="How was the money returned?"
+					name={methodName}
 					options={paymentMethodOptions}
 					value={method}
 					onChange={(value) => (method = value)}
 					error={methodError || undefined}
 				/>
-				<LabeledField label="Note (optional)" error={noteError || undefined}>
+				<LabeledField id={noteFieldId} label="Note (optional)" error={noteError || undefined}>
 					{#snippet children({ id, describedBy, invalid })}
 						<Textarea {id} {describedBy} {invalid} value={note} onInput={(value) => (note = value)} />
 					{/snippet}
@@ -205,7 +242,7 @@
 					]
 				: [
 						{ label: 'Amount to return', value: formatAmount(reviewedCents) },
-						{ label: 'Method', value: paymentMethodLabels[method] },
+						{ label: 'Method', value: paymentMethodLabels[method!] },
 						{ label: 'Note', value: note.trim() === '' ? '—' : note }
 					]}
 		/>
@@ -214,8 +251,5 @@
 		{/if}
 		<Button label="Confirm and return money" onClick={confirm} loading={isSubmitting} />
 		<Button label="Change" variant="secondary" onClick={() => (step = 'form')} />
-	{/if}
-	{#if error}
-		<p role="alert">{error}</p>
 	{/if}
 </section>

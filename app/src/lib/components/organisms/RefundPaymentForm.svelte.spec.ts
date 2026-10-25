@@ -32,6 +32,7 @@ async function setup(invoice: Invoice, onConfirm = vi.fn<(input: RefundPaymentIn
 const amountField = () => page.getByLabelText('Amount to return (USD)');
 const continueButton = () => page.getByRole('button', { name: 'Continue' });
 const confirmButton = () => page.getByRole('button', { name: 'Confirm and return money' });
+const checkOption = () => page.getByRole('radio', { name: 'Check' });
 
 describe('RefundPaymentForm', () => {
 	it('says how much is left to return, net of earlier Refunds', async () => {
@@ -57,10 +58,38 @@ describe('RefundPaymentForm', () => {
 			expect(onConfirm).toHaveBeenCalledWith({ amountCents: 12_550, method: 'bank_transfer', note: 'sent to her account' });
 		});
 
+		// #1913, ADR-0055: how the money went back is a question, so it
+		// opens with nothing chosen.
+		it('opens with no method chosen', async () => {
+			await setup(byHand);
+
+			for (const name of ['Check', 'Bank transfer', 'Cash', 'Other']) {
+				await expect.element(page.getByRole('radio', { name })).not.toBeChecked();
+			}
+		});
+
+		it('refuses Continue with no method chosen, names the question, and does not reach the review step', async () => {
+			const { onConfirm } = await setup(byHand);
+
+			await amountField().fill('10');
+			await continueButton().click();
+
+			await expect.element(page.getByRole('heading', { name: 'There is a problem' })).toBeVisible();
+			await expect
+				.element(page.getByRole('link', { name: 'Select how the money was returned' }))
+				.toHaveAttribute('href', '#refund-payment-method-check');
+			await expect
+				.element(page.getByRole('group', { name: 'How was the money returned?' }))
+				.toHaveTextContent('Select how the money was returned');
+			expect(confirmButton().all()).toHaveLength(0);
+			expect(onConfirm).not.toHaveBeenCalled();
+		});
+
 		it('shows a dash for an empty note on review', async () => {
 			await setup(byHand);
 
 			await amountField().fill('10');
+			await checkOption().click();
 			await continueButton().click();
 
 			await expect.element(page.getByText('—')).toBeVisible();
@@ -73,7 +102,7 @@ describe('RefundPaymentForm', () => {
 			await page.getByRole('radio', { name: 'Other' }).click();
 			await continueButton().click();
 
-			await expect.element(page.getByText('Enter a note for "Other"')).toBeVisible();
+			await expect.element(page.getByText('Enter a note for "Other"').first()).toBeVisible();
 			expect(confirmButton().all()).toHaveLength(0);
 		});
 	});
@@ -106,7 +135,7 @@ describe('RefundPaymentForm', () => {
 				await amountField().fill(typed);
 				await continueButton().click();
 
-				await expect.element(page.getByText('Enter an amount to return greater than $0.00')).toBeVisible();
+				await expect.element(page.getByText('Enter an amount to return greater than $0.00').first()).toBeVisible();
 				await expect.element(amountField()).toHaveAttribute('aria-invalid', 'true');
 			});
 		}
@@ -117,7 +146,7 @@ describe('RefundPaymentForm', () => {
 			await amountField().fill('300.01');
 			await continueButton().click();
 
-			await expect.element(page.getByText('Amount to return must be $300.00 or less')).toBeVisible();
+			await expect.element(page.getByText('Amount to return must be $300.00 or less').first()).toBeVisible();
 		});
 	});
 
@@ -133,10 +162,48 @@ describe('RefundPaymentForm', () => {
 			await setup(byHand, onConfirm);
 
 			await amountField().fill('10');
+			await checkOption().click();
 			await continueButton().click();
 			await confirmButton().click();
 
 			await expect.element(amountField()).toHaveAttribute('aria-invalid', 'true');
+			await expect
+				.element(page.getByRole('link', { name: 'Enter an amount to return greater than $0.00' }))
+				.toHaveAttribute('href', '#refund-payment-amount');
+		});
+
+		it('reads a method refusal back onto the question and into the summary', async () => {
+			const onConfirm = vi.fn<(input: RefundPaymentInput) => Promise<void>>().mockRejectedValue(
+				new RefusalError('method must be "check", "bank_transfer", "cash", or "other"', {
+					method: 'Select how the money was returned'
+				})
+			);
+			await setup(byHand, onConfirm);
+
+			await amountField().fill('10');
+			await checkOption().click();
+			await continueButton().click();
+			await confirmButton().click();
+
+			await expect
+				.element(page.getByRole('link', { name: 'Select how the money was returned' }))
+				.toHaveAttribute('href', '#refund-payment-method-check');
+		});
+
+		it('reads a note refusal back onto the Note field and into the summary', async () => {
+			const onConfirm = vi
+				.fn<(input: RefundPaymentInput) => Promise<void>>()
+				.mockRejectedValue(new RefusalError('note is required when method is "other"', { note: 'Enter a note for "Other"' }));
+			await setup(byHand, onConfirm);
+
+			await amountField().fill('10');
+			await checkOption().click();
+			await continueButton().click();
+			await confirmButton().click();
+
+			await expect
+				.element(page.getByRole('link', { name: 'Enter a note for "Other"' }))
+				.toHaveAttribute('href', '#refund-payment-note');
 		});
 
 		it('shows a refusal that names no field as a summary', async () => {
@@ -168,6 +235,7 @@ describe('RefundPaymentForm', () => {
 		const { onCancel } = await setup(byHand);
 
 		await amountField().fill('10');
+		await checkOption().click();
 		await continueButton().click();
 		await page.getByRole('button', { name: 'Change' }).click();
 		await expect.element(continueButton()).toBeVisible();
