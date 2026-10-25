@@ -16,6 +16,12 @@ var (
 	gapEnd   = time.Date(2026, 10, 18, 10, 0, 0, 0, time.UTC)
 )
 
+// The GapRequest fields a range refusal is keyed under.
+const (
+	fieldStartsAt = "startsAt"
+	fieldEndsAt   = "endsAt"
+)
+
 func gapsURL(srvURL, practiceID, engagementID string) string {
 	return srvURL + "/api/practices/" + practiceID + "/engagements/" + engagementID + "/coverage-gaps"
 }
@@ -125,22 +131,34 @@ func TestCreateGap_RefusesWhatItShould(t *testing.T) {
 		name  string
 		body  oncall.GapRequest
 		field string
+		want  string
 	}{
-		{"the Doula is not on the birth", gapBody(strangerID, nil), "staffId"},
-		{"the cover is not on the birth, so a gap cannot attach her", gapBody(f.doulaID, &strangerID), "coveringStaffId"},
-		{"the cover is the same Doula", gapBody(f.doulaID, &f.doulaID), "coveringStaffId"},
-		{"it ends before it starts", oncall.GapRequest{StaffID: f.doulaID, StartsAt: &gapStart, EndsAt: &early}, "endsAt"},
-		{"it runs past the window", oncall.GapRequest{StaffID: f.doulaID, StartsAt: &gapStart, EndsAt: &outside}, "startsAt"},
-		{"it has no start", oncall.GapRequest{StaffID: f.doulaID, EndsAt: &gapEnd}, "startsAt"},
+		{"the Doula is not on the birth", gapBody(strangerID, nil), "staffId", oncall.MsgNotOnCall},
+		{"the cover is not on the birth, so a gap cannot attach her", gapBody(f.doulaID, &strangerID), "coveringStaffId", oncall.MsgNotOnCall},
+		{"the cover is the same Doula", gapBody(f.doulaID, &f.doulaID), "coveringStaffId", oncall.MsgCoverIsTheSame},
+		// #1969: an empty or reversed range is refused against the field
+		// the page shows it under, in the page's own words.
+		{"it ends before it starts", oncall.GapRequest{StaffID: f.doulaID, StartsAt: &gapStart, EndsAt: &early}, fieldEndsAt, oncall.MsgEndsBeforeStarts},
+		{"it ends the moment it starts", oncall.GapRequest{StaffID: f.doulaID, StartsAt: &gapStart, EndsAt: &gapStart}, fieldEndsAt, oncall.MsgEndsBeforeStarts},
+		{"it runs past the window", oncall.GapRequest{StaffID: f.doulaID, StartsAt: &gapStart, EndsAt: &outside}, fieldStartsAt, oncall.MsgOutsideWindow},
+		{"it has no start", oncall.GapRequest{StaffID: f.doulaID, EndsAt: &gapEnd}, fieldStartsAt, oncall.MsgStartsAtRequired},
+		{"it has no end", oncall.GapRequest{StaffID: f.doulaID, StartsAt: &gapStart}, fieldEndsAt, oncall.MsgEndsAtRequired},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			body := doJSON[map[string]any](t, session, http.MethodPost, gapsURL(srv.URL, f.practiceID, f.engagementID), tt.body, http.StatusBadRequest)
 			details, _ := body["details"].(map[string]any)
-			if _, ok := details[tt.field]; !ok {
-				t.Fatalf("details = %v, want a refusal under %q", details, tt.field)
+			if details[tt.field] != tt.want {
+				t.Fatalf("details = %v, want %q under %q", details, tt.want, tt.field)
 			}
 		})
+	}
+
+	// Neither end: both are refused at once, each against its own field.
+	body := doJSON[map[string]any](t, session, http.MethodPost, gapsURL(srv.URL, f.practiceID, f.engagementID)+"?neither",
+		oncall.GapRequest{StaffID: f.doulaID}, http.StatusBadRequest)
+	if details, _ := body["details"].(map[string]any); details[fieldStartsAt] != oncall.MsgStartsAtRequired || details[fieldEndsAt] != oncall.MsgEndsAtRequired {
+		t.Fatalf("details = %v, want both ends refused", body["details"])
 	}
 	if n := countRows(t, db, `SELECT count(*) FROM engagement_coverage_gaps`); n != 0 {
 		t.Fatalf("%d gaps were written by refused requests", n)
