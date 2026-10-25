@@ -162,6 +162,11 @@
 		 * at 596px (564px against 564.6px), and on CI's Linux runner
 		 * `--measure` is 585px there, so the column reaches it only at
 		 * about 620px. A wider gutter or a wider `--measure` moves it.
+		 *
+		 * Re-measured 2026-10-25 (#1943): `--measure` is 65ch, so the 16px
+		 * body floor (ADR-0060) widened it. On macOS at 620px the column
+		 * reached 588px against a 604.2px measure; 40rem (640px) holds on
+		 * macOS and in CI's Linux/Chromium.
 		 */
 		@container overview-hub (min-width: 40rem) {
 			h1 {

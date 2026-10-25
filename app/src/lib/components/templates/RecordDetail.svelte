@@ -357,6 +357,11 @@
 		 * macOS, and CI's Linux/Chromium draws them wider: they wrapped
 		 * there at 352px. 22.25rem (356px) is the next step of the sweep's
 		 * 4px resolution, measured in CI, with no margin added beyond it.
+		 *
+		 * Re-measured 2026-10-25 (#1943), when the type floors moved to
+		 * 16px (ADR-0060): the four chips wrapped at 376px on macOS and in
+		 * CI's Linux/Chromium at 400px. 26rem (416px) is the floor, checked
+		 * in CI.
 		 */
 		.contents-rail {
 			display: block;
@@ -366,7 +371,7 @@
 			display: none;
 		}
 
-		@container record-contents (min-width: 25rem) {
+		@container record-contents (min-width: 26rem) {
 			.contents-rail {
 				display: none;
 			}

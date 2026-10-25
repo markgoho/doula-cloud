@@ -504,8 +504,14 @@
 		   (GLOSSARY.md's Content floor entry), with no margin added beyond
 		   it. It is the frame's own inline size that is measured, never
 		   the viewport (ADR-0024). A future table wider than this floor
-		   moves it. */
-		@container data-table (min-width: 54.25rem) {
+		   moves it.
+
+		   Re-measured 2026-10-25 (#1943), when the type floors moved to
+		   16px (ADR-0060): the same demo needed 876px at 868px in CI's
+		   Linux/Chromium. 55rem (880px) is the next step that holds there,
+		   with no margin added beyond it. #1945 shortens table words and
+		   measures again. */
+		@container data-table (min-width: 55rem) {
 			.table-view {
 				display: table;
 			}

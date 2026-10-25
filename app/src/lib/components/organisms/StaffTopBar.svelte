@@ -291,8 +291,14 @@
 		   own. On macOS they fit at 908px and need 908px at 904px; on CI's
 		   Linux/Chromium they needed 912px at 908px. 57rem (912px) is the
 		   next step of the sweep's 4px resolution, measured in CI, again
-		   with no margin added beyond it. */
-		@container staff-top-bar (min-width: 61.25rem) {
+		   with no margin added beyond it.
+
+		   Re-measured 2026-10-25 (#1943), when the type floors moved to
+		   16px (ADR-0060): in CI's Linux/Chromium the ten sections needed
+		   985px at 980px. 61.75rem (988px) is the next step of the sweep's
+		   4px resolution, with no margin added beyond it. #1945 checks the
+		   nav at `label` 16px and measures again. */
+		@container staff-top-bar (min-width: 61.75rem) {
 			.wide {
 				display: grid;
 			}

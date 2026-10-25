@@ -174,7 +174,7 @@ describe('the Practice landing page', () => {
 
 	it('tells a doula nobody is waiting on a reply, rather than drawing an empty block', async () => {
 		// DataTable's table view needs a frame wider than its content floor
-		// (48.75rem) to render, same reason the activity-feed empty-state
+		// (55rem) to render, same reason the activity-feed empty-state
 		// test below sets this -- otherwise the narrow record view's own
 		// <p>{emptyMessage}</p> and the table's <td> both match a bare text
 		// query.
@@ -611,7 +611,7 @@ describe('the Practice landing page', () => {
 	// columns -- when, what, who.
 	it('renders the practice-wide activity feed low on the page', async () => {
 		// DataTable's own table view needs a frame wider than its content
-		// floor (48.75rem, DataTable.svelte) or it renders the narrow
+		// floor (55rem, DataTable.svelte) or it renders the narrow
 		// record view instead, whose cells carry no `cell` role -- see
 		// DataTable.svelte.spec.ts's own WIDE viewport for the same reason.
 		await testPage.viewport(1440, 900);

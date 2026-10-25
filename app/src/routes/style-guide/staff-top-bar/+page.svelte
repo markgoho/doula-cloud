@@ -75,7 +75,7 @@
 	<p>
 		Two rows: the lockup, the Practice switcher and the avatar on a 60px band that grows when a
 		long Practice name wraps, and the sections on a row of their own under it. Narrow the bar past
-		57rem and the nav and the Practice switcher move into a full-screen sheet behind a
+		61.75rem and the nav and the Practice switcher move into a full-screen sheet behind a
 		hamburger — a bottom tab bar was drawn and rejected, because five slots cannot carry ten
 		sections without a <code>More</code>, and <code>More</code> is not a noun this domain has. A
 		screen that offers no section draws no nav and no hamburger.
