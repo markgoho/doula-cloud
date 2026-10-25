@@ -175,7 +175,9 @@
 		   wrap to more lines than at the old type floors, so it shows its
 		   records -- the founder's answer on #1945. Measured 2026-10-25 on
 		   this route's fixture on the drag surface:
-		   its natural width fits its column from 912px.
+		   its natural width fits its column from 912px on macOS/Chromium and
+		   from 936px in CI's Linux/Chromium, the canonical environment,
+		   with no margin beyond it.
 		   `DataTable.svelte`'s floor comment says why the floor is the
 		   route's own. */
 		.contracts-table {
@@ -188,7 +190,7 @@
 			--data-table-records-display: block;
 		}
 
-		@container contracts-table (min-width: 57rem) {
+		@container contracts-table (min-width: 58.5rem) {
 			.contracts-table > :global(*) {
 				--data-table-table-display: table;
 				--data-table-records-display: none;

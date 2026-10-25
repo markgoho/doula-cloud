@@ -2337,7 +2337,9 @@
 		   wrap to more lines than at the old type floors, so it shows its
 		   records -- the founder's answer on #1945. Measured 2026-10-25 on
 		   this route's fixture on the drag surface:
-		   its natural width fits its column from 1108px, for every session, in UTC (CI's zone, where the fixture's times print widest).
+		   its natural width fits its column from 1108px on macOS/Chromium and
+		   from 1124px in CI's Linux/Chromium, the canonical environment,
+		   with no margin beyond it, for every session, in UTC (CI's zone, where the fixture's times print widest).
 		   `DataTable.svelte`'s floor comment says why the floor is the
 		   route's own. */
 		.activity-table {
@@ -2350,7 +2352,7 @@
 			--data-table-records-display: block;
 		}
 
-		@container activity-table (min-width: 69.25rem) {
+		@container activity-table (min-width: 70.25rem) {
 			.activity-table > :global(*) {
 				--data-table-table-display: table;
 				--data-table-records-display: none;
@@ -2361,7 +2363,9 @@
 		   wrap to more lines than at the old type floors, so it shows its
 		   records -- the founder's answer on #1945. Measured 2026-10-25 on
 		   this route's fixture on the drag surface:
-		   its natural width fits its column from 2066px, for every session.
+		   its natural width fits its column from 2066px on macOS/Chromium and
+		   from 2084px in CI's Linux/Chromium, the canonical environment,
+		   with no margin beyond it, for every session.
 		   `DataTable.svelte`'s floor comment says why the floor is the
 		   route's own. */
 		.visits-table {
@@ -2374,7 +2378,7 @@
 			--data-table-records-display: block;
 		}
 
-		@container visits-table (min-width: 129.25rem) {
+		@container visits-table (min-width: 130.25rem) {
 			.visits-table > :global(*) {
 				--data-table-table-display: table;
 				--data-table-records-display: none;

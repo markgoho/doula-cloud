@@ -539,8 +539,8 @@
 		   width its own natural (max-content) width fits, and no sooner:
 		   that width is the table's content floor. It runs from under 880px
 		   (the Billing screen, the portal's tables, a Client's first table)
-		   to 2961px (the Clients list), so one floor here would have to be
-		   2961px and would put every table that fits into its records on
+		   to 2988px in CI (the Clients list), so one floor here would have to
+		   be 2988px and would put every table that fits into its records on
 		   every screen. So this floor stays the least any table needs, and
 		   a route whose table needs more sets its own floor on these two
 		   properties from its own containment context: below its floor,
