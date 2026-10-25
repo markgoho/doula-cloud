@@ -38,7 +38,7 @@ const (
 const (
 	MsgAttachmentTooLarge  = "The selected file must be smaller than 10MB"
 	MsgAttachmentEmpty     = "The selected file is empty"
-	MsgAttachmentWrongType = "The selected file must be an image or a PDF"
+	MsgAttachmentWrongType = "The selected file must be a JPG, PNG, GIF, WEBP or PDF"
 	MsgAttachmentUnread    = "The selected file could not be uploaded – try again"
 	MsgMessageOrFile       = "Enter a message or select a file"
 )
@@ -170,10 +170,24 @@ func decodeMultipartCreate(w http.ResponseWriter, r *http.Request, store objects
 	return body, info, true
 }
 
-// validAttachmentContentType reports whether contentType is one of #56's
-// two allowed attachment kinds.
+// acceptedAttachmentTypes is the exact list MsgAttachmentWrongType names,
+// as http.DetectContentType reports each one (#1977). It is #56's "an
+// image or a PDF" narrowed to the images every browser shows inline,
+// since both screens show an image attachment as a preview. HEIC is not
+// on it: the sniff cannot read it, and only Safari can show it. The app's
+// messageAttachment.ts checks the same list before sending.
+var acceptedAttachmentTypes = map[string]bool{
+	"image/jpeg":      true,
+	"image/png":       true,
+	"image/gif":       true,
+	"image/webp":      true,
+	"application/pdf": true,
+}
+
+// validAttachmentContentType reports whether contentType, as sniffed, is
+// on acceptedAttachmentTypes.
 func validAttachmentContentType(contentType string) bool {
-	return contentType == "application/pdf" || strings.HasPrefix(contentType, "image/")
+	return acceptedAttachmentTypes[contentType]
 }
 
 // validateAndStoreAttachment enforces the ~10MB size cap and image/PDF

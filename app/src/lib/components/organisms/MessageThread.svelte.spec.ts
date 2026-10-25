@@ -4,6 +4,7 @@ import { render } from 'vitest-browser-svelte';
 import { formatInstantWithClock } from '../../dates.js';
 import { RefusalError, SERVICE_PROBLEM } from '../../formErrors.js';
 import {
+	ATTACHMENT_ACCEPT,
 	ATTACHMENT_EMPTY,
 	ATTACHMENT_HINT,
 	ATTACHMENT_TOO_LARGE,
@@ -161,6 +162,8 @@ describe('MessageThread.svelte compose form', () => {
 		await expect.element(attachmentField()).toBeVisible();
 		await expect.element(attachmentField()).toHaveAccessibleDescription(ATTACHMENT_HINT);
 		await expect.element(attachmentField()).not.toHaveAttribute('aria-invalid');
+		// The picker offers the same list the hint names (#1977).
+		await expect.element(attachmentField()).toHaveAttribute('accept', ATTACHMENT_ACCEPT);
 	});
 
 	it('calls onSend with the typed body and selected attachment on submit', async () => {
@@ -201,7 +204,8 @@ describe('MessageThread.svelte compose form', () => {
 	it.each([
 		['a file over 10MB', fileOf(MAX_ATTACHMENT_BYTES + 1, 'scan.jpg', 'image/jpeg'), ATTACHMENT_TOO_LARGE],
 		['an empty file', fileOf(0, 'photo.png', 'image/png'), ATTACHMENT_EMPTY],
-		['a file that is neither an image nor a PDF', fileOf(4, 'notes.txt', 'text/plain'), ATTACHMENT_WRONG_TYPE]
+		['a file that is neither an image nor a PDF', fileOf(4, 'notes.txt', 'text/plain'), ATTACHMENT_WRONG_TYPE],
+		['an iPhone HEIC photo', fileOf(4, 'IMG_0001.HEIC', 'image/heic'), ATTACHMENT_WRONG_TYPE]
 	])('refuses %s against the attachment before sending', async (_name, file, words) => {
 		const { onSend } = await setup();
 

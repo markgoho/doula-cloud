@@ -13,37 +13,38 @@
 // The same 10MB as `maxAttachmentBytes` on the server (10 << 20).
 export const MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024;
 
-// What the file input offers in the browser's file picker.
-export const ATTACHMENT_ACCEPT = 'image/*,application/pdf';
+/*
+ * The types the server's sniff accepts (`acceptedAttachmentTypes` in
+ * `create.go`, #1977): each one every browser can show inline, which is
+ * what both screens do with an image. HEIC is not on it: the sniff cannot
+ * read it, and a browser other than Safari cannot show it.
+ */
+const ACCEPTED_TYPES = new Set(['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'application/pdf']);
 
-export const ATTACHMENT_HINT = 'An image or a PDF, up to 10MB';
+/*
+ * What the file input offers in the browser's file picker: the same
+ * list, named type by type rather than `image/*`. JPEG goes first because
+ * iOS Safari converts a HEIC photo to the first type listed when the list
+ * leaves HEIC out (WebKit bugs 267277 and 292350); with `image/*` it hands
+ * the HEIC over as it is.
+ */
+export const ATTACHMENT_ACCEPT = [...ACCEPTED_TYPES].join(',');
+
+export const ATTACHMENT_HINT = 'A JPG, PNG, GIF, WEBP or PDF, up to 10MB';
 
 export const ATTACHMENT_TOO_LARGE = 'The selected file must be smaller than 10MB';
 export const ATTACHMENT_EMPTY = 'The selected file is empty';
-export const ATTACHMENT_WRONG_TYPE = 'The selected file must be an image or a PDF';
+export const ATTACHMENT_WRONG_TYPE = 'The selected file must be a JPG, PNG, GIF, WEBP or PDF';
 export const MESSAGE_OR_FILE = 'Enter a message or select a file';
 
 /*
- * The extensions read as an image or a PDF when the browser reports no
+ * The extensions read as one of those types when the browser reports no
  * type at all for a file, which it does for a name it does not know.
  */
-const ACCEPTED_EXTENSIONS = new Set([
-	'avif',
-	'bmp',
-	'gif',
-	'heic',
-	'heif',
-	'jpeg',
-	'jpg',
-	'pdf',
-	'png',
-	'tif',
-	'tiff',
-	'webp'
-]);
+const ACCEPTED_EXTENSIONS = new Set(['gif', 'jpeg', 'jpg', 'pdf', 'png', 'webp']);
 
 function isAcceptedType(file: File): boolean {
-	if (file.type !== '') return file.type === 'application/pdf' || file.type.startsWith('image/');
+	if (file.type !== '') return ACCEPTED_TYPES.has(file.type);
 	const dot = file.name.lastIndexOf('.');
 	// No extension and no type: nothing the page can tell, so the
 	// server's sniff decides.
