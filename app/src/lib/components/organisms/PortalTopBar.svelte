@@ -201,7 +201,7 @@
 		   Unchanged by #1573, which let the bar grow to a wrapped name: the
 		   floor is an inline measurement, and a taller bar needs no more
 		   inline room than a fixed one did. */
-		@container portal-top-bar (min-width: 44.5rem) {
+		@container portal-top-bar (min-width: 49rem) {
 			.wide {
 				display: flex;
 			}

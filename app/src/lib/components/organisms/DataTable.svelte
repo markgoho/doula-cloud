@@ -454,7 +454,10 @@
 		   the floor everywhere the table view renders, while 2 x
 		   --space-2 stops fitting as the frame widens -- measured going
 		   over at the drag surface's own full width, which is enough to
-		   disqualify it.
+		   disqualify it. Since the 16px type floors (ADR-0060, #1943) one
+		   line plus 2 x --space-1 no longer fits the floor above a frame
+		   of about 1430px; #1945 owns the fix, and the row-height spec is
+		   marked `it.fails` until it lands.
 
 		   No counterpart for the record view's `<dd>`: it carries
 		   `padding-block` for EVERY cell already (below) and sets no
@@ -502,7 +505,7 @@
 		   it. It is the frame's own inline size that is measured, never
 		   the viewport (ADR-0024). A future table wider than this floor
 		   moves it. */
-		@container data-table (min-width: 48.75rem) {
+		@container data-table (min-width: 54.25rem) {
 			.table-view {
 				display: table;
 			}

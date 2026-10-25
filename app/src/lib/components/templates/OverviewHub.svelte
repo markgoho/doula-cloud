@@ -163,7 +163,7 @@
 		 * `--measure` is 585px there, so the column reaches it only at
 		 * about 620px. A wider gutter or a wider `--measure` moves it.
 		 */
-		@container overview-hub (min-width: 38.75rem) {
+		@container overview-hub (min-width: 40rem) {
 			h1 {
 				font-size: var(--text-display-size);
 				font-weight: var(--text-display-weight);

@@ -366,7 +366,7 @@
 			display: none;
 		}
 
-		@container record-contents (min-width: 22.25rem) {
+		@container record-contents (min-width: 25rem) {
 			.contents-rail {
 				display: none;
 			}

@@ -292,7 +292,7 @@
 		   Linux/Chromium they needed 912px at 908px. 57rem (912px) is the
 		   next step of the sweep's 4px resolution, measured in CI, again
 		   with no margin added beyond it. */
-		@container staff-top-bar (min-width: 57rem) {
+		@container staff-top-bar (min-width: 61.25rem) {
 			.wide {
 				display: grid;
 			}
