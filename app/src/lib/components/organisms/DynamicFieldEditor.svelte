@@ -1,4 +1,6 @@
 <script lang="ts">
+	import { tick } from 'svelte';
+	import { focusAfterMove } from '#lib/fieldMoveFocus.js';
 	import { FIELD_TYPES, isSelectType, type Field, type FieldType } from '#lib/planTemplate.js';
 	import Button from '../atoms/Button.svelte';
 	import Select from '../atoms/Select.svelte';
@@ -26,6 +28,19 @@
 	} = $props();
 
 	let newFieldType = $state<FieldType>(FIELD_TYPES[0]);
+	let list: HTMLUListElement;
+
+	// A moved row drops focus to the page (#1920); `focusAfterMove` says
+	// where it goes back to, once the consumer has reordered `fields`.
+	async function move(id: string, direction: 'up' | 'down') {
+		if (direction === 'up') {
+			onMoveUp(id);
+		} else {
+			onMoveDown(id);
+		}
+		await tick();
+		focusAfterMove(list, id, direction);
+	}
 
 	function optionsText(field: Field): string {
 		return (field.options ?? []).join('\n');
@@ -49,7 +64,7 @@
 	}
 </script>
 
-<ul>
+<ul bind:this={list}>
 	{#each fields as field, index (field.id)}
 		<li>
 			<!--
@@ -90,15 +105,15 @@
 			<Button
 				label="Move up"
 				describedBy="{field.id}-move-up-name"
-				onClick={() => onMoveUp(field.id)}
-				disabled={index === 0}
+				onClick={() => move(field.id, 'up')}
+				ariaDisabled={index === 0}
 			/>
 			<span class="visually-hidden" id="{field.id}-move-up-name">{rowName(field)}</span>
 			<Button
 				label="Move down"
 				describedBy="{field.id}-move-down-name"
-				onClick={() => onMoveDown(field.id)}
-				disabled={index === fields.length - 1}
+				onClick={() => move(field.id, 'down')}
+				ariaDisabled={index === fields.length - 1}
 			/>
 			<span class="visually-hidden" id="{field.id}-move-down-name">{rowName(field)}</span>
 			<Button

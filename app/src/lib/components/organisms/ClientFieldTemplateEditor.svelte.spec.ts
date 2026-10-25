@@ -1,8 +1,8 @@
-import { page } from 'vitest/browser';
+import { page, userEvent } from 'vitest/browser';
 import { describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import ClientFieldTemplateEditor from './ClientFieldTemplateEditor.svelte';
-import type { Field } from '#lib/clientFieldTemplate.js';
+import { moveField, type Field } from '#lib/clientFieldTemplate.js';
 
 const defaultFields: Field[] = [
 	{ id: 'a', type: 'short_text', label: 'Intake note', order: 0, archived: false },
@@ -184,16 +184,25 @@ describe('ClientFieldTemplateEditor.svelte', () => {
 		expect(onArchiveToggle).toHaveBeenCalledWith('a');
 	});
 
-	it('disables Move up on the first field and Move down on the last field', async () => {
-		await setup();
+	it('marks Move up on the first field and Move down on the last field unavailable, and a press there does nothing', async () => {
+		const { onMoveUp, onMoveDown } = await setup();
 
-		const moveUpButtons = page.getByRole('button', { name: 'Move up' }).elements() as HTMLButtonElement[];
-		const moveDownButtons = page.getByRole('button', { name: 'Move down' }).elements() as HTMLButtonElement[];
+		const moveUp = page.getByRole('button', { name: 'Move up' });
+		const moveDown = page.getByRole('button', { name: 'Move down' });
+		await expect.element(moveUp.first()).toHaveAttribute('aria-disabled', 'true');
+		await expect.element(moveUp.nth(1)).not.toHaveAttribute('aria-disabled');
+		await expect.element(moveDown.first()).not.toHaveAttribute('aria-disabled');
+		await expect.element(moveDown.nth(1)).toHaveAttribute('aria-disabled', 'true');
 
-		expect(moveUpButtons[0].disabled).toBe(true);
-		expect(moveUpButtons[1].disabled).toBe(false);
-		expect(moveDownButtons[0].disabled).toBe(false);
-		expect(moveDownButtons[1].disabled).toBe(true);
+		// Playwright's click refuses an aria-disabled button, so the press
+		// is the keyboard's: the way a person reaches it with focus on it.
+		(moveUp.first().element() as HTMLButtonElement).focus();
+		await userEvent.keyboard('{Enter}');
+		(moveDown.nth(1).element() as HTMLButtonElement).focus();
+		await userEvent.keyboard('{Enter}');
+
+		expect(onMoveUp).not.toHaveBeenCalled();
+		expect(onMoveDown).not.toHaveBeenCalled();
 	});
 
 	it('calls onMoveUp/onMoveDown with the field id when clicked', async () => {
@@ -260,5 +269,78 @@ describe('ClientFieldTemplateEditor.svelte', () => {
 		expect(
 			describedByText(container, page.getByRole('button', { name: 'Archive', exact: true }))
 		).toBe('Untitled field');
+	});
+});
+
+// The archived field sits between two active ones on purpose: Move up and
+// Move down walk the active list only, so an end of the list is an end of
+// that list, not of `fields`.
+const fieldsToMove: Field[] = [
+	{ id: 'a', type: 'short_text', label: 'Intake note', order: 0, archived: false },
+	{ id: 'x', type: 'short_text', label: 'Old question', order: 1, archived: true },
+	{ id: 'b', type: 'short_text', label: 'Due date source', order: 2, archived: false },
+	{ id: 'c', type: 'short_text', label: 'Referral source', order: 3, archived: false }
+];
+
+// A move is only seen to keep or drop focus when the list really
+// reorders, so this setup feeds each move back in as the consumer does
+// (`fields = moveField(fields, id, direction)`), not as a bare vi.fn().
+async function setupMoving() {
+	let fields = fieldsToMove;
+	const rendered = await render(ClientFieldTemplateEditor, {
+		fields,
+		existingIds: new Set<string>(),
+		onAdd: vi.fn(),
+		onArchiveToggle: vi.fn(),
+		onMoveUp: (id: string) => {
+			fields = moveField(fields, id, 'up');
+			void rendered.rerender({ fields });
+		},
+		onMoveDown: (id: string) => {
+			fields = moveField(fields, id, 'down');
+			void rendered.rerender({ fields });
+		},
+		onLabelChange: vi.fn(),
+		onTypeChange: vi.fn(),
+		onOptionsChange: vi.fn()
+	});
+}
+
+describe('ClientFieldTemplateEditor.svelte, focus after a move (#1920)', () => {
+	it('keeps focus on the moved row\'s Move down when the row moves to the middle', async () => {
+		await setupMoving();
+
+		await page.getByRole('button', { name: 'Move down' }).first().click();
+
+		const moved = page.getByRole('button', { name: 'Move down' }).nth(1);
+		await expect.element(moved).toHaveFocus();
+		await expect.element(page.getByLabelText('Field label').nth(1)).toHaveValue('Intake note');
+	});
+
+	it('keeps focus on the moved row\'s Move down when it takes the row to the end, and a second press does nothing', async () => {
+		await setupMoving();
+
+		await page.getByRole('button', { name: 'Move down' }).nth(1).click();
+
+		const moved = page.getByRole('button', { name: 'Move down' }).nth(2);
+		await expect.element(moved).toHaveFocus();
+		await expect.element(moved).toHaveAttribute('aria-disabled', 'true');
+		await expect.element(page.getByLabelText('Field label').nth(2)).toHaveValue('Due date source');
+
+		await userEvent.keyboard('{Enter}');
+
+		await expect.element(moved).toHaveFocus();
+		await expect.element(page.getByLabelText('Field label').nth(2)).toHaveValue('Due date source');
+	});
+
+	it('keeps focus on the moved row\'s Move up when it takes the row to the top', async () => {
+		await setupMoving();
+
+		await page.getByRole('button', { name: 'Move up' }).nth(1).click();
+
+		const moved = page.getByRole('button', { name: 'Move up' }).first();
+		await expect.element(moved).toHaveFocus();
+		await expect.element(moved).toHaveAttribute('aria-disabled', 'true');
+		await expect.element(page.getByLabelText('Field label').first()).toHaveValue('Due date source');
 	});
 });
