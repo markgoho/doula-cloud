@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { tick } from 'svelte';
 	import { FIELD_TYPES, isSelectType, type Field, type FieldType } from '#lib/clientFieldTemplate.js';
-	import { focusAfterMove } from '#lib/fieldMoveFocus.js';
+	import { focusAfterMove, moveAnnouncement } from '#lib/fieldMoveFocus.js';
 	import Button from '../atoms/Button.svelte';
 	import Heading from '../atoms/Heading.svelte';
 	import Select from '../atoms/Select.svelte';
@@ -57,10 +57,16 @@
 	 * ConfirmDialog is ever open at a time. */
 	let confirmArchiveId = $state('');
 	let activeList: HTMLUListElement;
+	let announcement = $state('');
 
 	// A moved row drops focus to the page (#1920); `focusAfterMove` says
 	// where it goes back to, once the consumer has reordered `fields`.
+	// The position is counted in the active list, the one being
+	// reordered, so an archived field is not counted. The region is
+	// emptied first so that a text identical to the last one (two
+	// "Untitled field" rows) is still a change, and is read (#1955).
 	async function move(id: string, direction: 'up' | 'down') {
+		announcement = '';
 		if (direction === 'up') {
 			onMoveUp(id);
 		} else {
@@ -68,6 +74,7 @@
 		}
 		await tick();
 		focusAfterMove(activeList, id, direction);
+		announcement = moveAnnouncement(activeFields, id, rowName);
 	}
 
 	let activeFields = $derived(fields.filter((f) => !f.archived));
@@ -174,6 +181,8 @@
 		</li>
 	{/each}
 </ul>
+<!-- In the page from the first render, empty, so the first move is read (#1955). -->
+<p class="visually-hidden" role="status">{announcement}</p>
 
 <label>
 	New field type
