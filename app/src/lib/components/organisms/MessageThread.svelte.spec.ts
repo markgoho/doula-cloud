@@ -1,6 +1,7 @@
 import { page } from 'vitest/browser';
 import { describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
+import { formatInstantWithClock } from '../../dates.js';
 import MessageThread, { type Message } from './MessageThread.svelte';
 
 const messages: Message[] = [
@@ -67,6 +68,17 @@ describe('MessageThread.svelte', () => {
 		await expect.element(page.getByText('Hello there')).toBeVisible();
 		await expect.element(page.getByText('Grace Hopper')).toBeVisible();
 		await expect.element(page.getByText('A photo for you')).toBeVisible();
+	});
+
+	// A message's createdAt is an instant (message/list.go), read in the
+	// reader's zone month first, to the minute (#1958).
+	it('prints when each message was sent through dates.ts, month first', async () => {
+		await setup();
+
+		await expect
+			.element(page.getByText(`(staff) — ${formatInstantWithClock(messages[0]!.createdAt)}`))
+			.toBeVisible();
+		await expect.element(page.getByText(/\(staff\) — Jan 1, 2026, \d{1,2}:00(am|pm)/)).toBeVisible();
 	});
 
 	it('omits the body paragraph for an attachment-only message with no body text', async () => {

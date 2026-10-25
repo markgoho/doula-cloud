@@ -1,6 +1,7 @@
 import { page as testPage } from 'vitest/browser';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
+import { formatInstant } from '#lib/dates.js';
 import { jsonResponse } from '#lib/testResponse.js';
 import type { PracticeWebsite } from '#lib/website.js';
 import Page from './+page.svelte';
@@ -142,7 +143,7 @@ describe('website settings screen', () => {
 			.fill('facebook.com/RochesterDoulas');
 		await testPage.getByRole('button', { name: 'Save' }).click();
 
-		await expect.element(testPage.getByText('Last changed by Maya Chen on August 29, 2026')).toBeVisible();
+		await expect.element(testPage.getByText('Last changed by Maya Chen on Aug 29, 2026')).toBeVisible();
 		expect(puts.at(-1)).toMatchObject({ mode: 'own', ownUrl: 'facebook.com/RochesterDoulas' });
 	});
 
@@ -249,7 +250,7 @@ describe('website settings screen', () => {
 		await testPage.getByRole('button', { name: 'Save' }).click();
 
 		await expect
-			.element(testPage.getByText('Last changed by Maya Chen on August 29, 2026'))
+			.element(testPage.getByText('Last changed by Maya Chen on Aug 29, 2026'))
 			.toBeVisible();
 		expect(puts.at(-1)).toEqual({ mode: 'own', ownUrl: 'rochesterdoulas.com' });
 	});
@@ -279,17 +280,12 @@ describe('website settings screen', () => {
 		// thing that says which `<dd>` is which, service description
 		// first, same as the screen's own field order.
 		await expect.element(testPage.getByText(fixtureWebsite.serviceDescription).first()).toBeVisible();
-		// Computed rather than a hardcoded "August 1, 2026": the fixture's
-		// `updatedAt` is UTC midnight, and the screen's own
-		// `toLocaleDateString` renders it in the runner's local timezone,
-		// which can read back a day earlier -- this is still a rendered
-		// form of the fixture's value (#596), just derived the same way
-		// the component derives it rather than guessed.
-		const updatedOn = new Date(fixtureWebsite.updatedAt).toLocaleDateString('en-US', {
-			day: 'numeric',
-			month: 'long',
-			year: 'numeric'
-		});
+		// Computed rather than a hardcoded "Aug 1, 2026": the fixture's
+		// `updatedAt` is UTC midnight, an instant the screen reads in the
+		// runner's local timezone, which can read back a day earlier --
+		// this is still a rendered form of the fixture's value (#596),
+		// through the same dates.ts formatter the component uses (#1958).
+		const updatedOn = formatInstant(fixtureWebsite.updatedAt);
 		await expect
 			.element(testPage.getByText(`Last changed by ${fixtureWebsite.updatedBy} on ${updatedOn}`))
 			.toBeVisible();

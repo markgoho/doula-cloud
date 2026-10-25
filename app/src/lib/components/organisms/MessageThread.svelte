@@ -12,6 +12,7 @@
 </script>
 
 <script lang="ts">
+	import { formatInstantWithClock } from '../../dates.js';
 	import Button from '../atoms/Button.svelte';
 	import Textarea from '../atoms/Textarea.svelte';
 	import LabeledField from '../molecules/LabeledField.svelte';
@@ -77,8 +78,8 @@
 					<stack-l space="var(--space-1)">
 						<cluster-l space="var(--space-2)" align="baseline">
 							<strong>{message.senderName}</strong>
-							<!-- v8 ignore start: Svelte's compiled null-guard on these text nodes is unreachable -- senderType is a required union member and toLocaleString always returns a string -->
-							<span class="meta">({message.senderType}) — {new Date(message.createdAt).toLocaleString()}</span>
+							<!-- v8 ignore start: Svelte's compiled null-guard on these text nodes is unreachable -- senderType is a required union member and formatInstantWithClock always returns a string -->
+							<span class="meta">({message.senderType}) — {formatInstantWithClock(message.createdAt)}</span>
 							<!-- v8 ignore stop -->
 						</cluster-l>
 						{#if message.body}

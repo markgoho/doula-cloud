@@ -22,6 +22,7 @@
 	 */
 	import { page } from '#lib/appState.svelte.js';
 	import { appBuild } from '#lib/build.js';
+	import { formatInstantWithClock } from '#lib/dates.js';
 	import { browserName, kindOptions, type ClientInput, type Kind } from '#lib/feedback.js';
 	import { errorsFromCause, type FormError } from '#lib/formErrors.js';
 	import Button from '#lib/components/atoms/Button.svelte';
@@ -97,7 +98,7 @@
 		const items = [`the page you were on: ${page.url.pathname}`];
 		if (roleAndPractice) items.push(`your role and Practice: ${roleAndPractice}`);
 		items.push(
-			`the time: ${new Date().toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' })}`,
+			`the time: ${formatInstantWithClock(new Date().toISOString())}`,
 			`your screen width and browser: ${window.innerWidth}px, ${browserName(navigator.userAgent)}`,
 			`the version of DoulaCloud: ${appBuild()}`
 		);

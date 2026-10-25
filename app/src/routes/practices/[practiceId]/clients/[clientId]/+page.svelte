@@ -19,7 +19,7 @@
 	import { engagementStatusText } from '#lib/engagementDetail.js';
 	import { eraseClient, loadEraseEligibility, type EraseEligibility, type UnsettledInvoice } from '#lib/clientErasure.js';
 	import { formatAmount } from '#lib/invoice.js';
-	import { formatActivityTimestamp } from '#lib/dates.js';
+	import { formatActivityTimestamp, formatInstant } from '#lib/dates.js';
 	import { takeOutcome } from '#lib/outcome.js';
 	import RecordDetail from '#lib/components/templates/RecordDetail.svelte';
 	import DescriptionList from '#lib/components/molecules/DescriptionList.svelte';
@@ -98,8 +98,11 @@
 		return `/practices/${page.params.practiceId}/clients/${page.params.clientId}/engagement-requests/new`;
 	}
 
+	// Every value it is given is an instant (client/detail.go: an
+	// Engagement's and an unsettled Invoice's createdAt, erasedAt,
+	// stripeRedactionEligibleAt, a Request's requestedAt).
 	function formattedDate(iso: string): string {
-		return new Date(iso).toLocaleDateString();
+		return formatInstant(iso);
 	}
 
 	// A history row can be either shape; DataTable's Column is one

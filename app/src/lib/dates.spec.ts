@@ -3,7 +3,9 @@ import {
 	formatActivityTimestamp,
 	formatCalendarDay,
 	formatInstant,
+	formatInstantWithClock,
 	formatPortalVisit,
+	formatUtcCalendarDay,
 	formatScheduledVisit,
 	toDatetimeLocalValue
 } from './dates.js';
@@ -12,23 +14,22 @@ describe('the instant / calendar-day distinction', () => {
 	// The one that matters: a due date is a calendar day, so it must read
 	// as the day it was typed no matter which zone the reader sits in.
 	it('reads a calendar day as its own parts, not as UTC midnight', () => {
-		expect(formatCalendarDay('2027-03-01')).toBe(
-			new Date(2027, 2, 1).toLocaleDateString(undefined, {
-				year: 'numeric',
-				month: 'short',
-				day: 'numeric'
-			})
-		);
+		expect(formatCalendarDay('2027-03-01')).toBe('Mar 1, 2027');
 	});
 
-	it('reads a timestamp as an instant in the reader own zone', () => {
-		expect(formatInstant('2026-08-01T10:00:00Z')).toBe(
-			new Date('2026-08-01T10:00:00Z').toLocaleDateString(undefined, {
-				year: 'numeric',
-				month: 'short',
-				day: 'numeric'
-			})
-		);
+	// Noon UTC is the same calendar day in every zone from UTC-11 to
+	// UTC+11, so this fixture's day holds wherever the suite runs.
+	it('reads a timestamp as an instant in the reader own zone, month first', () => {
+		expect(formatInstant('2026-08-01T12:00:00Z')).toBe('Aug 1, 2026');
+	});
+
+	it('reads a calendar day sent as UTC midnight as the day it names', () => {
+		expect(formatUtcCalendarDay('2026-10-25T00:00:00Z')).toBe('Oct 25, 2026');
+	});
+
+	it('reads an instant to the minute in the reader own zone', () => {
+		const iso = local(2026, 10, 25, 15, 4);
+		expect(formatInstantWithClock(iso)).toBe('Oct 25, 2026, 3:04pm');
 	});
 });
 

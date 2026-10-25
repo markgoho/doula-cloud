@@ -45,6 +45,7 @@
 		type PaymentMethod,
 		type RefundPaymentInput
 	} from '#lib/invoice.js';
+	import { formatCalendarDay, formatUtcCalendarDay } from '#lib/dates.js';
 	import RefundPaymentForm from '#lib/components/organisms/RefundPaymentForm.svelte';
 	import { RefusalError, type FormError } from '#lib/formErrors.js';
 	import Button from '#lib/components/atoms/Button.svelte';
@@ -520,8 +521,8 @@
 				{formatAmount(invoice.amountCents)} — {invoiceStatusLabel(invoice.status)}
 				<!-- v8 ignore stop -->
 				{#if invoice.paidAt}
-					<!-- v8 ignore start: Svelte's compiled null-guard on this text node is unreachable -- toLocaleDateString always returns a string -->
-					(paid {new Date(invoice.paidAt).toLocaleDateString()})
+					<!-- v8 ignore start: Svelte's compiled null-guard on this text node is unreachable -- formatUtcCalendarDay always returns a string -->
+					(paid {formatUtcCalendarDay(invoice.paidAt)})
 					<!-- v8 ignore stop -->
 				{/if}
 				{#if invoice.refundedCents > 0}
@@ -652,11 +653,11 @@
 						{ label: 'Note', value: paymentNote.trim() === '' ? '—' : paymentNote },
 						{
 							label: 'Date received',
-							// The date input's own "YYYY-MM-DD" parses as UTC midnight
-							// -- appending a local midnight time before formatting
-							// keeps a Rochester, NY recorder's chosen date from
-							// rendering back one day earlier.
-							value: new Date(`${paymentDate}T00:00:00`).toLocaleDateString()
+							// The date input's own "YYYY-MM-DD" is a calendar day, so
+							// it is built from its parts rather than parsed as UTC
+							// midnight, which a Rochester, NY recorder would read
+							// back one day earlier.
+							value: formatCalendarDay(paymentDate)
 						}
 					]}
 				/>

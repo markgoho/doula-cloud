@@ -1,3 +1,5 @@
+import { formatInstant } from './dates.js';
+
 /**
  * The 50 US states and the District of Columbia, as the USPS two-letter
  * abbreviation the API stores (`staff.work_state`, migration 00043) and
@@ -103,14 +105,10 @@ export function workStateName(code: string): string {
  * the design has (#415). Three screens showing the same fact in three
  * shapes would make it harder to compare, so the format lives here once.
  *
- * The locale is left to the browser (`undefined`), the way every other
- * date in this app is formatted -- we do not know better than the
- * reader's own machine which order she reads a date in.
+ * The timestamp is an instant (`staff_work_state_events.created_at`), so
+ * it reads as `formatInstant` reads one: month first, in the reader's own
+ * zone (ADR-0022's #1940 amendment, #1958).
  */
 export function workStateReportedOn(timestamp: string): string {
-	return new Date(timestamp).toLocaleDateString(undefined, {
-		year: 'numeric',
-		month: 'short',
-		day: 'numeric'
-	});
+	return formatInstant(timestamp);
 }

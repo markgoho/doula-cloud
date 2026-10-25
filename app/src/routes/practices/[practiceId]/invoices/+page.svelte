@@ -14,6 +14,7 @@
 	import { page } from '#lib/appState.svelte.js';
 	import { resolve } from '$app/paths';
 	import { apiFetchWithSession } from '#lib/api.js';
+	import { formatInstant, formatUtcCalendarDay } from '#lib/dates.js';
 	import {
 		clientsCannotPayMessage,
 		dueLabel,
@@ -110,7 +111,7 @@
 		},
 		{
 			label: 'Billed',
-			accessor: (invoice: PracticeInvoice) => new Date(invoice.createdAt).toLocaleDateString()
+			accessor: (invoice: PracticeInvoice) => formatInstant(invoice.createdAt)
 		},
 		{
 			// #768. "Payment due", not "Due date": a due date in this domain
@@ -125,7 +126,7 @@
 			// "nothing here yet" instead of a cell that failed to render.
 			label: 'Paid',
 			accessor: (invoice: PracticeInvoice) =>
-				invoice.paidAt ? new Date(invoice.paidAt).toLocaleDateString() : '—'
+				invoice.paidAt ? formatUtcCalendarDay(invoice.paidAt) : '—'
 		}
 	];
 
