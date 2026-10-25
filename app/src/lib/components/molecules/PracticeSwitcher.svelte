@@ -94,7 +94,6 @@
 			color: var(--color-on-surface-muted);
 			font-size: var(--text-meta-size);
 			letter-spacing: var(--text-meta-tracking);
-			text-transform: uppercase;
 		}
 
 		ul {

@@ -395,7 +395,6 @@
 			font-family: var(--font-family-base);
 			font-size: var(--text-meta-size);
 			letter-spacing: var(--text-meta-tracking);
-			text-transform: uppercase;
 		}
 	}
 </style>

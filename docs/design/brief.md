@@ -139,11 +139,12 @@ The current `--text-*` ramp in `tokens.css` was never chosen — it is a placeho
 | `label` | `0.8125rem` / 13px | 500 | 1.35 | `0.005em` | Field labels, nav, buttons |
 | `meta` | `0.75rem` / 12px | 400 | 1.4 | `0.01em` | Timestamps, attribution, help text |
 
-Three standing rules:
+Four standing rules:
 
 - **Tracking tightens as size grows and loosens as it shrinks.** The table above already does this; do not set a heading at `0` tracking.
 - **Tabular figures everywhere a number can be compared** — money, dates, invoice numbers, counts in a table column. `font-variant-numeric: tabular-nums`.
 - **Prose gets a measure.** The existing `--measure: 65ch` cap stays and applies to any run of reading text. Form fields are sized to their content, not to the measure.
+- **No all-caps text.** Size, weight and tracking already make the hierarchy, and `meta` in `on-surface-muted` already marks a group label, so capitals would be a second signal that needs a tracking token of its own to be set well (ADR-0060, [#1946](https://github.com/markgoho/doula-cloud/issues/1946)). A label is written in sentence case and no CSS sets it in capitals: `tokens.usage.spec.ts` refuses `text-transform: uppercase` and all small caps.
 
 ## Density
 

@@ -153,6 +153,23 @@ describe('components spend tokens, not raw values', () => {
 
 		expect(report(offenses)).toEqual([]);
 	});
+
+	/*
+	 * The brief's Typography section: no all-caps text (#1946, ADR-0060's
+	 * position 7). Hierarchy comes from size, weight and tracking, and
+	 * `meta` in `on-surface-muted` already marks a group label, so capitals
+	 * would be a second signal that needs a tracking token of its own to be
+	 * set well. `font-variant-caps` is refused beside `text-transform`
+	 * because all small caps is the same capitals by another property.
+	 */
+	it('sets no text in all caps, because size, weight and tracking already make the hierarchy', () => {
+		const offenses = scanDeclarations(
+			['text-transform', 'font-variant-caps'],
+			(value) => !['uppercase', 'all-small-caps', 'all-petite-caps'].includes(value)
+		);
+
+		expect(report(offenses)).toEqual([]);
+	});
 });
 
 /*
