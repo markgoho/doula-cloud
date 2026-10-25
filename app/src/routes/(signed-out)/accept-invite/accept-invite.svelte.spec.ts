@@ -164,11 +164,13 @@ const firstNameField = () => testPage.getByLabelText('First name');
 const lastNameField = () => testPage.getByLabelText('Last name');
 const stateField = () => testPage.getByRole('combobox', { name: 'Which state do you work from?' });
 
+const newHereRadio = () => testPage.getByRole('radio', { name: /I'm new here/ });
+const hasAccountRadio = () => testPage.getByRole('radio', { name: /I already have an account/ });
+
 async function identify(mode: 'signup' | 'login' = 'signup') {
 	await emailField().fill('priya@example.com');
 	await passwordField().fill('correct horse battery');
-	if (mode === 'login')
-		await testPage.getByRole('radio', { name: /I already have an account/ }).click();
+	await (mode === 'login' ? hasAccountRadio() : newHereRadio()).click();
 	await continueButton().click();
 }
 
@@ -183,9 +185,71 @@ async function identifyAsNewPerson() {
 	await stateField().selectOptions('New Jersey');
 }
 
-describe('step one -- autocomplete follows which mode is picked (#469)', () => {
-	it('offers to fill a new email and set a new password by default (signup)', async () => {
+describe('step one -- the account question opens with nothing chosen (#1915)', () => {
+	it('chooses neither answer when the screen opens', async () => {
 		await setup();
+
+		await expect.element(newHereRadio()).not.toBeChecked();
+		await expect.element(hasAccountRadio()).not.toBeChecked();
+	});
+
+	// Until she says which, the screen claims neither a new password nor a
+	// saved one, and states no rule for a password it may not be setting.
+	it('claims no autocomplete and states no password rule until she answers', async () => {
+		await setup();
+
+		await expect.element(emailField()).not.toHaveAttribute('autocomplete');
+		await expect.element(passwordField()).not.toHaveAttribute('autocomplete');
+		await expect.element(passwordField()).not.toHaveAttribute('passwordrules');
+		expect(
+			testPage.getByText('Must be 15 characters or more, and not a commonly used password').elements()
+		).toHaveLength(0);
+	});
+
+	it('refuses Continue with no answer, before anything is sent', async () => {
+		await setup();
+		await emailField().fill('priya@example.com');
+		await passwordField().fill('correct horse battery');
+
+		await continueButton().click();
+
+		const message = 'Select whether you are new here or already have an account';
+		await expect
+			.element(testPage.getByRole('link', { name: message }))
+			.toHaveAttribute('href', '#mode-signup');
+		await expect.element(testPage.getByText(message).last()).toBeVisible();
+		expect(createUserWithEmailAndPassword).not.toHaveBeenCalled();
+		expect(signInWithEmailAndPassword).not.toHaveBeenCalled();
+		expect(globalFetch).not.toHaveBeenCalled();
+		expect(apiFetch).not.toHaveBeenCalled();
+	});
+
+	// Field order: the question sits under the password, so its entry is
+	// listed after the empty fields above it.
+	it('lists the empty fields and the unanswered question in field order', async () => {
+		await setup();
+
+		await continueButton().click();
+
+		const summary = testPage.getByRole('alert').first();
+		await expect.element(summary.getByRole('link').first()).toBeVisible();
+		const links = summary
+			.getByRole('link')
+			.elements()
+			.map((link) => link.textContent.trim());
+		expect(links).toEqual([
+			'Enter your email address',
+			'Enter your password',
+			'Select whether you are new here or already have an account'
+		]);
+	});
+});
+
+describe('step one -- autocomplete follows which mode is picked (#469)', () => {
+	it('offers to fill a new email and set a new password once she says she is new', async () => {
+		await setup();
+
+		await newHereRadio().click();
 
 		await expect.element(emailField()).toHaveAttribute('autocomplete', 'email');
 		await expect.element(passwordField()).toHaveAttribute('autocomplete', 'new-password');
@@ -194,7 +258,7 @@ describe('step one -- autocomplete follows which mode is picked (#469)', () => {
 	it('asks for the account identifier and its existing password once she says she has one', async () => {
 		await setup();
 
-		await testPage.getByRole('radio', { name: /I already have an account/ }).click();
+		await hasAccountRadio().click();
 
 		await expect.element(emailField()).toHaveAttribute('autocomplete', 'username');
 		await expect.element(passwordField()).toHaveAttribute('autocomplete', 'current-password');
@@ -204,6 +268,7 @@ describe('step one -- autocomplete follows which mode is picked (#469)', () => {
 describe('step one -- passwordrules follows which mode is picked (#1813)', () => {
 	it('tells Safari the rule when she is making a new account', async () => {
 		await setup();
+		await newHereRadio().click();
 
 		await expect.element(passwordField()).toHaveAttribute('passwordrules', 'minlength: 15;');
 	});
@@ -211,7 +276,7 @@ describe('step one -- passwordrules follows which mode is picked (#1813)', () =>
 	it('states no rule for a password she is only typing back in', async () => {
 		await setup();
 
-		await testPage.getByRole('radio', { name: /I already have an account/ }).click();
+		await hasAccountRadio().click();
 
 		await expect.element(passwordField()).not.toHaveAttribute('passwordrules');
 	});
@@ -220,6 +285,7 @@ describe('step one -- passwordrules follows which mode is picked (#1813)', () =>
 describe('step one -- the password rule (#1538)', () => {
 	it('states the rule before she types when she is making a new account', async () => {
 		await setup();
+		await newHereRadio().click();
 
 		await expect
 			.element(testPage.getByText('Must be 15 characters or more, and not a commonly used password'))
@@ -228,6 +294,7 @@ describe('step one -- the password rule (#1538)', () => {
 
 	it('refuses a commonly used password for a new account before the account is created (#1539)', async () => {
 		await setup();
+		await newHereRadio().click();
 		await emailField().fill('priya@example.com');
 		await passwordField().fill('passwordpassword');
 		await continueButton().click();
@@ -260,7 +327,7 @@ describe('step one -- the password rule (#1538)', () => {
 
 	it('checks nothing against the list for an existing account password (#1539)', async () => {
 		await setup();
-		await testPage.getByRole('radio', { name: /I already have an account/ }).click();
+		await hasAccountRadio().click();
 		await emailField().fill('priya@example.com');
 		await passwordField().fill('passwordpassword');
 		await continueButton().click();
@@ -273,6 +340,7 @@ describe('step one -- the password rule (#1538)', () => {
 
 	it('refuses a short password for a new account before anything is sent', async () => {
 		await setup();
+		await newHereRadio().click();
 		await emailField().fill('priya@example.com');
 		await passwordField().fill('a'.repeat(14));
 		await continueButton().click();
@@ -285,7 +353,7 @@ describe('step one -- the password rule (#1538)', () => {
 
 	it('checks nothing about the length of an existing account password', async () => {
 		await setup();
-		await testPage.getByRole('radio', { name: /I already have an account/ }).click();
+		await hasAccountRadio().click();
 		await emailField().fill('priya@example.com');
 		await passwordField().fill('short');
 		await continueButton().click();

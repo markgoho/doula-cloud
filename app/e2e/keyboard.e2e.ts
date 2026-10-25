@@ -137,6 +137,13 @@ test('Renata signs in and invites a Doula, with no pointer at any step', async (
 	await tabTo(page, page.getByLabel('Their email'), 'the email field on the invite form');
 	await page.keyboard.type(invited);
 
+	// The form opens with nothing chosen (#1912), so both questions are
+	// answered the way a keyboard user answers them: Space on each.
+	await tabTo(page, page.getByRole('checkbox', { name: 'Doula' }), 'the Doula role checkbox');
+	await page.keyboard.press('Space');
+	await tabTo(page, page.getByRole('radio', { name: 'Employee' }), 'the Employee radio');
+	await page.keyboard.press('Space');
+
 	await tabTo(page, page.getByRole('button', { name: 'Send invite' }), 'the Send invite button');
 	await page.keyboard.press('Enter');
 

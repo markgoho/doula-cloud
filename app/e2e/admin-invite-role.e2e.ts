@@ -29,13 +29,12 @@ test('An Admin invited via the Staff invite route reaches the Credits and Staff 
 	await enterPractice(context, page, ownerHeaders, practiceId);
 	await expect(page).toHaveURL(new RegExp(`/practices/${practiceId}$`));
 
-	// The invite form's Roles default is 'doula' alone: select Admin and
-	// clear Doula, so the role plumbing is what decides the membership and
-	// a regression that ignored the checkboxes would grant the default.
+	// The invite form opens with nothing chosen (#1912): tick Admin alone,
+	// so the role plumbing is what decides the membership.
 	await page.goto(`/practices/${practiceId}/invite`);
 	await page.getByLabel('Their email').fill(adminEmail);
 	await page.getByRole('checkbox', { name: 'Admin' }).check();
-	await page.getByRole('checkbox', { name: 'Doula' }).uncheck();
+	await page.getByRole('radio', { name: 'Employee' }).check();
 	const [inviteResponse] = await Promise.all([
 		page.waitForResponse((response) => response.url().endsWith('/staff/invitations') && response.request().method() === 'POST'),
 		page.getByRole('button', { name: 'Send invite' }).click()
@@ -57,6 +56,7 @@ test('An Admin invited via the Staff invite route reaches the Credits and Staff 
 	await page.goto(`/accept-invite?token=${inviteToken}`);
 	await page.getByLabel('Email').fill(adminEmail);
 	await page.getByLabel('Password').fill(password);
+	await page.getByRole('radio', { name: /I'm new here/ }).check();
 	await page.getByRole('button', { name: 'Continue' }).click();
 
 	await expect(page.getByRole('heading', { name: 'Tell us about yourself' })).toBeVisible();
@@ -87,6 +87,8 @@ test('An Admin invited via the Staff invite route reaches the Credits and Staff 
 	// declaration names (#1031).
 	await page.goto(`/practices/${practiceId}/invite`);
 	await page.getByLabel('Their email').fill(uniqueEmail('someone-else'));
+	await page.getByRole('checkbox', { name: 'Doula' }).check();
+	await page.getByRole('radio', { name: 'Employee' }).check();
 	await page.getByRole('button', { name: 'Send invite' }).click();
 	await expect(page.getByText('only a Practice Owner can do that')).toBeVisible();
 });

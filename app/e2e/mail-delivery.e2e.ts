@@ -41,6 +41,8 @@ test('An invitation arrives as readable mail, and a complaint stops the next one
 
 	await page.goto(`/practices/${practiceId}/invite`);
 	await page.getByLabel('Their email').fill(doulaEmail);
+	await page.getByRole('checkbox', { name: 'Doula' }).check();
+	await page.getByRole('radio', { name: 'Employee' }).check();
 	await page.getByRole('button', { name: 'Send invite' }).click();
 	await expect(page.getByText(`is on its way to ${doulaEmail}`)).toBeVisible();
 
@@ -79,6 +81,7 @@ test('An invitation arrives as readable mail, and a complaint stops the next one
 	await expect(page.getByLabel('Email')).toBeVisible();
 	await page.getByLabel('Email').fill(doulaEmail);
 	await page.getByLabel('Password').fill(password);
+	await page.getByRole('radio', { name: /I'm new here/ }).check();
 	await page.getByRole('button', { name: 'Continue' }).click();
 	await expect(page.getByRole('heading', { name: 'Tell us about yourself' })).toBeVisible();
 
@@ -96,6 +99,8 @@ test('An invitation arrives as readable mail, and a complaint stops the next one
 	await enterPractice(context, page, ownerHeaders, practiceId);
 	await page.goto(`/practices/${practiceId}/invite`);
 	await page.getByLabel('Their email').fill(complainerEmail);
+	await page.getByRole('checkbox', { name: 'Doula' }).check();
+	await page.getByRole('radio', { name: 'Employee' }).check();
 	await page.getByRole('button', { name: 'Send invite' }).click();
 	// #861: the invitation is refused at the endpoint now, before any row
 	// is written, so the Owner is told at the field rather than reading a

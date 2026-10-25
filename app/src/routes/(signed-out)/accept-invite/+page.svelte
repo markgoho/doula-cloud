@@ -48,7 +48,7 @@
 	import LabeledField from '#lib/components/molecules/LabeledField.svelte';
 	import StaffNameFields from '#lib/components/molecules/StaffNameFields.svelte';
 	import StackedForm from '#lib/components/molecules/StackedForm.svelte';
-	import RadioGroup from '#lib/components/molecules/RadioGroup.svelte';
+	import RadioGroup, { radioFieldId } from '#lib/components/molecules/RadioGroup.svelte';
 	import WorkStateField from '#lib/components/molecules/WorkStateField.svelte';
 	import ErrorSummary from '#lib/components/molecules/ErrorSummary.svelte';
 	import EntryPage from '#lib/components/templates/EntryPage.svelte';
@@ -67,6 +67,10 @@
 	const firstNameId = 'accept-invite-first-name';
 	const lastNameId = 'accept-invite-last-name';
 	const workStateId = 'accept-invite-work-state';
+	// The summary entry for the account question points at its first
+	// option, GOV.UK's rule for a group.
+	const modeName = 'mode';
+	const modeFieldId = radioFieldId(modeName, 'signup');
 
 	// docs/api-design.md section 7's Details is keyed by the DTO's own
 	// JSON field name -- POST /api/staff/accept-invite's body, below.
@@ -74,7 +78,12 @@
 
 	let email = $state('');
 	let password = $state('');
-	let mode = $state<'signup' | 'login'>('signup');
+	/*
+	 * Opens with nothing chosen (#1915, ADR-0055). A person who already
+	 * has an account and presses Continue without reading would otherwise
+	 * try to make a second one.
+	 */
+	let mode = $state<'signup' | 'login' | undefined>();
 	// The Invitation carries an address and a Membership, never a name --
 	// a person names herself here, but only if she has no Staff account
 	// already carrying one.
@@ -87,8 +96,8 @@
 	 * only ever describe the form on screen.
 	 */
 	const submission = new FormSubmission();
-	// #1539: the list loads while she fills in the form, not on submit. The
-	// screen opens on the branch that sets a password.
+	// #1539: the list loads while she fills in the form, not on submit, so
+	// it is ready if she chooses the branch that sets a password.
 	preloadCommonPasswords();
 	let picker = $state<Membership[] | undefined>();
 
@@ -104,9 +113,15 @@
 	 */
 	// The email field is either establishing a new identity or naming an
 	// existing one, and the password field is either being set or being
-	// recalled -- `mode` is what tells the two apart (#469).
-	const emailAutocomplete = $derived(mode === 'signup' ? 'email' : 'username');
-	const passwordAutocomplete = $derived(mode === 'signup' ? 'new-password' : 'current-password');
+	// recalled -- `mode` is what tells the two apart (#469). Until she
+	// answers, neither is claimed: a guess would offer a saved password
+	// for a new account, or a new one for an account she has (#1915).
+	const autocompleteFor = {
+		signup: { email: 'email', password: 'new-password' },
+		login: { email: 'username', password: 'current-password' }
+	} as const;
+	const emailAutocomplete = $derived(mode && autocompleteFor[mode].email);
+	const passwordAutocomplete = $derived(mode && autocompleteFor[mode].password);
 	// Only when she is setting a new password: an existing password does
 	// not retroactively follow a rule stated for the one being created.
 	const passwordHint = $derived(mode === 'signup' ? PASSWORD_HINT : undefined);
@@ -148,6 +163,12 @@
 				const refusal = await passwordRefusal(password);
 				if (refusal) refusals.push({ message: refusal, targetId: passwordId });
 			}
+			// Last, in field order: the question sits under the password.
+			if (mode === undefined)
+				refusals.push({
+					message: 'Select whether you are new here or already have an account',
+					targetId: modeFieldId
+				});
 			if (refusals.length > 0) return refusals;
 
 			credential =
@@ -406,10 +427,11 @@
 			</LabeledField>
 			<RadioGroup
 				legend="Account mode"
-				name="mode"
+				name={modeName}
 				options={modeOptions}
 				value={mode}
 				onChange={(value) => (mode = value)}
+				error={submission.errorFor(modeFieldId)}
 			/>
 			<Button type="submit" label="Continue" loading={submission.isSubmitting} />
 		</StackedForm>

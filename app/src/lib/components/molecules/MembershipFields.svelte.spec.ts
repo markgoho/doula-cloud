@@ -61,6 +61,20 @@ describe('MembershipFields', () => {
 		await expect.element(page.getByRole('radio', { name: 'Contractor' })).toBeChecked();
 	});
 
+	// #1912: the invite form asks it about somebody else, so it opens with
+	// nothing chosen. Rendered directly, since setup's default answers it.
+	it('chooses no employment type when given none', async () => {
+		await render(MembershipFields, {
+			roles: [],
+			employmentType: undefined,
+			onRolesChange: vi.fn(),
+			onEmploymentTypeChange: vi.fn()
+		});
+
+		await expect.element(page.getByRole('radio', { name: 'Employee' })).not.toBeChecked();
+		await expect.element(page.getByRole('radio', { name: 'Contractor' })).not.toBeChecked();
+	});
+
 	/*
 	 * #510 non-regression: LabeledField's inline row moved from cluster-l to
 	 * a grid, and these three short-label checkboxes were the other

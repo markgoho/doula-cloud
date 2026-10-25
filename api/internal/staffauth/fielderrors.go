@@ -61,8 +61,11 @@ const (
 	// caller that sent its own body, and it still names the field so the
 	// summary can focus it.
 	MsgUnknownRole = "Select a role from the list"
-	// MsgEmploymentTypeNeeded is the employmentType field.
-	MsgEmploymentTypeNeeded = "Choose employee or contractor"
+	// MsgEmploymentTypeNeeded is the employmentType field. The invite
+	// form opens with no employment type chosen (#1912, ADR-0055), so an
+	// empty answer is a refusal a person can meet; "Select" is GOV.UK's
+	// verb for a radio group, and the sentence names the question.
+	MsgEmploymentTypeNeeded = "Select an employment type"
 	// MsgMembershipAlreadyHeld is the ticket's own worked example: the
 	// rule only the server knows, said in the reader's words and keyed
 	// onto the control that caused it.

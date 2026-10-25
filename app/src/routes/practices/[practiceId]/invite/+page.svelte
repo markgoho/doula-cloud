@@ -6,6 +6,8 @@
 	import Notice from '#lib/components/atoms/Notice.svelte';
 	import LabeledField from '#lib/components/molecules/LabeledField.svelte';
 	import MembershipFields from '#lib/components/molecules/MembershipFields.svelte';
+	import { radioFieldId } from '#lib/components/molecules/RadioGroup.svelte';
+	import type { EmploymentType } from '#lib/roles.js';
 	import ErrorSummary from '#lib/components/molecules/ErrorSummary.svelte';
 	import FormPage from '#lib/components/templates/FormPage.svelte';
 	import { refusalErrors } from '#lib/formErrors.js';
@@ -19,7 +21,7 @@
 	// each option's id from it, so the summary entry points at the first
 	// one -- GOV.UK's rule for a group, the same shape rolesFieldId takes.
 	const employmentTypeName = 'invite-employment-type';
-	const employmentTypeFieldId = `${employmentTypeName}-employee`;
+	const employmentTypeFieldId = radioFieldId(employmentTypeName, 'employee');
 	// Keyed by the BFF's own json tags (staffauth.InviteRequest), so a
 	// refusal it names lands on the control it is about (#488).
 	const inviteFieldIds = {
@@ -29,8 +31,14 @@
 	};
 
 	let email = $state('');
-	let roles = $state<string[]>(['doula']);
-	let employmentType = $state<'employee' | 'contractor'>('employee');
+	/*
+	 * Both open with nothing chosen (#1912, ADR-0055): the roles and the
+	 * employment type are facts about the person being invited, and an
+	 * answer chosen for the Owner could go through unread. Employment
+	 * type decides which work is hers (ADR-0008).
+	 */
+	let roles = $state<string[]>([]);
+	let employmentType = $state<EmploymentType | undefined>();
 	const submission = new FormSubmission();
 	let invitedAddress = $state('');
 
@@ -46,6 +54,9 @@
 			found.push({ message: "Enter the Staff member's email address", targetId: emailId });
 		if (roles.length === 0)
 			found.push({ message: 'Select at least one role', targetId: rolesFieldId });
+		// The same words as the BFF's staffauth.MsgEmploymentTypeNeeded.
+		if (employmentType === undefined)
+			found.push({ message: 'Select an employment type', targetId: employmentTypeFieldId });
 		return found;
 	}
 
@@ -73,8 +84,8 @@
 
 			invitedAddress = email;
 			email = '';
-			roles = ['doula'];
-			employmentType = 'employee';
+			roles = [];
+			employmentType = undefined;
 		}, orServiceProblem);
 	}
 </script>

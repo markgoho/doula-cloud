@@ -23,15 +23,17 @@ test('A Doula invited via the Staff invite route is refused an Owner-only action
 	const { idToken: ownerIdToken, practiceId } = await seedFoundingOwner(request);
 
 	// The invite send is walked through the real screen (#189's "Invite a
-	// Staff member" route, otherwise untouched by the suite): the default
-	// role selection is 'doula' alone, which is the non-Owner bundle this
-	// spec needs.
+	// Staff member" route, otherwise untouched by the suite). The form opens
+	// with nothing chosen (#1912), so the Owner ticks Doula alone, the
+	// non-Owner bundle this spec needs, and Employee.
 	const ownerHeaders = await signIn(request, API_URL, ownerIdToken);
 	await enterPractice(context, page, ownerHeaders, practiceId);
 	await expect(page).toHaveURL(new RegExp(`/practices/${practiceId}$`));
 
 	await page.goto(`/practices/${practiceId}/invite`);
 	await page.getByLabel('Their email').fill(doulaEmail);
+	await page.getByRole('checkbox', { name: 'Doula' }).check();
+	await page.getByRole('radio', { name: 'Employee' }).check();
 	const [inviteResponse] = await Promise.all([
 		page.waitForResponse((response) => response.url().endsWith('/staff/invitations') && response.request().method() === 'POST'),
 		page.getByRole('button', { name: 'Send invite' }).click()
@@ -54,6 +56,7 @@ test('A Doula invited via the Staff invite route is refused an Owner-only action
 	await page.goto(`/accept-invite?token=${inviteToken}`);
 	await page.getByLabel('Email').fill(doulaEmail);
 	await page.getByLabel('Password').fill(password);
+	await page.getByRole('radio', { name: /I'm new here/ }).check();
 	await page.getByRole('button', { name: 'Continue' }).click();
 
 	await expect(page.getByRole('heading', { name: 'Tell us about yourself' })).toBeVisible();
@@ -74,6 +77,8 @@ test('A Doula invited via the Staff invite route is refused an Owner-only action
 	// sentence is the one RequireOwner wrote before the move.
 	await page.goto(`/practices/${practiceId}/invite`);
 	await page.getByLabel('Their email').fill(uniqueEmail('someone-else'));
+	await page.getByRole('checkbox', { name: 'Doula' }).check();
+	await page.getByRole('radio', { name: 'Employee' }).check();
 	await page.getByRole('button', { name: 'Send invite' }).click();
 	await expect(page.getByText('only a Practice Owner can do that')).toBeVisible();
 });
