@@ -80,7 +80,7 @@ test('An Owner vouches for a locked-out doula, and the code reaches her and nobo
 	// link reading "Send a recovery code", and which row it is comes from
 	// the visually-hidden name joined by aria-describedby (#515) -- which
 	// no Playwright role query can select on.
-	await page.locator(`a[href$="/staff/${doulaStaffId}/mfa-recovery"]`).first().click();
+	await page.locator(`a[href$="/staff/${doulaStaffId}/mfa-recovery"]`).filter({ visible: true }).first().click();
 
 	await expect(page.getByRole('heading', { name: `Help ${doulaName} sign in again` })).toBeVisible();
 	// #615's AC, and the misreading the screen exists to prevent: the code
