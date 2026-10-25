@@ -344,3 +344,46 @@ describe('ClientFieldTemplateEditor.svelte, focus after a move (#1920)', () => {
 		await expect.element(page.getByLabelText('Field label').first()).toHaveValue('Due date source');
 	});
 });
+
+// The live region's text is the assertion, not its visibility: it is
+// visually hidden on purpose, and read only by a screen reader.
+function announced(): string | null {
+	return page.getByRole('status').element().textContent;
+}
+
+// "of 3", not "of 4": the archived field is not in the list being
+// reordered, so it is not counted in the position either.
+describe('ClientFieldTemplateEditor.svelte, what a move announces (#1955)', () => {
+	it('has an empty status region in the page before the first move', async () => {
+		await setupMoving();
+
+		expect(announced()).toBe('');
+	});
+
+	it('announces the field and its new position after a move down', async () => {
+		await setupMoving();
+
+		await page.getByRole('button', { name: 'Move down' }).first().click();
+
+		await expect.poll(announced).toBe('Intake note moved to 2 of 3');
+	});
+
+	it('announces the field and its new position after a move up', async () => {
+		await setupMoving();
+
+		await page.getByRole('button', { name: 'Move up' }).nth(1).click();
+
+		await expect.poll(announced).toBe('Due date source moved to 1 of 3');
+	});
+
+	it('announces nothing new when the end press moves nothing', async () => {
+		await setupMoving();
+
+		await page.getByRole('button', { name: 'Move down' }).nth(1).click();
+		await expect.poll(announced).toBe('Due date source moved to 3 of 3');
+
+		await userEvent.keyboard('{Enter}');
+
+		await expect.poll(announced).toBe('Due date source moved to 3 of 3');
+	});
+});

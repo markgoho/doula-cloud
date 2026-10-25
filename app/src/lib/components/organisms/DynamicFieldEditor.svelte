@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { tick } from 'svelte';
-	import { focusAfterMove } from '#lib/fieldMoveFocus.js';
+	import { focusAfterMove, moveAnnouncement } from '#lib/fieldMoveFocus.js';
 	import { FIELD_TYPES, isSelectType, type Field, type FieldType } from '#lib/planTemplate.js';
 	import Button from '../atoms/Button.svelte';
 	import Select from '../atoms/Select.svelte';
@@ -29,10 +29,15 @@
 
 	let newFieldType = $state<FieldType>(FIELD_TYPES[0]);
 	let list: HTMLUListElement;
+	let announcement = $state('');
 
 	// A moved row drops focus to the page (#1920); `focusAfterMove` says
 	// where it goes back to, once the consumer has reordered `fields`.
+	// The region is emptied first so that a text identical to the last
+	// one (two "Untitled field" rows) is still a change, and is read
+	// (#1955).
 	async function move(id: string, direction: 'up' | 'down') {
+		announcement = '';
 		if (direction === 'up') {
 			onMoveUp(id);
 		} else {
@@ -40,6 +45,7 @@
 		}
 		await tick();
 		focusAfterMove(list, id, direction);
+		announcement = moveAnnouncement(fields, id, rowName);
 	}
 
 	function optionsText(field: Field): string {
@@ -126,6 +132,8 @@
 		</li>
 	{/each}
 </ul>
+<!-- In the page from the first render, empty, so the first move is read (#1955). -->
+<p class="visually-hidden" role="status">{announcement}</p>
 
 <label>
 	New field type
