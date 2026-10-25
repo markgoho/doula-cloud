@@ -39,7 +39,7 @@ const invoiceOpen: Invoice = {
 	amountCents: 15_000,
 	currency: 'usd',
 	createdAt: '2026-01-01T00:00:00Z',
-	dueAt: '2026-01-31T00:00:00Z',
+	dueOn: '2026-01-31',
 	reference: 'STRIPE-in_1',
 	refundedCents: 0,
 	billingMode: 'stripe'
@@ -52,8 +52,8 @@ const invoicePaid: Invoice = {
 	amountCents: 20_000,
 	currency: 'usd',
 	createdAt: '2026-01-02T00:00:00Z',
-	paidAt: '2026-01-05T00:00:00Z',
-	dueAt: '2026-02-01T00:00:00Z',
+	paidOn: '2026-01-05',
+	dueOn: '2026-02-01',
 	reference: 'STRIPE-in_2',
 	refundedCents: 0,
 	billingMode: 'stripe'
@@ -79,8 +79,8 @@ const invoicePaidByHand: Invoice = {
 	amountCents: 25_000,
 	currency: 'usd',
 	createdAt: '2026-01-03T00:00:00Z',
-	paidAt: '2026-01-06T00:00:00Z',
-	dueAt: '2026-02-02T00:00:00Z',
+	paidOn: '2026-01-06',
+	dueOn: '2026-02-02',
 	reference: 'INV-0003',
 	refundedCents: 0,
 	billingMode: 'by_hand',
@@ -144,9 +144,9 @@ describe('InvoiceSection.svelte', () => {
 		await expect.element(page.getByText('$150.00 — Open')).toBeInTheDocument();
 	});
 
-	// #1958: paidAt is UTC midnight of the day the Payment was recorded,
-	// the form the by-hand rail writes, so it reads as that day in any
-	// zone -- not Jan 4, as an instant read in a US zone would.
+	// #1958, #1965: paidOn is the day the BFF read in the Practice's own
+	// timezone, and it prints as that day in any reader zone, behind UTC
+	// or ahead of it.
 	it('shows a paid Invoice on the day its Payment was recorded, month first', async () => {
 		await setup({ invoices: [invoicePaid] });
 

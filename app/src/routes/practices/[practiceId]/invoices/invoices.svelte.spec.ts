@@ -67,13 +67,27 @@ async function setup(page: PracticeInvoiceListData = data) {
 	await render(Page, { params: fixture.params, data: { ...page, session: sessionStub } });
 }
 
-describe('the dates the Practice-wide invoice list prints (#1958)', () => {
-	// The fixture's paidAt is UTC midnight of a recorded day, the form the
-	// by-hand rail writes; read as an instant it is Jul 3 in any US zone.
-	it('shows a paid Invoice on the day its Payment was recorded, month first', async () => {
+describe('the dates the Practice-wide invoice list prints (#1958, #1965)', () => {
+	// The BFF sends paidOn and dueOn as days it has already read in the
+	// Practice's own timezone. Printed as calendar days, they hold in any
+	// reader zone: the suite runs under TZ=UTC in CI and under zones behind
+	// and ahead of UTC locally, and these assertions do not change.
+	it('shows a paid Invoice on the day the BFF sent, month first', async () => {
 		await setup();
 
 		await expect.element(testPage.getByRole('cell', { name: 'Jul 4, 2026', exact: true })).toBeVisible();
+	});
+
+	it('shows the due day the BFF sent, with the lateness it counted', async () => {
+		await setup();
+
+		await expect
+			.element(testPage.getByRole('cell', { name: 'Aug 31, 2026 — 56 days overdue', exact: true }))
+			.toBeVisible();
+		// Within the paid row: the first row's Billed instant is also Jul 31
+		// in a zone behind UTC.
+		const paidRow = testPage.getByRole('row').filter({ hasText: 'DC-0092' });
+		await expect.element(paidRow.getByRole('cell', { name: 'Jul 31, 2026', exact: true })).toBeVisible();
 	});
 });
 
@@ -165,7 +179,9 @@ describe('the Practice-wide invoice list (#265)', () => {
 						status: 'open',
 						amountCents: 100,
 						currency: 'usd',
-						createdAt: '2026-06-01T00:00:00Z'
+						createdAt: '2026-06-01T00:00:00Z',
+						dueOn: '2026-07-01',
+						daysOverdue: 0
 					}
 				],
 				hasMore: false,

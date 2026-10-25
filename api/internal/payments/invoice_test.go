@@ -366,8 +366,8 @@ func TestPostInvoiceHandler_CreatesInvoiceWhenConnected(t *testing.T) {
 	if out.Currency != "usd" {
 		t.Fatalf("invoice.currency = %q, want %q", out.Currency, "usd")
 	}
-	if out.PaidAt != nil {
-		t.Fatalf("invoice.paidAt = %v, want nil", out.PaidAt)
+	if out.PaidOn != nil {
+		t.Fatalf("invoice.paidOn = %v, want nil", *out.PaidOn)
 	}
 
 	if len(client.CreateInvoiceCalls) != 1 {
@@ -847,17 +847,20 @@ func TestGetInvoicesHandler_ListsAcrossVoidedContract(t *testing.T) {
 	}
 }
 
-// TestGetInvoicesHandler_PaidAtRoundTrips proves a paid Invoice's paid_at
-// is surfaced in the response.
-func TestGetInvoicesHandler_PaidAtRoundTrips(t *testing.T) {
+// TestGetInvoicesHandler_ByHandPaidOnIsTheTypedDay proves a by-hand
+// Payment's day reaches the response as the day the recorder typed
+// (#1965). manual_payment.go stores Oct 25 as 2026-10-25T00:00Z, which is
+// the evening of Oct 24 in the Practice's New York; read as an instant it
+// would be a day early.
+func TestGetInvoicesHandler_ByHandPaidOnIsTheTypedDay(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "invoice-list-paid-at"
 	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
 	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jane Client", "jane@example.com")
 	contractID := seedDraftContract(t, db, engagementID)
 	invoiceID := seedInvoice(t, db, practiceID, contractID, "in_paid", invoiceStatusPaid, 10000, time.Now())
-	paidAt := time.Now().Round(time.Second)
-	if _, err := db.Admin.ExecContext(t.Context(), `UPDATE invoices SET paid_at = $1 WHERE id = $2`, paidAt, invoiceID); err != nil {
+	seedManualPayment(t, db, invoiceID, methodCheck, "")
+	if _, err := db.Admin.ExecContext(t.Context(), `UPDATE invoices SET paid_at = '2026-10-25T00:00:00Z' WHERE id = $1`, invoiceID); err != nil {
 		t.Fatalf("seed paid_at: %v", err)
 	}
 
@@ -872,11 +875,11 @@ func TestGetInvoicesHandler_PaidAtRoundTrips(t *testing.T) {
 	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
-	if len(out.Items) != 1 || out.Items[0].PaidAt == nil {
-		t.Fatalf("items = %+v, want one item with paidAt set", out.Items)
+	if len(out.Items) != 1 || out.Items[0].PaidOn == nil {
+		t.Fatalf("items = %+v, want one item with paidOn set", out.Items)
 	}
-	if !out.Items[0].PaidAt.Equal(paidAt) {
-		t.Fatalf("paidAt = %v, want %v", out.Items[0].PaidAt, paidAt)
+	if *out.Items[0].PaidOn != dayOct25 {
+		t.Fatalf("paidOn = %q, want 2026-10-25", *out.Items[0].PaidOn)
 	}
 }
 

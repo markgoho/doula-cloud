@@ -52,7 +52,7 @@ export const paidReturnedInvoice: ClientInvoice = {
 	...invoice,
 	status: 'paid',
 	billingMode: 'by_hand',
-	paidAt: '2027-02-04T15:00:00Z',
+	paidOn: '2027-02-04',
 	paidMethod: 'bank_transfer',
 	refundedCents: 25_000
 };

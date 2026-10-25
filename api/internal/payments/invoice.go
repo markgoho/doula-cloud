@@ -14,6 +14,7 @@ import (
 	"doula-cloud/api/internal/contracts"
 	"doula-cloud/api/internal/pagecursor"
 	"doula-cloud/api/internal/personname"
+	"doula-cloud/api/internal/practicetimezone"
 	"doula-cloud/api/internal/staffauth"
 )
 
@@ -50,22 +51,27 @@ const fieldMethod = "method"
 // Practice's own billing_mode later changes, so this is read off the row
 // itself, never off the Practice's current setting.
 type InvoiceView struct {
-	ID          string     `json:"id"`
-	ContractID  string     `json:"contractId"`
-	Status      string     `json:"status"`
-	AmountCents int64      `json:"amountCents"`
-	Currency    string     `json:"currency"`
-	CreatedAt   time.Time  `json:"createdAt"`
-	PaidAt      *time.Time `json:"paidAt,omitempty"`
-	// DueAt (#768) is the date this Invoice falls due, written onto the
-	// row when it was raised from the Practice's payment terms of that
-	// moment -- so changing the terms later never moves an Invoice
-	// already billed. It is the date, never a day count: how late an
-	// Invoice is has to be true at every instant, and a pre-baked integer
-	// goes stale in a tab left open overnight.
-	DueAt       time.Time `json:"dueAt"`
-	Reference   string    `json:"reference"`
-	BillingMode string    `json:"billingMode"`
+	ID          string    `json:"id"`
+	ContractID  string    `json:"contractId"`
+	Status      string    `json:"status"`
+	AmountCents int64     `json:"amountCents"`
+	Currency    string    `json:"currency"`
+	CreatedAt   time.Time `json:"createdAt"`
+	// PaidOn (#1965) is the calendar day this Invoice was paid, in
+	// YYYY-MM-DD form, absent while it is not paid: the day the recorder
+	// typed for a by-hand Payment, or the day Stripe's instant falls on in
+	// the Practice's zone for a card one (invoicePaidOn). The instant
+	// itself stays on the row and on the payments row, for the audit
+	// trail; a screen prints a day.
+	PaidOn *string `json:"paidOn,omitempty"`
+	// DueOn (#768, #1965) is the calendar day this Invoice falls due, in
+	// YYYY-MM-DD form: the day its stored due_at falls on in the
+	// Practice's zone. due_at is written onto the row when the Invoice is
+	// raised from the Practice's payment terms of that moment, so
+	// changing the terms later never moves an Invoice already billed.
+	DueOn       string `json:"dueOn"`
+	Reference   string `json:"reference"`
+	BillingMode string `json:"billingMode"`
 	// ActivePaymentID (#945) is the one Payment currently covering this
 	// Invoice, if any -- nil unless the Invoice is 'paid' by a row nothing
 	// has reversed. What the two acts that name a specific Payment need in
@@ -211,6 +217,15 @@ func PostInvoiceHandler(client Client) http.Handler {
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
+		// #1965: the response names the due day in the Practice's zone,
+		// the same day every later read of this Invoice sends. Loaded
+		// before either rail runs, so a zone that will not load refuses
+		// before Stripe is asked to raise anything.
+		zone, err := practicetimezone.Load(r.Context(), tx, practiceID)
+		if err != nil {
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+			return
+		}
 
 		var view InvoiceView
 		if mode == BillingModeByHand {
@@ -230,6 +245,7 @@ func PostInvoiceHandler(client Client) http.Handler {
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
+		view.DueOn = practiceDay(dueAt, zone)
 
 		// Only persist a first-time billing mode once the Invoice it was
 		// requested for has actually been created -- see
@@ -302,7 +318,6 @@ func createByHandInvoice(ctx context.Context, tx *sql.Tx, practiceID, contractID
 		AmountCents: amountCents,
 		Currency:    "usd",
 		CreatedAt:   createdAt,
-		DueAt:       dueAt,
 		Reference:   reference,
 		BillingMode: string(BillingModeByHand),
 	}, nil
@@ -392,7 +407,6 @@ func createStripeInvoice(ctx context.Context, tx *sql.Tx, client Client, practic
 		AmountCents: amountCents,
 		Currency:    "usd",
 		CreatedAt:   createdAt,
-		DueAt:       dueAt,
 		Reference:   number,
 		BillingMode: string(BillingModeStripe),
 	}, nil
@@ -437,7 +451,14 @@ func GetInvoicesHandler() http.Handler {
 			after = &c
 		}
 
-		items, hasMore, err := listInvoices(r.Context(), tx, engagementID, after)
+		// #1965: the paid and due days are the Practice's own.
+		zone, err := practicetimezone.Load(r.Context(), tx, practiceID)
+		if err != nil {
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+			return
+		}
+
+		items, hasMore, err := listInvoices(r.Context(), tx, engagementID, after, zone)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
@@ -731,7 +752,7 @@ const listInvoicesAfterQuery = `SELECT i.id, i.contract_id, i.status, i.amount_c
 // explicitly on top of the RLS scoping staffauth.Middleware already set
 // up on tx -- the app layer's own filter, so a bug in either one alone
 // can't leak rows.
-func listInvoices(ctx context.Context, tx *sql.Tx, engagementID string, after *invoiceCursor) ([]InvoiceView, bool, error) {
+func listInvoices(ctx context.Context, tx *sql.Tx, engagementID string, after *invoiceCursor, zone *time.Location) ([]InvoiceView, bool, error) {
 	var rows *sql.Rows
 	var err error
 	if after != nil {
@@ -749,15 +770,15 @@ func listInvoices(ctx context.Context, tx *sql.Tx, engagementID string, after *i
 	for rows.Next() {
 		var it InvoiceView
 		var paidAt sql.NullTime
+		var dueAt time.Time
 		var stripeInvoiceID sql.NullString
 		var activePaymentID, activePaymentKind sql.NullString
-		if err := rows.Scan(&it.ID, &it.ContractID, &it.Status, &it.AmountCents, &it.Currency, &it.CreatedAt, &paidAt, &it.DueAt, &it.Reference, &stripeInvoiceID, &activePaymentID, &activePaymentKind, &it.RefundedCents); err != nil {
+		if err := rows.Scan(&it.ID, &it.ContractID, &it.Status, &it.AmountCents, &it.Currency, &it.CreatedAt, &paidAt, &dueAt, &it.Reference, &stripeInvoiceID, &activePaymentID, &activePaymentKind, &it.RefundedCents); err != nil {
 			// coverage:ignore reason: row scan failure, not exercised by unit tests
 			return nil, false, fmt.Errorf("payments: scan invoice row: %w", err)
 		}
-		if paidAt.Valid {
-			it.PaidAt = &paidAt.Time
-		}
+		it.PaidOn = invoicePaidOn(paidAt, activePaymentKind.String == paymentKindManual, zone)
+		it.DueOn = practiceDay(dueAt, zone)
 		if activePaymentID.Valid {
 			it.ActivePaymentID = &activePaymentID.String
 			it.ActivePaymentKind = activePaymentKind.String

@@ -160,8 +160,8 @@ func TestClientListInvoices_OwnEngagementOnlyNoDraftAndTotals(t *testing.T) {
 		t.Fatalf("hasMore = %v cursor = %v, want a single page", out.HasMore, out.NextCursor)
 	}
 	stripeRow := out.Items[3]
-	if stripeRow.BillingMode != string(payments.BillingModeStripe) || stripeRow.PaidAt == nil || stripeRow.PaidMethod != nil {
-		t.Fatalf("stripe-paid row = %+v, want stripe rail, a paidAt and no paidMethod", stripeRow)
+	if stripeRow.BillingMode != string(payments.BillingModeStripe) || stripeRow.PaidOn == nil || stripeRow.PaidMethod != nil {
+		t.Fatalf("stripe-paid row = %+v, want stripe rail, a paidOn and no paidMethod", stripeRow)
 	}
 }
 

@@ -46,7 +46,7 @@ describe('invoiceFacts', () => {
 	});
 
 	it('adds when it was paid and how, where a manual record exists', () => {
-		const facts = invoiceFacts({ ...base, status: 'paid', paidAt: '2027-01-02T12:00:00Z', paidMethod: 'cash' });
+		const facts = invoiceFacts({ ...base, status: 'paid', paidOn: '2027-01-02', paidMethod: 'cash' });
 		expect(facts.map((fact) => fact.label)).toEqual([
 			'Amount',
 			'Invoice number',

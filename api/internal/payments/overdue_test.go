@@ -7,8 +7,10 @@ import (
 	"doula-cloud/api/internal/testdb"
 )
 
-// Overdue is derived, never stored (#768): `status = 'open' AND due_at <
-// now()`, evaluated by Postgres at read. These tests move the comparison
+// Overdue is derived, never stored (#768): open, and due before the start
+// of the Practice's own today (#1965), evaluated by Postgres at read.
+// invoice_days_wire_test.go pins that boundary at fixed instants; these
+// tests move the comparison
 // rather than waiting for one -- an Invoice seeded due five days ago is
 // the same fact as an Invoice raised five days ago falling due today, and
 // neither needs a webhook (Stripe emits none when a due date passes) nor
@@ -61,10 +63,14 @@ func TestGetPracticeInvoicesHandler_OverdueTotalsAndNarrowing(t *testing.T) {
 		t.Fatalf("narrowed totals = (%d overdue, %d outstanding), want whole-book (15000, 37000)",
 			narrowed.OverdueCents, narrowed.OutstandingCents)
 	}
-	// The row carries the date, never a day count -- how late an Invoice
-	// is has to stay true in a tab left open overnight.
-	if narrowed.Items[0].DueAt.IsZero() || !narrowed.Items[0].DueAt.Before(time.Now()) {
-		t.Fatalf("dueAt = %v, want a past instant", narrowed.Items[0].DueAt)
+	// The row carries its due day and how many Practice days late it is,
+	// counted by the same rule as the figure above it (#1965). The exact
+	// count is TestDaysOverdue's; here it is enough that a late row says so.
+	if narrowed.Items[0].DaysOverdue < 1 {
+		t.Fatalf("daysOverdue = %d, want a positive count", narrowed.Items[0].DaysOverdue)
+	}
+	if narrowed.Items[0].DueOn == "" {
+		t.Fatal("dueOn is empty, want the due day")
 	}
 }
 

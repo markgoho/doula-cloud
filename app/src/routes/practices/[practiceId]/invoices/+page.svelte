@@ -14,7 +14,7 @@
 	import { page } from '#lib/appState.svelte.js';
 	import { resolve } from '$app/paths';
 	import { apiFetchWithSession } from '#lib/api.js';
-	import { formatInstant, formatUtcCalendarDay } from '#lib/dates.js';
+	import { formatCalendarDay, formatInstant } from '#lib/dates.js';
 	import {
 		clientsCannotPayMessage,
 		dueLabel,
@@ -116,17 +116,18 @@
 		{
 			// #768. "Payment due", not "Due date": a due date in this domain
 			// is the pregnancy's (ADR-0015), and the two must not share a
-			// word. The lateness is derived here, from the row's own date
-			// against now, so it stays right in a tab left open overnight.
+			// word. The day and the lateness are the BFF's, in the
+			// Practice's own timezone (#1965), so the row agrees with the
+			// overdue figure above it.
 			label: 'Payment due',
-			accessor: (invoice: PracticeInvoice) => dueLabel(invoice, new Date())
+			accessor: (invoice: PracticeInvoice) => dueLabel(invoice)
 		},
 		{
 			// An em dash rather than a blank, so an unpaid row reads as
 			// "nothing here yet" instead of a cell that failed to render.
 			label: 'Paid',
 			accessor: (invoice: PracticeInvoice) =>
-				invoice.paidAt ? formatUtcCalendarDay(invoice.paidAt) : '—'
+				invoice.paidOn ? formatCalendarDay(invoice.paidOn) : '—'
 		}
 	];
 

@@ -10,7 +10,7 @@
 import type { Fetcher } from './fetcher.js';
 
 import { apiErrorMessage } from './apiErrorMessage.js';
-import { formatInstant } from './dates.js';
+import { formatCalendarDay } from './dates.js';
 import { refusalError } from './formErrors.js';
 import { formatMoney } from './money.js';
 
@@ -21,7 +21,11 @@ export interface Invoice {
 	amountCents: number;
 	currency: string;
 	createdAt: string;
-	paidAt?: string;
+	/** The day this Invoice was paid (#1965), `YYYY-MM-DD`, absent while it
+	 * is not paid: the day the recorder typed for a by-hand Payment, or the
+	 * day a card Payment came in, in the Practice's own timezone. A
+	 * calendar day, so it prints through `formatCalendarDay`. */
+	paidOn?: string;
 	/** A human-readable identifier (#271) -- a by-hand Invoice's own
 	 * per-Practice sequence, or Stripe's own `number` -- so a check "for
 	 * invoice ___" can be matched against it on paper. */
@@ -29,12 +33,11 @@ export interface Invoice {
 	/** Which rail this Invoice was raised on (#271) -- fixed at creation,
 	 * independent of the Practice's current billingMode. */
 	billingMode: BillingMode;
-	/** When this Invoice falls due (#768), written onto it when it was
-	 * raised from the Practice's payment terms of that moment -- so
-	 * changing the terms later never moves an Invoice already billed. The
-	 * date, never a day count: `daysOverdue` derives the count here, at
-	 * read, so it stays right in a tab left open overnight. */
-	dueAt: string;
+	/** The day this Invoice falls due (#768, #1965), `YYYY-MM-DD`, in the
+	 * Practice's own timezone. Fixed when the Invoice was raised from the
+	 * Practice's payment terms of that moment, so changing the terms later
+	 * never moves an Invoice already billed. */
+	dueOn: string;
 	/** The Payment currently covering this Invoice (#945), if any --
 	 * present only while status is 'paid' via a Payment nothing has
 	 * reversed. What reversePayment's and refundPayment's own paymentId
@@ -75,6 +78,11 @@ export type BillingMode = 'stripe' | 'by_hand';
 export interface PracticeInvoice extends Omit<Invoice, 'refundedCents'> {
 	engagementId: string;
 	clientName: string;
+	/** How many whole days in the Practice's own timezone this Invoice is
+	 * past `dueOn` (#1965), and 0 when it is not overdue or not open. The
+	 * BFF counts it at the same instant and by the same rule as the
+	 * page's overdue figure, so the row and the figure cannot disagree. */
+	daysOverdue: number;
 }
 
 /** A page of the Practice-wide Invoice list, with the whole book's
@@ -500,61 +508,23 @@ export const clientsCannotPayMessage =
  * only as feedback after a Send. */
 export const clientHasNoEmailMessage = 'This Client has no email address on file. Add one before creating an Invoice.';
 
-/** How many whole days past its due date an Invoice is, at `now` -- 0
- * when it is not late yet (#768).
- *
- * The count is derived here rather than sent by the BFF on purpose: the
- * row carries the date, so the number is right at every instant, not
- * only at the instant the page loaded. Whole days from the due instant,
- * so an Invoice due at 09:00 is not "1 day late" at 09:01.
- *
- * `now` is a parameter, not `Date.now()` read inside: it is what lets a
- * test move the comparison time instead of waiting for one to arrive,
- * which is the only way "overdue" can be proven without a clock, a
- * webhook or a scheduled sweep. */
-export function daysOverdue(dueAt: string, now: Date): number {
-	if (!isPastDue(dueAt, now)) {
-		return 0;
-	}
-	return Math.floor((now.getTime() - new Date(dueAt).getTime()) / MS_PER_DAY);
-}
-
-/** Whether `dueAt` has passed at `now` -- the lateness rule itself, said
- * once (#768). It is deliberately the same test the BFF's overdue totals
- * and narrowing use (`due_at < now()`), rather than "a whole day has
- * gone": `daysOverdue` answers *how* late, which is a second question,
- * and an Invoice that fell due an hour ago is already counted in the
- * Practice's overdue figure. An unparseable date is not late. */
-function isPastDue(dueAt: string, now: Date): boolean {
-	const dueMs = new Date(dueAt).getTime();
-	return Number.isFinite(dueMs) && dueMs < now.getTime();
-}
-
-const MS_PER_DAY = 24 * 60 * 60 * 1000;
-
 /** What the Practice-wide list's "Payment due" cell reads (#768): the due
- * date, and how late it is when it is late.
+ * day, and how late it is when it is late.
  *
- * Only an Invoice still awaiting payment can be late. A paid, voided or
- * written-off Invoice keeps its due date on the row and is never called
- * overdue, because none of the three is money still owed -- the same rule
- * the BFF's own overdue totals use, said once here so the screen and the
- * figure above it cannot disagree.
+ * The BFF decides lateness (#1965): an Invoice is overdue from the start
+ * of the day after `dueOn` in the Practice's own timezone, and
+ * `daysOverdue` is 0 for one that is not, including every paid, voided or
+ * written-off Invoice. The screen does not count on the reader's own
+ * clock, so it cannot call an Invoice late that the page's overdue figure
+ * does not count.
  *
  * "Payment due", never "due date": in this domain a due date is the
  * pregnancy's (ADR-0015), and the two must not share a word. */
-export function dueLabel(invoice: Pick<Invoice, 'status' | 'dueAt'>, now: Date): string {
-	// due_at is an instant (payment_terms.go compares it with now()).
-	const due = formatInstant(invoice.dueAt);
-	if (invoice.status !== 'open') {
+export function dueLabel(invoice: Pick<PracticeInvoice, 'dueOn' | 'daysOverdue'>): string {
+	const due = formatCalendarDay(invoice.dueOn);
+	const late = invoice.daysOverdue;
+	if (late < 1) {
 		return due;
-	}
-	if (!isPastDue(invoice.dueAt, now)) {
-		return due;
-	}
-	const late = daysOverdue(invoice.dueAt, now);
-	if (late === 0) {
-		return `${due} — overdue`;
 	}
 	return `${due} — ${late} ${late === 1 ? 'day' : 'days'} overdue`;
 }

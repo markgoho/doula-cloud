@@ -28,6 +28,17 @@ func raiseInvoice(t *testing.T, srv *httptest.Server, session, practiceID, engag
 	return out
 }
 
+// seededPracticeDay is the day at falls on in the zone testdb seeds every
+// Practice with, the zone the BFF reads an Invoice's days in (#1965).
+func seededPracticeDay(t *testing.T, at time.Time) string {
+	t.Helper()
+	loc, err := time.LoadLocation(testdb.SeededPracticeZoneName)
+	if err != nil {
+		t.Fatalf("load %s: %v", testdb.SeededPracticeZoneName, err)
+	}
+	return at.In(loc).Format("2006-01-02")
+}
+
 // TestPostInvoiceHandler_StripeRailSendsTheStoredDueDate is #768's first
 // acceptance criterion on the Stripe rail: one due date, computed once,
 // sent to Stripe as an instant and stored unchanged. Before this, Stripe
@@ -58,8 +69,8 @@ func TestPostInvoiceHandler_StripeRailSendsTheStoredDueDate(t *testing.T) {
 	if sent.Unix() != stored.Unix() {
 		t.Fatalf("due date sent to Stripe = %v, stored = %v; want the same instant", sent, stored)
 	}
-	if view.DueAt.Unix() != stored.Unix() {
-		t.Fatalf("returned dueAt = %v, stored = %v; want the same instant", view.DueAt, stored)
+	if want := seededPracticeDay(t, stored); view.DueOn != want {
+		t.Fatalf("returned dueOn = %q, stored due_at = %v; want %q, its day in the Practice's zone", view.DueOn, stored, want)
 	}
 	// And it is the default terms out from when the Invoice was raised,
 	// by the one rule the handler itself spends (#1626) -- exactly, since
@@ -90,8 +101,8 @@ func TestPostInvoiceHandler_ByHandRailStoresTheDueDate(t *testing.T) {
 	view := raiseInvoice(t, srv, session, practiceID, engagementID)
 
 	stored := invoiceDueAtOf(t, db, view.ID)
-	if view.DueAt.Unix() != stored.Unix() {
-		t.Fatalf("returned dueAt = %v, stored = %v; want the same instant", view.DueAt, stored)
+	if want := seededPracticeDay(t, stored); view.DueOn != want {
+		t.Fatalf("returned dueOn = %q, stored due_at = %v; want %q", view.DueOn, stored, want)
 	}
 	if len(client.CreateInvoiceCalls) != 0 {
 		t.Fatalf("CreateInvoice calls = %d, want 0 on the by-hand rail", len(client.CreateInvoiceCalls))

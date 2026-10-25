@@ -8,7 +8,9 @@ import (
 	"time"
 
 	"doula-cloud/api/internal/apierr"
+	"doula-cloud/api/internal/clock"
 	"doula-cloud/api/internal/personname"
+	"doula-cloud/api/internal/practicetimezone"
 	"doula-cloud/api/internal/staffauth"
 )
 
@@ -26,21 +28,26 @@ import (
 // -- the Contract's merge field and the Stripe Invoice itself -- not to a
 // staff-facing list.
 type PracticeInvoiceView struct {
-	ID           string     `json:"id"`
-	EngagementID string     `json:"engagementId"`
-	ContractID   string     `json:"contractId"`
-	ClientName   string     `json:"clientName"`
-	Status       string     `json:"status"`
-	AmountCents  int64      `json:"amountCents"`
-	Currency     string     `json:"currency"`
-	CreatedAt    time.Time  `json:"createdAt"`
-	PaidAt       *time.Time `json:"paidAt,omitempty"`
-	// DueAt (#768) is the date this Invoice falls due -- see InvoiceView's
-	// own field, which carries the same value for the same reason. The
-	// row says when the money was due, never how many days late it is:
-	// the day count is derived where it is read, so it is right at every
-	// instant rather than right at the moment the page loaded.
-	DueAt time.Time `json:"dueAt"`
+	ID           string    `json:"id"`
+	EngagementID string    `json:"engagementId"`
+	ContractID   string    `json:"contractId"`
+	ClientName   string    `json:"clientName"`
+	Status       string    `json:"status"`
+	AmountCents  int64     `json:"amountCents"`
+	Currency     string    `json:"currency"`
+	CreatedAt    time.Time `json:"createdAt"`
+	// PaidOn and DueOn (#1965) are the same two calendar days InvoiceView
+	// carries, in the Practice's zone, for the same reasons.
+	PaidOn *string `json:"paidOn,omitempty"`
+	DueOn  string  `json:"dueOn"`
+	// DaysOverdue (#1965) is how many whole Practice days this Invoice is
+	// past DueOn, and 0 when it is not overdue or not open. It is counted
+	// here, at the same instant and by the same rule as OverdueCount
+	// above the list, rather than on the reader's own clock: lateness is
+	// a fact about the Practice's day, and a screen counting it in the
+	// reader's zone would call an Invoice late that the figure above it
+	// does not count. It is as fresh as the page, the same as that figure.
+	DaysOverdue int `json:"daysOverdue"`
 	// Reference and BillingMode are #271's additions -- see InvoiceView's
 	// own doc comment; the same two facts, on the Practice-wide row.
 	Reference   string `json:"reference"`
@@ -77,8 +84,9 @@ type PracticeInvoicesResponse struct {
 	// positive number: money the Practice has returned to Clients.
 	RefundedCents int64 `json:"refundedCents"`
 	// OverdueCents and OverdueCount (#768) are the part of the
-	// outstanding book that is past its due date: 'open' and due_at <
-	// now(), evaluated by Postgres at read. They are a narrowing of the
+	// outstanding book that is past its due day: 'open' and due before
+	// the start of the Practice's own today (#1965, overdueFrom),
+	// evaluated by Postgres at read. They are a narrowing of the
 	// outstanding figures beside them, never a separate book -- an
 	// overdue Invoice is counted in both pairs, because it is still money
 	// billed and not yet collected.
@@ -111,7 +119,8 @@ type PracticeInvoicesResponse struct {
 // underneath it, not with whatever page the reader happens to be on.
 //
 // ?overdue=true (#768) narrows further, to the open Invoices whose own
-// due_at has passed -- the Invoices making up OverdueCents/OverdueCount,
+// due day has passed in the Practice's zone (#1965) -- the Invoices
+// making up OverdueCents/OverdueCount,
 // by the same rule, so the list and the figure above it cannot disagree.
 // It is a narrowing of ?unpaid=true, not an alternative to it, and wins
 // when a caller passes both.
@@ -139,14 +148,24 @@ func GetPracticeInvoicesHandler() http.Handler {
 			}
 			after = &c
 		}
-		items, hasMore, err := listPracticeInvoices(r.Context(), tx, practiceID, after, narrowingFor(r))
+		// #1965: one zone and one instant for the whole response, so the
+		// rows, the narrowing and the totals cannot disagree about which
+		// day it is at the Practice.
+		zone, err := practicetimezone.Load(r.Context(), tx, practiceID)
+		if err != nil {
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+			return
+		}
+		days := bookDays{zone: zone, now: clock.Now(r.Context())}
+
+		items, hasMore, err := listPracticeInvoices(r.Context(), tx, practiceID, after, narrowingFor(r), days)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
-		totals, err := practiceInvoiceTotals(r.Context(), tx, practiceID)
+		totals, err := practiceInvoiceTotals(r.Context(), tx, practiceID, overdueFrom(days.now, days.zone))
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
@@ -190,39 +209,60 @@ func GetPracticeInvoicesHandler() http.Handler {
 // Contract still resolves, so a voided Contract's Invoices keep their
 // Client's name here exactly as they keep their place in the per-
 // Engagement list (#72).
+//
+// activePaymentJoin is the per-Engagement list's own (invoice.go): the
+// covering Payment's kind is what says whether paid_at holds a typed day
+// or Stripe's instant (#1965, invoicePaidOn).
 const practiceInvoiceColumns = `SELECT i.id, e.id, i.contract_id, cl.given_name, cl.preferred_name,
-		i.status, i.amount_cents, i.currency, i.created_at, i.paid_at, i.due_at, i.reference, i.stripe_invoice_id
+		i.status, i.amount_cents, i.currency, i.created_at, i.paid_at, i.due_at, i.reference, i.stripe_invoice_id, ap.kind
 	FROM invoices i
 	JOIN contracts c ON c.id = i.contract_id
 	JOIN engagements e ON e.id = c.engagement_id
 	JOIN clients cl ON cl.id = e.client_id
+	` + activePaymentJoin + `
 	WHERE i.practice_id = $1`
 
 // invoiceNarrowing is which slice of the book a read asks for. The zero
 // value is the whole book, so a request that names no narrowing needs no
 // special case.
-type invoiceNarrowing string
+type invoiceNarrowing int
 
 // The three narrowings the Practice-wide list offers. Overdue is a
 // narrowing of unpaid, not a sibling of it: it repeats the 'open' test
 // and adds the due-date comparison, so the two can never disagree about
 // what "still owed" means.
 const (
-	narrowAll     invoiceNarrowing = ""
-	narrowUnpaid  invoiceNarrowing = ` AND i.status = 'open'`
-	narrowOverdue invoiceNarrowing = ` AND i.status = 'open' AND i.due_at < now()`
+	narrowAll invoiceNarrowing = iota
+	narrowUnpaid
+	narrowOverdue
 )
+
+// clause is the narrowing's fixed WHERE text. Overdue compares due_at
+// with overdueFrom's instant, passed as the query parameter cutoffParam
+// names, so the boundary is the start of the Practice's own today
+// (#1965) and the comparison stays an instant one on the stored column.
+func (n invoiceNarrowing) clause(cutoffParam string) string {
+	switch n {
+	case narrowUnpaid:
+		return ` AND i.status = 'open'`
+	case narrowOverdue:
+		return ` AND i.status = 'open' AND i.due_at < ` + cutoffParam
+	case narrowAll:
+	}
+	return ""
+}
 
 // narrowingFor reads the two query parameters the list accepts. ?overdue
 // wins when both are set, because it is the narrower of the two and a
 // caller asking for both means the narrower one.
 //
-// now() is Postgres's, not Go's: it is the same clock that stamped
-// created_at and computed due_at at raise (payment_terms.go's
-// invoiceDueAt), and the one simclock shifts when a sandbox runs
-// compressed time. Nothing is stored, nothing is swept, and no webhook
+// The instant overdue is judged at is clock.Now(ctx), read once by the
+// handler and turned into the start of the Practice's today
+// (overdueFrom). Before #1965 it was Postgres's now() against due_at
+// itself; a due date is a day to a person, and the Practice's day is the
+// one that decides. Nothing is stored, nothing is swept, and no webhook
 // is involved -- Stripe emits no event when a due date passes, so this
-// comparison is the only thing that can be true at every instant.
+// comparison is still the only thing that can be true at every instant.
 func narrowingFor(r *http.Request) invoiceNarrowing {
 	switch {
 	case r.URL.Query().Get("overdue") == "true":
@@ -237,16 +277,25 @@ func narrowingFor(r *http.Request) invoiceNarrowing {
 // listPracticeInvoicesQuery and its after-cursor twin take the narrowing
 // as a fixed clause from invoiceNarrowing rather than as a parameter --
 // it is never request text, so no interpolation of a caller's input can
-// reach the SQL.
+// reach the SQL. The overdue cutoff is the one value it carries, and it
+// rides as the parameter after the query's own, bound only when the
+// overdue narrowing names it.
 func listPracticeInvoicesQuery(narrowing invoiceNarrowing) string {
-	return practiceInvoiceColumns + string(narrowing) + `
+	return practiceInvoiceColumns + narrowing.clause("$3") + `
 	ORDER BY i.created_at DESC, i.id DESC LIMIT $2`
 }
 
 func listPracticeInvoicesAfterQuery(narrowing invoiceNarrowing) string {
-	return practiceInvoiceColumns + string(narrowing) + `
+	return practiceInvoiceColumns + narrowing.clause("$5") + `
 	AND (i.created_at, i.id) < ($2, $3)
 	ORDER BY i.created_at DESC, i.id DESC LIMIT $4`
+}
+
+// bookDays is the zone and the instant one read of the Practice-wide
+// list judges every calendar day by (#1965).
+type bookDays struct {
+	zone *time.Location
+	now  time.Time
 }
 
 // listPracticeInvoices fetches one page of the Practice's Invoices,
@@ -258,14 +307,17 @@ func listPracticeInvoicesAfterQuery(narrowing invoiceNarrowing) string {
 // (00056_invoices_practice_listing_index.sql), so the page is an index
 // scan of at most invoicePageSize+1 rows rather than a sort of the
 // Practice's whole book.
-func listPracticeInvoices(ctx context.Context, tx *sql.Tx, practiceID string, after *invoiceCursor, narrowing invoiceNarrowing) ([]PracticeInvoiceView, bool, error) {
-	var rows *sql.Rows
-	var err error
+func listPracticeInvoices(ctx context.Context, tx *sql.Tx, practiceID string, after *invoiceCursor, narrowing invoiceNarrowing, days bookDays) ([]PracticeInvoiceView, bool, error) {
+	query := listPracticeInvoicesQuery(narrowing)
+	args := []any{practiceID, invoicePageSize + 1}
 	if after != nil {
-		rows, err = tx.QueryContext(ctx, listPracticeInvoicesAfterQuery(narrowing), practiceID, after.createdAt, after.invoiceID, invoicePageSize+1)
-	} else {
-		rows, err = tx.QueryContext(ctx, listPracticeInvoicesQuery(narrowing), practiceID, invoicePageSize+1)
+		query = listPracticeInvoicesAfterQuery(narrowing)
+		args = []any{practiceID, after.createdAt, after.invoiceID, invoicePageSize + 1}
 	}
+	if narrowing == narrowOverdue {
+		args = append(args, overdueFrom(days.now, days.zone))
+	}
+	rows, err := tx.QueryContext(ctx, query, args...)
 	// coverage:ignore reason: DB query failure, not exercised by unit tests
 	if err != nil {
 		return nil, false, fmt.Errorf("payments: list practice invoices: %w", err)
@@ -278,16 +330,17 @@ func listPracticeInvoices(ctx context.Context, tx *sql.Tx, practiceID string, af
 		var givenName string
 		var preferredName sql.NullString
 		var paidAt sql.NullTime
-		var stripeInvoiceID sql.NullString
+		var dueAt time.Time
+		var stripeInvoiceID, activePaymentKind sql.NullString
 		if err := rows.Scan(&it.ID, &it.EngagementID, &it.ContractID, &givenName, &preferredName,
-			&it.Status, &it.AmountCents, &it.Currency, &it.CreatedAt, &paidAt, &it.DueAt, &it.Reference, &stripeInvoiceID); err != nil {
+			&it.Status, &it.AmountCents, &it.Currency, &it.CreatedAt, &paidAt, &dueAt, &it.Reference, &stripeInvoiceID, &activePaymentKind); err != nil {
 			// coverage:ignore reason: row scan failure, not exercised by unit tests
 			return nil, false, fmt.Errorf("payments: scan practice invoice row: %w", err)
 		}
 		it.ClientName = personname.Preferred(givenName, preferredName.String)
-		if paidAt.Valid {
-			it.PaidAt = &paidAt.Time
-		}
+		it.PaidOn = invoicePaidOn(paidAt, activePaymentKind.String == paymentKindManual, days.zone)
+		it.DueOn = practiceDay(dueAt, days.zone)
+		it.DaysOverdue = daysOverdue(it.Status, dueAt, days.now, days.zone)
 		it.BillingMode = billingModeOf(stripeInvoiceID)
 		items = append(items, it)
 	}
@@ -321,12 +374,15 @@ type invoiceTotals struct {
 // The refunded total (#1009) is a scalar subquery over payments, since
 // it is a sum of rows that are not Invoices. It is the whole book's money
 // gone back to Clients, as a positive number.
+//
+// $2 is overdueFrom's instant, the start of the Practice's today
+// (#1965): the same boundary the ?overdue=true narrowing binds.
 const practiceInvoiceTotalsQuery = `SELECT
 		COALESCE(SUM(amount_cents) FILTER (WHERE status = 'open'), 0),
 		COUNT(*) FILTER (WHERE status = 'open'),
 		COALESCE(SUM(amount_cents) FILTER (WHERE status = 'paid'), 0),
-		COALESCE(SUM(amount_cents) FILTER (WHERE status = 'open' AND due_at < now()), 0),
-		COUNT(*) FILTER (WHERE status = 'open' AND due_at < now()),
+		COALESCE(SUM(amount_cents) FILTER (WHERE status = 'open' AND due_at < $2), 0),
+		COUNT(*) FILTER (WHERE status = 'open' AND due_at < $2),
 		(SELECT COALESCE(-SUM(p.amount_cents), 0) FROM payments p
 		   JOIN invoices ri ON ri.id = p.invoice_id
 		  WHERE ri.practice_id = $1 AND p.kind = 'refund')
@@ -337,9 +393,9 @@ const practiceInvoiceTotalsQuery = `SELECT
 // aggregate in Postgres instead of a fold over the fetched page: a
 // 14-doula agency's book is thousands of rows, and only three numbers
 // cross the wire.
-func practiceInvoiceTotals(ctx context.Context, tx *sql.Tx, practiceID string) (invoiceTotals, error) {
+func practiceInvoiceTotals(ctx context.Context, tx *sql.Tx, practiceID string, overdueCutoff time.Time) (invoiceTotals, error) {
 	var t invoiceTotals
-	if err := tx.QueryRowContext(ctx, practiceInvoiceTotalsQuery, practiceID).
+	if err := tx.QueryRowContext(ctx, practiceInvoiceTotalsQuery, practiceID, overdueCutoff).
 		Scan(&t.outstandingCents, &t.outstandingCount, &t.paidCents, &t.overdueCents, &t.overdueCount, &t.refundedCents); err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		return invoiceTotals{}, fmt.Errorf("payments: practice invoice totals: %w", err)

@@ -45,7 +45,7 @@
 		type PaymentMethod,
 		type RefundPaymentInput
 	} from '#lib/invoice.js';
-	import { formatCalendarDay, formatUtcCalendarDay } from '#lib/dates.js';
+	import { formatCalendarDay } from '#lib/dates.js';
 	import RefundPaymentForm from '#lib/components/organisms/RefundPaymentForm.svelte';
 	import { RefusalError, type FormError } from '#lib/formErrors.js';
 	import Button from '#lib/components/atoms/Button.svelte';
@@ -520,9 +520,9 @@
 				<!-- v8 ignore start: Svelte's compiled null-guard on these text nodes is unreachable -- formatAmount and invoiceStatusLabel always return a string -->
 				{formatAmount(invoice.amountCents)} — {invoiceStatusLabel(invoice.status)}
 				<!-- v8 ignore stop -->
-				{#if invoice.paidAt}
-					<!-- v8 ignore start: Svelte's compiled null-guard on this text node is unreachable -- formatUtcCalendarDay always returns a string -->
-					(paid {formatUtcCalendarDay(invoice.paidAt)})
+				{#if invoice.paidOn}
+					<!-- v8 ignore start: Svelte's compiled null-guard on this text node is unreachable -- formatCalendarDay always returns a string -->
+					(paid {formatCalendarDay(invoice.paidOn)})
 					<!-- v8 ignore stop -->
 				{/if}
 				{#if invoice.refundedCents > 0}
