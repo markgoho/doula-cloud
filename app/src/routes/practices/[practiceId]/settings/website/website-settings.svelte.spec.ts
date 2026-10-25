@@ -230,6 +230,9 @@ describe('website settings screen', () => {
 		await expect.element(testPage.getByText('Birth and postpartum support.')).toBeVisible();
 		expect(puts).toHaveLength(0);
 
+		// #1968: an Owner's Publish page is a button she can press, never a
+		// disabled one.
+		await expect.element(testPage.getByRole('button', { name: 'Publish page' })).toBeEnabled();
 		await testPage.getByRole('button', { name: 'Publish page' }).click();
 		expect(puts.at(-1)).toMatchObject({
 			mode: 'hosted',
@@ -367,15 +370,30 @@ describe('website settings screen', () => {
 		await expect.element(testPage.getByText('https://rochesterdoulas.com')).toBeVisible();
 	});
 
-	it('tells a Doula she cannot change it and gives her no working button', async () => {
-		await setup({ roles: ['doula'] });
+	it('tells a non-Owner she cannot change it and offers her no button at all (#1968)', async () => {
+		await setup({ roles: ['admin'] });
 
 		await expect
 			.element(
 				testPage.getByText('Only a Practice Owner can change this. Ask an Owner if it needs updating.')
 			)
 			.toBeVisible();
-		await expect.element(testPage.getByRole('button', { name: 'Save' })).toBeDisabled();
+		await expect
+			.element(
+				testPage.getByText('Not answered yet. A Practice Owner answers this before Stripe can be connected.')
+			)
+			.toBeVisible();
+		await expect
+			.element(testPage.getByRole('radio', { name: 'Publish a page for me' }))
+			.not.toBeInTheDocument();
+		await expect.element(testPage.getByRole('button')).not.toBeInTheDocument();
+	});
+
+	it('shows a non-Owner a published page with no Change or Publish page button (#1968)', async () => {
+		await setup({ roles: ['doula'], website: fixtureWebsite });
+
+		await expect.element(testPage.getByText('Your page is live at', { exact: false })).toBeVisible();
+		await expect.element(testPage.getByRole('button')).not.toBeInTheDocument();
 	});
 
 	it('says so when the answer cannot be loaded at all', async () => {

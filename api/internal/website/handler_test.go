@@ -313,33 +313,44 @@ func TestPutHandler_RepublishingTheSameWordsIsAnAct(t *testing.T) {
 }
 
 // TestPutHandler_RefusesANonOwner proves who may set this is enforced at
-// the boundary, not only in the screen. A Doula who can read the answer
-// cannot write it.
+// the boundary, not only in the screen. An Admin or a Doula who can read
+// the answer can neither declare her own site nor publish a page (#1968:
+// the Website screen no longer draws either button for her, so this is
+// the only thing that refuses).
 func TestPutHandler_RefusesANonOwner(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "website-doula"
-	practiceID := testdb.SeedPractice(t, db, "Rochester Doulas")
-	testdb.SeedNamedStaffAtPractice(t, db, practiceID, uid, "Ana Reyes", []string{"doula"}, "employee")
-
-	srv, session := newServer(t, db, uid)
-	defer srv.Close()
-
-	resp := putWebsite(t, srv, session, practiceID,
-		`{"mode":"own","ownUrl":"https://rochesterdoulas.com"}`)
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusForbidden {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusForbidden)
+	bodies := map[string]string{
+		"own":    `{"mode":"own","ownUrl":"https://rochesterdoulas.com"}`,
+		"hosted": `{"mode":"hosted","serviceDescription":"Birth support.","cancellationPolicy":"Two weeks' notice."}`,
 	}
+	for _, role := range []string{"admin", "doula"} {
+		for mode, body := range bodies {
+			t.Run(role+"/"+mode, func(t *testing.T) {
+				db := testdb.New(t)
+				uid := "website-" + role + "-" + mode
+				practiceID := testdb.SeedPractice(t, db, "Rochester Doulas")
+				testdb.SeedNamedStaffAtPractice(t, db, practiceID, uid, "Ana Reyes", []string{role}, "employee")
 
-	var count int
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`SELECT count(*) FROM practice_websites WHERE practice_id = $1`, practiceID,
-	).Scan(&count); err != nil {
-		t.Fatalf("count rows: %v", err)
-	}
-	if count != 0 {
-		t.Fatalf("got %d rows, want none written by a non-Owner", count)
+				srv, session := newServer(t, db, uid)
+				defer srv.Close()
+
+				resp := putWebsite(t, srv, session, practiceID, body)
+				defer resp.Body.Close()
+
+				if resp.StatusCode != http.StatusForbidden {
+					t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusForbidden)
+				}
+
+				var count int
+				if err := db.Admin.QueryRowContext(t.Context(),
+					`SELECT count(*) FROM practice_websites WHERE practice_id = $1`, practiceID,
+				).Scan(&count); err != nil {
+					t.Fatalf("count rows: %v", err)
+				}
+				if count != 0 {
+					t.Fatalf("got %d rows, want none written by a non-Owner", count)
+				}
+			})
+		}
 	}
 }
 
