@@ -58,7 +58,7 @@ func CreateHandler() http.Handler {
 			return
 		}
 		if reader.IsAmbientContractor() {
-			apierr.WriteError(w, "a contractor doula does not create clients at a practice she contracts for -- work reaches her as an offer", http.StatusForbidden)
+			apierr.WriteError(w, "You contract for this Practice, so you cannot add a Client here. Work reaches you as an Offer.", http.StatusForbidden)
 			return
 		}
 

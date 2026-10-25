@@ -36,7 +36,7 @@ const (
 	MsgDoulaNotADoula     = "Select a person who holds the Doula role, or select No Doula yet"
 	// MsgDoulaIsContractor is for the contractor the rule refuses: one who
 	// holds neither Owner nor Admin (attachment.IsContractor).
-	MsgDoulaIsContractor = "Select an employee Doula, or select No Doula yet. A contractor goes on an Engagement when she accepts an Offer."
+	MsgDoulaIsContractor = "Select an employee Doula, or select No Doula yet. A contractor goes on an Engagement by accepting an Offer."
 	MsgDoulaNotHerself   = "Select yourself, or select No Doula yet. An Owner or an Admin names another Doula."
 )
 
@@ -123,7 +123,7 @@ func refusalFor(reason attachment.NotAttachable, name string) string {
 		// reason they were given. It is named so the switch is whole.
 		fallthrough
 	default:
-		return name + " is now a contractor, and a contractor goes on an Engagement when she accepts an Offer." + wayOn
+		return name + " is now a contractor, and a contractor goes on an Engagement by accepting an Offer." + wayOn
 	}
 }
 

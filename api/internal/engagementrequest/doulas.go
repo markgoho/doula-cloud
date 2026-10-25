@@ -49,7 +49,7 @@ type DoulasResponse struct {
 
 // msgContractorOriginates is the 403 a contractor Doula reads on both
 // halves of an ask, the write and the list that feeds its form.
-const msgContractorOriginates = "a contractor doula does not request an engagement at a practice she contracts for -- work reaches her as an offer"
+const msgContractorOriginates = "You contract for this Practice, so you cannot request an Engagement here. Work reaches you as an Offer."
 
 // DoulasHandler answers "who may this person name as the Doula on a new
 // Request" for the Start work form (#1596).

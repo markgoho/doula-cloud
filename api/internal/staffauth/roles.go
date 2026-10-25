@@ -87,7 +87,7 @@ func RequireOwner(w http.ResponseWriter, r *http.Request) (tx *sql.Tx, practiceI
 // so RequireNotAmbientContractor and a route that needs the reader-only
 // check without a tx (contracts.GetSignedContractPDFHandler) can never
 // drift onto two different wordings for the same refusal.
-const MsgContractorMoneyRefused = "a contractor Doula cannot read the Practice's money -- only her own agreed fee, on an Engagement she holds a granted attachment on"
+const MsgContractorMoneyRefused = "You contract for this Practice, so you cannot see its money. You can see your own agreed fee on an Engagement you are attached to."
 
 // RequireNotAmbientContractor resolves the caller's Reader and
 // request-scoped tx from context and confirms the caller is not a plain

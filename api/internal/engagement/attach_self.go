@@ -39,7 +39,7 @@ type AttachSelfResponse struct {
 // first two also name the path that is open to her.
 const (
 	msgAttachSelfNotADoula   = "Only a Staff member who holds the Doula role can be put on an Engagement."
-	msgAttachSelfContractor  = "A contractor Doula goes on an Engagement when she accepts an Offer."
+	msgAttachSelfContractor  = "You contract for this Practice, so you go on an Engagement by accepting an Offer."
 	msgAttachSelfIsCompleted = "This Engagement has completed, so nobody can be put on it."
 )
 

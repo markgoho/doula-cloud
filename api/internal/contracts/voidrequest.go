@@ -182,7 +182,7 @@ func PostVoidRequestHandler() http.Handler {
 		}
 		if Status(status) != StatusSigned {
 			apierr.WriteError(w,
-				fmt.Sprintf("a void may only be requested for a signed contract: it is %s", status),
+				statusClause(Status(status))+", so you cannot ask for it to be voided. Only a signed Contract can be voided.",
 				http.StatusConflict)
 			return
 		}

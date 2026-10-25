@@ -141,7 +141,7 @@ func MergeHandler() http.Handler {
 			return
 		}
 		if otherClientID == clientID {
-			apierr.WriteError(w, "a client cannot be merged into herself", http.StatusConflict)
+			apierr.WriteError(w, "A Client record cannot be merged into itself.", http.StatusConflict)
 			return
 		}
 

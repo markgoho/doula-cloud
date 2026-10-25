@@ -287,10 +287,10 @@ describe('attachSelf', () => {
 	it('throws a refusal', async () => {
 		const fetcher = vi
 			.fn()
-			.mockResolvedValue(jsonResponse('A contractor Doula goes on an Engagement when she accepts an Offer.', 403));
+			.mockResolvedValue(jsonResponse('You contract for this Practice, so you go on an Engagement by accepting an Offer.', 403));
 
 		await expect(attachSelf(fetcher, reference)).rejects.toThrow(
-			'A contractor Doula goes on an Engagement when she accepts an Offer.'
+			'You contract for this Practice, so you go on an Engagement by accepting an Offer.'
 		);
 	});
 });

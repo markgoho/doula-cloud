@@ -30,9 +30,11 @@ const (
 // source-scan guardrail, which fails if any of the five route files
 // below stops calling the Transition declared for it.
 type Transition struct {
-	// PastTense names the move for a refusal message ("sent", "voided",
-	// "signed", "billed", "edited").
-	PastTense string
+	// Act names the move as the reader would do it, for the refusal
+	// sentence Check writes ("send it", "create an Invoice for it"). The
+	// refusal reaches a screen word for word, so it is written for the
+	// person reading it (docs/api-design.md section 7 rule 4, #1884).
+	Act string
 	// Requires is the one status a Contract must be in for this move to
 	// run; anything else is refused.
 	Requires Status
@@ -40,25 +42,25 @@ type Transition struct {
 
 // TransitionEdit is PutContractHandler's precondition: only a Draft
 // Contract's merge field values may be replaced.
-var TransitionEdit = Transition{PastTense: "edited", Requires: StatusDraft}
+var TransitionEdit = Transition{Act: "change it", Requires: StatusDraft}
 
 // TransitionSend is PostSendContractHandler's precondition: only a Draft
 // Contract may be sent for signature.
-var TransitionSend = Transition{PastTense: "sent", Requires: StatusDraft}
+var TransitionSend = Transition{Act: "send it", Requires: StatusDraft}
 
 // TransitionSign is ClientPostSignContractHandler's precondition: only a
 // Sent Contract may be signed.
-var TransitionSign = Transition{PastTense: "signed", Requires: StatusSent}
+var TransitionSign = Transition{Act: "sign it", Requires: StatusSent}
 
 // TransitionVoid is PostVoidContractHandler's precondition: only a Signed
 // Contract may be voided.
-var TransitionVoid = Transition{PastTense: "voided", Requires: StatusSigned}
+var TransitionVoid = Transition{Act: "void it", Requires: StatusSigned}
 
 // TransitionBill is payments.PostInvoiceHandler's precondition (#275):
 // only a Signed, still-in-force Contract may be billed. A Draft, a Sent
 // (unsigned) or a Voided Contract is refused before payments ever asks
 // anything of Stripe.
-var TransitionBill = Transition{PastTense: "billed", Requires: StatusSigned}
+var TransitionBill = Transition{Act: "create an Invoice for it", Requires: StatusSigned}
 
 // TransitionOverrideAmount is PutContractAmountHandler's precondition
 // (#967): only a Draft Contract's amount may be overridden, the same
@@ -69,7 +71,7 @@ var TransitionBill = Transition{PastTense: "billed", Requires: StatusSigned}
 // a Sent Contract's amount; Draft-only is the narrower, safer reading,
 // consistent with every other merge-field edit already being refused
 // once a Contract leaves Draft (TransitionEdit).
-var TransitionOverrideAmount = Transition{PastTense: "amount overridden", Requires: StatusDraft}
+var TransitionOverrideAmount = Transition{Act: "change its amount", Requires: StatusDraft}
 
 // Transitions is every declared Contract lifecycle precondition, walked
 // by lifecycle_test.go's guardrail.
@@ -78,10 +80,31 @@ var Transitions = []Transition{TransitionEdit, TransitionSend, TransitionSign, T
 // Check reports whether current satisfies t (ok=true, no refusal
 // message), or, if not, the 409 message a caller should write -- naming
 // the state the Contract is actually in, per #275's acceptance criteria,
-// rather than only "not permitted".
+// rather than only "not permitted". The message is one sentence a person
+// would say ("This Contract is voided, so you cannot create an Invoice
+// for it."), because the app prints it in an error summary as it is
+// (#1884).
 func (t Transition) Check(current Status) (ok bool, refusal string) {
 	if current == t.Requires {
 		return true, ""
 	}
-	return false, fmt.Sprintf("contract cannot be %s: it is %s", t.PastTense, current)
+	return false, fmt.Sprintf("%s, so you cannot %s.", statusClause(current), t.Act)
+}
+
+// statusClause says what state a Contract is in, as the opening clause
+// of a refusal a person reads. Each clause keeps the status's own word
+// ("draft", "sent", "signed", "voided"), so a refusal still names the
+// state the Contract is actually in (#275).
+func statusClause(current Status) string {
+	switch current {
+	case StatusDraft:
+		return "This Contract is still a draft"
+	case StatusSent:
+		return "This Contract has been sent and is not signed yet"
+	case StatusSigned:
+		return "This Contract is signed"
+	case StatusVoided:
+		return "This Contract is voided"
+	}
+	return fmt.Sprintf("This Contract is %s", current)
 }

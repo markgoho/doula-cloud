@@ -131,6 +131,13 @@ func billingModeOf(stripeInvoiceID sql.NullString) string {
 // role-specific wording of its own.
 const MsgClientsCannotPay = "Clients cannot pay this Practice yet. A Practice Owner has to connect Stripe before an Invoice can be sent."
 
+// MsgClientNoEmail is the Stripe rail's 422 when the Client has no email
+// address (#430): Stripe mails the Invoice, so there is nowhere to send
+// it. The app prints it in Create Invoice's error summary as it is, so it
+// names the Client by the domain noun and uses no pronoun (#1884, the
+// Voice section of docs/design/brief.md).
+const MsgClientNoEmail = "This Client has no email address, so Stripe cannot send the Invoice. Add an email address to the Client, then try again."
+
 // ListInvoicesResponse is the standard cursor-pagination envelope from
 // docs/api-design.md section 4, mirroring message.ListResponse.
 type ListInvoicesResponse struct {
@@ -212,7 +219,7 @@ func PostInvoiceHandler(client Client) http.Handler {
 			view, err = createStripeInvoice(r.Context(), tx, client, practiceID, engagementID, contractID, amountCents, dueAt)
 		}
 		if errors.Is(err, errClientNoEmail) {
-			apierr.WriteError(w, "this client has no email on file -- add one before invoicing her", http.StatusUnprocessableEntity)
+			apierr.WriteError(w, MsgClientNoEmail, http.StatusUnprocessableEntity)
 			return
 		}
 		if errors.Is(err, errClientsCannotPay) {

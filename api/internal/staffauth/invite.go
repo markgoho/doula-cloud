@@ -145,7 +145,7 @@ func invite(ctx context.Context, tx *sql.Tx, practiceID, actorStaffID, address s
 		// The refusal names the field it is about (#488): the Owner typed
 		// this address into one control, and the summary entry has to be
 		// able to send her back to it.
-		return InviteResponse{}, http.StatusConflict, "that address already holds a membership at this practice",
+		return InviteResponse{}, http.StatusConflict, MsgMembershipAlreadyHeld + ".",
 			map[string]string{fieldEmail: MsgMembershipAlreadyHeld}
 	}
 
