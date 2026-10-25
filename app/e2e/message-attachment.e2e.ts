@@ -90,10 +90,39 @@ test('A file whose bytes are not an image is refused by the server against the a
 	]);
 	expect(createResponse.status()).toBe(400);
 
-	const words = 'The selected file must be an image or a PDF';
+	const words = 'The selected file must be a JPG, PNG, GIF, WEBP or PDF';
 	await expect(page.getByRole('link', { name: words })).toBeVisible();
 	await expect(attachment).toHaveAttribute('aria-invalid', 'true');
-	await expect(attachment).toHaveAccessibleDescription(`An image or a PDF, up to 10MB ${words}`);
+	await expect(attachment).toHaveAccessibleDescription(`A JPG, PNG, GIF, WEBP or PDF, up to 10MB ${words}`);
+});
+
+// #1977: an iPhone photo the browser hands over as HEIC is refused on the
+// page, before anything is sent, in the words that name the accepted
+// types -- the server cannot sniff HEIC and most browsers cannot show it.
+test('An iPhone HEIC photo is refused before sending, naming the accepted types', async ({ page }) => {
+	const { practiceId, engagementId, staffHeaders } = await seedPortalClient(page.request, 'Riverside Doulas');
+	await enterPractice(page.context(), page, staffHeaders, practiceId);
+	await page.goto(`/practices/${practiceId}/engagements/${engagementId}`);
+
+	let wasPosted = false;
+	page.on('request', (request) => {
+		if (request.url().includes('/messages') && request.method() === 'POST') wasPosted = true;
+	});
+
+	// The ftyp box that opens an iPhone's HEIC photo, the same bytes
+	// api/internal/message's type-list test refuses.
+	const attachment = page.getByLabel('Attachment', { exact: true });
+	await attachment.setInputFiles({
+		name: 'IMG_0001.HEIC',
+		mimeType: 'image/heic',
+		buffer: Buffer.from('000000186674797068656963000000006d69663168656963', 'hex')
+	});
+	await page.getByRole('button', { name: 'Send', exact: true }).click();
+
+	const words = 'The selected file must be a JPG, PNG, GIF, WEBP or PDF';
+	await expect(page.getByRole('link', { name: words })).toBeVisible();
+	await expect(attachment).toHaveAttribute('aria-invalid', 'true');
+	expect(wasPosted).toBe(false);
 });
 
 // #305's other half: a Message row whose attachment metadata points at

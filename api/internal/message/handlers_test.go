@@ -649,22 +649,72 @@ func TestCreateHandler_AttachmentPDFAccepted(t *testing.T) {
 	}
 }
 
-// TestCreateHandler_AttachmentWrongTypeRejected proves the content-type
-// cap: a plain-text attachment is neither image/* nor application/pdf.
-func TestCreateHandler_AttachmentWrongTypeRejected(t *testing.T) {
+// TestCreateHandler_AttachmentTypeList proves the exact list the sniff
+// accepts -- JPG, PNG, GIF, WEBP and PDF, the list
+// MsgAttachmentWrongType names -- and that everything else is refused in
+// those words (#1977). An iPhone's HEIC photo is the case that named it:
+// http.DetectContentType does not know HEIC, and most browsers cannot
+// show one inline, so it is refused rather than stored. BMP is on the
+// list of refusals because the sniff knows it and the old image/* prefix
+// let it through.
+func TestCreateHandler_AttachmentTypeList(t *testing.T) {
 	db := testdb.New(t)
-	const identityUID = "staff-wrong-type"
+	const identityUID = "staff-type-list"
 	practiceID := testdb.SeedPractice(t, db, "Practice")
 	testdb.SeedStaffAtPractice(t, db, practiceID, identityUID, []string{doulaRole}, "employee")
 	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Client", "client@example.com")
 
 	srv, session := newServer(t, db, identityUID)
 	defer srv.Close()
+	url := srv.URL + "/api/practices/" + practiceID + "/engagements/" + engagementID + "/messages"
 
-	resp := authedMultipartPost(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/messages",
-		"trying to attach a text file", "notes.txt", []byte("just plain text, not an image or PDF"))
-	defer resp.Body.Close()
-	assertFieldRefusal(t, resp, http.StatusBadRequest, "attachment", message.MsgAttachmentWrongType)
+	accepted := []struct {
+		filename, contentType string
+		content               []byte
+	}{
+		{"photo.jpg", "image/jpeg", []byte("\xFF\xD8\xFF\xE0\x00\x10JFIF\x00")},
+		{"pixel.png", pngContentType, pngBytes},
+		{"photo.gif", "image/gif", []byte("GIF89a\x01\x00\x01\x00")},
+		{"photo.webp", "image/webp", []byte("RIFF\x24\x00\x00\x00WEBPVP8 ")},
+		{"form.pdf", "application/pdf", []byte("%PDF-1.4\n")},
+	}
+	for _, tc := range accepted {
+		t.Run("accepts "+tc.filename, func(t *testing.T) {
+			resp := authedMultipartPost(t, session, url, "", tc.filename, tc.content)
+			defer resp.Body.Close()
+			if resp.StatusCode != http.StatusCreated {
+				t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusCreated)
+			}
+			var created message.Message
+			if err := json.NewDecoder(resp.Body).Decode(&created); err != nil {
+				t.Fatalf("decode response: %v", err)
+			}
+			if created.AttachmentContentType != tc.contentType {
+				t.Fatalf("attachmentContentType = %q, want %q", created.AttachmentContentType, tc.contentType)
+			}
+		})
+	}
+
+	refused := []struct {
+		filename string
+		content  []byte
+	}{
+		// The ftyp box that opens an iPhone's HEIC photo.
+		{"IMG_0001.HEIC", []byte("\x00\x00\x00\x18ftypheic\x00\x00\x00\x00mif1heic")},
+		{"scan.bmp", []byte("BM\x46\x00\x00\x00\x00\x00\x00\x00\x36\x00\x00\x00")},
+		{"notes.txt", []byte("just plain text, not an image or PDF")},
+	}
+	for _, tc := range refused {
+		t.Run("refuses "+tc.filename, func(t *testing.T) {
+			resp := authedMultipartPost(t, session, url, "", tc.filename, tc.content)
+			defer resp.Body.Close()
+			assertFieldRefusal(t, resp, http.StatusBadRequest, "attachment", message.MsgAttachmentWrongType)
+		})
+	}
+
+	if message.MsgAttachmentWrongType != "The selected file must be a JPG, PNG, GIF, WEBP or PDF" {
+		t.Fatalf("MsgAttachmentWrongType = %q, want the list in GOV.UK's form", message.MsgAttachmentWrongType)
+	}
 }
 
 // TestCreateHandler_AttachmentEmptyRejected proves a 0-byte file is
