@@ -12,7 +12,12 @@
 	// the two screens must not drift apart.
 	interface Properties {
 		roles: string[];
-		employmentType: EmploymentType;
+		/**
+		 * `undefined` chooses nothing. The invite form asks it as a
+		 * question about somebody else, so it opens empty (#1912,
+		 * ADR-0055); the edit form passes the stored answer.
+		 */
+		employmentType: EmploymentType | undefined;
 		onRolesChange: (roles: string[]) => void;
 		onEmploymentTypeChange: (employmentType: EmploymentType) => void;
 		/**

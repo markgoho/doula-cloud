@@ -47,8 +47,18 @@ beforeEach(() => {
 	apiFetchWithSession.mockReset();
 });
 
-async function fillAndSubmit(email: string) {
+interface Answers {
+	role?: string;
+	employmentType?: string;
+}
+
+// The form opens with nothing chosen (#1912), so a send that should go
+// through answers both questions the way an Owner would. Leaving one out
+// is how a test asks for that refusal.
+async function fillAndSubmit(email: string, { role = 'Doula', employmentType = 'Employee' }: Answers = {}) {
 	await testPage.getByLabelText('Their email').fill(email);
+	if (role) await testPage.getByRole('checkbox', { name: role }).click();
+	if (employmentType) await testPage.getByRole('radio', { name: employmentType }).click();
 	await testPage.getByRole('button', { name: 'Send invite' }).click();
 }
 
@@ -59,8 +69,60 @@ describe('invite a Staff member screen', () => {
 		await setup();
 
 		await expect.element(testPage.getByRole('group', { name: 'Roles' })).toBeVisible();
-		await expect.element(testPage.getByRole('checkbox', { name: 'Doula' })).toBeChecked();
-		await expect.element(testPage.getByRole('radio', { name: 'Employee' })).toBeChecked();
+		await expect.element(testPage.getByRole('group', { name: 'Employment type' })).toBeVisible();
+	});
+
+	// #1912, ADR-0055: both are facts about somebody else, so neither is
+	// answered for the Owner -- a Send pressed unread cannot invite an
+	// employee Doula who is not one.
+	it('opens with no role ticked and no employment type chosen', async () => {
+		await setup();
+
+		for (const role of ['Owner', 'Admin', 'Doula'])
+			await expect.element(testPage.getByRole('checkbox', { name: role })).not.toBeChecked();
+		for (const type of ['Employee', 'Contractor'])
+			await expect.element(testPage.getByRole('radio', { name: type })).not.toBeChecked();
+	});
+
+	it('sends the role and the employment type the Owner chose', async () => {
+		await setup();
+
+		await fillAndSubmit('lena@example.com', { role: 'Admin', employmentType: 'Contractor' });
+
+		expect(apiFetchWithSession).toHaveBeenCalledWith(
+			expect.stringContaining('/staff/invitations'),
+			expect.objectContaining({
+				body: JSON.stringify({ email: 'lena@example.com', roles: ['admin'], employmentType: 'contractor' })
+			})
+		);
+	});
+
+	// After a send the form is blank again for the next person, with
+	// nothing chosen -- not the last person's answers, and not a default.
+	it('opens blank again after an invitation is sent', async () => {
+		await setup();
+
+		await fillAndSubmit('lena@example.com');
+
+		await expect
+			.element(testPage.getByText('An email with a link to join is on its way to lena@example.com.'))
+			.toBeVisible();
+		await expect.element(testPage.getByRole('checkbox', { name: 'Doula' })).not.toBeChecked();
+		await expect.element(testPage.getByRole('radio', { name: 'Employee' })).not.toBeChecked();
+	});
+
+	it('refuses to send an invitation with no employment type chosen', async () => {
+		await setup();
+
+		await fillAndSubmit('lena@example.com', { employmentType: '' });
+
+		// In the summary, linking to the group's first option, and under the
+		// group's own legend (GOV.UK's Radios error message).
+		await expect
+			.element(testPage.getByRole('link', { name: 'Select an employment type' }))
+			.toHaveAttribute('href', '#invite-employment-type-employee');
+		await expect.element(testPage.getByText('Select an employment type').last()).toBeVisible();
+		expect(apiFetchWithSession).not.toHaveBeenCalled();
 	});
 
 	// The Invitation has no name column: a person names herself when she
@@ -117,8 +179,7 @@ describe('invite a Staff member screen', () => {
 	it('refuses to send an invitation carrying no roles', async () => {
 		await setup();
 
-		await testPage.getByRole('checkbox', { name: 'Doula' }).click();
-		await fillAndSubmit('lena@example.com');
+		await fillAndSubmit('lena@example.com', { role: '' });
 
 		// GOV.UK's verb for picking from options on screen is "Select", and an
 		// error message is not a sentence in prose, so it takes no full stop

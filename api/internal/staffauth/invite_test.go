@@ -348,6 +348,20 @@ func TestInviteHandler_Rejects(t *testing.T) {
 		})
 	}
 
+	// #1912: the invite form opens with no employment type chosen, so the
+	// server refuses an empty one too, keyed onto the group the page
+	// draws, in the same words as the page's own check.
+	t.Run("no employment type", func(t *testing.T) {
+		resp := postInvite(t, srv, session, practiceID, staffauth.InviteRequest{Email: validAddress, Roles: []string{doulaRole}})
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusBadRequest {
+			t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
+		}
+		if details := decodeDetails(t, resp); details["employmentType"] != staffauth.MsgEmploymentTypeNeeded {
+			t.Fatalf("details[employmentType] = %q, want %q", details["employmentType"], staffauth.MsgEmploymentTypeNeeded)
+		}
+	})
+
 	t.Run("invalid body", func(t *testing.T) {
 		resp := doInviteRequest(t, srv, session, "/api/practices/"+practiceID+"/staff/invitations", []byte("not json"))
 		defer resp.Body.Close()

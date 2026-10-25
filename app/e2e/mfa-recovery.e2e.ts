@@ -193,6 +193,8 @@ test('An Owner vouches for a locked-out doula, and the code reaches her and nobo
 	async function inviteAndAcceptDoula(): Promise<string> {
 		await page.goto(`/practices/${practiceId}/invite`);
 		await page.getByLabel('Their email').fill(doulaEmail);
+		await page.getByRole('checkbox', { name: 'Doula' }).check();
+		await page.getByRole('radio', { name: 'Employee' }).check();
 		const [inviteResponse] = await Promise.all([
 			page.waitForResponse(
 				(response) =>
@@ -210,6 +212,7 @@ test('An Owner vouches for a locked-out doula, and the code reaches her and nobo
 		await page.goto(`/accept-invite?token=${token}`);
 		await page.getByLabel('Email').fill(doulaEmail);
 		await page.getByLabel('Password').fill(password);
+		await page.getByRole('radio', { name: /I'm new here/ }).check();
 		await page.getByRole('button', { name: 'Continue' }).click();
 		await expect(page.getByRole('heading', { name: 'Tell us about yourself' })).toBeVisible();
 		const [doulaFirstName, ...doulaLastName] = doulaName.split(' ');
