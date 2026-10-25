@@ -8,6 +8,14 @@ from me until January.", is left out, because confirming now starts the
 Welcome email (#361).
 
 Unlisted, as /pilot-terms is: noindex, and left out of sitemap.xml.
+
+The redirect set in Buttondown is https://doula.cloud/check-your-inbox#_,
+not the bare path (#1897). Buttondown appends "?email_address=<address>"
+to the redirect, and no setting stops it. Behind the "#", that text is
+part of the fragment, which a browser never sends to a server, so
+Firebase Hosting receives only /check-your-inbox. The privacy page says
+Firebase Hosting receives your IP address, and that stays true. Keep
+the "#_" if this redirect is ever set again.
 -->
 <script lang="ts">
 	import SignedNote from '#lib/components/SignedNote.svelte';
