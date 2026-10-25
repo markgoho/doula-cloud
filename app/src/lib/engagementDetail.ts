@@ -30,7 +30,7 @@ import type { Fetcher } from './fetcher.js';
 
 import { apiErrorMessage } from './apiErrorMessage.js';
 import { NO_DOULA_YET_LABEL } from './engagementRequest.js';
-import { refusalOrConfirmable, type Refusal } from './formErrors.js';
+import { refusalError, refusalOrConfirmable, type Refusal } from './formErrors.js';
 import type { CursorPage } from './paginatedList.svelte.js';
 
 /** Which Engagement, at which Practice. Passed as one value because every
@@ -577,7 +577,9 @@ export async function sendMessage<M>(
 			body: JSON.stringify({ body })
 		});
 	}
-	if (!response.ok) throw new Error(await apiErrorMessage(response));
+	// A RefusalError, so the BFF's `details` reach the compose form and
+	// land against the field they name (#1952).
+	if (!response.ok) throw await refusalError(response);
 	return (await response.json()) as M;
 }
 

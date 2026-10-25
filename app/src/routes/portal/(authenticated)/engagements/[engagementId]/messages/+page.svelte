@@ -11,6 +11,7 @@
 	import { page } from '#lib/appState.svelte.js';
 	import { apiFetchWithSession } from '#lib/api.js';
 	import { apiErrorMessage } from '#lib/apiErrorMessage.js';
+	import { refusalError } from '#lib/formErrors.js';
 	import { subscribeToThreadPushMessages } from '#lib/pushRefresh.js';
 	import MessageThread, { type Message } from '#lib/components/organisms/MessageThread.svelte';
 	import RecordDetail from '#lib/components/templates/RecordDetail.svelte';
@@ -20,7 +21,6 @@
 	let messagesCursor = $state('');
 	let isMessagesHasMore = $state(false);
 	let isLoadingOlderMessages = $state(false);
-	let isSendingMessage = $state(false);
 	// Object URLs for image attachments, keyed by messageId, so images
 	// render inline in the thread (not just downloadable) -- fetched via
 	// apiFetchWithSession since the attachment endpoint requires the
@@ -105,38 +105,30 @@
 		}
 	}
 
-	async function didSendMessage(body: string, attachment: File | undefined): Promise<boolean> {
-		messagesError = '';
-		isSendingMessage = true;
-		try {
-			let response: Response;
-			if (attachment) {
-				const form = new FormData();
-				form.set('body', body);
-				form.set('attachment', attachment);
-				response = await apiFetchWithSession(messagesURL(), { method: 'POST', body: form });
-			} else {
-				response = await apiFetchWithSession(messagesURL(), {
-					method: 'POST',
-					headers: { 'Content-Type': 'application/json' },
-					body: JSON.stringify({ body })
-				});
-			}
-			if (!response.ok) {
-				messagesError = await apiErrorMessage(response);
-				return false;
-			}
-
-			const created = await response.json();
-			messages = [...messages, created];
-			await loadAttachmentPreviews([created]);
-			return true;
-		} catch (error_) {
-			messagesError = error_ instanceof Error ? error_.message : 'Failed to send message';
-			return false;
-		} finally {
-			isSendingMessage = false;
+	/*
+	 * Throws on a refusal, as a RefusalError carrying the BFF's `details`,
+	 * so MessageThread's compose form shows it against the field it names
+	 * (#1952). The thread holds the send's busy state and its refusals.
+	 */
+	async function sendThreadMessage(body: string, attachment: File | undefined): Promise<void> {
+		let response: Response;
+		if (attachment) {
+			const form = new FormData();
+			form.set('body', body);
+			form.set('attachment', attachment);
+			response = await apiFetchWithSession(messagesURL(), { method: 'POST', body: form });
+		} else {
+			response = await apiFetchWithSession(messagesURL(), {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ body })
+			});
 		}
+		if (!response.ok) throw await refusalError(response);
+
+		const created = await response.json();
+		messages = [...messages, created];
+		await loadAttachmentPreviews([created]);
 	}
 
 	async function handleDownloadAttachment(messageId: string, filename: string) {
@@ -162,9 +154,8 @@
 		error={messagesError}
 		hasMore={isMessagesHasMore}
 		isLoadingOlder={isLoadingOlderMessages}
-		isSending={isSendingMessage}
 		onLoadOlder={handleLoadOlderMessages}
-		onSend={didSendMessage}
+		onSend={sendThreadMessage}
 		onDownloadAttachment={handleDownloadAttachment}
 		{attachmentPreviewURLs}
 	/>

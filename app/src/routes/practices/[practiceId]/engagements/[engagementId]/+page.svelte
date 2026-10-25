@@ -509,17 +509,15 @@
 	let messages = $state<Message[]>([]);
 	let messagesCursor = $state('');
 	let isMessagesHasMore = $state(false);
-	// Load (including "load older") and send are separate SectionState
-	// instances so sending a Message never lights up the "Load older"
-	// spinner and vice versa; downloading an attachment is a third, so it
-	// never lights up either. All three still write the one Notice the
-	// thread renders.
+	// Load (including "load older") and download are separate SectionState
+	// instances so downloading an attachment never lights up the "Load
+	// older" spinner. Both write the one Notice the thread renders. A
+	// send is the compose form's own: MessageThread holds its refusals and
+	// its busy state, against the field each names (#1952).
 	const messagesLoad = new SectionState<void>(undefined);
-	const messagesSend = new SectionState<void>(undefined);
 	const messagesDownload = new SectionState<void>(undefined);
-	const messagesError = $derived(messagesLoad.error || messagesSend.error || messagesDownload.error);
+	const messagesError = $derived(messagesLoad.error || messagesDownload.error);
 	const isLoadingOlderMessages = $derived(messagesLoad.isBusy);
-	const isSendingMessage = $derived(messagesSend.isBusy);
 	// Object URLs for image attachments, keyed by messageId, so images
 	// render inline in the thread (not just downloadable) -- fetched via
 	// apiFetchWithSession since the attachment endpoint requires the
@@ -1419,12 +1417,11 @@
 		}, 'Failed to load older messages');
 	}
 
-	async function didSendMessage(body: string, attachment: File | undefined): Promise<boolean> {
-		return messagesSend.mutate(async () => {
-			const created = await sendMessage<Message>(apiFetchWithSession, reference, body, attachment);
-			messages = [...messages, created];
-			await refreshAttachmentPreviews([created]);
-		}, 'Failed to send message');
+	// Throws on a refusal; MessageThread shows it against its field.
+	async function sendThreadMessage(body: string, attachment: File | undefined): Promise<void> {
+		const created = await sendMessage<Message>(apiFetchWithSession, reference, body, attachment);
+		messages = [...messages, created];
+		await refreshAttachmentPreviews([created]);
 	}
 
 	async function handleDownloadAttachment(messageId: string, filename: string) {
@@ -2074,9 +2071,8 @@
 		error={messagesError}
 		hasMore={isMessagesHasMore}
 		isLoadingOlder={isLoadingOlderMessages}
-		isSending={isSendingMessage}
 		onLoadOlder={handleLoadOlderMessages}
-		onSend={didSendMessage}
+		onSend={sendThreadMessage}
 		onDownloadAttachment={handleDownloadAttachment}
 		{attachmentPreviewURLs}
 	/>

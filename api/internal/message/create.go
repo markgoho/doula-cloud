@@ -31,6 +31,18 @@ const (
 	bodyFormField         = "body"
 )
 
+// The refusals a person can cause from the compose form, in GOV.UK's File
+// upload words (#1952). Each is written with apierr.WriteFieldError under
+// the form field it is about, so the app shows it against that control,
+// and the app's own check before sending uses the same words.
+const (
+	MsgAttachmentTooLarge  = "The selected file must be smaller than 10MB"
+	MsgAttachmentEmpty     = "The selected file is empty"
+	MsgAttachmentWrongType = "The selected file must be an image or a PDF"
+	MsgAttachmentUnread    = "The selected file could not be uploaded – try again"
+	MsgMessageOrFile       = "Enter a message or select a file"
+)
+
 // CreateRequest is the body of a text-only (application/json)
 // create-Message request. A multipart/form-data request instead carries a
 // "body" field and an optional "attachment" file field -- see
@@ -126,7 +138,7 @@ func decodeMultipartCreate(w http.ResponseWriter, r *http.Request, store objects
 		// the parse-boundary leak out as a different status code for what
 		// is, to the caller, the same failure.
 		if _, ok := errors.AsType[*http.MaxBytesError](err); ok {
-			apierr.WriteError(w, "attachment exceeds the 10MB limit", http.StatusRequestEntityTooLarge)
+			apierr.WriteFieldError(w, http.StatusRequestEntityTooLarge, apierr.CodePayloadTooLarge, attachmentFormField, MsgAttachmentTooLarge)
 			return "", nil, false
 		}
 		apierr.WriteError(w, "malformed multipart request", http.StatusBadRequest)
@@ -139,14 +151,14 @@ func decodeMultipartCreate(w http.ResponseWriter, r *http.Request, store objects
 	switch {
 	case errors.Is(err, http.ErrMissingFile):
 		if body == "" {
-			apierr.WriteError(w, "body or attachment is required", http.StatusBadRequest)
+			apierr.WriteFieldError(w, http.StatusBadRequest, apierr.CodeInvalidArgument, bodyFormField, MsgMessageOrFile)
 			return "", nil, false
 		}
 		return body, nil, true
 	case err != nil:
 		// coverage:ignore reason: r.FormFile only returns a non-ErrMissingFile error on a
 		// filesystem-level failure opening an already-parsed part, not exercised by unit tests
-		apierr.WriteError(w, "invalid attachment", http.StatusBadRequest)
+		apierr.WriteFieldError(w, http.StatusBadRequest, apierr.CodeInvalidArgument, attachmentFormField, MsgAttachmentUnread)
 		return "", nil, false
 	}
 	defer func() { _ = file.Close() }()
@@ -173,7 +185,14 @@ func validAttachmentContentType(contentType string) bool {
 // scoped by engagementID/messageID.
 func validateAndStoreAttachment(w http.ResponseWriter, r *http.Request, store objectstore.ObjectStore, file multipart.File, header *multipart.FileHeader, engagementID, messageID, internalErrorMsg string) (*attachmentInfo, bool) {
 	if header.Size > maxAttachmentBytes {
-		apierr.WriteError(w, "attachment exceeds the 10MB limit", http.StatusRequestEntityTooLarge)
+		apierr.WriteFieldError(w, http.StatusRequestEntityTooLarge, apierr.CodePayloadTooLarge, attachmentFormField, MsgAttachmentTooLarge)
+		return nil, false
+	}
+	// Before the sniff: http.DetectContentType calls no bytes at all
+	// "text/plain", so an empty file would otherwise be told it is the
+	// wrong type when the true reason is that it holds nothing (#1952).
+	if header.Size == 0 {
+		apierr.WriteFieldError(w, http.StatusBadRequest, apierr.CodeInvalidArgument, attachmentFormField, MsgAttachmentEmpty)
 		return nil, false
 	}
 
@@ -182,12 +201,12 @@ func validateAndStoreAttachment(w http.ResponseWriter, r *http.Request, store ob
 	if err != nil && !errors.Is(err, io.ErrUnexpectedEOF) && !errors.Is(err, io.EOF) {
 		// coverage:ignore reason: a parsed multipart.File failing mid-read is a
 		// filesystem-level failure, not exercised by unit tests
-		apierr.WriteError(w, "invalid attachment", http.StatusBadRequest)
+		apierr.WriteFieldError(w, http.StatusBadRequest, apierr.CodeInvalidArgument, attachmentFormField, MsgAttachmentUnread)
 		return nil, false
 	}
 	contentType := http.DetectContentType(sniff[:n])
 	if !validAttachmentContentType(contentType) {
-		apierr.WriteError(w, "attachment must be an image or a PDF", http.StatusBadRequest)
+		apierr.WriteFieldError(w, http.StatusBadRequest, apierr.CodeInvalidArgument, attachmentFormField, MsgAttachmentWrongType)
 		return nil, false
 	}
 
@@ -222,7 +241,9 @@ func decodeCreateRequest(w http.ResponseWriter, r *http.Request) (CreateRequest,
 	}
 	req.Body = strings.TrimSpace(req.Body)
 	if req.Body == "" {
-		apierr.WriteError(w, "body is required", http.StatusBadRequest)
+		// The same words as the multipart path's: the app sends JSON only
+		// when no file is chosen, so an empty compose form lands here.
+		apierr.WriteFieldError(w, http.StatusBadRequest, apierr.CodeInvalidArgument, bodyFormField, MsgMessageOrFile)
 		return CreateRequest{}, false
 	}
 	return req, true

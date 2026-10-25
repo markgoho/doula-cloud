@@ -500,6 +500,18 @@ describe('sendMessage', () => {
 
 		await expect(sendMessage(fetcher, reference, 'hello', undefined)).rejects.toThrow('nope');
 	});
+
+	it('throws a refusal that keeps the field the BFF names', async () => {
+		const words = 'The selected file must be smaller than 10MB';
+		const fetcher = vi
+			.fn()
+			.mockResolvedValue(jsonResponse({ code: 'PAYLOAD_TOO_LARGE', message: words, details: { attachment: words } }, 413));
+
+		await expect(sendMessage(fetcher, reference, '', new File(['x'], 'big.png'))).rejects.toMatchObject({
+			message: words,
+			details: { attachment: words }
+		});
+	});
 });
 
 describe('downloadAttachment', () => {

@@ -2,6 +2,15 @@ import { page } from 'vitest/browser';
 import { describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import { formatInstantWithClock } from '../../dates.js';
+import { RefusalError, SERVICE_PROBLEM } from '../../formErrors.js';
+import {
+	ATTACHMENT_EMPTY,
+	ATTACHMENT_HINT,
+	ATTACHMENT_TOO_LARGE,
+	ATTACHMENT_WRONG_TYPE,
+	MAX_ATTACHMENT_BYTES,
+	MESSAGE_OR_FILE
+} from '../../messageAttachment.js';
 import MessageThread, { type Message } from './MessageThread.svelte';
 
 const messages: Message[] = [
@@ -30,8 +39,7 @@ interface SetupOptions {
 	error?: string;
 	hasMore?: boolean;
 	isLoadingOlder?: boolean;
-	isSending?: boolean;
-	onSend?: (body: string, attachment: File | undefined) => Promise<boolean>;
+	onSend?: (body: string, attachment: File | undefined) => Promise<void>;
 	attachmentPreviewURLs?: Record<string, string>;
 }
 
@@ -40,8 +48,7 @@ async function setup({
 	error = '',
 	hasMore = false,
 	isLoadingOlder = false,
-	isSending = false,
-	onSend = vi.fn().mockResolvedValue(true),
+	onSend = vi.fn().mockResolvedValue(undefined),
 	attachmentPreviewURLs = {}
 }: SetupOptions = {}) {
 	const onLoadOlder = vi.fn();
@@ -51,7 +58,6 @@ async function setup({
 		error,
 		hasMore,
 		isLoadingOlder,
-		isSending,
 		onLoadOlder,
 		onSend,
 		onDownloadAttachment,
@@ -137,41 +143,124 @@ describe('MessageThread.svelte', () => {
 		expect(container.querySelector('img.attachment-preview')).not.toBeInTheDocument();
 	});
 
-	it('calls onSend with the typed body and selected attachment on submit', async () => {
-		const onSend = vi.fn().mockResolvedValue(true);
-		await setup({ onSend });
+});
 
-		await page.getByLabelText('Message').fill('New message');
-		const file = new File(['data'], 'notes.pdf', { type: 'application/pdf' });
-		await page.getByLabelText('Attachment (image or PDF, up to 10MB)').upload(file);
-		await page.getByRole('button', { name: 'Send' }).click();
+const messageField = () => page.getByLabelText('Message');
+const attachmentField = () => page.getByLabelText('Attachment');
+const send = () => page.getByRole('button', { name: 'Send' }).click();
+const summary = () => page.getByRole('alert').filter({ hasText: 'There is a problem' });
+
+function fileOf(size: number, name: string, type: string): File {
+	return new File([new Uint8Array(size)], name, { type });
+}
+
+describe('MessageThread.svelte compose form', () => {
+	it('labels the attachment and states its types and limit in a separate hint', async () => {
+		await setup();
+
+		await expect.element(attachmentField()).toBeVisible();
+		await expect.element(attachmentField()).toHaveAccessibleDescription(ATTACHMENT_HINT);
+		await expect.element(attachmentField()).not.toHaveAttribute('aria-invalid');
+	});
+
+	it('calls onSend with the typed body and selected attachment on submit', async () => {
+		const { onSend } = await setup();
+
+		await messageField().fill('New message');
+		const file = fileOf(4, 'notes.pdf', 'application/pdf');
+		await attachmentField().upload(file);
+		await send();
 
 		expect(onSend).toHaveBeenCalledWith('New message', file);
 	});
 
-	it('clears the compose form after a successful send', async () => {
-		const onSend = vi.fn().mockResolvedValue(true);
-		await setup({ onSend });
+	it('clears the message and the file after a successful send', async () => {
+		const { onSend } = await setup();
 
-		await page.getByLabelText('Message').fill('New message');
-		await page.getByRole('button', { name: 'Send' }).click();
+		await messageField().fill('New message');
+		await attachmentField().upload(fileOf(4, 'photo.png', 'image/png'));
+		await send();
+		await expect.element(messageField()).toHaveValue('');
+		await expect.element(attachmentField()).toHaveValue('');
 
-		await expect.element(page.getByLabelText('Message')).toHaveValue('');
+		// The cleared file is not sent again with the next message.
+		await messageField().fill('Second message');
+		await send();
+		expect(onSend).toHaveBeenLastCalledWith('Second message', undefined);
 	});
 
-	it('keeps the compose form after a failed send', async () => {
-		const onSend = vi.fn().mockResolvedValue(false);
-		await setup({ onSend });
+	it('marks the send button busy while a send is in flight', async () => {
+		await setup({ onSend: () => new Promise<void>(() => {}) });
 
-		await page.getByLabelText('Message').fill('New message');
-		await page.getByRole('button', { name: 'Send' }).click();
-
-		await expect.element(page.getByLabelText('Message')).toHaveValue('New message');
-	});
-
-	it('marks the send button busy when isSending is true', async () => {
-		await setup({ isSending: true });
+		await messageField().fill('New message');
+		await send();
 
 		await expect.element(page.getByRole('button', { name: 'Send' })).toBeDisabled();
+	});
+
+	it.each([
+		['a file over 10MB', fileOf(MAX_ATTACHMENT_BYTES + 1, 'scan.jpg', 'image/jpeg'), ATTACHMENT_TOO_LARGE],
+		['an empty file', fileOf(0, 'photo.png', 'image/png'), ATTACHMENT_EMPTY],
+		['a file that is neither an image nor a PDF', fileOf(4, 'notes.txt', 'text/plain'), ATTACHMENT_WRONG_TYPE]
+	])('refuses %s against the attachment before sending', async (_name, file, words) => {
+		const { onSend } = await setup();
+
+		await attachmentField().upload(file);
+		await send();
+
+		expect(onSend).not.toHaveBeenCalled();
+		await expect.element(summary().getByRole('link', { name: words })).toBeVisible();
+		await expect.element(attachmentField()).toHaveAttribute('aria-invalid', 'true');
+		await expect.element(attachmentField()).toHaveAccessibleDescription(`${ATTACHMENT_HINT} ${words}`);
+	});
+
+	it('refuses an empty compose form against the message before sending', async () => {
+		const { onSend } = await setup();
+
+		await send();
+
+		expect(onSend).not.toHaveBeenCalled();
+		await expect.element(summary().getByRole('link', { name: MESSAGE_OR_FILE })).toBeVisible();
+		await expect.element(messageField()).toHaveAccessibleDescription(MESSAGE_OR_FILE);
+	});
+
+	it('shows a refusal the server keys to the attachment against the attachment, and keeps the draft', async () => {
+		const onSend = vi.fn().mockRejectedValue(
+			new RefusalError(ATTACHMENT_WRONG_TYPE, { attachment: ATTACHMENT_WRONG_TYPE })
+		);
+		await setup({ onSend });
+
+		await messageField().fill('New message');
+		await attachmentField().upload(fileOf(4, 'photo.png', 'image/png'));
+		await send();
+
+		await expect.element(summary().getByRole('link', { name: ATTACHMENT_WRONG_TYPE })).toBeVisible();
+		await expect
+			.element(attachmentField())
+			.toHaveAccessibleDescription(`${ATTACHMENT_HINT} ${ATTACHMENT_WRONG_TYPE}`);
+		await expect.element(messageField()).toHaveValue('New message');
+	});
+
+	it('shows a refusal the server keys to the message against the message', async () => {
+		const onSend = vi.fn().mockRejectedValue(new RefusalError(MESSAGE_OR_FILE, { body: MESSAGE_OR_FILE }));
+		await setup({ onSend });
+
+		await messageField().fill('Hello');
+		await send();
+
+		expect(onSend).toHaveBeenCalledOnce();
+		await expect.element(messageField()).toHaveAccessibleDescription(MESSAGE_OR_FILE);
+	});
+
+	it('shows a refusal that names no field in the summary, with no link', async () => {
+		const onSend = vi.fn().mockRejectedValue(new Error(SERVICE_PROBLEM));
+		await setup({ onSend });
+
+		await messageField().fill('New message');
+		await send();
+
+		await expect.element(summary().getByText(SERVICE_PROBLEM)).toBeVisible();
+		await expect.element(summary().getByRole('link')).not.toBeInTheDocument();
+		await expect.element(messageField()).toHaveValue('New message');
 	});
 });
