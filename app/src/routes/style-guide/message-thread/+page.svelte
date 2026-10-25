@@ -29,9 +29,7 @@
 		}
 	];
 
-	async function didSend() {
-		return true;
-	}
+	async function didSend() {}
 
 	function onLoadOlder() {}
 
@@ -54,7 +52,6 @@
 			error=""
 			hasMore={false}
 			isLoadingOlder={false}
-			isSending={false}
 			{onLoadOlder}
 			onSend={didSend}
 			{onDownloadAttachment}
@@ -69,7 +66,6 @@
 			error=""
 			hasMore={false}
 			isLoadingOlder={false}
-			isSending={false}
 			{onLoadOlder}
 			onSend={didSend}
 			{onDownloadAttachment}
@@ -84,7 +80,6 @@
 			error=""
 			hasMore={true}
 			isLoadingOlder={false}
-			isSending={false}
 			{onLoadOlder}
 			onSend={didSend}
 			{onDownloadAttachment}
@@ -99,22 +94,6 @@
 			error="We could not load the rest of this conversation. Check your connection and try again."
 			hasMore={false}
 			isLoadingOlder={false}
-			isSending={false}
-			{onLoadOlder}
-			onSend={didSend}
-			{onDownloadAttachment}
-			attachmentPreviewURLs={{}}
-		/>
-	</section>
-
-	<section>
-		<h2>Sending</h2>
-		<MessageThread
-			{messages}
-			error=""
-			hasMore={false}
-			isLoadingOlder={false}
-			isSending={true}
 			{onLoadOlder}
 			onSend={didSend}
 			{onDownloadAttachment}
@@ -129,7 +108,6 @@
 			error=""
 			hasMore={false}
 			isLoadingOlder={false}
-			isSending={false}
 			{onLoadOlder}
 			onSend={didSend}
 			{onDownloadAttachment}

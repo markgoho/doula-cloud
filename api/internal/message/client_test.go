@@ -89,9 +89,10 @@ func TestClientCreateHandler_EmptyBodyRejected(t *testing.T) {
 	resp := authedPost(t, session, srv.URL+"/api/portal/engagements/"+engagementID+"/messages", body)
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusBadRequest {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
-	}
+	// The JSON path is the one an empty compose form takes, since the app
+	// only sends multipart with a file, so it says the same thing the
+	// multipart path does, against the Message field (#1952).
+	assertFieldRefusal(t, resp, http.StatusBadRequest, "body", message.MsgMessageOrFile)
 }
 
 func TestClientCreateHandler_InvalidJSONBody(t *testing.T) {

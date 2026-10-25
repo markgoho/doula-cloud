@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"doula-cloud/api/internal/activity"
+	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/idempotency"
 	"doula-cloud/api/internal/message"
@@ -663,8 +664,42 @@ func TestCreateHandler_AttachmentWrongTypeRejected(t *testing.T) {
 	resp := authedMultipartPost(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/messages",
 		"trying to attach a text file", "notes.txt", []byte("just plain text, not an image or PDF"))
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusBadRequest {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
+	assertFieldRefusal(t, resp, http.StatusBadRequest, "attachment", message.MsgAttachmentWrongType)
+}
+
+// TestCreateHandler_AttachmentEmptyRejected proves a 0-byte file is
+// refused as empty, in GOV.UK's words, rather than read as the wrong type
+// -- http.DetectContentType calls no bytes "text/plain" (#1952).
+func TestCreateHandler_AttachmentEmptyRejected(t *testing.T) {
+	db := testdb.New(t)
+	const identityUID = "staff-empty-attachment"
+	practiceID := testdb.SeedPractice(t, db, "Practice")
+	testdb.SeedStaffAtPractice(t, db, practiceID, identityUID, []string{doulaRole}, "employee")
+	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Client", "client@example.com")
+
+	srv, session := newServer(t, db, identityUID)
+	defer srv.Close()
+
+	resp := authedMultipartPost(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/messages",
+		"an empty file", "empty.png", nil)
+	defer resp.Body.Close()
+	assertFieldRefusal(t, resp, http.StatusBadRequest, "attachment", message.MsgAttachmentEmpty)
+}
+
+// assertFieldRefusal checks a refusal's status and that it names field in
+// details with exactly want -- the key the compose form maps onto its
+// control, and the words the person reads there (#1952).
+func assertFieldRefusal(t *testing.T, resp *http.Response, status int, field, want string) {
+	t.Helper()
+	if resp.StatusCode != status {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, status)
+	}
+	var refusal apierr.APIError
+	if err := json.NewDecoder(resp.Body).Decode(&refusal); err != nil {
+		t.Fatalf("decode refusal: %v", err)
+	}
+	if refusal.Message != want || refusal.Details[field] != want {
+		t.Fatalf("refusal = %+v, want message and details[%q] = %q", refusal, field, want)
 	}
 }
 
@@ -685,9 +720,7 @@ func TestCreateHandler_AttachmentOversizedRejected(t *testing.T) {
 	resp := authedMultipartPost(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/messages",
 		"too big", "big.png", oversized)
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusRequestEntityTooLarge {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusRequestEntityTooLarge)
-	}
+	assertFieldRefusal(t, resp, http.StatusRequestEntityTooLarge, "attachment", message.MsgAttachmentTooLarge)
 }
 
 // TestCreateHandler_RequestWayOversizedRejectedAtParse proves the
@@ -709,9 +742,7 @@ func TestCreateHandler_RequestWayOversizedRejectedAtParse(t *testing.T) {
 	resp := authedMultipartPost(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/messages",
 		"way too big", "big.png", wayOversized)
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusRequestEntityTooLarge {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusRequestEntityTooLarge)
-	}
+	assertFieldRefusal(t, resp, http.StatusRequestEntityTooLarge, "attachment", message.MsgAttachmentTooLarge)
 }
 
 // TestCreateHandler_MalformedMultipartRejected proves a genuinely
@@ -759,9 +790,7 @@ func TestCreateHandler_EmptyBodyAndNoAttachmentRejected(t *testing.T) {
 
 	resp := authedMultipartPost(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/messages", "", "", nil)
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusBadRequest {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
-	}
+	assertFieldRefusal(t, resp, http.StatusBadRequest, "body", message.MsgMessageOrFile)
 }
 
 // TestCreateHandler_StorePutFailureReturns500 exercises the handler's

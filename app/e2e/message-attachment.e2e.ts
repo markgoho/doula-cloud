@@ -29,7 +29,7 @@ test('A Message attachment uploads and downloads through the real object store',
 			'00000049454e44ae426082',
 		'hex'
 	);
-	await page.getByLabel('Attachment (image or PDF, up to 10MB)').setInputFiles({
+	await page.getByLabel('Attachment', { exact: true }).setInputFiles({
 		name: 'photo.png',
 		mimeType: 'image/png',
 		buffer: pngBytes
@@ -65,6 +65,35 @@ test('A Message attachment uploads and downloads through the real object store',
 	expect(dlResp.headers()['content-type']).toBe('image/png');
 	const downloadedBytes = await dlResp.body();
 	expect(downloadedBytes.equals(pngBytes)).toBe(true);
+});
+
+// #1952: the page cannot see inside a file, so a file that says it is a
+// PNG passes the page's own check. The server sniffs its bytes, refuses it,
+// and keys the refusal to `attachment`, so it lands against the control in
+// GOV.UK's words rather than in a Notice above the thread.
+test('A file whose bytes are not an image is refused by the server against the attachment', async ({ page }) => {
+	const { practiceId, engagementId, staffHeaders } = await seedPortalClient(page.request, 'Riverside Doulas');
+	await enterPractice(page.context(), page, staffHeaders, practiceId);
+	await page.goto(`/practices/${practiceId}/engagements/${engagementId}`);
+
+	const attachment = page.getByLabel('Attachment', { exact: true });
+	await attachment.setInputFiles({
+		name: 'photo.png',
+		mimeType: 'image/png',
+		buffer: Buffer.from('plain text pretending to be a photo')
+	});
+	const [createResponse] = await Promise.all([
+		page.waitForResponse(
+			(response) => response.url().includes('/messages') && response.request().method() === 'POST'
+		),
+		page.getByRole('button', { name: 'Send', exact: true }).click()
+	]);
+	expect(createResponse.status()).toBe(400);
+
+	const words = 'The selected file must be an image or a PDF';
+	await expect(page.getByRole('link', { name: words })).toBeVisible();
+	await expect(attachment).toHaveAttribute('aria-invalid', 'true');
+	await expect(attachment).toHaveAccessibleDescription(`An image or a PDF, up to 10MB ${words}`);
 });
 
 // #305's other half: a Message row whose attachment metadata points at
