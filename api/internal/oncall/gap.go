@@ -41,10 +41,13 @@ const (
 	// MsgStaffIDNeeded is the gap form's own empty-Doula words (#1916):
 	// the form opens with no Doula chosen (ADR-0055), so a send that
 	// skips the question is refused here in the same words as the page.
-	MsgStaffIDNeeded    = "Select the Doula who cannot be reached"
-	MsgStartsAtRequired = "Enter when the gap starts."
-	MsgEndsAtRequired   = "Enter when the gap ends."
-	MsgEndsBeforeStarts = "The gap must end after it starts."
+	MsgStaffIDNeeded = "Select the Doula who cannot be reached"
+	// The three range refusals are the page's own words too (#1969): the
+	// gap form checks an empty From, an empty Until and an Until that is
+	// not after From itself, and lists the page's and these in one summary.
+	MsgStartsAtRequired = "Enter when the gap starts"
+	MsgEndsAtRequired   = "Enter when the gap ends"
+	MsgEndsBeforeStarts = "The gap must end after it starts"
 	MsgOutsideWindow    = "The gap must fall inside this birth's on-call window."
 	MsgReasonTooLong    = "Keep the reason to 500 characters or fewer."
 	MsgCoverIsTheSame   = "Choose someone other than the doula who cannot be reached."

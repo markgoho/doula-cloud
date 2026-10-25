@@ -113,7 +113,7 @@
 	import DescriptionList from '#lib/components/molecules/DescriptionList.svelte';
 	import RadioGroup from '#lib/components/molecules/RadioGroup.svelte';
 	import ErrorSummary from '#lib/components/molecules/ErrorSummary.svelte';
-	import { RefusalError } from '#lib/formErrors.js';
+	import type { FormError } from '#lib/formErrors.js';
 	import DataTable, { type DataTableView } from '#lib/components/organisms/DataTable.svelte';
 	import RecordDetail from '#lib/components/templates/RecordDetail.svelte';
 	import TextInput from '#lib/components/atoms/TextInput.svelte';
@@ -1112,10 +1112,21 @@
 	// Admin is told of the gap, so a report sent without reading the
 	// picker would name the wrong Doula to the whole Practice.
 	let gapStaffId = $state('');
-	// The refusal on "Doula who cannot be reached": the page's own check,
-	// or the BFF's `details.staffId`, in the same words.
-	let gapStaffError = $state('');
-	const gapStaffFieldId = 'coverage-gap-staff';
+	// Each question's id, keyed by the GapRequest field the BFF names in a
+	// refusal's `details`, in the order the questions are on the page, so
+	// the error summary lists the page's own check and the BFF's in field
+	// order (GOV.UK's error summary) -- Go writes a map's keys sorted.
+	const gapFieldIds = {
+		staffId: 'coverage-gap-staff',
+		startsAt: 'coverage-gap-starts',
+		endsAt: 'coverage-gap-ends',
+		coveringStaffId: 'coverage-gap-cover',
+		reason: 'coverage-gap-reason'
+	};
+	const gapFieldOrder: string[] = Object.values(gapFieldIds);
+	// Every refusal of the gap form, from the page's own check or the BFF:
+	// the summary lists it, and each question reads its own entry from it.
+	const gapSubmission = new FormSubmission();
 	let gapStartsAt = $state('');
 	let gapEndsAt = $state('');
 	let gapReason = $state('');
@@ -1141,45 +1152,63 @@
 
 	/* An instant the BFF takes, from what `<input type="datetime-local">`
 	   holds -- which is a local wall-clock time with no zone on it, so it
-	   is read in the reader's own zone rather than parsed as UTC. */
-	function toInstant(local: string): string {
-		return new Date(local).toISOString();
+	   is read in the reader's own zone rather than parsed as UTC. An empty
+	   control (or a half-typed one, which reports '') is `undefined`, never
+	   `new Date('')`, whose `toISOString()` throws "Invalid time value"
+	   (#1969). */
+	function toInstant(local: string): Date | undefined {
+		const instant = new Date(local);
+		return local === '' || Number.isNaN(instant.getTime()) ? undefined : instant;
 	}
 
-	function submitCoverageGap(event: SubmitEvent) {
-		event.preventDefault();
-		gapError = '';
-		gapStaffError = '';
+	/* The page's own check, in the BFF's words (`oncall.MsgStaffIDNeeded`,
+	   `MsgStartsAtRequired`, `MsgEndsAtRequired`, `MsgEndsBeforeStarts`),
+	   in field order. */
+	function coverageGapErrors(startsAt: Date | undefined, endsAt: Date | undefined): FormError[] {
+		const errors: FormError[] = [];
 		if (gapStaffId === '') {
-			gapStaffError = 'Select the Doula who cannot be reached';
-			return;
+			errors.push({ message: 'Select the Doula who cannot be reached', targetId: gapFieldIds.staffId });
 		}
-		void saveCoverageGap();
+		if (!startsAt) errors.push({ message: 'Enter when the gap starts', targetId: gapFieldIds.startsAt });
+		if (!endsAt) errors.push({ message: 'Enter when the gap ends', targetId: gapFieldIds.endsAt });
+		if (startsAt && endsAt && endsAt <= startsAt) {
+			errors.push({ message: 'The gap must end after it starts', targetId: gapFieldIds.endsAt });
+		}
+		return errors;
 	}
 
-	async function saveCoverageGap() {
-		try {
-			await saveGap(apiFetchWithSession, reference.practiceId, reference.engagementId, {
-				staffId: gapStaffId,
-				startsAt: toInstant(gapStartsAt),
-				endsAt: toInstant(gapEndsAt),
-				reason: gapReason === '' ? undefined : gapReason,
-				coveringStaffId: gapCoveringStaffId === '' ? undefined : gapCoveringStaffId
-			});
-			gapStaffId = '';
-			gapStartsAt = '';
-			gapEndsAt = '';
-			gapReason = '';
-			gapCoveringStaffId = '';
-			await loadOnCall();
-		} catch (error) {
-			const staffRefusal = error instanceof RefusalError ? error.details?.staffId : undefined;
-			if (staffRefusal) {
-				gapStaffError = staffRefusal;
-				return;
-			}
-			gapError = error instanceof Error ? error.message : 'We could not save the coverage gap.';
-		}
+	/* A refusal in the order the questions are on the page; one that names
+	   no field has no target and goes first, as it is about the whole gap. */
+	function inFieldOrder(errors: FormError[]): FormError[] {
+		const place = (entry: FormError) => (entry.targetId ? gapFieldOrder.indexOf(entry.targetId) : -1);
+		return errors.toSorted((a, b) => place(a) - place(b));
+	}
+
+	async function submitCoverageGap(event: SubmitEvent) {
+		event.preventDefault();
+		await gapSubmission.run(
+			async () => {
+				const startsAt = toInstant(gapStartsAt);
+				const endsAt = toInstant(gapEndsAt);
+				const errors = coverageGapErrors(startsAt, endsAt);
+				if (!startsAt || !endsAt || errors.length > 0) return errors;
+
+				await saveGap(apiFetchWithSession, reference.practiceId, reference.engagementId, {
+					staffId: gapStaffId,
+					startsAt: startsAt.toISOString(),
+					endsAt: endsAt.toISOString(),
+					reason: gapReason === '' ? undefined : gapReason,
+					coveringStaffId: gapCoveringStaffId === '' ? undefined : gapCoveringStaffId
+				});
+				gapStaffId = '';
+				gapStartsAt = '';
+				gapEndsAt = '';
+				gapReason = '';
+				gapCoveringStaffId = '';
+				await loadOnCall();
+			},
+			async (refusal) => inFieldOrder(await orThrownErrors(gapFieldIds)(refusal))
+		);
 	}
 
 	async function clearCoverageGap(gapId: string) {
@@ -2147,13 +2176,13 @@
 		{#if onCall.window && onCall.doulas.length > 0}
 			{@const panel = onCall}
 			<StackedForm onSubmit={submitCoverageGap}>
-				{#if gapStaffError}
-					<ErrorSummary errors={[{ message: gapStaffError, targetId: gapStaffFieldId }]} />
+				{#if gapSubmission.errors.length > 0}
+					<ErrorSummary errors={gapSubmission.errors} />
 				{/if}
 				<LabeledField
-					id={gapStaffFieldId}
+					id={gapFieldIds.staffId}
 					label="Doula who cannot be reached"
-					error={gapStaffError || undefined}
+					error={gapSubmission.errorFor(gapFieldIds.staffId)}
 				>
 					{#snippet children({ id, describedBy, invalid })}
 						<Select
@@ -2167,7 +2196,11 @@
 						/>
 					{/snippet}
 				</LabeledField>
-				<LabeledField label="From">
+				<LabeledField
+					id={gapFieldIds.startsAt}
+					label="From"
+					error={gapSubmission.errorFor(gapFieldIds.startsAt)}
+				>
 					{#snippet children({ id, describedBy, invalid })}
 						<TextInput
 							{id}
@@ -2179,7 +2212,11 @@
 						/>
 					{/snippet}
 				</LabeledField>
-				<LabeledField label="Until">
+				<LabeledField
+					id={gapFieldIds.endsAt}
+					label="Until"
+					error={gapSubmission.errorFor(gapFieldIds.endsAt)}
+				>
 					{#snippet children({ id, describedBy, invalid })}
 						<TextInput
 							{id}
@@ -2192,8 +2229,10 @@
 					{/snippet}
 				</LabeledField>
 				<LabeledField
+					id={gapFieldIds.coveringStaffId}
 					label="Who is covering"
 					hint="Leave this unanswered where nobody is covering yet. Every owner and admin is told so they can arrange it."
+					error={gapSubmission.errorFor(gapFieldIds.coveringStaffId)}
 				>
 					{#snippet children({ id, describedBy, invalid })}
 						<Select
@@ -2210,7 +2249,12 @@
 						/>
 					{/snippet}
 				</LabeledField>
-				<LabeledField label="Reason" hint="Optional, and read only by this practice.">
+				<LabeledField
+					id={gapFieldIds.reason}
+					label="Reason"
+					hint="Optional, and read only by this practice."
+					error={gapSubmission.errorFor(gapFieldIds.reason)}
+				>
 					{#snippet children({ id, describedBy, invalid })}
 						<TextInput
 							{id}
@@ -2221,7 +2265,7 @@
 						/>
 					{/snippet}
 				</LabeledField>
-				<Button type="submit" label="Record the gap" />
+				<Button type="submit" label="Record the gap" loading={gapSubmission.isSubmitting} />
 			</StackedForm>
 		{/if}
 	{:else}
