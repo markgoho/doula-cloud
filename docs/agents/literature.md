@@ -48,18 +48,18 @@ Stage is one of: **shelf** (no read-back yet), **read-back** (on trunk in `docs/
 
 | Book | Author, year | Drive file | Stage |
 |---|---|---|---|
-| Form Design Patterns | Adam Silver, 2018 | `form-design-patterns.pdf` | synthesized |
-| Inclusive Design Patterns | Heydon Pickering, 2016 | `inclusive-design-patterns.pdf` | synthesized |
-| Inclusive Components | Heydon Pickering, 2019 | `Inclusive_Components_-_Heydon_Pickering.pdf` | synthesized |
-| Design Systems | Alla Kholmatova, 2017 | `design-systems.pdf` | synthesized |
-| Expressive Design Systems | Yesenia Perez-Cruz, 2019 | `expressive-design-systems.pdf` | synthesized |
-| Laying the Foundations | Andrew Couldwell, 2019 | `laying-the-foundations-pdf.pdf` | synthesized |
-| Atomic Design | Brad Frost, 2016 | `atomic-design.pdf` | synthesized |
-| Refactoring UI | Adam Wathan and Steve Schoger, 2018 | `Refactoring UI v1.0.2.pdf` | synthesized |
-| Flexible Typesetting | Tim Brown, 2018 | `flexible-typesetting.pdf` | synthesized |
-| Giving a Damn About Accessibility | Sheri Byrne-Haber, 2021 | `Giving-a-damn-about-accessibility.pdf` | synthesized |
-| Going Offline | Jeremy Keith, 2018 | `going-offline.pdf` | synthesized |
-| Designing User Interfaces | Michal Malewicz and Diana Malewicz, 2020 | `DESIGNING_USER_INTERFACES_Eng_1.pdf` | synthesized |
+| Form Design Patterns | Adam Silver, 2018 | `form-design-patterns.pdf` | decided ([ADR-0055](../adr/0055-form-design-patterns-is-a-rank-three-source-for-forms.md)) |
+| Inclusive Design Patterns | Heydon Pickering, 2016 | `inclusive-design-patterns.pdf` | decided ([ADR-0055](../adr/0055-form-design-patterns-is-a-rank-three-source-for-forms.md), [ADR-0057](../adr/0057-inclusive-components-stays-a-rank-three-source-and-a-control-that-acts-at-once-is-a-switch.md), [ADR-0060](../adr/0060-the-visual-craft-books-stay-evidence-and-the-type-scale-is-one-ratio-from-16px.md)) |
+| Inclusive Components | Heydon Pickering, 2019 | `Inclusive_Components_-_Heydon_Pickering.pdf` | decided ([ADR-0057](../adr/0057-inclusive-components-stays-a-rank-three-source-and-a-control-that-acts-at-once-is-a-switch.md)) |
+| Design Systems | Alla Kholmatova, 2017 | `design-systems.pdf` | decided ([ADR-0058](../adr/0058-atomic-design-names-the-tiers-and-two-consumers-that-should-change-together-earn-a-variant.md)) |
+| Expressive Design Systems | Yesenia Perez-Cruz, 2019 | `expressive-design-systems.pdf` | decided ([ADR-0058](../adr/0058-atomic-design-names-the-tiers-and-two-consumers-that-should-change-together-earn-a-variant.md)) |
+| Laying the Foundations | Andrew Couldwell, 2019 | `laying-the-foundations-pdf.pdf` | decided ([ADR-0058](../adr/0058-atomic-design-names-the-tiers-and-two-consumers-that-should-change-together-earn-a-variant.md)) |
+| Atomic Design | Brad Frost, 2016 | `atomic-design.pdf` | decided ([ADR-0058](../adr/0058-atomic-design-names-the-tiers-and-two-consumers-that-should-change-together-earn-a-variant.md)) |
+| Refactoring UI | Adam Wathan and Steve Schoger, 2018 | `Refactoring UI v1.0.2.pdf` | decided ([ADR-0058](../adr/0058-atomic-design-names-the-tiers-and-two-consumers-that-should-change-together-earn-a-variant.md), [ADR-0060](../adr/0060-the-visual-craft-books-stay-evidence-and-the-type-scale-is-one-ratio-from-16px.md)) |
+| Flexible Typesetting | Tim Brown, 2018 | `flexible-typesetting.pdf` | decided ([ADR-0060](../adr/0060-the-visual-craft-books-stay-evidence-and-the-type-scale-is-one-ratio-from-16px.md)) |
+| Giving a Damn About Accessibility | Sheri Byrne-Haber, 2021 | `Giving-a-damn-about-accessibility.pdf` | decided ([ADR-0057](../adr/0057-inclusive-components-stays-a-rank-three-source-and-a-control-that-acts-at-once-is-a-switch.md)) |
+| Going Offline | Jeremy Keith, 2018 | `going-offline.pdf` | decided ([ADR-0059](../adr/0059-going-offline-is-adopted-for-its-principles-and-the-app-is-offline-maybe-by-launch.md)) |
+| Designing User Interfaces | Michal Malewicz and Diana Malewicz, 2020 | `DESIGNING_USER_INTERFACES_Eng_1.pdf` | decided ([ADR-0055](../adr/0055-form-design-patterns-is-a-rank-three-source-for-forms.md), [ADR-0060](../adr/0060-the-visual-craft-books-stay-evidence-and-the-type-scale-is-one-ratio-from-16px.md)) |
 
 Books in the folder that are on neither track, by the founder's decision of 2026-09-10: the engineering-craft titles (Accelerate, Clean Code, 97 Things, Infrastructure as Code, the database and Angular books) and the unrelated ones. They may join later; a book joins by a row in a table above.
 
