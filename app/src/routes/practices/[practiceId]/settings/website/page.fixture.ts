@@ -7,7 +7,7 @@
  * carry #530's own URL, since a Practice could paste a referral link
  * into either.
  *
- * Three sessions (#928). `isOwner` decides three things here, and one of
+ * Two sessions, three trees (#928). `isOwner` decides three things here, and one of
  * them is additive: anybody else reads a Notice in the saved frame, where
  * an Owner's Change button is, saying the setting is not hers to change
  * (#1971). The other two only withhold: the Change button, and, for a
