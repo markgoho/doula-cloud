@@ -38,14 +38,18 @@ const (
 	MsgNoWindowNobodyOnIt = "Nobody is on this birth yet, so there is nobody to record a gap for."
 	MsgNoWindowEnded      = "The baby arrived before on call would have opened, so there is no window to record a gap in."
 	MsgNotOnCall          = "Choose a doula who is on this birth."
-	MsgStartsAtRequired   = "Enter when the gap starts."
-	MsgEndsAtRequired     = "Enter when the gap ends."
-	MsgEndsBeforeStarts   = "The gap must end after it starts."
-	MsgOutsideWindow      = "The gap must fall inside this birth's on-call window."
-	MsgReasonTooLong      = "Keep the reason to 500 characters or fewer."
-	MsgCoverIsTheSame     = "Choose someone other than the doula who cannot be reached."
-	MsgOnlyYourOwnGap     = "You can record a gap only for yourself. An owner or an admin can record one for a colleague."
-	MsgGapNotFound        = "This coverage gap was not found. It may already have been cleared."
+	// MsgStaffIDNeeded is the gap form's own empty-Doula words (#1916):
+	// the form opens with no Doula chosen (ADR-0055), so a send that
+	// skips the question is refused here in the same words as the page.
+	MsgStaffIDNeeded    = "Select the Doula who cannot be reached"
+	MsgStartsAtRequired = "Enter when the gap starts."
+	MsgEndsAtRequired   = "Enter when the gap ends."
+	MsgEndsBeforeStarts = "The gap must end after it starts."
+	MsgOutsideWindow    = "The gap must fall inside this birth's on-call window."
+	MsgReasonTooLong    = "Keep the reason to 500 characters or fewer."
+	MsgCoverIsTheSame   = "Choose someone other than the doula who cannot be reached."
+	MsgOnlyYourOwnGap   = "You can record a gap only for yourself. An owner or an admin can record one for a colleague."
+	MsgGapNotFound      = "This coverage gap was not found. It may already have been cleared."
 )
 
 // GapRequest is the body of a gap create and a gap edit. An edit is a
@@ -131,6 +135,19 @@ func (c gapWrite) isAttached(staffID string) bool {
 		}
 	}
 	return false
+}
+
+// refuseNoStaffID writes the field refusal for a request that names no
+// Doula, and reports whether it did. It runs before mayWriteFor, so a
+// Doula who sent no answer is told what is missing rather than that she
+// may record a gap only for herself.
+func refuseNoStaffID(w http.ResponseWriter, req GapRequest) bool {
+	if req.StaffID != "" {
+		return false
+	}
+	apierr.Write(w, http.StatusBadRequest, apierr.CodeInvalidArgument, "The coverage gap could not be saved.",
+		map[string]string{fieldStaffID: MsgStaffIDNeeded})
+	return true
 }
 
 // mayWriteFor is the self-versus-colleague rule visit.resolveAssignee

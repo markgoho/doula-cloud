@@ -74,6 +74,14 @@ function danglingSummaryTargets(container: HTMLElement): string[] {
 }
 
 /**
+ * Answers "Offer this work to" with someone already here. The question
+ * opens with nothing chosen (#1914), so a send to a Doula answers it.
+ */
+async function chooseSomeoneHere() {
+	await page.getByLabelText('Someone already at this practice').click();
+}
+
+/**
  * Fills the three always-present facts, which every send needs.
  */
 async function fillFacts() {
@@ -156,6 +164,7 @@ describe('OfferSection.svelte', () => {
 	it('asks for a fee once a contractor is chosen, and sends it in cents', async () => {
 		const { onCreate } = await setup();
 
+		await chooseSomeoneHere();
 		await page.getByLabelText('Renata Alvarez').click();
 		await page.getByLabelText('Fee (USD)').fill('450');
 		await fillFacts();
@@ -175,6 +184,7 @@ describe('OfferSection.svelte', () => {
 	it('asks for no fee when the chosen Doula is an employee', async () => {
 		const { onCreate } = await setup();
 
+		await chooseSomeoneHere();
 		await page.getByLabelText('Dana Okafor').click();
 		expect(page.getByLabelText('Fee (USD)').elements()).toHaveLength(0);
 
@@ -223,6 +233,7 @@ describe('OfferSection.svelte', () => {
 	it('refuses a zero fee without calling onCreate', async () => {
 		const { onCreate } = await setup();
 
+		await chooseSomeoneHere();
 		await page.getByLabelText('Renata Alvarez').click();
 		await page.getByLabelText('Fee (USD)').fill('0');
 		await fillFacts();
@@ -234,10 +245,12 @@ describe('OfferSection.svelte', () => {
 		await expect.element(page.getByText('Enter a fee greater than zero').first()).toBeVisible();
 	});
 
+	// With nobody to pick, so the email field stays drawn after the send:
+	// with a roster, the question opens with nothing chosen again and the
+	// field goes with it (see "opens with nothing chosen again" below).
 	it('clears the typed fields once the Offer is away', async () => {
-		await setup();
+		await setup({ doulas: [] });
 
-		await page.getByLabelText('Someone new, by email').click();
 		await page.getByLabelText('Email address').fill('new@example.test');
 		await page.getByLabelText('Fee (USD)').fill('520');
 		await fillFacts();
@@ -251,6 +264,7 @@ describe('OfferSection.svelte', () => {
 		const onCreate = vi.fn().mockRejectedValue(new Error('that address already holds a membership'));
 		await setup({ onCreate });
 
+		await chooseSomeoneHere();
 		await page.getByLabelText('Renata Alvarez').click();
 		await page.getByLabelText('Fee (USD)').fill('450');
 		await fillFacts();
@@ -263,6 +277,7 @@ describe('OfferSection.svelte', () => {
 		const onCreate = vi.fn().mockRejectedValue('boom');
 		await setup({ onCreate });
 
+		await chooseSomeoneHere();
 		await page.getByLabelText('Renata Alvarez').click();
 		await page.getByLabelText('Fee (USD)').fill('450');
 		await fillFacts();
@@ -282,7 +297,7 @@ describe('OfferSection.svelte', () => {
 
 		expect(onCreate).not.toHaveBeenCalled();
 		await expect.element(page.getByText('There is a problem')).toBeVisible();
-		await expect.element(page.getByRole('link', { name: 'Select a Doula' })).toBeVisible();
+		await expect.element(page.getByRole('link', { name: 'Select who to offer this work to' })).toBeVisible();
 		await expect.element(page.getByRole('link', { name: 'Enter the general area' })).toBeVisible();
 		await expect.element(page.getByRole('link', { name: 'Enter the due date' })).toBeVisible();
 	});
@@ -293,6 +308,7 @@ describe('OfferSection.svelte', () => {
 		await page.getByLabelText("Client's first initial").fill('');
 		await page.getByLabelText('General area').fill('North side');
 		await page.getByLabelText('Due date').fill('2027-01-04');
+		await chooseSomeoneHere();
 		await page.getByLabelText('Renata Alvarez').click();
 		await page.getByLabelText('Fee (USD)').fill('450');
 		await page.getByRole('button', { name: 'Send Offer' }).click();
@@ -304,6 +320,7 @@ describe('OfferSection.svelte', () => {
 	it('refuses an unpicked Doula, which carried no browser check of its own', async () => {
 		const { onCreate } = await setup();
 
+		await chooseSomeoneHere();
 		await fillFacts();
 		await page.getByRole('button', { name: 'Send Offer' }).click();
 
@@ -341,6 +358,7 @@ describe('OfferSection.svelte', () => {
 	it('refuses an empty fee for a contractor Doula', async () => {
 		const { onCreate } = await setup();
 
+		await chooseSomeoneHere();
 		await page.getByLabelText('Renata Alvarez').click();
 		await fillFacts();
 		await page.getByRole('button', { name: 'Send Offer' }).click();
@@ -430,9 +448,67 @@ describe('OfferSection.svelte', () => {
 	it('sends every refusal to a control that is on the page when there is a Doula to pick', async () => {
 		const { container } = await setup();
 
+		await chooseSomeoneHere();
 		await page.getByRole('button', { name: 'Send Offer' }).click();
 
 		await expect.element(page.getByRole('link', { name: 'Select a Doula' })).toBeVisible();
 		expect(danglingSummaryTargets(container)).toEqual([]);
+	});
+
+	// #1914, ADR-0055: who gets the work is the sender's answer, so the
+	// question opens with nothing chosen, and neither follow-up question
+	// is asked until it is answered.
+	describe('Offer this work to, with somebody at the Practice to pick', () => {
+		it('opens with nothing chosen, and asks neither follow-up question', async () => {
+			await setup();
+
+			await expect.element(page.getByRole('group', { name: 'Offer this work to' })).toBeVisible();
+			for (const name of ['Someone already at this practice', 'Someone new, by email']) {
+				await expect.element(page.getByRole('radio', { name })).not.toBeChecked();
+			}
+			expect(page.getByRole('group', { name: 'Doula', exact: true }).elements()).toHaveLength(0);
+			expect(page.getByLabelText('Email address').elements()).toHaveLength(0);
+			expect(page.getByLabelText('Fee (USD)').elements()).toHaveLength(0);
+		});
+
+		it('asks which Doula, with nobody chosen, once someone already here is chosen', async () => {
+			await setup();
+
+			await chooseSomeoneHere();
+
+			await expect.element(page.getByRole('group', { name: 'Doula', exact: true })).toBeVisible();
+			for (const name of ['Renata Alvarez', 'Dana Okafor']) {
+				await expect.element(page.getByRole('radio', { name })).not.toBeChecked();
+			}
+		});
+
+		it('refuses a send with no answer, against the question and linked to its first option', async () => {
+			const { container, onCreate } = await setup();
+
+			await fillFacts();
+			await page.getByRole('button', { name: 'Send Offer' }).click();
+
+			expect(onCreate).not.toHaveBeenCalled();
+			await expect
+				.element(page.getByRole('link', { name: 'Select who to offer this work to' }))
+				.toHaveAttribute('href', '#offer-target-staff');
+			await expect
+				.element(page.getByRole('group', { name: 'Offer this work to' }))
+				.toHaveTextContent('Select who to offer this work to');
+			expect(danglingSummaryTargets(container)).toEqual([]);
+		});
+
+		it('opens with nothing chosen again once an Offer is away', async () => {
+			await setup();
+
+			await chooseSomeoneHere();
+			await page.getByLabelText('Dana Okafor').click();
+			await fillFacts();
+			await page.getByRole('button', { name: 'Send Offer' }).click();
+
+			await expect.element(page.getByLabelText('General area')).toHaveValue('');
+			await expect.element(page.getByRole('radio', { name: 'Someone already at this practice' })).not.toBeChecked();
+			expect(page.getByRole('group', { name: 'Doula', exact: true }).elements()).toHaveLength(0);
+		});
 	});
 });

@@ -31,6 +31,9 @@ func CreateGapHandler(enq tasknudge.Enqueuer) http.Handler {
 		if !apierr.DecodeJSON(w, r, &req) {
 			return
 		}
+		if refuseNoStaffID(w, req) {
+			return
+		}
 		if !c.mayWriteFor(req.StaffID) {
 			apierr.Write(w, http.StatusForbidden, apierr.CodeForbidden, MsgOnlyYourOwnGap, nil)
 			return
@@ -83,6 +86,9 @@ func UpdateGapHandler(enq tasknudge.Enqueuer) http.Handler {
 		tx, _ := staffauth.Tx(r.Context())
 		before, ok := lockGapFor(w, r, c, gapID)
 		if !ok {
+			return
+		}
+		if refuseNoStaffID(w, req) {
 			return
 		}
 		if !c.mayWriteFor(req.StaffID) {

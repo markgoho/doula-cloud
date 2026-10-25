@@ -52,10 +52,12 @@
 		onWithdraw: (offerId: string) => Promise<void>;
 	} = $props();
 
-	// What was last chosen, not what the form acts on: `isByEmail` below
-	// is, because an empty roster leaves "email" as the only answer
-	// whatever this holds (#1432).
-	let target = $state<'staff' | 'email'>('staff');
+	// What was last chosen, not what the form acts on: `answer` below is,
+	// because an empty roster leaves "email" as the only answer whatever
+	// this holds (#1432). Nothing is chosen when the form opens (#1914,
+	// ADR-0055): which follow-up question is asked first is the sender's
+	// to decide, not the form's.
+	let target = $state<'staff' | 'email' | undefined>();
 	let staffId = $state('');
 	let email = $state('');
 	let feeDollars = $state('');
@@ -72,6 +74,7 @@
 	// refusal it had -- StackedForm's `novalidate` (ADR-0021) takes that
 	// away, so every one of them (plus the "Doula" radio pick, which
 	// carried no browser check of its own to lose) is checked here first.
+	const targetGroupName = 'offer-target';
 	const doulaGroupName = 'offer-doula';
 	const emailFieldId = 'offer-email';
 	const feeFieldId = 'offer-fee';
@@ -88,22 +91,31 @@
 	const roster = $derived(doulas ?? []);
 	const firstDoula = $derived(roster[0]);
 
+	// What the form acts on: "email" whenever there is nobody to pick, and
+	// otherwise the sender's own answer, which is `undefined` until she
+	// gives one. Unanswered, neither follow-up question is drawn.
+	const answer = $derived(firstDoula === undefined ? 'email' : target);
+
+	// "Offer this work to"'s refusal points at its first option, GOV.UK's
+	// rule for a group. Only reached while the question is on the page.
+	const targetFieldId = radioFieldId(targetGroupName, 'staff');
+
 	// The Doula question's own target for a refusal -- its first option's
 	// id, the string RadioGroup itself builds -- and `undefined` whenever
 	// that question is not on the page: nobody to pick, or "someone new"
-	// chosen. One value answers both "is the question asked" and "where
-	// does its refusal point", so a refusal cannot be given an id that no
-	// element carries, which is what an id built from an empty roster was.
-	// `target` keeps what was last chosen, so a roster that arrives later
-	// restores the question rather than an answer nobody gave.
+	// chosen, or nothing chosen yet. One value answers both "is the
+	// question asked" and "where does its refusal point", so a refusal
+	// cannot be given an id that no element carries, which is what an id
+	// built from an empty roster was.
 	const doulaFieldId = $derived(
-		firstDoula === undefined || target === 'email' ? undefined : radioFieldId(doulaGroupName, firstDoula.staffId)
+		firstDoula !== undefined && answer === 'staff' ? radioFieldId(doulaGroupName, firstDoula.staffId) : undefined
 	);
-	const isByEmail = $derived(doulaFieldId === undefined);
+	const isByEmail = $derived(answer === 'email');
 
 	// Which employment type the fee rule is read against: her own
 	// Membership for a Doula already here, and always contractor for an
-	// email address, since that is what the Invitation joins her as.
+	// email address, since that is what the Invitation joins her as. With
+	// no answer yet there is no type, so no fee is asked.
 	const selectedType = $derived(
 		isByEmail ? 'contractor' : (roster.find((d) => d.staffId === staffId)?.employmentType ?? '')
 	);
@@ -116,7 +128,9 @@
 		await offerSubmission.run(async () => {
 			const errors: FormError[] = [];
 
-			if (doulaFieldId !== undefined) {
+			if (answer === undefined) {
+				errors.push({ message: 'Select who to offer this work to', targetId: targetFieldId });
+			} else if (doulaFieldId !== undefined) {
 				if (!staffId) errors.push({ message: 'Select a Doula', targetId: doulaFieldId });
 			} else if (email.trim() === '') {
 				errors.push({ message: 'Enter an email address', targetId: emailFieldId });
@@ -168,6 +182,10 @@
 			if (amountCents !== undefined) offer.amountCents = amountCents;
 
 			await onCreate(offer);
+			// Blank again for the next Offer, with nothing chosen: not the
+			// last answer, and not a default (#1914).
+			target = undefined;
+			staffId = '';
 			email = '';
 			feeDollars = '';
 			terms = '';
@@ -238,15 +256,18 @@
 	{:else}
 		<RadioGroup
 			legend="Offer this work to"
+			name={targetGroupName}
 			options={[
 				{ value: 'staff', label: 'Someone already at this practice' },
 				{ value: 'email', label: 'Someone new, by email' }
 			]}
 			value={target}
 			onChange={(value) => (target = value)}
+			error={offerSubmission.errorFor(targetFieldId)}
 		/>
 	{/if}
 
+	<!-- With nothing chosen yet, neither follow-up question is asked. -->
 	{#if doulaFieldId !== undefined}
 		<RadioGroup
 			legend="Doula"
@@ -256,7 +277,7 @@
 			onChange={(value) => (staffId = value)}
 			error={offerSubmission.errorFor(doulaFieldId)}
 		/>
-	{:else}
+	{:else if isByEmail}
 		<LabeledField id={emailFieldId} label="Email address" error={offerSubmission.errorFor(emailFieldId)}>
 			{#snippet children({ id, describedBy, invalid })}
 				<TextInput

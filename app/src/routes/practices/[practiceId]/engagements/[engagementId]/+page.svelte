@@ -113,6 +113,7 @@
 	import DescriptionList from '#lib/components/molecules/DescriptionList.svelte';
 	import RadioGroup from '#lib/components/molecules/RadioGroup.svelte';
 	import ErrorSummary from '#lib/components/molecules/ErrorSummary.svelte';
+	import { RefusalError } from '#lib/formErrors.js';
 	import DataTable, { type DataTableView } from '#lib/components/organisms/DataTable.svelte';
 	import RecordDetail from '#lib/components/templates/RecordDetail.svelte';
 	import TextInput from '#lib/components/atoms/TextInput.svelte';
@@ -1106,7 +1107,15 @@
 	 */
 	let onCall = $state<EngagementOnCall | undefined>();
 	let onCallError = $state('');
+	// Nothing is chosen when the form opens (#1916, ADR-0055): which Doula
+	// cannot be reached is a fact about someone else, and every Owner and
+	// Admin is told of the gap, so a report sent without reading the
+	// picker would name the wrong Doula to the whole Practice.
 	let gapStaffId = $state('');
+	// The refusal on "Doula who cannot be reached": the page's own check,
+	// or the BFF's `details.staffId`, in the same words.
+	let gapStaffError = $state('');
+	const gapStaffFieldId = 'coverage-gap-staff';
 	let gapStartsAt = $state('');
 	let gapEndsAt = $state('');
 	let gapReason = $state('');
@@ -1125,7 +1134,6 @@
 			onCall = panel;
 			narrowFrom = Object.fromEntries(panel.doulas.map((d) => [d.staffId, d.from ?? '']));
 			narrowTo = Object.fromEntries(panel.doulas.map((d) => [d.staffId, d.to ?? '']));
-			gapStaffId = panel.doulas[0]?.staffId ?? '';
 		} catch (error) {
 			onCallError = error instanceof Error ? error.message : 'We could not load who is on call.';
 		}
@@ -1140,11 +1148,16 @@
 
 	function submitCoverageGap(event: SubmitEvent) {
 		event.preventDefault();
+		gapError = '';
+		gapStaffError = '';
+		if (gapStaffId === '') {
+			gapStaffError = 'Select the Doula who cannot be reached';
+			return;
+		}
 		void saveCoverageGap();
 	}
 
 	async function saveCoverageGap() {
-		gapError = '';
 		try {
 			await saveGap(apiFetchWithSession, reference.practiceId, reference.engagementId, {
 				staffId: gapStaffId,
@@ -1153,12 +1166,18 @@
 				reason: gapReason === '' ? undefined : gapReason,
 				coveringStaffId: gapCoveringStaffId === '' ? undefined : gapCoveringStaffId
 			});
+			gapStaffId = '';
 			gapStartsAt = '';
 			gapEndsAt = '';
 			gapReason = '';
 			gapCoveringStaffId = '';
 			await loadOnCall();
 		} catch (error) {
+			const staffRefusal = error instanceof RefusalError ? error.details?.staffId : undefined;
+			if (staffRefusal) {
+				gapStaffError = staffRefusal;
+				return;
+			}
 			gapError = error instanceof Error ? error.message : 'We could not save the coverage gap.';
 		}
 	}
@@ -2128,14 +2147,23 @@
 		{#if onCall.window && onCall.doulas.length > 0}
 			{@const panel = onCall}
 			<StackedForm onSubmit={submitCoverageGap}>
-				<LabeledField label="Doula who cannot be reached">
+				{#if gapStaffError}
+					<ErrorSummary errors={[{ message: gapStaffError, targetId: gapStaffFieldId }]} />
+				{/if}
+				<LabeledField
+					id={gapStaffFieldId}
+					label="Doula who cannot be reached"
+					error={gapStaffError || undefined}
+				>
 					{#snippet children({ id, describedBy, invalid })}
 						<Select
 							{id}
 							{describedBy}
 							{invalid}
 							options={panel.doulas.map((doula) => ({ value: doula.staffId, label: doula.name }))}
+							placeholder="Choose a Doula"
 							bind:value={gapStaffId}
+							required
 						/>
 					{/snippet}
 				</LabeledField>

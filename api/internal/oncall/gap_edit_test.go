@@ -76,6 +76,39 @@ func TestUpdateGap_TwoSavesBeforeTheMailGoesAreOneNotice(t *testing.T) {
 	}
 }
 
+// TestGapWrites_NoDoulaIsAFieldRefusal is #1916: the gap form opens with
+// no Doula chosen, so a write that names none is refused against the
+// Doula field in the page's own words -- for an Owner, and for a Doula,
+// who would otherwise be told she may record a gap only for herself.
+func TestGapWrites_NoDoulaIsAFieldRefusal(t *testing.T) {
+	db := testdb.New(t)
+	f := newGapEditFixture(t, db, "gap-no-doula")
+	ownerSrv, ownerSession := newServer(t, db, f.ownerUID)
+	defer ownerSrv.Close()
+	doulaSrv, doulaSession := newServer(t, db, "gap-no-doula-doula")
+	defer doulaSrv.Close()
+
+	tests := []struct {
+		name, session, method, url string
+	}{
+		{"an Owner records one", ownerSession, http.MethodPost, gapsURL(ownerSrv.URL, f.practiceID, f.engagementID)},
+		{"an Owner edits one", ownerSession, http.MethodPut, f.gapURL(ownerSrv.URL)},
+		{"a Doula records one", doulaSession, http.MethodPost, gapsURL(doulaSrv.URL, f.practiceID, f.engagementID)},
+		{"a Doula edits her own", doulaSession, http.MethodPut, f.gapURL(doulaSrv.URL)},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			body := doJSON[map[string]any](t, tt.session, tt.method, tt.url, gapBody("", nil), http.StatusBadRequest)
+			if details, _ := body["details"].(map[string]any); details["staffId"] != oncall.MsgStaffIDNeeded {
+				t.Fatalf("details = %v, want staffId %q", body["details"], oncall.MsgStaffIDNeeded)
+			}
+		})
+	}
+	if n := countRows(t, db, `SELECT count(*) FROM engagement_coverage_gaps WHERE staff_id = $1`, f.doulaID); n != 1 {
+		t.Fatalf("gaps = %d, want only the fixture's own", n)
+	}
+}
+
 func TestUpdateGap_ADoulaCannotEditAColleaguesGap(t *testing.T) {
 	db := testdb.New(t)
 	f := newGapEditFixture(t, db, "gap-edit-colleague")

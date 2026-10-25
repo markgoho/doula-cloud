@@ -1533,6 +1533,8 @@ describe('the Offers form does not list the person at the screen (#1598)', () =>
 	it('leaves the reader out of the Doula pick, and keeps her in the Visit picker', async () => {
 		// The fixture's reader is `staff-1`, the roster's first Doula.
 		await setupWithRoster();
+		// *Offer this work to* opens with nothing chosen (#1914).
+		await testPage.getByLabelText('Someone already at this practice').click();
 
 		const doulaPick = testPage.getByRole('group', { name: 'Doula', exact: true });
 		await expect.element(doulaPick.getByLabelText('Jordan Reyes')).toBeVisible();
