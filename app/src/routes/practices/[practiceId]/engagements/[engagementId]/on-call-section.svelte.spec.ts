@@ -53,6 +53,14 @@ async function setupOnCall(extra: (path: string, init?: RequestInit) => Response
 	});
 }
 
+const gapStaffField = () => testPage.getByRole('combobox', { name: 'Doula who cannot be reached' });
+const coveringField = () => testPage.getByRole('combobox', { name: 'Who is covering' });
+const optionNames = (select: ReturnType<typeof testPage.getByRole>) =>
+	select
+		.getByRole('option')
+		.elements()
+		.map((option) => option.textContent.trim());
+
 describe('the on-call section on a birth (#1093)', () => {
 	it('says when the window runs, and who is on call for which part of it', async () => {
 		await setupOnCall();
@@ -80,6 +88,7 @@ describe('the on-call section on a birth (#1093)', () => {
 			return;
 		});
 
+		await gapStaffField().selectOptions('Bo Ng');
 		await testPage.getByLabelText('From', { exact: true }).fill('2026-10-20T22:00');
 		await testPage.getByLabelText('Until', { exact: true }).fill('2026-10-21T08:00');
 		await testPage.getByLabelText('Reason', { exact: true }).fill('Away overnight');
@@ -87,9 +96,88 @@ describe('the on-call section on a birth (#1093)', () => {
 
 		await vi.waitFor(() => expect(posted).toHaveLength(1));
 		const body = JSON.parse(String(posted[0]!.body));
-		expect(body.staffId).toBe(onCallPanel.doulas[0]!.staffId);
+		expect(body.staffId).toBe(onCallPanel.doulas[1]!.staffId);
 		expect(body.reason).toBe('Away overnight');
 		expect(body.coveringStaffId).toBeUndefined();
+		// Blank again for the next gap, with nobody chosen.
+		await expect.element(gapStaffField()).toHaveValue('');
+	});
+
+	// #1916, ADR-0055: which Doula cannot be reached is a fact about
+	// someone else, and every Owner and Admin is told of the gap, so the
+	// question opens with nobody chosen.
+	describe('Doula who cannot be reached', () => {
+		it('opens with nobody chosen', async () => {
+			await setupOnCall();
+
+			await expect.element(gapStaffField()).toHaveValue('');
+			await expect.element(gapStaffField().getByRole('option', { name: 'Choose a Doula' })).toBeDisabled();
+		});
+
+		it('refuses a gap with no Doula chosen, in the summary and against the field, and sends nothing', async () => {
+			const posted: RequestInit[] = [];
+			await setupOnCall((path, init) => {
+				if (path === gapsPath && init?.method === 'POST') {
+					posted.push(init);
+					return jsonResponse({ id: 'gap-3' }, 201);
+				}
+				return;
+			});
+
+			await testPage.getByLabelText('From', { exact: true }).fill('2026-10-20T22:00');
+			await testPage.getByLabelText('Until', { exact: true }).fill('2026-10-21T08:00');
+			await testPage.getByRole('button', { name: 'Record the gap' }).click();
+
+			await expect
+				.element(testPage.getByRole('link', { name: 'Select the Doula who cannot be reached' }))
+				.toHaveAttribute('href', '#coverage-gap-staff');
+			await expect.element(gapStaffField()).toHaveAttribute('aria-invalid', 'true');
+			await expect.element(testPage.getByText('Select the Doula who cannot be reached').last()).toBeVisible();
+			expect(posted).toHaveLength(0);
+		});
+
+		it('puts the BFF refusal of the Doula against the field', async () => {
+			await setupOnCall((path, init) =>
+				path === gapsPath && init?.method === 'POST'
+					? jsonResponse(
+							{
+								code: 'invalid_argument',
+								message: 'The coverage gap could not be saved.',
+								details: { staffId: 'Choose a doula who is on this birth.' }
+							},
+							400
+						)
+					: undefined
+			);
+
+			await gapStaffField().selectOptions('Bo Ng');
+			await testPage.getByLabelText('From', { exact: true }).fill('2026-10-20T22:00');
+			await testPage.getByLabelText('Until', { exact: true }).fill('2026-10-21T08:00');
+			await testPage.getByRole('button', { name: 'Record the gap' }).click();
+
+			await expect
+				.element(testPage.getByRole('link', { name: 'Choose a doula who is on this birth.' }))
+				.toHaveAttribute('href', '#coverage-gap-staff');
+		});
+
+		it('lists every on-call Doula under Who is covering while none is chosen, and leaves out the one chosen', async () => {
+			await setupOnCall();
+
+			// An option in a closed <select> is not drawn, so it is counted
+			// rather than asked whether it is visible.
+			await expect.element(coveringField()).toBeVisible();
+			expect(optionNames(coveringField())).toEqual([
+				'Nobody yet',
+				'Persephone Vandermeulen-Achterberg, CD(DONA)',
+				'Bo Ng'
+			]);
+
+			await gapStaffField().selectOptions('Bo Ng');
+
+			await vi.waitFor(() =>
+				expect(optionNames(coveringField())).toEqual(['Nobody yet', 'Persephone Vandermeulen-Achterberg, CD(DONA)'])
+			);
+		});
 	});
 
 	it('clears a gap when the doula can be reached again', async () => {

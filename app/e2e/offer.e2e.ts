@@ -46,6 +46,9 @@ test('Owner offers an Engagement to a Doula, who accepts it from her own inbox',
 
 	// #1598: the person at the screen holds the Doula role too (a founding
 	// Owner signs up with it), and she is not offered her own work.
+	// *Offer this work to* opens with nothing chosen (#1914), so the Owner
+	// answers it before the Doula question is asked.
+	await page.getByLabel('Someone already at this practice').check();
 	await expect(page.getByRole('group', { name: 'Doula', exact: true })).toBeVisible();
 	await expect(page.getByLabel('Jamie Owner')).toHaveCount(0);
 	await page.getByLabel('Casey Contractor').check();
