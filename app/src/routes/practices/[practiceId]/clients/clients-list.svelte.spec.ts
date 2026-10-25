@@ -504,7 +504,8 @@ describe('the Work column (#458)', () => {
 		await setup();
 
 		await expect.element(testPage.getByRole('columnheader', { name: 'Work' })).toBeVisible();
-		await expect.element(testPage.getByRole('cell', { name: 'Has work' })).toBeVisible();
+		// Two of the fixture's three Clients have work, so `first()`.
+		await expect.element(testPage.getByRole('cell', { name: 'Has work' }).first()).toBeVisible();
 		await expect.element(testPage.getByRole('cell', { name: 'No work yet' })).toBeVisible();
 	});
 });

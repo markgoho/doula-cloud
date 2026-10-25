@@ -94,8 +94,35 @@ export const clients: ClientListItem[] = [
 		email: 'persephone@example.test',
 		hasWork: false,
 		pendingRequestKinds: []
+	},
+	/*
+	 * A third Client for the two columns whose longest real value neither
+	 * row above holds (#1945): the Pending request column with a Request
+	 * of each kind ("Birth & Postpartum request pending"), and the Portal
+	 * invite column in its blocked branch, the longest invite words there
+	 * are plus the "Blocked email addresses" link (#785) -- a branch that
+	 * renders differently, so it earns a row of its own.
+	 */
+	{
+		clientId: 'client-3',
+		name: 'Persephone Adebayo-Lindqvist',
+		email: 'persephone.adebayo-lindqvist@example.test',
+		hasWork: true,
+		portalInviteStatus: 'bounced',
+		emailSuppressed: true,
+		pendingRequestKinds: ['birth', 'postpartum']
 	}
 ];
+
+/*
+ * "See everyone" on (#458, #1945): the Work column renders only here, so
+ * without this variant the sweep never measured the widest the table
+ * gets. The same rows as the base, through the base's own `respond`.
+ */
+export const withEveryone: RouteVariant = {
+	name: 'The Clients list, with See everyone on',
+	url: 'https://example.test/practices/practice-1/clients?all=true'
+};
 
 /*
  * The second axis, and the one no row set can reach (#928): who is
@@ -132,5 +159,5 @@ export const fixture: RouteFixture = {
 	props: { data: { isContractor: false } },
 	respond: () => jsonResponse({ items: clients, hasMore: false }),
 	readyText: 'Clients',
-	variants: [asContractorWithNoClients]
+	variants: [asContractorWithNoClients, withEveryone]
 };

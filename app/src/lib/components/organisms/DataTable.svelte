@@ -372,6 +372,10 @@
 			block-size: var(--row-height);
 			padding: 0 var(--space-3);
 			font-size: var(--text-body-sm-size);
+			/* The cells are `body-sm`, so they take `body-sm`'s own line
+			   height (ADR-0060: each role keeps its own leading) rather
+			   than inheriting `body`'s 1.55 from the frame (#1945). */
+			line-height: var(--text-body-sm-leading);
 			text-align: start;
 			border-block-end: var(--border-thin) solid var(--color-outline-variant);
 			/* The companion to shrink-to-fit above (#542): a cell above the
@@ -418,6 +422,7 @@
 
 		td.variant-body {
 			font-size: var(--text-body-size);
+			line-height: var(--text-body-leading);
 		}
 
 		td.muted {
@@ -443,27 +448,34 @@
 		   component that never renders it. The treatment moved to the
 		   route that writes the markup, where its own scope holds it.
 
-		   `--space-1` rather than `--space-2`, which is what the record
-		   view's `dd` spends: the padding lands inside the 2.5rem floor
-		   (`box-sizing: border-box`, reset.css), so a ONE-line content
+		   The padding is what the row leaves around ONE line, split over
+		   the two edges, not a spacing step. It lands inside the row
+		   (`box-sizing: border-box`, reset.css), so a one-line content
 		   cell -- the Clients list's Portal invite column is one -- must
-		   still fit that floor or every row in the table grows and
-		   Skeleton stops reserving the right space. Both tokens are
-		   container-relative clamps and so is `body-sm`, so the margin is
-		   not the same at every width: one line plus 2 x --space-1 fits
-		   the floor everywhere the table view renders, while 2 x
-		   --space-2 stops fitting as the frame widens -- measured going
-		   over at the drag surface's own full width, which is enough to
-		   disqualify it. Since the 16px type floors (ADR-0060, #1943) one
-		   line plus 2 x --space-1 no longer fits the floor above a frame
-		   of about 1430px; #1945 owns the fix, and the row-height spec is
-		   marked `it.fails` until it lands.
+		   still fit `--row-height` or every row in the table grows and
+		   Skeleton stops reserving the right space. A spacing step cannot
+		   promise that: the step, `body-sm` and the line height move on
+		   the ramp at different rates, so a fixed `--space-1` fitted until
+		   the 16px type floors (ADR-0060, #1943) and then pushed a one-line
+		   row to 42.8px at the ramp's ceiling, over the row above a frame
+		   of about 1430px (#1945). Derived from `1lh`, one line plus the
+		   padding and the rule IS the row at every width and at every
+		   `--row-height` (40px, or 44px where an input can tap), and a
+		   cell of more lines keeps that same gap from the rule above and
+		   below it (about 7px at the floor, 5px at the ceiling). Rounded
+		   down to a whole pixel, the hairline's own unit: Chromium lays a
+		   box out in 1/64px steps and rounds the half up, and the 5.1px
+		   the ceiling leaves came out at 5.109px, a 40.02px row.
 
 		   No counterpart for the record view's `<dd>`: it carries
 		   `padding-block` for EVERY cell already (below) and sets no
 		   height at all, so a rule there would override nothing. */
 		td.content {
-			padding-block: var(--space-1);
+			padding-block: round(
+				down,
+				calc((var(--row-height) - var(--border-thin) - 1lh) / 2),
+				var(--border-thin)
+			);
 		}
 
 		/* A content cell that holds a link or a button drops that padding
