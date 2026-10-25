@@ -147,5 +147,16 @@ export default defineConfig(
 		rules: {
 			'@stylistic/quotes': ['error', 'single', { avoidEscape: true, allowTemplateLiterals: 'always' }]
 		}
+	},
+	{
+		// PROTOTYPE (#1926) -- throwaway code on a throwaway branch, exempt
+		// from the production rules. Nothing here reaches trunk.
+		files: ['src/routes/prototype-type-scale/**'],
+		rules: {
+			'svelte/no-restricted-html-elements': 'off',
+			'svelte/no-unused-props': 'off',
+			'unicorn/consistent-boolean-name': 'off',
+			'unicorn/prefer-else-if': 'off'
+		}
 	}
 );

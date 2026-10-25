@@ -226,7 +226,8 @@ const fixtures = new Map(
  * with the app.
  */
 const UNSWEPT_ON = '#595';
-const UNSWEPT: readonly string[] = [];
+// PROTOTYPE (#1926): the throwaway type-scale route, on a branch that never merges.
+const UNSWEPT: readonly string[] = ['prototype-type-scale'];
 
 /*
  * Known-broken today, named rather than suppressed -- the same shape and

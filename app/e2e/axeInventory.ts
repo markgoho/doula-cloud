@@ -47,5 +47,7 @@ export const NOT_SCANNED: ListedRoute[] = [
 		reason:
 			'Sixty-odd component demo pages. They are not archetype routes, and scanning them would roughly triple the run for no additional archetype coverage. Every component on them is already scanned in the place a person meets it.'
 	},
-	{ route: 'demo/*', reason: "SvelteKit's own scaffolding, not a screen in the product." }
+	{ route: 'demo/*', reason: "SvelteKit's own scaffolding, not a screen in the product." },
+	// PROTOTYPE (#1926): the throwaway type-scale route, on a branch that never merges.
+	{ route: 'prototype-type-scale', reason: 'A throwaway prototype on a branch that never merges.' }
 ];
