@@ -101,7 +101,7 @@
 			/* #1968 (ADR-0055: no disabled submit button). Only an Owner
 			   answers this, so anybody else is never handed the questions
 			   and a Save or Publish page she cannot press: she reads that
-			   it is not answered yet, under the Notice saying whose it is.
+			   it is not answered yet, above the Notice saying whose it is.
 			   The BFF refuses her PUT whatever the screen draws. */
 			step = 'saved';
 		}
@@ -358,13 +358,6 @@
 		</center-l>
 	</container-l>
 {:else if current}
-	{#if !isPracticeOwner}
-		<Notice
-			variant="status"
-			message="Only a Practice Owner can change this. Ask an Owner if it needs updating."
-		/>
-	{/if}
-
 	{#if step === 'answers'}
 		<!-- `novalidate`: this page refuses the submit and says so once, at
 		     the top, rather than the browser stopping at the first empty
@@ -478,6 +471,15 @@
 								}}
 							/>
 						</cluster-l>
+					{:else}
+						<!-- In the frame, where an Owner's Change button is (#1971):
+						     the name and timezone screens' shape for a fact she can
+						     read but not change. A non-Owner only ever reaches this
+						     step (onMount above), so this is the one place it goes. -->
+						<Notice
+							variant="status"
+							message="Only a Practice Owner can change this. Ask an Owner if it needs updating."
+						/>
 					{/if}
 				</stack-l>
 			</center-l>

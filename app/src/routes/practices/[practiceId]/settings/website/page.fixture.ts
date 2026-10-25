@@ -7,14 +7,15 @@
  * carry #530's own URL, since a Practice could paste a referral link
  * into either.
  *
- * Two sessions (#928). `isOwner` decides three things here, and one of
- * them is additive: anybody else reads a Notice above the whole screen
- * saying the setting is not hers to change, which no Owner branch draws.
- * The other two only withhold: the Change button, and, for a Practice
- * that has not answered, the questions themselves (#1968), so a non-Owner
- * never meets a Save or Publish page she cannot press. That undeclared
- * non-Owner tree is the Notice and one sentence in the saved frame, a
- * subset of the variant below, so it is left out of the sweep on purpose.
+ * Two sessions, three trees (#928). `isOwner` decides three things here, and one of
+ * them is additive: anybody else reads a Notice in the saved frame, where
+ * an Owner's Change button is, saying the setting is not hers to change
+ * (#1971). The other two only withhold: the Change button, and, for a
+ * Practice that has not answered, the questions themselves (#1968), so a
+ * non-Owner never meets a Save or Publish page she cannot press. That
+ * undeclared non-Owner tree draws a sentence no other branch draws ("Not
+ * answered yet"), so it is swept as its own variant (#1971) rather than
+ * taken as a subset of the answered one.
  */
 import { jsonResponse } from '#lib/testResponse.js';
 import type { PracticeWebsite } from '#lib/website.js';
@@ -37,13 +38,41 @@ export const website: PracticeWebsite = {
 /*
  * Everyone who is not an Owner, Admin included. She reads the same saved
  * answers -- the two pasted URLs above are hers to read as much as the
- * Owner's -- with the Change button gone and a Notice added above them,
+ * Owner's -- with the Change button gone and a Notice in its place,
  * so this branch inherits `respond` deliberately rather than by omission.
  * Its own new line is that Notice, which is this repo's copy.
  */
 export const nonOwner: RouteVariant = {
 	name: 'The Website settings screen, as a non-Owner',
 	pageData: practiceSession(['admin'])
+};
+
+/*
+ * A Practice that has not answered yet, as the server sends it: every
+ * field empty, `mode: 'undeclared'`.
+ */
+export const undeclaredWebsite: PracticeWebsite = {
+	mode: 'undeclared',
+	ownUrl: '',
+	serviceDescription: '',
+	cancellationPolicy: '',
+	updatedBy: '',
+	updatedAt: '',
+	pageState: '',
+	pageCheckedAt: '',
+	pageCheckDetail: '',
+	pageUrl: ''
+};
+
+/*
+ * A non-Owner at a Practice that has not answered (#1968, #1971). No
+ * Owner reaches this tree: an Owner with no answer is on the questions.
+ * Its own `respond`, since the unanswered body is the branch's whole point.
+ */
+export const nonOwnerUnanswered: RouteVariant = {
+	name: 'The Website settings screen, as a non-Owner, not answered yet',
+	pageData: practiceSession(['admin']),
+	respond: () => jsonResponse(undeclaredWebsite)
 };
 
 export const fixture: RouteFixture = {
@@ -54,5 +83,5 @@ export const fixture: RouteFixture = {
 	pageData: practiceSession(['owner']),
 	respond: () => jsonResponse(website),
 	readyText: 'Your website',
-	variants: [nonOwner]
+	variants: [nonOwner, nonOwnerUnanswered]
 };
