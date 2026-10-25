@@ -1,5 +1,5 @@
 import type { ComponentProps } from 'svelte';
-import { page } from 'vitest/browser';
+import { page, userEvent } from 'vitest/browser';
 import { describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import Button from './Button.svelte';
@@ -51,6 +51,27 @@ describe('Button.svelte', () => {
 		await setup({ disabled: true });
 
 		await expect.element(page.getByRole('button')).toBeDisabled();
+	});
+
+	// A field editor's Move down that has just moved its row to the end
+	// (#1920): unavailable, but it keeps focus, so the page is not where
+	// focus lands.
+	it('stays focusable and does nothing when pressed if ariaDisabled', async () => {
+		const { onClick } = await setup({ ariaDisabled: true });
+
+		const button = page.getByRole('button');
+		await expect.element(button).toHaveAttribute('aria-disabled', 'true');
+		(button.element() as HTMLButtonElement).focus();
+		await expect.element(button).toHaveFocus();
+		await userEvent.keyboard('{Enter}');
+		await expect.element(button).toHaveFocus();
+		expect(onClick).not.toHaveBeenCalled();
+	});
+
+	it('carries no aria-disabled when ariaDisabled is not given', async () => {
+		await setup();
+
+		await expect.element(page.getByRole('button')).not.toHaveAttribute('aria-disabled');
 	});
 
 	it('renders an icon alongside the label when icon is given', async () => {

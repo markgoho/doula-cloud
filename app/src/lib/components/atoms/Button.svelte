@@ -17,6 +17,16 @@
 		size?: 'sm' | 'md' | 'lg';
 		type?: 'button' | 'submit' | 'reset';
 		disabled?: boolean;
+		/*
+		 * Unavailable, but still focusable (#1920): `aria-disabled` in place
+		 * of `disabled`, and a press does nothing. For a button that can be
+		 * pressed into its own unavailable state while it has focus -- a
+		 * field editor's *Move down* that has just moved its row to the end
+		 * of the list. A `disabled` button there drops focus to the page,
+		 * and the person is told nothing. Here focus stays, and a screen
+		 * reader reads the button as unavailable.
+		 */
+		ariaDisabled?: boolean;
 		loading?: boolean;
 		icon?: IconName;
 		/*
@@ -69,6 +79,7 @@
 		size = 'md',
 		type = 'button',
 		disabled = false,
+		ariaDisabled = false,
 		loading = false,
 		icon,
 		iconPosition = 'start',
@@ -94,12 +105,13 @@
 	class={buttonClass}
 	class:icon-only={iconOnly}
 	disabled={isDisabled}
+	aria-disabled={ariaDisabled || undefined}
 	aria-busy={loading}
 	aria-expanded={expanded}
 	aria-controls={ariaControls}
 	aria-describedby={describedBy}
 	popovertarget={popoverTarget}
-	onclick={onClick}
+	onclick={ariaDisabled ? undefined : onClick}
 >
 	{#if loading}
 		<span class="spinner" aria-hidden="true"></span>
@@ -155,7 +167,8 @@
 			border: var(--border-thin) solid transparent;
 		}
 
-		button:disabled {
+		button:disabled,
+		button[aria-disabled='true'] {
 			cursor: not-allowed;
 			opacity: var(--opacity-disabled);
 		}
@@ -210,7 +223,7 @@
 			background-color: var(--color-primary);
 		}
 
-		button.primary:not(:disabled):hover {
+		button.primary:not(:disabled, [aria-disabled='true']):hover {
 			background-color: var(--color-primary-hover);
 		}
 
@@ -220,7 +233,7 @@
 			border-color: var(--color-outline);
 		}
 
-		button.secondary:not(:disabled):hover {
+		button.secondary:not(:disabled, [aria-disabled='true']):hover {
 			background-color: var(--color-outline-variant);
 		}
 
@@ -232,7 +245,7 @@
 			background-color: var(--color-error);
 		}
 
-		button.destructive:not(:disabled):hover {
+		button.destructive:not(:disabled, [aria-disabled='true']):hover {
 			opacity: 0.85;
 		}
 
@@ -276,7 +289,7 @@
 			text-decoration: underline;
 		}
 
-		button.link:not(:disabled):hover {
+		button.link:not(:disabled, [aria-disabled='true']):hover {
 			color: var(--color-primary-hover);
 		}
 
@@ -330,7 +343,7 @@
 			font-weight: var(--font-weight-normal);
 		}
 
-		button.bare:not(:disabled):hover {
+		button.bare:not(:disabled, [aria-disabled='true']):hover {
 			color: var(--color-primary);
 		}
 

@@ -1,5 +1,7 @@
 <script lang="ts">
+	import { tick } from 'svelte';
 	import { FIELD_TYPES, isSelectType, type Field, type FieldType } from '#lib/clientFieldTemplate.js';
+	import { focusAfterMove } from '#lib/fieldMoveFocus.js';
 	import Button from '../atoms/Button.svelte';
 	import Heading from '../atoms/Heading.svelte';
 	import Select from '../atoms/Select.svelte';
@@ -54,6 +56,19 @@
 	 * for its End sessions/Remove from Practice dialogs, so only one row's
 	 * ConfirmDialog is ever open at a time. */
 	let confirmArchiveId = $state('');
+	let activeList: HTMLUListElement;
+
+	// A moved row drops focus to the page (#1920); `focusAfterMove` says
+	// where it goes back to, once the consumer has reordered `fields`.
+	async function move(id: string, direction: 'up' | 'down') {
+		if (direction === 'up') {
+			onMoveUp(id);
+		} else {
+			onMoveDown(id);
+		}
+		await tick();
+		focusAfterMove(activeList, id, direction);
+	}
 
 	let activeFields = $derived(fields.filter((f) => !f.archived));
 	let archivedFields = $derived(fields.filter((f) => f.archived));
@@ -82,7 +97,7 @@
 	}
 </script>
 
-<ul>
+<ul bind:this={activeList}>
 	{#each activeFields as field, index (field.id)}
 		<li>
 			<!--
@@ -124,15 +139,15 @@
 			<Button
 				label="Move up"
 				describedBy="{field.id}-move-up-name"
-				onClick={() => onMoveUp(field.id)}
-				disabled={index === 0}
+				onClick={() => move(field.id, 'up')}
+				ariaDisabled={index === 0}
 			/>
 			<span class="visually-hidden" id="{field.id}-move-up-name">{rowName(field)}</span>
 			<Button
 				label="Move down"
 				describedBy="{field.id}-move-down-name"
-				onClick={() => onMoveDown(field.id)}
-				disabled={index === activeFields.length - 1}
+				onClick={() => move(field.id, 'down')}
+				ariaDisabled={index === activeFields.length - 1}
 			/>
 			<span class="visually-hidden" id="{field.id}-move-down-name">{rowName(field)}</span>
 			<Button label="Archive" describedBy="{field.id}-archive-name" onClick={() => (confirmArchiveId = field.id)} />
