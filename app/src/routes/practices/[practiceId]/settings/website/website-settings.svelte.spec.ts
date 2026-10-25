@@ -3,10 +3,11 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import { formatInstant } from '#lib/dates.js';
 import { jsonResponse } from '#lib/testResponse.js';
+import { expectOneFramedHeading } from '#lib/components/templates/pageFrame.testing.js';
 import type { PracticeWebsite } from '#lib/website.js';
 import Page from './+page.svelte';
 import { toPageState } from '../../../../routeFixture.js';
-import { fixture, website as fixtureWebsite } from './page.fixture.js';
+import { fixture, undeclaredWebsite, website as fixtureWebsite } from './page.fixture.js';
 
 /*
  * The `page` this route reads comes from its own fixture (#596), so the
@@ -28,18 +29,7 @@ vi.mock('#lib/api.js', () => ({
 	apiFetchWithSession
 }));
 
-const undeclared = {
-	mode: 'undeclared',
-	ownUrl: '',
-	serviceDescription: '',
-	cancellationPolicy: '',
-	updatedBy: '',
-	updatedAt: '',
-	pageState: '',
-	pageCheckedAt: '',
-	pageCheckDetail: '',
-	pageUrl: ''
-};
+const undeclared = undeclaredWebsite;
 
 interface SetupOptions {
 	// `PracticeWebsite` alongside the bare `Record` so the fixture's own
@@ -387,6 +377,19 @@ describe('website settings screen', () => {
 			.element(testPage.getByRole('radio', { name: 'Publish a page for me' }))
 			.not.toBeInTheDocument();
 		await expect.element(testPage.getByRole('button')).not.toBeInTheDocument();
+	});
+
+	it('keeps the non-Owner Notice inside the page frame, with the heading (#1971)', async () => {
+		await setup({ roles: ['admin'] });
+
+		await expectOneFramedHeading('Your website');
+		const notice = testPage.getByText('Only a Practice Owner can change this. Ask an Owner if it needs updating.');
+		await expect.element(notice).toBeVisible();
+		// The frame is a layout primitive with no role, so `closest` is the
+		// only way to ask (svelte-tests.md's third exception, the reason
+		// `expectOneFramedHeading` gives). Outside `center-l`, the Notice has
+		// no gutter and runs to the window's edges at 320px.
+		expect(notice.element().closest('center-l')).not.toBeNull();
 	});
 
 	it('shows a non-Owner a published page with no Change or Publish page button (#1968)', async () => {
