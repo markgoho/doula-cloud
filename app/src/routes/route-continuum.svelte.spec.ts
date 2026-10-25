@@ -472,8 +472,9 @@ describe('the continuum check, over routes', () => {
  *
  * The same discovery as the component check -- `floor.ts`'s
  * `findConditions` over the raw source, never a list -- and the same two
- * halves: sufficient in every environment, minimal 5% below in the
- * canonical one. A route condition with no entry in `ROUTE_FLOORS` fails,
+ * halves: sufficient in every environment, and minimal in the canonical
+ * one, where some width in the 5% below the floor does not fit (every
+ * step of it, for the reason given where it is built). A route condition with no entry in `ROUTE_FLOORS` fails,
  * and so does an entry with no condition.
  */
 const routeSources = import.meta.glob('./**/+page.svelte', {
@@ -556,21 +557,46 @@ describe('the floor check, over routes (#1945)', () => {
 		 * Client yet draws its empty state, not its ledger -- is left out,
 		 * and a floor no screen renders is reported by the caller.
 		 */
-		async function measureAt(px: number): Promise<TableFitMeasurement[]> {
+		async function measureAt(widths: readonly number[]): Promise<TableFitMeasurement[]> {
 			const measurements: TableFitMeasurement[] = [];
 			for (const fixture of screens) {
 				const { frame, remove } = await mountRoute(fixture);
 				try {
 					if (!conditionContainer(frame, condition)) continue;
 					forceLive(condition, scopeClasses(frame));
-					atConditionWidth(frame, condition, px, TOLERANCE);
-					measurements.push(measureTableFit(conditionContainer(frame, condition)!));
+					for (const px of widths) {
+						atConditionWidth(frame, condition, px, TOLERANCE);
+						/*
+						 * A fixture's rows arrive after `mountInFrame` waited
+						 * for the face, and the table is only shown from the
+						 * sizing above, so any face its text asks for is
+						 * requested now. Measuring before it lands reads the
+						 * fallback.
+						 */
+						await document.fonts.ready;
+						measurements.push(measureTableFit(conditionContainer(frame, condition)!));
+					}
 				} finally {
 					remove();
 				}
 			}
 			return measurements;
 		}
+
+		/*
+		 * Every step of the sweep's resolution from the probe depth up to
+		 * just under the floor, not the one probe the component check
+		 * takes. A table's natural width is not monotonic in the width it
+		 * is given: measured in CI, the invoice list needed 1647px of a
+		 * 1668px column and 1745px of a 1703px one, so a single probe 5%
+		 * down can land in a width that fits while the floor is still the
+		 * width above which the table always fits. Minimal means some
+		 * width in that band does not fit.
+		 */
+		const belowFloorWidths = Array.from(
+			{ length: Math.floor((floorPx - belowFloorPx) / RESOLUTION) },
+			(_, step) => belowFloorPx + step * RESOLUTION
+		);
 
 		function report(measurements: TableFitMeasurement[]): string {
 			return measurements.length === 0
@@ -579,7 +605,7 @@ describe('the floor check, over routes (#1945)', () => {
 		}
 
 		it(`${key} is sufficient at its floor (${condition.floorRem}rem) on every screen`, async () => {
-			const measurements = await measureAt(floorPx);
+			const measurements = await measureAt([floorPx]);
 			expect(
 				measurements.length > 0 &&
 					measurements.every((measurement) => isTableFitAcceptable(measurement, TOLERANCE)),
@@ -587,13 +613,13 @@ describe('the floor check, over routes (#1945)', () => {
 			).toBe(true);
 		});
 
-		const minimalityName = `${key} is minimal: some screen's table does not fit ${floorPx - belowFloorPx}px below its floor`;
+		const minimalityName = `${key} is minimal: some screen's table does not fit somewhere in the ${floorPx - belowFloorPx}px below its floor`;
 		if (isCanonicalEnvironment()) {
 			it(minimalityName, async () => {
-				const measurements = await measureAt(belowFloorPx);
+				const measurements = await measureAt(belowFloorWidths);
 				expect(
 					measurements.some((measurement) => !isTableFitAcceptable(measurement, TOLERANCE)),
-					report(measurements)
+					report(measurements.filter((_, index) => index % belowFloorWidths.length === 0))
 				).toBe(true);
 			});
 		} else {
