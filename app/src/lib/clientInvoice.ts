@@ -16,7 +16,7 @@ import {
 	clientPaymentMethodLabel,
 	paidAndReturnedLabel
 } from './clientRegister.js';
-import { formatInstant } from './dates.js';
+import { formatCalendarDay, formatInstant } from './dates.js';
 import { formatMoney } from './money.js';
 import type { CursorPage } from './paginatedList.svelte.js';
 
@@ -34,7 +34,10 @@ export interface ClientInvoice {
 	reference: string;
 	billingMode: 'stripe' | 'by_hand';
 	createdAt: string;
-	paidAt?: string;
+	/**
+	The day it was paid, `YYYY-MM-DD`, in the Practice's own timezone (#1965).
+	*/
+	paidOn?: string;
 	/**
 	Present only where a manual Payment record exists.
 	*/
@@ -113,10 +116,10 @@ export function invoiceFacts(invoice: ClientInvoice): { label: string; value: st
 		{ label: 'Status', value: invoiceStatusText(invoice) },
 		{ label: 'Sent', value: formatInstant(invoice.createdAt) }
 	];
-	if (invoice.paidAt) {
+	if (invoice.paidOn) {
 		facts.push({
 			label: 'Paid',
-			value: formatInstant(invoice.paidAt)
+			value: formatCalendarDay(invoice.paidOn)
 		});
 	}
 	if (invoice.paidMethod) {

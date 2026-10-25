@@ -12,6 +12,7 @@ import (
 
 	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/clientauth"
+	"doula-cloud/api/internal/practicetimezone"
 )
 
 // msgClientInvoiceNotFound is the one thing a Client is told about an
@@ -36,10 +37,13 @@ type ClientInvoiceView struct {
 	AmountCents int64  `json:"amountCents"`
 	Currency    string `json:"currency"`
 	// Reference is her Invoice number (#981).
-	Reference   string     `json:"reference"`
-	BillingMode string     `json:"billingMode"` // stripe | by_hand
-	CreatedAt   time.Time  `json:"createdAt"`
-	PaidAt      *time.Time `json:"paidAt,omitempty"`
+	Reference   string    `json:"reference"`
+	BillingMode string    `json:"billingMode"` // stripe | by_hand
+	CreatedAt   time.Time `json:"createdAt"`
+	// PaidOn (#1965) is the day she paid, YYYY-MM-DD, in her Practice's
+	// zone -- the same day the Practice's own screens print
+	// (invoicePaidOn).
+	PaidOn *string `json:"paidOn,omitempty"`
 	// PaidMethod is present only where a manual Payment record exists. A
 	// Stripe-paid Invoice carries none, and it stays absent rather than
 	// reading "Card": the model records no card-versus-bank fact about a
@@ -112,8 +116,28 @@ func ClientTotalToPay(ctx context.Context, tx *sql.Tx, engagementID string) (cen
 	return cents, count, nil
 }
 
-// scanClientInvoice reads one row of clientInvoiceSelect.
-func scanClientInvoice(row interface{ Scan(dest ...any) error }) (ClientInvoiceView, error) {
+// clientPracticeZone is the zone of the Practice behind engagementID
+// (#1965), read on the Client's own transaction: engagements is hers to
+// read under her RLS, and practicetimezone.Load reads practices by id.
+func clientPracticeZone(ctx context.Context, tx *sql.Tx, engagementID string) (*time.Location, error) {
+	var practiceID string
+	if err := tx.QueryRowContext(ctx,
+		`SELECT practice_id FROM engagements WHERE id = $1`, engagementID,
+	).Scan(&practiceID); err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests -- clientauth.Middleware already proved she owns this Engagement
+		return nil, fmt.Errorf("payments: read client engagement practice: %w", err)
+	}
+	zone, err := practicetimezone.Load(ctx, tx, practiceID)
+	if err != nil {
+		return nil, fmt.Errorf("payments: load client practice zone: %w", err)
+	}
+	return zone, nil
+}
+
+// scanClientInvoice reads one row of clientInvoiceSelect. A live manual
+// Payment's method is the sign paid_at holds the typed day rather than
+// Stripe's instant (invoicePaidOn).
+func scanClientInvoice(row interface{ Scan(dest ...any) error }, zone *time.Location) (ClientInvoiceView, error) {
 	var it ClientInvoiceView
 	var paidAt sql.NullTime
 	var stripeInvoiceID, method sql.NullString
@@ -121,9 +145,7 @@ func scanClientInvoice(row interface{ Scan(dest ...any) error }) (ClientInvoiceV
 		&it.CreatedAt, &paidAt, &method, &it.RefundedCents); err != nil {
 		return ClientInvoiceView{}, fmt.Errorf("payments: scan client invoice: %w", err)
 	}
-	if paidAt.Valid {
-		it.PaidAt = &paidAt.Time
-	}
+	it.PaidOn = invoicePaidOn(paidAt, method.Valid, zone)
 	if method.Valid {
 		it.PaidMethod = &method.String
 	}
@@ -155,7 +177,12 @@ func ClientListInvoicesHandler() http.Handler {
 			after = &c
 		}
 
-		items, hasMore, err := listClientInvoices(r.Context(), tx, engagementID, after)
+		zone, err := clientPracticeZone(r.Context(), tx, engagementID)
+		if err != nil {
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+			return
+		}
+		items, hasMore, err := listClientInvoices(r.Context(), tx, engagementID, after, zone)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
@@ -178,7 +205,7 @@ func ClientListInvoicesHandler() http.Handler {
 }
 
 // listClientInvoices fetches one page under engagementID.
-func listClientInvoices(ctx context.Context, tx *sql.Tx, engagementID string, after *invoiceCursor) ([]ClientInvoiceView, bool, error) {
+func listClientInvoices(ctx context.Context, tx *sql.Tx, engagementID string, after *invoiceCursor, zone *time.Location) ([]ClientInvoiceView, bool, error) {
 	var rows *sql.Rows
 	var err error
 	if after != nil {
@@ -194,7 +221,7 @@ func listClientInvoices(ctx context.Context, tx *sql.Tx, engagementID string, af
 
 	items := []ClientInvoiceView{}
 	for rows.Next() {
-		it, err := scanClientInvoice(rows)
+		it, err := scanClientInvoice(rows, zone)
 		if err != nil {
 			// coverage:ignore reason: row scan failure, not exercised by unit tests
 			return nil, false, fmt.Errorf("payments: scan client invoice row: %w", err)
@@ -232,7 +259,12 @@ func ClientGetInvoiceHandler() http.Handler {
 			return
 		}
 
-		it, err := scanClientInvoice(tx.QueryRowContext(r.Context(), clientInvoiceOneQuery, engagementID, invoiceID))
+		zone, err := clientPracticeZone(r.Context(), tx, engagementID)
+		if err != nil {
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+			return
+		}
+		it, err := scanClientInvoice(tx.QueryRowContext(r.Context(), clientInvoiceOneQuery, engagementID, invoiceID), zone)
 		if errors.Is(err, sql.ErrNoRows) {
 			apierr.WriteError(w, msgClientInvoiceNotFound, http.StatusNotFound)
 			return

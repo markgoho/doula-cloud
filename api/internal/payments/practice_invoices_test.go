@@ -247,18 +247,20 @@ func TestGetPracticeInvoicesHandler_ClientsCanPay(t *testing.T) {
 	}
 }
 
-// TestGetPracticeInvoicesHandler_PaidAtRoundTrips proves a paid Invoice
-// carries the date it was paid, so the list can say when rather than only
-// naming the status.
-func TestGetPracticeInvoicesHandler_PaidAtRoundTrips(t *testing.T) {
+// TestGetPracticeInvoicesHandler_ByHandPaidOnIsTheTypedDay proves a paid
+// Invoice carries the day it was paid, so the list can say when rather
+// than only naming the status -- and that for a by-hand Payment it is the
+// day the recorder typed (#1965), not that day's UTC midnight read in New
+// York, which is the day before.
+func TestGetPracticeInvoicesHandler_ByHandPaidOnIsTheTypedDay(t *testing.T) {
 	db := testdb.New(t)
 	const uid = "practice-invoices-paid-at"
 	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
 	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Ada Client", "ada@example.com")
 	contractID := seedDraftContract(t, db, engagementID)
 	invoiceID := seedInvoice(t, db, practiceID, contractID, "in_paid_at", "paid", 4200, time.Now())
-	paidAt := time.Now().UTC().Truncate(time.Second)
-	if _, err := db.Admin.ExecContext(t.Context(), `UPDATE invoices SET paid_at = $1 WHERE id = $2`, paidAt, invoiceID); err != nil {
+	seedManualPayment(t, db, invoiceID, methodCheck, "")
+	if _, err := db.Admin.ExecContext(t.Context(), `UPDATE invoices SET paid_at = '2026-10-25T00:00:00Z' WHERE id = $1`, invoiceID); err != nil {
 		t.Fatalf("set paid_at: %v", err)
 	}
 
@@ -269,8 +271,8 @@ func TestGetPracticeInvoicesHandler_PaidAtRoundTrips(t *testing.T) {
 	if len(out.Items) != 1 {
 		t.Fatalf("items = %d, want 1", len(out.Items))
 	}
-	if out.Items[0].PaidAt == nil || !out.Items[0].PaidAt.Equal(paidAt) {
-		t.Fatalf("paidAt = %v, want %v", out.Items[0].PaidAt, paidAt)
+	if out.Items[0].PaidOn == nil || *out.Items[0].PaidOn != dayOct25 {
+		t.Fatalf("paidOn = %v, want 2026-10-25", out.Items[0].PaidOn)
 	}
 }
 

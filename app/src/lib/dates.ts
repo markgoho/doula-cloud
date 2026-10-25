@@ -43,32 +43,14 @@ export function formatInstantWithClock(value: string): string {
  * A due date is a calendar day, not an instant: it must not shift by one
  * when the reader's zone is behind UTC, so the day is built from its own
  * parts rather than parsed as UTC midnight. `value` is the date-only
- * `YYYY-MM-DD` form a `type="date"` control posts.
+ * `YYYY-MM-DD` form a `type="date"` control posts, and the form the BFF
+ * sends an Invoice's `dueOn` and `paidOn` in (#1965): days it has already
+ * read in the Practice's own timezone, so the reader's zone must not move
+ * them again.
  */
 export function formatCalendarDay(value: string): string {
 	const [year, month, day] = value.split('-').map(Number);
 	return formatDay(new Date(year!, month! - 1, day!));
-}
-
-/**
- * A calendar day that arrives as a full timestamp at UTC midnight of that
- * day, read as the day it names (#1958). An Invoice's `paidAt` is the
- * case: `invoices.paid_at` is a timestamptz, and the by-hand rail
- * (`manual_payment.go`) writes the recorder's date-only `paidOn` into it
- * as `2026-10-25T00:00:00Z`. Read as an instant, that is Oct 24 in any
- * zone behind UTC -- a Payment shown a day before it was recorded. So the
- * day is built from the timestamp's own UTC parts, the way
- * `formatCalendarDay` builds it from a date-only string's.
- *
- * The Stripe rail writes Stripe's own instant into the same column, so a
- * card Payment made late in a US evening reads here as the UTC day,
- * which is the next one. The BFF sending the day itself is the whole
- * fix; until then the recorded day is the one the person typed, and it
- * is never wrong.
- */
-export function formatUtcCalendarDay(value: string): string {
-	const instant = new Date(value);
-	return formatDay(new Date(instant.getUTCFullYear(), instant.getUTCMonth(), instant.getUTCDate()));
 }
 
 /**

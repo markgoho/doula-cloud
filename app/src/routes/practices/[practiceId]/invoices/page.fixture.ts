@@ -38,10 +38,11 @@ export const data: PracticeInvoiceListData = {
 			// carrying #537's hostile client-name value.
 			reference: 'INV-0042',
 			billingMode: 'by_hand',
-			// #768: overdue since well before this fixture's own "now", so the
-			// "Payment due" cell renders its longest form -- a date plus a day
-			// count -- at every width the continuum sweeps.
-			dueAt: '2026-08-31T00:00:00Z'
+			// #768: overdue, so the "Payment due" cell renders its longest
+			// form -- a date plus a day count -- at every width the continuum
+			// sweeps. The count is the BFF's, in the Practice's zone (#1965).
+			dueOn: '2026-08-31',
+			daysOverdue: 56
 		},
 		{
 			id: 'inv-2',
@@ -53,14 +54,16 @@ export const data: PracticeInvoiceListData = {
 			amountCents: 250_000,
 			currency: 'usd',
 			createdAt: '2026-07-01T00:00:00Z',
-			paidAt: '2026-07-04T00:00:00Z',
+			paidOn: '2026-07-04',
 			// #271: the Stripe rail's own reference, so this fixture's two
 			// rows realize both billing-mode states the "Billed via" column
 			// renders.
 			reference: 'DC-0092',
 			billingMode: 'stripe',
-			// Paid, so its due date reads plainly however long ago it passed.
-			dueAt: '2026-07-31T00:00:00Z'
+			// Paid, so its due date reads plainly however long ago it passed:
+			// the BFF counts no lateness on a settled Invoice.
+			dueOn: '2026-07-31',
+			daysOverdue: 0
 		}
 	],
 	hasMore: false,

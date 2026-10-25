@@ -5,7 +5,6 @@ import {
 	formatInstant,
 	formatInstantWithClock,
 	formatPortalVisit,
-	formatUtcCalendarDay,
 	formatScheduledVisit,
 	toDatetimeLocalValue
 } from './dates.js';
@@ -21,10 +20,6 @@ describe('the instant / calendar-day distinction', () => {
 	// UTC+11, so this fixture's day holds wherever the suite runs.
 	it('reads a timestamp as an instant in the reader own zone, month first', () => {
 		expect(formatInstant('2026-08-01T12:00:00Z')).toBe('Aug 1, 2026');
-	});
-
-	it('reads a calendar day sent as UTC midnight as the day it names', () => {
-		expect(formatUtcCalendarDay('2026-10-25T00:00:00Z')).toBe('Oct 25, 2026');
 	});
 
 	it('reads an instant to the minute in the reader own zone', () => {

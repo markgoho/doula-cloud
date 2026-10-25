@@ -1,84 +1,34 @@
 /*
- * #768. "Overdue" is derived, never stored: an Invoice is late when its
- * own due date has passed and it is still awaiting payment. These tests
- * move the comparison time rather than waiting for one to arrive, which
- * is the only way the fact can be proven -- Stripe emits no event when a
- * due date passes, and nothing in this product runs on a schedule.
+ * #768. "Overdue" is derived, never stored. Since #1965 the BFF derives
+ * it: an Invoice is late from the start of the day after its `dueOn` in
+ * the Practice's own timezone, and each row of the Practice-wide list
+ * carries `daysOverdue`, counted at the same instant as the page's
+ * overdue figure. The screen prints what it was sent.
  *
  * Its own file rather than more of `invoice.spec.ts`: that file is the
- * Invoice module's request surface, and this is the derivation over what
- * comes back from it.
+ * Invoice module's request surface, and this is what the screen makes of
+ * what comes back from it.
  */
 import { describe, expect, it, vi } from 'vitest';
-import { formatInstant } from './dates.js';
-import {
-	daysOverdue,
-	dueLabel,
-	loadPaymentTerms,
-	practiceInvoicesPath,
-	setPaymentTerms,
-	type Invoice
-} from './invoice.js';
+import { dueLabel, loadPaymentTerms, practiceInvoicesPath, setPaymentTerms } from './invoice.js';
 import { jsonResponse } from './testResponse.js';
-
-const openInvoice: Invoice = {
-	id: 'inv-1',
-	contractId: 'contract-1',
-	status: 'open',
-	amountCents: 15_000,
-	currency: 'usd',
-	createdAt: '2026-09-01T00:00:00Z',
-	dueAt: '2026-10-01T00:00:00Z',
-	reference: 'INV-0001',
-	refundedCents: 0,
-	billingMode: 'by_hand'
-};
-
-describe('daysOverdue', () => {
-	it('counts whole days once the due instant has passed', () => {
-		expect(daysOverdue(openInvoice.dueAt, new Date('2026-10-06T00:00:00Z'))).toBe(5);
-	});
-
-	it('is zero before the due date, and on the due instant itself', () => {
-		expect(daysOverdue(openInvoice.dueAt, new Date('2026-09-30T23:59:00Z'))).toBe(0);
-		expect(daysOverdue(openInvoice.dueAt, new Date('2026-10-01T00:00:00Z'))).toBe(0);
-	});
-
-	it('does not round a partial day up: an hour late is not a day late', () => {
-		expect(daysOverdue(openInvoice.dueAt, new Date('2026-10-01T01:00:00Z'))).toBe(0);
-	});
-});
 
 describe('dueLabel', () => {
 	it('says how late an unpaid invoice is, in the plural it earns', () => {
-		expect(dueLabel(openInvoice, new Date('2026-10-02T00:00:00Z'))).toContain('1 day overdue');
-		expect(dueLabel(openInvoice, new Date('2026-10-04T00:00:00Z'))).toContain('3 days overdue');
+		expect(dueLabel({ dueOn: '2026-10-01', daysOverdue: 1 })).toBe('Oct 1, 2026 — 1 day overdue');
+		expect(dueLabel({ dueOn: '2026-10-01', daysOverdue: 3 })).toBe('Oct 1, 2026 — 3 days overdue');
 	});
 
-	it('calls an invoice overdue from the instant it falls due, not a day later', () => {
-		// The BFF counts this Invoice in the Practice's overdue total the
-		// moment the date passes, so the row it lists must not read as if
-		// nothing had happened for the rest of that day.
-		expect(dueLabel(openInvoice, new Date('2026-10-01T01:00:00Z'))).toContain('overdue');
-		expect(dueLabel(openInvoice, new Date('2026-10-01T01:00:00Z'))).not.toContain('day');
+	// The BFF sends 0 for an Invoice within its terms, on its own due day,
+	// and for every settled one, however long ago its day passed.
+	it('says only the day when the BFF counted no lateness', () => {
+		expect(dueLabel({ dueOn: '2026-10-01', daysOverdue: 0 })).toBe('Oct 1, 2026');
 	});
 
-	it('says only the date while an invoice is still within its terms', () => {
-		expect(dueLabel(openInvoice, new Date('2026-09-15T00:00:00Z'))).not.toContain('overdue');
-	});
-
-	// `due_at` is a timestamptz the BFF compares as an instant
-	// (payment_terms.go), so the date is the instant in the reader's zone,
-	// month first (#1958), never "10/1/2026".
-	it('prints the due date as an instant, month first', () => {
-		expect(dueLabel(openInvoice, new Date('2026-09-15T00:00:00Z'))).toBe(formatInstant(openInvoice.dueAt));
-		expect(dueLabel(openInvoice, new Date('2026-09-15T00:00:00Z'))).toMatch(/^[A-Z][a-z]{2} \d{1,2}, 2026$/);
-	});
-
-	it('never calls a settled invoice late, however long ago its date passed', () => {
-		for (const status of ['paid', 'void', 'uncollectible']) {
-			expect(dueLabel({ ...openInvoice, status }, new Date('2027-01-01T00:00:00Z'))).not.toContain('overdue');
-		}
+	// `dueOn` is a calendar day, month first (#1958), never "10/1/2026",
+	// and never moved by the reader's zone (dates.zone.spec.ts).
+	it('prints the due day month first', () => {
+		expect(dueLabel({ dueOn: '2026-10-01', daysOverdue: 0 })).toMatch(/^[A-Z][a-z]{2} \d{1,2}, 2026$/);
 	});
 });
 

@@ -40,19 +40,16 @@ const paymentTermsDay = 24 * time.Hour
 // It is a duration and not netDays calendar days, so the answer does not
 // depend on a timezone -- not the Practice's, not the Postgres session's,
 // not this process's. Across a daylight-saving change the two readings
-// differ by an hour, and three records settle which one this is:
+// differ by an hour, and two records settle which one this is:
 //
-//   - ADR-0038 makes the due date an instant, and derives Overdue from an
-//     instant comparison (due_at < now()). There is no calendar day in
-//     it. ADR-0036's calendar day is about date columns and names its own
-//     scope; due_at is a timestamptz.
+//   - ADR-0038 makes the due date an instant, stored as due_at. Since
+//     #1965 that instant is read as a day in the Practice's zone
+//     (invoice_days.go), but the instant itself is still this one.
 //   - ADR-0038 took 30 days from what the Stripe rail already applied as
 //     days_until_due, and Stripe counts that day as 86,400 seconds:
 //     measured on the Sandbox on 2026-10-02, days_until_due=30 gave a
 //     due_date exactly 2,592,000 seconds after created, across the
 //     25-hour day of 2026-11-01.
-//   - The app counts days late the same way, in whole 24-hour periods
-//     from the due instant.
 //
 // The second is the resolution Stripe's own due_date carries: the value
 // sent to Stripe as a Unix timestamp and the value stored on the row are
