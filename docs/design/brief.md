@@ -120,28 +120,28 @@ The mechanism is already correct in `tokens.css` — `prefers-color-scheme` with
 
 **One family: Hanken Grotesk.** Headings, body, labels, buttons, tables. There is no second family and no display serif. Hierarchy comes from size, weight and tracking, never from a change of voice.
 
-Hanken Grotesk is the deliberate choice, not a default. It is a humanist grotesque with slightly open apertures and a real italic, so it stays legible at 13–14px in a dense table while having more character than the Inter / Roboto / system-ui field the rest of the category sits in. It is on Google Fonts under the SIL Open Font License; **self-host it** alongside the Phosphor icon pipeline rather than linking to a Google CDN, for the same privacy and performance reasons that decision was made for icons.
+Hanken Grotesk is the deliberate choice, not a default. It is a humanist grotesque with slightly open apertures and a real italic, so it stays legible in a dense table while having more character than the Inter / Roboto / system-ui field the rest of the category sits in. It is on Google Fonts under the SIL Open Font License; **self-host it** alongside the Phosphor icon pipeline rather than linking to a Google CDN, for the same privacy and performance reasons that decision was made for icons.
 
 Fallback stack, in order, so a face that has not loaded still sets close to the metrics: `"Hanken Grotesk", ui-sans-serif, system-ui, sans-serif`.
 
 ### The scale
 
-The current `--text-*` ramp in `tokens.css` was never chosen — it is a placeholder. Replace it. Sizes are `rem`, at a `16px` root.
+The scale is one ratio, 1.25, from a 16px floor ([ADR-0060](../adr/0060-the-visual-craft-books-stay-evidence-and-the-type-scale-is-one-ratio-from-16px.md)). The four steps from `body` down are all 16px and differ only by weight, line height and tracking, and each step above `body` is 1.25 times the step below it, so nothing is under 16px. Sizes are `rem`, at a `16px` root. Each size in the table is the step's floor: `tokens.css` grows it to 1.2 times the floor across the ramp ([#531](https://github.com/markgoho/doula-cloud/issues/531)).
 
 | Step | Size | Weight | Line height | Tracking | Used for |
 |---|---|---|---|---|---|
-| `display` | `2.25rem` / 36px | 600 | 1.15 | `-0.02em` | The one page title on a hub where its column holds a reading measure (`heading-lg` below that, [#1632](https://github.com/markgoho/doula-cloud/issues/1632)), and the greeting on the signed-out landing ([#1645](https://github.com/markgoho/doula-cloud/issues/1645)) |
-| `heading-lg` | `1.75rem` / 28px | 600 | 1.2 | `-0.018em` | Page titles elsewhere, and a hub title in a column narrower than a reading measure |
-| `heading` | `1.25rem` / 20px | 600 | 1.3 | `-0.012em` | Section headings |
-| `subheading` | `1rem` / 16px | 600 | 1.4 | `-0.006em` | Card and group titles |
-| `body` | `0.9375rem` / 15px | 400 | 1.55 | `0` | Prose, form values, list rows |
-| `body-sm` | `0.875rem` / 14px | 400 | 1.5 | `0` | Table cells, dense rows |
-| `label` | `0.8125rem` / 13px | 500 | 1.35 | `0.005em` | Field labels, nav, buttons |
-| `meta` | `0.75rem` / 12px | 400 | 1.4 | `0.01em` | Timestamps, attribution, help text |
+| `display` | `2.44140625rem` / 39.06px | 600 | 1.15 | `-0.02em` | The one page title on a hub where its column holds a reading measure (`heading-lg` below that, [#1632](https://github.com/markgoho/doula-cloud/issues/1632)), and the greeting on the signed-out landing ([#1645](https://github.com/markgoho/doula-cloud/issues/1645)) |
+| `heading-lg` | `1.953125rem` / 31.25px | 600 | 1.2 | `-0.018em` | Page titles elsewhere, and a hub title in a column narrower than a reading measure |
+| `heading` | `1.5625rem` / 25px | 600 | 1.3 | `-0.012em` | Section headings |
+| `subheading` | `1.25rem` / 20px | 600 | 1.4 | `-0.006em` | Card and group titles |
+| `body` | `1rem` / 16px | 400 | 1.55 | `0` | Prose, form values, list rows |
+| `body-sm` | `1rem` / 16px | 400 | 1.5 | `0` | Table cells, dense rows |
+| `label` | `1rem` / 16px | 500 | 1.35 | `0.005em` | Field labels, nav, buttons |
+| `meta` | `1rem` / 16px | 400 | 1.4 | `0.01em` | Timestamps, attribution, help text |
 
 Four standing rules:
 
-- **Tracking tightens as size grows and loosens as it shrinks.** The table above already does this; do not set a heading at `0` tracking.
+- **Above `body`, tracking tightens as size grows.** The table above already does this; do not set a heading at `0` tracking. From `body` down the four roles share one size, 16px, and each keeps its own tracking at that size (`meta` `0.01em`, `label` `0.005em`, `body-sm` and `body` `0`), as the prototype the founder picked the scale on rendered them (ADR-0060).
 - **Tabular figures everywhere a number can be compared** — money, dates, invoice numbers, counts in a table column. `font-variant-numeric: tabular-nums`.
 - **Prose gets a measure.** The existing `--measure: 65ch` cap stays and applies to any run of reading text. Form fields are sized to their content, not to the measure.
 - **No all-caps text.** Size, weight and tracking already make the hierarchy, and `meta` in `on-surface-muted` already marks a group label, so capitals would be a second signal that needs a tracking token of its own to be set well (ADR-0060, [#1946](https://github.com/markgoho/doula-cloud/issues/1946)). A label is written in sentence case and no CSS sets it in capitals: `tokens.usage.spec.ts` refuses `text-transform: uppercase` and all small caps.
@@ -150,7 +150,7 @@ Four standing rules:
 
 The survey behind [#406](https://github.com/markgoho/doula-cloud/issues/406) landed on one sentence, and this brief adopts it whole: **compact rows, airy forms.**
 
-- **Lists and tables are compact.** A table row is `40px` at `body-sm` when every input is fine. A person scanning fifty clients should see as many as will fit without the page becoming a wall. When any input can tap, the row is as tall as a touch target needs, as the hit-target rule below says.
+- **Lists and tables are compact.** A table row is `40px` when every input is fine, and its cells are at `body-sm`, which is 16px like body text, so a row is compact because of its `40px` height and its spacing, not because of a smaller size (ADR-0060). A person scanning fifty clients should see as many as will fit without the page becoming a wall. When any input can tap, the row is as tall as a touch target needs, as the hit-target rule below says.
 - **Forms are comfortable.** A form control is `40px` tall with `12px` of horizontal padding; consecutive fields are `20px` apart; a labeled field group is `28px` from the next. Filling in an intake form is careful work and is not the place to save vertical space.
 - **The spacing scale stays on a 4px base.** The existing `--space-*` ramp is correct and is kept. Page gutters are `40px` at desktop width; card padding is `20px 22px`.
 - **The top bar is `60px`.** It carries the product name, the flat nav, the Practice switcher and the avatar menu on one line, and it does not grow.
