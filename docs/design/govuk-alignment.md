@@ -36,11 +36,11 @@ A row is not automatically Open just because GOV.UK is silent on it -- silence i
 
 1. **GOV.UK Design System.**
 2. **NHS.UK Design System and ONS Design System**, tied.
-3. **Inclusive Components** (Heydon Pickering) and **Adrian Roselli's** writing, tied.
+3. **Inclusive Components** (Heydon Pickering) and **Adrian Roselli's** writing, tied. For forms only (a screen that asks a person a question, checks the answer, or reports a refusal), **Form Design Patterns** (Adam Silver) is tied with them, by [ADR-0055](../adr/0055-form-design-patterns-is-a-rank-three-source-for-forms.md).
 4. **Every Layout.**
 5. **Original work, with a recorded reason.**
 
-A row answered this way carries the status **Answered -- \<source\>** (e.g. `Answered -- ONS`), not Departed: nothing was overridden, because GOV.UK had no decision to override. See rule 5 below.
+A row answered this way carries the status **Answered -- \<source\>** (e.g. `Answered -- ONS`, or `Answered -- Form Design Patterns` for a forms row), not Departed: nothing was overridden, because GOV.UK had no decision to override. See rule 5 below.
 
 ## Autocomplete: whose data it is
 
