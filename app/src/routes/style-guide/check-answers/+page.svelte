@@ -76,7 +76,7 @@
 				},
 				{
 					label: 'Date of birth',
-					value: '4 February 1990',
+					value: 'Feb 4, 1990',
 					changeHref: here,
 					changes: 'date of birth'
 				}

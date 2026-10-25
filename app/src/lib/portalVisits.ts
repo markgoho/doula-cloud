@@ -25,7 +25,7 @@ import type { CursorPage } from './paginatedList.svelte.js';
  * One Visit as a Client reads it: when it is, who is coming, and whether
  * it has happened. `hasHappened` is the server's own answer (portal.Visit,
  * api/internal/portal/visits.go), so "Thursday at 2pm" and "she came on
- * 18 August" are told apart without the browser comparing clocks.
+ * August 18" are told apart without the browser comparing clocks.
  *
  * `scheduledAt` is not optional, unlike the Staff-side Visit's: a Visit
  * nobody has scheduled never reaches this response -- `created_at` is

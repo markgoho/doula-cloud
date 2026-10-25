@@ -91,7 +91,7 @@ describe('the Practice-wide schedule (#263)', () => {
 		// the reader's own zone, so the assertion is on the machine-readable
 		// value; `querySelector` because an attribute has no accessible
 		// query of its own.
-		const whenCell = testPage.getByRole('cell', { name: /Sep 2026/ }).first();
+		const whenCell = testPage.getByRole('cell', { name: /Sep \d+, 2026/ }).first();
 		await expect.element(whenCell).toBeVisible();
 		expect(whenCell.element().querySelector('time')).toHaveAttribute(
 			'datetime',

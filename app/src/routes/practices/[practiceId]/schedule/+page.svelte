@@ -103,7 +103,7 @@
 
 	/*
 	 * Client first, because `DataTable` puts the row's link on its first
-	 * column and only there: a link named "12 Sep 2026, 10:30am" says
+	 * column and only there: a link named "Sep 12, 2026, 10:30am" says
 	 * nothing about where it goes, and every other Practice-wide list in
 	 * the product (Contracts, Invoices, Clients) already puts the way in
 	 * on the Client's name. It also keeps `When` out of that branch, which

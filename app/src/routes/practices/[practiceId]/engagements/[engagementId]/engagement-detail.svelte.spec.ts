@@ -467,7 +467,7 @@ describe('the Visits section Date column and schedule control (#250)', () => {
 		const hour12 = scheduled.getHours() % 12 === 0 ? 12 : scheduled.getHours() % 12;
 		const minute = scheduled.getMinutes().toString().padStart(2, '0');
 		const suffix = scheduled.getHours() < 12 ? 'am' : 'pm';
-		const expected = `${scheduled.getDate()} ${scheduled.toLocaleDateString('en-US', { month: 'short' })} ${scheduled.getFullYear()}, ${hour12}:${minute}${suffix}`;
+		const expected = `${scheduled.toLocaleDateString('en-US', { month: 'short' })} ${scheduled.getDate()}, ${scheduled.getFullYear()}, ${hour12}:${minute}${suffix}`;
 		await expect.element(testPage.getByRole('cell', { name: expected, exact: true })).toBeVisible();
 		await expect.element(testPage.getByRole('cell', { name: 'Not yet scheduled', exact: true })).toBeVisible();
 	});

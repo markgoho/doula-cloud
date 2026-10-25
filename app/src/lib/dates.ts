@@ -92,7 +92,7 @@ export function formatScheduledVisit(value: string | undefined): string {
 
 /**
  * A Visit as her own portal shows it (#478), and the one place the
- * difference between "Thursday at 2pm" and "she came on 18 August" is
+ * difference between "Thursday at 2pm" and "she came on August 18" is
  * written. `hasHappened` is the server's own answer (portal.Visit's
  * `hasHappened`, decided against the database clock), never a comparison
  * this module makes against the reader's device: two people looking at
@@ -107,7 +107,8 @@ export function formatScheduledVisit(value: string | undefined): string {
  * later ("when Maya came"). The year is on the past form alone -- a
  * scheduled Visit is inside the pregnancy she is living in, a past one
  * may not be. Both are the design source's own two rows on
- * `Your care - Desktop` ("Thu 4 Sep, 2pm", "18 Aug 2026"), with this
+ * `Your care - Desktop`, read month-day per ADR-0022's 2026-10-24
+ * amendment (#1940): "Thu Sep 4, 2:00pm", "Aug 18, 2026", with this
  * file's existing `formatClock` for the hour rather than a second clock
  * format of its own.
  */
@@ -140,14 +141,15 @@ const HOUR_MS = 60 * MINUTE_MS;
 const DAY_MS = 24 * HOUR_MS;
 const WEEK_MS = 7 * DAY_MS;
 
-/** "18 Aug 2026", or "18 Aug" without the year -- the absolute calendar
- * day every formatter here prints, written once. Day, then short month,
- * then year: the order the Activity ledger's absolute branch established
- * (ADR-0022's own worked example, "31 Jul 2026, 8:00pm") and the one the
- * two Visit formatters below it already followed by hand. */
+/** "Aug 18, 2026", or "Aug 18" without the year -- the absolute calendar
+ * day every formatter here prints, written once. Short month, then day,
+ * then year: the order a person in the United States reads and says a
+ * date in, which ADR-0022's 2026-10-24 amendment (#1940) sets for the
+ * Activity ledger's absolute branch ("Aug 14, 2026, 8:12pm") and every
+ * Visit formatter here. */
 function formatDay(date: Date, { withYear = true } = {}): string {
-	const day = `${date.getDate()} ${date.toLocaleDateString('en-US', { month: 'short' })}`;
-	return withYear ? `${day} ${date.getFullYear()}` : day;
+	const day = `${date.toLocaleDateString('en-US', { month: 'short' })} ${date.getDate()}`;
+	return withYear ? `${day}, ${date.getFullYear()}` : day;
 }
 
 /** "9:31am" / "12:00pm" -- 12-hour, lowercase am/pm, no periods, minutes

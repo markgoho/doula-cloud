@@ -13,7 +13,7 @@ export interface Field {
 
 export const exerciseFields: readonly Field[] = [
 	{ label: 'Client', value: 'Anne-Marie Ochieng-Whitfield' },
-	{ label: 'Due date', value: '14 September 2027' },
+	{ label: 'Due date', value: 'Sep 14, 2027' },
 	{ label: 'Address', value: '128 Meadowbrook Lane, Apartment 4B, Rochester, NY 14620' },
 	{
 		label: 'Referral',

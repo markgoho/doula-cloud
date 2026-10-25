@@ -46,15 +46,15 @@
 	const offers: Offer[] = [
 		{
 			client: 'Anne-Marie Ochieng-Whitfield',
-			received: '2 March 2027',
+			received: 'Mar 2, 2027',
 			status: 'Awaiting reply'
 		},
 		{
 			client: 'Persephone Adeyemi-Wollstonecraft',
-			received: '28 February 2027',
+			received: 'Feb 28, 2027',
 			status: 'Awaiting reply'
 		},
-		{ client: 'Renata Chiamaka Okonkwo-Adeyemi', received: '26 February 2027', status: 'Accepted' }
+		{ client: 'Renata Chiamaka Okonkwo-Adeyemi', received: 'Feb 26, 2027', status: 'Accepted' }
 	];
 
 	const rosterItems = [
@@ -80,12 +80,12 @@
 		<stack-l space="var(--space-4)">
 			<Heading level={2} variant="section" text="Recent activity" />
 			<Text
-				text="Persephone Adeyemi-Wollstonecraft sent an invoice for $4,250.00 to Anne-Marie Ochieng-Whitfield — 1 March 2027, 9:14am."
+				text="Persephone Adeyemi-Wollstonecraft sent an invoice for $4,250.00 to Anne-Marie Ochieng-Whitfield — Mar 1, 2027, 9:14am."
 				step="body-sm"
 				tone="variant"
 			/>
 			<Text
-				text="Renata Chiamaka Okonkwo-Adeyemi accepted an Offer — 28 February 2027, 4:02pm."
+				text="Renata Chiamaka Okonkwo-Adeyemi accepted an Offer — Feb 28, 2027, 4:02pm."
 				step="body-sm"
 				tone="variant"
 			/>
@@ -104,7 +104,7 @@
 	<section>
 		<stack-l space="var(--space-4)">
 			<Heading level={2} variant="card" text="Payments" />
-			<Badge label="Payouts enabled, next on 15 March 2027" variant="success" />
+			<Badge label="Payouts enabled, next on Mar 15, 2027" variant="success" />
 			<Text text="42 credits remaining." step="body-sm" tone="variant" />
 		</stack-l>
 	</section>

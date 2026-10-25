@@ -118,7 +118,7 @@ describe('RadioGroup.svelte', () => {
 		const { container } = await render(RadioGroup<Mode>, {
 			legend: 'Mode',
 			options: [
-				{ value: 'signup' as Mode, label: 'Sarah Whitfield', description: 'Added 4 March 2026.' },
+				{ value: 'signup' as Mode, label: 'Sarah Whitfield', description: 'Added Mar 4, 2026.' },
 				{ value: 'login' as Mode, label: 'No, this is a different person' }
 			],
 			value: 'signup',
@@ -126,7 +126,7 @@ describe('RadioGroup.svelte', () => {
 		});
 
 		const described = page.getByLabelText('Sarah Whitfield').element().getAttribute('aria-describedby');
-		expect(container.querySelector(`#${described}`)?.textContent).toBe('Added 4 March 2026.');
+		expect(container.querySelector(`#${described}`)?.textContent).toBe('Added Mar 4, 2026.');
 		expect(
 			page.getByLabelText('No, this is a different person').element().getAttribute('aria-describedby')
 		).toBeNull();
