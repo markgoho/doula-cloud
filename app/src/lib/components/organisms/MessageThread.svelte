@@ -180,8 +180,14 @@
 			color: var(--color-on-surface);
 		}
 
+		/* A native file control sizes itself from its own button and its
+		   "No file chosen" text, and at the 16px `body` floor (ADR-0060)
+		   that is wider than a 320px screen's 288px column (#1943). Capping
+		   it at its column lets the text truncate inside the control, which
+		   is the browser's own behavior for a narrow file input. */
 		input[type='file'] {
 			display: block;
+			max-inline-size: 100%;
 			margin-block-start: var(--space-1);
 		}
 	}

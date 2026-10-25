@@ -254,8 +254,9 @@ describe('the manifest colors are the sRGB equivalents of two tokens', () => {
  * The fluid scale -- #531, written in #540.
  *
  * Every type size and every spacing step is a `clamp()` that climbs the
- * ramp. The floor is the design decision and the only free number here;
- * everything else is arithmetic, so this re-derives it. A literal edited by
+ * ramp. The floor is the design decision (for type, itself one 16px floor
+ * and one ratio, held below); everything else is arithmetic, so this
+ * re-derives it. A literal edited by
  * hand in `tokens.css` -- a ceiling nudged, a slope rounded, a step left
  * static when the rest moved -- fails here rather than shipping.
  *
@@ -319,6 +320,28 @@ const spacingSteps = [
 const TYPE_GROWTH = 1.2;
 const SPACING_GROWTH = 1.5;
 
+/* The type floors -- ADR-0060, positions 4 and 5. Nothing is under 16px,
+   so every step from `body` down sits on one floor, and each step above
+   `body` is one ratio up from the step below. Two numbers, as
+   TYPE_GROWTH is one: a floor nudged by hand, or rounded (`2.44rem` for
+   `display`), fails here. */
+const TYPE_FLOOR = 1;
+const TYPE_RATIO = 1.25;
+const stepsAtTheFloor = [
+	'--text-meta-size',
+	'--text-label-size',
+	'--text-body-sm-size',
+	'--text-body-size'
+];
+// Smallest first, so each one's floor is the ratio times the one before it.
+const stepsAboveBody = [
+	'--text-body-size',
+	'--text-subheading-size',
+	'--text-heading-size',
+	'--text-heading-lg-size',
+	'--text-display-size'
+];
+
 const fluidSteps = [
 	...typeSteps.map((name) => [name, TYPE_GROWTH] as const),
 	...spacingSteps.map((name) => [name, SPACING_GROWTH] as const)
@@ -339,6 +362,26 @@ describe('the ramp is declared once', () => {
 			.map(([name]) => name);
 		expect(offenders).toStrictEqual([]);
 	});
+});
+
+describe('the type scale is one ratio from a 16px floor', () => {
+	it('covers every type step, below body or above it', () => {
+		expect(new Set([...stepsAtTheFloor, ...stepsAboveBody])).toStrictEqual(new Set(typeSteps));
+	});
+
+	it.each(stepsAtTheFloor)('%s has a floor of 1rem, so nothing is under 16px', (name) => {
+		expect(parseFluidStep(name).floor).toBe(TYPE_FLOOR);
+	});
+
+	it.each(stepsAboveBody.slice(1).map((name, index) => [name, stepsAboveBody[index]!] as const))(
+		'%s has a floor 1.25 times %s',
+		(name, below) => {
+			expect(parseFluidStep(name).floor, `${name} floor`).toBeCloseTo(
+				parseFluidStep(below).floor * TYPE_RATIO,
+				6
+			);
+		}
+	);
 });
 
 describe('every size and every space is a fluid step', () => {

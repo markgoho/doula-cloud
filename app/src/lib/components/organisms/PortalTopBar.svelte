@@ -200,8 +200,14 @@
 
 		   Unchanged by #1573, which let the bar grow to a wrapped name: the
 		   floor is an inline measurement, and a taller bar needs no more
-		   inline room than a fixed one did. */
-		@container portal-top-bar (min-width: 44.5rem) {
+		   inline room than a fixed one did.
+
+		   Re-measured 2026-10-25 (#1943), when the type floors moved to
+		   16px (ADR-0060): the five items needed 770px at 712px on macOS
+		   and 779px at 772px, and 49rem (784px) holds in CI's Linux/
+		   Chromium, with no margin added beyond it. #1945 checks the nav
+		   at `label` 16px and measures again. */
+		@container portal-top-bar (min-width: 49rem) {
 			.wide {
 				display: flex;
 			}
