@@ -58,8 +58,8 @@ func invoicePaidOn(paidAt sql.NullTime, recordedByHand bool, loc *time.Location)
 //
 // Midnight exists on every day in every US zone, whose clocks change at
 // 2am. In a zone whose clock jumps at midnight, time.Date normalizes the
-// missing instant to the first one that exists, which is still the start
-// of that day.
+// missing midnight to an instant within an hour of it; which one is not
+// guaranteed, so there the boundary can be off by that hour.
 func overdueFrom(now time.Time, loc *time.Location) time.Time {
 	year, month, day := now.In(loc).Date()
 	return time.Date(year, month, day, 0, 0, 0, 0, loc)
