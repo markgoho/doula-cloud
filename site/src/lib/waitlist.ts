@@ -26,6 +26,14 @@ export const UTM_PARAMETERS = ['utm_source', 'utm_medium', 'utm_campaign', 'utm_
  * update, and an empty `metadata__*` value clears the tag it held
  * (#1771).
  *
+ * For the same reason it leaves a blank first name out of the
+ * submission (#1898). That input is visible and optional, so it cannot
+ * start `disabled`; the form's `formdata` event drops it instead, which
+ * changes only what is posted and never the input a person types into,
+ * so the field still works when Buttondown's error page sends them back.
+ * The address is never touched. With the script blocked, a blank first
+ * name still posts.
+ *
  * It runs in the page as an inline script (`utmScript` below), not
  * through SvelteKit, which ships no JavaScript on this site (`csr =
  * false`). So it must be self-contained: it names the four parameters
@@ -42,6 +50,14 @@ export function fillUtmFields(search: string): void {
 			input.value = value;
 			input.disabled = false;
 		}
+	}
+	const firstName = document.querySelector('input[name="metadata__first_name"]');
+	if (firstName instanceof HTMLInputElement && firstName.form) {
+		firstName.form.addEventListener('formdata', (event) => {
+			if (event.formData.getAll('metadata__first_name').join('').trim() === '') {
+				event.formData.delete('metadata__first_name');
+			}
+		});
 	}
 }
 

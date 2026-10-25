@@ -68,7 +68,8 @@ not open yet. #366 records the address; `WAITLIST_FORM_ACTION` carries it.
 				</stack-l>
 			</form>
 			<!-- ADR-0016's first-party script: it copies the address bar's
-			     utm_* values into the hidden inputs above. Inline, after the
+			     utm_* values into the hidden inputs above, and leaves a blank
+			     first name out of the submission (#1898). Inline, after the
 			     inputs it fills, because the site ships no bundle. -->
 			<!-- eslint-disable-next-line svelte/no-at-html-tags -- a fixed string of our own, not visitor input -->
 			{@html utmScriptElement}
