@@ -18,21 +18,30 @@ export const WAITLIST_FORM_ACTION: string | undefined =
 export const UTM_PARAMETERS = ['utm_source', 'utm_medium', 'utm_campaign', 'utm_content'] as const;
 
 /**
- * Copies each campaign parameter in `search` into its hidden input.
+ * Copies each campaign parameter in `search` into its hidden input, and
+ * turns that input on.
+ *
+ * The inputs start `disabled`, so that the form posts only the ones it
+ * fills: Buttondown treats a second signup from the same address as an
+ * update, and an empty `metadata__*` value clears the tag it held
+ * (#1771).
  *
  * It runs in the page as an inline script (`utmScript` below), not
  * through SvelteKit, which ships no JavaScript on this site (`csr =
  * false`). So it must be self-contained: it names the four parameters
  * itself and reaches for nothing outside its own body, because
- * `utmScript` is its source text. If it is blocked, the hidden inputs
- * post empty and the signup still works.
+ * `utmScript` is its source text. If it is blocked, no hidden input
+ * posts and the signup still works.
  */
 export function fillUtmFields(search: string): void {
 	const parameters = new URLSearchParams(search);
 	for (const name of ['utm_source', 'utm_medium', 'utm_campaign', 'utm_content']) {
 		const value = parameters.get(name);
 		const input = document.querySelector(`input[name="${CSS.escape(`metadata__${name}`)}"]`);
-		if (value && input instanceof HTMLInputElement) input.value = value;
+		if (value && input instanceof HTMLInputElement) {
+			input.value = value;
+			input.disabled = false;
+		}
 	}
 }
 

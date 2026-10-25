@@ -58,8 +58,11 @@ not open yet. #366 records the address; `WAITLIST_FORM_ACTION` carries it.
 							required
 						/>
 					</div>
+					<!-- Off until the script below fills one: Buttondown clears a
+					     tag an empty value posts over, so an unfilled input stays
+					     out of the submission (#1771). -->
 					{#each UTM_PARAMETERS as parameter (parameter)}
-						<input type="hidden" name={`metadata__${parameter}`} value="" />
+						<input type="hidden" name={`metadata__${parameter}`} value="" disabled />
 					{/each}
 					<button type="submit">Add me to the list</button>
 				</stack-l>

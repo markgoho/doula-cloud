@@ -1,6 +1,7 @@
 import { page as testPage, userEvent } from 'vitest/browser';
 import { describe, expect, it } from 'vitest';
 import { render } from 'vitest-browser-svelte';
+import { fillUtmFields } from '#lib/waitlist.js';
 import WaitlistCard from './WaitlistCard.svelte';
 
 const action = 'https://buttondown.example/api/emails/embed-subscribe/doulacloud';
@@ -47,6 +48,34 @@ describe('WaitlistCard, with Buttondown’s address (#358)', () => {
 			.element(testPage.getByText('A confirmation email now, a welcome once you confirm, and one when we open.', { exact: false }))
 			.toBeVisible();
 		await expect.element(testPage.getByRole('link', { name: 'Privacy Policy' })).toHaveAttribute('href', '/privacy');
+	});
+
+	// A signup with an empty campaign input would clear the tag Buttondown
+	// already holds for that address (#1771), so an input the script has
+	// not filled is not part of the submission. A script inserted as
+	// markup does not run, so a render here is a page with the script
+	// blocked.
+	it('submits only the name and the address while no campaign input is filled (#1771)', async () => {
+		const { container } = await render(WaitlistCard, { action });
+		await testPage.getByLabelText('First name').fill('Ada');
+		await testPage.getByLabelText('Email address').fill('ada@example.com');
+		await expect.element(testPage.getByRole('button', { name: 'Add me to the list' })).toBeVisible();
+		expect([...new FormData(container.querySelector('form')!)]).toEqual([
+			['metadata__first_name', 'Ada'],
+			['email', 'ada@example.com']
+		]);
+	});
+
+	it('submits each campaign input the script fills, with its value (#1771)', async () => {
+		const { container } = await render(WaitlistCard, { action });
+		await testPage.getByLabelText('Email address').fill('ada@example.com');
+		fillUtmFields('?utm_source=dona-summit-2026&utm_campaign=booth');
+		expect([...new FormData(container.querySelector('form')!)]).toEqual([
+			['metadata__first_name', ''],
+			['email', 'ada@example.com'],
+			['metadata__utm_source', 'dona-summit-2026'],
+			['metadata__utm_campaign', 'booth']
+		]);
 	});
 
 	it('carries the script that fills the hidden inputs, after them', async () => {
