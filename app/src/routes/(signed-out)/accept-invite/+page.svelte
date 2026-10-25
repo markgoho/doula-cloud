@@ -152,6 +152,13 @@
 
 		await submission.run(async () => {
 			const refusals: FormError[] = [];
+			// First, in field order: the question comes before the fields
+			// whose meaning it decides (#1959).
+			if (mode === undefined)
+				refusals.push({
+					message: 'Select whether you are new here or already have an account',
+					targetId: modeFieldId
+				});
 			if (email.trim() === '')
 				refusals.push({ message: 'Enter your email address', targetId: emailId });
 			if (password === '') {
@@ -163,12 +170,6 @@
 				const refusal = await passwordRefusal(password);
 				if (refusal) refusals.push({ message: refusal, targetId: passwordId });
 			}
-			// Last, in field order: the question sits under the password.
-			if (mode === undefined)
-				refusals.push({
-					message: 'Select whether you are new here or already have an account',
-					targetId: modeFieldId
-				});
 			if (refusals.length > 0) return refusals;
 
 			credential =
@@ -390,6 +391,19 @@
 		<!-- `novalidate`: the page refuses the submit, not the browser (#467). -->
 		<StackedForm onSubmit={handleIdentify}>
 			<Text text="First, sign in or create an account with the address your invite was sent to." />
+			<!--
+				The question comes first (#1959): its answer says whether the
+				password below is a new one or the one she already has, and so
+				which autocomplete and which password rule apply.
+			-->
+			<RadioGroup
+				legend="Do you already have a DoulaCloud account?"
+				name={modeName}
+				options={modeOptions}
+				value={mode}
+				onChange={(value) => (mode = value)}
+				error={submission.errorFor(modeFieldId)}
+			/>
 			<LabeledField id={emailId} label="Email" error={submission.errorFor(emailId)}>
 				{#snippet children({ id, describedBy, invalid })}
 					<TextInput
@@ -425,14 +439,6 @@
 					/>
 				{/snippet}
 			</LabeledField>
-			<RadioGroup
-				legend="Account mode"
-				name={modeName}
-				options={modeOptions}
-				value={mode}
-				onChange={(value) => (mode = value)}
-				error={submission.errorFor(modeFieldId)}
-			/>
 			<Button type="submit" label="Continue" loading={submission.isSubmitting} />
 		</StackedForm>
 	{:else if step === 'confirm-sign-out'}
