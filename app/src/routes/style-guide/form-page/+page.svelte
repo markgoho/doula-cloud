@@ -79,6 +79,7 @@
 	<LabeledField
 		id={dueDateId}
 		label="Estimated due date"
+		hint="For example, 2 April 2027"
 		error={hasError ? 'Enter a due date, like 2 April 2027' : undefined}
 	>
 		{#snippet children({ id, describedBy, invalid })}
@@ -86,7 +87,6 @@
 				{id}
 				{describedBy}
 				{invalid}
-				placeholder="2 April 2027"
 				value={dueDate}
 				onInput={(value) => (dueDate = value)}
 			/>
@@ -101,14 +101,12 @@
 		tone="variant"
 	/>
 
+	<!-- No hint: a Practice-defined field carries only its label
+	     (ClientFieldAnswers), and the example answer this demo used to
+	     show as a placeholder was filler (#1751). -->
 	<LabeledField label="Planned place of birth">
 		{#snippet children({ id })}
-			<TextInput
-				{id}
-				placeholder="Rochester General Hospital Birthing Center"
-				value={birthPlace}
-				onInput={(value) => (birthPlace = value)}
-			/>
+			<TextInput {id} value={birthPlace} onInput={(value) => (birthPlace = value)} />
 		{/snippet}
 	</LabeledField>
 {/snippet}

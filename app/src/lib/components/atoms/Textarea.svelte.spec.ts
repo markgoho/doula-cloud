@@ -46,14 +46,22 @@ describe('Textarea.svelte', () => {
 		await expect.element(page.getByRole('textbox')).toHaveAttribute('id', 'contract-prose');
 	});
 
-	it('reflects name, placeholder, required and disabled', async () => {
-		await setup({ name: 'terms', placeholder: 'Terms', required: true, disabled: true });
+	it('reflects name, required and disabled', async () => {
+		await setup({ name: 'terms', required: true, disabled: true });
 		const textbox = page.getByRole('textbox');
 
 		await expect.element(textbox).toHaveAttribute('name', 'terms');
-		await expect.element(textbox).toHaveAttribute('placeholder', 'Terms');
 		await expect.element(textbox).toHaveAttribute('required');
 		await expect.element(textbox).toBeDisabled();
+	});
+
+	// GOV.UK refuses a placeholder (#1751): the prop is gone, so writing one
+	// fails svelte-check, and nothing reaches the element if it is forced.
+	it('offers no placeholder', async () => {
+		// @ts-expect-error -- `placeholder` is not a prop of this atom (#1751).
+		await setup({ placeholder: 'Terms' });
+
+		await expect.element(page.getByRole('textbox')).not.toHaveAttribute('placeholder');
 	});
 
 	it('names itself with ariaLabel, for the rows that have no label of their own', async () => {

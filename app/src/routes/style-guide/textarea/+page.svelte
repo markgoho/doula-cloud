@@ -16,7 +16,7 @@
 	<section>
 		<h2>Default</h2>
 		<p>Four rows to start with. Type past them and the field grows, up to twenty rows.</p>
-		<Textarea value={note} onInput={(value) => (note = value)} placeholder="Anything you want your Doula to know before the birth" />
+		<Textarea value={note} onInput={(value) => (note = value)} />
 	</section>
 
 	<section>

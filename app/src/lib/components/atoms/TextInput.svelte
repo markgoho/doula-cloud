@@ -54,7 +54,6 @@
 		onInput,
 		type = 'text',
 		name,
-		placeholder,
 		required = false,
 		disabled = false,
 		invalid = false,
@@ -91,7 +90,12 @@
 		 */
 		type?: 'text' | 'email' | 'password' | 'tel' | 'url' | 'search' | 'number' | 'date' | 'datetime-local';
 		name?: string;
-		placeholder?: string;
+		/*
+		 * No `placeholder` (#1751). GOV.UK's Text input guidance, adopted by
+		 * ADR-0021: placeholder text is not a label, a hint or an example,
+		 * and it goes away the moment a person types. A hint belongs on
+		 * `LabeledField`, where it stays on screen and is announced.
+		 */
 		required?: boolean;
 		disabled?: boolean;
 		invalid?: boolean;
@@ -175,7 +179,6 @@
 		type={effectiveType}
 		{name}
 		{value}
-		{placeholder}
 		{required}
 		{disabled}
 		{minlength}

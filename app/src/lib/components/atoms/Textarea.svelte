@@ -65,7 +65,6 @@
 		value,
 		onInput,
 		name,
-		placeholder,
 		required = false,
 		disabled = false,
 		invalid = false,
@@ -84,7 +83,8 @@
 		value: string;
 		onInput: (value: string) => void;
 		name?: string;
-		placeholder?: string;
+		// No `placeholder`, for the reason TextInput gives (#1751): a hint
+		// goes on `LabeledField`.
 		required?: boolean;
 		disabled?: boolean;
 		invalid?: boolean;
@@ -133,7 +133,6 @@
 	{name}
 	{value}
 	{rows}
-	{placeholder}
 	{required}
 	{disabled}
 	{autocomplete}

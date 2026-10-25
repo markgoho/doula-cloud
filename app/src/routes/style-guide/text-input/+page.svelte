@@ -3,8 +3,8 @@
 
 	const noop = () => {};
 
-	let name = $state('');
-	let email = $state('');
+	let name = $state('Anne-Marie Ochieng-Whitfield');
+	let email = $state('anne-marie.ochieng-whitfield@highland-midwifery-group.example.org');
 	let quantity = $state('1');
 	let dueDate = $state('');
 	let password = $state('correct horse battery staple');
@@ -21,33 +21,21 @@
 			what a Client types into this field, and the longest email a Practice
 			hands out. Neither overflows on its own -- a browser breaks on "-"
 			and "@" (#521) -- so what they test is the field's own width, not the
-			row's.
+			row's. Both are values, not placeholders: this atom has no
+			placeholder, because GOV.UK's Text input guidance refuses one
+			(#1751). A hint goes on LabeledField.
 		-->
-		<TextInput
-			value={name}
-			onInput={(value) => (name = value)}
-			placeholder="Full legal name, as it appears on the Contract"
-		/>
+		<TextInput value={name} onInput={(value) => (name = value)} />
 	</section>
 
 	<section>
 		<h2>Email type</h2>
-		<TextInput
-			type="email"
-			value={email}
-			onInput={(value) => (email = value)}
-			placeholder="anne-marie.ochieng-whitfield@highland-midwifery-group.example.org"
-		/>
+		<TextInput type="email" value={email} onInput={(value) => (email = value)} />
 	</section>
 
 	<section>
 		<h2>Number type</h2>
-		<TextInput
-			type="number"
-			value={quantity}
-			onInput={(value) => (quantity = value)}
-			placeholder="1"
-		/>
+		<TextInput type="number" value={quantity} onInput={(value) => (quantity = value)} />
 	</section>
 
 	<section>

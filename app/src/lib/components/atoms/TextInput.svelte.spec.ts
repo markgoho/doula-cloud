@@ -117,6 +117,15 @@ describe('TextInput.svelte', () => {
 		await expect.element(page.getByRole('textbox')).toBeDisabled();
 	});
 
+	// GOV.UK refuses a placeholder (#1751): the prop is gone, so writing one
+	// fails svelte-check, and nothing reaches the element if it is forced.
+	it('offers no placeholder', async () => {
+		// @ts-expect-error -- `placeholder` is not a prop of this atom (#1751).
+		await setup({ placeholder: 'Full legal name' });
+
+		await expect.element(page.getByRole('textbox')).not.toHaveAttribute('placeholder');
+	});
+
 	it('reflects required', async () => {
 		await setup({ required: true });
 
