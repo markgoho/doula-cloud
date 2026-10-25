@@ -36,7 +36,7 @@ A row is not automatically Open just because GOV.UK is silent on it -- silence i
 
 1. **GOV.UK Design System.**
 2. **NHS.UK Design System and ONS Design System**, tied.
-3. **Inclusive Components** (Heydon Pickering) and **Adrian Roselli's** writing, tied. For forms only (a screen that asks a person a question, checks the answer, or reports a refusal), **Form Design Patterns** (Adam Silver) is tied with them, by [ADR-0055](../adr/0055-form-design-patterns-is-a-rank-three-source-for-forms.md).
+3. **Inclusive Components** (Heydon Pickering) and **Adrian Roselli's** writing, tied. [ADR-0057](../adr/0057-inclusive-components-stays-a-rank-three-source-and-a-control-that-acts-at-once-is-a-switch.md) confirms the book's rank, with two limits: the decision is taken and never the markup, and the book's browser facts are checked against today's support before use. For forms only (a screen that asks a person a question, checks the answer, or reports a refusal), **Form Design Patterns** (Adam Silver) is tied with them, by [ADR-0055](../adr/0055-form-design-patterns-is-a-rank-three-source-for-forms.md).
 4. **Every Layout.**
 5. **Original work, with a recorded reason.**
 
