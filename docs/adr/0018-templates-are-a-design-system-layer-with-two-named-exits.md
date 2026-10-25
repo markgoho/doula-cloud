@@ -228,3 +228,37 @@ The cause was the sentence in the 2026-09-02 amendment above: no Template "owns 
 **The welcome block is centered side to side in its panel, at every width.** Mark asked for this the same day, on seeing the page at 4K: a greeting held to the left edge of a 1000px panel left most of the panel empty. The mark and the two lines keep one shared left edge, and the block as a whole sits in the middle. A first build centered it only where the panels sit side by side and started it at the gutter where they stack, to keep one left edge with the doors; Mark saw that on a phone-width window and rejected it, because a welcome that is centered on a large screen and not on a small one reads as a defect. So it is one rule with no switch. The mark's cap moved from a percentage of the block to `55cqi` of the page: a block that shrinks to its content would otherwise size the mark off the greeting's length.
 
 `<main>` is not made a flex column for every page, which would have been the shorter rule. A flex column changes how its children's margins collapse and how an auto-margined child sizes, on every route, to serve one Template. The opt-in changes `<main>` only on the page that asks.
+
+## Amendment, 2026-10-25 — ADR-0058 is the decision under the tier names, and the bar between the two exits is restated
+
+Filed as [#1906](https://github.com/markgoho/doula-cloud/issues/1906), from [ADR-0058](0058-atomic-design-names-the-tiers-and-two-consumers-that-should-change-together-earn-a-variant.md), positions 1 and 6, which the founder decided on [#1721](https://github.com/markgoho/doula-cloud/issues/1721) on 2026-10-24.
+
+**The tier names now stand on a decision.** *Template means the Atomic Design layer* above keeps the names because "Atomic Design is one of two things the map declared it would not change". That sentence was written before [ADR-0041](0041-a-book-enters-the-repo-as-evidence-and-becomes-a-rule-only-through-a-decision.md), under which a book is evidence and only the founder's recorded decision makes it a rule. ADR-0058 is that decision under ADR-0041. *Atomic Design* is adopted for two things only: the names of the tiers (atoms, molecules, organisms and Templates), and the split between a Template and a page, a page being a Template with real content in it. Nothing else in the book is adopted, and the book takes no place in [ADR-0021](0021-govuk-is-the-reference-for-service-patterns.md)'s order of sources. The sentence above stays as it was written, as the reason the names were first kept.
+
+**The bar is restated.** This amendment supersedes the bar sentence in *Two named exits, and no third* above, "One consumer stays a raw exception; two identical consumers earn a variant or a Template". The two named exits hold, and so does the rule that deviation is never anonymous. The bar between the two exits is now:
+
+- **Two consumers that should change together earn a variant or a Template.** Two things are one pattern when a change to one should change the other the same way. "Identical" was a proxy for this, and the proxy failed both ways: two byte-identical blocks can drift apart on purpose, and two slightly different ones can be one pattern with a variant.
+- **A thing that only a Template or an atom can hold enters on its first consumer.**
+- **The bar covers a new molecule, organism or Template, and a new variant of one of those.** An atom keeps growing on its first need, as [`docs/design/workflow.md`](../design/workflow.md) already says ("grow the atom"). A new variant of an atom is the atom growing, so it also enters on its first need. The founder settled the variant case on 2026-10-24, on [#1906](https://github.com/markgoho/doula-cloud/issues/1906#issuecomment-6392468282).
+
+**Two earlier amendments now sit inside the rule.** The 2026-10-02 `LandingPage` amendment, "One consumer clears the bar here, and the reason is not a new exit", is the rule's own single-consumer case: the frame and the brief's `display` step can only live in a Template, so `LandingPage` enters on its first consumer. The 2026-09-20 amendment holds as written: reuse of a Template whose region already fits, as the Offer read reused `EntryPage`, stays outside the bar, because it makes nothing new.
+
+The text of *Two named exits, and no third* and of the earlier amendments stays as it was written, as the record of what was decided then and on which bar.
+
+## Amendment, 2026-10-25 — a component is named by its structure or by its one domain thing
+
+Filed as [#1907](https://github.com/markgoho/doula-cloud/issues/1907), from [ADR-0058](0058-atomic-design-names-the-tiers-and-two-consumers-that-should-change-together-earn-a-variant.md), position 4, which the founder decided on [#1721](https://github.com/markgoho/doula-cloud/issues/1721) on 2026-10-24. *Template means the Atomic Design layer* above settles only the suffix: none, because "the directory carries the tier". This amendment writes the rest of the naming rule, as the code already follows it:
+
+- **Atoms and Templates are named by structure:** `Button`, `Notice`, `ListPage`, `RecordDetail`.
+- **A molecule or organism that exists for one domain thing is named for that thing,** in [`GLOSSARY.md`](../../GLOSSARY.md)'s words: `ContractForm`, `BirthPlanView`, `PracticeSwitcher`, `InvoiceSection`, `OfferInbox`, `ClientFieldTemplateEditor`.
+- **No name describes the look or is a metaphor.**
+- **No name carries a tier suffix**, as the suffix rule above says.
+
+The reason: a `ContractForm` holds the Contract's fields and nothing else does, so its name is its purpose, and a name with no context would hide that purpose. The bar in the amendment above is what splits a reusable part out of such a component.
+
+**No component is renamed.** A check of the 77 components on trunk (17 atoms, 28 molecules, 22 organisms and 10 Templates, the count ADR-0058 records for 2026-10-24) found two names that the rule may not fit. Each goes to the interface inventory, [#1908](https://github.com/markgoho/doula-cloud/issues/1908), to decide, and none is renamed here:
+
+- `atoms/DoorLink`: "door" is the 2026-10-02 design's metaphor for a large link on the signed-out landing.
+- `organisms/ContractTemplateEditor`: "Contract Template" is not a `GLOSSARY.md` term, though **Plan Template** and **Client Field Template** are.
+
+Names of a known structure, such as `Skeleton`, `Drawer`, `Badge` and `StepRail`, and GOV.UK's `CheckAnswers` and `WarningText`, read as structure. `PageTitle.svelte` sits outside every tier directory, so the rule does not reach it.

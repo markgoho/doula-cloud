@@ -62,6 +62,10 @@ A throwaway UI prototype for the founder to review: where its route lives, the s
 
 The GOV.UK Design System is the default reference for any screen that asks a person for something or reports a failure — the decision, never the markup or the look. See `docs/adr/0021-govuk-is-the-reference-for-service-patterns.md` for the rule and `docs/design/govuk-alignment.md` for the pattern-by-pattern table. Check the table before building such a screen; a departure needs a recorded reason.
 
+### Components
+
+Read before adding a component, a variant, or a Template to `app/src/lib/components/`. `docs/adr/0018-templates-are-a-design-system-layer-with-two-named-exits.md` holds the four tiers, the naming rule and the bar for when a new component or variant is made (its 2026-10-25 amendments). `docs/design/workflow.md`, "Carrying a design into code", is the procedure.
+
 ### Copy
 
 The Voice section of `docs/design/brief.md` is the rule for every line a person reads on screen. Read it before writing or changing one. In short: no third-person pronoun for anyone, "you" and "your" for the reader, a clear label with at most one short line under it, a line a person would say aloud, and the words a doula or a Client has said in place of ours. `app/src/lib/copy.pronoun.usage.spec.ts` enforces the pronoun rule; `app/src/lib/copy.secondPerson.usage.spec.ts` enforces the narrow set of impersonal forms it can find where the reader is known ("owed" and "the Client" on a screen the Client reads, "Staff member" on the signed-in person's own account screen), with `voice:ignore` and a reason on the line as the deliberate override; the remainder is checked in review.
