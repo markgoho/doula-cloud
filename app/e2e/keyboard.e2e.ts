@@ -358,11 +358,16 @@ test('An Owner decides a pending Engagement Request, with no pointer at any step
 	await page.keyboard.press('Enter');
 	await expect(page).toHaveURL(new RegExp(`/practices/${practiceId}/engagement-requests/${requestId}$`));
 
-	// Stage 4 -- Approve is reachable, but not pressed: this Request is
-	// decided exactly once, and Refuse is the decision this walk proves.
-	const approveButton = page.getByRole('button', { name: 'Approve and start the work' });
-	await tabTo(page, approveButton, 'the Approve button on the approval screen');
-	await expect(approveButton).toBeFocused();
+	// Stage 4 -- "Do you approve this work?" (#2043). With neither answer
+	// chosen, Tab lands on the group's first radio, Approve; the arrow key
+	// moves to Refuse, which reveals the reason under it. Approve is
+	// reachable but not chosen: this Request is decided exactly once, and
+	// Refuse is the decision this walk proves.
+	const approveRadio = page.getByRole('radio', { name: 'Approve and start the work' });
+	await tabTo(page, approveRadio, 'the Approve answer on the approval screen');
+	await expect(approveRadio).toBeFocused();
+	await page.keyboard.press('ArrowDown');
+	await expect(page.getByRole('radio', { name: 'Refuse' })).toBeChecked();
 
 	await tabTo(
 		page,
@@ -373,8 +378,8 @@ test('An Owner decides a pending Engagement Request, with no pointer at any step
 
 	await tabTo(
 		page,
-		page.getByRole('button', { name: 'Refuse this request' }),
-		'the Refuse button on the approval screen'
+		page.getByRole('main').getByRole('button', { name: 'Continue' }),
+		'the Continue button on the approval screen'
 	);
 	await page.keyboard.press('Enter');
 

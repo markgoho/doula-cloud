@@ -169,6 +169,15 @@ const hasAccountRadio = () => testPage.getByRole('radio', { name: /I already hav
 const accountQuestion = () =>
 	testPage.getByRole('group', { name: 'Do you already have a DoulaCloud account?' });
 
+async function summaryLinks(): Promise<string[]> {
+	const summary = testPage.getByRole('alert').first();
+	await expect.element(summary.getByRole('link').first()).toBeVisible();
+	return summary
+		.getByRole('link')
+		.elements()
+		.map((link) => link.textContent.trim());
+}
+
 async function identify(mode: 'signup' | 'login' = 'signup') {
 	await (mode === 'login' ? hasAccountRadio() : newHereRadio()).click();
 	await emailField().fill('priya@example.com');
@@ -195,14 +204,15 @@ describe('step one -- the account question opens with nothing chosen (#1915)', (
 		await expect.element(hasAccountRadio()).not.toBeChecked();
 	});
 
-	// Until she says which, the screen claims neither a new password nor a
-	// saved one, and states no rule for a password it may not be setting.
-	it('claims no autocomplete and states no password rule until she answers', async () => {
+	// Until she says which, the screen asks for no email and no password
+	// (#2035): one decision at a time, and no password rule for a password
+	// it may not be setting.
+	it('draws no email, no password and no password rule until she answers', async () => {
 		await setup();
 
-		await expect.element(emailField()).not.toHaveAttribute('autocomplete');
-		await expect.element(passwordField()).not.toHaveAttribute('autocomplete');
-		await expect.element(passwordField()).not.toHaveAttribute('passwordrules');
+		await expect.element(accountQuestion()).toBeVisible();
+		await expect.element(emailField()).not.toBeInTheDocument();
+		await expect.element(passwordField()).not.toBeInTheDocument();
 		expect(
 			testPage.getByText('Must be 15 characters or more, and not a commonly used password').elements()
 		).toHaveLength(0);
@@ -210,8 +220,6 @@ describe('step one -- the account question opens with nothing chosen (#1915)', (
 
 	it('refuses Continue with no answer, before anything is sent', async () => {
 		await setup();
-		await emailField().fill('priya@example.com');
-		await passwordField().fill('correct horse battery');
 
 		await continueButton().click();
 
@@ -226,24 +234,33 @@ describe('step one -- the account question opens with nothing chosen (#1915)', (
 		expect(apiFetch).not.toHaveBeenCalled();
 	});
 
-	// Field order: the question comes first (#1959), so its entry is
-	// listed before the empty fields under it.
-	it('lists the unanswered question and the empty fields in field order', async () => {
+	// #2035: the fields are not on the page before the answer, so an empty
+	// submit reports the question alone.
+	it('reports only the question on an empty submit', async () => {
 		await setup();
 
 		await continueButton().click();
 
-		const summary = testPage.getByRole('alert').first();
-		await expect.element(summary.getByRole('link').first()).toBeVisible();
-		const links = summary
-			.getByRole('link')
-			.elements()
-			.map((link) => link.textContent.trim());
-		expect(links).toEqual([
-			'Select whether you are new here or already have an account',
-			'Enter your email address',
-			'Enter your password'
-		]);
+		expect(await summaryLinks()).toEqual(['Select whether you are new here or already have an account']);
+	});
+
+	it('reports the empty fields, in field order, once the question is answered', async () => {
+		await setup();
+		await newHereRadio().click();
+
+		await continueButton().click();
+
+		expect(await summaryLinks()).toEqual(['Enter your email address', 'Enter your password']);
+		expect(createUserWithEmailAndPassword).not.toHaveBeenCalled();
+	});
+
+	it('says under each answer who it is for', async () => {
+		await setup();
+
+		await expect.element(testPage.getByText('You have never signed in to DoulaCloud.')).toBeVisible();
+		await expect
+			.element(testPage.getByText('You already sign in to DoulaCloud for another practice.'))
+			.toBeVisible();
 	});
 });
 
@@ -258,8 +275,9 @@ describe('step one -- the account question comes first (#1959)', () => {
 	// types one.
 	it('asks it before the email and the password', async () => {
 		await setup();
+		await newHereRadio().click();
 
-		await expect.element(accountQuestion()).toBeVisible();
+		await expect.element(emailField()).toBeVisible();
 		const question = accountQuestion().element();
 		for (const field of [emailField().element(), passwordField().element()])
 			expect(question.compareDocumentPosition(field) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
@@ -390,6 +408,7 @@ describe('step one -- identifying yourself', () => {
 	// already, and signing in is what settles that (#437).
 	it('asks only for credentials, not for a name or a work state', async () => {
 		await setup();
+		await newHereRadio().click();
 
 		await expect.element(emailField()).toBeVisible();
 		await expect.element(passwordField()).toBeVisible();

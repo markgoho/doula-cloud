@@ -54,9 +54,9 @@ test('A Doula invited via the Staff invite route is refused an Owner-only action
 	// form): a brand-new person, so the signup branch and both questions on
 	// step two.
 	await page.goto(`/accept-invite?token=${inviteToken}`);
+	await page.getByRole('radio', { name: /I'm new here/ }).check();
 	await page.getByLabel('Email').fill(doulaEmail);
 	await page.getByLabel('Password').fill(password);
-	await page.getByRole('radio', { name: /I'm new here/ }).check();
 	await page.getByRole('button', { name: 'Continue' }).click();
 
 	await expect(page.getByRole('heading', { name: 'Tell us about yourself' })).toBeVisible();

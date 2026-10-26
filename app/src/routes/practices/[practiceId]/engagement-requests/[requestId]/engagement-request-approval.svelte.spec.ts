@@ -93,6 +93,27 @@ async function setup(options: MockOptions = {}) {
 	await expect.element(testPage.getByRole('heading', { level: 1 })).toBeVisible();
 }
 
+/*
+ * #2043: the decision is one question with two answers and one Continue.
+ * Answering is choosing a radio, then (for Refuse) the reason revealed
+ * under it, then Continue -- the way a person does it.
+ */
+const approveRadio = () => testPage.getByRole('radio', { name: 'Approve and start the work' });
+const refuseRadio = () => testPage.getByRole('radio', { name: 'Refuse' });
+const reasonField = () => testPage.getByLabelText('Why are you refusing this?');
+const continueButton = () => testPage.getByRole('button', { name: 'Continue' });
+
+async function approve() {
+	await approveRadio().click();
+	await continueButton().click();
+}
+
+async function refuse(reason: string) {
+	await refuseRadio().click();
+	if (reason) await reasonField().fill(reason);
+	await continueButton().click();
+}
+
 // A Request that cannot be rendered has no page heading -- the Template
 // draws the refusal alone -- so the load-failure cases wait on the
 // message instead.
@@ -116,7 +137,7 @@ describe('the approval screen', () => {
 		await expect.element(testPage.getByText('Birth', { exact: true })).toBeVisible();
 		await expect.element(testPage.getByText('Mar 1, 2027')).toBeVisible();
 		await expect.element(testPage.getByText(note)).toBeVisible();
-		await expect.element(testPage.getByText('1 credit')).toBeVisible();
+		await expect.element(testPage.getByText('1 credit', { exact: true })).toBeVisible();
 		await expect.element(testPage.getByText('Balance after')).toBeVisible();
 		await expect.element(testPage.getByText('2', { exact: true })).toBeVisible();
 	});
@@ -157,8 +178,10 @@ describe('the approval screen', () => {
 
 		await expect.element(testPage.getByLabelText('Kind of work')).not.toBeInTheDocument();
 		await expect.element(testPage.getByLabelText('Due date')).not.toBeInTheDocument();
-		await expect.element(testPage.getByRole('radio')).not.toBeInTheDocument();
 		await expect.element(testPage.getByRole('combobox')).not.toBeInTheDocument();
+		// The only radios are the decision's own two answers (#2043).
+		await expect.element(refuseRadio()).toBeVisible();
+		expect(testPage.getByRole('radio').elements()).toHaveLength(2);
 	});
 
 	it('shows why approval was refused when the named Doula can no longer be attached', async () => {
@@ -166,11 +189,12 @@ describe('the approval screen', () => {
 			'Marguerite Throckmorton-Balasubramanian is now a contractor, and a contractor goes on an Engagement by accepting an Offer. Refuse this request, then start the work again and name another Doula or no Doula yet.';
 		await setup({ approveStatus: 409, approveBody: reason });
 
-		await testPage.getByRole('button', { name: 'Approve and start the work' }).click();
+		await approve();
 
 		await expect.element(testPage.getByText(reason)).toBeVisible();
-		// The Request stays pending, so both decisions are still on screen.
-		await expect.element(testPage.getByRole('button', { name: 'Refuse this request' })).toBeVisible();
+		// The Request stays pending, so the question is still on screen.
+		await expect.element(refuseRadio()).toBeVisible();
+		await expect.element(continueButton()).toBeEnabled();
 		expect(goto).not.toHaveBeenCalled();
 	});
 
@@ -178,13 +202,13 @@ describe('the approval screen', () => {
 		await setup({ detail: { ...baseDetail, warning: 'this client already has a live engagement' } });
 
 		await expect.element(testPage.getByText(`${clientName} already has a live engagement.`, { exact: false })).toBeVisible();
-		await expect.element(testPage.getByRole('button', { name: 'Approve and start the work' })).toBeEnabled();
+		await expect.element(approveRadio()).toBeEnabled();
 	});
 
 	it('approves and lands on the Engagement the approval created', async () => {
 		await setup();
 
-		await testPage.getByRole('button', { name: 'Approve and start the work' }).click();
+		await approve();
 
 		await vi.waitFor(() => expect(goto).toHaveBeenCalledWith(`/practices/${practiceId}/engagements/engagement-9`));
 	});
@@ -201,7 +225,10 @@ describe('the approval screen', () => {
 		await expect.element(testPage.getByText('Balance after')).not.toBeInTheDocument();
 		await expect.element(testPage.getByText('-1', { exact: true })).not.toBeInTheDocument();
 
-		await testPage.getByRole('button', { name: 'Approve and start the work' }).click();
+		// The hint under Approve says so too, without the negative number.
+		await expect.element(testPage.getByText('Uses 1 credit. There are none left.')).toBeVisible();
+
+		await approve();
 
 		await expect.element(testPage.getByText("There are no credits left on this Practice's balance.")).toBeVisible();
 		await expect.element(testPage.getByText(`${baseDetail.requestedByName} on Aug 1, 2026`)).toBeVisible();
@@ -227,10 +254,39 @@ describe('the approval screen', () => {
 		expect(sessionStorage.getItem('engagement-request-approval-return')).toBeNull();
 	});
 
+	it('says what Approve spends and what is left, under the answer itself', async () => {
+		await setup();
+
+		await expect.element(testPage.getByText('Uses 1 credit. 2 left after this.')).toBeVisible();
+	});
+
+	it('opens with neither answer chosen and asks the reason only under Refuse', async () => {
+		await setup();
+
+		await expect.element(approveRadio()).not.toBeChecked();
+		await expect.element(refuseRadio()).not.toBeChecked();
+		await expect.element(reasonField()).not.toBeInTheDocument();
+
+		await refuseRadio().click();
+
+		await expect.element(reasonField()).toBeVisible();
+	});
+
+	it('refuses Continue with no answer, before any request', async () => {
+		await setup();
+
+		await continueButton().click();
+
+		await expect
+			.element(testPage.getByRole('link', { name: 'Select whether you approve this work' }))
+			.toHaveAttribute('href', '#engagement-request-decision-approve');
+		expect(apiFetchWithSession).toHaveBeenCalledTimes(1);
+	});
+
 	it('refuses to submit a refusal with no reason, client-side, before any request', async () => {
 		await setup();
 
-		await testPage.getByRole('button', { name: 'Refuse this request' }).click();
+		await refuse('');
 
 		await expect
 			.element(testPage.getByRole('link', { name: 'Enter why this request is being refused' }))
@@ -241,8 +297,7 @@ describe('the approval screen', () => {
 	it('refuses with the reason and lands back on her record', async () => {
 		await setup();
 
-		await testPage.getByLabelText('Why are you refusing this?').fill('No capacity in March');
-		await testPage.getByRole('button', { name: 'Refuse this request' }).click();
+		await refuse('No capacity in March');
 
 		await vi.waitFor(() =>
 			expect(apiFetchWithSession).toHaveBeenCalledWith(
@@ -257,13 +312,13 @@ describe('the approval screen', () => {
 		await setupUnreadable({ detailStatus: 409, detailBody: 'that request is no longer pending -- it is approved' });
 
 		await expect.element(testPage.getByText('that request is no longer pending -- it is approved')).toBeVisible();
-		await expect.element(testPage.getByRole('button', { name: 'Approve and start the work' })).not.toBeInTheDocument();
+		await expect.element(approveRadio()).not.toBeInTheDocument();
 	});
 
 	it('surfaces an endpoint refusal on approve as an error rather than a silent failure', async () => {
 		await setup({ approveStatus: 409, approveBody: 'that request is no longer pending' });
 
-		await testPage.getByRole('button', { name: 'Approve and start the work' }).click();
+		await approve();
 
 		await expect.element(testPage.getByText('that request is no longer pending')).toBeVisible();
 		expect(goto).not.toHaveBeenCalled();
@@ -272,9 +327,13 @@ describe('the approval screen', () => {
 	it('exposes the decision controls and her record as reachable, labeled controls', async () => {
 		await setup();
 
-		await expect.element(testPage.getByRole('button', { name: 'Approve and start the work' })).toBeVisible();
-		await expect.element(testPage.getByLabelText('Why are you refusing this?')).toBeVisible();
-		await expect.element(testPage.getByRole('button', { name: 'Refuse this request' })).toBeVisible();
+		await expect
+			.element(testPage.getByRole('group', { name: 'Do you approve this work?' }))
+			.toBeVisible();
+		await expect.element(approveRadio()).toBeVisible();
+		await refuseRadio().click();
+		await expect.element(reasonField()).toBeVisible();
+		await expect.element(continueButton()).toBeVisible();
 		await expect
 			.element(testPage.getByRole('link', { name: `View ${clientName}'s record` }))
 			.toHaveAttribute('href', `/practices/${practiceId}/clients/${baseDetail.client.clientId}`);

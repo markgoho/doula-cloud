@@ -55,9 +55,19 @@
 	import { workStateCode, workStateName, workStateReportedOn } from '#lib/workStates.js';
 	import { privacyPolicyUrl } from '#lib/legal.js';
 
-	const modeOptions: { value: 'signup' | 'login'; label: string }[] = [
-		{ value: 'signup', label: "I'm new here — create an account" },
-		{ value: 'login', label: 'I already have an account — log in' }
+	// A one-line hint under each answer (#2035), so she can tell which
+	// is hers without knowing what an "account" is here.
+	const modeOptions: { value: 'signup' | 'login'; label: string; description: string }[] = [
+		{
+			value: 'signup',
+			label: "I'm new here — create an account",
+			description: 'You have never signed in to DoulaCloud.'
+		},
+		{
+			value: 'login',
+			label: 'I already have an account — log in',
+			description: 'You already sign in to DoulaCloud for another practice.'
+		}
 	];
 
 	const inviteToken = page.url.searchParams.get('token') ?? '';
@@ -151,14 +161,16 @@
 		event.preventDefault();
 
 		await submission.run(async () => {
-			const refusals: FormError[] = [];
-			// First, in field order: the question comes before the fields
-			// whose meaning it decides (#1959).
+			// The question alone (#2035): the fields are not on the page
+			// until she answers it, so they cannot be refused yet either.
 			if (mode === undefined)
-				refusals.push({
-					message: 'Select whether you are new here or already have an account',
-					targetId: modeFieldId
-				});
+				return [
+					{
+						message: 'Select whether you are new here or already have an account',
+						targetId: modeFieldId
+					}
+				];
+			const refusals: FormError[] = [];
 			if (email.trim() === '')
 				refusals.push({ message: 'Enter your email address', targetId: emailId });
 			if (password === '') {
@@ -364,6 +376,43 @@
 	<ErrorSummary errors={submission.errors} />
 {/snippet}
 
+{#snippet credentials()}
+	<!-- Revealed under whichever answer she chose (#2035); the answer
+	     decides the autocomplete and whether the password rule applies. -->
+	<stack-l space="var(--space-5)">
+		<LabeledField id={emailId} label="Email" error={submission.errorFor(emailId)}>
+			{#snippet children({ id, describedBy, invalid })}
+				<TextInput
+					{id}
+					{describedBy}
+					{invalid}
+					type="email"
+					value={email}
+					onInput={(value) => (email = value)}
+					required
+					autocomplete={emailAutocomplete}
+				/>
+			{/snippet}
+		</LabeledField>
+		<LabeledField id={passwordId} label="Password" hint={passwordHint} error={submission.errorFor(passwordId)}>
+			{#snippet children({ id, describedBy, invalid })}
+				<TextInput
+					{id}
+					{describedBy}
+					{invalid}
+					type="password"
+					value={password}
+					onInput={(value) => (password = value)}
+					required
+					minlength={6}
+					autocomplete={passwordAutocomplete}
+					passwordrules={passwordRules}
+				/>
+			{/snippet}
+		</LabeledField>
+	</stack-l>
+{/snippet}
+
 {#snippet content()}
 	{#if !inviteToken}
 		<!-- #2025: only the Practice can send another invite. -->
@@ -383,49 +432,21 @@
 				password below is a new one or the one she already has, and so
 				which autocomplete and which password rule apply.
 			-->
+			<!--
+				#2035: the fields are revealed under the answer, GOV.UK's
+				conditional reveal, so she makes one decision at a time. Both
+				answers reveal the same two fields; only the chosen one is
+				mounted, so their ids never appear twice, and what she typed
+				stays in this page's state if she changes her answer.
+			-->
 			<RadioGroup
 				legend="Do you already have a DoulaCloud account?"
 				name={modeName}
-				options={modeOptions}
+				options={modeOptions.map((option) => ({ ...option, conditional: credentials }))}
 				value={mode}
 				onChange={(value) => (mode = value)}
 				error={submission.errorFor(modeFieldId)}
 			/>
-			<LabeledField id={emailId} label="Email" error={submission.errorFor(emailId)}>
-				{#snippet children({ id, describedBy, invalid })}
-					<TextInput
-						{id}
-						{describedBy}
-						{invalid}
-						type="email"
-						value={email}
-						onInput={(value) => (email = value)}
-						required
-						autocomplete={emailAutocomplete}
-					/>
-				{/snippet}
-			</LabeledField>
-			<LabeledField
-				id={passwordId}
-				label="Password"
-				hint={passwordHint}
-				error={submission.errorFor(passwordId)}
-			>
-				{#snippet children({ id, describedBy, invalid })}
-					<TextInput
-						{id}
-						{describedBy}
-						{invalid}
-						type="password"
-						value={password}
-						onInput={(value) => (password = value)}
-						required
-						minlength={6}
-						autocomplete={passwordAutocomplete}
-						passwordrules={passwordRules}
-					/>
-				{/snippet}
-			</LabeledField>
 			<Button type="submit" label="Continue" loading={submission.isSubmitting} />
 		</StackedForm>
 	{:else if step === 'confirm-sign-out'}

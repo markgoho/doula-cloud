@@ -14,9 +14,10 @@ import { staffLoginAfterSessionEnded } from '#lib/sessionEnded.js';
  *   factor. To TOTP enrollment, carrying `returnTo` so enrollment sends
  *   him back to the page he asked for -- the same hand-off
  *   `practices/[practiceId]/+layout.ts` makes.
- * - 404: anybody but the founder, or a piece that is gone. The root
- *   `+error.svelte` renders it, which is the page a URL with no route
- *   behind it gets, so the page's existence is not revealed either.
+ * - 404: anybody but the founder, or a piece that is gone. The
+ *   `(person)/+error.svelte` boundary renders it as "Page not found",
+ *   so the page's existence is not revealed, inside the signed-in shell
+ *   with the way out to her own account (#2040), never "Log in".
  *
  * `load` and not an onMount fetch, for #471's reason: a refusal has to
  * reach the error page rather than sit in a string this route owns.

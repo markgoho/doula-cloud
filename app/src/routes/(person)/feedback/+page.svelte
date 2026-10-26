@@ -2,8 +2,8 @@
 	/*
 	 * The founder's list of Feedback (#1526, decided on #1499). One person
 	 * reaches it: `staffauth.FounderOnly` answers everybody else 404, and
-	 * this route's `load` turns that into the same "not found" page a URL
-	 * with no route behind it gets.
+	 * this route's `load` turns that into "Page not found", drawn in the
+	 * signed-in shell by `(person)/+error.svelte` (#2040).
 	 *
 	 * Two tables, and the order is the point. The first holds every piece
 	 * whose GitHub issue did not open -- dead-lettered, or still retrying.
