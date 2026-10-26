@@ -57,7 +57,7 @@
 	import DateFields from '#lib/components/molecules/DateFields.svelte';
 	import ErrorSummary from '#lib/components/molecules/ErrorSummary.svelte';
 	import StackedForm from '#lib/components/molecules/StackedForm.svelte';
-	import DescriptionList from '#lib/components/molecules/DescriptionList.svelte';
+	import SummaryList from '#lib/components/molecules/SummaryList.svelte';
 	import {
 		EMPTY_DATE_PARTS,
 		dateFieldId,
@@ -322,8 +322,8 @@
 										<section class="match">
 											<stack-l space="var(--space-3)">
 												<Heading level={3} variant="card" text={displayName(match)} />
-												<DescriptionList
-													items={[
+												<SummaryList
+													rows={[
 														{ label: 'Date of birth', value: match.dateOfBirth || '—' },
 														{ label: 'Email', value: match.email || '—' },
 														{ label: 'Phone', value: match.phone || '—' }

@@ -54,7 +54,7 @@ const sessionStub = {
 	roles: [],
 	isContractor: false
 };
-// The Address DescriptionList row joins the same fields the same way the
+// The Address SummaryList row joins the same fields the same way the
 // route does -- an empty addressLine2 is filtered out rather than shown
 // as a bare comma.
 const address = [

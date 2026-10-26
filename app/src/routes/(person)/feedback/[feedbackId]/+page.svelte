@@ -7,7 +7,7 @@
 	 * The BFF recorded this read before it answered `load`, so the page
 	 * only prints. It writes no CSS of its own: the frame is
 	 * `DocumentPage`'s, capped at a readable measure because the body is
-	 * somebody's own words, and the facts are a `DescriptionList` -- GOV.UK's
+	 * somebody's own words, and the facts are a `SummaryList` -- GOV.UK's
 	 * summary list (docs/design/govuk-alignment.md).
 	 */
 	import { resolve } from '$app/paths';
@@ -15,7 +15,7 @@
 	import Heading from '#lib/components/atoms/Heading.svelte';
 	import Link from '#lib/components/atoms/Link.svelte';
 	import Text from '#lib/components/atoms/Text.svelte';
-	import DescriptionList from '#lib/components/molecules/DescriptionList.svelte';
+	import SummaryList from '#lib/components/molecules/SummaryList.svelte';
 	import DocumentPage from '#lib/components/templates/DocumentPage.svelte';
 	import type { PageProps as PageProperties } from './$types';
 
@@ -45,7 +45,7 @@
 
 		<stack-l space="var(--space-4)">
 			<Heading level={2} variant="section" text="About this piece" />
-			<DescriptionList items={pieceFacts(piece)} />
+			<SummaryList rows={pieceFacts(piece)} />
 		</stack-l>
 
 		<stack-l space="var(--space-4)">

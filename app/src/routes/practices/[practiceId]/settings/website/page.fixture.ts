@@ -2,7 +2,7 @@
  * The Website settings screen, as the continuum check sees it (#595).
  *
  * A `mode: 'hosted'` Practice that has already answered lands on the
- * "saved" step, whose `DescriptionList` shows exactly the free text this
+ * "saved" step, whose `SummaryList` shows exactly the free text this
  * screen collects: what she offers and her cancellation policy each
  * carry #530's own URL, since a Practice could paste a referral link
  * into either.

@@ -29,10 +29,14 @@
 	 * it -- ADR-0058's bar, two consumers that should change together. A
 	 * change to how a Change row reads should reach both the same way.
 	 *
-	 * Not `DescriptionList`: that molecule is a record's facts with no
-	 * action column, laid out as a two-track grid, and it has many
-	 * consumers under the continuum gate. Whether the two become one is
-	 * the pre-launch inventory's question (#1908), not this ticket's.
+	 * The one key/value list (#2021, decided on #2001): every record's
+	 * facts, every check-answers row, each record of `DataTable`'s record
+	 * view, each section of a Birth Plan and an Offer's facts render
+	 * through this, and nothing else writes a `<dl>`. `DescriptionList`,
+	 * the action-less twin it replaced, drew its rule twice per row (once
+	 * under the key, once under the value, with the column gap between)
+	 * and capped the value rather than the list, so four lists on one page
+	 * ended at four right edges.
 	 *
 	 * The action is a Snippet, not an href, because the two consumers
 	 * act differently: `CheckAnswers`' Change is a link back to the
@@ -44,6 +48,13 @@
 
 	interface Properties {
 		rows: Row[];
+		/**
+		 * Draws a row's value in place of its `value` text: a link, a
+		 * `<time>`, a control -- whatever the caller's value is. A row's
+		 * `value` text still names it to the caller (`DataTable` keeps its
+		 * accessor's string there).
+		 */
+		value?: Snippet<[Row, number]>;
 		action?: Snippet<[Row, string]>;
 		/**
 		 * Drawn under a row whose `isDetailShown` is set, across the
@@ -56,22 +67,33 @@
 		 * apart by their own headings.
 		 */
 		isBordered?: boolean;
+		/**
+		 * Every row's key above its value at any width, as a Birth Plan's
+		 * questions are: a question is a sentence, and a sentence in a key
+		 * column wraps to a ribbon. Without it a row stacks only where the
+		 * key and the value cannot share a line.
+		 */
+		isStacked?: boolean;
 	}
 
-	let { rows, action, detail, isBordered = false }: Properties = $props();
+	let { rows, value, action, detail, isBordered = false, isStacked = false }: Properties = $props();
 
 	const listId = $props.id();
 </script>
 
-<dl class:bordered={isBordered}>
+<dl class:bordered={isBordered} class:stacked={isStacked}>
 	<!--
-		Keyed on index, not on the label: two rows may share a label, the
-		same defect #464 fixed in `DescriptionList`.
+		Keyed on index, not on the label (#464): a record can show the same
+		label twice -- two phone numbers, two Practice-defined fields a
+		Practice named alike -- and a duplicate key collapses both rows into
+		one silently.
 	-->
 	{#each rows as row, index (index)}
 		<div class="row">
 			<dt>{row.label}</dt>
-			<dd class="value" class:spans={!(action && row.changes)}>{row.value}</dd>
+			<dd class="value">
+				{#if value}{@render value(row, index)}{:else}{row.value}{/if}
+			</dd>
 			{#if action && row.changes}
 				<dd class="action">
 					{@render action(row, `${listId}-${index}-changes`)}
@@ -88,25 +110,13 @@
 <style>
 	@layer components {
 		/*
-		 * One grid for the whole list, and each row a subgrid of it (#1998),
-		 * so every label, value and Change sits in the same column as the
-		 * row above -- what makes a run of rows read as one list, and what
-		 * the drawing shows. A flex row per row, which this replaced, sized
-		 * each row's columns to that row's own words, so the values
-		 * zig-zagged down the card.
-		 *
-		 * The tracks are `DescriptionList`'s, plus the action's: the label
-		 * takes `fit-content(40%)` because a Practice types some labels and
-		 * one may be a pasted URL (#725); the value is `minmax(0, 1fr)`, so
-		 * an unbreakable value shrinks rather than widening the page
-		 * (#530); and the action is `auto`, the width of "Change". No
-		 * width is named, so the list adapts to whatever room it is given
-		 * (ADR-0024).
+		 * The measure caps the list (#2021), not the value: a value capped
+		 * alone put the row's end at key width plus measure, so each list
+		 * ended at its own right edge. `--measure` is the repo's one reading
+		 * width and font-relative; at 320px it is inert.
 		 */
 		dl {
-			display: grid;
-			grid-template-columns: fit-content(40%) minmax(0, 1fr) auto;
-			column-gap: var(--space-4);
+			max-inline-size: var(--measure);
 			margin: 0;
 		}
 
@@ -127,7 +137,57 @@
 			border-block-end: none;
 		}
 
+		/*
+		 * One hairline per row, across the key and the value (#2021), GOV.UK's
+		 * grouping cue and the brief's Law of Uniform Connectedness.
+		 *
+		 * Each row is a wrapping flex line whose key takes a share of the
+		 * list, not of its own words, so every key, value and Change sits
+		 * in the same column as the row above, and in every other list of
+		 * the same width: a Client hub's four lists and a check page's
+		 * sections line their values up down the page. `fit-content(40%)`,
+		 * the grid track this replaced, sized each list's key to its own
+		 * longest label, so four lists put their values at four lines.
+		 *
+		 * The key is 30% of the row, GOV.UK's own key column. It names no
+		 * width (ADR-0024); a key longer than its share wraps inside it, a
+		 * pasted URL included (#725). The value asks for 20rem beside it --
+		 * a date, a name, a short address on one line -- and where the row
+		 * cannot give it that much, the value moves to its own line under
+		 * the key: GOV.UK's Summary list on a narrow screen, reached by the
+		 * row's own width, never the window's, and with no query at all
+		 * (at 30rem, a 30% key is 9rem, where an ordinary label such as
+		 * "Preferred name" starts to wrap beside its value). The break
+		 * reads only the key and the value, so every row of a list stacks
+		 * at the same width, with a Change or without.
+		 *
+		 * The Change follows the value and sits at the row's end: on the
+		 * value's line where there is room, on a line of its own under it
+		 * where there is not. `align-items: baseline` puts the label, the
+		 * value and the Change on one text line, though the Change is a
+		 * 44px target and the others are not.
+		 *
+		 * (#564 dropped a grid of `repeat(auto-fit, minmax(min-content,
+		 * 1fr))` because Chromium drops it whole; this is a flex line with
+		 * definite bases, which does not meet that restriction.)
+		 */
+		.row {
+			display: flex;
+			flex-wrap: wrap;
+			align-items: baseline;
+			gap: var(--space-1) var(--space-4);
+			padding-block: var(--space-3);
+			border-block-end: var(--border-thin) solid var(--color-outline-variant);
+		}
+
+		/*
+		 * The key grows only when it is alone on its line, stacked: the
+		 * value's grow factor is so much larger that, sharing a line, the
+		 * key keeps its 30% to well under a pixel.
+		 */
 		dt {
+			flex: 1 0 30%;
+			min-inline-size: 0;
 			margin: 0;
 			font-weight: var(--font-weight-medium);
 			color: var(--color-on-surface-variant);
@@ -139,45 +199,27 @@
 			color: var(--color-on-surface);
 		}
 
-		/*
-		 * A hairline under each row. `align-items: baseline` puts the
-		 * label, the value and the Change on one text line, though the
-		 * Change is a 44px target and the others are not.
-		 *
-		 * (CheckAnswers' rows were flex-wrap before, after a first grid of
-		 * `repeat(auto-fit, minmax(min-content, 1fr))` that Chromium drops
-		 * whole (#564). This grid has fixed tracks and no auto-fit, so it
-		 * does not meet that restriction.)
-		 */
-		.row {
-			display: grid;
-			grid-column: 1 / -1;
-			grid-template-columns: subgrid;
-			align-items: baseline;
-			row-gap: var(--space-1);
-			padding-block: var(--space-3);
-			border-block-end: var(--border-thin) solid var(--color-outline-variant);
-		}
-
+		/* `min-inline-size: 0` and `anywhere`, so an unbreakable value (a
+		   pasted URL, #530) shrinks rather than widening the page. */
 		.value {
-			grid-column: 2;
+			flex: 100000 1 20rem;
+			min-inline-size: 0;
 			overflow-wrap: anywhere;
 		}
 
-		/* A row with no Change gives its value the action's column too, so
-		   a narrow list does not wrap a date around an empty cell. */
-		.value.spans {
-			grid-column: 2 / -1;
+		.action {
+			flex: none;
+			margin-inline-start: auto;
 		}
 
-		.action {
-			grid-column: 3;
-			text-align: end;
+		/* Every key above its value at every width (`isStacked`). */
+		.stacked .value {
+			flex-basis: 100%;
 		}
 
 		/* The in-place form takes the row's whole width, on a line of its own. */
 		.row > .detail {
-			grid-column: 1 / -1;
+			flex-basis: 100%;
 			padding-block-start: var(--space-3);
 		}
 	}

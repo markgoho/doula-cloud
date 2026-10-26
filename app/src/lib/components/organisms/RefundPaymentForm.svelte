@@ -47,7 +47,7 @@
 	import LabeledField from '#lib/components/molecules/LabeledField.svelte';
 	import RadioGroup, { radioFieldId } from '#lib/components/molecules/RadioGroup.svelte';
 	import StackedForm from '#lib/components/molecules/StackedForm.svelte';
-	import DescriptionList from '#lib/components/molecules/DescriptionList.svelte';
+	import SummaryList from '#lib/components/molecules/SummaryList.svelte';
 
 	let {
 		invoice,
@@ -234,8 +234,8 @@
 			<Button label="Cancel" variant="secondary" onClick={onCancel} />
 		</StackedForm>
 	{:else}
-		<DescriptionList
-			items={isCardPayment
+		<SummaryList
+			rows={isCardPayment
 				? [
 						{ label: 'Amount to return', value: formatAmount(reviewedCents) },
 						{ label: 'Returned by', value: 'Stripe, to the card that paid' }

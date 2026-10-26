@@ -23,6 +23,7 @@
 	import Link from '../atoms/Link.svelte';
 	import Notice from '../atoms/Notice.svelte';
 	import EmptyState, { type EmptyStateAction } from '../molecules/EmptyState.svelte';
+	import SummaryList, { type SummaryListRow } from '../molecules/SummaryList.svelte';
 
 	interface Column<T> {
 		label: string;
@@ -186,6 +187,30 @@
 	function isContentCell(column: Column<T>, columnIndex: number): boolean {
 		return Boolean(column.content) && !(columnIndex === 0 && rowHref);
 	}
+
+	/*
+	 * One record of the record view as `SummaryList` rows (#2021): a row
+	 * per column, then the row actions' row. The value text is the
+	 * column's accessor; what draws is the `cell` snippet, through the
+	 * list's `value` snippet below.
+	 */
+	interface RecordRow extends SummaryListRow {
+		column?: Column<T>;
+		columnIndex: number;
+	}
+
+	function recordRows(row: T): RecordRow[] {
+		const fields: RecordRow[] = columns.map((column, columnIndex) => ({
+			label: column.label,
+			value: column.accessor(row),
+			column,
+			columnIndex
+		}));
+		if (rowActions) {
+			fields.push({ label: rowActions.label, value: '', columnIndex: columns.length });
+		}
+		return fields;
+	}
 </script>
 
 <!--
@@ -283,26 +308,33 @@
 		     failure mode. -->
 		<div class="record-view">
 			{#each rows as row, index (index)}
-				<dl>
-					{#each columns as column, columnIndex (column.label)}
-						<dt>{column.label}</dt>
-						<!-- Neither `variant-body` nor `content` is written here,
-						     and for one reason: each would name a rule that
-						     overrides nothing in this tree. See the mirror
-						     block in the style below. -->
-						<dd
-							class:numeric={column.numeric}
-							class:meta={column.variant === 'meta'}
-							class:muted={column.variant === 'muted'}
-						>
-							{@render cell(column, columnIndex, row, 'record')}
-						</dd>
-					{/each}
-					{#if rowActions}
-						<dt>{rowActions.label}</dt>
-						<dd>{@render rowActions.content(row, 'record')}</dd>
-					{/if}
-				</dl>
+				<!-- Each record is a `SummaryList` (#2021). The wrapper is
+				     the record's own box, which #2022's card frame is drawn
+				     on. -->
+				<div class="record">
+					<SummaryList rows={recordRows(row)}>
+						{#snippet value(field)}
+							{#if field.column}
+								<!-- Neither `variant-body` nor `content` is written
+								     here, and for one reason: each would name a rule
+								     that overrides nothing in this tree. See the
+								     mirror block in the style below. -->
+								<span
+									class="cell"
+									class:numeric={field.column.numeric}
+									class:meta={field.column.variant === 'meta'}
+									class:muted={field.column.variant === 'muted'}
+									>{@render cell(field.column, field.columnIndex, row, 'record')}</span
+								>
+							{:else}
+								<!-- The one row with no column is the row actions'
+								     row, which `recordRows` adds only when they are
+								     set. -->
+								{@render rowActions!.content(row, 'record')}
+							{/if}
+						{/snippet}
+					</SummaryList>
+				</div>
 			{/each}
 		</div>
 	{/if}
@@ -579,57 +611,22 @@
 			}
 		}
 
-		/* One <dl> per record (#508, ADR-0024) rather than a mangled
-		   <table>, which strips table semantics in Safari and Firefox.
-
-		   `minmax(0, 1fr)` rather than a bare `1fr` (#1851): a bare track's
-		   automatic minimum is its content's min-content, and a row action
-		   that holds a `<select>` has the width of its longest option as
-		   that minimum, which no `overflow-wrap` can lower. The Engagement
-		   hub's Reassign control set the column 12px past the record at
-		   320px, which only the box criterion saw: the overflow landed in
-		   the page's own gutter, not past the frame. */
-		/* A record is capped at the reading measure (#1981). The record
-		   view shows past this component's own floor wherever a route's
-		   table needs more room, and a `<dl>` that spans the whole column
-		   put a label up to 1,200px from its value at a 1440px window, and
-		   an amount at the column's far edge. `--measure` is this repo's
-		   one reading width and is font-relative, so it is not a number
-		   picked off a screen; below it, at 320px, it is inert. */
-		.record-view dl {
-			display: grid;
-			grid-template-columns: auto minmax(0, 1fr);
-			gap: 0 var(--space-4);
-			margin: 0;
-			max-inline-size: var(--measure);
-		}
-
-		.record-view dl + dl {
+		/* One `SummaryList` per record (#508, ADR-0024, #2021) rather than
+		   a mangled <table>, which strips table semantics in Safari and
+		   Firefox. The list owns what this view used to write for itself:
+		   the shrinkable value track (#1851, a row action's `<select>`;
+		   #542, a pasted URL), the measure cap (#1981, a label 1,200px
+		   from its value at 1440px), and one rule per row. */
+		.record + .record {
 			margin-block-start: var(--space-4);
 		}
 
-		.record-view dt {
-			font-weight: var(--font-weight-medium);
-			color: var(--color-on-surface-variant);
-			padding-block: var(--space-2);
-			border-block-end: var(--border-thin) solid var(--color-outline-variant);
+		/* A block, so a numeric value can sit at its column's end. */
+		.record-view .cell {
+			display: block;
 		}
 
-		/* The same unbounded column, seen at the other end (#542): the
-		   free-text history value put this view 62px past its frame at
-		   320px, because `1fr`'s automatic minimum is the min-content size
-		   and a pasted URL has none. `anywhere` gives the value break
-		   opportunities, which lowers that minimum and lets the track
-		   shrink -- the fix #534's exercise teaches and #552 landed. */
-		.record-view dd {
-			margin: 0;
-			color: var(--color-on-surface);
-			padding-block: var(--space-2);
-			border-block-end: var(--border-thin) solid var(--color-outline-variant);
-			overflow-wrap: anywhere;
-		}
-
-		.record-view dd.numeric {
+		.record-view .cell.numeric {
 			text-align: end;
 			font-variant-numeric: tabular-nums;
 		}
@@ -643,7 +640,7 @@
 		   restating that would have overridden nothing, so neither it nor
 		   the class that selected it is written -- the same rule this
 		   ticket applied to `td.content`'s missing `<dd>` counterpart. */
-		.record-view dd.meta {
+		.record-view .cell.meta {
 			font-size: var(--text-meta-size);
 			font-weight: var(--text-meta-weight);
 			line-height: var(--text-meta-leading);
@@ -651,7 +648,7 @@
 			font-variant-numeric: tabular-nums;
 		}
 
-		.record-view dd.muted {
+		.record-view .cell.muted {
 			color: var(--color-on-surface-muted);
 		}
 	}

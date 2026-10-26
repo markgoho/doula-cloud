@@ -60,7 +60,7 @@
 	import LabeledField from '#lib/components/molecules/LabeledField.svelte';
 	import RadioGroup, { radioFieldId } from '#lib/components/molecules/RadioGroup.svelte';
 	import StackedForm from '#lib/components/molecules/StackedForm.svelte';
-	import DescriptionList from '#lib/components/molecules/DescriptionList.svelte';
+	import SummaryList from '#lib/components/molecules/SummaryList.svelte';
 
 	let {
 		invoices,
@@ -260,7 +260,7 @@
 	// #1228: assembled from the same four strings the fields already show,
 	// so the summary and the field-level message cannot drift. Built only
 	// while the form step is on screen -- the review step shows a
-	// DescriptionList, not these controls, so nothing here could be linked
+	// SummaryList, not these controls, so nothing here could be linked
 	// to during it.
 	const paymentFormErrors = $derived<FormError[]>(
 		[
@@ -293,7 +293,7 @@
 			if (paymentMethodError || paymentNoteError || paymentDateError) {
 				// Back to the entry step: a field-level error is only
 				// wired into the field it concerns while that field is on
-				// screen, and the review step shows a DescriptionList, not
+				// screen, and the review step shows a SummaryList, not
 				// the form.
 				paymentStep = 'form';
 				return;
@@ -663,8 +663,8 @@
 					<Button label="Cancel" variant="secondary" onClick={cancelRecordingPayment} />
 				</StackedForm>
 			{:else}
-				<DescriptionList
-					items={[
+				<SummaryList
+					rows={[
 						{ label: 'Amount', value: formatAmount(invoice.amountCents) },
 						{ label: 'Method', value: paymentMethodLabels[paymentMethod!] },
 						{ label: 'Note', value: paymentNote.trim() === '' ? '—' : paymentNote },
@@ -707,8 +707,8 @@
 					<Button label="Cancel" variant="secondary" onClick={cancelReversingPayment} />
 				</StackedForm>
 			{:else}
-				<DescriptionList
-					items={[
+				<SummaryList
+					rows={[
 						{ label: 'Amount', value: formatAmount(invoice.amountCents) },
 						{ label: 'Reason', value: reversalReason }
 					]}

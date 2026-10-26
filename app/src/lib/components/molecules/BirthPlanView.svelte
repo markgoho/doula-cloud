@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { isAnswerChecked, answerOptions, answerText, type Answers, type Field } from '#lib/planInstance.js';
+	import SummaryList, { type SummaryListRow } from '#lib/components/molecules/SummaryList.svelte';
 
 	let { fields, answers }: { fields: Field[]; answers: Answers } = $props();
 
@@ -47,6 +48,22 @@
 		const options = answerOptions(answers, field.id);
 		return options.length > 0 ? options.join(', ') : '—';
 	}
+
+	function answerValue(field: Field): string {
+		if (field.type === 'checkbox') return checkboxValue(field);
+		if (field.type === 'multi_select') return selectedOptions(field);
+		return textValue(field);
+	}
+
+	/*
+	 * Each section is a `SummaryList` (#2021), stacked: a question is a
+	 * sentence a Practice wrote, and a sentence in a key column wraps to a
+	 * ribbon beside its answer. Its value column also breaks a pasted URL
+	 * (#552), which this component used to say for itself.
+	 */
+	function rowsFor(section: Section): SummaryListRow[] {
+		return section.fields.map((field) => ({ label: field.label, value: answerValue(field) }));
+	}
 </script>
 
 {#each sections as section (section.key)}
@@ -54,32 +71,6 @@
 		<h3>{section.heading}</h3>
 	{/if}
 	{#if section.fields.length > 0}
-		<dl>
-			{#each section.fields as field (field.id)}
-				<div>
-					<dt>{field.label}</dt>
-					{#if field.type === 'checkbox'}
-						<dd>{checkboxValue(field)}</dd>
-					{:else if field.type === 'multi_select'}
-						<dd>{selectedOptions(field)}</dd>
-					{:else}
-						<dd>{textValue(field)}</dd>
-					{/if}
-				</div>
-			{/each}
-		</dl>
+		<SummaryList rows={rowsFor(section)} isStacked />
 	{/if}
 {/each}
-
-<style>
-	@layer components {
-		/*
-		 * A free-text answer can hold a URL, which a browser will not break
-		 * on its own (#552). Scoped to the component that owns the answer
-		 * markup so every caller gets it, not just this one.
-		 */
-		dd {
-			overflow-wrap: anywhere;
-		}
-	}
-</style>

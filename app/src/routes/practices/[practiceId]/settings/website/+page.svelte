@@ -47,7 +47,7 @@
 	import TextInput from '#lib/components/atoms/TextInput.svelte';
 	import Textarea from '#lib/components/atoms/Textarea.svelte';
 	import LabeledField from '#lib/components/molecules/LabeledField.svelte';
-	import DescriptionList from '#lib/components/molecules/DescriptionList.svelte';
+	import SummaryList from '#lib/components/molecules/SummaryList.svelte';
 	import RadioGroup from '#lib/components/molecules/RadioGroup.svelte';
 	import FormPage from '#lib/components/templates/FormPage.svelte';
 	import ErrorSummary from '#lib/components/molecules/ErrorSummary.svelte';
@@ -385,8 +385,8 @@
 						text="This is what Clients and Stripe will see at your page. You can change any of it later."
 					/>
 
-					<DescriptionList
-						items={[
+					<SummaryList
+						rows={[
 							{ label: 'Business name', value: practiceName },
 							{ label: 'What you offer', value: serviceDescription },
 							{ label: 'Cancellation policy', value: cancellationPolicy }
@@ -415,15 +415,15 @@
 						     with no answer is on the questions instead. -->
 						<Text text="Not answered yet. A Practice Owner answers this before Stripe can be connected." />
 					{:else if current.mode === 'own'}
-						<DescriptionList
-							items={[
+						<SummaryList
+							rows={[
 								{ label: 'What Stripe will be told', value: current.ownUrl },
 								{ label: 'A page published here', value: 'No' }
 							]}
 						/>
 					{:else}
-						<DescriptionList
-							items={[
+						<SummaryList
+							rows={[
 								{ label: 'Business name', value: practiceName },
 								{ label: 'What you offer', value: current.serviceDescription },
 								{ label: 'Cancellation policy', value: current.cancellationPolicy }

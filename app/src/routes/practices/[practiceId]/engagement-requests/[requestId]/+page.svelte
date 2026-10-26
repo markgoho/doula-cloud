@@ -8,7 +8,7 @@
 	 * There is no control that amends the kind, the due date or the named
 	 * Doula (#1596). ADR-0017: "the requester describes the work; the
 	 * approver does not amend it" -- so all three are rendered as facts in
-	 * a DescriptionList, never as inputs.
+	 * a SummaryList, never as inputs.
 	 * An approver who disagrees with the ask refuses it and says why.
 	 *
 	 * Refuse demands a reason, and this screen refuses an empty one before
@@ -53,7 +53,7 @@
 	import Notice from '#lib/components/atoms/Notice.svelte';
 	import Text from '#lib/components/atoms/Text.svelte';
 	import Textarea from '#lib/components/atoms/Textarea.svelte';
-	import DescriptionList from '#lib/components/molecules/DescriptionList.svelte';
+	import SummaryList from '#lib/components/molecules/SummaryList.svelte';
 	import ErrorSummary from '#lib/components/molecules/ErrorSummary.svelte';
 	import LabeledField from '#lib/components/molecules/LabeledField.svelte';
 	import StackedForm from '#lib/components/molecules/StackedForm.svelte';
@@ -206,7 +206,7 @@
 			{#if submission.errors.length > 0}
 				<ErrorSummary errors={submission.errors} />
 			{/if}
-			<DescriptionList items={facts(detail)} />
+			<SummaryList rows={facts(detail)} />
 			<Link href={clientHref(detail.client.clientId)} label="View {clientName(detail.client)}'s record" />
 		</stack-l>
 	{/if}

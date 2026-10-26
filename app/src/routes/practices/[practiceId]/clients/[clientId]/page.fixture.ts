@@ -12,7 +12,7 @@
  * `resolvedFields` and `history` are each a row set the route's own
  * markup branches on, neither delegated to a component swept elsewhere
  * (#720): a `section_header` Field renders only a Heading while every
- * other type renders a DescriptionList row, so one of each is here, the
+ * other type renders a SummaryList row, so one of each is here, the
  * value row carrying an archived field's `note` too and #530's own URL
  * as the Practice's own question label. `history` merges two shapes at
  * once (`client_event`/`engagement_request`, see the route's own

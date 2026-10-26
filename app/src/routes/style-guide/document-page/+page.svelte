@@ -19,7 +19,7 @@
 
 <script lang="ts">
 	import DocumentPage from '#lib/components/templates/DocumentPage.svelte';
-	import DescriptionList from '#lib/components/molecules/DescriptionList.svelte';
+	import SummaryList from '#lib/components/molecules/SummaryList.svelte';
 	import Text from '#lib/components/atoms/Text.svelte';
 
 	/*
@@ -39,7 +39,7 @@
 </script>
 
 {#snippet content()}
-	<DescriptionList items={facts} />
+	<SummaryList rows={facts} />
 	<Text
 		text="Pay this Invoice by check or bank transfer to Riverside Doulas & Postpartum Care Collective, and quote A4B2-0011-PERSEPHONE."
 	/>

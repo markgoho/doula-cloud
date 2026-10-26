@@ -52,7 +52,7 @@
 			 * and a Practice's registered name is one this repo has already
 			 * seen typed as a bare URL (#530) -- no space or hyphen for a
 			 * browser to break on. Every other free-text surface this repo
-			 * ships (`Link`, `DataTable`, `DescriptionList`, `ContractView`)
+			 * ships (`Link`, `DataTable`, `SummaryList`, `ContractView`)
 			 * already carries this same rule; a heading had simply never
 			 * been measured with hostile content before this ticket's sweep
 			 * found it 600px past its 320px frame.
