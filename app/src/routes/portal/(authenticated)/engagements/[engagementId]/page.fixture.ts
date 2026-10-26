@@ -8,18 +8,9 @@
  * Both carry #530's own URL, since a Practice's registered name is
  * exactly the value that broke a grid track there.
  *
- * Neither is painted any more, and that is a real change this fixture
- * has to own rather than imply. #296 made the `<h1>` a literal, and
- * `serviceName` only ever reached `<svelte:head>` -- so the visible text
- * this fixture now hands the sweep is the summary's Status and Due date
- * and the two document links, with the hostile URL nowhere in it. The
- * route genuinely renders the Practice's name nowhere itself: what a
- * Client sees is the portal shell's `PortalTopBar`, above this route,
- * and a fixture is not the place to invent a carrier the screen does not
- * have. The unbreakable-string measurement lives where such a string is
- * actually painted: `practices/[practiceId]`'s fixture still puts this
- * very URL in an `<h1>`, and the `portal-top-bar` style-guide page
- * measures the bar itself under a Practice name of its own.
+ * #2007 paints the Practice's name again, under the `<h1>`, as the
+ * drawing has it -- so this fixture's hostile URL is measured on this
+ * screen once more, and the line it sits in wraps anywhere.
  */
 import { jsonResponse } from '#lib/testResponse.js';
 import type { RouteFixture } from '../../../../routeFixture.js';
@@ -34,10 +25,24 @@ export const detail = {
 	engagementId: 'engagement-1',
 	practiceName,
 	clientName: 'Anne-Marie Ochieng-Whitfield',
-	status: 'active',
 	dueDate: '2027-03-01',
 	offersBirthPlan: true,
-	totalToPayCents: 335_000
+	totalToPayCents: 335_000,
+	/*
+	 * #2007's three cards, each at its longest: a signed Contract, a
+	 * Birth Plan she has confirmed, and a Message whose body is one long
+	 * unbreakable run beside a double-barreled sender's name. Their
+	 * other states are the spec's departures from this record.
+	 */
+	contract: { status: 'signed', signedAt: '2026-08-14T15:00:00Z' },
+	birthPlan: { acknowledgedAt: '2026-08-20T12:00:00Z' },
+	lastMessage: {
+		messageId: 'message-1',
+		senderType: 'staff',
+		senderName: 'Marguerite Ashworth-Delacroix-Whitfield',
+		body: 'https://maps.example.org/directions/to/the/birth-center/entrance?from=parking-garage-level-3',
+		createdAt: '2026-08-28T15:00:00Z'
+	}
 };
 
 /*

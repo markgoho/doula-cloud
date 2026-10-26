@@ -1,12 +1,13 @@
 <script lang="ts">
 	/*
-	 * The portal hub -- "Your care". What the Client's Engagement is, and
-	 * the way to the two documents that belong to it.
+	 * The portal hub -- "Your care" (#2007). Her care, in the drawing's
+	 * order: what happens next, her Visits, her Birth Plan, her Contract,
+	 * her Messages, what she still owes, and everything that has happened.
+	 * No care phase, at any width: the drawings state none, and #293 found
+	 * none true after a loss, so the BFF no longer sends one.
 	 *
 	 * The message thread used to render here and now has its own route
-	 * (#452): Messages is a destination in the portal's nav, and a nav item
-	 * that scrolls to a section of another page is a nav item that lies.
-	 * Push registration moved with it, up to `portal/(authenticated)/
+	 * (#452). Push registration lives in `portal/(authenticated)/
 	 * +layout.svelte`, so a Client who lands straight on her Contract is
 	 * still registered for #61's alerts.
 	 */
@@ -15,7 +16,6 @@
 	import { resolve } from '$app/paths';
 	import { apiFetchWithSession } from '#lib/api.js';
 	import { apiErrorMessage } from '#lib/apiErrorMessage.js';
-	import { formatCalendarDay } from '#lib/dates.js';
 	import { PaginatedList } from '#lib/paginatedList.svelte.js';
 	import {
 		clientActivityLedgerColumns,
@@ -29,35 +29,49 @@
 		portalVisitColumns,
 		type PortalVisit
 	} from '#lib/portalVisits.js';
-	import { INVOICES_HEADING, engagementLabel, engagementStatusLabel } from '#lib/clientRegister.js';
+	import { INVOICES_HEADING, OWED_HEADING, engagementLabel } from '#lib/clientRegister.js';
 	import { totalToPayFact } from '#lib/clientInvoice.js';
-	import Link from '#lib/components/atoms/Link.svelte';
+	import {
+		NEXT_HEADING,
+		birthPlanCard,
+		contractCard,
+		messagesCard,
+		nextVisit,
+		whatHappensNext,
+		type BirthPlanGlance,
+		type CareCard,
+		type ContractGlance,
+		type LastMessage
+	} from '#lib/yourCare.js';
+	import DoorLink from '#lib/components/atoms/DoorLink.svelte';
+	import Heading from '#lib/components/atoms/Heading.svelte';
+	import Notice from '#lib/components/atoms/Notice.svelte';
+	import Text from '#lib/components/atoms/Text.svelte';
 	import SummaryList from '#lib/components/molecules/SummaryList.svelte';
 	import DataTable from '#lib/components/organisms/DataTable.svelte';
-	import Notice from '#lib/components/atoms/Notice.svelte';
 	import RecordDetail from '#lib/components/templates/RecordDetail.svelte';
 
 	type Detail = {
 		engagementId: string;
 		practiceName: string;
 		clientName: string;
-		/** Absent after a loss, with dueDate (#2003, as #293 decided): the
-		 * BFF leaves out the care phase and the due date once the
-		 * Engagement has no living or expected baby. */
-		status?: string;
+		/** Absent after a loss (#2003, as #293 decided), and on a
+		 * postpartum-only Engagement, which never had one (#505). */
 		dueDate?: string;
 		offersBirthPlan: boolean;
-		/** What she still owes on this care -- the one figure the hub carries
-		 * (#983); the Invoices route holds the rest. */
+		/** What she still owes on this care (#983); the Invoices route
+		 * holds the rest. */
 		totalToPayCents: number;
+		contract?: ContractGlance;
+		birthPlan?: BirthPlanGlance;
+		lastMessage?: LastMessage;
 	};
 
 	let detail = $state<Detail | undefined>();
 	let error = $state('');
 
 	// #486 AC5: the same record-scoped ledger the staff Engagement page
-	// gets, behind a closed disclosure -- the design brief's own placement
-	// decision for the Client portal.
+	// gets, behind a closed disclosure.
 	const activity = new PaginatedList<ActivityEntry>({
 		first: { items: [], hasMore: false },
 		loadPage: (cursor) => loadPortalActivityPage(apiFetchWithSession, page.params.engagementId!, cursor),
@@ -66,9 +80,8 @@
 	let activityError = $state('');
 
 	// #478: her own Visits, scheduled and past, in one cursor-paginated
-	// stream ordered furthest-future first -- so the two groups need no
-	// second request. `inReadingOrder` turns the scheduled half around for
-	// display; its own doc comment says why the two orders differ.
+	// stream ordered furthest-future first; `inReadingOrder` turns the
+	// scheduled half around for display.
 	const visits = new PaginatedList<PortalVisit>({
 		first: { items: [], hasMore: false },
 		loadPage: (cursor) => loadPortalVisitsPage(apiFetchWithSession, page.params.engagementId!, cursor),
@@ -77,9 +90,7 @@
 	let visitsError = $state('');
 
 	onMount(async () => {
-		const response = await apiFetchWithSession(
-			`/api/portal/engagements/${page.params.engagementId}`
-		);
+		const response = await apiFetchWithSession(`/api/portal/engagements/${page.params.engagementId}`);
 		if (!response.ok) {
 			error = await apiErrorMessage(response);
 			return;
@@ -87,11 +98,8 @@
 
 		detail = await response.json();
 
-		// Both sections' first page at once, not one behind the other: the
-		// section a Client came for is the open one at the top, and
-		// awaiting the ledger's request first would make it wait on a
-		// table that is closed when the page loads. Neither read depends
-		// on the other's answer, and each keeps its own failure.
+		// Both lists' first page at once: neither read depends on the
+		// other's answer, and each keeps its own failure.
 		await Promise.all([
 			(async () => {
 				try {
@@ -110,86 +118,55 @@
 		]);
 	});
 
-	/** The summary row's own facts (#505). `dueDate` is left out of the
-	 * array entirely, rather than shown with a placeholder, when null --
-	 * ADR-0017's postpartum-only Engagement genuinely has none, and a
-	 * "Due date" row reading "Not given" would tell a Client something is
-	 * missing from her own record rather than that nothing was ever due.
-	 * #2003: `status` is left out the same way, after a loss.
-	 *
-	 * "Total to pay" is always the last row (#2038), the Invoices page's
-	 * own row, so the figure reads one way in both places. It is always
-	 * written, $0.00 included: it is true on every Engagement however it
-	 * ended (#982), so the row consults nothing about her history.
-	 * Currency is USD: an Engagement's Invoices are all in the Practice's
-	 * one currency and the hub holds no Invoice to read it from. */
-	function summaryItems(d: Detail): { label: string; value: string }[] {
-		const items: { label: string; value: string }[] = [];
-		if (d.status) {
-			items.push({ label: 'Status', value: engagementStatusLabel(d.status) });
-		}
-		if (d.dueDate) {
-			items.push({ label: 'Due date', value: formatCalendarDay(d.dueDate) });
-		}
-		items.push(totalToPayFact(d.totalToPayCents, 'usd'));
-		return items;
-	}
+	const next = $derived(whatHappensNext(nextVisit(visits.items), detail?.dueDate));
+
+	const routes = $derived.by(() => {
+		const engagementId = page.params.engagementId!;
+		return {
+			birthPlan: resolve('/portal/(authenticated)/engagements/[engagementId]/birth-plan', { engagementId }),
+			contract: resolve('/portal/(authenticated)/engagements/[engagementId]/contract', { engagementId }),
+			messages: resolve('/portal/(authenticated)/engagements/[engagementId]/messages', { engagementId }),
+			invoices: resolve('/portal/(authenticated)/engagements/[engagementId]/invoices', { engagementId })
+		};
+	});
 </script>
 
+<!--
+	Under the heading: whose care this is, then "What happens next" -- the
+	next Visit as a sentence, and the due date where there is one. A
+	labeled region of its own, so a screen reader can reach it by name;
+	its heading is the drawing's small label, not a section heading.
+-->
 {#snippet summary()}
-	<SummaryList rows={summaryItems(detail!)} />
-	<!-- #983: the way through to the money, under the figure it explains. -->
-	<div class="money">
-		<Link
-			href={resolve('/portal/(authenticated)/engagements/[engagementId]/invoices', {
-				engagementId: page.params.engagementId!
-			})}
-			label={INVOICES_HEADING}
-		/>
+	<div class="summary">
+		<div class="practice"><Text text={page.data.practiceName ?? ''} tone="variant" /></div>
+		<section class="next" aria-labelledby="what-happens-next"><!-- spelling:ignore: aria-labelledby is an ARIA attribute name -->
+			<Heading level={2} variant="card" text={NEXT_HEADING} id="what-happens-next" />
+			<Text text={next.lead} step="label" />
+			{#if next.detail}
+				<Text text={next.detail} tone="variant" />
+			{/if}
+		</section>
 	</div>
 {/snippet}
 
-{#snippet actions()}
-	<!--
-		The same one answer the nav item reads -- #311's kind half and
-		#294's living-or-expected-baby half, derived server-side and never
-		recomputed here.
-	-->
-	{#if detail?.offersBirthPlan}
-		<Link
-			href={resolve('/portal/(authenticated)/engagements/[engagementId]/birth-plan', {
-				engagementId: page.params.engagementId!
-			})}
-			label="Birth plan"
-		/>
-	{/if}
-	<Link
-		href={resolve('/portal/(authenticated)/engagements/[engagementId]/contract', {
-			engagementId: page.params.engagementId!
-		})}
-		label="Contract"
-	/>
+<!-- One card per document: the line that says where it stands, under
+     the way to it (DoorLink, #1645). No link where there is nothing to
+     open yet. -->
+{#snippet card(content: CareCard, href: string)}
+	<div class="column">
+		{#if content.label}
+			<DoorLink {href} label={content.label} description={content.description} />
+		{:else}
+			<Text text={content.description} />
+		{/if}
+	</div>
 {/snippet}
 
 <!--
-	#478: GLOSSARY.md's Visit entry gives this section its heading -- the
-	Client register's own "Your visits", her phrasing ("when she comes
-	over", "when Maya came"), never the team's "Visits".
-
-	It is the FIRST section on the page, not the second. The drawing puts
-	it directly under "What happens next", and that section does not
-	exist on this route -- nothing above the sections here but the
-	record's own summary and the two document links -- so directly under
-	it means first. Ahead of the Activity ledger either way: both
-	journeys put "when is someone coming" among the first things she
-	wants, and the ledger is what already happened.
-
-	Open, unlike the ledger's closed disclosure: the ledger sits behind
-	one because it is a record to consult, and this is the answer she came
-	for.
-
-	No Visit type is rendered, in any wording -- see portalVisits.ts, and
-	GLOSSARY.md's Visit entry, for why.
+	#478: "Your visits" is the Client register's own heading (GLOSSARY.md's
+	Visit entry). Open, unlike the ledger: this is the answer she came for.
+	No Visit type is rendered, in any wording -- see portalVisits.ts.
 -->
 {#snippet visitsSection()}
 	{#if visitsError}
@@ -206,18 +183,38 @@
 	/>
 {/snippet}
 
-<!--
-	#486 AC5: GLOSSARY.md's own words for this to a Client -- "Everything
-	that has happened" -- as the section heading. GOV.UK's Details guidance
-	is that a summary names what it reveals rather than a bare "Show" with
-	no subject, so the disclosure's own toggle text repeats "what has
-	happened" instead of the heading's exact words. Behind a closed
-	disclosure, per the design brief's #433 amendment for the Client
-	portal.
+{#snippet birthPlanSection()}
+	{@render card(birthPlanCard(detail?.birthPlan), routes.birthPlan)}
+{/snippet}
 
-	#708: the Client's own column set, not the staff one -- every row's
-	event text is the register's fixed phrase for that action, never the
-	raw `activity.EngagementAction` the two staff surfaces show.
+{#snippet contractSection()}
+	{@render card(contractCard(detail?.contract, page.data.practiceName ?? ''), routes.contract)}
+{/snippet}
+
+{#snippet messagesSection()}
+	{@render card(messagesCard(detail?.lastMessage), routes.messages)}
+{/snippet}
+
+<!--
+	#983, #2038: the "Total to pay" row is the Invoices page's own, so the
+	figure reads one way in both places, $0.00 included (#982). Paying
+	happens on an Invoice's own page (#983); how a Client pays is #297's.
+-->
+{#snippet owedSection()}
+	<div class="column">
+		<SummaryList rows={[totalToPayFact(detail?.totalToPayCents ?? 0, 'usd')]} />
+		<DoorLink
+			href={routes.invoices}
+			label={INVOICES_HEADING}
+			description="Each Invoice for your care, and the way to pay one that is due."
+		/>
+	</div>
+{/snippet}
+
+<!--
+	#486 AC5: GLOSSARY.md's own words for this to a Client, behind a
+	closed disclosure (the design brief's #433 amendment). #708: every
+	row's event text is the register's fixed phrase for that action.
 -->
 {#snippet activitySection()}
 	{#if activityError}
@@ -236,52 +233,28 @@
 {/snippet}
 
 <!--
-	Archetype D, ADR-0018 -- the same Template the staff Engagement page
-	uses, which is the point of putting both on it. #486 gives this page
-	its first section: everything else here is the record's own summary
-	and the way to its documents.
--->
-<!--
-	#310: `serviceName` is what `PageTitle` folds into `<title>`, and
-	SvelteKit's own client-side navigation announcer reads that title
-	aloud after every route change -- it is how "a change of Engagement
-	is announced" gets met without a bespoke live region. `engagementLabel`
-	rather than the bare Practice name so switching between two
-	Engagements at the same Practice still announces something that
-	differs; the `<h1>` stays the same words on every Engagement, since a
-	distinguishing fact belongs in what is spoken, not necessarily in what
-	is read.
--->
-<!--
-	#296: the heading is GLOSSARY.md's own Client word for an Engagement --
-	the Engagement entry's `_Client says_:` line reads `my care ("Your
-	care" as a heading)`. It was `Welcome to {practiceName}`, a first-visit
-	greeting rendered on every visit for the life of the Engagement, which
-	on the loss journey is what the screen said to a woman coming back
-	three weeks after her pregnancy ended.
+	Archetype D, ADR-0018. #296: the heading is GLOSSARY.md's own Client
+	word for an Engagement, a literal that consults nothing, so it is true
+	for every Client, after a loss included. #310: `serviceName` is what
+	`PageTitle` folds into `<title>`, which SvelteKit's navigation
+	announcer reads aloud, so two Engagements at one Practice announce
+	different words.
 
-	A literal, not an expression, and that is the whole fix: the heading
-	consults nothing -- not the record, not a visit count, not an outcome
-	-- because "Your care" is true on the first visit and the four
-	hundredth, for an `intake`, `active` or `completed` Engagement, and
-	for a Client after a loss. The register's own rule is that a word which
-	cannot be kind to every Client is the wrong word, never a word wanting
-	a condition, so there is no branch here to keep true.
-
-	The Practice's name has not gone anywhere: `serviceName` below is what
-	`PageTitle` folds into `<title>`, and the portal shell above this route
-	-- `portal/(authenticated)/+layout.svelte`'s `PortalTopBar` -- renders
-	it on the page itself, which is why losing it from the `<h1>` loses
-	nothing a Client needs to know about whose portal she is in.
+	The Birth Plan section follows `offersBirthPlan`, the same one answer
+	the nav item reads (#311, #294): where none is offered she meets no
+	mention of it.
 -->
 <RecordDetail
 	title="Your care"
 	serviceName={engagementLabel({ practiceName: page.data.practiceName, createdAt: page.data.createdAt })}
 	{summary}
-	{actions}
 	sections={detail
 		? [
 				{ heading: 'Your visits', content: visitsSection },
+				...(detail.offersBirthPlan ? [{ heading: 'Your birth plan', content: birthPlanSection }] : []),
+				{ heading: 'Your contract', content: contractSection },
+				{ heading: 'Messages', content: messagesSection },
+				{ heading: OWED_HEADING, content: owedSection },
 				{ heading: 'Everything that has happened', content: activitySection }
 			]
 		: []}
@@ -291,9 +264,39 @@
 
 <style>
 	@layer components {
-		/* The way through to the Invoices, under the summary it explains. */
-		.money {
-			margin: var(--space-4) 0 var(--space-6);
+		.summary {
+			display: flex;
+			flex-direction: column;
+			gap: var(--space-8);
+			margin-block-start: var(--space-2);
+		}
+
+		/* The Practice's name is her Practice's own data, of any length. */
+		.practice {
+			overflow-wrap: anywhere;
+		}
+
+		/* The drawing's card: one bordered block, as wide as the cards
+		   below it. */
+		.next {
+			display: flex;
+			flex-direction: column;
+			gap: var(--space-3);
+			max-inline-size: var(--measure);
+			padding: var(--space-5);
+			border: var(--border-thin) solid var(--color-outline-variant);
+			border-radius: var(--radius);
+			background-color: var(--color-surface-bright);
+		}
+
+		/* One column for every section's card, the drawing's width: a
+		   card that ran the full 1440px would put its one line a long way
+		   from its edge. */
+		.column {
+			display: flex;
+			flex-direction: column;
+			gap: var(--space-4);
+			max-inline-size: var(--measure);
 		}
 	}
 </style>

@@ -1,13 +1,45 @@
 package contracts
 
 import (
+	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"net/http"
+	"time"
 
 	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/clientauth"
 )
+
+// ClientGlance is the one line the portal's "Your care" page says about
+// her Contract (#2007): where it stands, and when she signed it. The
+// document itself stays on the Contract page, so the hub does not carry
+// its prose to say one sentence about it.
+type ClientGlance struct {
+	Status   string     `json:"status"`
+	SignedAt *time.Time `json:"signedAt,omitempty"`
+}
+
+// ClientContractGlance reads the same Contract ClientGetContractHandler
+// shows her -- the newest row her RLS lets her see, so a Draft never
+// reaches her (contracts_client_visibility). found is false when she has none yet.
+// tx must be a Client-portal transaction.
+func ClientContractGlance(ctx context.Context, tx *sql.Tx, engagementID string) (glance ClientGlance, found bool, err error) {
+	err = tx.QueryRowContext(ctx,
+		`SELECT status, signed_at FROM contracts
+		 WHERE engagement_id = $1 ORDER BY created_at DESC, id DESC LIMIT 1`,
+		engagementID,
+	).Scan(&glance.Status, &glance.SignedAt)
+	if errors.Is(err, sql.ErrNoRows) {
+		return ClientGlance{}, false, nil
+	}
+	if err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		return ClientGlance{}, false, fmt.Errorf("contracts: client contract glance: %w", err)
+	}
+	return glance, true, nil
+}
 
 // ClientGetContractHandler views the Contract for the Client-portal
 // caller's Engagement -- read-only, no PUT/POST route for this

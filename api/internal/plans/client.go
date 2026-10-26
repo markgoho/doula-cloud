@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"time"
 
 	"doula-cloud/api/internal/activity"
 	"doula-cloud/api/internal/apierr"
@@ -26,6 +27,34 @@ const birthPlanType = "birth_plan"
 // entry: where it does not apply she meets no mention of it at all, so
 // the refusal must not distinguish the three cases for her.
 const msgNoBirthPlan = "no birth plan found for this engagement"
+
+// ClientGlance is the one line the portal's "Your care" page says about
+// her Birth Plan (#2007): when she last confirmed she read it, absent
+// when she has not since it last changed. The answers stay on the Birth
+// Plan page.
+type ClientGlance struct {
+	AcknowledgedAt *time.Time `json:"acknowledgedAt,omitempty"`
+}
+
+// ClientBirthPlanGlance reads her Birth Plan's acknowledgment; found is
+// false when no Birth Plan has been started. The caller asks only where
+// engagement.OffersBirthPlan is true, the same gate the Birth Plan read
+// carries, so this never mentions a plan she cannot have. tx must be a
+// Client-portal transaction.
+func ClientBirthPlanGlance(ctx context.Context, tx *sql.Tx, engagementID string) (glance ClientGlance, found bool, err error) {
+	err = tx.QueryRowContext(ctx,
+		`SELECT client_acknowledged_at FROM plan_instances WHERE engagement_id = $1 AND plan_type = $2`,
+		engagementID, birthPlanType,
+	).Scan(&glance.AcknowledgedAt)
+	if errors.Is(err, sql.ErrNoRows) {
+		return ClientGlance{}, false, nil
+	}
+	if err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		return ClientGlance{}, false, fmt.Errorf("plans: client birth plan glance: %w", err)
+	}
+	return glance, true, nil
+}
 
 // ClientGetBirthPlanHandler views the Birth Plan instance for the
 // Client-portal caller's Engagement -- clientauth.Middleware has already

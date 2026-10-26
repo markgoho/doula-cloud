@@ -155,16 +155,44 @@
 		   own edge -- still the item's own marker, beside aria-current. */
 		.narrow {
 			flex-wrap: wrap;
+			padding-inline: var(--page-gutter);
 		}
 
+		/* Each item is as wide as its label where the whole row fits on
+		   one line (#2007): the drawing's tabs sit together under the
+		   Practice's name, never stretched across a 1440px bar. Where the
+		   row does not fit, each item takes a share of the row big enough
+		   that no line holds more than three, so five items wrap three and
+		   two and never leave one alone on a line; four wrap two and two.
+		   The switch is the flex-basis itself (the "albatross"): below the
+		   width the labels need, `(width - 100%) * 999` is huge and the
+		   clamp holds it at the share; above it the value is negative and
+		   the clamp holds it at zero, so the item is its label's own
+		   width. No query, and the count is read with `:has()`. Under the
+		   app's border-box sizing, 30% puts three to a line and never
+		   four, 45% two and never three. An item whose label is wider than
+		   its share keeps its label's width.
+
+		   The widths, measured 2026-10-26 in the running app on
+		   macOS/Chromium at the 16px type floor: five labels need 458px of
+		   row, four about 370px. 31rem (496px) and 25rem (400px) leave
+		   each about 8% for CI's Linux/Chromium, which sets the same font
+		   wider. The spec sweeps every 4px from 320px to 640px for both
+		   counts, under the app's own stylesheet. */
 		.narrow :global(a) {
-			flex: 1 1 auto;
+			flex: 0 0 auto;
+			flex-basis: clamp(0rem, calc((31rem - 100%) * 999), 30%);
 			justify-content: center;
 			min-block-size: var(--nav-row-height);
 			/* The link's own inset, which its padding and its label's 44px
 			   floor both read (#1851), rather than the padding alone. */
 			--link-inset-start: var(--space-2);
 			--link-inset-end: var(--space-2);
+		}
+
+		/* Four items (no Birth plan): two to a line where they wrap. */
+		.narrow:not(:has(> :global(a:nth-child(5)))) :global(a) {
+			flex-basis: clamp(0rem, calc((25rem - 100%) * 999), 45%);
 		}
 
 		/* Unavoidable (#564): the same shape as StaffTopBar's own -- a wide
