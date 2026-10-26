@@ -548,6 +548,7 @@
 	<Link
 		href={resolve('/practices/[practiceId]/invite', { practiceId: page.params.practiceId! })}
 		label="Invite a Staff member"
+		variant="start"
 	/>
 {/snippet}
 

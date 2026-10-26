@@ -752,7 +752,7 @@
 				variant="info"
 				message="Stripe will not process Client payments until it can see this Practice online. The website question needs an answer before Stripe can be connected."
 			/>
-			<Link href={websiteHref} label="Answer the website question" />
+			<Link href={websiteHref} label="Answer the website question" variant="start" />
 		{:else if canStartOnboarding && isPageFailed}
 			<!--
 				Block again, and name it as our problem rather than hers: she

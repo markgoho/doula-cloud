@@ -35,8 +35,15 @@
 
 	<section>
 		<h2>Disabled</h2>
+		<p>
+			A dashed outline in the muted color with no fill, whatever the variant. A button that is unavailable but keeps focus
+			(the last Move down) draws the same.
+		</p>
 		<cluster-l space="var(--space-4)">
 			<Button label="Send this invoice to the Client" disabled onClick={noop} />
+			<Button label="Move up" variant="secondary" disabled onClick={noop} />
+			<Button label="Remove this Doula from the Practice" variant="destructive" disabled onClick={noop} />
+			<Button label="Move down" variant="secondary" ariaDisabled onClick={noop} />
 		</cluster-l>
 	</section>
 

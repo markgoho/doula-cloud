@@ -14,6 +14,24 @@
 	</section>
 
 	<section>
+		<h2>Start button</h2>
+		<p>The one navigation that starts a screen's task, drawn as the primary button. Once on a screen at most.</p>
+		<stack-l space="var(--space-4)">
+			<Link label="Invite a Staff member" href="/style-guide" variant="start" />
+			<Link label="Answer the website question so Stripe can see your Practice online" href="/style-guide" variant="start" />
+		</stack-l>
+	</section>
+
+	<section>
+		<h2>Filter chips</h2>
+		<p>The applied filter is drawn apart from the others.</p>
+		<cluster-l space="var(--space-3)">
+			<Link label="All invoices" href="/style-guide" variant="chip" current />
+			<Link label="Overdue (1)" href="/style-guide" variant="chip" />
+		</cluster-l>
+	</section>
+
+	<section>
 		<h2>Internal link</h2>
 		<cluster-l space="var(--space-4)">
 			<Link label="Back to style guide" href="/style-guide" />

@@ -103,6 +103,7 @@
 			     exception the select/option pair above takes. -->
 			<Button
 				label="Move up"
+				variant="secondary"
 				describedBy="{field.id}-move-up-name"
 				onClick={() => move(field.id, 'up')}
 				ariaDisabled={index === 0}
@@ -110,6 +111,7 @@
 			<span class="visually-hidden" id="{field.id}-move-up-name">{rowName(field)}</span>
 			<Button
 				label="Move down"
+				variant="secondary"
 				describedBy="{field.id}-move-down-name"
 				onClick={() => move(field.id, 'down')}
 				ariaDisabled={index === fields.length - 1}
@@ -117,6 +119,7 @@
 			<span class="visually-hidden" id="{field.id}-move-down-name">{rowName(field)}</span>
 			<Button
 				label="Remove"
+				variant="secondary"
 				describedBy="{field.id}-remove-name"
 				onClick={() => onRemove(field.id)}
 			/>
@@ -139,4 +142,4 @@
 		/>
 	{/snippet}
 </LabeledField>
-<Button label="Add field" onClick={() => onAdd(newFieldType)} />
+<Button label="Add field" variant="secondary" onClick={() => onAdd(newFieldType)} />

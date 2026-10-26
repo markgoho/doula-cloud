@@ -394,7 +394,7 @@
 						practiceId: page.params.practiceId!
 					})}
 					label={isPracticeOwner ?'Set up card payments' : 'Getting paid'}
-					variant="secondary"
+					variant={isPracticeOwner ? 'start' : 'secondary'}
 				/>
 			{:else}
 				{#if connect.requirementsDue.length > 0}
@@ -515,7 +515,7 @@
 			the search is the only door again. `from` sends the name
 			question's Back here.
 		-->
-		<Link href={startHref(page.params.practiceId!, 'overview')} label="Add your first Client" />
+		<Link href={startHref(page.params.practiceId!, 'overview')} label="Add your first Client" variant="start" />
 	</stack-l>
 {/snippet}
 

@@ -96,9 +96,11 @@
 			{#if instance}
 				<div class="no-print">
 					<!-- A cluster, so the two buttons keep a gap between them when
-					     they wrap onto two rows at a narrow width (#1576). -->
+					     they wrap onto two rows at a narrow width (#1576). Both
+					     secondary: "I've read this" is the screen's one primary
+					     (#2019); where it sits is #2036's. -->
 					<cluster-l space="var(--space-3)">
-						<Button label="Print" onClick={() => print()} />
+						<Button label="Print" variant="secondary" onClick={() => print()} />
 						<Button
 							label="Download Birth Plan (PDF)"
 							icon="file-text"

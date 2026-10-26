@@ -145,6 +145,7 @@
 			     exception the select/option pair above takes. -->
 			<Button
 				label="Move up"
+				variant="secondary"
 				describedBy="{field.id}-move-up-name"
 				onClick={() => move(field.id, 'up')}
 				ariaDisabled={index === 0}
@@ -152,12 +153,13 @@
 			<span class="visually-hidden" id="{field.id}-move-up-name">{rowName(field)}</span>
 			<Button
 				label="Move down"
+				variant="secondary"
 				describedBy="{field.id}-move-down-name"
 				onClick={() => move(field.id, 'down')}
 				ariaDisabled={index === activeFields.length - 1}
 			/>
 			<span class="visually-hidden" id="{field.id}-move-down-name">{rowName(field)}</span>
-			<Button label="Archive" describedBy="{field.id}-archive-name" onClick={() => (confirmArchiveId = field.id)} />
+			<Button label="Archive" variant="secondary" describedBy="{field.id}-archive-name" onClick={() => (confirmArchiveId = field.id)} />
 			<span class="visually-hidden" id="{field.id}-archive-name">{rowName(field)}</span>
 			<!-- v8 ignore stop -->
 			<!-- v8 ignore start: the setter half of this get/set bind:open only
@@ -195,7 +197,7 @@
 		/>
 	{/snippet}
 </LabeledField>
-<Button label="Add field" onClick={() => onAdd(newFieldType)} />
+<Button label="Add field" variant="secondary" onClick={() => onAdd(newFieldType)} />
 
 {#if archivedFields.length > 0}
 	<Heading level={2} text="Archived fields" />
@@ -207,6 +209,7 @@
 				<span>Archived -- no longer collected</span>
 				<Button
 					label="Unarchive"
+					variant="secondary"
 					describedBy="{field.id}-unarchive-name"
 					onClick={() => onArchiveToggle(field.id)}
 				/>
