@@ -522,7 +522,7 @@
 			one-shot codes is. The same reasoning /mfa/enroll's own secret
 			key uses.
 		-->
-		<ol class="codes">
+		<ol class="codes prose-list">
 			{#each savedCodes as code (code)}
 				<li><code>{code}</code></li>
 			{/each}

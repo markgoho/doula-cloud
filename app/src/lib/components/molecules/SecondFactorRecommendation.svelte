@@ -64,7 +64,7 @@
 		<Text
 			text="As a Practice Owner, you can see every Client's records and decide who gets in. You need two-factor authentication before you can:"
 		/>
-		<ul>
+		<ul class="prose-list">
 			<li>download all of your Practice's data</li>
 			<li>delete your Practice</li>
 			<li>erase a Client's records</li>

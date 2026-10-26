@@ -7,6 +7,71 @@ import { defineConfig, includeIgnoreFile } from 'eslint/config';
 import globals from 'globals';
 import ts from 'typescript-eslint';
 
+/*
+ * The atoms and molecules that own a raw control element, and the
+ * elements every other `.svelte` file must reach through them.
+ */
+const controlOwners = [
+	'src/lib/components/atoms/Button.svelte',
+	'src/lib/components/atoms/Link.svelte',
+	// A door (#1645) is one anchor holding a name and a line, with the
+	// name alone as its accessible name -- a shape `Link`'s one label
+	// cannot draw. It is the second atom that owns a raw <a>.
+	'src/lib/components/atoms/DoorLink.svelte',
+	'src/lib/components/atoms/Select.svelte',
+	'src/lib/components/atoms/Textarea.svelte',
+	'src/lib/components/atoms/TextInput.svelte',
+	'src/lib/components/atoms/Checkbox.svelte',
+	'src/lib/components/molecules/RadioGroup.svelte'
+];
+
+const controlRestrictions = [
+	{
+		elements: ['button'],
+		message: 'Use the Button atom (#lib/components/atoms/Button.svelte) instead of a raw <button> element.'
+	},
+	{
+		elements: ['a'],
+		message: 'Use the Link atom (#lib/components/atoms/Link.svelte) instead of a raw <a> element.'
+	},
+	{
+		elements: ['select'],
+		message: 'Use the Select atom (#lib/components/atoms/Select.svelte) instead of a raw <select> element.'
+	},
+	{
+		elements: ['textarea'],
+		message: 'Use the Textarea atom (#lib/components/atoms/Textarea.svelte) instead of a raw <textarea> element.'
+	},
+	{
+		elements: ['input'],
+		message:
+			'Use the TextInput atom (#lib/components/atoms/TextInput.svelte), the Checkbox atom, or the RadioGroup molecule instead of a raw <input> element. A file input has no atom -- disable this rule on that one line with a comment saying so (#492).'
+	}
+];
+
+// The molecules and Templates that own a raw <label> or <fieldset> (#2017).
+const fieldOwners = [
+	'src/lib/components/molecules/LabeledField.svelte',
+	'src/lib/components/molecules/DateFields.svelte',
+	'src/lib/components/molecules/CheckboxGroup.svelte',
+	'src/lib/components/molecules/RadioGroup.svelte',
+	'src/lib/components/templates/QuestionPage.svelte',
+	'src/lib/components/templates/FormPage.svelte'
+];
+
+const fieldRestrictions = [
+	{
+		elements: ['label'],
+		message:
+			'Use LabeledField (#lib/components/molecules/LabeledField.svelte) instead of a raw <label>: it joins the label, hint and error to the control.'
+	},
+	{
+		elements: ['fieldset'],
+		message:
+			'Use a group molecule -- CheckboxGroup, RadioGroup, DateFields -- or a Template (FormPage, QuestionPage) instead of a raw <fieldset>.'
+	}
+];
+
 const gitignorePath = path.resolve(import.meta.dirname, '.gitignore');
 
 export default defineConfig(
@@ -92,44 +157,23 @@ export default defineConfig(
 	},
 	{
 		files: ['**/*.svelte'],
-		ignores: [
-			'src/lib/components/atoms/Button.svelte',
-			'src/lib/components/atoms/Link.svelte',
-			// A door (#1645) is one anchor holding a name and a line, with the
-			// name alone as its accessible name -- a shape `Link`'s one label
-			// cannot draw. It is the second atom that owns a raw <a>.
-			'src/lib/components/atoms/DoorLink.svelte',
-			'src/lib/components/atoms/Select.svelte',
-			'src/lib/components/atoms/Textarea.svelte',
-			'src/lib/components/atoms/TextInput.svelte',
-			'src/lib/components/atoms/Checkbox.svelte',
-			'src/lib/components/molecules/RadioGroup.svelte'
-		],
+		ignores: controlOwners,
 		rules: {
-			'svelte/no-restricted-html-elements': [
-				'error',
-				{
-					elements: ['button'],
-					message: 'Use the Button atom (#lib/components/atoms/Button.svelte) instead of a raw <button> element.'
-				},
-				{
-					elements: ['a'],
-					message: 'Use the Link atom (#lib/components/atoms/Link.svelte) instead of a raw <a> element.'
-				},
-				{
-					elements: ['select'],
-					message: 'Use the Select atom (#lib/components/atoms/Select.svelte) instead of a raw <select> element.'
-				},
-				{
-					elements: ['textarea'],
-					message: 'Use the Textarea atom (#lib/components/atoms/Textarea.svelte) instead of a raw <textarea> element.'
-				},
-				{
-					elements: ['input'],
-					message:
-						'Use the TextInput atom (#lib/components/atoms/TextInput.svelte), the Checkbox atom, or the RadioGroup molecule instead of a raw <input> element. A file input has no atom -- disable this rule on that one line with a comment saying so (#492).'
-				}
-			]
+			'svelte/no-restricted-html-elements': ['error', ...controlRestrictions]
+		}
+	},
+	{
+		// #2017: a field's label and a group's fieldset belong to the
+		// molecules and Templates that draw them, the way a <button> belongs
+		// to Button. Its own block, not more `ignores` on the block above:
+		// an ignored file there is exempt from every element in it, and
+		// LabeledField owning <label> is no reason for it to hold a raw
+		// <button>. A flat-config rule set later replaces the earlier one,
+		// so the owners below still answer to the block above.
+		files: ['**/*.svelte'],
+		ignores: [...controlOwners, ...fieldOwners],
+		rules: {
+			'svelte/no-restricted-html-elements': ['error', ...controlRestrictions, ...fieldRestrictions]
 		}
 	},
 	{

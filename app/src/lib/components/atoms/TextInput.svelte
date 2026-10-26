@@ -282,7 +282,7 @@
 			   padding below sits inside the 100% rather than pushing the
 			   control past its column. */
 			inline-size: 100%;
-			min-height: 2.5rem;
+			min-height: var(--control-height);
 			padding: var(--space-2) var(--space-3);
 			color: var(--color-on-surface);
 			background-color: var(--color-surface);

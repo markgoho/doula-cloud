@@ -13,6 +13,7 @@
 	import DataTable, { type DataTableView } from '#lib/components/organisms/DataTable.svelte';
 	import Checkbox from '#lib/components/atoms/Checkbox.svelte';
 	import Link from '#lib/components/atoms/Link.svelte';
+	import LabeledField from '#lib/components/molecules/LabeledField.svelte';
 	import Notice from '#lib/components/atoms/Notice.svelte';
 	import Skeleton from '#lib/components/atoms/Skeleton.svelte';
 	import ListPage from '#lib/components/templates/ListPage.svelte';
@@ -322,10 +323,11 @@
 		everyone, including a Client whose only Request was refused -- nothing
 		new is built for her, she is simply no longer filtered out.
 	-->
-	<label>
-		<Checkbox variant="toggle" checked={isShowingEveryone} onChange={handleToggleAll} />
-		See everyone
-	</label>
+	<LabeledField label="See everyone" orientation="inline">
+		{#snippet children(control)}
+			<Checkbox variant="toggle" checked={isShowingEveryone} onChange={handleToggleAll} {...control} />
+		{/snippet}
+	</LabeledField>
 
 	{#if error}
 		<Notice message={error} variant="error" />

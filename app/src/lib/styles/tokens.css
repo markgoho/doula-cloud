@@ -182,6 +182,9 @@
 	/* Fixed dimensions the brief states as numbers. Tokens rather than magic
 	   numbers, so #431's shell and #422's Templates share one source. */
 	--control-height: 2.5rem;
+	/* The large Button's floor (#2017), which was a 3rem literal in the
+	   atom: the one control a screen makes its main act. */
+	--control-height-lg: 3rem;
 	/* The checkbox's box and the radio's circle (#2014): one size, so a
 	   form that asks both reads as one product. GOV.UK's 40px, the height
 	   of a text input, which was the radio's size already (#1518) and was

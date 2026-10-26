@@ -124,24 +124,19 @@
 		<stack-l space="var(--space-3)">
 			<Heading level={2} text="If you do not agree" />
 			<p>You can take your Practice's data with you, or delete your Practice.</p>
-			<ul>
-				<li>
-					{#if hasSecondFactor}
-						<Link href={`${apiBaseURL()}/api/practices/${practiceId}/export`} label="Export your Practice's data" />
-					{:else}
-						<SecondFactorNeeded
-							message="You need two-factor authentication before you can export your Practice's data."
-							returnTo={page.url.pathname}
-						/>
-					{/if}
-				</li>
-				<li>
-					<Link href={resolve('/practices/[practiceId]/settings/delete', { practiceId })} label="Delete your Practice" />
-				</li>
-				<li>
-					<Button variant="link" label="Sign out" onClick={signOut} />
-				</li>
-			</ul>
+			<!-- Three actions, not a list (#2017): a cluster wraps them to a line each when the column is narrow. -->
+			<cluster-l space="var(--space-4)">
+				{#if hasSecondFactor}
+					<Link href={`${apiBaseURL()}/api/practices/${practiceId}/export`} label="Export your Practice's data" />
+				{:else}
+					<SecondFactorNeeded
+						message="You need two-factor authentication before you can export your Practice's data."
+						returnTo={page.url.pathname}
+					/>
+				{/if}
+				<Link href={resolve('/practices/[practiceId]/settings/delete', { practiceId })} label="Delete your Practice" />
+				<Button variant="link" label="Sign out" onClick={signOut} />
+			</cluster-l>
 		</stack-l>
 	</section>
 {/snippet}
@@ -152,15 +147,6 @@
 	@layer components {
 		p {
 			margin: 0;
-		}
-
-		ul {
-			display: flex;
-			flex-direction: column;
-			gap: var(--space-3);
-			margin: 0;
-			padding: 0;
-			list-style: none;
 		}
 	}
 </style>

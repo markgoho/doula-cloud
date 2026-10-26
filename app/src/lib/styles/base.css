@@ -113,3 +113,22 @@ main:has(> [data-fills-main]) {
 body > * {
 	font-size: var(--text-body-size);
 }
+
+/*
+ * The opt-in for a prose list (#2017): `reset.css` takes every list's
+ * markers away, and a list that is part of a sentence's argument -- the
+ * second-factor recommendation's five acts, what Stripe asks for, the
+ * terms a person agrees to, the numbered recovery codes -- puts them
+ * back, with the room they hang in. GOV.UK's `govuk-list--bullet` and
+ * `govuk-list--number`, as one class: an `<ol>` already says it is
+ * numbered.
+ */
+ul.prose-list {
+	list-style-type: disc;
+	padding-inline-start: var(--space-6);
+}
+
+ol.prose-list {
+	list-style-type: decimal;
+	padding-inline-start: var(--space-6);
+}

@@ -1,5 +1,6 @@
 <script lang="ts">
 	import Select from '#lib/components/atoms/Select.svelte';
+	import LabeledField from '#lib/components/molecules/LabeledField.svelte';
 	import { apiBaseURL } from '#lib/api.js';
 	import { clearPageOverride, overridePage } from '#lib/appState.svelte.js';
 	import { toPageState, type RouteFixture } from '../../routeFixture.js';
@@ -124,12 +125,14 @@
 		window, which never moves.
 	</p>
 
-	<label>
-		Component
-		<Select options={names} bind:value={selectedName} />
-	</label>
+	<LabeledField label="Component">
+		{#snippet children({ id, describedBy, invalid })}
+			<Select {id} {describedBy} {invalid} options={names} bind:value={selectedName} />
+		{/snippet}
+	</LabeledField>
 
 	<div class="handle">
+		<!-- eslint-disable-next-line svelte/no-restricted-html-elements -- the range input below has no atom (#492), and its label shares a grid row with the live <output>, a shape LabeledField does not draw -->
 		<label for="available-space">Available space</label>
 		<output for="available-space">{frameSpace}px</output>
 		<!-- No range atom exists, and the block on new components (CLAUDE.md)

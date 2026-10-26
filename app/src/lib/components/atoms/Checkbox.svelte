@@ -83,7 +83,8 @@
 			block-size: var(--choice-size);
 			/* Never smaller than the text beside it, for the reason
 			   RadioGroup gives: a box with `appearance: none` and no token
-			   to size it would be a box of nothing. */
+			   to size it would be a box of nothing. tokens:ignore -- `1em`
+			   is the text's own size, a floor and not a design value. */
 			min-inline-size: 1em;
 			min-block-size: 1em;
 			margin: 0;
@@ -142,6 +143,8 @@
 		input.toggle {
 			appearance: none;
 			position: relative;
+			/* tokens:ignore -- the toggle's drawn track: its width, height,
+			   knob and travel are one shape and move with nothing else. */
 			inline-size: 2.5rem;
 			block-size: 1.5rem;
 			border: var(--border-thin) solid var(--color-outline);
@@ -154,6 +157,7 @@
 			position: absolute;
 			inset-block-start: var(--border-thin);
 			inset-inline-start: var(--border-thin);
+			/* tokens:ignore -- the toggle's drawn knob, sized to its track. */
 			inline-size: 1.2rem;
 			block-size: 1.2rem;
 			border-radius: 50%;
@@ -165,6 +169,7 @@
 		}
 
 		input.toggle:checked::before {
+			/* tokens:ignore -- the knob's travel along its drawn track. */
 			translate: 1rem 0;
 		}
 

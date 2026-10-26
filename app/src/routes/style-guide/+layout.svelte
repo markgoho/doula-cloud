@@ -3,6 +3,7 @@
 	import { page } from '$app/state';
 	import Checkbox from '#lib/components/atoms/Checkbox.svelte';
 	import Link from '#lib/components/atoms/Link.svelte';
+	import LabeledField from '#lib/components/molecules/LabeledField.svelte';
 	import PageTitle from '#lib/components/PageTitle.svelte';
 	import {
 		atomPages,
@@ -49,10 +50,11 @@
 	<stack-l space="var(--space-6)">
 		<cluster-l justify="space-between" align="center">
 			<h1>Style guide</h1>
-			<label>
-				Dark mode
-				<Checkbox variant="toggle" checked={isDark} onChange={onToggleTheme} />
-			</label>
+			<LabeledField label="Dark mode" orientation="inline">
+				{#snippet children(control)}
+					<Checkbox variant="toggle" checked={isDark} onChange={onToggleTheme} {...control} />
+				{/snippet}
+			</LabeledField>
 		</cluster-l>
 
 		<nav>

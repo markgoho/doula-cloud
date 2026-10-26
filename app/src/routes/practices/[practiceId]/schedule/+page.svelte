@@ -144,6 +144,7 @@
 	{#snippet content()}
 		<!-- stacked-form:ignore: #1108 -- a `method="get"` narrowing control, not a run of fields. Its controls sit side by side in `.controls` and wrap to one per row on their own, and `StackedForm` would both stack them and take away the GET submission this form is built on. -->
 		<form method="get" action={basePath} onsubmit={applyNarrowing}>
+			<!-- eslint-disable-next-line svelte/no-restricted-html-elements -- a route-owned filter bar, copied on On call; the FilterBar molecule that will own this fieldset is #2026 -->
 			<fieldset>
 				<legend>Narrow the schedule</legend>
 				<div class="controls">

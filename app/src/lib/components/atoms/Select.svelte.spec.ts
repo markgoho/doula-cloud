@@ -12,6 +12,7 @@ interface SetupOptions {
 	required?: boolean;
 	invalid?: boolean;
 	describedBy?: string;
+	ariaLabel?: string;
 	name?: string;
 	id?: string;
 	onChange?: (value: string) => void;
@@ -25,11 +26,12 @@ async function setup({
 	required,
 	invalid,
 	describedBy,
+	ariaLabel,
 	name,
 	id,
 	onChange
 }: SetupOptions = {}) {
-	await render(Select, { options, value, placeholder, disabled, required, invalid, describedBy, name, id, onChange });
+	await render(Select, { options, value, placeholder, disabled, required, invalid, describedBy, ariaLabel, name, id, onChange });
 }
 
 describe('Select.svelte', () => {
@@ -90,6 +92,12 @@ describe('Select.svelte', () => {
 		await setup();
 
 		await expect.element(page.getByRole('option', { name: 'Choose a location' })).not.toBeInTheDocument();
+	});
+
+	it('takes its accessible name from ariaLabel when no label wraps it', async () => {
+		await setup({ ariaLabel: 'Field type' });
+
+		await expect.element(page.getByRole('combobox', { name: 'Field type' })).toBeVisible();
 	});
 
 	it('disables the control when disabled is true', async () => {

@@ -54,6 +54,7 @@
 	<section>
 		<h2>Disabled</h2>
 		<p>No caller disables a box. A disabled fieldset around a form still reaches one, and this is how it looks.</p>
+		<!-- eslint-disable-next-line svelte/no-restricted-html-elements -- the demo IS a disabled fieldset around the group, the one way a caller's form reaches a disabled box -->
 		<fieldset disabled class="plain-fieldset">
 			<CheckboxGroup legend="Roles" options={roleOptions} value={['admin']} onChange={() => {}} />
 		</fieldset>

@@ -61,6 +61,20 @@ p {
 	text-wrap: pretty;
 }
 
+/*
+ * A list is unbulleted unless it is prose (#2017), as GOV.UK's own list is
+ * (`govuk-list`, with `govuk-list--bullet` opted into). Most of the app's
+ * lists are records, form rows or links, where a browser bullet and its
+ * 40px of start padding read as unfinished; the brief's Law of Prägnanz
+ * asks for the plain list. A prose list opts its markers back in with
+ * `base.css`'s `.prose-list`.
+ */
+ul,
+ol {
+	list-style: none;
+	padding-inline-start: 0;
+}
+
 h1,
 h2,
 h3,
