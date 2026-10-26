@@ -1,6 +1,7 @@
 package client
 
 import (
+	"database/sql"
 	"fmt"
 	"os"
 	"strings"
@@ -62,23 +63,11 @@ func TestOpenEngagementRollupQueryPlanAtScale(t *testing.T) {
 		t.Fatalf("set practice id: %v", err)
 	}
 
-	// The list's first page: its thirty newest Clients.
-	idRows, err := tx.QueryContext(t.Context(),
-		`SELECT id FROM clients WHERE practice_id = $1 ORDER BY created_at DESC, id DESC LIMIT 30`, practiceID)
-	if err != nil {
-		t.Fatalf("page ids: %v", err)
+	args := firstPageClientIDs(t, tx, practiceID)
+	placeholders := make([]string, len(args))
+	for i := range args {
+		placeholders[i] = fmt.Sprintf("$%d", i+1)
 	}
-	var args []any
-	var placeholders []string
-	for idRows.Next() {
-		var id string
-		if err := idRows.Scan(&id); err != nil {
-			t.Fatalf("scan id: %v", err)
-		}
-		args = append(args, id)
-		placeholders = append(placeholders, fmt.Sprintf("$%d", len(args)))
-	}
-	_ = idRows.Close()
 	staffIdx, attachedOnlyIdx := len(args)+1, len(args)+2
 	args = append(args, "00000000-0000-0000-0000-000000000000", false)
 	query := fmt.Sprintf(openEngagementRollupQueryTemplate, staffIdx, strings.Join(placeholders, ", "), attachedOnlyIdx)
@@ -101,4 +90,28 @@ func TestOpenEngagementRollupQueryPlanAtScale(t *testing.T) {
 	if err := rows.Err(); err != nil {
 		t.Fatalf("iterate explain lines: %v", err)
 	}
+}
+
+// firstPageClientIDs is the list's first page: the Practice's thirty
+// newest Clients, as bind arguments.
+func firstPageClientIDs(t *testing.T, tx *sql.Tx, practiceID string) []any {
+	t.Helper()
+	rows, err := tx.QueryContext(t.Context(),
+		`SELECT id FROM clients WHERE practice_id = $1 ORDER BY created_at DESC, id DESC LIMIT 30`, practiceID)
+	if err != nil {
+		t.Fatalf("page ids: %v", err)
+	}
+	defer func() { _ = rows.Close() }()
+	var ids []any
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			t.Fatalf("scan id: %v", err)
+		}
+		ids = append(ids, id)
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatalf("iterate ids: %v", err)
+	}
+	return ids
 }
