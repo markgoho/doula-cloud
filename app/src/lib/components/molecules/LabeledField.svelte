@@ -85,7 +85,7 @@
 	{/if}
 {/snippet}
 
-<stack-l space="var(--space-1)">
+<stack-l space="var(--space-label)">
 	{#if orientation === 'inline'}
 		{@render fieldError()}
 		<!--

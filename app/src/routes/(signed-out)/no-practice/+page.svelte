@@ -74,26 +74,30 @@
 </script>
 
 {#snippet content()}
-	<p>
-		You are signed in, but this account does not belong to a Practice yet. That happens when
-		setting up a Practice stopped part-way through, or when your last Practice removed you.
-	</p>
-	<p>There are two ways on from here.</p>
-	<ul>
-		<!-- A `<p>`, because the link is inside a sentence: `Link` reads the
-		     paragraph as that, and draws inline rather than as a 44px box
-		     that would push the sentence's lines apart (#1828). -->
-		<li>
-			<p>
-				<Link href={resolve('/(signed-out)/signup')} label="Set up a Practice" /> — you keep this
-				email address and password, and this account becomes its Owner.
-			</p>
-		</li>
-		<li>
-			Wait for an invitation. An Owner at an existing Practice can invite this email address, and
-			the invitation arrives by email.
-		</li>
-	</ul>
+	<!-- One explanation, so one group (#2020): EntryPage's own step set
+	     each paragraph a section apart. -->
+	<stack-l space="var(--space-related)">
+		<p>
+			You are signed in, but this account does not belong to a Practice yet. That happens when
+			setting up a Practice stopped part-way through, or when your last Practice removed you.
+		</p>
+		<p>There are two ways on from here.</p>
+		<ul>
+			<!-- A `<p>`, because the link is inside a sentence: `Link` reads the
+			     paragraph as that, and draws inline rather than as a 44px box
+			     that would push the sentence's lines apart (#1828). -->
+			<li>
+				<p>
+					<Link href={resolve('/(signed-out)/signup')} label="Set up a Practice" /> — you keep this
+					email address and password, and this account becomes its Owner.
+				</p>
+			</li>
+			<li>
+				Wait for an invitation. An Owner at an existing Practice can invite this email address, and
+				the invitation arrives by email.
+			</li>
+		</ul>
+	</stack-l>
 
 	<SignOutButton signOut={handleSignOut} />
 {/snippet}

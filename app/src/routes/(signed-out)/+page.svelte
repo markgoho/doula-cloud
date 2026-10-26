@@ -199,8 +199,11 @@
 			a screen that reports a state: say what has happened (the
 			heading) and what to do next.
 		-->
-		<p>{NO_CARE_MESSAGE}</p>
-		<p>{NO_CARE_WRONG_ADDRESS_MESSAGE}</p>
+		<!-- Two halves of one answer, so one group (#2020). -->
+		<stack-l space="var(--space-related)">
+			<p>{NO_CARE_MESSAGE}</p>
+			<p>{NO_CARE_WRONG_ADDRESS_MESSAGE}</p>
+		</stack-l>
 		<SignOutButton signOut={handleSignOut} />
 	{:else}
 		<!--

@@ -89,7 +89,7 @@
 		{:else if loading}
 			<Skeleton variant="text" lines={6} label={loading} />
 		{:else}
-			<stack-l space="var(--space-8)">
+			<stack-l space="var(--space-section)">
 				{#if outcome}
 					<Notice variant="status" message={outcome} isFocusedOnAppear />
 				{/if}
@@ -121,14 +121,19 @@
 						this fix). "100%" caps the floor at whatever the row
 						actually has once alone.
 					-->
-					<sidebar-l side="end" space="var(--space-8)" content-min="min(var(--measure), 100%)">
-						<stack-l space="var(--space-6)">{@render primary()}</stack-l>
-						<aside><stack-l space="var(--space-6)">{@render secondary()}</stack-l></aside>
+					<sidebar-l side="end" space="var(--space-section)" content-min="min(var(--measure), 100%)">
+						<stack-l space="var(--space-group)">{@render primary()}</stack-l>
+						<aside><stack-l space="var(--space-group)">{@render secondary()}</stack-l></aside>
 					</sidebar-l>
 				{:else}
-					<stack-l space="var(--space-6)">{@render primary()}</stack-l>
+					<stack-l space="var(--space-group)">{@render primary()}</stack-l>
 				{/if}
 
+				<!-- Still below the whole split, so a long rail leaves a blank
+				     band above it at desktop widths (#2020). Moving it to the end
+				     of the primary column was tried and undone: that column is
+				     under DataTable's 55rem table floor below about a 1366px
+				     window, so the feed fell to its record view on a laptop. -->
 				{#if !isEmpty && feed}
 					{@render feed()}
 				{/if}

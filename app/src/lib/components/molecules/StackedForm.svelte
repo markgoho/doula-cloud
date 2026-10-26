@@ -13,9 +13,9 @@
 	 * arrangement to the page and every one of those pages arranged it the
 	 * same way.
 	 *
-	 * `var(--space-5)` is the token `FormPage` already spends on a
+	 * `var(--space-field)` is the step `FormPage` already spends on a
 	 * fieldset's content, so a form reads the same whichever archetype it
-	 * is on.
+	 * is on (#2020).
 	 *
 	 * `novalidate` is not a prop. GOV.UK's Recover from validation errors
 	 * pattern (ADR-0021) is that the page refuses the submit and says so
@@ -45,7 +45,7 @@
 </script>
 
 <form onsubmit={onSubmit} novalidate>
-	<stack-l space="var(--space-5)">
+	<stack-l space="var(--space-field)">
 		{@render children()}
 	</stack-l>
 </form>

@@ -13,14 +13,6 @@
 		step?: 'body' | 'body-sm' | 'label' | 'meta';
 		tone?: 'default' | 'variant' | 'muted';
 		/**
-		 * Caps at --measure, flush left (#609). Opt-in: most callers sit in
-		 * a column already sized for the job (--form-max, --page-max, a
-		 * table cell), and a default cap would narrow those uninvited. Set
-		 * this only where the text is read as continuous prose in a column
-		 * wider than --measure -- a lede, an intro.
-		 */
-		measure?: boolean;
-		/**
 		 * Lets a caller join this paragraph to a control's `aria-describedby`
 		 * (#257) -- e.g. explaining why a disabled button is disabled.
 		 * Undefined by default: most callers render standalone prose no
@@ -29,18 +21,34 @@
 		id?: string;
 	}
 
-	let { text, step = 'body', tone = 'default', measure = false, id }: Properties = $props();
+	let { text, step = 'body', tone = 'default', id }: Properties = $props();
 
-	const classes = $derived(`step-${step} tone-${tone}${measure ? ' measure' : ''}`);
+	const classes = $derived(`step-${step} tone-${tone}`);
 </script>
 
 <p {id} class={classes}>{text}</p>
 
 <style>
 	@layer components {
+		/*
+		 * Capped at --measure, flush left, wherever it sits (#2020). It was
+		 * an opt-in until then (#609), and the screens that forgot it ran a
+		 * sentence to 1,260px: Contracts' void-requests line and Staff's
+		 * work-state line, both in a list's uncapped content. A paragraph
+		 * is read as prose in any column, and a cap never widens a column
+		 * narrower than it.
+		 */
 		p {
 			margin: 0;
+			max-inline-size: var(--measure);
 			font-family: var(--font-family-base);
+		}
+
+		/* A table cell opts out: its width is the column's, which the
+		   table sizes against every row, and a cap on one cell's text
+		   would wrap it short of the column it sits in. */
+		:global(:is(td, th)) p {
+			max-inline-size: none;
 		}
 
 		.step-body {
@@ -81,10 +89,6 @@
 
 		.tone-muted {
 			color: var(--color-on-surface-muted);
-		}
-
-		.measure {
-			max-inline-size: var(--measure);
 		}
 	}
 </style>

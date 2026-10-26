@@ -4,6 +4,9 @@ import { render } from 'vitest-browser-svelte';
 import Page from './+page.svelte';
 import { toApiResponder, toPageState, type RouteFixture } from '../../../../routeFixture.js';
 import { fixture, ownerWithoutSecondFactor } from './page.fixture.js';
+// The stack's gap is a token, which exists only once the tokens load; the
+// real app loads them in the root layout.
+import '#lib/styles/app.css';
 
 const pageState = vi.hoisted(() => ({
 	params: {} as Record<string, string>,
@@ -30,6 +33,23 @@ describe('Delete-this-Practice settings screen', () => {
 		await setup();
 
 		await expect.element(testPage.getByRole('button', { name: 'Delete this Practice' })).toBeVisible();
+	});
+
+	// #2020: here the intro and the body both render nothing, and FormPage
+	// drew each as an empty region with the stack's gap either side -- a
+	// blank band between the title and the button. Measured, because the
+	// band is a fact about the rendered page and nothing else says it.
+	it('puts the button one gap under the title, with no blank band between', async () => {
+		await setup();
+
+		const button = testPage.getByRole('button', { name: 'Delete this Practice' });
+		await expect.element(button).toBeVisible();
+		const title = testPage.getByRole('heading', { level: 1, name: 'Delete this Practice' }).element();
+		const stack = title.parentElement!;
+		const gap = Number(getComputedStyle(stack).rowGap.replace('px', ''));
+		const between = button.element().getBoundingClientRect().top - title.getBoundingClientRect().bottom;
+		expect(gap).toBeGreaterThan(0);
+		expect(between).toBeCloseTo(gap, 0);
 	});
 
 	// #1532: starting deletion needs a second factor. She is told so before

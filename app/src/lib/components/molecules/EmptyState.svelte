@@ -43,7 +43,7 @@
 <div class="empty-state">
 	<span class="icon"><Icon name="tray" size={32} weight="duotone" /></span>
 	<stack-l space="var(--space-3)">
-		<Text text={message} measure />
+		<Text text={message} />
 		{#if action && 'href' in action}
 			<div><Link href={action.href} label={action.label} /></div>
 		{:else if action}

@@ -46,18 +46,6 @@ describe('Text.svelte', () => {
 		expect(container.querySelector('p.step-label.tone-muted')).toBeVisible();
 	});
 
-	it('does not cap the line length unless measure is asked for', async () => {
-		const { container } = await setup();
-
-		expect(container.querySelector('p.measure')).toBeNull();
-	});
-
-	it('caps at --measure when measure is set (#609)', async () => {
-		const { container } = await setup({ measure: true });
-
-		expect(container.querySelector('p.measure')).toBeVisible();
-	});
-
 	// The id exists so a control can point at this sentence through
 	// aria-describedby. The example used to be the Billing screen's own
 	// 'buy-credits-help', removed with the unreachable branch that owned it

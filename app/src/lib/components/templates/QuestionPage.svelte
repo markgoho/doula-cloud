@@ -137,7 +137,7 @@
 			journey IS the page's content, so it earns the column.
 		-->
 		<div class="column">
-			<stack-l space="var(--space-6)">
+			<stack-l space="var(--space-field)">
 				<BackLink href={backHref} />
 
 				<!-- After the back link and before the question: the back link
@@ -181,13 +181,13 @@
 						-->
 						<!--
 							A nested stack, not a margin on `.thing`: the question
-							and the thing it asks for sit --space-7 apart, wider
-							than the --space-6 the column keeps between its own
+							and the thing it asks for sit --space-group apart, wider
+							than the --space-field the column keeps between its own
 							items. Under the outer stack's `gap` (ADR-0039) a
 							child's own margin ADDS to that gap instead of
 							replacing it, so the wider step is a stack of its own.
 						-->
-						<stack-l space="var(--space-7)">
+						<stack-l space="var(--space-group)">
 							<div>
 								<h1>
 									{@render questionCaption()}
@@ -303,9 +303,9 @@
 		   (ADR-0039). It keeps the wrapper all the same: a `content`
 		   snippet is free to emit more than one element, and the wrapper is
 		   what makes those one block rather than two stack items the nested
-		   stack would push --space-7 apart. */
+		   stack would push --space-group apart. */
 		fieldset .thing {
-			margin-block-start: var(--space-7);
+			margin-block-start: var(--space-group);
 		}
 
 	}
