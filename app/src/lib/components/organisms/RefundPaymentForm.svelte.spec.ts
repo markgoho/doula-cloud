@@ -16,6 +16,7 @@ const byHand: Invoice = {
 	dueOn: '2026-01-31',
 	reference: 'INV-0001',
 	refundedCents: 20_000,
+	daysOverdue: 0,
 	billingMode: 'by_hand',
 	activePaymentId: 'payment-1',
 	activePaymentKind: 'manual'

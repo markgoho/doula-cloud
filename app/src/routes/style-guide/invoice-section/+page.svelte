@@ -19,6 +19,7 @@
 			dueOn: '2027-10-14',
 			reference: 'DC-0014',
 			refundedCents: 0,
+			daysOverdue: 0,
 			billingMode: 'stripe'
 		},
 		{
@@ -31,6 +32,9 @@
 			dueOn: '2027-12-30',
 			reference: 'INV-0002',
 			refundedCents: 0,
+			// #2122: past its due day, so the Owner's row reads Overdue, as
+			// the contractor's rows below do for theirs.
+			daysOverdue: 12,
 			billingMode: 'by_hand'
 		}
 	];

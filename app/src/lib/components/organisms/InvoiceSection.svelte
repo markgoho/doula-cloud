@@ -39,18 +39,17 @@
 		clientHasNoEmailMessage,
 		clientsCannotPayMessage,
 		contractorInvoicesMessage,
-		contractorInvoiceStatusLabel,
-		contractorInvoiceStatusVariant,
 		formatAmount,
 		invoiceCreatedMessage,
-		invoiceStatusLabel,
-		invoiceStatusVariant,
+		invoiceRowStatusLabel,
+		invoiceRowStatusVariant,
 		paymentMethodLabels,
 		paymentMethodOptions,
 		unbillableContractMessage,
 		type BillingMode,
 		type ContractorInvoice,
 		type Invoice,
+		type InvoiceStanding,
 		type PaymentMethod,
 		type RefundPaymentInput
 	} from '#lib/invoice.js';
@@ -529,7 +528,7 @@
 	 */
 	const invoiceColumns = [
 		{ label: 'Amount', accessor: (invoice: Invoice) => formatAmount(invoice.amountCents), numeric: true },
-		{ label: 'Status', accessor: (invoice: Invoice) => invoiceStatusLabel(invoice.status), content: invoiceStatus },
+		{ label: 'Status', accessor: (invoice: Invoice) => invoiceRowStatusLabel(invoice), content: invoiceStatus },
 		{ label: 'Paid', accessor: (invoice: Invoice) => (invoice.paidOn ? formatCalendarDay(invoice.paidOn) : '') },
 		{
 			label: 'Returned',
@@ -548,8 +547,8 @@
 		{ label: 'Raised', accessor: (invoice: ContractorInvoice) => formatCalendarDay(invoice.raisedOn) },
 		{
 			label: 'Status',
-			accessor: (invoice: ContractorInvoice) => contractorInvoiceStatusLabel(invoice),
-			content: contractorInvoiceStatus
+			accessor: (invoice: ContractorInvoice) => invoiceRowStatusLabel(invoice),
+			content: invoiceStatus
 		},
 		{ label: 'Payment due', accessor: (invoice: ContractorInvoice) => formatCalendarDay(invoice.dueOn) },
 		{
@@ -593,12 +592,13 @@
 	}
 </script>
 
-{#snippet invoiceStatus(invoice: Invoice)}
-	<Badge label={invoiceStatusLabel(invoice.status)} variant={invoiceStatusVariant(invoice.status)} />
-{/snippet}
-
-{#snippet contractorInvoiceStatus(invoice: ContractorInvoice)}
-	<Badge label={contractorInvoiceStatusLabel(invoice)} variant={contractorInvoiceStatusVariant(invoice)} />
+<!--
+	One Badge for both row shapes (#2122): an Owner's, an Admin's or an
+	employee Doula's Invoice and a contractor's read the same status,
+	Overdue included, from the BFF's one count.
+-->
+{#snippet invoiceStatus(invoice: InvoiceStanding)}
+	<Badge label={invoiceRowStatusLabel(invoice)} variant={invoiceRowStatusVariant(invoice)} />
 {/snippet}
 
 <!--

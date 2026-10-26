@@ -105,7 +105,9 @@ describe('the Practice-wide invoice list (#265)', () => {
 			.element(testPage.getByRole('link', { name: paidInvoice.clientName }))
 			.toBeVisible();
 		await expect.element(testPage.getByRole('cell', { name: '$4,500.00' })).toBeVisible();
-		await expect.element(testPage.getByRole('cell', { name: 'Open' })).toBeVisible();
+		// The open row is past its due day, so it reads Overdue, as it does
+		// on its Engagement's Invoices section (#2122).
+		await expect.element(testPage.getByRole('cell', { name: 'Overdue', exact: true })).toBeVisible();
 		await expect.element(testPage.getByRole('cell', { name: 'Paid', exact: true })).toBeVisible();
 	});
 

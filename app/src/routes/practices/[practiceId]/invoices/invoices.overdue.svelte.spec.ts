@@ -60,7 +60,7 @@ describe('the overdue book (#768)', () => {
 		// $4,500.00 owed, all of it overdue -- the fixture's first
 		// row is open and past its due date.
 		await expect.element(testPage.getByText('Overdue invoices')).toBeVisible();
-		await expect.element(testPage.getByText('Overdue', { exact: true })).toBeVisible();
+		await expect.element(testPage.getByRole('term').filter({ hasText: /^Overdue$/ })).toBeVisible();
 	});
 
 	it('says how late an unpaid invoice is, in the row itself', async () => {

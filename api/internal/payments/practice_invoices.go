@@ -292,13 +292,6 @@ func listPracticeInvoicesAfterQuery(narrowing invoiceNarrowing) string {
 	ORDER BY i.created_at DESC, i.id DESC LIMIT $4`
 }
 
-// bookDays is the zone and the instant one read of the Practice-wide
-// list judges every calendar day by (#1965).
-type bookDays struct {
-	zone *time.Location
-	now  time.Time
-}
-
 // listPracticeInvoices fetches one page of the Practice's Invoices,
 // filtered explicitly on practice_id on top of the RLS scoping
 // staffauth.Middleware already set up on tx -- the app layer's own

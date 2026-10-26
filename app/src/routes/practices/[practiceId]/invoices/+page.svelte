@@ -19,7 +19,7 @@
 		clientsCannotPayMessage,
 		dueLabel,
 		formatAmount,
-		invoiceStatusLabel,
+		invoiceRowStatusLabel,
 		loadPracticeInvoices,
 		type PracticeInvoice
 	} from '#lib/invoice.js';
@@ -104,7 +104,9 @@
 			accessor: (invoice: PracticeInvoice) => formatAmount(invoice.amountCents),
 			numeric: true
 		},
-		{ label: 'Status', accessor: (invoice: PracticeInvoice) => invoiceStatusLabel(invoice.status) },
+		// #2122: Overdue once the BFF counts the row late, through the one
+		// label the Engagement's Invoices section reads for every role.
+		{ label: 'Status', accessor: (invoice: PracticeInvoice) => invoiceRowStatusLabel(invoice) },
 		{
 			// #271: local and Stripe Invoices share one figure, so the rail
 			// is shown per row rather than as a second book.

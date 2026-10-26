@@ -44,6 +44,7 @@ const invoiceOpen: Invoice = {
 	dueOn: '2026-01-31',
 	reference: 'STRIPE-in_1',
 	refundedCents: 0,
+	daysOverdue: 0,
 	billingMode: 'stripe'
 };
 
@@ -58,6 +59,7 @@ const invoicePaid: Invoice = {
 	dueOn: '2026-02-01',
 	reference: 'STRIPE-in_2',
 	refundedCents: 0,
+	daysOverdue: 0,
 	billingMode: 'stripe'
 };
 
@@ -85,6 +87,7 @@ const invoicePaidByHand: Invoice = {
 	dueOn: '2026-02-02',
 	reference: 'INV-0003',
 	refundedCents: 0,
+	daysOverdue: 0,
 	billingMode: 'by_hand',
 	activePaymentId: 'payment-1',
 	activePaymentKind: 'manual'
@@ -174,6 +177,17 @@ describe('InvoiceSection.svelte', () => {
 
 		await expect.element(invoiceTitle('$150.00')).toBeVisible();
 		await expect.element(invoiceFact('Open')).toBeVisible();
+	});
+
+	// #2122: the Owner's row reads Overdue from the BFF's count, the same
+	// word a contractor and the Practice-wide list read for this Invoice,
+	// and still offers the Payment it is waiting on.
+	it('reads Overdue once the BFF counts an open Invoice late', async () => {
+		await setup({ invoices: [{ ...invoiceOpen, daysOverdue: 12 }], isOwnerOrAdmin: true });
+
+		await expect.element(invoiceFact('Overdue')).toBeVisible();
+		await expect.element(invoiceFact('Open')).not.toBeInTheDocument();
+		await expect.element(page.getByRole('button', { name: 'Record payment' })).toBeVisible();
 	});
 
 	// #2017's rule: no list item holds a control.
