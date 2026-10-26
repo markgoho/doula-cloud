@@ -69,10 +69,12 @@ test('The first Client in three presses, then the Visits section', async ({ page
 	// Schedule, Contracts and Invoices have no row for it. The Clients
 	// list and her record each link to it.
 	const engagementUrl = page.url();
-	await page.getByRole('link', { name: 'Clients', exact: true }).click();
+	// #1998: the Engagement page's own "Clients" back link.
+	await page.getByRole('main').getByRole('link', { name: 'Clients', exact: true }).click();
 	await page.getByRole('link', { name: 'Birth', exact: true }).click();
 	await expect(page).toHaveURL(engagementUrl);
-	await page.getByRole('link', { name: 'Clients', exact: true }).click();
+	// #1998: the Engagement page's own "Clients" back link.
+	await page.getByRole('main').getByRole('link', { name: 'Clients', exact: true }).click();
 	await page.getByRole('link', { name: /^Pat/ }).click();
 	await expect(page).toHaveURL(new RegExp(`/practices/${practiceId}/clients/[^/?]+$`));
 	await page.getByRole('link', { name: 'Birth', exact: true }).click();

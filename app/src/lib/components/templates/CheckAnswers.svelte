@@ -27,13 +27,10 @@
 	 * ## Why the rows are not `DescriptionList`
 	 *
 	 * A check-answers row is a label, a value and an action, and
-	 * `DescriptionList` has no action column. Growing it would be growing a
-	 * molecule for exactly one consumer, and ADR-0018 names the bar this
-	 * repo already uses: one consumer stays a raw exception, two identical
-	 * consumers earn the extraction. So the row markup lives here until a
-	 * second page wants it. `DescriptionList`'s own defect -- keying its
-	 * `#each` on the label -- is fixed on this ticket regardless, because
-	 * that is a bug rather than a shape.
+	 * `DescriptionList` has no action column. #464 kept the row markup here
+	 * until a second page wanted it; the Engagement page did (#1998), so the
+	 * rows are now `molecules/SummaryList.svelte`, GOV.UK's Summary list
+	 * with row actions, shared by both.
 	 *
 	 * ## Two widths
 	 *
@@ -47,6 +44,7 @@
 	import Heading from '#lib/components/atoms/Heading.svelte';
 	import Link from '#lib/components/atoms/Link.svelte';
 	import BackLink from '#lib/components/molecules/BackLink.svelte';
+	import SummaryList from '#lib/components/molecules/SummaryList.svelte';
 	import PageTitle from '#lib/components/PageTitle.svelte';
 	import StepRail, { type JourneyStep } from '#lib/components/organisms/StepRail.svelte';
 
@@ -86,8 +84,6 @@
 		isWide = false,
 		actions
 	}: Properties = $props();
-
-	const pageId = $props.id();
 </script>
 
 <PageTitle page={title} {serviceName} isError={Boolean(errorSummary)} />
@@ -141,44 +137,25 @@
 							<section>
 								<stack-l space="var(--space-4)">
 									<Heading level={2} variant="section" text={section.heading} />
-									<dl>
-										{#each section.answers as answer, answerIndex (answerIndex)}
-											<div class="row">
-												<dt>{answer.label}</dt>
-												<dd class="value">{answer.value}</dd>
-												<!--
-													Every row's link reads "Change", so on its own the
-													list of links is nineteen identical names. GOV.UK
-													answers that with visually-hidden text naming what
-													changes; here it is a sibling joined by
-													aria-describedby rather than a child, because a
-													`Link` takes a label and not children -- the
-													announced name becomes "Change, given name" either
-													way, and the atom stays closed.
+									<!--
+										The rows are `SummaryList`'s (#1998). The Change is a
+										link back to the question, described by the
+										visually-hidden words SummaryList draws, so the
+										announced name is "Change, given name".
 
-													`secondary`, not the plum prose link GOV.UK uses: a
-													summary page carries one Change link per row, and the
-													brief's Von Restorff rule spends the accent once per
-													screen -- which here is `Save this client`. Nineteen
-													plum links is the same overspend #432 rejected in the
-													step rail's first pass. Neutral, underlined, and plum
-													on hover keeps the affordance without the noise.
-												-->
-												<dd class="action">
-													<Link
-														href={answer.changeHref}
-														label="Change"
-														variant="secondary"
-														describedBy="{pageId}-{sectionIndex}-{answerIndex}-changes"
-													/>
-													<span
-														class="visually-hidden"
-														id="{pageId}-{sectionIndex}-{answerIndex}-changes">{answer.changes}</span
-													>
-												</dd>
-											</div>
-										{/each}
-									</dl>
+										`secondary`, not the plum prose link GOV.UK uses: a
+										summary page carries one Change link per row, and the
+										brief's Von Restorff rule spends the accent once per
+										screen -- which here is `Save this client`. Nineteen
+										plum links is the same overspend #432 rejected in the
+										step rail's first pass. Neutral, underlined, and plum
+										on hover keeps the affordance without the noise.
+									-->
+									<SummaryList rows={section.answers}>
+										{#snippet action(answer, describedBy)}
+											<Link href={answer.changeHref} label="Change" variant="secondary" {describedBy} />
+										{/snippet}
+									</SummaryList>
 								</stack-l>
 							</section>
 						{/each}
@@ -228,77 +205,11 @@
 			max-inline-size: none;
 		}
 
-		dl {
-			margin: 0;
-		}
-
-		dt {
-			margin: 0;
-			font-weight: var(--font-weight-medium);
-			color: var(--color-on-surface-variant);
-		}
-
-		dd {
-			margin: 0;
-			color: var(--color-on-surface);
-		}
-
-
 		.caption {
 			display: block;
 			margin-block-end: var(--space-1);
 			font-size: var(--text-body-size);
 			color: var(--color-on-surface-muted);
-		}
-
-		/*
-		 * A hairline under each row and none around the list: the brief's
-		 * rule that containers are declared by an edge rather than a box,
-		 * and what makes nineteen rows scannable without nineteen borders.
-		 *
-		 * No @container query (#564): flex-wrap reads the row's own
-		 * content instead of an authored width. `grid-template-columns:
-		 * repeat(auto-fit, minmax(min-content, 1fr))` was tried first and
-		 * read as the same idea, but `CSS.supports()` against a real
-		 * Chromium returns false for it -- auto-fit's repetition count has
-		 * to be computable from a fixed track size, and min-content is not
-		 * one, so the whole declaration is dropped and every row silently
-		 * stacked, always, which a class-level test never caught. Flexbox
-		 * does not have that restriction: each cell's automatic minimum is
-		 * its own min-content -- `white-space` is ordinary, so a cell CAN
-		 * still wrap internally, but never below the width its own text
-		 * needs to start a line -- and flex-wrap packs as many cells onto
-		 * a line as fit before starting the next. That is what makes a
-		 * label and a "Change" action -- both short, author-controlled
-		 * strings -- the ones that force a stack when they do not fit:
-		 * their min-content cannot shrink, where the previous no-wrap
-		 * criterion had to measure that same fact against a pixel (416px)
-		 * because nothing could yet be asked directly. A value is a
-		 * Practice's own data of arbitrary length and wraps freely either
-		 * way, which was always true and is unchanged.
-		 *
-		 * `flex-grow: 1` on every cell gives each fitting column an EQUAL
-		 * share of the row once three fit, which does cost the previous
-		 * design's one asymmetry -- `.action` no longer stays
-		 * content-sized against two equal columns, all three now match --
-		 * a visible proportion change, and the trade for removing the
-		 * threshold entirely.
-		 */
-		.row {
-			display: flex;
-			flex-wrap: wrap;
-			column-gap: var(--space-4);
-			row-gap: var(--space-1);
-			padding-block: var(--space-3);
-			border-block-end: var(--border-thin) solid var(--color-outline-variant);
-		}
-
-		.row > * {
-			flex: 1 1 auto;
-		}
-
-		.action {
-			text-align: end;
 		}
 	}
 </style>

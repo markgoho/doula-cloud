@@ -197,16 +197,97 @@ function visitsTable() {
 	return testPage.elementLocator(document.querySelector('.table-view')!);
 }
 
+/*
+ * #1998: the summary card's "Change" for one row. Every row's button reads
+ * "Change", and the visually-hidden words it is described by name the row
+ * (SummaryList), so that is how a test tells them apart, the same way a
+ * screen reader does.
+ */
+function changeButton(changes: string): HTMLButtonElement | undefined {
+	return [...document.querySelectorAll('button')].find(
+		(button) =>
+			button.textContent?.trim() === 'Change' &&
+			document.querySelector(`#${CSS.escape(button.getAttribute('aria-describedby') ?? '')}`)?.textContent ===
+				changes
+	);
+}
+
+async function openChange(changes: string) {
+	await vi.waitFor(() => expect(changeButton(changes)).toBeDefined());
+	await testPage.elementLocator(changeButton(changes)!).click();
+}
+
 describe('Staff Engagement detail summary', () => {
 	beforeEach(() => {
 		apiFetchWithSession.mockReset();
+	});
+
+	// #1998: the drawing's summary card -- Care, Due, Care phase, Doula --
+	// with the two rows the drawing does not have after them. The Client's
+	// name is the h1, so it is no longer a row.
+	it('lists the rows in the drawn order, in one bordered card', async () => {
+		await setup(fixtureDetail);
+
+		await expect.element(testPage.getByText('Care phase', { exact: true })).toBeVisible();
+		const list = document.querySelector('dl.bordered')!;
+		expect([...list.querySelectorAll(':scope dt')].map((node) => node.textContent)).toEqual([
+			'Care',
+			'Due',
+			'Care phase',
+			'Doulas',
+			'Portal invite',
+			'Created'
+		]);
+	});
+
+	it('gives an Owner who is a Doula a Change on each row she may change, and none on Due', async () => {
+		await testPage.viewport(3200, 900);
+		apiFetchWithSession.mockResolvedValue(jsonResponse('not available', 403));
+		await render(Page, { data: { ...fixtureDetail, session: sessionFor(['owner', 'doula']) }, params: fixture.params });
+
+		await vi.waitFor(() => expect(changeButton('care')).toBeDefined());
+		expect(changeButton('care phase')).toBeDefined();
+		const dueRow = [...document.querySelectorAll('dl.bordered dt')].find((node) => node.textContent === 'Due')!;
+		expect(dueRow.parentElement?.querySelector(':scope button')).toBeNull();
+	});
+
+	// A contractor Doula may change none of these facts, and the BFF
+	// answers her with no status moves and no canAttachSelf, so her card
+	// has no Change at all: an action she may not take is not shown.
+	it('gives a contractor Doula no Change on any row', async () => {
+		await testPage.viewport(3200, 900);
+		apiFetchWithSession.mockResolvedValue(jsonResponse('not available', 403));
+		await render(Page, {
+			data: {
+				...fixtureDetail,
+				statusMoves: [],
+				canAttachSelf: false,
+				session: { ...sessionFor(['doula']), isContractor: true }
+			},
+			params: fixture.params
+		});
+
+		await expect.element(testPage.getByText('Care phase', { exact: true })).toBeVisible();
+		expect(document.querySelectorAll('dl.bordered button')).toHaveLength(0);
+		await expect.element(testPage.getByRole('link', { name: 'Message the client' })).toBeVisible();
+	});
+
+	it('draws the "← Clients" back link and the header actions above the summary', async () => {
+		await setup(fixtureDetail);
+
+		await expect
+			.element(testPage.getByRole('link', { name: 'Clients', exact: true }))
+			.toHaveAttribute('href', '/practices/practice-1/clients');
+		await expect
+			.element(testPage.getByRole('link', { name: 'Message the client' }))
+			.toHaveAttribute('href', '#messages');
 	});
 
 	it('shows the due date under its own label, alongside Created (#538)', async () => {
 		// The fixture's own Engagement (#596) already carries a due date.
 		await setup(fixtureDetail);
 
-		await expect.element(testPage.getByText('Due date')).toBeVisible();
+		await expect.element(testPage.getByText('Due', { exact: true })).toBeVisible();
 		await expect.element(testPage.getByText('Mar 1, 2027')).toBeVisible();
 		await expect.element(testPage.getByText('Created')).toBeVisible();
 	});
@@ -220,7 +301,7 @@ describe('Staff Engagement detail summary', () => {
 		await setup({ ...fixtureDetail, dueDate: undefined });
 
 		await expect.element(testPage.getByText('Active', { exact: true })).toBeVisible();
-		await expect.element(testPage.getByText(/due date/i)).not.toBeInTheDocument();
+		await expect.element(testPage.getByText('Due', { exact: true })).not.toBeInTheDocument();
 	});
 });
 
@@ -268,6 +349,8 @@ describe('the status-move controls (#253)', () => {
 
 		await expect.element(testPage.getByRole('button', { name: 'Mark care complete' })).not.toBeInTheDocument();
 		await expect.element(testPage.getByRole('button', { name: /reopen|mark care as active/i })).not.toBeInTheDocument();
+		// #1998: and the Care phase row has no Change to open.
+		expect(changeButton('care phase')).toBeUndefined();
 	});
 
 	it('moves status directly for a move that is not completing, and reflects it without a reload', async () => {
@@ -281,11 +364,17 @@ describe('the status-move controls (#253)', () => {
 			{ ...fixtureDetail, status: 'completed', statusMoves: ['active'] }
 		);
 
+		await openChange('care phase');
 		await testPage.getByRole('button', { name: 'Reopen (correction)' }).click();
 
 		await expect.poll(() => requests).toHaveLength(1);
 		expect(requests[0]!.body).toEqual({ status: 'active' });
 		await expect.element(testPage.getByText('Active', { exact: true })).toBeVisible();
+		// #1998: the save closes the row's form and says what changed, in
+		// the focus the pressed button had.
+		await expect.element(testPage.getByText('The care phase is now Active.')).toHaveFocus();
+		expect(changeButton('care phase')).toHaveAttribute('aria-expanded', 'false');
+		expect(testPage.getByRole('button', { name: 'Mark care complete' }).elements()).toHaveLength(0);
 	});
 
 	it('asks for a reason before completing, and refuses to submit without one', async () => {
@@ -296,6 +385,7 @@ describe('the status-move controls (#253)', () => {
 			return Promise.resolve(jsonResponse({ status: 'completed', statusMoves: ['active'] }));
 		});
 
+		await openChange('care phase');
 		await testPage.getByRole('button', { name: 'Mark care complete' }).click();
 		await testPage.getByRole('button', { name: 'Confirm completion' }).click();
 
@@ -320,6 +410,7 @@ describe('the status-move controls (#253)', () => {
 			return Promise.resolve(jsonResponse({ status: 'completed', statusMoves: ['active'] }));
 		});
 
+		await openChange('care phase');
 		await testPage.getByRole('button', { name: 'Mark care complete' }).click();
 		await testPage.getByLabelText('The work finished as agreed').click();
 		await testPage.getByLabelText('Note (optional)').fill('Baby arrived safely.');
@@ -333,6 +424,25 @@ describe('the status-move controls (#253)', () => {
 		});
 		await expect.element(testPage.getByText('Completed', { exact: true })).toBeVisible();
 		await expect.element(testPage.getByRole('button', { name: 'Confirm completion' })).not.toBeInTheDocument();
+		await expect.element(testPage.getByText('The care phase is now Completed.')).toHaveFocus();
+	});
+
+	// #1998: the completion question now sits inside the summary card's
+	// Care phase row, the narrowest room it has had. No sweep presses a
+	// Change, so this is where that open form is measured at 320px, with
+	// its error summary on screen.
+	it('never scrolls the document sideways at 320px with the completion question open', async () => {
+		await renderWithFixtureResponder();
+		await testPage.viewport(320, 800);
+
+		await openChange('care phase');
+		await testPage.getByRole('button', { name: 'Mark care complete' }).click();
+		await testPage.getByRole('button', { name: 'Confirm completion' }).click();
+
+		await expect
+			.element(testPage.getByRole('link', { name: 'Select why this Engagement is ending' }))
+			.toBeVisible();
+		expect(document.documentElement.scrollWidth).toBe(document.documentElement.clientWidth);
 	});
 
 	it('shows the refusal when the BFF rejects the move', async () => {
@@ -341,6 +451,7 @@ describe('the status-move controls (#253)', () => {
 			return Promise.resolve(jsonResponse('endingReason is required to complete an Engagement', 400));
 		});
 
+		await openChange('care phase');
 		await testPage.getByRole('button', { name: 'Mark care complete' }).click();
 		await testPage.getByLabelText('The work finished as agreed').click();
 		await testPage.getByRole('button', { name: 'Confirm completion' }).click();
@@ -371,6 +482,7 @@ describe('the status-move controls (#253)', () => {
 			);
 		});
 
+		await openChange('care phase');
 		await testPage.getByRole('button', { name: 'Mark care complete' }).click();
 		await testPage.getByLabelText('The work finished as agreed').click();
 		await testPage.getByRole('button', { name: 'Confirm completion' }).click();
@@ -970,6 +1082,7 @@ describe('Create Draft Contract with no rate for the Engagement kind (#1885)', (
 		);
 		await expect.element(testPage.getByRole('button', { name: 'Create Draft Contract' })).toBeEnabled();
 
+		await openChange('care');
 		await testPage.getByRole('button', { name: 'Change to Postpartum' }).click();
 
 		await expect
@@ -1603,12 +1716,14 @@ describe('who is on the Engagement, and putting yourself on it (#1598)', () => {
 			.element(testPage.getByText('Persephone Vandermeulen-Achterberg, CD(DONA), Bo Ng', { exact: true }))
 			.toBeVisible();
 		expect(putMeOnIt().elements()).toHaveLength(0);
+		expect(changeButton('Doula')).toBeUndefined();
 	});
 
 	it('says "No Doula yet" and offers the control where the BFF says the press would be accepted', async () => {
 		await setupWhoIsOn(nobodyOnIt);
 
 		await expect.element(testPage.getByText('No Doula yet', { exact: true })).toBeVisible();
+		await openChange('Doula');
 		await expect.element(putMeOnIt()).toBeVisible();
 	});
 
@@ -1622,6 +1737,7 @@ describe('who is on the Engagement, and putting yourself on it (#1598)', () => {
 		await render(Page, { data: { ...nobodyOnIt, session }, params: fixture.params });
 
 		await expect.element(testPage.getByText('No Doula yet', { exact: true })).toBeVisible();
+		await openChange('Doula');
 		await expect.element(putMeOnIt()).toBeVisible();
 	});
 
@@ -1634,6 +1750,7 @@ describe('who is on the Engagement, and putting yourself on it (#1598)', () => {
 
 		await expect.element(testPage.getByText('No Doula yet', { exact: true })).toBeVisible();
 		expect(putMeOnIt().elements()).toHaveLength(0);
+		expect(changeButton('Doula')).toBeUndefined();
 	});
 
 	it('puts the reader on the Engagement with one press, names her, says so, and takes the control away', async () => {
@@ -1644,6 +1761,7 @@ describe('who is on the Engagement, and putting yourself on it (#1598)', () => {
 				canAttachSelf: false
 			})
 		);
+		await openChange('Doula');
 		await expect.element(putMeOnIt()).toBeVisible();
 		apiFetchWithSession.mockClear();
 
@@ -1654,6 +1772,7 @@ describe('who is on the Engagement, and putting yourself on it (#1598)', () => {
 		await expect.element(testPage.getByText('You are on this Engagement.')).toHaveFocus();
 		expect(testPage.getByText('No Doula yet', { exact: true }).elements()).toHaveLength(0);
 		expect(putMeOnIt().elements()).toHaveLength(0);
+		expect(changeButton('Doula')).toBeUndefined();
 		// The ledger has a new entry and the birth can now have an On-call
 		// window, so both sections are read again.
 		await vi.waitFor(() => {
@@ -1666,6 +1785,7 @@ describe('who is on the Engagement, and putting yourself on it (#1598)', () => {
 
 	it('shows the refusal and keeps the control when the BFF refuses the press', async () => {
 		await setupWhoIsOn(nobodyOnIt, () => jsonResponse('This Engagement has completed, so nobody can be put on it.', 409));
+		await openChange('Doula');
 		await expect.element(putMeOnIt()).toBeVisible();
 
 		await putMeOnIt().click();
@@ -1706,6 +1826,7 @@ describe('who is on the Engagement, and putting yourself on it (#1598)', () => {
 			data: { ...nobodyOnIt, session: sessionFor(['owner', 'doula']) },
 			params: fixture.params
 		});
+		await openChange('Doula');
 		await expect.element(putMeOnIt()).toBeVisible();
 		await expect.element(testPage.getByLabelText('Who is this Visit for?')).toHaveValue('staff-1');
 
@@ -1947,9 +2068,13 @@ describe('the Kind section (#874)', () => {
 	it("reads what the Practice sold off the Engagement's own read, and offers the other kind", async () => {
 		await setupKind();
 
-		await expect.element(testPage.getByText('What the Practice sold')).toBeVisible();
+		await expect.element(testPage.getByText('Care', { exact: true })).toBeVisible();
 		await expect.element(testPage.getByText('Birth', { exact: true })).toBeVisible();
+		// #1998: behind the Care row's Change, not in a loose stack.
+		expect(testPage.getByRole('button', { name: 'Change to Postpartum' }).elements()).toHaveLength(0);
+		await openChange('care');
 		await expect.element(testPage.getByRole('button', { name: 'Change to Postpartum' })).toBeVisible();
+		expect(changeButton('care')).toHaveAttribute('aria-expanded', 'true');
 	});
 
 	it("offers a contractor Doula no way to change it, matching the BFF's own refusal", async () => {
@@ -1958,6 +2083,8 @@ describe('the Kind section (#874)', () => {
 		await expect
 			.element(testPage.getByRole('button', { name: 'Change to Postpartum' }))
 			.not.toBeInTheDocument();
+		// #1998: and so no Change on the Care row.
+		expect(changeButton('care')).toBeUndefined();
 	});
 
 	// ADR-0015: "the product stops offering a postpartum -> birth change
@@ -1968,9 +2095,7 @@ describe('the Kind section (#874)', () => {
 		await setupKind({ detail: { ...fixtureDetail, kind: 'postpartum' } });
 
 		await expect.element(testPage.getByText('Postpartum', { exact: true })).toBeVisible();
-		await expect
-			.element(testPage.getByRole('button', { name: 'Change to Birth' }))
-			.not.toBeInTheDocument();
+		expect(changeButton('care')).toBeUndefined();
 	});
 
 	// The other side of the same rule: a postpartum Engagement whose
@@ -1981,6 +2106,7 @@ describe('the Kind section (#874)', () => {
 			detail: { ...fixtureDetail, kind: 'postpartum', birthOutcome: undefined, pregnancyEndedOn: undefined }
 		});
 
+		await openChange('care');
 		await expect.element(testPage.getByRole('button', { name: 'Change to Birth' })).toBeVisible();
 	});
 
@@ -2000,6 +2126,7 @@ describe('the Kind section (#874)', () => {
 			)
 		);
 
+		await openChange('care');
 		await testPage.getByRole('button', { name: 'Change to Postpartum' }).click();
 
 		expect(apiFetchWithSession).toHaveBeenCalledWith(
@@ -2019,6 +2146,10 @@ describe('the Kind section (#874)', () => {
 		// getByRole('status'), which also matches InvoiceSection's unrelated
 		// "Invoicing is unavailable" notice on this same fixture.
 		await expect.element(testPage.getByText('Now set to Postpartum.')).toBeVisible();
+		// #1998: the save closes the Care row's form, so the message takes
+		// the focus the pressed button had, and the row has no Change left.
+		await expect.element(testPage.getByText('Now set to Postpartum.')).toHaveFocus();
+		expect(changeButton('care')).toBeUndefined();
 	});
 
 	it('shows the refusal when the BFF rejects the change', async () => {
@@ -2034,6 +2165,7 @@ describe('the Kind section (#874)', () => {
 			)
 		);
 
+		await openChange('care');
 		await testPage.getByRole('button', { name: 'Change to Postpartum' }).click();
 
 		// Scoped by its own text rather than getByRole('alert'), which also
