@@ -510,7 +510,7 @@
 {#snippet contactSection()}
 	<SummaryList
 		rows={[
-			changeable('Email', detail!.email || '—', 'email', 'email address'),
+			changeable('Email address', detail!.email || '—', 'email', 'email address'),
 			changeable('Phone', detail!.phone || '—', 'phone', 'phone number'),
 			{ label: 'Portal invite', value: portalInviteStatusText(detail!) }
 		] as ChangeRow[]}

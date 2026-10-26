@@ -49,7 +49,7 @@ describe('one piece of Feedback (#1526)', () => {
 			'Kind',
 			'Sent',
 			'Sender',
-			'Email',
+			'Email address',
 			'Role',
 			'Practice',
 			'Page',

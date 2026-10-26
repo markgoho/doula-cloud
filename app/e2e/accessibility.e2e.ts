@@ -1247,7 +1247,7 @@ test('Archetype E -- the contractor Doula door onto clients/search', async ({ pa
 	const contractor = await seedContractorDoula(request, practiceId, seeded.staffHeaders);
 
 	await page.goto('/login');
-	await page.getByLabel('Email').fill(contractor.email);
+	await page.getByLabel('Email address').fill(contractor.email);
 	await page.getByLabel('Password').fill(PORTAL_CLIENT_PASSWORD);
 	await page.getByRole('button', { name: 'Sign in' }).click();
 	await expect(page).toHaveURL(new RegExp(`/practices/${practiceId}$`));

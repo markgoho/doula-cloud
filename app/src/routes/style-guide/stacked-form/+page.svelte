@@ -24,7 +24,7 @@
 			component exists for. Without it every child sits flush against the one above.
 		</p>
 		<StackedForm onSubmit={(event) => event.preventDefault()}>
-			<LabeledField id={emailId} label="Email">
+			<LabeledField id={emailId} label="Email address">
 				{#snippet children({ id, describedBy, invalid })}
 					<TextInput
 						{id}

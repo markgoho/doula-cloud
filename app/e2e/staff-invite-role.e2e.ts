@@ -55,7 +55,7 @@ test('A Doula invited via the Staff invite route is refused an Owner-only action
 	// step two.
 	await page.goto(`/accept-invite?token=${inviteToken}`);
 	await page.getByRole('radio', { name: /I'm new here/ }).check();
-	await page.getByLabel('Email').fill(doulaEmail);
+	await page.getByLabel('Email address').fill(doulaEmail);
 	await page.getByLabel('Password').fill(password);
 	await page.getByRole('button', { name: 'Continue' }).click();
 

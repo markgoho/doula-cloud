@@ -38,7 +38,7 @@
 				firstError={errorFor(FIELD_IDS.firstName)}
 				lastError={errorFor(FIELD_IDS.lastName)}
 			/>
-			<LabeledField id={FIELD_IDS.email} label="Email" error={errorFor(FIELD_IDS.email)}>
+			<LabeledField id={FIELD_IDS.email} label="Email address" error={errorFor(FIELD_IDS.email)}>
 				{#snippet children({ id, describedBy, invalid })}
 					<TextInput
 						{id}

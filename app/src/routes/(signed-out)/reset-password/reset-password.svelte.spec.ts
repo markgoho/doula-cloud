@@ -69,7 +69,7 @@ describe('the account a password manager saves the new password against (#1813)'
 
 		await expect.element(accountLine()).toBeVisible();
 		// #1888's read-only Email field looked as if it could be changed.
-		await expect.element(testPage.getByRole('textbox', { name: 'Email' })).not.toBeInTheDocument();
+		await expect.element(testPage.getByRole('textbox', { name: 'Email address' })).not.toBeInTheDocument();
 	});
 
 	it('puts the email in a hidden username field in the same form as the new password', async () => {

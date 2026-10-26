@@ -122,7 +122,7 @@ describe('Staff login -- the way back from a lost authenticator app (#694)', () 
 		getMultiFactorResolver.mockReturnValue({ hints: [{ uid: 'enrollment-1' }] });
 		await setup();
 
-		await testPage.getByLabelText('Email').fill('anne-marie@example.test');
+		await testPage.getByLabelText('Email address').fill('anne-marie@example.test');
 		await testPage.getByLabelText('Password').fill('correct horse');
 		await testPage.getByRole('button', { name: 'Sign in' }).click();
 
@@ -184,7 +184,7 @@ describe('Staff login -- on-load session probe (#283)', () => {
 		// #2027: the chooser replaces the form rather than sitting under it,
 		// and takes focus from the form that has gone.
 		await expect.element(heading).toHaveFocus();
-		await expect.element(testPage.getByLabelText('Email')).not.toBeInTheDocument();
+		await expect.element(testPage.getByLabelText('Email address')).not.toBeInTheDocument();
 		await expect.element(testPage.getByRole('button', { name: 'Sign in' })).not.toBeInTheDocument();
 	});
 
@@ -193,7 +193,7 @@ describe('Staff login -- on-load session probe (#283)', () => {
 
 		await setup();
 
-		await expect.element(testPage.getByLabelText('Email')).toBeVisible();
+		await expect.element(testPage.getByLabelText('Email address')).toBeVisible();
 		expect(testPage.getByText(/session/i).elements()).toHaveLength(0);
 		expect(goto).not.toHaveBeenCalled();
 	});
@@ -233,7 +233,7 @@ async function signIn() {
 	vi.stubGlobal('fetch', vi.fn(async () => jsonResponse({}, 200)));
 
 	await render(Page, {});
-	await testPage.getByLabelText('Email').fill('priya@example.com');
+	await testPage.getByLabelText('Email address').fill('priya@example.com');
 	await testPage.getByLabelText('Password').fill('correct horse');
 	await testPage.getByRole('button', { name: 'Sign in' }).click();
 }
@@ -312,7 +312,7 @@ describe('Staff login -- the TOTP sign-in challenge (#606)', () => {
 		getMultiFactorResolver.mockReturnValue(resolver);
 
 		await render(Page, {});
-		await testPage.getByLabelText('Email').fill('priya@example.com');
+		await testPage.getByLabelText('Email address').fill('priya@example.com');
 		await testPage.getByLabelText('Password').fill('correct horse');
 		await testPage.getByRole('button', { name: 'Sign in' }).click();
 
@@ -328,7 +328,7 @@ describe('Staff login -- the TOTP sign-in challenge (#606)', () => {
 	it('challenges for the code instead of showing a refusal, and asks for nothing else', async () => {
 		await reachChallenge();
 
-		expect(testPage.getByLabelText('Email').elements()).toHaveLength(0);
+		expect(testPage.getByLabelText('Email address').elements()).toHaveLength(0);
 		expect(testPage.getByLabelText('Password').elements()).toHaveLength(0);
 		expect(testPage.getByText(/is not correct/i).elements()).toHaveLength(0);
 	});
@@ -410,7 +410,7 @@ describe('Staff login -- signing in over a live portal session (#610)', () => {
 		vi.stubGlobal('fetch', exchange);
 
 		await render(Page, {});
-		await testPage.getByLabelText('Email').fill('priya@example.com');
+		await testPage.getByLabelText('Email address').fill('priya@example.com');
 		await testPage.getByLabelText('Password').fill('correct horse');
 		await testPage.getByRole('button', { name: 'Sign in' }).click();
 
@@ -501,7 +501,7 @@ describe('Staff login -- the session-ended notice (#757)', () => {
 	it('leaves the form usable, rather than replacing it', async () => {
 		await setupSessionEnded();
 
-		await expect.element(testPage.getByLabelText('Email')).toBeVisible();
+		await expect.element(testPage.getByLabelText('Email address')).toBeVisible();
 		await expect.element(testPage.getByLabelText('Password')).toBeVisible();
 		await expect.element(testPage.getByRole('button', { name: 'Sign in' })).toBeVisible();
 	});
@@ -520,7 +520,7 @@ describe('Staff login -- the session-ended notice (#757)', () => {
 		getMultiFactorResolver.mockReturnValue({ hints: [{ uid: 'enrollment-1' }] });
 
 		await setupSessionEnded();
-		await testPage.getByLabelText('Email').fill('priya@example.com');
+		await testPage.getByLabelText('Email address').fill('priya@example.com');
 		await testPage.getByLabelText('Password').fill('correct horse');
 		await testPage.getByRole('button', { name: 'Sign in' }).click();
 

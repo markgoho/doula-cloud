@@ -373,7 +373,7 @@
 		{/if}
 
 		<StackedForm onSubmit={handleSubmit}>
-			<LabeledField id={emailId} label="Email" error={submission.errorFor(emailId)}>
+			<LabeledField id={emailId} label="Email address" error={submission.errorFor(emailId)}>
 				{#snippet children({ id, describedBy, invalid })}
 					<TextInput
 						{id}

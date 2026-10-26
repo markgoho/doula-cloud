@@ -31,7 +31,7 @@
 
 	const columns = [
 		{ label: 'Name', accessor: (row: StaffRow) => row.name },
-		{ label: 'Email', accessor: (row: StaffRow) => row.email },
+		{ label: 'Email address', accessor: (row: StaffRow) => row.email },
 		{ label: 'Roles', accessor: (row: StaffRow) => row.roles }
 	];
 

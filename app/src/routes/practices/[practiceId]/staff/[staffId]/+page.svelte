@@ -125,7 +125,7 @@
 	const facts = $derived<FactRow[]>(
 		member
 			? [
-					{ label: 'Email', value: member.email },
+					{ label: 'Email address', value: member.email },
 					{
 						label: 'Roles',
 						value: rolesLabel(member.roles) || 'No roles yet',

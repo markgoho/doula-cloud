@@ -270,7 +270,7 @@
 						error={dateOfBirthRefusal?.message}
 						invalidField={dateOfBirthRefusal?.field}
 					/>
-					<LabeledField id={emailId} label="Email">
+					<LabeledField id={emailId} label="Email address">
 						{#snippet children({ id, describedBy })}
 							<TextInput
 								{id}

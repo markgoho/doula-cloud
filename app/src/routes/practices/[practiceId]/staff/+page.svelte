@@ -53,7 +53,7 @@
 	 */
 	const memberColumns = [
 		{ label: 'Name', accessor: (member: StaffSummary) => member.name },
-		{ label: 'Email', accessor: (member: StaffSummary) => member.email },
+		{ label: 'Email address', accessor: (member: StaffSummary) => member.email },
 		{
 			label: 'Roles',
 			accessor: (member: StaffSummary) => rolesLabel(member.roles) || 'No roles yet'
@@ -75,7 +75,7 @@
 	];
 
 	const invitationColumns = [
-		{ label: 'Email', accessor: (invitation: InvitationSummary) => invitation.address },
+		{ label: 'Email address', accessor: (invitation: InvitationSummary) => invitation.address },
 		{ label: 'Roles', accessor: (invitation: InvitationSummary) => rolesLabel(invitation.roles) },
 		{
 			label: 'Employment type',
