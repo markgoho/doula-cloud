@@ -174,7 +174,7 @@ test('A solo Owner who is a contractor Doula is named on the Start work form, an
 			response.request().method() === 'POST' &&
 			response.url().endsWith(`/clients/${secondClientId}/engagement-requests`)
 	);
-	await page.getByRole('button', { name: 'Start work with Ines Duarte' }).click();
+	await page.getByRole('button', { name: 'Start work with Ines' }).click();
 	const writtenResponse = await written;
 	const { engagementId: startedEngagementId } = await writtenResponse.json();
 	// #1611: an approved start lands on the Engagement it started.

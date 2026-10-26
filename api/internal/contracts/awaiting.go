@@ -139,7 +139,7 @@ func AwaitingSignatureHandler() http.Handler {
 // unique index already allows only one non-voided Contract per
 // Engagement, so nothing here has to de-duplicate. The join to clients
 // is for her name only.
-const awaitingSelect = `SELECT c.id, e.id, cl.id, cl.given_name, cl.preferred_name, c.status::text, c.created_at
+const awaitingSelect = `SELECT c.id, e.id, cl.id, cl.given_name, cl.preferred_name, cl.family_name, c.status::text, c.created_at
 	            FROM contracts c
 	            JOIN engagements e ON e.id = c.engagement_id
 	            JOIN clients cl ON cl.id = e.client_id
@@ -210,13 +210,13 @@ func scanAwaitingItems(rows *sql.Rows) ([]AwaitingItem, error) {
 	for rows.Next() {
 		var item AwaitingItem
 		var givenName string
-		var preferredName sql.NullString
+		var preferredName, familyName sql.NullString
 		if err := rows.Scan(&item.ContractID, &item.EngagementID, &item.ClientID,
-			&givenName, &preferredName, &item.Status, &item.CreatedAt); err != nil {
+			&givenName, &preferredName, &familyName, &item.Status, &item.CreatedAt); err != nil {
 			// coverage:ignore reason: row scan failure, not exercised by unit tests
 			return nil, fmt.Errorf("contracts: scan awaiting signature: %w", err)
 		}
-		item.ClientName = personname.Preferred(givenName, preferredName.String)
+		item.ClientName = personname.Full(givenName, preferredName.String, familyName.String)
 		list = append(list, item)
 	}
 	if err := rows.Err(); err != nil {

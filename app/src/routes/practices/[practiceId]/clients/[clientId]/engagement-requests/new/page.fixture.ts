@@ -1,9 +1,10 @@
 /*
  * Requesting a new Engagement, as the continuum check sees it (#595).
  *
- * `title` starts as the static "Start new work" and becomes
- * `submitLabel` (`Ask to start work with ${fullName}` for a Doula)
- * once the Client loads -- the two strings differ, so `readyText`
+ * `title` starts as the static "Start new work" and becomes the
+ * button's words with her full name (`Ask to start work with ${fullName}`
+ * for a Doula; the button itself says her first name, #2115) once the
+ * Client loads -- the two strings differ, so `readyText`
  * genuinely gates on the fetch. A Doula role keeps the Owner/Admin-only
  * balance preview out of the mount cascade entirely.
  */
@@ -107,7 +108,7 @@ export const soloRoster: RequestDoulas = {
  * is restated with it, and so is the Doula list: the approver reads the
  * whole roster, which is the fourteen-Doula agency here.
  *
- * `readyText` moves with the verb: the heading IS `submitLabel`, so the
+ * `readyText` moves with the verb: the heading is the button's words, so the
  * inherited one would never appear on this branch and the mount would
  * wait for a heading that is not coming.
  *

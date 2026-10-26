@@ -60,7 +60,9 @@ func TestVoidRequestsAwaitingHandler_ListsOnlyOpenRequests(t *testing.T) {
 	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
 	doulaID := testdb.SeedStaffAtPractice(t, db, practiceID, uid+"-doula", []string{doulaRole}, "employee")
 
-	_, openEngagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Waiting Client", "waiting@example.com")
+	openClientID, openEngagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Waiting Client", "waiting@example.com")
+	// #2114: the list names each Client in full.
+	testdb.NameClient(t, db, openClientID, "Wren", "Okafor")
 	seedContract(t, db, openEngagementID, statusSigned, mergeFieldProse)
 	seedVoidRequest(t, db, openEngagementID, doulaID, "the client's plan changed")
 
@@ -91,7 +93,7 @@ func TestVoidRequestsAwaitingHandler_ListsOnlyOpenRequests(t *testing.T) {
 		t.Fatalf("items = %+v, want exactly the one still-open request", out.Items)
 	}
 	item := out.Items[0]
-	if item.EngagementID != openEngagementID || item.ClientName != "Waiting Client" || item.Reason != "the client's plan changed" {
+	if item.EngagementID != openEngagementID || item.ClientName != "Wren Okafor" || item.Reason != "the client's plan changed" {
 		t.Fatalf("item = %+v, want the open request against %q", item, openEngagementID)
 	}
 }

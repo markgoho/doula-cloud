@@ -69,8 +69,10 @@ type scheduleFixture struct {
 	// engagementA is the Engagement the contractor holds an open, granted
 	// attachment on; engagementB is the one she does not.
 	engagementA, engagementB string
-	employeeDoulaID          string
-	otherDoulaID             string
+	// clientA is engagementA's Client, named in full by a test (#2114).
+	clientA         string
+	employeeDoulaID string
+	otherDoulaID    string
 	// soon and later are both inside the default window; unscheduledVisit
 	// has no instant at all and past is behind it.
 	soonVisit, laterVisit, unscheduledVisit, pastVisit string
@@ -84,13 +86,14 @@ func newScheduleFixture(t *testing.T, db *testdb.DB, prefix string) scheduleFixt
 	otherDoulaID := testdb.SeedNamedStaffAtPractice(
 		t, db, practiceID, prefix+"-other-doula", "Other Doula", []string{doulaRole}, employeeType)
 
-	_, engagementA := testdb.SeedNamedEngagement(t, db, practiceID, "Ada Client", prefix+"-ada@example.com")
+	clientA, engagementA := testdb.SeedNamedEngagement(t, db, practiceID, "Ada Client", prefix+"-ada@example.com")
 	_, engagementB := testdb.SeedNamedEngagement(t, db, practiceID, "Bea Client", prefix+"-bea@example.com")
 
 	base := time.Now().UTC().Add(time.Hour).Truncate(time.Second)
 	f := scheduleFixture{
 		practiceID:      practiceID,
 		engagementA:     engagementA,
+		clientA:         clientA,
 		engagementB:     engagementB,
 		employeeDoulaID: employeeDoulaID,
 		otherDoulaID:    otherDoulaID,
@@ -111,6 +114,8 @@ func TestPracticeSchedule_ListsEveryScheduledVisitSoonestFirst(t *testing.T) {
 	const identityUID = "schedule-owner"
 	f := newScheduleFixture(t, db, "listing")
 	testdb.SeedStaffAtPractice(t, db, f.practiceID, identityUID, []string{ownerRole}, employeeType)
+	// #2114: the schedule names each Client in full.
+	testdb.NameClient(t, db, f.clientA, "Ada", "Okafor")
 
 	srv, session := newServer(t, db, identityUID)
 	defer srv.Close()
@@ -124,8 +129,8 @@ func TestPracticeSchedule_ListsEveryScheduledVisitSoonestFirst(t *testing.T) {
 	if first.EngagementID != f.engagementA {
 		t.Errorf("engagementId = %q, want %q", first.EngagementID, f.engagementA)
 	}
-	if first.ClientName != "Ada Client" {
-		t.Errorf("clientName = %q, want %q", first.ClientName, "Ada Client")
+	if first.ClientName != "Ada Okafor" {
+		t.Errorf("clientName = %q, want %q", first.ClientName, "Ada Okafor")
 	}
 	if first.StaffID != f.employeeDoulaID {
 		t.Errorf("staffId = %q, want %q", first.StaffID, f.employeeDoulaID)

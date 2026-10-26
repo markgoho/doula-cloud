@@ -107,7 +107,7 @@ func ListHandler() http.Handler {
 // staffauth.Middleware already set on tx, the same belt-and-braces
 // client.listClients uses, and the join to clients is for her name only.
 func listPending(ctx context.Context, tx *sql.Tx, practiceID string, after *pagecursor.Cursor) ([]ListItem, error) {
-	query := `SELECT r.id, c.id, c.given_name, c.preferred_name, r.kind::text, r.due_date::text,
+	query := `SELECT r.id, c.id, c.given_name, c.preferred_name, c.family_name, r.kind::text, r.due_date::text,
 	                 rs.name, r.requested_at
 	            FROM engagement_requests r
 	            JOIN clients c ON c.id = r.client_id
@@ -133,13 +133,13 @@ func listPending(ctx context.Context, tx *sql.Tx, practiceID string, after *page
 	for rows.Next() {
 		var item ListItem
 		var givenName string
-		var preferredName, dueDate sql.NullString
-		if err := rows.Scan(&item.RequestID, &item.ClientID, &givenName, &preferredName,
+		var preferredName, familyName, dueDate sql.NullString
+		if err := rows.Scan(&item.RequestID, &item.ClientID, &givenName, &preferredName, &familyName,
 			&item.Kind, &dueDate, &item.RequestedByName, &item.RequestedAt); err != nil {
 			// coverage:ignore reason: row scan failure, not exercised by unit tests
 			return nil, fmt.Errorf("engagementrequest: scan pending: %w", err)
 		}
-		item.ClientName = personname.Preferred(givenName, preferredName.String)
+		item.ClientName = personname.Full(givenName, preferredName.String, familyName.String)
 		if dueDate.Valid {
 			item.DueDate = &dueDate.String
 		}

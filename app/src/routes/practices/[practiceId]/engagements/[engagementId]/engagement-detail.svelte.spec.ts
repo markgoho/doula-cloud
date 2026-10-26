@@ -1962,7 +1962,7 @@ describe("the link to the Client's details journey (#1610)", () => {
 		await renderWithFixtureResponder();
 
 		await expect
-			.element(testPage.getByRole('link', { name: `Add ${fixtureDetail.clientDisplayName}'s details` }))
+			.element(testPage.getByRole('link', { name: `Add ${fixtureDetail.clientName}'s details`, exact: true }))
 			.toHaveAttribute(
 				'href',
 				`/practices/${fixture.params.practiceId}/clients/${fixtureDetail.clientId}/details?engagement=${fixture.params.engagementId}`

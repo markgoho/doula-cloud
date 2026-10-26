@@ -93,7 +93,7 @@ func VoidRequestsAwaitingHandler() http.Handler {
 // contracts/engagements is needed for the Practice filter itself, only
 // for the Client's name.
 func listVoidRequestsAwaiting(ctx context.Context, tx *sql.Tx, practiceID string, after *pagecursor.Cursor) ([]VoidRequestAwaitingItem, error) {
-	query := `SELECT cvr.id, cvr.engagement_id, cl.id, cl.given_name, cl.preferred_name, s.name, cvr.reason, cvr.created_at
+	query := `SELECT cvr.id, cvr.engagement_id, cl.id, cl.given_name, cl.preferred_name, cl.family_name, s.name, cvr.reason, cvr.created_at
 	            FROM contract_void_requests cvr
 	            JOIN engagements e ON e.id = cvr.engagement_id
 	            JOIN clients cl ON cl.id = e.client_id
@@ -119,13 +119,13 @@ func listVoidRequestsAwaiting(ctx context.Context, tx *sql.Tx, practiceID string
 	for rows.Next() {
 		var item VoidRequestAwaitingItem
 		var givenName string
-		var preferredName sql.NullString
+		var preferredName, familyName sql.NullString
 		if err := rows.Scan(&item.RequestID, &item.EngagementID, &item.ClientID,
-			&givenName, &preferredName, &item.RequestedByName, &item.Reason, &item.CreatedAt); err != nil {
+			&givenName, &preferredName, &familyName, &item.RequestedByName, &item.Reason, &item.CreatedAt); err != nil {
 			// coverage:ignore reason: row scan failure, not exercised by unit tests
 			return nil, fmt.Errorf("contracts: scan void request awaiting: %w", err)
 		}
-		item.ClientName = personname.Preferred(givenName, preferredName.String)
+		item.ClientName = personname.Full(givenName, preferredName.String, familyName.String)
 		list = append(list, item)
 	}
 	if err := rows.Err(); err != nil {

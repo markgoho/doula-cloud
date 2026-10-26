@@ -234,6 +234,22 @@ func SeedNamedClient(t *testing.T, db *DB, practiceID, givenName, email string) 
 	return clientID
 }
 
+// NameClient gives a seeded Client a preferred name and a family name
+// beside the given name SeedNamedClient stored, so a test can prove which
+// of her names a surface reads (#2111, #2114): with only a given name on
+// file, the first name and the full name read the same. An empty name is
+// stored as NULL, the way intake stores one not given.
+func NameClient(t *testing.T, db *DB, clientID, preferredName, familyName string) {
+	t.Helper()
+	if _, err := db.Admin.ExecContext(t.Context(),
+		`UPDATE clients SET preferred_name = NULLIF($2, ''), family_name = NULLIF($3, '') WHERE id = $1`,
+		clientID, preferredName, familyName,
+	); err != nil {
+		// coverage:ignore reason: fixture update failure, not exercised by the happy-path test
+		t.Fatalf("testdb: name client %s: %v", clientID, err)
+	}
+}
+
 // SeedNamedEngagement inserts a Client with the given name and email and
 // an Engagement linking them to practiceID, at the schema's default
 // status ("intake"). Collapses the near-identical seedClientEngagement

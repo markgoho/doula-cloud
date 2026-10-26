@@ -17,6 +17,7 @@ import { gotoWithOutcome } from '#lib/outcome.js';
 import Page from './+page.svelte';
 import { toPageState } from '../../../../routeFixture.js';
 import { detail as baseDetail, fixture } from './page.fixture.js';
+import { firstName } from '#lib/personName.js';
 
 if (!customElements.get('center-l')) registerLayoutPrimitives();
 
@@ -43,6 +44,9 @@ const goto = vi.hoisted(() => vi.fn());
 vi.mock('$app/navigation', () => ({ goto }));
 
 const { practiceId, clientId } = fixture.params;
+// The heading names her in full (`fixture.readyText`); each line under
+// it, by her first name (the brief's Voice rule 2, #2115).
+const first = firstName(baseDetail);
 // The generated `data` prop merges practices/[practiceId]/+layout.ts's
 // `session` (#835) into +page.ts's own ContractorGate, the way SvelteKit
 // really does at runtime -- this route never reads it, but rendering the
@@ -229,15 +233,23 @@ describe('client detail hub', () => {
 		await expect.element(testPage.getByRole('link', { name: 'Blocked email addresses' })).not.toBeInTheDocument();
 	});
 
+	it('titles her record with her full name and names her by her preferred name under it (#2115)', async () => {
+		await setup({ overrides: { givenName: 'Rebecca', preferredName: 'Bex', familyName: 'Okafor' } });
+
+		await expect.element(testPage.getByRole('heading', { level: 1, name: 'Bex Okafor' })).toBeVisible();
+		await expect.element(testPage.getByRole('heading', { level: 2, name: 'Who Bex is' })).toBeVisible();
+		await expect.element(testPage.getByRole('link', { name: 'Start new work with Bex', exact: true })).toBeVisible();
+	});
+
 	it("groups the structural columns per #432's decision: identity, contact, address", async () => {
 		await setup();
 
-		await expect.element(testPage.getByRole('heading', { level: 2, name: `Who ${fixture.readyText} is` })).toBeVisible();
+		await expect.element(testPage.getByRole('heading', { level: 2, name: `Who ${first} is` })).toBeVisible();
 		await expect
-			.element(testPage.getByRole('heading', { level: 2, name: `How to reach ${fixture.readyText}` }))
+			.element(testPage.getByRole('heading', { level: 2, name: `How to reach ${first}` }))
 			.toBeVisible();
 		await expect
-			.element(testPage.getByRole('heading', { level: 2, name: `Where ${fixture.readyText} lives` }))
+			.element(testPage.getByRole('heading', { level: 2, name: `Where ${first} lives` }))
 			.toBeVisible();
 	});
 
@@ -282,7 +294,7 @@ describe('client detail hub', () => {
 		await expect
 			.element(
 				testPage.getByText(
-					`Your Practice stopped asking this question. ${fixture.readyText}'s answer is kept and can be read. It cannot be changed, and it is not asked of a new Client.`
+					`Your Practice stopped asking this question. ${first}'s answer is kept and can be read. It cannot be changed, and it is not asked of a new Client.`
 				)
 			)
 			.toBeVisible();
@@ -307,7 +319,7 @@ describe('client detail hub', () => {
 		await expect
 			.element(
 				testPage.getByText(
-					`Your Practice stopped asking these questions. ${fixture.readyText}'s answers are kept and can be read. The answers cannot be changed, and the questions are not asked of a new Client.`
+					`Your Practice stopped asking these questions. ${first}'s answers are kept and can be read. The answers cannot be changed, and the questions are not asked of a new Client.`
 				)
 			)
 			.toBeVisible();
@@ -583,7 +595,7 @@ describe('client detail hub', () => {
 		await setup();
 
 		await expect
-			.element(testPage.getByRole('link', { name: `Start new work with ${fixture.readyText}` }))
+			.element(testPage.getByRole('link', { name: `Start new work with ${first}` }))
 			.toHaveAttribute('href', `/practices/${practiceId}/clients/${clientId}/engagement-requests/new`);
 	});
 
@@ -616,7 +628,7 @@ describe('client detail hub', () => {
 		await setup({ isContractor: true });
 
 		await expect
-			.element(testPage.getByRole('link', { name: `Start new work with ${fixture.readyText}` }))
+			.element(testPage.getByRole('link', { name: `Start new work with ${first}` }))
 			.not.toBeInTheDocument();
 		// Edit follows read, not the originate rule -- a contractor keeps it.
 		await expect.poll(() => changeHrefs().has('given name')).toBe(true);
@@ -784,7 +796,7 @@ describe('erasing a Client (#691, ADR-0027)', () => {
 	it("puts Erase in a section of its own, apart from the record's everyday links", async () => {
 		await setup({ isOwner: true });
 
-		const section = testPage.getByRole('region', { name: `Erase ${fixture.readyText}'s data` });
+		const section = testPage.getByRole('region', { name: `Erase ${first}'s data` });
 		await expect.element(section.getByRole('button', { name: "Erase this Client's data" })).toBeVisible();
 		await expect.element(section.getByRole('link')).not.toBeInTheDocument();
 	});
@@ -797,7 +809,7 @@ describe('erasing a Client (#691, ADR-0027)', () => {
 		await expect
 			.element(
 				testPage.getByText(
-					`You need two-factor authentication before you can erase ${fixture.readyText}'s data.`
+					`You need two-factor authentication before you can erase ${first}'s data.`
 				)
 			)
 			.toBeVisible();
@@ -830,7 +842,7 @@ describe('erasing a Client (#691, ADR-0027)', () => {
 
 		await testPage.getByRole('button', { name: "Erase this Client's data" }).click();
 
-		const dialog = testPage.getByRole('dialog', { name: `Erase ${fixture.readyText}'s data` });
+		const dialog = testPage.getByRole('dialog', { name: `Erase ${first}'s data` });
 		await expect.element(dialog).toBeVisible();
 		await expect.element(dialog.getByText(/erases .*'s name, email, phone, address and date of birth\./)).toBeVisible();
 		await expect.element(dialog.getByText(/stay in your Practice's financial and clinical record\./)).toBeVisible();
@@ -893,8 +905,8 @@ describe('erasing a Client (#691, ADR-0027)', () => {
 
 		await expect.element(testPage.getByText(baseDetail.email)).toBeVisible();
 		await testPage.getByRole('button', { name: "Erase this Client's data" }).click();
-		const dialog = testPage.getByRole('dialog', { name: `Erase ${fixture.readyText}'s data` });
-		await dialog.getByRole('button', { name: `Erase ${fixture.readyText}'s data` }).click();
+		const dialog = testPage.getByRole('dialog', { name: `Erase ${first}'s data` });
+		await dialog.getByRole('button', { name: `Erase ${first}'s data` }).click();
 
 		expect(apiFetchWithSession).toHaveBeenCalledWith(`/api/practices/${practiceId}/clients/${clientId}/erasure`, {
 			method: 'POST'
@@ -921,8 +933,8 @@ describe('erasing a Client (#691, ADR-0027)', () => {
 		});
 
 		await testPage.getByRole('button', { name: "Erase this Client's data" }).click();
-		const dialog = testPage.getByRole('dialog', { name: `Erase ${fixture.readyText}'s data` });
-		await dialog.getByRole('button', { name: `Erase ${fixture.readyText}'s data` }).click();
+		const dialog = testPage.getByRole('dialog', { name: `Erase ${first}'s data` });
+		await dialog.getByRole('button', { name: `Erase ${first}'s data` }).click();
 
 		await expect
 			.element(testPage.getByText("this client's data has already been erased"))

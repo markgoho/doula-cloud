@@ -26,6 +26,9 @@ func TestListHandler_GathersEveryPendingRequestOldestFirst(t *testing.T) {
 	testdb.SeedStaffAtPractice(t, db, practiceID, "admin-1", []string{adminRole}, employeeType)
 	firstClient := testdb.SeedNamedClient(t, db, practiceID, "Test Client", "client.com")
 	secondClient := testdb.SeedNamedClient(t, db, practiceID, "Test Client", "client.com")
+	// #2114: the inbox names each Client in full, the preferred name
+	// followed by the family name.
+	testdb.NameClient(t, db, firstClient, "Tess", "Okafor")
 	oldest := pendingRequest(t, db, practiceID, firstClient, testKindBirth, doulaID)
 	newest := pendingRequest(t, db, practiceID, secondClient, testKindPostpartum, doulaID)
 
@@ -43,8 +46,8 @@ func TestListHandler_GathersEveryPendingRequestOldestFirst(t *testing.T) {
 		t.Fatalf("order = %s, %s; want the oldest wait first", out.Items[0].RequestID, out.Items[1].RequestID)
 	}
 	row := out.Items[0]
-	if row.ClientID != firstClient || row.ClientName != "Test Client" {
-		t.Fatalf("client = %s/%q, want the seeded Client named", row.ClientID, row.ClientName)
+	if row.ClientID != firstClient || row.ClientName != "Tess Okafor" {
+		t.Fatalf("client = %s/%q, want the seeded Client named in full", row.ClientID, row.ClientName)
 	}
 	if row.Kind != testKindBirth || row.DueDate == nil || *row.DueDate != testDueDate {
 		t.Fatalf("ask = %s due %v, want the birth Request as it was made", row.Kind, row.DueDate)

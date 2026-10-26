@@ -235,7 +235,7 @@ func parseScheduleFilter(w http.ResponseWriter, r *http.Request) (scheduleFilter
 // "this parameter is NULL, or it matches". `$4` is the Doula a reader
 // picked; `$5` is the contractor rule she did not pick, and is NULL for
 // every caller ADR-0008 grants ambient reach.
-const scheduleSelect = `SELECT v.id, e.id, cl.given_name, cl.preferred_name, s.id, s.name, v.scheduled_at
+const scheduleSelect = `SELECT v.id, e.id, cl.given_name, cl.preferred_name, cl.family_name, s.id, s.name, v.scheduled_at
 	  FROM visits v
 	  JOIN engagements e ON e.id = v.engagement_id
 	  JOIN clients cl ON cl.id = e.client_id
@@ -299,13 +299,13 @@ func listScheduledVisits(
 	for rows.Next() {
 		var item ScheduledVisit
 		var givenName string
-		var preferredName sql.NullString
-		if err := rows.Scan(&item.VisitID, &item.EngagementID, &givenName, &preferredName,
+		var preferredName, familyName sql.NullString
+		if err := rows.Scan(&item.VisitID, &item.EngagementID, &givenName, &preferredName, &familyName,
 			&item.StaffID, &item.StaffName, &item.ScheduledAt); err != nil {
 			// coverage:ignore reason: row scan failure, not exercised by unit tests
 			return nil, fmt.Errorf("visit: scan practice schedule row: %w", err)
 		}
-		item.ClientName = personname.Preferred(givenName, preferredName.String)
+		item.ClientName = personname.Full(givenName, preferredName.String, familyName.String)
 		list = append(list, item)
 	}
 	if err := rows.Err(); err != nil {
