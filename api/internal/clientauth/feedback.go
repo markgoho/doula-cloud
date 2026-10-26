@@ -60,12 +60,11 @@ type PortalFeedbackResponse struct {
 // more than one Practice (ADR-0015) and most of this route's screens
 // name no single Engagement at all.
 //
-// Not wrapped in idempotency.Wrap, the same gap message.ClientCreateHandler's
-// own doc comment already names: idempotency_keys (00027) scopes a key
-// by (practice_id, staff_id), both NOT NULL, and a Portal caller has
-// neither. Q2's own resolution -- "redundant feedback is better than no
-// feedback" (#1498) -- is also why closing that gap is not worth doing
-// here even where a practice_id happens to be on hand.
+// Not wrapped in idempotency.WrapClient (#1924 declares it PortalExempt
+// at the route): this route is not Engagement-scoped, so there is no
+// clientauth.Middleware tx or Client id to key a retry on, and Q2's own
+// resolution -- "redundant feedback is better than no feedback" (#1498)
+// -- is why it is not worth building one here.
 func FeedbackHandler(db *sql.DB, enq tasknudge.Enqueuer) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		tx, uid, _, ok := authn.Begin(w, r, db, authn.TierPortal)

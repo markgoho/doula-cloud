@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"doula-cloud/api/internal/authntest"
+	"doula-cloud/api/internal/idempotency"
 	"doula-cloud/api/internal/notificationpref"
 	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/testdb"
@@ -20,7 +21,7 @@ func newPortalServer(t *testing.T, db *testdb.DB, uid string) (srv *httptest.Ser
 	t.Helper()
 	mux := http.NewServeMux()
 	g := staffauth.NewGatedRouter(mux, db.App)
-	notificationpref.Mount(g, db.App)
+	notificationpref.Mount(g, idempotency.NewRouter(g, db.App), db.App)
 	return httptest.NewServer(mux), authntest.SeedSession(t, db.App, testdb.PortalUID(uid))
 }
 

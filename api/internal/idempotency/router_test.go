@@ -184,3 +184,38 @@ func TestRouter_ReplayableGatedRecordsRoles(t *testing.T) {
 		t.Error("second route Attaching = true, want false")
 	}
 }
+
+// TestRouter_PortalExemptPanicsWithoutAReason: a portal write left
+// unwrapped must say why, the same rule Exempt holds a Staff write to
+// (#1924).
+func TestRouter_PortalExemptPanicsWithoutAReason(t *testing.T) {
+	defer func() {
+		if r := recover(); r == nil {
+			t.Fatal("expected PortalExempt to panic on an empty reason, it did not")
+		}
+	}()
+	rt := idempotency.NewRouter(discardMounter{}, nil)
+	rt.PortalExempt("POST /api/portal/feedback", "", http.NotFoundHandler())
+}
+
+// TestRouter_PortalDoorsRecordTheirStance proves PortalReplayable and
+// PortalExempt each land on the registry marked Portal, with the
+// Replayable flag or the reason their door means -- the fields
+// TestRoutes_EveryPortalWriteDeclaresAnIdempotencyStance walks against
+// the real route table.
+func TestRouter_PortalDoorsRecordTheirStance(t *testing.T) {
+	rt := idempotency.NewRouter(discardMounter{}, nil)
+	rt.PortalReplayable("POST /api/portal/engagements/{engagementId}/messages", http.NotFoundHandler())
+	rt.PortalExempt("POST /api/portal/feedback", "redundant feedback is better than none", http.NotFoundHandler())
+
+	routes := rt.Routes()
+	if len(routes) != 2 {
+		t.Fatalf("Routes() = %d entries, want 2", len(routes))
+	}
+	if !routes[0].Portal || !routes[0].Replayable || routes[0].Reason != "" {
+		t.Errorf("PortalReplayable route = %+v, want Portal, Replayable, no Reason", routes[0])
+	}
+	if !routes[1].Portal || routes[1].Replayable || routes[1].Reason == "" {
+		t.Errorf("PortalExempt route = %+v, want Portal, not Replayable, a Reason", routes[1])
+	}
+}

@@ -66,3 +66,51 @@ func TestRoutes_EveryMutatingPracticeRouteHasIdempotencyDeclaration(t *testing.T
 		}
 	}
 }
+
+// TestRoutes_EveryPortalWriteDeclaresAnIdempotencyStance is the
+// Client-portal mirror of TestRoutes_NoPracticeWriteBypassesIdempotencyRouter
+// (#1924): every mutating route under /api/portal goes through
+// idempotency.Router's portal doors -- PortalReplayable, keyed to the
+// calling Client, or PortalExempt with its reason -- never a bare
+// GatedRouter.Write that asks for neither. The Replayable ones are named
+// here too, so a route quietly moved from Replayable to Exempt fails the
+// build rather than losing its replay unseen.
+func TestRoutes_EveryPortalWriteDeclaresAnIdempotencyStance(t *testing.T) {
+	_, gRoutes, irRoutes := routes(testDeps())
+
+	declared := make(map[string]bool, len(irRoutes))
+	replayable := map[string]bool{}
+	for _, route := range irRoutes {
+		if !route.Portal {
+			continue
+		}
+		declared[route.Pattern] = true
+		if route.Replayable {
+			replayable[route.Pattern] = true
+		}
+	}
+
+	found := 0
+	for _, route := range gRoutes {
+		if !route.Write || !strings.HasPrefix(route.Pattern, "/api/portal/") {
+			continue
+		}
+		found++
+		key := route.Method + " " + route.Pattern
+		if !declared[key] {
+			t.Errorf("route %q is a portal write not registered through idempotency.Router -- register it through ir.PortalReplayable or ir.PortalExempt instead", key)
+		}
+	}
+	if found == 0 {
+		t.Fatal("found zero portal writes in g.Routes() -- did registerPortalRoutes stop wiring feature Mounts?")
+	}
+
+	for _, want := range []string{
+		"POST /api/portal/engagements/{engagementId}/messages",
+		"POST /api/portal/engagements/{engagementId}/contract/sign",
+	} {
+		if !replayable[want] {
+			t.Errorf("route %q is not PortalReplayable, want it replayable (#1924)", want)
+		}
+	}
+}

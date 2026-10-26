@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 
+	"doula-cloud/api/internal/clientauth"
 	"doula-cloud/api/internal/staffauth"
 )
 
@@ -34,6 +35,10 @@ type Route struct {
 	// (#970, #990). Empty for a route registered through Replayable or
 	// Exempt -- their write carries no role declaration, by design.
 	Roles []string
+	// Portal marks a route registered through PortalReplayable or
+	// PortalExempt: a Client-portal write, keyed (when Replayable) to the
+	// calling Client rather than a Staff member (#1924).
+	Portal bool
 }
 
 // Router closes mutating-route registration until each route declares its
@@ -81,9 +86,10 @@ type Mounter interface {
 }
 
 // NewRouter mounts its routes through mounter. db is the low-privilege
-// connection Replayable and Exempt apply staffauth.Middleware with --
-// every route this Router mounts runs downstream of it, since
-// routes_practice.go's whole surface is Staff-population, Practice-scoped.
+// connection Replayable and Exempt apply staffauth.Middleware with, and
+// PortalReplayable applies clientauth.Middleware with -- the Client
+// portal's writes declare their stance here too (#1924), through
+// PortalReplayable and PortalExempt.
 func NewRouter(mounter Mounter, db *sql.DB) *Router {
 	return &Router{mounter: mounter, db: db}
 }
@@ -169,6 +175,32 @@ func (rt *Router) ExemptGated(pattern, reason string, attaching bool, roles []st
 	}
 	rt.routes = append(rt.routes, Route{Pattern: pattern, Reason: reason, Attaching: attaching, Roles: roles})
 	rt.mounter.GatedWrite(pattern, roles, wrapped)
+}
+
+// PortalReplayable declares a Client-portal pattern replayable (#1924)
+// and mounts h behind clientauth.Middleware and WrapClient, which this
+// applies itself -- a caller passes the bare handler, the same as
+// Replayable. The key is scoped to the calling Client and her own
+// Practice, never a Staff member's.
+func (rt *Router) PortalReplayable(pattern string, h http.Handler) {
+	rt.routes = append(rt.routes, Route{Pattern: pattern, Replayable: true, Portal: true})
+	rt.mounter.Write(pattern, clientauth.Middleware(rt.db)(WrapClient(h)))
+}
+
+// PortalExempt declares a Client-portal pattern deliberately unwrapped,
+// for reason, the portal's mirror of Exempt (#1924). Unlike Exempt, it
+// mounts h exactly as given: a portal write is not always behind
+// clientauth.Middleware -- a magic-link spend or an invitation's
+// acceptance runs before there is any session, and a sign-in-address
+// change or a piece of Feedback is not Engagement-scoped -- so the caller
+// passes the whole chain it already has. reason must be non-empty, for
+// the same purpose Exempt requires one.
+func (rt *Router) PortalExempt(pattern, reason string, h http.Handler) {
+	if reason == "" {
+		panic(fmt.Sprintf("idempotency: Router.PortalExempt(%q): no reason given -- a mutating route left unwrapped must say why", pattern))
+	}
+	rt.routes = append(rt.routes, Route{Pattern: pattern, Reason: reason, Portal: true})
+	rt.mounter.Write(pattern, h)
 }
 
 // Routes returns the registry of every mutating route this router knows

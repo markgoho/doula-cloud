@@ -232,7 +232,7 @@ func routes(d Deps) (http.Handler, []staffauth.GatedRoute, []idempotency.Route) 
 	// Practice-scoped routes too (#836).
 	registerSessionRoutes(g, ir, d)
 	registerPracticeRoutes(g, ir, d)
-	registerPortalRoutes(g, d)
+	registerPortalRoutes(g, ir, d)
 	registerInternalRoutes(g, d)
 	registerWebhookRoutes(g, d)
 

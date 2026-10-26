@@ -6,10 +6,12 @@ import (
 	"doula-cloud/api/internal/testdb"
 )
 
-// These tests exercise idempotency_keys_own_scope from
-// 00027_idempotency_keys.sql directly via db.App and set_config, proving
-// the SQL policy itself scopes access to the caller's own Practice and
-// Staff member -- not just that the Go helper happens to agree with it.
+// These tests exercise idempotency_keys_own_scope's Staff branch
+// (00129_idempotency_keys_client_scope.sql, first written in 00027)
+// directly via db.App and set_config, proving the SQL policy itself
+// scopes access to the caller's own Practice and Staff member -- not just
+// that the Go helper happens to agree with it. Its Client branch is held
+// in rlsguardrail/idempotency_keys_test.go (#1924).
 
 // seedStaffMember inserts a Staff row (no membership needed for these
 // tests -- they set session vars directly rather than going through
@@ -135,6 +137,33 @@ func TestRLS_IdempotencyKeysAllowsOwnPracticeAndStaff(t *testing.T) {
 	}
 	if statusCode != 201 {
 		t.Fatalf("status_code = %d, want 201", statusCode)
+	}
+}
+
+// TestSchema_IdempotencyKeyNamesExactlyOneCaller proves
+// idempotency_keys_one_caller (00129, #1924): a key belongs to a Staff
+// member or to a Client, never to both and never to neither -- checked
+// through the superuser, so RLS plays no part.
+func TestSchema_IdempotencyKeyNamesExactlyOneCaller(t *testing.T) {
+	db := testdb.New(t)
+	practiceID := testdb.SeedPractice(t, db, "One Caller Practice")
+	staffID := seedStaffMember(t, db, "one-caller-staff")
+	clientID, _ := testdb.SeedNamedEngagement(t, db, practiceID, "One Caller Client", "one-caller@example.com")
+
+	for _, tc := range []struct {
+		name              string
+		staffID, clientID any
+	}{
+		{"neither", nil, nil},
+		{"both", staffID, clientID},
+	} {
+		_, err := db.Admin.ExecContext(t.Context(),
+			`INSERT INTO idempotency_keys (key, practice_id, staff_id, client_id, status_code, response_body) VALUES ('k', $1, $2, $3, 200, '{}')`,
+			practiceID, tc.staffID, tc.clientID,
+		)
+		if err == nil {
+			t.Errorf("%s: a key naming %s caller was stored, want it refused", tc.name, tc.name)
+		}
 	}
 }
 

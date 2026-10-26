@@ -2,10 +2,14 @@
 // Idempotency-Key contract as a single reusable decorator: replay a
 // previously stored response for a key already seen in the caller's own
 // scope, or run the handler and persist its result when a key is present.
-// Must be mounted inside staffauth.Middleware -- it reads the
-// request-scoped tx, Practice id, and Staff id Middleware sets, and relies
-// on idempotency_keys' RLS policy (00027_idempotency_keys.sql) to enforce
-// that scope at the database layer too.
+//
+// A caller is one of two populations, and each has its own decorator:
+// Wrap for a Staff member, mounted inside staffauth.Middleware, and
+// WrapClient for a Client, mounted inside clientauth.Middleware (#1924).
+// Each reads the request-scoped tx and caller id its Middleware sets, and
+// relies on idempotency_keys' RLS policy
+// (00129_idempotency_keys_client_scope.sql) to enforce that scope at the
+// database layer too.
 package idempotency
 
 import (
@@ -19,6 +23,7 @@ import (
 	"time"
 
 	"doula-cloud/api/internal/apierr"
+	"doula-cloud/api/internal/clientauth"
 	"doula-cloud/api/internal/staffauth"
 )
 
@@ -39,15 +44,26 @@ const maxKeyLength = 255
 // reaper/sweep job actually deleting anything.
 const ttl = 48 * time.Hour
 
+// scope is whose key a request carries: a Staff member at a Practice, or a
+// Client, whose Practice is the one her own clients row belongs to.
+// Exactly one of staffID and clientID is set, the same rule
+// idempotency_keys_one_caller holds the table to.
+type scope struct {
+	practiceID string
+	staffID    sql.NullString
+	clientID   sql.NullString
+}
+
 // Wrap runs next unmodified when no usable Idempotency-Key header is
 // present. When a key is present, it replays a stored response for that
 // key scoped to the caller's own Practice and Staff member, or runs next
 // and persists the result (when the response status is not a server
-// error) for the next request carrying the same key.
+// error) for the next request carrying the same key. Must be mounted
+// inside staffauth.Middleware.
 func Wrap(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		key := r.Header.Get(headerName)
-		if key == "" || len(key) > maxKeyLength {
+		key, ok := usableKey(r)
+		if !ok {
 			next.ServeHTTP(w, r)
 			return
 		}
@@ -59,53 +75,111 @@ func Wrap(next http.Handler) http.Handler {
 		}
 		staffID, _ := staffauth.StaffID(r.Context())
 
-		found, status, body, err := lookup(r.Context(), tx, key, practiceID, staffID)
-		if err != nil {
+		serve(w, r, next, tx, key, scope{practiceID: practiceID, staffID: sql.NullString{String: staffID, Valid: true}})
+	})
+}
+
+// WrapClient is Wrap for the Client-portal population (#1924): the same
+// replay-or-run, with the key scoped to the calling Client and her own
+// Practice. Must be mounted inside clientauth.Middleware, which sets the
+// tx and the Client id this reads. clientauth.Middleware sets no Practice
+// id, so the Practice is read from her own clients row on that tx --
+// clients_self_visibility (00009) lets her session read it, and
+// idempotency_keys_own_scope checks the same pairing again on every read
+// and write.
+func WrapClient(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		key, ok := usableKey(r)
+		if !ok {
+			next.ServeHTTP(w, r)
+			return
+		}
+
+		tx, hasTx := clientauth.Tx(r.Context())
+		clientID, hasClient := clientauth.ClientID(r.Context())
+		// coverage:ignore reason: clientauth.Middleware always sets a tx and a Client id before this handler runs
+		if !hasTx || !hasClient {
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+			return
+		}
+
+		var practiceID string
+		if err := tx.QueryRowContext(r.Context(), `SELECT practice_id FROM clients WHERE id = $1`, clientID).Scan(&practiceID); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
-		if found {
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(status)
-			//nolint:gosec // replaying a body this same request scope already wrote as JSON on the initial call, not attacker-controlled markup
-			_, _ = w.Write(body)
-			return
-		}
 
-		rec := &recorder{ResponseWriter: w, status: http.StatusOK}
-		next.ServeHTTP(rec, r)
-
-		// A 5xx means the initial execution failed -- caching it would
-		// permanently wedge this key, since the caller would never be
-		// able to retry past a transient failure. Only successful and
-		// deterministic-error (4xx) outcomes are worth replaying.
-		if rec.status < 500 {
-			if err := save(r.Context(), tx, key, practiceID, staffID, rec.status, rec.body.Bytes()); err != nil {
-				// coverage:ignore reason: DB query failure, not exercised by unit tests
-				//
-				// The response has already been written to the caller at
-				// this point, so a storage failure can't change what they
-				// receive -- it just means the next retry with this key
-				// re-runs the handler instead of replaying. Logged, not
-				// surfaced.
-				log.Printf("idempotency: store response for key: %v", err)
-			}
-		}
+		serve(w, r, next, tx, key, scope{practiceID: practiceID, clientID: sql.NullString{String: clientID, Valid: true}})
 	})
 }
 
+// usableKey returns the request's Idempotency-Key, and false when there is
+// none or it is too long to store.
+func usableKey(r *http.Request) (string, bool) {
+	key := r.Header.Get(headerName)
+	if key == "" || len(key) > maxKeyLength {
+		return "", false
+	}
+	return key, true
+}
+
+// serve is the replay-or-run both Wrap and WrapClient share once each has
+// resolved its caller's scope.
+func serve(w http.ResponseWriter, r *http.Request, next http.Handler, tx *sql.Tx, key string, sc scope) {
+	found, status, body, err := lookup(r.Context(), tx, key, sc)
+	if err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+		return
+	}
+	if found {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(status)
+		//nolint:gosec // replaying a body this same request scope already wrote as JSON on the initial call, not attacker-controlled markup
+		_, _ = w.Write(body)
+		return
+	}
+
+	rec := &recorder{ResponseWriter: w, status: http.StatusOK}
+	next.ServeHTTP(rec, r)
+
+	// A 5xx means the initial execution failed -- caching it would
+	// permanently wedge this key, since the caller would never be able to
+	// retry past a transient failure. Only successful and
+	// deterministic-error (4xx) outcomes are worth replaying.
+	if rec.status < 500 {
+		// Copied onto a non-nil slice: a handler that writes no body (a
+		// 204) leaves Bytes() nil, which the driver sends as NULL into
+		// response_body's NOT NULL -- so an empty response was never
+		// stored, and its retry re-ran instead of replaying.
+		stored := append([]byte{}, rec.body.Bytes()...)
+		if err := save(r.Context(), tx, key, sc, rec.status, stored); err != nil {
+			// coverage:ignore reason: DB query failure, not exercised by unit tests
+			//
+			// The response has already been written to the caller at this
+			// point, so a storage failure can't change what they receive --
+			// it just means the next retry with this key re-runs the
+			// handler instead of replaying. Logged, not surfaced.
+			log.Printf("idempotency: store response for key: %v", err)
+		}
+	}
+}
+
 // lookup returns the stored status code and response body for key, if one
-// was already persisted for the caller's own practiceID/staffID scope
-// within ttl. A row older than ttl is treated as not found, honoring
-// docs/api-design.md section 3's TTL without a reaper job actually
-// deleting it.
-func lookup(ctx context.Context, tx *sql.Tx, key, practiceID, staffID string) (found bool, status int, body []byte, err error) {
+// was already persisted for the caller's own scope within ttl. A row older
+// than ttl is treated as not found, honoring docs/api-design.md section
+// 3's TTL without a reaper job actually deleting it. IS NOT DISTINCT FROM
+// compares the caller column a scope leaves NULL as equal to the row's
+// NULL, the same reading idempotency_keys_scope's NULLS NOT DISTINCT
+// gives it.
+func lookup(ctx context.Context, tx *sql.Tx, key string, sc scope) (found bool, status int, body []byte, err error) {
 	err = tx.QueryRowContext(ctx,
 		`SELECT status_code, response_body FROM idempotency_keys
-		 WHERE key = $1 AND practice_id = $2 AND staff_id = $3
-		   AND created_at >= now() - make_interval(secs => $4)`,
-		key, practiceID, staffID, ttl.Seconds(),
+		 WHERE key = $1 AND practice_id = $2
+		   AND staff_id IS NOT DISTINCT FROM $3::uuid AND client_id IS NOT DISTINCT FROM $4::uuid
+		   AND created_at >= now() - make_interval(secs => $5)`,
+		key, sc.practiceID, sc.staffID, sc.clientID, ttl.Seconds(),
 	).Scan(&status, &body)
 	if errors.Is(err, sql.ErrNoRows) {
 		return false, 0, nil, nil
@@ -117,24 +191,24 @@ func lookup(ctx context.Context, tx *sql.Tx, key, practiceID, staffID string) (f
 	return true, status, body, nil
 }
 
-// save persists status and body against key, scoped to practiceID and
-// staffID. On conflict with an existing row still within ttl, the insert
-// no-ops -- a concurrent retry racing this same insert loses harmlessly,
-// whichever write lands first is what future replays return. On conflict
-// with a row past ttl (lookup already treats it as not-found, so the
-// handler just re-ran), the row is refreshed in place instead of staying
-// stale forever, since ON CONFLICT DO NOTHING would otherwise silently
-// drop every save attempt against that key going forward.
-func save(ctx context.Context, tx *sql.Tx, key, practiceID, staffID string, status int, body []byte) error {
+// save persists status and body against key, in the caller's scope. On
+// conflict with an existing row still within ttl, the insert no-ops -- a
+// concurrent retry racing this same insert loses harmlessly, whichever
+// write lands first is what future replays return. On conflict with a row
+// past ttl (lookup already treats it as not-found, so the handler just
+// re-ran), the row is refreshed in place instead of staying stale
+// forever, since ON CONFLICT DO NOTHING would otherwise silently drop
+// every save attempt against that key going forward.
+func save(ctx context.Context, tx *sql.Tx, key string, sc scope, status int, body []byte) error {
 	_, err := tx.ExecContext(ctx,
-		`INSERT INTO idempotency_keys (key, practice_id, staff_id, status_code, response_body)
-		 VALUES ($1, $2, $3, $4, $5)
-		 ON CONFLICT (key, practice_id, staff_id) DO UPDATE
+		`INSERT INTO idempotency_keys (key, practice_id, staff_id, client_id, status_code, response_body)
+		 VALUES ($1, $2, $3, $4, $5, $6)
+		 ON CONFLICT (key, practice_id, staff_id, client_id) DO UPDATE
 		 SET status_code = EXCLUDED.status_code,
 		     response_body = EXCLUDED.response_body,
 		     created_at = now()
-		 WHERE idempotency_keys.created_at < now() - make_interval(secs => $6)`,
-		key, practiceID, staffID, status, body, ttl.Seconds(),
+		 WHERE idempotency_keys.created_at < now() - make_interval(secs => $7)`,
+		key, sc.practiceID, sc.staffID, sc.clientID, status, body, ttl.Seconds(),
 	)
 	if err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests

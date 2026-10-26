@@ -70,11 +70,10 @@ var feedbackRules = []ratelimit.Rule{
 // optional and independently checked, exactly like UpdateWorkStateHandler's
 // own self-only shape above it in this file's neighbors.
 //
-// Not wrapped in idempotency.Wrap. idempotency_keys (00027) scopes a key
-// by (practice_id, staff_id), both NOT NULL -- a piece sent from /account
-// carries no practice_id at all, so no key could ever be formed for that
-// call, the same gap message.ClientCreateHandler's own doc comment
-// records for a Portal caller with neither. It is also not a gap worth
+// Not wrapped in idempotency.Wrap. idempotency_keys scopes a Staff key
+// by (practice_id, staff_id), practice_id NOT NULL -- a piece sent from
+// /account carries no practice_id at all, so no key could ever be formed
+// for that call. It is also not a gap worth
 // closing here: Q2's own resolution is "redundant feedback is better
 // than no feedback" (#1498), so a retried send landing twice is not the
 // failure this route exists to prevent.

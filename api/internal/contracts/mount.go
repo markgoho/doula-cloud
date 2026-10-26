@@ -109,8 +109,12 @@ func Mount(g *staffauth.GatedRouter, ir *idempotency.Router, db *sql.DB, store o
 
 	g.OpenGet("/api/portal/engagements/{engagementId}/contract", clientauth.PortalPopulation,
 		clientauth.Middleware(db)(ClientGetContractHandler()))
-	g.Write("POST /api/portal/engagements/{engagementId}/contract/sign",
-		clientauth.Middleware(db)(ClientPostSignContractHandler(store)))
+	// #1924: state-guarded like the Staff transitions Exempt covers, but
+	// Replayable on purpose -- a Client whose response dropped after the
+	// signature committed would otherwise press again and be refused with
+	// a 409 for a Contract she has signed. The replay gives her the first
+	// response instead. PortalReplayable applies clientauth.Middleware.
+	ir.PortalReplayable("POST /api/portal/engagements/{engagementId}/contract/sign", ClientPostSignContractHandler(store))
 	g.OpenGet("/api/portal/engagements/{engagementId}/contract/pdf", clientauth.PortalPopulation,
 		clientauth.Middleware(db)(ClientGetSignedContractPDFHandler(store)))
 }

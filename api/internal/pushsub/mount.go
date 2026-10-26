@@ -11,7 +11,10 @@ import (
 // Mount registers both populations' push-subscription surface: the Staff
 // one under a Practice (behind staffauth.Middleware via ir), and the
 // Client-portal one under an Engagement (behind clientauth.Middleware).
-func Mount(g *staffauth.GatedRouter, ir *idempotency.Router, db *sql.DB) {
+// Every route here is a write, and since #1924 the portal ones register
+// through ir too, so the GatedRouter is unused -- kept in the signature
+// that every feature Mount shares.
+func Mount(_ *staffauth.GatedRouter, ir *idempotency.Router, db *sql.DB) {
 	ir.Exempt("POST /api/practices/{practiceId}/push-subscriptions",
 		"upsert; registering the same endpoint again is a no-op update, not a duplicate row",
 		false, RegisterHandler())
@@ -19,8 +22,10 @@ func Mount(g *staffauth.GatedRouter, ir *idempotency.Router, db *sql.DB) {
 		"delete; a retry after the first succeeds deletes nothing further",
 		false, UnregisterHandler())
 
-	g.Write("POST /api/portal/engagements/{engagementId}/push-subscriptions",
+	ir.PortalExempt("POST /api/portal/engagements/{engagementId}/push-subscriptions",
+		"upsert; registering the same endpoint again is a no-op update, not a duplicate row",
 		clientauth.Middleware(db)(ClientRegisterHandler()))
-	g.Write("DELETE /api/portal/engagements/{engagementId}/push-subscriptions",
+	ir.PortalExempt("DELETE /api/portal/engagements/{engagementId}/push-subscriptions",
+		"delete; a retry after the first succeeds deletes nothing further",
 		clientauth.Middleware(db)(ClientUnregisterHandler()))
 }

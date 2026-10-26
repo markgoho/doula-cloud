@@ -2,6 +2,7 @@ import { goto } from '$app/navigation';
 import { resolve } from '$app/paths';
 import { signOut } from 'firebase/auth';
 import { getFirebaseAuth } from './firebase.js';
+import { keyRequest } from './idempotencyKey.js';
 import { portalLoginAfterSessionEnded, staffLoginAfterSessionEnded } from './sessionEnded.js';
 
 /**
@@ -127,9 +128,18 @@ portal). Both are best-effort, and the unregister runs against a session
 sign-out is about to end anyway --
 routing either through apiFetchWithSession would navigate the page away
 mid-flight. Feature code wants apiFetchWithSession, not this.
+
+Every `POST` through here carries an `Idempotency-Key` (#1924,
+`#lib/idempotencyKey.js`): the same key when the same submit is sent again
+after a dropped connection or a 5xx, a new one once a submit has settled.
+A `fetch` that throws leaves its submit unsettled, which is the case the
+key exists for.
 */
-export function apiFetch(path: string, init: RequestInit = {}): Promise<Response> {
-	return fetch(apiBaseURL() + path, { ...init, credentials: 'include' });
+export async function apiFetch(path: string, init: RequestInit = {}): Promise<Response> {
+	const keyed = keyRequest(path, init);
+	const response = await fetch(apiBaseURL() + path, { ...keyed.init, credentials: 'include' });
+	keyed.settle(response);
+	return response;
 }
 
 async function handleExpiredSession(): Promise<void> {

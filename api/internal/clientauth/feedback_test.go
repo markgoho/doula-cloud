@@ -13,6 +13,7 @@ import (
 	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/clientauth"
 	"doula-cloud/api/internal/feedback"
+	"doula-cloud/api/internal/idempotency"
 	"doula-cloud/api/internal/portalaccount"
 	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/tasknudge"
@@ -22,7 +23,7 @@ import (
 func newPortalFeedbackServer(db *testdb.DB) *httptest.Server {
 	mux := http.NewServeMux()
 	g := staffauth.NewGatedRouter(mux, db.App)
-	clientauth.Mount(g, db.App, tasknudge.NoOpEnqueuer{})
+	clientauth.Mount(g, idempotency.NewRouter(g, db.App), db.App, tasknudge.NoOpEnqueuer{})
 	return httptest.NewServer(mux)
 }
 

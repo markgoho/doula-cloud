@@ -10,6 +10,7 @@ import (
 	"doula-cloud/api/internal/authn"
 	"doula-cloud/api/internal/authtoken"
 	"doula-cloud/api/internal/clientauth"
+	"doula-cloud/api/internal/idempotency"
 	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/tasknudge"
 	"doula-cloud/api/internal/testdb"
@@ -18,7 +19,7 @@ import (
 func newMagicLinkRequestServer(db *testdb.DB) *httptest.Server {
 	mux := http.NewServeMux()
 	g := staffauth.NewGatedRouter(mux, db.App)
-	clientauth.Mount(g, db.App, &tasknudge.FakeEnqueuer{})
+	clientauth.Mount(g, idempotency.NewRouter(g, db.App), db.App, &tasknudge.FakeEnqueuer{})
 	return httptest.NewServer(mux)
 }
 
