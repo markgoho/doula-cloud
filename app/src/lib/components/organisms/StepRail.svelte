@@ -157,7 +157,7 @@
 	and its marker and list are their own departure from the plain shape:
 	the caret is drawn in the row rather than by the browser (#2005), and
 	`details > ol` lays the steps out as a grid. Widening
-	the atom to carry a composed summary and a bespoke marker position
+	the atom to carry a composed summary and a marker of its own
 	would fit one caller and no other; DataTable is the real caller the
 	shared shape serves.
 -->
@@ -253,9 +253,15 @@
 			display: none;
 		}
 
-		/* One line tall, with the caret centered in it, so it sits on the
-		   caption's first line however many lines the caption takes. */
+		/*
+		 * One line tall, with the caret centered in it, so it sits on the
+		 * caption's first line however many lines the caption takes.
+		 * `flex: none`, the rule `Icon` gives its own <svg> (#1743): a
+		 * caption that wraps squeezed this box in Firefox and Safari, and
+		 * the 16px caret spilled out of the rail on the left (#1633).
+		 */
 		.marker {
+			flex: none;
 			display: inline-flex;
 			align-items: center;
 			block-size: 1lh;
@@ -289,7 +295,9 @@
 			min-inline-size: 0;
 		}
 
-		/* The arranging happens one level in, so the marker survives it. */
+		/* The caret-and-words pair and the track share one row, and the
+		   track wraps below the pair when the pair leaves it too little
+		   room (see `.track` below). */
 		summary .summary-row {
 			display: flex;
 			flex-wrap: wrap;

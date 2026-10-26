@@ -28,15 +28,18 @@ The shape is hybrid, and the hybrid is forced by a real page: the staff Engageme
 
 | Archetype | Component | Regions |
 |---|---|---|
-| **A** Entry | `templates/EntryPage.svelte` | `title`, `errorSummary?`, `content` — see the 2026-09-02 amendment below |
-| **B** Overview hub | `templates/OverviewHub.svelte` | `title`, `primary`, `secondary?`, and **`isEmpty` + `empty`, both required** |
-| **C** List | `templates/ListPage.svelte` | `title`, `intro?`, `actions?`, `content` — see the 2026-09-02 amendment below |
-| **D** Record detail | `templates/RecordDetail.svelte` | `title`, `summary?`, `actions?`, `sections: { heading, content }[]`, **`contents?`** — see the amendment below |
-| **E** Long form | `templates/FormPage.svelte` | `title`, `intro?`, `fieldsets: { legend, content }[]`, `error?`, `actions` |
-| **E** Question page | `templates/QuestionPage.svelte` | `journey`, `steps`, `allStepsHref?`, `backHref`, `errorSummary?`, `caption?`, `question`, `hint?`, `content`, `actions` — see the second amendment below |
-| **E** Check answers | `templates/CheckAnswers.svelte` | `journey`, `steps`, `allStepsHref?`, `backHref`, `title`, `caption?`, `errorSummary?`, `sections`, `isWide?`, `actions` — same amendment |
-| **G** Document | `templates/DocumentPage.svelte` | `title`, `backHref`, `backLabel?`, `content`, `empty?` — see the 2026-09-29 amendment below |
+| **A** Entry | `templates/EntryPage.svelte` | `title`, `errorSummary?`, `lede?`, `content` — see the 2026-09-02 amendment below |
+| **B** Overview hub | `templates/OverviewHub.svelte` | `title`, `serviceName?`, `outcome?`, `primary`, `secondary?`, `feed?`, `links?`, **`isEmpty` + `empty`, both required**, `loading?`, `loadError?` |
+| **C** List | `templates/ListPage.svelte` | `title`, `serviceName?`, `outcome?`, `intro?`, `actions?`, `content`, `loading?`, `loadError?` — see the 2026-09-02 amendment below |
+| **D** Record detail | `templates/RecordDetail.svelte` | `title`, `serviceName?`, `outcome?`, `backHref?`, `backLabel?`, `summary?`, `actions?`, `sections: { heading, content }[]`, **`isContentsShown?`**, `loading?`, `loadError?` — see the amendment below |
+| **E** Long form | `templates/FormPage.svelte` | `title`, `serviceName?`, `outcome?`, `intro?`, `fieldsets: { legend?, content }[]`, `errorSummary?`, `actions`, `loading?`, `loadError?` |
+| **E** Question page | `templates/QuestionPage.svelte` | `journey`, `serviceName?`, `steps`, `backHref`, `errorSummary?`, `caption?`, `question`, `hint?`, `error?`, `content`, `actions` — see the second amendment below |
+| **E** Check answers | `templates/CheckAnswers.svelte` | `journey`, `steps`, `backHref`, `title`, `serviceName?`, `caption?`, `errorSummary?`, `sections`, `declaration?`, `actions` — same amendment |
+| **G** Document | `templates/DocumentPage.svelte` | `title`, `serviceName?`, `backHref`, `backLabel?`, `content`, `loading?`, `loadError?`, `empty?`, `emptyAction?` — see the 2026-09-29 amendment below |
 | **A** Signed-out landing | `templates/LandingPage.svelte` | `title`, `greeting`, `lede`, `content` — see the 2026-10-02 amendment below |
+| Error, any side | `templates/ErrorPage.svelte` | `kind`, `wayOutHref`, `wayOutLabel` |
+
+**Amended, 2026-10-26 ([#1633](https://github.com/markgoho/doula-cloud/issues/1633)):** the table above is corrected to the props each Template takes on trunk. Removed: `CheckAnswers`'s `isWide?`, which [#2005](https://github.com/markgoho/doula-cloud/issues/2005) took out when the rail moved into the column at one width; `allStepsHref?` on `QuestionPage` and `CheckAnswers`, which went with `StepRail`'s "Show all steps" link on [#585](https://github.com/markgoho/doula-cloud/issues/585); `FormPage`'s `error?`, which shipped as `errorSummary?` (the 2026-08-30 amendment below says so); and `RecordDetail`'s `contents?`, which shipped as `isContentsShown?` (the #424 note below). Added: the props later tickets gave each Template, among them `serviceName?` and `outcome?`, the `loading?` and `loadError?` of the 2026-08-30 amendment, `CheckAnswers`'s `declaration?` ([#2049](https://github.com/markgoho/doula-cloud/issues/2049)), `QuestionPage`'s `error?`, `EntryPage`'s `lede?`, `OverviewHub`'s `feed?` and `links?`, `RecordDetail`'s `backHref?` and `backLabel?`, `DocumentPage`'s `emptyAction?`, and a row for `ErrorPage`, which had none. The 2026-08-30 amendment below says the table "still lists" `error?`; that was true until this correction. The decisions above stand; only the list of props changed.
 
 `FormPage.fieldsets` is ADR-0017's shape: the twelve-column structural core is one fieldset and each Practice-defined section is another appended below it — the pattern the [#406](https://github.com/markgoho/doula-cloud/issues/406) survey found in Cliniko and endorsed as the one matching ADR-0017.
 
