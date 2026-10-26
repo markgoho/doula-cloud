@@ -415,14 +415,9 @@ const siteFiles = globFiles('site/src/**/*.{svelte,ts,js,css,svg,html,md}', { cw
 // American English too, and #899, #921, #1154 and #1218 each swept the code
 // and left `docs/` to the next reader's eye, which is how an ADR kept the
 // British spelling of "enrollment" after the code dropped it. The file set
-// is the one `prose.usage.spec.ts` reads, and the two exclusions are that
-// spec's own:
-//
-//   - `docs/research/transcripts/` is verbatim auto-generated captions.
-//   - `docs/design/doula-cloud.export.md` is generated from the `.pen` file
-//     by `bun run design:export`, and `scripts/design-export.test.ts` fails
-//     when the two disagree, so a line in it can be neither fixed by hand
-//     nor marked. A spelling there is fixed on the canvas.
+// is the one `prose.usage.spec.ts` reads, and the one exclusion is that
+// spec's own: `docs/research/transcripts/` is verbatim auto-generated
+// captions.
 //
 // Nothing else is exempt by where it sits. A book read-back, a GOV.UK
 // quotation, a `>` blockquote and a dated Run log entry are all read. A
@@ -439,8 +434,7 @@ const siteFiles = globFiles('site/src/**/*.{svelte,ts,js,css,svg,html,md}', { cw
 // here.
 const documentFiles = [
 	...globFiles('docs/**/*.md', { cwd: repoRoot }).filter(
-		(file) =>
-			!file.startsWith('docs/research/transcripts/') && file !== 'docs/design/doula-cloud.export.md'
+		(file) => !file.startsWith('docs/research/transcripts/')
 	),
 	'GLOSSARY.md',
 	'README.md',

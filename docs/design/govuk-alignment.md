@@ -14,7 +14,7 @@ The fit is unusually close, for three reasons:
 2. **It is form-heavy and low-frequency.** A person who adds four Clients a month never builds fluency. Their patterns assume exactly that person.
 3. **The users are people mid-crisis, some of the time.** A client filling in a birth plan after a loss, a doula doing admin between two births. GOV.UK's whole posture -- one question at a time, plain words, an obvious way out -- is designed for someone who has no attention to spare.
 
-This is already how the product has been built. [ADR-0018](../adr/0018-templates-are-a-design-system-layer-with-two-named-exits.md)'s Template layer, the intake sequence drawn in `doula-cloud.pen`, and the three-box date of birth drawn in `b7e8ab7` all came from there. This document makes that explicit rather than leaving it as a habit that only holds while someone remembers.
+This is already how the product has been built. [ADR-0018](../adr/0018-templates-are-a-design-system-layer-with-two-named-exits.md)'s Template layer, the intake sequence drawn on the canvas in `e994dc79`, and the three-box date of birth drawn in `b7e8ab7` all came from there. This document makes that explicit rather than leaving it as a habit that only holds while someone remembers.
 
 ## What is adopted, and what is not
 

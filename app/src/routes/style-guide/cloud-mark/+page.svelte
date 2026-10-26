@@ -12,7 +12,7 @@
 		<p>
 			Only the width and height vary. An SVG stroke is in viewBox units and scales with the frame,
 			so one <code>stroke-width</code> produces the weight ramp the canvas has to state by hand —
-			pen.dev's <code>strokeWidth</code> is node pixels and does not scale (#411). <code>xl</code> is
+			a drawing tool's stroke is node pixels and does not scale (#411). <code>xl</code> is
 			the signed-out landing's mark, alone on its own panel (#1645); in a space narrower than 200px
 			it scales down and keeps its proportion.
 		</p>

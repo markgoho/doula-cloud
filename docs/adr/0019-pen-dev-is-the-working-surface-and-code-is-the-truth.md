@@ -1,5 +1,7 @@
 # pen.dev is the working surface, and the code is the truth
 
+> **Superseded by [ADR-0061](0061-pen-dev-is-left-and-a-screen-is-designed-on-a-prototype-and-the-rendered-page.md) on 2026-10-25.** pen.dev is left, and `docs/design/doula-cloud.pen` and its export are deleted ([#1993](https://github.com/markgoho/doula-cloud/issues/1993)). "Code is the truth" stands and is the reason leaving cost a deletion, as this document said it would. The tool findings below are kept as the record of why pen.dev was chosen and what was learned driving it.
+
 Screens in this application are designed on a canvas before they become Svelte. This document records which canvas, where the design lives, and — the part that actually matters — which side wins when the canvas and the code disagree.
 
 Decided on the wayfinder map [Holistic application design](https://github.com/markgoho/doula-cloud/issues/405), ticket [#412](https://github.com/markgoho/doula-cloud/issues/412). The step-by-step procedure lives in [the design workflow](../design/workflow.md), deliberately not here: this decision should be stable, and that procedure will be edited as we learn more.
