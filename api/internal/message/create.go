@@ -190,8 +190,9 @@ func validAttachmentContentType(contentType string) bool {
 	return acceptedAttachmentTypes[contentType]
 }
 
-// validateAndStoreAttachment enforces the ~10MB size cap and image/PDF
-// content-type rule on an uploaded file, sniffing the real content type
+// validateAndStoreAttachment enforces the ~10MB size cap and the
+// acceptedAttachmentTypes list (JPEG, PNG, GIF, WebP or PDF) on an
+// uploaded file, sniffing the real content type
 // via http.DetectContentType rather than trusting the client-declared
 // header (trivially spoofable) -- the sniffed type is also what's
 // persisted, so the download endpoint later serves back the type that was

@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import { jsonResponse } from '#lib/testResponse.js';
 import { expectPrivacyLinkAfterMain } from '#lib/testPrivacyLink.js';
+import { inReaderZone } from '#lib/testZone.js';
 import type { SignOutOutcome } from '#lib/signOut.js';
 import Layout from './+layout.svelte';
 
@@ -102,6 +103,11 @@ async function openAvatarMenu() {
 	await page.getByRole('button', { name: 'Your account, Tasha Bell' }).first().click();
 	return page.getByRole('button', { name: 'Sign out' }).first();
 }
+
+// The way back to the portal root is named with the Engagement's
+// `createdAt`, an instant printed in the reader's zone: this file names
+// the zone that day is true in rather than trusting the runner's (#1982).
+inReaderZone('America/New_York');
 
 describe('Client portal authenticated layout', () => {
 	it('renders its children', async () => {

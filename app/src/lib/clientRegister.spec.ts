@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import {
 	CARE_HEADING,
 	NO_CARE_HEADING,
@@ -25,6 +25,18 @@ describe('engagementStatusLabel', () => {
 });
 
 describe('engagementLabel', () => {
+	// `createdAt` is an instant, printed in the reader's zone: 20:00Z is
+	// Mar 12 in New York and already Mar 13 in Tokyo. The block names its
+	// zone rather than trusting the runner's (#1982), the way
+	// dates.zone.spec.ts does; Vitest runs each spec file in its own fork.
+	const runnerZone = process.env.TZ;
+	beforeAll(() => {
+		process.env.TZ = 'America/New_York';
+	});
+	afterAll(() => {
+		process.env.TZ = runnerZone;
+	});
+
 	it('carries the Practice name and when the Engagement began', () => {
 		expect(
 			engagementLabel({ practiceName: 'Riverside Doulas', createdAt: '2026-03-12T20:00:00Z' })
