@@ -71,7 +71,7 @@
 	{#each rows as row, index (index)}
 		<div class="row">
 			<dt>{row.label}</dt>
-			<dd class="value">{row.value}</dd>
+			<dd class="value" class:spans={!(action && row.changes)}>{row.value}</dd>
 			{#if action && row.changes}
 				<dd class="action">
 					{@render action(row, `${listId}-${index}-changes`)}
@@ -87,7 +87,26 @@
 
 <style>
 	@layer components {
+		/*
+		 * One grid for the whole list, and each row a subgrid of it (#1998),
+		 * so every label, value and Change sits in the same column as the
+		 * row above -- what makes a run of rows read as one list, and what
+		 * the drawing shows. A flex row per row, which this replaced, sized
+		 * each row's columns to that row's own words, so the values
+		 * zig-zagged down the card.
+		 *
+		 * The tracks are `DescriptionList`'s, plus the action's: the label
+		 * takes `fit-content(40%)` because a Practice types some labels and
+		 * one may be a pasted URL (#725); the value is `minmax(0, 1fr)`, so
+		 * an unbreakable value shrinks rather than widening the page
+		 * (#530); and the action is `auto`, the width of "Change". No
+		 * width is named, so the list adapts to whatever room it is given
+		 * (ADR-0024).
+		 */
 		dl {
+			display: grid;
+			grid-template-columns: fit-content(40%) minmax(0, 1fr) auto;
+			column-gap: var(--space-4);
 			margin: 0;
 		}
 
@@ -112,6 +131,7 @@
 			margin: 0;
 			font-weight: var(--font-weight-medium);
 			color: var(--color-on-surface-variant);
+			overflow-wrap: anywhere;
 		}
 
 		dd {
@@ -120,51 +140,44 @@
 		}
 
 		/*
-		 * A hairline under each row: what makes a run of rows read as one
-		 * list without a border on each.
+		 * A hairline under each row. `align-items: baseline` puts the
+		 * label, the value and the Change on one text line, though the
+		 * Change is a 44px target and the others are not.
 		 *
-		 * No @container query (#564): flex-wrap reads the row's own content
-		 * instead of an authored width. Each cell's automatic minimum is its
-		 * own min-content, and flex-wrap packs as many cells onto a line as
-		 * fit before starting the next -- so a label and a "Change", both
-		 * short, author-controlled strings, are what force a stack when they
-		 * do not fit. A value is a Practice's own data of any length and
-		 * wraps freely either way.
-		 *
-		 * Not a grid: `grid-template-columns: repeat(auto-fit,
-		 * minmax(min-content, 1fr))` was tried first in `CheckAnswers`
-		 * (#564), and `CSS.supports()` against a real Chromium returns false
-		 * for it -- auto-fit's repetition count has to be computable from a
-		 * fixed track size, and min-content is not one -- so every row
-		 * silently stacked.
-		 *
-		 * `flex-grow: 1` on every cell gives each fitting column an equal
-		 * share of the row once three fit.
+		 * (CheckAnswers' rows were flex-wrap before, after a first grid of
+		 * `repeat(auto-fit, minmax(min-content, 1fr))` that Chromium drops
+		 * whole (#564). This grid has fixed tracks and no auto-fit, so it
+		 * does not meet that restriction.)
 		 */
 		.row {
-			display: flex;
-			flex-wrap: wrap;
-			column-gap: var(--space-4);
+			display: grid;
+			grid-column: 1 / -1;
+			grid-template-columns: subgrid;
+			align-items: baseline;
 			row-gap: var(--space-1);
 			padding-block: var(--space-3);
 			border-block-end: var(--border-thin) solid var(--color-outline-variant);
 		}
 
-		.row > * {
-			flex: 1 1 auto;
-		}
-
 		.value {
+			grid-column: 2;
 			overflow-wrap: anywhere;
 		}
 
+		/* A row with no Change gives its value the action's column too, so
+		   a narrow list does not wrap a date around an empty cell. */
+		.value.spans {
+			grid-column: 2 / -1;
+		}
+
 		.action {
+			grid-column: 3;
 			text-align: end;
 		}
 
 		/* The in-place form takes the row's whole width, on a line of its own. */
 		.row > .detail {
-			flex-basis: 100%;
+			grid-column: 1 / -1;
 			padding-block-start: var(--space-3);
 		}
 	}
