@@ -309,7 +309,7 @@ describe('Staff Engagement detail summary', () => {
 
 		await expect.element(testPage.getByText('Care phase', { exact: true })).toBeVisible();
 		expect(document.querySelectorAll('dl.bordered button')).toHaveLength(0);
-		await expect.element(testPage.getByRole('link', { name: 'Message the client' })).toBeVisible();
+		await expect.element(testPage.getByRole('link', { name: 'Message the Client' })).toBeVisible();
 	});
 
 	it('draws the "← Clients" back link and the header actions above the summary', async () => {
@@ -319,7 +319,7 @@ describe('Staff Engagement detail summary', () => {
 			.element(testPage.getByRole('link', { name: 'Clients', exact: true }))
 			.toHaveAttribute('href', '/practices/practice-1/clients');
 		await expect
-			.element(testPage.getByRole('link', { name: 'Message the client' }))
+			.element(testPage.getByRole('link', { name: 'Message the Client' }))
 			.toHaveAttribute('href', '#messages');
 	});
 
@@ -1639,6 +1639,117 @@ describe('Create Draft Contract with no rate for the Engagement kind (#1885)', (
 
 		await expect.element(testPage.getByText('rates are down')).toBeVisible();
 		expect(testPage.getByRole('button', { name: 'Create a Draft Contract' }).elements()).toHaveLength(0);
+	});
+});
+
+function contractRegion() {
+	return testPage.getByRole('region', { name: 'Contract', exact: true });
+}
+
+// #2146: before there is a Contract, the page says what signing needs and
+// where the money will appear.
+describe('an Engagement with no Contract yet (#2146)', () => {
+	beforeEach(() => {
+		apiFetchWithSession.mockReset();
+	});
+
+	const inviteBeforeContract =
+		'Send a portal invite to this Client before sending the Contract — the Contract can only be viewed and signed once portal access exists.';
+
+	it('shows the Invoices section with one line and no action', async () => {
+		await setupWithContract(() => mockNoContract(birthRateOnly), fixtureDetail, ownerSession);
+
+		const invoices = testPage.getByRole('region', { name: 'Invoices', exact: true });
+		await expect.element(invoices.getByText('An Invoice is raised against a signed Contract.')).toBeVisible();
+		expect(invoices.getByRole('button').elements()).toHaveLength(0);
+		await expect.element(testPage.getByRole('link', { name: 'Invoices' }).first()).toHaveAttribute('href', '#invoices');
+	});
+
+	it('says a never-invited Client signs in the portal, and offers the invite beside Create', async () => {
+		await setupWithContract(() => mockNoContract(birthRateOnly), fixtureDetail, ownerSession);
+
+		await expect.element(contractRegion().getByText(inviteBeforeContract)).toBeVisible();
+		await expect.element(contractRegion().getByRole('button', { name: 'Send portal invite' })).toBeVisible();
+		await expect.element(contractRegion().getByRole('button', { name: 'Create a Draft Contract' })).toBeVisible();
+	});
+
+	it('says why the invite cannot be sent when the Client has no email address', async () => {
+		await setupWithContract(
+			() => mockNoContract(birthRateOnly),
+			{ ...fixtureDetail, clientHasEmail: false },
+			ownerSession
+		);
+
+		await expect.element(contractRegion().getByText(inviteBeforeContract)).toBeVisible();
+		await expect
+			.element(
+				contractRegion().getByText('This Client has no email address on file. Add one before sending a portal invite.')
+			)
+			.toBeVisible();
+		expect(contractRegion().getByRole('button', { name: 'Send portal invite' }).elements()).toHaveLength(0);
+		await expect.element(contractRegion().getByRole('button', { name: 'Create a Draft Contract' })).toBeVisible();
+	});
+
+	it('names the acceptance signing waits on once an invite is out', async () => {
+		await setupWithContract(
+			() => mockNoContract(birthRateOnly),
+			{ ...fixtureDetail, clientPortalInviteStatus: 'sent' },
+			ownerSession
+		);
+
+		await expect
+			.element(
+				contractRegion().getByText(
+					'The Contract can only be viewed and signed once this Client has accepted the portal invite.'
+				)
+			)
+			.toBeVisible();
+		await expect.element(contractRegion().getByRole('button', { name: 'Send portal invite' })).toBeVisible();
+	});
+
+	it('offers neither line nor invite to a Client who has a portal account', async () => {
+		await setupWithContract(
+			() => mockNoContract(birthRateOnly),
+			{ ...fixtureDetail, clientPortalInviteStatus: 'accepted' },
+			ownerSession
+		);
+
+		await expect.element(contractRegion().getByRole('button', { name: 'Create a Draft Contract' })).toBeVisible();
+		expect(contractRegion().getByRole('button', { name: 'Send portal invite' }).elements()).toHaveLength(0);
+		expect(contractRegion().getByText(/portal/).elements()).toHaveLength(0);
+	});
+
+	it('shows no action row with no email address and no rate', async () => {
+		await setupWithContract(() => mockNoContract(noRates), { ...fixtureDetail, clientHasEmail: false }, ownerSession);
+
+		await expect.element(contractRegion().getByText(inviteBeforeContract)).toBeVisible();
+		expect(contractRegion().getByRole('button').elements()).toHaveLength(0);
+	});
+});
+
+// #2146: the order a Doula works in, Contract before the Visits.
+describe('the order of the sections (#2146)', () => {
+	it('runs On call, Birth outcome, Contract, Visits, Care Plan, Birth Plan, Invoices, Offers, Messages, Activity', async () => {
+		await setupWithContract(() => respondFromFixture(), fixtureDetail, ownerSession);
+		// Offers is an Owner's or an Admin's, drawn once its read lands.
+		await expect.element(testPage.getByRole('heading', { level: 2, name: 'Offers' })).toBeVisible();
+
+		const headings = testPage
+			.getByRole('heading', { level: 2 })
+			.all()
+			.map((heading) => heading.element().textContent?.trim());
+		expect(headings).toEqual([
+			'On call',
+			'Birth outcome',
+			'Contract',
+			'Visits',
+			'Care Plan',
+			'Birth Plan',
+			'Invoices',
+			'Offers',
+			'Messages',
+			'Activity'
+		]);
 	});
 });
 

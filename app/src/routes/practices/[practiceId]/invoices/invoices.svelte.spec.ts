@@ -184,6 +184,7 @@ describe('the Practice-wide invoice list (#265)', () => {
 						amountCents: 100,
 						currency: 'usd',
 						createdAt: '2026-06-01T00:00:00Z',
+						raisedOn: '2026-06-01',
 						dueOn: '2026-07-01',
 						daysOverdue: 0
 					}

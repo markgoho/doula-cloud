@@ -71,7 +71,12 @@ type InvoiceView struct {
 	// Practice's zone. due_at is written onto the row when the Invoice is
 	// raised from the Practice's payment terms of that moment, so
 	// changing the terms later never moves an Invoice already billed.
-	DueOn       string `json:"dueOn"`
+	DueOn string `json:"dueOn"`
+	// RaisedOn (#2146) is the calendar day this Invoice was raised, in
+	// YYYY-MM-DD form: the day CreatedAt falls on in the Practice's zone,
+	// so an Owner and a contractor on one Engagement read the same Raised
+	// day for the same Invoice, whatever zone each reads it in.
+	RaisedOn    string `json:"raisedOn"`
 	Reference   string `json:"reference"`
 	BillingMode string `json:"billingMode"`
 	// ActivePaymentID (#945) is the one Payment currently covering this
@@ -140,13 +145,13 @@ type ContractorInvoicesResponse struct {
 
 // contractorInvoiceRows is items with every money field left behind:
 // each row is built field by field from what ContractorInvoiceView holds.
-func contractorInvoiceRows(items []InvoiceView, zone *time.Location) []ContractorInvoiceView {
+func contractorInvoiceRows(items []InvoiceView) []ContractorInvoiceView {
 	rows := make([]ContractorInvoiceView, 0, len(items))
 	for _, it := range items {
 		rows = append(rows, ContractorInvoiceView{
 			ID:          it.ID,
 			Status:      it.Status,
-			RaisedOn:    practiceDay(it.CreatedAt, zone),
+			RaisedOn:    it.RaisedOn,
 			DueOn:       it.DueOn,
 			PaidOn:      it.PaidOn,
 			DaysOverdue: it.DaysOverdue,
@@ -304,6 +309,7 @@ func PostInvoiceHandler(client Client) http.Handler {
 			return
 		}
 		view.DueOn = practiceDay(dueAt, zone)
+		view.RaisedOn = practiceDay(raisedAt, zone)
 		// view.DaysOverdue stays 0: an Invoice raised now falls due at
 		// least a whole day of payment terms from now (ADR-0038), so it
 		// cannot be late yet.
@@ -574,7 +580,7 @@ func GetInvoicesHandler() http.Handler {
 		}
 		if reader.IsAmbientContractor() {
 			apierr.WriteJSON(w, http.StatusOK, ContractorInvoicesResponse{
-				Items:      contractorInvoiceRows(items, zone),
+				Items:      contractorInvoiceRows(items),
 				NextCursor: nextCursor,
 				HasMore:    hasMore,
 			})
@@ -889,6 +895,7 @@ func listInvoices(ctx context.Context, tx *sql.Tx, engagementID string, after *i
 		}
 		it.PaidOn = invoicePaidOn(paidAt, activePaymentKind.String == paymentKindManual, days.zone)
 		it.DueOn = practiceDay(dueAt, days.zone)
+		it.RaisedOn = practiceDay(it.CreatedAt, days.zone)
 		it.DaysOverdue = overdue.Days(it.Status, dueAt, days.now, days.zone)
 		if activePaymentID.Valid {
 			it.ActivePaymentID = &activePaymentID.String

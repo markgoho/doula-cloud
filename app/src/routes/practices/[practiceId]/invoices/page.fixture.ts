@@ -35,6 +35,7 @@ export const data: PracticeInvoiceListData = {
 			amountCents: 450_000,
 			currency: 'usd',
 			createdAt: '2026-08-01T00:00:00Z',
+			raisedOn: '2026-08-01',
 			// #271: the by-hand rail's own reference, on the row already
 			// carrying #537's hostile client-name value.
 			reference: 'INV-0042',
@@ -55,6 +56,7 @@ export const data: PracticeInvoiceListData = {
 			amountCents: 250_000,
 			currency: 'usd',
 			createdAt: '2026-07-01T00:00:00Z',
+			raisedOn: '2026-07-01',
 			paidOn: '2026-07-04',
 			// #271: the Stripe rail's own reference, so this fixture's two
 			// rows realize both billing-mode states the "Billed via" column
@@ -119,6 +121,7 @@ export const typical: RouteVariant<RouteParameters> = {
 					amountCents: index % 3 === 2 ? 90_000 : 150_000,
 					currency: 'usd',
 					createdAt: `2026-09-${String(1 + index * 3).padStart(2, '0')}T15:00:00Z`,
+					raisedOn: `2026-09-${String(1 + index * 3).padStart(2, '0')}`,
 					...(isPaid && { paidOn: `2026-09-${String(5 + index * 3).padStart(2, '0')}` }),
 					reference: isByHand ? `INV-00${String(index + 10)}` : `DC-00${String(index + 10)}`,
 					billingMode: isByHand ? 'by_hand' : 'stripe',

@@ -36,7 +36,7 @@
  * list, which no other session draws, so she is `asContractor` below.
  */
 import type { Contract } from '#lib/contract.js';
-import type { ContractorInvoice } from '#lib/invoice.js';
+import type { ContractorInvoice, Invoice } from '#lib/invoice.js';
 import { jsonResponse } from '#lib/testResponse.js';
 import type { EngagementOnCall } from '#lib/onCall.js';
 import type { RouteFixture, RouteVariant } from '../../../../routeFixture.js';
@@ -528,6 +528,39 @@ const typicalDetail = {
 	clientPortalInviteStatus: 'accepted',
 	doulas: [{ staffId: typicalDoula.staffId, name: typicalDoula.name }]
 };
+const typicalInvoices: Invoice[] = [
+	{
+		id: 'invoice-balance',
+		contractId: 'contract-1',
+		status: 'open',
+		amountCents: 90_000,
+		currency: 'usd',
+		createdAt: '2026-10-09T15:00:00Z',
+		raisedOn: '2026-10-09',
+		dueOn: '2026-11-08',
+		reference: '4F2C9A1B-0002',
+		billingMode: 'stripe',
+		refundedCents: 0,
+		daysOverdue: 0
+	},
+	{
+		id: 'invoice-deposit',
+		contractId: 'contract-1',
+		status: 'paid',
+		amountCents: 60_000,
+		currency: 'usd',
+		createdAt: '2026-08-20T15:00:00Z',
+		raisedOn: '2026-08-20',
+		dueOn: '2026-09-19',
+		paidOn: '2026-08-24',
+		reference: '4F2C9A1B-0001',
+		billingMode: 'stripe',
+		activePaymentId: 'payment-deposit',
+		activePaymentKind: 'stripe',
+		refundedCents: 15_000,
+		daysOverdue: 0
+	}
+];
 const typicalRoster = TYPICAL_STAFF.map((member) => ({
 	...member,
 	roles: [...member.roles],
@@ -616,6 +649,10 @@ export const typical: RouteVariant<RouteParameters> = {
 				hasMore: false
 			});
 		}
+		// #2146: the ledger's "Invoice raised", and the deposit before it,
+		// paid: the Invoices table this screen measures, with every column
+		// an Owner reads filled on the paid row.
+		if (path.endsWith('/contract/invoices')) return jsonResponse({ items: typicalInvoices, hasMore: false });
 		if (path.includes('/activity')) {
 			return jsonResponse({
 				items: ['visit_logged', 'invoice_raised', 'contract_sent', 'visit_logged', 'visit_scheduled'].map(

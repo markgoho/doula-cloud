@@ -602,6 +602,24 @@
 		return `The thread opens once ${name} has accepted the portal invite.`;
 	});
 
+	// #2004, #2146: one line for each place the page says a Contract waits
+	// on the portal -- the Draft's Send gate and the empty Contract section
+	// -- and one for the reason an invite cannot be sent, shared by the
+	// header and the empty Contract section, so each says the same thing.
+	const inviteBeforeContractMessage =
+		'Send a portal invite to this Client before sending the Contract — the Contract can only be viewed and signed once portal access exists.';
+	const noEmailForInviteMessage = 'This Client has no email address on file. Add one before sending a portal invite.';
+	// #2146: what the empty Contract section says while the Client has no
+	// portal account: the same three states as messageBlock above. An
+	// invite already sent does not hold Send back (PostSendContractHandler
+	// asks only that one was sent), so that state names the acceptance
+	// signing waits on rather than asking for an invite again.
+	const contractInviteBlock = $derived.by(() => {
+		if (hasAcceptedPortalAccess) return;
+		if (hasNeverInvitedClient || !hasClientEmailOnFile) return inviteBeforeContractMessage;
+		return 'The Contract can only be viewed and signed once this Client has accepted the portal invite.';
+	});
+
 	// #1999: the Visits are rows of facts, and a form appears only when
 	// asked -- the add form, or one Visit's change, never both, so the
 	// section holds at most the one primary its open form submits with
@@ -2045,12 +2063,12 @@
 
 {#snippet actions()}
 	<!--
-		#1998: the drawing's header actions. "Message the client" goes to
+		#1998: the drawing's header actions. "Message the Client" goes to
 		this page's own Messages section, which every reader of the page
 		has. Both are secondary, as drawn: the header names what can be
 		done, and the page's one accent is spent lower down.
 	-->
-	<Link href="#messages" label="Message the client" variant="secondary" />
+	<Link href="#messages" label="Message the Client" variant="secondary" />
 	<!--
 		#255: an accepted Client is never offered a second invite -- the
 		"Portal invite" summary row above already says "Accepted", so
@@ -2070,7 +2088,7 @@
 				loading={isSendingPortalInvite}
 			/>
 		{:else}
-			<Notice variant="info" message="This Client has no email address on file. Add one before sending a portal invite." />
+			<Notice variant="info" message={noEmailForInviteMessage} />
 		{/if}
 	{/if}
 {/snippet}
@@ -2480,10 +2498,7 @@
 								.join(', ')}.`}
 						/>
 					{:else if hasNeverInvitedClient}
-						<Notice
-							variant="info"
-							message="Send a portal invite to this Client before sending the Contract — the Contract can only be viewed and signed once portal access exists."
-						/>
+						<Notice variant="info" message={inviteBeforeContractMessage} />
 					{/if}
 					<cluster-l space="var(--space-3)">
 						{#if missingMergeFields.length === 0 && !hasNeverInvitedClient}
@@ -2529,10 +2544,40 @@
 					/>
 				{/if}
 			{/if}
-			<EmptyState
-				message="No Contract yet."
-				action={hasRateForKind ? { label: 'Create a Draft Contract', onClick: handleCreateContract } : undefined}
-			/>
+			{#if contractInviteBlock}
+				<!--
+					#2146: a Client signs in the portal, so before there is a
+					Contract the section says so and offers the invite beside
+					Create, in the words the Draft's Send gate and the header
+					already use. With no email address, the reason it cannot be
+					sent takes the invite's place.
+				-->
+				<EmptyState message="No Contract yet." />
+				<Notice variant="info" message={contractInviteBlock} />
+				{#if !hasClientEmailOnFile}
+					<Notice variant="info" message={noEmailForInviteMessage} />
+				{/if}
+				{#if hasClientEmailOnFile || hasRateForKind}
+					<cluster-l space="var(--space-3)">
+						{#if hasClientEmailOnFile}
+							<Button
+								label="Send portal invite"
+								variant="secondary"
+								onClick={handleSendPortalInvite}
+								loading={isSendingPortalInvite}
+							/>
+						{/if}
+						{#if hasRateForKind}
+							<Button label="Create a Draft Contract" variant="secondary" onClick={handleCreateContract} />
+						{/if}
+					</cluster-l>
+				{/if}
+			{:else}
+				<EmptyState
+					message="No Contract yet."
+					action={hasRateForKind ? { label: 'Create a Draft Contract', onClick: handleCreateContract } : undefined}
+				/>
+			{/if}
 		{/if}
 	{:else}
 		<Skeleton label="Loading the Contract" />
@@ -2540,6 +2585,21 @@
 {/snippet}
 
 {#snippet invoicesSection()}
+	<!--
+		#2146: the section stands before there is a Contract, as drawn, so
+		the reader learns where money will appear and what it waits for. No
+		action: there is nothing to raise an Invoice against yet.
+	-->
+	{#if !isContractLoaded}
+		<Skeleton label="Loading the Invoices" />
+	{:else if contract}
+		{@render invoicesBody(contract.status)}
+	{:else}
+		<EmptyState message="An Invoice is raised against a signed Contract." />
+	{/if}
+{/snippet}
+
+{#snippet invoicesBody(contractStatus: string)}
 	{#if invoicesError}
 		<Notice variant="error" message={invoicesError} />
 	{/if}
@@ -2559,7 +2619,7 @@
 	{#if practiceTimezone}
 		<InvoiceSection
 			{invoices}
-			contractStatus={contract!.status}
+			{contractStatus}
 			{billingMode}
 			clientsCanPay={canClientsPay}
 			hasClientEmail={hasClientEmailOnFile}
@@ -2899,10 +2959,21 @@
 {/snippet}
 
 <!--
-	Archetype D, ADR-0018. The Invoices and Offers sections are still
-	conditional exactly as before -- Invoices needs a Contract to exist
-	and Offers is Owner/Admin-only -- which is why `sections` is a typed
-	array and not a run of named regions.
+	Archetype D, ADR-0018. Offers is Owner/Admin-only, which is why
+	`sections` is a typed array and not a run of named regions.
+
+	The order (#2146) is the order a Doula works in on an open Engagement:
+	who is on call and how the birth went first, because during a birth
+	those are what she opens the page for (#1093, #943). Then the
+	Contract, before the Visits, because a new Engagement waits on the
+	signed agreement and the money that follows it -- the drawing's reason
+	for putting Contract first. Then the care she gives in the order she
+	gives it (Visits, Care Plan, Birth Plan), the money raised against the
+	Contract (Invoices), who else was offered the work (Offers), and the
+	conversation and the record of what happened last. The "On this page"
+	rail and the "Jump to" strip are derived from this array, so they
+	follow it. Every section shows even when empty (#2015): Invoices
+	before a Contract says what it waits for.
 -->
 <!--
 	No loading or loadError: the Engagement is loaded before this page
@@ -2922,11 +2993,11 @@
 	sections={[
 		{ heading: 'On call', content: onCallSection },
 		{ heading: 'Birth outcome', content: birthOutcomeSection },
+		{ heading: 'Contract', content: contractSection },
 		{ heading: 'Visits', content: visitsSection },
 		{ heading: 'Care Plan', content: carePlanSection },
 		{ heading: 'Birth Plan', content: birthPlanSection },
-		{ heading: 'Contract', content: contractSection },
-		...(contract ? [{ heading: 'Invoices', content: invoicesSection }] : []),
+		{ heading: 'Invoices', content: invoicesSection },
 		...(isOffersVisible ? [{ heading: 'Offers', content: offersSection }] : []),
 		{ heading: 'Messages', content: messagesSection },
 		{ heading: 'Activity', content: activitySection }

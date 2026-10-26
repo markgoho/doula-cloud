@@ -108,6 +108,11 @@ func TestPostInvoiceHandler_ByHandRailStoresTheDueDate(t *testing.T) {
 	if want := seededPracticeDay(t, stored); view.DueOn != want {
 		t.Fatalf("returned dueOn = %q, stored due_at = %v; want %q", view.DueOn, stored, want)
 	}
+	// #2146: the row just raised names the day it was raised, as a list
+	// read of it does.
+	if want := seededPracticeDay(t, view.CreatedAt); view.RaisedOn != want {
+		t.Fatalf("returned raisedOn = %q, created_at = %v; want %q", view.RaisedOn, view.CreatedAt, want)
+	}
 	if len(client.CreateInvoiceCalls) != 0 {
 		t.Fatalf("CreateInvoice calls = %d, want 0 on the by-hand rail", len(client.CreateInvoiceCalls))
 	}

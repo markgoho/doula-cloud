@@ -14,6 +14,7 @@
 		amountCents: 425_000,
 		currency: 'usd',
 		createdAt: '2027-09-14T00:00:00Z',
+		raisedOn: '2027-09-14',
 		paidOn: '2027-09-28',
 		dueOn: '2027-10-14',
 		reference: 'INV-0014',

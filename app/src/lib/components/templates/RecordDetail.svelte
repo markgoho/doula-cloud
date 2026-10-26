@@ -4,7 +4,7 @@
 	 *
 	 * `sections` is an array rather than a run of named Snippet props because
 	 * the page that forced this Template has a *variable* number of them: the
-	 * staff Engagement detail is Visits, then N Plan sections, then Contract,
+	 * staff Engagement detail is Contract, Visits, then N Plan sections, then
 	 * Invoices, Offers and Messages. Named regions cannot express N. It is
 	 * `DataTable.rowActions`'s shape generalized -- the third confirmed use of
 	 * Snippets as an API, after `LabeledField` and `DataTable`.

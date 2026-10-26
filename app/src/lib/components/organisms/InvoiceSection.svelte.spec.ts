@@ -41,6 +41,7 @@ const invoiceOpen: Invoice = {
 	amountCents: 15_000,
 	currency: 'usd',
 	createdAt: '2026-01-01T00:00:00Z',
+	raisedOn: '2026-01-01',
 	dueOn: '2026-01-31',
 	reference: 'STRIPE-in_1',
 	refundedCents: 0,
@@ -55,6 +56,7 @@ const invoicePaid: Invoice = {
 	amountCents: 20_000,
 	currency: 'usd',
 	createdAt: '2026-01-02T00:00:00Z',
+	raisedOn: '2026-01-02',
 	paidOn: '2026-01-05',
 	dueOn: '2026-02-01',
 	reference: 'STRIPE-in_2',
@@ -83,6 +85,7 @@ const invoicePaidByHand: Invoice = {
 	amountCents: 25_000,
 	currency: 'usd',
 	createdAt: '2026-01-03T00:00:00Z',
+	raisedOn: '2026-01-03',
 	paidOn: '2026-01-06',
 	dueOn: '2026-02-02',
 	reference: 'INV-0003',
@@ -158,10 +161,11 @@ function invoiceFact(text: string) {
 	return page.getByRole('definition').filter({ hasText: text });
 }
 
-/* The card's title is the amount, in a block with no role of its own; the
- * card's tree is the later of DataTable's two, so `last()` is its copy. */
-function invoiceTitle(amount: string) {
-	return page.getByText(amount, { exact: true }).last();
+/* The card's title is its first column's value -- an Owner's Invoice
+ * number, a contractor's raised day -- in a block with no role of its own;
+ * the card's tree is the later of DataTable's two, so `last()` is its copy. */
+function invoiceTitle(text: string) {
+	return page.getByText(text, { exact: true }).last();
 }
 
 describe('InvoiceSection.svelte', () => {
@@ -172,11 +176,26 @@ describe('InvoiceSection.svelte', () => {
 	});
 
 	// #2059: a row per Invoice, its status a Badge of its own.
-	it('lists an Invoice with its formatted amount and its status', async () => {
+	// #2146: titled by its number, then the day it was raised, as drawn.
+	it('lists an Invoice by its number, with the day it was raised, its formatted amount and its status', async () => {
 		await setup({ invoices: [invoiceOpen] });
 
-		await expect.element(invoiceTitle('$150.00')).toBeVisible();
+		await expect.element(invoiceTitle('STRIPE-in_1')).toBeVisible();
+		await expect.element(invoiceFact('Jan 1, 2026')).toBeVisible();
+		await expect.element(invoiceFact('$150.00')).toBeVisible();
 		await expect.element(invoiceFact('Open')).toBeVisible();
+	});
+
+	// The card's title is the Invoice column; its facts follow in order.
+	it('reads Raised, Amount and Status under the number, in that order', async () => {
+		await setup({ invoices: [invoiceOpen] });
+		await expect.element(page.getByRole('term').first()).toBeVisible();
+
+		const terms = page
+			.getByRole('term')
+			.all()
+			.map((term) => term.element().textContent?.trim());
+		expect(terms).toEqual(['Raised', 'Amount', 'Status']);
 	});
 
 	// #2122: the Owner's row reads Overdue from the BFF's count, the same
@@ -1079,7 +1098,7 @@ describe('InvoiceSection.svelte', () => {
 			const fullyRefunded: Invoice = { ...invoicePaidByHand, refundedCents: invoicePaidByHand.amountCents };
 			await setup({ invoices: [fullyRefunded], isOwnerOrAdmin: true });
 
-			await expect.element(invoiceFact('$250.00')).toBeVisible();
+			await expect.element(invoiceTitle(fullyRefunded.reference)).toBeVisible();
 			expect(page.getByRole('button', { name: 'Return money' }).all()).toHaveLength(0);
 		});
 

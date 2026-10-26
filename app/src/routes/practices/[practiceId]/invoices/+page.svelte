@@ -14,7 +14,7 @@
 	import { page } from '#lib/appState.svelte.js';
 	import { resolve } from '$app/paths';
 	import { apiFetchWithSession } from '#lib/api.js';
-	import { formatCalendarDay, formatInstant } from '#lib/dates.js';
+	import { formatCalendarDay } from '#lib/dates.js';
 	import {
 		clientsCannotPayMessage,
 		dueLabel,
@@ -114,8 +114,10 @@
 			accessor: (invoice: PracticeInvoice) => (invoice.billingMode === 'by_hand' ? 'By hand' : 'Stripe')
 		},
 		{
+			// #2146: the day raised, in the Practice's zone -- the Raised
+			// day the Engagement's own Invoices section shows.
 			label: 'Billed',
-			accessor: (invoice: PracticeInvoice) => formatInstant(invoice.createdAt)
+			accessor: (invoice: PracticeInvoice) => formatCalendarDay(invoice.raisedOn)
 		},
 		{
 			// #768. "Payment due", not "Due date": a due date in this domain
