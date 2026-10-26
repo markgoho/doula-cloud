@@ -565,8 +565,9 @@ export type InvoiceStanding = Pick<Invoice, 'status' | 'daysOverdue'>;
  * Overdue in place of Open once the BFF counts it late, because lateness
  * is the one status the stored value does not say. Every other status
  * reads through invoiceStatusLabel. One function for the Engagement's
- * Invoices section, for every role, and the Practice-wide list, so one
- * Invoice cannot read Overdue on one Staff screen and Open on the next.
+ * Invoices section, for every role, the Practice-wide list, and the
+ * Clients list's rollup line (#2130), so one Invoice cannot read Overdue
+ * on one Staff screen and Open on the next.
  * Never the Client portal's: ADR-0038 keeps Overdue off it, and she
  * reads "Not yet paid" (clientInvoiceStatusLabel). */
 export function invoiceRowStatusLabel(invoice: InvoiceStanding): string {

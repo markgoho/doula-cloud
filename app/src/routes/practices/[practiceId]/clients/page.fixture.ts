@@ -47,6 +47,12 @@ export const clients: ClientListItem[] = [
 				invoiceStatus: 'open',
 				invoiceAmountCents: 450_000,
 				/*
+				 * #2130: late, so it reads "Overdue $4,500.00", the longer
+				 * of the two words an open Invoice can take ("Owes" is on
+				 * the typical rows below).
+				 */
+				daysOverdue: 12,
+				/*
 				 * The third optional field, and the one the first pass
 				 * missed: a fee appends a whole ` · Your fee: $1,200.00`
 				 * segment, which is render-distinct under ADR-0025's
@@ -186,7 +192,10 @@ const typicalClients: ClientListItem[] = TYPICAL_CLIENTS.slice(0, 8).map((person
 						contractStatus: 'signed',
 						doulaName: doula.name,
 						invoiceStatus: 'open',
-						invoiceAmountCents: kind === 'birth' ? 150_000 : 90_000
+						invoiceAmountCents: kind === 'birth' ? 150_000 : 90_000,
+						// #2130: one Invoice on the page is late, as one at a
+						// real agency is on most days.
+						daysOverdue: index === 1 ? 12 : 0
 					}
 				]
 	};

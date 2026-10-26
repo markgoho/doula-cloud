@@ -9,6 +9,7 @@ import (
 
 	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/clock"
+	"doula-cloud/api/internal/overdue"
 	"doula-cloud/api/internal/personname"
 	"doula-cloud/api/internal/practicetimezone"
 	"doula-cloud/api/internal/staffauth"
@@ -86,7 +87,7 @@ type PracticeInvoicesResponse struct {
 	RefundedCents int64 `json:"refundedCents"`
 	// OverdueCents and OverdueCount (#768) are the part of the
 	// outstanding book that is past its due day: 'open' and due before
-	// the start of the Practice's own today (#1965, overdueFrom),
+	// the start of the Practice's own today (#1965, overdue.From),
 	// evaluated by Postgres at read. They are a narrowing of the
 	// outstanding figures beside them, never a separate book -- an
 	// overdue Invoice is counted in both pairs, because it is still money
@@ -166,7 +167,7 @@ func GetPracticeInvoicesHandler() http.Handler {
 			return
 		}
 
-		totals, err := practiceInvoiceTotals(r.Context(), tx, practiceID, overdueFrom(days.now, days.zone))
+		totals, err := practiceInvoiceTotals(r.Context(), tx, practiceID, overdue.From(days.now, days.zone))
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
@@ -239,7 +240,7 @@ const (
 )
 
 // clause is the narrowing's fixed WHERE text. Overdue compares due_at
-// with overdueFrom's instant, passed as the query parameter cutoffParam
+// with overdue.From's instant, passed as the query parameter cutoffParam
 // names, so the boundary is the start of the Practice's own today
 // (#1965) and the comparison stays an instant one on the stored column.
 func (n invoiceNarrowing) clause(cutoffParam string) string {
@@ -259,7 +260,7 @@ func (n invoiceNarrowing) clause(cutoffParam string) string {
 //
 // The instant overdue is judged at is clock.Now(ctx), read once by the
 // handler and turned into the start of the Practice's today
-// (overdueFrom). Before #1965 it was Postgres's now() against due_at
+// (overdue.From). Before #1965 it was Postgres's now() against due_at
 // itself; a due date is a day to a person, and the Practice's day is the
 // one that decides. Nothing is stored, nothing is swept, and no webhook
 // is involved -- Stripe emits no event when a due date passes, so this
@@ -309,7 +310,7 @@ func listPracticeInvoices(ctx context.Context, tx *sql.Tx, practiceID string, af
 		args = []any{practiceID, after.createdAt, after.invoiceID, invoicePageSize + 1}
 	}
 	if narrowing == narrowOverdue {
-		args = append(args, overdueFrom(days.now, days.zone))
+		args = append(args, overdue.From(days.now, days.zone))
 	}
 	rows, err := tx.QueryContext(ctx, query, args...)
 	// coverage:ignore reason: DB query failure, not exercised by unit tests
@@ -334,7 +335,7 @@ func listPracticeInvoices(ctx context.Context, tx *sql.Tx, practiceID string, af
 		it.ClientName = personname.Full(givenName, preferredName.String, familyName.String)
 		it.PaidOn = invoicePaidOn(paidAt, activePaymentKind.String == paymentKindManual, days.zone)
 		it.DueOn = practiceDay(dueAt, days.zone)
-		it.DaysOverdue = daysOverdue(it.Status, dueAt, days.now, days.zone)
+		it.DaysOverdue = overdue.Days(it.Status, dueAt, days.now, days.zone)
 		it.BillingMode = billingModeOf(stripeInvoiceID)
 		items = append(items, it)
 	}
@@ -369,7 +370,7 @@ type invoiceTotals struct {
 // it is a sum of rows that are not Invoices. It is the whole book's money
 // gone back to Clients, as a positive number.
 //
-// $2 is overdueFrom's instant, the start of the Practice's today
+// $2 is overdue.From's instant, the start of the Practice's today
 // (#1965): the same boundary the ?overdue=true narrowing binds.
 const practiceInvoiceTotalsQuery = `SELECT
 		COALESCE(SUM(amount_cents) FILTER (WHERE status = 'open'), 0),

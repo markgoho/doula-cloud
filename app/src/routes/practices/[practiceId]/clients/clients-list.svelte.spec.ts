@@ -290,9 +290,31 @@ describe('the Status column (#264, #2022)', () => {
 		await setup();
 
 		await expect.element(table().getByText('Contract sent')).toBeVisible();
-		await expect.element(table().getByText('Owes $4,500.00')).toBeVisible();
+		await expect.element(table().getByText('Overdue $4,500.00')).toBeVisible();
 		await expect.element(table().getByText('Intake', { exact: true })).toBeVisible();
 		await expect.element(table().getByText('No contract yet').first()).toBeVisible();
+	});
+
+	// #2130: the BFF's one count (#2122) decides it, so a late Invoice
+	// reads Overdue here as on its Engagement and on Invoices.
+	it('reads "Overdue" once the BFF counts the open Invoice late', async () => {
+		await setup();
+
+		await expect.element(table().getByText('Overdue $4,500.00')).toBeVisible();
+		await expect.element(table().getByText('Owes $4,500.00')).not.toBeInTheDocument();
+	});
+
+	it('still reads "Owes" for an open Invoice that is not late', async () => {
+		const [line] = clients[0].openEngagements ?? [];
+		await setup(
+			jsonResponse({
+				items: [{ ...clients[0], openEngagements: [{ ...line, daysOverdue: 0 }] }],
+				hasMore: false
+			})
+		);
+
+		await expect.element(table().getByText('Owes $4,500.00')).toBeVisible();
+		await expect.element(table().getByText(/^Overdue/)).not.toBeInTheDocument();
 	});
 
 	// #741: `open` (billed, unpaid) is what "is anything outstanding"

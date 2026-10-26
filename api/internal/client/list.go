@@ -9,8 +9,11 @@ import (
 	"time"
 
 	"doula-cloud/api/internal/apierr"
+	"doula-cloud/api/internal/clock"
+	"doula-cloud/api/internal/overdue"
 	"doula-cloud/api/internal/pagecursor"
 	"doula-cloud/api/internal/personname"
+	"doula-cloud/api/internal/practicetimezone"
 	"doula-cloud/api/internal/staffauth"
 )
 
@@ -108,6 +111,14 @@ type OpenEngagement struct {
 	// unpaid deposit raised earlier.
 	InvoiceStatus      *string `json:"invoiceStatus,omitempty"`
 	InvoiceAmountCents *int64  `json:"invoiceAmountCents,omitempty"`
+	// DaysOverdue (#2130) is how many whole Practice days the Invoice
+	// InvoiceStatus names is past its due day, and 0 when it is not late
+	// or not open: counted by overdue.Days at the request's one instant,
+	// the same rule and the same count every other Staff read of an
+	// Invoice carries (#2122, ADR-0038), so one Invoice reads Overdue on
+	// this list exactly when it does on its Engagement and on the
+	// Invoices list. Set beside InvoiceStatus and gated with it.
+	DaysOverdue *int `json:"daysOverdue,omitempty"`
 
 	// FeeCents is the Reader's own agreed fee (ADR-0008's
 	// engagement_attachments.fee_amount_cents), set only when the Reader
@@ -188,7 +199,7 @@ func ListHandler() http.Handler {
 			list = list[:pageSize]
 		}
 
-		if err := attachOpenEngagements(r.Context(), tx, list, reader, staffID); err != nil {
+		if err := attachOpenEngagements(r.Context(), tx, practiceID, list, reader, staffID); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
@@ -325,7 +336,16 @@ type rawOpenEngagement struct {
 	doulaName          sql.NullString
 	invoiceStatus      sql.NullString
 	invoiceAmountCents sql.NullInt64
+	invoiceDueAt       sql.NullTime
 	feeCents           sql.NullInt64
+}
+
+// invoiceDays is the zone and the instant one read of the list counts
+// every rollup line's lateness against (#2130): practicetimezone.Load
+// and clock.Now(ctx), read once per request, as payments' bookDays is.
+type invoiceDays struct {
+	zone *time.Location
+	now  time.Time
 }
 
 // attachOpenEngagements fills ListItem.OpenEngagements for every row of
@@ -334,7 +354,7 @@ type rawOpenEngagement struct {
 // number of round trips against a 14-doula Practice's book, per #264's
 // AC. A no-op when list is empty (the "See everyone" first page, or a
 // Practice with no Clients yet).
-func attachOpenEngagements(ctx context.Context, tx *sql.Tx, list []ListItem, reader staffauth.Reader, staffID string) error {
+func attachOpenEngagements(ctx context.Context, tx *sql.Tx, practiceID string, list []ListItem, reader staffauth.Reader, staffID string) error {
 	if len(list) == 0 {
 		return nil
 	}
@@ -347,13 +367,25 @@ func attachOpenEngagements(ctx context.Context, tx *sql.Tx, list []ListItem, rea
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		return err
 	}
+	// The zone is read only for a reader who is shown Invoices at all: a
+	// contractor's lines carry no lateness, so her list makes no extra
+	// round trip for it.
+	days := invoiceDays{now: clock.Now(ctx)}
+	if !reader.IsAmbientContractor() {
+		zone, err := practicetimezone.Load(ctx, tx, practiceID)
+		if err != nil {
+			// coverage:ignore reason: DB query failure or a stored zone that will not load, not exercised by unit tests
+			return fmt.Errorf("client: load practice timezone: %w", err)
+		}
+		days.zone = zone
+	}
 	byClient := map[string][]rawOpenEngagement{}
 	for _, raw := range raws {
 		byClient[raw.clientID] = append(byClient[raw.clientID], raw)
 	}
 	for i := range list {
 		for _, raw := range byClient[list[i].ClientID] {
-			list[i].OpenEngagements = append(list[i].OpenEngagements, shapeOpenEngagement(reader, raw))
+			list[i].OpenEngagements = append(list[i].OpenEngagements, shapeOpenEngagement(reader, raw, days))
 		}
 	}
 	return nil
@@ -363,13 +395,33 @@ func attachOpenEngagements(ctx context.Context, tx *sql.Tx, list []ListItem, rea
 // two %-verbs standing in for placeholder indices that shift depending on
 // how many clientIDs the caller passes -- staffIdx and attachedOnlyIdx
 // below always come after every clientID placeholder, never before.
+//
+// #2130 added inv.due_at, so each line's lateness is counted in Go by
+// overdue.Days. It is a column of the one Invoice row the inv LATERAL
+// already reads off invoices_contract_created_idx, so it adds no join, no
+// index and no row. Measured with EXPLAIN (ANALYZE, BUFFERS) as
+// app_runtime under the Practice's RLS (2026-10-26), for one page of
+// thirty Clients at 5,000 Clients, each with an active Engagement, a
+// signed Contract and two Invoices (TestOpenEngagementRollupQueryPlanAtScale,
+// list_perf_test.go): Sort over a Hash Left Join, the Engagements by a
+// Bitmap Index Scan on engagements_client_idx, the Contract and the
+// Invoice each by its own index once per line (Memoize on the Invoice);
+// total cost 17,603, under a fifth of jit_above_cost, so no JIT section;
+// 13.6 ms planning, 3.0 ms execution, 421 shared buffers.
+// On the demo Practice (dev:full, Rooted Birth Collective), the first
+// page's thirty Clients and their 27 open Engagements: Sort over a Nested
+// Loop Left Join with the same index scans, total cost 1,860, no JIT
+// section; 10.9 ms planning, 3.0 ms execution, 504 shared buffers.
+// The zone the count needs is one primary-key read of practices
+// (practicetimezone.Load) per request, made only for a reader shown
+// Invoices.
 const openEngagementRollupQueryTemplate = `
 	SELECT e.client_id, e.id, e.kind, e.status, ct.status,
 	       (SELECT string_agg(s.name, ', ' ORDER BY s.last_name, s.first_name)
 	        FROM engagement_attachments ea
 	        JOIN staff s ON s.id = ea.staff_id
 	        WHERE ea.engagement_id = e.id AND ea.origin = 'granted' AND ea.ended_at IS NULL),
-	       inv.status, inv.amount_cents, att.fee_amount_cents
+	       inv.status, inv.amount_cents, inv.due_at, att.fee_amount_cents
 	FROM engagements e
 	LEFT JOIN LATERAL (
 	    -- At most one Contract row per Engagement, because there can be
@@ -403,7 +455,7 @@ const openEngagementRollupQueryTemplate = `
 	    -- Invoice when the Contract has one, and only falls back to the
 	    -- newest Invoice of any other status (paid, void, uncollectible,
 	    -- or draft) once nothing is outstanding.
-	    SELECT i.status, i.amount_cents FROM invoices i
+	    SELECT i.status, i.amount_cents, i.due_at FROM invoices i
 	    WHERE i.contract_id = ct.id
 	    ORDER BY (i.status <> 'open'), (CASE WHEN i.status = 'open' THEN i.created_at END), i.created_at DESC
 	    LIMIT 1
@@ -464,7 +516,7 @@ func fetchOpenEngagements(ctx context.Context, tx *sql.Tx, clientIDs []string, s
 		var raw rawOpenEngagement
 		if err := rows.Scan(
 			&raw.clientID, &raw.engagementID, &raw.kind, &raw.engagementStatus, &raw.contractStatus,
-			&raw.doulaName, &raw.invoiceStatus, &raw.invoiceAmountCents, &raw.feeCents,
+			&raw.doulaName, &raw.invoiceStatus, &raw.invoiceAmountCents, &raw.invoiceDueAt, &raw.feeCents,
 		); err != nil {
 			// coverage:ignore reason: row scan failure, not exercised by unit tests
 			return nil, fmt.Errorf("client: scan open engagement: %w", err)
@@ -489,7 +541,7 @@ func fetchOpenEngagements(ctx context.Context, tx *sql.Tx, clientIDs []string, s
 // construction of fetchOpenEngagements' join). Contract status, Doula
 // name, and Engagement status carry no gate -- every role on ADR-0006's
 // table may read them.
-func shapeOpenEngagement(reader staffauth.Reader, raw rawOpenEngagement) OpenEngagement {
+func shapeOpenEngagement(reader staffauth.Reader, raw rawOpenEngagement, days invoiceDays) OpenEngagement {
 	oe := OpenEngagement{
 		EngagementID:     raw.engagementID,
 		Kind:             raw.kind,
@@ -507,6 +559,10 @@ func shapeOpenEngagement(reader staffauth.Reader, raw rawOpenEngagement) OpenEng
 		if raw.invoiceStatus.Valid {
 			status := raw.invoiceStatus.String
 			oe.InvoiceStatus = &status
+			// invoices.due_at is NOT NULL (00102), so a line with an
+			// Invoice status always carries its due instant.
+			late := overdue.Days(status, raw.invoiceDueAt.Time, days.now, days.zone)
+			oe.DaysOverdue = &late
 		}
 		if raw.invoiceAmountCents.Valid {
 			amount := raw.invoiceAmountCents.Int64

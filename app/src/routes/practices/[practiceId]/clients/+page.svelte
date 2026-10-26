@@ -8,7 +8,7 @@
 	import { kindLabel } from '#lib/engagementRequest.js';
 	import { engagementStatusText } from '#lib/engagementDetail.js';
 	import { startHref } from './new/intake.js';
-	import { formatAmount, invoiceStatusLabel } from '#lib/invoice.js';
+	import { formatAmount, invoiceRowStatusLabel, invoiceRowStatusVariant, invoiceStatusLabel } from '#lib/invoice.js';
 	import { PaginatedList } from '#lib/paginatedList.svelte.js';
 	import DataTable, { type DataTableView } from '#lib/components/organisms/DataTable.svelte';
 	import Badge from '#lib/components/atoms/Badge.svelte';
@@ -133,7 +133,13 @@
 		];
 		if (line.invoiceStatus) {
 			const amount = line.invoiceAmountCents === undefined ? '' : ` ${formatAmount(line.invoiceAmountCents)}`;
-			if (line.invoiceStatus === 'open') {
+			// #2130: a late Invoice reads Overdue, from the BFF's one count
+			// and through the label pair every Staff screen reads, so it
+			// says here what it says on its Engagement and on Invoices.
+			const standing = { status: line.invoiceStatus, daysOverdue: line.daysOverdue ?? 0 };
+			if (standing.daysOverdue > 0) {
+				badges.push({ label: `${invoiceRowStatusLabel(standing)}${amount}`, variant: invoiceRowStatusVariant(standing) });
+			} else if (line.invoiceStatus === 'open') {
 				badges.push({ label: `Owes${amount}`, variant: 'warning' });
 			} else if (line.invoiceStatus === 'paid') {
 				badges.push({ label: `Paid${amount}`, variant: 'success' });
@@ -346,7 +352,10 @@
 			No floor of its own (#2022): with Email, Portal invite and the
 			Engagements sentence gone, the typical pilot screen's table fits
 			`DataTable`'s own 55rem, so the 101.75rem this route used to set
-			(#1945, #1981) went with them.
+			(#1945, #1981) went with them. #2130 put an "Overdue $1,500.00"
+			badge on a typical row and measured again on 2026-10-26: the
+			typical table needs 782px on macOS/Chromium with it and without
+			it, under the 880px (55rem) floor, so the floor did not move.
 
 			#539, #501 (ADR-0017): hiding "Find or add a Client" above took
 			away this door's only link for a contractor Doula, so it comes
