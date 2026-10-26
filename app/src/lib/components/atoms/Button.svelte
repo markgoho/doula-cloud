@@ -430,6 +430,10 @@
 			color: var(--color-on-surface);
 			font-size: var(--text-body-sm-size);
 			font-weight: var(--font-weight-normal);
+			/* The Practice switcher's name can wrap in the narrow bar, and it
+			   reads from the start there (#2141), not centered under itself
+			   as the UA's own `text-align: center` on a button would draw it. */
+			text-align: start;
 		}
 
 		button.bare:not(:disabled, [aria-disabled='true']):hover {
