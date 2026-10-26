@@ -24,8 +24,8 @@
 	<p>Insert these tokens into the prose above; they are replaced per Engagement.</p>
 	<ul>
 		<!-- v8 ignore start: Svelte-compiled keyed-each-diffing branch, same
-		     class of unreachable-from-interaction-tests branch as
-		     DynamicFieldEditor.svelte's bound <select>/<option> pair -->
+		     class of branch no interaction test reaches as any keyed each
+		     whose list never changes after mount -->
 		{#each MERGE_FIELDS as field (field.token)}
 			<li><code>{field.token}</code> &mdash; {field.label}</li>
 		{/each}

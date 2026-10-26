@@ -6,7 +6,6 @@ import Details from './Details.svelte';
 
 interface SetupOptions {
 	summary?: string;
-	hiddenSummary?: string;
 	open?: boolean;
 	onToggle?: (isOpen: boolean) => void;
 }
@@ -14,26 +13,24 @@ interface SetupOptions {
 /*
  * `getByRole('button', ...)` does not resolve a native <summary> in this
  * stack -- Chromium exposes it under an internal disclosure role that
- * Playwright's accessibility-tree lookup does not map to "button", the
- * same reason HistoryDisclosure's own spec drives its <details> through
- * `getByText` rather than a role query. `open` on the element (case 3,
+ * Playwright's accessibility-tree lookup does not map to "button", so
+ * the summary is reached through `getByText` rather than a role query.
+ * `open` on the element (case 3,
  * `.claude/rules/svelte-tests.md`) is the fact under test: it is not in
  * the accessible tree at all, it is the platform state the tree is
  * computed FROM.
  */
-async function setup({ summary = 'Show more', hiddenSummary, open, onToggle }: SetupOptions = {}) {
+async function setup({ summary = 'Show more', open, onToggle }: SetupOptions = {}) {
 	const { container } = await render(Details, {
 		summary,
-		hiddenSummary,
 		open,
 		onToggle,
 		children: createRawSnippet(() => ({ render: () => '<p>The disclosed content</p>' }))
 	});
-	const fullSummaryText = hiddenSummary ? `${summary} ${hiddenSummary}` : summary;
 	return {
 		container,
 		details: container.querySelector('details')!,
-		summaryText: page.getByText(fullSummaryText)
+		summaryText: page.getByText(summary)
 	};
 }
 
@@ -69,20 +66,6 @@ describe('Details', () => {
 
 		await expect.element(page.getByText('The disclosed content')).toBeVisible();
 		expect(details.open).toBe(true);
-	});
-
-	it('appends the hidden text to the summary’s accessible name only', async () => {
-		const { container } = await setup({ summary: 'Membership history', hiddenSummary: 'for Renata Alvarez' });
-
-		await expect.element(page.getByText('Membership history for Renata Alvarez')).toBeVisible();
-		const hidden = container.querySelector('.visually-hidden');
-		expect(hidden).toHaveTextContent('for Renata Alvarez');
-	});
-
-	it('renders no hidden span when the caller passes no hiddenSummary', async () => {
-		const { container } = await setup();
-
-		expect(container.querySelector('.visually-hidden')).toBeNull();
 	});
 
 	it('calls onToggle with the new open state', async () => {

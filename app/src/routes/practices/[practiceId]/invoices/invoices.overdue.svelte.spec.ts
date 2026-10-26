@@ -54,10 +54,10 @@ async function setup(page: PracticeInvoiceListData = data) {
 }
 
 describe('the overdue book (#768)', () => {
-	it('says how much of the outstanding money is late, beside the outstanding figure itself', async () => {
+	it('says how much of what Clients owe is late, beside that figure itself', async () => {
 		await setup();
 
-		// $4,500.00 outstanding, all of it overdue -- the fixture's first
+		// $4,500.00 owed, all of it overdue -- the fixture's first
 		// row is open and past its due date.
 		await expect.element(testPage.getByText('Overdue invoices')).toBeVisible();
 		await expect.element(testPage.getByText('Overdue', { exact: true })).toBeVisible();

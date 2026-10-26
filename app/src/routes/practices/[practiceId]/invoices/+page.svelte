@@ -55,12 +55,12 @@
 	/*
 	 * The totals stay the load's, never the loaded pages': the BFF returns
 	 * the whole book's figures on every page, so paging must not make
-	 * "outstanding" look like it is only what has been scrolled to.
+	 * "Clients owe" look like it is only what has been scrolled to.
 	 */
 	const isBookEmpty = $derived(!data.isNarrowedToOverdue && invoices.items.length === 0);
 
 	const summary = $derived([
-		{ label: 'Outstanding', value: formatAmount(data.outstandingCents) },
+		{ label: 'Clients owe', value: formatAmount(data.outstandingCents) },
 		{
 			label: 'Unpaid invoices',
 			value: String(data.outstandingCount)
@@ -71,7 +71,7 @@
 		// beside it -- always shown, $0.00 included, so the block has one
 		// shape whatever the book holds.
 		{ label: 'Returned to Clients', value: formatAmount(data.refundedCents) },
-		// #768: the aging figure sits beside the outstanding one it is a
+		// #768: the aging figure sits beside the owed one it is a
 		// slice of, so "who owes me, and for how long" is answered by the
 		// same block rather than by opening a second screen.
 		{ label: 'Overdue', value: formatAmount(data.overdueCents) },
