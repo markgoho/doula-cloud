@@ -44,6 +44,7 @@
 	import { apiFetchWithSession } from '#lib/api.js';
 	import { searchClients, type ClientMatch, type ClientSearchFields } from '#lib/client.js';
 	import { displayName } from '#lib/clientDetail.js';
+	import { formatCalendarDay } from '#lib/dates.js';
 	import { carriedGivenName } from '#lib/intakeJourney.js';
 	import { handOffToIntake } from '#lib/intakeHandoff.js';
 	import { intakeDraft } from '#lib/intakeDraft.svelte.js';
@@ -325,7 +326,10 @@
 												<Heading level={3} variant="card" text={displayName(match)} />
 												<SummaryList
 													rows={[
-														{ label: 'Date of birth', value: match.dateOfBirth || '—' },
+														{
+															label: 'Date of birth',
+															value: match.dateOfBirth ? formatCalendarDay(match.dateOfBirth) : '—'
+														},
 														{ label: 'Email', value: match.email || '—' },
 														{ label: 'Phone', value: match.phone || '—' }
 													]}

@@ -27,6 +27,56 @@ import { globFiles } from './globFiles';
  * `spelling:ignore`.
  */
 
+/*
+ * #2008's rule, beside it. A date of birth went around `dates.ts` with no
+ * `toLocale*` call at all: the record and the search results printed the
+ * stored value as it came, "1991-03-14", while intake printed "Mar 14,
+ * 1991". A raw ISO day reaching the screen is a value, not a call, so no
+ * source scan can find every one; what this one can find reliably is the
+ * shape that happened. In a `.svelte` file, every read of `.dateOfBirth`
+ * is one of three things: handed to `formatCalendarDay` (or `splitDate`,
+ * which fills the three date boxes), tested for presence (`!x.dateOfBirth`,
+ * `x.dateOfBirth ? … :`, `x.dateOfBirth && …`), or a print of the raw
+ * value -- which this fails. It does not catch a calendar day under
+ * another name, and it does not read a `.ts` file, where a draft carries
+ * the stored value on to the BFF; the formatter the record and intake
+ * share, `formatCalendarDay`, is the answer for both.
+ */
+const CHAIN = /[\w$]+(?:!?\??\.[\w$]+)*/g;
+const READ = /!?\??\.dateOfBirth$/;
+const FORMATTERS = ['formatCalendarDay(', 'splitDate('];
+const NEGATED_BEFORE = /!\s*$/;
+const TESTED_AFTER = /^\s*(?:\?(?![?.])|&&)/;
+
+// Inside a call to one of FORMATTERS that has not closed yet, however deep
+// -- `splitDate(untrack(() => draft.dateOfBirth))` is handed to it too.
+function isInsideFormatter(before: string): boolean {
+	const opened = Math.max(...FORMATTERS.map((call) => before.lastIndexOf(call)));
+	if (opened === -1) return false;
+	const call = [...before.slice(before.indexOf('(', opened))];
+	let depth = 0;
+	for (const character of call) {
+		if (character === '(') depth += 1;
+		else if (character === ')') depth -= 1;
+		// The formatter's own call closed before the read.
+		if (depth === 0) return false;
+	}
+	return true;
+}
+
+function findRawDateOfBirth(file: string, source: string): Offense[] {
+	return source.split('\n').flatMap((text, index) => {
+		if (text.includes(IGNORE_MARKER)) return [];
+		const isRaw = text.matchAll(CHAIN).some((match) => {
+			if (!READ.test(match[0])) return false;
+			const before = text.slice(0, match.index);
+			const after = text.slice(match.index + match[0].length);
+			return !isInsideFormatter(before) && !NEGATED_BEFORE.test(before) && !TESTED_AFTER.test(after);
+		});
+		return isRaw ? [{ file, line: index + 1 }] : [];
+	});
+}
+
 const appRoot = fileURLToPath(new URL('../../', import.meta.url));
 
 const IGNORE_MARKER = 'dates:ignore';
@@ -56,6 +106,51 @@ const sourceFiles = globFiles('src/**/*.{svelte,ts,js}', { cwd: appRoot }).filte
 const offenses = sourceFiles.flatMap((file) =>
 	findDatePrinting(file, readFileSync(path.join(appRoot, file), 'utf8'))
 );
+
+const svelteFiles = sourceFiles.filter((file) => file.endsWith('.svelte'));
+const rawDatesOfBirth = svelteFiles.flatMap((file) =>
+	findRawDateOfBirth(file, readFileSync(path.join(appRoot, file), 'utf8'))
+);
+
+describe('a date of birth reaches the screen through dates.ts (#2008)', () => {
+	it('reads the screens that print one', () => {
+		expect(svelteFiles).toContain('src/routes/practices/[practiceId]/clients/[clientId]/+page.svelte');
+		expect(svelteFiles).toContain('src/routes/practices/[practiceId]/clients/search/+page.svelte');
+	});
+
+	it('finds the raw value printed, in a row, in markup and behind a fallback', () => {
+		expect(findRawDateOfBirth('a.svelte', "{ label: 'Date of birth', value: match.dateOfBirth || '—' },")).toEqual([
+			{ file: 'a.svelte', line: 1 }
+		]);
+		expect(findRawDateOfBirth('a.svelte', '\n<dd>{detail!.dateOfBirth}</dd>')).toEqual([{ file: 'a.svelte', line: 2 }]);
+		expect(findRawDateOfBirth('a.svelte', "x.dateOfBirth ? x.dateOfBirth : '—'")).toEqual([
+			{ file: 'a.svelte', line: 1 }
+		]);
+		expect(findRawDateOfBirth('a.svelte', 'x.dateOfBirth ?? y')).toEqual([{ file: 'a.svelte', line: 1 }]);
+	});
+
+	it('leaves a formatted value, a filled date box, a presence test and a line that carries the marker', () => {
+		expect(findRawDateOfBirth('a.svelte', "x.dateOfBirth ? formatCalendarDay(x.dateOfBirth) : '—'")).toEqual([]);
+		expect(findRawDateOfBirth('a.svelte', 'value: d.answers.dateOfBirth && formatCalendarDay(d.answers.dateOfBirth)')).toEqual([]);
+		expect(findRawDateOfBirth('a.svelte', 'parts = splitDate(typed.dateOfBirth);')).toEqual([]);
+		expect(findRawDateOfBirth('a.svelte', 'splitDate(untrack(() => journey.draft.answers.dateOfBirth))')).toEqual([]);
+		expect(findRawDateOfBirth('a.svelte', "formatCalendarDay(x.y) + (z.dateOfBirth || '')")).toEqual([
+			{ file: 'a.svelte', line: 1 }
+		]);
+		expect(findRawDateOfBirth('a.svelte', 'if (!fields.name && !fields.dateOfBirth) {')).toEqual([]);
+		expect(findRawDateOfBirth('a.svelte', '{x.dateOfBirth} <!-- ' + IGNORE_MARKER + ': a demo -->')).toEqual([]);
+		expect(findRawDateOfBirth('a.svelte', 'let dateOfBirth = $derived(composed.value);')).toEqual([]);
+	});
+
+	it('finds no date of birth printed raw', () => {
+		expect(
+			rawDatesOfBirth.map(
+				(offense) =>
+					`${offense.file}:${offense.line} prints a date of birth as it is stored -- pass it through formatCalendarDay, or put ${IGNORE_MARKER} and a reason on the line`
+			)
+		).toEqual([]);
+	});
+});
 
 describe('every date a screen prints goes through dates.ts (#1958)', () => {
 	it('reads the whole app/src tree, and no spec', () => {

@@ -166,7 +166,9 @@ describe('the search that fronts intake (#498)', () => {
 
 		await expect.element(testPage.getByRole('heading', { level: 2, name: '1 match' })).toBeVisible();
 		await expect.element(testPage.getByRole('heading', { level: 3, name: 'Ada Byron' })).toBeVisible();
-		await expect.element(testPage.getByText('1815-12-10')).toBeVisible();
+		// #2008: a date of birth prints month-day here too, as on her record.
+		await expect.element(testPage.getByText('Dec 10, 1815')).toBeVisible();
+		await expect.element(testPage.getByText('1815-12-10')).not.toBeInTheDocument();
 		await expect.element(testPage.getByText('Birth · active')).toBeVisible();
 		await expect
 			.element(testPage.getByRole('link', { name: "Open Ada Byron's record" }))

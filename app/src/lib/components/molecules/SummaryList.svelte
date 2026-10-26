@@ -18,6 +18,18 @@
 		 * row is open, because the caller owns what the form does.
 		 */
 		isDetailShown?: boolean;
+		/**
+		 * A word or two marking the row, drawn as a neutral `Badge` under
+		 * its label -- "No longer collected" on a Client's answer to a
+		 * question the Practice stopped asking (#2008).
+		 */
+		tag?: string;
+		/**
+		 * Why a row has no action, said where the action would be -- "Kept,
+		 * not collected" (#2008). Drawn only on a row with no `changes`, so
+		 * a row never carries both.
+		 */
+		status?: string;
 	}
 </script>
 
@@ -45,6 +57,7 @@
 	 * so whatever it draws is described by it.
 	 */
 	import type { Snippet } from 'svelte';
+	import Badge from '../atoms/Badge.svelte';
 
 	interface Properties {
 		rows: Row[];
@@ -90,7 +103,7 @@
 	-->
 	{#each rows as row, index (index)}
 		<div class="row">
-			<dt>{row.label}</dt>
+			<dt>{row.label}{#if row.tag}<span class="tag"><Badge label={row.tag} variant="neutral" /></span>{/if}</dt>
 			<dd class="value">
 				{#if value}{@render value(row, index)}{:else}{row.value}{/if}
 			</dd>
@@ -99,6 +112,8 @@
 					{@render action(row, `${listId}-${index}-changes`)}
 					<span class="visually-hidden" id="{listId}-{index}-changes">{row.changes}</span>
 				</dd>
+			{:else if row.status}
+				<dd class="action status">{row.status}</dd>
 			{/if}
 			{#if detail && row.isDetailShown}
 				<dd class="detail">{@render detail(row)}</dd>
@@ -210,6 +225,19 @@
 		.action {
 			flex: none;
 			margin-inline-start: auto;
+		}
+
+		/* The tag sits on its own line under the label, as the drawing has it. */
+		.tag {
+			display: block;
+			margin-block-start: var(--space-1);
+		}
+
+		/* What stands where a Change would be is a remark, not a control. */
+		.status {
+			font-size: var(--text-meta-size);
+			line-height: var(--text-meta-leading);
+			color: var(--color-on-surface-muted);
 		}
 
 		/* Every key above its value at every width (`isStacked`). */

@@ -83,6 +83,38 @@ describe('SummaryList.svelte', () => {
 		expect(named).toEqual(['care', 'care phase']);
 	});
 
+	/*
+	 * #2008: an answer to a question the Practice no longer asks. The
+	 * drawing marks it under its label and says, where a Change would be,
+	 * why there is none.
+	 */
+	it('marks a row with its tag under the label', async () => {
+		const { container } = await render(SummaryList, {
+			props: { rows: [...rows, { label: 'Doula on call at booking', value: 'Priya Raman', tag: 'No longer collected' }] }
+		});
+
+		await expect.element(page.getByText('No longer collected')).toBeVisible();
+		const lastKey = [...container.querySelectorAll(':scope dt')].at(-1);
+		expect(lastKey?.textContent).toContain('No longer collected');
+		expect(lastKey?.textContent).toContain('Doula on call at booking');
+	});
+
+	it("draws a row's status where its action would be, with no action, on a row nobody may change", async () => {
+		const { container } = await render(SummaryList, {
+			props: {
+				rows: [rows[0]!, { label: 'Doula on call at booking', value: 'Priya Raman', status: 'Kept, not collected' }],
+				action: changeLink
+			}
+		});
+
+		await expect.element(page.getByText('Kept, not collected')).toBeVisible();
+		const actions = [...container.querySelectorAll(':scope .row')].map(
+			(row) => row.querySelector(':scope .action')?.textContent?.trim() ?? ''
+		);
+		expect(actions).toEqual(['Change care', 'Kept, not collected']);
+		expect(page.getByRole('link', { name: 'Change' }).elements()).toHaveLength(1);
+	});
+
 	it('draws no action cell at all without an action', async () => {
 		const { container } = await render(SummaryList, { props: { rows } });
 
