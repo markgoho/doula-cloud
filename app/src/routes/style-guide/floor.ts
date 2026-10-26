@@ -247,6 +247,13 @@ export function atConditionWidth(
  * Each such cell is held to its widest single control while the table is
  * measured: no control is squeezed below its own label, and the row of
  * them may wrap.
+ *
+ * Nor is the column `DataTable` marks `wraps` (#2091): a Practice's own
+ * prose beside the facts, which takes the width they leave and wraps
+ * there by design. Counting its longest line made a two-sentence note
+ * decide the table's floor. It is held at its minimum while the table is
+ * measured: its longest word, the narrowest it goes without breaking one,
+ * so the floor is the fact columns at their one line beside it.
  */
 export interface TableFitMeasurement {
 	readonly given: number;
@@ -275,8 +282,21 @@ export function measureTableFit(container: HTMLElement): TableFitMeasurement {
 		);
 		const held = actions.map((cell) => [cell, cell.style.inlineSize] as const);
 		for (const [cell] of held) cell.style.inlineSize = `${widestControl}px`;
+		// A zero width resolves the column to its min-content, which
+		// `normal` makes the longest word rather than one character.
+		const wrapping = [...table.querySelectorAll<HTMLElement>(':scope > * > tr > .wraps')].map(
+			(cell) => [cell, cell.style.inlineSize, cell.style.overflowWrap] as const
+		);
+		for (const [cell] of wrapping) {
+			cell.style.inlineSize = '0';
+			cell.style.overflowWrap = 'normal';
+		}
 		const width = table.getBoundingClientRect().width;
 		for (const [cell, size] of held) cell.style.inlineSize = size;
+		for (const [cell, size, wrap] of wrapping) {
+			cell.style.inlineSize = size;
+			cell.style.overflowWrap = wrap;
+		}
 		table.style.display = display;
 		table.style.inlineSize = inlineSize;
 		return Math.ceil(width);

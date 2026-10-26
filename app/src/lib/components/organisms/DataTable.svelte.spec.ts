@@ -528,6 +528,48 @@ describe('the activity ledger treatment (#486)', () => {
 		}
 	});
 
+	/*
+	 * #2091: a column marked `wraps` takes the room its facts leave. In a
+	 * table too narrow for the note's one line, the note wraps, every fact
+	 * keeps one line, and the row's one control keeps its word whole.
+	 */
+	it('wraps only its wrapping column when the table is narrowed', async () => {
+		await page.viewport(...WIDE);
+		const host = document.createElement('div');
+		host.style.inlineSize = '56rem';
+		document.body.append(host);
+		const note = 'Talked through the birth plan and the hospital bag, and practiced positions. '.repeat(3);
+		try {
+			const { container } = await render(
+				DataTable<Row>,
+				{
+					columns: [
+						{ label: 'Date', accessor: () => 'Sep 12, 2026, 10:30am' },
+						{ label: 'Doula', accessor: (row: Row) => row.name },
+						{ label: 'Notes', accessor: () => note, wraps: true }
+					],
+					rows: rows.slice(0, 1),
+					rowActions: { label: 'Actions', content: removeActionSnippet(vi.fn()) },
+					emptyMessage: 'No records yet.'
+				},
+				{ baseElement: host }
+			);
+			const lines = (cell: Element) => {
+				const range = document.createRange();
+				range.selectNodeContents(cell);
+				return new Set([...range.getClientRects()].map((rect) => Math.round(rect.top))).size;
+			};
+			// Geometry, which the accessible tree does not carry (svelte-tests.md, case 1's reason).
+			const cells = [...container.querySelectorAll(':scope .table-view tbody td')];
+
+			expect(lines(cells[2]!)).toBeGreaterThan(1);
+			expect(cells.slice(0, 2).map((cell) => lines(cell))).toEqual([1, 1]);
+			expect(lines(cells[3]!.querySelector('button')!)).toBe(1);
+		} finally {
+			host.remove();
+		}
+	});
+
 	it('applies no variant class when a column asks for none', async () => {
 		const { container } = await setup();
 
