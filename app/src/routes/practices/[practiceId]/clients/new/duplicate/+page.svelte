@@ -32,20 +32,19 @@
 	import { apiFetchWithSession } from '#lib/api.js';
 	import { editClient, type ClientMatch } from '#lib/client.js';
 	import { fullName } from '#lib/personName.js';
-	import { formatCalendarDay } from '#lib/dates.js';
+	import { matchHistory } from '#lib/clientMatch.js';
 	import SummaryList from '#lib/components/molecules/SummaryList.svelte';
 	import ErrorSummary from '#lib/components/molecules/ErrorSummary.svelte';
 	import RadioGroup from '#lib/components/molecules/RadioGroup.svelte';
 	import QuestionPage from '#lib/components/templates/QuestionPage.svelte';
 	import Button from '#lib/components/atoms/Button.svelte';
-	import Text from '#lib/components/atoms/Text.svelte';
 	import { FormSubmission, orThrownMessage } from '#lib/formSubmission.svelte.js';
 	import { intakeDraft } from '#lib/intakeDraft.svelte.js';
 	import { detailsSavedMessage } from '#lib/intakeJourney.js';
 	import { mergedEditFields } from '#lib/intakeMerge.js';
 	import { gotoWithOutcome } from '#lib/outcome.js';
 	import { proposedChanges } from '#lib/proposedChanges.js';
-	import { JOURNEY, basePath, detailHref, intakeSteps, knownAs, saveIntake } from '../intake.js';
+	import { JOURNEY, basePath, detailHref, intakeSteps, saveIntake } from '../intake.js';
 
 	const DIFFERENT_PERSON = 'different';
 	// Named rather than generated, so the error summary can point an
@@ -94,26 +93,24 @@
 		}
 	});
 
-	function matchDescription(match: ClientMatch): string {
-		const facts = [
-			// In words, through `dates.ts`, like every other date the app
-			// shows: this line's whole job is telling two people with the
-			// same name apart, and "1988-02-09" is storage rather than a
-			// fact a reader recognizes.
-			match.dateOfBirth ? `Born ${formatCalendarDay(match.dateOfBirth)}` : 'No date of birth on file',
-			match.email || match.phone || 'No contact details on file',
-			match.engagements.length === 1
-				? '1 Engagement'
-				: `${match.engagements.length} Engagements`
-		];
-		return facts.join(' · ');
-	}
-
+	/*
+	 * #2143: each existing record says, under its name, the line Find a
+	 * Client prints for it (`matchHistory`: when it was added and when the
+	 * Client was last cared for, which is what tells two people with one
+	 * name apart), and then what choosing it does. That second line used
+	 * to be one paragraph under all the options; said under each, it is
+	 * read at the moment of choosing. It holds on both branches below:
+	 * with something to change, the changes are shown before anything is
+	 * written; with nothing, the record opens as it is.
+	 */
 	const options = $derived([
 		...intakeDraft.matches.map((match) => ({
 			value: match.id,
 			label: fullName(match),
-			description: matchDescription(match)
+			description: [
+				matchHistory(match),
+				'Keeps this record. You check any changes before they are saved.'
+			]
 		})),
 		{
 			value: DIFFERENT_PERSON,
@@ -215,20 +212,13 @@
 			errorSummary={submission.errors.length > 0 ? errorSummary : undefined}
 		>
 			{#snippet content()}
-				<stack-l space="var(--space-5)">
-					<RadioGroup
-						name={ANSWER_NAME}
-						{options}
-						value={answer}
-						onChange={(chosen) => (answer = chosen)}
-						error={answerError}
-					/>
-					<Text
-						step="body-sm"
-						tone="muted"
-						text="Records are never merged here. Choosing an existing Client updates that record with what was typed for {knownAs()}."
-					/>
-				</stack-l>
+				<RadioGroup
+					name={ANSWER_NAME}
+					{options}
+					value={answer}
+					onChange={(chosen) => (answer = chosen)}
+					error={answerError}
+				/>
 			{/snippet}
 
 			{#snippet actions()}

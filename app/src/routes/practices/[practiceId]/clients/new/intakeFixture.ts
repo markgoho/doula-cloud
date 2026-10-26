@@ -52,9 +52,23 @@ const matches: ClientMatch[] = [
 		addressRegion: 'NY',
 		addressPostalCode: '14472',
 		dateOfBirth: '1988-02-09',
+		// #2143: the longest history line, every Engagement ended.
+		createdAt: '2023-11-14T15:00:00Z',
 		engagements: [
-			{ engagementId: 'e1', kind: 'birth', status: 'completed', createdAt: '2024-03-01T00:00:00Z' },
-			{ engagementId: 'e2', kind: 'postpartum', status: 'active', createdAt: '2026-01-04T00:00:00Z' }
+			{
+				engagementId: 'e1',
+				kind: 'birth',
+				status: 'completed',
+				createdAt: '2024-03-01T00:00:00Z',
+				endedAt: '2024-09-18T15:00:00Z'
+			},
+			{
+				engagementId: 'e2',
+				kind: 'postpartum',
+				status: 'completed',
+				createdAt: '2026-01-04T00:00:00Z',
+				endedAt: '2026-06-12T15:00:00Z'
+			}
 		]
 	},
 	{
@@ -70,6 +84,7 @@ const matches: ClientMatch[] = [
 		addressRegion: '',
 		addressPostalCode: '',
 		dateOfBirth: '',
+		createdAt: '2026-10-20T15:00:00Z',
 		engagements: []
 	}
 ];

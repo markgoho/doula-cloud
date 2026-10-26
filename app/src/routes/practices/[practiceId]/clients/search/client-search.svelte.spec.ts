@@ -46,6 +46,7 @@ const adaMatch: ClientMatch = {
 	addressRegion: '',
 	addressPostalCode: '',
 	dateOfBirth: '1815-12-10',
+	createdAt: '2024-03-04T15:00:00Z',
 	engagements: [{ engagementId: 'engagement-1', kind: 'birth', status: 'active', createdAt: '2024-01-01' }]
 };
 
@@ -164,18 +165,36 @@ describe('the search that fronts intake (#498)', () => {
 		await testPage.getByLabelText('Name').fill('Ada');
 		await testPage.getByRole('button', { name: 'Search' }).click();
 
-		await expect.element(testPage.getByRole('heading', { level: 2, name: '1 match' })).toBeVisible();
-		await expect.element(testPage.getByRole('heading', { level: 3, name: 'Ada Byron' })).toBeVisible();
-		// #2008: a date of birth prints month-day here too, as on her record.
-		await expect.element(testPage.getByText('Dec 10, 1815')).toBeVisible();
-		await expect.element(testPage.getByText('1815-12-10')).not.toBeInTheDocument();
-		await expect.element(testPage.getByText('Birth · active')).toBeVisible();
+		const heading = testPage.getByRole('heading', { level: 2, name: '1 match' });
+		await expect.element(heading).toBeVisible();
+		// #2143: the full name is the link, and one line under it says when
+		// the record was added and when the Client was last cared for.
 		await expect
-			.element(testPage.getByRole('link', { name: "Open Ada Byron's record" }))
+			.element(testPage.getByRole('link', { name: 'Ada Byron' }))
 			.toHaveAttribute('href', `/practices/${practiceId}/clients/client-2`);
+		await expect.element(testPage.getByText('Added Mar 4, 2024 · 1 Engagement · open now')).toBeVisible();
+		// The contact rows are gone, so a blank one draws no dash.
+		await expect.element(testPage.getByText('—', { exact: true })).not.toBeInTheDocument();
 		// A client-side result set moves no focus on its own -- the results
-		// heading takes it, so a screen reader announces the count.
-		expect(document.activeElement?.id).toBe('client-search-results');
+		// heading takes it (Heading's own `focusOnAppearing`), so a screen
+		// reader announces the count.
+		await expect.element(heading).toHaveFocus();
+	});
+
+	// #2143: the heading is keyed on each completed search, so a repeat
+	// search with the same count takes focus back and is announced again.
+	it('moves focus back to the results heading on a repeat search', async () => {
+		apiFetchWithSession.mockResolvedValue(jsonResponse({ matches: [adaMatch] }));
+		await setup();
+
+		await testPage.getByLabelText('Name').fill('Ada');
+		await testPage.getByRole('button', { name: 'Search' }).click();
+		const heading = testPage.getByRole('heading', { level: 2, name: '1 match' });
+		await expect.element(heading).toHaveFocus();
+
+		await testPage.getByRole('button', { name: 'Search' }).click();
+		await expect.element(heading).toHaveFocus();
+		expect(apiFetchWithSession).toHaveBeenCalledTimes(2);
 	});
 
 	/*
@@ -192,7 +211,7 @@ describe('the search that fronts intake (#498)', () => {
 		await testPage.getByRole('button', { name: 'Search' }).click();
 
 		await expect.element(testPage.getByText('Not the right Client?')).toBeVisible();
-		const lastMatch = testPage.getByRole('link', { name: "Open Ada Byron's record" }).element();
+		const lastMatch = testPage.getByRole('link', { name: 'Ada Byron' }).element();
 		const addNew = testPage.getByRole('link', { name: 'Add a new Client' }).element();
 		expect(lastMatch.compareDocumentPosition(addNew) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 		expect(await followAddNewClient()).toEqual({ ...blankFields, name: 'Ada Byron', phone: '555-0100' });

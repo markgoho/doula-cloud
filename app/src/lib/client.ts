@@ -173,11 +173,14 @@ export function clientsResultSummary(count: number, hasMore: boolean, isShowingE
 }
 
 /** One Client ADR-0017's match query turned up against a create or an
- * edit's values -- her record plus her Engagement history, unrestricted
- * inside the Practice -- mirrors the Go BFF's client.Match. Declared
+ * edit's values -- her record, the instant it was added, and her
+ * Engagement history, unrestricted inside the Practice -- mirrors the Go
+ * BFF's client.Match. `createdAt` is half of what tells two Clients with
+ * one name apart (#2143, `matchHistory` in `clientMatch.ts`). Declared
  * before `ClientCreateFields`/`ClientEditFields` since both result types
  * below reference it. */
 export interface ClientMatch extends ClientRecord {
+	createdAt: string;
 	engagements: EngagementSummary[];
 }
 

@@ -50,12 +50,15 @@ export interface ResolvedField {
 }
 
 /** One of a Client's Engagements, past or present -- mirrors
- * client.EngagementSummary. */
+ * client.EngagementSummary. `endedAt` is the instant a completed one was
+ * completed (#2143), absent while it is open and absent for a completed
+ * one the ledger holds no completion for. */
 export interface EngagementSummary {
 	engagementId: string;
 	kind: string;
 	status: string;
 	createdAt: string;
+	endedAt?: string;
 }
 
 /** One activity row on a Client's record -- mirrors client.Event.

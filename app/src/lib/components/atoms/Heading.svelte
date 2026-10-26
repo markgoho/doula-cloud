@@ -56,6 +56,7 @@
 	this={tag}
 	{id}
 	class={classes}
+	class:takes-focus={focusOnAppearing}
 	tabindex={focusOnAppearing ? -1 : undefined}
 	{@attach focusOnAppearing && takeFocus}>{text}</svelte:element>
 
@@ -88,6 +89,24 @@
 			 */
 			overflow-wrap: anywhere;
 			min-inline-size: 0;
+		}
+
+		/*
+		 * The heading's own focus style (#2143). Left to the browser, a
+		 * heading that took focus from the keyboard drew a thin black box
+		 * the width of the whole column, which read as a selected field.
+		 * The ring is the one a Link draws, and it hugs the words: the
+		 * heading is as wide as its text, never wider than the column. On
+		 * `:focus-visible`, so the ring shows where the browser judges the
+		 * reader is on the keyboard and not after a click.
+		 */
+		.takes-focus {
+			inline-size: fit-content;
+		}
+
+		.takes-focus:focus-visible {
+			outline: var(--focus-ring-width) solid var(--color-primary);
+			outline-offset: var(--focus-ring-offset);
 		}
 
 		.variant-page {

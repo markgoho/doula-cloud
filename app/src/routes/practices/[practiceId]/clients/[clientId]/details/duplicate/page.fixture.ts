@@ -53,6 +53,7 @@ export const matches: CollisionMatch[] = [
 		addressPostalCode: '14620',
 		dateOfBirth: '1988-02-09',
 		wouldSurvive: true,
+		createdAt: '2023-11-14T15:00:00Z',
 		engagements: [
 			{ engagementId: 'e1', kind: 'birth', status: 'completed', createdAt: '2024-03-01T00:00:00Z' },
 			{ engagementId: 'e2', kind: 'postpartum', status: 'active', createdAt: '2026-01-04T00:00:00Z' }
@@ -72,6 +73,7 @@ export const matches: CollisionMatch[] = [
 		addressPostalCode: '',
 		dateOfBirth: '',
 		wouldSurvive: false,
+		createdAt: '2026-10-20T15:00:00Z',
 		engagements: []
 	}
 ];

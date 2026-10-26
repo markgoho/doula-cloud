@@ -91,7 +91,7 @@ describe('the details layout', () => {
 	// whichever page saved. What it does is `client-details.svelte.spec.ts`'s.
 	it('clears the substitution question when it is canceled', async () => {
 		await setup();
-		detailsSave.matches = [{ ...record, id: 'client-2', engagements: [], wouldSurvive: true }];
+		detailsSave.matches = [{ ...record, id: 'client-2', createdAt: '2024-03-04T15:00:00Z', engagements: [], wouldSurvive: true }];
 		detailsSave.overrideError = 'refused before';
 		detailsSave.isConflictOpen = true;
 

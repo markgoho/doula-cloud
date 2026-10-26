@@ -8,16 +8,15 @@ import (
 	"time"
 )
 
-// Collision is one Client FindCollisions found: her record, her
-// Engagement history (the same shape the save-time prompt already
-// shows), when her row was made (what breaks a tie between two
-// unattached rows -- the older survives a merge), and whether this
+// Collision is one Client FindCollisions found: the same Match the
+// save-time prompt shows (her record, when her row was made, and her
+// Engagement history -- Match.CreatedAt also breaks a tie between two
+// unattached rows, since the older survives a merge), and whether this
 // particular hit is a name substitution -- ADR-0017's amendment gate
 // one, narrowed to an exact given-and-family match.
 type Collision struct {
 	Match
-	CreatedAt        time.Time `json:"createdAt"`
-	NameSubstitution bool      `json:"-"`
+	NameSubstitution bool `json:"-"`
 }
 
 // FindCollisions runs ADR-0017's amendment predicate -- the one both

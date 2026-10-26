@@ -17,6 +17,7 @@ function match(partial: Partial<ClientMatch> = {}): ClientMatch {
 		addressRegion: 'NY',
 		addressPostalCode: '14607',
 		dateOfBirth: '1988-02-09',
+		createdAt: '2024-03-04T15:00:00Z',
 		engagements: [],
 		...partial
 	};

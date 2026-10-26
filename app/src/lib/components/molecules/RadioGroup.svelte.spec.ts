@@ -134,6 +134,29 @@ describe('RadioGroup.svelte', () => {
 	});
 
 	/*
+	 * #2143: the duplicate check's history line and what choosing the
+	 * record does are two lines, each on its own, and still the one hint
+	 * the radio is described by.
+	 */
+	it('sets each line of a several-line description on its own line, as one hint', async () => {
+		const { container } = await render(RadioGroup<Mode>, {
+			legend: 'Mode',
+			options: [
+				{ value: 'signup' as Mode, label: 'Sarah Whitfield', description: ['Added Mar 4, 2026', 'Keeps this record.'] },
+				{ value: 'login' as Mode, label: 'No, this is a different person' }
+			],
+			value: 'signup',
+			onChange: vi.fn()
+		});
+
+		const described = page.getByLabelText('Sarah Whitfield').element().getAttribute('aria-describedby');
+		const hint = container.querySelector(`#${described}`);
+		expect(hint?.textContent).toBe('Added Mar 4, 2026Keeps this record.');
+		const [first, second] = [...(hint?.children ?? [])];
+		expect(second!.getBoundingClientRect().top).toBeGreaterThan(first!.getBoundingClientRect().top);
+	});
+
+	/*
 	 * GOV.UK's conditional reveal (#2043, #2035): what an answer asks next
 	 * is on the page only while that answer is the chosen one, and it
 	 * comes straight after its own option, before the next one.
