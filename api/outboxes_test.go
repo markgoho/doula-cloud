@@ -20,6 +20,7 @@ import (
 var wantOutboxPaths = []string{
 	"/api/internal/clients/process-erasure-outbox",
 	feedbackIssueOutboxPath,
+	idempotencySweepPath,
 	"/api/internal/notifications/process-connect-nudge-outbox",
 	"/api/internal/notifications/process-coverage-gap-outbox",
 	"/api/internal/notifications/process-engagement-request-outbox",
@@ -100,8 +101,10 @@ func TestOutboxRegistrations_NudgeTargetsAreDistinct(t *testing.T) {
 // decision that its two outboxes ride ADR-0010's plain delay, #617's
 // magic-link and #619's address-confirmation outboxes joining them for
 // the same reason, and #871's Practice-deletion outbox joining them
-// because both its acts are inherently weeks out, rather than letting
-// some other later outbox quietly join by leaving Nudge blank.
+// because both its acts are inherently weeks out, and #1987's
+// idempotency sweep because a row is due for deletion 48 hours after
+// it was written and nobody waits on that, rather than letting some
+// other later outbox quietly join by leaving Nudge blank.
 func TestOutboxRegistrations_OnlyTheAuthMailOutboxesAreUnnudged(t *testing.T) {
 	var unnudged []string
 	for _, reg := range outboxRegistrations(testDeps()) {
@@ -115,6 +118,7 @@ func TestOutboxRegistrations_OnlyTheAuthMailOutboxesAreUnnudged(t *testing.T) {
 		staffEmailChangeOutboxPath, staffTokenMailOutboxPath,
 		portalMagicLinkOutboxPath, portalAddressChangeOutboxPath,
 		practiceDeletionOutboxPath, legalNoticeOutboxPath,
+		idempotencySweepPath,
 	}
 	sort.Strings(want)
 	if !reflect.DeepEqual(unnudged, want) {

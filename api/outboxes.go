@@ -1,6 +1,7 @@
 package main
 
 import (
+	"doula-cloud/api/internal/idempotency"
 	"doula-cloud/api/internal/outbox"
 	"doula-cloud/api/internal/tasknudge"
 )
@@ -30,6 +31,10 @@ const (
 	// rather than /notifications because it notifies nobody -- it opens
 	// an issue in a private GitHub repo.
 	feedbackIssueOutboxPath = "/api/internal/feedback/process-issue-outbox"
+	// #1987's sweep of expired idempotency keys, not nudged: a row is
+	// due for deletion 48 hours after it was written, and nobody waits
+	// on that.
+	idempotencySweepPath = "/api/internal/idempotency/sweep-expired-keys"
 )
 
 // outboxRegistrations is every outbox the BFF serves (ADR-0010), in one
@@ -211,6 +216,18 @@ func outboxRegistrations(d Deps) []outbox.Registration {
 			Door:   outbox.NotificationDoor,
 			Nudge:  tasknudge.FeedbackIssue,
 			Worker: d.FeedbackIssueWorker,
+		},
+		{
+			// #1987's sweep: deletes every idempotency_keys row past
+			// idempotency.ttl, at every Practice. Not an outbox -- it has
+			// no queue -- but the drain is the one scheduled tick, so a
+			// retention delete rides it, as feedback's 24-month delete
+			// (#1525) rides its worker. The door is what
+			// sweep_expired_idempotency_keys (00130) checks before it
+			// deletes anything.
+			Path:   idempotencySweepPath,
+			Door:   outbox.NotificationDoor,
+			Worker: idempotency.Sweeper{},
 		},
 		{
 			// #443's site rebuild, under /api/internal/site for the same

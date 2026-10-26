@@ -37,11 +37,11 @@ const headerName = "Idempotency-Key"
 const maxKeyLength = 255
 
 // ttl is docs/api-design.md section 3's "appropriate TTL (typically 24-48
-// hours)" for a stored key. A row past this age is treated as not found --
-// the request runs normally and overwrites nothing, since the original row
-// is still there for save's ON CONFLICT to no-op against -- so the
-// created_at column alone is enough to honor the TTL for v1 without a
-// reaper/sweep job actually deleting anything.
+// hours)" for a stored key. A row past this age is treated as not found,
+// and Sweeper deletes it on the outbox drain's next tick (#1987), so a
+// stored response does not outlive the window it exists for. Between the
+// two, lookup's own created_at check is what honors the TTL, and save
+// refreshes a row the sweep has not reached yet.
 const ttl = 48 * time.Hour
 
 // scope is whose key a request carries: a Staff member at a Practice, or a
@@ -169,7 +169,7 @@ func serve(w http.ResponseWriter, r *http.Request, next http.Handler, tx *sql.Tx
 // lookup returns the stored status code and response body for key, if one
 // was already persisted for the caller's own scope within ttl. A row older
 // than ttl is treated as not found, honoring docs/api-design.md section
-// 3's TTL without a reaper job actually deleting it. IS NOT DISTINCT FROM
+// 3's TTL until Sweeper deletes it. IS NOT DISTINCT FROM
 // compares the caller column a scope leaves NULL as equal to the row's
 // NULL, the same reading idempotency_keys_scope's NULLS NOT DISTINCT
 // gives it.
