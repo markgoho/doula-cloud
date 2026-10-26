@@ -152,12 +152,30 @@ describe('Client-portal Invoice (#1564)', () => {
 });
 
 describe('paying a Stripe-rail Invoice in our own chrome (#1020)', () => {
-	it("reads the server's refusal, and offers nothing to press, when the Invoice cannot be paid here", async () => {
+	// #2039: the Practice's setup is a fact about the Practice, with the
+	// way to pay another way -- info, not an error, by #2002's rule.
+	it('states that the Practice cannot take a card yet as a fact, and offers nothing to press', async () => {
 		await setupInvoice();
 
-		await expect.element(page.getByText(paymentRefusal)).toBeVisible();
+		await expect
+			.element(page.getByRole('status'))
+			.toHaveTextContent(
+				`Your Practice is not set up to take card payments yet. Contact ${fixture.pageData!.practiceName as string} to pay another way.`
+			);
+		expect(page.getByRole('alert').elements()).toHaveLength(0);
+		expect(page.getByText(paymentRefusal.message).elements()).toHaveLength(0);
 		expect(page.getByRole('button').elements()).toHaveLength(0);
 		expect(stripeDouble.loadStripe).not.toHaveBeenCalled();
+	});
+
+	it("reads any other refusal in the server's own words, as an error", async () => {
+		await setupInvoice((path) =>
+			path.endsWith('/payment')
+				? Response.json({ code: 'FAILED_PRECONDITION', message: 'This Invoice is not waiting for a payment.' }, { status: 409 })
+				: jsonResponse(invoice)
+		);
+
+		await expect.element(page.getByRole('alert')).toHaveTextContent('This Invoice is not waiting for a payment.');
 	});
 
 	it('falls back to a retry sentence when the secret cannot be fetched and no reason came back', async () => {

@@ -74,6 +74,16 @@ export function contractVoidedNotice(practiceName: string): string {
 	return `${practiceName} ended this Contract.`;
 }
 
+/** What she reads where the signing form stood, once she has signed
+ * (#2037): what happens next, and nothing the model does not hold.
+ * Signing records the signature the Practice's own Contract page reads,
+ * and renders the PDF before it answers (`api/internal/contracts/
+ * sign.go`), so both halves are true the moment this shows. It claims no
+ * message to the Practice: signing sends none. */
+export function contractSignedNotice(practiceName: string): string {
+	return `You signed this Contract. ${practiceName} can see it is signed, and your copy is ready to download.`;
+}
+
 /** The Engagement noun (GLOSSARY.md: "my care", heading form "Your care").
  * `CARE_HEADING` replaces every "Choose an Engagement" heading;
  * `NO_CARE_HEADING` and `NO_CARE_MESSAGE` replace every "You don't have an
@@ -310,6 +320,15 @@ export function returnedToYouSentence(money: string): string {
  * nothing to click, and the one thing she can act on. */
 export function byHandPaymentNotice(reference: string): string {
 	return `Your Practice collects this Invoice directly. Quote Invoice ${reference} when you pay.`;
+}
+
+/** What stands where a pay button would be when the Practice cannot take a
+ * card yet (#2039): a fact about the Practice and what she can do, never
+ * an error, by #2002's rule for a setup absence (govuk-alignment.md's
+ * rule-5 row). The Practice is named for the way out, not "them": the
+ * brief's Voice rule allows no third-person pronoun. */
+export function cardPaymentsNotSetUpNotice(practiceName: string): string {
+	return `Your Practice is not set up to take card payments yet. Contact ${practiceName} to pay another way.`;
 }
 
 /** The primary action on a payable Invoice (#983): the figure is in the

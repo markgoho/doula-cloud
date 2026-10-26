@@ -51,7 +51,8 @@ describe('Client-portal Contract status (#212, NH-G5)', () => {
 		await setup(() => jsonResponse({ ...contract, status: 'voided' }));
 
 		await expect.element(page.getByText('No longer active')).toBeVisible();
-		await expect.element(page.getByText('Riverside Doula Collective ended this Contract.')).toBeVisible();
+		// #2037: through Notice, as information -- nothing went wrong.
+		await expect.element(page.getByRole('status')).toHaveTextContent('Riverside Doula Collective ended this Contract.');
 		// NH-G5: never the Staff ContractStatus component's own wording.
 		expect(page.getByText(/Voided —/).elements()).toHaveLength(0);
 	});
@@ -61,6 +62,40 @@ describe('Client-portal Contract status (#212, NH-G5)', () => {
 
 		await expect.element(page.getByText('No longer active')).toBeVisible();
 		expect(page.getByRole('button', { name: /sign/i }).elements()).toHaveLength(0);
+	});
+});
+
+// #2037: signing is the peak of her journey, and it ends in a Notice that
+// says what happens next, where the form stood -- focused, because the
+// Sign button that caused it is gone.
+describe('Client-portal Contract signing ends in a Notice (#2037)', () => {
+	it('replaces the form with a focused status Notice and shows the signed Badge', async () => {
+		await setup((path) =>
+			jsonResponse(path.endsWith('/sign') ? { ...contract, status: 'signed', hasSignedPdf: true } : contract)
+		);
+
+		await page.getByRole('button', { name: 'I agree to sign electronically, continue' }).click();
+		await page.getByLabelText('Full legal name').fill('Anne-Marie Ochieng-Whitfield');
+		await page.getByLabelText('I have read this Contract and I am signing it electronically').click();
+		await page.getByRole('button', { name: 'Sign', exact: true }).click();
+
+		const notice = page.getByRole('status');
+		await expect
+			.element(notice)
+			.toHaveTextContent(
+				'You signed this Contract. Riverside Doula Collective can see it is signed, and your copy is ready to download.'
+			);
+		await expect.element(notice).toHaveFocus();
+		await expect.element(page.getByText('Signed', { exact: true })).toBeVisible();
+		expect(page.getByRole('button', { name: 'Sign', exact: true }).elements()).toHaveLength(0);
+		await expect.element(page.getByRole('button', { name: 'Download signed Contract (PDF)' })).toBeVisible();
+	});
+
+	it('announces nothing on a Contract that was already signed when the page opened', async () => {
+		await setup(() => jsonResponse({ ...contract, status: 'signed', hasSignedPdf: true }));
+
+		await expect.element(page.getByText('Signed', { exact: true })).toBeVisible();
+		expect(page.getByRole('status').elements()).toHaveLength(0);
 	});
 });
 

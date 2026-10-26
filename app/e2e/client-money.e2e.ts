@@ -19,9 +19,11 @@ test('a Client walks from the hub to an Invoice and back', async ({ page, reques
 	await signInPortalClient(page, request, clientEmail);
 	await expect(page).toHaveURL(new RegExp(`/portal/engagements/${engagementId}$`));
 
-	// The hub's one line: the figure, and a way through.
+	// The hub's figure, as the Invoices page's own summary row (#2038),
+	// and a way through.
 	const main = page.getByRole('main');
-	await expect(main.getByText('Total to pay $3,350.00')).toBeVisible();
+	await expect(main.getByRole('term').filter({ hasText: 'Total to pay' })).toBeVisible();
+	await expect(main.getByRole('definition').filter({ hasText: '$3,350.00' })).toBeVisible();
 	await main.getByRole('link', { name: 'Invoices' }).click();
 
 	await expect(page).toHaveURL(new RegExp(`/portal/engagements/${engagementId}/invoices$`));

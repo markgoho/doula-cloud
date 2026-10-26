@@ -117,11 +117,13 @@ describe('Client portal Engagement hub', () => {
 		await expect.element(page.getByText('Created')).not.toBeInTheDocument();
 	});
 
-	// #983: the hub's one line for money -- the figure, and a way through.
-	it('carries one money line: the total to pay and a link to the Invoices route (#983)', async () => {
+	// #983: the hub's money -- the figure, and a way through. Since #2038
+	// the figure is a summary-list row, the Invoices page's own.
+	it('carries the total to pay as a summary row and a link to the Invoices route (#983, #2038)', async () => {
 		await setupHub();
 
-		await expect.element(page.getByText('Total to pay $3,350.00')).toBeVisible();
+		await expect.element(page.getByRole('term').filter({ hasText: 'Total to pay' })).toBeVisible();
+		await expect.element(page.getByRole('definition').filter({ hasText: '$3,350.00' })).toBeVisible();
 		await expect
 			.element(page.getByRole('link', { name: 'Invoices' }))
 			.toHaveAttribute('href', '/portal/engagements/engagement-1/invoices');
@@ -130,7 +132,7 @@ describe('Client portal Engagement hub', () => {
 	it('writes the figure even when nothing is owed, so the line consults no history (#982)', async () => {
 		await setupHub({ record: { ...detail, totalToPayCents: 0 } });
 
-		await expect.element(page.getByText('Total to pay $0.00')).toBeVisible();
+		await expect.element(page.getByRole('definition').filter({ hasText: '$0.00' })).toBeVisible();
 	});
 
 	// #310's own "a change of Engagement is announced" AC: SvelteKit's
@@ -518,7 +520,7 @@ describe('the hub after a loss (#2003)', () => {
 		await setupHub({ record: { ...detail, status: undefined, dueDate: undefined, offersBirthPlan: false } });
 
 		await expect.element(page.getByRole('heading', { name: 'Your care', level: 1 })).toBeVisible();
-		await expect.element(page.getByText('Total to pay $3,350.00')).toBeVisible();
+		await expect.element(page.getByRole('definition').filter({ hasText: '$3,350.00' })).toBeVisible();
 		await expect.element(page.getByText('Status')).not.toBeInTheDocument();
 		await expect.element(page.getByText(/due date/i)).not.toBeInTheDocument();
 		await expect.element(page.getByText('Mar 1, 2027')).not.toBeInTheDocument();

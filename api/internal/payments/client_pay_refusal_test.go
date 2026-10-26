@@ -106,8 +106,9 @@ func TestClientGetPayment_RefusesWhileThePracticeCannotTakeACard(t *testing.T) {
 	invoiceID := seedInvoice(t, w.db, w.me.practiceID, w.me.contractID, "in_nc", invoiceStatusOpen, 100, time.Now())
 
 	status, body := w.get(t, invoiceID)
-	if status != http.StatusConflict || !strings.Contains(body, "cannot take this payment yet") {
-		t.Fatalf("status %d body %s, want 409 naming the Practice", status, body)
+	if status != http.StatusConflict || !strings.Contains(body, "cannot take this payment yet") ||
+		!strings.Contains(body, `"code":"CARD_PAYMENTS_NOT_SET_UP"`) {
+		t.Fatalf("status %d body %s, want 409 naming the Practice under its own code", status, body)
 	}
 	if len(w.stripe.ClientSecretCalls) != 0 {
 		t.Fatal("a Practice that cannot take a card reached Stripe")
@@ -122,8 +123,9 @@ func TestClientGetPayment_RefusesWithNoPublishableKey(t *testing.T) {
 	srv := newClientMoneyServerKeyed(t, w.db, w.stripe, "")
 
 	status, body := getPortal(t, srv, w.session, clientPaymentPath(w.me.engagementID, invoiceID))
-	if status != http.StatusConflict || strings.Contains(body, "clientSecret") {
-		t.Fatalf("status %d body %s, want a 409 and no secret", status, body)
+	if status != http.StatusConflict || strings.Contains(body, "clientSecret") ||
+		!strings.Contains(body, `"code":"FAILED_PRECONDITION"`) {
+		t.Fatalf("status %d body %s, want a 409, the generic code, and no secret", status, body)
 	}
 	if len(w.stripe.ClientSecretCalls) != 0 {
 		t.Fatal("a deployment with no publishable key reached Stripe")

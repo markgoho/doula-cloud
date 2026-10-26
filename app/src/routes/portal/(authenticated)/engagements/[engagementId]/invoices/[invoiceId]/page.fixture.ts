@@ -42,9 +42,14 @@ export const payment: ClientPayment = {
  * a third party's script measures the network, not the screen. The Element
  * is Stripe's own iframe either way -- what the sweep can measure is our
  * container and the sentence, and the spec drives the mounted path with a
- * Stripe double.
+ * Stripe double. The refusal is the Practice's setup (#2039), in the
+ * `{code, message}` shape `apierr` writes, so the base tree is the info
+ * Notice naming the Practice.
  */
-export const paymentRefusal = 'Your Practice cannot take this payment yet.';
+export const paymentRefusal = {
+	code: 'CARD_PAYMENTS_NOT_SET_UP',
+	message: 'Your Practice cannot take this payment yet.'
+};
 
 export const byHandInvoice: ClientInvoice = { ...invoice, billingMode: 'by_hand' };
 
@@ -74,7 +79,9 @@ export const fixture: RouteFixture = {
 	url: 'https://example.test/portal/engagements/engagement-1/invoices/invoice-1',
 	pageData: { practiceName },
 	respond: (path) =>
-		path.endsWith('/payment') ? new Response(paymentRefusal, { status: 409 }) : jsonResponse(invoice),
+		path.endsWith('/payment')
+			? Response.json(paymentRefusal, { status: 409 })
+			: jsonResponse(invoice),
 	readyText: 'Invoice INV-2027-Persephone-Ochieng-Whitfield-0011',
 	variants: [asByHand, asPaidAndReturned]
 };

@@ -2,7 +2,8 @@ import { page } from 'vitest/browser';
 import { describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import { toApiResponder, toPageState } from '../../../../../routeFixture.js';
-import { fixture } from './page.fixture.js';
+import { jsonResponse } from '#lib/testResponse.js';
+import { fixture, instance } from './page.fixture.js';
 import Page from './+page.svelte';
 // The loading Skeleton reserves space with `var(--text-body-size)`, which
 // only exists once the tokens are loaded -- the real app loads them in the
@@ -114,6 +115,55 @@ describe('Client-portal Birth Plan PDF download (#306)', () => {
 		await page.getByRole('button', { name: 'Download Birth Plan (PDF)' }).click();
 
 		await expect.element(page.getByRole('alert')).toHaveTextContent('no birth plan found for this engagement');
+	});
+});
+
+// #2036: "I've read this" ends the task, so it comes after the plan, and
+// its confirmation replaces it in place.
+async function setupAcknowledge(acknowledgeResponse: () => Response) {
+	pageState.data = { ...pageState.data, offersBirthPlan: true };
+	apiFetchWithSession.mockReset();
+	apiFetchWithSession.mockImplementation((path: string) =>
+		path.endsWith('/acknowledge') ? Promise.resolve(acknowledgeResponse()) : toApiResponder(fixture)(path)
+	);
+	await render(Page);
+}
+
+describe('Client-portal Birth Plan ends with "I\'ve read this" (#2036)', () => {
+	it('offers one primary, after the plan she reads', async () => {
+		await setupAcknowledge(() => jsonResponse(instance));
+		const acknowledge = page.getByRole('button', { name: "I've read this" });
+		await expect.element(acknowledge).toBeVisible();
+
+		const lastAnswer = page.getByText('My partner, for the whole labor').element();
+		expect(lastAnswer.compareDocumentPosition(acknowledge.element()) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+	});
+
+	it('replaces the button with a focused confirmation once pressed', async () => {
+		await setupAcknowledge(() => jsonResponse({ ...instance, clientAcknowledgedAt: '2027-02-01T15:00:00Z' }));
+
+		await page.getByRole('button', { name: "I've read this" }).click();
+
+		const notice = page.getByRole('status');
+		await expect.element(notice).toHaveTextContent("You confirmed you've read this on");
+		await expect.element(notice).toHaveFocus();
+		expect(page.getByRole('button', { name: "I've read this" }).elements()).toHaveLength(0);
+	});
+
+	it('takes no focus for a plan confirmed on an earlier visit', async () => {
+		await setup({ respond: () => jsonResponse({ ...instance, clientAcknowledgedAt: '2027-02-01T15:00:00Z' }) });
+
+		await expect.element(page.getByRole('status')).toHaveTextContent("You confirmed you've read this on");
+		await expect.element(page.getByRole('status')).not.toHaveFocus();
+	});
+
+	it('reports a failed confirmation through a Notice and keeps the button', async () => {
+		await setupAcknowledge(() => new Response('the plan changed since you opened it', { status: 409 }));
+
+		await page.getByRole('button', { name: "I've read this" }).click();
+
+		await expect.element(page.getByRole('alert')).toHaveTextContent('the plan changed since you opened it');
+		await expect.element(page.getByRole('button', { name: "I've read this" })).toBeVisible();
 	});
 });
 

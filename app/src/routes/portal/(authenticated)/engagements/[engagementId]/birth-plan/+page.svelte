@@ -16,6 +16,9 @@
 	let error = $state('');
 	let isAcknowledging = $state(false);
 	let acknowledgeError = $state('');
+	// Set only by a confirmation made on this visit, so its Notice takes
+	// focus where the pressed button was (the Notification banner row).
+	let isAcknowledgedHere = $state(false);
 	let isDownloadingPdf = $state(false);
 	let downloadError = $state('');
 
@@ -43,6 +46,7 @@
 		isAcknowledging = true;
 		try {
 			instance = await acknowledgeClientBirthPlan(apiFetchWithSession, page.params.engagementId!);
+			isAcknowledgedHere = true;
 		} catch (error_) {
 			acknowledgeError = error_ instanceof Error ? error_.message : 'Failed to confirm you read this Birth Plan';
 		} finally {
@@ -94,34 +98,48 @@
 			<!-- `content` renders only once the Template's own states are past,
 			     so `instance` is a loaded Birth Plan here. -->
 			{#if instance}
+				<!-- A cluster, so the two buttons keep a gap between them when
+				     they wrap onto two rows at a narrow width (#1576). Both
+				     secondary: what she does with the plan, not the task. -->
+				<cluster-l class="no-print" space="var(--space-3)">
+					<Button label="Print" variant="secondary" onClick={() => print()} />
+					<Button
+						label="Download Birth Plan (PDF)"
+						icon="file-text"
+						variant="secondary"
+						onClick={handleDownloadPdf}
+						loading={isDownloadingPdf}
+					/>
+				</cluster-l>
+				{#if downloadError}
+					<div class="no-print"><Notice variant="error" message={downloadError} /></div>
+				{/if}
+				<BirthPlanView fields={instance.fields} answers={instance.answers} />
+				<!--
+					#2036: the act that ends the task comes after the thing she
+					reads (Fitts's Law: a form's submit sits at the end), and it
+					is the screen's one primary. Its confirmation replaces it in
+					place, focused only when she has just pressed it -- a plan she
+					confirmed on an earlier visit announces nothing on arrival.
+				-->
 				<div class="no-print">
-					<!-- A cluster, so the two buttons keep a gap between them when
-					     they wrap onto two rows at a narrow width (#1576). Both
-					     secondary: "I've read this" is the screen's one primary
-					     (#2019); where it sits is #2036's. -->
-					<cluster-l space="var(--space-3)">
-						<Button label="Print" variant="secondary" onClick={() => print()} />
-						<Button
-							label="Download Birth Plan (PDF)"
-							icon="file-text"
-							variant="secondary"
-							onClick={handleDownloadPdf}
-							loading={isDownloadingPdf}
-						/>
-					</cluster-l>
-					{#if downloadError}
-						<p role="alert">{downloadError}</p>
-					{/if}
 					{#if instance.clientAcknowledgedAt}
-						<Notice variant="status" message="You confirmed you've read this on {formatInstant(instance.clientAcknowledgedAt)}." />
+						<Notice
+							variant="status"
+							message="You confirmed you've read this on {formatInstant(instance.clientAcknowledgedAt)}."
+							isFocusedOnAppear={isAcknowledgedHere}
+						/>
 					{:else}
-						<Button label="I've read this" onClick={handleAcknowledge} loading={isAcknowledging} />
-					{/if}
-					{#if acknowledgeError}
-						<Notice variant="error" message={acknowledgeError} />
+						<stack-l space="var(--space-related)">
+							{#if acknowledgeError}
+								<Notice variant="error" message={acknowledgeError} />
+							{/if}
+							<cluster-l space="var(--space-3)">
+								<Button label="I've read this" onClick={handleAcknowledge} loading={isAcknowledging} />
+							</cluster-l>
+						</stack-l>
 					{/if}
 				</div>
-				<BirthPlanView fields={instance.fields} answers={instance.answers} />
 			{/if}
 		{/snippet}
 	</DocumentPage>

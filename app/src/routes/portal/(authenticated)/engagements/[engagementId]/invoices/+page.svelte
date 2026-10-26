@@ -28,6 +28,7 @@
 		noLongerOwed,
 		stillOwed,
 		totalReturnedCents,
+		totalToPayFact,
 		type ClientInvoice
 	} from '#lib/clientInvoice.js';
 	import {
@@ -38,11 +39,10 @@
 		NO_PAYMENTS_MESSAGE,
 		OWED_HEADING,
 		PAID_HEADING,
-		TOTAL_TO_PAY_LABEL,
 		returnedToYouSentence
 	} from '#lib/clientRegister.js';
 	import { formatMoney } from '#lib/money.js';
-	import BackLink from '#lib/components/molecules/BackLink.svelte';
+	import SummaryList from '#lib/components/molecules/SummaryList.svelte';
 	import DataTable from '#lib/components/organisms/DataTable.svelte';
 	import RecordDetail from '#lib/components/templates/RecordDetail.svelte';
 
@@ -109,8 +109,11 @@
 	}
 </script>
 
+<!-- `even` (#2038): the three sections are one set of columns read one
+     under the next, so each column starts at the same place in each. -->
 {#snippet table(rows: ClientInvoice[], emptyMessage: string)}
 	<DataTable
+		columnWidths="even"
 		{columns}
 		{rows}
 		rowHref={invoiceHref}
@@ -122,11 +125,9 @@
 	/>
 {/snippet}
 
+<!-- The hub's own "Total to pay" row (#2038): one treatment in both places. -->
 {#snippet owedSection()}
-	<p class="total">
-		<span class="total-label">{TOTAL_TO_PAY_LABEL}</span>
-		<span class="total-figure">{formatMoney(totalToPayCents, currency)}</span>
-	</p>
+	<SummaryList rows={[totalToPayFact(totalToPayCents, currency)]} />
 	{@render table(owed, owedEmptyMessage)}
 {/snippet}
 
@@ -138,19 +139,12 @@
 	{@render table(released, '')}
 {/snippet}
 
-<container-l>
-	<center-l max="none" gutters="var(--page-gutter)">
-		<BackLink
-			href={resolve('/portal/(authenticated)/engagements/[engagementId]', {
-				engagementId: page.params.engagementId!
-			})}
-		/>
-	</center-l>
-</container-l>
-
 <RecordDetail
 	title={INVOICES_HEADING}
 	serviceName={page.data.practiceName}
+	backHref={resolve('/portal/(authenticated)/engagements/[engagementId]', {
+		engagementId: page.params.engagementId!
+	})}
 	sections={isLoaded
 		? [
 				{ heading: OWED_HEADING, content: owedSection },
@@ -161,30 +155,3 @@
 	loading={isLoaded || error ? undefined : 'Loading your Invoices'}
 	loadError={error || undefined}
 />
-
-<style>
-	@layer components {
-		/* Wraps rather than assuming a width: the figure drops under its
-		   label when the container cannot hold both (ADR-0024). */
-		.total {
-			display: flex;
-			flex-wrap: wrap;
-			align-items: baseline;
-			gap: var(--space-2) var(--space-4);
-			margin: 0;
-		}
-
-		.total-label {
-			font-size: var(--text-label-size);
-			font-weight: var(--text-label-weight);
-			color: var(--color-on-surface-variant);
-		}
-
-		.total-figure {
-			font-size: var(--text-heading-lg-size);
-			font-weight: var(--text-heading-lg-weight);
-			font-variant-numeric: tabular-nums;
-			overflow-wrap: anywhere;
-		}
-	}
-</style>
