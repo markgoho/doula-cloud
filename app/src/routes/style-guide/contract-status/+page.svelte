@@ -12,7 +12,8 @@
 		added the second one -- not a fourth status (there are still only
 		three: draft, signed, voided) but the other value hasSignedPdf can
 		take on a Draft, which is what the notice's presence or absence
-		demonstrates.
+		demonstrates. #2104's sent and signed Stamps carry a person's name,
+		so the signed and voided sections give the longest a roster holds.
 	-->
 
 	<section>
@@ -31,6 +32,8 @@
 			status="signed"
 			hasSignedPdf
 			amountChangedAt="2026-08-19T00:00:00Z"
+			sent={{ at: '2026-08-12T15:00:00Z', by: 'Anne-Marie Ochieng-Whitfield' }}
+			signed={{ at: '2026-08-14T20:12:00Z', by: 'Oluwaseun Adebayo-Montgomery Fitzwilliam' }}
 			rows={[{ label: 'Your fee', value: '$12,620.00, the fee you accepted on Jul 22, 2026' }]}
 			onVoid={async () => {}}
 			onDownloadPdf={async () => {}}
@@ -44,6 +47,12 @@
 
 	<section>
 		<h2>Voided, the terminal state &mdash; the agreement is over, the copy of it is not</h2>
-		<ContractStatus status="voided" hasSignedPdf onDownloadPdf={async () => {}} />
+		<ContractStatus
+			status="voided"
+			hasSignedPdf
+			sent={{ at: '2026-08-12T15:00:00Z', by: 'Anne-Marie Ochieng-Whitfield' }}
+			signed={{ at: '2026-08-14T20:12:00Z', by: 'Oluwaseun Adebayo-Montgomery Fitzwilliam' }}
+			onDownloadPdf={async () => {}}
+		/>
 	</section>
 </stack-l>

@@ -562,6 +562,62 @@ func TestPutInstanceHandler_RecordsWhichPlanChanged(t *testing.T) {
 	}
 }
 
+// TestInstance_LastEdited is #2104: a Plan that has never been saved says
+// no edit, a save's own response names when and by whom, and a read of
+// the other Plan does not borrow this one's edit.
+func TestInstance_LastEdited(t *testing.T) {
+	db := testdb.New(t)
+	const uid = "instance-last-edited"
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
+	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
+	const fields = `[{"id":"name","type":"short_text","label":"Name","order":0}]`
+	seedInstance(t, db, engagementID, carePlanType, fields, `{}`)
+	seedInstance(t, db, engagementID, birthPlanType, fields, `{}`)
+
+	srv, session := newPlanServer(t, db, uid)
+	defer srv.Close()
+
+	startedResp := getInstance(t, srv, session, practiceID, engagementID, carePlanType)
+	defer startedResp.Body.Close()
+	if started := decodeInstance(t, startedResp); started.LastEdited != nil {
+		t.Fatalf("a Plan never saved: lastEdited = %+v, want none", started.LastEdited)
+	}
+
+	savedResp := putInstance(t, srv, session, practiceID, engagementID, carePlanType, plans.PutInstanceRequest{
+		Answers: plans.Answers{nameFieldID: jamieAnswer},
+	})
+	defer savedResp.Body.Close()
+	saved := decodeInstance(t, savedResp)
+	if saved.LastEdited == nil || saved.LastEdited.By != "Test Staff "+uid || saved.LastEdited.At.IsZero() {
+		t.Fatalf("the save's response: lastEdited = %+v, want its instant, by the Staff member who saved", saved.LastEdited)
+	}
+
+	againResp := getInstance(t, srv, session, practiceID, engagementID, carePlanType)
+	defer againResp.Body.Close()
+	if again := decodeInstance(t, againResp); again.LastEdited == nil || !again.LastEdited.At.Equal(saved.LastEdited.At) {
+		t.Errorf("GET after the save: lastEdited = %+v, want the save's", again.LastEdited)
+	}
+	otherResp := getInstance(t, srv, session, practiceID, engagementID, birthPlanType)
+	defer otherResp.Body.Close()
+	if other := decodeInstance(t, otherResp); other.LastEdited != nil {
+		t.Errorf("the Birth Plan: lastEdited = %+v, want none -- only the Care Plan was saved", other.LastEdited)
+	}
+}
+
+// decodeInstance reads an InstanceResponse off a 200 body; the caller
+// closes it.
+func decodeInstance(t *testing.T, resp *http.Response) plans.InstanceResponse {
+	t.Helper()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
+	}
+	var out plans.InstanceResponse
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	return out
+}
+
 // TestPlanTemplateEditDoesNotMutateExistingInstance is the AC's centerpiece:
 // editing a Practice's Plan Template after a Plan Instance already exists
 // must never change that instance's stored field snapshot.

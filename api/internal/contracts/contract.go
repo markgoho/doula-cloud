@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"doula-cloud/api/internal/activity"
+	"doula-cloud/api/internal/activitypage"
 	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/personname"
 	"doula-cloud/api/internal/pgerr"
@@ -63,6 +64,17 @@ type ContractResponse struct {
 	// by any handler for itself, so a route added later cannot forget it
 	// and quietly hide a Client's own copy of what she signed (#1119).
 	HasSignedPDF bool `json:"hasSignedPdf"`
+	// Sent and Signed answer "how did this Contract come to be?" on the
+	// Staff Engagement page (#2104): when it was sent and by whom, read
+	// from the contract_sent row the activity ledger already holds, and
+	// when it was signed and the full legal name typed to sign it, read
+	// from the Contract's own signing columns (00018). Filled by
+	// writeContract for a Staff reader only, so every Staff response --
+	// a send's included -- carries them; omitted until each has
+	// happened. A voided Contract keeps both: voiding ends the agreement,
+	// never the record that it was made.
+	Sent   *activitypage.Stamp `json:"sent,omitempty"`
+	Signed *activitypage.Stamp `json:"signed,omitempty"`
 }
 
 // PutContractRequest is the body of a PUT Contract request: a full
@@ -98,7 +110,55 @@ func writeContract(w http.ResponseWriter, r *http.Request, tx *sql.Tx, status in
 	}
 	out.HasSignedPDF = hasSignedPDF
 	reader, hasReader := staffauth.ReaderFrom(r.Context())
+	// The Client portal's own read (client.go) runs with no Practice
+	// scope, under which the ledger reads nothing, so the trail is a
+	// Staff read only rather than one that is quietly empty there.
+	if hasReader {
+		practiceID, _ := staffauth.PracticeID(r.Context())
+		out.Sent, out.Signed, err = contractTrail(r.Context(), tx, practiceID, out.EngagementID)
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		if err != nil {
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+			return
+		}
+	}
 	apierr.WriteJSON(w, status, shapeForReader(reader, hasReader, out))
+}
+
+// contractTrail reads when engagementID's current Contract -- the newest,
+// the one fetchContract reads -- was sent and by whom, and when it was
+// signed and under what name. A send is recorded against the
+// Engagement, not the Contract, so the lookup starts at this Contract's
+// own created_at: a voided predecessor's send came before it.
+func contractTrail(ctx context.Context, tx *sql.Tx, practiceID, engagementID string) (sent, signed *activitypage.Stamp, err error) {
+	var (
+		createdAt  time.Time
+		signedAt   sql.NullTime
+		signerName sql.NullString
+	)
+	if err := tx.QueryRowContext(ctx,
+		`SELECT created_at, signed_at, signer_full_name FROM contracts
+		 WHERE engagement_id = $1 ORDER BY created_at DESC, id DESC LIMIT 1`,
+		engagementID,
+	).Scan(&createdAt, &signedAt, &signerName); err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests -- every caller has just read or written this Contract
+		return nil, nil, fmt.Errorf("contracts: read contract trail: %w", err)
+	}
+	sent, err = activitypage.Latest(ctx, tx, activitypage.LatestQuery{
+		PracticeID:  practiceID,
+		SubjectKind: activity.SubjectEngagement,
+		SubjectID:   engagementID,
+		Action:      string(activity.ActionContractSent),
+		NotBefore:   &createdAt,
+	})
+	// coverage:ignore reason: DB query failure, not exercised by unit tests
+	if err != nil {
+		return nil, nil, fmt.Errorf("contracts: read contract sent: %w", err)
+	}
+	if signedAt.Valid {
+		signed = &activitypage.Stamp{At: signedAt.Time, By: signerName.String}
+	}
+	return sent, signed, nil
 }
 
 // mergeFieldPattern matches a {{merge_field_key}} placeholder in Contract

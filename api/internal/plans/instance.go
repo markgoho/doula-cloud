@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"doula-cloud/api/internal/activity"
+	"doula-cloud/api/internal/activitypage"
 	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/pgerr"
 	"doula-cloud/api/internal/staffauth"
@@ -38,6 +39,29 @@ type InstanceResponse struct {
 	// never acknowledged, or acknowledged before a Staff edit since
 	// cleared it (PutInstanceHandler).
 	ClientAcknowledgedAt *time.Time `json:"clientAcknowledgedAt,omitempty"`
+
+	// LastEdited is when this Plan Instance was last saved and by whom
+	// (#2104), read from the care_plan_edited or birth_plan_edited row
+	// PutInstanceHandler records. Staff reads only, and nil until the
+	// first save: starting a Plan records no edit.
+	LastEdited *activitypage.Stamp `json:"lastEdited,omitempty"`
+}
+
+// lastEdited reads planType's newest save on engagementID from the
+// activity ledger, on the Staff caller's own Practice-scoped tx.
+func lastEdited(r *http.Request, tx *sql.Tx, engagementID, planType string) (*activitypage.Stamp, error) {
+	practiceID, _ := staffauth.PracticeID(r.Context())
+	stamp, err := activitypage.Latest(r.Context(), tx, activitypage.LatestQuery{
+		PracticeID:  practiceID,
+		SubjectKind: activity.SubjectEngagement,
+		SubjectID:   engagementID,
+		Action:      string(editedAction(planType)),
+	})
+	// coverage:ignore reason: DB query failure, not exercised by unit tests
+	if err != nil {
+		return nil, fmt.Errorf("plans: read last edited: %w", err)
+	}
+	return stamp, nil
 }
 
 // PutInstanceRequest is the body of a PUT Plan Instance request: a full
@@ -125,7 +149,14 @@ func GetInstanceHandler() http.Handler {
 			return
 		}
 
-		out := InstanceResponse{EngagementID: engagementID, PlanType: planType, Fields: fields, Answers: answers, ClientAcknowledgedAt: clientAcknowledgedAt}
+		edited, err := lastEdited(r, tx, engagementID, planType)
+		if err != nil {
+			// coverage:ignore reason: DB query failure, not exercised by unit tests
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+			return
+		}
+
+		out := InstanceResponse{EngagementID: engagementID, PlanType: planType, Fields: fields, Answers: answers, ClientAcknowledgedAt: clientAcknowledgedAt, LastEdited: edited}
 		apierr.WriteJSON(w, http.StatusOK, out)
 	})
 }
@@ -244,7 +275,14 @@ func PutInstanceHandler() http.Handler {
 			return
 		}
 
-		out := InstanceResponse{EngagementID: engagementID, PlanType: planType, Fields: fields, Answers: req.Answers, ClientAcknowledgedAt: nullTimePtr(clientAcknowledgedAt)}
+		edited, err := lastEdited(r, tx, engagementID, planType)
+		if err != nil {
+			// coverage:ignore reason: DB query failure, not exercised by unit tests
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+			return
+		}
+
+		out := InstanceResponse{EngagementID: engagementID, PlanType: planType, Fields: fields, Answers: req.Answers, ClientAcknowledgedAt: nullTimePtr(clientAcknowledgedAt), LastEdited: edited}
 		apierr.WriteJSON(w, http.StatusOK, out)
 	})
 }

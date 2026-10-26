@@ -54,6 +54,8 @@
 		type PortalInviteSubject
 	} from '#lib/portalInvite.js';
 	import type { PageProps as PageProperties } from './$types';
+	import { stampText } from '#lib/stamp.js';
+	import { latestMessageText, unansweredSince } from '#lib/threadSummary.js';
 	import { formatCalendarDay, formatInstant, formatScheduledVisit, toDatetimeLocalValue } from '#lib/dates.js';
 	import {
 		activityLedgerColumns,
@@ -651,6 +653,15 @@
 	let messages = $state<Message[]>([]);
 	let messagesCursor = $state('');
 	let isMessagesHasMore = $state(false);
+	const messageThreadRows = $derived.by<SummaryListRow[]>(() => {
+		const latest = latestMessageText(messages);
+		if (latest === undefined) return [];
+		const since = unansweredSince(messages);
+		return [
+			{ label: 'Latest', value: latest },
+			...(since ? [{ label: 'Unanswered', value: `Since ${formatInstant(since)}` }] : [])
+		];
+	});
 	// Load (including "load older") and download are separate SectionState
 	// instances so downloading an attachment never lights up the "Load
 	// older" spinner. Both write the one Notice the thread renders. A
@@ -2348,6 +2359,8 @@
 				<SummaryList
 					rows={[
 						{ label: 'Progress', value: planProgress(instance.fields, instance.answers) },
+						// #2104: who last saved it, from the ledger; none until a first save.
+						...(instance.lastEdited ? [{ label: 'Last edited', value: stampText(instance.lastEdited) }] : []),
 						...(planType === 'birth_plan' ? [{ label: 'Client', value: birthPlanReadText(instance) }] : [])
 					]}
 				/>
@@ -2418,6 +2431,8 @@
 				hasSignedPdf={contract.hasSignedPdf}
 				amountChangedAt={contract.amountChangedAt}
 				voidRequests={contract.voidRequests}
+				sent={contract.sent}
+				signed={contract.signed}
 				rows={contractFeeRows}
 				onVoid={isPracticeOwnerOrAdmin ? handleVoidContract : undefined}
 				onDownloadPdf={canReadContractMoney ? handleDownloadSignedContractPdf : undefined}
@@ -2577,6 +2592,14 @@
 {/snippet}
 
 {#snippet messagesSection()}
+	<!--
+		#2104: the thread's two facts ahead of it, as drawn -- the newest
+		message, and whether the Client is waiting on a reply (GLOSSARY.md,
+		Unanswered). Unanswered is a row only while it is true.
+	-->
+	{#if messageThreadRows.length > 0}
+		<SummaryList rows={messageThreadRows} />
+	{/if}
 	<MessageThread
 		{messages}
 		error={messagesError}

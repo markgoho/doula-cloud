@@ -69,6 +69,31 @@ describe('ContractStatus.svelte', () => {
 		await expect.element(page.getByText('Voided, no longer active')).toBeVisible();
 	});
 
+	it('says when a signed Contract was signed and sent, and by whom (#2104)', async () => {
+		await render(ContractStatus, {
+			status: 'signed',
+			hasSignedPdf: false,
+			sent: { at: '2026-08-12T15:00:00Z', by: 'Renata Alvarez' },
+			signed: { at: '2026-08-14T15:00:00Z', by: 'Camille Boyd' }
+		});
+
+		await expect.element(page.getByText('Signed on Aug 14, 2026')).toBeVisible();
+		await expect.element(page.getByText('Signed by')).toBeVisible();
+		await expect.element(page.getByText('Camille Boyd', { exact: true })).toBeVisible();
+		await expect.element(page.getByText('Aug 12, 2026 by Renata Alvarez')).toBeVisible();
+	});
+
+	it('keeps a voided Contract’s signature as a row of its own (#2104)', async () => {
+		await render(ContractStatus, {
+			status: 'voided',
+			hasSignedPdf: true,
+			signed: { at: '2026-08-14T15:00:00Z', by: 'Camille Boyd' }
+		});
+
+		await expect.element(page.getByText('Voided, no longer active')).toBeVisible();
+		await expect.element(page.getByText('Aug 14, 2026 by Camille Boyd')).toBeVisible();
+	});
+
 	it("adds the caller's own rows after the status", async () => {
 		await render(ContractStatus, {
 			status: 'signed',
