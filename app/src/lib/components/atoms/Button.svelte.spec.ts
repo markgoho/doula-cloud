@@ -8,8 +8,22 @@ type SetupOptions = Partial<ComponentProps<typeof Button>>;
 
 async function setup({ label = 'Save', ...rest }: SetupOptions = {}) {
 	const onClick = vi.fn();
-	const { container } = await render(Button, { label, onClick, ...rest });
-	return { onClick, container };
+	const { container, rerender } = await render(Button, { label, onClick, ...rest });
+	return { onClick, container, rerender };
+}
+
+/*
+ * A Button inside a real form, so a test can tell whether its press sent
+ * the form. The form cancels its own submit, so the page never navigates.
+ */
+async function setupInForm(options: SetupOptions) {
+	const form = document.createElement('form');
+	const onSubmit = vi.fn((event: SubmitEvent) => event.preventDefault());
+	form.addEventListener('submit', onSubmit);
+	document.body.append(form);
+	await render(Button, { target: form, props: { label: 'Send', type: 'submit', ...options } });
+	(page.getByRole('button').element() as HTMLButtonElement).focus();
+	return { onSubmit, form };
 }
 
 function icon(container: HTMLElement) {
@@ -143,12 +157,71 @@ describe('Button.svelte', () => {
 		expect(labelSpan(container)).not.toHaveClass('visually-hidden');
 	});
 
-	it('is disabled and marked aria-busy when loading', async () => {
+	it('is marked busy and unavailable when loading, but not disabled', async () => {
 		await setup({ loading: true });
 
 		const button = page.getByRole('button');
-		await expect.element(button).toBeDisabled();
 		await expect.element(button).toHaveAttribute('aria-busy', 'true');
+		await expect.element(button).toHaveAttribute('aria-disabled', 'true');
+		// `toBeDisabled` counts `aria-disabled` too, so the native property
+		// is what says the browser will not drop focus from it.
+		expect((button.element() as HTMLButtonElement).disabled).toBe(false);
+	});
+
+	// #2119: a keyboard user who presses a button that then loads keeps
+	// focus on it, so a failed action does not send the next Tab to the
+	// top of the page; and a press while it loads does nothing.
+	it('keeps focus while its action runs, and does nothing when pressed', async () => {
+		const { onClick, rerender } = await setup({ label: 'Load more' });
+		const button = page.getByRole('button');
+		(button.element() as HTMLButtonElement).focus();
+		await userEvent.keyboard('{Enter}');
+		expect(onClick).toHaveBeenCalledOnce();
+
+		await rerender({ loading: true });
+		await expect.element(button).toHaveFocus();
+		await userEvent.keyboard('{Enter}');
+		await userEvent.keyboard(' ');
+		expect(onClick).toHaveBeenCalledOnce();
+
+		await rerender({ loading: false });
+		await expect.element(button).toHaveFocus();
+	});
+
+	it('sends its form when pressed', async () => {
+		const { onSubmit, form } = await setupInForm({});
+
+		await userEvent.keyboard('{Enter}');
+
+		expect(onSubmit).toHaveBeenCalledOnce();
+		form.remove();
+	});
+
+	it('does not send its form when pressed while loading', async () => {
+		const { onSubmit, form } = await setupInForm({ loading: true });
+
+		await userEvent.keyboard('{Enter}');
+
+		expect(onSubmit).not.toHaveBeenCalled();
+		form.remove();
+	});
+
+	// Enter in a field sends the form through its submit button's click,
+	// which `disabled` used to block and the canceled click now does.
+	it.each([
+		{ loading: false, sends: 1 },
+		{ loading: true, sends: 0 }
+	])('Enter in a field sends the form $sends time(s) when loading is $loading', async ({ loading, sends }) => {
+		const { onSubmit, form } = await setupInForm({ loading });
+		const field = document.createElement('input');
+		field.setAttribute('aria-label', 'Message');
+		form.prepend(field);
+
+		await page.getByRole('textbox', { name: 'Message' }).fill('Hello');
+		await userEvent.keyboard('{Enter}');
+
+		expect(onSubmit).toHaveBeenCalledTimes(sends);
+		form.remove();
 	});
 
 	it('sets aria-busy=false when not loading', async () => {

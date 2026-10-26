@@ -1,6 +1,6 @@
 import { createRawSnippet } from 'svelte';
 import type { CDPSession } from '@vitest/browser-playwright';
-import { cdp, page } from 'vitest/browser';
+import { cdp, page, userEvent } from 'vitest/browser';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import DataTable, { type DataTableView } from './DataTable.svelte';
@@ -341,7 +341,10 @@ describe('DataTable.svelte', () => {
 		expect(document.activeElement?.textContent).not.toContain('Ada Lovelace');
 	});
 
-	it('moves focus to no row when the load adds none', async () => {
+	// #2119: a keyboard user whose "Load more" fails is still on the
+	// button, so the next Tab does not start at the top of the page, and
+	// focus moves to no row, since the load added none.
+	it('keeps focus on "Load more" while it loads and after it fails', async () => {
 		const onLoadMore = vi.fn();
 		await page.viewport(...WIDE);
 		const { rerender } = await render(DataTable<Row>, {
@@ -351,15 +354,19 @@ describe('DataTable.svelte', () => {
 			onLoadMore,
 			emptyMessage: 'No records yet.'
 		});
-		onLoadMore.mockImplementation(() => {
-			void rerender({ isLoadingMore: true });
-			void rerender({ isLoadingMore: false, loadMoreError: 'Failed to load more records' });
-		});
+		onLoadMore.mockImplementation(() => void rerender({ isLoadingMore: true }));
+		const button = page.getByRole('button', { name: 'Load more' });
 
-		await page.getByRole('button', { name: 'Load more' }).click();
+		(button.element() as HTMLButtonElement).focus();
+		await userEvent.keyboard('{Enter}');
+		await expect.element(button).toHaveAttribute('aria-busy', 'true');
+		await expect.element(button).toHaveFocus();
+
+		await rerender({ isLoadingMore: false, loadMoreError: 'Failed to load more records' });
 
 		await expect.element(page.getByRole('alert')).toHaveTextContent('Failed to load more records');
-		expect(document.activeElement?.closest('tr, .record')).toBeNull();
+		await expect.element(button).toHaveFocus();
+		expect(onLoadMore).toHaveBeenCalledOnce();
 	});
 
 	it('renders no load-more button when hasMore is false', async () => {
@@ -378,8 +385,8 @@ describe('DataTable.svelte', () => {
 		await setup({ hasMore: true, onLoadMore: vi.fn(), isLoadingMore: true });
 
 		const button = page.getByRole('button', { name: 'Load more' });
-		await expect.element(button).toBeDisabled();
 		await expect.element(button).toHaveAttribute('aria-busy', 'true');
+		await expect.element(button).toHaveAttribute('aria-disabled', 'true');
 	});
 
 	it('renders loadMoreError next to the load-more button without hiding the existing rows', async () => {

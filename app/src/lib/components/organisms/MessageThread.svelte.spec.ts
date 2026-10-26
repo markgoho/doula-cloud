@@ -216,7 +216,7 @@ describe('MessageThread.svelte compose form', () => {
 		await messageField().fill('New message');
 		await send();
 
-		await expect.element(page.getByRole('button', { name: 'Send' })).toBeDisabled();
+		await expect.element(page.getByRole('button', { name: 'Send' })).toHaveAttribute('aria-busy', 'true');
 	});
 
 	it.each([
