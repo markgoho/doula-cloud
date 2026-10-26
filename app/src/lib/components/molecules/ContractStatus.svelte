@@ -21,7 +21,8 @@
 	import ConfirmDialog from '#lib/components/molecules/ConfirmDialog.svelte';
 	import LabeledField from '#lib/components/molecules/LabeledField.svelte';
 	import SummaryList, { type SummaryListRow } from '#lib/components/molecules/SummaryList.svelte';
-	import { formatActivityTimestamp } from '#lib/dates.js';
+	import { formatActivityTimestamp, formatInstant } from '#lib/dates.js';
+	import { stampText, type Stamp } from '#lib/stamp.js';
 	import { contractStatusText, type VoidRequestSummary } from '#lib/contract.js';
 
 	/**
@@ -81,8 +82,18 @@
 		onRequestVoid,
 		onDeclineVoidRequest,
 		rows = [],
+		sent,
+		signed,
 		children
 	}: {
+		/**
+		When it was sent and by whom (#2104), absent for a Draft.
+		*/
+		sent?: Stamp;
+		/**
+		When it was signed and the name typed to sign it (#2104).
+		*/
+		signed?: Stamp;
 		/** What the caller shows between the facts and the actions: on the
 		 * Engagement page, the Contract's text and a Draft's own actions,
 		 * so Void stays the last thing in the section (#2004). */
@@ -223,8 +234,23 @@
 	}
 
 	type FactRow = SummaryListRow & { instant?: string };
+	// #2104: how the Contract came to be, as drawn -- "Signed on <day>" as
+	// its status and the signer's name beneath, then when it was sent and
+	// by whom. A voided Contract keeps its signature as a row of its own,
+	// the same "<day> by <name>" shape as Sent.
+	const isSignedNow = $derived(status === 'signed' && signed !== undefined);
 	const facts = $derived<FactRow[]>([
-		{ label: 'Status', value: contractStatusText(status) },
+		isSignedNow
+			? { label: 'Status', value: `Signed on ${formatInstant(signed!.at)}`, instant: signed!.at }
+			: { label: 'Status', value: contractStatusText(status) },
+		...(signed
+			? [
+					isSignedNow
+						? { label: 'Signed by', value: signed.by }
+						: { label: 'Signed', value: stampText(signed), instant: signed.at }
+				]
+			: []),
+		...(sent ? [{ label: 'Sent', value: stampText(sent), instant: sent.at }] : []),
 		...(amountChangedAt
 			? [{ label: 'Price changed', value: formatActivityTimestamp(amountChangedAt), instant: amountChangedAt }]
 			: []),

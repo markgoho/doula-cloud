@@ -8,6 +8,7 @@
 import type { Fetcher } from './fetcher.js';
 
 import type { Field,  } from './planTemplate.js';
+import type { Stamp } from './stamp.js';
 import { apiErrorMessage } from './apiErrorMessage.js';
 import { fetchBlob } from './blobDownload.js';
 
@@ -32,6 +33,9 @@ export interface Instance {
 	 * Absent/undefined means never acknowledged, or acknowledged before a
 	 * Staff edit since cleared it. */
 	clientAcknowledgedAt?: string;
+	/** When this Plan was last saved and by whom (#2104). Absent until the
+	 * first save, and on a Client-portal read. */
+	lastEdited?: Stamp;
 }
 
 /** Reads fieldId's raw stored value out of answers as a string, or '' if

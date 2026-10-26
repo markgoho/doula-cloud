@@ -433,6 +433,22 @@ async function scheduleVisit(
 	});
 }
 
+// A Plan from the Practice's template, with its first text question
+// answered and saved by whoever `headers` signs in as.
+async function startAndSavePlan(
+	request: APIRequestContext,
+	roster: Roster,
+	engagement: NamedEngagement,
+	planType: 'care_plan' | 'birth_plan',
+	headers: Record<string, string>,
+	answer: string
+): Promise<void> {
+	const planPath = `/api/practices/${roster.practiceId}/engagements/${engagement.engagementId}/plans/${planType}`;
+	const { fields } = await send<{ fields: { id: string; type: string }[] }>(request, 'POST', planPath, headers);
+	const question = fields.find((field) => field.type === 'short_text' || field.type === 'long_text');
+	await send(request, 'PUT', planPath, headers, { answers: question ? { [question.id]: answer } : {} });
+}
+
 // Priya's four. Camille Boyd is the demo's portal Client: her Contract is
 // signed, an Invoice is open, Visits are logged and scheduled, and she and
 // Priya have a thread. Tessa has paid, Imani is overdue, and Grace's
@@ -451,8 +467,11 @@ async function seedPriyaBook(request: APIRequestContext, roster: Roster, today: 
 	await contractFor(request, roster, today, camille, camillePortal);
 	await raiseInvoice(request, roster, camille);
 	// Her Birth Plan, from the Practice's own template, so the portal's
-	// Birth plan screen has one to show.
-	await send(request, 'POST', `/api/practices/${roster.practiceId}/engagements/${camille.engagementId}/plans/birth_plan`, priya.headers);
+	// Birth plan screen has one to show -- and both Plans saved once, by
+	// two different people, so the Engagement page's "Last edited" rows
+	// have a save to name (#2104).
+	await startAndSavePlan(request, roster, camille, 'birth_plan', priya.headers, 'Low lights, music, and her partner beside her.');
+	await startAndSavePlan(request, roster, camille, 'care_plan', roster.owner, 'Iron supplements from 28 weeks.');
 	const { visitId } = await send<{ visitId: string }>(
 		request,
 		'POST',
@@ -476,6 +495,11 @@ async function seedPriyaBook(request: APIRequestContext, roster: Roster, today: 
 	});
 	await send(request, 'POST', messagesPath(camille), priya.headers, {
 		body: 'Very normal at this stage. Rest when you can, and we can talk it through at your next visit.'
+	});
+	// Her question with no reply yet, so the Messages section's
+	// Unanswered row has something to say (#2104).
+	await send(request, 'POST', `/api/portal/engagements/${camille.engagementId}/messages`, camillePortal, {
+		body: 'Thank you. Could we move Thursday’s visit to the afternoon?'
 	});
 
 	await contractFor(request, roster, today, tessa, await portalSessionFor(request, roster, tessa));

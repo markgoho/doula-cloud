@@ -297,6 +297,10 @@ export const contract: Contract = {
 	// #968: the price moved after this Contract was created, so the
 	// section's "Price changed on" line renders rather than staying absent.
 	amountChangedAt: '2026-08-19T00:00:00Z',
+	// #2104: how it came to be -- sent by a Staff member and signed under
+	// a typed legal name, both as long as a real one runs.
+	sent: { at: '2026-08-12T15:00:00Z', by: 'Anne-Marie Ochieng-Whitfield' },
+	signed: { at: '2026-08-14T20:12:00Z', by: 'Oluwaseun Adebayo-Montgomery Fitzwilliam' },
 	// #971: one request still waiting on an Owner's decision, and one
 	// already declined -- the two states ContractStatus renders
 	// differently. A granted request needs no row: `status` reads 'voided'
@@ -346,7 +350,9 @@ export const birthPlan = {
 		{ id: 'bp-support', type: 'short_text', label: 'Who will be with you', order: 2 },
 		{ id: 'bp-feeding', type: 'single_select', label: 'Feeding plan', options: ['Breast', 'Bottle', 'Both'], order: 3 }
 	],
-	answers: { 'bp-atmosphere': 'Low lights and the playlist her partner made.' }
+	answers: { 'bp-atmosphere': 'Low lights and the playlist her partner made.' },
+	// #2104: its last save, by the longest name the roster holds.
+	lastEdited: { at: '2026-08-26T15:00:00Z', by: 'Priyanka Venkataraman-Solberg' }
 };
 
 export const session = {

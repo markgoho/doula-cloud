@@ -1715,7 +1715,7 @@ describe('the Contract PDF download is gated on the page (#302, amended by #969)
 	it('does not render the download for a contractor Doula, the role the endpoint still refuses', async () => {
 		await setupWithRoles(['doula'], pdfBlobResponse(), true);
 
-		await expect.element(testPage.getByText('Signed', { exact: true })).toBeVisible();
+		await expect.element(testPage.getByText('Signed on Aug 14, 2026', { exact: true })).toBeVisible();
 		expect(testPage.getByRole('button', { name: 'Download signed Contract (PDF)' }).elements()).toHaveLength(0);
 	});
 
@@ -2918,7 +2918,7 @@ describe('what a reader sees about money (#2002, #2003)', () => {
 	it('draws no fee row for a reader the BFF sends no fee', async () => {
 		await setupMoney(sessionFor(['owner']), { ...fixtureDetail, yourFee: undefined });
 
-		await expect.element(testPage.getByText('Signed', { exact: true })).toBeVisible();
+		await expect.element(testPage.getByText('Signed on Aug 14, 2026', { exact: true })).toBeVisible();
 		await expect.element(testPage.getByText('Your fee')).not.toBeInTheDocument();
 	});
 
@@ -3026,6 +3026,70 @@ describe('the Messages section (#2004)', () => {
 		await messagesSection().getByRole('button', { name: 'Send', exact: true }).click();
 
 		await expect.element(messagesSection().getByRole('status').filter({ hasText: 'Message sent.' })).toHaveFocus();
-		await expect.element(messagesSection().getByText('See you Thursday.')).toBeVisible();
+		await expect.element(messagesSection().getByText('See you Thursday.', { exact: true })).toBeVisible();
+	});
+
+	it('reads the newest message, and whether the Client is waiting on a reply (#2104)', async () => {
+		const fromClient = {
+			messageId: 'message-2',
+			senderType: 'client',
+			senderId: 'client-1',
+			senderName: 'Camille',
+			body: 'Thursday works. See you at 2.',
+			createdAt: '2026-10-24T15:00:00Z'
+		};
+		const fromStaff = {
+			...fromClient,
+			messageId: 'message-1',
+			senderType: 'staff',
+			senderName: 'Priya Raman',
+			body: 'Thursday at 2?',
+			createdAt: '2026-10-23T15:00:00Z'
+		};
+		await setupMoney(sessionFor(['owner']), fixtureDetail, (path) =>
+			path.includes('/messages') ? jsonResponse({ items: [fromClient, fromStaff], hasMore: false }) : undefined
+		);
+
+		const latest = messagesSection().getByText('“Thursday works. See you at 2.” — Camille, Oct 24, 2026');
+		await expect.element(latest).toBeVisible();
+		await expect.element(messagesSection().getByText('Since Oct 24, 2026')).toBeVisible();
+	});
+
+	it('draws no Unanswered row once Staff has answered (#2104)', async () => {
+		await setupMoney(sessionFor(['owner']), fixtureDetail, (path) =>
+			path.includes('/messages')
+				? jsonResponse({
+						items: [
+							{
+								messageId: 'message-1',
+								senderType: 'staff',
+								senderId: 'staff-1',
+								senderName: 'Priya Raman',
+								body: 'Thursday at 2?',
+								createdAt: '2026-10-23T15:00:00Z'
+							}
+						],
+						hasMore: false
+					})
+				: undefined
+		);
+
+		await expect.element(messagesSection().getByText('“Thursday at 2?” — Priya Raman, Oct 23, 2026')).toBeVisible();
+		expect(messagesSection().getByText('Unanswered').elements()).toHaveLength(0);
+	});
+});
+
+describe('how the Contract and the Plans came to be (#2104)', () => {
+	beforeEach(() => {
+		apiFetchWithSession.mockReset();
+	});
+
+	it('says when the Contract was signed and sent, and by whom, and when the Birth Plan was last edited', async () => {
+		await setupMoney(sessionFor(['owner']));
+
+		await expect.element(testPage.getByText('Signed on Aug 14, 2026', { exact: true })).toBeVisible();
+		await expect.element(testPage.getByText('Oluwaseun Adebayo-Montgomery Fitzwilliam')).toBeVisible();
+		await expect.element(testPage.getByText('Aug 12, 2026 by Anne-Marie Ochieng-Whitfield')).toBeVisible();
+		await expect.element(testPage.getByText('Aug 26, 2026 by Priyanka Venkataraman-Solberg')).toBeVisible();
 	});
 });

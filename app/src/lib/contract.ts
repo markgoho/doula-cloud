@@ -8,6 +8,7 @@
  */
 import type { Fetcher } from './fetcher.js';
 import type { CursorPage } from './paginatedList.svelte.js';
+import type { Stamp } from './stamp.js';
 
 import { MERGE_FIELDS } from './contractTemplate.js';
 import { apiErrorMessage } from './apiErrorMessage.js';
@@ -40,6 +41,13 @@ export interface Contract {
 	 * or an unsigned Sent Contract reports `false`. Always present -- the
 	 * Go BFF sends it on every Contract-shaped response. */
 	hasSignedPdf: boolean;
+	/** When the Contract was sent and by whom, from the Activity ledger's
+	 * own record of the send (#2104). Absent for a Draft, and on a
+	 * Client-portal read. */
+	sent?: Stamp;
+	/** When the Contract was signed and the full legal name typed to sign
+	 * it (#2104). A voided Contract keeps it. */
+	signed?: Stamp;
 }
 
 /** One void request against a Contract (#971): who asked, when, why, and
