@@ -144,7 +144,7 @@ const LOADING_AFFORDANCE_SELECTOR = '[role="status"][aria-busy="true"]';
  *
  * `[role="alert"]` alone was tried first and refused on `accept-invite`:
  * its no-token state is `EntryPage`, not a `Template` with a `loadError`
- * prop, and its "Missing invite token" `Notice` is the row's own,
+ * prop, and its "This link is not complete." `Notice` is the row's own,
  * deliberately-scanned state ("the form is the page", per that row's own
  * comment below). That Notice's markup -- an `<h1>` plus one
  * `role="alert"` paragraph and nothing else -- is byte-identical to a
@@ -325,7 +325,7 @@ const SIGNED_OUT_ROUTES: Route[] = [
 		archetype: 'A',
 		url: '/verify-email',
 		h1: 'Verify your email',
-		reach: (page) => expect(page.getByText('This link is missing its verification code.')).toBeVisible()
+		reach: (page) => expect(page.getByText('This link is not complete.')).toBeVisible()
 	},
 	{
 		key: 'portal/accept-invite',

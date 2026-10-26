@@ -31,6 +31,7 @@
 	 */
 	import type { Snippet } from 'svelte';
 	import Heading from '#lib/components/atoms/Heading.svelte';
+	import Text from '#lib/components/atoms/Text.svelte';
 	import PageTitle from '#lib/components/PageTitle.svelte';
 
 	interface Properties {
@@ -58,9 +59,18 @@
 		 * one group rather than as groups of their own.
 		 */
 		content: Snippet;
+		/**
+		 * One line under the title that says where the person is (#2025):
+		 * which door this is, which address is signing in. A person who
+		 * opens a link from an email on a phone arrives cold, and a title
+		 * and a Continue button alone do not say what Continue does. A
+		 * string, not a region: the brief's Voice rule 5 allows a title one
+		 * short line, and a string cannot grow into a paragraph.
+		 */
+		lede?: string;
 	}
 
-	let { title, errorSummary, content }: Properties = $props();
+	let { title, errorSummary, content, lede }: Properties = $props();
 </script>
 
 <PageTitle page={title} isError={Boolean(errorSummary)} />
@@ -72,7 +82,20 @@
 				{@render errorSummary()}
 			{/if}
 
-			<Heading level={1} variant="page" text={title} />
+			{#if lede}
+				<!--
+					The lede belongs to the title, so the two are one group at
+					`--space-related` (#2020's rule), not two at `--space-group`.
+					It can hold an address, which wraps at 320px rather than
+					pushing the page wide.
+				-->
+				<stack-l space="var(--space-related)">
+					<Heading level={1} variant="page" text={title} />
+					<div class="lede"><Text text={lede} /></div>
+				</stack-l>
+			{:else}
+				<Heading level={1} variant="page" text={title} />
+			{/if}
 
 			{@render content()}
 		</stack-l>
@@ -83,6 +106,10 @@
 	@layer components {
 		container-l {
 			padding-block: var(--space-8);
+		}
+
+		.lede {
+			overflow-wrap: anywhere;
 		}
 	}
 </style>

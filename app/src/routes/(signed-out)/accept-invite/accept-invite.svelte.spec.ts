@@ -427,7 +427,9 @@ describe('step one -- identifying yourself', () => {
 	it('refuses outright when the URL carries no invite token', async () => {
 		await setup({ token: '' });
 
-		await expect.element(testPage.getByRole('alert')).toHaveTextContent('Missing invite token');
+		// #2025: what is wrong, then the one next step, in words a person says.
+		await expect.element(testPage.getByRole('alert')).toHaveTextContent('This link is not complete.');
+		await expect.element(testPage.getByText('Ask the practice to send the invite again.')).toBeVisible();
 		expect(emailField().elements()).toHaveLength(0);
 		expect(createUserWithEmailAndPassword).not.toHaveBeenCalled();
 	});

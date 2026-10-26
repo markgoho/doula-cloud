@@ -5,14 +5,24 @@
 	import { getFirebaseAuth } from '#lib/firebase.js';
 	import { apiBaseURL, probeSession } from '#lib/api.js';
 	import type { SessionInfo } from '#lib/landing.js';
-	import { refusalMessage, SERVICE_PROBLEM } from '#lib/formErrors.js';
+	import {
+		isUnusableLink,
+		LINK_EXPIRED_OR_USED,
+		LINK_NOT_COMPLETE,
+		refusalMessage,
+		SERVICE_PROBLEM
+	} from '#lib/formErrors.js';
 	import Notice from '#lib/components/atoms/Notice.svelte';
 	import Link from '#lib/components/atoms/Link.svelte';
+	import UnusableLink from '#lib/components/molecules/UnusableLink.svelte';
 	import EntryPage from '#lib/components/templates/EntryPage.svelte';
 
 	const token = page.url.searchParams.get('token') ?? '';
 
-	let status = $state<'checking' | 'verified' | 'failed'>('checking');
+	// #2025: `unusable` is the link's own fault -- not complete, expired or
+	// used -- and offers the way to a new one; `failed` is ours, and a
+	// reload may still work.
+	let status = $state<'checking' | 'verified' | 'unusable' | 'failed'>('checking');
 	let errorMessage = $state('');
 	// #1504: the link is spent in whatever browser she opens it in. In the
 	// one she signed up in she is still signed in, and "Continue to log in"
@@ -21,8 +31,8 @@
 
 	onMount(async () => {
 		if (!token) {
-			status = 'failed';
-			errorMessage = 'This link is missing its verification code.';
+			status = 'unusable';
+			errorMessage = LINK_NOT_COMPLETE;
 			return;
 		}
 		try {
@@ -31,6 +41,11 @@
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify({ token })
 			});
+			if (isUnusableLink(response)) {
+				errorMessage = LINK_EXPIRED_OR_USED;
+				status = 'unusable';
+				return;
+			}
 			if (!response.ok) {
 				errorMessage = await refusalMessage(response);
 				status = 'failed';
@@ -74,6 +89,12 @@
 			{:else}
 				<Link href={resolve('/(signed-out)/login')} label="Continue to log in" />
 			{/if}
+		{:else if status === 'unusable'}
+			<!-- #2025: a signed-in person asks for a new link from the account screen. -->
+			<UnusableLink
+				message={errorMessage}
+				next={{ label: 'Log in to get a new link', href: resolve('/(signed-out)/login') }}
+			/>
 		{:else}
 			<Notice variant="error" message={errorMessage} />
 		{/if}

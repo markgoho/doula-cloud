@@ -9,6 +9,7 @@
 	import TextInput from '#lib/components/atoms/TextInput.svelte';
 	import Button from '#lib/components/atoms/Button.svelte';
 	import Notice from '#lib/components/atoms/Notice.svelte';
+	import Link from '#lib/components/atoms/Link.svelte';
 	import LabeledField from '#lib/components/molecules/LabeledField.svelte';
 	import StackedForm from '#lib/components/molecules/StackedForm.svelte';
 	import ErrorSummary from '#lib/components/molecules/ErrorSummary.svelte';
@@ -124,7 +125,16 @@
 			</LabeledField>
 			<Button type="submit" label="Send me a sign-in link" loading={submission.isSubmitting} />
 		</StackedForm>
+
+		<!-- #2025: the other door, named as the signed-out landing names it. -->
+		<Link href={resolve('/(signed-out)/login')} label="Staff log in" />
 	{/if}
 {/snippet}
 
-<EntryPage title="Log in" errorSummary={submission.errors.length > 0 ? errorSummary : undefined} {content} />
+<!-- #2025: both doors say "Log in", so the lede says which one this is. -->
+<EntryPage
+	title="Log in"
+	lede="For clients of a doula practice."
+	errorSummary={submission.errors.length > 0 ? errorSummary : undefined}
+	{content}
+/>

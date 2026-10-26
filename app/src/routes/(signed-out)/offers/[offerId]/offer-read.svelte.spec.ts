@@ -181,13 +181,8 @@ describe('the pre-account Offer read refuses its own submit', () => {
 	it('still refuses a link with no token at all, before asking for a code', async () => {
 		await setup({ url: 'https://example.test/(signed-out)/offers/offer-1' });
 
-		await expect
-			.element(
-				testPage.getByText(
-					'This link is missing its token. Open the offer from the email you were sent.'
-				)
-			)
-			.toBeVisible();
+		await expect.element(testPage.getByRole('alert')).toHaveTextContent('This link is not complete.');
+		await expect.element(testPage.getByText('Ask the practice to send the offer again.')).toBeVisible();
 		expect(openButton().elements()).toHaveLength(0);
 	});
 });

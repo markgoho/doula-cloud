@@ -4,6 +4,7 @@
 	interface Properties {
 		hasError?: boolean;
 		isPickerShown?: boolean;
+		hasLede?: boolean;
 	}
 
 	/*
@@ -14,7 +15,9 @@
 	 */
 	export const variants: readonly DemoVariant<Properties>[] = [
 		{ name: 'Entry page, with errors', props: { hasError: true } },
-		{ name: 'Entry page, with the Practice picker', props: { isPickerShown: true } }
+		{ name: 'Entry page, with the Practice picker', props: { isPickerShown: true } },
+		// #2025: the one line under the title that says which door this is.
+		{ name: 'Entry page, with a lede', props: { hasLede: true } }
 	];
 </script>
 
@@ -41,7 +44,7 @@
 	let email = $state('anne-marie.ochieng-whitfield@highland-midwifery-group.example.org');
 	let password = $state('');
 
-	let { hasError = false, isPickerShown = false }: Properties = $props();
+	let { hasError = false, isPickerShown = false, hasLede = false }: Properties = $props();
 
 	const noop = () => {};
 </script>
@@ -103,4 +106,9 @@
 	{/if}
 {/snippet}
 
-<EntryPage title="Log in" errorSummary={hasError ? errorSummary : undefined} {content} />
+<EntryPage
+	title="Log in"
+	lede={hasLede ? 'For doulas and practice owners.' : undefined}
+	errorSummary={hasError ? errorSummary : undefined}
+	{content}
+/>

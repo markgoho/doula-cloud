@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"net/url"
 	"time"
 
 	"doula-cloud/api/internal/outbox"
@@ -65,15 +66,22 @@ func composeMagicLink(mailer outbox.Mailer) func(context.Context, *sql.Tx, magic
 			// coverage:ignore reason: every row this package queues carries a token; unreachable without writing to the table outside queueMagicLinkMail
 			return "", "", "", &outbox.DeadLetterError{Reason: "outbox row carries no token"}
 		}
-		subject, text := magicLinkCopy(mailer.AppBaseURL, r.token.String)
+		subject, text := magicLinkCopy(mailer.AppBaseURL, r.token.String, r.signInAddress)
 		return r.signInAddress, subject, text, nil
 	}
 }
 
 // magicLinkCopy is the sign-in link's fixed, content-free copy (ADR-0009):
 // no Client name, no Practice name, only the link.
-func magicLinkCopy(appBaseURL, token string) (subject, text string) {
-	link := appBaseURL + "/portal/sign-in?token=" + token
+//
+// The link also carries recipient, the address it is mailed to (#2025),
+// so the sign-in screen can say who is signing in -- the same reasoning
+// and the same fragment as the password reset link's (authmail's
+// tokenMailCopy, #1813, #1827): it tells a holder of the link nothing the
+// mailbox does not, the BFF never reads it, and a fragment stays out of
+// every request log.
+func magicLinkCopy(appBaseURL, token, recipient string) (subject, text string) {
+	link := appBaseURL + "/portal/sign-in?token=" + token + "#email=" + url.QueryEscape(recipient)
 	return "Your DoulaCloud sign-in link", "Hello,\n\n" +
 		"Here is your sign-in link for DoulaCloud.\n\n" +
 		link + "\n\n" +

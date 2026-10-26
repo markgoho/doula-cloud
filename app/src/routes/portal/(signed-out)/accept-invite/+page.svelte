@@ -3,13 +3,19 @@
 	import { page } from '#lib/appState.svelte.js';
 	import { resolve } from '$app/paths';
 	import { apiBaseURL, apiFetchWithSession } from '#lib/api.js';
-	import { refusalErrors, refusalOrConfirmable } from '#lib/formErrors.js';
+	import {
+		isUnusableLink,
+		LINK_EXPIRED_OR_USED,
+		LINK_NOT_COMPLETE,
+		refusalErrors,
+		refusalOrConfirmable
+	} from '#lib/formErrors.js';
 	import { FormSubmission, orServiceProblem } from '#lib/formSubmission.svelte.js';
 	import { decidePortalLanding, type PortalSessionInfo } from '#lib/portalLanding.js';
 	import Button from '#lib/components/atoms/Button.svelte';
-	import Notice from '#lib/components/atoms/Notice.svelte';
 	import WarningText from '#lib/components/atoms/WarningText.svelte';
 	import ErrorSummary from '#lib/components/molecules/ErrorSummary.svelte';
+	import UnusableLink from '#lib/components/molecules/UnusableLink.svelte';
 	import EntryPage from '#lib/components/templates/EntryPage.svelte';
 
 	const inviteToken = page.url.searchParams.get('token') ?? '';
@@ -24,6 +30,10 @@
 	 * own copy of this comment.
 	 */
 	let signOutWarning = $state<string | undefined>();
+
+	// #2025: the BFF refused the invite itself -- expired, or accepted
+	// already -- so Continue can only be refused again.
+	let isLinkUnusable = $state(false);
 
 	// #617, ADR-0026: a Client has no password, so accepting an invitation
 	// is nothing but pressing Continue -- there is no account-setup step.
@@ -44,6 +54,10 @@
 				},
 				body: JSON.stringify({ inviteToken })
 			});
+			if (isUnusableLink(acceptResponse)) {
+				isLinkUnusable = true;
+				return;
+			}
 			if (!acceptResponse.ok) {
 				const refusal = await refusalOrConfirmable(acceptResponse);
 				if (refusal.kind === 'confirmable') {
@@ -84,8 +98,20 @@
 {/snippet}
 
 {#snippet content()}
+	<!--
+		#2025: only the Practice can send another invite. "Your doula", not
+		the Practice's name: the invite mail names no Practice (ADR-0009,
+		#221), and a page that spends nothing on its GET (ADR-0026) cannot
+		ask whose invite this is.
+	-->
 	{#if !inviteToken}
-		<Notice variant="error" message="Missing invite token" />
+		<UnusableLink message={LINK_NOT_COMPLETE} next={{ text: 'Ask your doula to send the invite again.' }} />
+	{:else if isLinkUnusable}
+		<UnusableLink
+			message={LINK_EXPIRED_OR_USED}
+			next={{ text: 'Ask your doula to send the invite again.' }}
+			isFocusedOnAppear
+		/>
 	{:else}
 		<!-- #610: see the sign-in page for why the warning sits on this button. -->
 		{#if signOutWarning}
@@ -102,6 +128,7 @@
 
 <EntryPage
 	title="Accept your portal invite"
+	lede={inviteToken && !isLinkUnusable ? 'Your doula invited you to see your care online.' : undefined}
 	errorSummary={submission.errors.length > 0 ? errorSummary : undefined}
 	{content}
 />

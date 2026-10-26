@@ -4,7 +4,7 @@ import { render } from 'vitest-browser-svelte';
 import { jsonResponse } from '#lib/testResponse.js';
 import Page from './+page.svelte';
 import { toPageState } from '../../../routeFixture.js';
-import { fixture } from './page.fixture.js';
+import { fixture, linkNotComplete } from './page.fixture.js';
 
 /*
  * #610: a browser holds exactly one DoulaCloud session, so redeeming a
@@ -133,11 +133,61 @@ describe('Redeeming a sign-in link over a live Staff session (#610)', () => {
 		await render(Page, {});
 		await testPage.getByRole('button', { name: 'Continue' }).click();
 
+		// #2025: the link's own fault, so Continue gives way to the next step.
+		await expect.element(testPage.getByRole('alert')).toHaveTextContent('This link has expired or was already used.');
+		// The pressed button is gone, so focus moves to what replaced it.
+		await expect.element(testPage.getByRole('alert')).toHaveFocus();
 		await expect
-			.element(testPage.getByText('this link is invalid or has expired -- ask for a new one'))
-			.toBeVisible();
+			.element(testPage.getByRole('link', { name: 'Ask for a new sign-in link' }))
+			.toHaveAttribute('href', '/portal/login');
+		expect(testPage.getByRole('button', { name: 'Continue' }).elements()).toHaveLength(0);
 		expect(testPage.getByRole('button', { name: 'Continue and sign out' }).elements()).toHaveLength(
 			0
 		);
+	});
+});
+
+/*
+ * #2025: the line under the heading names the address the link was
+ * mailed to, read from the link's fragment, and a link with no token ends
+ * on the way to a new one.
+ */
+describe('Where a sign-in link leads (#2025)', () => {
+	afterEach(() => {
+		Object.assign(pageState, toPageState(fixture));
+	});
+
+	it('names the address that is signing in', async () => {
+		await render(Page, {});
+
+		await expect
+			.element(
+				testPage.getByText(
+					'You are signing in as anne-marie.ochieng-whitfield+portal@highland-midwifery-group.example.org.'
+				)
+			)
+			.toBeVisible();
+	});
+
+	it('says what Continue does when the link carries no address', async () => {
+		Object.assign(
+			pageState,
+			toPageState({ ...fixture, url: 'https://example.test/portal/(signed-out)/sign-in?token=magic-link-token-1' })
+		);
+
+		await render(Page, {});
+
+		await expect.element(testPage.getByText('Continue to see your care.')).toBeVisible();
+	});
+
+	it('ends on the way to a new link when the link is not complete', async () => {
+		Object.assign(pageState, toPageState({ ...fixture, ...linkNotComplete }));
+
+		await render(Page, {});
+
+		await expect.element(testPage.getByRole('alert')).toHaveTextContent('This link is not complete.');
+		await expect
+			.element(testPage.getByRole('link', { name: 'Ask for a new sign-in link' }))
+			.toHaveAttribute('href', '/portal/login');
 	});
 });

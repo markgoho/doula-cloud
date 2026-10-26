@@ -27,7 +27,9 @@ func TestComposeMagicLink_SendsWithSignInLink(t *testing.T) {
 	if to != testSignInAddress {
 		t.Fatalf("to = %q, want the account's sign-in address", to)
 	}
-	wantLink := testComposeAppBaseURL + "/portal/sign-in?token=link-token"
+	// #2025: the address rides in the fragment, escaped, so the screen can
+	// say who is signing in.
+	wantLink := testComposeAppBaseURL + "/portal/sign-in?token=link-token#email=her%40example.com"
 	if !strings.Contains(text, wantLink) {
 		t.Fatalf("text %q does not contain link %q", text, wantLink)
 	}
@@ -56,7 +58,8 @@ func TestComposeAddressChange_SendsToTheRowsOwnAddress(t *testing.T) {
 	if to != testNewAddress {
 		t.Fatalf("to = %q, want the row's own to_address", to)
 	}
-	wantLink := testComposeAppBaseURL + "/portal/confirm-sign-in-address?token=confirm-token"
+	// #2025: the new address -- the mailbox's own -- rides in the fragment.
+	wantLink := testComposeAppBaseURL + "/portal/confirm-sign-in-address?token=confirm-token#email=the-new-one%40example.com"
 	if !strings.Contains(text, wantLink) {
 		t.Fatalf("text %q does not contain link %q", text, wantLink)
 	}
