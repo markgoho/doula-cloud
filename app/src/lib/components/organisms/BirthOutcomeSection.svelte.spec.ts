@@ -366,5 +366,7 @@ describe('BirthOutcomeSection', () => {
 			.element(page.getByText('What happened to the pregnancy?'))
 			.not.toBeInTheDocument();
 		expect(onRecord).not.toHaveBeenCalled();
+		// #2103: back on the opener, not on the page.
+		await expect.element(page.getByRole('button', { name: 'Record what happened' })).toHaveFocus();
 	});
 });

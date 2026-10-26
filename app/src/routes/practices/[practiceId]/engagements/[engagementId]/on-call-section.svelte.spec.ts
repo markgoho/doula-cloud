@@ -411,6 +411,8 @@ describe('the on-call section on a birth (#1093)', () => {
 			await gapStaffField().selectOptions('Bo Ng');
 
 			await testPage.getByRole('button', { name: 'Cancel' }).click();
+			// #2103: back on the opener, not on the page.
+			await expect.element(recordGapOpener()).toHaveFocus();
 			await recordGapOpener().click();
 
 			await expect.element(gapStaffField()).toHaveValue('');

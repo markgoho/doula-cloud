@@ -617,9 +617,14 @@
 	let changeNotes = $state('');
 	let changeStaffId = $state('');
 	const visitChange = new SectionState<void>(undefined);
+	// #2103: which opener takes focus back after a Cancel -- 'add' for
+	// "Add a Visit", or the id of the Visit whose row Change opened the
+	// form. Only a Cancel sets it, so a save's status keeps focus.
+	let refocusedVisitOpener = $state('');
 
 	function openVisitForm(change?: VisitChange) {
 		openVisitChange = change;
+		refocusedVisitOpener = '';
 		visitsSavedMessage = '';
 		visitChange.error = '';
 		hasAttemptedChange = false;
@@ -633,6 +638,11 @@
 	function toggleVisitChange(visit: Visit) {
 		if (changingVisit?.visitId === visit.visitId) openVisitForm();
 		else openVisitForm({ visit });
+	}
+
+	function cancelVisitChange(visit: Visit) {
+		openVisitForm();
+		refocusedVisitOpener = visit.visitId;
 	}
 
 	// The scheduled Visits by date, then the rest (#1999).
@@ -1025,17 +1035,22 @@
 	let shownPlanForms = $state<Record<PlanType, boolean>>({ care_plan: false, birth_plan: false });
 	let planDraft = $state<Record<PlanType, Answers>>({ care_plan: {}, birth_plan: {} });
 	let planSavedMessage = $state<Record<PlanType, string>>({ care_plan: '', birth_plan: '' });
+	// #2103: the Plan whose Cancel hands focus back to its "Change the …"
+	// opener, drawn again once the form has gone.
+	let refocusedPlanOpener = $state<PlanType | undefined>();
 
 	function openPlanForm(planType: PlanType) {
+		refocusedPlanOpener = undefined;
 		planDraft[planType] = { ...planState[planType].value?.answers };
 		planSavedMessage[planType] = '';
 		planState[planType].error = '';
 		shownPlanForms[planType] = true;
 	}
 
-	function closePlanForm(planType: PlanType) {
+	function cancelPlanForm(planType: PlanType) {
 		planState[planType].error = '';
 		shownPlanForms[planType] = false;
+		refocusedPlanOpener = planType;
 	}
 
 	// A new Plan has nothing to read yet, so starting one opens its
@@ -1103,17 +1118,22 @@
 	let isContractFormOpen = $state(false);
 	let contractDraft = $state<Record<string, string>>({});
 	let contractSavedMessage = $state('');
+	// #2103: Cancel hands focus back to "Change the Draft Contract", drawn
+	// again once the form has gone. Only Cancel sets it.
+	let isContractOpenerRefocused = $state(false);
 
 	function openContractForm() {
+		isContractOpenerRefocused = false;
 		contractDraft = { ...contractState.value?.values };
 		contractSavedMessage = '';
 		contractState.error = '';
 		isContractFormOpen = true;
 	}
 
-	function closeContractForm() {
+	function cancelContractForm() {
 		contractState.error = '';
 		isContractFormOpen = false;
+		isContractOpenerRefocused = true;
 	}
 
 	// A new Draft's merge fields are what is left to do, so creating one
@@ -1384,8 +1404,14 @@
 		return typeof openOnCallChange === 'object' && openOnCallChange.staffId === staffId;
 	}
 
+	// #2103: Cancel on the gap form hands focus back to its opener, drawn
+	// again once the form has gone. Only Cancel sets it: a recorded gap's
+	// status takes focus instead.
+	let isGapOpenerRefocused = $state(false);
+
 	function openOnCall(change?: OnCallChange) {
 		openOnCallChange = change;
+		isGapOpenerRefocused = false;
 		onCallDaysError = '';
 		onCallSavedMessage = '';
 		gapError = '';
@@ -1483,6 +1509,11 @@
 		gapCoveringStaffId = '';
 		gapSubmission.errors = [];
 		openOnCall();
+	}
+
+	function cancelGapForm() {
+		closeGapForm();
+		isGapOpenerRefocused = true;
 	}
 
 	async function clearCoverageGap(gap: CoverageGap) {
@@ -1647,6 +1678,11 @@
 		hasAttemptedCreateVisit = false;
 		visitsCreate.error = '';
 		openVisitForm();
+	}
+
+	function cancelAddVisit() {
+		closeAddVisit();
+		refocusedVisitOpener = 'add';
 	}
 
 	// #268: an empty picker means "for me", which is what a Doula logging
@@ -2036,6 +2072,7 @@
 		expanded={changingVisit?.visitId === visit.visitId}
 		describedBy="{view}-visit-{visit.visitId}-name"
 		onClick={() => toggleVisitChange(visit)}
+		focusOnAppearing={refocusedVisitOpener === visit.visitId}
 	/>
 {/snippet}
 
@@ -2106,7 +2143,7 @@
 		</LabeledField>
 		<cluster-l space="var(--space-3)">
 			<Button label="Save Visit" type="submit" loading={isCreatingVisit} />
-			<Button label="Cancel" variant="secondary" onClick={closeAddVisit} />
+			<Button label="Cancel" variant="secondary" onClick={cancelAddVisit} />
 		</cluster-l>
 	</StackedForm>
 {/snippet}
@@ -2202,7 +2239,7 @@
 		</LabeledField>
 		<cluster-l space="var(--space-3)">
 			<Button label="Save changes" type="submit" loading={visitChange.isBusy} />
-			<Button label="Cancel" variant="secondary" onClick={() => openVisitForm()} />
+			<Button label="Cancel" variant="secondary" onClick={() => cancelVisitChange(visit)} />
 		</cluster-l>
 	</StackedForm>
 {/snippet}
@@ -2226,7 +2263,13 @@
 	-->
 	{@const canAddVisit = canAssignVisits || canLogOwnVisit}
 	{@const addOpener =
-		canAddVisit && openVisitChange !== 'add' ? { label: 'Add a Visit', onClick: () => openVisitForm('add') } : undefined}
+		canAddVisit && openVisitChange !== 'add'
+			? {
+					label: 'Add a Visit',
+					onClick: () => openVisitForm('add'),
+					focusOnAppearing: refocusedVisitOpener === 'add'
+				}
+			: undefined}
 	<DataTable
 		columns={[
 			{ label: 'Date', accessor: (visit: Visit) => formatScheduledVisit(visit.scheduledAt) },
@@ -2254,7 +2297,14 @@
 	{/if}
 
 	{#if addOpener && sortedVisits.length > 0}
-		<div><Button label={addOpener.label} variant="secondary" onClick={addOpener.onClick} /></div>
+		<div>
+			<Button
+				label={addOpener.label}
+				variant="secondary"
+				onClick={addOpener.onClick}
+				focusOnAppearing={addOpener.focusOnAppearing}
+			/>
+		</div>
 	{/if}
 
 	{#if openVisitChange === 'add' && canAddVisit}
@@ -2287,7 +2337,7 @@
 				/>
 				<cluster-l space="var(--space-3)">
 					<Button label="Save {heading}" type="submit" loading={planState[planType].isBusy} />
-					<Button label="Cancel" variant="secondary" onClick={() => closePlanForm(planType)} />
+					<Button label="Cancel" variant="secondary" onClick={() => cancelPlanForm(planType)} />
 				</cluster-l>
 			</StackedForm>
 		{:else}
@@ -2305,7 +2355,12 @@
 					<Notice variant="status" message={planSavedMessage[planType]} isFocusedOnAppear />
 				{/if}
 				<cluster-l space="var(--space-3)">
-					<Button label="Change the {heading}" variant="secondary" onClick={() => openPlanForm(planType)} />
+					<Button
+						label="Change the {heading}"
+						variant="secondary"
+						onClick={() => openPlanForm(planType)}
+						focusOnAppearing={refocusedPlanOpener === planType}
+					/>
 					<!--
 						#280: the reading and taking-away surface -- its own
 						address. Editing stays here.
@@ -2351,7 +2406,7 @@
 				/>
 				<cluster-l space="var(--space-3)">
 					<Button label="Save Contract" type="submit" loading={isContractBusy} />
-					<Button label="Cancel" variant="secondary" onClick={closeContractForm} />
+					<Button label="Cancel" variant="secondary" onClick={cancelContractForm} />
 				</cluster-l>
 			</StackedForm>
 		{:else if contract}
@@ -2410,7 +2465,12 @@
 							<Button label="Send Contract" onClick={handleSendContract} loading={isContractBusy} />
 						{/if}
 						{#if contractEditableFields.length > 0}
-							<Button label="Change the Draft Contract" variant="secondary" onClick={openContractForm} />
+							<Button
+								label="Change the Draft Contract"
+								variant="secondary"
+								onClick={openContractForm}
+								focusOnAppearing={isContractOpenerRefocused}
+							/>
 						{/if}
 					</cluster-l>
 				{/if}
@@ -2630,7 +2690,11 @@
 			<EmptyState
 				message="Nobody has recorded a time they cannot be reached."
 				action={canRecordGap && !isGapFormOpen
-					? { label: 'Record a time a doula cannot be reached', onClick: () => openOnCall('gap') }
+					? {
+							label: 'Record a time a doula cannot be reached',
+							onClick: () => openOnCall('gap'),
+							focusOnAppearing: isGapOpenerRefocused
+						}
 					: undefined}
 			/>
 		{:else}
@@ -2667,6 +2731,7 @@
 						label="Record a time a doula cannot be reached"
 						variant="secondary"
 						onClick={() => openOnCall('gap')}
+						focusOnAppearing={isGapOpenerRefocused}
 					/>
 				</div>
 			{/if}
@@ -2766,7 +2831,7 @@
 				</LabeledField>
 				<cluster-l space="var(--space-3)">
 					<Button type="submit" label="Record the gap" loading={gapSubmission.isSubmitting} />
-					<Button label="Cancel" variant="secondary" onClick={closeGapForm} />
+					<Button label="Cancel" variant="secondary" onClick={cancelGapForm} />
 				</cluster-l>
 			</StackedForm>
 		{/if}

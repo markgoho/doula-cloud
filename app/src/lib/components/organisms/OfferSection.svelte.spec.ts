@@ -138,6 +138,30 @@ describe('OfferSection.svelte', () => {
 		await expect.element(page.getByRole('button', { name: 'Offer this work' })).toBeVisible();
 	});
 
+	// #2103: Cancel took the focused button with the form, so focus fell to
+	// the page; it goes back to the opener, as GOV.UK's in-place change does.
+	it('puts focus back on the opener after Cancel', async () => {
+		await setup({ offers: [openOffer] });
+
+		await page.getByRole('button', { name: 'Cancel' }).click();
+
+		await expect.element(page.getByRole('button', { name: 'Offer this work' })).toHaveFocus();
+	});
+
+	it('puts focus back on the empty list opener after Cancel', async () => {
+		await setup();
+
+		await page.getByRole('button', { name: 'Cancel' }).click();
+
+		await expect.element(page.getByRole('button', { name: 'Offer this work' })).toHaveFocus();
+	});
+
+	it('does not move focus to the opener on first render', async () => {
+		await setup({ offers: [openOffer], isFormOpened: false });
+
+		await expect.element(page.getByRole('button', { name: 'Offer this work' })).not.toHaveFocus();
+	});
+
 	it('closes the form once the Offer is away, and says who was offered it, focused', async () => {
 		await setup();
 

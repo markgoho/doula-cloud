@@ -70,6 +70,19 @@
 		 * rather than a second way to pass content in.
 		 */
 		describedBy?: string;
+		/*
+		 * The opener of an in-place form takes focus back after Cancel
+		 * (#2103), the way `Heading`'s own `focusOnAppearing` takes it when a
+		 * form appears. Cancel removes the form, and the Cancel button with
+		 * it, so focus would fall to the page; GOV.UK returns the reader to
+		 * where the change was asked from. Most openers are drawn again only
+		 * once their form has gone, so this focuses the button the moment it
+		 * renders; a row's Change that stays on screen takes focus the moment
+		 * this turns true. The caller sets it from Cancel and clears it when
+		 * the form opens again, so a save, whose status takes focus, never
+		 * moves focus here.
+		 */
+		focusOnAppearing?: boolean;
 		onClick?: (event: MouseEvent) => void;
 	}
 
@@ -89,8 +102,13 @@
 		expanded,
 		ariaControls,
 		describedBy,
+		focusOnAppearing = false,
 		onClick
 	}: Properties = $props();
+
+	function takeFocus(element: HTMLButtonElement) {
+		element.focus();
+	}
 
 	const isDisabled = $derived(disabled || loading);
 	const iconSize = $derived(size === 'sm' ? 16 : (size === 'lg' ? 24 : 20));
@@ -112,6 +130,7 @@
 	aria-describedby={describedBy}
 	popovertarget={popoverTarget}
 	onclick={ariaDisabled ? undefined : onClick}
+	{@attach focusOnAppearing && takeFocus}
 >
 	{#if loading}
 		<span class="spinner" aria-hidden="true"></span>

@@ -91,13 +91,19 @@
 	let sentMessage = $state('');
 	const isComposeShown = $derived(!cannotSendReason && (composeOpener === undefined || isComposeOpen));
 
+	// #2103: Cancel hands focus back to the opener, drawn again once the
+	// form has gone. Only Cancel sets it: a send's status takes focus.
+	let isOpenerRefocused = $state(false);
+
 	function openCompose() {
 		sentMessage = '';
+		isOpenerRefocused = false;
 		isComposeOpen = true;
 	}
 
-	function closeCompose() {
+	function cancelCompose() {
 		submission.errors = [];
+		isOpenerRefocused = true;
 		isComposeOpen = false;
 	}
 
@@ -224,7 +230,9 @@
 	{/if}
 
 	{#if composeOpener !== undefined && !isComposeOpen && !cannotSendReason}
-		<div><Button label={composeOpener} variant="secondary" onClick={openCompose} /></div>
+		<div>
+			<Button label={composeOpener} variant="secondary" onClick={openCompose} focusOnAppearing={isOpenerRefocused} />
+		</div>
 	{/if}
 
 	{#if isComposeShown}
@@ -276,7 +284,7 @@
 			{:else}
 				<cluster-l space="var(--space-3)">
 					<Button type="submit" label="Send" loading={submission.isSubmitting} />
-					<Button label="Cancel" variant="secondary" onClick={closeCompose} />
+					<Button label="Cancel" variant="secondary" onClick={cancelCompose} />
 				</cluster-l>
 			{/if}
 		</StackedForm>

@@ -213,14 +213,20 @@
 	 * because the button pressed went with the form.
 	 */
 	let sentMessage = $state('');
+	// #2103: Cancel hands focus back to the opener, which is drawn again
+	// once the form has gone. Only Cancel sets it: a send's status takes
+	// focus instead.
+	let isOpenerRefocused = $state(false);
 
 	function openForm() {
 		sentMessage = '';
+		isOpenerRefocused = false;
 		isFormOpen = true;
 	}
 
-	function closeForm() {
+	function cancelForm() {
 		offerSubmission.errors = [];
+		isOpenerRefocused = true;
 		isFormOpen = false;
 	}
 
@@ -276,7 +282,9 @@
 	rows={offers}
 	rowActions={offers.some((offer) => isOpen(offer)) ? { label: 'Actions', content: offerActions } : undefined}
 	emptyMessage="Nobody has been offered this work yet."
-	emptyAction={isFormOpen ? undefined : { label: 'Offer this work', onClick: openForm }}
+	emptyAction={isFormOpen
+		? undefined
+		: { label: 'Offer this work', onClick: openForm, focusOnAppearing: isOpenerRefocused }}
 />
 
 {#if withdrawError}
@@ -288,7 +296,9 @@
 {/if}
 
 {#if offers.length > 0 && !isFormOpen}
-	<div><Button label="Offer this work" variant="secondary" onClick={openForm} /></div>
+	<div>
+		<Button label="Offer this work" variant="secondary" onClick={openForm} focusOnAppearing={isOpenerRefocused} />
+	</div>
 {/if}
 
 {#if isFormOpen}
@@ -426,7 +436,7 @@
 
 		<cluster-l space="var(--space-3)">
 			<Button label="Send Offer" type="submit" loading={offerSubmission.isSubmitting} />
-			<Button label="Cancel" variant="secondary" onClick={closeForm} />
+			<Button label="Cancel" variant="secondary" onClick={cancelForm} />
 		</cluster-l>
 	</StackedForm>
 {/if}
