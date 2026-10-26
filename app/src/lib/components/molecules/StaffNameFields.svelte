@@ -39,12 +39,14 @@
 	parent's stack (StackedForm, FormPage) spaces them like any other field
 	and a screen moves the pair by moving this one element.
 -->
-<LabeledField id={firstId} label="First name" error={firstError}>
-	{#snippet children({ id, describedBy, invalid })}
+<!-- GOV.UK's Names pattern sizes each name field at 20 characters (#1216). -->
+<LabeledField id={firstId} label="First name" error={firstError} width={20}>
+	{#snippet children({ id, describedBy, invalid, width })}
 		<TextInput
 			{id}
 			{describedBy}
 			{invalid}
+			{width}
 			value={firstName}
 			onInput={(value) => (firstName = value)}
 			required
@@ -52,12 +54,13 @@
 		/>
 	{/snippet}
 </LabeledField>
-<LabeledField id={lastId} label="Last name" error={lastError}>
-	{#snippet children({ id, describedBy, invalid })}
+<LabeledField id={lastId} label="Last name" error={lastError} width={20}>
+	{#snippet children({ id, describedBy, invalid, width })}
 		<TextInput
 			{id}
 			{describedBy}
 			{invalid}
+			{width}
 			value={lastName}
 			onInput={(value) => (lastName = value)}
 			required

@@ -78,12 +78,19 @@
 	{#if isSaved}
 		<Text text="Saved." />
 	{/if}
-	<LabeledField label="Birth rate (USD)" error={birthError}>
-		{#snippet children({ id, describedBy, invalid })}
+	<!--
+		A rate to the cent ("2500.00") is seven characters: GOV.UK's
+		10-character step, after a "$" that the label's "(USD)" says again
+		for a screen reader (#1216).
+	-->
+	<LabeledField label="Birth rate (USD)" error={birthError} width={10}>
+		{#snippet children({ id, describedBy, invalid, width })}
 			<TextInput
 				{id}
 				{describedBy}
 				{invalid}
+				{width}
+				prefix="$"
 				type="number"
 				step={0.01}
 				min={0.01}
@@ -92,12 +99,14 @@
 			/>
 		{/snippet}
 	</LabeledField>
-	<LabeledField label="Postpartum rate (USD)" error={postpartumError}>
-		{#snippet children({ id, describedBy, invalid })}
+	<LabeledField label="Postpartum rate (USD)" error={postpartumError} width={10}>
+		{#snippet children({ id, describedBy, invalid, width })}
 			<TextInput
 				{id}
 				{describedBy}
 				{invalid}
+				{width}
+				prefix="$"
 				type="number"
 				step={0.01}
 				min={0.01}

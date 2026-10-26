@@ -172,12 +172,14 @@
 			same line as its box, which is the defect #425 found and #475 walked
 			the pages to catch the rest of.
 		-->
-		<LabeledField id={quantityId} label="Quantity" error={purchaseSubmission.errorFor(quantityId)}>
-			{#snippet children({ id, describedBy, invalid })}
+		<!-- A count of credits, GOV.UK's 4-character step (#1216). -->
+		<LabeledField id={quantityId} label="Quantity" error={purchaseSubmission.errorFor(quantityId)} width={4}>
+			{#snippet children({ id, describedBy, invalid, width })}
 				<TextInput
 					{id}
 					{describedBy}
 					{invalid}
+					{width}
 					type="number"
 					inputmode="numeric"
 					min={1}

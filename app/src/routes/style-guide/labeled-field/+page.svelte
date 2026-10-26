@@ -5,6 +5,7 @@
 
 	let name = $state('');
 	let email = $state('');
+	let code = $state('123456');
 	let isAttestation = $state(false);
 </script>
 
@@ -43,6 +44,24 @@
 					value={email}
 					onInput={(value) => (email = value)}
 				/>
+			{/snippet}
+		</LabeledField>
+	</section>
+
+	<!--
+		The width is stated on the field and passed through to the control
+		(#1216); the label, the hint and the error keep the column.
+	-->
+	<section>
+		<h2>With a width</h2>
+		<LabeledField
+			label="Authenticator app code"
+			hint="The six-digit code your authenticator app shows now."
+			error="Enter the six-digit code from your authenticator app"
+			width={10}
+		>
+			{#snippet children({ id, describedBy, invalid, width })}
+				<TextInput {id} {describedBy} {invalid} {width} inputmode="numeric" value={code} onInput={(value) => (code = value)} />
 			{/snippet}
 		</LabeledField>
 	</section>

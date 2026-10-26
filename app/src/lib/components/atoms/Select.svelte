@@ -1,6 +1,7 @@
 <script lang="ts">
 	import type { HTMLSelectAttributes } from 'svelte/elements';
 	import type { LabeledValue } from '#lib/roles.js';
+	import type { InputWidth } from './TextInput.svelte';
 
 	interface Properties {
 		id?: string;
@@ -42,6 +43,13 @@
 		 * than a false "off".
 		 */
 		autocomplete?: HTMLSelectAttributes['autocomplete'];
+		/*
+		 * How many characters the longest option holds, on the scale
+		 * `TextInput` names and argues (#1216). A select narrower than its
+		 * longest option cuts the chosen answer off, so the count is the
+		 * longest label's, not a typical one's; unset is the whole column.
+		 */
+		width?: InputWidth;
 	}
 
 	const uid = $props.id();
@@ -57,7 +65,8 @@
 		invalid = false,
 		describedBy,
 		onChange,
-		autocomplete
+		autocomplete,
+		width
 	}: Properties = $props();
 
 	/* One shape for the markup below, so the `{#each}` has no branch of its
@@ -77,6 +86,8 @@
 	{autocomplete}
 	aria-invalid={invalid}
 	aria-describedby={describedBy}
+	class:sized={width !== undefined}
+	style:--input-chars={width}
 >
 	{#if placeholder}
 		<option value="" disabled>{placeholder}</option>
@@ -108,6 +119,14 @@
 			background-color: var(--color-surface);
 			border: var(--border-thin) solid var(--color-outline);
 			border-radius: var(--radius);
+		}
+
+		/* `TextInput`'s formula, plus room for the picker icon beside the
+		   text, so the longest option is not cut off by it. */
+		select.sized {
+			max-inline-size: calc(
+				(var(--input-chars) + 1) * 1ch + var(--space-6) + var(--space-5) + 2 * var(--border-thin)
+			);
 		}
 
 		select::picker(select) {

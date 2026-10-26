@@ -543,12 +543,16 @@
 				label="Days to pay"
 				hint="Applies to the next invoice raised. An invoice already raised keeps the terms it was billed under."
 				error={paymentTermsError || undefined}
+				width={3}
 			>
-				{#snippet children({ id, describedBy, invalid })}
+				<!-- Up to 365 days, so three characters (#1216); the label says "days" for a screen reader. -->
+				{#snippet children({ id, describedBy, invalid, width })}
 					<TextInput
 						{id}
 						{describedBy}
 						{invalid}
+						{width}
+						suffix="days"
 						type="number"
 						min={MIN_PAYMENT_TERMS_DAYS}
 						inputmode="numeric"

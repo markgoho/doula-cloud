@@ -1,8 +1,17 @@
 <script module lang="ts">
+	import type { InputWidth } from '#lib/components/atoms/TextInput.svelte';
+
 	export interface ControlProperties {
 		id: string;
 		describedBy: string | undefined;
 		invalid: boolean;
+		/*
+		 * This field's `width`, handed on for the control to take
+		 * (`<TextInput {width} />`). Stated on the field, beside its label
+		 * and hint, because what the answer holds is a fact about the
+		 * question; the control is what sizes to it (#1216).
+		 */
+		width: InputWidth | undefined;
 	}
 </script>
 
@@ -22,12 +31,18 @@
 		hint?: string;
 		error?: string;
 		orientation?: 'stacked' | 'inline';
+		/*
+		 * How many characters the answer holds, on the scale `TextInput`
+		 * names and argues. This component draws nothing with it: it is
+		 * passed through to the control (#1216).
+		 */
+		width?: InputWidth;
 		children: Snippet<[ControlProperties]>;
 	}
 
 	const generatedId = $props.id();
 
-	let { id = generatedId, label, hint, error, orientation = 'stacked', children }: Properties = $props();
+	let { id = generatedId, label, hint, error, orientation = 'stacked', width, children }: Properties = $props();
 
 	const errorId = $derived(`${id}-error`);
 	const hintId = $derived(`${id}-hint`);
@@ -44,7 +59,7 @@
 </script>
 
 {#snippet control()}
-	{@render children({ id, describedBy, invalid: isInvalid })}
+	{@render children({ id, describedBy, invalid: isInvalid, width })}
 {/snippet}
 
 {#snippet fieldLabel()}
@@ -89,6 +104,13 @@
 			intrinsic width and the label wraps in whatever is left, at any
 			width -- ADR-0024's rule 1, and ADR-0025's minimum-size note is why
 			the label's track is `minmax(0, 1fr)` rather than a bare `1fr`.
+
+			The `auto` track stays shrink-to-fit on purpose (#1216): it sizes
+			to the control rather than the other way round, which is right for
+			the checkbox and the toggle this row holds. A text input's 100%
+			base resolves against that intrinsic track, so an inline field is
+			at the control's own width, not the column's; a `width` passed
+			here is still a cap on it, never a stretch.
 		-->
 		<div class="inline-row">
 			{@render control()}

@@ -123,12 +123,16 @@
 			label="Week of pregnancy"
 			hint="37 is the usual answer: on call opens three weeks before the due date."
 			error={submission.errorFor(startWeekId)}
+			width={2}
 		>
-			{#snippet children({ id, describedBy, invalid })}
+			<!-- A week of pregnancy is two digits (#1216); the label says "week" for a screen reader. -->
+			{#snippet children({ id, describedBy, invalid, width })}
 				<TextInput
 					{id}
 					{describedBy}
 					{invalid}
+					{width}
+					suffix="weeks"
 					type="number"
 					inputmode="numeric"
 					value={startWeek}
@@ -141,12 +145,16 @@
 		label="Days on call after the due date"
 		hint="How long on call runs past the due date when no birth has been recorded yet. 14 covers a post-dates birth."
 		error={submission.errorFor(graceDaysId)}
+		width={2}
 	>
-		{#snippet children({ id, describedBy, invalid })}
+		<!-- At most 42 days (the API's maxGraceDays), so two digits (#1216). -->
+		{#snippet children({ id, describedBy, invalid, width })}
 			<TextInput
 				{id}
 				{describedBy}
 				{invalid}
+				{width}
+				suffix="days"
 				type="number"
 				inputmode="numeric"
 				value={graceDays}

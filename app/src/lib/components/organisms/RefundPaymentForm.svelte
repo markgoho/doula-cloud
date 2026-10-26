@@ -201,12 +201,16 @@
 				label="Amount to return (USD)"
 				hint="Up to {formatAmount(remainingCents)} is left to return on this payment."
 				error={amountError || undefined}
+				width={10}
 			>
-				{#snippet children({ id, describedBy, invalid })}
+				<!-- Money to the cent, the same width and "$" as the Practice rates (#1216). -->
+				{#snippet children({ id, describedBy, invalid, width })}
 					<TextInput
 						{id}
 						{describedBy}
 						{invalid}
+						{width}
+						prefix="$"
 						type="number"
 						step={0.01}
 						inputmode="decimal"

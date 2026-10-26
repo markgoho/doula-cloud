@@ -42,12 +42,15 @@
 	{error}
 	label="Which state do you work from?"
 	hint="Sales tax on your practice's credits is worked out from where its team works — so this needs to be right, and needs updating if you move. We only need the state, not your address."
+	width={20}
 >
-	{#snippet children({ id: controlId, describedBy, invalid })}
+	<!-- 20 characters: the longest of the 51 names, "District of Columbia", and the placeholder (#1216). -->
+	{#snippet children({ id: controlId, describedBy, invalid, width })}
 		<Select
 			id={controlId}
 			{describedBy}
 			{invalid}
+			{width}
 			options={[...WORK_STATE_NAMES]}
 			placeholder="Choose a state"
 			bind:value
