@@ -562,6 +562,53 @@ func TestPutInstanceHandler_RecordsWhichPlanChanged(t *testing.T) {
 	}
 }
 
+// TestInstance_LastEdited is #2104: a Plan that has never been saved says
+// no edit, a save's own response names when and by whom, and a read of
+// the other Plan does not borrow this one's edit.
+func TestInstance_LastEdited(t *testing.T) {
+	db := testdb.New(t)
+	const uid = "instance-last-edited"
+	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
+	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
+	const fields = `[{"id":"name","type":"short_text","label":"Name","order":0}]`
+	seedInstance(t, db, engagementID, carePlanType, fields, `{}`)
+	seedInstance(t, db, engagementID, birthPlanType, fields, `{}`)
+
+	srv, session := newPlanServer(t, db, uid)
+	defer srv.Close()
+
+	read := func(resp *http.Response) plans.InstanceResponse {
+		t.Helper()
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
+		}
+		var out plans.InstanceResponse
+		if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+			t.Fatalf("decode: %v", err)
+		}
+		return out
+	}
+
+	if started := read(getInstance(t, srv, session, practiceID, engagementID, carePlanType)); started.LastEdited != nil {
+		t.Fatalf("a Plan never saved: lastEdited = %+v, want none", started.LastEdited)
+	}
+
+	saved := read(putInstance(t, srv, session, practiceID, engagementID, carePlanType, plans.PutInstanceRequest{
+		Answers: plans.Answers{nameFieldID: jamieAnswer},
+	}))
+	if saved.LastEdited == nil || saved.LastEdited.By != "Test Staff "+uid || saved.LastEdited.At.IsZero() {
+		t.Fatalf("the save's response: lastEdited = %+v, want its instant, by the Staff member who saved", saved.LastEdited)
+	}
+
+	if again := read(getInstance(t, srv, session, practiceID, engagementID, carePlanType)); again.LastEdited == nil || !again.LastEdited.At.Equal(saved.LastEdited.At) {
+		t.Errorf("GET after the save: lastEdited = %+v, want the save's", again.LastEdited)
+	}
+	if other := read(getInstance(t, srv, session, practiceID, engagementID, birthPlanType)); other.LastEdited != nil {
+		t.Errorf("the Birth Plan: lastEdited = %+v, want none -- only the Care Plan was saved", other.LastEdited)
+	}
+}
+
 // TestPlanTemplateEditDoesNotMutateExistingInstance is the AC's centerpiece:
 // editing a Practice's Plan Template after a Plan Instance already exists
 // must never change that instance's stored field snapshot.
