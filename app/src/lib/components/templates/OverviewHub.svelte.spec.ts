@@ -98,19 +98,33 @@ describe('OverviewHub.svelte', () => {
 		await expect.element(page.getByText('Six open Offers')).toBeVisible();
 	});
 
-	// #486: the Recent-activity feed sits low on the page, below the
-	// primary/secondary split -- not inside `secondary`'s own narrow rail,
-	// which is why this gets its own prop rather than becoming one more
-	// block a route appends to `secondary`.
-	it('renders the feed region when given, alongside primary and secondary', async () => {
+	// #486: the Recent-activity feed sits low on the page -- not inside
+	// `secondary`'s own narrow rail, which is why this gets its own prop
+	// rather than becoming one more block a route appends to `secondary`.
+	// #2063: last in the primary column, so it starts under that column's
+	// last card and not under the whole split, where a long rail set it.
+	it('renders the feed last in the primary column, outside the rail', async () => {
 		await setup({
 			secondary: textSnippet('Two doulas unassigned'),
 			feed: textSnippet('Mark Goho sent the invoice')
 		});
 
-		await expect.element(page.getByText('Six open Offers')).toBeVisible();
+		const primary = page.getByText('Six open Offers');
+		const feed = page.getByText('Mark Goho sent the invoice');
+		await expect.element(primary).toBeVisible();
 		await expect.element(page.getByText('Two doulas unassigned')).toBeVisible();
-		await expect.element(page.getByText('Mark Goho sent the invoice')).toBeVisible();
+		await expect.element(feed).toBeVisible();
+		await expect.element(page.getByRole('complementary').getByText('Mark Goho sent the invoice')).not.toBeInTheDocument();
+		expect(feed.element().parentElement).toBe(primary.element().parentElement);
+		expect(primary.element().nextElementSibling).toBe(feed.element());
+	});
+
+	it('renders the feed last in the primary column when there is no rail', async () => {
+		await setup({ feed: textSnippet('Mark Goho sent the invoice') });
+
+		expect(page.getByText('Six open Offers').element().nextElementSibling).toBe(
+			page.getByText('Mark Goho sent the invoice').element()
+		);
 	});
 
 	it('renders no feed region when empty, whatever was passed', async () => {

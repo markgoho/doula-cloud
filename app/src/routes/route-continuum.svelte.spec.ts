@@ -507,7 +507,7 @@ function toRouteFloorKey(condition: Condition): string {
  * criterion (`floor.ts`'s `measureTableFit`), so the entry names the
  * table rather than a criterion. Since #1981 the tables whose typical
  * screen fits under `DataTable`'s own 55rem keep that floor and are not
- * here: both activity ledgers, a Client's history, both Contracts tables,
+ * here: the activity ledgers other than the hub's, a Client's history, both Contracts tables,
  * Engagement Requests, the schedule, Blocked email addresses and Pending
  * invitations. Since #2022 the Clients list is one of them: its cells were
  * cut to Name and a Status of badges, and its typical screen fits.
@@ -515,6 +515,10 @@ function toRouteFloorKey(condition: Condition): string {
 const ROUTE_FLOORS: Readonly<Record<string, string>> = {
 	'(person)/feedback#unopened-table': 'Issue not opened',
 	'(person)/feedback#feedback-table': 'All feedback',
+	// The hub's two tables floor LOWER than 55rem (#2063): both sit in its
+	// primary column, which is narrower than that at a laptop's window.
+	'practices/[practiceId]#activity-table': 'Recent activity',
+	'practices/[practiceId]#waiting-table': 'Clients waiting on a reply',
 	'practices/[practiceId]/engagements/[engagementId]#visits-table': 'Visits',
 	'practices/[practiceId]/invoices#invoices-table': 'The invoice list',
 	'practices/[practiceId]/on-call#roster-table': 'The on-call roster',
