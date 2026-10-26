@@ -2643,8 +2643,11 @@
 	{#if activityError}
 		<Notice variant="error" message={activityError} />
 	{/if}
+	<!-- #2098: the What sentence is the one column that wraps, beside When
+	     and Who on one line each, so the ledger stays a table at a laptop's
+	     window instead of sizing itself to its longest sentence. -->
 	<DataTable
-		columns={activityLedgerColumns()}
+		columns={activityLedgerColumns(undefined, { whatWraps: true })}
 		rows={activity.items}
 		hasMore={activity.hasMore}
 		onLoadMore={() => activity.loadMore()}

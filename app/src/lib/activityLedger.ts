@@ -192,6 +192,20 @@ interface LedgerColumn {
 	accessor: (row: ActivityEntry) => string;
 	variant: 'meta' | 'body' | 'muted';
 	datetimeAccessor?: (row: ActivityEntry) => string;
+	wraps?: boolean;
+}
+
+/**
+ * How one ledger lays out its What column (#2098). `whatWraps` makes it
+ * DataTable's one wrapping column (#2091): the sentence takes the room
+ * When and Who leave and wraps there, so the table's floor is those two
+ * facts beside the sentence's longest word, not its longest line. It is
+ * the caller's choice rather than every ledger's because a route that
+ * sets its own floor for this table measured that floor with the column
+ * unwrapped (the hub's, #2063), and a wrapping column moves it.
+ */
+interface LedgerLayout {
+	whatWraps?: boolean;
 }
 
 /**
@@ -216,7 +230,8 @@ interface LedgerColumn {
  * module.
  */
 export function activityLedgerColumns(
-	describeEvent: (row: ActivityEntry) => string = staffEventText
+	describeEvent: (row: ActivityEntry) => string = staffEventText,
+	{ whatWraps = false }: LedgerLayout = {}
 ): LedgerColumn[] {
 	return [
 		{
@@ -225,7 +240,7 @@ export function activityLedgerColumns(
 			variant: 'meta',
 			datetimeAccessor: (row) => row.createdAt
 		},
-		{ label: 'What', accessor: describeEvent, variant: 'body' },
+		{ label: 'What', accessor: describeEvent, variant: 'body', wraps: whatWraps },
 		{ label: 'Who', accessor: (row) => row.actorName, variant: 'muted' }
 	];
 }

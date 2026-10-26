@@ -527,7 +527,9 @@ function toRouteFloorKey(condition: Condition): string {
  * invitations. Since #2022 the Clients list is one of them: its cells were
  * cut to Name and a Status of badges, and its typical screen fits. Since
  * #2091 the Visits on an Engagement are too: their Notes column wraps, so
- * the table's floor is its facts beside a note's longest word.
+ * the table's floor is its facts beside a note's longest word. Since
+ * #2098 the Engagement's Activity ledger and both histories on a Staff
+ * member's page wrap their What column the same way.
  */
 const ROUTE_FLOORS: Readonly<Record<string, string>> = {
 	'(person)/feedback#unopened-table': 'Issue not opened',
