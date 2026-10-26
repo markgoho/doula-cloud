@@ -102,7 +102,7 @@ describe('one piece of Feedback (#1526)', () => {
 			.element(testPage.getByText(`The last attempt said: ${unopenedClientPiece.issue.lastError}`))
 			.toBeVisible();
 		await expect
-			.element(testPage.getByRole('definition').filter({ hasText: 'A Client, named by her sign-in address' }))
+			.element(testPage.getByRole('definition').filter({ hasText: 'A Client, named by the sign-in address' }))
 			.toBeVisible();
 		await expect
 			.element(testPage.getByRole('definition').filter({ hasText: 'None: sent from a screen outside any Practice' }))

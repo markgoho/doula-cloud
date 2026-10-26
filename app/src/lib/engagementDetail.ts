@@ -177,10 +177,10 @@ export async function attachSelf(fetcher: Fetcher, reference: EngagementReferenc
  * order the hub's radio group offers them. */
 export const endingReasons: { value: string; label: string }[] = [
 	{ value: 'care_complete', label: 'The work finished as agreed' },
-	{ value: 'client_withdrew', label: 'She stopped, for her own reasons' },
+	{ value: 'client_withdrew', label: 'The Client chose to stop' },
 	{ value: 'practice_ended', label: 'The Practice ended it' },
-	{ value: 'transferred', label: 'She moved to another provider' },
-	{ value: 'no_response', label: 'She stopped answering' },
+	{ value: 'transferred', label: 'The Client moved to another provider' },
+	{ value: 'no_response', label: 'The Client stopped answering' },
 	{ value: 'entered_in_error', label: 'This Engagement should never have existed' }
 ];
 

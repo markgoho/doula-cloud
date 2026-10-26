@@ -479,10 +479,23 @@ describe('visitAssigneeOptions', () => {
 
 describe('unnameableHint', () => {
 	it('explains the marker, and says nothing when nobody carries it', () => {
-		expect(unnameableHint([nameableEmployee, unattachedContractor])).toContain(
-			'Send her an Offer, then name her on a Visit'
-		);
 		expect(unnameableHint([nameableEmployee])).toBe('');
+	});
+
+	// #2092: the brief's Voice rules 1 and 2 -- a known name by its first
+	// word, never a pronoun.
+	it('names the one person who carries the marker by first name', () => {
+		expect(unnameableHint([nameableEmployee, unattachedContractor])).toBe(
+			'Maya Oyelaran-Fitzgerald is marked "cannot be named yet": a contractor who has not accepted an Offer on this Engagement. Send Maya an Offer, then name Maya on a Visit.'
+		);
+	});
+
+	it('speaks of several who carry the marker by the domain noun', () => {
+		const second = { ...unattachedContractor, staffId: 'staff-3', name: 'Trish Halvorsen' };
+
+		expect(unnameableHint([nameableEmployee, unattachedContractor, second])).toBe(
+			'Somebody marked "cannot be named yet" is a contractor who has not accepted an Offer on this Engagement. Send an Offer, then name that doula on a Visit.'
+		);
 	});
 });
 
@@ -493,7 +506,7 @@ describe('assigneeBlock', () => {
 	// error says what is wrong and what to do about it.
 	it('refuses a person this Engagement cannot admit, naming the remedy', () => {
 		expect(assigneeBlock(assignees, 'staff-2')).toBe(
-			'Maya Oyelaran-Fitzgerald is a contractor who has not accepted an Offer on this Engagement, so she cannot be named on a Visit here yet. Send her an Offer, then name her.'
+			'Maya Oyelaran-Fitzgerald is a contractor who has not accepted an Offer on this Engagement, so cannot be named on a Visit here yet. Send Maya an Offer, then name Maya.'
 		);
 	});
 

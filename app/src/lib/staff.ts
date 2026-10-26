@@ -416,11 +416,20 @@ export const CONTRACTOR_WITHOUT_ACCEPTED_OFFER = 'contractor_without_accepted_of
  * reason the BFF grows before this map catches up still blocks the
  * choice and still says she cannot be named, rather than throwing the
  * screen away over a word. */
-function unnameableClause(reason: string | undefined): string {
+function unnameableClause(reason: string | undefined, name: string): string {
 	if (reason === CONTRACTOR_WITHOUT_ACCEPTED_OFFER) {
-		return 'is a contractor who has not accepted an Offer on this Engagement, so she cannot be named on a Visit here yet. Send her an Offer, then name her.';
+		const first = firstName(name);
+		return `is a contractor who has not accepted an Offer on this Engagement, so cannot be named on a Visit here yet. Send ${first} an Offer, then name ${first}.`;
 	}
 	return 'cannot be named on a Visit on this Engagement yet.';
+}
+
+/** The name copy calls a person by once the screen knows who it is
+ * (the brief's Voice rule 2, #2092): the first word of the name on
+ * record, or the whole of it when it is one word. `split` always gives
+ * back at least one element, so `[0]` is always there. */
+function firstName(name: string): string {
+	return name.trim().split(/\s+/, 1)[0]!;
 }
 
 /** The short marker carried in the option's own text. Text, not color and
@@ -460,10 +469,19 @@ export function visitAssigneeOptions(
  * cannot be named: what the marker in those labels means, before a
  * reader has to choose one to find out. The empty string when everybody
  * listed can be named, so the field is not carrying an explanation of a
- * state nobody is in. */
+ * state nobody is in.
+ *
+ * One such person is named, by first name (#2092); several are spoken of
+ * by the domain noun, because no one name fits them all. */
 export function unnameableHint(assignees: readonly VisitAssignee[]): string {
-	if (assignees.every((assignee) => assignee.nameable)) return '';
-	return `Somebody marked "${UNNAMEABLE_MARKER}" is a contractor who has not accepted an Offer on this Engagement. Send her an Offer, then name her on a Visit.`;
+	const unnameable = assignees.filter((assignee) => !assignee.nameable);
+	if (unnameable.length === 0) return '';
+	if (unnameable.length === 1) {
+		const { name } = unnameable[0]!;
+		const first = firstName(name);
+		return `${name} is marked "${UNNAMEABLE_MARKER}": a contractor who has not accepted an Offer on this Engagement. Send ${first} an Offer, then name ${first} on a Visit.`;
+	}
+	return `Somebody marked "${UNNAMEABLE_MARKER}" is a contractor who has not accepted an Offer on this Engagement. Send an Offer, then name that doula on a Visit.`;
 }
 
 /**
@@ -482,7 +500,7 @@ export function unnameableHint(assignees: readonly VisitAssignee[]): string {
 export function assigneeBlock(assignees: readonly VisitAssignee[], staffId: string): string {
 	const chosen = assignees.find((assignee) => assignee.staffId === staffId);
 	if (!chosen || chosen.nameable) return '';
-	return `${chosen.name} ${unnameableClause(chosen.reason)}`;
+	return `${chosen.name} ${unnameableClause(chosen.reason, chosen.name)}`;
 }
 
 /** Loads who may be named on a Visit at one Engagement: every Doula on

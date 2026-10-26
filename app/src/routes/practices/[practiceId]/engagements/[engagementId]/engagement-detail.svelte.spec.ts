@@ -2058,7 +2058,7 @@ describe('who can be named on a Visit at this Engagement (#911)', () => {
 		await openAddVisit();
 
 		await expect
-			.element(testPage.getByText(/Send her an Offer, then name her on a Visit/).first())
+			.element(testPage.getByText(/an Offer, then name .+ on a Visit/).first())
 			.toBeVisible();
 	});
 
