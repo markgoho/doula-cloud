@@ -33,7 +33,7 @@
 	import { editClient, type ClientMatch } from '#lib/client.js';
 	import { displayName } from '#lib/clientDetail.js';
 	import { formatCalendarDay } from '#lib/dates.js';
-	import DescriptionList from '#lib/components/molecules/DescriptionList.svelte';
+	import SummaryList from '#lib/components/molecules/SummaryList.svelte';
 	import ErrorSummary from '#lib/components/molecules/ErrorSummary.svelte';
 	import RadioGroup from '#lib/components/molecules/RadioGroup.svelte';
 	import QuestionPage from '#lib/components/templates/QuestionPage.svelte';
@@ -187,8 +187,8 @@
 		errorSummary={submission.errors.length > 0 ? errorSummary : undefined}
 	>
 		{#snippet content()}
-			<DescriptionList
-				items={changes.map((change) => ({
+			<SummaryList
+				rows={changes.map((change) => ({
 					label: change.label,
 					value: `${change.before} → ${change.after}`
 				}))}

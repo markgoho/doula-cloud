@@ -149,7 +149,7 @@ describe('Client portal Engagement hub', () => {
 
 	// ADR-0017: a postpartum-only Engagement has no due date. #505 asks for
 	// nothing to show, not a blank row and not a placeholder -- the row is
-	// left out of the DescriptionList's own items entirely, so there is no
+	// left out of the SummaryList's own rows entirely, so there is no
 	// "Due date" label sitting over an empty value. Not the happy path --
 	// the fixture's own detail has a due date (see the previous test) --
 	// so this is a departure from it, spread rather than restated.

@@ -161,7 +161,7 @@ describe('what a Credit costs (#285)', () => {
 
 		// exact: true, not a plain substring match -- #256's intro sentence
 		// ("One Credit costs $20.00.") also contains "$20.00", and this
-		// test means the DescriptionList's own Price per Credit value.
+		// test means the SummaryList's own Price per Credit value.
 		await expect.element(testPage.getByText('$20.00', { exact: true })).toBeVisible();
 		await expect.element(testPage.getByText('$100.00')).toBeVisible();
 		await expect

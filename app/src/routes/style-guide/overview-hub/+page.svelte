@@ -22,7 +22,7 @@
 	import Button from '#lib/components/atoms/Button.svelte';
 	import DataTable from '#lib/components/organisms/DataTable.svelte';
 	import DoorLink from '#lib/components/atoms/DoorLink.svelte';
-	import DescriptionList from '#lib/components/molecules/DescriptionList.svelte';
+	import SummaryList from '#lib/components/molecules/SummaryList.svelte';
 	import Heading from '#lib/components/atoms/Heading.svelte';
 	import Text from '#lib/components/atoms/Text.svelte';
 
@@ -98,7 +98,7 @@
 	<section>
 		<stack-l space="var(--space-4)">
 			<Heading level={2} variant="card" text="Roster" />
-			<DescriptionList items={rosterItems} />
+			<SummaryList rows={rosterItems} />
 		</stack-l>
 	</section>
 

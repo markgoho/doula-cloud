@@ -37,7 +37,7 @@
 	} from '#lib/clientRegister.js';
 	import { formatMoney } from '#lib/money.js';
 	import Link from '#lib/components/atoms/Link.svelte';
-	import DescriptionList from '#lib/components/molecules/DescriptionList.svelte';
+	import SummaryList from '#lib/components/molecules/SummaryList.svelte';
 	import DataTable from '#lib/components/organisms/DataTable.svelte';
 	import Notice from '#lib/components/atoms/Notice.svelte';
 	import RecordDetail from '#lib/components/templates/RecordDetail.svelte';
@@ -136,7 +136,7 @@
 {#snippet summary()}
 	{@const items = summaryItems(detail!)}
 	{#if items.length > 0}
-		<DescriptionList {items} />
+		<SummaryList rows={items} />
 	{/if}
 	<!--
 		#983: the hub keeps one line for money -- the amount and a way

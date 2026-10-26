@@ -7,7 +7,7 @@
 	import { isOwnerOrAdmin } from '#lib/roles.js';
 	import type { PracticeSession } from '../../+layout.js';
 	import TimezoneField from '#lib/components/molecules/TimezoneField.svelte';
-	import DescriptionList from '#lib/components/molecules/DescriptionList.svelte';
+	import SummaryList from '#lib/components/molecules/SummaryList.svelte';
 	import ErrorSummary from '#lib/components/molecules/ErrorSummary.svelte';
 	import Text from '#lib/components/atoms/Text.svelte';
 	import Notice from '#lib/components/atoms/Notice.svelte';
@@ -90,7 +90,7 @@
 {/snippet}
 
 {#snippet readOnlyFields()}
-	<DescriptionList items={[{ label: 'Timezone', value: timezoneLabel }]} />
+	<SummaryList rows={[{ label: 'Timezone', value: timezoneLabel }]} />
 	<Text text={TIMEZONE_HINT} />
 	<!-- The payments screen's shape for a fact she can see but not change
 	     (#267): a plain sentence naming who holds it, not the BFF's 403. -->

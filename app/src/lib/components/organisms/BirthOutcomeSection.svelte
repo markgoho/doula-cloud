@@ -53,7 +53,7 @@
 	import Notice from '#lib/components/atoms/Notice.svelte';
 	import ConfirmDialog from '#lib/components/molecules/ConfirmDialog.svelte';
 	import DateFields from '#lib/components/molecules/DateFields.svelte';
-	import DescriptionList from '#lib/components/molecules/DescriptionList.svelte';
+	import SummaryList from '#lib/components/molecules/SummaryList.svelte';
 	import ErrorSummary from '#lib/components/molecules/ErrorSummary.svelte';
 	import RadioGroup from '#lib/components/molecules/RadioGroup.svelte';
 	import StackedForm from '#lib/components/molecules/StackedForm.svelte';
@@ -256,7 +256,7 @@
 			text="Nothing recorded yet. Record this once the Practice knows what happened — it does not wait for the care to end."
 		/>
 	{:else}
-		<DescriptionList items={recordedItems(outcome, endedOn)} />
+		<SummaryList rows={recordedItems(outcome, endedOn)} />
 	{/if}
 
 	<!--

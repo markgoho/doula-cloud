@@ -42,7 +42,7 @@
 	import OverviewHub from '#lib/components/templates/OverviewHub.svelte';
 	import SecondFactorRecommendation from '#lib/components/molecules/SecondFactorRecommendation.svelte';
 	import DataTable from '#lib/components/organisms/DataTable.svelte';
-	import DescriptionList from '#lib/components/molecules/DescriptionList.svelte';
+	import SummaryList from '#lib/components/molecules/SummaryList.svelte';
 	import Badge from '#lib/components/atoms/Badge.svelte';
 	import Heading from '#lib/components/atoms/Heading.svelte';
 	import Link from '#lib/components/atoms/Link.svelte';
@@ -300,8 +300,8 @@
 			{#if landing!.roster === 'unavailable'}
 				<Text text="Could not load the roster just now." tone="muted" />
 			{:else if landing!.roster}
-				<DescriptionList
-					items={[
+				<SummaryList
+					rows={[
 						{ label: 'Members', value: String(landing!.roster.members) },
 						{ label: 'Invitations pending', value: String(landing!.roster.pendingInvitations) }
 					]}
@@ -370,7 +370,7 @@
 			{#if landing!.credit === 'unavailable'}
 				<Text text="Could not load your credit balance just now." tone="muted" />
 			{:else if landing!.credit}
-				<DescriptionList items={[{ label: 'Balance', value: String(landing!.credit.balance) }]} />
+				<SummaryList rows={[{ label: 'Balance', value: String(landing!.credit.balance) }]} />
 				<Link
 					href={resolve('/practices/[practiceId]/billing', { practiceId: page.params.practiceId! })}
 					label="Buy credits"

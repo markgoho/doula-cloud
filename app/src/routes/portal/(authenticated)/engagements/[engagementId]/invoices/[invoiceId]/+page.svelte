@@ -17,7 +17,7 @@
 	import { loadClientPayment, type ClientPayment } from '#lib/clientPayment.js';
 	import { formatMoney } from '#lib/money.js';
 	import { byHandPaymentNotice, INVOICES_HEADING } from '#lib/clientRegister.js';
-	import DescriptionList from '#lib/components/molecules/DescriptionList.svelte';
+	import SummaryList from '#lib/components/molecules/SummaryList.svelte';
 	import Notice from '#lib/components/atoms/Notice.svelte';
 	import Text from '#lib/components/atoms/Text.svelte';
 	import DocumentPage from '#lib/components/templates/DocumentPage.svelte';
@@ -69,7 +69,7 @@
 		<!-- `content` renders only once the Template's own states are past,
 		     so `invoice` is a loaded Invoice here. -->
 		{#if invoice}
-			<DescriptionList items={invoiceFacts(invoice)} />
+			<SummaryList rows={invoiceFacts(invoice)} />
 			{#if invoice.status === 'open'}
 				{#if invoice.billingMode === 'stripe'}
 					<!--

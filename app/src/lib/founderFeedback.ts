@@ -134,7 +134,7 @@ export function formatSentAt(value: string): string {
 }
 
 /**
- * Every stored field of a piece but its free text, as `DescriptionList`
+ * Every stored field of a piece but its free text, as `SummaryList`
  * rows (#1526's own AC). The text is the sender's own words and the page
  * prints it on its own; the issue has its own section, because it can
  * carry a link and a list row cannot.

@@ -110,7 +110,6 @@
 	import Link from '#lib/components/atoms/Link.svelte';
 	import Button from '#lib/components/atoms/Button.svelte';
 	import Notice from '#lib/components/atoms/Notice.svelte';
-	import DescriptionList from '#lib/components/molecules/DescriptionList.svelte';
 	import SummaryList, { type SummaryListRow } from '#lib/components/molecules/SummaryList.svelte';
 	import RadioGroup from '#lib/components/molecules/RadioGroup.svelte';
 	import ErrorSummary from '#lib/components/molecules/ErrorSummary.svelte';
@@ -1985,7 +1984,7 @@
 		it only to the person whose fee it is, so this reads nothing else.
 	-->
 	{#if data.yourFee}
-		<DescriptionList items={[{ label: 'Your fee', value: yourFeeValue(data.yourFee) }]} />
+		<SummaryList rows={[{ label: 'Your fee', value: yourFeeValue(data.yourFee) }]} />
 	{/if}
 	{#if contractError}
 		<Notice variant="error" message={contractError} />

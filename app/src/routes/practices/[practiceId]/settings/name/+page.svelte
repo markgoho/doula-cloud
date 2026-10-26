@@ -22,7 +22,7 @@
 	import { FormSubmission, type FormError } from '#lib/formSubmission.svelte.js';
 	import type { PracticeSession } from '../../+layout.js';
 	import LabeledField from '#lib/components/molecules/LabeledField.svelte';
-	import DescriptionList from '#lib/components/molecules/DescriptionList.svelte';
+	import SummaryList from '#lib/components/molecules/SummaryList.svelte';
 	import ErrorSummary from '#lib/components/molecules/ErrorSummary.svelte';
 	import TextInput from '#lib/components/atoms/TextInput.svelte';
 	import Text from '#lib/components/atoms/Text.svelte';
@@ -69,7 +69,7 @@
 {/snippet}
 
 {#snippet readOnlyFields()}
-	<DescriptionList items={[{ label: 'Practice name', value: session.practiceName }]} />
+	<SummaryList rows={[{ label: 'Practice name', value: session.practiceName }]} />
 	<Notice variant="status" message="Only a Practice Owner can change the Practice name." />
 {/snippet}
 

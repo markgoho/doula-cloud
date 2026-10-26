@@ -3,8 +3,8 @@
 	import Badge from '#lib/components/atoms/Badge.svelte';
 	import Button from '#lib/components/atoms/Button.svelte';
 	import DataTable from '#lib/components/organisms/DataTable.svelte';
-	import DescriptionList from '#lib/components/molecules/DescriptionList.svelte';
 	import EmptyState from '#lib/components/molecules/EmptyState.svelte';
+	import SummaryList from '#lib/components/molecules/SummaryList.svelte';
 	import Text from '#lib/components/atoms/Text.svelte';
 
 	interface Visit {
@@ -49,7 +49,7 @@
 </script>
 
 {#snippet summary()}
-	<DescriptionList items={summaryItems} />
+	<SummaryList rows={summaryItems} />
 {/snippet}
 
 {#snippet actions()}
@@ -63,8 +63,8 @@
 {/snippet}
 
 {#snippet birthPlanSection()}
-	<DescriptionList
-		items={[
+	<SummaryList
+		rows={[
 			{
 				label: 'Pain relief',
 				value: 'Wants to try without an epidural, and to be asked rather than offered'

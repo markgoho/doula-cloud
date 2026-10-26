@@ -22,8 +22,8 @@
 	import { formatActivityTimestamp, formatInstant } from '#lib/dates.js';
 	import { takeOutcome } from '#lib/outcome.js';
 	import RecordDetail from '#lib/components/templates/RecordDetail.svelte';
-	import DescriptionList from '#lib/components/molecules/DescriptionList.svelte';
 	import EmptyState from '#lib/components/molecules/EmptyState.svelte';
+	import SummaryList from '#lib/components/molecules/SummaryList.svelte';
 	import DataTable from '#lib/components/organisms/DataTable.svelte';
 	import Button from '#lib/components/atoms/Button.svelte';
 	import ConfirmDialog from '#lib/components/molecules/ConfirmDialog.svelte';
@@ -435,8 +435,8 @@
 {/snippet}
 
 {#snippet whoSection()}
-	<DescriptionList
-		items={[
+	<SummaryList
+		rows={[
 			{ label: 'Given name', value: detail!.givenName },
 			{ label: 'Family name', value: detail!.familyName || '—' },
 			{ label: 'Preferred name', value: detail!.preferredName || '—' },
@@ -446,8 +446,8 @@
 {/snippet}
 
 {#snippet contactSection()}
-	<DescriptionList
-		items={[
+	<SummaryList
+		rows={[
 			{ label: 'Email', value: detail!.email || '—' },
 			{ label: 'Phone', value: detail!.phone || '—' }
 		]}
@@ -455,8 +455,8 @@
 {/snippet}
 
 {#snippet addressSection()}
-	<DescriptionList
-		items={[
+	<SummaryList
+		rows={[
 			{
 				label: 'Address',
 				value:
@@ -495,8 +495,8 @@
 				{#if field.type === 'section_header'}
 					<Heading level={3} variant="card" text={field.label} />
 				{:else}
-					<DescriptionList
-						items={[
+					<SummaryList
+						rows={[
 							{
 								label: field.label,
 								value: field.note ? `${resolvedFieldValueText(field) || '—'} (${field.note})` : resolvedFieldValueText(field) || '—'

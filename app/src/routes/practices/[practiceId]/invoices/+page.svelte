@@ -6,7 +6,7 @@
 	 *
 	 * This page composes existing components only and writes no CSS of its
 	 * own: the frame is `ListPage`'s (#1576), the totals are a
-	 * `DescriptionList`, the book is a `DataTable`, and each already adapts
+	 * `SummaryList`, the book is a `DataTable`, and each already adapts
 	 * to the space it is given. That is also what keeps it inside
 	 * CLAUDE.md's no-new-components block.
 	 */
@@ -26,7 +26,7 @@
 	import Link from '#lib/components/atoms/Link.svelte';
 	import { PaginatedList } from '#lib/paginatedList.svelte.js';
 	import DataTable from '#lib/components/organisms/DataTable.svelte';
-	import DescriptionList from '#lib/components/molecules/DescriptionList.svelte';
+	import SummaryList from '#lib/components/molecules/SummaryList.svelte';
 	import Notice from '#lib/components/atoms/Notice.svelte';
 	import Text from '#lib/components/atoms/Text.svelte';
 	import ListPage from '#lib/components/templates/ListPage.svelte';
@@ -156,7 +156,7 @@
 		back to the whole book.
 	-->
 	{#if !isBookEmpty}
-		<DescriptionList items={summary} />
+		<SummaryList rows={summary} />
 
 		<!-- One cluster, so the two filters sit side by side as one control
 		     rather than as two rows of ListPage's stack. -->

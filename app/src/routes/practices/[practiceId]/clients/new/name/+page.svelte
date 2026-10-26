@@ -34,7 +34,7 @@
 	import Button from '#lib/components/atoms/Button.svelte';
 	import Text from '#lib/components/atoms/Text.svelte';
 	import TextInput from '#lib/components/atoms/TextInput.svelte';
-	import DescriptionList from '#lib/components/molecules/DescriptionList.svelte';
+	import SummaryList from '#lib/components/molecules/SummaryList.svelte';
 	import ErrorSummary from '#lib/components/molecules/ErrorSummary.svelte';
 	import LabeledField from '#lib/components/molecules/LabeledField.svelte';
 	import QuestionPage from '#lib/components/templates/QuestionPage.svelte';
@@ -144,7 +144,7 @@
 				{#if carriedAnswers.length > 0}
 					<stack-l space="var(--space-2)">
 						<Text text="From your search, also saved with the name:" />
-						<DescriptionList items={carriedAnswers} />
+						<SummaryList rows={carriedAnswers} />
 					</stack-l>
 				{/if}
 			</stack-l>

@@ -31,6 +31,7 @@
 	import LabeledField from '#lib/components/molecules/LabeledField.svelte';
 	import StackedForm from '#lib/components/molecules/StackedForm.svelte';
 	import ConfirmDialog from '#lib/components/molecules/ConfirmDialog.svelte';
+	import SummaryList, { type SummaryListRow } from '#lib/components/molecules/SummaryList.svelte';
 	import EntryPage from '#lib/components/templates/EntryPage.svelte';
 
 	const codeId = 'offer-access-code';
@@ -50,6 +51,29 @@
 	 */
 	let declineError = $state('');
 	let isDeclineDialogOpen = $state(false);
+
+	/*
+	 * The Offer's facts, through `SummaryList` (#2021). #230: she opens
+	 * the link in March and gets a closed offer, not the Client's due
+	 * date. The BFF stops serving these once the Offer is terminal; the
+	 * page stops asking for their row.
+	 */
+	function offerFacts(shown: PreAccountOffer): SummaryListRow[] {
+		const rows: SummaryListRow[] = [];
+		if (shown.state === 'offered') {
+			rows.push(
+				{ label: 'Client', value: shown.clientFirstInitial },
+				{ label: 'Area', value: shown.clientArea },
+				{ label: 'Due date', value: shown.dueDate }
+			);
+		}
+		rows.push({ label: 'Fee', value: formatFee(shown.amountCents) });
+		if (shown.terms) {
+			rows.push({ label: 'Terms', value: shown.terms });
+		}
+		rows.push({ label: 'Status', value: offerStateLabels[shown.state] });
+		return rows;
+	}
 	const submission = new FormSubmission();
 
 	/*
@@ -151,27 +175,7 @@
 			<Button label="Open offer" type="submit" loading={submission.isSubmitting} />
 		</StackedForm>
 	{:else}
-		<dl>
-			<!-- #230: she opens the link in March and gets a closed offer, not
-			     the Client's due date. The BFF stops serving these once the
-			     Offer is terminal; the page stops asking for their row. -->
-			{#if offer.state === 'offered'}
-				<dt>Client</dt>
-				<dd>{offer.clientFirstInitial}</dd>
-				<dt>Area</dt>
-				<dd>{offer.clientArea}</dd>
-				<dt>Due date</dt>
-				<dd>{offer.dueDate}</dd>
-			{/if}
-			<dt>Fee</dt>
-			<dd>{formatFee(offer.amountCents)}</dd>
-			{#if offer.terms}
-				<dt>Terms</dt>
-				<dd>{offer.terms}</dd>
-			{/if}
-			<dt>Status</dt>
-			<dd>{offerStateLabels[offer.state]}</dd>
-		</dl>
+		<SummaryList rows={offerFacts(offer)} />
 
 		{#if offer.state === 'offered'}
 			<Text text="Accepting this work means joining the practice, so that the offer can be recorded in your name." tone="variant" />

@@ -21,6 +21,29 @@
 			value: 'https://portal.highland-midwifery-group.example.org/referrals/2027/persephone?source=intake'
 		}
 	];
+
+	/*
+	 * A record's facts, with no action: the shape most lists have. The
+	 * label is free text too (#725) -- a Client Field Template's label is
+	 * a question the Practice types -- so the same URL sits on the key
+	 * side of a row as well, and the Contract row's value is a link.
+	 */
+	const facts: SummaryListRow[] = [
+		{ label: 'Status', value: 'Stripe onboarding incomplete' },
+		{ label: 'Contract', value: 'Signed Sep 14, 2027' },
+		{ label: 'Address', value: '128 Meadowbrook Lane, Apartment 4B, Rochester, NY 14620' },
+		{
+			label: 'https://portal.highland-midwifery-group.example.org/referrals/2027/persephone?source=intake',
+			value: 'Epidural, as early as it can be given'
+		}
+	];
+
+	// A Birth Plan section: each question is a sentence a Practice wrote.
+	const answers: SummaryListRow[] = [
+		{ label: 'Who do you want in the room with you?', value: 'My partner, Sam, and my sister, Leila' },
+		{ label: 'Would you like photos taken during the birth?', value: 'Yes' },
+		{ label: 'Anything else your doula should know?', value: '—' }
+	];
 </script>
 
 <stack-l space="var(--space-6)">
@@ -36,6 +59,24 @@
 				<Button label="Mark care complete" size="sm" variant="secondary" />
 			{/snippet}
 		</SummaryList>
+	</section>
+
+	<section>
+		<h2>A record's facts, one value a link</h2>
+		<SummaryList rows={facts}>
+			{#snippet value(row)}
+				{#if row.label === 'Contract'}
+					<Link href="#contract" label={row.value} />
+				{:else}
+					{row.value}
+				{/if}
+			{/snippet}
+		</SummaryList>
+	</section>
+
+	<section>
+		<h2>Stacked, a question above its answer</h2>
+		<SummaryList rows={answers} isStacked />
 	</section>
 
 	<section>

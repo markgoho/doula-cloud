@@ -24,7 +24,7 @@
 	import ErrorSummary from '#lib/components/molecules/ErrorSummary.svelte';
 	import LabeledField from '#lib/components/molecules/LabeledField.svelte';
 	import StackedForm from '#lib/components/molecules/StackedForm.svelte';
-	import DescriptionList from '#lib/components/molecules/DescriptionList.svelte';
+	import SummaryList from '#lib/components/molecules/SummaryList.svelte';
 	import ListPage from '#lib/components/templates/ListPage.svelte';
 	import type { PageProps as PageProperties } from './$types';
 
@@ -188,7 +188,7 @@
 			{/snippet}
 		</LabeledField>
 
-		<DescriptionList items={priceItems} />
+		<SummaryList rows={priceItems} />
 		<Text text="New York sales tax is added at checkout where it applies." step="body-sm" tone="variant" />
 
 		<!--

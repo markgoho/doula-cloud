@@ -24,13 +24,14 @@
 	 * Archetype E, second half -- the summary page that ends a question
 	 * sequence. ADR-0018, amended on #464.
 	 *
-	 * ## Why the rows are not `DescriptionList`
+	 * ## The rows
 	 *
-	 * A check-answers row is a label, a value and an action, and
-	 * `DescriptionList` has no action column. #464 kept the row markup here
-	 * until a second page wanted it; the Engagement page did (#1998), so the
-	 * rows are now `molecules/SummaryList.svelte`, GOV.UK's Summary list
-	 * with row actions, shared by both.
+	 * A check-answers row is a label, a value and an action. #464 kept the
+	 * row markup here until a second page wanted it; the Engagement page
+	 * did (#1998), so the rows are `molecules/SummaryList.svelte`, GOV.UK's
+	 * Summary list, which every key/value list renders through (#2021).
+	 * Its key column is a share of the list, so each section's values
+	 * start on the same line down the page.
 	 *
 	 * ## Two widths
 	 *
@@ -131,7 +132,7 @@
 						<!--
 							Keyed on index, not on the heading: a Practice names its
 							own sections and two may share a name, which is the same
-							defect this ticket fixes in `DescriptionList`.
+							defect #464 fixed in the key/value list.
 						-->
 						{#each sections as section, sectionIndex (sectionIndex)}
 							<section>

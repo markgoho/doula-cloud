@@ -14,6 +14,7 @@
 	import Button from '#lib/components/atoms/Button.svelte';
 	import Notice from '#lib/components/atoms/Notice.svelte';
 	import EmptyState from '#lib/components/molecules/EmptyState.svelte';
+	import SummaryList, { type SummaryListRow } from '#lib/components/molecules/SummaryList.svelte';
 
 	let {
 		offers,
@@ -22,6 +23,29 @@
 		offers: Offer[];
 		onDecide: (offerId: string, action: 'accept' | 'decline') => Promise<void>;
 	} = $props();
+
+	/*
+	 * An Offer's facts, through `SummaryList` (#2021). The Client's own
+	 * fields stop being served once an Offer goes terminal (#230), so a
+	 * past Offer reads as the fact of the asking rather than as three
+	 * blank rows. `terms` is a Practice's own free text and may be a
+	 * pasted URL (#595); the list's value column breaks it.
+	 */
+	function offerFacts(offer: Offer): SummaryListRow[] {
+		const rows: SummaryListRow[] = [];
+		if (isOpen(offer)) {
+			rows.push(
+				{ label: 'Client', value: offer.clientFirstInitial },
+				{ label: 'Area', value: offer.clientArea },
+				{ label: 'Due date', value: offer.dueDate }
+			);
+		}
+		rows.push({ label: 'Fee', value: formatFee(offer.amountCents) });
+		if (offer.terms) {
+			rows.push({ label: 'Terms', value: offer.terms });
+		}
+		return rows;
+	}
 
 	let decidingId = $state('');
 	let decideError = $state('');
@@ -46,25 +70,7 @@
 		{#each offers as offer (offer.offerId)}
 			<li>
 				<Badge label={offerStateLabels[offer.state]} variant={offerStateVariants[offer.state]} />
-				<dl>
-					<!-- The Client's own fields stop being served once an Offer
-					     goes terminal (#230), so a past Offer reads as the fact
-					     of the asking rather than as three blank rows. -->
-					{#if isOpen(offer)}
-						<dt>Client</dt>
-						<dd>{offer.clientFirstInitial}</dd>
-						<dt>Area</dt>
-						<dd>{offer.clientArea}</dd>
-						<dt>Due date</dt>
-						<dd>{offer.dueDate}</dd>
-					{/if}
-					<dt>Fee</dt>
-					<dd>{formatFee(offer.amountCents)}</dd>
-					{#if offer.terms}
-						<dt>Terms</dt>
-						<dd>{offer.terms}</dd>
-					{/if}
-				</dl>
+				<SummaryList rows={offerFacts(offer)} />
 				{#if isOpen(offer)}
 					<!-- v8 ignore start: Svelte-compiled attribute-diffing branches for
 					     the dynamic id/describedBy strings below aren't reachable from
@@ -96,20 +102,3 @@
 {#if decideError}
 	<Notice message={decideError} variant="error" />
 {/if}
-
-<style>
-	@layer components {
-		/*
-		 * #595: `terms` is a Practice's own free text about an Offer, and
-		 * #530 already found a bare pasted URL -- no space or hyphen to
-		 * break on -- pushing an unconstrained `dd` past its frame.
-		 * `DescriptionList`'s own value column carries this exact pairing
-		 * for the same reason (its own comment); this `dl` predates that
-		 * molecule and had never been measured with hostile content.
-		 */
-		dd {
-			max-inline-size: var(--measure);
-			overflow-wrap: anywhere;
-		}
-	}
-</style>
