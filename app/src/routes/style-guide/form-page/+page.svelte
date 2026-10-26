@@ -96,7 +96,7 @@
 
 {#snippet practiceFields()}
 	<Text
-		text="Fields this Practice added itself, per ADR-0017. Each Practice-defined section is one more fieldset appended below the structural core."
+		text="Questions this Practice added itself, per ADR-0017. Each section of them is one more fieldset appended below the structural core."
 		step="body-sm"
 		tone="variant"
 	/>
