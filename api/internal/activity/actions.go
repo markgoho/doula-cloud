@@ -66,6 +66,36 @@ const SubjectClient = "client"
 // prevents.
 const SubjectPractice = "practice"
 
+// PracticeAction is one of the fixed action strings a write site records
+// against SubjectPractice. Until #2006 each write site declared its own
+// unexported constant, and the two MFA-required actions were bare
+// literals, so "every Practice event" was a set no reader could see. The
+// staff activity ledger now gives every action its own words, and
+// app/src/lib/activityPhrases.usage.spec.ts reads this file to check it
+// holds one for each -- so the vocabulary is named here, once, and each
+// write site's own constant points at it.
+type PracticeAction string
+
+// The whole Practice vocabulary.
+const (
+	ActionStripeConnectFormReturned   PracticeAction = "stripe_connect_form_returned"
+	ActionStripeConnectNudgeRequested PracticeAction = "stripe_connect_nudge_requested"
+	ActionPaymentTermsChanged         PracticeAction = "payment_terms_changed"
+	ActionBillingModeChanged          PracticeAction = "billing_mode_changed"
+	ActionPracticeRateChanged         PracticeAction = "practice_rate_changed"
+	ActionPracticeNameChanged         PracticeAction = "practice_name_changed"
+	ActionPracticeTimezoneChanged     PracticeAction = "practice_timezone_changed"
+	ActionPracticeOnCallChanged       PracticeAction = "practice_on_call_changed"
+	ActionPracticeDataExported        PracticeAction = "practice_data_exported"
+	ActionPracticeDeletionRequested   PracticeAction = "practice_deletion_requested"
+	ActionPracticeDeletionRestored    PracticeAction = "practice_deletion_restored"
+	ActionPracticeDeletionFinalized   PracticeAction = "practice_deletion_finalized"
+	ActionTermsAccepted               PracticeAction = "terms_accepted"
+	ActionSecondFactorRefused         PracticeAction = "second_factor_refused"
+	ActionMFARequiredEnabled          PracticeAction = "mfa_required_enabled"
+	ActionMFARequiredDisabled         PracticeAction = "mfa_required_disabled"
+)
+
 // SubjectMembership is the subject_kind every write site that touches
 // one person's standing at one Practice records against (subject_id =
 // staff_id): staffauth's RecordMembershipEvent (joined, roles_changed,

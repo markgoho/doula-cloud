@@ -21,7 +21,7 @@ import (
 // is the moment closest to what she lived through, and #1591 reads it
 // beside stripe_connect_status_history's first row with nothing
 // outstanding, which is the moment the data can prove.
-const actionConnectFormReturned = "stripe_connect_form_returned"
+const actionConnectFormReturned = string(activity.ActionStripeConnectFormReturned)
 
 // MsgConnectReturnNoAccount is the refusal for a return with no Stripe
 // account behind it. Only a hand-typed address reaches it: Stripe sends

@@ -19,7 +19,7 @@ import (
 // actionNameChanged records a change to a Practice's name --
 // Practice-scoped and plain-string, the shape practicetimezone's sibling
 // action uses.
-const actionNameChanged = "practice_name_changed"
+const actionNameChanged = string(activity.ActionPracticeNameChanged)
 
 // fieldName is PutRequest's own json tag, and so the Details key its
 // refusal is written under (docs/api-design.md section 7 rule 4).

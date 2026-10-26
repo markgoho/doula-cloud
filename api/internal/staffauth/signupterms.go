@@ -25,7 +25,7 @@ import (
 // A constant of this package rather than of a shared Practice vocabulary
 // because that vocabulary does not exist yet: #1449 holds it, and the
 // action is named there.
-const ActionTermsAccepted = "terms_accepted"
+const ActionTermsAccepted = string(activity.ActionTermsAccepted)
 
 // termsAcceptedDiff is the row's diff: the version of each document in
 // force when she agreed, which is the date it takes effect; each version

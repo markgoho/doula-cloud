@@ -1,11 +1,14 @@
 package export
 
-import "doula-cloud/api/internal/mailsuppress"
+import (
+	"doula-cloud/api/internal/activity"
+	"doula-cloud/api/internal/mailsuppress"
+)
 
 // actionPracticeDataExported names the one Activity row Handler writes.
 // Its subject_kind is activity.SubjectPractice, shared with
 // staffauth.PutMFARequiredHandler rather than a second local literal.
-const actionPracticeDataExported = "practice_data_exported"
+const actionPracticeDataExported = string(activity.ActionPracticeDataExported)
 
 // Column-name literals repeated across more than one entity's header,
 // named once for golangci-lint's goconst check rather than because any

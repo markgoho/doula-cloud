@@ -32,7 +32,7 @@ const (
 // staffauth.mfarequired.go's own action constant is: SubjectPractice
 // carries no per-package action vocabulary of its own the way
 // SubjectEngagement's EngagementAction does.
-const actionBillingModeChanged = "billing_mode_changed"
+const actionBillingModeChanged = string(activity.ActionBillingModeChanged)
 
 // errBillingModeRequired is resolveBillingMode's refusal when a Practice
 // has never chosen a rail and the request raising its first Invoice named

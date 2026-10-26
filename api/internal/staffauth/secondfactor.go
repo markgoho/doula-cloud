@@ -40,7 +40,7 @@ var SecondFactorActs = map[string]string{
 // and which act (its diff's "act"). Recorded against the Practice
 // itself, the same SubjectPractice the archive, deletion and switch
 // already record their own successes against.
-const ActionSecondFactorRefused = "second_factor_refused"
+const ActionSecondFactorRefused = string(activity.ActionSecondFactorRefused)
 
 // secondFactorRefusal is ActionSecondFactorRefused's diff.
 type secondFactorRefusal struct {

@@ -80,7 +80,7 @@ const maxPaymentTermsDays = 365
 // actionPaymentTermsChanged records a change to a Practice's payment
 // terms -- Practice-scoped, plain-string, the same shape
 // actionBillingModeChanged uses.
-const actionPaymentTermsChanged = "payment_terms_changed"
+const actionPaymentTermsChanged = string(activity.ActionPaymentTermsChanged)
 
 // PaymentTermsResponse is what both handlers return. NetDays is always a
 // usable number, whether or not the Practice has set one; IsDefault says
