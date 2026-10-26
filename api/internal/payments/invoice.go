@@ -96,10 +96,14 @@ type InvoiceView struct {
 	// (00115_payment_refund.sql), so this field is the only thing that
 	// answers "is this Client owed money back".
 	RefundedCents int64 `json:"refundedCents"`
-	// dueAt is the stored due instant behind DueOn, kept off the wire
-	// (unexported) so contractorInvoiceRows can judge lateness with
-	// daysOverdue, the one rule the Practice-wide list uses (#2094).
-	dueAt time.Time
+	// DaysOverdue (#2122) is how many whole Practice days this Invoice is
+	// past DueOn, and 0 when it is not overdue or not open: counted by
+	// daysOverdue at the request's one instant, the same rule and the
+	// same count PracticeInvoiceView.DaysOverdue and a contractor's row
+	// carry, so one Invoice reads Overdue on every Staff screen or on
+	// none. A screen reads Overdue from it and never judges lateness
+	// itself.
+	DaysOverdue int `json:"daysOverdue"`
 }
 
 // ContractorInvoiceView is one Invoice as a contractor Doula reads it on an
@@ -118,9 +122,9 @@ type ContractorInvoiceView struct {
 	RaisedOn string  `json:"raisedOn"`
 	DueOn    string  `json:"dueOn"`
 	PaidOn   *string `json:"paidOn,omitempty"`
-	// DaysOverdue is counted as the Practice-wide list counts it
-	// (daysOverdue): 0 unless the Invoice is open and past its due day.
-	// The screen reads Overdue from it and never judges lateness itself.
+	// DaysOverdue is the count InvoiceView.DaysOverdue carries, copied
+	// rather than counted again (#2122): 0 unless the Invoice is open and
+	// past its due day.
 	DaysOverdue int `json:"daysOverdue"`
 }
 
@@ -135,7 +139,7 @@ type ContractorInvoicesResponse struct {
 
 // contractorInvoiceRows is items with every money field left behind:
 // each row is built field by field from what ContractorInvoiceView holds.
-func contractorInvoiceRows(items []InvoiceView, now time.Time, zone *time.Location) []ContractorInvoiceView {
+func contractorInvoiceRows(items []InvoiceView, zone *time.Location) []ContractorInvoiceView {
 	rows := make([]ContractorInvoiceView, 0, len(items))
 	for _, it := range items {
 		rows = append(rows, ContractorInvoiceView{
@@ -144,7 +148,7 @@ func contractorInvoiceRows(items []InvoiceView, now time.Time, zone *time.Locati
 			RaisedOn:    practiceDay(it.CreatedAt, zone),
 			DueOn:       it.DueOn,
 			PaidOn:      it.PaidOn,
-			DaysOverdue: daysOverdue(it.Status, it.dueAt, now, zone),
+			DaysOverdue: it.DaysOverdue,
 		})
 	}
 	return rows
@@ -299,6 +303,9 @@ func PostInvoiceHandler(client Client) http.Handler {
 			return
 		}
 		view.DueOn = practiceDay(dueAt, zone)
+		// view.DaysOverdue stays 0: an Invoice raised now falls due at
+		// least a whole day of payment terms from now (ADR-0038), so it
+		// cannot be late yet.
 
 		// Only persist a first-time billing mode once the Invoice it was
 		// requested for has actually been created -- see
@@ -549,7 +556,8 @@ func GetInvoicesHandler() http.Handler {
 			return
 		}
 
-		items, hasMore, err := listInvoices(r.Context(), tx, engagementID, after, zone)
+		days := bookDays{zone: zone, now: clock.Now(r.Context())}
+		items, hasMore, err := listInvoices(r.Context(), tx, engagementID, after, days)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
@@ -563,7 +571,7 @@ func GetInvoicesHandler() http.Handler {
 		}
 		if reader.IsAmbientContractor() {
 			apierr.WriteJSON(w, http.StatusOK, ContractorInvoicesResponse{
-				Items:      contractorInvoiceRows(items, clock.Now(r.Context()), zone),
+				Items:      contractorInvoiceRows(items, zone),
 				NextCursor: nextCursor,
 				HasMore:    hasMore,
 			})
@@ -851,7 +859,7 @@ const listInvoicesAfterQuery = `SELECT i.id, i.contract_id, i.status, i.amount_c
 // explicitly on top of the RLS scoping staffauth.Middleware already set
 // up on tx -- the app layer's own filter, so a bug in either one alone
 // can't leak rows.
-func listInvoices(ctx context.Context, tx *sql.Tx, engagementID string, after *invoiceCursor, zone *time.Location) ([]InvoiceView, bool, error) {
+func listInvoices(ctx context.Context, tx *sql.Tx, engagementID string, after *invoiceCursor, days bookDays) ([]InvoiceView, bool, error) {
 	var rows *sql.Rows
 	var err error
 	if after != nil {
@@ -876,9 +884,9 @@ func listInvoices(ctx context.Context, tx *sql.Tx, engagementID string, after *i
 			// coverage:ignore reason: row scan failure, not exercised by unit tests
 			return nil, false, fmt.Errorf("payments: scan invoice row: %w", err)
 		}
-		it.PaidOn = invoicePaidOn(paidAt, activePaymentKind.String == paymentKindManual, zone)
-		it.DueOn = practiceDay(dueAt, zone)
-		it.dueAt = dueAt
+		it.PaidOn = invoicePaidOn(paidAt, activePaymentKind.String == paymentKindManual, days.zone)
+		it.DueOn = practiceDay(dueAt, days.zone)
+		it.DaysOverdue = daysOverdue(it.Status, dueAt, days.now, days.zone)
 		if activePaymentID.Valid {
 			it.ActivePaymentID = &activePaymentID.String
 			it.ActivePaymentKind = activePaymentKind.String

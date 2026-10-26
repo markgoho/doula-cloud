@@ -54,6 +54,12 @@ export interface Invoice {
 	 * after a Refund, exactly as Stripe's own does, so this is the only
 	 * field that says money went back. */
 	refundedCents: number;
+	/** How many whole days in the Practice's own timezone this Invoice is
+	 * past `dueOn` (#1965, #2122), and 0 when it is not overdue or not
+	 * open. The BFF counts it once, by one rule, for every Staff list that
+	 * carries an Invoice, so one Invoice reads Overdue on every Staff
+	 * screen or on none. */
+	daysOverdue: number;
 }
 
 /** One Invoice as a contractor Doula reads it on her own Engagement
@@ -69,8 +75,8 @@ export interface ContractorInvoice {
 	raisedOn: string;
 	dueOn: string;
 	paidOn?: string;
-	/** Counted by the BFF as the Practice-wide list counts it: 0 unless the
-	 * Invoice is open and past its due day. */
+	/** The count `Invoice.daysOverdue` carries, copied by the BFF rather
+	 * than counted again. */
 	daysOverdue: number;
 }
 
@@ -96,11 +102,6 @@ export type BillingMode = 'stripe' | 'by_hand';
 export interface PracticeInvoice extends Omit<Invoice, 'refundedCents'> {
 	engagementId: string;
 	clientName: string;
-	/** How many whole days in the Practice's own timezone this Invoice is
-	 * past `dueOn` (#1965), and 0 when it is not overdue or not open. The
-	 * BFF counts it at the same instant and by the same rule as the
-	 * page's overdue figure, so the row and the figure cannot disagree. */
-	daysOverdue: number;
 }
 
 /** A page of the Practice-wide Invoice list, with the whole book's
@@ -555,19 +556,26 @@ export const contractorInvoicesMessage =
  * takes focus says it worked, above the row it added. */
 export const invoiceCreatedMessage = 'Invoice created.';
 
-/** The status a contractor's Invoice row shows (#2094): Overdue in place
- * of Open once the BFF counts it late, because lateness is the one status
- * the stored value does not say. Every other status reads as it does for
- * everyone, through invoiceStatusLabel. */
-export function contractorInvoiceStatusLabel(invoice: Pick<ContractorInvoice, 'status' | 'daysOverdue'>): string {
+/** What an Invoice row needs to say where it stands: its stored status
+ * and the BFF's count of days late. `Invoice`, `ContractorInvoice` and
+ * `PracticeInvoice` all carry both. */
+export type InvoiceStanding = Pick<Invoice, 'status' | 'daysOverdue'>;
+
+/** The status every Staff screen shows for an Invoice (#2094, #2122):
+ * Overdue in place of Open once the BFF counts it late, because lateness
+ * is the one status the stored value does not say. Every other status
+ * reads through invoiceStatusLabel. One function for the Engagement's
+ * Invoices section, for every role, and the Practice-wide list, so one
+ * Invoice cannot read Overdue on one Staff screen and Open on the next.
+ * Never the Client portal's: ADR-0038 keeps Overdue off it, and she
+ * reads "Not yet paid" (clientInvoiceStatusLabel). */
+export function invoiceRowStatusLabel(invoice: InvoiceStanding): string {
 	return invoice.daysOverdue > 0 ? 'Overdue' : invoiceStatusLabel(invoice.status);
 }
 
-/** The Badge variant beside contractorInvoiceStatusLabel: Overdue is the
- * warning, as late money is on the Practice-wide list. */
-export function contractorInvoiceStatusVariant(
-	invoice: Pick<ContractorInvoice, 'status' | 'daysOverdue'>
-): 'info' | 'success' | 'warning' | 'neutral' {
+/** The Badge variant beside invoiceRowStatusLabel: Overdue is the
+ * warning, as late money is. */
+export function invoiceRowStatusVariant(invoice: InvoiceStanding): 'info' | 'success' | 'warning' | 'neutral' {
 	return invoice.daysOverdue > 0 ? 'warning' : invoiceStatusVariant(invoice.status);
 }
 

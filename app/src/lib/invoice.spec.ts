@@ -1,10 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
 	billableContractStatus,
-	contractorInvoiceStatusLabel,
-	contractorInvoiceStatusVariant,
 	createInvoice,
 	formatAmount,
+	invoiceRowStatusLabel,
+	invoiceRowStatusVariant,
 	invoiceStatusLabel,
 	invoiceStatusVariant,
 	loadBillingMode,
@@ -80,20 +80,20 @@ describe('loadContractorInvoices (#2094)', () => {
 	});
 });
 
-describe('contractorInvoiceStatusLabel and contractorInvoiceStatusVariant (#2094)', () => {
+describe('invoiceRowStatusLabel and invoiceRowStatusVariant (#2094, #2122)', () => {
 	it('reads Overdue, as a warning, once the BFF counts an Invoice late', () => {
 		const late = { status: 'open', daysOverdue: 3 };
 
-		expect(contractorInvoiceStatusLabel(late)).toBe('Overdue');
-		expect(contractorInvoiceStatusVariant(late)).toBe('warning');
+		expect(invoiceRowStatusLabel(late)).toBe('Overdue');
+		expect(invoiceRowStatusVariant(late)).toBe('warning');
 	});
 
 	it('reads every other status as everyone reads it', () => {
 		const paid = { status: 'paid', daysOverdue: 0 };
 
-		expect(contractorInvoiceStatusLabel(paid)).toBe('Paid');
-		expect(contractorInvoiceStatusVariant(paid)).toBe('success');
-		expect(contractorInvoiceStatusLabel({ status: 'open', daysOverdue: 0 })).toBe('Open');
+		expect(invoiceRowStatusLabel(paid)).toBe('Paid');
+		expect(invoiceRowStatusVariant(paid)).toBe('success');
+		expect(invoiceRowStatusLabel({ status: 'open', daysOverdue: 0 })).toBe('Open');
 	});
 });
 

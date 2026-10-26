@@ -65,6 +65,17 @@ func overdueFrom(now time.Time, loc *time.Location) time.Time {
 	return time.Date(year, month, day, 0, 0, 0, 0, loc)
 }
 
+// bookDays is the zone and the instant one read of an Invoice list judges
+// every calendar day by (#1965): the Practice-wide list and the
+// per-Engagement list, for every reader of it (#2122). Each read builds
+// one from practicetimezone.Load and clock.Now(ctx) and counts each row's
+// lateness with daysOverdue against it, so no two screens can count one
+// Invoice late by different rules or at different instants.
+type bookDays struct {
+	zone *time.Location
+	now  time.Time
+}
+
 // daysOverdue is how many whole Practice days an open Invoice is past its
 // due day at now, and 0 when it is not overdue or not open: paid, voided
 // and written-off Invoices are never late. The first overdue day counts
