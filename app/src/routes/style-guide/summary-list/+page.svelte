@@ -16,6 +16,13 @@
 		{ label: 'Due', value: 'Nov 14, 2026' },
 		{ label: 'Care phase', value: 'Active', changes: 'care phase', isDetailShown: true },
 		{ label: 'Doula', value: 'Anne-Marie Ochieng-Whitfield, Priya Raman', changes: 'Doula' },
+		// #2008: an answer to a question the Practice stopped asking.
+		{
+			label: 'Doula on call at booking',
+			value: 'Anne-Marie Ochieng-Whitfield',
+			tag: 'No longer collected',
+			status: 'Kept, not collected'
+		},
 		{
 			label: 'Referral',
 			value: 'https://portal.highland-midwifery-group.example.org/referrals/2027/persephone?source=intake'

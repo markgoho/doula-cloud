@@ -76,13 +76,13 @@ test('the founder reads a piece of Feedback, and nobody else finds the page', as
 
 	// She is an Owner with a second factor, and still not the founder:
 	// both pages are "Page not found", and since she is signed in the way
-	// out is her own account, never "Log in" (#2040).
+	// out is her own account, never "Sign in" (#2040).
 	await becomeSession(context, ownerHeaders);
 	for (const path of ['/feedback', `/feedback/${feedbackId}`]) {
 		await page.goto(path);
 		await expect(page.getByRole('heading', { name: 'Page not found' })).toBeVisible();
 		await expect(page.getByRole('main').getByRole('link', { name: 'Go to your account' })).toBeVisible();
-		await expect(page.getByRole('link', { name: 'Log in' })).toHaveCount(0);
+		await expect(page.getByRole('link', { name: 'Sign in' })).toHaveCount(0);
 	}
 
 	// The founder finds it in the list.

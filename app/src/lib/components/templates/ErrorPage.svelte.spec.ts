@@ -78,10 +78,10 @@ describe('ErrorPage.svelte', () => {
 	});
 
 	it('renders the given way-out link', async () => {
-		await setup({ wayOutHref: '/portal/(signed-out)/login', wayOutLabel: 'Log in' });
+		await setup({ wayOutHref: '/portal/(signed-out)/login', wayOutLabel: 'Sign in' });
 
-		await expect.element(page.getByRole('link', { name: 'Log in' })).toBeVisible();
-		expect(page.getByRole('link', { name: 'Log in' }).element()).toHaveAttribute(
+		await expect.element(page.getByRole('link', { name: 'Sign in' })).toBeVisible();
+		expect(page.getByRole('link', { name: 'Sign in' }).element()).toHaveAttribute(
 			'href',
 			'/portal/(signed-out)/login'
 		);

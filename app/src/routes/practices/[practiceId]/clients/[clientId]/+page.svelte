@@ -13,7 +13,8 @@
 		type ClientDetail,
 		type EngagementRequestSummary,
 		type EngagementSummary,
-		type HistoryEntry
+		type HistoryEntry,
+		type ResolvedField
 	} from '#lib/clientDetail.js';
 	import { canAddDetails, fieldSectionIndexes } from '#lib/clientDetailsJourney.js';
 	import { sectionSlug } from '#lib/intakeJourney.js';
@@ -23,7 +24,7 @@
 	import { eraseClient, loadEraseEligibility, type EraseEligibility, type UnsettledInvoice } from '#lib/clientErasure.js';
 	import { formatAmount } from '#lib/invoice.js';
 	import { isBlockedInvite, portalInviteStatusText } from '#lib/portalInvite.js';
-	import { formatActivityTimestamp, formatInstant } from '#lib/dates.js';
+	import { formatActivityTimestamp, formatCalendarDay, formatInstant } from '#lib/dates.js';
 	import { takeOutcome } from '#lib/outcome.js';
 	import RecordDetail from '#lib/components/templates/RecordDetail.svelte';
 	import EmptyState from '#lib/components/molecules/EmptyState.svelte';
@@ -123,6 +124,28 @@
 	*/
 	function changeable(label: string, value: string, slug: string, changes: string): ChangeRow {
 		return canChange ? { label, value, changes, href: changeHref(slug) } : { label, value };
+	}
+
+	/**
+	A row for one of the Practice's own questions: a Change into its
+	section, or, for a question the Practice no longer asks (#2008), the
+	BFF's note under the label and why there is no Change.
+	*/
+	function fieldRow(field: ResolvedField): ChangeRow {
+		const value = resolvedFieldValueText(field) || '—';
+		if (field.note) return { label: field.label, value, tag: field.note, status: 'Kept, not collected' };
+		const section = fieldSections.get(field.fieldId);
+		return section === undefined
+			? { label: field.label, value }
+			: changeable(field.label, value, sectionSlug(section), field.label);
+	}
+
+	// Under a section holding answers to questions the Practice stopped
+	// asking (#2008): the drawing's sentence, to "you" (the brief's Voice).
+	function noLongerAskedText(count: number): string {
+		return count === 1
+			? `Your Practice stopped asking this question. ${name}'s answer is kept and can be read. It cannot be changed, and it is not asked of a new Client.`
+			: `Your Practice stopped asking these questions. ${name}'s answers are kept and can be read. The answers cannot be changed, and the questions are not asked of a new Client.`;
 	}
 
 	function newEngagementRequestHref(): string {
@@ -460,7 +483,12 @@
 			changeable('Given name', detail!.givenName, 'name', 'given name'),
 			changeable('Family name', detail!.familyName || '—', 'name', 'family name'),
 			changeable('Preferred name', detail!.preferredName || '—', 'name', 'preferred name'),
-			changeable('Date of birth', detail!.dateOfBirth || '—', 'date-of-birth', 'date of birth')
+			changeable(
+				'Date of birth',
+				detail!.dateOfBirth ? formatCalendarDay(detail!.dateOfBirth) : '—',
+				'date-of-birth',
+				'date of birth'
+			)
 		]}
 		action={changeAction}
 	/>
@@ -541,25 +569,31 @@
 			the page. Keyed on index: a Practice can name two sections alike.
 			Each row's Change opens the journey's page for its section (#2048);
 			a field the Practice no longer asks has none.
+
+			An answer to a question the Practice no longer asks is set apart
+			from the current answers (#2008, the drawing "Sarah Beck - record,
+			with an archived field"): last in its section, marked under its
+			label with the BFF's own note, "Kept, not collected" where a
+			Change would be, and one sentence under the list saying what that
+			means.
 		-->
 		<stack-l space="var(--space-6)">
 			{#each fieldGroups as group, groupIndex (groupIndex)}
+				{@const archivedCount = group.fields.filter((field) => field.note).length}
 				<stack-l space="var(--space-3)">
 					{#if group.heading}
 						<Heading level={3} variant="card" text={group.heading} />
 					{/if}
 					<SummaryList
-						rows={group.fields.map((field): ChangeRow => {
-							const value = field.note
-								? `${resolvedFieldValueText(field) || '—'} (${field.note})`
-								: resolvedFieldValueText(field) || '—';
-							const section = fieldSections.get(field.fieldId);
-							return section === undefined
-								? { label: field.label, value }
-								: changeable(field.label, value, sectionSlug(section), field.label);
-						})}
+						rows={[
+							...group.fields.filter((field) => !field.note).map((field) => fieldRow(field)),
+							...group.fields.filter((field) => field.note).map((field) => fieldRow(field))
+						]}
 						action={changeAction}
 					/>
+					{#if archivedCount > 0}
+						<Text tone="variant" text={noLongerAskedText(archivedCount)} />
+					{/if}
 				</stack-l>
 			{/each}
 		</stack-l>

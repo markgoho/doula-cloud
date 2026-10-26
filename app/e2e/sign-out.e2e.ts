@@ -50,12 +50,12 @@ test('a Staff member signs out and can no longer reach an authenticated screen',
 	// through api.ts's central 401 path, which carries sessionEnded=true.
 	await page.goto(`/practices/${practiceId}`);
 	await expect(page).toHaveURL(/\/login\?sessionEnded=true$/);
-	await expect(page.getByRole('heading', { name: 'Log in' })).toBeVisible();
+	await expect(page.getByRole('heading', { name: 'Sign in' })).toBeVisible();
 
 	// #757: the flag in that URL is the whole reason it is carried -- the
 	// screen says what happened rather than leaving her at a bare form.
 	await expect(
-		page.getByText('For your security, we signed you out. Log in again to continue.')
+		page.getByText('For your security, we signed you out. Sign in again to continue.')
 	).toBeVisible();
 });
 
@@ -140,5 +140,5 @@ test('a second tab loses access once the first tab signs out, without itself sig
 	// shared cookie is gone.
 	await secondTab.goto(`/practices/${practiceId}`);
 	await expect(secondTab).toHaveURL(/\/login\?sessionEnded=true$/);
-	await expect(secondTab.getByRole('heading', { name: 'Log in' })).toBeVisible();
+	await expect(secondTab.getByRole('heading', { name: 'Sign in' })).toBeVisible();
 });

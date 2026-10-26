@@ -329,7 +329,7 @@
 	<!--
 		The chooser heads the step chain (#2027): once her password is
 		accepted the form has been answered, so it goes, and the chooser is
-		the screen (Hick's Law). The form she pressed Log in on unmounts, so
+		the screen (Hick's Law). The form she pressed Sign in on unmounts, so
 		the heading takes focus as it appears (`focusOnAppearing`, #2018).
 
 		A picker is only ever rendered with something in it: `land` sends a
@@ -356,19 +356,19 @@
 		{#if hasSessionEnded}
 			<Notice
 				variant="info"
-				message="For your security, we signed you out. Log in again to continue."
+				message="For your security, we signed you out. Sign in again to continue."
 			/>
 		{/if}
 		<!--
 			#694's own arrival here, in the same position and on the same
 			step, for the same reason: spending a recovery code mints no
 			session, so without a word she would be looking at an unchanged
-			log-in form with nothing to show for what she just did.
+			sign-in form with nothing to show for what she just did.
 		-->
 		{#if hasSpentRecoveryCode}
 			<Notice
 				variant="status"
-				message="Your recovery code worked. Two-factor authentication is off, so log in with your password and set up an authenticator app again."
+				message="Your recovery code worked. Two-factor authentication is off, so sign in with your password and set up an authenticator app again."
 			/>
 		{/if}
 
@@ -401,7 +401,7 @@
 					/>
 				{/snippet}
 			</LabeledField>
-			<Button type="submit" label="Log in" loading={submission.isSubmitting} />
+			<Button type="submit" label="Sign in" loading={submission.isSubmitting} />
 		</StackedForm>
 
 		<!-- One group (#2020): the two other ways in sit together, not a
@@ -420,7 +420,7 @@
 		</cluster-l>
 		<!-- #2025: the other door, named as the signed-out landing names it. A
 		     group of its own: it is not another way into this account. -->
-		<Link href={resolve('/portal/(signed-out)/login')} label="Client portal log in" />
+		<Link href={resolve('/portal/(signed-out)/login')} label="Client portal sign in" />
 	{:else if step === 'confirm-sign-out'}
 		<!--
 			#610: the warning goes on the button that acts, not on a screen
@@ -462,9 +462,9 @@
 	{/if}
 {/snippet}
 
-<!-- #2025: both doors say "Log in", so the lede says which one this is, in the landing door's own words. -->
+<!-- #2025: both doors say "Sign in", so the lede says which one this is, in the landing door's own words. -->
 <EntryPage
-	title="Log in"
+	title="Sign in"
 	lede="For doulas and practice owners."
 	errorSummary={submission.errors.length > 0 ? errorSummary : undefined}
 	{content}

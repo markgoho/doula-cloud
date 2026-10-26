@@ -55,6 +55,6 @@ export const fixture: RouteFixture = {
 	params: {},
 	url: 'https://example.test/(signed-out)/login',
 	respond: () => jsonResponse(session),
-	readyText: 'Log in',
+	readyText: 'Sign in',
 	variants: [afterSessionEnded]
 };

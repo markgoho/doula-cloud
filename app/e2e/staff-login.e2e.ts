@@ -13,7 +13,7 @@ test('Staff login lands an unenrolled Owner on her Practice', async ({ page, req
 	await page.goto('/login');
 	await page.getByLabel('Email').fill(email);
 	await page.getByLabel('Password').fill(password);
-	await page.getByRole('button', { name: 'Log in' }).click();
+	await page.getByRole('button', { name: 'Sign in' }).click();
 
 	const practicePath = new RegExp(`/practices/${practiceId}$`);
 	await expect(page).toHaveURL(practicePath);

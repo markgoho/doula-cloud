@@ -17,7 +17,7 @@ import { staffLoginAfterSessionEnded } from '#lib/sessionEnded.js';
  * - 404: anybody but the founder, or a piece that is gone. The
  *   `(person)/+error.svelte` boundary renders it as "Page not found",
  *   so the page's existence is not revealed, inside the signed-in shell
- *   with the way out to her own account (#2040), never "Log in".
+ *   with the way out to her own account (#2040), never "Sign in".
  *
  * `load` and not an onMount fetch, for #471's reason: a refusal has to
  * reach the error page rather than sit in a string this route owns.

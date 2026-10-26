@@ -35,7 +35,7 @@ const RECOVERY_SUBJECT = 'DoulaCloud: account recovery code';
  * the Owner reaching the vouch screen from the roster and being told
  * where the code lands before she asks for it, the mail arriving at her
  * address and at nobody else's, and the spend screen -- reachable signed
- * out, from the log-in screen, answering a wrong code and an unknown
+ * out, from the sign-in screen, answering a wrong code and an unknown
  * address with one sentence.
  */
 test('An Owner vouches for a locked-out doula, and the code reaches her and nobody else', async ({
@@ -163,7 +163,7 @@ test('An Owner vouches for a locked-out doula, and the code reaches her and nobo
 	 * the emulator accept it is rewriting a live credential call for the
 	 * emulator's sake. The success path therefore stays unwalkable here.
 	 * See the second named limitation in mfa.ts. What *is* walked is
-	 * everything this screen owns: reachable signed out, from the log-in
+	 * everything this screen owns: reachable signed out, from the sign-in
 	 * screen, posting the shape the endpoint reads, and rendering the one
 	 * sentence #168 allows.
 	 */

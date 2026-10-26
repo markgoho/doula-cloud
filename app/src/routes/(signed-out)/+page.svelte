@@ -135,7 +135,7 @@
 
 {#snippet doors()}
 	<!--
-		Staff log in is the primary door: the marketing site is where a new
+		Staff sign in is the primary door: the marketing site is where a new
 		person arrives (ADR-0044), so most people who reach `/` already have
 		an account. A judgment, not a measurement -- ADR-0046 counts nothing
 		about who visits.
@@ -143,14 +143,14 @@
 	<stack-l space="var(--space-4)">
 		<DoorLink
 			href={resolve('/(signed-out)/login')}
-			label="Staff log in"
+			label="Staff sign in"
 			description="For doulas and practice owners."
 			variant="primary"
 		/>
 		<grid-l min="var(--door-min)" space="var(--space-4)">
 			<DoorLink
 				href={resolve('/portal/(signed-out)/login')}
-				label="Client portal log in"
+				label="Client portal sign in"
 				description="Your contract, your birth plan, and your invoices."
 			/>
 			<!-- ADR-0042: signup grants three Credits with no card, one per Engagement. -->

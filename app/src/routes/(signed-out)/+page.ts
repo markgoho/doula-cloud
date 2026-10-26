@@ -26,7 +26,7 @@ export const load: PageLoad = async (): Promise<RootLanding> => {
 	 * two different people: nobody signed in, and somebody signed in whose
 	 * identity resolves to no staff row -- a signup whose second half
 	 * failed. The first belongs on the signed-out home below; the second
-	 * belongs on `/no-practice`, and telling her to sign up or log in is
+	 * belongs on `/no-practice`, and telling her to sign up or sign in is
 	 * telling her to do the two things that have already stopped working
 	 * for her.
 	 */

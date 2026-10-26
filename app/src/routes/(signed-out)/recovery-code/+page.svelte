@@ -129,7 +129,7 @@
 			tone="muted"
 			step="body-sm"
 		/>
-		<Link href={resolve('/(signed-out)/login')} label="Log in" />
+		<Link href={resolve('/(signed-out)/login')} label="Sign in" />
 	</stack-l>
 {/snippet}
 

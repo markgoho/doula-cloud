@@ -21,14 +21,14 @@
 	<stack-l space="var(--space-4)">
 		<DoorLink
 			href="/style-guide/landing-page"
-			label="Staff log in"
+			label="Staff sign in"
 			description="For doulas and practice owners."
 			variant="primary"
 		/>
 		<grid-l min="var(--door-min)" space="var(--space-4)">
 			<DoorLink
 				href="/style-guide/landing-page"
-				label="Client portal log in"
+				label="Client portal sign in"
 				description="Your contract, your birth plan, and your invoices."
 			/>
 			<DoorLink

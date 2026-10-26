@@ -50,11 +50,11 @@ describe('verifying an email address', () => {
 		await expectOneFramedHeading(fixture.readyText);
 	});
 
-	it('confirms the address and offers the way to log in', async () => {
+	it('confirms the address and offers the way to sign in', async () => {
 		await setup({ token: 'token-1', respond: () => Promise.resolve(new Response(undefined, { status: 204 })) });
 
 		await expect.element(testPage.getByText('Your email address is verified.')).toBeVisible();
-		await expect.element(testPage.getByRole('link', { name: 'Continue to log in' })).toBeVisible();
+		await expect.element(testPage.getByRole('link', { name: 'Continue to sign in' })).toBeVisible();
 		await expectOneFramedHeading(fixture.readyText);
 	});
 
@@ -65,7 +65,7 @@ describe('verifying an email address', () => {
 		await setup({ token: 'token-1', respond: () => Promise.resolve(new Response(undefined, { status: 204 })) });
 
 		await expect.element(testPage.getByRole('link', { name: 'Go to your Practice' })).toHaveAttribute('href', '/');
-		expect(testPage.getByRole('link', { name: 'Continue to log in' }).elements()).toHaveLength(0);
+		expect(testPage.getByRole('link', { name: 'Continue to sign in' }).elements()).toHaveLength(0);
 	});
 
 	// A failed link is not a refused form, so the tab title carries no
@@ -92,7 +92,7 @@ describe('verifying an email address', () => {
 
 		await expect.element(testPage.getByRole('alert')).toHaveTextContent('This link has expired or was already used.');
 		await expect
-			.element(testPage.getByRole('link', { name: 'Log in to get a new link' }))
+			.element(testPage.getByRole('link', { name: 'Sign in to get a new link' }))
 			.toHaveAttribute('href', '/login');
 		expect(document.title.startsWith('Error:')).toBe(false);
 	});

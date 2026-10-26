@@ -62,7 +62,7 @@ describe('spending a recovery code', () => {
 		expect(spends).toHaveLength(0);
 	});
 
-	it('spends the code and sends her to log in again, since none of this mints a session', async () => {
+	it('spends the code and sends her to sign in again, since none of this mints a session', async () => {
 		const { spends } = await setup();
 
 		await fillAndSubmit('anne-marie@example.test', 'CODE-1');
@@ -110,9 +110,9 @@ describe('spending a recovery code', () => {
 		expect(goto).not.toHaveBeenCalled();
 	});
 
-	it('offers the way back to the log-in screen', async () => {
+	it('offers the way back to the sign-in screen', async () => {
 		await setup();
 
-		await expect.element(testPage.getByRole('link', { name: 'Log in' })).toHaveAttribute('href', '/login');
+		await expect.element(testPage.getByRole('link', { name: 'Sign in' })).toHaveAttribute('href', '/login');
 	});
 });

@@ -14,5 +14,5 @@
 <ErrorPage
 	kind={errorKindForStatus(page.status, page.error?.code)}
 	wayOutHref={resolve('/portal/(signed-out)/login')}
-	wayOutLabel="Log in"
+	wayOutLabel="Sign in"
 />

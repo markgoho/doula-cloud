@@ -205,9 +205,9 @@ The map kept "the signup paths that fail" as fog. This spec takes the patch in, 
 | Path | What the product does | Record |
 | --- | --- | --- |
 | A field is empty or incorrect | The error summary lists each refusal in the order of the fields, and each field says what to do | [No form in the app recovers from a validation error: add the error summary, once (#467)](https://github.com/markgoho/doula-cloud/issues/467); the words are in Screen 1 |
-| The address has an account already, and the password is not that account's | The Email field says "This email address already has an account. Log in instead." | #467 |
+| The address has an account already, and the password is not that account's | The Email field says "This email address already has an account. Sign in instead." | #467 |
 | The account was created and the Practice was not | The same form, sent again with the same address and password, signs her in to the account and finishes the signup. No second verification message is sent. Her name and her work state from the form replace the stored ones | [A failed signup strands the Identity Platform account, and sign-in has nothing to say to it (#745)](https://github.com/markgoho/doula-cloud/issues/745) |
-| She has a Practice already | "This account already belongs to a Practice. Log in instead." No second Practice is made | #745 |
+| She has a Practice already | "This account already belongs to a Practice. Sign in instead." No second Practice is made | #745 |
 | A Client is signed in to the portal in the same browser | The form is replaced by the warning "Continuing signs you out of the client portal in this browser.", with the buttons **Continue and sign out** and **Cancel**. Nothing is created before she continues | [Staff signup and invitation acceptance still evict a live portal session silently (#816)](https://github.com/markgoho/doula-cloud/issues/816) |
 
 Three notes for the builders, each inside a ticket that exists:

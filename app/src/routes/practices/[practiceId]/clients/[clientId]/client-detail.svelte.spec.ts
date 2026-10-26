@@ -4,7 +4,7 @@ import { render } from 'vitest-browser-svelte';
 import { jsonResponse } from '#lib/testResponse.js';
 import type { ClientDetail, HistoryEntry } from '#lib/clientDetail.js';
 import type { EraseEligibility } from '#lib/clientErasure.js';
-import { formatActivityTimestamp } from '#lib/dates.js';
+import { formatActivityTimestamp, formatCalendarDay } from '#lib/dates.js';
 import { registerLayoutPrimitives } from '#lib/primitives/index.js';
 // DataTable's frame needs stack-l's display:block default (primitives.css)
 // to work as a container-query context -- see DataTable.svelte.spec.ts. This
@@ -198,7 +198,9 @@ describe('client detail hub', () => {
 		await expect.element(testPage.getByText(baseDetail.email)).toBeVisible();
 		await expect.element(testPage.getByText(baseDetail.phone)).toBeVisible();
 		await expect.element(testPage.getByText(address)).toBeVisible();
-		await expect.element(testPage.getByText(baseDetail.dateOfBirth)).toBeVisible();
+		// #2008: month-day, as intake and every other screen print a day.
+		await expect.element(testPage.getByText(formatCalendarDay(baseDetail.dateOfBirth))).toBeVisible();
+		await expect.element(testPage.getByText(baseDetail.dateOfBirth)).not.toBeInTheDocument();
 	});
 
 	/*
@@ -253,7 +255,62 @@ describe('client detail hub', () => {
 		// `.first()`: the row's Change carries the label again, visually hidden.
 		await expect.element(testPage.getByText('Doula notes').first()).toBeVisible();
 		await expect.element(testPage.getByText('she/her')).toBeVisible();
-		await expect.element(testPage.getByText('kept value (No longer collected)')).toBeVisible();
+		await expect.element(testPage.getByText('kept value', { exact: true })).toBeVisible();
+	});
+
+	/*
+	 * #2008, as the drawing "Sarah Beck - record, with an archived field"
+	 * has it: an answer to a question the Practice no longer asks is set
+	 * apart from the current answers -- after them in its section, marked
+	 * under its label, with why it has no Change where the Change would be,
+	 * and one sentence under the list saying what that means.
+	 */
+	it('sets an answer the Practice no longer asks apart from the current ones', async () => {
+		const { container } = await setup({
+			overrides: {
+				resolvedFields: [
+					{ fieldId: 'f1', label: 'Source', type: 'short_text', value: 'Midwife referral' },
+					{ fieldId: 'f2', label: 'Doula on call at booking', type: 'short_text', value: 'Priya Raman', note: 'No longer collected' },
+					{ fieldId: 'f3', label: 'Who referred', type: 'short_text', value: 'Rochester Midwifery Group' }
+				]
+			}
+		});
+
+		await expect.element(testPage.getByText('Priya Raman', { exact: true })).toBeVisible();
+		await expect.element(testPage.getByText('No longer collected')).toBeVisible();
+		await expect.element(testPage.getByText('Kept, not collected')).toBeVisible();
+		await expect
+			.element(
+				testPage.getByText(
+					`Your Practice stopped asking this question. ${fixture.readyText}'s answer is kept and can be read. It cannot be changed, and it is not asked of a new Client.`
+				)
+			)
+			.toBeVisible();
+		// Which row comes after which has no accessible signal (a `<dl>` has
+		// no role), so the order of the keys is read off the DOM.
+		const keys = [...container.querySelectorAll('dt')].map((node) => node.textContent?.trim() ?? '');
+		const archivedAt = keys.findIndex((key) => key.startsWith('Doula on call at booking'));
+		expect(archivedAt).toBeGreaterThan(keys.indexOf('Who referred'));
+		expect(keys.indexOf('Who referred')).toBeGreaterThan(keys.indexOf('Source'));
+	});
+
+	it('says so in the plural under a section with two answers no longer asked', async () => {
+		await setup({
+			overrides: {
+				resolvedFields: [
+					{ fieldId: 'f1', label: 'Old one', type: 'short_text', value: 'a', note: 'No longer collected' },
+					{ fieldId: 'f2', label: 'Old two', type: 'short_text', value: 'b', note: 'No longer collected' }
+				]
+			}
+		});
+
+		await expect
+			.element(
+				testPage.getByText(
+					`Your Practice stopped asking these questions. ${fixture.readyText}'s answers are kept and can be read. The answers cannot be changed, and the questions are not asked of a new Client.`
+				)
+			)
+			.toBeVisible();
 	});
 
 	// #2051: one list per section, so a section's values share one column.

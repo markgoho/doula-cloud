@@ -65,7 +65,7 @@
 		},
 		{
 			value: 'login',
-			label: 'I already have an account — log in',
+			label: 'I already have an account — sign in',
 			description: 'You already sign in to DoulaCloud for another practice.'
 		}
 	];

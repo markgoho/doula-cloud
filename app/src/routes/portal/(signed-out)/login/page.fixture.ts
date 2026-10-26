@@ -27,6 +27,6 @@ export const fixture: RouteFixture = {
 	params: {},
 	url: 'https://example.test/portal/(signed-out)/login',
 	respond: () => jsonResponse('no matching portal session', 404),
-	readyText: 'Log in',
+	readyText: 'Sign in',
 	variants: [afterSessionEnded]
 };

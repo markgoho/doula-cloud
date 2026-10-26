@@ -127,13 +127,13 @@
 		</StackedForm>
 
 		<!-- #2025: the other door, named as the signed-out landing names it. -->
-		<Link href={resolve('/(signed-out)/login')} label="Staff log in" />
+		<Link href={resolve('/(signed-out)/login')} label="Staff sign in" />
 	{/if}
 {/snippet}
 
-<!-- #2025: both doors say "Log in", so the lede says which one this is. -->
+<!-- #2025: both doors say "Sign in", so the lede says which one this is. -->
 <EntryPage
-	title="Log in"
+	title="Sign in"
 	lede="For clients of a doula practice."
 	errorSummary={submission.errors.length > 0 ? errorSummary : undefined}
 	{content}

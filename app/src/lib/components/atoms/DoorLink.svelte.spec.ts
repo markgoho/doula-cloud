@@ -11,7 +11,7 @@ interface SetupOptions {
 async function setup({ variant }: SetupOptions = {}) {
 	await render(DoorLink, {
 		href: '/login',
-		label: 'Staff log in',
+		label: 'Staff sign in',
 		description: 'For doulas and practice owners.',
 		variant
 	});
@@ -25,7 +25,7 @@ describe('DoorLink', () => {
 			const { link } = await setup({ variant });
 
 			await expect.element(link).toBeVisible();
-			await expect.element(link).toHaveAccessibleName('Staff log in');
+			await expect.element(link).toHaveAccessibleName('Staff sign in');
 			await expect.element(link).toHaveAccessibleDescription('For doulas and practice owners.');
 			await expect.element(link).toHaveAttribute('href', '/login');
 			expect(page.getByRole('link').all()).toHaveLength(1);

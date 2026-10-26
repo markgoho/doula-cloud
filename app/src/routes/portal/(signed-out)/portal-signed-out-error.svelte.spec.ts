@@ -18,10 +18,10 @@ describe('portal/(signed-out)/+error.svelte', () => {
 		await expect.element(page.getByRole('heading', { name: 'You cannot view this' })).toBeVisible();
 	});
 
-	it('offers the way out to log in', async () => {
+	it('offers the way out to sign in', async () => {
 		await setup(404);
 
-		const link = page.getByRole('link', { name: 'Log in' });
+		const link = page.getByRole('link', { name: 'Sign in' });
 		await expect.element(link).toBeVisible();
 		expect(link.element()).toHaveAttribute('href', '/portal/login');
 	});

@@ -79,7 +79,7 @@ async function tabTo(page: Page, target: Locator, description: string): Promise<
  */
 async function signInByKeyboard(page: Page, email: string, password: string, practiceId: string) {
 	await page.goto('/login');
-	await expect(page.getByRole('heading', { level: 1, name: 'Log in' })).toBeVisible();
+	await expect(page.getByRole('heading', { level: 1, name: 'Sign in' })).toBeVisible();
 
 	await page.keyboard.press('Tab');
 	await expect(
@@ -96,7 +96,7 @@ async function signInByKeyboard(page: Page, email: string, password: string, pra
 	await expect(page.getByLabel('Password')).toBeFocused();
 	await page.keyboard.type(password);
 
-	await tabTo(page, page.getByRole('button', { name: 'Log in' }), 'the Log in button');
+	await tabTo(page, page.getByRole('button', { name: 'Sign in' }), 'the Sign in button');
 	await page.keyboard.press('Enter');
 	await expect(page).toHaveURL(new RegExp(`/practices/${practiceId}$`));
 }

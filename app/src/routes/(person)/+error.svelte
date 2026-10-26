@@ -9,7 +9,7 @@
 	 * opens `/feedback`. The founder read page refuses her with a 404 on
 	 * purpose (`founderRead.ts`), so its existence is not revealed, and
 	 * before this boundary the root one caught it: the signed-out bar and
-	 * "Log in" for a person who is signed in. The 404 stays; only the way
+	 * "Sign in" for a person who is signed in. The 404 stays; only the way
 	 * out changes, to her own account, which every signed-in person has.
 	 */
 	import { page } from '$app/state';

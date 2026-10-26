@@ -33,7 +33,7 @@ const MsgNoMatchingStaffAccount = "no matching staff account"
 // wording is aimed at a reader, not at a log line: `refusalMessage` in
 // the app prints a 4xx body verbatim, so this sentence is what she sees
 // (#745).
-const MsgAlreadyBelongsToPractice = "This account already belongs to a Practice. Log in instead."
+const MsgAlreadyBelongsToPractice = "This account already belongs to a Practice. Sign in instead."
 
 // MsgNoAddressToCreateAPractice is what signup answers a caller whose ID
 // token carries no email claim. staff.email is the address the identity
@@ -227,7 +227,7 @@ func signup(r *http.Request, tx *sql.Tx, verified authn.VerifiedToken, req Signu
 
 	// #1790: until the founder opens the pilot gate, only an address on
 	// the pilot allowlist creates a Practice. Asked after the 409 above, so
-	// somebody who already belongs to a Practice is still told to log in,
+	// somebody who already belongs to a Practice is still told to sign in,
 	// and before the first INSERT below, so a refusal leaves no Practice,
 	// no Staff row, no Membership and no Credits. A refused person keeps
 	// the Identity Platform account the screen made first; once the

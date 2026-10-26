@@ -82,7 +82,7 @@ test.describe('After a material change to the Terms starts', () => {
 		await page.goto('/login');
 		await page.getByLabel('Email').fill(doula.email);
 		await page.getByLabel('Password').fill(doula.password);
-		await page.getByRole('button', { name: 'Log in' }).click();
+		await page.getByRole('button', { name: 'Sign in' }).click();
 		await expect(page).toHaveURL(new RegExp(`/practices/${owner.practiceId}$`));
 		await page.goto(`/practices/${owner.practiceId}/clients/${clientId}`);
 		await expect(page).toHaveURL(new RegExp(`/practices/${owner.practiceId}/clients/${clientId}$`));
@@ -93,7 +93,7 @@ test.describe('After a material change to the Terms starts', () => {
 		await ownerPage.goto('/login');
 		await ownerPage.getByLabel('Email').fill(owner.email);
 		await ownerPage.getByLabel('Password').fill(owner.password);
-		await ownerPage.getByRole('button', { name: 'Log in' }).click();
+		await ownerPage.getByRole('button', { name: 'Sign in' }).click();
 		await expect(ownerPage).toHaveURL(new RegExp(`/practices/${owner.practiceId}/agreement$`));
 		await expect(ownerPage.getByRole('heading', { level: 1, name: 'The Terms of Service have changed' })).toBeVisible();
 		await expect(ownerPage.getByText(CHANGE)).toBeVisible();

@@ -92,7 +92,7 @@
 				/>
 			{/snippet}
 		</LabeledField>
-		<Button type="submit" label="Log in" onClick={noop} />
+		<Button type="submit" label="Sign in" onClick={noop} />
 	</StackedForm>
 
 	<Link href="/style-guide/entry-page" label="Forgot your password?" />
@@ -107,7 +107,7 @@
 {/snippet}
 
 <EntryPage
-	title="Log in"
+	title="Sign in"
 	lede={hasLede ? 'For doulas and practice owners.' : undefined}
 	errorSummary={hasError ? errorSummary : undefined}
 	{content}

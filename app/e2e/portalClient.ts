@@ -229,7 +229,7 @@ export async function seedContractorDoula(
 }
 
 /**
- * Provisions everything a Client needs to log in to their portal: a
+ * Provisions everything a Client needs to sign in to their portal: a
  * Practice with a Staff owner, a Client + Engagement at that Practice,
  * and a Portal Account (#617) linked to that Client.
  *

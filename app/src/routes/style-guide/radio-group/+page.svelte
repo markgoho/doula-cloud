@@ -5,7 +5,7 @@
 
 	const modeOptions: { value: 'signup' | 'login'; label: string }[] = [
 		{ value: 'signup', label: "I'm new here — create an account with this email address" },
-		{ value: 'login', label: 'I already have an account — log in and add this Practice to it' }
+		{ value: 'login', label: 'I already have an account — sign in and add this Practice to it' }
 	];
 
 	/* The longest label the Start work form draws (#1596, #1518): a
@@ -79,7 +79,7 @@
 
 	<section>
 		<h2>Error</h2>
-		<RadioGroup legend="Are you creating an account?" options={modeOptions} value="" onChange={() => {}} error="Select whether you are creating an account or logging in" />
+		<RadioGroup legend="Are you creating an account?" options={modeOptions} value="" onChange={() => {}} error="Select whether you are creating an account or signing in" />
 	</section>
 
 	<section>

@@ -18,6 +18,18 @@
 		 * row is open, because the caller owns what the form does.
 		 */
 		isDetailShown?: boolean;
+		/**
+		 * A word or two marking the row, drawn as a neutral `Badge` on a
+		 * line under the label -- "No longer collected" on a Client's answer
+		 * to a question the Practice stopped asking (#2008).
+		 */
+		tag?: string;
+		/**
+		 * Why a row has no action, said at the row's end on the same line
+		 * as its tag -- "Kept, not collected" (#2008). Drawn only on a row
+		 * that draws no action, so a row never carries both.
+		 */
+		status?: string;
 	}
 </script>
 
@@ -45,6 +57,7 @@
 	 * so whatever it draws is described by it.
 	 */
 	import type { Snippet } from 'svelte';
+	import Badge from '../atoms/Badge.svelte';
 
 	interface Properties {
 		rows: Row[];
@@ -98,6 +111,19 @@
 				<dd class="action">
 					{@render action(row, `${listId}-${index}-changes`)}
 					<span class="visually-hidden" id="{listId}-{index}-changes">{row.changes}</span>
+				</dd>
+			{/if}
+			<!--
+				#2008: the tag and the status share one line under the row, the
+				tag under the label and the status at the row's end. Under the
+				label itself, a 30% key column wrapped the badge inside its own
+				pill; on the label's line, the status pushed past the value's
+				20rem and dropped to a line of its own anyway.
+			-->
+			{#if row.tag || (row.status && !(action && row.changes))}
+				<dd class="note">
+					{#if row.tag}<Badge label={row.tag} variant="neutral" />{/if}
+					{#if row.status && !(action && row.changes)}<span class="status">{row.status}</span>{/if}
 				</dd>
 			{/if}
 			{#if detail && row.isDetailShown}
@@ -210,6 +236,22 @@
 		.action {
 			flex: none;
 			margin-inline-start: auto;
+		}
+
+		.row > .note {
+			display: flex;
+			flex-basis: 100%;
+			flex-wrap: wrap;
+			align-items: center;
+			gap: var(--space-1) var(--space-4);
+		}
+
+		/* What stands where a Change would be is a remark, not a control. */
+		.status {
+			margin-inline-start: auto;
+			font-size: var(--text-meta-size);
+			line-height: var(--text-meta-leading);
+			color: var(--color-on-surface-muted);
 		}
 
 		/* Every key above its value at every width (`isStacked`). */

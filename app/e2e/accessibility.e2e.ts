@@ -279,7 +279,7 @@ function routeFor<Seed>(row: SeededRoute<Seed>, seed: Seed): Route {
 const LINK_TOKEN = 'a11y-scan-token';
 const SIGNED_OUT_ROUTES: Route[] = [
 	{ key: '/', archetype: 'A', url: '/', h1: 'Sign in or set up a Practice' },
-	{ key: 'login', archetype: 'A', url: '/login', h1: 'Log in' },
+	{ key: 'login', archetype: 'A', url: '/login', h1: 'Sign in' },
 	// #2049: setting up a Practice is three question pages and a check
 	// page. Each is reached by its address with nothing typed, which is
 	// the state a person who follows a link to one of them meets.
@@ -319,7 +319,7 @@ const SIGNED_OUT_ROUTES: Route[] = [
 		url: '/offers/00000000-0000-0000-0000-000000000000',
 		h1: 'An offer of work'
 	},
-	{ key: 'portal/login', archetype: 'A', url: '/portal/login', h1: 'Log in' },
+	{ key: 'portal/login', archetype: 'A', url: '/portal/login', h1: 'Sign in' },
 	// #694: the way back for a locked-out person, and one of the few
 	// screens somebody meets while already in trouble -- which is
 	// exactly when an accessibility defect costs the most.
@@ -1249,7 +1249,7 @@ test('Archetype E -- the contractor Doula door onto clients/search', async ({ pa
 	await page.goto('/login');
 	await page.getByLabel('Email').fill(contractor.email);
 	await page.getByLabel('Password').fill(PORTAL_CLIENT_PASSWORD);
-	await page.getByRole('button', { name: 'Log in' }).click();
+	await page.getByRole('button', { name: 'Sign in' }).click();
 	await expect(page).toHaveURL(new RegExp(`/practices/${practiceId}$`));
 
 	// #539: a freshly seeded contractor has no attached Clients yet, so

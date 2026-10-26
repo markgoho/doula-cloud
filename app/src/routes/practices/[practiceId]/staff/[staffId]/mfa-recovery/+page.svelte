@@ -152,7 +152,7 @@
 			text={`Read the code out to ${memberName} on a call where you are sure who you are talking to. It works once, and stops working after 24 hours.`}
 		/>
 		<Text
-			text={`${memberName} enters it on the log-in screen, under the link for a lost authenticator app. That switches two-factor authentication off for that account, and ${memberName} can then log in with a password and set up a new authenticator app.`}
+			text={`${memberName} enters it on the sign-in screen, under the link for a lost authenticator app. That switches two-factor authentication off for that account, and ${memberName} can then sign in with a password and set up a new authenticator app.`}
 			tone="variant"
 		/>
 		<Link href={rosterHref} label="Staff" />

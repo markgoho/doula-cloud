@@ -28,9 +28,9 @@ describe('PageTitle', () => {
 	});
 
 	it('prefixes Error: when a refused form is showing', async () => {
-		await setup({ page: 'Log in', isError: true });
+		await setup({ page: 'Sign in', isError: true });
 
-		await expect.poll(() => document.title).toBe('Error: Log in — DoulaCloud');
+		await expect.poll(() => document.title).toBe('Error: Sign in — DoulaCloud');
 	});
 
 	it("uses the Practice's own name on the portal", async () => {

@@ -29,7 +29,7 @@ const WCAG_TAGS = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'];
 
 test('a refused form says what is wrong, takes focus, and leads to the field', async ({ page }) => {
 	await page.goto('/login');
-	await expect(page.getByRole('heading', { level: 1, name: 'Log in' })).toBeVisible();
+	await expect(page.getByRole('heading', { level: 1, name: 'Sign in' })).toBeVisible();
 
 	// Nothing before the submit: no summary on a clean form, which is what
 	// stops it stealing focus from somebody who has not asked for anything
@@ -37,7 +37,7 @@ test('a refused form says what is wrong, takes focus, and leads to the field', a
 	await expect(page.getByRole('heading', { name: 'There is a problem' })).toBeHidden();
 	await expect(page).not.toHaveTitle(/^Error: /);
 
-	await page.getByRole('button', { name: 'Log in' }).click();
+	await page.getByRole('button', { name: 'Sign in' }).click();
 
 	// The browser's own validation is off (`novalidate`), so the page is
 	// what refuses -- and it refuses with *every* reason at once rather
@@ -76,6 +76,6 @@ test('a refused form says what is wrong, takes focus, and leads to the field', a
 	// summary rather than leaving a stale list of solved problems.
 	await page.getByLabel('Email').fill('nobody@example.com');
 	await page.getByLabel('Password').fill('a-password');
-	await page.getByRole('button', { name: 'Log in' }).click();
+	await page.getByRole('button', { name: 'Sign in' }).click();
 	await expect(page.getByRole('link', { name: 'Enter your email address' })).toBeHidden();
 });

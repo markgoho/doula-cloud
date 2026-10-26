@@ -359,7 +359,7 @@ function sqlLiteral(value: string): string {
 
 // Creates the low-privilege LOGIN role the RLS policies in db/migrations
 // apply to. Migration 00002 creates the app_runtime *group* role, but
-// nothing can log in as it until a member role exists -- a real deploy
+// nothing can sign in as it until a member role exists -- a real deploy
 // would provision that via Cloud SQL IAM instead of a hardcoded
 // password. Used to be compose.e2e.yaml's own `seed-role` service; now
 // runs the identical SQL via execSQL once runMigrations has finished.
