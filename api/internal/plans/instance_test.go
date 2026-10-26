@@ -604,6 +604,88 @@ func TestInstance_LastEdited(t *testing.T) {
 	}
 }
 
+// TestPostInstanceHandler_RecordsWhoStartedIt is #2133: starting a Plan
+// records one action per plan, naming the Staff member who started it;
+// the POST's own response, a later GET and a save's response all carry
+// that start; a refused second start records nothing more; and the other
+// Plan does not borrow it.
+func TestPostInstanceHandler_RecordsWhoStartedIt(t *testing.T) {
+	for _, tc := range []struct {
+		planType, other string
+		want            string
+	}{
+		{carePlanType, birthPlanType, "care_plan_started"},
+		{birthPlanType, carePlanType, "birth_plan_started"},
+	} {
+		t.Run(tc.planType, func(t *testing.T) {
+			db := testdb.New(t)
+			uid := "post-instance-started-" + tc.planType
+			practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
+			_, engagementID := testdb.SeedEngagement(t, db, practiceID)
+			const fields = `[{"id":"name","type":"short_text","label":"Name","order":0}]`
+			seedPlanTemplate(t, db, practiceID, tc.planType, fields)
+			seedInstance(t, db, engagementID, tc.other, fields, `{}`)
+
+			srv, session := newPlanServer(t, db, uid)
+			defer srv.Close()
+
+			postResp := postInstance(t, srv, session, practiceID, engagementID, tc.planType)
+			defer postResp.Body.Close()
+			if postResp.StatusCode != http.StatusCreated {
+				t.Fatalf("POST status = %d, want %d", postResp.StatusCode, http.StatusCreated)
+			}
+			var posted plans.InstanceResponse
+			if err := json.NewDecoder(postResp.Body).Decode(&posted); err != nil {
+				t.Fatalf("decode POST: %v", err)
+			}
+			wantBy := "Test Staff " + uid
+			if posted.Started == nil || posted.Started.By != wantBy || posted.Started.At.IsZero() {
+				t.Fatalf("POST response: started = %+v, want its instant, by %q", posted.Started, wantBy)
+			}
+			if posted.LastEdited != nil {
+				t.Errorf("POST response: lastEdited = %+v, want none -- starting is not a save", posted.LastEdited)
+			}
+
+			again := postInstance(t, srv, session, practiceID, engagementID, tc.planType)
+			defer again.Body.Close()
+			if again.StatusCode != http.StatusConflict {
+				t.Fatalf("second POST status = %d, want %d", again.StatusCode, http.StatusConflict)
+			}
+
+			var action, actorID string
+			var rows int
+			if err := db.Admin.QueryRowContext(t.Context(),
+				`SELECT action, actor_staff_id::text, count(*) OVER () FROM activity WHERE subject_kind = 'engagement' AND subject_id = $1`,
+				engagementID,
+			).Scan(&action, &actorID, &rows); err != nil {
+				t.Fatalf("query activity: %v", err)
+			}
+			if action != tc.want || actorID != staffID || rows != 1 {
+				t.Fatalf("activity = %q by %q (%d rows), want one %q by %q", action, actorID, rows, tc.want, staffID)
+			}
+
+			savedResp := putInstance(t, srv, session, practiceID, engagementID, tc.planType, plans.PutInstanceRequest{
+				Answers: plans.Answers{nameFieldID: jamieAnswer},
+			})
+			defer savedResp.Body.Close()
+			if saved := decodeInstance(t, savedResp); saved.Started == nil || !saved.Started.At.Equal(posted.Started.At) || saved.LastEdited == nil {
+				t.Errorf("the save's response: started = %+v, lastEdited = %+v, want the start kept beside the save", saved.Started, saved.LastEdited)
+			}
+
+			getResp := getInstance(t, srv, session, practiceID, engagementID, tc.planType)
+			defer getResp.Body.Close()
+			if got := decodeInstance(t, getResp); got.Started == nil || !got.Started.At.Equal(posted.Started.At) {
+				t.Errorf("GET: started = %+v, want the POST's", got.Started)
+			}
+			otherResp := getInstance(t, srv, session, practiceID, engagementID, tc.other)
+			defer otherResp.Body.Close()
+			if other := decodeInstance(t, otherResp); other.Started != nil {
+				t.Errorf("the %s: started = %+v, want none -- only the %s was started here", tc.other, other.Started, tc.planType)
+			}
+		})
+	}
+}
+
 // decodeInstance reads an InstanceResponse off a 200 body; the caller
 // closes it.
 func decodeInstance(t *testing.T, resp *http.Response) plans.InstanceResponse {

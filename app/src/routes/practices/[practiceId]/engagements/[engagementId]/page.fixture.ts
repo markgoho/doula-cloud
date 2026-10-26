@@ -351,8 +351,22 @@ export const birthPlan = {
 		{ id: 'bp-feeding', type: 'single_select', label: 'Feeding plan', options: ['Breast', 'Bottle', 'Both'], order: 3 }
 	],
 	answers: { 'bp-atmosphere': 'Low lights and the playlist her partner made.' },
+	// #2133: its start, which the last save's row replaces on screen.
+	started: { at: '2026-08-20T15:00:00Z', by: 'Anne-Marie Ochieng-Whitfield' },
 	// #2104: its last save, by the longest name the roster holds.
 	lastEdited: { at: '2026-08-26T15:00:00Z', by: 'Priyanka Venkataraman-Solberg' }
+};
+
+/*
+ * A Care Plan started and never saved (#2133): its one audit row is the
+ * start, so the Plan section's other branch is swept too.
+ */
+const carePlan = {
+	...birthPlan,
+	planType: 'care_plan',
+	answers: {},
+	lastEdited: undefined,
+	started: { at: '2026-08-21T15:00:00Z', by: 'Priyanka Venkataraman-Solberg' }
 };
 
 export const session = {
@@ -563,7 +577,7 @@ export const typical: RouteVariant<RouteParameters> = {
 				clientAcknowledgedAt: '2026-10-03T15:00:00Z'
 			});
 		}
-		if (path.endsWith('/plans/care_plan')) return jsonResponse({ ...birthPlan, planType: 'care_plan' });
+		if (path.endsWith('/plans/care_plan')) return jsonResponse(carePlan);
 		if (path.includes('/messages')) {
 			// Newest first, as the BFF sends a page.
 			return jsonResponse({

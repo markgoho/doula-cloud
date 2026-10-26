@@ -357,6 +357,16 @@ const (
 	ActionCarePlanEdited  EngagementAction = "care_plan_edited"
 	ActionBirthPlanEdited EngagementAction = "birth_plan_edited"
 
+	// ActionCarePlanStarted and ActionBirthPlanStarted record a Staff
+	// member starting an Engagement's Care Plan or Birth Plan
+	// (plans.PostInstanceHandler, #2133), so a Plan started and never
+	// saved still answers "who started this, and when?". One action per
+	// plan for #2066's reason: the Care Plan's start stays off her
+	// ledger by action (staffingActions below); her Birth Plan's start
+	// stays on it.
+	ActionCarePlanStarted  EngagementAction = "care_plan_started"
+	ActionBirthPlanStarted EngagementAction = "birth_plan_started"
+
 	// ActionVisitNotesEdited records a Visit's free-text notes being
 	// written or re-written (#251) -- staff-only content (ADR-0006), but
 	// the action itself is not: deliberately absent from staffingActions
@@ -558,6 +568,7 @@ func MoneyActions() []EngagementAction {
 // ActionCarePlanEdited is here by a third rule (#2066): the Care Plan is
 // staff-only and "never shown in the Client portal" (GLOSSARY.md,
 // ADR-0006), so even the fact that it changed stays off her ledger.
+// ActionCarePlanStarted stands on the same rule (#2133).
 var staffingActions = map[EngagementAction]bool{
 	ActionOfferSent:             true,
 	ActionOfferAccepted:         true,
@@ -585,6 +596,8 @@ var staffingActions = map[EngagementAction]bool{
 	ActionDueDateChanged: true,
 	// #2066: the Care Plan is staff-only.
 	ActionCarePlanEdited: true,
+	// #2133: so is the fact that it was started.
+	ActionCarePlanStarted: true,
 }
 
 // StaffingActions returns every action GLOSSARY.md's Activity entry keeps

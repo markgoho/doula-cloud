@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"testing"
 
 	"doula-cloud/api/internal/activity"
@@ -195,13 +196,16 @@ func TestActivityHandler_HidesStaffingEntries(t *testing.T) {
 // TestActivityHandler_HidesTheCarePlan proves #2066 at the reader: a Care
 // Plan is "never shown in the Client portal" (GLOSSARY.md), so its save is
 // left out of her ledger, while a Birth Plan save, her own document, stays.
+// #2133: the same holds for each Plan's start.
 func TestActivityHandler_HidesTheCarePlan(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "portal-activity-care-plan"
 	practiceID, engagementID := seedEngagementForActivity(t, db, identityUID, "Activity Care Plan Practice")
 	staffID := testdb.SeedStaffAtPractice(t, db, practiceID, "portal-activity-care-plan-staff", []string{ownerRole}, "employee")
 
+	testdb.SeedActivity(t, db, practiceID, activity.SubjectEngagement, engagementID, string(activity.ActionCarePlanStarted), activity.StaffActor(staffID))
 	testdb.SeedActivity(t, db, practiceID, activity.SubjectEngagement, engagementID, string(activity.ActionCarePlanEdited), activity.StaffActor(staffID))
+	testdb.SeedActivity(t, db, practiceID, activity.SubjectEngagement, engagementID, string(activity.ActionBirthPlanStarted), activity.StaffActor(staffID))
 	testdb.SeedActivity(t, db, practiceID, activity.SubjectEngagement, engagementID, string(activity.ActionBirthPlanEdited), activity.StaffActor(staffID))
 
 	srv, session := activityServer(t, db, identityUID)
@@ -213,8 +217,14 @@ func TestActivityHandler_HidesTheCarePlan(t *testing.T) {
 	if err := json.NewDecoder(resp.Body).Decode(&got); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
-	if len(got.Items) != 1 || got.Items[0].Action != string(activity.ActionBirthPlanEdited) {
-		t.Fatalf("Items = %+v, want only the birth_plan_edited row (the Care Plan hidden)", got.Items)
+	actions := make([]string, 0, len(got.Items))
+	for _, item := range got.Items {
+		actions = append(actions, item.Action)
+	}
+	slices.Sort(actions)
+	want := []string{string(activity.ActionBirthPlanEdited), string(activity.ActionBirthPlanStarted)}
+	if !slices.Equal(actions, want) {
+		t.Fatalf("actions = %v, want only %v (the Care Plan's start and save hidden)", actions, want)
 	}
 }
 

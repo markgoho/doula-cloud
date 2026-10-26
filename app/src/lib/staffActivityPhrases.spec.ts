@@ -14,8 +14,10 @@ const WORDING: readonly (readonly [action: string, named: string, unnamed: strin
 	['birth_outcome_recorded', 'Birth outcome recorded for Amara', 'Birth outcome recorded for the Client'],
 	['birth_plan_acknowledged', 'Birth Plan marked as read by Amara', 'Birth Plan marked as read by the Client'],
 	['birth_plan_edited', 'Birth Plan for Amara changed', 'Birth Plan for the Client changed'],
+	['birth_plan_started', 'Birth Plan for Amara started', 'Birth Plan for the Client started'],
 	['care_phase_changed', 'Care phase changed for Amara', 'Care phase changed for the Client'],
 	['care_plan_edited', 'Care Plan for Amara changed', 'Care Plan for the Client changed'],
+	['care_plan_started', 'Care Plan for Amara started', 'Care Plan for the Client started'],
 	['contract_amount_overridden', 'Contract price for Amara changed by hand', 'Contract price for the Client changed by hand'],
 	[
 		'contract_amount_repriced',

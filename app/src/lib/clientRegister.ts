@@ -212,9 +212,11 @@ const CLIENT_ACTIVITY_PHRASES: Record<string, string> = {
 	visit_scheduled: "A visit's timing was updated.",
 	visit_notes_edited: 'Notes on a visit were updated.',
 
-	// Her Birth Plan. A Care Plan save (`care_plan_edited`) never reaches
-	// her: the portal reader leaves it out, since a Care Plan is never
-	// shown in the Client portal (GLOSSARY.md, #2066).
+	// Her Birth Plan. A Care Plan's start or save (`care_plan_started`,
+	// `care_plan_edited`) never reaches her: the portal reader leaves both
+	// out, since a Care Plan is never shown in the Client portal
+	// (GLOSSARY.md, #2066, #2133).
+	birth_plan_started: 'Your Birth Plan was started.',
 	birth_plan_edited: 'Your Birth Plan was updated.',
 	birth_plan_acknowledged: 'You marked your Birth Plan as read.',
 
