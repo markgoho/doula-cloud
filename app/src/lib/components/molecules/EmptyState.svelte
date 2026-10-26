@@ -4,7 +4,11 @@
 	 * `Link`, a change on this same screen is a `Button`. Its shape picks
 	 * which, so a caller never chooses an element, only what it does.
 	 */
-	export type EmptyStateAction = { label: string; href: string } | { label: string; onClick: () => void };
+	export type EmptyStateAction =
+		| { label: string; href: string }
+		/* `focusOnAppearing` is the Button's own (#2103): an opener that
+		   takes focus back after its form's Cancel. */
+		| { label: string; onClick: () => void; focusOnAppearing?: boolean };
 </script>
 
 <script lang="ts">
@@ -47,7 +51,12 @@
 		{#if action && 'href' in action}
 			<div><Link href={action.href} label={action.label} /></div>
 		{:else if action}
-			<div><Button label={action.label} variant="secondary" onClick={action.onClick} /></div>
+			<div><Button
+					label={action.label}
+					variant="secondary"
+					onClick={action.onClick}
+					focusOnAppearing={action.focusOnAppearing}
+				/></div>
 		{/if}
 	</stack-l>
 </div>

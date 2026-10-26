@@ -47,6 +47,30 @@ describe('Button.svelte', () => {
 		await expect.element(page.getByRole('button')).toHaveAttribute('type', 'submit');
 	});
 
+	// #2103: an opener drawn again after its form's Cancel takes focus.
+	it('takes focus the moment it appears if focusOnAppearing', async () => {
+		await setup({ focusOnAppearing: true });
+
+		await expect.element(page.getByRole('button')).toHaveFocus();
+	});
+
+	it('does not take focus when it appears by default', async () => {
+		await setup();
+
+		await expect.element(page.getByRole('button')).not.toHaveFocus();
+	});
+
+	// A row's Change stays on screen while its form is open, so it takes
+	// focus when focusOnAppearing turns true, not only when it renders.
+	it('takes focus when focusOnAppearing turns true', async () => {
+		const { rerender } = await render(Button, { label: 'Change' });
+		await expect.element(page.getByRole('button')).not.toHaveFocus();
+
+		await rerender({ focusOnAppearing: true });
+
+		await expect.element(page.getByRole('button')).toHaveFocus();
+	});
+
 	it('reflects disabled', async () => {
 		await setup({ disabled: true });
 
