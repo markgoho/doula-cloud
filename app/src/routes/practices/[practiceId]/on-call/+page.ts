@@ -24,8 +24,9 @@ export interface OnCallPageData {
  * tool mid-`load`.
  *
  * The range lives in the URL, so a link a colleague is sent opens on the
- * same days, and a reload paints the same roster. Its default is today,
- * which is the question the screen exists for.
+ * same days, and a reload paints the same roster. Its default is today
+ * through the next 30 days (#2026), so a first visit shows the births
+ * coming up rather than an empty day.
  *
  * This read is the same for every Staff member, and what comes back is
  * not: the BFF gives a contractor Doula only the births she holds a

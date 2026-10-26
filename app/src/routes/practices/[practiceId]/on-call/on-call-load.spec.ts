@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { jsonResponse } from '#lib/testResponse.js';
 import type { OnCallPageData } from './+page.js';
-import type { Roster } from '#lib/onCall.js';
+import { defaultRange, type Roster } from '#lib/onCall.js';
 
 /*
  * This spec declares its own body rather than importing the fixture
@@ -78,7 +78,7 @@ describe('on-call/+page.ts load', () => {
 		expect(data.roster.windows.length).toBeGreaterThan(0);
 	});
 
-	it('opens on today when the URL names no days, because the question is tonight', async () => {
+	it('opens on the next 30 days when the URL names none, so a first visit is not empty (#2026)', async () => {
 		const { load } = await import('./+page.js');
 		const { fetchMock } = setup(200);
 
@@ -86,7 +86,7 @@ describe('on-call/+page.ts load', () => {
 			loadEvent() as Parameters<typeof load>[0]
 		)) as OnCallPageData;
 
-		expect(data.range.from).toBe(data.range.to);
+		expect(data.range).toEqual(defaultRange());
 		expect(fetchMock.mock.calls[0][0]).toContain(
 			`from=${data.range.from}&to=${data.range.to}`
 		);

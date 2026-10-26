@@ -60,19 +60,19 @@ function roster(
 }
 
 describe('the range a reader is looking at', () => {
-	it('opens on today, and only today, because the question is tonight', () => {
+	it('opens on today through the next 30 days, so a first visit is not empty (#2026)', () => {
 		expect(defaultRange(today)).toEqual({
 			from: '2026-10-17',
-			to: '2026-10-17',
+			to: '2026-11-16',
 		});
 	});
 
-	it('reads a day from the URL and falls back to today for one it does not name', () => {
+	it('reads a day from the URL and falls back to the default for one it does not name', () => {
 		expect(
 			rangeFromParameters(new URLSearchParams('from=2026-10-01'), today)
 		).toEqual({
 			from: '2026-10-01',
-			to: '2026-10-17',
+			to: '2026-11-16',
 		});
 	});
 
@@ -85,7 +85,7 @@ describe('the range a reader is looking at', () => {
 	it('writes only the days a reader actually chose into the href', () => {
 		const base = '/practices/practice-1/on-call';
 		expect(
-			rosterHref(base, { from: '2026-10-17', to: '2026-10-17' }, today)
+			rosterHref(base, { from: '2026-10-17', to: '2026-11-16' }, today)
 		).toBe(base);
 		expect(
 			rosterHref(base, { from: '2026-10-17', to: '2026-10-31' }, today)
