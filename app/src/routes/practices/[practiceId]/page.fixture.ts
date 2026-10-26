@@ -102,8 +102,11 @@ function respondForPopulatedPractice(path: string): Response {
 			hasMore: false
 		});
 	}
-	if (path.includes('/clients')) {
-		return jsonResponse({ items: [{ clientId: 'client-1' }] });
+	// #2095: the Clients card's count, and whether there is any Client
+	// at all. Four digits, the widest a pilot's count line could be drawn
+	// at, so the card is measured with a long line rather than "2 active".
+	if (path.includes('/clients/count')) {
+		return jsonResponse({ records: 2048, active: 1024 });
 	}
 	if (path.includes('/push-subscriptions')) {
 		return jsonResponse({});
@@ -235,9 +238,9 @@ function respondForPopulatedPractice(path: string): Response {
 
 /*
  * The empty Practice: the first screen a new Owner sees after signup, and
- * a tree that neither subject above draws (#1621). `hasAnyClient` reads
- * no Client, so `OverviewHub` draws its `empty` snippet in place of
- * `primary`, `secondary` and `feed`: the level-1 heading, one sentence
+ * a tree that neither subject above draws (#1621). `/clients/count`
+ * reads no record (#2095), so `OverviewHub` draws its `empty` snippet in
+ * place of `primary`, `secondary` and `feed`: the level-1 heading, one sentence
  * and one link. The hostile content of this screen is the heading, so
  * the session keeps the fixture's own `practiceName`.
  *
@@ -248,7 +251,7 @@ function respondForPopulatedPractice(path: string): Response {
  *
  * Which way `respond` went: this variant carries its own, because the one
  * answer that differs is in `respond`, and a variant's `respond` is a
- * replacement and not a merge. It answers `/clients` itself and hands
+ * replacement and not a merge. It answers `/clients/count` itself and hands
  * each other path to the base's function. The hub makes the other eight
  * reads for an Owner on an empty Practice too (`/offers`, `/staff`,
  * `/billing`, `/payments/connect`, `/engagement-requests`, `/activity`,
@@ -267,10 +270,6 @@ function respondForPopulatedPractice(path: string): Response {
  * alone, and its "3 Welcome credits" is the longer of the two forms, so
  * that is the one measured here (#1621's triage).
  *
- * The match is on the end of the path (`/clients`, then a query or
- * nothing), not on `includes('/clients')`, so a later path below
- * `/clients/` goes to the base and is not answered as an empty list.
- *
  * No variant for a Doula on an empty Practice, on purpose. The `empty`
  * snippet reads the session only through the balance, and her sentence
  * has no number, which makes her tree a strict subset of this one.
@@ -279,7 +278,7 @@ export const asOwnerWithNoClient: RouteVariant = {
 	name: 'The Practice landing hub, as an Owner with no Client yet',
 	pageData: practiceSession(['owner'], { practiceName }),
 	respond: (path) => {
-		if (/\/clients(\?|$)/.test(path)) return jsonResponse({ items: [] });
+		if (path.includes('/clients/count')) return jsonResponse({ records: 0, active: 0 });
 		if (path.includes('/billing')) {
 			return jsonResponse({
 				balance: 3,
@@ -349,9 +348,10 @@ const typicalActivity = [
 ].map(({ action, actor, subject }, index) => ({
 	subjectKind: subject === undefined ? 'engagement' : 'membership',
 	subjectId: subject === undefined ? `engagement-${index + 1}` : nth(TYPICAL_STAFF, subject).staffId,
-	// #2006: an Engagement's row names its Client by the conversation
-	// name, the given name here; a Membership row names the staff member.
-	subjectName: subject === undefined ? nth(TYPICAL_CLIENTS, index).givenName : nth(TYPICAL_STAFF, subject).name,
+	// #2006: an Engagement's row names its Client; since #2095 by the full
+	// name, the conversation name and the family name, so two Clients with
+	// one first name read apart. A Membership row names the staff member.
+	subjectName: subject === undefined ? nth(TYPICAL_CLIENTS, index).name : nth(TYPICAL_STAFF, subject).name,
 	action,
 	actorKind: 'staff',
 	actorName: nth(TYPICAL_STAFF, actor).name,

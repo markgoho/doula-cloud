@@ -23,6 +23,10 @@ import (
 // CanAccessEngagement.
 func Mount(g *staffauth.GatedRouter, ir *idempotency.Router, nudge tasknudge.Enqueuer) {
 	g.Get("/api/practices/{practiceId}/clients", staffauth.AnyStaff, ListHandler())
+	// #2095: the Overview's Clients card. AnyStaff like the list; the
+	// contractor narrowing is inside, as the list's is. The literal
+	// segment outranks {clientId} below in the mux's precedence.
+	g.Get("/api/practices/{practiceId}/clients/count", staffauth.AnyStaff, CountHandler())
 	// #1829: a read sent as a POST, so the four fields a Client is
 	// searched on travel in the body and never in a request log's URL.
 	// AnyStaff is the declaration the GET it replaced carried; the

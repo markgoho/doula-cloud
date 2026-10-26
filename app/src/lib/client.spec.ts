@@ -3,6 +3,7 @@ import {
 	clientsResultSummary,
 	createClient,
 	editClient,
+	loadClientCount,
 	loadClients,
 	mergeClient,
 	searchClients,
@@ -24,6 +25,21 @@ const editFields: ClientEditFields = {
 	dateOfBirth: '',
 	fieldValues: { pronouns: 'she/her' }
 };
+
+describe('loadClientCount', () => {
+	it('reads the count path and returns the two numbers', async () => {
+		const fetcher = vi.fn().mockResolvedValue(response({ records: 22, active: 14 }));
+
+		await expect(loadClientCount(fetcher, 'practice-1')).resolves.toEqual({ records: 22, active: 14 });
+		expect(fetcher).toHaveBeenCalledWith('/api/practices/practice-1/clients/count');
+	});
+
+	it('throws on a refusal', async () => {
+		const fetcher = vi.fn().mockResolvedValue(response({ message: 'You cannot see this Practice.' }, 403));
+
+		await expect(loadClientCount(fetcher, 'practice-1')).rejects.toThrow('You cannot see this Practice.');
+	});
+});
 
 describe('loadClients', () => {
 	it('fetches the practice clients path and returns the decoded page', async () => {

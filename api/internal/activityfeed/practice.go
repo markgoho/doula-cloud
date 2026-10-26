@@ -190,6 +190,13 @@ const personSubjectKind = activity.SubjectMembership
 // Sort (top-N heapsort) -> an activity_subject-prefixed scan, no JIT
 // section.
 //
+// Re-measured after #2095 read sc.family_name as well (2026-10-26): one
+// more column from a row the sc join already fetches, no new join.
+// TestPracticeQueryPlanAtScale, 98 ms; TestPracticeQueryPlanWith
+// DepartedMembershipSubjects, 176 ms. The same plan shape, no JIT
+// section; lower than the numbers just above because the Podman VM was
+// quieter, not because anything got cheaper.
+//
 // The subject join (subj) is #1148's own addition: a feed spanning many
 // subject kinds has to say who a roster change happened to, or "Roles
 // changed" names the actor and nobody else, and a reader cannot tell one
@@ -233,7 +240,7 @@ const personSubjectKind = activity.SubjectMembership
 // neither, and each is a primary-key lookup on a table this query
 // already reads.
 const listPracticeActivityQueryTemplate = `SELECT a.id, a.subject_kind, a.subject_id, a.action, a.actor_kind::text,
-	       %[3]s, subj.name, sc.given_name, sc.preferred_name, a.created_at
+	       %[3]s, subj.name, sc.given_name, sc.preferred_name, sc.family_name, a.created_at
 	FROM activity a
 	%[4]s
 	LEFT JOIN staff subj ON a.subject_kind = '%[2]s' AND subj.id = a.subject_id
@@ -243,7 +250,7 @@ const listPracticeActivityQueryTemplate = `SELECT a.id, a.subject_kind, a.subjec
 	ORDER BY a.created_at DESC, a.id DESC LIMIT %[1]d`
 
 const listPracticeActivityAfterQueryTemplate = `SELECT a.id, a.subject_kind, a.subject_id, a.action, a.actor_kind::text,
-	       %[3]s, subj.name, sc.given_name, sc.preferred_name, a.created_at
+	       %[3]s, subj.name, sc.given_name, sc.preferred_name, sc.family_name, a.created_at
 	FROM activity a
 	%[4]s
 	LEFT JOIN staff subj ON a.subject_kind = '%[2]s' AND subj.id = a.subject_id
@@ -353,16 +360,16 @@ func queryBatch(ctx context.Context, tx *sql.Tx, practiceID string, after *pagec
 		var row rawEntry
 		var actorKind string
 		var staffName, clientGivenName, clientPreferredName, subjectName sql.NullString
-		var subjectClientGivenName, subjectClientPreferredName sql.NullString
+		var subjectClientGivenName, subjectClientPreferredName, subjectClientFamilyName sql.NullString
 		if err := rows.Scan(&row.cursorID, &row.SubjectKind, &row.SubjectID, &row.Action, &actorKind,
 			&staffName, &clientGivenName, &clientPreferredName, &subjectName,
-			&subjectClientGivenName, &subjectClientPreferredName, &row.CreatedAt); err != nil {
+			&subjectClientGivenName, &subjectClientPreferredName, &subjectClientFamilyName, &row.CreatedAt); err != nil {
 			// coverage:ignore reason: row scan failure, not exercised by unit tests
 			return nil, fmt.Errorf("activityfeed: scan practice activity row: %w", err)
 		}
 		row.ActorKind = actorKind
 		row.ActorName = activitypage.ActorName(actorKind, staffName, clientGivenName, clientPreferredName)
-		row.SubjectName = resolveSubjectName(row.SubjectKind, subjectName, subjectClientGivenName, subjectClientPreferredName)
+		row.SubjectName = resolveSubjectName(row.SubjectKind, subjectName, subjectClientGivenName, subjectClientPreferredName, subjectClientFamilyName)
 		items = append(items, row)
 	}
 	if err := rows.Err(); err != nil {
@@ -412,17 +419,19 @@ func queryBatch(ctx context.Context, tx *sql.Tx, practiceID string, after *pagec
 // exactly what ADR-0033's redaction promises stops happening. 00116's own
 // doc comment carries the full reasoning and the cost measurement #1077
 // asked any fourth staff policy to repeat.
-func resolveSubjectName(subjectKind string, subjectName, clientGivenName, clientPreferredName sql.NullString) string {
+func resolveSubjectName(subjectKind string, subjectName, clientGivenName, clientPreferredName, clientFamilyName sql.NullString) string {
 	if subjectKind != personSubjectKind {
 		// #2006: an Engagement's row and a Client record's own row name
-		// the Client, in the conversation name every screen reads. Not
+		// the Client. #2095 made it the full name (personname.Full): this
+		// feed spans every Client at the Practice, and two of them can
+		// share a first name. Not
 		// Valid for a Practice row, which joins no Client, and for a row
 		// whose Client this reader's RLS does not reach -- a row the gate
 		// refuses anyway.
 		if !clientGivenName.Valid {
 			return ""
 		}
-		return personname.Preferred(clientGivenName.String, clientPreferredName.String)
+		return personname.Full(clientGivenName.String, clientPreferredName.String, clientFamilyName.String)
 	}
 	if !subjectName.Valid {
 		return activity.DepartedStaffName

@@ -31,6 +31,17 @@ func Display(givenName, familyName, preferredName string) string {
 	return Legal(givenName, familyName)
 }
 
+// Full is the name a row reads where it names one Client among the
+// Practice's others (#2095): the conversation name (Preferred) followed
+// by family_name when she has one. The Practice-wide activity feed reads
+// it, because two Clients at one Practice can share a first name and
+// "Visit added for Sarah" then does not say which Sarah. The brief's
+// Voice section, rule 2's amendment of 2026-10-26, is the rule; this is
+// its one spelling.
+func Full(givenName, preferredName, familyName string) string {
+	return Legal(Preferred(givenName, preferredName), familyName)
+}
+
 // Preferred is the conversation name every screen, the Clients sort, and
 // the Message thread read: preferred_name when she has one, falling back
 // to given_name -- the one column that's never empty.

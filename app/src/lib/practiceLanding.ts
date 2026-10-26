@@ -14,7 +14,7 @@
 import { isOpen, loadInbox, type Offer } from './offer.js';
 import { apiErrorMessage } from './apiErrorMessage.js';
 import { loadPendingRequests } from './engagementRequest.js';
-import { hasAnyClient } from './client.js';
+import { loadClientCount } from './client.js';
 export type { Fetcher } from './fetcher.js';
 import { creditCount, loadBalance } from './billing.js';
 import { loadConnectStatus, type ConnectStatus } from './payments.js';
@@ -121,6 +121,9 @@ export interface PracticeLanding {
 	 * primary region is "what needs me today". */
 	openOffers: Offer[];
 	hasClients: boolean;
+	/** How many Clients are in active care, for the Clients card's count
+	 * (#2095). The same read answers `hasClients`. */
+	activeClients: number;
 	roster: Block<RosterHealth>;
 	credit: Block<CreditHealth>;
 	connect: Block<ConnectHealth>;
@@ -259,9 +262,11 @@ export async function loadPracticeLanding(
 ): Promise<PracticeLanding> {
 	const { roles } = session;
 
-	const [openOffers, hasClients, roster, credit, connect, requests, secondFactorRecommended] = await Promise.all([
+	const [openOffers, clientCount, roster, credit, connect, requests, secondFactorRecommended] = await Promise.all([
 		readOpenOffers(fetcher, practiceId),
-		hasAnyClient(fetcher, practiceId),
+		// One row from the BFF (#2095), where this was a whole page of the
+		// list read to learn whether it was empty.
+		loadClientCount(fetcher, practiceId),
 		canReadRoster(roles) ? block(() => loadRoster(fetcher, practiceId)) : undefined,
 		canReadRoster(roles)
 			? block(async () => {
@@ -295,7 +300,8 @@ export async function loadPracticeLanding(
 		practiceName: session.practiceName,
 		roles,
 		openOffers,
-		hasClients,
+		hasClients: clientCount.records > 0,
+		activeClients: clientCount.active,
 		roster,
 		credit,
 		connect,

@@ -190,27 +190,41 @@
 		href: string;
 	}
 
+	// #2095: the drawing gives three cards a count in place of their line
+	// ("14 active", "31 Credits"), so a person sees how much is there
+	// before going in. Each count comes from a read this page already
+	// makes; the active Clients from the one-row `/clients/count` that
+	// also says whether the Practice has a Client at all. Until a count is
+	// known the card keeps its own line.
+	function countLine(count: number | undefined, words: string): string | undefined {
+		if (count === undefined) return undefined;
+		return count === 0 ? `None ${words}` : `${count} ${words}`;
+	}
+
 	const quickLinkCards = $derived.by((): QuickLinkCard[] => {
 		const practiceId = page.params.practiceId!;
 		const isForOwnerOrAdmin = isOwnerOrAdmin(session);
 		return [
 			{
 				label: 'Clients',
-				description: "Find a Client's record and care.",
+				description: countLine(landing?.activeClients, 'active') ?? "Find a Client's record and care.",
 				href: resolve('/practices/[practiceId]/clients', { practiceId })
 			},
 			...(isForOwnerOrAdmin
 				? [
 						{
 							label: 'Credits',
-							description: 'Buy Credits and see the balance.',
+							description:
+								landing?.credit && landing.credit !== 'unavailable'
+									? landing.credit.count
+									: 'Buy Credits and see the balance.',
 							href: resolve('/practices/[practiceId]/billing', { practiceId })
 						}
 					]
 				: []),
 			{
 				label: 'Your offers',
-				description: 'Work you have been offered.',
+				description: countLine(landing?.openOffers.length, 'waiting on you') ?? 'Work you have been offered.',
 				href: resolve('/practices/[practiceId]/offers', { practiceId })
 			},
 			...(isForOwnerOrAdmin

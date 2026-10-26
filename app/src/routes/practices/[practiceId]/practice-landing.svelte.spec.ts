@@ -33,7 +33,7 @@ if (!customElements.get('center-l')) registerLayoutPrimitives();
  * well as what a Doula fetches, since #928 gave this route an Owner
  * variant and `block()` swallows an unanswered path into a "Could not
  * load" rail. The variant for an Owner with no Client (#1621) has a
- * `respond` of its own, which answers `/clients` with no items and hands
+ * `respond` of its own, which answers `/clients/count` with no record and hands
  * each other path to that same function, so those answers are still
  * written once. `setup()` below still installs its own answers rather than
  * the fixture's, because most of these tests are about a *particular*
@@ -90,7 +90,8 @@ async function setup({
 		// written as a spread onto that same Offer rather than a second
 		// object restating its fields (#596).
 		offers: jsonResponse({ items: [...offers, { ...offers[0], offerId: 'offer-2', state: 'declined' }] }),
-		clients: jsonResponse({ items: clients, hasMore: false }),
+		// `/clients/count` (#2095): every Client here is in active care.
+		clients: jsonResponse({ records: clients.length, active: clients.length }),
 		staff: jsonResponse({
 			members: [{ staffId: 's1' }, { staffId: 's2' }],
 			invitations: { items: [{ expired: true }], hasMore: false }
@@ -192,7 +193,7 @@ describe('the Practice landing page', () => {
 		await expect.element(testPage.getByRole('heading', { name: 'Your people' })).toBeVisible();
 		await expect.element(testPage.getByText('1 invitation expired')).toBeVisible();
 		await expect.element(testPage.getByRole('heading', { name: 'Credits' })).toBeVisible();
-		await expect.element(testPage.getByText('12')).toBeVisible();
+		await expect.element(testPage.getByText('12', { exact: true })).toBeVisible();
 		await expect.element(testPage.getByText('Onboarding incomplete')).toBeVisible();
 		await expect
 			.element(testPage.getByText('Stripe is waiting on 1 more detail.'))
@@ -439,7 +440,7 @@ describe('the Practice landing page', () => {
 		await expect.element(testPage.getByRole('heading', { name: 'Your people' })).toBeVisible();
 		await expect.element(testPage.getByText('4 invitations expired')).toBeVisible();
 		await expect.element(testPage.getByRole('heading', { name: 'Credits' })).toBeVisible();
-		await expect.element(testPage.getByText('1284')).toBeVisible();
+		await expect.element(testPage.getByText('1284', { exact: true })).toBeVisible();
 		await expect.element(testPage.getByText('30+ waiting')).toBeVisible();
 		await expect.element(testPage.getByText('Onboarding incomplete')).toBeVisible();
 		await expect
@@ -706,6 +707,42 @@ describe('the Practice landing page', () => {
 			await expect.element(quickLinks.getByRole('link', { name: label, exact: true })).toBeVisible();
 		}
 		expect(quickLinks.getByRole('link').elements()).toHaveLength(labels.length);
+	});
+
+	// #2095: the three cards the drawing counts carry the count as their
+	// line, and every other card keeps its own.
+	it('counts the Clients in active care, the open Offers and the Credits on their cards', async () => {
+		await setup({ clients: [{ clientId: 'c1' }, { clientId: 'c2' }] });
+
+		const quickLinks = testPage.getByRole('navigation', { name: 'Quick links' });
+		await expect.element(quickLinks.getByRole('link', { name: 'Clients' })).toHaveAccessibleDescription('2 active');
+		await expect.element(quickLinks.getByRole('link', { name: 'Your offers' })).toHaveAccessibleDescription('1 waiting on you');
+		await expect.element(quickLinks.getByRole('link', { name: 'Credits' })).toHaveAccessibleDescription('12 Credits');
+		await expect
+			.element(quickLinks.getByRole('link', { name: 'Staff' }))
+			.toHaveAccessibleDescription('Who works here, and who is invited.');
+	});
+
+	it('says none where nothing is counted', async () => {
+		await setup({
+			clients: [{ clientId: 'c1' }],
+			overrides: {
+				clients: jsonResponse({ records: 1, active: 0 }),
+				offers: jsonResponse({ items: [] })
+			}
+		});
+
+		const quickLinks = testPage.getByRole('navigation', { name: 'Quick links' });
+		await expect.element(quickLinks.getByRole('link', { name: 'Clients' })).toHaveAccessibleDescription('None active');
+		await expect.element(quickLinks.getByRole('link', { name: 'Your offers' })).toHaveAccessibleDescription('None waiting on you');
+	});
+
+	it('keeps the line of the Credits card when the balance cannot be read', async () => {
+		await setup({ overrides: { billing: refusal('nope') } });
+
+		await expect
+			.element(testPage.getByRole('navigation', { name: 'Quick links' }).getByRole('link', { name: 'Credits' }))
+			.toHaveAccessibleDescription('Buy Credits and see the balance.');
 	});
 
 	it('sends the Clients card to the Clients list', async () => {
